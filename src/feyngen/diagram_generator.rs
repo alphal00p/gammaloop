@@ -1859,6 +1859,52 @@ impl FeynGen {
         &self,
         graph: &SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>,
         model: &Model,
+    ) -> Result<usize, FeynGenError> {
+        let mut adj_map: HashMap<usize, Vec<(usize, usize)>> = HashMap::default();
+        for (i_e, e) in graph.edges().iter().enumerate() {
+            // Build an adjacency list including only fermions
+            if !model.get_particle_from_pdg(e.data.pdg).is_fermion() {
+                continue;
+            }
+            adj_map
+                .entry(e.vertices.0)
+                .or_default()
+                .push((i_e, e.vertices.1));
+            if e.vertices.0 != e.vertices.1 {
+                adj_map
+                    .entry(e.vertices.1)
+                    .or_default()
+                    .push((i_e, e.vertices.0));
+            }
+        }
+
+        let mut vetoed_edges: Vec<bool> = graph
+            .edges()
+            .iter()
+            .map(|e| !model.get_particle_from_pdg(e.data.pdg).is_fermion())
+            .collect();
+        let mut n_fermion_loops = 0;
+        for (i_e, e) in graph.edges().iter().enumerate() {
+            if vetoed_edges[i_e] {
+                continue;
+            }
+            vetoed_edges[i_e] = true;
+            let (_, left_trail_end) =
+                FeynGen::follow_chain(e.vertices.0, &mut vetoed_edges, &adj_map, false)?;
+            let (_, right_trail_end) =
+                FeynGen::follow_chain(e.vertices.1, &mut vetoed_edges, &adj_map, false)?;
+            if left_trail_end == right_trail_end {
+                n_fermion_loops += 1;
+            }
+        }
+        Ok(n_fermion_loops)
+    }
+
+    // Note, this function will not work as intended with four-fermion vertices, and only aggregated self-loops or fermion-loops not involving four-femion vertices
+    pub fn count_closed_fermion_loops_without_vertex_rule(
+        &self,
+        graph: &SymbolicaGraph<NodeColorWithoutVertexRule, EdgeColor>,
+        model: &Model,
         veto_list: Option<Vec<isize>>,
     ) -> Result<usize, FeynGenError> {
         let mut adj_map: HashMap<usize, Vec<(usize, usize)>> = HashMap::default();
@@ -2367,7 +2413,7 @@ impl FeynGen {
             processed_graphs
                 .iter()
                 .filter_map(|(g, symmetry_factor)| {
-                    match self.count_closed_fermion_loops(g, model, None) {
+                    match self.count_closed_fermion_loops(g, model) {
                         Ok(n_closed_fermion_loops) => {
                             let new_symmetry_factor = if n_closed_fermion_loops % 2 == 1 {
                                 (Atom::new_num(-1) * Atom::parse(symmetry_factor).unwrap())
@@ -3046,7 +3092,9 @@ impl FeynGen {
             if n_cancellations > 1 { "s" } else { "" },
         );
 
-        for (_graph_id, graph) in bare_graphs.iter_mut() {
+        let mut nf_graphs = Vec::new();
+
+        for (graph_id, graph) in bare_graphs.iter_mut() {
             let forced_lmb = if let Some(lmbs) = loop_momentum_bases.as_ref() {
                 let g_name = String::from(graph.name.clone());
                 lmbs.get(&g_name).map(|lmb: &Vec<String>| {
@@ -3089,6 +3137,28 @@ impl FeynGen {
             //} else {
             //    None
             //};
+
+            // count the non-top fermion loops
+            let veto_for_nf = Some(vec![
+                model.get_particle(&SmartString::from("t")).pdg_code,
+                model.get_particle(&SmartString::from("t~")).pdg_code,
+            ]);
+
+            let n_closed_fermion_loops_without_top = self
+                .count_closed_fermion_loops_without_vertex_rule(
+                    &symbolica_graph,
+                    model,
+                    veto_for_nf,
+                )
+                .unwrap();
+
+            if n_closed_fermion_loops_without_top == 1 {
+                nf_graphs.push(graph_id);
+            }
+
+            if n_closed_fermion_loops_without_top > 1 {
+                warn!("this should not happen");
+            }
 
             let cuts = self.contains_cut(model, &symbolica_graph, n_unresolved, &unresolved_type);
 
@@ -3158,6 +3228,8 @@ impl FeynGen {
         //         .collect::<Vec<_>>()
         //         .join(", "),
         // );
+
+        info!("nf graphs: {:?}", nf_graphs);
 
         Ok(bare_graphs
             .iter()
