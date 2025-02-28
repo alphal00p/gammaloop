@@ -758,6 +758,7 @@ impl FeynGen {
         fn is_valid_cut<NodeColor: NodeColorFunctions>(
             cut: &(InternalSubGraph, OrientedCut, InternalSubGraph),
             s_set: &AHashSet<NodeIndex>,
+            t_set: &AHashSet<NodeIndex>,
             model: &Model,
             n_unresolved: usize,
             unresolved_type: &AHashSet<Arc<Particle>>,
@@ -766,7 +767,7 @@ impl FeynGen {
             amp_loop_count: Option<(usize, usize)>,
             graph: &HedgeGraph<Arc<Particle>, NodeColor>,
         ) -> bool {
-            if is_s_channel(cut, s_set, graph) {
+            if is_s_channel(cut, s_set, t_set, graph) {
                 let mut cut_content: Vec<_> = cut
                     .1
                     .iter_edges_relative(graph)
@@ -816,6 +817,7 @@ impl FeynGen {
         fn is_s_channel<NodeColor>(
             cut: &(InternalSubGraph, OrientedCut, InternalSubGraph),
             s_set: &AHashSet<NodeIndex>,
+            t_set: &AHashSet<NodeIndex>,
             graph: &HedgeGraph<Arc<Particle>, NodeColor>,
         ) -> bool {
             let nodes: AHashSet<_> = graph
@@ -823,7 +825,9 @@ impl FeynGen {
                 .map(|(i, _)| graph.id_from_hairs(i).unwrap())
                 .collect();
 
-            s_set.is_subset(&nodes)
+            // the left graph should only contain s-set particles
+
+            s_set.is_subset(&nodes) && t_set.intersection(&nodes).count() == 0
         }
 
         let particle_content = self
@@ -841,7 +845,7 @@ impl FeynGen {
         );
 
         let mut s_set = AHashSet::new();
-        let mut t_set = vec![];
+        let mut t_set = AHashSet::new();
 
         for (n, f) in he_graph.iter_nodes() {
             let id = he_graph.id_from_hairs(n).unwrap();
@@ -850,18 +854,19 @@ impl FeynGen {
                     s_set.insert(id);
                 }
                 SignOrZero::Minus => {
-                    t_set.push(id);
+                    t_set.insert(id);
                 }
                 _ => {}
             }
         }
-        if let (Some(&s), Some(&t)) = (s_set.iter().next(), t_set.first()) {
+        if let (Some(&s), Some(&t)) = (s_set.iter().next(), t_set.iter().next()) {
             let cuts = he_graph.all_cuts(s, t);
 
             let pass_cut_filter = cuts.iter().any(|c| {
                 is_valid_cut(
                     c,
                     &s_set,
+                    &t_set,
                     model,
                     n_unresolved,
                     unresolved_type,
