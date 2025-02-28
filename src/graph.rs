@@ -3889,6 +3889,35 @@ impl LoopExtSignature {
         res
     }
 
+    pub fn format_momentum_python(&self) -> String {
+        let mut res = String::new();
+        let mut first = true;
+
+        for (i, sign) in (&self.internal).into_iter().enumerate() {
+            if !first {
+                res.push_str(&sign.to_string());
+            } else {
+                first = false;
+            }
+            if sign.is_sign() {
+                res.push_str(&format!("k{}", i));
+            }
+        }
+
+        for (i, sign) in (&self.external).into_iter().enumerate() {
+            if !first {
+                res.push_str(&sign.to_string());
+            } else {
+                first = false;
+            }
+            if sign.is_sign() {
+                res.push_str(&format!("p{}", i));
+            }
+        }
+
+        res
+    }
+
     #[allow(unused)]
     pub fn compute_four_momentum_from_three<T: FloatLike>(
         &self,
