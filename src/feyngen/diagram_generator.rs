@@ -1,6 +1,7 @@
 use indicatif::ProgressBar;
 use indicatif::{ParallelProgressIterator, ProgressStyle};
 
+use momtrop::Edge;
 use rayon::iter::ParallelIterator;
 use rayon::prelude::*;
 use rayon::ThreadPoolBuilder;
@@ -44,7 +45,7 @@ use crate::graph::EdgeType;
 use crate::model::ColorStructure;
 use crate::model::Particle;
 use crate::model::VertexRule;
-use crate::momentum::{SignOrZero, Signature};
+use crate::momentum::{self, SignOrZero, Signature};
 use crate::numerator::AtomStructure;
 use crate::numerator::Numerator;
 use crate::numerator::SymbolicExpression;
@@ -3107,6 +3108,37 @@ impl FeynGen {
             if !found_good_lmb {
                 warn!("could not find good lmb for graph: {}", graph.name);
             }
+
+            if &graph.name == "GL1108" {
+                let lmb_as_edge_names = graph
+                    .loop_momentum_basis
+                    .basis
+                    .iter()
+                    .map(|edge| graph.edges[*edge].name.clone())
+                    .collect::<Vec<_>>();
+
+                println!("lmb for graph {} is: {:?}", graph.name, lmb_as_edge_names);
+
+                let cuts_as_edge_names = cuts
+                    .iter()
+                    .map(|(_, cut, _)| {
+                        graph
+                            .hedge_representation
+                            .iter_egdes(cut)
+                            .map(|(_, edge_data)| {
+                                graph.edges[*edge_data.data.unwrap()].name.clone()
+                            })
+                            .collect::<Vec<_>>()
+                    })
+                    .collect::<Vec<_>>();
+
+                println!("num cuts: {}", cuts.len());
+
+                println!(
+                    "cuts for graph {} are: {:?}",
+                    graph.name, cuts_as_edge_names
+                );
+            }
         }
         // println!(
         //     "Graphs: [{}]",
@@ -3949,20 +3981,21 @@ fn get_allowed_external_signatures() -> Vec<Signature> {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct PythonEdge {
     name: String,
-    pdg: i32,
+    #[allow(non_snake_case)]
+    PDG: isize,
     edge_type: String,
     momentum: String,
-    indices: Vec<i32>,
+    indices: Option<()>,
     vertices: (usize, usize),
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct PythonNode {
-    pdgs: Vec<i32>,
+    PDGs: Vec<isize>,
     momenta: Vec<String>,
-    indices: Vec<i32>,
-    vertex_id: i32,
-    edge_ids: Vec<i32>,
+    indices: Option<()>,
+    vertex_id: isize,
+    edge_ids: Vec<usize>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -3975,4 +4008,96 @@ struct PythonGraph {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct OutputPy {
     graphs: Vec<PythonGraph>,
+}
+
+impl PythonGraph {
+    fn from_bare_graph(bare_graph: &BareGraph) -> Self {
+        let python_edges = bare_graph
+            .edges
+            .iter()
+            .map(|edge| {
+                let edge_type = match edge.edge_type {
+                    EdgeType::Incoming => "in",
+                    EdgeType::Outgoing => "out",
+                    EdgeType::Virtual => "virtual",
+                }
+                .to_owned();
+
+                let name = edge.name.clone().into();
+
+                let PDG = edge.particle.pdg_code;
+                let vertices = (edge.vertices[0], edge.vertices[1]);
+
+                let edge_id = bare_graph.edge_name_to_position[&edge.name];
+                let momentum = bare_graph.loop_momentum_basis.edge_signatures[edge_id]
+                    .format_momentum_python();
+
+                PythonEdge {
+                    name,
+                    PDG,
+                    edge_type,
+                    vertices,
+                    momentum,
+                    indices: None,
+                }
+            })
+            .collect();
+
+        let python_nodes = bare_graph
+            .vertices
+            .iter()
+            .map(|vertex| {
+                let PDGs = vertex
+                    .edges
+                    .iter()
+                    .map(|edge_id| {
+                        let edge = &bare_graph.edges[*edge_id];
+                        edge.particle.pdg_code
+                    })
+                    .collect();
+
+                let momenta = vertex
+                    .edges
+                    .iter()
+                    .map(|edge_id| {
+                        let edge = &bare_graph.edges[*edge_id];
+                        let edge_id = bare_graph.edge_name_to_position[&edge.name];
+                        bare_graph.loop_momentum_basis.edge_signatures[edge_id]
+                            .format_momentum_python()
+                    })
+                    .collect();
+
+                let edge_ids = vertex.edges.clone();
+
+                let mut vertex_id = 0;
+                if vertex.edges.len() == 1 {
+                    let edge = &bare_graph.edges[vertex.edges[0]];
+                    match edge.edge_type {
+                        EdgeType::Incoming => {
+                            vertex_id = -1;
+                        }
+                        EdgeType::Outgoing => vertex_id = -1,
+                        EdgeType::Virtual => {
+                            unreachable!()
+                        }
+                    }
+                    {}
+                }
+
+                PythonNode {
+                    PDGs,
+                    momenta,
+                    indices: None,
+                    edge_ids,
+                    vertex_id,
+                }
+            })
+            .collect();
+
+        PythonGraph {
+            edges: python_edges,
+            nodes: python_nodes,
+            overal_factor: bare_graph.overall_factor.clone(),
+        }
+    }
 }
