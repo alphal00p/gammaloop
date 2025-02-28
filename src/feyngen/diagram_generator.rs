@@ -752,6 +752,7 @@ impl FeynGen {
         graph: &SymbolicaGraph<NodeColor, EdgeColor>,
         n_unresolved: usize,
         unresolved_type: &AHashSet<Arc<Particle>>,
+        force_other_final_state: Option<Vec<isize>>,
     ) -> Vec<(InternalSubGraph, OrientedCut, InternalSubGraph)>
     where
         NodeColor: NodeColorFunctions + Clone,
@@ -832,12 +833,19 @@ impl FeynGen {
             s_set.is_subset(&nodes) && t_set.intersection(&nodes).count() == 0
         }
 
-        let particle_content = self
-            .options
-            .final_pdgs
-            .iter()
-            .map(|&pdg| model.get_particle_from_pdg(pdg as isize))
-            .collect::<Vec<_>>();
+        let particle_content = if let Some(final_state) = force_other_final_state {
+            final_state
+                .iter()
+                .map(|&pdg| model.get_particle_from_pdg(pdg as isize))
+                .collect::<Vec<_>>()
+        } else {
+            self.options
+                .final_pdgs
+                .iter()
+                .map(|&pdg| model.get_particle_from_pdg(pdg as isize))
+                .collect::<Vec<_>>()
+        };
+
         let amp_couplings = self.options.amplitude_filters.get_coupling_orders();
         let amp_loop_count = self.options.amplitude_filters.get_loop_count_range();
         let n_particles = self.options.initial_pdgs.len();
@@ -2527,7 +2535,7 @@ impl FeynGen {
                     .par_iter()
                     .progress_with(bar.clone())
                     .filter(|(g, _)| {
-                        self.contains_cut(model, g, n_unresolved, &unresolved_type)
+                        self.contains_cut(model, g, n_unresolved, &unresolved_type, None)
                             .is_empty()
                     })
                     .map(|(g, sf)| (g.clone(), sf.clone()))
@@ -3160,7 +3168,13 @@ impl FeynGen {
                 warn!("this should not happen");
             }
 
-            let cuts = self.contains_cut(model, &symbolica_graph, n_unresolved, &unresolved_type);
+            let cuts = self.contains_cut(
+                model,
+                &symbolica_graph,
+                n_unresolved,
+                &unresolved_type,
+                None,
+            );
 
             if cuts.is_empty() {
                 warn!("could not find cuts for graph: {}", graph.name);
