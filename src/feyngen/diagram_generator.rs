@@ -1859,6 +1859,7 @@ impl FeynGen {
         &self,
         graph: &SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>,
         model: &Model,
+        veto_list: Option<Vec<isize>>,
     ) -> Result<usize, FeynGenError> {
         let mut adj_map: HashMap<usize, Vec<(usize, usize)>> = HashMap::default();
         for (i_e, e) in graph.edges().iter().enumerate() {
@@ -1881,7 +1882,16 @@ impl FeynGen {
         let mut vetoed_edges: Vec<bool> = graph
             .edges()
             .iter()
-            .map(|e| !model.get_particle_from_pdg(e.data.pdg).is_fermion())
+            .map(|e| {
+                let is_not_fermion = !model.get_particle_from_pdg(e.data.pdg).is_fermion();
+                let is_vetoed = if let Some(veto_list) = &veto_list {
+                    veto_list.contains(&e.data.pdg)
+                } else {
+                    false
+                };
+
+                is_not_fermion || is_vetoed
+            })
             .collect();
         let mut n_fermion_loops = 0;
         for (i_e, e) in graph.edges().iter().enumerate() {
@@ -2357,7 +2367,7 @@ impl FeynGen {
             processed_graphs
                 .iter()
                 .filter_map(|(g, symmetry_factor)| {
-                    match self.count_closed_fermion_loops(g, model) {
+                    match self.count_closed_fermion_loops(g, model, None) {
                         Ok(n_closed_fermion_loops) => {
                             let new_symmetry_factor = if n_closed_fermion_loops % 2 == 1 {
                                 (Atom::new_num(-1) * Atom::parse(symmetry_factor).unwrap())
