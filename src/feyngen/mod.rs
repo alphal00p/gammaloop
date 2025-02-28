@@ -508,6 +508,7 @@ pub struct FeynGenOptions {
     pub symmetrize_final_states: bool,
     pub symmetrize_left_right_states: bool,
     pub allow_symmetrization_of_external_fermions_in_amplitudes: bool,
+    pub max_multiplicity_for_fast_cut_filter: usize,
     pub amplitude_filters: FeynGenFilters,
     pub cross_section_filters: FeynGenFilters,
 }

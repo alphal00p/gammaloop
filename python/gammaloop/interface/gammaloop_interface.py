@@ -783,6 +783,8 @@ class GammaLoop(object):
                                  help='Clear existing processes stored before adding this one..')
     generate_parser.add_argument('--num_threads', '-nt', default=None, type=int,
                                  help='Number of threads to parallelize the generation on. (default: all available cores)')
+    generate_parser.add_argument('--max_multiplicity_for_fast_cut_filter', '-mmfcf', default=6, type=int,
+                                 help='Specify the maximum cut multiplicity before switching to an alternative Cutkosky cut filter that is faster for large multiplicities. (default: %(default)s)')
     generate_parser.add_argument('--graph_prefix', '-gp', type=str, default="GL",
                                  help='Graph name prefix. default: "GL"')
     generate_parser.add_argument('--max_n_bridges', '-mnb', type=int, default=None,
