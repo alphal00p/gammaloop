@@ -202,13 +202,13 @@ class TestProcessGeneration:
             ('a a > t t~ | a t g b ghg QED^2=4 [{{1}} QCD=0] -num_grouping only_detect_zeroes', 4),
             ('a a > t t~ | a t g b ghg QED^2=4 [{{2}} QCD=1] -num_grouping only_detect_zeroes', 36),
             ('a a > t t~ | a t g b ghg QED^2=4 [{{3}} QCD=2] -num_grouping only_detect_zeroes', 774),
-            ('a a > t t~ | a t g b ghg QED^2=4 [{{1}} QCD=0] --symmetrize_initial_states -num_grouping group_identical_graphs_up_to_scalar_rescaling', 1),
-            ('a a > t t~ | a t g b ghg QED^2=4 [{{2}} QCD=1] --symmetrize_initial_states -num_grouping group_identical_graphs_up_to_scalar_rescaling', 7),
-            ('a a > t t~ | a t g b ghg QED^2=4 [{{3}} QCD=2] --symmetrize_initial_states -num_grouping group_identical_graphs_up_to_scalar_rescaling', 114),
-            ('a a > t t~ | a t g b ghg QED^2=4 [{{1}} QCD=0] --symmetrize_initial_states --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_scalar_rescaling', 1),
-            ('a a > t t~ | a t g b ghg QED^2=4 [{{2}} QCD=1] --symmetrize_initial_states --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_scalar_rescaling', 5),
-            ('a a > t t~ | a t g b ghg QED^2=4 [{{3}} QCD=2] --symmetrize_initial_states --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_scalar_rescaling', 74),
-            ('a a > t t~ | a t g ghg QED^2=4 [{{3}} QCD=2] --symmetrize_initial_states --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_scalar_rescaling', 65),
+            ('a a > t t~ | a t g b ghg QED^2=4 [{{1}} QCD=0] --symmetrize_initial_states -num_grouping group_identical_graphs_up_to_scalar_rescaling', 2),
+            ('a a > t t~ | a t g b ghg QED^2=4 [{{2}} QCD=1] --symmetrize_initial_states -num_grouping group_identical_graphs_up_to_scalar_rescaling', 14),
+            ('a a > t t~ | a t g b ghg QED^2=4 [{{3}} QCD=2] --symmetrize_initial_states -num_grouping group_identical_graphs_up_to_scalar_rescaling', 219),
+            ('a a > t t~ | a t g b ghg QED^2=4 [{{1}} QCD=0] --symmetrize_initial_states --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_scalar_rescaling', 2),
+            ('a a > t t~ | a t g b ghg QED^2=4 [{{2}} QCD=1] --symmetrize_initial_states --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_scalar_rescaling', 10),
+            ('a a > t t~ | a t g b ghg QED^2=4 [{{3}} QCD=2] --symmetrize_initial_states --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_scalar_rescaling', 143),
+            ('a a > t t~ | a t g ghg QED^2=4 [{{3}} QCD=2] --symmetrize_initial_states --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_scalar_rescaling', 128),
         ]
         TestProcessGeneration.run_tests(gloop, tests)
 
