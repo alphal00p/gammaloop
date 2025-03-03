@@ -1,7 +1,6 @@
 use indicatif::ProgressBar;
 use indicatif::{ParallelProgressIterator, ProgressStyle};
 
-use momtrop::Edge;
 use rayon::iter::ParallelIterator;
 use rayon::prelude::*;
 use rayon::ThreadPoolBuilder;
@@ -17,6 +16,9 @@ use spenso::structure::{HasStructure, SmartShadowStructure};
 use spenso::symbolica_utils::{SerializableAtom, SerializableSymbol};
 use std::collections::hash_map::Entry;
 use std::collections::HashSet;
+use std::fs::{create_dir_all, File, OpenOptions};
+use std::io::Write;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use symbolica::atom::AtomView;
@@ -2805,6 +2807,12 @@ impl FeynGen {
 
         canonized_processed_graphs.sort_by(|a, b| (a.1).partial_cmp(&b.1).unwrap());
 
+        //for _i in 451..=457 {
+        //println!("{}", canonized_processed_graphs[451].0.to_dot());
+        //println!("{:?}", canonized_processed_graphs[i].2);
+        //}
+        //panic!("aaaaaaaa");
+
         let n_zeroes_color = Arc::new(Mutex::new(0));
         let n_zeroes_lorentz = Arc::new(Mutex::new(0));
         let n_groupings = Arc::new(Mutex::new(0));
@@ -3101,6 +3109,8 @@ impl FeynGen {
         );
 
         let mut nf_graphs = Vec::new();
+        let mut s_channel_singlet = Vec::new();
+        let mut no_valid_lmb = Vec::new();
 
         for (graph_id, graph) in bare_graphs.iter_mut() {
             let forced_lmb = if let Some(lmbs) = loop_momentum_bases.as_ref() {
@@ -3161,7 +3171,7 @@ impl FeynGen {
                 .unwrap();
 
             if n_closed_fermion_loops_without_top == 1 {
-                nf_graphs.push(graph_id);
+                nf_graphs.push(*graph_id);
             }
 
             if n_closed_fermion_loops_without_top > 1 {
@@ -3200,39 +3210,64 @@ impl FeynGen {
             }
 
             if !found_good_lmb {
+                no_valid_lmb.push(*graph_id);
                 warn!("could not find good lmb for graph: {}", graph.name);
             }
 
-            if &graph.name == "GL1108" {
-                let lmb_as_edge_names = graph
-                    .loop_momentum_basis
-                    .basis
-                    .iter()
-                    .map(|edge| graph.edges[*edge].name.clone())
-                    .collect::<Vec<_>>();
+            // two gluons
+            let s_channel_singlet_final_state =
+                Some(vec![
+                    model.get_particle(&SmartString::from("g")).pdg_code;
+                    2
+                ]);
 
-                println!("lmb for graph {} is: {:?}", graph.name, lmb_as_edge_names);
+            let s_channel_singlet_cuts = self.contains_cut(
+                model,
+                &symbolica_graph,
+                0,
+                &unresolved_type,
+                s_channel_singlet_final_state,
+            );
 
-                let cuts_as_edge_names = cuts
-                    .iter()
-                    .map(|(_, cut, _)| {
-                        graph
-                            .hedge_representation
-                            .iter_egdes(cut)
-                            .map(|(_, edge_data)| {
-                                graph.edges[*edge_data.data.unwrap()].name.clone()
-                            })
-                            .collect::<Vec<_>>()
-                    })
-                    .collect::<Vec<_>>();
-
-                println!("num cuts: {}", cuts.len());
-
-                println!(
-                    "cuts for graph {} are: {:?}",
-                    graph.name, cuts_as_edge_names
-                );
+            if !s_channel_singlet_cuts.is_empty() {
+                s_channel_singlet.push(*graph_id);
             }
+
+            //info!(
+            //    "overall factor: {} for graph {}",
+            //    graph.overall_factor, graph.name
+            //);
+
+            //if &graph.name == "GL1108" {
+            //    let lmb_as_edge_names = graph
+            //        .loop_momentum_basis
+            //        .basis
+            //        .iter()
+            //        .map(|edge| graph.edges[*edge].name.clone())
+            //        .collect::<Vec<_>>();
+
+            //    println!("lmb for graph {} is: {:?}", graph.name, lmb_as_edge_names);
+
+            //    let cuts_as_edge_names = cuts
+            //        .iter()
+            //        .map(|(_, cut, _)| {
+            //            graph
+            //                .hedge_representation
+            //                .iter_egdes(cut)
+            //                .map(|(_, edge_data)| {
+            //                    graph.edges[*edge_data.data.unwrap()].name.clone()
+            //                })
+            //                .collect::<Vec<_>>()
+            //        })
+            //        .collect::<Vec<_>>();
+
+            //    println!("num cuts: {}", cuts.len());
+
+            //    println!(
+            //        "cuts for graph {} are: {:?}",
+            //        graph.name, cuts_as_edge_names
+            //    );
+            //}
         }
         // println!(
         //     "Graphs: [{}]",
@@ -3243,7 +3278,174 @@ impl FeynGen {
         //         .join(", "),
         // );
 
+        let main_path_to_output = PathBuf::from("alphaloop_outputs");
+        let order = if bare_graphs[0].1.loop_momentum_basis.basis.len() == 1 {
+            Order::LO
+        } else if bare_graphs[0].1.loop_momentum_basis.basis.len() == 2 {
+            Order::NLO
+        } else if bare_graphs[0].1.loop_momentum_basis.basis.len() == 3 {
+            Order::NNLO
+        } else {
+            panic!("this little hack made it easier to write the output to the correct folder, but it is not compatible with what you are trying to do");
+        };
+
+        match order {
+            Order::LO => {
+                let path_to_output: PathBuf = main_path_to_output.join("LO_graphs");
+
+                if path_to_output.exists() {
+                    std::fs::remove_dir_all(&path_to_output).unwrap();
+                }
+                std::fs::create_dir_all(&path_to_output).unwrap();
+
+                for (_graph_id, graph) in bare_graphs.iter() {
+                    let python_graph = PythonGraph::from_bare_graph(graph);
+                    let python_graph_yaml = serde_yaml::to_string(&python_graph).unwrap();
+
+                    let graph_path = path_to_output.join(format!("{}.yaml", graph.name));
+
+                    let mut file = OpenOptions::new()
+                        .create(true)
+                        .write(true)
+                        .truncate(true)
+                        .open(&graph_path)
+                        .unwrap();
+
+                    write!(file, "{}", python_graph_yaml).unwrap();
+                }
+            }
+            Order::NLO => {
+                let path_to_output: PathBuf = main_path_to_output.join("NLO_graphs");
+
+                if path_to_output.exists() {
+                    std::fs::remove_dir_all(&path_to_output).unwrap();
+                }
+                std::fs::create_dir_all(&path_to_output).unwrap();
+
+                for (_graph_id, graph) in bare_graphs.iter() {
+                    let python_graph = PythonGraph::from_bare_graph(graph);
+                    let python_graph_yaml = serde_yaml::to_string(&python_graph).unwrap();
+
+                    let graph_path = path_to_output.join(format!("{}.yaml", graph.name));
+
+                    let mut file = OpenOptions::new()
+                        .create(true)
+                        .write(true)
+                        .truncate(true)
+                        .open(&graph_path)
+                        .unwrap();
+
+                    write!(file, "{}", python_graph_yaml).unwrap();
+                }
+            }
+            Order::NNLO => {
+                let path_to_output: PathBuf = main_path_to_output.join("NNLO_graphs");
+
+                if path_to_output.exists() {
+                    std::fs::remove_dir_all(&path_to_output).unwrap();
+                }
+                std::fs::create_dir_all(&path_to_output).unwrap();
+
+                let nf_valid_lmb_path = path_to_output.join("nf_graphs_valid_lmb");
+                std::fs::create_dir_all(&nf_valid_lmb_path).unwrap();
+
+                let nf_no_valid_lmb_path = path_to_output.join("nf_graphs_no_valid_lmb");
+                std::fs::create_dir_all(&nf_no_valid_lmb_path).unwrap();
+
+                let non_singlet_valid_lmb_path =
+                    path_to_output.join("non_s_channel_singlet_graphs_valid_lmb");
+                std::fs::create_dir_all(&non_singlet_valid_lmb_path).unwrap();
+
+                let non_singlet_no_valid_lmb_path =
+                    path_to_output.join("non_s_channel_singlet_graphs_no_valid_lmb");
+                std::fs::create_dir_all(&non_singlet_no_valid_lmb_path).unwrap();
+
+                let singlet_valid_lmb_path =
+                    path_to_output.join("s_channel_singlet_graphs_valid_lmb");
+                std::fs::create_dir_all(&singlet_valid_lmb_path).unwrap();
+
+                let singlet_no_valid_lmb_path =
+                    path_to_output.join("s_channel_singlet_graphs_no_valid_lmb");
+                std::fs::create_dir_all(&singlet_no_valid_lmb_path).unwrap();
+
+                let non_nf_valid_lmb_path = path_to_output.join("non_nf_graphs_valid_lmb");
+                std::fs::create_dir_all(&non_nf_valid_lmb_path).unwrap();
+
+                let non_nf_no_valid_lmb_path = path_to_output.join("non_nf_graphs_no_valid_lmb");
+                std::fs::create_dir_all(&non_nf_no_valid_lmb_path).unwrap();
+
+                for (graph_id, graph) in bare_graphs.iter() {
+                    let python_graph = PythonGraph::from_bare_graph(graph);
+                    let python_graph_yaml = serde_yaml::to_string(&python_graph).unwrap();
+                    if nf_graphs.contains(graph_id) {
+                        let graph_path = if no_valid_lmb.contains(graph_id) {
+                            nf_no_valid_lmb_path.join(format!("{}.yaml", graph.name))
+                        } else {
+                            nf_valid_lmb_path.join(format!("{}.yaml", graph.name))
+                        };
+
+                        let mut file = OpenOptions::new()
+                            .create(true)
+                            .write(true)
+                            .truncate(true)
+                            .open(&graph_path)
+                            .unwrap();
+
+                        write!(file, "{}", python_graph_yaml).unwrap();
+                    } else {
+                        let graph_path = if no_valid_lmb.contains(graph_id) {
+                            non_nf_no_valid_lmb_path.join(format!("{}.yaml", graph.name))
+                        } else {
+                            non_nf_valid_lmb_path.join(format!("{}.yaml", graph.name))
+                        };
+
+                        let mut file = OpenOptions::new()
+                            .create(true)
+                            .write(true)
+                            .truncate(true)
+                            .open(&graph_path)
+                            .unwrap();
+
+                        write!(file, "{}", python_graph_yaml).unwrap();
+                    }
+
+                    if !s_channel_singlet.contains(graph_id) {
+                        let graph_path = if no_valid_lmb.contains(graph_id) {
+                            non_singlet_no_valid_lmb_path.join(format!("{}.yaml", graph.name))
+                        } else {
+                            non_singlet_valid_lmb_path.join(format!("{}.yaml", graph.name))
+                        };
+
+                        let mut file = OpenOptions::new()
+                            .create(true)
+                            .write(true)
+                            .truncate(true)
+                            .open(&graph_path)
+                            .unwrap();
+
+                        write!(file, "{}", python_graph_yaml).unwrap();
+                    } else {
+                        let graph_path = if no_valid_lmb.contains(graph_id) {
+                            singlet_no_valid_lmb_path.join(format!("{}.yaml", graph.name))
+                        } else {
+                            singlet_valid_lmb_path.join(format!("{}.yaml", graph.name))
+                        };
+
+                        let mut file = OpenOptions::new()
+                            .create(true)
+                            .write(true)
+                            .truncate(true)
+                            .open(&graph_path)
+                            .unwrap();
+
+                        write!(file, "{}", python_graph_yaml).unwrap();
+                    }
+                }
+            }
+        }
+
         info!("nf graphs: {:?}", nf_graphs);
+        info!("s channel singlet graphs: {:?}", s_channel_singlet);
 
         Ok(bare_graphs
             .iter()
@@ -3355,14 +3557,14 @@ impl FeynGen {
                         //         .join("\n")
                         // );
                         if let Some(ratio) = analyze_ratios(&ratios) {
-                            // debug!(
-                            //     "Combining graph #{} with #{} using canonized numerators, with ratio #{}/#{}={}",
-                            //     numerator_b.diagram_id,
-                            //     numerator_a.diagram_id,
-                            //     numerator_a.diagram_id,
-                            //     numerator_b.diagram_id,
-                            //     ratio
-                            // );
+                            //   info!(
+                            //    "Combining graph #{} with #{} using canonized numerators, with ratio #{}/#{}={}",
+                            //    numerator_b.diagram_id,
+                            //    numerator_a.diagram_id,
+                            //    numerator_a.diagram_id,
+                            //    numerator_b.diagram_id,
+                            //    ratio
+                            //);
                             return Some(ratio);
                         }
                     }
@@ -4096,8 +4298,8 @@ struct PythonNode {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct PythonGraph {
-    edges: Vec<PythonEdge>,
-    nodes: Vec<PythonNode>,
+    edges: HashMap<usize, PythonEdge>,
+    nodes: HashMap<usize, PythonNode>,
     overal_factor: String,
 }
 
@@ -4108,87 +4310,86 @@ struct OutputPy {
 
 impl PythonGraph {
     fn from_bare_graph(bare_graph: &BareGraph) -> Self {
-        let python_edges = bare_graph
-            .edges
-            .iter()
-            .map(|edge| {
-                let edge_type = match edge.edge_type {
-                    EdgeType::Incoming => "in",
-                    EdgeType::Outgoing => "out",
-                    EdgeType::Virtual => "virtual",
-                }
-                .to_owned();
+        let mut python_edges = HashMap::default();
 
-                let name = edge.name.clone().into();
+        for (edge_id, edge) in bare_graph.edges.iter().enumerate() {
+            let edge_type = match edge.edge_type {
+                EdgeType::Incoming => "in",
+                EdgeType::Outgoing => "out",
+                EdgeType::Virtual => "virtual",
+            }
+            .to_owned();
 
-                let PDG = edge.particle.pdg_code;
-                let vertices = (edge.vertices[0], edge.vertices[1]);
+            let name = edge.name.clone().into();
 
-                let edge_id = bare_graph.edge_name_to_position[&edge.name];
-                let momentum = bare_graph.loop_momentum_basis.edge_signatures[edge_id]
-                    .format_momentum_python();
+            let PDG = edge.particle.pdg_code;
+            let vertices = (edge.vertices[0], edge.vertices[1]);
 
-                PythonEdge {
-                    name,
-                    PDG,
-                    edge_type,
-                    vertices,
-                    momentum,
-                    indices: None,
-                }
-            })
-            .collect();
+            let edge_id = bare_graph.edge_name_to_position[&edge.name];
+            let momentum =
+                bare_graph.loop_momentum_basis.edge_signatures[edge_id].format_momentum_python();
 
-        let python_nodes = bare_graph
-            .vertices
-            .iter()
-            .map(|vertex| {
-                let PDGs = vertex
-                    .edges
-                    .iter()
-                    .map(|edge_id| {
-                        let edge = &bare_graph.edges[*edge_id];
-                        edge.particle.pdg_code
-                    })
-                    .collect();
+            let edge = PythonEdge {
+                name,
+                PDG,
+                edge_type,
+                vertices,
+                momentum,
+                indices: None,
+            };
 
-                let momenta = vertex
-                    .edges
-                    .iter()
-                    .map(|edge_id| {
-                        let edge = &bare_graph.edges[*edge_id];
-                        let edge_id = bare_graph.edge_name_to_position[&edge.name];
-                        bare_graph.loop_momentum_basis.edge_signatures[edge_id]
-                            .format_momentum_python()
-                    })
-                    .collect();
+            python_edges.insert(edge_id, edge);
+        }
 
-                let edge_ids = vertex.edges.clone();
+        let mut python_nodes = HashMap::default();
 
-                let mut vertex_id = 0;
-                if vertex.edges.len() == 1 {
-                    let edge = &bare_graph.edges[vertex.edges[0]];
-                    match edge.edge_type {
-                        EdgeType::Incoming => {
-                            vertex_id = -1;
-                        }
-                        EdgeType::Outgoing => vertex_id = -1,
-                        EdgeType::Virtual => {
-                            unreachable!()
-                        }
+        for (node_id, vertex) in bare_graph.vertices.iter().enumerate() {
+            let PDGs = vertex
+                .edges
+                .iter()
+                .map(|edge_id| {
+                    let edge = &bare_graph.edges[*edge_id];
+                    edge.particle.pdg_code
+                })
+                .collect();
+
+            let momenta = vertex
+                .edges
+                .iter()
+                .map(|edge_id| {
+                    let edge = &bare_graph.edges[*edge_id];
+                    let edge_id = bare_graph.edge_name_to_position[&edge.name];
+                    bare_graph.loop_momentum_basis.edge_signatures[edge_id].format_momentum_python()
+                })
+                .collect();
+
+            let edge_ids = vertex.edges.clone();
+
+            let mut vertex_id = 0;
+            if vertex.edges.len() == 1 {
+                let edge = &bare_graph.edges[vertex.edges[0]];
+                match edge.edge_type {
+                    EdgeType::Incoming => {
+                        vertex_id = -1;
                     }
-                    {}
+                    EdgeType::Outgoing => vertex_id = -1,
+                    EdgeType::Virtual => {
+                        unreachable!()
+                    }
                 }
+                {}
+            }
 
-                PythonNode {
-                    PDGs,
-                    momenta,
-                    indices: None,
-                    edge_ids,
-                    vertex_id,
-                }
-            })
-            .collect();
+            let python_node = PythonNode {
+                PDGs,
+                momenta,
+                indices: None,
+                edge_ids,
+                vertex_id,
+            };
+
+            python_nodes.insert(node_id, python_node);
+        }
 
         PythonGraph {
             edges: python_edges,
@@ -4196,4 +4397,10 @@ impl PythonGraph {
             overal_factor: bare_graph.overall_factor.clone(),
         }
     }
+}
+
+enum Order {
+    LO,
+    NLO,
+    NNLO,
 }

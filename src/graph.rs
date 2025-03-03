@@ -3894,23 +3894,23 @@ impl LoopExtSignature {
         let mut first = true;
 
         for (i, sign) in (&self.internal).into_iter().enumerate() {
-            if !first {
-                res.push_str(&sign.to_string());
-            } else {
-                first = false;
-            }
             if sign.is_sign() {
+                if !first {
+                    res.push_str(&sign.to_string());
+                } else {
+                    first = false;
+                }
                 res.push_str(&format!("k{}", i));
             }
         }
 
         for (i, sign) in (&self.external).into_iter().enumerate() {
-            if !first {
-                res.push_str(&sign.to_string());
-            } else {
-                first = false;
-            }
             if sign.is_sign() {
+                if !first {
+                    res.push_str(&sign.to_string());
+                } else {
+                    first = false;
+                }
                 res.push_str(&format!("p{}", i));
             }
         }
