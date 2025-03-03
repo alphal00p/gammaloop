@@ -1,0 +1,228 @@
+edges:
+  6:
+    name: q3
+    PDG: 6
+    edge_type: virtual
+    momentum: k0+k1
+    indices: null
+    vertices:
+    - 4
+    - 8
+  1:
+    name: p2
+    PDG: 22
+    edge_type: in
+    momentum: p1
+    indices: null
+    vertices:
+    - 0
+    - 9
+  4:
+    name: q1
+    PDG: 21
+    edge_type: virtual
+    momentum: k0
+    indices: null
+    vertices:
+    - 4
+    - 5
+  2:
+    name: p3
+    PDG: 22
+    edge_type: out
+    momentum: p2
+    indices: null
+    vertices:
+    - 6
+    - 3
+  5:
+    name: q2
+    PDG: 6
+    edge_type: virtual
+    momentum: k1
+    indices: null
+    vertices:
+    - 7
+    - 4
+  7:
+    name: q4
+    PDG: 6
+    edge_type: virtual
+    momentum: k1+p0+p1
+    indices: null
+    vertices:
+    - 5
+    - 6
+  3:
+    name: p4
+    PDG: 22
+    edge_type: out
+    momentum: p0+p1-p2
+    indices: null
+    vertices:
+    - 7
+    - 2
+  8:
+    name: q5
+    PDG: 6
+    edge_type: virtual
+    momentum: k0+k1+p0+p1
+    indices: null
+    vertices:
+    - 9
+    - 5
+  9:
+    name: q6
+    PDG: 6
+    edge_type: virtual
+    momentum: k1+p0+p1-p2
+    indices: null
+    vertices:
+    - 6
+    - 7
+  10:
+    name: q7
+    PDG: 6
+    edge_type: virtual
+    momentum: k0+k1+p0
+    indices: null
+    vertices:
+    - 8
+    - 9
+  0:
+    name: p1
+    PDG: 22
+    edge_type: in
+    momentum: p0
+    indices: null
+    vertices:
+    - 1
+    - 8
+nodes:
+  2:
+    PDGs:
+    - 22
+    momenta:
+    - p0+p1-p2
+    indices: null
+    vertex_id: -1
+    edge_ids:
+    - 3
+  4:
+    PDGs:
+    - 6
+    - 6
+    - 21
+    momenta:
+    - k0+k1
+    - k1
+    - k0
+    indices: null
+    vertex_id: 0
+    edge_ids:
+    - 6
+    - 5
+    - 4
+  1:
+    PDGs:
+    - 22
+    momenta:
+    - p0
+    indices: null
+    vertex_id: -1
+    edge_ids:
+    - 0
+  0:
+    PDGs:
+    - 22
+    momenta:
+    - p1
+    indices: null
+    vertex_id: -1
+    edge_ids:
+    - 1
+  5:
+    PDGs:
+    - 6
+    - 6
+    - 21
+    momenta:
+    - k1+p0+p1
+    - k0+k1+p0+p1
+    - k0
+    indices: null
+    vertex_id: 0
+    edge_ids:
+    - 7
+    - 8
+    - 4
+  7:
+    PDGs:
+    - 6
+    - 6
+    - 22
+    momenta:
+    - k1
+    - k1+p0+p1-p2
+    - p0+p1-p2
+    indices: null
+    vertex_id: 0
+    edge_ids:
+    - 5
+    - 9
+    - 3
+  9:
+    PDGs:
+    - 6
+    - 6
+    - 22
+    momenta:
+    - k0+k1+p0+p1
+    - k0+k1+p0
+    - p1
+    indices: null
+    vertex_id: 0
+    edge_ids:
+    - 8
+    - 10
+    - 1
+  6:
+    PDGs:
+    - 6
+    - 6
+    - 22
+    momenta:
+    - k1+p0+p1-p2
+    - k1+p0+p1
+    - p2
+    indices: null
+    vertex_id: 0
+    edge_ids:
+    - 9
+    - 7
+    - 2
+  8:
+    PDGs:
+    - 6
+    - 6
+    - 22
+    momenta:
+    - k0+k1+p0
+    - k0+k1
+    - p0
+    indices: null
+    vertex_id: 0
+    edge_ids:
+    - 10
+    - 6
+    - 0
+  3:
+    PDGs:
+    - 22
+    momenta:
+    - p2
+    indices: null
+    vertex_id: -1
+    edge_ids:
+    - 2
+overal_factor: '-2'
