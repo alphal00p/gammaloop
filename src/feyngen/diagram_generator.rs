@@ -755,6 +755,7 @@ impl FeynGen {
         n_unresolved: usize,
         unresolved_type: &AHashSet<Arc<Particle>>,
         force_other_final_state: Option<Vec<isize>>,
+        force_t_channel: bool,
     ) -> Vec<(InternalSubGraph, OrientedCut, InternalSubGraph)>
     where
         NodeColor: NodeColorFunctions + Clone,
@@ -771,8 +772,9 @@ impl FeynGen {
             amp_couplings: Option<&std::collections::HashMap<String, usize, ahash::RandomState>>,
             amp_loop_count: Option<(usize, usize)>,
             graph: &HedgeGraph<Arc<Particle>, NodeColor>,
+            force_t_channel: bool,
         ) -> bool {
-            if is_s_channel(cut, s_set, t_set, graph) {
+            if is_s_channel(cut, s_set, t_set, graph, force_t_channel) {
                 let mut cut_content: Vec<_> = cut
                     .1
                     .iter_edges_relative(graph)
@@ -824,15 +826,28 @@ impl FeynGen {
             s_set: &AHashSet<NodeIndex>,
             t_set: &AHashSet<NodeIndex>,
             graph: &HedgeGraph<Arc<Particle>, NodeColor>,
+            force_t_channel: bool,
         ) -> bool {
             let nodes: AHashSet<_> = graph
                 .iter_node_data(&cut.0)
                 .map(|(i, _)| graph.id_from_hairs(i).unwrap())
                 .collect();
 
-            // the left graph should only contain s-set particles
+            if !force_t_channel {
+                // the left graph should only contain s-set particles
 
-            s_set.is_subset(&nodes) && t_set.intersection(&nodes).count() == 0
+                s_set.is_subset(&nodes) && t_set.intersection(&nodes).count() == 0
+            } else {
+                let right_nodes: AHashSet<_> = graph
+                    .iter_node_data(&cut.2)
+                    .map(|(i, _)| graph.id_from_hairs(i).unwrap())
+                    .collect();
+
+                s_set.intersection(&nodes).count() == 1
+                    && s_set.intersection(&right_nodes).count() == 1
+                    && t_set.intersection(&nodes).count() == 1
+                    && t_set.intersection(&right_nodes).count() == 1
+            }
         }
 
         let particle_content = if let Some(final_state) = force_other_final_state {
@@ -871,28 +886,63 @@ impl FeynGen {
                 _ => {}
             }
         }
-        if let (Some(&s), Some(&t)) = (s_set.iter().next(), t_set.iter().next()) {
-            let cuts = he_graph.all_cuts(s, t);
 
-            cuts.into_iter()
-                .filter(|c| {
-                    is_valid_cut(
-                        c,
-                        &s_set,
-                        &t_set,
-                        model,
-                        n_unresolved,
-                        unresolved_type,
-                        &particle_content,
-                        amp_couplings,
-                        amp_loop_count,
-                        &he_graph,
-                    )
-                })
-                .collect()
+        if force_t_channel {
+            let mut possible_source_target_combos = s_set.iter().cartesian_product(t_set.iter());
+
+            // this is stupid because we will get duplicates, but we don't give a shit for what we are trying to do
+            let mut all_cuts_with_duplicates_probably = Vec::new();
+            while let Some((s, t)) = possible_source_target_combos.next() {
+                let cuts = he_graph.all_cuts(*s, *t);
+
+                let valid_cuts = cuts
+                    .into_iter()
+                    .filter(|c| {
+                        is_valid_cut(
+                            c,
+                            &s_set,
+                            &t_set,
+                            model,
+                            n_unresolved,
+                            unresolved_type,
+                            &particle_content,
+                            amp_couplings,
+                            amp_loop_count,
+                            &he_graph,
+                            force_t_channel,
+                        )
+                    })
+                    .collect_vec();
+
+                all_cuts_with_duplicates_probably.extend(valid_cuts);
+            }
+
+            all_cuts_with_duplicates_probably
         } else {
-            // true //TODO still check the amplitude level filters in the case where there is no initial-state specified
-            Vec::new()
+            if let (Some(&s), Some(&t)) = (s_set.iter().next(), t_set.iter().next()) {
+                let cuts = he_graph.all_cuts(s, t);
+
+                cuts.into_iter()
+                    .filter(|c| {
+                        is_valid_cut(
+                            c,
+                            &s_set,
+                            &t_set,
+                            model,
+                            n_unresolved,
+                            unresolved_type,
+                            &particle_content,
+                            amp_couplings,
+                            amp_loop_count,
+                            &he_graph,
+                            force_t_channel,
+                        )
+                    })
+                    .collect()
+            } else {
+                // true //TODO still check the amplitude level filters in the case where there is no initial-state specified
+                Vec::new()
+            }
         }
     }
 
@@ -2537,7 +2587,7 @@ impl FeynGen {
                     .par_iter()
                     .progress_with(bar.clone())
                     .filter(|(g, _)| {
-                        self.contains_cut(model, g, n_unresolved, &unresolved_type, None)
+                        self.contains_cut(model, g, n_unresolved, &unresolved_type, None, false)
                             .is_empty()
                     })
                     .map(|(g, sf)| (g.clone(), sf.clone()))
@@ -3110,6 +3160,7 @@ impl FeynGen {
 
         let mut nf_graphs = Vec::new();
         let mut s_channel_singlet = Vec::new();
+        let mut t_channel_singlet = Vec::new();
         let mut no_valid_lmb = Vec::new();
 
         for (graph_id, graph) in bare_graphs.iter_mut() {
@@ -3184,6 +3235,7 @@ impl FeynGen {
                 n_unresolved,
                 &unresolved_type,
                 None,
+                false,
             );
 
             if cuts.is_empty() {
@@ -3226,11 +3278,25 @@ impl FeynGen {
                 &symbolica_graph,
                 0,
                 &unresolved_type,
+                s_channel_singlet_final_state.clone(),
+                false,
+            );
+
+            let t_channel_singlet_cuts = self.contains_cut(
+                model,
+                &symbolica_graph,
+                0,
+                &unresolved_type,
                 s_channel_singlet_final_state,
+                true,
             );
 
             if !s_channel_singlet_cuts.is_empty() {
                 s_channel_singlet.push(*graph_id);
+            }
+
+            if !t_channel_singlet_cuts.is_empty() {
+                t_channel_singlet.push(*graph_id);
             }
 
             //info!(
@@ -3446,6 +3512,7 @@ impl FeynGen {
 
         info!("nf graphs: {:?}", nf_graphs);
         info!("s channel singlet graphs: {:?}", s_channel_singlet);
+        info!("t channel singlet graphs: {:?}", t_channel_singlet);
 
         Ok(bare_graphs
             .iter()
@@ -4283,7 +4350,7 @@ struct PythonEdge {
     PDG: isize,
     edge_type: String,
     momentum: String,
-    indices: Option<()>,
+    indices: Vec<isize>,
     vertices: (usize, usize),
 }
 
@@ -4291,7 +4358,7 @@ struct PythonEdge {
 struct PythonNode {
     PDGs: Vec<isize>,
     momenta: Vec<String>,
-    indices: Option<()>,
+    indices: Vec<isize>,
     vertex_id: isize,
     edge_ids: Vec<usize>,
 }
@@ -4329,13 +4396,18 @@ impl PythonGraph {
             let momentum =
                 bare_graph.loop_momentum_basis.edge_signatures[edge_id].format_momentum_python();
 
+            let indices = match edge.edge_type {
+                EdgeType::Virtual => vec![1 + edge_id as isize * 2, 1 + edge_id as isize * 2 + 1],
+                _ => vec![1 + edge_id as isize * 2],
+            };
+
             let edge = PythonEdge {
                 name,
                 PDG,
                 edge_type,
                 vertices,
                 momentum,
-                indices: None,
+                indices,
             };
 
             python_edges.insert(edge_id, edge);
@@ -4383,7 +4455,7 @@ impl PythonGraph {
             let python_node = PythonNode {
                 PDGs,
                 momenta,
-                indices: None,
+                indices: vec![],
                 edge_ids,
                 vertex_id,
             };
