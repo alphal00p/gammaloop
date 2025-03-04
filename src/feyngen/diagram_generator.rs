@@ -1,6 +1,7 @@
 use indicatif::ProgressBar;
 use indicatif::{ParallelProgressIterator, ProgressStyle};
 
+use petgraph::graph;
 use rayon::iter::ParallelIterator;
 use rayon::prelude::*;
 use rayon::ThreadPoolBuilder;
@@ -3222,7 +3223,7 @@ impl FeynGen {
                 .unwrap();
 
             if n_closed_fermion_loops_without_top == 1 {
-                nf_graphs.push(*graph_id);
+                nf_graphs.push(graph.name.clone());
             }
 
             if n_closed_fermion_loops_without_top > 1 {
@@ -3262,7 +3263,7 @@ impl FeynGen {
             }
 
             if !found_good_lmb {
-                no_valid_lmb.push(*graph_id);
+                no_valid_lmb.push(graph.name.clone());
                 warn!("could not find good lmb for graph: {}", graph.name);
             }
 
@@ -3292,11 +3293,11 @@ impl FeynGen {
             );
 
             if !s_channel_singlet_cuts.is_empty() {
-                s_channel_singlet.push(*graph_id);
+                s_channel_singlet.push(graph.name.clone());
             }
 
             if !t_channel_singlet_cuts.is_empty() {
-                t_channel_singlet.push(*graph_id);
+                t_channel_singlet.push(graph.name.clone());
             }
 
             //info!(
@@ -3355,159 +3356,47 @@ impl FeynGen {
             panic!("this little hack made it easier to write the output to the correct folder, but it is not compatible with what you are trying to do");
         };
 
-        match order {
-            Order::LO => {
-                let path_to_output: PathBuf = main_path_to_output.join("LO_graphs");
+        let path_to_output = match order {
+            Order::LO => main_path_to_output.join("LO_graphs"),
+            Order::NLO => main_path_to_output.join("NLO_graphs"),
+            Order::NNLO => main_path_to_output.join("NNLO_graphs"),
+        };
 
-                if path_to_output.exists() {
-                    std::fs::remove_dir_all(&path_to_output).unwrap();
-                }
-                std::fs::create_dir_all(&path_to_output).unwrap();
+        if path_to_output.exists() {
+            std::fs::remove_dir_all(&path_to_output).unwrap();
+        }
+        std::fs::create_dir_all(&path_to_output).unwrap();
 
-                for (_graph_id, graph) in bare_graphs.iter() {
-                    let python_graph = PythonGraph::from_bare_graph(graph);
-                    let python_graph_yaml = serde_yaml::to_string(&python_graph).unwrap();
+        for (_graph_id, graph) in bare_graphs.iter() {
+            let python_graph = PythonGraph::from_bare_graph(graph);
+            let python_graph_yaml = serde_yaml::to_string(&python_graph).unwrap();
 
-                    let graph_path = path_to_output.join(format!("{}.yaml", graph.name));
+            let graph_path = path_to_output.join(format!("{}.yaml", graph.name));
 
-                    let mut file = OpenOptions::new()
-                        .create(true)
-                        .write(true)
-                        .truncate(true)
-                        .open(&graph_path)
-                        .unwrap();
+            let mut file = OpenOptions::new()
+                .create(true)
+                .write(true)
+                .truncate(true)
+                .open(&graph_path)
+                .unwrap();
 
-                    write!(file, "{}", python_graph_yaml).unwrap();
-                }
-            }
-            Order::NLO => {
-                let path_to_output: PathBuf = main_path_to_output.join("NLO_graphs");
+            write!(file, "{}", python_graph_yaml).unwrap();
+        }
 
-                if path_to_output.exists() {
-                    std::fs::remove_dir_all(&path_to_output).unwrap();
-                }
-                std::fs::create_dir_all(&path_to_output).unwrap();
+        if matches!(order, Order::NNLO) {
+            let category_path = path_to_output.join("categories.py");
 
-                for (_graph_id, graph) in bare_graphs.iter() {
-                    let python_graph = PythonGraph::from_bare_graph(graph);
-                    let python_graph_yaml = serde_yaml::to_string(&python_graph).unwrap();
+            let mut categories = OpenOptions::new()
+                .create(true)
+                .write(true)
+                .truncate(true)
+                .open(&category_path)
+                .unwrap();
 
-                    let graph_path = path_to_output.join(format!("{}.yaml", graph.name));
-
-                    let mut file = OpenOptions::new()
-                        .create(true)
-                        .write(true)
-                        .truncate(true)
-                        .open(&graph_path)
-                        .unwrap();
-
-                    write!(file, "{}", python_graph_yaml).unwrap();
-                }
-            }
-            Order::NNLO => {
-                let path_to_output: PathBuf = main_path_to_output.join("NNLO_graphs");
-
-                if path_to_output.exists() {
-                    std::fs::remove_dir_all(&path_to_output).unwrap();
-                }
-                std::fs::create_dir_all(&path_to_output).unwrap();
-
-                let nf_valid_lmb_path = path_to_output.join("nf_graphs_valid_lmb");
-                std::fs::create_dir_all(&nf_valid_lmb_path).unwrap();
-
-                let nf_no_valid_lmb_path = path_to_output.join("nf_graphs_no_valid_lmb");
-                std::fs::create_dir_all(&nf_no_valid_lmb_path).unwrap();
-
-                let non_singlet_valid_lmb_path =
-                    path_to_output.join("non_s_channel_singlet_graphs_valid_lmb");
-                std::fs::create_dir_all(&non_singlet_valid_lmb_path).unwrap();
-
-                let non_singlet_no_valid_lmb_path =
-                    path_to_output.join("non_s_channel_singlet_graphs_no_valid_lmb");
-                std::fs::create_dir_all(&non_singlet_no_valid_lmb_path).unwrap();
-
-                let singlet_valid_lmb_path =
-                    path_to_output.join("s_channel_singlet_graphs_valid_lmb");
-                std::fs::create_dir_all(&singlet_valid_lmb_path).unwrap();
-
-                let singlet_no_valid_lmb_path =
-                    path_to_output.join("s_channel_singlet_graphs_no_valid_lmb");
-                std::fs::create_dir_all(&singlet_no_valid_lmb_path).unwrap();
-
-                let non_nf_valid_lmb_path = path_to_output.join("non_nf_graphs_valid_lmb");
-                std::fs::create_dir_all(&non_nf_valid_lmb_path).unwrap();
-
-                let non_nf_no_valid_lmb_path = path_to_output.join("non_nf_graphs_no_valid_lmb");
-                std::fs::create_dir_all(&non_nf_no_valid_lmb_path).unwrap();
-
-                for (graph_id, graph) in bare_graphs.iter() {
-                    let python_graph = PythonGraph::from_bare_graph(graph);
-                    let python_graph_yaml = serde_yaml::to_string(&python_graph).unwrap();
-                    if nf_graphs.contains(graph_id) {
-                        let graph_path = if no_valid_lmb.contains(graph_id) {
-                            nf_no_valid_lmb_path.join(format!("{}.yaml", graph.name))
-                        } else {
-                            nf_valid_lmb_path.join(format!("{}.yaml", graph.name))
-                        };
-
-                        let mut file = OpenOptions::new()
-                            .create(true)
-                            .write(true)
-                            .truncate(true)
-                            .open(&graph_path)
-                            .unwrap();
-
-                        write!(file, "{}", python_graph_yaml).unwrap();
-                    } else {
-                        let graph_path = if no_valid_lmb.contains(graph_id) {
-                            non_nf_no_valid_lmb_path.join(format!("{}.yaml", graph.name))
-                        } else {
-                            non_nf_valid_lmb_path.join(format!("{}.yaml", graph.name))
-                        };
-
-                        let mut file = OpenOptions::new()
-                            .create(true)
-                            .write(true)
-                            .truncate(true)
-                            .open(&graph_path)
-                            .unwrap();
-
-                        write!(file, "{}", python_graph_yaml).unwrap();
-                    }
-
-                    if !s_channel_singlet.contains(graph_id) {
-                        let graph_path = if no_valid_lmb.contains(graph_id) {
-                            non_singlet_no_valid_lmb_path.join(format!("{}.yaml", graph.name))
-                        } else {
-                            non_singlet_valid_lmb_path.join(format!("{}.yaml", graph.name))
-                        };
-
-                        let mut file = OpenOptions::new()
-                            .create(true)
-                            .write(true)
-                            .truncate(true)
-                            .open(&graph_path)
-                            .unwrap();
-
-                        write!(file, "{}", python_graph_yaml).unwrap();
-                    } else {
-                        let graph_path = if no_valid_lmb.contains(graph_id) {
-                            singlet_no_valid_lmb_path.join(format!("{}.yaml", graph.name))
-                        } else {
-                            singlet_valid_lmb_path.join(format!("{}.yaml", graph.name))
-                        };
-
-                        let mut file = OpenOptions::new()
-                            .create(true)
-                            .write(true)
-                            .truncate(true)
-                            .open(&graph_path)
-                            .unwrap();
-
-                        write!(file, "{}", python_graph_yaml).unwrap();
-                    }
-                }
-            }
+            writeln!(categories, "nf_graphs = {:?}", nf_graphs).unwrap();
+            writeln!(categories, "s_channel_singlet = {:?}", s_channel_singlet).unwrap();
+            writeln!(categories, "t_channel_singlet = {:?}", t_channel_singlet).unwrap();
+            writeln!(categories, "no_valid_lmb = {:?}", no_valid_lmb).unwrap();
         }
 
         info!("nf graphs: {:?}", nf_graphs);
