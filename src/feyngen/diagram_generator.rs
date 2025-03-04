@@ -4348,6 +4348,7 @@ struct PythonEdge {
     name: String,
     #[allow(non_snake_case)]
     PDG: isize,
+    #[serde(rename = "type")]
     edge_type: String,
     momentum: String,
     indices: Vec<isize>,
