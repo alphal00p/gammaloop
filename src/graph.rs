@@ -29,6 +29,7 @@ use crate::{
     ExportSettings, Settings, TropicalSubgraphTableSettings,
 };
 
+use cgmath::num_traits::sign;
 use linnet::half_edge::{subgraph::SubGraphOps, HedgeGraph, HedgeGraphBuilder};
 
 use ahash::{HashSet, RandomState};
@@ -3889,14 +3890,19 @@ impl LoopExtSignature {
         res
     }
 
-    pub fn format_momentum_python(&self) -> String {
+    pub fn format_momentum_python(&self, flip_sign: bool) -> String {
         let mut res = String::new();
         let mut first = true;
 
-        for (i, sign) in (&self.internal).into_iter().enumerate() {
+        for (i, mut sign) in (&self.internal).into_iter().enumerate() {
+            if flip_sign {
+                sign = -sign;
+            }
+
             if sign.is_sign() {
-                if !first {
+                if !first || sign.is_negative() {
                     res.push_str(&sign.to_string());
+                    first = false;
                 } else {
                     first = false;
                 }
@@ -3904,10 +3910,15 @@ impl LoopExtSignature {
             }
         }
 
-        for (i, sign) in (&self.external).into_iter().enumerate() {
+        for (i, mut sign) in (&self.external).into_iter().enumerate() {
+            if flip_sign {
+                sign = -sign;
+            }
+
             if sign.is_sign() {
-                if !first {
+                if !first || sign.is_negative() {
                     res.push_str(&sign.to_string());
+                    first = false;
                 } else {
                     first = false;
                 }

@@ -3368,7 +3368,7 @@ impl FeynGen {
         std::fs::create_dir_all(&path_to_output).unwrap();
 
         for (_graph_id, graph) in bare_graphs.iter() {
-            let python_graph = PythonGraph::from_bare_graph(graph);
+            let python_graph = PythonGraph::from_bare_graph(graph, model);
             let python_graph_yaml = serde_yaml::to_string(&python_graph).unwrap();
 
             let graph_path = path_to_output.join(format!("{}.yaml", graph.name));
@@ -4266,7 +4266,7 @@ struct OutputPy {
 }
 
 impl PythonGraph {
-    fn from_bare_graph(bare_graph: &BareGraph) -> Self {
+    fn from_bare_graph(bare_graph: &BareGraph, model: &Model) -> Self {
         let mut python_edges = HashMap::default();
 
         for (edge_id, edge) in bare_graph.edges.iter().enumerate() {
@@ -4283,8 +4283,8 @@ impl PythonGraph {
             let vertices = (edge.vertices[0], edge.vertices[1]);
 
             let edge_id = bare_graph.edge_name_to_position[&edge.name];
-            let momentum =
-                bare_graph.loop_momentum_basis.edge_signatures[edge_id].format_momentum_python();
+            let momentum = bare_graph.loop_momentum_basis.edge_signatures[edge_id]
+                .format_momentum_python(false);
 
             let indices = match edge.edge_type {
                 EdgeType::Virtual => vec![1 + edge_id as isize * 2, 1 + edge_id as isize * 2 + 1],
@@ -4305,15 +4305,60 @@ impl PythonGraph {
 
         let mut python_nodes = HashMap::default();
 
-        for (node_id, vertex) in bare_graph.vertices.iter().enumerate() {
-            let PDGs = vertex
+        for (node_id, mut vertex) in bare_graph.vertices.clone().into_iter().enumerate() {
+            let mut PDGs = vertex
                 .edges
                 .iter()
                 .map(|edge_id| {
                     let edge = &bare_graph.edges[*edge_id];
                     edge.particle.pdg_code
                 })
-                .collect();
+                .collect_vec();
+
+            let num_fermions = PDGs
+                .iter()
+                .filter(|pdg| model.get_particle_from_pdg(**pdg).is_fermion())
+                .count();
+
+            // 🤮🤮
+            if vertex.edges.len() == 3 && num_fermions == 2 {
+                let mut new_edges = Vec::new();
+
+                let first_fermion_edge = vertex
+                    .edges
+                    .iter()
+                    .find(|edge_id| bare_graph.edges[**edge_id].particle.is_fermion())
+                    .unwrap();
+
+                new_edges.push(*first_fermion_edge);
+
+                let non_fermion_edge = vertex
+                    .edges
+                    .iter()
+                    .find(|edge_id| !bare_graph.edges[**edge_id].particle.is_fermion())
+                    .unwrap();
+
+                new_edges.push(*non_fermion_edge);
+
+                let last_fermion_edge = vertex
+                    .edges
+                    .iter()
+                    .find(|edge_id| !new_edges.contains(*edge_id))
+                    .unwrap();
+
+                new_edges.push(*last_fermion_edge);
+
+                vertex.edges = new_edges;
+
+                PDGs = vertex
+                    .edges
+                    .iter()
+                    .map(|edge_id| bare_graph.edges[*edge_id].particle.pdg_code)
+                    .collect();
+
+                PDGs[0] = -PDGs[0].abs();
+                PDGs[2] = PDGs[2].abs();
+            }
 
             let momenta = vertex
                 .edges
@@ -4321,7 +4366,13 @@ impl PythonGraph {
                 .map(|edge_id| {
                     let edge = &bare_graph.edges[*edge_id];
                     let edge_id = bare_graph.edge_name_to_position[&edge.name];
-                    bare_graph.loop_momentum_basis.edge_signatures[edge_id].format_momentum_python()
+                    if node_id == edge.vertices[1] {
+                        bare_graph.loop_momentum_basis.edge_signatures[edge_id]
+                            .format_momentum_python(false)
+                    } else {
+                        bare_graph.loop_momentum_basis.edge_signatures[edge_id]
+                            .format_momentum_python(true)
+                    }
                 })
                 .collect();
 
