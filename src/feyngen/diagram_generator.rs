@@ -4452,10 +4452,22 @@ impl PythonGraph {
                 {}
             }
 
+            let indices = python_edges
+                .values()
+                .filter(|e| e.vertices.0 == node_id || e.vertices.1 == node_id)
+                .map(|e| {
+                    if e.indices[0] == node_id as isize || e.indices.len() == 1 {
+                        e.indices[0]
+                    } else {
+                        e.indices[1]
+                    }
+                })
+                .collect();
+
             let python_node = PythonNode {
                 PDGs,
                 momenta,
-                indices: vec![],
+                indices,
                 edge_ids,
                 vertex_id,
             };
