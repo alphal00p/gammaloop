@@ -1,35 +1,4 @@
 edges:
-  6:
-    name: q3
-    PDG: 6
-    type: virtual
-    momentum: k0+k1+p0
-    indices:
-    - 13
-    - 14
-    vertices:
-    - 4
-    - 9
-  2:
-    name: p3
-    PDG: 22
-    type: out
-    momentum: p2
-    indices:
-    - 5
-    vertices:
-    - 6
-    - 3
-  0:
-    name: p1
-    PDG: 22
-    type: in
-    momentum: p0
-    indices:
-    - 1
-    vertices:
-    - 1
-    - 8
   4:
     name: q1
     PDG: 21
@@ -41,17 +10,48 @@ edges:
     vertices:
     - 4
     - 5
-  10:
-    name: q7
+  6:
+    name: q3
     PDG: 6
     type: virtual
-    momentum: k0+k1+p0+p1
+    momentum: k0+k1+p0
     indices:
-    - 21
-    - 22
+    - 13
+    - 14
     vertices:
+    - 4
     - 9
-    - 7
+  9:
+    name: q6
+    PDG: 6
+    type: virtual
+    momentum: k1
+    indices:
+    - 19
+    - 20
+    vertices:
+    - 6
+    - 8
+  1:
+    name: p2
+    PDG: 22
+    type: in
+    momentum: p1
+    indices:
+    - 3
+    vertices:
+    - 0
+    - 9
+  2:
+    name: p3
+    PDG: 22
+    type: out
+    momentum: p2
+    indices:
+    - 5
+    vertices:
+    - 6
+    - 3
   7:
     name: q4
     PDG: 6
@@ -63,6 +63,28 @@ edges:
     vertices:
     - 5
     - 6
+  10:
+    name: q7
+    PDG: 6
+    type: virtual
+    momentum: k0+k1+p0+p1
+    indices:
+    - 21
+    - 22
+    vertices:
+    - 9
+    - 7
+  5:
+    name: q2
+    PDG: 6
+    type: virtual
+    momentum: k1+p0
+    indices:
+    - 11
+    - 12
+    vertices:
+    - 8
+    - 4
   8:
     name: q5
     PDG: 6
@@ -84,67 +106,27 @@ edges:
     vertices:
     - 7
     - 2
-  5:
-    name: q2
-    PDG: 6
-    type: virtual
-    momentum: k1+p0
-    indices:
-    - 11
-    - 12
-    vertices:
-    - 8
-    - 4
-  1:
-    name: p2
+  0:
+    name: p1
     PDG: 22
     type: in
-    momentum: p1
+    momentum: p0
     indices:
-    - 3
+    - 1
     vertices:
-    - 0
-    - 9
-  9:
-    name: q6
-    PDG: 6
-    type: virtual
-    momentum: k1
-    indices:
-    - 19
-    - 20
-    vertices:
-    - 6
+    - 1
     - 8
 nodes:
-  5:
-    PDGs:
-    - 6
-    - 6
-    - 21
-    momenta:
-    - k1+p2
-    - k0+k1+p2
-    - k0
-    indices:
-    - 16
-    - 18
-    - 10
-    vertex_id: 0
-    edge_ids:
-    - 7
-    - 8
-    - 4
-  2:
+  1:
     PDGs:
     - 22
     momenta:
-    - p0+p1-p2
+    - p0
     indices:
-    - 7
+    - 1
     vertex_id: -1
     edge_ids:
-    - 3
+    - 0
   9:
     PDGs:
     - 6
@@ -163,6 +145,44 @@ nodes:
     - 10
     - 6
     - 1
+  4:
+    PDGs:
+    - 6
+    - 6
+    - 21
+    momenta:
+    - k0+k1+p0
+    - k1+p0
+    - k0
+    indices:
+    - 14
+    - 12
+    - 10
+    vertex_id: 0
+    edge_ids:
+    - 6
+    - 5
+    - 4
+  0:
+    PDGs:
+    - 22
+    momenta:
+    - p1
+    indices:
+    - 3
+    vertex_id: -1
+    edge_ids:
+    - 1
+  2:
+    PDGs:
+    - 22
+    momenta:
+    - p0+p1-p2
+    indices:
+    - 7
+    vertex_id: -2
+    edge_ids:
+    - 3
   6:
     PDGs:
     - 6
@@ -181,23 +201,41 @@ nodes:
     - 9
     - 7
     - 2
-  4:
+  8:
+    PDGs:
+    - 6
+    - 6
+    - 22
+    momenta:
+    - k1+p0
+    - k1
+    - p0
+    indices:
+    - 12
+    - 20
+    - 1
+    vertex_id: 0
+    edge_ids:
+    - 5
+    - 9
+    - 0
+  5:
     PDGs:
     - 6
     - 6
     - 21
     momenta:
-    - k0+k1+p0
-    - k1+p0
+    - k1+p2
+    - k0+k1+p2
     - k0
     indices:
-    - 14
-    - 12
+    - 16
+    - 18
     - 10
     vertex_id: 0
     edge_ids:
-    - 6
-    - 5
+    - 7
+    - 8
     - 4
   7:
     PDGs:
@@ -217,44 +255,6 @@ nodes:
     - 8
     - 10
     - 3
-  0:
-    PDGs:
-    - 22
-    momenta:
-    - p1
-    indices:
-    - 3
-    vertex_id: -1
-    edge_ids:
-    - 1
-  8:
-    PDGs:
-    - 6
-    - 6
-    - 22
-    momenta:
-    - k1+p0
-    - k1
-    - p0
-    indices:
-    - 12
-    - 20
-    - 1
-    vertex_id: 0
-    edge_ids:
-    - 5
-    - 9
-    - 0
-  1:
-    PDGs:
-    - 22
-    momenta:
-    - p0
-    indices:
-    - 1
-    vertex_id: -1
-    edge_ids:
-    - 0
   3:
     PDGs:
     - 22
@@ -262,7 +262,7 @@ nodes:
     - p2
     indices:
     - 5
-    vertex_id: -1
+    vertex_id: -2
     edge_ids:
     - 2
-overal_factor: '-2'
+overall_factor: '-2'

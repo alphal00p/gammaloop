@@ -4257,7 +4257,7 @@ struct PythonNode {
 struct PythonGraph {
     edges: HashMap<usize, PythonEdge>,
     nodes: HashMap<usize, PythonNode>,
-    overal_factor: String,
+    overall_factor: String,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -4334,7 +4334,7 @@ impl PythonGraph {
                     EdgeType::Incoming => {
                         vertex_id = -1;
                     }
-                    EdgeType::Outgoing => vertex_id = -1,
+                    EdgeType::Outgoing => vertex_id = -2,
                     EdgeType::Virtual => {
                         unreachable!()
                     }
@@ -4370,7 +4370,7 @@ impl PythonGraph {
         PythonGraph {
             edges: python_edges,
             nodes: python_nodes,
-            overal_factor: bare_graph.overall_factor.clone(),
+            overall_factor: bare_graph.overall_factor.clone(),
         }
     }
 }
