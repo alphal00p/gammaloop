@@ -4324,11 +4324,30 @@ impl PythonGraph {
             if vertex.edges.len() == 3 && num_fermions == 2 {
                 let mut new_edges = Vec::new();
 
-                let first_fermion_edge = vertex
-                    .edges
+                let is_using_anti_particle = PDGs
                     .iter()
-                    .find(|edge_id| bare_graph.edges[**edge_id].particle.is_fermion())
-                    .unwrap();
+                    .filter(|pdg| model.get_particle_from_pdg(**pdg).is_fermion())
+                    .all(|pdg| pdg.is_negative());
+
+                let first_fermion_edge = if is_using_anti_particle {
+                    vertex
+                        .edges
+                        .iter()
+                        .find(|edge_id| {
+                            bare_graph.edges[**edge_id].particle.is_fermion()
+                                && bare_graph.edges[**edge_id].vertices[1] == node_id
+                        })
+                        .unwrap()
+                } else {
+                    vertex
+                        .edges
+                        .iter()
+                        .find(|edge_id| {
+                            bare_graph.edges[**edge_id].particle.is_fermion()
+                                && bare_graph.edges[**edge_id].vertices[0] == node_id
+                        })
+                        .unwrap()
+                };
 
                 new_edges.push(*first_fermion_edge);
 
