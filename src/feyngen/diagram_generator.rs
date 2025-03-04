@@ -4453,8 +4453,10 @@ impl PythonGraph {
                 {}
             }
 
-            let indices = python_edges
-                .values()
+            let indices = vertex
+                .edges
+                .iter()
+                .map(|id| &python_edges[id])
                 .filter(|e| e.vertices.0 == node_id || e.vertices.1 == node_id)
                 .map(|e| {
                     if e.indices[0] == node_id as isize || e.indices.len() == 1 {

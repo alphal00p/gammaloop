@@ -10,37 +10,16 @@ edges:
     vertices:
     - 9
     - 6
-  0:
-    name: p1
-    PDG: 22
-    type: in
-    momentum: p0
-    indices:
-    - 1
-    vertices:
-    - 1
-    - 8
-  2:
-    name: p3
+  3:
+    name: p4
     PDG: 22
     type: out
-    momentum: p2
+    momentum: p0+p1-p2
     indices:
-    - 5
+    - 7
     vertices:
-    - 6
-    - 3
-  6:
-    name: q3
-    PDG: 6
-    type: virtual
-    momentum: k1-p1
-    indices:
-    - 13
-    - 14
-    vertices:
-    - 4
-    - 9
+    - 7
+    - 2
   7:
     name: q4
     PDG: 6
@@ -52,17 +31,6 @@ edges:
     vertices:
     - 6
     - 5
-  8:
-    name: q5
-    PDG: 6
-    type: virtual
-    momentum: k0+k1-p2
-    indices:
-    - 17
-    - 18
-    vertices:
-    - 5
-    - 7
   10:
     name: q7
     PDG: 6
@@ -84,16 +52,6 @@ edges:
     vertices:
     - 0
     - 9
-  3:
-    name: p4
-    PDG: 22
-    type: out
-    momentum: p0+p1-p2
-    indices:
-    - 7
-    vertices:
-    - 7
-    - 2
   5:
     name: q2
     PDG: 6
@@ -105,6 +63,48 @@ edges:
     vertices:
     - 8
     - 4
+  6:
+    name: q3
+    PDG: 6
+    type: virtual
+    momentum: k1-p1
+    indices:
+    - 13
+    - 14
+    vertices:
+    - 4
+    - 9
+  2:
+    name: p3
+    PDG: 22
+    type: out
+    momentum: p2
+    indices:
+    - 5
+    vertices:
+    - 6
+    - 3
+  8:
+    name: q5
+    PDG: 6
+    type: virtual
+    momentum: k0+k1-p2
+    indices:
+    - 17
+    - 18
+    vertices:
+    - 5
+    - 7
+  0:
+    name: p1
+    PDG: 22
+    type: in
+    momentum: p0
+    indices:
+    - 1
+    vertices:
+    - 1
+    - 8
   4:
     name: q1
     PDG: 21
@@ -117,72 +117,6 @@ edges:
     - 4
     - 5
 nodes:
-  2:
-    PDGs:
-    - 22
-    momenta:
-    - p0+p1-p2
-    indices:
-    - 7
-    vertex_id: -1
-    edge_ids:
-    - 3
-  1:
-    PDGs:
-    - 22
-    momenta:
-    - p0
-    indices:
-    - 1
-    vertex_id: -1
-    edge_ids:
-    - 0
-  3:
-    PDGs:
-    - 22
-    momenta:
-    - p2
-    indices:
-    - 5
-    vertex_id: -1
-    edge_ids:
-    - 2
-  8:
-    PDGs:
-    - 6
-    - 6
-    - 22
-    momenta:
-    - k0+k1-p1
-    - k0+k1-p0-p1
-    - p0
-    indices:
-    - 1
-    - 22
-    - 12
-    vertex_id: 0
-    edge_ids:
-    - 5
-    - 10
-    - 0
-  5:
-    PDGs:
-    - 6
-    - 6
-    - 21
-    momenta:
-    - k0+k1-p2
-    - k1-p2
-    - k0
-    indices:
-    - 16
-    - 18
-    - 10
-    vertex_id: 0
-    edge_ids:
-    - 8
-    - 7
-    - 4
   0:
     PDGs:
     - 22
@@ -193,41 +127,25 @@ nodes:
     vertex_id: -1
     edge_ids:
     - 1
-  7:
+  2:
     PDGs:
-    - 6
-    - 6
     - 22
     momenta:
-    - k0+k1-p0-p1
-    - k0+k1-p2
     - p0+p1-p2
     indices:
-    - 18
-    - 22
     - 7
-    vertex_id: 0
+    vertex_id: -1
     edge_ids:
-    - 10
-    - 8
     - 3
-  6:
+  3:
     PDGs:
-    - 6
-    - 6
     - 22
     momenta:
-    - k1-p2
-    - k1
     - p2
     indices:
-    - 20
     - 5
-    - 16
-    vertex_id: 0
+    vertex_id: -1
     edge_ids:
-    - 7
-    - 9
     - 2
   4:
     PDGs:
@@ -247,6 +165,70 @@ nodes:
     - 6
     - 5
     - 4
+  6:
+    PDGs:
+    - 6
+    - 6
+    - 22
+    momenta:
+    - k1-p2
+    - k1
+    - p2
+    indices:
+    - 16
+    - 20
+    - 5
+    vertex_id: 0
+    edge_ids:
+    - 7
+    - 9
+    - 2
+  1:
+    PDGs:
+    - 22
+    momenta:
+    - p0
+    indices:
+    - 1
+    vertex_id: -1
+    edge_ids:
+    - 0
+  5:
+    PDGs:
+    - 6
+    - 6
+    - 21
+    momenta:
+    - k0+k1-p2
+    - k1-p2
+    - k0
+    indices:
+    - 18
+    - 16
+    - 10
+    vertex_id: 0
+    edge_ids:
+    - 8
+    - 7
+    - 4
+  7:
+    PDGs:
+    - 6
+    - 6
+    - 22
+    momenta:
+    - k0+k1-p0-p1
+    - k0+k1-p2
+    - p0+p1-p2
+    indices:
+    - 22
+    - 18
+    - 7
+    vertex_id: 0
+    edge_ids:
+    - 10
+    - 8
+    - 3
   9:
     PDGs:
     - 6
@@ -265,4 +247,22 @@ nodes:
     - 9
     - 6
     - 1
+  8:
+    PDGs:
+    - 6
+    - 6
+    - 22
+    momenta:
+    - k0+k1-p1
+    - k0+k1-p0-p1
+    - p0
+    indices:
+    - 12
+    - 22
+    - 1
+    vertex_id: 0
+    edge_ids:
+    - 5
+    - 10
+    - 0
 overal_factor: '-2'
