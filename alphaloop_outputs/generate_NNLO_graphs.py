@@ -65,6 +65,7 @@ inputs = [
         [
             (g_name, g) for (g_name, g) in graphs if (
                 g_name in nf_graphs and
+                g_name not in outer_nf_graphs and
                 g_name not in s_channel_singlet and
                 g_name not in t_channel_singlet)
         ],
