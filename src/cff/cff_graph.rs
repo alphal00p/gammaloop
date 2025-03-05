@@ -4,7 +4,7 @@ use itertools::Itertools;
 use linnet::half_edge::{
     hedgevec::HedgeVec,
     involution::{EdgeIndex, Flow, HedgePair, Orientation},
-    subgraph::OrientedCut,
+    subgraph::{HedgeNode, OrientedCut},
     HedgeGraph,
 };
 use serde::{Deserialize, Serialize};
@@ -18,7 +18,7 @@ use crate::{
 
 use super::{
     esurface::{Esurface, ExternalShift},
-    surface::HybridSurface,
+    surface::{HybridSurface, UnitSurface},
 };
 
 const MAX_VERTEX_COUNT: usize = 64;
@@ -541,14 +541,9 @@ impl CFFGenerationGraph {
             .unwrap_or_else(|| panic!("Could not find vertex with connected complement"))
     }
 
-    #[allow(unused_variables)]
-    #[allow(clippy::ptr_arg)]
-    pub fn generate_children(
-        &self,
-        vertices_used: &mut Vec<VertexSet>,
-    ) -> (Option<Vec<Self>>, HybridSurface) {
+    pub fn generate_children(&self) -> (Option<Vec<Self>>, HybridSurface) {
         if self.vertices.len() < 2 {
-            return (None, HybridSurface::Unit(()));
+            return (None, HybridSurface::Unit(UnitSurface {}));
         }
 
         let vertex = if let Some(vertex) = self.get_source_sink_greedy() {
@@ -613,7 +608,6 @@ impl CFFGenerationGraph {
             let esurface = Esurface {
                 energies: positive_energies,
                 external_shift,
-                circled_vertices: vertex.vertex_set,
             };
 
             HybridSurface::Esurface(esurface)
@@ -749,7 +743,7 @@ impl CFFGenerationGraph {
     pub fn new_from_subgraph<E, V>(
         graph: &HedgeGraph<E, V>,
         global_orientation: HedgeVec<Orientation>,
-        subgraph: &BitVec,
+        subgraph: &HedgeNode,
     ) -> Self {
         let mut vertices = (0..graph.n_nodes()).map(CFFVertex::new).collect_vec();
 
