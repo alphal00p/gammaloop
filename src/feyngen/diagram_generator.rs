@@ -3160,6 +3160,7 @@ impl FeynGen {
         );
 
         let mut nf_graphs = Vec::new();
+        let mut outer_nf_graphs = Vec::new();
         let mut s_channel_singlet = Vec::new();
         let mut t_channel_singlet = Vec::new();
         let mut no_valid_lmb = Vec::new();
@@ -3206,7 +3207,19 @@ impl FeynGen {
             //    Some(graph.clone())
             //} else {
             //    None
-            //};
+
+            let cuts = self.contains_cut(
+                model,
+                &symbolica_graph,
+                n_unresolved,
+                &unresolved_type,
+                None,
+                false,
+            );
+
+            if cuts.is_empty() {
+                warn!("could not find cuts for graph: {}", graph.name);
+            } //};
 
             // count the non-top fermion loops
             let veto_for_nf = Some(vec![
@@ -3221,51 +3234,6 @@ impl FeynGen {
                     veto_for_nf,
                 )
                 .unwrap();
-
-            if n_closed_fermion_loops_without_top == 1 {
-                nf_graphs.push(graph.name.clone());
-            }
-
-            if n_closed_fermion_loops_without_top > 1 {
-                warn!("this should not happen");
-            }
-
-            let cuts = self.contains_cut(
-                model,
-                &symbolica_graph,
-                n_unresolved,
-                &unresolved_type,
-                None,
-                false,
-            );
-
-            if cuts.is_empty() {
-                warn!("could not find cuts for graph: {}", graph.name);
-            }
-
-            let lmbs = graph.generate_loop_momentum_bases();
-            let mut found_good_lmb = false;
-            'find_lmb: for lmb in lmbs.into_iter() {
-                if (*cuts).iter().all(|(_, cut, _)| {
-                    graph
-                        .hedge_representation
-                        .iter_egdes(cut)
-                        .all(|(_, edge_data)| {
-                            let external_signature =
-                                &lmb.edge_signatures[*edge_data.data.unwrap()].external;
-                            get_allowed_external_signatures().contains(external_signature)
-                        })
-                }) {
-                    graph.loop_momentum_basis = lmb;
-                    found_good_lmb = true;
-                    break 'find_lmb;
-                }
-            }
-
-            if !found_good_lmb {
-                no_valid_lmb.push(graph.name.clone());
-                warn!("could not find good lmb for graph: {}", graph.name);
-            }
 
             // two gluons
             let s_channel_singlet_final_state =
@@ -3291,6 +3259,54 @@ impl FeynGen {
                 s_channel_singlet_final_state,
                 true,
             );
+
+            if n_closed_fermion_loops_without_top == 1 {
+                nf_graphs.push(graph.name.clone());
+                if cuts.iter().all(|(_, cut, _)| {
+                    let is_all_fermion = graph
+                        .hedge_representation
+                        .iter_egdes(cut)
+                        .map(|(_, edge_data)| &graph.edges[*edge_data.data.unwrap()].particle)
+                        .all(|p| p.is_fermion());
+
+                    let has_4_edges = graph.hedge_representation.iter_egdes(cut).count() == 4;
+
+                    is_all_fermion
+                        && has_4_edges
+                        && s_channel_singlet_cuts.is_empty()
+                        && t_channel_singlet_cuts.is_empty()
+                }) {
+                    outer_nf_graphs.push(graph.name.clone());
+                }
+            }
+
+            if n_closed_fermion_loops_without_top > 1 {
+                warn!("this should not happen");
+            }
+
+            let lmbs = graph.generate_loop_momentum_bases();
+            let mut found_good_lmb = false;
+            'find_lmb: for lmb in lmbs.into_iter() {
+                if (*cuts).iter().all(|(_, cut, _)| {
+                    graph
+                        .hedge_representation
+                        .iter_egdes(cut)
+                        .all(|(_, edge_data)| {
+                            let external_signature =
+                                &lmb.edge_signatures[*edge_data.data.unwrap()].external;
+                            get_allowed_external_signatures().contains(external_signature)
+                        })
+                }) {
+                    graph.loop_momentum_basis = lmb;
+                    found_good_lmb = true;
+                    break 'find_lmb;
+                }
+            }
+
+            if !found_good_lmb {
+                no_valid_lmb.push(graph.name.clone());
+                warn!("could not find good lmb for graph: {}", graph.name);
+            }
 
             if !s_channel_singlet_cuts.is_empty() {
                 s_channel_singlet.push(graph.name.clone());
@@ -3396,11 +3412,13 @@ impl FeynGen {
             writeln!(categories, "nf_graphs = {:?}", nf_graphs).unwrap();
             writeln!(categories, "s_channel_singlet = {:?}", s_channel_singlet).unwrap();
             writeln!(categories, "t_channel_singlet = {:?}", t_channel_singlet).unwrap();
+            writeln!(categories, "outer_nf_graphs = {:?}", outer_nf_graphs).unwrap();
             writeln!(categories, "no_valid_lmb = {:?}", no_valid_lmb).unwrap();
         }
 
         info!("nf graphs: {:?}", nf_graphs);
         info!("s channel singlet graphs: {:?}", s_channel_singlet);
+        info!("outer nf graphs: {:?}", outer_nf_graphs);
         info!("t channel singlet graphs: {:?}", t_channel_singlet);
 
         Ok(bare_graphs
