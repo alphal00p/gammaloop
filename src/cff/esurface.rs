@@ -64,14 +64,15 @@ impl Esurface {
         let symbolic_energies = self
             .energies
             .iter()
-            .map(|i| parse!(&format!("E{}", Into::<usize>::into(*i))).unwrap())
+            .map(|i| parse!(&format!("Q({}, cind(0))", Into::<usize>::into(*i))).unwrap())
             .collect_vec();
 
         let symbolic_shift = self
             .external_shift
             .iter()
             .fold(Atom::new(), |sum, (i, sign)| {
-                parse!(&format!("p{}", Into::<usize>::into(*i))).unwrap() * &Atom::new_num(*sign)
+                parse!(&format!("P({}, cind(0))", Into::<usize>::into(*i))).unwrap()
+                    * &Atom::new_num(*sign)
                     + &sum
             });
 
@@ -609,6 +610,12 @@ pub fn add_external_shifts(lhs: &ExternalShift, rhs: &ExternalShift) -> External
     res
 }
 
+impl From<EsurfaceID> for Atom {
+    fn from(id: EsurfaceID) -> Self {
+        parse!(&format!("η({})", Into::<usize>::into(id.0))).unwrap()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use itertools::Itertools;
@@ -686,7 +693,7 @@ mod tests {
         };
 
         let esurface_atom = esurface.to_atom();
-        let expected_atom = parse!("E2 + E3 - p1").unwrap();
+        let expected_atom = parse!("Q(2, cind(0)) + Q(3, cind(0)) - P(1, cind(0))").unwrap();
 
         let diff = esurface_atom - &expected_atom;
         let diff = diff.expand();
