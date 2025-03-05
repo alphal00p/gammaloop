@@ -739,23 +739,18 @@ mod tests {
                 edge_signatures: box_signatures,
             };
 
-            let circled_vertices = VertexSet::dummy();
-
             let esurfaces_array = [
                 Esurface {
                     energies: vec![EdgeIndex::from(5), EdgeIndex::from(6)],
                     external_shift: vec![(EdgeIndex::from(1), 1)],
-                    circled_vertices,
                 },
                 Esurface {
                     energies: vec![EdgeIndex::from(5), EdgeIndex::from(7)],
                     external_shift: vec![(EdgeIndex::from(1), 1), (EdgeIndex::from(2), 1)],
-                    circled_vertices,
                 },
                 Esurface {
                     energies: vec![EdgeIndex::from(4), EdgeIndex::from(6)],
                     external_shift: vec![(EdgeIndex::from(0), 1), (EdgeIndex::from(1), 1)],
-                    circled_vertices,
                 },
                 Esurface {
                     energies: vec![EdgeIndex::from(4), EdgeIndex::from(7)],
@@ -764,7 +759,6 @@ mod tests {
                         (EdgeIndex::from(1), 1),
                         (EdgeIndex::from(2), 1),
                     ],
-                    circled_vertices,
                 },
             ];
 
@@ -844,7 +838,6 @@ mod tests {
             let only_esurface = Esurface {
                 energies: vec![EdgeIndex::from(2), EdgeIndex::from(3), EdgeIndex::from(4)],
                 external_shift: vec![(EdgeIndex::from(0), -1)],
-                circled_vertices: VertexSet::dummy(),
             };
 
             let esurfaces = vec![only_esurface].into();
