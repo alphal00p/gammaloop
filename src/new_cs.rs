@@ -6,11 +6,17 @@ use color_eyre::Result;
 
 use itertools::Itertools;
 use linnet::half_edge::{
-    builder::HedgeGraphBuilder, involution::Flow, subgraph::OrientedCut, NodeIndex,
+    builder::HedgeGraphBuilder,
+    involution::Flow,
+    subgraph::{HedgeNode, OrientedCut},
+    NodeIndex,
 };
+use serde::{Deserialize, Serialize};
 use symbolica::{atom::Atom, parse};
+use typed_index_collections::TiVec;
 
 use crate::{
+    cff::cut_expression::{OrientationData, OrientationID},
     feyngen::{
         diagram_generator::FeynGen, FeynGenFilter, FeynGenFilters, FeynGenOptions, GenerationType,
         NumeratorAwareGraphGroupingOption, SelfEnergyFilterOptions, SnailFilterOptions,
@@ -22,6 +28,8 @@ use crate::{
     numerator::{GlobalPrefactor, NumeratorState, PythonState},
     ProcessSettings,
 };
+
+use derive_more::{From, Into};
 
 pub struct ProcessDefinition {
     pub initial_pdgs: Vec<i64>, // Do we want a pub type Pdg = i64;?
@@ -62,6 +70,7 @@ fn test_process_cross_section() -> GenerationOptions {
         symmetrize_left_right_states: false,
         loop_count_range: (2, 2),
         allow_symmetrization_of_external_fermions_in_amplitudes: false,
+        max_multiplicity_for_fast_cut_filter: 6,
     };
 
     GenerationOptions {
@@ -96,6 +105,7 @@ fn test_process_amplitude() -> GenerationOptions {
         symmetrize_left_right_states: false,
         allow_symmetrization_of_external_fermions_in_amplitudes: false,
         loop_count_range: (1, 1),
+        max_multiplicity_for_fast_cut_filter: 6,
     };
 
     GenerationOptions {
@@ -280,18 +290,23 @@ pub struct CrossSection<S: NumeratorState = PythonState> {
     supergraphs: Vec<CrossSectionGraph<S>>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, From, Into, Hash, PartialEq, Copy, Eq)]
+pub struct CutId(usize);
+
 pub struct CrossSectionGraph<S: NumeratorState = PythonState> {
     graph: Graph<S>,
-    cuts: Vec<CrossSectionCut>,
+    cuts: TiVec<CutId, CrossSectionCut>,
     derived_data: CrossSectionDerivedData,
 }
 
-pub struct CrossSectionDerivedData {}
+pub struct CrossSectionDerivedData {
+    pub orientations: TiVec<OrientationID, OrientationData>,
+}
 
 pub struct CrossSectionCut {
     pub cut: OrientedCut,
-    pub left: BitVec,
-    pub right: BitVec,
+    pub left: HedgeNode,
+    pub right: HedgeNode,
 }
 
 #[test]
