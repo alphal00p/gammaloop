@@ -1,7 +1,8 @@
 use crate::{
     cff::{
+        cut_expression::CFFCutExpression,
         esurface::add_external_shifts,
-        expression::{CompiledCFFExpression, OrientationExpression},
+        expression::CompiledCFFExpression,
         hsurface::HsurfaceID,
         surface::{HybridSurface, HybridSurfaceID},
         tree::Tree,
@@ -29,10 +30,13 @@ use log::debug;
 
 use super::{
     cff_graph::{CFFGenerationGraph, VertexSet},
-    cut_expression::{OrientationData, OrientationID},
+    cut_expression::{
+        CutOrientationExpression, OrientationData, OrientationExpression, OrientationID,
+    },
     esurface::{Esurface, EsurfaceCollection, EsurfaceID, ExternalShift},
     expression::{CFFExpression, CFFLimit, TermId},
     hsurface::HsurfaceCollection,
+    surface::Surface,
     tree::NodeId,
 };
 
@@ -256,6 +260,8 @@ fn get_possible_orientations_for_cut_list<E, V>(
         !graph.has_directed_cycle_initial()
     });
 
+    // find the cuts that are consistent with the orientation
+    // remove orientations with no consistent cuts
     let orientations = filter_non_dag
         .filter_map(|global_orientation| {
             let cuts_consistent_with_orientation = cuts
@@ -264,6 +270,7 @@ fn get_possible_orientations_for_cut_list<E, V>(
                     let edges_in_cut = graph.iter_edges(&cut.cut).map(|(_, id, _)| id);
                     let orientation_of_edges_in_cut =
                         cut.cut.iter_edges_relative(graph).map(|(or, _)| or);
+
                     edges_in_cut
                         .zip(orientation_of_edges_in_cut)
                         .all(|(edge_id, orientation)| global_orientation[edge_id] == orientation)
@@ -297,35 +304,78 @@ pub fn generate_cff_expression<E, V>(
     Ok(graph_cff)
 }
 
-pub fn generate_cff_for_cut<E, V>(
+fn generate_cff_for_orientation<E, V>(
     graph: &HedgeGraph<E, V>,
-    cut: &CrossSectionCut,
     canonize_esurface: &Option<ShiftRewrite>,
-    cache: &mut EsurfaceCollection,
-) -> Result<CFFExpression, Report> {
-    let orientations = get_orientations_with_cut(graph, &cut.cut);
+    cache: &mut SurfaceCache,
+    cuts: &TiVec<CutId, CrossSectionCut>,
+    orientation_data: &OrientationData,
+) -> Vec<CutOrientationExpression> {
+    orientation_data
+        .cuts
+        .iter()
+        .map(|cut_id| {
+            let cut = &cuts[*cut_id];
+            let left_diagram = CFFGenerationGraph::new_from_subgraph(
+                graph,
+                orientation_data.orientation.clone(),
+                &cut.left,
+            );
+            let right_diagram = CFFGenerationGraph::new_from_subgraph(
+                graph,
+                orientation_data.orientation.clone(),
+                &cut.right,
+            );
 
-    let left_and_right_diagrams =
-        orientations
-            .into_iter()
-            .enumerate()
-            .map(|(term_id, orientation)| {
-                let left =
-                    CFFGenerationGraph::new_from_subgraph(graph, orientation.clone(), &cut.left);
-                let right = CFFGenerationGraph::new_from_subgraph(graph, orientation, &cut.right);
+            let left_tree =
+                generate_tree_for_orientation(left_diagram, cache, None, canonize_esurface)
+                    .map(forget_graphs);
 
-                disable! {
-                    let left_expression = generate_tree_for_orientation(
-                        left,
-                        term_id,
-                        generator_cache,
-                        None,
-                        canonize_esurface,
-                    );
-                }
-            });
+            let right_tree =
+                generate_tree_for_orientation(right_diagram, cache, None, canonize_esurface)
+                    .map(forget_graphs);
 
-    todo!()
+            CutOrientationExpression {
+                left: left_tree,
+                right: right_tree,
+            }
+        })
+        .collect()
+}
+
+pub fn generate_cff_with_cuts<E, V>(
+    graph: &HedgeGraph<E, V>,
+    canonize_esurface: &Option<ShiftRewrite>,
+    cuts: &TiVec<CutId, CrossSectionCut>,
+) -> CFFCutExpression {
+    let orientations = get_possible_orientations_for_cut_list(graph, cuts);
+    let mut surface_cache = SurfaceCache {
+        esurface_cache: EsurfaceCollection::from_iter(std::iter::empty()),
+        hsurface_cache: HsurfaceCollection::from_iter(std::iter::empty()),
+    };
+
+    let orientation_expressions = orientations
+        .into_iter()
+        .map(|orientation_data| {
+            let cut_expressions = generate_cff_for_orientation(
+                graph,
+                canonize_esurface,
+                &mut surface_cache,
+                cuts,
+                &orientation_data,
+            );
+
+            OrientationExpression {
+                data: orientation_data,
+                expressions: cut_expressions,
+            }
+        })
+        .collect();
+
+    CFFCutExpression {
+        orientations: orientation_expressions,
+        surfaces: surface_cache,
+    }
 }
 
 pub fn generate_cff_limit(
@@ -385,10 +435,9 @@ fn generate_cff_from_orientations(
         HsurfaceCollection::from_iter(std::iter::empty())
     };
 
-    let mut generator_cache = GeneratorCache {
+    let mut generator_cache = SurfaceCache {
         esurface_cache,
         hsurface_cache,
-        vertices_used: vec![],
     };
 
     // filter cyclic orientations beforehand
@@ -414,7 +463,7 @@ fn generate_cff_from_orientations(
             );
             let expression = tree.map(forget_graphs);
 
-            OrientationExpression {
+            crate::cff::expression::OrientationExpression {
                 expression,
                 orientation: global_orientation,
                 dag: graph,
@@ -430,15 +479,14 @@ fn generate_cff_from_orientations(
     })
 }
 
-struct GeneratorCache {
-    esurface_cache: EsurfaceCollection,
-    hsurface_cache: HsurfaceCollection,
-    vertices_used: Vec<VertexSet>,
+pub struct SurfaceCache {
+    pub esurface_cache: EsurfaceCollection,
+    pub hsurface_cache: HsurfaceCollection,
 }
 
 fn generate_tree_for_orientation(
     graph: CFFGenerationGraph,
-    generator_cache: &mut GeneratorCache,
+    generator_cache: &mut SurfaceCache,
     rewrite_at_cache_growth: Option<&Esurface>,
     canonize_esurface: &Option<ShiftRewrite>,
 ) -> Tree<GenerationData> {
@@ -459,7 +507,7 @@ fn generate_tree_for_orientation(
 
 fn advance_tree(
     tree: &mut Tree<GenerationData>,
-    generator_cache: &mut GeneratorCache,
+    generator_cache: &mut SurfaceCache,
     rewrite_at_cache_growth: Option<&Esurface>,
     canonize_esurface: &Option<ShiftRewrite>,
 ) -> Option<()> {
@@ -474,8 +522,7 @@ fn advance_tree(
             let node = &tree.get_node(node_id);
             let graph = &node.data.graph;
 
-            let (option_children, surface) =
-                graph.generate_children(&mut generator_cache.vertices_used);
+            let (option_children, surface) = graph.generate_children();
 
             let surface_id = match surface {
                 HybridSurface::Esurface(mut esurface) => {
