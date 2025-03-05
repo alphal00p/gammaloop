@@ -761,6 +761,7 @@ impl FeynGen {
         fn is_valid_cut<NodeColor: NodeColorFunctions>(
             cut: &(InternalSubGraph, OrientedCut, InternalSubGraph),
             s_set: &AHashSet<NodeIndex>,
+            t_set: &AHashSet<NodeIndex>,
             model: &Model,
             n_unresolved: usize,
             unresolved_type: &AHashSet<Arc<Particle>>,
@@ -769,7 +770,7 @@ impl FeynGen {
             amp_loop_count: Option<(usize, usize)>,
             graph: &HedgeGraph<Arc<Particle>, NodeColor>,
         ) -> bool {
-            if is_s_channel(cut, s_set, graph) {
+            if is_s_channel(cut, s_set, t_set, graph) {
                 let mut cut_content: Vec<_> = cut
                     .1
                     .iter_edges_relative(graph)
@@ -819,6 +820,7 @@ impl FeynGen {
         fn is_s_channel<NodeColor>(
             cut: &(InternalSubGraph, OrientedCut, InternalSubGraph),
             s_set: &AHashSet<NodeIndex>,
+            t_set: &AHashSet<NodeIndex>,
             graph: &HedgeGraph<Arc<Particle>, NodeColor>,
         ) -> bool {
             let nodes: AHashSet<_> = graph
@@ -826,7 +828,9 @@ impl FeynGen {
                 .map(|(i, _)| graph.id_from_hairs(i).unwrap())
                 .collect();
 
-            s_set.is_subset(&nodes)
+            // the left graph should only contain s-set particles
+
+            s_set.is_subset(&nodes) && t_set.intersection(&nodes).count() == 0
         }
 
         let particle_content = self
@@ -846,37 +850,38 @@ impl FeynGen {
                 |_, d| d.map(|d| model.get_particle_from_pdg(d.pdg)),
             );
 
-            let mut s_set = AHashSet::new();
-            let mut t_set = vec![];
+        let mut s_set = AHashSet::new();
+        let mut t_set = AHashSet::new();
 
-            for (n, f) in he_graph.iter_nodes() {
-                let id = he_graph.id_from_hairs(n).unwrap();
-                match f.get_sign(n_particles) {
-                    SignOrZero::Plus => {
-                        s_set.insert(id);
-                    }
-                    SignOrZero::Minus => {
-                        t_set.push(id);
-                    }
-                    _ => {}
+        for (n, f) in he_graph.iter_nodes() {
+            let id = he_graph.id_from_hairs(n).unwrap();
+            match f.get_sign(n_particles) {
+                SignOrZero::Plus => {
+                    s_set.insert(id);
                 }
+                SignOrZero::Minus => {
+                    t_set.insert(id);
+                }
+                _ => {}
             }
-            if let (Some(&s), Some(&t)) = (s_set.iter().next(), t_set.first()) {
-                let cuts = he_graph.all_cuts(s, t);
+        }
+        if let (Some(&s), Some(&t)) = (s_set.iter().next(), t_set.iter().next()) {
+            let cuts = he_graph.all_cuts(s, t);
 
-                let pass_cut_filter = cuts.iter().any(|c| {
-                    is_valid_cut(
-                        c,
-                        &s_set,
-                        model,
-                        n_unresolved,
-                        unresolved_type,
-                        &particle_content,
-                        amp_couplings,
-                        amp_loop_count,
-                        &he_graph,
-                    )
-                });
+            let pass_cut_filter = cuts.iter().any(|c| {
+                is_valid_cut(
+                    c,
+                    &s_set,
+                    &t_set,
+                    model,
+                    n_unresolved,
+                    unresolved_type,
+                    &particle_content,
+                    amp_couplings,
+                    amp_loop_count,
+                    &he_graph,
+                )
+            });
 
                 pass_cut_filter
             } else {
@@ -1035,9 +1040,58 @@ impl FeynGen {
             }
             false
         }
+
+        fn are_nodes_connected<NodeColor>(
+            cut: &[usize],
+            graph: &SymbolicaGraph<NodeColor, EdgeColor>,
+            adj_list: &HashMap<usize, Vec<(usize, usize)>>,
+            nodes: &[usize],
+        ) -> bool {
+            for (node_a, node_b) in nodes.iter().tuple_combinations() {
+                let mut visited: Vec<bool> = vec![false; graph.nodes().len()];
+                let mut stack: Vec<usize> = vec![*node_a];
+                let mut found_connecting_path = false;
+                'dfs_search: while let Some(node) = stack.pop() {
+                    if node == *node_b {
+                        found_connecting_path = true;
+                        break 'dfs_search;
+                    }
+                    visited[node] = true;
+                    for (i_e, neighbor) in adj_list[&node].iter() {
+                        if !cut.contains(i_e) && !visited[*neighbor] {
+                            stack.push(*neighbor);
+                        }
+                    }
+                }
+                if !found_connecting_path {
+                    return false;
+                }
+            }
+            true
+        }
+
+        fn is_valid_cut<NodeColor>(
+            cut: &[usize],
+            graph: &SymbolicaGraph<NodeColor, EdgeColor>,
+            adj_list: &HashMap<usize, Vec<(usize, usize)>>,
+            left_nodes: &[usize],
+            right_nodes: &[usize],
+        ) -> bool {
+            if are_incoming_connected_to_outgoing(cut, graph, adj_list, left_nodes, right_nodes) {
+                return false;
+            }
+            if !are_nodes_connected(cut, graph, adj_list, left_nodes) {
+                return false;
+            }
+            if !are_nodes_connected(cut, graph, adj_list, right_nodes) {
+                return false;
+            }
+            true
+        }
+
         for unique_combination_with_fixed_multiplicity in unique_combinations {
             'cutloop: for cut in unique_combination_with_fixed_multiplicity {
-                if are_incoming_connected_to_outgoing(
+                if !is_valid_cut(
                     &cut,
                     graph,
                     &adj_list,
@@ -1050,7 +1104,7 @@ impl FeynGen {
                 for subcut in (1..=(cut.len() - 1))
                     .flat_map(|offset| cut.iter().combinations(cut.len() - offset))
                 {
-                    if !are_incoming_connected_to_outgoing(
+                    if is_valid_cut(
                         subcut.iter().map(|&id| *id).collect::<Vec<_>>().as_slice(),
                         graph,
                         &adj_list,
@@ -1234,7 +1288,6 @@ impl FeynGen {
                 } else if pass_steps == 1 && symmetrized_external_tag < -2000 {
                     // Node colors below -2000 indicate a left-right symmetrization of the external legs for a forward-scattering diagrams
                     // without symmetrizing the initial-states.
-                    assert!(self.options.symmetrize_left_right_states);
                     let external_leg_position = (-symmetrized_external_tag) % 1000;
                     // Try and find this either in initial or final states
                     let (matched_position, is_initial_match) = if let Some(matched_initial_pos) =
@@ -1328,7 +1381,8 @@ impl FeynGen {
         input_graph: &SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>,
         node_colors_for_external_symmetrization: &HashMap<i32, i32>,
         numerator_aware_isomorphism_grouping: &NumeratorAwareGraphGroupingOption,
-        manually_canonalize_initial_final_swap: bool,
+        // This option contains: (self.options.symmetrize_initial_states, self.options.symmetrize_left_right_states) if any is true, else None.
+        manually_canonalize_initial_states_cross_section_ordering: Option<(bool, bool)>,
     ) -> Result<
         (
             SymbolicaGraph<NodeColorWithoutVertexRule, std::string::String>,
@@ -1350,26 +1404,82 @@ impl FeynGen {
                 }
             })
             .collect::<HashMap<_, _>>();
-        let mut external_remappings = vec![AHashMap::<usize, usize>::default()];
-        if manually_canonalize_initial_final_swap {
-            let mut remapping = AHashMap::default();
-            for i_ext in 1..=self.options.initial_pdgs.len() {
-                remapping.insert(
-                    *external_node_positions.get(&(i_ext as i32)).unwrap(),
-                    *external_node_positions
-                        .get(&((i_ext + self.options.initial_pdgs.len()) as i32))
-                        .unwrap(),
-                );
-                remapping.insert(
-                    *external_node_positions
-                        .get(&((i_ext + self.options.initial_pdgs.len()) as i32))
-                        .unwrap(),
-                    *external_node_positions.get(&(i_ext as i32)).unwrap(),
-                );
+        // Contains the two tuple (are_left_and_right_swapped, remapping)
+        let mut external_remappings = vec![];
+        if let Some((symmetrize_initial_states, symmetrize_left_right_states)) =
+            manually_canonalize_initial_states_cross_section_ordering
+        {
+            let external_ids = (1..=self.options.initial_pdgs.len()).collect::<Vec<_>>();
+            let mut initial_states_orders = vec![];
+            if symmetrize_initial_states {
+                'permutation_loop: for permutation in external_ids
+                    .iter()
+                    .cloned()
+                    .permutations(external_ids.len())
+                {
+                    if permutation.iter().enumerate().any(|(src, trgt)| {
+                        self.options.initial_pdgs[src] != self.options.initial_pdgs[*trgt - 1]
+                    }) {
+                        continue 'permutation_loop;
+                    }
+                    initial_states_orders.push(permutation);
+                }
+            } else {
+                initial_states_orders.push(external_ids);
+            };
+            for initial_state_order in initial_states_orders {
+                let mut remapping = AHashMap::<usize, usize>::default();
+                for ext_id in 1..=self.options.initial_pdgs.len() {
+                    remapping.insert(
+                        *external_node_positions.get(&(ext_id as i32)).unwrap(),
+                        *external_node_positions
+                            .get(&((initial_state_order[ext_id - 1]) as i32))
+                            .unwrap(),
+                    );
+                    remapping.insert(
+                        *external_node_positions
+                            .get(&((ext_id + self.options.initial_pdgs.len()) as i32))
+                            .unwrap(),
+                        *external_node_positions
+                            .get(
+                                &((initial_state_order[ext_id - 1]
+                                    + self.options.initial_pdgs.len())
+                                    as i32),
+                            )
+                            .unwrap(),
+                    );
+                }
+                external_remappings.push((false, remapping));
+                if symmetrize_left_right_states {
+                    let mut remapping = AHashMap::<usize, usize>::default();
+                    for ext_id in 1..=self.options.initial_pdgs.len() {
+                        remapping.insert(
+                            *external_node_positions.get(&(ext_id as i32)).unwrap(),
+                            *external_node_positions
+                                .get(
+                                    &((initial_state_order[ext_id - 1]
+                                        + self.options.initial_pdgs.len())
+                                        as i32),
+                                )
+                                .unwrap(),
+                        );
+                        remapping.insert(
+                            *external_node_positions
+                                .get(&((ext_id + self.options.initial_pdgs.len()) as i32))
+                                .unwrap(),
+                            *external_node_positions
+                                .get(&(initial_state_order[ext_id - 1] as i32))
+                                .unwrap(),
+                        );
+                    }
+                    external_remappings.push((true, remapping));
+                }
             }
-            external_remappings.push(remapping);
+        } else {
+            external_remappings.push((false, AHashMap::<usize, usize>::default()));
         }
-        for remapping in external_remappings {
+
+        for (are_left_and_right_swapped, remapping) in external_remappings {
             // Make sure to canonize the edge ordering based on the skeletton graph with only propagator mass as edge color
             let mut skeletton_graph = SymbolicaGraph::new();
             for node in input_graph.nodes() {
@@ -1428,10 +1538,15 @@ impl FeynGen {
                     )
                     .unwrap();
             }
-            canonized_skelettons.push((remapping, skeletton_graph.canonize()));
+            canonized_skelettons.push((
+                (are_left_and_right_swapped, remapping),
+                skeletton_graph.canonize(),
+            ));
         }
-        canonized_skelettons.sort_by(|a, b| a.1.graph.partial_cmp(&b.1.graph).unwrap());
-        let (selected_external_remapping, canonized_skeletton) =
+        canonized_skelettons.sort_by(|a, b| {
+            (a.1.graph.nodes(), a.1.graph.edges()).cmp(&(b.1.graph.nodes(), b.1.graph.edges()))
+        });
+        let ((was_left_and_right_swapped, selected_external_remapping), canonized_skeletton) =
             canonized_skelettons.first().unwrap();
 
         let mut can_graph_node_pos_to_input_graph_node_pos: Vec<usize> =
@@ -1485,12 +1600,12 @@ impl FeynGen {
                 } else {
                     model.get_particle_from_pdg(e.data.pdg)
                 };
-                // Apply the switch from particle to anti-particle (CP symmetry) if the canonilazation swapped initial and final states.
+                // Apply the switch from particle to anti-particle (CP symmetry) if the canonicalization swapped initial and final states.
                 // IMPORTANT: we must here to apply CP not just to the external particles since the assignment of fermion flow matters, for
                 // internal edges connecting these external fermions.
                 // If one would fix those edges (necessary e.g. for e- d > e- d DIS process) then one could add '&& is_external' below, which
                 // would allow to capture additional groupings involving the charged. W bosons.
-                if !selected_external_remapping.is_empty() {
+                if *was_left_and_right_swapped {
                     particle = particle.get_anti_particle(model);
                 }
                 (
@@ -2297,11 +2412,11 @@ impl FeynGen {
         let (n_unresolved, unresolved_type) = self.unresolved_cut_content(model);
 
         // The fast cutksoky filter is only fast for up to ~ 6 particles to check
-        const MAX_FAST_CUTKOSKY_PARTICLES: usize = 6;
         let mut applied_fast_cutksosky_cut_filter = false;
         if self.options.generation_type == GenerationType::CrossSection
             && !self.options.final_pdgs.is_empty()
-            && self.options.final_pdgs.len() + n_unresolved <= MAX_FAST_CUTKOSKY_PARTICLES
+            && self.options.final_pdgs.len() + n_unresolved
+                <= self.options.max_multiplicity_for_fast_cut_filter
         {
             applied_fast_cutksosky_cut_filter = true;
 
@@ -2395,17 +2510,17 @@ impl FeynGen {
                     self.options.symmetrize_initial_states,
                     self.options.symmetrize_left_right_states,
                 ) {
-                    (true, true) | (true, false) => {
-                        for initial_color in 1..=self.options.initial_pdgs.len() {
-                            node_colors_for_canonicalization.insert(initial_color as i32, -2);
-                        }
-                        for final_color in self.options.initial_pdgs.len() + 1
-                            ..=2 * self.options.initial_pdgs.len()
-                        {
-                            node_colors_for_canonicalization.insert(final_color as i32, -3);
-                        }
-                    }
-                    (false, true) => {
+                    // (true, true) | (true, false) => {
+                    //     for initial_color in 1..=self.options.initial_pdgs.len() {
+                    //         node_colors_for_canonicalization.insert(initial_color as i32, -2);
+                    //     }
+                    //     for final_color in self.options.initial_pdgs.len() + 1
+                    //         ..=2 * self.options.initial_pdgs.len()
+                    //     {
+                    //         node_colors_for_canonicalization.insert(final_color as i32, -3);
+                    //     }
+                    // }
+                    (false, true) | (true, true) | (true, false) => {
                         // In this case we only care about left-righ  the pre-grouping does nothing so we can skip it
                         perform_graph_pregrouping_without_numerator_and_left_right_symmetry = false;
                         for initial_color in 1..=self.options.initial_pdgs.len() {
@@ -2582,29 +2697,38 @@ impl FeynGen {
                 .par_iter()
                 .progress_with(bar.clone())
                 .map(|(g, symmetry_factor)| {
-                    let manually_canonalize_initial_final_swap = self.options.generation_type
-                        == GenerationType::CrossSection
-                        && self.options.symmetrize_left_right_states;
+                    let manually_canonalize_initial_states_cross_section_ordering =
+                        if self.options.generation_type == GenerationType::CrossSection
+                            && (self.options.symmetrize_initial_states
+                                || self.options.symmetrize_left_right_states)
+                        {
+                            Some((
+                                self.options.symmetrize_initial_states,
+                                self.options.symmetrize_left_right_states,
+                            ))
+                        } else {
+                            None
+                        };
                     let (mut canonical_repr, mut sorted_g) = self
                         .canonicalize_edge_and_vertex_ordering(
                             model,
                             g,
                             &node_colors_for_canonicalization,
                             numerator_aware_isomorphism_grouping,
-                            manually_canonalize_initial_final_swap,
+                            manually_canonalize_initial_states_cross_section_ordering,
                         )
                         .unwrap();
                     // If we are symmetrizing the left-right states in the context of a cross-section, the canonaliztion above
                     // has canonized the choice of which nodes to assign to the initial and final state.
                     // We now do a second pass to canonalize the vertex ordering for that particular choice.
-                    if manually_canonalize_initial_final_swap {
+                    if manually_canonalize_initial_states_cross_section_ordering.is_some() {
                         (canonical_repr, sorted_g) = self
                             .canonicalize_edge_and_vertex_ordering(
                                 model,
                                 &sorted_g,
                                 &node_colors_for_canonicalization,
                                 numerator_aware_isomorphism_grouping,
-                                false,
+                                None,
                             )
                             .unwrap();
                     }
