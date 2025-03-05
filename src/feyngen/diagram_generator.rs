@@ -4269,7 +4269,7 @@ impl PythonGraph {
     fn from_bare_graph(bare_graph: &BareGraph, model: &Model) -> Self {
         let mut python_edges = HashMap::default();
 
-        for (edge_id, edge) in bare_graph.edges.iter().enumerate() {
+        for edge in bare_graph.edges.iter() {
             let edge_type = match edge.edge_type {
                 EdgeType::Incoming => "in",
                 EdgeType::Outgoing => "out",
@@ -4416,9 +4416,8 @@ impl PythonGraph {
                 .edges
                 .iter()
                 .map(|id| &python_edges[id])
-                .filter(|e| e.vertices.0 == node_id || e.vertices.1 == node_id)
                 .map(|e| {
-                    if e.indices[0] == node_id as isize || e.indices.len() == 1 {
+                    if e.vertices.0 == node_id || e.indices.len() == 1 {
                         e.indices[0]
                     } else {
                         e.indices[1]
@@ -4437,9 +4436,30 @@ impl PythonGraph {
             python_nodes.insert(node_id, python_node);
         }
 
+        for edge in python_edges.values_mut() {
+            edge.vertices.0 += 1;
+            edge.vertices.1 += 1;
+        }
+
+        for node in python_nodes.values_mut() {
+            for edge_id in node.edge_ids.iter_mut() {
+                *edge_id += 1;
+            }
+        }
+
+        let shifted_python_edges = python_edges
+            .into_iter()
+            .map(|(key, edge)| (key + 1, edge))
+            .collect();
+
+        let shifted_python_nodes = python_nodes
+            .into_iter()
+            .map(|(key, node)| (key + 1, node))
+            .collect();
+
         PythonGraph {
-            edges: python_edges,
-            nodes: python_nodes,
+            edges: shifted_python_edges,
+            nodes: shifted_python_nodes,
             overall_factor: bare_graph.overall_factor.clone(),
         }
     }
