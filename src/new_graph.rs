@@ -19,7 +19,6 @@ use linnet::half_edge::{
     subgraph::{
         self, cycle::SignedCycle, Inclusion, InternalSubGraph, OrientedCut, SubGraph, SubGraphOps,
     },
-    tree::TraversalTree,
     HedgeGraph, NodeIndex,
 };
 use petgraph::graph;
@@ -41,6 +40,7 @@ use symbolica::{
 use typed_index_collections::TiVec;
 
 use crate::{
+    disable,
     gammaloop_integrand::BareSample,
     graph::{BareEdge, BareVertex, DerivedGraphData, EdgeType, HasVertexInfo, Shifts, VertexInfo},
     model::{self, EdgeSlots, Model, VertexSlots},
@@ -103,37 +103,39 @@ impl FeynmanGraph for HedgeGraph<Edge, Vertex> {
             .unwrap_or(self.iter_nodes().next().unwrap())
             .0;
 
-        let tree = TraversalTree::dfs(self, &self.full_filter(), root, None);
-        let tree_complement = tree.tree.complement(self);
+        todo!();
+        disable! {
+            let tree = TraversalTree::dfs(self, &self.full_filter(), root, None);
+            let tree_complement = tree.tree.complement(self);
 
-        let mut lmb_vec = Vec::new();
-        let mut cycle_basis = Vec::new();
-        let mut lmb_basis = Vec::new();
+            let mut lmb_vec = Vec::new();
+            let mut cycle_basis = Vec::new();
+            let mut lmb_basis = Vec::new();
 
-        for (pair, edge_index, _) in self.iter_edges(&tree_complement) {
-            if let HedgePair::Paired { source, .. } = pair {
-                lmb_vec.push(edge_index);
-                lmb_basis.push(source);
-                cycle_basis.push(
-                    SignedCycle::from_cycle(tree.cycle(source).unwrap(), source, self).unwrap(),
-                );
+            for (pair, edge_index, _) in self.iter_edges(&tree_complement) {
+                if let HedgePair::Paired { source, .. } = pair {
+                    lmb_vec.push(edge_index);
+                    lmb_basis.push(source);
+                    cycle_basis.push(
+                        SignedCycle::from_cycle(tree.cycle(source).unwrap(), source, self).unwrap(),
+                    );
+                }
             }
+
+            let loop_number = lmb_vec.len();
+            let mut lmb = LoopMomentumBasis {
+                tree: Some(tree),
+                basis: TiVec::from_iter(lmb_vec),
+                edge_signatures: self.new_hedgevec(&|_, _| LoopExtSignature {
+                    internal: LoopSignature::from_iter(vec![SignOrZero::Zero; loop_number]),
+                    external: ExternalSignature::from_iter(vec![SignOrZero::Zero; self.n_externals()]),
+                }),
+            };
+
+            lmb.set_edge_signatures(self)?;
+
+            Ok(lmb)
         }
-
-        let loop_number = lmb_vec.len();
-        let mut lmb = LoopMomentumBasis {
-            tree: Some(tree),
-            basis: TiVec::from_iter(lmb_vec),
-            edge_signatures: self.new_hedgevec(&|_, _| LoopExtSignature {
-                internal: LoopSignature::from_iter(vec![SignOrZero::Zero; loop_number]),
-                external: ExternalSignature::from_iter(vec![SignOrZero::Zero; self.n_externals()]),
-            }),
-        };
-
-        lmb.set_edge_signatures(self)?;
-
-        Ok(lmb)
-
         //        let mut leaves = tree.leaf_edges();
         //
         //        let mut external_leaves = self.empty_filter();
@@ -548,7 +550,7 @@ impl From<BareVertex> for Vertex {
 
 pub struct LoopMomentumBasis {
     #[bincode(with_serde)]
-    pub tree: Option<TraversalTree>,
+    pub tree: Option<()>,
     #[bincode(with_serde)]
     pub basis: TiVec<LoopIndex, EdgeIndex>,
     #[bincode(with_serde)]
