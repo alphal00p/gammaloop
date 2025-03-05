@@ -7,7 +7,7 @@ use derive_more::From;
 use itertools::Itertools;
 use linnet::half_edge::{hedgevec::HedgeVec, involution::EdgeIndex};
 use serde::{Deserialize, Serialize};
-use symbolica::domains::float::NumericalFloatLike;
+use symbolica::{atom::Atom, domains::float::NumericalFloatLike};
 use typed_index_collections::TiVec;
 
 pub trait Surface {
@@ -20,7 +20,7 @@ pub trait Surface {
     fn get_external_shift(&self) -> impl Iterator<Item = &(EdgeIndex, i64)>;
 }
 
-pub type UnitSurface = ();
+pub struct UnitSurface {}
 
 impl Surface for UnitSurface {
     fn get_positive_energies(&self) -> impl Iterator<Item = &EdgeIndex> {
@@ -116,3 +116,13 @@ pub enum HybridSurfaceID {
 
 pub type HybridSurfaceCollection = TiVec<HybridSurfaceID, HybridSurface>;
 pub type HybridSurfaceCache<T> = TiVec<HybridSurfaceID, T>;
+
+impl From<HybridSurfaceID> for Atom {
+    fn from(id: HybridSurfaceID) -> Atom {
+        match id {
+            HybridSurfaceID::Esurface(id) => Atom::from(id),
+            HybridSurfaceID::Hsurface(id) => Atom::from(id),
+            HybridSurfaceID::Unit => Atom::new_num(1),
+        }
+    }
+}

@@ -65,7 +65,9 @@ impl Hsurface {
                 .map(|energies| {
                     energies
                         .iter()
-                        .map(|i| parse!(&format!("E{}", Into::<usize>::into(*i))).unwrap())
+                        .map(|i| {
+                            parse!(&format!("Q({}, cind(0))", Into::<usize>::into(*i))).unwrap()
+                        })
                         .collect_vec()
                 })
                 .collect_tuple()
@@ -75,7 +77,8 @@ impl Hsurface {
             .external_shift
             .iter()
             .fold(Atom::new(), |sum, (i, sign)| {
-                Atom::new_num(*sign) * &parse!(&format!("p{}", Into::<usize>::into(*i))).unwrap()
+                Atom::new_num(*sign)
+                    * &parse!(&format!("P({}, cind(0))", Into::<usize>::into(*i))).unwrap()
                     + &sum
             });
 
@@ -119,7 +122,6 @@ impl Hsurface {
         let dummy_esurface = Esurface {
             energies,
             external_shift,
-            circled_vertices: VertexSet::dummy(),
         };
 
         Some(dummy_esurface.to_atom())
@@ -212,7 +214,7 @@ mod tests {
         };
 
         let h_surface_atom = h_surface.to_atom();
-        let expected_atom = parse!("E0 + E1 - E2 - E3 - p4 + p5").unwrap();
+        let expected_atom = parse!("Q(0, cind(0)) + Q(1, cind(0)) - Q(2, cind(0)) - Q(3, cind(0)) - P(4, cind(0)) + P(5, cind(0))").unwrap();
         let diff = h_surface_atom - &expected_atom;
         let diff = diff.expand();
         assert_eq!(diff, Atom::new());
@@ -231,7 +233,6 @@ mod tests {
         let e_surface = Esurface {
             energies: vec![EdgeIndex::from(2), EdgeIndex::from(3), EdgeIndex::from(6)],
             external_shift: vec![(EdgeIndex::from(4), 1)],
-            circled_vertices: VertexSet::dummy(),
         };
 
         let h_surface_atom = h_surface.to_atom().expand();
@@ -241,7 +242,8 @@ mod tests {
         println!("with {}", e_surface_atom);
 
         let rewritten = h_surface.to_atom_with_rewrite(&e_surface).unwrap();
-        let target = parse!("E0 + E1 + E6 + p5").unwrap();
+        let target =
+            parse!("Q(0, cind(0)) + Q(1, cind(0)) + Q(6, cind(0)) + P(5, cind(0))").unwrap();
         let diff = rewritten - &target;
         let diff = diff.expand();
 
@@ -254,10 +256,17 @@ mod tests {
         };
 
         let rewritten = h_surface_2.to_atom_with_rewrite(&e_surface).unwrap();
-        let target = parse!("E1 + E7 + E2 + p5").unwrap();
+        let target =
+            parse!("Q(1, cind(0)) + Q(7, cind(0)) + Q(2, cind(0)) + P(5, cind(0))").unwrap();
         let diff = rewritten - &target;
         let diff = diff.expand();
 
         assert_eq!(diff, Atom::new(), "diff: {}", diff);
+    }
+}
+
+impl From<HsurfaceID> for Atom {
+    fn from(value: HsurfaceID) -> Self {
+        parse!(&format!("H({})", Into::<usize>::into(value))).unwrap()
     }
 }
