@@ -1,5 +1,6 @@
 use derive_more::{From, Into};
 use serde::{Deserialize, Serialize};
+use symbolica::atom::Atom;
 use typed_index_collections::TiVec;
 
 /// data structure for a tree
@@ -89,6 +90,27 @@ impl<T> Tree<T> {
 
     pub fn get_num_nodes(&self) -> usize {
         self.nodes.len()
+    }
+}
+
+impl<T> Tree<T>
+where
+    Atom: From<T>,
+    T: Copy,
+{
+    fn to_atom_inv_impl(&self, cur_node: NodeId) -> Atom {
+        let node = &self.nodes[cur_node];
+        let inv_data_esurface = Atom::new_num(1) / Atom::from(node.data);
+        let child_sum = node
+            .children
+            .iter()
+            .map(|&child| self.to_atom_inv_impl(child))
+            .fold(Atom::new_num(0), |acc, x| acc + x);
+        inv_data_esurface * child_sum
+    }
+
+    pub fn to_atom_inv(&self) -> Atom {
+        self.to_atom_inv_impl(NodeId::root())
     }
 }
 
