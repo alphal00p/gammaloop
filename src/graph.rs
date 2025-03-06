@@ -2327,8 +2327,13 @@ impl BareGraph {
 
         virtual_edges
             .filter(|(index, _)| {
+                let inverted_signatue = LoopExtSignature {
+                    internal: edge_signature.internal.iter().map(|x| -*x).collect(),
+                    external: edge_signature.external.iter().map(|x| -*x).collect(),
+                };
                 self.loop_momentum_basis.edge_signatures[*index] == *edge_signature
-                    && *index != edge_index
+                    || self.loop_momentum_basis.edge_signatures[*index] == inverted_signatue
+                        && *index != edge_index
             })
             .map(|(index, _)| index)
             .collect()
