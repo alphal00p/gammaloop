@@ -3301,6 +3301,8 @@ impl FeynGen {
                 }) {
                     let mut num_non_raised_gluons = 0;
                     let mut num_raised_gluons = 0;
+                    let mut num_raised_fermions = 0;
+                    let mut num_non_raised_fermions = 0;
                     for edge in lmb.basis.iter() {
                         if graph.edges[*edge].particle.name == "g" {
                             if graph.is_edge_raised(*edge).is_empty() {
@@ -3309,12 +3311,22 @@ impl FeynGen {
                                 num_raised_gluons += 1;
                             }
                         }
+
+                        if graph.edges[*edge].particle.is_fermion() {
+                            if graph.is_edge_raised(*edge).is_empty() {
+                                num_non_raised_fermions += 1;
+                            } else {
+                                num_raised_fermions += 1;
+                            }
+                        }
                     }
 
                     lmbs_good_for_all_cuts.push(ScoredLMB {
                         lmb,
                         num_non_raised_gluons,
                         num_raised_gluons,
+                        num_raised_fermions,
+                        num_non_raised_fermions,
                     });
                 }
             }
@@ -4511,30 +4523,47 @@ enum Order {
 struct ScoredLMB {
     lmb: LoopMomentumBasis,
     num_non_raised_gluons: usize,
+    num_non_raised_fermions: usize,
     num_raised_gluons: usize,
+    num_raised_fermions: usize,
 }
 
 impl PartialEq for ScoredLMB {
     fn eq(&self, other: &Self) -> bool {
         self.num_non_raised_gluons == other.num_non_raised_gluons
             && self.num_raised_gluons == other.num_raised_gluons
+            && self.num_non_raised_fermions == other.num_non_raised_fermions
+            && self.num_raised_fermions == other.num_raised_fermions
     }
 }
 
 impl PartialOrd for ScoredLMB {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        let raised_gluon_cmp = self.num_raised_gluons.cmp(&other.num_raised_gluons);
-        if raised_gluon_cmp != Ordering::Equal {
-            return Some(raised_gluon_cmp);
-        } else {
-            Some(self.num_non_raised_gluons.cmp(&other.num_non_raised_gluons))
-        }
+        Some(self.cmp(other))
     }
 }
 
 impl Eq for ScoredLMB {}
+
 impl Ord for ScoredLMB {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.partial_cmp(other).unwrap()
+        let raised_gluon_cmp = self.num_raised_gluons.cmp(&other.num_raised_gluons);
+        if raised_gluon_cmp != Ordering::Equal {
+            raised_gluon_cmp
+        } else {
+            let raised_f_cmp = self.num_raised_fermions.cmp(&other.num_raised_fermions);
+            if raised_f_cmp != Ordering::Equal {
+                raised_f_cmp
+            } else {
+                let non_raised_f_cmp = self
+                    .num_non_raised_fermions
+                    .cmp(&other.num_non_raised_fermions);
+                if non_raised_f_cmp != Ordering::Equal {
+                    non_raised_f_cmp
+                } else {
+                    self.num_non_raised_gluons.cmp(&other.num_non_raised_gluons)
+                }
+            }
+        }
     }
 }

@@ -29,7 +29,6 @@ use crate::{
     ExportSettings, Settings, TropicalSubgraphTableSettings,
 };
 
-use cgmath::num_traits::sign;
 use linnet::half_edge::{subgraph::SubGraphOps, HedgeGraph, HedgeGraphBuilder};
 
 use ahash::{HashSet, RandomState};
