@@ -15,6 +15,7 @@ use spenso::parametric::{MixedTensor, ParamOrConcrete, ParamTensor};
 use spenso::structure::representation::ExtendibleReps;
 use spenso::structure::{HasStructure, SmartShadowStructure};
 use spenso::symbolica_utils::{SerializableAtom, SerializableSymbol};
+use std::cmp::Ordering;
 use std::collections::hash_map::Entry;
 use std::collections::HashSet;
 use std::fs::{create_dir_all, File, OpenOptions};
@@ -44,7 +45,7 @@ use super::SnailFilterOptions;
 use super::TadpolesFilterOptions;
 use super::{FeynGenError, FeynGenOptions};
 
-use crate::graph::EdgeType;
+use crate::graph::{EdgeType, LoopMomentumBasis};
 use crate::model::ColorStructure;
 use crate::model::Particle;
 use crate::model::VertexRule;
@@ -3165,7 +3166,7 @@ impl FeynGen {
         let mut t_channel_singlet = Vec::new();
         let mut no_valid_lmb = Vec::new();
 
-        for (graph_id, graph) in bare_graphs.iter_mut() {
+        for (_graph_id, graph) in bare_graphs.iter_mut() {
             let forced_lmb = if let Some(lmbs) = loop_momentum_bases.as_ref() {
                 let g_name = String::from(graph.name.clone());
                 lmbs.get(&g_name).map(|lmb: &Vec<String>| {
@@ -3285,8 +3286,9 @@ impl FeynGen {
             }
 
             let lmbs = graph.generate_loop_momentum_bases();
-            let mut found_good_lmb = false;
-            'find_lmb: for lmb in lmbs.into_iter() {
+            let mut lmbs_good_for_all_cuts = Vec::new();
+
+            for lmb in lmbs.into_iter() {
                 if (*cuts).iter().all(|(_, cut, _)| {
                     graph
                         .hedge_representation
@@ -3297,15 +3299,32 @@ impl FeynGen {
                             get_allowed_external_signatures().contains(external_signature)
                         })
                 }) {
-                    graph.loop_momentum_basis = lmb;
-                    found_good_lmb = true;
-                    break 'find_lmb;
+                    let mut num_non_raised_gluons = 0;
+                    let mut num_raised_gluons = 0;
+                    for edge in lmb.basis.iter() {
+                        if graph.edges[*edge].particle.name == "g" {
+                            if graph.is_edge_raised(*edge).is_empty() {
+                                num_non_raised_gluons += 1;
+                            } else {
+                                num_raised_gluons += 1;
+                            }
+                        }
+                    }
+
+                    lmbs_good_for_all_cuts.push(ScoredLMB {
+                        lmb,
+                        num_non_raised_gluons,
+                        num_raised_gluons,
+                    });
                 }
             }
 
-            if !found_good_lmb {
+            if lmbs_good_for_all_cuts.is_empty() {
                 no_valid_lmb.push(graph.name.clone());
                 warn!("could not find good lmb for graph: {}", graph.name);
+            } else {
+                lmbs_good_for_all_cuts.sort_by(|lmb_1, lmb_2| lmb_2.cmp(lmb_1));
+                graph.loop_momentum_basis = lmbs_good_for_all_cuts[0].lmb.clone();
             }
 
             if !s_channel_singlet_cuts.is_empty() {
@@ -4487,4 +4506,35 @@ enum Order {
     LO,
     NLO,
     NNLO,
+}
+
+struct ScoredLMB {
+    lmb: LoopMomentumBasis,
+    num_non_raised_gluons: usize,
+    num_raised_gluons: usize,
+}
+
+impl PartialEq for ScoredLMB {
+    fn eq(&self, other: &Self) -> bool {
+        self.num_non_raised_gluons == other.num_non_raised_gluons
+            && self.num_raised_gluons == other.num_raised_gluons
+    }
+}
+
+impl PartialOrd for ScoredLMB {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        let raised_gluon_cmp = self.num_raised_gluons.cmp(&other.num_raised_gluons);
+        if raised_gluon_cmp != Ordering::Equal {
+            return Some(raised_gluon_cmp);
+        } else {
+            Some(self.num_non_raised_gluons.cmp(&other.num_non_raised_gluons))
+        }
+    }
+}
+
+impl Eq for ScoredLMB {}
+impl Ord for ScoredLMB {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.partial_cmp(other).unwrap()
+    }
 }
