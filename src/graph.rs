@@ -4165,6 +4165,24 @@ impl LoopMomentumBasis {
         path.reverse();
         Some(path)
     }
+
+    pub fn is_edge_raised(&self, edge_index: usize) -> SmallVec<[usize; 2]> {
+        let edge_signature = &self.edge_signatures[edge_index];
+
+        self.edge_signatures
+            .iter()
+            .enumerate()
+            .filter(|(index, signature)| {
+                let inverted_signatue = LoopExtSignature {
+                    internal: edge_signature.internal.iter().map(|x| -*x).collect(),
+                    external: edge_signature.external.iter().map(|x| -*x).collect(),
+                };
+                (**signature == *edge_signature || **signature == inverted_signatue)
+                    && *index != edge_index
+            })
+            .map(|(index, _)| index)
+            .collect()
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

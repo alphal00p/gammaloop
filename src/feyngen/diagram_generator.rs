@@ -3303,9 +3303,10 @@ impl FeynGen {
                     let mut num_raised_gluons = 0;
                     let mut num_raised_fermions = 0;
                     let mut num_non_raised_fermions = 0;
+
                     for edge in lmb.basis.iter() {
                         if graph.edges[*edge].particle.name == "g" {
-                            if graph.is_edge_raised(*edge).is_empty() {
+                            if lmb.is_edge_raised(*edge).is_empty() {
                                 num_non_raised_gluons += 1;
                             } else {
                                 num_raised_gluons += 1;
@@ -3313,7 +3314,7 @@ impl FeynGen {
                         }
 
                         if graph.edges[*edge].particle.is_fermion() {
-                            if graph.is_edge_raised(*edge).is_empty() {
+                            if lmb.is_edge_raised(*edge).is_empty() {
                                 num_non_raised_fermions += 1;
                             } else {
                                 num_raised_fermions += 1;
@@ -3337,6 +3338,12 @@ impl FeynGen {
             } else {
                 lmbs_good_for_all_cuts.sort_by(|lmb_1, lmb_2| lmb_2.cmp(lmb_1));
                 graph.loop_momentum_basis = lmbs_good_for_all_cuts[0].lmb.clone();
+                let basis_picked_names = graph
+                    .loop_momentum_basis
+                    .basis
+                    .iter()
+                    .map(|edge| graph.edges[*edge].name.clone())
+                    .collect::<Vec<_>>();
             }
 
             if !s_channel_singlet_cuts.is_empty() {
@@ -4555,15 +4562,40 @@ impl Ord for ScoredLMB {
             if raised_f_cmp != Ordering::Equal {
                 raised_f_cmp
             } else {
-                let non_raised_f_cmp = self
-                    .num_non_raised_fermions
-                    .cmp(&other.num_non_raised_fermions);
-                if non_raised_f_cmp != Ordering::Equal {
-                    non_raised_f_cmp
+                let non_raised_g_cmp = self.num_non_raised_gluons.cmp(&other.num_non_raised_gluons);
+                if non_raised_g_cmp != Ordering::Equal {
+                    non_raised_g_cmp
                 } else {
-                    self.num_non_raised_gluons.cmp(&other.num_non_raised_gluons)
+                    self.num_non_raised_fermions
+                        .cmp(&other.num_non_raised_fermions)
                 }
             }
         }
     }
+}
+
+#[test]
+fn test_scored_lmb() {
+    let lmb = LoopMomentumBasis {
+        basis: vec![],
+        edge_signatures: vec![],
+    };
+
+    let scored_lmb = ScoredLMB {
+        lmb: lmb.clone(),
+        num_raised_gluons: 1,
+        num_raised_fermions: 2,
+        num_non_raised_gluons: 1,
+        num_non_raised_fermions: 3,
+    };
+
+    let scored_lmb3 = ScoredLMB {
+        lmb: lmb.clone(),
+        num_raised_gluons: 1,
+        num_raised_fermions: 2,
+        num_non_raised_gluons: 2,
+        num_non_raised_fermions: 1,
+    };
+
+    assert!(scored_lmb > scored_lmb3);
 }
