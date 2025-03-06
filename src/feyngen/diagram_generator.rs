@@ -2790,11 +2790,11 @@ impl FeynGen {
                     // In principle this could be fixed by forcing to pick an LMB for edges that have not been flipped and allowing closed loops
                     // of antiparticles as well, but I prefer this post re-processing option instead.
                     let canonized_fermion_flow_bare_graph = if CANONIZE_FERMION_FLOW {
-                        let canonied_fermion_flow_symbolica_graph = self.normalize_fermion_flow(g, model)?;
+                        let canonized_fermion_flow_symbolica_graph = self.normalize_fermion_flow(g, model)?;
                         BareGraph::from_symbolica_graph(
                             model,
                             graph_name,
-                            &canonied_fermion_flow_symbolica_graph,
+                            &canonized_fermion_flow_symbolica_graph,
                             symmetry_factor.clone(),
                             external_connections.clone(),
                             None,
@@ -2824,8 +2824,11 @@ impl FeynGen {
                             }
                         }
                     } else {
+                        // println!("Processing graph #{}...", i_g);
+                        // println!("Bare graph: {}",bare_graph.dot());
                         let numerator =
                             Numerator::default().from_graph(&bare_graph, &numerator_global_prefactor);
+                        // println!("Num single atom: {}",numerator.get_single_atom().unwrap());
 
                         let numerator_color_simplified =
                             numerator.clone().color_simplify().canonize_color().unwrap();
@@ -3828,7 +3831,7 @@ impl ProcessedNumeratorForComparison {
                             let processed = tn_res.to_bare_dense();
                             Ok(processed.scalar().map(|s| {
                                 Atom::new_num(s.re) + Atom::new_num(s.im) * Atom::I
-                            }).unwrap()*tn_scalar.unwrap_or(Atom::new_num(1)))
+                            }).expect("Expected scalar in numerator evaluation.")*tn_scalar.unwrap_or(Atom::new_num(1)))
                         },
                         Err(spenso::network::TensorNetworkError::NoNodes) => {
                             let s = tn_complex

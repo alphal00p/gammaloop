@@ -287,20 +287,22 @@ class TestProcessGeneration:
             ('e- d > e- d | e- a d g ghg QED=2 [{1}] -a --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_scalar_rescaling', 1),
             ('e- d > e- d | e- a d g ghg QED=2 [{2}] -a --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_scalar_rescaling', 11),
             ('e- d > e- d | e- a d g ghg QED=2 [{3}] -a --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_scalar_rescaling', 186),
+            # 3>N no symmetrization
             ('e- d g > e- d | e- a d g ghg QED=2 [{0}] -a -num_grouping only_detect_zeroes', 2),
             ('e- d g > e- d | e- a d g ghg QED=2 [{1}] -a -num_grouping only_detect_zeroes', 13),
             ('e- d g > e- d | e- a d g ghg QED=2 [{2}] -a -num_grouping only_detect_zeroes', 223),
-            # Numerator broken for 3>N for now
-            # ('e- d g > e- d | e- a d g ghg QED=2 [{0}] -a --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_scalar_rescaling', 0),
-            # ('e- d g > e- d | e- a d g ghg QED=2 [{1}] -a --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_scalar_rescaling', 0),
-            # ('e- d g > e- d | e- a d g ghg QED=2 [{2}] -a --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_scalar_rescaling', 0),
+            # 3>N with symmetrization
+            ('e- d g > e- d | e- a d g ghg QED=2 [{0}] -a --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_scalar_rescaling', 2),
+            ('e- d g > e- d | e- a d g ghg QED=2 [{1}] -a --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_scalar_rescaling', 11),
+            ('e- d g > e- d | e- a d g ghg QED=2 [{2}] -a --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_scalar_rescaling', 179),
+            # 4>N no symmetrization
             ('e- d u u~ > e- d | e- a d u g ghg QED=2 [{0}] -a -num_grouping only_detect_zeroes', 4),
             ('e- d u u~ > e- d | e- a d u g ghg QED=2 [{1}] -a -num_grouping only_detect_zeroes', 62),
             ('e- d u u~ > e- d | e- a d u g ghg QED=2 [{2}] -a -num_grouping only_detect_zeroes', 1428),
-            # Numerator broken for 4>N for now
-            # ('e- d u u~ > e- d | e- a d u g ghg QED=2 [{0}] -a --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_scalar_rescaling', 0),
-            # ('e- d u u~ > e- d | e- a d u g ghg QED=2 [{1}] -a --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_scalar_rescaling', 0),
-            # ('e- d u u~ > e- d | e- a d u g ghg QED=2 [{2}] -a --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_scalar_rescaling', 0)
+            # 4>N with symmetrization
+            ('e- d u u~ > e- d | e- a d u g ghg QED=2 [{0}] -a --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_scalar_rescaling', 4),
+            ('e- d u u~ > e- d | e- a d u g ghg QED=2 [{1}] -a --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_scalar_rescaling', 54),
+            ('e- d u u~ > e- d | e- a d u g ghg QED=2 [{2}] -a --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_scalar_rescaling', 1107)
         ]
         TestProcessGeneration.run_tests(gloop, tests)
 

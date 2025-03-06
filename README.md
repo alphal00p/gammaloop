@@ -1,7 +1,7 @@
 <div align="center">
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/gammalooplogo-dark.svg">
-  <img src="assets/gammalooplogo-light.svg", width="300">
+  <source media="(prefers-color-scheme: dark)" srcset="./python/gammaloop/data/assets/gammalooplogo-dark.svg">
+  <img src="./python/gammaloop/data/assets/gammalooplogo-light.svg", width="300">
 </picture>
 </div> 
 

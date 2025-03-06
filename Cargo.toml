@@ -1,6 +1,6 @@
 [package]
 name = "gammalooprs"
-version = "0.3.1"
+version = "0.3.2"
 edition = "2021"
 authors = ["Valentin Hirschi <valentin.hirschi@gmail.com>"]
 categories = ["science"]
@@ -114,7 +114,7 @@ brotli = "7.0.0"
 cgmath = "0.18.0"
 argmin = "0.10.0"
 by_address = "1.2.1"
-pyo3-pylogger = {version="0.3.0",optional=true}
+pyo3-pylogger = { version = "0.3.0", optional = true }
 fern = "0.7.1"
 humantime = "2.1.0"
 chrono = "0.4.39"
@@ -142,7 +142,7 @@ extension-module = ["pyo3/extension-module"]
 higher_loops = []
 fjcore = []
 
-python_api = ["pyo3", "extension-module", "pyo3-log","pyo3-pylogger"]
+python_api = ["pyo3", "extension-module", "pyo3-log", "pyo3-pylogger"]
 binary = []
 fail-on-warnings = []
 no_python = []
