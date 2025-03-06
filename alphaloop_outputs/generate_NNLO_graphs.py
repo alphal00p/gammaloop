@@ -112,9 +112,9 @@ for (category, selected_graphs) in inputs:
         print("Category selections do not add up to the original list of graphs!")
         sys.exit(1)
 
-    for (category, selected_graphs) in inputs:
-        with open(f'{category}.py', 'w') as f:
-            f.write("graphs={}\ngraph_names=[{}]".format(
-                pformat([g for g_name, g in selected_graphs]),
-                ','.join('"%s"' % g_name for g_name, g in selected_graphs)
-            ))
+for (category, selected_graphs) in inputs:
+    with open(f'{category}.py', 'w') as f:
+        f.write("graphs={}\ngraph_names=[{}]".format(
+            pformat([g for g_name, g in selected_graphs]),
+            ','.join('"%s"' % g_name for g_name, g in selected_graphs)
+        ))
