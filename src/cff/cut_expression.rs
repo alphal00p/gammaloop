@@ -1,6 +1,7 @@
 use derive_more::{From, Into};
 use linnet::half_edge::{hedgevec::HedgeVec, involution::Orientation};
 use serde::{Deserialize, Serialize};
+use symbolica::atom::Atom;
 use typed_index_collections::TiVec;
 
 use crate::new_cs::CutId;
@@ -19,6 +20,14 @@ pub struct OrientationData {
 pub struct CutOrientationExpression {
     pub left: Tree<HybridSurfaceID>,
     pub right: Tree<HybridSurfaceID>,
+}
+
+impl From<&CutOrientationExpression> for Atom {
+    fn from(value: &CutOrientationExpression) -> Self {
+        let left_atom = value.left.to_atom_inv();
+        let right_atom = value.right.to_atom_inv();
+        left_atom * right_atom
+    }
 }
 
 pub struct OrientationExpression {
