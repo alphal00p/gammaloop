@@ -1760,7 +1760,9 @@ impl FeynGen {
         let mut adj_map: HashMap<usize, Vec<(usize, usize)>> = HashMap::default();
         for (i_e, e) in graph.edges().iter().enumerate() {
             // Build an adjacency list including only fermions
-            if !model.get_particle_from_pdg(e.data.pdg).is_fermion() {
+            if !(model.get_particle_from_pdg(e.data.pdg).is_fermion()
+                || model.get_particle_from_pdg(e.data.pdg).is_ghost())
+            {
                 continue;
             }
             adj_map
@@ -1778,7 +1780,10 @@ impl FeynGen {
         let mut vetoed_edges: Vec<bool> = graph
             .edges()
             .iter()
-            .map(|e| !model.get_particle_from_pdg(e.data.pdg).is_fermion())
+            .map(|e| {
+                !(model.get_particle_from_pdg(e.data.pdg).is_fermion()
+                    || model.get_particle_from_pdg(e.data.pdg).is_ghost())
+            })
             .collect();
         let mut new_edges: AHashMap<usize, (usize, usize, bool, EdgeColor)> = AHashMap::default();
         let mut normalized_graph: SymbolicaGraph<NodeColorWithVertexRule, EdgeColor> =
@@ -3338,12 +3343,12 @@ impl FeynGen {
             } else {
                 lmbs_good_for_all_cuts.sort_by(|lmb_1, lmb_2| lmb_2.cmp(lmb_1));
                 graph.loop_momentum_basis = lmbs_good_for_all_cuts[0].lmb.clone();
-                let basis_picked_names = graph
-                    .loop_momentum_basis
-                    .basis
-                    .iter()
-                    .map(|edge| graph.edges[*edge].name.clone())
-                    .collect::<Vec<_>>();
+                //let basis_picked_names = graph
+                //    .loop_momentum_basis
+                //    .basis
+                //    .iter()
+                //    .map(|edge| graph.edges[*edge].name.clone())
+                //    .collect::<Vec<_>>();
             }
 
             if !s_channel_singlet_cuts.is_empty() {
@@ -4335,7 +4340,14 @@ impl PythonGraph {
 
             let name = edge.name.clone().into();
 
-            let PDG = edge.particle.pdg_code;
+            let PDG = if edge.particle.pdg_code == 9000005 {
+                82
+            } else if edge.particle.pdg_code == -9000005 {
+                -82
+            } else {
+                edge.particle.pdg_code
+            };
+
             let vertices = (edge.vertices[0], edge.vertices[1]);
 
             let edge_id = bare_graph.edge_name_to_position[&edge.name];
@@ -4373,7 +4385,10 @@ impl PythonGraph {
 
             let num_fermions = PDGs
                 .iter()
-                .filter(|pdg| model.get_particle_from_pdg(**pdg).is_fermion())
+                .filter(|pdg| {
+                    model.get_particle_from_pdg(**pdg).is_fermion()
+                        || model.get_particle_from_pdg(**pdg).is_ghost()
+                })
                 .count();
 
             // 🤮🤮
@@ -4382,7 +4397,10 @@ impl PythonGraph {
 
                 let is_using_anti_particle = PDGs
                     .iter()
-                    .filter(|pdg| model.get_particle_from_pdg(**pdg).is_fermion())
+                    .filter(|pdg| {
+                        model.get_particle_from_pdg(**pdg).is_fermion()
+                            || model.get_particle_from_pdg(**pdg).is_ghost()
+                    })
                     .all(|pdg| pdg.is_negative());
 
                 let first_fermion_edge = if is_using_anti_particle {
@@ -4390,7 +4408,8 @@ impl PythonGraph {
                         .edges
                         .iter()
                         .find(|edge_id| {
-                            bare_graph.edges[**edge_id].particle.is_fermion()
+                            (bare_graph.edges[**edge_id].particle.is_fermion()
+                                || bare_graph.edges[**edge_id].particle.is_ghost())
                                 && bare_graph.edges[**edge_id].vertices[1] == node_id
                         })
                         .unwrap()
@@ -4399,10 +4418,11 @@ impl PythonGraph {
                         .edges
                         .iter()
                         .find(|edge_id| {
-                            bare_graph.edges[**edge_id].particle.is_fermion()
+                            (bare_graph.edges[**edge_id].particle.is_fermion()
+                                || bare_graph.edges[**edge_id].particle.is_ghost())
                                 && bare_graph.edges[**edge_id].vertices[0] == node_id
                         })
-                        .unwrap()
+                        .expect(&format!("data corrupt: {:?}", PDGs))
                 };
 
                 new_edges.push(*first_fermion_edge);
@@ -4410,8 +4430,11 @@ impl PythonGraph {
                 let non_fermion_edge = vertex
                     .edges
                     .iter()
-                    .find(|edge_id| !bare_graph.edges[**edge_id].particle.is_fermion())
-                    .unwrap();
+                    .find(|edge_id| {
+                        !(bare_graph.edges[**edge_id].particle.is_fermion()
+                            || bare_graph.edges[**edge_id].particle.is_ghost())
+                    })
+                    .expect(&format!("data corrupt: {:?}", PDGs));
 
                 new_edges.push(*non_fermion_edge);
 
@@ -4480,6 +4503,14 @@ impl PythonGraph {
                     }
                 })
                 .collect();
+
+            for pdg in PDGs.iter_mut() {
+                if *pdg == 9000005 {
+                    *pdg = 82;
+                } else if *pdg == -9000005 {
+                    *pdg = -82;
+                }
+            }
 
             let python_node = PythonNode {
                 PDGs,
