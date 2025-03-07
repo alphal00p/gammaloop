@@ -549,7 +549,10 @@ impl CFFGenerationGraph {
         let vertex = if let Some(vertex) = self.get_source_sink_greedy() {
             vertex
         } else {
-            panic!("could not find vertex to contract from")
+            panic!(
+                "could not find vertex to contract from for graph {:#?}",
+                self
+            );
         };
 
         let vertex_type = vertex.get_vertex_type();
@@ -743,14 +746,20 @@ impl CFFGenerationGraph {
     pub fn new_from_subgraph<E, V>(
         graph: &HedgeGraph<E, V>,
         global_orientation: HedgeVec<Orientation>,
-        subgraph: &HedgeNode,
+        subgraph: &BitVec,
     ) -> Self {
-        let mut vertices = (0..graph.n_nodes()).map(CFFVertex::new).collect_vec();
+        let mut vertices = HashMap::default();
+
+        for (hedge_node, _data) in graph.iter_node_data(subgraph) {
+            let node_id = graph.id_from_hairs(hedge_node).unwrap();
+            let vertex = CFFVertex::new(node_id.into());
+            vertices.insert(node_id, vertex);
+        }
 
         for (hedge_pair, edge_index, _data) in graph.iter_edges(subgraph) {
             match hedge_pair {
                 HedgePair::Unpaired { hedge, flow } => {
-                    let vertex = Into::<usize>::into(graph.node_id(hedge));
+                    let vertex = graph.node_id(hedge);
                     let edge_type = CFFEdgeType::External;
                     let edge = CFFEdge {
                         edge_id: edge_index,
@@ -758,16 +767,16 @@ impl CFFGenerationGraph {
                     };
                     match flow {
                         Flow::Source => {
-                            vertices[vertex].outgoing_edges.push(edge);
+                            vertices.get_mut(&vertex).unwrap().outgoing_edges.push(edge);
                         }
                         Flow::Sink => {
-                            vertices[vertex].incoming_edges.push(edge);
+                            vertices.get_mut(&vertex).unwrap().incoming_edges.push(edge);
                         }
                     }
                 }
                 HedgePair::Paired { source, sink } => {
-                    let source_vertex = Into::<usize>::into(graph.node_id(source));
-                    let sink_vertex = Into::<usize>::into(graph.node_id(sink));
+                    let source_vertex = graph.node_id(source);
+                    let sink_vertex = graph.node_id(sink);
                     let edge_type = CFFEdgeType::Virtual;
                     let edge = CFFEdge {
                         edge_id: edge_index,
@@ -776,12 +785,28 @@ impl CFFGenerationGraph {
 
                     match global_orientation[edge_index] {
                         Orientation::Default => {
-                            vertices[source_vertex].outgoing_edges.push(edge);
-                            vertices[sink_vertex].incoming_edges.push(edge);
+                            vertices
+                                .get_mut(&source_vertex)
+                                .unwrap()
+                                .outgoing_edges
+                                .push(edge);
+                            vertices
+                                .get_mut(&sink_vertex)
+                                .unwrap()
+                                .incoming_edges
+                                .push(edge);
                         }
                         Orientation::Reversed => {
-                            vertices[source_vertex].incoming_edges.push(edge);
-                            vertices[sink_vertex].outgoing_edges.push(edge);
+                            vertices
+                                .get_mut(&source_vertex)
+                                .unwrap()
+                                .incoming_edges
+                                .push(edge);
+                            vertices
+                                .get_mut(&sink_vertex)
+                                .unwrap()
+                                .outgoing_edges
+                                .push(edge);
                         }
                         Orientation::Undirected => {
                             panic!("Can not generate CFF with undirected edges")
@@ -800,20 +825,28 @@ impl CFFGenerationGraph {
                     };
                     match split {
                         Flow::Source => {
-                            let vertex = Into::<usize>::into(graph.node_id(source));
+                            let vertex = graph.node_id(source);
                             match global_orientation[edge_index] {
-                                Orientation::Default => vertices[vertex].outgoing_edges.push(edge),
-                                Orientation::Reversed => vertices[vertex].incoming_edges.push(edge),
+                                Orientation::Default => {
+                                    vertices.get_mut(&vertex).unwrap().outgoing_edges.push(edge)
+                                }
+                                Orientation::Reversed => {
+                                    vertices.get_mut(&vertex).unwrap().incoming_edges.push(edge)
+                                }
                                 Orientation::Undirected => {
                                     panic!("Can not generate CFF with undirected edges")
                                 }
                             }
                         }
                         Flow::Sink => {
-                            let vertex = Into::<usize>::into(graph.node_id(sink));
+                            let vertex = graph.node_id(sink);
                             match global_orientation[edge_index] {
-                                Orientation::Default => vertices[vertex].incoming_edges.push(edge),
-                                Orientation::Reversed => vertices[vertex].outgoing_edges.push(edge),
+                                Orientation::Default => {
+                                    vertices.get_mut(&vertex).unwrap().incoming_edges.push(edge)
+                                }
+                                Orientation::Reversed => {
+                                    vertices.get_mut(&vertex).unwrap().outgoing_edges.push(edge)
+                                }
                                 Orientation::Undirected => {
                                     panic!("Can not generate CFF with undirected edges")
                                 }
@@ -824,10 +857,38 @@ impl CFFGenerationGraph {
             }
         }
 
-        Self {
+        let vertices = vertices.into_values().collect_vec();
+
+        let res = Self {
             vertices,
             global_orientation,
+        };
+
+        let vertex_exists_with_connected_comlement = res
+            .vertices
+            .iter()
+            .any(|vertex| res.has_connected_complement(&vertex.vertex_set));
+
+        if !vertex_exists_with_connected_comlement && res.vertices.len() > 1 {
+            println!(
+                "No vertex with connected complement found: {:#?}\n 
+                input dot: \n 
+                {}
+            
+            ",
+                res,
+                graph.dot(subgraph)
+            );
+
+            println!(
+                "num edges in subgraph: {}",
+                graph.iter_edges(subgraph).count()
+            );
+
+            panic!("aborting")
         }
+
+        res
     }
 
     pub fn new(graph: &BareGraph, virtual_orientation: Vec<bool>) -> Self {
@@ -1019,7 +1080,15 @@ mod test {
     use super::CFFGenerationGraph;
     use crate::cff::cff_graph::{CFFEdgeType, VertexSet};
     use itertools::Itertools;
-    use linnet::half_edge::involution::EdgeIndex;
+    use linnet::{
+        half_edge::{
+            builder::HedgeGraphBuilder,
+            involution::{EdgeIndex, Flow, Orientation},
+            nodestorage::NodeStorageVec,
+            subgraph::{HedgeNode, InternalSubGraph, SubGraphOps},
+        },
+        union_find::left,
+    };
 
     #[test]
     fn test_graph_struct_triangle() {
@@ -1462,5 +1531,43 @@ mod test {
 
         //println!("left {:#?}", left_cut);
         //println!("right {:#?}", right_cut);
+    }
+
+    #[test]
+    fn test_new_from_subgraph() {
+        let mut hedge_graph_builder = HedgeGraphBuilder::new();
+
+        let nodes = (0..4)
+            .map(|_| hedge_graph_builder.add_node(()))
+            .collect_vec();
+
+        hedge_graph_builder.add_edge(nodes[0], nodes[1], (), Orientation::Undirected);
+        hedge_graph_builder.add_edge(nodes[0], nodes[2], (), Orientation::Undirected);
+        hedge_graph_builder.add_edge(nodes[1], nodes[2], (), Orientation::Undirected);
+        hedge_graph_builder.add_edge(nodes[1], nodes[3], (), Orientation::Undirected);
+        hedge_graph_builder.add_edge(nodes[2], nodes[3], (), Orientation::Undirected);
+
+        hedge_graph_builder.add_external_edge(nodes[0], (), Orientation::Undirected, Flow::Sink);
+        hedge_graph_builder.add_external_edge(nodes[3], (), Orientation::Undirected, Flow::Source);
+
+        let hedge_graph = hedge_graph_builder.build::<NodeStorageVec<_>>();
+
+        let left_triangle = hedge_graph[&nodes[0]]
+            .union(&hedge_graph[&nodes[1]])
+            .union(&hedge_graph[&nodes[2]]);
+
+        let dot = hedge_graph.dot(&left_triangle);
+        println!("{}", dot);
+
+        for (hedge_pair, _, _) in hedge_graph.iter_edges(&left_triangle) {
+            println!("{:?}", hedge_pair);
+        }
+
+        let global_orientation = hedge_graph.new_hedgevec(&|_, _| Orientation::Default);
+
+        //let cff_graph =
+        //    CFFGenerationGraph::new_from_subgraph(&hedge_graph, global_orientation, &left_triangle);
+
+        //println!("{:#?}", cff_graph);
     }
 }

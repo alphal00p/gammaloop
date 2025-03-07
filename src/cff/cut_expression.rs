@@ -11,6 +11,7 @@ use super::{generation::SurfaceCache, surface::HybridSurfaceID, tree::Tree};
 #[derive(Debug, Clone, Serialize, Deserialize, From, Into, Hash, PartialEq, Eq, Copy)]
 pub struct OrientationID(usize);
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OrientationData {
     pub orientation: HedgeVec<Orientation>,
     pub cuts: Vec<CutId>,
@@ -30,11 +31,13 @@ impl From<&CutOrientationExpression> for Atom {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OrientationExpression {
     pub data: OrientationData,
     pub expressions: Vec<CutOrientationExpression>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CFFCutExpression {
     pub orientations: TiVec<OrientationID, OrientationExpression>,
     pub surfaces: SurfaceCache,
@@ -60,8 +63,20 @@ impl CFFCutExpression {
 
 #[cfg(test)]
 mod tests {
+    use core::panic;
+
     use itertools::Itertools;
-    use linnet::half_edge::{builder::HedgeGraphBuilder, involution::Orientation};
+    use linnet::half_edge::{
+        builder::HedgeGraphBuilder,
+        involution::{Flow, Orientation},
+        nodestorage::NodeStorageVec,
+    };
+    use typed_index_collections::TiVec;
+
+    use crate::{
+        cff, disable,
+        new_cs::{CrossSectionCut, CutId},
+    };
 
     #[test]
     fn test_double_triangle() {
@@ -71,7 +86,42 @@ mod tests {
             .map(|_| hedge_graph_builder.add_node(()))
             .collect_vec();
 
-        hedge_graph_builder.add_edge(nodes[0], nodes[1], (), Orientation::Default);
-        todo!()
+        hedge_graph_builder.add_edge(nodes[0], nodes[1], (), Orientation::Undirected);
+        hedge_graph_builder.add_edge(nodes[0], nodes[2], (), Orientation::Undirected);
+        hedge_graph_builder.add_edge(nodes[1], nodes[2], (), Orientation::Undirected);
+        hedge_graph_builder.add_edge(nodes[1], nodes[3], (), Orientation::Undirected);
+        hedge_graph_builder.add_edge(nodes[2], nodes[3], (), Orientation::Undirected);
+
+        hedge_graph_builder.add_external_edge(nodes[0], (), Orientation::Undirected, Flow::Sink);
+        hedge_graph_builder.add_external_edge(nodes[3], (), Orientation::Undirected, Flow::Source);
+
+        let hedge_graph = hedge_graph_builder.build::<NodeStorageVec<_>>();
+
+        let cuts: TiVec<CutId, CrossSectionCut> = hedge_graph
+            .all_cuts(nodes[0], nodes[3])
+            .into_iter()
+            .map(|(left, cut, right)| CrossSectionCut { left, cut, right })
+            .collect();
+
+        for cut in cuts.iter() {
+            let edges_in_cut = hedge_graph
+                .iter_edges(&cut.cut)
+                .map(|(_, id, _)| id)
+                .collect_vec();
+
+            println!("{:?}", edges_in_cut);
+            let left_dot = hedge_graph.dot(&cut.left);
+            let right_dot = hedge_graph.dot(&cut.right);
+
+            println!("Left: {}", left_dot);
+            println!("Right: {}", right_dot);
+        }
+
+        let cut_expression = cff::generation::generate_cff_with_cuts(&hedge_graph, &None, &cuts);
+        let atom_cut_1 = cut_expression.to_atom_for_cut(CutId::from(2));
+        let atom_with_energies = cut_expression.surfaces.substitute_energies(&atom_cut_1);
+
+        print!("{}", atom_cut_1);
+        println!("{}", atom_with_energies);
     }
 }
