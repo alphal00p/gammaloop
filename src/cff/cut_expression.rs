@@ -39,3 +39,39 @@ pub struct CFFCutExpression {
     pub orientations: TiVec<OrientationID, OrientationExpression>,
     pub surfaces: SurfaceCache,
 }
+
+impl CFFCutExpression {
+    pub fn to_atom_for_cut(&self, cut: CutId) -> Atom {
+        self.orientations
+            .iter()
+            .filter_map(|orientation| {
+                orientation
+                    .data
+                    .cuts
+                    .iter()
+                    .position(|c| *c == cut)
+                    .map(|cut_orientation_index| {
+                        Atom::from(&orientation.expressions[cut_orientation_index])
+                    })
+            })
+            .fold(Atom::new(), |acc, x| acc + x)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use itertools::Itertools;
+    use linnet::half_edge::{builder::HedgeGraphBuilder, involution::Orientation};
+
+    #[test]
+    fn test_double_triangle() {
+        let mut hedge_graph_builder = HedgeGraphBuilder::new();
+
+        let nodes = (0..4)
+            .map(|_| hedge_graph_builder.add_node(()))
+            .collect_vec();
+
+        hedge_graph_builder.add_edge(nodes[0], nodes[1], (), Orientation::Default);
+        todo!()
+    }
+}
