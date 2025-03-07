@@ -665,6 +665,10 @@ impl Particle {
     pub fn is_fermion(&self) -> bool {
         self.spin % 2 == 0
     }
+
+    pub fn is_ghost(&self) -> bool {
+        self.ghost_number != 0
+    }
 }
 
 impl Ord for Particle {
