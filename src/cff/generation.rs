@@ -21,7 +21,17 @@ use linnet::half_edge::{
     involution::{EdgeIndex, Orientation},
     subgraph::InternalSubGraph,
 };
-use std::fmt::Debug;
+use rayon::result;
+use std::{
+    fmt::Debug,
+    iter::{Chain, Enumerate, Map},
+    ops::Index,
+    vec::IntoIter,
+};
+use symbolica::{
+    atom::{Atom, AtomCore},
+    id::{Pattern, Replacement},
+};
 use typed_index_collections::TiVec;
 
 use serde::{Deserialize, Serialize};
@@ -35,8 +45,8 @@ use super::{
     },
     esurface::{Esurface, EsurfaceCollection, EsurfaceID, ExternalShift},
     expression::{CFFExpression, CFFLimit, TermId},
-    hsurface::HsurfaceCollection,
-    surface::Surface,
+    hsurface::{self, Hsurface, HsurfaceCollection},
+    surface::{HybridSurfaceRef, Surface, UnitSurface},
     tree::NodeId,
 };
 
@@ -479,9 +489,55 @@ fn generate_cff_from_orientations(
     })
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SurfaceCache {
     pub esurface_cache: EsurfaceCollection,
     pub hsurface_cache: HsurfaceCollection,
+}
+
+impl SurfaceCache {
+    pub fn substitute_energies(&self, atom: &Atom) -> Atom {
+        let replacement_rules = self.get_all_replacements();
+        atom.replace_all_multiple(&replacement_rules)
+    }
+
+    pub fn iter_all_surfaces(
+        &self,
+    ) -> impl Iterator<Item = (HybridSurfaceID, HybridSurfaceRef)> + '_ {
+        let esurface_id_iter = self.esurface_cache.iter_enumerated().map(|(id, esurface)| {
+            (
+                HybridSurfaceID::Esurface(id),
+                HybridSurfaceRef::Esurface(esurface),
+            )
+        });
+
+        let hsurface_id_iter = self.hsurface_cache.iter_enumerated().map(|(id, hsurface)| {
+            (
+                HybridSurfaceID::Hsurface(id),
+                HybridSurfaceRef::Hsurface(hsurface),
+            )
+        });
+
+        esurface_id_iter.chain(hsurface_id_iter)
+    }
+
+    pub fn get_all_replacements(&self) -> Vec<Replacement> {
+        self.iter_all_surfaces()
+            .map(|(id, surface)| {
+                let id_atom = Pattern::from(Atom::from(id));
+                let surface_atom = Pattern::from(Atom::from(surface));
+                Replacement::new(id_atom, surface_atom)
+            })
+            .collect()
+    }
+
+    pub fn get_surface(&self, surface_id: HybridSurfaceID) -> HybridSurfaceRef {
+        match surface_id {
+            HybridSurfaceID::Esurface(id) => HybridSurfaceRef::Esurface(&self.esurface_cache[id]),
+            HybridSurfaceID::Hsurface(id) => HybridSurfaceRef::Hsurface(&self.hsurface_cache[id]),
+            HybridSurfaceID::Unit => HybridSurfaceRef::Unit(UnitSurface {}),
+        }
+    }
 }
 
 fn generate_tree_for_orientation(
