@@ -20,6 +20,7 @@ pub trait Surface {
     fn get_external_shift(&self) -> impl Iterator<Item = &(EdgeIndex, i64)>;
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct UnitSurface {}
 
 impl Surface for UnitSurface {
@@ -101,10 +102,38 @@ pub fn string_format<S: Surface>(surface: &S) -> String {
     res
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum HybridSurface {
     Esurface(Esurface),
     Hsurface(Hsurface),
     Unit(UnitSurface),
+}
+
+impl From<&HybridSurface> for Atom {
+    fn from(value: &HybridSurface) -> Self {
+        match value {
+            HybridSurface::Esurface(surface) => surface.to_atom(),
+            HybridSurface::Hsurface(surface) => surface.to_atom(),
+            HybridSurface::Unit(_) => Atom::new_num(1),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum HybridSurfaceRef<'a> {
+    Esurface(&'a Esurface),
+    Hsurface(&'a Hsurface),
+    Unit(UnitSurface),
+}
+
+impl From<HybridSurfaceRef<'_>> for Atom {
+    fn from(value: HybridSurfaceRef) -> Self {
+        match value {
+            HybridSurfaceRef::Esurface(surface) => surface.to_atom(),
+            HybridSurfaceRef::Hsurface(surface) => surface.to_atom(),
+            HybridSurfaceRef::Unit(_) => Atom::new_num(1),
+        }
+    }
 }
 
 #[derive(From, Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
