@@ -57,6 +57,7 @@ use spenso::{
     complex::Complex,
     contraction::{IsZero, RefZero},
     data::{DataTensor, DenseTensor, GetTensorData, SetTensorData, SparseTensor, StorageTensor},
+    permutation::Permutation,
     scalar::Scalar,
     shadowing::{Shadowable, ETS},
     structure::{
@@ -2074,14 +2075,19 @@ impl BareGraph {
 
         let ext_vertices = self.verify_external_edge_order().unwrap();
 
+        let perm = Permutation::sort(&ext_vertices);
+
         let (mut external, s) = ext_vertices.into_iter().map(|i| &self.vertices[i]).fold(
-            (VecDeque::new(), initial_shifts),
+            (Vec::new(), initial_shifts),
             |(mut acc, shifts), v| {
                 let (e, new_shifts) = v.generate_vertex_slots(shifts, model);
-                acc.push_back(e);
+                acc.push(e);
                 (acc, new_shifts)
             },
         );
+
+        perm.apply_slice_in_place_inv(&mut external);
+        let mut external = VecDeque::from(external);
 
         let (mut v, s) = self
             .vertices
