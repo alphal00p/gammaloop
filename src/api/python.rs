@@ -13,6 +13,7 @@ use crate::{
         SerializableIntegrationState,
     },
     model::Model,
+    new_cs::ProcessList,
     numerator::{GlobalPrefactor, Numerator, PythonState},
     utils::F,
     HasIntegrand, ProcessSettings, Settings,
@@ -234,6 +235,7 @@ pub struct OutputOptions {}
 pub struct PythonWorker {
     pub model: Model,
     pub cross_sections: CrossSectionList,
+    pub process_list: ProcessList,
     pub amplitudes: AmplitudeList<PythonState>,
     pub integrands: HashMap<String, Integrand>,
     pub master_node: Option<MasterNode>,
@@ -244,6 +246,7 @@ impl Clone for PythonWorker {
         PythonWorker {
             model: self.model.clone(),
             cross_sections: self.cross_sections.clone(),
+            process_list: self.process_list.clone(),
             amplitudes: self.amplitudes.clone(),
             integrands: self.integrands.clone(),
             master_node: self.master_node.clone(),
@@ -532,6 +535,7 @@ impl PythonWorker {
         Ok(PythonWorker {
             model: Model::default(),
             cross_sections: CrossSectionList::default(),
+            process_list: ProcessList::new(),
             amplitudes: AmplitudeList::default(),
             integrands: HashMap::default(),
             master_node: None,

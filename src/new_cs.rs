@@ -31,10 +31,13 @@ use crate::{
 
 use derive_more::{From, Into};
 
+#[derive(Debug, Clone)]
 pub struct ProcessDefinition {
     pub initial_pdgs: Vec<i64>, // Do we want a pub type Pdg = i64;?
     pub final_pdgs: Vec<i64>,
 }
+
+#[derive(Clone)]
 pub struct Process<S: NumeratorState = PythonState> {
     pub definition: ProcessDefinition,
     pub collection: ProcessCollection<S>,
@@ -197,6 +200,7 @@ impl Process {
     }
 }
 
+#[derive(Clone)]
 pub struct ProcessList<S: NumeratorState = PythonState> {
     pub processes: Vec<Process<S>>,
 }
@@ -240,6 +244,7 @@ impl ProcessList {
     }
 }
 
+#[derive(Clone)]
 pub enum ProcessCollection<S: NumeratorState = PythonState> {
     Amplitudes(Vec<Amplitude<S>>),
     CrossSections(Vec<CrossSection<S>>),
@@ -255,10 +260,12 @@ impl<S: NumeratorState> ProcessCollection<S> {
     }
 }
 
+#[derive(Clone)]
 pub struct Amplitude<S: NumeratorState = PythonState> {
     graphs: Vec<AmplitudeGraph<S>>,
 }
 
+#[derive(Clone)]
 pub struct AmplitudeGraph<S: NumeratorState = PythonState> {
     graph: Graph<S>,
     derived_data: AmplitudeDerivedData,
@@ -273,6 +280,7 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
     }
 }
 
+#[derive(Clone)]
 pub struct AmplitudeDerivedData {}
 
 impl<S: NumeratorState> Amplitude<S> {
@@ -286,6 +294,8 @@ impl<S: NumeratorState> Amplitude<S> {
         Ok(())
     }
 }
+
+#[derive(Clone)]
 pub struct CrossSection<S: NumeratorState = PythonState> {
     supergraphs: Vec<CrossSectionGraph<S>>,
 }
@@ -293,16 +303,19 @@ pub struct CrossSection<S: NumeratorState = PythonState> {
 #[derive(Debug, Clone, Serialize, Deserialize, From, Into, Hash, PartialEq, Copy, Eq)]
 pub struct CutId(usize);
 
+#[derive(Clone)]
 pub struct CrossSectionGraph<S: NumeratorState = PythonState> {
     graph: Graph<S>,
     cuts: TiVec<CutId, CrossSectionCut>,
     derived_data: CrossSectionDerivedData,
 }
 
+#[derive(Clone)]
 pub struct CrossSectionDerivedData {
     pub orientations: TiVec<OrientationID, OrientationData>,
 }
 
+#[derive(Clone)]
 pub struct CrossSectionCut {
     pub cut: OrientedCut,
     pub left: BitVec,

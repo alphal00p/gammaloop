@@ -54,6 +54,7 @@ use crate::{
     ProcessSettings, GAMMALOOP_NAMESPACE,
 };
 
+#[derive(Clone)]
 pub struct Graph<S: NumeratorState = PythonState> {
     pub multiplicity: Atom,
     pub underlying: HedgeGraph<Edge, Vertex>,
