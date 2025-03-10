@@ -2112,13 +2112,13 @@ impl Model {
     }
 
     #[inline]
-    pub fn get_propagator_for_particle(&self, name: &SmartString<LazyCompact>) -> Arc<Propagator> {
-        if let Some(position) = self.particle_name_to_propagator_position.get(name) {
+    pub fn get_propagator_for_particle<S: AsRef<str>>(&self, name: S) -> Arc<Propagator> {
+        if let Some(position) = self.particle_name_to_propagator_position.get(name.as_ref()) {
             self.propagators[*position].clone()
         } else {
             panic!(
                 "Propagator for particle '{}' not found in model '{}'. Valid entries are:\n{}",
-                name,
+                name.as_ref(),
                 self.name,
                 self.particle_name_to_propagator_position.keys().join(", ")
             );
@@ -2126,13 +2126,13 @@ impl Model {
     }
 
     #[inline]
-    pub fn get_particle(&self, name: &SmartString<LazyCompact>) -> Arc<Particle> {
-        if let Some(position) = self.particle_name_to_position.get(name) {
+    pub fn get_particle<S: AsRef<str>>(&self, name: S) -> Arc<Particle> {
+        if let Some(position) = self.particle_name_to_position.get(name.as_ref()) {
             self.particles[*position].clone()
         } else {
             panic!(
                 "Particle '{}' not found in model '{}'. Valid entries are:\n{}",
-                name,
+                name.as_ref(),
                 self.name,
                 self.particle_name_to_position.keys().join(", ")
             );
@@ -2151,58 +2151,76 @@ impl Model {
     }
 
     #[inline]
-    pub fn get_propagator(&self, name: &SmartString<LazyCompact>) -> Arc<Propagator> {
-        if let Some(position) = self.propagator_name_to_position.get(name) {
+    pub fn get_propagator<S: AsRef<str>>(&self, name: S) -> Arc<Propagator> {
+        if let Some(position) = self.propagator_name_to_position.get(name.as_ref()) {
             self.propagators[*position].clone()
         } else {
-            panic!("Propagator '{}' not found in model '{}'.", name, self.name);
+            panic!(
+                "Propagator '{}' not found in model '{}'.",
+                name.as_ref(),
+                self.name
+            );
         }
     }
 
     #[inline]
-    pub fn get_parameter(&self, name: &SmartString<LazyCompact>) -> Arc<Parameter> {
-        if let Some(position) = self.parameter_name_to_position.get(name) {
+    pub fn get_parameter<S: AsRef<str>>(&self, name: S) -> Arc<Parameter> {
+        if let Some(position) = self.parameter_name_to_position.get(name.as_ref()) {
             self.parameters[*position].clone()
         } else {
-            panic!("Parameter '{}' not found in model '{}'.", name, self.name);
+            panic!(
+                "Parameter '{}' not found in model '{}'.",
+                name.as_ref(),
+                self.name
+            );
         }
     }
     #[inline]
-    pub fn get_order(&self, name: &SmartString<LazyCompact>) -> Arc<Order> {
-        if let Some(position) = self.order_name_to_position.get(name) {
+    pub fn get_order<S: AsRef<str>>(&self, name: S) -> Arc<Order> {
+        if let Some(position) = self.order_name_to_position.get(name.as_ref()) {
             self.orders[*position].clone()
         } else {
             panic!(
                 "Coupling order '{}' not found in model '{}'.",
-                name, self.name
+                name.as_ref(),
+                self.name
             );
         }
     }
     #[inline]
-    pub fn get_lorentz_structure(&self, name: &SmartString<LazyCompact>) -> Arc<LorentzStructure> {
-        if let Some(position) = self.lorentz_structure_name_to_position.get(name) {
+    pub fn get_lorentz_structure<S: AsRef<str>>(&self, name: S) -> Arc<LorentzStructure> {
+        if let Some(position) = self.lorentz_structure_name_to_position.get(name.as_ref()) {
             self.lorentz_structures[*position].clone()
         } else {
             panic!(
                 "Lorentz structure '{}' not found in model '{}'.",
-                name, self.name
+                name.as_ref(),
+                self.name
             );
         }
     }
     #[inline]
-    pub fn get_coupling(&self, name: &SmartString<LazyCompact>) -> Arc<Coupling> {
-        if let Some(position) = self.coupling_name_to_position.get(name) {
+    pub fn get_coupling<S: AsRef<str>>(&self, name: S) -> Arc<Coupling> {
+        if let Some(position) = self.coupling_name_to_position.get(name.as_ref()) {
             self.couplings[*position].clone()
         } else {
-            panic!("Coupling '{}' not found in model '{}'.", name, self.name);
+            panic!(
+                "Coupling '{}' not found in model '{}'.",
+                name.as_ref(),
+                self.name
+            );
         }
     }
     #[inline]
-    pub fn get_vertex_rule(&self, name: &SmartString<LazyCompact>) -> Arc<VertexRule> {
-        if let Some(position) = self.vertex_rule_name_to_position.get(name) {
+    pub fn get_vertex_rule<S: AsRef<str>>(&self, name: S) -> Arc<VertexRule> {
+        if let Some(position) = self.vertex_rule_name_to_position.get(name.as_ref()) {
             self.vertex_rules[*position].clone()
         } else {
-            panic!("Vertex rule '{}' not found in model '{}'.", name, self.name);
+            panic!(
+                "Vertex rule '{}' not found in model '{}'.",
+                name.as_ref(),
+                self.name
+            );
         }
     }
 }
