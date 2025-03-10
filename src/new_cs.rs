@@ -305,8 +305,8 @@ pub struct CrossSectionDerivedData {
 
 pub struct CrossSectionCut {
     pub cut: OrientedCut,
-    pub left: HedgeNode,
-    pub right: HedgeNode,
+    pub left: BitVec,
+    pub right: BitVec,
 }
 
 #[test]
