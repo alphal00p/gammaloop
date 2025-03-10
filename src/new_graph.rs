@@ -5,7 +5,7 @@ use std::{
     sync::Arc,
 };
 
-use ahash::{HashMap, HashMapExt, HashSet};
+use ahash::{AHashMap, AHashSet, HashMap, HashMapExt, HashSet};
 use bincode::{Decode, Encode};
 use bitvec::vec::BitVec;
 use color_eyre::{Report, Result};
@@ -13,16 +13,17 @@ use eyre::eyre;
 use hyperdual::Num;
 use itertools::Itertools;
 use linnet::half_edge::{
+    builder::HedgeGraphBuilder,
     hedgevec::HedgeVec,
-    involution::{EdgeIndex, Flow, Hedge, HedgePair},
+    involution::{EdgeIndex, Flow, Hedge, HedgePair, Orientation},
     nodestorage::NodeStorageVec,
     subgraph::{
-        self, cycle::SignedCycle, Inclusion, InternalSubGraph, OrientedCut, SubGraph, SubGraphOps,
+        self, cycle::SignedCycle, node, Inclusion, InternalSubGraph, OrientedCut, SubGraph,
+        SubGraphOps,
     },
     HedgeGraph, NodeIndex,
 };
-use petgraph::graph;
-use serde::{Deserialize, Serialize};
+use serde::{de::value, Deserialize, Serialize};
 use smartstring::{LazyCompact, SmartString};
 use spenso::{
     data::DataTensor,
@@ -42,7 +43,10 @@ use typed_index_collections::TiVec;
 use crate::{
     disable,
     gammaloop_integrand::BareSample,
-    graph::{BareEdge, BareVertex, DerivedGraphData, EdgeType, HasVertexInfo, Shifts, VertexInfo},
+    graph::{
+        BareEdge, BareGraph, BareVertex, DerivedGraphData, EdgeType, HasVertexInfo, Shifts,
+        VertexInfo,
+    },
     model::{self, EdgeSlots, Model, VertexSlots},
     momentum::{FourMomentum, SignOrZero, Signature, ThreeMomentum},
     momentum_sample::{
@@ -55,22 +59,25 @@ use crate::{
 };
 
 #[derive(Clone)]
-pub struct Graph<S: NumeratorState = PythonState> {
+pub struct Graph {
     pub multiplicity: Atom,
     pub underlying: HedgeGraph<Edge, Vertex>,
     pub loop_momentum_basis: LoopMomentumBasis,
-    pub derived_data: DerivedGraphData<S>,
     pub vertex_slots: TiVec<NodeIndex, VertexSlots>,
 }
 
-impl<S: NumeratorState> Graph<S> {
-    pub fn forget_type(self) -> Graph<PythonState> {
-        Graph {
-            multiplicity: self.multiplicity,
-            underlying: self.underlying,
-            loop_momentum_basis: self.loop_momentum_basis,
-            derived_data: self.derived_data.forget_type(),
-            vertex_slots: self.vertex_slots,
+impl From<BareGraph> for Graph {
+    fn from(value: BareGraph) -> Self {
+        let loop_momentum_basis = value.loop_momentum_basis.clone();
+        let vertex_slots = value.vertex_slots.clone().into();
+        let multiplicity = value.overall_factor.clone();
+        let underlying = value.into();
+
+        Self {
+            multiplicity,
+            vertex_slots,
+            loop_momentum_basis,
+            underlying,
         }
     }
 }
@@ -313,19 +320,18 @@ impl FeynmanGraph for HedgeGraph<Edge, Vertex> {
     }
 }
 
-impl Graph<UnInit> {
+impl Graph {
     pub fn new(multiplicity: Atom, underlying: HedgeGraph<Edge, Vertex>) -> Result<Self> {
         Ok(Self {
             multiplicity,
             loop_momentum_basis: underlying.new_lmb()?,
             underlying,
-            derived_data: DerivedGraphData::new_empty(),
             vertex_slots: TiVec::new(),
         })
     }
 }
 
-impl<S: NumeratorState> Graph<S> {
+impl Graph {
     pub fn apply_vertex_rule(&self, node_id: NodeIndex) -> Option<[DataTensor<Atom>; 3]> {
         self.underlying[node_id].vertex_info.apply_vertex_rule(
             &self.underlying.add_signs_to_edges(node_id),
@@ -842,5 +848,57 @@ pub struct Vertex {
 impl Vertex {
     pub fn generate_vertex_slots(&self, shifts: Shifts, model: &Model) -> (VertexSlots, Shifts) {
         self.vertex_info.generate_vertex_slots(shifts, model)
+    }
+}
+
+impl From<BareGraph> for HedgeGraph<Edge, Vertex> {
+    fn from(value: BareGraph) -> Self {
+        let mut node_map = AHashMap::default();
+        let mut external_nodes_to_be_dropped = AHashSet::default();
+        let mut builder = HedgeGraphBuilder::new();
+
+        for (bare_node_id, bare_node) in value.vertices.into_iter().enumerate() {
+            let is_external = bare_node.edges.len() == 1;
+            if is_external {
+                external_nodes_to_be_dropped.insert(bare_node_id);
+                continue;
+            }
+
+            let node_id = builder.add_node(bare_node.into());
+            node_map.insert(bare_node_id, node_id);
+        }
+
+        for bare_edge in value.edges.into_iter() {
+            match bare_edge.edge_type {
+                EdgeType::Incoming => {
+                    assert!(external_nodes_to_be_dropped.contains(&bare_edge.vertices[0]));
+                    builder.add_external_edge(
+                        node_map[&bare_edge.vertices[1]],
+                        bare_edge.into(),
+                        Orientation::Default,
+                        Flow::Sink,
+                    );
+                }
+                EdgeType::Outgoing => {
+                    assert!(external_nodes_to_be_dropped.contains(&bare_edge.vertices[1]));
+                    builder.add_external_edge(
+                        node_map[&bare_edge.vertices[0]],
+                        bare_edge.into(),
+                        Orientation::Default,
+                        Flow::Source,
+                    );
+                }
+                EdgeType::Virtual => {
+                    builder.add_edge(
+                        node_map[&bare_edge.vertices[0]],
+                        node_map[&bare_edge.vertices[1]],
+                        bare_edge.into(),
+                        Orientation::Default,
+                    );
+                }
+            }
+        }
+
+        builder.build()
     }
 }

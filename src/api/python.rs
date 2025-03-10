@@ -13,7 +13,7 @@ use crate::{
         SerializableIntegrationState,
     },
     model::Model,
-    new_cs::ProcessList,
+    new_cs::{Process, ProcessDefinition, ProcessList},
     numerator::{GlobalPrefactor, Numerator, PythonState},
     utils::F,
     HasIntegrand, ProcessSettings, Settings,
@@ -635,6 +635,13 @@ impl PythonWorker {
         }
         let feyngen_options = generation_options.options.clone();
 
+        let process_definition = ProcessDefinition {
+            initial_pdgs: feyngen_options.initial_pdgs.clone(),
+            final_pdgs: feyngen_options.final_pdgs.clone(),
+        };
+
+        let generation_type = feyngen_options.generation_type.clone();
+
         let diagram_generator = FeynGen::new(feyngen_options);
 
         let mut global_prefactor = GlobalPrefactor::default();
@@ -646,6 +653,7 @@ impl PythonWorker {
             global_prefactor.colorless = parse!(&global_prefactor_colorless)
                 .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
         }
+
         let diagrams = diagram_generator
             .generate(
                 &self.model,
@@ -661,10 +669,19 @@ impl PythonWorker {
                 num_threads,
             )
             .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
-        Ok(diagrams
+
+        let res = Ok(diagrams
             .iter()
             .map(|d| serde_yaml::to_string(&SerializableGraph::from_graph(d)).unwrap())
-            .collect())
+            .collect());
+
+        let process =
+            Process::from_bare_graph_list(diagrams, generation_type, process_definition, None)
+                .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
+
+        self.process_list.add_process(process);
+
+        res
     }
 
     pub fn add_amplitude_from_yaml_str(&mut self, yaml_str: &str) -> PyResult<()> {

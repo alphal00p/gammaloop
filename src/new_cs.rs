@@ -1,9 +1,10 @@
-use std::path::PathBuf;
+use std::{marker::PhantomData, path::PathBuf};
 
 use ahash::HashMap;
 use bitvec::vec::BitVec;
 use color_eyre::Result;
 
+use hyperdual::Num;
 use itertools::Itertools;
 use linnet::half_edge::{
     builder::HedgeGraphBuilder,
@@ -12,11 +13,13 @@ use linnet::half_edge::{
     NodeIndex,
 };
 use serde::{Deserialize, Serialize};
+use spenso::upgrading_arithmetic::GreaterThan;
 use symbolica::{atom::Atom, parse};
 use typed_index_collections::TiVec;
 
 use crate::{
-    cff::cut_expression::{OrientationData, OrientationID},
+    cff::cut_expression::{CutOrientationExpression, OrientationData, OrientationID},
+    cross_section,
     feyngen::{
         diagram_generator::FeynGen, FeynGenFilter, FeynGenFilters, FeynGenOptions, GenerationType,
         NumeratorAwareGraphGroupingOption, SelfEnergyFilterOptions, SnailFilterOptions,
@@ -188,7 +191,6 @@ impl Process {
                 }
 
                 Graph::new(bare_graph.overall_factor, hedge_graph_builder.build())
-                    .map(Graph::forget_type)
             })
             .collect::<Result<Vec<Graph>, _>>()?;
 
@@ -198,8 +200,56 @@ impl Process {
     pub fn from_bare_graph_list(
         bare_graphs: Vec<BareGraph>,
         generation_type: GenerationType,
-    ) -> Self {
-        todo!();
+        definition: ProcessDefinition,
+        sub_classes: Option<Vec<Vec<String>>>,
+    ) -> Result<Self> {
+        let graphs = bare_graphs
+            .into_iter()
+            .map(|bare_graph| Graph::from(bare_graph))
+            .collect_vec();
+
+        match generation_type {
+            GenerationType::Amplitude => {
+                let mut collection: ProcessCollection<PythonState> =
+                    ProcessCollection::new_amplitude();
+
+                if let Some(_sub_classes) = sub_classes {
+                    todo!("implement seperation of processes into user defined sub classes");
+                } else {
+                    let mut amplitude: Amplitude<PythonState> = Amplitude::new();
+
+                    for amplitude_graph in graphs {
+                        amplitude.add_graph(amplitude_graph)?;
+                    }
+
+                    collection.add_amplitude(amplitude);
+                    Ok(Self {
+                        definition,
+                        collection,
+                    })
+                }
+            }
+            GenerationType::CrossSection => {
+                let mut collection: ProcessCollection<PythonState> =
+                    ProcessCollection::new_cross_section();
+
+                if let Some(_sub_classes) = sub_classes {
+                    todo!("implement seperation of processes into user defined sub classes");
+                } else {
+                    let mut cross_section: CrossSection<PythonState> = CrossSection::new();
+
+                    for cross_section_graph in graphs {
+                        cross_section.add_supergraph(cross_section_graph)?;
+                    }
+
+                    collection.add_cross_section(cross_section);
+                    Ok(Self {
+                        definition,
+                        collection,
+                    })
+                }
+            }
+        }
     }
 }
 
@@ -223,6 +273,10 @@ impl ProcessList {
     /// Generates a new empty process list
     pub fn new() -> Self {
         ProcessList { processes: vec![] }
+    }
+
+    pub fn add_process(&mut self, process: Process) {
+        self.processes.push(process);
     }
 
     /// given the process definition generates a new process and adds it to the list
@@ -261,6 +315,20 @@ impl<S: NumeratorState> ProcessCollection<S> {
     fn new_cross_section() -> Self {
         Self::CrossSections(vec![])
     }
+
+    fn add_amplitude(&mut self, amplitude: Amplitude<S>) {
+        match self {
+            Self::Amplitudes(amplitudes) => amplitudes.push(amplitude),
+            _ => panic!("Cannot add amplitude to a cross section collection"),
+        }
+    }
+
+    fn add_cross_section(&mut self, cross_section: CrossSection<S>) {
+        match self {
+            Self::CrossSections(cross_sections) => cross_sections.push(cross_section),
+            _ => panic!("Cannot add cross section to an amplitude collection"),
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -270,28 +338,32 @@ pub struct Amplitude<S: NumeratorState = PythonState> {
 
 #[derive(Clone)]
 pub struct AmplitudeGraph<S: NumeratorState = PythonState> {
-    graph: Graph<S>,
-    derived_data: AmplitudeDerivedData,
+    graph: Graph,
+    derived_data: AmplitudeDerivedData<S>,
 }
 
 impl<S: NumeratorState> AmplitudeGraph<S> {
-    fn new(graph: Graph<S>) -> Self {
+    fn new(graph: Graph) -> Self {
         AmplitudeGraph {
             graph,
-            derived_data: AmplitudeDerivedData {},
+            derived_data: AmplitudeDerivedData {
+                temp_numerator: PhantomData,
+            },
         }
     }
 }
 
 #[derive(Clone)]
-pub struct AmplitudeDerivedData {}
+pub struct AmplitudeDerivedData<S: NumeratorState> {
+    temp_numerator: PhantomData<S>,
+}
 
 impl<S: NumeratorState> Amplitude<S> {
     pub fn new() -> Self {
         Self { graphs: vec![] }
     }
 
-    pub fn add_graph(&mut self, graph: Graph<S>) -> Result<()> {
+    pub fn add_graph(&mut self, graph: Graph) -> Result<()> {
         self.graphs.push(AmplitudeGraph::new(graph));
         /// TODO: validate that the graph is compatible
         Ok(())
@@ -299,8 +371,23 @@ impl<S: NumeratorState> Amplitude<S> {
 }
 
 #[derive(Clone)]
-pub struct CrossSection<S: NumeratorState = PythonState> {
+pub struct CrossSection<S: NumeratorState> {
     supergraphs: Vec<CrossSectionGraph<S>>,
+}
+
+impl<S: NumeratorState> CrossSection<S> {
+    pub fn new() -> Self {
+        Self {
+            supergraphs: vec![],
+        }
+    }
+
+    pub fn add_supergraph(&mut self, supergraph: Graph) -> Result<()> {
+        let cross_section_graph = CrossSectionGraph::new(supergraph);
+        self.supergraphs.push(cross_section_graph);
+        /// TODO: validate that the graph is compatible
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, From, Into, Hash, PartialEq, Copy, Eq)]
@@ -308,30 +395,32 @@ pub struct CutId(usize);
 
 #[derive(Clone)]
 pub struct CrossSectionGraph<S: NumeratorState = PythonState> {
-    graph: Graph<S>,
+    graph: Graph,
     cuts: TiVec<CutId, CrossSectionCut>,
-    derived_data: CrossSectionDerivedData,
+    derived_data: CrossSectionDerivedData<S>,
 }
 
-impl CrossSectionGraph {
-    fn new_from_graph(graph: Graph) -> Self {
+impl<S: NumeratorState> CrossSectionGraph<S> {
+    fn new(graph: Graph) -> Self {
         Self {
             graph,
             cuts: TiVec::new(),
-            derived_data: CrossSectionDerivedData::new_empty(),
+            derived_data: CrossSectionDerivedData::<S>::new_empty(),
         }
     }
 }
 
 #[derive(Clone)]
-pub struct CrossSectionDerivedData {
+pub struct CrossSectionDerivedData<S: NumeratorState = PythonState> {
     pub orientations: TiVec<OrientationID, OrientationData>,
+    temp_numerator: PhantomData<S>,
 }
 
-impl CrossSectionDerivedData {
+impl<S: NumeratorState> CrossSectionDerivedData<S> {
     fn new_empty() -> Self {
         Self {
             orientations: TiVec::new(),
+            temp_numerator: PhantomData,
         }
     }
 }

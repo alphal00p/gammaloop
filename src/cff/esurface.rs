@@ -484,18 +484,11 @@ impl EsurfaceData {
     }
 }
 
-pub fn generate_esurface_data<S: NumeratorState>(
-    graph: &new_graph::Graph<S>,
+pub fn generate_esurface_data(
+    graph: &new_graph::Graph,
+    lmbs: &Vec<LoopMomentumBasis>,
     esurfaces: &EsurfaceCollection,
 ) -> Result<EsurfaceDerivedData, Report> {
-    let lmbs = graph
-        .derived_data
-        .loop_momentum_bases
-        .as_ref()
-        .ok_or_else(|| {
-            eyre!("Could not generate esurface data, loop momentum bases not generated.")
-        })?;
-
     let edge_masses = graph
         .underlying
         .new_hedgevec(&|edge, edge_index| edge.particle.mass.value);
