@@ -2797,8 +2797,8 @@ impl FeynGen {
             combined_canonized_processed_graphs
                 .entry(g_with_canonical_flows_clone)
                 .and_modify(|entry: &mut CanonizedGraphInfo| {
-                    entry.symmetry_factor = (Atom::parse(entry.symmetry_factor.as_str()).unwrap()
-                        + Atom::parse(canonized_graph.symmetry_factor.as_str()).unwrap())
+                    entry.symmetry_factor = (parse!(entry.symmetry_factor.as_str()).unwrap()
+                        + parse!(canonized_graph.symmetry_factor.as_str()).unwrap())
                     .expand()
                     .to_canonical_string();
                 })
