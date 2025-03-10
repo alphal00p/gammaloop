@@ -187,12 +187,8 @@ impl Process {
                     }
                 }
 
-                Graph::new(
-                    parse!(&bare_graph.overall_factor)
-                        .expect("failed to convert overall factor to symbolica atom"),
-                    hedge_graph_builder.build(),
-                )
-                .map(Graph::forget_type)
+                Graph::new(bare_graph.overall_factor, hedge_graph_builder.build())
+                    .map(Graph::forget_type)
             })
             .collect::<Result<Vec<Graph>, _>>()?;
 

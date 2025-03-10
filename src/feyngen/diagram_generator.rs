@@ -100,7 +100,7 @@ struct CanonizedGraphInfo {
     canonized_graph: SymbolicaGraph<NodeColorWithoutVertexRule, String>,
     graph: SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>,
     graph_with_canonized_flow: SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>,
-    symmetry_factor: String,
+    symmetry_factor: Atom,
 }
 
 pub trait NodeColorFunctions: Sized {
@@ -2357,8 +2357,7 @@ impl FeynGen {
                             .map(|(colored_g, multiplicity)| {
                                 (
                                     colored_g.canonize().graph,
-                                    (Atom::new_num(*multiplicity as i64) * symmetry_factor)
-                                        .to_canonical_string(),
+                                    (Atom::new_num(*multiplicity as i64) * symmetry_factor),
                                 )
                             })
                             .collect::<Vec<_>>()
@@ -2413,8 +2412,7 @@ impl FeynGen {
                     match self.count_closed_fermion_loops(g, model) {
                         Ok(n_closed_fermion_loops) => {
                             let new_symmetry_factor = if n_closed_fermion_loops % 2 == 1 {
-                                (Atom::new_num(-1) * parse!(symmetry_factor).unwrap())
-                                    .to_canonical_string()
+                                Atom::new_num(-1) * symmetry_factor
                             } else {
                                 symmetry_factor.clone()
                             };
@@ -2704,14 +2702,14 @@ impl FeynGen {
             processed_graphs = FeynGen::group_isomorphic_graphs_after_node_color_change(
                 &processed_graphs
                     .iter()
-                    .map(|(g, m)| (g.clone(), parse!(m).unwrap()))
+                    .map(|(g, m)| (g.clone(), m.clone()))
                     .collect::<HashMap<_, _>>(),
                 &node_colors_for_canonicalization,
                 &pool,
                 &progress_bar_style,
             )
             .iter()
-            .map(|(g, m)| (g.clone(), m.to_canonical_string()))
+            .map(|(g, m)| (g.clone(), m.clone()))
             .collect::<Vec<_>>();
         }
 
@@ -2799,10 +2797,8 @@ impl FeynGen {
             combined_canonized_processed_graphs
                 .entry(g_with_canonical_flows_clone)
                 .and_modify(|entry: &mut CanonizedGraphInfo| {
-                    entry.symmetry_factor = (parse!(entry.symmetry_factor.as_str()).unwrap()
-                        + parse!(canonized_graph.symmetry_factor.as_str()).unwrap())
-                    .expand()
-                    .to_canonical_string();
+                    entry.symmetry_factor =
+                        (&entry.symmetry_factor + &canonized_graph.symmetry_factor).expand()
                 })
                 .or_insert(canonized_graph);
         }
@@ -3048,21 +3044,14 @@ impl FeynGen {
                                                         format!("{}",n_groupings_value).green().bold(),
                                                     ));
                                                 }
+
                                                 found_match = true;
-                                                other_graph.overall_factor =
-                                                    (parse!(other_graph.overall_factor.as_str())
-                                                        .unwrap()
-                                                        + ratio
-                                                            * parse!(
-                                                                bare_graph.overall_factor.as_str()
-                                                            )
-                                                            .unwrap())
-                                                    .expand()
-                                                    .to_canonical_string();
+                                                other_graph.overall_factor = (&other_graph.overall_factor + ratio * &bare_graph.overall_factor).expand();
+
                                                 // TOFIX: Current version of symbolica (v0.14.0 rev: e534d9f7f8972e22d2a4fb7cd6cb5943373d3bb3)
                                                 // has a bug when cancelling terms where it does not yield 0. So this can be removed when updating to latest symbolica version.
-                                                if other_graph.overall_factor.is_empty() {
-                                                    other_graph.overall_factor = "0".to_string();
+                                                if other_graph.overall_factor.is_zero() {
+                                                    other_graph.overall_factor = Atom::new_num(0);
                                                 }
                                             }
                                         }
@@ -3089,7 +3078,7 @@ impl FeynGen {
                     .values()
                     .flatten()
                     .filter_map(|(graph_id, _numerator, graph)| {
-                        if parse!(&graph.overall_factor).unwrap().expand().is_zero() {
+                        if graph.overall_factor.expand().is_zero() {
                             n_cancellations += 1;
                             None
                         } else {

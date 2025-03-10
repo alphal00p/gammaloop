@@ -966,7 +966,7 @@ impl SerializableGraph {
                 .map(|e| SerializableBareEdge::from_edge(graph, e))
                 .collect(),
 
-            overall_factor: graph.overall_factor.clone(),
+            overall_factor: graph.overall_factor.to_canonical_string(),
             external_connections: graph
                 .external_connections
                 .iter()
@@ -1097,7 +1097,7 @@ pub struct BareGraph {
     pub vertices: Vec<BareVertex>,
     pub edges: Vec<BareEdge>,
     pub external_edges: Vec<usize>,
-    pub overall_factor: String,
+    pub overall_factor: Atom,
     pub external_connections: Vec<(Option<usize>, Option<usize>)>,
     pub loop_momentum_basis: LoopMomentumBasis,
     pub vertex_name_to_position: HashMap<SmartString<LazyCompact>, usize, RandomState>,
@@ -1333,7 +1333,7 @@ impl BareGraph {
             vertices,
             edges: vec![],
             external_edges: vec![],
-            overall_factor: graph.overall_factor.clone(),
+            overall_factor: parse!(graph.overall_factor.clone()).unwrap(),
             external_connections: vec![],
             loop_momentum_basis: LoopMomentumBasis {
                 tree: None,
@@ -1534,7 +1534,7 @@ impl BareGraph {
         model: &model::Model,
         name: String,
         graph: &SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>,
-        symmetry_factor: String,
+        symmetry_factor: Atom,
         external_connections: Vec<(Option<usize>, Option<usize>)>,
         forced_lmb: Option<Vec<SmartString<LazyCompact>>>,
     ) -> Result<BareGraph, FeynGenError> {
@@ -1865,74 +1865,101 @@ impl BareGraph {
         &mut self,
         forced_lmb: &Option<Vec<SmartString<LazyCompact>>>,
     ) -> Result<(), FeynGenError> {
-        todo!("fix this function")
-        //let lmb_basis = if let Some(user_selected_lmb) = forced_lmb {
-        //    let mut user_basis = vec![];
-        //    for e_lmb in user_selected_lmb {
-        //        if let Some(e_pos) = self.edge_name_to_position.get(e_lmb) {
-        //            user_basis.push(*e_pos);
-        //        } else {
-        //            return Err(FeynGenError::LoopMomentumBasisError(format!(
-        //                "Specified loop momentum basis edge named '{}' not found in the graph.",
-        //                e_lmb
-        //            )));
-        //        }
-        //    }
-        //    user_basis
-        //} else {
-        //    // !g.hedge_representation
-        //    //     .cycle_basis().1.
-        //    //     .iter()
-        //    //     .map(|cycle| {
-        //    //         *g.hedge_representation
-        //    //             .iter_egde_data(&cycle.internal_graph)
-        //    //             .next()
-        //    //             .unwrap()
-        //    //     })
-        //    //     .collect::<Vec<_>>()
-        //    let spanning_tree = self.hedge_representation.cycle_basis().1;
-        //    // println!("hedge graph: \n{}", g.hedge_representation.base_dot());
-        //    // let spanning_tree_half_edge_node = sefl
-        //    //     .hedge_representation
-        //    //     .nesting_node_from_subgraph(spanning_tree.clone());
-        //    // println!(
-        //    //     "spanning tree: \n{}",
-        //    //     self.hedge_representation.dot(&spanning_tree_half_edge_node)
-        //    // );
-        //    self.hedge_representation
-        //        .iter_internal_edge_data(&spanning_tree.tree.complement(&self.hedge_representation))
-        //        .map(|e| *e.data)
-        //        .collect::<Vec<_>>()
-        //};
-        //debug!(
-        //    "Loop momentum basis edge positions selected: {:?}",
-        //    lmb_basis
-        //);
-        //debug!(
-        //    "Loop momentum basis selected: {}",
-        //    lmb_basis
-        //        .iter()
-        //        .map(|i_e| self.edges[*i_e].clone().name)
-        //        .collect::<Vec<_>>()
-        //        .join(", ")
-        //);
-        //let mut lmb: LoopMomentumBasis = LoopMomentumBasis {
-        //    basis: lmb_basis,
-        //    edge_signatures: vec![],
-        //};
-        //lmb.set_edge_signatures(self).map_err(|e| {
-        //    FeynGenError::LoopMomentumBasisError(format!(
-        //        "{} | Error: {}",
-        //        lmb.basis
-        //            .iter()
-        //            .map(|i_e| format!("{}", self.edges[*i_e].name))
-        //            .collect::<Vec<_>>()
-        //            .join(", "),
-        //        e
-        //    ))
-        //})?;
-        //self.loop_momentum_basis = lmb;
-        //Ok(())
+        debug!("setting loop momentum basis");
+
+        let lmb_basis = if let Some(user_selected_lmb) = forced_lmb {
+            let mut user_basis = TiVec::new();
+            for e_lmb in user_selected_lmb {
+                if let Some(e_pos) = self.edge_name_to_position.get(e_lmb) {
+                    user_basis.push(EdgeIndex::from(*e_pos));
+                } else {
+                    return Err(FeynGenError::LoopMomentumBasisError(format!(
+                        "Specified loop momentum basis edge named '{}' not found in the graph.",
+                        e_lmb
+                    )));
+                }
+            }
+            user_basis
+        } else {
+            // !g.hedge_representation
+            //     .cycle_basis().1.
+            //     .iter()
+            //     .map(|cycle| {
+            //         *g.hedge_representation
+            //             .iter_egde_data(&cycle.internal_graph)
+            //             .next()
+            //             .unwrap()
+            //     })
+            //     .collect::<Vec<_>>()
+
+            debug!("finding spanning tree");
+            warn!("Spanning tree selection is disabled");
+            disable! {
+            let spanning_tree = self.hedge_representation.cycle_basis().1;
+            // println!("hedge graph: \n{}", g.hedge_representation.base_dot());
+            // let spanning_tree_half_edge_node = sefl
+            //     .hedge_representation
+            //     .nesting_node_from_subgraph(spanning_tree.clone());
+            // println!(
+            //     "spanning tree: \n{}",
+            //     self.hedge_representation.dot(&spanning_tree_half_edge_node)
+            // );
+            self.hedge_representation
+                .iter_internal_edge_data(
+                    &spanning_tree.covers.complement(&self.hedge_representation),
+                )
+                .map(|e| EdgeIndex::from(*e.data))
+                .collect()
+            }
+            TiVec::from(vec![EdgeIndex::from(
+                self.edges
+                    .iter()
+                    .position(|edge| edge.particle.name == "d" || edge.particle.name == "d~")
+                    .unwrap(),
+            )])
+        };
+        debug!(
+            "Loop momentum basis edge positions selected: {:?}",
+            lmb_basis
+        );
+        debug!(
+            "Loop momentum basis selected: {}",
+            lmb_basis
+                .iter()
+                .map(|i_e| self.edges[Into::<usize>::into(*i_e)].clone().name)
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+
+        debug!("loop momentum basis set");
+
+        let temp_edge_signatures =
+            self.hedge_representation
+                .new_hedgevec(&|_, _| LoopExtSignature {
+                    internal: SignatureLike::from_iter(std::iter::empty::<SignOrZero>()),
+                    external: SignatureLike::from_iter(std::iter::empty::<SignOrZero>()),
+                });
+
+        let mut lmb: LoopMomentumBasis = LoopMomentumBasis {
+            tree: None,
+            basis: lmb_basis,
+            edge_signatures: temp_edge_signatures,
+        };
+
+        lmb.set_edge_signatures(&self.hedge_representation)
+            .map_err(|e| {
+                FeynGenError::LoopMomentumBasisError(format!(
+                    "{} | Error: {}",
+                    lmb.basis
+                        .iter()
+                        .map(|i_e| format!("{}", self.edges[Into::<usize>::into(*i_e)].name))
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                    e
+                ))
+            })?;
+        self.loop_momentum_basis = lmb;
+        Ok(())
     }
 
     pub fn verify_external_edge_order(&self) -> Result<Vec<usize>> {
@@ -2273,52 +2300,47 @@ impl BareGraph {
         k_format: &str,
         p_format: &str,
     ) -> Vec<(Atom, Atom)> {
-        todo!()
-        //let mut rule = vec![];
+        let mut rule = vec![];
 
-        //for (i, signature) in lmb.edge_signatures.iter().enumerate() {
-        //    rule.push((
-        //        parse!(&q_format
-        //            .replace("<i>", &format!("{}", i))
-        //            .replace("<j>", &format!("{}", i)))
-        //        .unwrap()
-        //        .to_pattern(),
-        //        self.replacement_rule_from_signature(i, signature, k_format, p_format),
-        //    ));
-        //}
+        for (i, signature) in lmb.edge_signatures.borrow().into_iter() {
+            rule.push((
+                parse!(&q_format
+                    .replace("<i>", &format!("{}", Into::<usize>::into(i)))
+                    .replace("<j>", &format!("{}", Into::<usize>::into(i))))
+                .unwrap(),
+                self.replacement_rule_from_signature(i, signature, k_format, p_format),
+            ));
+        }
 
-        //rule
+        rule
     }
 
     fn replacement_rule_from_signature(
         &self,
-        index: usize,
+        index: EdgeIndex,
         signature: &LoopExtSignature,
         k_format: &str,
         p_format: &str,
     ) -> Atom {
-        todo!()
-        // let mut acc = Atom::new_num(0);
-        // for (i_l, &sign) in signature.internal.iter().enumerate() {
-        //     let k = sign
-        //         * parse!(&k_format
-        //             .replace("<i>", &format!("{}", i_l))
-        //             .replace("<j>", &format!("{}", index)))
-        //         .unwrap()
-        //         .to_pattern();
-        //     acc = &acc + &k;
-        // }
+        let mut acc = Atom::new_num(0);
+        for (i_l, &sign) in signature.internal.iter().enumerate() {
+            let k = sign
+                * parse!(&k_format
+                    .replace("<i>", &format!("{}", i_l))
+                    .replace("<j>", &format!("{}", Into::<usize>::into(index))))
+                .unwrap();
+            acc = &acc + &k;
+        }
 
-        // for (i_e, &sign) in signature.external.iter().enumerate() {
-        //     let p = sign
-        //         * parse!(&p_format
-        //             .replace("<i>", &format!("{}", i_e))
-        //             .replace("<j>", &format!("{}", index)))
-        //         .unwrap()
-        //         .to_pattern();
-        //     acc = &acc + &p;
-        // }
-        // acc
+        for (i_e, &sign) in signature.external.iter().enumerate() {
+            let p = sign
+                * parse!(&p_format
+                    .replace("<i>", &format!("{}", i_e))
+                    .replace("<j>", &format!("{}", Into::<usize>::into(index))))
+                .unwrap();
+            acc = &acc + &p;
+        }
+        acc
     }
 
     pub fn denominator(self) -> Vec<(Atom, Atom)> {
