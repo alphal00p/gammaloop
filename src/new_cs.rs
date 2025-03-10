@@ -22,7 +22,7 @@ use crate::{
         NumeratorAwareGraphGroupingOption, SelfEnergyFilterOptions, SnailFilterOptions,
         TadpolesFilterOptions,
     },
-    graph::{BareVertex, EdgeType},
+    graph::{BareGraph, BareVertex, EdgeType},
     model::Model,
     new_graph::{Edge, Graph, Vertex},
     numerator::{GlobalPrefactor, NumeratorState, PythonState},
@@ -194,6 +194,13 @@ impl Process {
 
         todo!();
     }
+
+    pub fn from_bare_graph_list(
+        bare_graphs: Vec<BareGraph>,
+        generation_type: GenerationType,
+    ) -> Self {
+        todo!();
+    }
 }
 
 #[derive(Clone)]
@@ -306,9 +313,27 @@ pub struct CrossSectionGraph<S: NumeratorState = PythonState> {
     derived_data: CrossSectionDerivedData,
 }
 
+impl CrossSectionGraph {
+    fn new_from_graph(graph: Graph) -> Self {
+        Self {
+            graph,
+            cuts: TiVec::new(),
+            derived_data: CrossSectionDerivedData::new_empty(),
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct CrossSectionDerivedData {
     pub orientations: TiVec<OrientationID, OrientationData>,
+}
+
+impl CrossSectionDerivedData {
+    fn new_empty() -> Self {
+        Self {
+            orientations: TiVec::new(),
+        }
+    }
 }
 
 #[derive(Clone)]
