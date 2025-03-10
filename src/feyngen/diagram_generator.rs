@@ -1,3 +1,4 @@
+use bitvec::vec::BitVec;
 use indicatif::ProgressBar;
 use indicatif::{ParallelProgressIterator, ProgressStyle};
 
@@ -19,7 +20,6 @@ use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use symbolica::atom::AtomView;
-use symbolica::atom::Symbol;
 use symbolica::domains::finite_field::PrimeIteratorU64;
 use symbolica::domains::rational::Rational;
 use symbolica::function;
@@ -42,7 +42,6 @@ use super::SnailFilterOptions;
 use super::TadpolesFilterOptions;
 use super::{FeynGenError, FeynGenOptions};
 
-use crate::disable;
 use crate::graph::EdgeType;
 use crate::model::ColorStructure;
 use crate::model::Particle;
@@ -125,7 +124,7 @@ pub trait NodeColorFunctions: Sized {
     }
 
     fn passes_amplitude_filter(
-        _amplitude_subgraph: &InternalSubGraph,
+        _amplitude_subgraph: &BitVec,
         _graph: &HedgeGraph<Arc<Particle>, Self>,
         _amp_couplings: Option<&std::collections::HashMap<String, usize, ahash::RandomState>>,
     ) -> bool {
@@ -154,7 +153,7 @@ impl NodeColorFunctions for NodeColorWithVertexRule {
     }
 
     fn passes_amplitude_filter(
-        amplitude_subgraph: &InternalSubGraph,
+        amplitude_subgraph: &BitVec,
         graph: &HedgeGraph<Arc<Particle>, Self>,
         amp_couplings: Option<&std::collections::HashMap<String, usize, ahash::RandomState>>,
     ) -> bool {
@@ -767,7 +766,7 @@ impl FeynGen {
     {
         #[allow(clippy::too_many_arguments)]
         fn is_valid_cut<NodeColor: NodeColorFunctions>(
-            cut: &(InternalSubGraph, OrientedCut, InternalSubGraph),
+            cut: &(BitVec, OrientedCut, BitVec),
             s_set: &AHashSet<NodeIndex>,
             t_set: &AHashSet<NodeIndex>,
             model: &Model,
@@ -810,8 +809,14 @@ impl FeynGen {
                 }
 
                 if let Some((min_loop, max_loop)) = amp_loop_count {
-                    let left_loop = graph.cyclotomatic_number(&cut.0);
-                    let right_loop = graph.cyclotomatic_number(&cut.2);
+                    let left_internal_subgraph =
+                        InternalSubGraph::cleaned_filter_pessimist(cut.0.clone(), graph);
+
+                    let right_internal_subgraph =
+                        InternalSubGraph::cleaned_filter_pessimist(cut.2.clone(), graph);
+
+                    let left_loop = graph.cyclotomatic_number(&left_internal_subgraph);
+                    let right_loop = graph.cyclotomatic_number(&right_internal_subgraph);
 
                     let sum = left_loop + right_loop;
                     if sum < min_loop || sum > max_loop {
@@ -826,7 +831,7 @@ impl FeynGen {
         }
 
         fn is_s_channel<NodeColor>(
-            cut: &(InternalSubGraph, OrientedCut, InternalSubGraph),
+            cut: &(BitVec, OrientedCut, BitVec),
             s_set: &AHashSet<NodeIndex>,
             t_set: &AHashSet<NodeIndex>,
             graph: &HedgeGraph<Arc<Particle>, NodeColor>,
@@ -851,12 +856,10 @@ impl FeynGen {
         let amp_loop_count = self.options.amplitude_filters.get_loop_count_range();
         let n_particles = self.options.initial_pdgs.len();
 
-        todo!("fix HedgeGraph::From");
-        disable! {
-            let he_graph = HedgeGraph::<EdgeColor, NodeColor >::from(graph.clone()).map(
-                |node_color| node_color,
-                |_, d| d.map(|d| model.get_particle_from_pdg(d.pdg)),
-            );
+        let he_graph = HedgeGraph::<EdgeColor, NodeColor>::from(graph.clone()).map(
+            |_, _, _, node_color| node_color,
+            |_, _, _, d| d.map(|d| model.get_particle_from_pdg(d.pdg)),
+        );
 
         let mut s_set = AHashSet::new();
         let mut t_set = AHashSet::new();
@@ -891,10 +894,9 @@ impl FeynGen {
                 )
             });
 
-                pass_cut_filter
-            } else {
-                true //TODO still check the amplitude level filters in the case where there is no initial-state specified
-            }
+            pass_cut_filter
+        } else {
+            true //TODO still check the amplitude level filters in the case where there is no initial-state specified
         }
     }
 
