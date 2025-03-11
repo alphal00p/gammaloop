@@ -1,16 +1,17 @@
-use std::{marker::PhantomData, path::PathBuf};
+use std::{collections::btree_map::Range, marker::PhantomData, path::PathBuf, sync::Arc};
 
-use ahash::HashMap;
-use bitvec::vec::BitVec;
+use ahash::{AHashSet, HashMap};
+use bitvec::{index, vec::BitVec};
 use color_eyre::Result;
 
+use eyre::eyre;
 use hyperdual::Num;
-use itertools::Itertools;
+use itertools::{partition, Itertools};
 use linnet::half_edge::{
     builder::HedgeGraphBuilder,
-    involution::Flow,
-    subgraph::{HedgeNode, OrientedCut},
-    NodeIndex,
+    involution::{Flow, HedgePair, Orientation},
+    subgraph::{HedgeNode, InternalSubGraph, OrientedCut},
+    HedgeGraph, NodeIndex,
 };
 use serde::{Deserialize, Serialize};
 use spenso::upgrading_arithmetic::GreaterThan;
@@ -18,15 +19,18 @@ use symbolica::{atom::Atom, parse};
 use typed_index_collections::TiVec;
 
 use crate::{
-    cff::cut_expression::{CutOrientationExpression, OrientationData, OrientationID},
-    cross_section,
+    cff::{
+        cut_expression::{CutOrientationExpression, OrientationData, OrientationID},
+        esurface::Esurface,
+    },
+    cross_section, disable,
     feyngen::{
         diagram_generator::FeynGen, FeynGenFilter, FeynGenFilters, FeynGenOptions, GenerationType,
         NumeratorAwareGraphGroupingOption, SelfEnergyFilterOptions, SnailFilterOptions,
         TadpolesFilterOptions,
     },
-    graph::{BareGraph, BareVertex, EdgeType},
-    model::Model,
+    graph::{self, BareGraph, BareVertex, EdgeType},
+    model::{self, Model, Particle},
     new_graph::{Edge, Graph, Vertex},
     numerator::{GlobalPrefactor, NumeratorState, PythonState},
     ProcessSettings,
@@ -38,6 +42,10 @@ use derive_more::{From, Into};
 pub struct ProcessDefinition {
     pub initial_pdgs: Vec<i64>, // Do we want a pub type Pdg = i64;?
     pub final_pdgs: Vec<i64>,
+    pub n_unresolved: usize, // we need al this information to know what cuts are considered at runtime
+    pub unresolved_cut_content: AHashSet<Arc<Particle>>,
+    pub amplitude_filters: FeynGenFilters,
+    pub cross_section_filters: FeynGenFilters,
 }
 
 #[derive(Clone)]
@@ -129,6 +137,7 @@ fn test_process_amplitude() -> GenerationOptions {
 
 impl Process {
     pub fn generate(options: GenerationOptions, model: &Model) -> Result<Self> {
+        disable! {
         let definition = ProcessDefinition {
             initial_pdgs: options.feyngen_options.initial_pdgs.clone(),
             final_pdgs: options.feyngen_options.final_pdgs.clone(),
@@ -194,6 +203,7 @@ impl Process {
             })
             .collect::<Result<Vec<Graph>, _>>()?;
 
+        }
         todo!();
     }
 
@@ -383,7 +393,7 @@ impl<S: NumeratorState> CrossSection<S> {
     }
 
     pub fn add_supergraph(&mut self, supergraph: Graph) -> Result<()> {
-        let cross_section_graph = CrossSectionGraph::new(supergraph);
+        let mut cross_section_graph = CrossSectionGraph::new(supergraph);
         self.supergraphs.push(cross_section_graph);
         /// TODO: validate that the graph is compatible
         Ok(())
@@ -396,17 +406,84 @@ pub struct CutId(usize);
 #[derive(Clone)]
 pub struct CrossSectionGraph<S: NumeratorState = PythonState> {
     graph: Graph,
+    source_nodes: AHashSet<NodeIndex>,
+    target_nodes: AHashSet<NodeIndex>,
     cuts: TiVec<CutId, CrossSectionCut>,
+    cut_esurface: TiVec<CutId, Esurface>,
     derived_data: CrossSectionDerivedData<S>,
 }
 
 impl<S: NumeratorState> CrossSectionGraph<S> {
     fn new(graph: Graph) -> Self {
+        let mut source_nodes = AHashSet::new();
+        let mut target_nodes = AHashSet::new();
+
+        for (hedge_pair, _, _) in graph.underlying.iter_all_edges() {
+            match hedge_pair {
+                HedgePair::Unpaired { hedge, flow } => {
+                    let node_id = graph.underlying.node_id(hedge);
+                    match flow {
+                        Flow::Source => {
+                            target_nodes.insert(node_id);
+                        }
+                        Flow::Sink => {
+                            source_nodes.insert(node_id);
+                        }
+                    }
+                }
+                _ => continue,
+            }
+        }
+
         Self {
             graph,
+            source_nodes,
+            target_nodes,
             cuts: TiVec::new(),
+            cut_esurface: TiVec::new(),
             derived_data: CrossSectionDerivedData::<S>::new_empty(),
         }
+    }
+
+    fn generate_cuts(
+        &mut self,
+        model: &Model,
+        process_definition: ProcessDefinition,
+    ) -> Result<()> {
+        if let (Some(&source), Some(&target)) = (
+            self.source_nodes.iter().next(),
+            self.target_nodes.iter().next(),
+        ) {
+            let cuts: TiVec<CutId, CrossSectionCut> = self
+                .graph
+                .underlying
+                .all_cuts(source, target)
+                .into_iter()
+                .map(|(left, cut, right)| CrossSectionCut { cut, left, right })
+                .filter_map(|cut| {
+                    match cut.is_valid_for_process(self, &process_definition, model) {
+                        Ok(true) => Some(Ok(cut)),
+                        Ok(false) => None,
+                        Err(e) => Some(Err(e)),
+                    }
+                })
+                .collect::<Result<_>>()?;
+
+            self.cuts = cuts;
+            Ok(())
+        } else {
+            Err(eyre!("Could not find cuts for graph: {}", self.graph.name))
+        }
+    }
+
+    fn generate_esurface_cuts(&mut self) {
+        let esurfaces: TiVec<CutId, Esurface> = self
+            .cuts
+            .iter()
+            .map(|cut| Esurface::new_from_cut_left(&self.graph.underlying, cut))
+            .collect();
+
+        self.cut_esurface = esurfaces;
     }
 }
 
@@ -430,6 +507,123 @@ pub struct CrossSectionCut {
     pub cut: OrientedCut,
     pub left: BitVec,
     pub right: BitVec,
+}
+
+impl CrossSectionCut {
+    pub fn is_s_channel<S: NumeratorState>(
+        &self,
+        cross_section_graph: &CrossSectionGraph<S>,
+    ) -> Result<bool> {
+        let nodes_of_left_cut: Option<AHashSet<_>> = cross_section_graph
+            .graph
+            .underlying
+            .iter_node_data(&self.left)
+            .map(|(hedge_node, _)| {
+                cross_section_graph
+                    .graph
+                    .underlying
+                    .id_from_hairs(hedge_node)
+            })
+            .collect();
+
+        if let Some(nodes_left_of_cut) = nodes_of_left_cut {
+            Ok(cross_section_graph
+                .source_nodes
+                .is_subset(&nodes_left_of_cut)
+                && cross_section_graph
+                    .target_nodes
+                    .intersection(&nodes_left_of_cut)
+                    .count()
+                    == 0)
+        } else {
+            Err(eyre!("Could not determine nodes in left cut"))
+        }
+    }
+
+    pub fn is_valid_for_process<S: NumeratorState>(
+        &self,
+        cross_section_graph: &CrossSectionGraph<S>,
+        process: &ProcessDefinition,
+        model: &Model,
+    ) -> Result<bool> {
+        if self.is_s_channel(cross_section_graph)? {
+            let mut cut_content = self
+                .cut
+                .iter_edges_relative(&cross_section_graph.graph.underlying)
+                .map(|(orientation, edge_data)| {
+                    if orientation == Orientation::Reversed {
+                        edge_data.data.particle.get_anti_particle(model)
+                    } else {
+                        edge_data.data.particle.clone()
+                    }
+                })
+                .collect_vec();
+
+            let particle_content = process
+                .final_pdgs
+                .iter()
+                .map(|pdg| model.get_particle_from_pdg(*pdg as isize));
+
+            for particle in particle_content {
+                if let Some(index) = cut_content.iter().position(|p| p == &particle) {
+                    cut_content.remove(index);
+                } else {
+                    return Ok(false);
+                }
+            }
+
+            if cut_content.len() > process.n_unresolved {
+                return Ok(false);
+            }
+
+            if !cut_content
+                .iter()
+                .all(|particle| process.unresolved_cut_content.contains(particle))
+            {
+                return Ok(false);
+            }
+
+            let amplitude_couplings = process.amplitude_filters.get_coupling_orders();
+            let amplitude_loop_count = process.amplitude_filters.get_loop_count_range();
+
+            if let Some((min_loop, max_loop)) = amplitude_loop_count {
+                let loop_range = min_loop..=max_loop;
+                let left_internal_subgraph = InternalSubGraph::cleaned_filter_pessimist(
+                    self.left.clone(),
+                    &cross_section_graph.graph.underlying,
+                );
+
+                let right_internal_subgraph = InternalSubGraph::cleaned_filter_pessimist(
+                    self.right.clone(),
+                    &cross_section_graph.graph.underlying,
+                );
+
+                let left_loop = cross_section_graph
+                    .graph
+                    .underlying
+                    .cyclotomatic_number(&left_internal_subgraph);
+
+                let right_loop = cross_section_graph
+                    .graph
+                    .underlying
+                    .cyclotomatic_number(&right_internal_subgraph);
+
+                let total_loops = left_loop + right_loop;
+
+                if !loop_range.contains(&total_loops) {
+                    return Ok(false);
+                }
+            }
+
+            if amplitude_couplings.is_some() {
+                todo!("waiting for update")
+            }
+
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    }
 }
 
 #[test]

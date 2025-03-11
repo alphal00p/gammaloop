@@ -5,6 +5,7 @@ use crate::{
         self, diagram_generator::FeynGen, FeynGenError, FeynGenFilters, FeynGenOptions,
         NumeratorAwareGraphGroupingOption,
     },
+    gammaloop_integrand::DiscreteGraphSample,
     graph::SerializableGraph,
     inspect,
     integrands::Integrand,
@@ -635,12 +636,12 @@ impl PythonWorker {
         }
         let feyngen_options = generation_options.options.clone();
 
-        let process_definition = ProcessDefinition {
-            initial_pdgs: feyngen_options.initial_pdgs.clone(),
-            final_pdgs: feyngen_options.final_pdgs.clone(),
-        };
-
+        // clone some of the options that will be used in the process definition
+        let initial_pdgs = feyngen_options.initial_pdgs.clone();
+        let final_pdgs = feyngen_options.final_pdgs.clone();
         let generation_type = feyngen_options.generation_type.clone();
+        let amplitude_filters = feyngen_options.amplitude_filters.clone();
+        let cross_section_filters = feyngen_options.cross_section_filters.clone();
 
         let diagram_generator = FeynGen::new(feyngen_options);
 
@@ -674,6 +675,19 @@ impl PythonWorker {
             .iter()
             .map(|d| serde_yaml::to_string(&SerializableGraph::from_graph(d)).unwrap())
             .collect());
+
+        // load everything into processlist
+        let (n_unresolved, unresolved_cut_content) =
+            diagram_generator.unresolved_cut_content(&self.model);
+
+        let process_definition = ProcessDefinition {
+            initial_pdgs,
+            final_pdgs,
+            n_unresolved,
+            unresolved_cut_content,
+            amplitude_filters,
+            cross_section_filters,
+        };
 
         let process =
             Process::from_bare_graph_list(diagrams, generation_type, process_definition, None)

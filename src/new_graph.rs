@@ -61,6 +61,7 @@ use crate::{
 #[derive(Clone)]
 pub struct Graph {
     pub multiplicity: Atom,
+    pub name: SmartString<LazyCompact>,
     pub underlying: HedgeGraph<Edge, Vertex>,
     pub loop_momentum_basis: LoopMomentumBasis,
     pub vertex_slots: TiVec<NodeIndex, VertexSlots>,
@@ -71,9 +72,11 @@ impl From<BareGraph> for Graph {
         let loop_momentum_basis = value.loop_momentum_basis.clone();
         let vertex_slots = value.vertex_slots.clone().into();
         let multiplicity = value.overall_factor.clone();
+        let name = value.name.clone();
         let underlying = value.into();
 
         Self {
+            name,
             multiplicity,
             vertex_slots,
             loop_momentum_basis,
@@ -321,8 +324,13 @@ impl FeynmanGraph for HedgeGraph<Edge, Vertex> {
 }
 
 impl Graph {
-    pub fn new(multiplicity: Atom, underlying: HedgeGraph<Edge, Vertex>) -> Result<Self> {
+    pub fn new(
+        name: SmartString<LazyCompact>,
+        multiplicity: Atom,
+        underlying: HedgeGraph<Edge, Vertex>,
+    ) -> Result<Self> {
         Ok(Self {
+            name,
             multiplicity,
             loop_momentum_basis: underlying.new_lmb()?,
             underlying,

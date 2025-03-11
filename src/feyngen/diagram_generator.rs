@@ -185,7 +185,7 @@ impl NodeColorFunctions for NodeColorWithoutVertexRule {
     }
 
     fn passes_amplitude_filter(
-        _amplitude_subgraph: &InternalSubGraph,
+        _amplitude_subgraph: &BitVec,
         _graph: &HedgeGraph<Arc<Particle>, Self>,
         _amp_couplings: Option<&std::collections::HashMap<String, usize, ahash::RandomState>>,
     ) -> bool {
