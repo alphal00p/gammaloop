@@ -888,13 +888,10 @@ class GammaLoop(object):
                 "Amplitude generation requested but cross section orders are also specified. Ignoring cross section orders.")
             parsed_process.cross_section_orders = None
 
-        if not args.amplitude and parsed_process.amplitude_orders is not None:
-            raise GammaLoopError(
-                "Cross section generation requested but amplitude orders are also specified. This option is not yet supported.")
-
-        if not args.amplitude and parsed_process.amplitude_loop_count is not None:
-            raise GammaLoopError(
-                "Cross section generation requested but amplitude loop count is also specified. This option is not yet supported.")
+        if args.amplitude and parsed_process.cross_section_loop_count is not None:
+            logger.warning(
+                "Amplitude generation requested but cross section loop count is also specified. Ignoring cross section loop count.")
+            parsed_process.cross_section_loop_count = None
 
         # if parsed_process.perturbative_orders is not None:
         #     logger.warning(
