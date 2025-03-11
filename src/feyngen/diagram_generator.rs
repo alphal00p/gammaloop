@@ -739,7 +739,7 @@ impl FeynGen {
         false
     }
 
-    pub(super) fn unresolved_cut_content(&self, model: &Model) -> (usize, AHashSet<Arc<Particle>>) {
+    pub fn unresolved_cut_content(&self, model: &Model) -> (usize, AHashSet<Arc<Particle>>) {
         if let Some(p) = self.options.cross_section_filters.get_perturbative_orders() {
             let mut unresolved = AHashSet::new();
             for k in p.keys() {
