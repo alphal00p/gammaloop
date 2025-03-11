@@ -777,7 +777,9 @@ impl FeynGen {
             n_unresolved: usize,
             unresolved_type: &AHashSet<Arc<Particle>>,
             particle_content: &[Arc<Particle>],
-            amp_couplings: Option<&std::collections::HashMap<String, usize, ahash::RandomState>>,
+            amp_couplings: Option<
+                &std::collections::HashMap<String, (usize, Option<usize>), ahash::RandomState>,
+            >,
             amp_loop_count: Option<(usize, usize)>,
             graph: &HedgeGraph<Arc<Particle>, NodeColor>,
         ) -> bool {

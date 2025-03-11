@@ -369,7 +369,7 @@ impl PyFeynGenFilters {
         tadpoles_filter: Option<PyRef<PyTadpolesFilterOptions>>,
         zero_snails_filter: Option<PyRef<PySnailFilterOptions>>,
         perturbative_orders: Option<HashMap<String, usize>>,
-        coupling_orders: Option<HashMap<String, usize>>,
+        coupling_orders: Option<HashMap<String, (usize, Option<usize>)>>,
         loop_count_range: Option<(usize, usize)>,
         fermion_loop_count_range: Option<(usize, usize)>,
         factorized_loop_topologies_count_range: Option<(usize, usize)>,

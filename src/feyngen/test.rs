@@ -18,7 +18,7 @@ fn cut_content() {
     let model = load_generic_model("sm");
 
     let mut coupling = HashMap::new();
-    coupling.insert("QED".into(), 6);
+    coupling.insert("QED".into(), (6, Some(6)));
     let mut pert = HashMap::new();
     pert.insert("QCD".into(), 1);
     let filters = FeynGen::new(FeynGenOptions {
@@ -179,7 +179,7 @@ fn cut_content() {
         .unwrap();
 
     let mut coupling = HashMap::new();
-    coupling.insert("QED".into(), 6);
+    coupling.insert("QED".into(), (6, Some(6)));
     let mut pert = HashMap::new();
     pert.insert("QCD".into(), 2);
     let filters = FeynGen::new(FeynGenOptions {

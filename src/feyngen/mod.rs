@@ -240,7 +240,7 @@ impl FeynGenFilters {
         })
     }
 
-    pub fn get_coupling_orders(&self) -> Option<&HashMap<String, usize>> {
+    pub fn get_coupling_orders(&self) -> Option<&HashMap<String, (usize, Option<usize>)>> {
         self.0.iter().find_map(|f| {
             if let FeynGenFilter::CouplingOrders(o) = f {
                 Some(o)
@@ -299,10 +299,10 @@ impl FeynGenFilters {
                             .progress_with(bar.clone())
                             .filter(|(g, _)| {
                                 let graph_coupling_orders = get_coupling_orders(g);
-                                orders.iter().all(|(k, v)| {
+                                orders.iter().all(|(k, (v_min, v_max))| {
                                     graph_coupling_orders
                                         .get(&SmartString::from(k))
-                                        .map_or(0 == *v, |o| *o == *v)
+                                        .map_or(0 == *v_min, |o| *o >= *v_min && (*v_max).map_or(true, |max| *o <= max))
                                 })
                             })
                             .map(|(g, sf)| (g.clone(), sf.clone()))
@@ -442,7 +442,7 @@ pub enum FeynGenFilter {
     ZeroSnailsFilter(SnailFilterOptions),
     ParticleVeto(Vec<i64>),
     MaxNumberOfBridges(usize),
-    CouplingOrders(HashMap<String, usize>),
+    CouplingOrders(HashMap<String,(usize, Option<usize>)>),
     LoopCountRange((usize, usize)),
     PerturbativeOrders(HashMap<String, usize>),
     FermionLoopCountRange((usize, usize)),
@@ -470,7 +470,18 @@ impl fmt::Display for FeynGenFilter {
                     "CouplingOrders({})",
                     orders
                         .iter()
-                        .map(|(k, v)| format!("{}={}", k, v))
+                        .map(|(k, (v_min,v_max_opt))| {
+                            if let Some(v_max) = v_max_opt {
+                                if v_min == v_max {
+                                    format!("{}=={}", k, v_min)
+                                } else {
+                                    format!("{}=[{}..{}]", k, v_min, v_max)
+                                }
+                            } else {
+                                format!("{}>={}", k, v_min)
+                            }
+
+                        })
                         .collect::<Vec<String>>()
                         .join("|")
                 ),

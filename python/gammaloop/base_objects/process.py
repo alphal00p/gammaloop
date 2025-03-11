@@ -9,6 +9,8 @@ import yaml
 import gammaloop._gammaloop as gl_rust
 from gammaloop.misc.common import logger
 
+COMPARISON_OPS = ["==", "<=", ">="]
+
 
 class MalformedProcessError(GammaLoopError):
     pass
@@ -18,8 +20,10 @@ class Process(object):
     def __init__(self,
                  initial_particles: list[Particle],
                  final_particles: list[Particle],
-                 amplitude_orders: dict[str, int] | None = None,
-                 cross_section_orders: dict[str, int] | None = None,
+                 amplitude_orders: dict[str,
+                                        tuple[int, int | None]] | None = None,
+                 cross_section_orders: dict[str,
+                                            tuple[int, int | None]] | None = None,
                  perturbative_orders: dict[str, int] | None = None,
                  amplitude_loop_count: tuple[int, int] | None = None,
                  cross_section_loop_count: tuple[int, int] | None = None,
@@ -36,7 +40,7 @@ class Process(object):
         self.final_states = final_particles
         self.amplitude_orders = amplitude_orders
         self.cross_section_orders = cross_section_orders
-        self.perturbative_orders = perturbative_orders
+        self.perturbative_orders: dict[str, int] | None = perturbative_orders
         self.amplitude_loop_count = amplitude_loop_count
         self.cross_section_loop_count = cross_section_loop_count
         self.particle_vetos: list[Particle] | None = particle_vetos
@@ -65,9 +69,15 @@ class Process(object):
                 cross_section_orders = None
             for k, v in self.perturbative_orders.items():
                 if amplitude_orders is not None and k in amplitude_orders:
-                    amplitude_orders[k] += 2*v
+                    amplitude_orders[k] = (
+                        amplitude_orders[k][0]+2*v,
+                        None if amplitude_orders[k][1] is None else amplitude_orders[k][1]+2*v  # type: ignore # nopep8
+                    )
                 if cross_section_orders is not None and k in cross_section_orders:
-                    cross_section_orders[k] += 2*v
+                    cross_section_orders[k] = (
+                        cross_section_orders[k][0]+2*v,
+                        None if cross_section_orders[k][1] is None else cross_section_orders[k][1]+2*v  # type: ignore # nopep8
+                    )
 
         self.cross_section_filters = gl_rust.FeynGenFilters(
             particle_veto=(None if self.particle_vetos is None else [
@@ -95,11 +105,31 @@ class Process(object):
                 res.append(
                     f"no__{'_'.join([p.name.lower() for p in self.particle_vetos])}")
             if self.amplitude_orders is not None:
-                res.append(
-                    '__'.join([f"{k}_eq_{v}" for k, v in self.amplitude_orders.items()]))
+                amp_orders = []
+                for k, (v_min, v_max) in self.amplitude_orders.items():
+                    if v_min == v_max:
+                        amp_orders.append(f"{k}_eq_{v_min}")
+                    else:
+                        if v_min > 0:
+                            amp_orders.append(
+                                f"{k}_ge_{v_min}")
+                        if v_max is not None:
+                            amp_orders.append(
+                                f"{k}_le_{v_max}")
+                res.append('__'.join(amp_orders))
             if self.cross_section_orders is not None:
-                res.append(
-                    '__'.join([f"{k}sq_eq_{v}" for k, v in self.cross_section_orders.items()]))
+                xsec_orders = []
+                for k, (v_min, v_max) in self.cross_section_orders.items():
+                    if v_min == v_max:
+                        xsec_orders.append(f"{k}sq_eq_{v_min}")
+                    else:
+                        if v_min > 0:
+                            xsec_orders.append(
+                                f"{k}sq_ge_{v_min}")
+                        if v_max is not None:
+                            xsec_orders.append(
+                                f"{k}sq_le_{v_max}")
+                res.append('__'.join(xsec_orders))
             if self.perturbative_orders is not None:
                 res.append(
                     '__'.join([f"{k}loop_eq_{v}" for k, v in self.perturbative_orders.items()]))
@@ -123,8 +153,18 @@ class Process(object):
             for p in self.particle_vetos:
                 process_str_pieces.append(p.name.lower())
         if self.amplitude_orders is not None:
-            for k, v in sorted(self.amplitude_orders.items(), key=lambda x: x[0]):
-                process_str_pieces.append(f"{k}={v}")
+            amp_orders = []
+            for k, (v_min, v_max) in sorted(self.amplitude_orders.items(), key=lambda x: x[0]):
+                if v_min == v_max:
+                    amp_orders.append(f"{k}=={v_min}")
+                else:
+                    if v_min > 0:
+                        amp_orders.append(
+                            f"{k}>={v_min}")
+                    if v_max is not None:
+                        amp_orders.append(
+                            f"{k}<={v_max}")
+            process_str_pieces.extend(amp_orders)
         if self.perturbative_orders is not None or self.amplitude_loop_count is not None or self.cross_section_loop_count is not None:
             process_str_pieces.append("[")
             if self.amplitude_loop_count is not None:
@@ -142,16 +182,27 @@ class Process(object):
                     process_str_pieces.append(
                         f"{{{{{','.join([str(i) for i in self.cross_section_loop_count])}}}}}")
             if self.perturbative_orders is not None:
-                for k, v in sorted(self.perturbative_orders.items(), key=lambda x: x[0]):
-                    if v > 1:
-                        process_str_pieces.append(f"{k}={v}")
-                    else:
-                        process_str_pieces.append(f"{k}")
+                for k, v in sorted(self.perturbative_orders.items(), key=lambda x: x[0]):  # type: ignore # nopep8
+                    if v > 0:  # type: ignore # nopep8
+                        if v > 1:  # type: ignore # nopep8
+                            process_str_pieces.append(f"{k}={v}")
+                        else:
+                            process_str_pieces.append(f"{k}")
             process_str_pieces.append("]")
 
         if self.cross_section_orders is not None:
-            for k, v in sorted(self.cross_section_orders.items(), key=lambda x: x[0]):
-                process_str_pieces.append(f"{k}^2={v}")
+            xsec_orders = []
+            for k, (v_min, v_max) in sorted(self.cross_section_orders.items(), key=lambda x: x[0]):
+                if v_min == v_max:
+                    xsec_orders.append(f"{k}^2=={v_min}")
+                else:
+                    if v_min > 0:
+                        xsec_orders.append(
+                            f"{k}^2>={v_min}")
+                    if v_max is not None:
+                        xsec_orders.append(
+                            f"{k}^2<={v_max}")
+            process_str_pieces.extend(xsec_orders)
 
         return ' '.join(process_str_pieces)
 
@@ -361,8 +412,8 @@ class Process(object):
         cross_section_loop_count: tuple[int, int] | None = None
         particle_vetos: list[Particle] = []
         perturbative_orders: dict[str, int] = {}
-        amplitude_orders: dict[str, int] = {}
-        cross_section_orders: dict[str, int] = {}
+        amplitude_orders: dict[str, list[int | None]] = {}
+        cross_section_orders: dict[str, list[int | None]] = {}
 
         model_coupling_orders = model.get_coupling_orders()
 
@@ -379,6 +430,7 @@ class Process(object):
 
         parsing_stage: str = "initial_states"
         current_coupling_order: str | None = None
+        current_comparison_operator: str | None = None
         is_coupling_order_for_xsec = False
         current_perturbative_order_str: str = ""
         process_string = ' '.join(process_args.process)
@@ -417,11 +469,12 @@ class Process(object):
                         model_coupling_orders, current_perturbative_order_str, perturbative_orders)
                     parsing_stage = "orders"
                 case _:
-                    match (parsing_stage, next_token == "="):
+                    match (parsing_stage, next_token in COMPARISON_OPS):
                         case ("waiting_for_equal", _):
-                            if t != "=":
+                            if t not in COMPARISON_OPS:
                                 raise MalformedProcessError(
-                                    f"Expected '=' after coupling order {current_coupling_order}.")
+                                    f"Expected comparison operator ({','.join(COMPARISON_OPS)}) after coupling order {current_coupling_order}.")
+                            current_comparison_operator = t
                             parsing_stage = "waiting_on_order_value"
                         case ("waiting_on_order_value", _):
                             try:
@@ -431,11 +484,40 @@ class Process(object):
                                     f"Invalid order value {t}.")
                             if current_coupling_order is None:
                                 raise MalformedProcessError(
-                                    "No coupling order specified before the equal sign.")
+                                    f"No coupling order specified before the comparison operator ({current_comparison_operator if current_comparison_operator is not None else ','.join(COMPARISON_OPS)})")
+                            if current_comparison_operator is None:
+                                raise MalformedProcessError(
+                                    f"No comparison operator specified before the coupling order value.")
                             if is_coupling_order_for_xsec:
-                                cross_section_orders[current_coupling_order] = order_value
+                                xsec_order = cross_section_orders.get(
+                                    current_coupling_order, [0, None])
+                                match current_comparison_operator:
+                                    case "==":
+                                        xsec_order: list[int | None] = [
+                                            order_value, order_value]
+                                    case "<=":
+                                        xsec_order[1] = order_value
+                                    case ">=":
+                                        xsec_order[0] = order_value
+                                    case _:
+                                        raise MalformedProcessError(
+                                            f"Invalid comparison operator {current_comparison_operator} for cross-section orders.")
+                                cross_section_orders[current_coupling_order] = xsec_order
                             else:
-                                amplitude_orders[current_coupling_order] = order_value
+                                amp_order = amplitude_orders.get(
+                                    current_coupling_order, [0, None])
+                                match current_comparison_operator:
+                                    case "==":
+                                        amp_order: list[int | None] = [
+                                            order_value, order_value]
+                                    case "<=":
+                                        amp_order[1] = order_value
+                                    case ">=":
+                                        amp_order[0] = order_value
+                                    case _:
+                                        raise MalformedProcessError(
+                                            f"Invalid comparison operator {current_comparison_operator} for amplitude orders.")
+                                amplitude_orders[current_coupling_order] = amp_order
                             parsing_stage = "orders"
                         case ("perturbative_orders", _):
                             if t.endswith("]"):
@@ -525,11 +607,21 @@ class Process(object):
         if process_args.max_n_bridges is not None and process_args.max_n_bridges < 0:
             process_args.max_n_bridges = None
 
+        if len(amplitude_orders) == 0:
+            amplitude_orders_input = None
+        else:
+            amplitude_orders_input = {k: (0 if v[0] is None else v[0], v[1])
+                                      for k, v in amplitude_orders.items()}
+        if len(cross_section_orders) == 0:
+            cross_section_orders_input = None
+        else:
+            cross_section_orders_input = {k: (0 if v[0] is None else v[0], v[1])
+                                          for k, v in cross_section_orders.items()}
         return Process(
             initial_particles,
             final_particles,
-            None if len(amplitude_orders) == 0 else amplitude_orders,
-            None if len(cross_section_orders) == 0 else cross_section_orders,
+            amplitude_orders_input,
+            cross_section_orders_input,
             None if len(perturbative_orders) == 0 else perturbative_orders,
             amplitude_loop_count,
             cross_section_loop_count,
