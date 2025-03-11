@@ -400,14 +400,14 @@ def split_str_args(str_args: str) -> list[str]:
 
 class CommandList(list[tuple[str, str]]):
 
-    @ staticmethod
+    @staticmethod
     def from_file(filename: str):
         command_file = CommandList()
         with open(filename, 'r', encoding='utf-8') as file:
             command_file.parse(file.read())
         return command_file
 
-    @ staticmethod
+    @staticmethod
     def from_string(cmd_str: str):
         command_file = CommandList()
         command_file.parse(cmd_str)
@@ -1350,6 +1350,9 @@ class GammaLoop(object):
                 args.output_path, args.expression_format)
             logger.info(
                 "Model replacement rules exported to model directory.")
+
+        export_config = yaml.dump(self.config["export_settings"])
+        self.rust_worker.preprocess(export_config)
 
         if len(self.cross_sections) == 0 and len(self.amplitudes) == 0:
             raise GammaLoopError("No process generated yet.")

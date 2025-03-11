@@ -161,6 +161,9 @@ class Worker:
     def reset_amplitudes(self) -> None:
         """ Resets the internal list of amplitudes of the worker. """
 
+    def preprocess(self, export_yaml_str: str) -> None:
+        """ Preprocesses the cross sections or amplitudes. """
+
     def export_cross_sections(self, export_root: str, cross_section_names: list[str]) -> None:
         """ Exports the cross sections given in argument to the export root given in argument. """
 

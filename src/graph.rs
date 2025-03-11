@@ -1914,7 +1914,7 @@ impl BareGraph {
             TiVec::from(vec![EdgeIndex::from(
                 self.edges
                     .iter()
-                    .position(|edge| edge.particle.name == "d" || edge.particle.name == "d~")
+                    .position(|edge| edge.edge_type == EdgeType::Virtual)
                     .unwrap(),
             )])
         };

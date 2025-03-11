@@ -1,18 +1,19 @@
-use std::{collections::btree_map::Range, marker::PhantomData, path::PathBuf, sync::Arc};
+use std::{marker::PhantomData, path::PathBuf, sync::Arc};
 
 use ahash::{AHashSet, HashMap};
-use bitvec::{index, vec::BitVec};
+use bincode::de;
+use bitvec::vec::BitVec;
 use color_eyre::Result;
 
 use eyre::eyre;
-use hyperdual::Num;
-use itertools::{partition, Itertools};
+use itertools::Itertools;
 use linnet::half_edge::{
     builder::HedgeGraphBuilder,
     involution::{Flow, HedgePair, Orientation},
     subgraph::{HedgeNode, InternalSubGraph, OrientedCut},
     HedgeGraph, NodeIndex,
 };
+use log::debug;
 use serde::{Deserialize, Serialize};
 use spenso::upgrading_arithmetic::GreaterThan;
 use symbolica::{atom::Atom, parse};
@@ -52,6 +53,13 @@ pub struct ProcessDefinition {
 pub struct Process<S: NumeratorState = PythonState> {
     pub definition: ProcessDefinition,
     pub collection: ProcessCollection<S>,
+}
+
+impl<S: NumeratorState> Process<S> {
+    pub fn preprocess(&mut self, model: &Model) -> Result<()> {
+        self.collection.preprocess(model, &self.definition)?;
+        Ok(())
+    }
 }
 
 pub struct GenerationOptions {
@@ -301,7 +309,11 @@ impl ProcessList {
     }
 
     ///preprocesses the process list according to the settings
-    pub fn preprocess(&mut self, settings: ProcessSettings) -> Result<()> {
+    pub fn preprocess(&mut self, model: &Model, settings: ProcessSettings) -> Result<()> {
+        for process in self.processes.iter_mut() {
+            process.preprocess(&model)?;
+        }
+
         Ok(())
     }
 
@@ -338,6 +350,20 @@ impl<S: NumeratorState> ProcessCollection<S> {
             Self::CrossSections(cross_sections) => cross_sections.push(cross_section),
             _ => panic!("Cannot add cross section to an amplitude collection"),
         }
+    }
+
+    fn preprocess(&mut self, model: &Model, process_definition: &ProcessDefinition) -> Result<()> {
+        match self {
+            Self::Amplitudes(amplitudes) => {
+                todo!()
+            }
+            Self::CrossSections(cross_sections) => {
+                for cross_section in cross_sections {
+                    cross_section.preprocess(model, process_definition)?;
+                }
+            }
+        }
+        Ok(())
     }
 }
 
@@ -393,9 +419,20 @@ impl<S: NumeratorState> CrossSection<S> {
     }
 
     pub fn add_supergraph(&mut self, supergraph: Graph) -> Result<()> {
-        let mut cross_section_graph = CrossSectionGraph::new(supergraph);
+        let cross_section_graph = CrossSectionGraph::new(supergraph);
         self.supergraphs.push(cross_section_graph);
         /// TODO: validate that the graph is compatible
+        Ok(())
+    }
+
+    pub fn preprocess(
+        &mut self,
+        model: &Model,
+        process_definition: &ProcessDefinition,
+    ) -> Result<()> {
+        for supergraph in &mut self.supergraphs {
+            supergraph.preprocess(model, process_definition)?;
+        }
         Ok(())
     }
 }
@@ -445,31 +482,89 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
         }
     }
 
+    pub fn preprocess(
+        &mut self,
+        model: &Model,
+        process_definition: &ProcessDefinition,
+    ) -> Result<()> {
+        self.generate_cuts(model, process_definition)?;
+        self.generate_esurface_cuts();
+        Ok(())
+    }
+
     fn generate_cuts(
         &mut self,
         model: &Model,
-        process_definition: ProcessDefinition,
+        process_definition: &ProcessDefinition,
     ) -> Result<()> {
+        debug!("generatig cuts for graph: {}", self.graph.name);
+
         if let (Some(&source), Some(&target)) = (
             self.source_nodes.iter().next(),
             self.target_nodes.iter().next(),
         ) {
-            let cuts: TiVec<CutId, CrossSectionCut> = self
-                .graph
-                .underlying
-                .all_cuts(source, target)
+            let all_st_cuts = self.graph.underlying.all_cuts(source, target);
+
+            debug!("num s_t cuts: {}", all_st_cuts.len());
+            debug!("source nodes: {:?}", self.source_nodes);
+            debug!("target nodes: {:?}", self.target_nodes);
+
+            let cuts: TiVec<CutId, CrossSectionCut> = all_st_cuts
                 .into_iter()
                 .map(|(left, cut, right)| CrossSectionCut { cut, left, right })
-                .filter_map(|cut| {
-                    match cut.is_valid_for_process(self, &process_definition, model) {
+                .filter_map(
+                    |cut| match cut.is_valid_for_process(self, process_definition, model) {
                         Ok(true) => Some(Ok(cut)),
                         Ok(false) => None,
                         Err(e) => Some(Err(e)),
-                    }
-                })
+                    },
+                )
                 .collect::<Result<_>>()?;
 
+            let s_node = self.source_nodes.iter().next().unwrap();
+            let t_node = self.target_nodes.iter().next().unwrap();
+
+            let left = self.graph.underlying.hairs_from_id(*s_node).hairs.clone();
+            let right = self.graph.underlying.hairs_from_id(*t_node).hairs.clone();
+
+            debug!("left: \n {}", self.graph.underlying.dot(&left));
+            debug!("right: \n {}", self.graph.underlying.dot(&right));
+
+            let mut cut: OrientedCut = self.graph.underlying.empty_subgraph();
+
+            for (pair, _, _) in self.graph.underlying.iter_all_edges() {
+                match pair {
+                    HedgePair::Paired { source, sink } => {
+                        cut.reference.set(source.0, true);
+                        cut.reference.set(sink.0, true);
+
+                        cut.sign.set(source.0, true);
+                        cut.sign.set(sink.0, false);
+                    }
+                    _ => continue,
+                }
+            }
+
+            let cross_section_cut = CrossSectionCut { cut, left, right };
+            let edges_in_cut = self
+                .graph
+                .underlying
+                .iter_edges(&cross_section_cut.cut)
+                .map(|(_, _, data)| data.data.name.clone())
+                .collect_vec();
+
             self.cuts = cuts;
+
+            self.cuts.push(cross_section_cut);
+
+            debug!(
+                "found {} cuts for graph: {}",
+                self.cuts.len(),
+                self.graph.name
+            );
+
+            debug!("edges in cut: {:?}", edges_in_cut);
+
             Ok(())
         } else {
             Err(eyre!("Could not find cuts for graph: {}", self.graph.name))
@@ -477,6 +572,8 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
     }
 
     fn generate_esurface_cuts(&mut self) {
+        debug!("generating esurfaces for cuts");
+
         let esurfaces: TiVec<CutId, Esurface> = self
             .cuts
             .iter()
@@ -564,15 +661,22 @@ impl CrossSectionCut {
                 .iter()
                 .map(|pdg| model.get_particle_from_pdg(*pdg as isize));
 
+            debug!(
+                "cut content: {:?}",
+                cut_content.iter().map(|p| p.pdg_code).collect_vec()
+            );
+
             for particle in particle_content {
                 if let Some(index) = cut_content.iter().position(|p| p == &particle) {
                     cut_content.remove(index);
                 } else {
+                    debug!("wrong particles");
                     return Ok(false);
                 }
             }
 
             if cut_content.len() > process.n_unresolved {
+                debug!(" too many unresolved particles");
                 return Ok(false);
             }
 
@@ -580,6 +684,7 @@ impl CrossSectionCut {
                 .iter()
                 .all(|particle| process.unresolved_cut_content.contains(particle))
             {
+                debug!("wrong unresolved particles");
                 return Ok(false);
             }
 
@@ -611,6 +716,7 @@ impl CrossSectionCut {
                 let total_loops = left_loop + right_loop;
 
                 if !loop_range.contains(&total_loops) {
+                    debug!("incorrect loop count");
                     return Ok(false);
                 }
             }
@@ -621,6 +727,7 @@ impl CrossSectionCut {
 
             Ok(true)
         } else {
+            debug!("cut is not s channel");
             Ok(false)
         }
     }

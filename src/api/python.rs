@@ -564,6 +564,20 @@ impl PythonWorker {
             .map_err(|e| exceptions::PyException::new_err(e.to_string()))
     }
 
+    pub fn preprocess(&mut self, export_yaml_str: &str) -> PyResult<()> {
+        let process_settings: ProcessSettings = serde_yaml::from_str(export_yaml_str)
+            .map_err(|e| exceptions::PyException::new_err(e.to_string()))
+            .unwrap();
+
+        if self.process_list.processes.is_empty() {
+            warn!("No processes to preprocess");
+        }
+
+        self.process_list
+            .preprocess(&self.model, process_settings)
+            .map_err(|e| exceptions::PyException::new_err(e.to_string()))
+    }
+
     pub fn add_cross_section_from_yaml_str(&mut self, yaml_str: &str) -> PyResult<()> {
         if self.model.is_empty() {
             return Err(exceptions::PyException::new_err(
