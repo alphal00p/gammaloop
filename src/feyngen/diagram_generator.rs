@@ -127,9 +127,7 @@ pub trait NodeColorFunctions: Sized {
         _amplitude_subgraph: &BitVec,
         _graph: &HedgeGraph<Arc<Particle>, Self>,
         _amp_couplings: Option<&std::collections::HashMap<String, usize, ahash::RandomState>>,
-    ) -> bool {
-        true
-    }
+    ) -> bool;
 }
 
 impl NodeColorFunctions for NodeColorWithVertexRule {
@@ -184,6 +182,14 @@ impl NodeColorFunctions for NodeColorWithoutVertexRule {
     }
     fn set_external_tag(&mut self, external_tag: i32) {
         self.external_tag = external_tag;
+    }
+
+    fn passes_amplitude_filter(
+        _amplitude_subgraph: &InternalSubGraph,
+        _graph: &HedgeGraph<Arc<Particle>, Self>,
+        _amp_couplings: Option<&std::collections::HashMap<String, usize, ahash::RandomState>>,
+    ) -> bool {
+        panic!("Cannot apply amplitude filters without vertex information.");
     }
 }
 
