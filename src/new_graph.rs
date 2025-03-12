@@ -342,7 +342,9 @@ impl FeynmanGraph for HedgeGraph<Edge, Vertex> {
     }
 
     fn get_loop_number(&self) -> usize {
-        self.cyclotomatic_number(&self.full_filter())
+        let internal_subgraph =
+            InternalSubGraph::cleaned_filter_pessimist(self.full_filter(), self);
+        self.cyclotomatic_number(&internal_subgraph)
     }
 }
 
