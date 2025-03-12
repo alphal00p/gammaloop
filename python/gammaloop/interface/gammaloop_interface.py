@@ -62,7 +62,8 @@ AVAILABLE_COMMANDS = [
     'define_graph',
     'generate',
     'generate_amplitude',
-    'display_debug_log'
+    'display_debug_log',
+    'preprocess',
 ]
 
 
@@ -1376,6 +1377,10 @@ class GammaLoop(object):
     #
     # Run interface type of commands below (those bound to a particular output already generated)
     #
+
+    def do_preprocess(self, str_args: str) -> None:
+        export_config = yaml.dump(self.config["export_settings"])
+        self.rust_worker.preprocess(export_config)
 
     # launch command
     launch_parser = ArgumentParser(prog='launch')
