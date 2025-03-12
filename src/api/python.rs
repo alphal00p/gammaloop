@@ -1055,7 +1055,7 @@ impl PythonWorker {
         let target = target.map(|(re, im)| (F(re), F(im)));
         match self.integrands.get_mut(integrand) {
             Some(integrand_enum) => match integrand_enum {
-                Integrand::GammaLoopIntegrand(gloop_integrand) => {
+                Integrand::NewIntegrand(gloop_integrand) => {
                     let target = match target {
                         Some((re, im)) => Some(Complex::new(re, im)),
                         _ => None,
@@ -1093,7 +1093,7 @@ impl PythonWorker {
                                     .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
 
                             // force the settings to be the same as the ones used in the previous integration
-                            gloop_integrand.global_data.settings = workspace_settings.clone();
+                            *gloop_integrand.get_mut_settings() = workspace_settings.clone();
 
                             let state =
                                 serializable_state.into_integration_state(&workspace_settings);
@@ -1126,7 +1126,7 @@ impl PythonWorker {
                         }
                     };
 
-                    let settings = gloop_integrand.global_data.settings.clone();
+                    let settings = gloop_integrand.get_settings().clone();
                     let result = havana_integrate(
                         &settings,
                         |set| gloop_integrand.user_data_generator(num_cores, set),
@@ -1248,6 +1248,14 @@ impl PythonWorker {
     pub fn sync(&mut self) {
         self.amplitudes.sync(&self.model);
         self.cross_sections.sync(&self.model);
+    }
+
+    pub fn generate_integrands(&mut self, settings_yaml_str: &str) {
+        let settings =
+            serde_yaml::from_str::<Settings>(settings_yaml_str).expect("Could not parse settings");
+
+        let integrands = self.process_list.generate_integrands(settings);
+        self.integrands = integrands;
     }
 }
 

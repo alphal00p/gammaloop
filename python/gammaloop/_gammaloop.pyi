@@ -208,3 +208,6 @@ class Worker:
 
     def sync(self) -> None:
         """sync the worker"""
+
+    def generate_integrands(self, settings_yaml_str: str) -> None:
+        """Generates integrands from the settings given in argument. """

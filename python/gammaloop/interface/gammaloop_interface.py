@@ -1611,16 +1611,21 @@ class GammaLoop(object):
         help='Do not sync rust worker with the process output (safe to do if not config change was issued since launch).')
 
     def do_integrate(self, str_args: str) -> list[complex]:
+        settings = yaml.dump(self.config["run_settings"])
+        self.rust_worker.generate_integrands(settings)
+
         if str_args == 'help':
             self.integrate_parser.print_help()
             return []
         args = self.integrate_parser.parse_args(split_str_args(str_args))
 
         if self.launched_output is None:
-            raise GammaLoopError(
-                "No output launched. Please launch an output first with 'launch' command.")
+            self.launched_output = Path("launchless_run")
+            os.mkdir(self.launched_output)
+            # raise GammaLoopError(
+            #    "No output launched. Please launch an output first with 'launch' command.")
 
-        self.sync_worker_with_output(args.no_sync)
+        # self.sync_worker_with_output(args.no_sync)
 
         target: tuple[float, float] | None = None
         if args.target is not None:

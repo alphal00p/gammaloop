@@ -21,7 +21,11 @@ use linnet::half_edge::{
 use log::{debug, warn};
 use serde::{Deserialize, Serialize};
 use spenso::upgrading_arithmetic::GreaterThan;
-use symbolica::{atom::Atom, parse};
+use symbolica::{
+    atom::{Atom, AtomCore},
+    evaluate::{ExpressionEvaluator, FunctionMap, OptimizationSettings},
+    parse,
+};
 use typed_index_collections::TiVec;
 
 use crate::{
@@ -39,10 +43,15 @@ use crate::{
         TadpolesFilterOptions,
     },
     graph::{self, BareGraph, BareVertex, EdgeType},
+    integrands::Integrand,
     model::{self, Model, Particle},
-    new_gammaloop_integrand::cross_section_integrand::CrossSectionIntegrand,
+    new_gammaloop_integrand::{
+        cross_section_integrand::{self, CrossSectionGraphTerm, CrossSectionIntegrand},
+        NewIntegrand,
+    },
     new_graph::{Edge, FeynmanGraph, Graph, Vertex},
     numerator::{GlobalPrefactor, NumeratorState, PythonState},
+    utils::F,
     ProcessSettings, Settings,
 };
 
@@ -230,10 +239,7 @@ impl Process {
         definition: ProcessDefinition,
         sub_classes: Option<Vec<Vec<String>>>,
     ) -> Result<Self> {
-        let graphs = bare_graphs
-            .into_iter()
-            .map(|bare_graph| Graph::from(bare_graph))
-            .collect_vec();
+        let graphs = bare_graphs.into_iter().map(Graph::from).collect_vec();
 
         match generation_type {
             GenerationType::Amplitude => {
@@ -277,6 +283,10 @@ impl Process {
                 }
             }
         }
+    }
+
+    fn generate_integrands(&self, settings: Settings) -> HashMap<String, Integrand> {
+        self.collection.generate_integrands(settings)
     }
 }
 
@@ -324,6 +334,17 @@ impl ProcessList {
         }
 
         Ok(())
+    }
+
+    pub fn generate_integrands(&self, settings: Settings) -> HashMap<String, Integrand> {
+        let mut result = HashMap::default();
+
+        for process in self.processes.iter() {
+            let integrands = process.generate_integrands(settings.clone());
+            result.extend(integrands);
+        }
+
+        result
     }
 
     /// exports a process list to a folder
@@ -375,8 +396,19 @@ impl<S: NumeratorState> ProcessCollection<S> {
         Ok(())
     }
 
-    fn build_integrand(&self, settings: &Settings) {
-        todo!()
+    fn generate_integrands(&self, settings: Settings) -> HashMap<String, Integrand> {
+        let mut result = HashMap::default();
+        match self {
+            Self::Amplitudes(_) => todo!(),
+            Self::CrossSections(cross_sections) => {
+                let name = "default".to_owned();
+                for cross_section in cross_sections {
+                    let integrand = cross_section.generate_integrand(settings.clone());
+                    result.insert(name.clone(), integrand);
+                }
+            }
+        }
+        result
     }
 }
 
@@ -447,6 +479,20 @@ impl<S: NumeratorState> CrossSection<S> {
             supergraph.preprocess(model, process_definition)?;
         }
         Ok(())
+    }
+
+    pub fn generate_integrand(&self, settings: Settings) -> Integrand {
+        let terms = self
+            .supergraphs
+            .iter()
+            .map(|sg| sg.generate_term_for_graph(&settings))
+            .collect_vec();
+        let cross_section_integrand = CrossSectionIntegrand {
+            settings,
+            graph_terms: terms,
+        };
+
+        Integrand::NewIntegrand(NewIntegrand::CrossSection(cross_section_integrand))
     }
 }
 
@@ -644,16 +690,55 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
 
         let t_star_factor = parse!(&format!(
             "tstar^(-{})",
-            self.graph.underlying.get_loop_number()
+            3 * self.graph.underlying.get_loop_number()
         ))
         .unwrap();
 
-        let h_function = parse!("h(tstar)").unwrap();
-        let grad_eta = parse!(&format!("∇η({}, tstar)", cut_id)).unwrap();
+        let h_function = parse!("h").unwrap();
+        let grad_eta = parse!(&format!("∇η")).unwrap();
 
         let result = cut_atom * inverse_energy_product * t_star_factor * h_function / grad_eta;
         debug!("result: {}", result);
         result
+    }
+
+    fn get_params(&self) -> Vec<Atom> {
+        let mut params = self
+            .graph
+            .underlying
+            .iter_all_edges()
+            .map(|(_, edge_id, _)| {
+                parse!(&format!("Q({}, cind(0))", Into::<usize>::into(edge_id))).unwrap()
+            })
+            .collect_vec();
+
+        params.push(parse!("tstar").unwrap());
+        params.push(parse!("h").unwrap());
+        params.push(parse!("∇η").unwrap());
+
+        params
+    }
+
+    fn generate_term_for_graph(&self, settings: &Settings) -> CrossSectionGraphTerm {
+        let mut evaluators = TiVec::new();
+
+        for (cut_id, _) in self.cuts.iter_enumerated() {
+            let atom = self.build_atom_for_cut(cut_id);
+
+            let fn_map = FunctionMap::new();
+            let params = self.get_params();
+            let mut tree = atom.to_evaluation_tree(&fn_map, &params).unwrap();
+
+            tree.horner_scheme();
+            tree.common_subexpression_elimination();
+
+            let tree_ft = tree.map_coeff::<F<f64>, _>(&|r| r.into());
+            evaluators.push(tree_ft.linearize(Some(1)));
+        }
+
+        CrossSectionGraphTerm {
+            bare_cff_evaluators: evaluators,
+        }
     }
 }
 
