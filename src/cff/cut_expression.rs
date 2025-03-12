@@ -44,6 +44,16 @@ pub struct CFFCutExpression {
 }
 
 impl CFFCutExpression {
+    pub fn new_empty() -> Self {
+        Self {
+            orientations: TiVec::new(),
+            surfaces: SurfaceCache {
+                esurface_cache: TiVec::new(),
+                hsurface_cache: TiVec::new(),
+            },
+        }
+    }
+
     pub fn to_atom_for_cut(&self, cut: CutId) -> Atom {
         self.orientations
             .iter()

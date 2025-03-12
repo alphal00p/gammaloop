@@ -13,7 +13,7 @@ use linnet::half_edge::{
     subgraph::{HedgeNode, InternalSubGraph, OrientedCut},
     HedgeGraph, NodeIndex,
 };
-use log::debug;
+use log::{debug, warn};
 use serde::{Deserialize, Serialize};
 use spenso::upgrading_arithmetic::GreaterThan;
 use symbolica::{atom::Atom, parse};
@@ -21,8 +21,11 @@ use typed_index_collections::TiVec;
 
 use crate::{
     cff::{
-        cut_expression::{CutOrientationExpression, OrientationData, OrientationID},
+        cut_expression::{
+            CFFCutExpression, CutOrientationExpression, OrientationData, OrientationID,
+        },
         esurface::Esurface,
+        generation::{generate_cff_with_cuts, ShiftRewrite},
     },
     cross_section, disable,
     feyngen::{
@@ -489,7 +492,79 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
     ) -> Result<()> {
         self.generate_cuts(model, process_definition)?;
         self.generate_esurface_cuts();
+        self.generate_cff();
+
+        // if a cut was not generated during cff, we still add it to the surface cache such that it has an esurface_id
+        for esurface in self.cut_esurface.iter() {
+            if !self
+                .derived_data
+                .cff_expression
+                .surfaces
+                .esurface_cache
+                .contains(esurface)
+            {
+                self.derived_data
+                    .cff_expression
+                    .surfaces
+                    .esurface_cache
+                    .push(esurface.clone());
+            }
+        }
+
+        for (cut_id, esurface) in self.cut_esurface.iter_enumerated() {
+            debug!(
+                "cut_id: {:?} \n, esurface: {:#?} \n, expression: {}",
+                cut_id,
+                esurface,
+                self.derived_data.cff_expression.to_atom_for_cut(cut_id)
+            );
+        }
+
         Ok(())
+    }
+
+    fn generate_cff(&mut self) {
+        // hardcorde 1 to n for now
+        debug!("generating cff");
+        warn!("the esurface canonization is hardcoded to the case of 1 to n processes for cross sections");
+
+        let dependent_momentum = self
+            .graph
+            .underlying
+            .iter_all_edges()
+            .find_map(|(_, edge_id, edge_data)| {
+                if &edge_data.data.name == "p2" {
+                    Some(edge_id)
+                } else {
+                    None
+                }
+            })
+            .unwrap();
+
+        let not_dependent_momenta = self
+            .graph
+            .underlying
+            .iter_all_edges()
+            .find_map(|(_, edge_id, edge_data)| {
+                if &edge_data.data.name == "p1" {
+                    Some(edge_id)
+                } else {
+                    None
+                }
+            })
+            .unwrap();
+
+        let dep_mom_expr = vec![(not_dependent_momenta, 1)];
+
+        let shift_rewrite = ShiftRewrite {
+            dependent_momentum,
+            dependent_momentum_expr: dep_mom_expr,
+        };
+
+        let cff_cut_expression =
+            generate_cff_with_cuts(&self.graph.underlying, &Some(shift_rewrite), &self.cuts);
+
+        self.derived_data.cff_expression = cff_cut_expression;
     }
 
     fn generate_cuts(
@@ -530,40 +605,13 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
             debug!("left: \n {}", self.graph.underlying.dot(&left));
             debug!("right: \n {}", self.graph.underlying.dot(&right));
 
-            let mut cut: OrientedCut = self.graph.underlying.empty_subgraph();
-
-            for (pair, _, _) in self.graph.underlying.iter_all_edges() {
-                match pair {
-                    HedgePair::Paired { source, sink } => {
-                        cut.reference.set(source.0, true);
-                        cut.reference.set(sink.0, true);
-
-                        cut.sign.set(source.0, true);
-                        cut.sign.set(sink.0, false);
-                    }
-                    _ => continue,
-                }
-            }
-
-            let cross_section_cut = CrossSectionCut { cut, left, right };
-            let edges_in_cut = self
-                .graph
-                .underlying
-                .iter_edges(&cross_section_cut.cut)
-                .map(|(_, _, data)| data.data.name.clone())
-                .collect_vec();
-
             self.cuts = cuts;
-
-            self.cuts.push(cross_section_cut);
 
             debug!(
                 "found {} cuts for graph: {}",
                 self.cuts.len(),
                 self.graph.name
             );
-
-            debug!("edges in cut: {:?}", edges_in_cut);
 
             Ok(())
         } else {
@@ -587,6 +635,7 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
 #[derive(Clone)]
 pub struct CrossSectionDerivedData<S: NumeratorState = PythonState> {
     pub orientations: TiVec<OrientationID, OrientationData>,
+    pub cff_expression: CFFCutExpression,
     temp_numerator: PhantomData<S>,
 }
 
@@ -594,6 +643,7 @@ impl<S: NumeratorState> CrossSectionDerivedData<S> {
     fn new_empty() -> Self {
         Self {
             orientations: TiVec::new(),
+            cff_expression: CFFCutExpression::new_empty(),
             temp_numerator: PhantomData,
         }
     }

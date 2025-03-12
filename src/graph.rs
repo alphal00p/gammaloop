@@ -1909,7 +1909,7 @@ impl BareGraph {
                     &spanning_tree.covers.complement(&self.hedge_representation),
                 )
                 .map(|e| EdgeIndex::from(*e.data))
-                .collect()
+                .collect();
             }
             TiVec::from(vec![EdgeIndex::from(
                 self.edges
