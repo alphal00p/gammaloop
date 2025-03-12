@@ -100,6 +100,8 @@ pub trait FeynmanGraph {
         skip_one: bool,
     ) -> usize;
     fn add_signs_to_edges(&self, node_id: NodeIndex) -> Vec<isize>;
+    fn get_cff_inverse_energy_product(&self) -> Atom;
+    fn get_loop_number(&self) -> usize;
 }
 
 impl FeynmanGraph for HedgeGraph<Edge, Vertex> {
@@ -320,6 +322,27 @@ impl FeynmanGraph for HedgeGraph<Edge, Vertex> {
                 }
             })
             .collect()
+    }
+
+    /// This includes the factor 2 for each edge, inversion already performed           
+    fn get_cff_inverse_energy_product(&self) -> Atom {
+        Atom::new_num(1)
+            / self
+                .iter_all_edges()
+                .filter_map(|(pair, edge_index, _)| match pair {
+                    HedgePair::Unpaired { .. } => parse!(&format!(
+                        "2*Q({}, cind(0))",
+                        Into::<usize>::into(edge_index)
+                    ))
+                    .ok(),
+                    _ => None,
+                })
+                .reduce(|acc, x| acc * x)
+                .unwrap_or_else(|| Atom::new_num(1))
+    }
+
+    fn get_loop_number(&self) -> usize {
+        self.cyclotomatic_number(&self.full_filter())
     }
 }
 

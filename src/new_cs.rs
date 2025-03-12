@@ -1,4 +1,9 @@
-use std::{marker::PhantomData, path::PathBuf, sync::Arc};
+use std::{
+    fmt::{Display, Formatter},
+    marker::PhantomData,
+    path::PathBuf,
+    sync::Arc,
+};
 
 use ahash::{AHashSet, HashMap};
 use bincode::de;
@@ -24,7 +29,7 @@ use crate::{
         cut_expression::{
             CFFCutExpression, CutOrientationExpression, OrientationData, OrientationID,
         },
-        esurface::Esurface,
+        esurface::{self, Esurface, EsurfaceID},
         generation::{generate_cff_with_cuts, ShiftRewrite},
     },
     cross_section, disable,
@@ -35,9 +40,10 @@ use crate::{
     },
     graph::{self, BareGraph, BareVertex, EdgeType},
     model::{self, Model, Particle},
-    new_graph::{Edge, Graph, Vertex},
+    new_gammaloop_integrand::cross_section_integrand::CrossSectionIntegrand,
+    new_graph::{Edge, FeynmanGraph, Graph, Vertex},
     numerator::{GlobalPrefactor, NumeratorState, PythonState},
-    ProcessSettings,
+    ProcessSettings, Settings,
 };
 
 use derive_more::{From, Into};
@@ -368,6 +374,10 @@ impl<S: NumeratorState> ProcessCollection<S> {
         }
         Ok(())
     }
+
+    fn build_integrand(&self, settings: &Settings) {
+        todo!()
+    }
 }
 
 #[derive(Clone)]
@@ -443,6 +453,12 @@ impl<S: NumeratorState> CrossSection<S> {
 #[derive(Debug, Clone, Serialize, Deserialize, From, Into, Hash, PartialEq, Copy, Eq)]
 pub struct CutId(usize);
 
+impl Display for CutId {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 #[derive(Clone)]
 pub struct CrossSectionGraph<S: NumeratorState = PythonState> {
     graph: Graph,
@@ -450,6 +466,7 @@ pub struct CrossSectionGraph<S: NumeratorState = PythonState> {
     target_nodes: AHashSet<NodeIndex>,
     cuts: TiVec<CutId, CrossSectionCut>,
     cut_esurface: TiVec<CutId, Esurface>,
+    cut_esurface_id_map: TiVec<CutId, EsurfaceID>,
     derived_data: CrossSectionDerivedData<S>,
 }
 
@@ -481,6 +498,7 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
             target_nodes,
             cuts: TiVec::new(),
             cut_esurface: TiVec::new(),
+            cut_esurface_id_map: TiVec::new(),
             derived_data: CrossSectionDerivedData::<S>::new_empty(),
         }
     }
@@ -493,23 +511,7 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
         self.generate_cuts(model, process_definition)?;
         self.generate_esurface_cuts();
         self.generate_cff();
-
-        // if a cut was not generated during cff, we still add it to the surface cache such that it has an esurface_id
-        for esurface in self.cut_esurface.iter() {
-            if !self
-                .derived_data
-                .cff_expression
-                .surfaces
-                .esurface_cache
-                .contains(esurface)
-            {
-                self.derived_data
-                    .cff_expression
-                    .surfaces
-                    .esurface_cache
-                    .push(esurface.clone());
-            }
-        }
+        self.update_surface_cache();
 
         for (cut_id, esurface) in self.cut_esurface.iter_enumerated() {
             debug!(
@@ -521,6 +523,20 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
         }
 
         Ok(())
+    }
+
+    pub fn update_surface_cache(&mut self) {
+        let esurface_cache = &mut self.derived_data.cff_expression.surfaces.esurface_cache;
+
+        // if a cut was not generated during cff, we still add it to the surface cache such that it has an esurface_id
+        for esurface in self.cut_esurface.iter() {
+            if let Some(esurface_id) = esurface_cache.iter().position(|e| e == esurface) {
+                self.cut_esurface_id_map.push(esurface_id.into());
+            } else {
+                self.cut_esurface_id_map.push(esurface_cache.len().into());
+                esurface_cache.push(esurface.clone());
+            }
+        }
     }
 
     fn generate_cff(&mut self) {
@@ -596,15 +612,6 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
                 )
                 .collect::<Result<_>>()?;
 
-            let s_node = self.source_nodes.iter().next().unwrap();
-            let t_node = self.target_nodes.iter().next().unwrap();
-
-            let left = self.graph.underlying.hairs_from_id(*s_node).hairs.clone();
-            let right = self.graph.underlying.hairs_from_id(*t_node).hairs.clone();
-
-            debug!("left: \n {}", self.graph.underlying.dot(&left));
-            debug!("right: \n {}", self.graph.underlying.dot(&right));
-
             self.cuts = cuts;
 
             debug!(
@@ -629,6 +636,24 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
             .collect();
 
         self.cut_esurface = esurfaces;
+    }
+
+    fn build_atom_for_cut(&self, cut_id: CutId) -> Atom {
+        let cut_atom = self.derived_data.cff_expression.to_atom_for_cut(cut_id);
+        let inverse_energy_product = self.graph.underlying.get_cff_inverse_energy_product();
+
+        let t_star_factor = parse!(&format!(
+            "tstar^(-{})",
+            self.graph.underlying.get_loop_number()
+        ))
+        .unwrap();
+
+        let h_function = parse!("h(tstar)").unwrap();
+        let grad_eta = parse!(&format!("∇η({}, tstar)", cut_id)).unwrap();
+
+        let result = cut_atom * inverse_energy_product * t_star_factor * h_function / grad_eta;
+        debug!("result: {}", result);
+        result
     }
 }
 

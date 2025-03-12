@@ -27,6 +27,7 @@ pub mod model;
 pub mod momentum;
 pub mod momentum_sample;
 pub mod new_cs;
+pub mod new_gammaloop_integrand;
 pub mod new_graph;
 pub mod numerator;
 pub mod observables;
