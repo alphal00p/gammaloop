@@ -434,8 +434,17 @@ class Process(object):
         is_coupling_order_for_xsec = False
         current_perturbative_order_str: str = ""
         process_string = ' '.join(process_args.process)
+
+        # Handle the comparison operators specially to avoid splitting them with the '=' and '>' below
+        special_reps = [('==', 'eq'), ('>=', 'geq'), ('<=', 'leq')]
+        for src, trgt in special_reps:
+            process_string = process_string.replace(
+                src, f"____GLMARKER____{trgt}")
         for l in ['=', '[', ']', '>', '/', '|']:
-            process_string = process_string.replace(l, ' '+l+' ')
+            process_string = process_string.replace(l, f" {l} ")
+        for src, trgt in special_reps:
+            process_string = process_string.replace(
+                f"____GLMARKER____{trgt}", f" {src} ")
 
         tokens = [token.strip()
                   for token in process_string.split(' ') if token != '']
