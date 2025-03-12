@@ -46,7 +46,7 @@ symbolica = { version = "0.14.0" }
 
 spenso = { version = "0.4.0", features = ["shadowing"] }
 linnet = { git = "https://github.com/alphal00p/linnet", features = [
-    "symbolica",
+    # "symbolica",
     "drawing",
 ] }
 
@@ -152,3 +152,5 @@ no_python = []
 symbolica = { path = "./python/gammaloop/dependencies/symbolica" }
 spenso = { git = "https://github.com/alphal00p/spenso", rev = "47a35775325a4d061af05e2fc00904b221d8bf83" }
 # spenso = { path = "../spenso" }
+[patch."https://github.com/alphal00p/linnet"]
+# linnet = { path = "../../linnet" }

@@ -302,7 +302,9 @@ impl FeynGenFilters {
                                 orders.iter().all(|(k, (v_min, v_max))| {
                                     graph_coupling_orders
                                         .get(&SmartString::from(k))
-                                        .map_or(0 == *v_min, |o| *o >= *v_min && (*v_max).map_or(true, |max| *o <= max))
+                                        .map_or(0 == *v_min, |o| {
+                                            *o >= *v_min && (*v_max).map_or(true, |max| *o <= max)
+                                        })
                                 })
                             })
                             .map(|(g, sf)| (g.clone(), sf.clone()))
@@ -440,9 +442,11 @@ pub enum FeynGenFilter {
     SelfEnergyFilter(SelfEnergyFilterOptions),
     TadpolesFilter(TadpolesFilterOptions),
     ZeroSnailsFilter(SnailFilterOptions),
+    /// A list of vetoed pdgs
     ParticleVeto(Vec<i64>),
     MaxNumberOfBridges(usize),
-    CouplingOrders(HashMap<String,(usize, Option<usize>)>),
+    /// A map between the coupling order name and a range of orders, inclusive, with an optional upper bound
+    CouplingOrders(HashMap<String, (usize, Option<usize>)>),
     LoopCountRange((usize, usize)),
     PerturbativeOrders(HashMap<String, usize>),
     FermionLoopCountRange((usize, usize)),
@@ -470,7 +474,7 @@ impl fmt::Display for FeynGenFilter {
                     "CouplingOrders({})",
                     orders
                         .iter()
-                        .map(|(k, (v_min,v_max_opt))| {
+                        .map(|(k, (v_min, v_max_opt))| {
                             if let Some(v_max) = v_max_opt {
                                 if v_min == v_max {
                                     format!("{}=={}", k, v_min)
@@ -480,7 +484,6 @@ impl fmt::Display for FeynGenFilter {
                             } else {
                                 format!("{}>={}", k, v_min)
                             }
-
                         })
                         .collect::<Vec<String>>()
                         .join("|")
@@ -531,7 +534,7 @@ impl fmt::Display for FeynGenOptions {
             "Generation type: {}{}{}\nInitial PDGs: {:?}{}\nFinal PDGs: {:?}{}\nLoop count: {}\nAmplitude filters:{}{}\nCross-section filters:{}{}",
             self.generation_type,
             if self.symmetrize_left_right_states { " (left-right symmetrized)" } else { "" },
-            if self.allow_symmetrization_of_external_fermions_in_amplitudes 
+            if self.allow_symmetrization_of_external_fermions_in_amplitudes
                 && self.generation_type == GenerationType::Amplitude
                 && (self.symmetrize_initial_states  || self.symmetrize_final_states || self.symmetrize_left_right_states)
                 { " (allowing fermion symmetrization)" } else { "" },

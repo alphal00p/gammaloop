@@ -1,3 +1,4 @@
+use bitvec::vec::BitVec;
 use indicatif::ProgressBar;
 use indicatif::{ParallelProgressIterator, ProgressStyle};
 
@@ -39,7 +40,7 @@ use super::SnailFilterOptions;
 use super::TadpolesFilterOptions;
 use super::{FeynGenError, FeynGenOptions};
 
-use crate::graph::EdgeType;
+use crate::graph::{EdgeType, HedgeGraphExt};
 use crate::model::ColorStructure;
 use crate::model::Particle;
 use crate::model::VertexRule;
@@ -55,11 +56,10 @@ use crate::{
     model::Model,
 };
 use itertools::Itertools;
-use linnet::half_edge::subgraph::InternalSubGraph;
+use linnet::half_edge::involution::Orientation;
 use linnet::half_edge::subgraph::OrientedCut;
 use linnet::half_edge::HedgeGraph;
 use linnet::half_edge::NodeIndex;
-use linnet::half_edge::Orientation;
 use symbolica::{atom::Atom, graph::Graph as SymbolicaGraph};
 
 const CANONIZE_GRAPH_FLOWS: bool = true;
@@ -104,6 +104,9 @@ struct CanonizedGraphInfo {
 pub trait NodeColorFunctions: Sized {
     fn get_external_tag(&self) -> i32;
     fn set_external_tag(&mut self, external_tag: i32);
+    fn is_external(&self) -> bool {
+        self.get_external_tag() == 0
+    }
 
     fn coupling_orders(&self) -> AHashMap<SmartString<LazyCompact>, usize> {
         AHashMap::default()
@@ -122,9 +125,11 @@ pub trait NodeColorFunctions: Sized {
     }
 
     fn passes_amplitude_filter(
-        _amplitude_subgraph: &InternalSubGraph,
+        _amplitude_subgraph: &BitVec,
         _graph: &HedgeGraph<Arc<Particle>, Self>,
-        _amp_couplings: Option<&std::collections::HashMap<String, usize, ahash::RandomState>>,
+        _amp_couplings: Option<
+            &std::collections::HashMap<String, (usize, Option<usize>), ahash::RandomState>,
+        >,
     ) -> bool;
 }
 
@@ -137,6 +142,7 @@ impl NodeColorFunctions for NodeColorWithVertexRule {
     }
 
     fn coupling_orders(&self) -> AHashMap<SmartString<LazyCompact>, usize> {
+        // info!("looking at :{}", self.vertex_rule.name);
         let mut coupling_orders = AHashMap::default();
         let vr = self.vertex_rule.clone();
         if vr.name == "external" {
@@ -149,25 +155,37 @@ impl NodeColorFunctions for NodeColorWithVertexRule {
     }
 
     fn passes_amplitude_filter(
-        amplitude_subgraph: &InternalSubGraph,
+        amplitude_subgraph: &BitVec,
         graph: &HedgeGraph<Arc<Particle>, Self>,
-        amp_couplings: Option<&std::collections::HashMap<String, usize, ahash::RandomState>>,
+        amp_couplings: Option<
+            &std::collections::HashMap<String, (usize, Option<usize>), ahash::RandomState>,
+        >,
     ) -> bool {
         if let Some(amp_couplings) = amp_couplings {
             let mut coupling_orders = AHashMap::default();
             for (_, s) in graph.iter_node_data(amplitude_subgraph) {
-                if s.get_external_tag() != 0 {
+                // println!("node {}:{}", s.vertex_rule.name, s.get_external_tag());
+                if s.is_external() {
                     for (k, v) in s.coupling_orders() {
                         *coupling_orders.entry(k).or_insert(0) += v;
                     }
                 }
             }
 
-            amp_couplings.iter().all(|(k, v)| {
+            // info!("Coupling orders: {:?}", coupling_orders);
+            // info!("Amplitude couplings: {:?}", amp_couplings);
+
+            let ans = amp_couplings.iter().all(|(k, (lower_bound, upper_bound))| {
                 coupling_orders
                     .get(&SmartString::from(k))
-                    .map_or(0 == *v, |o| *o == *v)
-            })
+                    .map_or(true, |o| {
+                        lower_bound <= o && upper_bound.map(|a| *o <= a).unwrap_or(true)
+                    })
+            });
+            // if ans {
+            //     info!("Passes amplitude filter");
+            // }
+            ans
         } else {
             true
         }
@@ -183,9 +201,11 @@ impl NodeColorFunctions for NodeColorWithoutVertexRule {
     }
 
     fn passes_amplitude_filter(
-        _amplitude_subgraph: &InternalSubGraph,
+        _amplitude_subgraph: &BitVec,
         _graph: &HedgeGraph<Arc<Particle>, Self>,
-        _amp_couplings: Option<&std::collections::HashMap<String, usize, ahash::RandomState>>,
+        _amp_couplings: Option<
+            &std::collections::HashMap<String, (usize, Option<usize>), ahash::RandomState>,
+        >,
     ) -> bool {
         panic!("Cannot apply amplitude filters without vertex information.");
     }
@@ -770,7 +790,7 @@ impl FeynGen {
     {
         #[allow(clippy::too_many_arguments)]
         fn is_valid_cut<NodeColor: NodeColorFunctions>(
-            cut: &(InternalSubGraph, OrientedCut, InternalSubGraph),
+            cut: &(BitVec, OrientedCut, BitVec),
             s_set: &AHashSet<NodeIndex>,
             t_set: &AHashSet<NodeIndex>,
             model: &Model,
@@ -789,27 +809,66 @@ impl FeynGen {
                     .iter_edges_relative(graph)
                     .map(|(o, d)| {
                         if matches!(o, Orientation::Reversed) {
-                            d.data.as_ref().unwrap().get_anti_particle(model)
+                            d.data.as_ref().get_anti_particle(model)
                         } else {
-                            d.data.as_ref().unwrap().clone()
+                            d.data.clone()
                         }
                     })
                     .collect();
+
+                // info!(
+                //     "//left\n{}\n",
+                //     graph.dot_impl(
+                //         &cut.0,
+                //         "".into(),
+                //         &|a| Some(format!("label=\"{}\"", a.name)),
+                //         &|b| None
+                //     )
+                // );
+
+                // info!(
+                //     "//cut\n{}\n",
+                //     graph.dot_impl(
+                //         &cut.1.reference,
+                //         "".into(),
+                //         &|a| Some(format!("label=\"{}\"", a.name)),
+                //         &|b| None
+                //     )
+                // );
+                // for p in cut_content.iter() {
+                //     info!("Particle {} in cut", p.name);
+                // }
+                // info!(
+                //     "//right\n{}\n",
+                //     graph.dot_impl(
+                //         &cut.2,
+                //         "".into(),
+                //         &|a| Some(format!("label=\"{}\"", a.name)),
+                //         &|b| None
+                //     )
+                // );
 
                 for p in particle_content.iter() {
                     if let Some(pos) = cut_content.iter().position(|c| c == p) {
                         cut_content.swap_remove(pos);
                     } else {
+                        // info!("Particle {} not found in cut content", p.name);
                         return false;
                     }
                 }
 
                 if cut_content.len() > n_unresolved {
+                    // info!(
+                    //     "Cut content has {} more particles than {} allowed unresolved particles",
+                    //     cut_content.len() - n_unresolved,
+                    //     n_unresolved
+                    // );
                     return false;
                 }
 
                 for p in cut_content.iter() {
                     if !unresolved_type.contains(p) {
+                        // info!("Particle {} not found in unresolved type", p.name);
                         return false;
                     }
                 }
@@ -820,18 +879,26 @@ impl FeynGen {
 
                     let sum = left_loop + right_loop;
                     if sum < min_loop || sum > max_loop {
+                        // info!(
+                        //     "Loop count sum {} not within range [{}, {}]",
+                        //     sum, min_loop, max_loop
+                        // );
                         return false;
                     }
                 }
-                NodeColor::passes_amplitude_filter(&cut.0, graph, amp_couplings)
-                    && NodeColor::passes_amplitude_filter(&cut.2, graph, amp_couplings)
+                let left = NodeColor::passes_amplitude_filter(&cut.0, graph, amp_couplings);
+
+                let right = NodeColor::passes_amplitude_filter(&cut.2, graph, amp_couplings);
+
+                left && right
             } else {
+                // info!("isn't s-channel");
                 false
             }
         }
 
         fn is_s_channel<NodeColor>(
-            cut: &(InternalSubGraph, OrientedCut, InternalSubGraph),
+            cut: &(BitVec, OrientedCut, BitVec),
             s_set: &AHashSet<NodeIndex>,
             t_set: &AHashSet<NodeIndex>,
             graph: &HedgeGraph<Arc<Particle>, NodeColor>,
@@ -855,11 +922,19 @@ impl FeynGen {
         let amp_couplings = self.options.amplitude_filters.get_coupling_orders();
         let amp_loop_count = self.options.amplitude_filters.get_loop_count_range();
         let n_particles = self.options.initial_pdgs.len();
-        let he_graph = HedgeGraph::from(graph.clone()).map(
-            |node_color| node_color,
-            |_, d| d.map(|d| model.get_particle_from_pdg(d.pdg)),
+        let he_graph = HedgeGraph::<EdgeColor, NodeColor>::from_sym(graph.clone()).map(
+            |_, _, _, node_color| node_color,
+            |_, _, _, d| d.map(|d| model.get_particle_from_pdg(d.pdg)),
         );
-
+        // info!(
+        //     "Looking at\n{}",
+        //     he_graph.dot_impl(
+        //         &he_graph.full_filter(),
+        //         "".into(),
+        //         &|a| Some(format!("label=\"{}\"", a.name)),
+        //         &|b| None
+        //     )
+        // );
         let mut s_set = AHashSet::new();
         let mut t_set = AHashSet::new();
 
@@ -877,6 +952,8 @@ impl FeynGen {
         }
         if let (Some(&s), Some(&t)) = (s_set.iter().next(), t_set.iter().next()) {
             let cuts = he_graph.all_cuts(s, t);
+
+            // info!("found {} cuts", cuts.len());
 
             let pass_cut_filter = cuts.iter().any(|c| {
                 is_valid_cut(
