@@ -208,11 +208,18 @@ impl Esurface {
         let mut radius_guess = const_builder.zero();
         let mut denominator = const_builder.zero();
 
+        //println!("got to energy loop");
         for energy in self.energies.iter() {
+            //println!("computing contribution for energy {:?}", energy);
             let signature = &lmb.edge_signatures[*energy];
+            //println!("signature {:?}", signature);
 
             let unit_loop_part = compute_loop_part(&signature.internal, unit_loops);
+            //println!("computed_loop_part {:?}", unit_loop_part);
+
             let shift = compute_shift_part(&signature.external, external_moms);
+            //println!("computed_shift {:?}", shift);
+
             let three_shift = shift.spatial;
             let norm_unit_loop_part_squared = unit_loop_part.norm_squared();
             let loop_dot_shift = &unit_loop_part * three_shift;

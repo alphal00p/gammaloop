@@ -22,9 +22,9 @@ use log::{debug, warn};
 use serde::{Deserialize, Serialize};
 use spenso::upgrading_arithmetic::GreaterThan;
 use symbolica::{
-    atom::{Atom, AtomCore},
+    atom::{Atom, AtomCore, Symbol},
     evaluate::{ExpressionEvaluator, FunctionMap, OptimizationSettings},
-    parse,
+    parse, symbol,
 };
 use typed_index_collections::TiVec;
 
@@ -51,7 +51,7 @@ use crate::{
     },
     new_graph::{Edge, FeynmanGraph, Graph, Vertex},
     numerator::{GlobalPrefactor, NumeratorState, PythonState},
-    utils::F,
+    utils::{F, GS},
     ProcessSettings, Settings,
 };
 
@@ -507,13 +507,13 @@ impl Display for CutId {
 
 #[derive(Clone)]
 pub struct CrossSectionGraph<S: NumeratorState = PythonState> {
-    graph: Graph,
-    source_nodes: AHashSet<NodeIndex>,
-    target_nodes: AHashSet<NodeIndex>,
-    cuts: TiVec<CutId, CrossSectionCut>,
-    cut_esurface: TiVec<CutId, Esurface>,
-    cut_esurface_id_map: TiVec<CutId, EsurfaceID>,
-    derived_data: CrossSectionDerivedData<S>,
+    pub graph: Graph,
+    pub source_nodes: AHashSet<NodeIndex>,
+    pub target_nodes: AHashSet<NodeIndex>,
+    pub cuts: TiVec<CutId, CrossSectionCut>,
+    pub cut_esurface: TiVec<CutId, Esurface>,
+    pub cut_esurface_id_map: TiVec<CutId, EsurfaceID>,
+    pub derived_data: CrossSectionDerivedData<S>,
 }
 
 impl<S: NumeratorState> CrossSectionGraph<S> {
@@ -567,7 +567,9 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
                 self.derived_data.cff_expression.to_atom_for_cut(cut_id)
             );
         }
-
+        self.graph
+            .loop_momentum_basis
+            .set_edge_signatures(&self.graph.underlying);
         Ok(())
     }
 
@@ -689,7 +691,7 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
         let inverse_energy_product = self.graph.underlying.get_cff_inverse_energy_product();
 
         let t_star_factor = parse!(&format!(
-            "tstar^(-{})",
+            "tstar^({})",
             3 * self.graph.underlying.get_loop_number()
         ))
         .unwrap();
@@ -697,7 +699,12 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
         let h_function = parse!("h").unwrap();
         let grad_eta = parse!(&format!("∇η")).unwrap();
 
-        let result = cut_atom * inverse_energy_product * t_star_factor * h_function / grad_eta;
+        let result = cut_atom
+            * inverse_energy_product
+            * t_star_factor
+            * h_function
+            * &self.graph.multiplicity
+            / grad_eta;
         debug!("result: {}", result);
         result
     }
@@ -707,8 +714,14 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
             .graph
             .underlying
             .iter_all_edges()
-            .map(|(_, edge_id, _)| {
-                parse!(&format!("Q({}, cind(0))", Into::<usize>::into(edge_id))).unwrap()
+            .map(|(pair, edge_id, _)| match pair {
+                HedgePair::Paired { .. } => {
+                    parse!(&format!("Q({}, cind(0))", Into::<usize>::into(edge_id))).unwrap()
+                }
+                HedgePair::Unpaired { .. } => {
+                    parse!(&format!("P({}, cind(0))", Into::<usize>::into(edge_id))).unwrap()
+                }
+                _ => unreachable!(),
             })
             .collect_vec();
 
@@ -719,15 +732,20 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
         params
     }
 
+    fn get_function_map(&self) -> FunctionMap {
+        FunctionMap::new()
+    }
+
     fn generate_term_for_graph(&self, settings: &Settings) -> CrossSectionGraphTerm {
         let mut evaluators = TiVec::new();
 
         for (cut_id, _) in self.cuts.iter_enumerated() {
             let atom = self.build_atom_for_cut(cut_id);
 
-            let fn_map = FunctionMap::new();
             let params = self.get_params();
-            let mut tree = atom.to_evaluation_tree(&fn_map, &params).unwrap();
+            let mut tree = atom
+                .to_evaluation_tree(&self.get_function_map(), &params)
+                .unwrap();
 
             tree.horner_scheme();
             tree.common_subexpression_elimination();
@@ -738,6 +756,8 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
 
         CrossSectionGraphTerm {
             bare_cff_evaluators: evaluators,
+            graph: self.graph.clone(),
+            cut_esurface: self.cut_esurface.clone(),
         }
     }
 }

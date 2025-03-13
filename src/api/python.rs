@@ -17,7 +17,7 @@ use crate::{
     new_cs::{Process, ProcessDefinition, ProcessList},
     numerator::{GlobalPrefactor, Numerator, PythonState},
     utils::F,
-    HasIntegrand, ProcessSettings, Settings,
+    Externals, HasIntegrand, ProcessSettings, Settings,
 };
 use ahash::HashMap;
 use chrono::{Datelike, Local, Timelike};
@@ -1251,7 +1251,7 @@ impl PythonWorker {
     }
 
     pub fn generate_integrands(&mut self, settings_yaml_str: &str) {
-        let settings =
+        let mut settings =
             serde_yaml::from_str::<Settings>(settings_yaml_str).expect("Could not parse settings");
 
         let integrands = self.process_list.generate_integrands(settings);

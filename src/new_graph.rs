@@ -26,6 +26,7 @@ use linnet::half_edge::{
 use serde::{de::value, Deserialize, Serialize};
 use smartstring::{LazyCompact, SmartString};
 use spenso::{
+    contraction::IsZero,
     data::DataTensor,
     structure::{
         abstract_index::AbstractIndex, representation::Minkowski, NamedStructure, ToSymbolic,
@@ -51,6 +52,7 @@ use crate::{
     momentum::{FourMomentum, SignOrZero, Signature, ThreeMomentum},
     momentum_sample::{
         BareMomentumSample, ExternalFourMomenta, ExternalIndex, ExternalThreeMomenta, LoopIndex,
+        LoopMomenta,
     },
     numerator::{ufo::preprocess_ufo_spin_wrapped, NumeratorState, PythonState, UnInit},
     signature::{ExternalSignature, LoopExtSignature, LoopSignature},
@@ -102,6 +104,13 @@ pub trait FeynmanGraph {
     fn add_signs_to_edges(&self, node_id: NodeIndex) -> Vec<isize>;
     fn get_cff_inverse_energy_product(&self) -> Atom;
     fn get_loop_number(&self) -> usize;
+    fn get_real_mass_vector<T: FloatLike>(&self) -> HedgeVec<F<T>>;
+    fn get_energy_cache<T: FloatLike>(
+        &self,
+        loop_moms: &LoopMomenta<F<T>>,
+        external_moms: &ExternalFourMomenta<F<T>>,
+        lmb: &LoopMomentumBasis,
+    ) -> HedgeVec<F<T>>;
 }
 
 impl FeynmanGraph for HedgeGraph<Edge, Vertex> {
@@ -330,7 +339,7 @@ impl FeynmanGraph for HedgeGraph<Edge, Vertex> {
             / self
                 .iter_all_edges()
                 .filter_map(|(pair, edge_index, _)| match pair {
-                    HedgePair::Unpaired { .. } => parse!(&format!(
+                    HedgePair::Paired { .. } => parse!(&format!(
                         "2*Q({}, cind(0))",
                         Into::<usize>::into(edge_index)
                     ))
@@ -345,6 +354,43 @@ impl FeynmanGraph for HedgeGraph<Edge, Vertex> {
         let internal_subgraph =
             InternalSubGraph::cleaned_filter_pessimist(self.full_filter(), self);
         self.cyclotomatic_number(&internal_subgraph)
+    }
+
+    fn get_real_mass_vector<T: FloatLike>(&self) -> HedgeVec<F<T>> {
+        self.new_hedgevec(&|edge, _edge_id| match edge.particle.mass.value {
+            Some(mass) => F::from_ff64(mass.re),
+            None => F::from_f64(0.0),
+        })
+    }
+
+    fn get_energy_cache<T: FloatLike>(
+        &self,
+        loop_moms: &LoopMomenta<F<T>>,
+        external_moms: &ExternalFourMomenta<F<T>>,
+        lmb: &LoopMomentumBasis,
+    ) -> HedgeVec<F<T>> {
+        self.new_hedgevec_from_iter(
+            lmb.edge_signatures
+                .borrow()
+                .into_iter()
+                .map(|(_, sig)| sig.compute_four_momentum_from_three(loop_moms, external_moms))
+                .zip(self.iter_all_edges())
+                .map(|(emr_mom, (_, _, edge))| match edge.data.edge_type {
+                    EdgeType::Virtual => {
+                        emr_mom
+                            .spatial
+                            .on_shell_energy(edge.data.particle.mass.value.map(|m| {
+                                if m.im.is_non_zero() {
+                                    panic!("Complex masses not yet supported in gammaLoop")
+                                }
+                                F::<T>::from_ff64(m.re)
+                            }))
+                            .value
+                    }
+                    _ => emr_mom.temporal.value, // a wierd way of just obtaining the energy of the external particles
+                }),
+        )
+        .unwrap()
     }
 }
 
@@ -657,6 +703,8 @@ impl LoopMomentumBasis {
     }
 
     pub fn set_edge_signatures<E, V>(&mut self, graph: &HedgeGraph<E, V>) -> Result<(), Report> {
+        println!("n_externals: {}", graph.n_externals());
+
         self.edge_signatures = graph.new_hedgevec(&|_, _edge_index| LoopExtSignature {
             internal: LoopSignature::from_iter(vec![SignOrZero::Zero; self.basis.len()]),
             external: ExternalSignature::from_iter(vec![SignOrZero::Zero; graph.n_externals()]),
@@ -746,6 +794,8 @@ impl LoopMomentumBasis {
                     ))
                 }
             };
+
+            println!("loop_index: {}", i_lmb);
 
             self.edge_signatures[*lmb_edge_id].internal[i_lmb] = SignOrZero::Plus;
             if let Some(path) = self.find_shortest_path(&adj_list, v, u) {
