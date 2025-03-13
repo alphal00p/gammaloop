@@ -153,4 +153,3 @@ symbolica = { path = "./python/gammaloop/dependencies/symbolica" }
 spenso = { git = "https://github.com/alphal00p/spenso", rev = "47a35775325a4d061af05e2fc00904b221d8bf83" }
 # spenso = { path = "../spenso" }
 [patch."https://github.com/alphal00p/linnet"]
-# linnet = { path = "../../linnet" }

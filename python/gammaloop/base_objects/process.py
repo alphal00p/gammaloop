@@ -67,17 +67,6 @@ class Process(object):
                 cross_section_orders = self.cross_section_orders.copy()
             else:
                 cross_section_orders = None
-            for k, v in self.perturbative_orders.items():
-                if amplitude_orders is not None and k in amplitude_orders:
-                    amplitude_orders[k] = (
-                        amplitude_orders[k][0]+2*v,
-                        None if amplitude_orders[k][1] is None else amplitude_orders[k][1]+2*v  # type: ignore # nopep8
-                    )
-                if cross_section_orders is not None and k in cross_section_orders:
-                    cross_section_orders[k] = (
-                        cross_section_orders[k][0]+2*v,
-                        None if cross_section_orders[k][1] is None else cross_section_orders[k][1]+2*v  # type: ignore # nopep8
-                    )
 
         self.cross_section_filters = gl_rust.FeynGenFilters(
             particle_veto=(None if self.particle_vetos is None else [

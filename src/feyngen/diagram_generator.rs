@@ -29,8 +29,8 @@ use ahash::AHashMap;
 use ahash::AHashSet;
 use ahash::HashMap;
 use colored::Colorize;
-use log::debug;
 use log::info;
+use log::{debug, warn};
 use smartstring::{LazyCompact, SmartString};
 use symbolica::atom::AtomCore;
 
@@ -820,7 +820,7 @@ impl FeynGen {
                 //     "//left\n{}\n",
                 //     graph.dot_impl(
                 //         &cut.0,
-                //         "".into(),
+                //         "",
                 //         &|a| Some(format!("label=\"{}\"", a.name)),
                 //         &|b| None
                 //     )
@@ -830,7 +830,7 @@ impl FeynGen {
                 //     "//cut\n{}\n",
                 //     graph.dot_impl(
                 //         &cut.1.reference,
-                //         "".into(),
+                //         "",
                 //         &|a| Some(format!("label=\"{}\"", a.name)),
                 //         &|b| None
                 //     )
@@ -903,6 +903,7 @@ impl FeynGen {
             t_set: &AHashSet<NodeIndex>,
             graph: &HedgeGraph<Arc<Particle>, NodeColor>,
         ) -> bool {
+            // info!("checking s-channel");
             let nodes: AHashSet<_> = graph
                 .iter_node_data(&cut.0)
                 .map(|(i, _)| graph.id_from_hairs(i).unwrap())
@@ -930,7 +931,7 @@ impl FeynGen {
         //     "Looking at\n{}",
         //     he_graph.dot_impl(
         //         &he_graph.full_filter(),
-        //         "".into(),
+        //         "",
         //         &|a| Some(format!("label=\"{}\"", a.name)),
         //         &|b| None
         //     )
@@ -950,7 +951,10 @@ impl FeynGen {
                 _ => {}
             }
         }
+
+        // info!("HI");
         if let (Some(&s), Some(&t)) = (s_set.iter().next(), t_set.iter().next()) {
+            // info!("{}-{}", s, t);
             let cuts = he_graph.all_cuts(s, t);
 
             // info!("found {} cuts", cuts.len());
@@ -972,6 +976,7 @@ impl FeynGen {
 
             pass_cut_filter
         } else {
+            warn!("No external particles found");
             true //TODO still check the amplitude level filters in the case where there is no initial-state specified
         }
     }
@@ -1653,7 +1658,7 @@ impl FeynGen {
             input_graph_node_pos_to_can_graph_node_pos[*input_graph_node_pos] = can_graph_node_pos;
         }
 
-        // Sort nodes according to the canonized skeletton graph
+        // Sort nodes according to the canonized skeleton graph
         // This will also ensure that EMR variables line up
         let mut sorted_g: SymbolicaGraph<NodeColorWithVertexRule, EdgeColor> =
             SymbolicaGraph::new();

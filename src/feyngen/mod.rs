@@ -447,6 +447,7 @@ pub enum FeynGenFilter {
     MaxNumberOfBridges(usize),
     /// A map between the coupling order name and a range of orders, inclusive, with an optional upper bound
     CouplingOrders(HashMap<String, (usize, Option<usize>)>),
+    /// A range of loop counts, inclusive
     LoopCountRange((usize, usize)),
     PerturbativeOrders(HashMap<String, usize>),
     FermionLoopCountRange((usize, usize)),
