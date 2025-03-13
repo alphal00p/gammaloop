@@ -3,6 +3,7 @@ pub mod diagram_generator;
 use ahash::{AHashMap, HashMap};
 use diagram_generator::EdgeColor;
 use indicatif::{ParallelProgressIterator, ProgressBar, ProgressStyle};
+use itertools::Itertools;
 use rayon::iter::IntoParallelRefMutIterator;
 use rayon::iter::ParallelIterator;
 use smartstring::{LazyCompact, SmartString};
@@ -240,7 +241,7 @@ impl FeynGenFilters {
         })
     }
 
-    pub fn get_coupling_orders(&self) -> Option<&HashMap<String, usize>> {
+    pub fn get_coupling_orders(&self) -> Option<&HashMap<String, (usize, Option<usize>)>> {
         self.0.iter().find_map(|f| {
             if let FeynGenFilter::CouplingOrders(o) = f {
                 Some(o)
@@ -299,10 +300,12 @@ impl FeynGenFilters {
                             .progress_with(bar.clone())
                             .filter(|(g, _)| {
                                 let graph_coupling_orders = get_coupling_orders(g);
-                                orders.iter().all(|(k, v)| {
+                                orders.iter().all(|(k, (v_min, v_max))| {
                                     graph_coupling_orders
                                         .get(&SmartString::from(k))
-                                        .map_or(0 == *v, |o| *o == *v)
+                                        .map_or(0 == *v_min, |o| {
+                                            *o >= *v_min && (*v_max).map_or(true, |max| *o <= max)
+                                        })
                                 })
                             })
                             .map(|(g, sf)| (g.clone(), sf.clone()))
@@ -440,9 +443,12 @@ pub enum FeynGenFilter {
     SelfEnergyFilter(SelfEnergyFilterOptions),
     TadpolesFilter(TadpolesFilterOptions),
     ZeroSnailsFilter(SnailFilterOptions),
+    /// A list of vetoed pdgs
     ParticleVeto(Vec<i64>),
     MaxNumberOfBridges(usize),
-    CouplingOrders(HashMap<String, usize>),
+    /// A map between the coupling order name and a range of orders, inclusive, with an optional upper bound
+    CouplingOrders(HashMap<String, (usize, Option<usize>)>),
+    /// A range of loop counts, inclusive
     LoopCountRange((usize, usize)),
     PerturbativeOrders(HashMap<String, usize>),
     FermionLoopCountRange((usize, usize)),
@@ -470,7 +476,17 @@ impl fmt::Display for FeynGenFilter {
                     "CouplingOrders({})",
                     orders
                         .iter()
-                        .map(|(k, v)| format!("{}={}", k, v))
+                        .map(|(k, (v_min, v_max_opt))| {
+                            if let Some(v_max) = v_max_opt {
+                                if v_min == v_max {
+                                    format!("{}=={}", k, v_min)
+                                } else {
+                                    format!("{}=[{}..{}]", k, v_min, v_max)
+                                }
+                            } else {
+                                format!("{}>={}", k, v_min)
+                            }
+                        })
                         .collect::<Vec<String>>()
                         .join("|")
                 ),
@@ -502,7 +518,7 @@ impl fmt::Display for FeynGenFilter {
 pub struct FeynGenOptions {
     pub generation_type: GenerationType,
     pub initial_pdgs: Vec<i64>,
-    pub final_pdgs: Vec<i64>,
+    pub final_pdgs_lists: Vec<Vec<i64>>,
     pub loop_count_range: (usize, usize),
     pub symmetrize_initial_states: bool,
     pub symmetrize_final_states: bool,
@@ -517,16 +533,20 @@ impl fmt::Display for FeynGenOptions {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "Generation type: {}{}{}\nInitial PDGs: {:?}{}\nFinal PDGs: {:?}{}\nLoop count: {}\nAmplitude filters:{}{}\nCross-section filters:{}{}",
+            "Generation type: {}{}{}\nInitial PDGs: {:?}{}\nFinal PDGs: {}{}\nLoop count: {}\nAmplitude filters:{}{}\nCross-section filters:{}{}",
             self.generation_type,
             if self.symmetrize_left_right_states { " (left-right symmetrized)" } else { "" },
-            if self.allow_symmetrization_of_external_fermions_in_amplitudes 
+            if self.allow_symmetrization_of_external_fermions_in_amplitudes
                 && self.generation_type == GenerationType::Amplitude
                 && (self.symmetrize_initial_states  || self.symmetrize_final_states || self.symmetrize_left_right_states)
                 { " (allowing fermion symmetrization)" } else { "" },
             self.initial_pdgs,
             if self.symmetrize_initial_states { " (symmetrized)" } else { "" },
-            self.final_pdgs,
+            if self.final_pdgs_lists.len() == 1 {
+                format!("{:?}",self.final_pdgs_lists[0])
+            } else {
+                format!("[ {} ]", self.final_pdgs_lists.iter().map(|pdgs| format!("{:?}", pdgs)).join(" | "))
+            },
             if self.symmetrize_final_states { " (symmetrized)" } else { "" },
             if self.loop_count_range.0 == self.loop_count_range.1 {
                 format!("{}", self.loop_count_range.0)

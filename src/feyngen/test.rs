@@ -18,13 +18,13 @@ fn cut_content() {
     let model = load_generic_model("sm");
 
     let mut coupling = HashMap::new();
-    coupling.insert("QED".into(), 6);
+    coupling.insert("QED".into(), (6, Some(6)));
     let mut pert = HashMap::new();
     pert.insert("QCD".into(), 1);
     let filters = FeynGen::new(FeynGenOptions {
         generation_type: GenerationType::CrossSection,
         initial_pdgs: vec![-11, 11],
-        final_pdgs: vec![5, -5, 25],
+        final_pdgs_lists: vec![vec![5, -5, 25]],
         loop_count_range: (3, 3),
         symmetrize_initial_states: true,
         symmetrize_final_states: true,
@@ -179,13 +179,13 @@ fn cut_content() {
         .unwrap();
 
     let mut coupling = HashMap::new();
-    coupling.insert("QED".into(), 6);
+    coupling.insert("QED".into(), (6, Some(6)));
     let mut pert = HashMap::new();
     pert.insert("QCD".into(), 2);
     let filters = FeynGen::new(FeynGenOptions {
         generation_type: GenerationType::CrossSection,
         initial_pdgs: vec![-11, 11],
-        final_pdgs: vec![5, -5, 25],
+        final_pdgs_lists: vec![vec![5, -5, 25]],
         loop_count_range: (4, 4),
         symmetrize_initial_states: true,
         symmetrize_final_states: true,

@@ -29,9 +29,15 @@ use crate::{
     ExportSettings, Settings, TropicalSubgraphTableSettings,
 };
 
-use linnet::half_edge::{subgraph::SubGraphOps, HedgeGraph, HedgeGraphBuilder};
+use linnet::half_edge::{
+    builder::HedgeGraphBuilder,
+    involution::{HedgePair, Orientation},
+    nodestorage::NodeStorageOps,
+    subgraph::SubGraphOps,
+    HedgeGraph, HedgeGraphError, NodeIndex,
+};
 
-use ahash::{HashSet, RandomState};
+use ahash::{AHashMap, HashSet, RandomState};
 
 use bincode::{Decode, Encode};
 use color_eyre::Result;
@@ -92,6 +98,79 @@ use symbolica::{
     graph::Graph as SymbolicaGraph,
     printer::{AtomPrinter, PrintOptions},
 };
+
+pub trait HedgeGraphExt<N, E> {
+    type Error;
+    fn from_sym(graph: SymbolicaGraph<N, E>) -> Self;
+
+    fn to_sym(graph: &Self) -> Result<SymbolicaGraph<&N, &E>, Self::Error>;
+}
+
+impl<N: Clone, E: Clone, S: NodeStorageOps<NodeData = N>> HedgeGraphExt<N, E>
+    for HedgeGraph<E, N, S>
+{
+    fn from_sym(graph: SymbolicaGraph<N, E>) -> Self {
+        let mut builder = HedgeGraphBuilder::new();
+        let mut map = AHashMap::new();
+
+        for (i, node) in graph.nodes().iter().enumerate() {
+            map.insert(i, builder.add_node(node.data.clone()));
+        }
+
+        for edge in graph.edges() {
+            let vertices = edge.vertices;
+            let source = map[&vertices.0];
+            let sink = map[&vertices.1];
+            builder.add_edge(source, sink, edge.data.clone(), edge.directed);
+        }
+
+        builder.into()
+    }
+
+    type Error = HedgeGraphError;
+
+    fn to_sym(value: &HedgeGraph<E, N, S>) -> Result<SymbolicaGraph<&N, &E>, Self::Error> {
+        let mut graph = SymbolicaGraph::new();
+        let mut map = AHashMap::new();
+
+        for (n, (_, node)) in value.iter_nodes().enumerate() {
+            map.insert(NodeIndex(n), graph.add_node(node));
+        }
+
+        for (i, _, d) in value.iter_all_edges() {
+            if let HedgePair::Paired { source, sink } = i {
+                let source = map[&value.node_id(source)];
+                let sink = map[&value.node_id(sink)];
+
+                let data = d.data;
+                let orientation = d.orientation;
+
+                match orientation {
+                    Orientation::Default => {
+                        graph
+                            .add_edge(source, sink, true, data)
+                            .map_err(HedgeGraphError::SymbolicaError)?;
+                    }
+                    Orientation::Reversed => {
+                        graph
+                            .add_edge(sink, source, true, data)
+                            .map_err(HedgeGraphError::SymbolicaError)?;
+                    }
+                    Orientation::Undirected => {
+                        graph
+                            .add_edge(source, sink, false, data)
+                            .map_err(HedgeGraphError::SymbolicaError)?;
+                    }
+                }
+            } else {
+                return Err(HedgeGraphError::HasIdentityHedge);
+            }
+        }
+
+        Ok(graph)
+    }
+}
+
 //use symbolica::{atom::Symbol,state::State};
 //pub mod half_edge;
 #[derive(Debug, Default, Clone, Copy, Serialize, Deserialize, PartialEq)]
@@ -1339,7 +1418,7 @@ impl BareGraph {
         g.edge_name_to_position = edge_name_to_position;
 
         // set the half-edge graph representation
-        g.hedge_representation = HedgeGraph::from(&g);
+        g.hedge_representation = HedgeGraph::<usize, usize>::from(&g);
 
         let mut edge_signatures: Vec<_> = vec![None; graph.edges.len()];
         for (e_name, sig) in graph.edge_signatures.iter() {
@@ -1841,8 +1920,12 @@ impl BareGraph {
             //     self.hedge_representation.dot(&spanning_tree_half_edge_node)
             // );
             self.hedge_representation
-                .iter_internal_edge_data(&spanning_tree.tree.complement(&self.hedge_representation))
-                .map(|e| *e.data.unwrap())
+                .iter_internal_edge_data(
+                    &spanning_tree
+                        .tree_subgraph
+                        .complement(&self.hedge_representation),
+                )
+                .map(|e| *e.data)
                 .collect::<Vec<_>>()
         };
         debug!(

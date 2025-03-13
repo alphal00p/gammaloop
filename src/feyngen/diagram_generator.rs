@@ -1,3 +1,4 @@
+use bitvec::vec::BitVec;
 use indicatif::ProgressBar;
 use indicatif::{ParallelProgressIterator, ProgressStyle};
 
@@ -28,8 +29,8 @@ use ahash::AHashMap;
 use ahash::AHashSet;
 use ahash::HashMap;
 use colored::Colorize;
-use log::debug;
 use log::info;
+use log::{debug, warn};
 use smartstring::{LazyCompact, SmartString};
 use symbolica::atom::AtomCore;
 
@@ -39,7 +40,7 @@ use super::SnailFilterOptions;
 use super::TadpolesFilterOptions;
 use super::{FeynGenError, FeynGenOptions};
 
-use crate::graph::EdgeType;
+use crate::graph::{EdgeType, HedgeGraphExt};
 use crate::model::ColorStructure;
 use crate::model::Particle;
 use crate::model::VertexRule;
@@ -55,11 +56,10 @@ use crate::{
     model::Model,
 };
 use itertools::Itertools;
-use linnet::half_edge::subgraph::InternalSubGraph;
+use linnet::half_edge::involution::Orientation;
 use linnet::half_edge::subgraph::OrientedCut;
 use linnet::half_edge::HedgeGraph;
 use linnet::half_edge::NodeIndex;
-use linnet::half_edge::Orientation;
 use symbolica::{atom::Atom, graph::Graph as SymbolicaGraph};
 
 const CANONIZE_GRAPH_FLOWS: bool = true;
@@ -104,6 +104,9 @@ struct CanonizedGraphInfo {
 pub trait NodeColorFunctions: Sized {
     fn get_external_tag(&self) -> i32;
     fn set_external_tag(&mut self, external_tag: i32);
+    fn is_external(&self) -> bool {
+        self.get_external_tag() == 0
+    }
 
     fn coupling_orders(&self) -> AHashMap<SmartString<LazyCompact>, usize> {
         AHashMap::default()
@@ -121,10 +124,13 @@ pub trait NodeColorFunctions: Sized {
         }
     }
 
+    #[allow(clippy::type_complexity)]
     fn passes_amplitude_filter(
-        _amplitude_subgraph: &InternalSubGraph,
+        _amplitude_subgraph: &BitVec,
         _graph: &HedgeGraph<Arc<Particle>, Self>,
-        _amp_couplings: Option<&std::collections::HashMap<String, usize, ahash::RandomState>>,
+        _amp_couplings: Option<
+            &std::collections::HashMap<String, (usize, Option<usize>), ahash::RandomState>,
+        >,
     ) -> bool;
 }
 
@@ -137,6 +143,7 @@ impl NodeColorFunctions for NodeColorWithVertexRule {
     }
 
     fn coupling_orders(&self) -> AHashMap<SmartString<LazyCompact>, usize> {
+        // info!("looking at :{}", self.vertex_rule.name);
         let mut coupling_orders = AHashMap::default();
         let vr = self.vertex_rule.clone();
         if vr.name == "external" {
@@ -149,25 +156,37 @@ impl NodeColorFunctions for NodeColorWithVertexRule {
     }
 
     fn passes_amplitude_filter(
-        amplitude_subgraph: &InternalSubGraph,
+        amplitude_subgraph: &BitVec,
         graph: &HedgeGraph<Arc<Particle>, Self>,
-        amp_couplings: Option<&std::collections::HashMap<String, usize, ahash::RandomState>>,
+        amp_couplings: Option<
+            &std::collections::HashMap<String, (usize, Option<usize>), ahash::RandomState>,
+        >,
     ) -> bool {
         if let Some(amp_couplings) = amp_couplings {
             let mut coupling_orders = AHashMap::default();
             for (_, s) in graph.iter_node_data(amplitude_subgraph) {
-                if s.get_external_tag() != 0 {
+                // println!("node {}:{}", s.vertex_rule.name, s.get_external_tag());
+                if s.is_external() {
                     for (k, v) in s.coupling_orders() {
                         *coupling_orders.entry(k).or_insert(0) += v;
                     }
                 }
             }
 
-            amp_couplings.iter().all(|(k, v)| {
+            // info!("Coupling orders: {:?}", coupling_orders);
+            // info!("Amplitude couplings: {:?}", amp_couplings);
+
+            let ans = amp_couplings.iter().all(|(k, (lower_bound, upper_bound))| {
                 coupling_orders
                     .get(&SmartString::from(k))
-                    .map_or(0 == *v, |o| *o == *v)
-            })
+                    .map_or(true, |o| {
+                        lower_bound <= o && upper_bound.map(|a| *o <= a).unwrap_or(true)
+                    })
+            });
+            // if ans {
+            //     info!("Passes amplitude filter");
+            // }
+            ans
         } else {
             true
         }
@@ -183,9 +202,11 @@ impl NodeColorFunctions for NodeColorWithoutVertexRule {
     }
 
     fn passes_amplitude_filter(
-        _amplitude_subgraph: &InternalSubGraph,
+        _amplitude_subgraph: &BitVec,
         _graph: &HedgeGraph<Arc<Particle>, Self>,
-        _amp_couplings: Option<&std::collections::HashMap<String, usize, ahash::RandomState>>,
+        _amp_couplings: Option<
+            &std::collections::HashMap<String, (usize, Option<usize>), ahash::RandomState>,
+        >,
     ) -> bool {
         panic!("Cannot apply amplitude filters without vertex information.");
     }
@@ -769,47 +790,94 @@ impl FeynGen {
         NodeColor: NodeColorFunctions + Clone,
     {
         #[allow(clippy::too_many_arguments)]
+        #[allow(clippy::type_complexity)]
         fn is_valid_cut<NodeColor: NodeColorFunctions>(
-            cut: &(InternalSubGraph, OrientedCut, InternalSubGraph),
+            cut: &(BitVec, OrientedCut, BitVec),
             s_set: &AHashSet<NodeIndex>,
             t_set: &AHashSet<NodeIndex>,
             model: &Model,
             n_unresolved: usize,
             unresolved_type: &AHashSet<Arc<Particle>>,
-            particle_content: &[Arc<Particle>],
-            amp_couplings: Option<&std::collections::HashMap<String, usize, ahash::RandomState>>,
+            particle_content_options: &[Vec<Arc<Particle>>],
+            amp_couplings: Option<
+                &std::collections::HashMap<String, (usize, Option<usize>), ahash::RandomState>,
+            >,
             amp_loop_count: Option<(usize, usize)>,
             graph: &HedgeGraph<Arc<Particle>, NodeColor>,
         ) -> bool {
             if is_s_channel(cut, s_set, t_set, graph) {
-                let mut cut_content: Vec<_> = cut
+                let cut_content: Vec<_> = cut
                     .1
                     .iter_edges_relative(graph)
                     .map(|(o, d)| {
                         if matches!(o, Orientation::Reversed) {
-                            d.data.as_ref().unwrap().get_anti_particle(model)
+                            d.data.as_ref().get_anti_particle(model)
                         } else {
-                            d.data.as_ref().unwrap().clone()
+                            d.data.clone()
                         }
                     })
                     .collect();
 
-                for p in particle_content.iter() {
-                    if let Some(pos) = cut_content.iter().position(|c| c == p) {
-                        cut_content.swap_remove(pos);
-                    } else {
+                // info!(
+                //     "//left\n{}\n",
+                //     graph.dot_impl(
+                //         &cut.0,
+                //         "",
+                //         &|a| Some(format!("label=\"{}\"", a.name)),
+                //         &|b| None
+                //     )
+                // );
+
+                // info!(
+                //     "//cut\n{}\n",
+                //     graph.dot_impl(
+                //         &cut.1.reference,
+                //         "",
+                //         &|a| Some(format!("label=\"{}\"", a.name)),
+                //         &|b| None
+                //     )
+                // );
+                // for p in cut_content.iter() {
+                //     info!("Particle {} in cut", p.name);
+                // }
+                // info!(
+                //     "//right\n{}\n",
+                //     graph.dot_impl(
+                //         &cut.2,
+                //         "".into(),
+                //         &|a| Some(format!("label=\"{}\"", a.name)),
+                //         &|b| None
+                //     )
+                // );
+                if !particle_content_options.iter().any(|particle_content| {
+                    let mut cut_content_clone = cut_content.clone();
+                    for p in particle_content.iter() {
+                        if let Some(pos) = cut_content.iter().position(|c| c == p) {
+                            cut_content_clone.swap_remove(pos);
+                        } else {
+                            // info!("Particle {} not found in cut content", p.name);
+                            return false;
+                        }
+                    }
+                    if cut_content_clone.len() > n_unresolved {
+                        // info!(
+                        //     "Cut content has {} more particles than {} allowed unresolved particles",
+                        //     cut_content.len() - n_unresolved,
+                        //     n_unresolved
+                        // );
                         return false;
                     }
-                }
 
-                if cut_content.len() > n_unresolved {
+                    for p in cut_content_clone.iter() {
+                        if !unresolved_type.contains(p) {
+                            // info!("Particle {} not found in unresolved type", p.name);
+                            return false;
+                        }
+                    }
+
+                    true
+                }) {
                     return false;
-                }
-
-                for p in cut_content.iter() {
-                    if !unresolved_type.contains(p) {
-                        return false;
-                    }
                 }
 
                 if let Some((min_loop, max_loop)) = amp_loop_count {
@@ -818,22 +886,31 @@ impl FeynGen {
 
                     let sum = left_loop + right_loop;
                     if sum < min_loop || sum > max_loop {
+                        // info!(
+                        //     "Loop count sum {} not within range [{}, {}]",
+                        //     sum, min_loop, max_loop
+                        // );
                         return false;
                     }
                 }
-                NodeColor::passes_amplitude_filter(&cut.0, graph, amp_couplings)
-                    && NodeColor::passes_amplitude_filter(&cut.2, graph, amp_couplings)
+                let left = NodeColor::passes_amplitude_filter(&cut.0, graph, amp_couplings);
+
+                let right = NodeColor::passes_amplitude_filter(&cut.2, graph, amp_couplings);
+
+                left && right
             } else {
+                // info!("isn't s-channel");
                 false
             }
         }
 
         fn is_s_channel<NodeColor>(
-            cut: &(InternalSubGraph, OrientedCut, InternalSubGraph),
+            cut: &(BitVec, OrientedCut, BitVec),
             s_set: &AHashSet<NodeIndex>,
             t_set: &AHashSet<NodeIndex>,
             graph: &HedgeGraph<Arc<Particle>, NodeColor>,
         ) -> bool {
+            // info!("checking s-channel");
             let nodes: AHashSet<_> = graph
                 .iter_node_data(&cut.0)
                 .map(|(i, _)| graph.id_from_hairs(i).unwrap())
@@ -844,20 +921,22 @@ impl FeynGen {
             s_set.is_subset(&nodes) && t_set.intersection(&nodes).count() == 0
         }
 
-        let particle_content = self
-            .options
-            .final_pdgs
-            .iter()
-            .map(|&pdg| model.get_particle_from_pdg(pdg as isize))
-            .collect::<Vec<_>>();
         let amp_couplings = self.options.amplitude_filters.get_coupling_orders();
         let amp_loop_count = self.options.amplitude_filters.get_loop_count_range();
         let n_particles = self.options.initial_pdgs.len();
-        let he_graph = HedgeGraph::from(graph.clone()).map(
-            |node_color| node_color,
-            |_, d| d.map(|d| model.get_particle_from_pdg(d.pdg)),
+        let he_graph = HedgeGraph::<EdgeColor, NodeColor>::from_sym(graph.clone()).map(
+            |_, _, _, node_color| node_color,
+            |_, _, _, d| d.map(|d| model.get_particle_from_pdg(d.pdg)),
         );
-
+        // info!(
+        //     "Looking at\n{}",
+        //     he_graph.dot_impl(
+        //         &he_graph.full_filter(),
+        //         "",
+        //         &|a| Some(format!("label=\"{}\"", a.name)),
+        //         &|b| None
+        //     )
+        // );
         let mut s_set = AHashSet::new();
         let mut t_set = AHashSet::new();
 
@@ -873,9 +952,24 @@ impl FeynGen {
                 _ => {}
             }
         }
+
+        // info!("HI");
         if let (Some(&s), Some(&t)) = (s_set.iter().next(), t_set.iter().next()) {
+            // info!("{}-{}", s, t);
             let cuts = he_graph.all_cuts(s, t);
 
+            // info!("found {} cuts", cuts.len());
+            let particle_content_options = self
+                .options
+                .final_pdgs_lists
+                .iter()
+                .map(|pdg_list| {
+                    pdg_list
+                        .iter()
+                        .map(|pdg| model.get_particle_from_pdg((*pdg) as isize))
+                        .collect::<Vec<_>>()
+                })
+                .collect::<Vec<_>>();
             let pass_cut_filter = cuts.iter().any(|c| {
                 is_valid_cut(
                     c,
@@ -884,7 +978,7 @@ impl FeynGen {
                     model,
                     n_unresolved,
                     unresolved_type,
-                    &particle_content,
+                    &particle_content_options,
                     amp_couplings,
                     amp_loop_count,
                     &he_graph,
@@ -893,6 +987,7 @@ impl FeynGen {
 
             pass_cut_filter
         } else {
+            warn!("No external particles found");
             true //TODO still check the amplitude level filters in the case where there is no initial-state specified
         }
     }
@@ -1241,8 +1336,7 @@ impl FeynGen {
                 .map(|(i_n, pdg)| (pdg, i_n + 1 + initial_pdgs.len()))
                 .collect::<Vec<_>>()
         } else {
-            self.options
-                .final_pdgs
+            self.options.final_pdgs_lists[0]
                 .iter()
                 .enumerate()
                 .map(|(i_n, pdg)| (pdg, i_n + 1 + initial_pdgs.len()))
@@ -1574,7 +1668,7 @@ impl FeynGen {
             input_graph_node_pos_to_can_graph_node_pos[*input_graph_node_pos] = can_graph_node_pos;
         }
 
-        // Sort nodes according to the canonized skeletton graph
+        // Sort nodes according to the canonized skeleton graph
         // This will also ensure that EMR variables line up
         let mut sorted_g: SymbolicaGraph<NodeColorWithVertexRule, EdgeColor> =
             SymbolicaGraph::new();
@@ -1961,6 +2055,32 @@ impl FeynGen {
         )
         .unwrap();
 
+        if self.options.final_pdgs_lists.is_empty() {
+            return Err(FeynGenError::GenericError(
+                "No specification of final states is provided".to_string(),
+            ));
+        }
+
+        let representative_final_pdgs = if self.options.generation_type
+            == GenerationType::CrossSection
+        {
+            if self.options.final_pdgs_lists.len() > 1
+                && self.options.final_pdgs_lists.iter().any(|fs| fs.is_empty())
+            {
+                return Err(FeynGenError::GenericError(
+                        "When specifying multiple possible set of final states in cross-section generation, each must contain at least one particle".to_string(),
+                    ));
+            }
+            self.options.final_pdgs_lists[0].clone()
+        } else {
+            if self.options.final_pdgs_lists.len() > 1 {
+                return Err(FeynGenError::GenericError(
+                    "Multiple selection of possible final states is not supported for amplitude generation".to_string(),
+                ));
+            }
+            self.options.final_pdgs_lists[0].clone()
+        };
+
         // Build a custom ThreadPool. If `Some(threads)` is given, use that;
         // otherwise, default to the number of logical CPUs on the system.
         let pool = match num_threads {
@@ -2046,13 +2166,12 @@ impl FeynGen {
                     external_connections.push((Some(i_initial), None));
                 }
                 for i_final in (self.options.initial_pdgs.len() + 1)
-                    ..=(self.options.initial_pdgs.len() + self.options.final_pdgs.len())
+                    ..=(self.options.initial_pdgs.len() + representative_final_pdgs.len())
                 {
                     external_connections.push((None, Some(i_final)));
                 }
                 external_edges.extend(
-                    self.options
-                        .final_pdgs
+                    representative_final_pdgs
                         .iter()
                         .enumerate()
                         .map(|(i_final, pdg)| {
@@ -2166,53 +2285,77 @@ impl FeynGen {
         );
         last_step = step;
 
-        let unoriented_final_state_particles = if self.options.generation_type
+        let unoriented_final_state_particles_lists = if self.options.generation_type
             == GenerationType::CrossSection
-            && !self.options.final_pdgs.is_empty()
+            && !representative_final_pdgs.is_empty()
         {
             self.options
-                .final_pdgs
+                .final_pdgs_lists
                 .iter()
-                .map(|pdg| {
-                    let p = model.get_particle_from_pdg(*pdg as isize);
-                    if p.is_antiparticle() {
-                        p.get_anti_particle(model).pdg_code
-                    } else {
-                        p.pdg_code
-                    }
+                .map(|final_pdgs| {
+                    final_pdgs
+                        .iter()
+                        .map(|pdg| {
+                            let p = model.get_particle_from_pdg(*pdg as isize);
+                            if p.is_antiparticle() {
+                                p.get_anti_particle(model).pdg_code
+                            } else {
+                                p.pdg_code
+                            }
+                        })
+                        .collect::<Vec<_>>()
                 })
                 .collect::<Vec<_>>()
         } else {
             vec![]
         };
 
-        if !unoriented_final_state_particles.is_empty() {
-            let bar = ProgressBar::new(graphs.len() as u64);
-            bar.set_style(progress_bar_style.clone());
-            bar.set_message("Enforcing particle content...");
-            pool.install(|| {
-                graphs = graphs
-                    .par_iter()
-                    .progress_with(bar.clone())
-                    .filter(|(g, _symmetry_factor)| {
-                        FeynGen::contains_particles(g, unoriented_final_state_particles.as_slice())
-                    })
-                    .map(|(g, sf)| (g.clone(), sf.clone()))
-                    .collect::<HashMap<_, _>>()
-            });
-            bar.finish_and_clear();
+        if !unoriented_final_state_particles_lists.is_empty() {
+            let mut unoriented_final_state_particles_always_present: HashSet<isize> =
+                HashSet::from_iter(unoriented_final_state_particles_lists[0].iter().cloned());
+            for final_pdgs in unoriented_final_state_particles_lists.iter().skip(1) {
+                unoriented_final_state_particles_always_present =
+                    unoriented_final_state_particles_always_present
+                        .intersection(&HashSet::from_iter(final_pdgs.iter().cloned()))
+                        .cloned()
+                        .collect();
+            }
+            let unoriented_final_state_particles_always_present_vec =
+                unoriented_final_state_particles_always_present
+                    .iter()
+                    .cloned()
+                    .collect::<Vec<_>>();
+            if !unoriented_final_state_particles_always_present_vec.is_empty() {
+                let bar = ProgressBar::new(graphs.len() as u64);
+                bar.set_style(progress_bar_style.clone());
+                bar.set_message("Enforcing particle content...");
+                pool.install(|| {
+                    graphs = graphs
+                        .par_iter()
+                        .progress_with(bar.clone())
+                        .filter(|(g, _symmetry_factor)| {
+                            FeynGen::contains_particles(
+                                g,
+                                unoriented_final_state_particles_always_present_vec.as_slice(),
+                            )
+                        })
+                        .map(|(g, sf)| (g.clone(), sf.clone()))
+                        .collect::<HashMap<_, _>>()
+                });
+                bar.finish_and_clear();
 
-            step = Instant::now();
-            info!(
-                "{} | Δ={} | {:<95}{}",
-                format!("{:<6}", utils::format_wdhms_from_duration(step - start))
-                    .blue()
-                    .bold(),
-                format!("{:<6}", utils::format_wdhms_from_duration(step - last_step)).blue(),
-                "Number of graphs retained after enforcing supergraph particle content:",
-                format!("{}", graphs.len()).green()
-            );
-            last_step = step;
+                step = Instant::now();
+                info!(
+                    "{} | Δ={} | {:<95}{}",
+                    format!("{:<6}", utils::format_wdhms_from_duration(step - start))
+                        .blue()
+                        .bold(),
+                    format!("{:<6}", utils::format_wdhms_from_duration(step - last_step)).blue(),
+                    "Number of graphs retained after enforcing supergraph particle content:",
+                    format!("{}", graphs.len()).green()
+                );
+                last_step = step;
+            }
         }
 
         let tadpole_filter = filters
@@ -2446,8 +2589,15 @@ impl FeynGen {
         // The fast cutksoky filter is only fast for up to ~ 6 particles to check
         let mut applied_fast_cutksosky_cut_filter = false;
         if self.options.generation_type == GenerationType::CrossSection
-            && !self.options.final_pdgs.is_empty()
-            && self.options.final_pdgs.len() + n_unresolved
+            && !representative_final_pdgs.is_empty()
+            && self
+                .options
+                .final_pdgs_lists
+                .iter()
+                .map(|pdgs| pdgs.len())
+                .max()
+                .unwrap_or(0)
+                + n_unresolved
                 <= self.options.max_multiplicity_for_fast_cut_filter
         {
             applied_fast_cutksosky_cut_filter = true;
@@ -2460,12 +2610,16 @@ impl FeynGen {
                     .par_iter()
                     .progress_with(bar.clone())
                     .filter(|(g, _symmetry_factor)| {
-                        self.contains_cut_fast(
-                            model,
-                            g,
-                            n_unresolved,
-                            &unresolved_type,
-                            unoriented_final_state_particles.as_slice(),
+                        unoriented_final_state_particles_lists.iter().any(
+                            |unoriented_final_state_particles| {
+                                self.contains_cut_fast(
+                                    model,
+                                    g,
+                                    n_unresolved,
+                                    &unresolved_type,
+                                    unoriented_final_state_particles.as_slice(),
+                                )
+                            },
                         )
                     })
                     .map(|(g, sf)| (g.clone(), sf.clone()))
@@ -2489,7 +2643,7 @@ impl FeynGen {
         // This secondary cutkosky cut filter is always necessary as the fast one can have false positives
         // even in the absence of constraints on amplitudes on either side of the cut
         if self.options.generation_type == GenerationType::CrossSection
-            && !self.options.final_pdgs.is_empty()
+            && !representative_final_pdgs.is_empty()
             && (self
                 .options
                 .amplitude_filters
@@ -2592,11 +2746,11 @@ impl FeynGen {
                             }
                         }
                         for final_color in self.options.initial_pdgs.len() + 1
-                            ..=self.options.initial_pdgs.len() + self.options.final_pdgs.len()
+                            ..=self.options.initial_pdgs.len() + representative_final_pdgs.len()
                         {
                             if !model
                                 .get_particle_from_pdg(
-                                    self.options.final_pdgs
+                                    representative_final_pdgs
                                         [final_color - self.options.initial_pdgs.len() - 1]
                                         as isize,
                                 )
@@ -2626,11 +2780,11 @@ impl FeynGen {
                     }
                     (false, true, false) => {
                         for final_color in self.options.initial_pdgs.len() + 1
-                            ..=self.options.initial_pdgs.len() + self.options.final_pdgs.len()
+                            ..=self.options.initial_pdgs.len() + representative_final_pdgs.len()
                         {
                             if !model
                                 .get_particle_from_pdg(
-                                    self.options.final_pdgs
+                                    representative_final_pdgs
                                         [final_color - self.options.initial_pdgs.len() - 1]
                                         as isize,
                                 )
@@ -2658,11 +2812,11 @@ impl FeynGen {
                             }
                         }
                         for final_color in self.options.initial_pdgs.len() + 1
-                            ..=self.options.initial_pdgs.len() + self.options.final_pdgs.len()
+                            ..=self.options.initial_pdgs.len() + representative_final_pdgs.len()
                         {
                             if !model
                                 .get_particle_from_pdg(
-                                    self.options.final_pdgs
+                                    representative_final_pdgs
                                         [final_color - self.options.initial_pdgs.len() - 1]
                                         as isize,
                                 )
