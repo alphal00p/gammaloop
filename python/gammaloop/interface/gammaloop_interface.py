@@ -1352,9 +1352,6 @@ class GammaLoop(object):
             logger.info(
                 "Model replacement rules exported to model directory.")
 
-        export_config = yaml.dump(self.config["export_settings"])
-        self.rust_worker.preprocess(export_config)
-
         if len(self.cross_sections) == 0 and len(self.amplitudes) == 0:
             raise GammaLoopError("No process generated yet.")
 

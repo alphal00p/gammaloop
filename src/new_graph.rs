@@ -703,8 +703,6 @@ impl LoopMomentumBasis {
     }
 
     pub fn set_edge_signatures<E, V>(&mut self, graph: &HedgeGraph<E, V>) -> Result<(), Report> {
-        println!("n_externals: {}", graph.n_externals());
-
         self.edge_signatures = graph.new_hedgevec(&|_, _edge_index| LoopExtSignature {
             internal: LoopSignature::from_iter(vec![SignOrZero::Zero; self.basis.len()]),
             external: ExternalSignature::from_iter(vec![SignOrZero::Zero; graph.n_externals()]),
@@ -794,8 +792,6 @@ impl LoopMomentumBasis {
                     ))
                 }
             };
-
-            println!("loop_index: {}", i_lmb);
 
             self.edge_signatures[*lmb_edge_id].internal[i_lmb] = SignOrZero::Plus;
             if let Some(path) = self.find_shortest_path(&adj_list, v, u) {

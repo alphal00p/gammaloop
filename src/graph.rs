@@ -1893,7 +1893,6 @@ impl BareGraph {
             //     .collect::<Vec<_>>()
 
             debug!("finding spanning tree");
-            warn!("Spanning tree selection is disabled");
             let spanning_tree = self.hedge_representation.cycle_basis().1;
             // println!("hedge graph: \n{}", g.hedge_representation.base_dot());
             // let spanning_tree_half_edge_node = sefl
