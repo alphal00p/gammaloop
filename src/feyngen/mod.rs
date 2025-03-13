@@ -3,6 +3,7 @@ pub mod diagram_generator;
 use ahash::{AHashMap, HashMap};
 use diagram_generator::EdgeColor;
 use indicatif::{ParallelProgressIterator, ProgressBar, ProgressStyle};
+use itertools::Itertools;
 use rayon::iter::IntoParallelRefMutIterator;
 use rayon::iter::ParallelIterator;
 use smartstring::{LazyCompact, SmartString};
@@ -517,7 +518,7 @@ impl fmt::Display for FeynGenFilter {
 pub struct FeynGenOptions {
     pub generation_type: GenerationType,
     pub initial_pdgs: Vec<i64>,
-    pub final_pdgs: Vec<i64>,
+    pub final_pdgs_lists: Vec<Vec<i64>>,
     pub loop_count_range: (usize, usize),
     pub symmetrize_initial_states: bool,
     pub symmetrize_final_states: bool,
@@ -532,7 +533,7 @@ impl fmt::Display for FeynGenOptions {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "Generation type: {}{}{}\nInitial PDGs: {:?}{}\nFinal PDGs: {:?}{}\nLoop count: {}\nAmplitude filters:{}{}\nCross-section filters:{}{}",
+            "Generation type: {}{}{}\nInitial PDGs: {:?}{}\nFinal PDGs: {}{}\nLoop count: {}\nAmplitude filters:{}{}\nCross-section filters:{}{}",
             self.generation_type,
             if self.symmetrize_left_right_states { " (left-right symmetrized)" } else { "" },
             if self.allow_symmetrization_of_external_fermions_in_amplitudes
@@ -541,7 +542,11 @@ impl fmt::Display for FeynGenOptions {
                 { " (allowing fermion symmetrization)" } else { "" },
             self.initial_pdgs,
             if self.symmetrize_initial_states { " (symmetrized)" } else { "" },
-            self.final_pdgs,
+            if self.final_pdgs_lists.len() == 1 {
+                format!("{:?}",self.final_pdgs_lists[0])
+            } else {
+                format!("[ {} ]", self.final_pdgs_lists.iter().map(|pdgs| format!("{:?}", pdgs)).join(" | "))
+            },
             if self.symmetrize_final_states { " (symmetrized)" } else { "" },
             if self.loop_count_range.0 == self.loop_count_range.1 {
                 format!("{}", self.loop_count_range.0)

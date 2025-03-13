@@ -9,7 +9,7 @@ import yaml
 import gammaloop._gammaloop as gl_rust
 from gammaloop.misc.common import logger
 
-COMPARISON_OPS = ["==", "<=", ">="]
+COMPARISON_OPS = ["=", "==", "<=", ">="]
 
 
 class MalformedProcessError(GammaLoopError):
@@ -19,7 +19,7 @@ class MalformedProcessError(GammaLoopError):
 class Process(object):
     def __init__(self,
                  initial_particles: list[Particle],
-                 final_particles: list[Particle],
+                 final_particles_lists: list[list[Particle]],
                  amplitude_orders: dict[str,
                                         tuple[int, int | None]] | None = None,
                  cross_section_orders: dict[str,
@@ -37,7 +37,7 @@ class Process(object):
                  max_n_bridges: int | None = None,
                  ):
         self.initial_states = initial_particles
-        self.final_states = final_particles
+        self.final_states_lists = final_particles_lists
         self.amplitude_orders = amplitude_orders
         self.cross_section_orders = cross_section_orders
         self.perturbative_orders: dict[str, int] | None = perturbative_orders
@@ -83,12 +83,11 @@ class Process(object):
 
     def process_shell_name(self, short=True) -> str:
         res = []
-        res.append(
-            (''.join([p.name.lower() for p in self.initial_states]) if len(
-                self.initial_states) > 0 else "empty") + '_' +
-            (''.join([p.name.lower() for p in self.final_states]
-                     ) if len(self.initial_states) > 0 else "empty")
-        )
+        proc_name = (''.join([p.name.lower() for p in self.initial_states]) if len(
+            self.initial_states) > 0 else "empty") + '_'
+        proc_name += '_or_'.join((''.join([p.name.lower() for p in final_states]
+                                          ) if len(self.initial_states) > 0 else "empty") for final_states in self.final_states_lists)
+        res.append(proc_name)
         if not short:
             if self.particle_vetos is not None:
                 res.append(
@@ -132,11 +131,18 @@ class Process(object):
             for p in self.initial_states:
                 process_str_pieces.append(p.name.lower())
         process_str_pieces.append(">")
-        if len(self.final_states) == 0:
-            process_str_pieces.append("{}")
+        if len(self.final_states_lists) == 1:
+            if len(self.final_states_lists[0]) == 0:
+                process_str_pieces.append("{}")
+            else:
+                for p in self.final_states_lists[0]:
+                    process_str_pieces.append(p.name.lower())
         else:
-            for p in self.final_states:
-                process_str_pieces.append(p.name.lower())
+            final_states_str_pieces = [
+                ' '.join(p.name.lower() for p in final_states) for final_states in self.final_states_lists
+            ]
+            process_str_pieces.append(
+                f"{{ {', '.join(final_states_str_pieces)} }}")
         if self.particle_vetos is not None:
             process_str_pieces.append("/")
             for p in self.particle_vetos:
@@ -214,7 +220,10 @@ class Process(object):
             else:
                 loop_count = 0
             if not generation_args.amplitude:
-                loop_count += len(self.final_states) - 1
+                n_final_states = min(len(final_states)
+                                     for final_states in self.final_states_lists)
+                if n_final_states > 0:
+                    loop_count += n_final_states - 1
             loop_count_range = (loop_count, loop_count)
 
         # Automatically adjust symmetrizations
@@ -245,7 +254,8 @@ class Process(object):
             gl_rust.FeynGenOptions(
                 "amplitude" if generation_args.amplitude else "cross_section",
                 [p.get_pdg_code() for p in self.initial_states],
-                [p.get_pdg_code() for p in self.final_states],
+                [[p.get_pdg_code() for p in final_states]
+                 for final_states in self.final_states_lists],
                 loop_count_range,
                 generation_args.symmetrize_initial_states,
                 generation_args.symmetrize_final_states,
@@ -390,12 +400,40 @@ class Process(object):
 
         return (res_amplitude_loop_count, res_cross_section_loop_count)
 
-    @ classmethod
+    @classmethod
+    def process_final_state_particles(cls, model: Model, final_states_str: str) -> list[list[Particle]]:
+        final_states_str = final_states_str.strip()
+        final_state_str_options = []
+        if final_states_str.startswith("{") and final_states_str.endswith("}"):
+            final_state_str_options = [s.strip()
+                                       for s in final_states_str[1:-1].strip().split(",")]
+        else:
+            final_state_str_options.append(final_states_str.strip())
+
+        if final_state_str_options == [""]:
+            return [[]]
+        final_state_options = []
+        for final_states_str in final_state_str_options:
+            final_states = []
+            for p_str in final_states_str.split(" "):
+                if p_str.strip() == "":
+                    continue
+
+                try:
+                    final_states.append(model.get_particle(p_str.strip()))
+                except KeyError:
+                    raise MalformedProcessError(
+                        f"Unknown particle '{p_str}' in final state. Particle in the model are:\n{sorted([p.name for p in model.particles])}")
+            final_state_options.append(final_states)
+
+        return final_state_options
+
+    @classmethod
     def from_input_args(cls, model: Model, process_args: Namespace) -> Process:
         """ Creates a process object from the user input string representation. """
 
         initial_particles: list[Particle] = []
-        final_particles: list[Particle] = []
+        final_particles_lists: list[list[Particle]] = []
         perturbative_orders: dict[str, int] = {}
         amplitude_loop_count: tuple[int, int] | None = None
         cross_section_loop_count: tuple[int, int] | None = None
@@ -407,15 +445,28 @@ class Process(object):
         model_coupling_orders = model.get_coupling_orders()
 
         accept_empty_initial_state = False
-        accept_empty_final_state = False
+        current_final_states_tokens: list[str] = []
 
         def check_process_defined(check_final=True):
+            if len(current_final_states_tokens) > 0:
+                final_particles_lists.extend(cls.process_final_state_particles(
+                    model, ' '.join(current_final_states_tokens)))
+                current_final_states_tokens.clear()
+
             if len(initial_particles) == 0 and not accept_empty_initial_state:
                 raise MalformedProcessError(
                     "No initial state specified.")
-            if check_final and len(final_particles) == 0 and not accept_empty_final_state:
-                raise MalformedProcessError(
-                    "No final state specified.")
+            if check_final:
+                if len(final_particles_lists) == 0:
+                    raise MalformedProcessError(
+                        "No final state specified.")
+                if len(final_particles_lists) > 1:
+                    if process_args.amplitude:
+                        raise MalformedProcessError(
+                            "Multiple final state combinations are not supported for amplitude generation.")
+                    elif any(len(final_states) == 0 for final_states in final_particles_lists):
+                        raise MalformedProcessError(
+                            "When specifying multiple set of final states for cross-section generation, each set must contain at least one particle.")
 
         parsing_stage: str = "initial_states"
         current_coupling_order: str | None = None
@@ -471,7 +522,7 @@ class Process(object):
                         case ("waiting_for_equal", _):
                             if t not in COMPARISON_OPS:
                                 raise MalformedProcessError(
-                                    f"Expected comparison operator ({','.join(COMPARISON_OPS)}) after coupling order {current_coupling_order}.")
+                                    f"Expected comparison operator ({','.join(COMPARISON_OPS)}) after coupling order {current_coupling_order}, not '{t}'.")
                             current_comparison_operator = t
                             parsing_stage = "waiting_on_order_value"
                         case ("waiting_on_order_value", _):
@@ -490,7 +541,7 @@ class Process(object):
                                 xsec_order = cross_section_orders.get(
                                     current_coupling_order, [0, None])
                                 match current_comparison_operator:
-                                    case "==":
+                                    case "==" | "=":
                                         xsec_order: list[int | None] = [
                                             order_value, order_value]
                                     case "<=":
@@ -505,7 +556,7 @@ class Process(object):
                                 amp_order = amplitude_orders.get(
                                     current_coupling_order, [0, None])
                                 match current_comparison_operator:
-                                    case "==":
+                                    case "==" | "=":
                                         amp_order: list[int | None] = [
                                             order_value, order_value]
                                     case "<=":
@@ -536,15 +587,16 @@ class Process(object):
                                     raise MalformedProcessError(
                                         f"Unknown particle '{t}' in initial state. Particle in the model are:\n{sorted([p.name for p in model.particles])}")
                         case ("final_states", False):
-                            if t == "{}":
-                                accept_empty_final_state = True
-                            else:
-                                try:
-                                    final_particles.append(
-                                        model.get_particle(t))
-                                except KeyError:
-                                    raise MalformedProcessError(
-                                        f"Unknown particle '{t}' in final state. Particle in the model are:\n{sorted([p.name for p in model.particles])}")
+                            current_final_states_tokens.append(t)
+                            # if t == "{}":
+                            #     accept_empty_final_state = True
+                            # else:
+                            #     try:
+                            #         final_particles.append(
+                            #             model.get_particle(t))
+                            #     except KeyError:
+                            #         raise MalformedProcessError(
+                            #             f"Unknown particle '{t}' in final state. Particle in the model are:\n{sorted([p.name for p in model.particles])}")
                         case ("vetos", False) | ("vetos_complement", False):
                             try:
                                 veto_particle = model.get_particle(t)
@@ -583,7 +635,7 @@ class Process(object):
             if not process_args.amplitude:
                 is_vaccuum_topology = True
             else:
-                if len(final_particles) == 0:
+                if len(final_particles_lists[0]) == 0:
                     is_vaccuum_topology = True
 
         if is_vaccuum_topology:
@@ -617,7 +669,7 @@ class Process(object):
                                           for k, v in cross_section_orders.items()}
         return Process(
             initial_particles,
-            final_particles,
+            final_particles_lists,
             amplitude_orders_input,
             cross_section_orders_input,
             None if len(perturbative_orders) == 0 else perturbative_orders,

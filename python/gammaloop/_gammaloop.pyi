@@ -84,7 +84,7 @@ class FeynGenOptions:
     def __new__(_cls,
                 generation_type: str,
                 initial_particles: list[int],
-                final_particles: list[int],
+                final_particles: list[list[int]],
                 loop_count_range: tuple[int, int],
                 symmetrize_initial_states: bool,
                 symmetrize_final_states: bool,

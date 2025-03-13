@@ -124,6 +124,7 @@ pub trait NodeColorFunctions: Sized {
         }
     }
 
+    #[allow(clippy::type_complexity)]
     fn passes_amplitude_filter(
         _amplitude_subgraph: &BitVec,
         _graph: &HedgeGraph<Arc<Particle>, Self>,
@@ -789,6 +790,7 @@ impl FeynGen {
         NodeColor: NodeColorFunctions + Clone,
     {
         #[allow(clippy::too_many_arguments)]
+        #[allow(clippy::type_complexity)]
         fn is_valid_cut<NodeColor: NodeColorFunctions>(
             cut: &(BitVec, OrientedCut, BitVec),
             s_set: &AHashSet<NodeIndex>,
@@ -796,7 +798,7 @@ impl FeynGen {
             model: &Model,
             n_unresolved: usize,
             unresolved_type: &AHashSet<Arc<Particle>>,
-            particle_content: &[Arc<Particle>],
+            particle_content_options: &[Vec<Arc<Particle>>],
             amp_couplings: Option<
                 &std::collections::HashMap<String, (usize, Option<usize>), ahash::RandomState>,
             >,
@@ -804,7 +806,7 @@ impl FeynGen {
             graph: &HedgeGraph<Arc<Particle>, NodeColor>,
         ) -> bool {
             if is_s_channel(cut, s_set, t_set, graph) {
-                let mut cut_content: Vec<_> = cut
+                let cut_content: Vec<_> = cut
                     .1
                     .iter_edges_relative(graph)
                     .map(|(o, d)| {
@@ -847,30 +849,35 @@ impl FeynGen {
                 //         &|b| None
                 //     )
                 // );
-
-                for p in particle_content.iter() {
-                    if let Some(pos) = cut_content.iter().position(|c| c == p) {
-                        cut_content.swap_remove(pos);
-                    } else {
-                        // info!("Particle {} not found in cut content", p.name);
+                if !particle_content_options.iter().any(|particle_content| {
+                    let mut cut_content_clone = cut_content.clone();
+                    for p in particle_content.iter() {
+                        if let Some(pos) = cut_content.iter().position(|c| c == p) {
+                            cut_content_clone.swap_remove(pos);
+                        } else {
+                            // info!("Particle {} not found in cut content", p.name);
+                            return false;
+                        }
+                    }
+                    if cut_content_clone.len() > n_unresolved {
+                        // info!(
+                        //     "Cut content has {} more particles than {} allowed unresolved particles",
+                        //     cut_content.len() - n_unresolved,
+                        //     n_unresolved
+                        // );
                         return false;
                     }
-                }
 
-                if cut_content.len() > n_unresolved {
-                    // info!(
-                    //     "Cut content has {} more particles than {} allowed unresolved particles",
-                    //     cut_content.len() - n_unresolved,
-                    //     n_unresolved
-                    // );
+                    for p in cut_content_clone.iter() {
+                        if !unresolved_type.contains(p) {
+                            // info!("Particle {} not found in unresolved type", p.name);
+                            return false;
+                        }
+                    }
+
+                    true
+                }) {
                     return false;
-                }
-
-                for p in cut_content.iter() {
-                    if !unresolved_type.contains(p) {
-                        // info!("Particle {} not found in unresolved type", p.name);
-                        return false;
-                    }
                 }
 
                 if let Some((min_loop, max_loop)) = amp_loop_count {
@@ -914,12 +921,6 @@ impl FeynGen {
             s_set.is_subset(&nodes) && t_set.intersection(&nodes).count() == 0
         }
 
-        let particle_content = self
-            .options
-            .final_pdgs
-            .iter()
-            .map(|&pdg| model.get_particle_from_pdg(pdg as isize))
-            .collect::<Vec<_>>();
         let amp_couplings = self.options.amplitude_filters.get_coupling_orders();
         let amp_loop_count = self.options.amplitude_filters.get_loop_count_range();
         let n_particles = self.options.initial_pdgs.len();
@@ -958,7 +959,17 @@ impl FeynGen {
             let cuts = he_graph.all_cuts(s, t);
 
             // info!("found {} cuts", cuts.len());
-
+            let particle_content_options = self
+                .options
+                .final_pdgs_lists
+                .iter()
+                .map(|pdg_list| {
+                    pdg_list
+                        .iter()
+                        .map(|pdg| model.get_particle_from_pdg((*pdg) as isize))
+                        .collect::<Vec<_>>()
+                })
+                .collect::<Vec<_>>();
             let pass_cut_filter = cuts.iter().any(|c| {
                 is_valid_cut(
                     c,
@@ -967,7 +978,7 @@ impl FeynGen {
                     model,
                     n_unresolved,
                     unresolved_type,
-                    &particle_content,
+                    &particle_content_options,
                     amp_couplings,
                     amp_loop_count,
                     &he_graph,
@@ -1325,8 +1336,7 @@ impl FeynGen {
                 .map(|(i_n, pdg)| (pdg, i_n + 1 + initial_pdgs.len()))
                 .collect::<Vec<_>>()
         } else {
-            self.options
-                .final_pdgs
+            self.options.final_pdgs_lists[0]
                 .iter()
                 .enumerate()
                 .map(|(i_n, pdg)| (pdg, i_n + 1 + initial_pdgs.len()))
@@ -2045,6 +2055,32 @@ impl FeynGen {
         )
         .unwrap();
 
+        if self.options.final_pdgs_lists.is_empty() {
+            return Err(FeynGenError::GenericError(
+                "No specification of final states is provided".to_string(),
+            ));
+        }
+
+        let representative_final_pdgs = if self.options.generation_type
+            == GenerationType::CrossSection
+        {
+            if self.options.final_pdgs_lists.len() > 1
+                && self.options.final_pdgs_lists.iter().any(|fs| fs.is_empty())
+            {
+                return Err(FeynGenError::GenericError(
+                        "When specifying multiple possible set of final states in cross-section generation, each must contain at least one particle".to_string(),
+                    ));
+            }
+            self.options.final_pdgs_lists[0].clone()
+        } else {
+            if self.options.final_pdgs_lists.len() > 1 {
+                return Err(FeynGenError::GenericError(
+                    "Multiple selection of possible final states is not supported for amplitude generation".to_string(),
+                ));
+            }
+            self.options.final_pdgs_lists[0].clone()
+        };
+
         // Build a custom ThreadPool. If `Some(threads)` is given, use that;
         // otherwise, default to the number of logical CPUs on the system.
         let pool = match num_threads {
@@ -2130,13 +2166,12 @@ impl FeynGen {
                     external_connections.push((Some(i_initial), None));
                 }
                 for i_final in (self.options.initial_pdgs.len() + 1)
-                    ..=(self.options.initial_pdgs.len() + self.options.final_pdgs.len())
+                    ..=(self.options.initial_pdgs.len() + representative_final_pdgs.len())
                 {
                     external_connections.push((None, Some(i_final)));
                 }
                 external_edges.extend(
-                    self.options
-                        .final_pdgs
+                    representative_final_pdgs
                         .iter()
                         .enumerate()
                         .map(|(i_final, pdg)| {
@@ -2250,53 +2285,77 @@ impl FeynGen {
         );
         last_step = step;
 
-        let unoriented_final_state_particles = if self.options.generation_type
+        let unoriented_final_state_particles_lists = if self.options.generation_type
             == GenerationType::CrossSection
-            && !self.options.final_pdgs.is_empty()
+            && !representative_final_pdgs.is_empty()
         {
             self.options
-                .final_pdgs
+                .final_pdgs_lists
                 .iter()
-                .map(|pdg| {
-                    let p = model.get_particle_from_pdg(*pdg as isize);
-                    if p.is_antiparticle() {
-                        p.get_anti_particle(model).pdg_code
-                    } else {
-                        p.pdg_code
-                    }
+                .map(|final_pdgs| {
+                    final_pdgs
+                        .iter()
+                        .map(|pdg| {
+                            let p = model.get_particle_from_pdg(*pdg as isize);
+                            if p.is_antiparticle() {
+                                p.get_anti_particle(model).pdg_code
+                            } else {
+                                p.pdg_code
+                            }
+                        })
+                        .collect::<Vec<_>>()
                 })
                 .collect::<Vec<_>>()
         } else {
             vec![]
         };
 
-        if !unoriented_final_state_particles.is_empty() {
-            let bar = ProgressBar::new(graphs.len() as u64);
-            bar.set_style(progress_bar_style.clone());
-            bar.set_message("Enforcing particle content...");
-            pool.install(|| {
-                graphs = graphs
-                    .par_iter()
-                    .progress_with(bar.clone())
-                    .filter(|(g, _symmetry_factor)| {
-                        FeynGen::contains_particles(g, unoriented_final_state_particles.as_slice())
-                    })
-                    .map(|(g, sf)| (g.clone(), sf.clone()))
-                    .collect::<HashMap<_, _>>()
-            });
-            bar.finish_and_clear();
+        if !unoriented_final_state_particles_lists.is_empty() {
+            let mut unoriented_final_state_particles_always_present: HashSet<isize> =
+                HashSet::from_iter(unoriented_final_state_particles_lists[0].iter().cloned());
+            for final_pdgs in unoriented_final_state_particles_lists.iter().skip(1) {
+                unoriented_final_state_particles_always_present =
+                    unoriented_final_state_particles_always_present
+                        .intersection(&HashSet::from_iter(final_pdgs.iter().cloned()))
+                        .cloned()
+                        .collect();
+            }
+            let unoriented_final_state_particles_always_present_vec =
+                unoriented_final_state_particles_always_present
+                    .iter()
+                    .cloned()
+                    .collect::<Vec<_>>();
+            if !unoriented_final_state_particles_always_present_vec.is_empty() {
+                let bar = ProgressBar::new(graphs.len() as u64);
+                bar.set_style(progress_bar_style.clone());
+                bar.set_message("Enforcing particle content...");
+                pool.install(|| {
+                    graphs = graphs
+                        .par_iter()
+                        .progress_with(bar.clone())
+                        .filter(|(g, _symmetry_factor)| {
+                            FeynGen::contains_particles(
+                                g,
+                                unoriented_final_state_particles_always_present_vec.as_slice(),
+                            )
+                        })
+                        .map(|(g, sf)| (g.clone(), sf.clone()))
+                        .collect::<HashMap<_, _>>()
+                });
+                bar.finish_and_clear();
 
-            step = Instant::now();
-            info!(
-                "{} | Δ={} | {:<95}{}",
-                format!("{:<6}", utils::format_wdhms_from_duration(step - start))
-                    .blue()
-                    .bold(),
-                format!("{:<6}", utils::format_wdhms_from_duration(step - last_step)).blue(),
-                "Number of graphs retained after enforcing supergraph particle content:",
-                format!("{}", graphs.len()).green()
-            );
-            last_step = step;
+                step = Instant::now();
+                info!(
+                    "{} | Δ={} | {:<95}{}",
+                    format!("{:<6}", utils::format_wdhms_from_duration(step - start))
+                        .blue()
+                        .bold(),
+                    format!("{:<6}", utils::format_wdhms_from_duration(step - last_step)).blue(),
+                    "Number of graphs retained after enforcing supergraph particle content:",
+                    format!("{}", graphs.len()).green()
+                );
+                last_step = step;
+            }
         }
 
         let tadpole_filter = filters
@@ -2530,8 +2589,15 @@ impl FeynGen {
         // The fast cutksoky filter is only fast for up to ~ 6 particles to check
         let mut applied_fast_cutksosky_cut_filter = false;
         if self.options.generation_type == GenerationType::CrossSection
-            && !self.options.final_pdgs.is_empty()
-            && self.options.final_pdgs.len() + n_unresolved
+            && !representative_final_pdgs.is_empty()
+            && self
+                .options
+                .final_pdgs_lists
+                .iter()
+                .map(|pdgs| pdgs.len())
+                .max()
+                .unwrap_or(0)
+                + n_unresolved
                 <= self.options.max_multiplicity_for_fast_cut_filter
         {
             applied_fast_cutksosky_cut_filter = true;
@@ -2544,12 +2610,16 @@ impl FeynGen {
                     .par_iter()
                     .progress_with(bar.clone())
                     .filter(|(g, _symmetry_factor)| {
-                        self.contains_cut_fast(
-                            model,
-                            g,
-                            n_unresolved,
-                            &unresolved_type,
-                            unoriented_final_state_particles.as_slice(),
+                        unoriented_final_state_particles_lists.iter().any(
+                            |unoriented_final_state_particles| {
+                                self.contains_cut_fast(
+                                    model,
+                                    g,
+                                    n_unresolved,
+                                    &unresolved_type,
+                                    unoriented_final_state_particles.as_slice(),
+                                )
+                            },
                         )
                     })
                     .map(|(g, sf)| (g.clone(), sf.clone()))
@@ -2573,7 +2643,7 @@ impl FeynGen {
         // This secondary cutkosky cut filter is always necessary as the fast one can have false positives
         // even in the absence of constraints on amplitudes on either side of the cut
         if self.options.generation_type == GenerationType::CrossSection
-            && !self.options.final_pdgs.is_empty()
+            && !representative_final_pdgs.is_empty()
             && (self
                 .options
                 .amplitude_filters
@@ -2676,11 +2746,11 @@ impl FeynGen {
                             }
                         }
                         for final_color in self.options.initial_pdgs.len() + 1
-                            ..=self.options.initial_pdgs.len() + self.options.final_pdgs.len()
+                            ..=self.options.initial_pdgs.len() + representative_final_pdgs.len()
                         {
                             if !model
                                 .get_particle_from_pdg(
-                                    self.options.final_pdgs
+                                    representative_final_pdgs
                                         [final_color - self.options.initial_pdgs.len() - 1]
                                         as isize,
                                 )
@@ -2710,11 +2780,11 @@ impl FeynGen {
                     }
                     (false, true, false) => {
                         for final_color in self.options.initial_pdgs.len() + 1
-                            ..=self.options.initial_pdgs.len() + self.options.final_pdgs.len()
+                            ..=self.options.initial_pdgs.len() + representative_final_pdgs.len()
                         {
                             if !model
                                 .get_particle_from_pdg(
-                                    self.options.final_pdgs
+                                    representative_final_pdgs
                                         [final_color - self.options.initial_pdgs.len() - 1]
                                         as isize,
                                 )
@@ -2742,11 +2812,11 @@ impl FeynGen {
                             }
                         }
                         for final_color in self.options.initial_pdgs.len() + 1
-                            ..=self.options.initial_pdgs.len() + self.options.final_pdgs.len()
+                            ..=self.options.initial_pdgs.len() + representative_final_pdgs.len()
                         {
                             if !model
                                 .get_particle_from_pdg(
-                                    self.options.final_pdgs
+                                    representative_final_pdgs
                                         [final_color - self.options.initial_pdgs.len() - 1]
                                         as isize,
                                 )

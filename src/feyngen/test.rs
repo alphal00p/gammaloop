@@ -24,7 +24,7 @@ fn cut_content() {
     let filters = FeynGen::new(FeynGenOptions {
         generation_type: GenerationType::CrossSection,
         initial_pdgs: vec![-11, 11],
-        final_pdgs: vec![5, -5, 25],
+        final_pdgs_lists: vec![vec![5, -5, 25]],
         loop_count_range: (3, 3),
         symmetrize_initial_states: true,
         symmetrize_final_states: true,
@@ -185,7 +185,7 @@ fn cut_content() {
     let filters = FeynGen::new(FeynGenOptions {
         generation_type: GenerationType::CrossSection,
         initial_pdgs: vec![-11, 11],
-        final_pdgs: vec![5, -5, 25],
+        final_pdgs_lists: vec![vec![5, -5, 25]],
         loop_count_range: (4, 4),
         symmetrize_initial_states: true,
         symmetrize_final_states: true,
