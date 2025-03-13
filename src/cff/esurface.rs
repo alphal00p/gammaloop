@@ -218,7 +218,7 @@ impl Esurface {
             //println!("computed_loop_part {:?}", unit_loop_part);
 
             let shift = compute_shift_part(&signature.external, external_moms);
-            //println!("computed_shift {:?}", shift);
+            //./bprintln!("computed_shift {:?}", shift);
 
             let three_shift = shift.spatial;
             let norm_unit_loop_part_squared = unit_loop_part.norm_squared();

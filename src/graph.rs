@@ -1894,7 +1894,6 @@ impl BareGraph {
 
             debug!("finding spanning tree");
             warn!("Spanning tree selection is disabled");
-            disable! {
             let spanning_tree = self.hedge_representation.cycle_basis().1;
             // println!("hedge graph: \n{}", g.hedge_representation.base_dot());
             // let spanning_tree_half_edge_node = sefl
@@ -1906,18 +1905,15 @@ impl BareGraph {
             // );
             self.hedge_representation
                 .iter_internal_edge_data(
-                    &spanning_tree.covers.complement(&self.hedge_representation),
+                    &spanning_tree
+                        .tree_subgraph
+                        .complement(&self.hedge_representation),
                 )
                 .map(|e| EdgeIndex::from(*e.data))
-                .collect();
-            }
-            TiVec::from(vec![EdgeIndex::from(
-                self.edges
-                    .iter()
-                    .position(|edge| edge.edge_type == EdgeType::Virtual)
-                    .unwrap(),
-            )])
+                .collect()
         };
+
+        debug!("lmb length: {}", lmb_basis.len());
         debug!(
             "Loop momentum basis edge positions selected: {:?}",
             lmb_basis
