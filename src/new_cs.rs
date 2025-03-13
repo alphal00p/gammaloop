@@ -697,7 +697,7 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
         .unwrap();
 
         let h_function = parse!("h").unwrap();
-        let grad_eta = parse!(&format!("∇η")).unwrap();
+        let grad_eta = parse!("∇η").unwrap();
 
         let result = cut_atom
             * inverse_energy_product
