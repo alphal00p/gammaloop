@@ -59,7 +59,6 @@ use momentum::Signature;
 use momentum::ThreeMomentum;
 use momentum_sample::ExternalFourMomenta;
 use momentum_sample::ExternalIndex;
-use new_cs::ExternalEdgeMapping;
 use numerator::NumeratorSettings;
 use typed_index_collections::TiVec;
 

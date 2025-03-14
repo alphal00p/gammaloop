@@ -571,7 +571,6 @@ pub struct CrossSectionGraph<S: NumeratorState = PythonState> {
     pub cuts: TiVec<CutId, CrossSectionCut>,
     pub cut_esurface: TiVec<CutId, Esurface>,
     pub cut_esurface_id_map: TiVec<CutId, EsurfaceID>,
-    pub external_edge_mapping: ExternalEdgeMapping,
     pub derived_data: CrossSectionDerivedData<S>,
 }
 
@@ -599,15 +598,7 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
 
         assert_eq!(source_nodes.len(), target_nodes.len());
 
-        // this is not the most general thing, this should be set from somewhere
         let num_incoming = source_nodes.len();
-        let mut mapping = BTreeMap::new();
-
-        for i in 0..num_incoming {
-            mapping.insert(i.into(), (i + num_incoming).into());
-        }
-
-        let external_edge_mapping = ExternalEdgeMapping { mapping };
 
         Self {
             graph,
@@ -616,7 +607,6 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
             cuts: TiVec::new(),
             cut_esurface: TiVec::new(),
             cut_esurface_id_map: TiVec::new(),
-            external_edge_mapping,
             derived_data: CrossSectionDerivedData::<S>::new_empty(),
         }
     }
@@ -983,17 +973,4 @@ fn test_new_structure_ampltiude() {
 
     let mut process_list = ProcessList::new();
     process_list.generate(generation_options, &model).unwrap();
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-pub struct ExternalEdgeMapping {
-    pub mapping: BTreeMap<ExternalIndex, ExternalIndex>,
-}
-
-impl ExternalEdgeMapping {
-    fn new_empty() -> Self {
-        Self {
-            mapping: BTreeMap::new(),
-        }
-    }
 }
