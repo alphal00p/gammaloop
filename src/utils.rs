@@ -1794,7 +1794,7 @@ pub fn pinch_dampening_function<T: FloatLike>(
 }
 
 pub fn h<T: FloatLike>(
-    t: F<T>,
+    t: &F<T>,
     tstar: Option<F<T>>,
     sigma: Option<F<T>>,
     h_function_settings: &crate::HFunctionSettings,
@@ -1832,7 +1832,7 @@ pub fn h<T: FloatLike>(
             };
             let prefactor = match power {
                 None | Some(0) => normalisation.inv(),
-                Some(p) => (&t / &sig).powi(-(p as i32)) / normalisation,
+                Some(p) => (t / &sig).powi(-(p as i32)) / normalisation,
             };
             prefactor
                 * (F::<T>::from_f64(2_f64)
@@ -1868,7 +1868,7 @@ pub fn h<T: FloatLike>(
 
             let prefactor = match power {
                 None | Some(0) => normalisation.inv(),
-                Some(p) => (&t / &sig).powi(-(p as i32)) / normalisation,
+                Some(p) => (t / &sig).powi(-(p as i32)) / normalisation,
             };
 
             // println!("prefactor: {}", prefactor);
@@ -1877,7 +1877,7 @@ pub fn h<T: FloatLike>(
                     .exp()
         }
         crate::HFunction::ExponentialCT => {
-            let delta_t_sq = (tstar.clone().unwrap() - &t).square();
+            let delta_t_sq = (tstar.clone().unwrap() - t).square();
             let tstar_sq = tstar.unwrap().square();
             // info!("dampener: {}", dampener);
             // info!("delta_t_sq: {}", delta_t_sq);
