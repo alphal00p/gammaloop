@@ -3,13 +3,14 @@ use std::fmt::Display;
 use crate::momentum::{FourMomentum, Polarization, Rotatable, Rotation, ThreeMomentum};
 use crate::signature::ExternalSignature;
 use crate::utils::{FloatLike, Length, F};
-use crate::{Externals, Polarizations, Settings};
+use crate::{DependentMomentaConstructor, Externals, Polarizations, Settings};
 use bincode::{Decode, Encode};
 use derive_more::{From, Into};
 use serde::{Deserialize, Serialize};
 use spenso::complex::Complex;
 use std::ops::Index;
 use symbolica::domains::float::NumericalFloatLike;
+use symbolica::poly::factor;
 use typed_index_collections::TiVec;
 use uuid::Uuid;
 
@@ -171,7 +172,7 @@ impl<T: FloatLike> BareMomentumSample<T> {
         external_moms: &Externals,
         jacobian: F<T>,
         polarizations: &Polarizations,
-        external_signature: &ExternalSignature,
+        dependent_momenta_constructor: DependentMomentaConstructor,
     ) -> Self {
         let polarizations = match polarizations {
             Polarizations::None => PolarizationVectors::new(),
@@ -181,7 +182,7 @@ impl<T: FloatLike> BareMomentumSample<T> {
                 .collect(),
         };
 
-        let external_moms = external_moms.new_get_dependent_externals(external_signature);
+        let external_moms = external_moms.get_dependent_externals(dependent_momenta_constructor);
         Self {
             polarizations,
             loop_moms,
@@ -293,6 +294,16 @@ impl<T: FloatLike> BareMomentumSample<T> {
             jacobian: self.jacobian.clone(),
         }
     }
+
+    #[inline]
+    pub fn rescaled_loop_momenta(&self, factor: &F<T>, subspace: Subspace) -> Self {
+        Self {
+            loop_moms: self.loop_moms.rescale(factor, subspace),
+            external_moms: self.external_moms.clone(),
+            polarizations: self.polarizations.clone(),
+            jacobian: self.jacobian.clone(),
+        }
+    }
 }
 
 impl<T: FloatLike> MomentumSample<T> {
@@ -395,7 +406,7 @@ impl<T: FloatLike> MomentumSample<T> {
         external_moms: &Externals,
         jacobian: F<T>,
         polarizations: &Polarizations,
-        external_signature: &ExternalSignature,
+        dependent_momenta_constructor: DependentMomentaConstructor,
     ) -> Self {
         Self {
             sample: BareMomentumSample::new(
@@ -403,7 +414,7 @@ impl<T: FloatLike> MomentumSample<T> {
                 external_moms,
                 jacobian,
                 polarizations,
-                external_signature,
+                dependent_momenta_constructor,
             ),
             rotated_sample: None,
             uuid: Uuid::new_v4(),
@@ -420,7 +431,7 @@ impl<T: FloatLike> MomentumSample<T> {
 
     /// Cast the sample to a different precision
     #[inline]
-    fn cast_sample<T2: FloatLike>(&self) -> MomentumSample<T2>
+    pub fn cast_sample<T2: FloatLike>(&self) -> MomentumSample<T2>
     where
         F<T2>: From<F<T>>,
     {
@@ -477,6 +488,18 @@ impl<T: FloatLike> MomentumSample<T> {
         Self {
             sample: self.sample.clone(),
             rotated_sample: Some(self.sample.get_rotated_sample(rotation)),
+            uuid: self.uuid,
+        }
+    }
+
+    #[inline]
+    pub fn rescaled_loop_momenta(&self, factor: &F<T>, subspace: Subspace) -> Self {
+        Self {
+            sample: self.sample.rescaled_loop_momenta(factor, subspace),
+            rotated_sample: self
+                .rotated_sample
+                .as_ref()
+                .map(|s| s.rescaled_loop_momenta(factor, subspace)),
             uuid: self.uuid,
         }
     }
