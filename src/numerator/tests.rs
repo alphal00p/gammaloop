@@ -38,7 +38,7 @@ use crate::{
         load_amplitude_output, load_generic_model, sample_generator, test_export_settings,
     },
     utils::{self, ApproxEq, F},
-    Externals, RotationSetting, Settings,
+    DependentMomentaConstructor, Externals, RotationSetting, Settings,
 };
 
 use super::{
@@ -175,9 +175,11 @@ fn trees() {
         LoopMomenta::from(vec![]),
         &external_mom,
         F(1.),
-        &external_mom
-            .generate_polarizations(&graph.bare_graph.external_particles(), &external_signature),
-        &external_signature,
+        &external_mom.generate_polarizations(
+            &graph.bare_graph.external_particles(),
+            DependentMomentaConstructor::Amplitude(&external_signature),
+        ),
+        DependentMomentaConstructor::Amplitude(&external_signature),
     );
     let settings = Settings::default();
 
@@ -367,9 +369,11 @@ fn tree_ta_ta_1() {
         LoopMomenta::from(vec![]),
         &externals,
         F(1.),
-        &externals
-            .generate_polarizations(&graph.bare_graph.external_particles(), &external_signature),
-        &external_signature,
+        &externals.generate_polarizations(
+            &graph.bare_graph.external_particles(),
+            DependentMomentaConstructor::Amplitude(&external_signature),
+        ),
+        DependentMomentaConstructor::Amplitude(&external_signature),
     );
 
     let cff_val = graph.evaluate_cff_expression(&sample, &Settings::default())
@@ -657,9 +661,11 @@ fn tree_hh_ttxaa_1() {
         LoopMomenta::from(vec![]),
         &externals,
         F(1.),
-        &externals
-            .generate_polarizations(&graph.bare_graph.external_particles(), &external_signature),
-        &external_signature,
+        &externals.generate_polarizations(
+            &graph.bare_graph.external_particles(),
+            DependentMomentaConstructor::Amplitude(&external_signature),
+        ),
+        DependentMomentaConstructor::Amplitude(&external_signature),
     );
 
     let cff_val = graph.evaluate_cff_expression(&sample, &Settings::default())

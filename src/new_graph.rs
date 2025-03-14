@@ -49,7 +49,7 @@ use crate::{
         BareEdge, BareGraph, BareVertex, DerivedGraphData, EdgeType, HasVertexInfo, Shifts,
         VertexInfo,
     },
-    model::{self, EdgeSlots, Model, VertexSlots},
+    model::{self, EdgeSlots, Model, Particle, VertexSlots},
     momentum::{FourMomentum, SignOrZero, Signature, ThreeMomentum},
     momentum_sample::{
         BareMomentumSample, ExternalFourMomenta, ExternalIndex, ExternalThreeMomenta, LoopIndex,
@@ -113,6 +113,8 @@ pub trait FeynmanGraph {
         lmb: &LoopMomentumBasis,
     ) -> HedgeVec<F<T>>;
     fn get_esurface_canonization(&self, lmb: &LoopMomentumBasis) -> Option<ShiftRewrite>;
+    fn external_in_or_out_signature(&self) -> ExternalSignature;
+    fn get_external_partcles(&self) -> Vec<Arc<Particle>>;
 }
 
 impl FeynmanGraph for HedgeGraph<Edge, Vertex> {
@@ -424,6 +426,27 @@ impl FeynmanGraph for HedgeGraph<Edge, Vertex> {
                     dependent_momentum_expr: external_shift,
                 }
             })
+    }
+
+    fn external_in_or_out_signature(&self) -> ExternalSignature {
+        self.iter_all_edges()
+            .filter_map(|(pair, _, _)| match pair {
+                HedgePair::Unpaired { flow, .. } => match flow {
+                    Flow::Sink => Some(1i8),
+                    Flow::Source => Some(-1i8),
+                },
+                _ => None,
+            })
+            .collect()
+    }
+
+    fn get_external_partcles(&self) -> Vec<Arc<Particle>> {
+        self.iter_all_edges()
+            .filter_map(|(pair, _, data)| match pair {
+                HedgePair::Unpaired { .. } => Some(data.data.particle.clone()),
+                _ => None,
+            })
+            .collect()
     }
 }
 

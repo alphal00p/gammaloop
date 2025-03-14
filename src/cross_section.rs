@@ -7,7 +7,9 @@ use crate::numerator::{
     PythonState, TypedNumeratorState, UnInit,
 };
 use crate::signature::ExternalSignature;
-use crate::{utils::*, Externals, Polarizations, ProcessSettings, Settings};
+use crate::{
+    utils::*, DependentMomentaConstructor, Externals, Polarizations, ProcessSettings, Settings,
+};
 use bincode;
 use color_eyre::Result;
 use color_eyre::{Help, Report};
@@ -678,7 +680,10 @@ impl<S: NumeratorState> Amplitude<S> {
 
 impl<S: NumeratorState> IsPolarizable for Amplitude<S> {
     fn polarizations(&self, externals: &Externals) -> Polarizations {
-        externals.generate_polarizations(&self.external_particles, &self.external_signature)
+        externals.generate_polarizations(
+            &self.external_particles,
+            DependentMomentaConstructor::Amplitude(&self.external_signature),
+        )
     }
 }
 

@@ -1,8 +1,9 @@
 use std::time::Duration;
 
+use itertools::Itertools;
 use log::info;
 use serde::Serialize;
-use spenso::complex::Complex;
+use spenso::{complex::Complex, ufo::gamma};
 use symbolica::{
     evaluate::ExpressionEvaluator,
     numerical_integration::{ContinuousGrid, Grid, Sample},
@@ -15,18 +16,23 @@ use crate::{
     graph,
     integrands::HasIntegrand,
     momentum::ThreeMomentum,
-    momentum_sample::{ExternalFourMomenta, LoopMomenta},
+    momentum_sample::{ExternalFourMomenta, LoopMomenta, MomentumSample},
     new_cs::{CrossSectionGraph, CutId},
     new_graph::{FeynmanGraph, Graph},
     signature::ExternalSignature,
     utils::{self, FloatLike, F},
-    IntegratedCounterTermRange, Settings,
+    DependentMomentaConstructor, IntegratedCounterTermRange, Polarizations, Settings,
 };
+
+use super::gammaloop_sample::{self, parameterize, DiscreteGraphSample, GammaLoopSample};
+const TOLERANCE: F<f64> = F(2.0);
 
 #[derive(Clone)]
 pub struct CrossSectionIntegrand {
     pub settings: Settings,
+    pub polarizations: Vec<Polarizations>,
     pub graph_terms: Vec<CrossSectionGraphTerm>,
+    pub n_incoming: usize,
 }
 
 #[derive(Clone)]
@@ -34,6 +40,90 @@ pub struct CrossSectionGraphTerm {
     pub bare_cff_evaluators: TiVec<CutId, ExpressionEvaluator<F<f64>>>,
     pub graph: Graph,
     pub cut_esurface: TiVec<CutId, Esurface>,
+}
+
+impl CrossSectionGraphTerm {
+    fn evaluate<T: FloatLike>(
+        &mut self,
+        momentum_sample: &MomentumSample<T>,
+        settings: &Settings,
+    ) -> F<T> {
+        let mut result = momentum_sample.zero();
+
+        let center = LoopMomenta::from_iter(vec![
+            ThreeMomentum::from([
+                momentum_sample.zero(),
+                momentum_sample.zero(),
+                momentum_sample.zero()
+            ]);
+            self.graph.underlying.get_loop_number()
+        ]);
+
+        for (cut_id, esurface) in self.cut_esurface.iter_enumerated() {
+            let (tstar_initial, _tstar_initial_negative) = esurface.get_radius_guess(
+                &momentum_sample.loop_moms(),
+                &momentum_sample.external_moms(),
+                &self.graph.loop_momentum_basis,
+            );
+
+            let root_function = |t: &_| {
+                esurface.compute_self_and_r_derivative(
+                    t,
+                    &momentum_sample.loop_moms(),
+                    &center,
+                    &momentum_sample.external_moms(),
+                    &self.graph.loop_momentum_basis,
+                    &self.graph.underlying.get_real_mass_vector(),
+                )
+            };
+
+            let e_cm = F::from_ff64(settings.kinematics.e_cm);
+            let tolerance = F::from_ff64(TOLERANCE);
+
+            let newton_result = newton_iteration_and_derivative(
+                &tstar_initial,
+                root_function,
+                &tolerance,
+                20,
+                &e_cm,
+            );
+
+            let rescaled_sample =
+                momentum_sample.rescaled_loop_momenta(&newton_result.solution, None);
+
+            let h_function_settings = match &settings.subtraction.integrated_ct_settings.range {
+                IntegratedCounterTermRange::Compact => panic!(),
+                IntegratedCounterTermRange::Infinite {
+                    h_function_settings,
+                } => h_function_settings,
+            };
+
+            let h_function = utils::h(&newton_result.solution, None, None, h_function_settings);
+
+            let mut params = self
+                .graph
+                .underlying
+                .get_energy_cache(
+                    &rescaled_sample.loop_moms(),
+                    &rescaled_sample.external_moms(),
+                    &self.graph.loop_momentum_basis,
+                )
+                .into_iter()
+                .map(|(_, x)| x.into_ff64())
+                .collect_vec();
+
+            params.push(newton_result.solution.into_ff64());
+            params.push(h_function.into_ff64());
+            params.push(newton_result.derivative_at_solution.into_ff64());
+
+            let mut out = [F(0.0)];
+            self.bare_cff_evaluators[cut_id].evaluate(&params, &mut out);
+
+            let res = out[0];
+            result += F::from_ff64(res);
+        }
+        result
+    }
 }
 
 impl HasIntegrand for CrossSectionIntegrand {
@@ -55,110 +145,36 @@ impl HasIntegrand for CrossSectionIntegrand {
         use_f128: bool,
         max_eval: F<f64>,
     ) -> EvaluationResult {
-        assert_eq!(self.graph_terms.len(), 1);
+        let gammaloop_sample = parameterize(
+            sample,
+            &self.polarizations,
+            DependentMomentaConstructor::CrossSection {
+                n_incoming: self.n_incoming,
+            },
+            &self.settings,
+            None,
+        )
+        .unwrap();
 
-        let graph_term = &self.graph_terms[0];
-        assert_eq!(graph_term.bare_cff_evaluators.len(), 1);
-        assert_eq!(graph_term.cut_esurface.len(), 1);
-        let cut_id = CutId::from(0);
-
-        let esurface = &graph_term.cut_esurface[cut_id];
-
-        // println!("esurface: {:?}", esurface);
-
-        let signature = ExternalSignature::from_iter(vec![1i8, 0]);
-        let externals = self
-            .settings
-            .kinematics
-            .externals
-            .get_dependent_externals(&signature);
-
-        // println!("externals: {:?}", &self.settings.kinematics.externals);
-
-        let externals = ExternalFourMomenta::from_iter(externals);
-
-        let raw_sample = match sample {
-            Sample::Continuous(_, xs) => xs,
-            _ => panic!("Expected continuous sample"),
+        let result = match &gammaloop_sample {
+            GammaLoopSample::Default(sample) => {
+                let mut res = F(0.0);
+                for term in &mut self.graph_terms {
+                    res += term.evaluate(sample, &self.settings);
+                }
+                res
+            }
+            GammaLoopSample::DiscreteGraph { graph_id, sample } => match sample {
+                DiscreteGraphSample::Default(sample) => {
+                    self.graph_terms[*graph_id].evaluate(sample, &self.settings)
+                }
+                _ => todo!(),
+            },
+            _ => todo!(),
         };
 
-        let e_cm = self.settings.kinematics.e_cm;
-        let e_cm_squared = e_cm * e_cm;
+        let mut res = result * gammaloop_sample.get_default_sample().jacobian();
 
-        let (loop_momenta, jacobian) =
-            utils::global_parameterize(raw_sample, e_cm_squared, &self.settings, false);
-
-        let real_loop_momenta = ThreeMomentum::from(loop_momenta[0]);
-        let real_real_loop_momnta = LoopMomenta::from_iter([real_loop_momenta]);
-        let loop_momenta = real_real_loop_momnta;
-
-        let factor: F<f64> = F::from_f64((2. * std::f64::consts::PI).powi(-3));
-
-        // println!("loop_momenta: {:?}", loop_momenta);
-        let (tstar_initial, _) = esurface.get_radius_guess(
-            &loop_momenta,
-            &externals,
-            &graph_term.graph.loop_momentum_basis,
-        );
-
-        // println!("tstar_initial: {}", tstar_initial);
-        // println!("lmb: {:?}", graph_term.graph.loop_momentum_basis);
-
-        let center = LoopMomenta::from_iter([ThreeMomentum::from([F(0.0); 3])]);
-
-        // println!("am here");
-        let function = |t: &_| {
-            esurface.compute_self_and_r_derivative(
-                t,
-                &loop_momenta,
-                &center,
-                &externals,
-                &graph_term.graph.loop_momentum_basis,
-                &graph_term.graph.underlying.get_real_mass_vector(),
-            )
-        };
-
-        let newton_result =
-            newton_iteration_and_derivative(&tstar_initial, function, &F(1.0), 20, &e_cm);
-
-        let t_star = newton_result.solution;
-        let grad_eta = newton_result.derivative_at_solution;
-
-        // println!("jacobian: {:?}", jacobian);
-        // println!("externals: {:?}", externals);
-        // println!("t_star: {}", t_star);
-
-        //println!("grad_eta: {}", grad_eta);
-
-        let h_function_settings = match &self.settings.subtraction.integrated_ct_settings.range {
-            IntegratedCounterTermRange::Compact => panic!(),
-            IntegratedCounterTermRange::Infinite {
-                h_function_settings,
-            } => h_function_settings,
-        };
-
-        let h = utils::h(t_star, None, None, h_function_settings);
-
-        let rescaled_loop_momenta = loop_momenta.rescale(&t_star, None);
-
-        let mut params = graph_term
-            .graph
-            .underlying
-            .get_energy_cache(
-                &rescaled_loop_momenta,
-                &externals,
-                &graph_term.graph.loop_momentum_basis,
-            )
-            .get_raw();
-
-        params.push(t_star);
-        params.push(h);
-        params.push(grad_eta);
-
-        let mut out = [F(0.0)];
-        self.graph_terms[0].bare_cff_evaluators[cut_id].evaluate(&params, &mut out);
-
-        let mut res = out[0];
         let is_nan = if res.is_nan() {
             res = F(0.0);
             res.is_nan()
@@ -167,7 +183,7 @@ impl HasIntegrand for CrossSectionIntegrand {
         };
 
         EvaluationResult {
-            integrand_result: Complex::new(res * jacobian * factor, F(0.0)),
+            integrand_result: Complex::new(res, F(0.0)),
             integrator_weight: wgt,
             event_buffer: vec![],
             evaluation_metadata: EvaluationMetaData {

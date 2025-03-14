@@ -28,7 +28,10 @@ use crate::subtraction::overlap::{self, find_center, find_maximal_overlap};
 use crate::tests::load_default_settings;
 use crate::utils::{self, dummy_hedge_graph, f128, F};
 use crate::utils::{ApproxEq, FloatLike, PrecisionUpgradable};
-use crate::{cff, ltd, Externals, GeneralSettings, Integrand, Polarizations, RotationSetting};
+use crate::{
+    cff, ltd, DependentMomentaConstructor, Externals, GeneralSettings, Integrand, Polarizations,
+    RotationSetting,
+};
 use crate::{
     inspect::inspect, GammaloopCompileOptions, ProcessSettings, Settings,
     TropicalSubgraphTableSettings,
@@ -185,8 +188,11 @@ where
         loop_moms,
         &externals,
         jacobian,
-        &externals.generate_polarizations(&bare_graph.external_particles(), &external_signature),
-        &external_signature,
+        &externals.generate_polarizations(
+            &bare_graph.external_particles(),
+            DependentMomentaConstructor::Amplitude(&external_signature),
+        ),
+        DependentMomentaConstructor::Amplitude(&external_signature),
     )
 }
 
@@ -235,8 +241,11 @@ pub fn kinematics_builder(
         loop_moms,
         &externals,
         jacobian,
-        &externals.generate_polarizations(&bare_graph.external_particles(), &external_signature),
-        &external_signature,
+        &externals.generate_polarizations(
+            &bare_graph.external_particles(),
+            DependentMomentaConstructor::Amplitude(&external_signature),
+        ),
+        DependentMomentaConstructor::Amplitude(&external_signature),
     )
 }
 pub fn load_generic_model(name: &str) -> Model {
@@ -787,7 +796,7 @@ fn pytest_scalar_massless_triangle() {
         &externals,
         F(1.),
         &crate::Polarizations::None,
-        &ExternalSignature::from_iter([1i8, 1, -1]),
+        DependentMomentaConstructor::Amplitude(&ExternalSignature::from_iter([1i8, 1, -1])),
     );
     let amp_check = AmplitudeCheck {
         name: "massless_scalar_triangle",
@@ -846,7 +855,7 @@ fn pytest_scalar_fishnet_2x2() {
         },
         F(1.),
         &Polarizations::None,
-        &ExternalSignature::from_iter([1i8, 1, -1, -1]),
+        DependentMomentaConstructor::Amplitude(&ExternalSignature::from_iter([1i8, 1, -1, -1])),
     );
 
     let amp_check = AmplitudeCheck {
@@ -1132,7 +1141,7 @@ fn pytest_scalar_isopod() {
         &externals,
         F(1.),
         &crate::Polarizations::None,
-        &ExternalSignature::from_iter([1i8, 1, -1i8]),
+        DependentMomentaConstructor::Amplitude(&ExternalSignature::from_iter([1i8, 1, -1i8])),
     );
     let amp_check = AmplitudeCheck {
         name: "scalar_isopod",
@@ -2087,7 +2096,9 @@ fn scalar_box_to_triangle() {
         },
         F(1.),
         &crate::Polarizations::None,
-        &triangle_graph.bare_graph.external_in_or_out_signature(),
+        DependentMomentaConstructor::Amplitude(
+            &triangle_graph.bare_graph.external_in_or_out_signature(),
+        ),
     );
 
     let triangle_energy = triangle_graph

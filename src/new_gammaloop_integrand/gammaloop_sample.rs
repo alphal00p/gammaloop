@@ -185,7 +185,7 @@ impl<T: FloatLike> GammaLoopSample<T> {
 
     /// Retrieve the default sample which is contained in all types
     #[inline]
-    fn get_default_sample(&self) -> &MomentumSample<T> {
+    pub fn get_default_sample(&self) -> &MomentumSample<T> {
         match self {
             GammaLoopSample::Default(sample) => sample,
             GammaLoopSample::MultiChanneling { sample, .. } => sample,

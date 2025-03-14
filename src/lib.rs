@@ -599,8 +599,11 @@ impl Externals {
 
         let external_signatture = match dependent_momenta_constructor {
             DependentMomentaConstructor::Amplitude(external_signature) => external_signature,
-            DependentMomentaConstructor::CrossSection => {
-                unimplemented!("generate polizations for cross section not yet implemented")
+            DependentMomentaConstructor::CrossSection { n_incoming } => {
+                &ExternalSignature::from_iter(
+                    std::iter::repeat_n(SignOrZero::Plus, n_incoming)
+                        .chain(std::iter::repeat_n(SignOrZero::Minus, n_incoming)),
+                )
             }
         };
 
@@ -755,8 +758,8 @@ impl Externals {
                         dependent_momenta[pos_dep] = dependent_sign * sum; //.lower();
                         dependent_momenta.into()
                     }
-                    DependentMomentaConstructor::CrossSection => {
-                        let num_incoming = momenta.len();
+                    DependentMomentaConstructor::CrossSection { n_incoming } => {
+                        assert_eq!(n_incoming, momenta.len());
 
                         let mut dependent_momenta = momenta
                             .iter()
@@ -768,7 +771,7 @@ impl Externals {
                             })
                             .collect::<TiVec<_, _>>();
 
-                        for i in 0..num_incoming {
+                        for i in 0..n_incoming {
                             dependent_momenta
                                 .push(dependent_momenta[ExternalIndex::from(i)].clone());
                         }
@@ -1050,5 +1053,5 @@ pub struct TropicalSubgraphTableSettings {
 
 pub enum DependentMomentaConstructor<'a> {
     Amplitude(&'a ExternalSignature),
-    CrossSection, // at the moment I assume the first n/2 externals are incoming and the second n/2 are outgoing, the mapping is (0, n/2), (1, n/2+1), (2, n/2+2), ...
+    CrossSection { n_incoming: usize }, // at the moment I assume the first n/2 externals are incoming and the second n/2 are outgoing, the mapping is (0, n/2), (1, n/2+1), (2, n/2+2), ...
 }

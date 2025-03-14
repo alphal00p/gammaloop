@@ -1,4 +1,5 @@
 use std::{
+    collections::BTreeMap,
     fmt::{Display, Formatter},
     marker::PhantomData,
     path::PathBuf,
@@ -23,6 +24,8 @@ use serde::{Deserialize, Serialize};
 use spenso::upgrading_arithmetic::GreaterThan;
 use symbolica::{
     atom::{Atom, AtomCore, Symbol},
+    coefficient::ConvertToRing,
+    domains::{float::NumericalFloatLike, rational::Rational},
     evaluate::{ExpressionEvaluator, FunctionMap, OptimizationSettings},
     parse, symbol,
 };
@@ -36,7 +39,8 @@ use crate::{
         esurface::{self, Esurface, EsurfaceID},
         generation::{generate_cff_with_cuts, ShiftRewrite},
     },
-    cross_section, disable,
+    cross_section::{self, IsPolarizable},
+    disable,
     feyngen::{
         diagram_generator::FeynGen, FeynGenFilter, FeynGenFilters, FeynGenOptions, GenerationType,
         NumeratorAwareGraphGroupingOption, SelfEnergyFilterOptions, SnailFilterOptions,
@@ -45,6 +49,8 @@ use crate::{
     graph::{self, BareGraph, BareVertex, EdgeType},
     integrands::Integrand,
     model::{self, Model, Particle},
+    momentum::{Rotatable, Rotation, RotationMethod},
+    momentum_sample::ExternalIndex,
     new_gammaloop_integrand::{
         cross_section_integrand::{self, CrossSectionGraphTerm, CrossSectionIntegrand},
         NewIntegrand,
@@ -52,7 +58,7 @@ use crate::{
     new_graph::{Edge, FeynmanGraph, Graph, Vertex},
     numerator::{GlobalPrefactor, NumeratorState, PythonState},
     utils::{F, GS},
-    ProcessSettings, Settings,
+    DependentMomentaConstructor, Externals, Polarizations, ProcessSettings, Settings,
 };
 
 use derive_more::{From, Into};
@@ -454,19 +460,39 @@ impl<S: NumeratorState> Amplitude<S> {
 #[derive(Clone)]
 pub struct CrossSection<S: NumeratorState> {
     supergraphs: Vec<CrossSectionGraph<S>>,
+    external_particles: Vec<Arc<Particle>>,
+    n_incmoming: usize,
 }
 
 impl<S: NumeratorState> CrossSection<S> {
     pub fn new() -> Self {
         Self {
             supergraphs: vec![],
+            external_particles: vec![],
+            n_incmoming: 0,
         }
     }
 
     pub fn add_supergraph(&mut self, supergraph: Graph) -> Result<()> {
+        if self.external_particles.is_empty() {
+            let external_particles = supergraph.underlying.get_external_partcles();
+            if external_particles.len() % 2 != 0 {
+                return Err(eyre!(
+                    "expected even number of externals for forward scattering graph"
+                ));
+            }
+            self.external_particles = external_particles;
+            self.n_incmoming = self.external_particles.len() / 2;
+        } else if self.external_particles != supergraph.underlying.get_external_partcles() {
+            return Err(eyre!(
+                "attempt to add supergraph with differnt external particles"
+            ));
+        }
+
         let cross_section_graph = CrossSectionGraph::new(supergraph);
         self.supergraphs.push(cross_section_graph);
-        /// TODO: validate that the graph is compatible
+
+        // TODO: validate that the graph is compatible
         Ok(())
     }
 
@@ -487,12 +513,44 @@ impl<S: NumeratorState> CrossSection<S> {
             .iter()
             .map(|sg| sg.generate_term_for_graph(&settings))
             .collect_vec();
+
+        let rotations: Vec<Rotation> = Some(Rotation::new(RotationMethod::Identity))
+            .into_iter()
+            .chain(
+                settings
+                    .stability
+                    .rotation_axis
+                    .iter()
+                    .map(|axis| Rotation::new(axis.rotation_method())),
+            )
+            .collect(); // want this to include the identity rotation (i.e the first sample)
+
+        let orig_polarizations = self.polarizations(&settings.kinematics.externals);
+
+        let polarizations = rotations
+            .iter()
+            .map(|r| orig_polarizations.rotate(r))
+            .collect();
+
         let cross_section_integrand = CrossSectionIntegrand {
+            n_incoming: self.n_incmoming,
+            polarizations,
             settings,
             graph_terms: terms,
         };
 
         Integrand::NewIntegrand(NewIntegrand::CrossSection(cross_section_integrand))
+    }
+}
+
+impl<S: NumeratorState> IsPolarizable for CrossSection<S> {
+    fn polarizations(&self, externals: &Externals) -> Polarizations {
+        externals.generate_polarizations(
+            &self.external_particles,
+            DependentMomentaConstructor::CrossSection {
+                n_incoming: self.n_incmoming,
+            },
+        )
     }
 }
 
@@ -513,6 +571,7 @@ pub struct CrossSectionGraph<S: NumeratorState = PythonState> {
     pub cuts: TiVec<CutId, CrossSectionCut>,
     pub cut_esurface: TiVec<CutId, Esurface>,
     pub cut_esurface_id_map: TiVec<CutId, EsurfaceID>,
+    pub external_edge_mapping: ExternalEdgeMapping,
     pub derived_data: CrossSectionDerivedData<S>,
 }
 
@@ -538,6 +597,18 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
             }
         }
 
+        assert_eq!(source_nodes.len(), target_nodes.len());
+
+        // this is not the most general thing, this should be set from somewhere
+        let num_incoming = source_nodes.len();
+        let mut mapping = BTreeMap::new();
+
+        for i in 0..num_incoming {
+            mapping.insert(i.into(), (i + num_incoming).into());
+        }
+
+        let external_edge_mapping = ExternalEdgeMapping { mapping };
+
         Self {
             graph,
             source_nodes,
@@ -545,6 +616,7 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
             cuts: TiVec::new(),
             cut_esurface: TiVec::new(),
             cut_esurface_id_map: TiVec::new(),
+            external_edge_mapping,
             derived_data: CrossSectionDerivedData::<S>::new_empty(),
         }
     }
@@ -671,12 +743,19 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
         let h_function = parse!("h").unwrap();
         let grad_eta = parse!("∇η").unwrap();
 
+        let factors_of_pi = parse!(&format!(
+            "(2*π)^{}",
+            3 * self.graph.underlying.get_loop_number()
+        ))
+        .unwrap();
+
         let result = cut_atom
             * inverse_energy_product
             * t_star_factor
             * h_function
             * &self.graph.multiplicity
-            / grad_eta;
+            / grad_eta
+            / factors_of_pi;
         debug!("result: {}", result);
         result
     }
@@ -705,7 +784,10 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
     }
 
     fn get_function_map(&self) -> FunctionMap {
-        FunctionMap::new()
+        let mut fn_map = FunctionMap::new();
+        let pi_rational = Rational::from(std::f64::consts::PI);
+        fn_map.add_constant(parse!("π").unwrap(), pi_rational);
+        fn_map
     }
 
     fn generate_term_for_graph(&self, settings: &Settings) -> CrossSectionGraphTerm {
@@ -901,4 +983,17 @@ fn test_new_structure_ampltiude() {
 
     let mut process_list = ProcessList::new();
     process_list.generate(generation_options, &model).unwrap();
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct ExternalEdgeMapping {
+    pub mapping: BTreeMap<ExternalIndex, ExternalIndex>,
+}
+
+impl ExternalEdgeMapping {
+    fn new_empty() -> Self {
+        Self {
+            mapping: BTreeMap::new(),
+        }
+    }
 }
