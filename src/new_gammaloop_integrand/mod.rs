@@ -7,6 +7,7 @@ use crate::utils::F;
 use symbolica::numerical_integration::{Grid, Sample};
 pub mod amplitude_integrand;
 pub mod cross_section_integrand;
+pub mod gammaloop_sample;
 use crate::observables::EventManager;
 use crate::{IntegratorSettings, Settings};
 
@@ -38,4 +39,10 @@ impl NewIntegrand {
             NewIntegrand::CrossSection(integrand) => &mut integrand.settings,
         }
     }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum IntegrandType {
+    Amplitude,
+    CrossSection,
 }
