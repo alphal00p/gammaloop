@@ -42,6 +42,7 @@ use color_eyre::{Help, Report, Result};
 #[allow(unused)]
 use colored::Colorize;
 use cross_section::Amplitude;
+use cross_section::CrossSection;
 use eyre::WrapErr;
 use integrands::*;
 use log::debug;
@@ -57,7 +58,10 @@ use momentum::SignOrZero;
 use momentum::Signature;
 use momentum::ThreeMomentum;
 use momentum_sample::ExternalFourMomenta;
+use momentum_sample::ExternalIndex;
+use new_cs::ExternalEdgeMapping;
 use numerator::NumeratorSettings;
+use typed_index_collections::TiVec;
 
 use observables::ObservableSettings;
 
@@ -589,17 +593,24 @@ impl Externals {
     pub fn generate_polarizations(
         &self,
         external_particles: &[Arc<Particle>],
-        external_signature: &ExternalSignature,
+        dependent_momenta_constructor: DependentMomentaConstructor,
     ) -> Polarizations {
         let mut polarizations = vec![];
 
-        let dep_ext = self.get_dependent_externals(external_signature);
+        let external_signatture = match dependent_momenta_constructor {
+            DependentMomentaConstructor::Amplitude(external_signature) => external_signature,
+            DependentMomentaConstructor::CrossSection => {
+                unimplemented!("generate polizations for cross section not yet implemented")
+            }
+        };
+
+        let dep_ext = self.get_dependent_externals(dependent_momenta_constructor);
         let helicities = self.get_helicities();
         for (((ext_mom, hel), p), s) in dep_ext
             .iter()
             .zip(helicities.iter())
             .zip(external_particles.iter())
-            .zip(external_signature.iter())
+            .zip(external_signatture.iter())
         {
             match s {
                 SignOrZero::Minus => {
@@ -662,7 +673,7 @@ impl Externals {
         }
     }
 
-    pub fn get_dependent_externals<T: FloatLike>(
+    pub fn old_get_dependent_externals<T: FloatLike>(
         &self,
         external_signature: &ExternalSignature,
     ) -> Vec<FourMomentum<F<T>>>
@@ -703,43 +714,68 @@ impl Externals {
         }
     }
 
-    pub fn new_get_dependent_externals<T: FloatLike>(
+    pub fn get_dependent_externals<T: FloatLike>(
         &self,
-        external_signature: &ExternalSignature,
+        dependent_momenta_constructor: DependentMomentaConstructor,
     ) -> ExternalFourMomenta<F<T>>
 // where
     //     T::Higher: PrecisionUpgradable<Lower = T> + FloatLike,
     {
         match self {
             Externals::Constant { momenta, .. } => {
-                let mut sum: FourMomentum<F<T>> = FourMomentum::from([
-                    F::<T>::from_f64(0.0),
-                    F::from_f64(0.0),
-                    F::from_f64(0.0),
-                    F::from_f64(0.0),
-                ]);
-                // .higher();
-                let mut pos_dep = 0;
+                match dependent_momenta_constructor {
+                    DependentMomentaConstructor::Amplitude(external_signature) => {
+                        let mut sum: FourMomentum<F<T>> = FourMomentum::from([
+                            F::<T>::from_f64(0.0),
+                            F::from_f64(0.0),
+                            F::from_f64(0.0),
+                            F::from_f64(0.0),
+                        ]);
+                        // .higher();
+                        let mut pos_dep = 0;
 
-                let mut dependent_sign = SignOrZero::Plus;
+                        let mut dependent_sign = SignOrZero::Plus;
 
-                let mut dependent_momenta = vec![];
+                        let mut dependent_momenta = vec![];
 
-                for ((i, m), s) in momenta.iter().enumerate().zip(external_signature.iter()) {
-                    if let Ok(a) = FourMomentum::try_from(*m) {
-                        // println!("external{i}: {}", a);
-                        let a = FourMomentum::<F<T>>::from_ff64(&a);
-                        sum -= *s * a.clone(); //.higher();
-                        dependent_momenta.push(a);
-                    } else {
-                        pos_dep = i;
-                        dependent_sign = *s;
-                        dependent_momenta.push(sum.clone()); //.lower());
+                        for ((i, m), s) in momenta.iter().enumerate().zip(external_signature.iter())
+                        {
+                            if let Ok(a) = FourMomentum::try_from(*m) {
+                                // println!("external{i}: {}", a);
+                                let a = FourMomentum::<F<T>>::from_ff64(&a);
+                                sum -= *s * a.clone(); //.higher();
+                                dependent_momenta.push(a);
+                            } else {
+                                pos_dep = i;
+                                dependent_sign = *s;
+                                dependent_momenta.push(sum.clone()); //.lower());
+                            }
+                        }
+
+                        dependent_momenta[pos_dep] = dependent_sign * sum; //.lower();
+                        dependent_momenta.into()
+                    }
+                    DependentMomentaConstructor::CrossSection => {
+                        let num_incoming = momenta.len();
+
+                        let mut dependent_momenta = momenta
+                            .iter()
+                            .map(|m| {
+                                let momentum = FourMomentum::try_from(*m)
+                                    .expect("Dependent momenta in cross section not supported");
+
+                                FourMomentum::<F<T>>::from_ff64(&momentum)
+                            })
+                            .collect::<TiVec<_, _>>();
+
+                        for i in 0..num_incoming {
+                            dependent_momenta
+                                .push(dependent_momenta[ExternalIndex::from(i)].clone());
+                        }
+
+                        dependent_momenta
                     }
                 }
-
-                dependent_momenta[pos_dep] = dependent_sign * sum; //.lower();
-                dependent_momenta.into()
             }
         }
     }
@@ -1010,4 +1046,9 @@ impl GammaloopCompileOptions {
 pub struct TropicalSubgraphTableSettings {
     pub panic_on_fail: bool,
     pub target_omega: f64,
+}
+
+pub enum DependentMomentaConstructor<'a> {
+    Amplitude(&'a ExternalSignature),
+    CrossSection, // at the moment I assume the first n/2 externals are incoming and the second n/2 are outgoing, the mapping is (0, n/2), (1, n/2+1), (2, n/2+2), ...
 }
