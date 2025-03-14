@@ -554,6 +554,10 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
         model: &Model,
         process_definition: &ProcessDefinition,
     ) -> Result<()> {
+        // not sure why I need to call this again, but it seems like I do?
+        self.graph
+            .loop_momentum_basis
+            .set_edge_signatures(&self.graph.underlying)?;
         self.generate_cuts(model, process_definition)?;
         self.generate_esurface_cuts();
         self.generate_cff();
@@ -567,9 +571,6 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
                 self.derived_data.cff_expression.to_atom_for_cut(cut_id)
             );
         }
-        self.graph
-            .loop_momentum_basis
-            .set_edge_signatures(&self.graph.underlying);
         Ok(())
     }
 
@@ -590,43 +591,14 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
     fn generate_cff(&mut self) {
         // hardcorde 1 to n for now
         debug!("generating cff");
-        warn!("the esurface canonization is hardcoded to the case of 1 to n processes for cross sections");
 
-        let dependent_momentum = self
+        let shift_rewrite = self
             .graph
             .underlying
-            .iter_all_edges()
-            .find_map(|(_, edge_id, edge_data)| {
-                if &edge_data.data.name == "p2" {
-                    Some(edge_id)
-                } else {
-                    None
-                }
-            })
-            .unwrap();
-
-        let not_dependent_momenta = self
-            .graph
-            .underlying
-            .iter_all_edges()
-            .find_map(|(_, edge_id, edge_data)| {
-                if &edge_data.data.name == "p1" {
-                    Some(edge_id)
-                } else {
-                    None
-                }
-            })
-            .unwrap();
-
-        let dep_mom_expr = vec![(not_dependent_momenta, 1)];
-
-        let shift_rewrite = ShiftRewrite {
-            dependent_momentum,
-            dependent_momentum_expr: dep_mom_expr,
-        };
+            .get_esurface_canonization(&self.graph.loop_momentum_basis);
 
         let cff_cut_expression =
-            generate_cff_with_cuts(&self.graph.underlying, &Some(shift_rewrite), &self.cuts);
+            generate_cff_with_cuts(&self.graph.underlying, &shift_rewrite, &self.cuts);
 
         self.derived_data.cff_expression = cff_cut_expression;
     }

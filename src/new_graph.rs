@@ -42,6 +42,7 @@ use symbolica::{
 use typed_index_collections::TiVec;
 
 use crate::{
+    cff::generation::ShiftRewrite,
     disable,
     gammaloop_integrand::BareSample,
     graph::{
@@ -111,6 +112,7 @@ pub trait FeynmanGraph {
         external_moms: &ExternalFourMomenta<F<T>>,
         lmb: &LoopMomentumBasis,
     ) -> HedgeVec<F<T>>;
+    fn get_esurface_canonization(&self, lmb: &LoopMomentumBasis) -> Option<ShiftRewrite>;
 }
 
 impl FeynmanGraph for HedgeGraph<Edge, Vertex> {
@@ -391,6 +393,37 @@ impl FeynmanGraph for HedgeGraph<Edge, Vertex> {
                 }),
         )
         .unwrap()
+    }
+
+    fn get_esurface_canonization(&self, lmb: &LoopMomentumBasis) -> Option<ShiftRewrite> {
+        let external_edges: TiVec<ExternalIndex, _> = self
+            .iter_all_edges()
+            .filter(|(pair, _, _)| matches!(pair, HedgePair::Unpaired { .. }))
+            .collect();
+
+        // find the external leg which does not appear in it's own signature
+        external_edges
+            .iter_enumerated()
+            .find(|(external_index, (_, edge_id, _))| {
+                lmb.edge_signatures[*edge_id].external[*external_index] == SignOrZero::Zero
+            })
+            .map(|(_, (_, dep_mom_edge_id, _))| {
+                let dep_mom_signatrue = &lmb.edge_signatures[*dep_mom_edge_id].external;
+
+                let external_shift = external_edges
+                    .iter()
+                    .zip(dep_mom_signatrue)
+                    .filter(|(_, dep_mom_sign)| dep_mom_sign.is_sign())
+                    .map(|((_, external_edge, _), dep_mom_sign)| {
+                        (*external_edge, dep_mom_sign as i64)
+                    })
+                    .collect_vec();
+
+                ShiftRewrite {
+                    dependent_momentum: *dep_mom_edge_id,
+                    dependent_momentum_expr: external_shift,
+                }
+            })
     }
 }
 
