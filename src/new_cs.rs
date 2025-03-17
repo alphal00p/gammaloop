@@ -747,6 +747,13 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
 
     fn build_atom_for_cut(&self, cut_id: CutId) -> Atom {
         let cut_atom = self.derived_data.cff_expression.to_atom_for_cut(cut_id);
+
+        let cut_atom_energy_sub = self
+            .derived_data
+            .cff_expression
+            .surfaces
+            .substitute_energies(&cut_atom);
+
         let inverse_energy_product = self.graph.underlying.get_cff_inverse_energy_product();
 
         let t_star_factor = parse!(&format!(
@@ -764,13 +771,14 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
         ))
         .unwrap();
 
-        let result = cut_atom
+        let result = cut_atom_energy_sub
             * inverse_energy_product
             * t_star_factor
             * h_function
             * &self.graph.multiplicity
             / grad_eta
             / factors_of_pi;
+
         debug!("result: {}", result);
         result
     }

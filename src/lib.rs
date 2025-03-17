@@ -801,6 +801,8 @@ impl Externals {
                                 incoming_momentum;
                         }
 
+                        debug!("dependent_momenta: {:?}", dependent_momenta);
+
                         dependent_momenta
                     }
                 }
