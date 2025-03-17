@@ -54,6 +54,7 @@ class TadpolesFilterOptions:
                 veto_tadpoles_attached_to_massive_lines: Optional[bool] = True,
                 veto_tadpoles_attached_to_massless_lines: Optional[bool] = True,
                 veto_only_scaleless_tadpoles: Optional[bool] = False,
+                 veto_cross_section_sewed_tadpoles:Optional[bool]=False,
                 ) -> TadpolesFilterOptions:
         """ Creates options for vetoing tadpole diagrams. """
 
@@ -86,6 +87,8 @@ class FeynGenOptions:
                 initial_particles: list[int],
                 final_particles: list[list[int]],
                 loop_count_range: tuple[int, int],
+                cut_blob_range: tuple[int, int],
+                cut_spectator_range: tuple[int, int],
                 symmetrize_initial_states: bool,
                 symmetrize_final_states: bool,
                 symmetrize_left_right_states: bool,

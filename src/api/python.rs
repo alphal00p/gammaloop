@@ -321,6 +321,7 @@ impl PyTadpolesFilterOptions {
         veto_tadpoles_attached_to_massive_lines: Option<bool>,
         veto_tadpoles_attached_to_massless_lines: Option<bool>,
         veto_only_scaleless_tadpoles: Option<bool>,
+        veto_cross_section_sewed_tadpoles: Option<bool>,
     ) -> PyResult<PyTadpolesFilterOptions> {
         Ok(PyTadpolesFilterOptions {
             filter_options: TadpolesFilterOptions {
@@ -329,6 +330,8 @@ impl PyTadpolesFilterOptions {
                 veto_tadpoles_attached_to_massless_lines: veto_tadpoles_attached_to_massless_lines
                     .unwrap_or(true),
                 veto_only_scaleless_tadpoles: veto_only_scaleless_tadpoles.unwrap_or(false),
+                veto_cross_section_sewed_tadpoles: veto_cross_section_sewed_tadpoles
+                    .unwrap_or(false),
             },
         })
     }
@@ -452,6 +455,8 @@ impl PyFeynGenOptions {
         initial_particles: Vec<i64>,
         final_particles_lists: Vec<Vec<i64>>,
         loop_count_range: (usize, usize),
+        n_cut_blobs: (usize, usize),
+        n_cut_spectators: (usize, usize),
         symmetrize_initial_states: bool,
         symmetrize_final_states: bool,
         symmetrize_left_right_states: bool,
@@ -460,6 +465,25 @@ impl PyFeynGenOptions {
         amplitude_filters: Option<PyRef<PyFeynGenFilters>>,
         cross_section_filters: Option<PyRef<PyFeynGenFilters>>,
     ) -> PyResult<PyFeynGenOptions> {
+        let amplitude_filters = FeynGenFilters(
+            amplitude_filters
+                .map(|f| f.filters.clone())
+                .unwrap_or_default(),
+        );
+
+        let mut cross_section_filters = FeynGenFilters(
+            cross_section_filters
+                .map(|f| f.filters.clone())
+                .unwrap_or_default(),
+        );
+
+        cross_section_filters
+            .0
+            .push(FeynGenFilter::BlobRange(n_cut_blobs.0..=n_cut_blobs.1));
+        cross_section_filters.0.push(FeynGenFilter::SpectatorRange(
+            n_cut_spectators.0..=n_cut_spectators.1,
+        ));
+
         let feyngen_options = FeynGenOptions {
             generation_type: GenerationType::from_str(&generation_type)
                 .map_err(feyngen_to_python_error)?,
@@ -471,16 +495,8 @@ impl PyFeynGenOptions {
             symmetrize_left_right_states,
             allow_symmetrization_of_external_fermions_in_amplitudes,
             max_multiplicity_for_fast_cut_filter,
-            amplitude_filters: FeynGenFilters(
-                amplitude_filters
-                    .map(|f| f.filters.clone())
-                    .unwrap_or_default(),
-            ),
-            cross_section_filters: FeynGenFilters(
-                cross_section_filters
-                    .map(|f| f.filters.clone())
-                    .unwrap_or_default(),
-            ),
+            amplitude_filters,
+            cross_section_filters,
         };
         if feyngen_options.generation_type == GenerationType::Amplitude {
             if feyngen_options.final_pdgs_lists.len() > 1 {

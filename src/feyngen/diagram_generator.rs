@@ -12,10 +12,12 @@ use spenso::iterators::IteratableTensor;
 use spenso::network::TensorNetwork;
 use spenso::parametric::{MixedTensor, ParamOrConcrete, ParamTensor};
 use spenso::structure::representation::ExtendibleReps;
+use spenso::structure::slot::DualSlotTo;
 use spenso::structure::{HasStructure, SmartShadowStructure};
 use spenso::symbolica_utils::{SerializableAtom, SerializableSymbol};
 use std::collections::hash_map::Entry;
 use std::collections::HashSet;
+use std::ops::RangeInclusive;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use symbolica::atom::AtomView;
@@ -57,7 +59,7 @@ use crate::{
 };
 use itertools::Itertools;
 use linnet::half_edge::involution::Orientation;
-use linnet::half_edge::subgraph::OrientedCut;
+use linnet::half_edge::subgraph::{OrientedCut, SubGraph};
 use linnet::half_edge::HedgeGraph;
 use linnet::half_edge::NodeIndex;
 use symbolica::{atom::Atom, graph::Graph as SymbolicaGraph};
@@ -101,7 +103,7 @@ struct CanonizedGraphInfo {
     symmetry_factor: String,
 }
 
-pub trait NodeColorFunctions: Sized {
+pub trait NodeColorFunctions: Sized + std::fmt::Display {
     fn get_external_tag(&self) -> i32;
     fn set_external_tag(&mut self, external_tag: i32);
     fn is_external(&self) -> bool {
@@ -162,6 +164,15 @@ impl NodeColorFunctions for NodeColorWithVertexRule {
             &std::collections::HashMap<String, (usize, Option<usize>), ahash::RandomState>,
         >,
     ) -> bool {
+        // info!(
+        //     "//looking at \n{}\n",
+        //     graph.dot_impl(
+        //         amplitude_subgraph,
+        //         "",
+        //         &|a| Some(format!("label=\"{}\"", a.name)),
+        //         &|b| { None }
+        //     )
+        // );
         if let Some(amp_couplings) = amp_couplings {
             let mut coupling_orders = AHashMap::default();
             for (_, s) in graph.iter_node_data(amplitude_subgraph) {
@@ -179,7 +190,7 @@ impl NodeColorFunctions for NodeColorWithVertexRule {
             let ans = amp_couplings.iter().all(|(k, (lower_bound, upper_bound))| {
                 coupling_orders
                     .get(&SmartString::from(k))
-                    .map_or(true, |o| {
+                    .map_or(*lower_bound == 0, |o| {
                         lower_bound <= o && upper_bound.map(|a| *o <= a).unwrap_or(true)
                     })
             });
@@ -779,10 +790,11 @@ impl FeynGen {
         }
     }
 
-    pub fn contains_cut<NodeColor>(
+    pub fn half_edge_filters<NodeColor>(
         &self,
         model: &Model,
         graph: &SymbolicaGraph<NodeColor, EdgeColor>,
+        external_connections: &[(Option<usize>, Option<usize>)],
         n_unresolved: usize,
         unresolved_type: &AHashSet<Arc<Particle>>,
     ) -> bool
@@ -793,8 +805,8 @@ impl FeynGen {
         #[allow(clippy::type_complexity)]
         fn is_valid_cut<NodeColor: NodeColorFunctions>(
             cut: &(BitVec, OrientedCut, BitVec),
-            s_set: &AHashSet<NodeIndex>,
-            t_set: &AHashSet<NodeIndex>,
+            blob_range: &RangeInclusive<usize>,
+            spectator_range: &RangeInclusive<usize>,
             model: &Model,
             n_unresolved: usize,
             unresolved_type: &AHashSet<Arc<Particle>>,
@@ -805,7 +817,9 @@ impl FeynGen {
             amp_loop_count: Option<(usize, usize)>,
             graph: &HedgeGraph<Arc<Particle>, NodeColor>,
         ) -> bool {
-            if is_s_channel(cut, s_set, t_set, graph) {
+            if validate_connectivity(&cut.0, blob_range, spectator_range, graph)
+                && validate_connectivity(&cut.2, blob_range, spectator_range, graph)
+            {
                 let cut_content: Vec<_> = cut
                     .1
                     .iter_edges_relative(graph)
@@ -826,7 +840,7 @@ impl FeynGen {
                 //         &|a| Some(format!("label=\"{}\"", a.name)),
                 //         &|b| None
                 //     )
-                // );
+                // // );
 
                 // info!(
                 //     "//cut\n{}\n",
@@ -844,7 +858,7 @@ impl FeynGen {
                 //     "//right\n{}\n",
                 //     graph.dot_impl(
                 //         &cut.2,
-                //         "".into(),
+                //         "",
                 //         &|a| Some(format!("label=\"{}\"", a.name)),
                 //         &|b| None
                 //     )
@@ -852,7 +866,7 @@ impl FeynGen {
                 if !particle_content_options.iter().any(|particle_content| {
                     let mut cut_content_clone = cut_content.clone();
                     for p in particle_content.iter() {
-                        if let Some(pos) = cut_content.iter().position(|c| c == p) {
+                        if let Some(pos) = cut_content_clone.iter().position(|c| c == p) {
                             cut_content_clone.swap_remove(pos);
                         } else {
                             // info!("Particle {} not found in cut content", p.name);
@@ -877,6 +891,7 @@ impl FeynGen {
 
                     true
                 }) {
+                    // info!("Cut content not right");
                     return false;
                 }
 
@@ -897,6 +912,15 @@ impl FeynGen {
 
                 let right = NodeColor::passes_amplitude_filter(&cut.2, graph, amp_couplings);
 
+                if !left {
+                    // info!("Left node color not valid");
+                    return false;
+                }
+                if !right {
+                    // info!("Right node color not valid");
+                    return false;
+                }
+
                 left && right
             } else {
                 // info!("isn't s-channel");
@@ -904,27 +928,39 @@ impl FeynGen {
             }
         }
 
-        fn is_s_channel<NodeColor>(
-            cut: &(BitVec, OrientedCut, BitVec),
-            s_set: &AHashSet<NodeIndex>,
-            t_set: &AHashSet<NodeIndex>,
+        fn validate_connectivity<NodeColor>(
+            subgraph: &BitVec,
+            blob_range: &RangeInclusive<usize>,
+            spectator_range: &RangeInclusive<usize>,
             graph: &HedgeGraph<Arc<Particle>, NodeColor>,
         ) -> bool {
-            // info!("checking s-channel");
-            let nodes: AHashSet<_> = graph
-                .iter_node_data(&cut.0)
-                .map(|(i, _)| graph.id_from_hairs(i).unwrap())
-                .collect();
+            let components = graph.connected_components(subgraph);
 
-            // the left graph should only contain s-set particles
+            let mut n_blobs = 0;
+            let mut n_spectators = 0;
 
-            s_set.is_subset(&nodes) && t_set.intersection(&nodes).count() == 0
+            for component in components {
+                if component.nhedges() > 1 {
+                    n_blobs += 1;
+                } else {
+                    n_spectators += 1;
+                }
+            }
+
+            blob_range.contains(&n_blobs) && spectator_range.contains(&n_spectators)
         }
 
         let amp_couplings = self.options.amplitude_filters.get_coupling_orders();
         let amp_loop_count = self.options.amplitude_filters.get_loop_count_range();
+        let blob_range = self.options.cross_section_filters.get_blob_range().unwrap();
+        let spectator_range = self
+            .options
+            .cross_section_filters
+            .get_spectator_range()
+            .unwrap();
+
         let n_particles = self.options.initial_pdgs.len();
-        let he_graph = HedgeGraph::<EdgeColor, NodeColor>::from_sym(graph.clone()).map(
+        let mut he_graph = HedgeGraph::<EdgeColor, NodeColor>::from_sym(graph.clone()).map(
             |_, _, _, node_color| node_color,
             |_, _, _, d| d.map(|d| model.get_particle_from_pdg(d.pdg)),
         );
@@ -937,26 +973,26 @@ impl FeynGen {
         //         &|b| None
         //     )
         // );
-        let mut s_set = AHashSet::new();
-        let mut t_set = AHashSet::new();
+        let mut s_set = Vec::new();
+        let mut t_set = Vec::new();
 
         for (n, f) in he_graph.iter_nodes() {
             let id = he_graph.id_from_hairs(n).unwrap();
             match f.get_sign(n_particles) {
                 SignOrZero::Plus => {
-                    s_set.insert(id);
+                    s_set.push(id);
                 }
                 SignOrZero::Minus => {
-                    t_set.insert(id);
+                    t_set.push(id);
                 }
                 _ => {}
             }
         }
 
         // info!("HI");
-        if let (Some(&s), Some(&t)) = (s_set.iter().next(), t_set.iter().next()) {
+        if !s_set.is_empty() && !t_set.is_empty() {
             // info!("{}-{}", s, t);
-            let cuts = he_graph.all_cuts(s, t);
+            let cuts = he_graph.all_cuts_from_ids(&s_set, &t_set);
 
             // info!("found {} cuts", cuts.len());
             let particle_content_options = self
@@ -973,8 +1009,8 @@ impl FeynGen {
             let pass_cut_filter = cuts.iter().any(|c| {
                 is_valid_cut(
                     c,
-                    &s_set,
-                    &t_set,
+                    blob_range,
+                    spectator_range,
                     model,
                     n_unresolved,
                     unresolved_type,
@@ -985,7 +1021,66 @@ impl FeynGen {
                 )
             });
 
-            pass_cut_filter
+            if !pass_cut_filter {
+                return false;
+            }
+
+            if self
+                .options
+                .cross_section_filters
+                .filter_cross_section_tadpoles()
+            {
+                for (i, f) in external_connections {
+                    if let (Some(i), Some(f)) = (i, f) {
+                        let i = he_graph
+                            .iter_nodes()
+                            .find_position(|a| a.1.get_external_tag() == *i as i32);
+                        let f = he_graph
+                            .iter_nodes()
+                            .find_position(|a| a.1.get_external_tag() == *f as i32);
+
+                        if let (Some((id_i, (_, c_i))), Some((id_f, (_, _)))) = (i, f) {
+                            he_graph
+                                .identify_nodes(&[NodeIndex(id_i), NodeIndex(id_f)], c_i.clone());
+                        }
+                    }
+                }
+
+                // info!("Identified nodes");
+
+                let non_bridges = he_graph.non_bridges();
+
+                // info!("\\he_graph:\n{}", he_graph.dot(&non_bridges));
+                let connected_components = he_graph.count_connected_components(&non_bridges);
+                if connected_components == 1 {
+                    return true;
+                } else {
+                    // info!(
+                    //     "Vetoed: \n{}\n because it had {} connected components",
+                    //     he_graph.dot_impl(
+                    //         &non_bridges,
+                    //         "",
+                    //         &|a| Some(format!("label=\"{}\"", a.name)),
+                    //         &|b| Some(format!("label=\"{}\"", b.get_external_tag()))
+                    //     ),
+                    //     connected_components
+                    // );
+                    // info!(
+                    //     "OG:\n {}",
+                    //     og_he.dot_impl(
+                    //         &non_bridges,
+                    //         "",
+                    //         &|a| Some(format!("label=\"{}\"", a.name)),
+                    //         &|b| Some(format!("label=\"{}\"", b.get_external_tag()))
+                    //     ),
+                    // );
+                    // info!("{}", graph.to_dot());
+
+                    return false;
+                }
+            }
+
+            true
         } else {
             warn!("No external particles found");
             true //TODO still check the amplitude level filters in the case where there is no initial-state specified
@@ -2667,7 +2762,15 @@ impl FeynGen {
                 processed_graphs = processed_graphs
                     .par_iter()
                     .progress_with(bar.clone())
-                    .filter(|(g, _)| self.contains_cut(model, g, n_unresolved, &unresolved_type))
+                    .filter(|(g, _)| {
+                        self.half_edge_filters(
+                            model,
+                            g,
+                            &external_connections,
+                            n_unresolved,
+                            &unresolved_type,
+                        )
+                    })
                     .map(|(g, sf)| (g.clone(), sf.clone()))
                     .collect::<Vec<_>>()
             });
@@ -3075,9 +3178,26 @@ impl FeynGen {
                     } else {
                         // println!("Processing graph #{}...", i_g);
                         // println!("Bare graph: {}",bare_graph.dot());
-                        let numerator =
+                        let mut numerator =
                             Numerator::default().from_graph(&bare_graph, &numerator_global_prefactor);
                         // println!("Num single atom: {}",numerator.get_single_atom().unwrap());
+                        for connection in bare_graph.external_connections.iter() {
+                            if let (Some(left_external_node_pos), Some(right_external_node_pos)) =
+                                connection
+                            {
+                                let color_a = &bare_graph.vertex_slots[*left_external_node_pos].edge_slots[0].color;
+                                let color_b = &bare_graph.vertex_slots[*right_external_node_pos].edge_slots[0].color;
+
+                                let color = color_a
+                                    .iter()
+                                    .zip(color_b.iter())
+                                    .map(|(a, b)| a.dual().kroneker_atom(&b.dual()))
+                                    .fold(Atom::parse("1").unwrap(), |acc, x| acc * x);
+
+                                numerator.state.color.map_data_mut(|a|{a.0 = &a.0*&color});
+
+                            }
+                        }
 
                         let numerator_color_simplified =
                             numerator.clone().color_simplify().canonize_color().unwrap();
@@ -3707,6 +3827,7 @@ impl ProcessedNumeratorForComparison {
                     {
                         let left_edge = &bare_graph.edges
                             [bare_graph.vertices[*left_external_node_pos].edges[0]];
+
                         let right_edge = &bare_graph.edges
                             [bare_graph.vertices[*right_external_node_pos].edges[0]];
                         let connected_external_id = bare_graph.external_connections.len() + i_ext;

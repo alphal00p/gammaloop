@@ -4,9 +4,12 @@ use ahash::{AHashMap, HashMap};
 use diagram_generator::EdgeColor;
 use indicatif::{ParallelProgressIterator, ProgressBar, ProgressStyle};
 use itertools::Itertools;
+use libc::FF0;
+use log::info;
 use rayon::iter::IntoParallelRefMutIterator;
 use rayon::iter::ParallelIterator;
 use smartstring::{LazyCompact, SmartString};
+use std::ops::RangeInclusive;
 use std::{fmt, str::FromStr};
 use symbolica::graph::Graph as SymbolicaGraph;
 use thiserror::Error;
@@ -224,11 +227,43 @@ impl FeynGenFilters {
         })
     }
 
+    pub fn get_blob_range(&self) -> Option<&RangeInclusive<usize>> {
+        self.0.iter().find_map(|f| {
+            if let FeynGenFilter::BlobRange(v) = f {
+                Some(v)
+            } else {
+                None
+            }
+        })
+    }
+
+    pub fn get_spectator_range(&self) -> Option<&RangeInclusive<usize>> {
+        self.0.iter().find_map(|f| {
+            if let FeynGenFilter::SpectatorRange(v) = f {
+                Some(v)
+            } else {
+                None
+            }
+        })
+    }
+
     pub fn allow_tadpoles(&self) -> bool {
         !self
             .0
             .iter()
             .any(|f| matches!(f, FeynGenFilter::TadpolesFilter(_)))
+    }
+
+    pub fn filter_cross_section_tadpoles(&self) -> bool {
+        self.0.iter().any(|f| {
+            matches!(
+                f,
+                FeynGenFilter::TadpolesFilter(TadpolesFilterOptions {
+                    veto_cross_section_sewed_tadpoles: true,
+                    ..
+                })
+            )
+        })
     }
 
     pub fn get_particle_vetos(&self) -> Option<&[i64]> {
@@ -300,13 +335,21 @@ impl FeynGenFilters {
                             .progress_with(bar.clone())
                             .filter(|(g, _)| {
                                 let graph_coupling_orders = get_coupling_orders(g);
-                                orders.iter().all(|(k, (v_min, v_max))| {
+                                let a = orders.iter().all(|(k, (v_min, v_max))| {
                                     graph_coupling_orders
                                         .get(&SmartString::from(k))
                                         .map_or(0 == *v_min, |o| {
                                             *o >= *v_min && (*v_max).map_or(true, |max| *o <= max)
                                         })
-                                })
+                                });
+                                // if a {
+                                //     info!(
+                                //         "Coupling orders constraints satisfied for graph {}",
+                                //         g.to_dot()
+                                //     );
+                                //     info!("{:?}", graph_coupling_orders);
+                                // }
+                                a
                             })
                             .map(|(g, sf)| (g.clone(), sf.clone()))
                             .collect::<Vec<_>>()
@@ -325,6 +368,8 @@ impl FeynGenFilters {
                 | FeynGenFilter::ZeroSnailsFilter(_)
                 | FeynGenFilter::FermionLoopCountRange(_)
                 | FeynGenFilter::FactorizedLoopTopologiesCountRange(_)
+                | FeynGenFilter::BlobRange(_)
+                | FeynGenFilter::SpectatorRange(_)
                 | FeynGenFilter::ParticleVeto(_) => {} // These other filters are implemented directly during diagram generation
             }
         }
@@ -407,6 +452,7 @@ pub struct TadpolesFilterOptions {
     pub veto_tadpoles_attached_to_massive_lines: bool,
     pub veto_tadpoles_attached_to_massless_lines: bool,
     pub veto_only_scaleless_tadpoles: bool,
+    pub veto_cross_section_sewed_tadpoles: bool,
 }
 
 impl Default for TadpolesFilterOptions {
@@ -415,6 +461,7 @@ impl Default for TadpolesFilterOptions {
             veto_tadpoles_attached_to_massive_lines: true,
             veto_tadpoles_attached_to_massless_lines: true,
             veto_only_scaleless_tadpoles: false,
+            veto_cross_section_sewed_tadpoles: false,
         }
     }
 }
@@ -450,6 +497,9 @@ pub enum FeynGenFilter {
     CouplingOrders(HashMap<String, (usize, Option<usize>)>),
     /// A range of loop counts, inclusive
     LoopCountRange((usize, usize)),
+    /// A range of blob counts, inclusive
+    BlobRange(RangeInclusive<usize>),
+    SpectatorRange(RangeInclusive<usize>),
     PerturbativeOrders(HashMap<String, usize>),
     FermionLoopCountRange((usize, usize)),
     FactorizedLoopTopologiesCountRange((usize, usize)),
@@ -469,6 +519,8 @@ impl fmt::Display for FeynGenFilter {
                         .collect::<Vec<String>>()
                         .join("|")
                 ),
+                Self::SpectatorRange(r) => format!("SpectatorRange({:?})", r),
+                Self::BlobRange(r) => format!("BlobRange({:?})", r),
                 Self::MaxNumberOfBridges(n) => format!("MaxNumberOfBridges({})", n),
                 Self::TadpolesFilter(opts) => format!("NoTadpoles({})", opts),
                 Self::ZeroSnailsFilter(opts) => format!("NoZeroSnails({})", opts),

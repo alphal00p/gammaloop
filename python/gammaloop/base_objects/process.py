@@ -257,6 +257,8 @@ class Process(object):
                 [[p.get_pdg_code() for p in final_states]
                  for final_states in self.final_states_lists],
                 loop_count_range,
+                tuple(generation_args.n_cut_blobs),
+                tuple(generation_args.n_cut_spectators),
                 generation_args.symmetrize_initial_states,
                 generation_args.symmetrize_final_states,
                 generation_args.symmetrize_left_right_states,
@@ -684,7 +686,8 @@ class Process(object):
             tadpole_filter=None if not process_args.filter_tadpoles else gl_rust.TadpolesFilterOptions(
                 veto_tadpoles_attached_to_massive_lines=process_args.veto_tadpoles_attached_to_massive_lines,
                 veto_tadpoles_attached_to_massless_lines=process_args.veto_tadpoles_attached_to_massless_lines,
-                veto_only_scaleless_tadpoles=process_args.veto_only_scaleless_tadpoles
+                veto_only_scaleless_tadpoles=process_args.veto_only_scaleless_tadpoles,
+                veto_cross_section_sewed_tadpoles=process_args.filter_cross_section_tadpoles
             ),
             zero_snail_filter=None if not process_args.filter_snails else gl_rust.SnailFilterOptions(
                 veto_snails_attached_to_massive_lines=process_args.veto_snails_attached_to_massive_lines,
