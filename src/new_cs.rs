@@ -16,7 +16,7 @@ use itertools::Itertools;
 use linnet::half_edge::{
     builder::HedgeGraphBuilder,
     involution::{Flow, HedgePair, Orientation},
-    subgraph::{HedgeNode, InternalSubGraph, OrientedCut},
+    subgraph::{HedgeNode, Inclusion, InternalSubGraph, OrientedCut},
     HedgeGraph, NodeIndex,
 };
 use log::{debug, warn};
@@ -566,8 +566,8 @@ impl Display for CutId {
 #[derive(Clone)]
 pub struct CrossSectionGraph<S: NumeratorState = PythonState> {
     pub graph: Graph,
-    pub source_nodes: AHashSet<NodeIndex>,
-    pub target_nodes: AHashSet<NodeIndex>,
+    pub source_nodes: HedgeNode,
+    pub target_nodes: HedgeNode,
     pub cuts: TiVec<CutId, CrossSectionCut>,
     pub cut_esurface: TiVec<CutId, Esurface>,
     pub cut_esurface_id_map: TiVec<CutId, EsurfaceID>,
@@ -600,10 +600,21 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
 
         let num_incoming = source_nodes.len();
 
+        let source_node_vec = source_nodes.into_iter().collect_vec();
+        let target_node_vec = target_nodes.into_iter().collect_vec();
+
+        let source_node = graph
+            .underlying
+            .combine_to_single_hedgenode(&source_node_vec);
+
+        let target_node = graph
+            .underlying
+            .combine_to_single_hedgenode(&target_node_vec);
+
         Self {
             graph,
-            source_nodes,
-            target_nodes,
+            source_nodes: source_node,
+            target_nodes: target_node,
             cuts: TiVec::new(),
             cut_esurface: TiVec::new(),
             cut_esurface_id_map: TiVec::new(),
@@ -672,40 +683,34 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
     ) -> Result<()> {
         debug!("generatig cuts for graph: {}", self.graph.name);
 
-        if let (Some(&source), Some(&target)) = (
-            self.source_nodes.iter().next(),
-            self.target_nodes.iter().next(),
-        ) {
-            let all_st_cuts = self.graph.underlying.all_cuts(source, target);
+        let all_st_cuts = self
+            .graph
+            .underlying
+            .all_cuts(self.source_nodes.clone(), self.target_nodes.clone());
 
-            debug!("num s_t cuts: {}", all_st_cuts.len());
-            debug!("source nodes: {:?}", self.source_nodes);
-            debug!("target nodes: {:?}", self.target_nodes);
+        debug!("num s_t cuts: {}", all_st_cuts.len());
 
-            let cuts: TiVec<CutId, CrossSectionCut> = all_st_cuts
-                .into_iter()
-                .map(|(left, cut, right)| CrossSectionCut { cut, left, right })
-                .filter_map(
-                    |cut| match cut.is_valid_for_process(self, process_definition, model) {
-                        Ok(true) => Some(Ok(cut)),
-                        Ok(false) => None,
-                        Err(e) => Some(Err(e)),
-                    },
-                )
-                .collect::<Result<_>>()?;
+        let cuts: TiVec<CutId, CrossSectionCut> = all_st_cuts
+            .into_iter()
+            .map(|(left, cut, right)| CrossSectionCut { cut, left, right })
+            .filter_map(
+                |cut| match cut.is_valid_for_process(self, process_definition, model) {
+                    Ok(true) => Some(Ok(cut)),
+                    Ok(false) => None,
+                    Err(e) => Some(Err(e)),
+                },
+            )
+            .collect::<Result<_>>()?;
 
-            self.cuts = cuts;
+        self.cuts = cuts;
 
-            debug!(
-                "found {} cuts for graph: {}",
-                self.cuts.len(),
-                self.graph.name
-            );
+        debug!(
+            "found {} cuts for graph: {}",
+            self.cuts.len(),
+            self.graph.name
+        );
 
-            Ok(())
-        } else {
-            Err(eyre!("Could not find cuts for graph: {}", self.graph.name))
-        }
+        Ok(())
     }
 
     fn generate_esurface_cuts(&mut self) {
@@ -835,7 +840,7 @@ impl CrossSectionCut {
         &self,
         cross_section_graph: &CrossSectionGraph<S>,
     ) -> Result<bool> {
-        let nodes_of_left_cut: Option<AHashSet<_>> = cross_section_graph
+        let nodes_of_left_cut: Option<Vec<_>> = cross_section_graph
             .graph
             .underlying
             .iter_node_data(&self.left)
@@ -848,14 +853,18 @@ impl CrossSectionCut {
             .collect();
 
         if let Some(nodes_left_of_cut) = nodes_of_left_cut {
-            Ok(cross_section_graph
-                .source_nodes
-                .is_subset(&nodes_left_of_cut)
-                && cross_section_graph
-                    .target_nodes
-                    .intersection(&nodes_left_of_cut)
-                    .count()
-                    == 0)
+            let left_node = cross_section_graph
+                .graph
+                .underlying
+                .combine_to_single_hedgenode(&nodes_left_of_cut);
+            let res = left_node.includes(&cross_section_graph.source_nodes)
+                && cross_section_graph.target_nodes.weakly_disjoint(&left_node);
+
+            if !res {
+                warn!("s channel check wrong");
+            }
+
+            Ok(true)
         } else {
             Err(eyre!("Could not determine nodes in left cut"))
         }

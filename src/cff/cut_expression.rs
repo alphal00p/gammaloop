@@ -108,7 +108,10 @@ mod tests {
         let hedge_graph = hedge_graph_builder.build::<NodeStorageVec<_>>();
 
         let cuts: TiVec<CutId, CrossSectionCut> = hedge_graph
-            .all_cuts(nodes[0], nodes[3])
+            .all_cuts(
+                hedge_graph[&nodes[0]].clone(),
+                hedge_graph[&nodes[3]].clone(),
+            )
             .into_iter()
             .map(|(left, cut, right)| CrossSectionCut { left, cut, right })
             .collect();
@@ -131,7 +134,7 @@ mod tests {
         let atom_cut_1 = cut_expression.to_atom_for_cut(CutId::from(2));
         let atom_with_energies = cut_expression.surfaces.substitute_energies(&atom_cut_1);
 
-        print!("{}", atom_cut_1);
+        println!("{}", atom_cut_1);
         println!("{}", atom_with_energies);
     }
 }

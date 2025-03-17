@@ -882,28 +882,31 @@ impl FeynGen {
                 _ => {}
             }
         }
-        if let (Some(&s), Some(&t)) = (s_set.iter().next(), t_set.iter().next()) {
-            let cuts = he_graph.all_cuts(s, t);
 
-            let pass_cut_filter = cuts.iter().any(|c| {
-                is_valid_cut(
-                    c,
-                    &s_set,
-                    &t_set,
-                    model,
-                    n_unresolved,
-                    unresolved_type,
-                    &particle_content,
-                    amp_couplings,
-                    amp_loop_count,
-                    &he_graph,
-                )
-            });
+        let s_vec = s_set.clone().into_iter().collect_vec();
+        let t_vec = t_set.clone().into_iter().collect_vec();
 
-            pass_cut_filter
-        } else {
-            true //TODO still check the amplitude level filters in the case where there is no initial-state specified
-        }
+        let s_node = he_graph.combine_to_single_hedgenode(&s_vec);
+        let t_node = he_graph.combine_to_single_hedgenode(&t_vec);
+
+        let cuts = he_graph.all_cuts(s_node, t_node);
+
+        let pass_cut_filter = cuts.iter().any(|c| {
+            is_valid_cut(
+                c,
+                &s_set,
+                &t_set,
+                model,
+                n_unresolved,
+                unresolved_type,
+                &particle_content,
+                amp_couplings,
+                amp_loop_count,
+                &he_graph,
+            )
+        });
+
+        pass_cut_filter
     }
 
     // This fast cut checker does not enumerate all cuts, but rather checks if the graph can contain a cut with the right particles

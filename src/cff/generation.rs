@@ -1065,7 +1065,10 @@ mod tests_cff {
             cff_res
         );
 
-        let cuts = hedge_double_traingle.all_cuts(nodes[3], nodes[0]);
+        let cuts = hedge_double_traingle.all_cuts(
+            hedge_double_traingle[&nodes[3]].clone(),
+            hedge_double_traingle[&nodes[0]].clone(),
+        );
         let mut num_with_6_ors = 0;
         let mut num_with_4_ors = 0;
         assert_eq!(cuts.len(), 4);
@@ -1184,7 +1187,7 @@ mod tests_cff {
             relative_error
         );
 
-        let cuts = tbt_hedge.all_cuts(nodes[0], nodes[5]);
+        let cuts = tbt_hedge.all_cuts(tbt_hedge[&nodes[0]].clone(), tbt_hedge[&nodes[5]].clone());
         assert_eq!(cuts.len(), 9);
         let mut num_with_24 = 0;
         let mut num_with_16 = 0;

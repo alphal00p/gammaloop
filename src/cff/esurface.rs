@@ -767,7 +767,10 @@ mod tests {
 
         let double_triangle = hedge_graph_builder.build::<NodeStorageVec<()>>();
 
-        let cuts = double_triangle.all_cuts(nodes[0], nodes[3]);
+        let cuts = double_triangle.all_cuts(
+            double_triangle[&nodes[0]].clone(),
+            double_triangle[&nodes[3]].clone(),
+        );
 
         let cross_section_cuts = cuts
             .into_iter()
@@ -821,7 +824,7 @@ mod tests {
         hedge_graph_builder.add_external_edge(nodes[3], (), Orientation::Undirected, Flow::Sink);
 
         let box_graph = hedge_graph_builder.build::<NodeStorageVec<()>>();
-        let cuts = box_graph.all_cuts(nodes[0], nodes[2]);
+        let cuts = box_graph.all_cuts(box_graph[&nodes[0]].clone(), box_graph[&nodes[2]].clone());
         assert_eq!(cuts.len(), 4);
 
         let cross_section_cuts = cuts
