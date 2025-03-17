@@ -17,7 +17,8 @@ use crate::{
     model::{self, ColorStructure, EdgeSlots, Model, Particle, VertexSlots},
     momentum::{FourMomentum, Polarization, Rotation, SignOrZero, Signature, ThreeMomentum},
     momentum_sample::{
-        BareMomentumSample, ExternalFourMomenta, LoopIndex, LoopMomenta, MomentumSample,
+        BareMomentumSample, ExternalFourMomenta, ExternalIndex, LoopIndex, LoopMomenta,
+        MomentumSample,
     },
     new_graph::LoopMomentumBasis,
     numerator::{
@@ -1118,6 +1119,25 @@ pub struct Shifts {
 }
 
 impl BareGraph {
+    pub fn get_external_index(&self, edge_id: usize) -> Option<ExternalIndex> {
+        if self.edges[edge_id].edge_type == EdgeType::Virtual {
+            return None;
+        }
+
+        let mut external_index_usize = 0;
+        for (other_edge_id, edge) in self.edges.iter().enumerate() {
+            if other_edge_id == edge_id {
+                return Some(ExternalIndex::from(external_index_usize));
+            }
+
+            if edge.edge_type != EdgeType::Virtual {
+                external_index_usize += 1;
+            }
+        }
+
+        None
+    }
+
     pub fn rep_rules_print(&self, printer_ops: PrintOptions) -> Vec<(String, String)> {
         self.generate_lmb_replacement_rules("Q<i>(x<j>__)", "K<i>(x<j>__)", "P<i>(x<j>__)")
             .iter()
