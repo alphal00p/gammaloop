@@ -18,7 +18,7 @@ use crate::{
     momentum::ThreeMomentum,
     momentum_sample::{ExternalFourMomenta, LoopMomenta, MomentumSample},
     new_cs::{CrossSectionGraph, CutId},
-    new_graph::{FeynmanGraph, Graph},
+    new_graph::{ExternalConnection, FeynmanGraph, Graph},
     signature::ExternalSignature,
     utils::{self, FloatLike, F},
     DependentMomentaConstructor, IntegratedCounterTermRange, Polarizations, Settings,
@@ -33,6 +33,7 @@ pub struct CrossSectionIntegrand {
     pub polarizations: Vec<Polarizations>,
     pub graph_terms: Vec<CrossSectionGraphTerm>,
     pub n_incoming: usize,
+    pub external_connections: Vec<ExternalConnection>,
 }
 
 #[derive(Clone)]
@@ -149,7 +150,7 @@ impl HasIntegrand for CrossSectionIntegrand {
             sample,
             &self.polarizations,
             DependentMomentaConstructor::CrossSection {
-                n_incoming: self.n_incoming,
+                external_connections: &self.external_connections,
             },
             &self.settings,
             None,

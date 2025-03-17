@@ -55,7 +55,7 @@ use crate::{
         cross_section_integrand::{self, CrossSectionGraphTerm, CrossSectionIntegrand},
         NewIntegrand,
     },
-    new_graph::{Edge, FeynmanGraph, Graph, Vertex},
+    new_graph::{Edge, ExternalConnection, FeynmanGraph, Graph, Vertex},
     numerator::{GlobalPrefactor, NumeratorState, PythonState},
     utils::{F, GS},
     DependentMomentaConstructor, Externals, Polarizations, ProcessSettings, Settings,
@@ -461,6 +461,7 @@ impl<S: NumeratorState> Amplitude<S> {
 pub struct CrossSection<S: NumeratorState> {
     supergraphs: Vec<CrossSectionGraph<S>>,
     external_particles: Vec<Arc<Particle>>,
+    external_connections: Vec<ExternalConnection>,
     n_incmoming: usize,
 }
 
@@ -468,6 +469,7 @@ impl<S: NumeratorState> CrossSection<S> {
     pub fn new() -> Self {
         Self {
             supergraphs: vec![],
+            external_connections: vec![],
             external_particles: vec![],
             n_incmoming: 0,
         }
@@ -486,6 +488,14 @@ impl<S: NumeratorState> CrossSection<S> {
         } else if self.external_particles != supergraph.underlying.get_external_partcles() {
             return Err(eyre!(
                 "attempt to add supergraph with differnt external particles"
+            ));
+        }
+
+        if self.external_connections.is_empty() {
+            self.external_connections = supergraph.external_connections.clone();
+        } else if &self.external_connections != &supergraph.external_connections {
+            return Err(eyre!(
+                "attempt to add supergraph with different external connections"
             ));
         }
 
@@ -533,6 +543,7 @@ impl<S: NumeratorState> CrossSection<S> {
             .collect();
 
         let cross_section_integrand = CrossSectionIntegrand {
+            external_connections: self.external_connections.clone(),
             n_incoming: self.n_incmoming,
             polarizations,
             settings,
@@ -548,7 +559,7 @@ impl<S: NumeratorState> IsPolarizable for CrossSection<S> {
         externals.generate_polarizations(
             &self.external_particles,
             DependentMomentaConstructor::CrossSection {
-                n_incoming: self.n_incmoming,
+                external_connections: &self.external_connections,
             },
         )
     }

@@ -23,6 +23,7 @@ use linnet::half_edge::{
     },
     HedgeGraph, NodeIndex,
 };
+use petgraph::Direction::Outgoing;
 use serde::{de::value, Deserialize, Serialize};
 use smartstring::{LazyCompact, SmartString};
 use spenso::{
@@ -68,6 +69,7 @@ pub struct Graph {
     pub underlying: HedgeGraph<Edge, Vertex>,
     pub loop_momentum_basis: LoopMomentumBasis,
     pub vertex_slots: TiVec<NodeIndex, VertexSlots>,
+    pub external_connections: Vec<ExternalConnection>,
 }
 
 impl From<BareGraph> for Graph {
@@ -76,10 +78,35 @@ impl From<BareGraph> for Graph {
         let vertex_slots = value.vertex_slots.clone().into();
         let multiplicity = value.overall_factor.clone();
         let name = value.name.clone();
-        let underlying = value.into();
 
+        // convert old external connections to new format
+        let external_connections = value
+            .external_connections
+            .iter()
+            .map(|(incoming_node, outgoing_node)| {
+                let incoming_index = incoming_node.map(|node_id| {
+                    let edge_id = value.vertices[node_id].edges[0];
+                    let external_index = value.get_external_index(edge_id).unwrap();
+                    external_index
+                });
+
+                let outgoing_index = outgoing_node.map(|node_id| {
+                    let edge_id = value.vertices[node_id].edges[0];
+                    let external_index = value.get_external_index(edge_id).unwrap();
+                    external_index
+                });
+
+                ExternalConnection {
+                    incoming_index,
+                    outgoing_index,
+                }
+            })
+            .collect_vec();
+
+        let underlying = value.into();
         Self {
             name,
+            external_connections,
             multiplicity,
             vertex_slots,
             loop_momentum_basis,
@@ -461,6 +488,7 @@ impl Graph {
             multiplicity,
             loop_momentum_basis: underlying.new_lmb()?,
             underlying,
+            external_connections: Vec::new(),
             vertex_slots: TiVec::new(),
         })
     }
@@ -1036,4 +1064,10 @@ impl From<BareGraph> for HedgeGraph<Edge, Vertex> {
 
         builder.build()
     }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub struct ExternalConnection {
+    pub incoming_index: Option<ExternalIndex>,
+    pub outgoing_index: Option<ExternalIndex>,
 }

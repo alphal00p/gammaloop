@@ -45,6 +45,7 @@ use cross_section::Amplitude;
 use cross_section::CrossSection;
 use eyre::WrapErr;
 use integrands::*;
+use itertools::Itertools;
 use log::debug;
 use model::Particle;
 use momentum::Dep;
@@ -59,6 +60,7 @@ use momentum::Signature;
 use momentum::ThreeMomentum;
 use momentum_sample::ExternalFourMomenta;
 use momentum_sample::ExternalIndex;
+use new_graph::ExternalConnection;
 use numerator::NumeratorSettings;
 use typed_index_collections::TiVec;
 
@@ -597,12 +599,25 @@ impl Externals {
         let mut polarizations = vec![];
 
         let external_signatture = match dependent_momenta_constructor {
-            DependentMomentaConstructor::Amplitude(external_signature) => external_signature,
-            DependentMomentaConstructor::CrossSection { n_incoming } => {
-                &ExternalSignature::from_iter(
-                    std::iter::repeat_n(SignOrZero::Plus, n_incoming)
-                        .chain(std::iter::repeat_n(SignOrZero::Minus, n_incoming)),
-                )
+            DependentMomentaConstructor::Amplitude(external_signature) => {
+                external_signature.clone()
+            }
+            DependentMomentaConstructor::CrossSection {
+                external_connections,
+            } => {
+                let mut external_signature = ExternalSignature::from_iter(std::iter::repeat_n(
+                    SignOrZero::Zero,
+                    external_connections.len() * 2,
+                ));
+
+                for external_connection in external_connections.iter() {
+                    external_signature[external_connection.incoming_index.unwrap()] =
+                        SignOrZero::Plus;
+                    external_signature[external_connection.outgoing_index.unwrap()] =
+                        SignOrZero::Minus;
+                }
+
+                external_signature
             }
         };
 
@@ -757,22 +772,35 @@ impl Externals {
                         dependent_momenta[pos_dep] = dependent_sign * sum; //.lower();
                         dependent_momenta.into()
                     }
-                    DependentMomentaConstructor::CrossSection { n_incoming } => {
-                        assert_eq!(n_incoming, momenta.len());
+                    DependentMomentaConstructor::CrossSection {
+                        external_connections,
+                    } => {
+                        assert_eq!(external_connections.len(), momenta.len());
 
-                        let mut dependent_momenta = momenta
+                        // set all_to_zero
+                        let mut dependent_momenta = (0..momenta.len() * 2)
+                            .map(|_| {
+                                FourMomentum::<F<T>>::from_ff64(&FourMomentum::from([F(0.0); 4]))
+                            })
+                            .collect::<ExternalFourMomenta<F<T>>>();
+
+                        let incoming_momenta = momenta
                             .iter()
                             .map(|m| {
-                                let momentum = FourMomentum::try_from(*m)
-                                    .expect("Dependent momenta in cross section not supported");
-
-                                FourMomentum::<F<T>>::from_ff64(&momentum)
+                                FourMomentum::<F<T>>::from_ff64(
+                                    &FourMomentum::try_from(*m)
+                                        .expect("dependent momenta in cross section not allowed"),
+                                )
                             })
-                            .collect::<TiVec<_, _>>();
+                            .collect_vec();
 
-                        for i in 0..n_incoming {
-                            dependent_momenta
-                                .push(dependent_momenta[ExternalIndex::from(i)].clone());
+                        for (external_connection, incoming_momentum) in
+                            external_connections.iter().zip(incoming_momenta)
+                        {
+                            dependent_momenta[external_connection.incoming_index.unwrap()] =
+                                incoming_momentum.clone();
+                            dependent_momenta[external_connection.outgoing_index.unwrap()] =
+                                incoming_momentum;
                         }
 
                         dependent_momenta
@@ -1052,5 +1080,7 @@ pub struct TropicalSubgraphTableSettings {
 
 pub enum DependentMomentaConstructor<'a> {
     Amplitude(&'a ExternalSignature),
-    CrossSection { n_incoming: usize }, // at the moment I assume the first n/2 externals are incoming and the second n/2 are outgoing, the mapping is (0, n/2), (1, n/2+1), (2, n/2+2), ...
+    CrossSection {
+        external_connections: &'a [ExternalConnection],
+    }, // at the moment I assume the first n/2 externals are incoming and the second n/2 are outgoing, the mapping is (0, n/2), (1, n/2+1), (2, n/2+2), ...
 }
