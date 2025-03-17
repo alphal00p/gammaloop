@@ -611,10 +611,8 @@ impl Externals {
                 ));
 
                 for external_connection in external_connections.iter() {
-                    external_signature[external_connection.incoming_index.unwrap()] =
-                        SignOrZero::Plus;
-                    external_signature[external_connection.outgoing_index.unwrap()] =
-                        SignOrZero::Minus;
+                    external_signature[external_connection.incoming_index] = SignOrZero::Plus;
+                    external_signature[external_connection.outgoing_index] = SignOrZero::Minus;
                 }
 
                 external_signature
@@ -797,9 +795,9 @@ impl Externals {
                         for (external_connection, incoming_momentum) in
                             external_connections.iter().zip(incoming_momenta)
                         {
-                            dependent_momenta[external_connection.incoming_index.unwrap()] =
+                            dependent_momenta[external_connection.incoming_index] =
                                 incoming_momentum.clone();
-                            dependent_momenta[external_connection.outgoing_index.unwrap()] =
+                            dependent_momenta[external_connection.outgoing_index] =
                                 incoming_momentum;
                         }
 

@@ -69,7 +69,7 @@ pub struct Graph {
     pub underlying: HedgeGraph<Edge, Vertex>,
     pub loop_momentum_basis: LoopMomentumBasis,
     pub vertex_slots: TiVec<NodeIndex, VertexSlots>,
-    pub external_connections: Vec<ExternalConnection>,
+    pub external_connections: Option<Vec<ExternalConnection>>,
 }
 
 impl From<BareGraph> for Graph {
@@ -96,12 +96,18 @@ impl From<BareGraph> for Graph {
                     external_index
                 });
 
-                ExternalConnection {
-                    incoming_index,
-                    outgoing_index,
+                if let (Some(incoming_index), Some(outgoing_index)) =
+                    (incoming_index, outgoing_index)
+                {
+                    Some(ExternalConnection {
+                        incoming_index,
+                        outgoing_index,
+                    })
+                } else {
+                    None
                 }
             })
-            .collect_vec();
+            .collect::<Option<Vec<ExternalConnection>>>();
 
         let underlying = value.into();
         Self {
@@ -488,7 +494,7 @@ impl Graph {
             multiplicity,
             loop_momentum_basis: underlying.new_lmb()?,
             underlying,
-            external_connections: Vec::new(),
+            external_connections: None,
             vertex_slots: TiVec::new(),
         })
     }
@@ -1068,6 +1074,6 @@ impl From<BareGraph> for HedgeGraph<Edge, Vertex> {
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct ExternalConnection {
-    pub incoming_index: Option<ExternalIndex>,
-    pub outgoing_index: Option<ExternalIndex>,
+    pub incoming_index: ExternalIndex,
+    pub outgoing_index: ExternalIndex,
 }
