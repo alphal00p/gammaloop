@@ -36,7 +36,7 @@ use std::{
     sync::{LazyLock, Mutex},
 };
 use symbolica::{atom::Atom, printer::PrintOptions};
-const GIT_VERSION: &str = git_version!();
+const GIT_VERSION: &str = git_version!(fallback = "unavailable");
 
 #[allow(unused)]
 use pyo3::{
