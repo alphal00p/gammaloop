@@ -1956,6 +1956,25 @@ pub enum SignOrZero {
     Minus = -1,
 }
 
+impl From<linnet::half_edge::involution::Orientation> for SignOrZero {
+    fn from(value: linnet::half_edge::involution::Orientation) -> Self {
+        match value {
+            linnet::half_edge::involution::Orientation::Default => SignOrZero::Plus,
+            linnet::half_edge::involution::Orientation::Reversed => SignOrZero::Minus,
+            linnet::half_edge::involution::Orientation::Undirected => SignOrZero::Zero,
+        }
+    }
+}
+
+impl From<linnet::half_edge::involution::Flow> for SignOrZero {
+    fn from(value: linnet::half_edge::involution::Flow) -> Self {
+        match value {
+            linnet::half_edge::involution::Flow::Source => SignOrZero::Plus,
+            linnet::half_edge::involution::Flow::Sink => SignOrZero::Minus,
+        }
+    }
+}
+
 impl TryFrom<i8> for SignOrZero {
     type Error = SignError;
     fn try_from(value: i8) -> Result<Self, Self::Error> {

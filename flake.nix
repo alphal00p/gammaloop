@@ -176,6 +176,7 @@
 
         # Extra inputs can be added here; cargo and rustc are provided by default.
         packages = with pkgs; [
+          tdf
           # pkgs.ripgrep
           cargo-udeps
           cargo-insta
