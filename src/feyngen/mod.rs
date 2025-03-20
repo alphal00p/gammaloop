@@ -4,8 +4,6 @@ use ahash::{AHashMap, HashMap};
 use diagram_generator::EdgeColor;
 use indicatif::{ParallelProgressIterator, ProgressBar, ProgressStyle};
 use itertools::Itertools;
-use libc::FF0;
-use log::info;
 use rayon::iter::IntoParallelRefMutIterator;
 use rayon::iter::ParallelIterator;
 use smartstring::{LazyCompact, SmartString};
@@ -258,8 +256,8 @@ impl FeynGenFilters {
         self.0.iter().any(|f| {
             matches!(
                 f,
-                FeynGenFilter::TadpolesFilter(TadpolesFilterOptions {
-                    veto_cross_section_sewed_tadpoles: true,
+                FeynGenFilter::SewedFilter(SewedFilterOptions {
+                    filter_tadpoles: true,
                     ..
                 })
             )
@@ -367,6 +365,7 @@ impl FeynGenFilters {
                 | FeynGenFilter::TadpolesFilter(_)
                 | FeynGenFilter::ZeroSnailsFilter(_)
                 | FeynGenFilter::FermionLoopCountRange(_)
+                | FeynGenFilter::SewedFilter(_)
                 | FeynGenFilter::FactorizedLoopTopologiesCountRange(_)
                 | FeynGenFilter::BlobRange(_)
                 | FeynGenFilter::SpectatorRange(_)
@@ -452,7 +451,6 @@ pub struct TadpolesFilterOptions {
     pub veto_tadpoles_attached_to_massive_lines: bool,
     pub veto_tadpoles_attached_to_massless_lines: bool,
     pub veto_only_scaleless_tadpoles: bool,
-    pub veto_cross_section_sewed_tadpoles: bool,
 }
 
 impl Default for TadpolesFilterOptions {
@@ -461,7 +459,6 @@ impl Default for TadpolesFilterOptions {
             veto_tadpoles_attached_to_massive_lines: true,
             veto_tadpoles_attached_to_massless_lines: true,
             veto_only_scaleless_tadpoles: false,
-            veto_cross_section_sewed_tadpoles: false,
         }
     }
 }
@@ -485,11 +482,17 @@ impl fmt::Display for TadpolesFilterOptions {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct SewedFilterOptions {
+    pub filter_tadpoles: bool,
+}
+
 #[derive(Debug, Clone)]
 pub enum FeynGenFilter {
     SelfEnergyFilter(SelfEnergyFilterOptions),
     TadpolesFilter(TadpolesFilterOptions),
     ZeroSnailsFilter(SnailFilterOptions),
+    SewedFilter(SewedFilterOptions),
     /// A list of vetoed pdgs
     ParticleVeto(Vec<i64>),
     MaxNumberOfBridges(usize),
@@ -561,6 +564,10 @@ impl fmt::Display for FeynGenFilter {
                         "NFactorizableLoopRange({{{},{}}})",
                         loop_count_min, loop_count_max
                     ),
+                Self::SewedFilter(SewedFilterOptions { filter_tadpoles }) => format!(
+                    "SewedCrossSectionFilter(filter_tadpoles={{{}}})",
+                    filter_tadpoles
+                ),
             }
         )
     }

@@ -1030,6 +1030,12 @@ impl FeynGen {
                 .cross_section_filters
                 .filter_cross_section_tadpoles()
             {
+                let non_bridges = he_graph.non_bridges();
+
+                // info!("\\he_graph:\n{}", he_graph.dot(&non_bridges));
+                //
+
+                let connected_components_before = 1; // he_graph.tadpoles(externals).len();
                 for (i, f) in external_connections {
                     if let (Some(i), Some(f)) = (i, f) {
                         let i = he_graph
@@ -1052,7 +1058,7 @@ impl FeynGen {
 
                 // info!("\\he_graph:\n{}", he_graph.dot(&non_bridges));
                 let connected_components = he_graph.count_connected_components(&non_bridges);
-                if connected_components == 1 {
+                if connected_components == connected_components_before {
                     return true;
                 } else {
                     // info!(
@@ -2346,7 +2352,7 @@ impl FeynGen {
             vertex_signatures_for_generation
         );
 
-        debug!("feygen options: {:?}", self);
+        debug!("feygen options: {:#?}", self);
 
         // Record the start time
         let start = Instant::now();

@@ -28,6 +28,7 @@ class Process(object):
                  amplitude_loop_count: tuple[int, int] | None = None,
                  cross_section_loop_count: tuple[int, int] | None = None,
                  particle_vetos: list[Particle] | None = None,
+                 sewed_filter: gl_rust.SewedFilterOptions | None = None,
                  self_energy_filter: gl_rust.SelfEnergyFilterOptions | None = None,
                  tadpole_filter: gl_rust.TadpolesFilterOptions | None = None,
                  zero_snail_filter: gl_rust.SnailFilterOptions | None = None,
@@ -71,6 +72,7 @@ class Process(object):
         self.cross_section_filters = gl_rust.FeynGenFilters(
             particle_veto=(None if self.particle_vetos is None else [
                 p.get_pdg_code() for p in self.particle_vetos]),
+            sewed_filter=sewed_filter,
             self_energy_filter=self_energy_filter,
             tadpoles_filter=tadpole_filter,
             zero_snails_filter=zero_snail_filter,
@@ -678,6 +680,7 @@ class Process(object):
             amplitude_loop_count,
             cross_section_loop_count,
             None if len(particle_vetos) == 0 else particle_vetos,
+            sewed_filter=None if not process_args.filter_cross_section_tadpoles else gl_rust.SewedFilterOptions(filter_tadpoles=process_args.filter_cross_section_tadpoles),
             self_energy_filter=None if not process_args.filter_selfenergies else gl_rust.SelfEnergyFilterOptions(
                 veto_self_energy_of_massive_lines=process_args.veto_self_energy_of_massive_lines,
                 veto_self_energy_of_massless_lines=process_args.veto_self_energy_of_massless_lines,
@@ -687,8 +690,8 @@ class Process(object):
                 veto_tadpoles_attached_to_massive_lines=process_args.veto_tadpoles_attached_to_massive_lines,
                 veto_tadpoles_attached_to_massless_lines=process_args.veto_tadpoles_attached_to_massless_lines,
                 veto_only_scaleless_tadpoles=process_args.veto_only_scaleless_tadpoles,
-                veto_cross_section_sewed_tadpoles=process_args.filter_cross_section_tadpoles
             ),
+
             zero_snail_filter=None if not process_args.filter_snails else gl_rust.SnailFilterOptions(
                 veto_snails_attached_to_massive_lines=process_args.veto_snails_attached_to_massive_lines,
                 veto_snails_attached_to_massless_lines=process_args.veto_snails_attached_to_massless_lines,

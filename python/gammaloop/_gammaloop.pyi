@@ -38,6 +38,14 @@ class SnailFilterOptions:
         """ Creates options for vetoing snail diagrams. """
 
 
+class SewedFilterOptions:
+    @classmethod
+    def __new__(_cls,
+                filter_tadpoles: Optional[bool] = True,
+                ) -> SewedFilterOptions:
+        """ Creates options for vetoing tadpoles when sewing diagrams. """
+
+
 class SelfEnergyFilterOptions:
     @classmethod
     def __new__(_cls,
@@ -66,6 +74,7 @@ class FeynGenFilters:
                 include_external_self_energy: Optional[bool] = False,
                 particle_veto: Optional[list[int]] = [],
                 max_number_of_bridges: Optional[int] = 0,
+                sewed_filter: Optional[SewedFilterOptions] = None,
                 self_energy_filter: Optional[SelfEnergyFilterOptions] = None,
                 tadpoles_filter: Optional[TadpolesFilterOptions] = None,
                 zero_snails_filter: Optional[SnailFilterOptions] = None,

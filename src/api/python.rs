@@ -3,7 +3,7 @@ use crate::{
     cross_section::{Amplitude, AmplitudeList, CrossSection, CrossSectionList},
     feyngen::{
         self, diagram_generator::FeynGen, FeynGenError, FeynGenFilters, FeynGenOptions,
-        NumeratorAwareGraphGroupingOption,
+        NumeratorAwareGraphGroupingOption, SewedFilterOptions,
     },
     graph::SerializableGraph,
     inspect,
@@ -218,6 +218,7 @@ fn gammalooprs(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     m.add_class::<PythonWorker>()?;
     m.add_class::<PyFeynGenFilters>()?;
     m.add_class::<PySnailFilterOptions>()?;
+    m.add_class::<PySewedFilterOptions>()?;
     m.add_class::<PyTadpolesFilterOptions>()?;
     m.add_class::<PySelfEnergyFilterOptions>()?;
     m.add_class::<PyFeynGenOptions>()?;
@@ -309,6 +310,23 @@ impl PySelfEnergyFilterOptions {
     }
 }
 
+#[pyclass(name = "SewedFilterOptions")]
+pub struct PySewedFilterOptions {
+    pub filter_options: SewedFilterOptions,
+}
+
+#[pymethods]
+impl PySewedFilterOptions {
+    #[new]
+    pub fn __new__(filter_tadpoles: Option<bool>) -> PyResult<PySewedFilterOptions> {
+        Ok(PySewedFilterOptions {
+            filter_options: SewedFilterOptions {
+                filter_tadpoles: filter_tadpoles.unwrap_or(false),
+            },
+        })
+    }
+}
+
 #[pyclass(name = "TadpolesFilterOptions")]
 pub struct PyTadpolesFilterOptions {
     pub filter_options: TadpolesFilterOptions,
@@ -321,7 +339,6 @@ impl PyTadpolesFilterOptions {
         veto_tadpoles_attached_to_massive_lines: Option<bool>,
         veto_tadpoles_attached_to_massless_lines: Option<bool>,
         veto_only_scaleless_tadpoles: Option<bool>,
-        veto_cross_section_sewed_tadpoles: Option<bool>,
     ) -> PyResult<PyTadpolesFilterOptions> {
         Ok(PyTadpolesFilterOptions {
             filter_options: TadpolesFilterOptions {
@@ -330,8 +347,6 @@ impl PyTadpolesFilterOptions {
                 veto_tadpoles_attached_to_massless_lines: veto_tadpoles_attached_to_massless_lines
                     .unwrap_or(true),
                 veto_only_scaleless_tadpoles: veto_only_scaleless_tadpoles.unwrap_or(false),
-                veto_cross_section_sewed_tadpoles: veto_cross_section_sewed_tadpoles
-                    .unwrap_or(false),
             },
         })
     }
@@ -368,6 +383,7 @@ impl PyFeynGenFilters {
     pub fn __new__(
         particle_veto: Option<Vec<i64>>,
         max_number_of_bridges: Option<usize>,
+        sewed_filter: Option<PyRef<PySewedFilterOptions>>,
         self_energy_filter: Option<PyRef<PySelfEnergyFilterOptions>>,
         tadpoles_filter: Option<PyRef<PyTadpolesFilterOptions>>,
         zero_snails_filter: Option<PyRef<PySnailFilterOptions>>,
@@ -378,6 +394,9 @@ impl PyFeynGenFilters {
         factorized_loop_topologies_count_range: Option<(usize, usize)>,
     ) -> PyResult<PyFeynGenFilters> {
         let mut filters = Vec::new();
+        if let Some(sewed_filter) = sewed_filter {
+            filters.push(FeynGenFilter::SewedFilter(sewed_filter.filter_options));
+        }
         if let Some(self_energy_filter) = self_energy_filter {
             filters.push(FeynGenFilter::SelfEnergyFilter(
                 self_energy_filter.filter_options,

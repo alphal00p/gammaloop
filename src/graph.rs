@@ -117,7 +117,14 @@ impl<N: Clone, E: Clone, S: NodeStorageOps<NodeData = N>> HedgeGraphExt<N, E>
             map.insert(i, builder.add_node(node.data.clone()));
         }
 
-        for edge in graph.edges() {
+        // let mut edges = graph.edges().to_vec();
+        // edges.sort_by(|a, b| a.vertices.cmp(&b.vertices));
+
+        for edge in graph
+            .edges()
+            .iter()
+            .sorted_by(|a, b| a.vertices.cmp(&b.vertices))
+        {
             let vertices = edge.vertices;
             let source = map[&vertices.0];
             let sink = map[&vertices.1];
@@ -287,7 +294,7 @@ pub struct SerializableExternalVertexInfo {
 
 #[derive(Debug, Clone)]
 pub struct ExternalVertexInfo {
-    direction: EdgeType,
+    pub direction: EdgeType,
     pub particle: Arc<model::Particle>,
 }
 
@@ -612,7 +619,7 @@ impl Edge {
 
     pub fn denominator(&self, graph: &BareGraph) -> (Atom, Atom) {
         let num = *graph.edge_name_to_position.get(&self.name).unwrap();
-        let mom = Atom::parse(&format!("Q{num}")).unwrap();
+        let mom = Atom::parse(&format!("Q({num})")).unwrap();
         let mass = self
             .particle
             .mass
@@ -1158,7 +1165,7 @@ pub struct Shifts {
 
 impl BareGraph {
     pub fn rep_rules_print(&self, printer_ops: PrintOptions) -> Vec<(String, String)> {
-        self.generate_lmb_replacement_rules("Q<i>(x<j>__)", "K<i>(x<j>__)", "P<i>(x<j>__)")
+        self.generate_lmb_replacement_rules("Q(<i>,x___)", "K(<i>,x___)", "P(<i>,x___)")
             .iter()
             .map(|(lhs, rhs)| {
                 (
@@ -1177,18 +1184,22 @@ impl BareGraph {
     pub fn denominator_print(&self, printer_ops: PrintOptions) -> Vec<(String, String)> {
         self.edges
             .iter()
-            .map(|e| {
-                let (mom, mass) = e.denominator(self);
-                (
-                    format!(
-                        "{}",
-                        AtomPrinter::new_with_options(mom.as_view(), printer_ops)
-                    ),
-                    format!(
-                        "{}",
-                        AtomPrinter::new_with_options(mass.as_view(), printer_ops)
-                    ),
-                )
+            .filter_map(|e| {
+                if let EdgeType::Virtual = e.edge_type {
+                    let (mom, mass) = e.denominator(self);
+                    Some((
+                        format!(
+                            "{}",
+                            AtomPrinter::new_with_options(mom.as_view(), printer_ops)
+                        ),
+                        format!(
+                            "{}",
+                            AtomPrinter::new_with_options(mass.as_view(), printer_ops)
+                        ),
+                    ))
+                } else {
+                    None
+                }
             })
             .collect()
     }
