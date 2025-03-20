@@ -1653,7 +1653,7 @@ checksum = "0717cef1bc8b636c6e1c1bbdefc09e6322da8a9321966e8928ef80d20f7f770f"
 [[package]]
 name = "linnet"
 version = "0.1.0"
-source = "git+https://github.com/alphal00p/linnet?rev=09d5f5f0da1f91f5c772eecd9022c6c01313bb09#09d5f5f0da1f91f5c772eecd9022c6c01313bb09"
+source = "git+https://github.com/alphal00p/linnet?rev=9f7d265be48adcba0509d594d37819b484f322d2#9f7d265be48adcba0509d594d37819b484f322d2"
 dependencies = [
  "ahash",
  "argmin",
