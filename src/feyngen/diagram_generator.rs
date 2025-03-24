@@ -11,6 +11,7 @@ use spenso::data::{DataTensor, StorageTensor};
 use spenso::iterators::IteratableTensor;
 use spenso::network::TensorNetwork;
 use spenso::parametric::{MixedTensor, ParamOrConcrete, ParamTensor};
+use spenso::permutation::Permutation;
 use spenso::structure::representation::ExtendibleReps;
 use spenso::structure::slot::DualSlotTo;
 use spenso::structure::{HasStructure, SmartShadowStructure};
@@ -1901,7 +1902,7 @@ impl FeynGen {
         &self,
         graph: &SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>,
         model: &Model,
-    ) -> Result<SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>, FeynGenError> {
+    ) -> Result<(SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>, bool), FeynGenError> {
         let mut adj_map: HashMap<usize, Vec<(usize, usize)>> = HashMap::default();
         for (i_e, e) in graph.edges().iter().enumerate() {
             // Build an adjacency list including only fermions
@@ -1937,6 +1938,10 @@ impl FeynGen {
         }
 
         let graph_edges = graph.edges();
+        // Pairing of the external fermion flows. The keys are (sorted) two-tuple of the PDGs of the external fermions (assuming all incoming)
+        // and the values are the external leg ids of the fermions connected and in the order of the sorted key.
+        let mut external_fermion_flow_pairings: AHashMap<(i64, i64), Vec<(usize, usize)>> =
+            AHashMap::default();
         // First fix flows connected to external only and after that fix all internal fermion/ghost flows
         for do_external_only in [true, false] {
             for (i_e, e) in graph_edges.iter().enumerate() {
@@ -1951,8 +1956,8 @@ impl FeynGen {
                     }
                     continue;
                 }
-                let mut is_starting_antiparticle =
-                    model.get_particle_from_pdg(e.data.pdg).is_antiparticle();
+                let starting_particle = model.get_particle_from_pdg(e.data.pdg);
+                let mut is_starting_antiparticle = starting_particle.is_antiparticle();
                 let starting_vertices = if is_a_virtual_edge && is_starting_antiparticle {
                     // Force all virtual closed fermion loops to be particles
                     is_starting_antiparticle = false;
@@ -1982,6 +1987,7 @@ impl FeynGen {
                 };
 
                 vetoed_edges[i_e] = true;
+                let mut connected_leg_ids: AHashSet<usize> = AHashSet::new();
                 for read_to_the_right in [true, false] {
                     let mut previous_node_position = if read_to_the_right {
                         starting_vertices.1
@@ -1992,6 +1998,12 @@ impl FeynGen {
                     //     "Starting reading chain from edge {}->{}, from {}",
                     //     starting_vertices.0, starting_vertices.1, previous_node_position
                     // );
+                    if graph.nodes()[previous_node_position].data.external_tag > 0 {
+                        connected_leg_ids.insert(
+                            graph.nodes()[previous_node_position].data.external_tag as usize,
+                        );
+                    }
+
                     'fermion_chain: loop {
                         let (next_fermion_edge_position, next_fermion_node_position) =
                             FeynGen::follow_chain(
@@ -2000,6 +2012,12 @@ impl FeynGen {
                                 &adj_map,
                                 true,
                             )?;
+                        if graph.nodes()[next_fermion_node_position].data.external_tag > 0 {
+                            connected_leg_ids.insert(
+                                graph.nodes()[next_fermion_node_position].data.external_tag
+                                    as usize,
+                            );
+                        }
                         // println!(
                         //     "Next edge: {}",
                         //     if let Some(nfep) = next_fermion_edge_position {
@@ -2056,6 +2074,90 @@ impl FeynGen {
                         }
                     }
                 }
+                if do_external_only && starting_particle.is_fermion() {
+                    if connected_leg_ids.len() != 2 {
+                        return Err(FeynGenError::GenericError(
+                            "External fermion flow must have exactly two legs".to_string(),
+                        ));
+                    }
+                    let connected_leg_ids_vec =
+                        connected_leg_ids.iter().copied().collect::<Vec<_>>();
+                    let connected_leg_pdgs = (0..=1)
+                        .map(|i| {
+                            if connected_leg_ids_vec[i] <= self.options.initial_pdgs.len() {
+                                self.options.initial_pdgs[connected_leg_ids_vec[i] - 1]
+                            } else {
+                                // Assign line types assuming all incoming particles
+                                if self.options.generation_type == GenerationType::CrossSection {
+                                    model
+                                        .get_particle_from_pdg(
+                                            self.options.initial_pdgs[connected_leg_ids_vec[i]
+                                                - self.options.initial_pdgs.len()
+                                                - 1]
+                                                as isize,
+                                        )
+                                        .get_anti_particle(model)
+                                        .pdg_code as i64
+                                } else {
+                                    model
+                                        .get_particle_from_pdg(
+                                            self.options.final_pdgs_lists[0][connected_leg_ids_vec
+                                                [i]
+                                                - self.options.initial_pdgs.len()
+                                                - 1]
+                                                as isize,
+                                        )
+                                        .get_anti_particle(model)
+                                        .pdg_code as i64
+                                }
+                            }
+                        })
+                        .collect::<Vec<_>>();
+                    if connected_leg_pdgs
+                        .iter()
+                        .any(|&pdg| !model.get_particle_from_pdg(pdg as isize).is_fermion())
+                    {
+                        return Err(FeynGenError::GenericError(
+                            "External fermion flow must connect two fermions".to_string(),
+                        ));
+                    }
+                    if connected_leg_pdgs[0] == connected_leg_pdgs[1] {
+                        return Err(FeynGenError::GenericError(
+                            "External fermion flow must connect a fermion and an anti-fermion. GammaLoop has no support for Majorana particles yet.".to_string(),
+                        ));
+                    }
+                    if connected_leg_pdgs[0] < connected_leg_pdgs[1] {
+                        external_fermion_flow_pairings
+                            .entry((connected_leg_pdgs[0], connected_leg_pdgs[1]))
+                            .or_default()
+                            .push((connected_leg_ids_vec[0], connected_leg_ids_vec[1]));
+                    } else {
+                        external_fermion_flow_pairings
+                            .entry((connected_leg_pdgs[1], connected_leg_pdgs[0]))
+                            .or_default()
+                            .push((connected_leg_ids_vec[1], connected_leg_ids_vec[0]));
+                    }
+                }
+            }
+        }
+
+        let mut external_fermion_flow_sign = 1;
+        for (_line_type, lines) in external_fermion_flow_pairings.iter() {
+            // println!("Line type: {:?}, lines: {:?}", _line_type, lines);
+            if lines.len() > 1 {
+                let mut concatenated_lines = vec![];
+                for (a, b) in lines.iter() {
+                    concatenated_lines.push(*a);
+                    concatenated_lines.push(*b);
+                }
+                if Permutation::sort(&concatenated_lines)
+                    .transpositions()
+                    .len()
+                    % 2
+                    == 1
+                {
+                    external_fermion_flow_sign *= -1;
+                }
             }
         }
 
@@ -2089,7 +2191,8 @@ impl FeynGen {
                 .map_err(|e| FeynGenError::GenericError(e.to_string()))?;
         }
         assert!(normalized_graph.edges().len() == graph.edges().len());
-        Ok(normalized_graph)
+
+        Ok((normalized_graph, external_fermion_flow_sign == -1))
     }
 
     // Note, this function will not work as intended with four-fermion vertices, and only aggregated self-loops or fermion-loops not involving four-femion vertices
@@ -3030,15 +3133,40 @@ impl FeynGen {
                     // NOTE: The normalization of the fermion flow cannot be performed at this stage yet because
                     // it involves flipping edge orientation which modifies the sign of the momenta for the local
                     // numerator comparison during the grouping of graphs. This is done later in the process then.
-                    let g_with_canonical_flows = self
+                    let (g_with_canonical_flows, is_external_fermion_flow_sign_negative) = self
                         .normalize_flows(&sorted_g, model)
                         .expect("Failed to normalize fermion flow");
+
+                    let symmetry_factor_with_external_fermion_flow_sign =
+                        if self.options.generation_type == GenerationType::Amplitude
+                            && ((!self
+                                .options
+                                .allow_symmetrization_of_external_fermions_in_amplitudes)
+                                || (self.options.symmetrize_initial_states
+                                    && self.options.symmetrize_final_states))
+                        {
+                            Atom::parse(&format!(
+                                // TODO: Add head to the various pieces building the overall factor
+                                //"ExternalFermionSign({})*({})",
+                                "({})*({})",
+                                if is_external_fermion_flow_sign_negative {
+                                    "-1"
+                                } else {
+                                    "1"
+                                },
+                                symmetry_factor
+                            ))
+                            .unwrap()
+                            .to_canonical_string()
+                        } else {
+                            symmetry_factor.clone()
+                        };
 
                     CanonizedGraphInfo {
                         canonized_graph: canonical_repr,
                         graph: sorted_g,
                         graph_with_canonized_flow: g_with_canonical_flows,
-                        symmetry_factor: symmetry_factor.clone(),
+                        symmetry_factor: symmetry_factor_with_external_fermion_flow_sign,
                     }
                 })
                 .collect::<Vec<_>>()
@@ -3425,7 +3553,11 @@ impl FeynGen {
         //     "Graphs: [{}]",
         //     bare_graphs
         //         .iter()
-        //         .map(|(_graph_id, graph)| format!("\"{}\"", graph.name.clone()))
+        //         .map(|(_graph_id, graph)| format!(
+        //             "\"{}@{{{}}}\"",
+        //             graph.name.clone(),
+        //             graph.overall_factor
+        //         ))
         //         .collect::<Vec<_>>()
         //         .join(", "),
         // );
