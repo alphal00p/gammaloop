@@ -403,6 +403,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "bstr"
+version = "1.11.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "531a9155a481e2ee699d4f98f43c0ca4ff8ee1bfd55c31e9e98fb29d2b176fe0"
+dependencies = [
+ "memchr",
+ "regex-automata",
+ "serde",
+]
+
+[[package]]
 name = "bumpalo"
 version = "3.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1653,7 +1664,7 @@ checksum = "0717cef1bc8b636c6e1c1bbdefc09e6322da8a9321966e8928ef80d20f7f770f"
 [[package]]
 name = "linnet"
 version = "0.1.0"
-source = "git+https://github.com/alphal00p/linnet?rev=9f7d265be48adcba0509d594d37819b484f322d2#9f7d265be48adcba0509d594d37819b484f322d2"
+source = "git+https://github.com/alphal00p/linnet?rev=3401fa7e22138ea2cf947aee4618357ae2c75057#3401fa7e22138ea2cf947aee4618357ae2c75057"
 dependencies = [
  "ahash",
  "argmin",
@@ -1670,6 +1681,7 @@ dependencies = [
  "rand",
  "ref-ops",
  "serde",
+ "similar-asserts",
  "thiserror 2.0.12",
 ]
 
@@ -2823,6 +2835,20 @@ name = "similar"
 version = "2.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bbbb5d9659141646ae647b42fe094daf6c6192d1620870b449d9557f748b2daa"
+dependencies = [
+ "bstr",
+ "unicode-segmentation",
+]
+
+[[package]]
+name = "similar-asserts"
+version = "1.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b5b441962c817e33508847a22bd82f03a30cff43642dc2fae8b050566121eb9a"
+dependencies = [
+ "console",
+ "similar",
+]
 
 [[package]]
 name = "slotmap"

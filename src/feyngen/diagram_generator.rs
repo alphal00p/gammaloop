@@ -59,10 +59,10 @@ use crate::{
     model::Model,
 };
 use itertools::Itertools;
-use linnet::half_edge::involution::Orientation;
+use linnet::half_edge::involution::{Flow, Orientation};
 use linnet::half_edge::subgraph::{OrientedCut, SubGraph};
-use linnet::half_edge::HedgeGraph;
 use linnet::half_edge::NodeIndex;
+use linnet::half_edge::{EdgeAccessors, HedgeGraph};
 use symbolica::{atom::Atom, graph::Graph as SymbolicaGraph};
 
 const CANONIZE_GRAPH_FLOWS: bool = true;
@@ -823,12 +823,13 @@ impl FeynGen {
             {
                 let cut_content: Vec<_> = cut
                     .1
-                    .iter_edges_relative(graph)
-                    .map(|(o, d)| {
-                        if matches!(o, Orientation::Reversed) {
-                            d.data.as_ref().get_anti_particle(model)
+                    .iter_left_hedges()
+                    .map(|h| {
+                        let o = graph.flow(h);
+                        if matches!(o, Flow::Sink) {
+                            graph[[&h]].as_ref().get_anti_particle(model)
                         } else {
-                            d.data.clone()
+                            graph[[&h]].clone()
                         }
                     })
                     .collect();
@@ -1031,12 +1032,18 @@ impl FeynGen {
                 .cross_section_filters
                 .filter_cross_section_tadpoles()
             {
-                let non_bridges = he_graph.non_bridges();
+                let externals: Vec<_> = he_graph
+                    .iter_nodes()
+                    .filter_map(|(h, n)| {
+                        if n.is_external() {
+                            he_graph.id_from_hairs(h)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
 
-                // info!("\\he_graph:\n{}", he_graph.dot(&non_bridges));
-                //
-
-                let connected_components_before = 1; // he_graph.tadpoles(externals).len();
+                let connected_components_before = he_graph.tadpoles(&externals).len() + 1;
                 for (i, f) in external_connections {
                     if let (Some(i), Some(f)) = (i, f) {
                         let i = he_graph
@@ -1058,6 +1065,7 @@ impl FeynGen {
                 let non_bridges = he_graph.non_bridges();
 
                 // info!("\\he_graph:\n{}", he_graph.dot(&non_bridges));
+
                 let connected_components = he_graph.count_connected_components(&non_bridges);
                 if connected_components == connected_components_before {
                     return true;
