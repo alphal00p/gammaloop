@@ -786,7 +786,7 @@ impl FeynGen {
             if is_s_channel(cut, s_set, t_set, graph) {
                 let mut cut_content: Vec<_> = cut
                     .1
-                    .iter_edges_relative(graph)
+                    .iter_edges(graph)
                     .map(|(o, d)| {
                         if matches!(o, Orientation::Reversed) {
                             d.data.as_ref().get_anti_particle(model)

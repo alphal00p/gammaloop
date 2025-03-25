@@ -215,8 +215,7 @@ fn get_orientations_with_cut<E, V>(
         .filter(|global_orientation| {
             // filter out orientations that are not consistent with the cut
             let edges_in_cut = graph.iter_edges(oriented_cut).map(|(_, id, _)| id);
-            let orientation_of_edges_in_cut =
-                oriented_cut.iter_edges_relative(graph).map(|(or, _)| or);
+            let orientation_of_edges_in_cut = oriented_cut.iter_edges(graph).map(|(or, _)| or);
 
             edges_in_cut
                 .zip(orientation_of_edges_in_cut)
@@ -278,8 +277,7 @@ fn get_possible_orientations_for_cut_list<E, V>(
                 .iter_enumerated()
                 .filter(|(_cut_id, cut)| {
                     let edges_in_cut = graph.iter_edges(&cut.cut).map(|(_, id, _)| id);
-                    let orientation_of_edges_in_cut =
-                        cut.cut.iter_edges_relative(graph).map(|(or, _)| or);
+                    let orientation_of_edges_in_cut = cut.cut.iter_edges(graph).map(|(or, _)| or);
 
                     edges_in_cut
                         .zip(orientation_of_edges_in_cut)

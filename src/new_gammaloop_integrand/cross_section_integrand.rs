@@ -62,17 +62,17 @@ impl CrossSectionGraphTerm {
 
         for (cut_id, esurface) in self.cut_esurface.iter_enumerated() {
             let (tstar_initial, _tstar_initial_negative) = esurface.get_radius_guess(
-                &momentum_sample.loop_moms(),
-                &momentum_sample.external_moms(),
+                momentum_sample.loop_moms(),
+                momentum_sample.external_moms(),
                 &self.graph.loop_momentum_basis,
             );
 
             let root_function = |t: &_| {
                 esurface.compute_self_and_r_derivative(
                     t,
-                    &momentum_sample.loop_moms(),
+                    momentum_sample.loop_moms(),
                     &center,
-                    &momentum_sample.external_moms(),
+                    momentum_sample.external_moms(),
                     &self.graph.loop_momentum_basis,
                     &self.graph.underlying.get_real_mass_vector(),
                 )
@@ -105,8 +105,8 @@ impl CrossSectionGraphTerm {
                 .graph
                 .underlying
                 .get_energy_cache(
-                    &rescaled_sample.loop_moms(),
-                    &rescaled_sample.external_moms(),
+                    rescaled_sample.loop_moms(),
+                    rescaled_sample.external_moms(),
                     &self.graph.loop_momentum_basis,
                 )
                 .into_iter()

@@ -23,6 +23,7 @@ use linnet::half_edge::{
     },
     HedgeGraph, NodeIndex,
 };
+use nalgebra::DMatrix;
 use petgraph::Direction::Outgoing;
 use serde::{de::value, Deserialize, Serialize};
 use smartstring::{LazyCompact, SmartString};
@@ -1005,6 +1006,140 @@ impl LoopMomentumBasis {
 
         path.reverse();
         Some(path)
+    }
+
+    pub fn generate_loop_momentum_bases<E, V>(
+        &self,
+        graph: &HedgeGraph<E, V>,
+    ) -> Vec<LoopMomentumBasis> {
+        let loop_number = self.basis.len();
+        let num_edges = graph.iter_all_edges().count();
+        let external_signature_length = self.edge_signatures[EdgeIndex::from(0)].external.len();
+
+        // the full virtual signature matrix in the form of a flattened vector
+        let signature_matrix_flattened = self
+            .edge_signatures
+            .borrow()
+            .into_iter()
+            .flat_map(|(_, sig)| sig.internal.iter().map(|s| (*s as i8) as f64).collect_vec())
+            .collect_vec();
+
+        // convert to dmatrix
+        let signature_matrix =
+            DMatrix::from_row_slice(num_edges, loop_number, &signature_matrix_flattened);
+
+        // the full external signature matrix in the form of a flattened vector
+        let external_signature_matrix_flattened = self
+            .edge_signatures
+            .borrow()
+            .into_iter()
+            .flat_map(|(_, sig)| sig.external.iter().map(|&s| (s as i8) as f64).collect_vec())
+            .collect_vec();
+
+        // convert to dmatrix
+        let external_signature_matrix = DMatrix::from_row_slice(
+            num_edges,
+            external_signature_length,
+            &external_signature_matrix_flattened,
+        );
+
+        let possible_lmbs = graph
+            .iter_all_edges()
+            .filter(|(pair, _, _)| matches!(pair, HedgePair::Paired { .. }))
+            .map(|(_, edge_index, _)| edge_index)
+            .combinations(loop_number);
+
+        let valid_lmbs = possible_lmbs
+            .map(|basis| {
+                let reduced_signature_matrix_flattened = basis
+                    .iter()
+                    .flat_map(|e| {
+                        self.edge_signatures[*e]
+                            .internal
+                            .iter()
+                            .map(|s| (*s as i8) as f64)
+                    })
+                    .collect_vec();
+
+                (
+                    basis,
+                    DMatrix::from_row_slice(
+                        loop_number,
+                        loop_number,
+                        &reduced_signature_matrix_flattened,
+                    ),
+                )
+            })
+            .filter(|(_basis, reduced_signature_matrix)| {
+                reduced_signature_matrix.determinant() != 0. // nonzero determinant means valid lmb
+            })
+            .map(|(basis, reduced_signature_matrix)| {
+                let mut sorted_basis = basis;
+                sorted_basis.sort();
+                (
+                    Into::<TiVec<LoopIndex, EdgeIndex>>::into(sorted_basis),
+                    reduced_signature_matrix,
+                )
+            });
+
+        let lmbs = valid_lmbs
+            .map(|(basis, reduced_signature_matrix)| {
+                // construct the signatures
+
+                // for this we need the reduced external signatures
+                let reduced_external_signatures_vec = basis
+                    .iter()
+                    .flat_map(|&e| {
+                        self.edge_signatures[e]
+                            .external
+                            .iter()
+                            .map(|s| (*s as i8) as f64)
+                    })
+                    .collect_vec();
+
+                let reduced_external_signatures = DMatrix::from_row_slice(
+                    loop_number,
+                    external_signature_length,
+                    &reduced_external_signatures_vec,
+                );
+
+                let reduced_signature_matrix_inverse =
+                    reduced_signature_matrix.clone().try_inverse().unwrap();
+
+                let new_virtual_signatures =
+                    signature_matrix.clone() * reduced_signature_matrix_inverse.clone();
+                let new_external_signatures = external_signature_matrix.clone()
+                    - signature_matrix.clone()
+                        * reduced_signature_matrix_inverse.clone()
+                        * reduced_external_signatures;
+
+                let new_signatures = graph.new_hedgevec(&|_, edge_id| {
+                    let new_virtual_signature = new_virtual_signatures
+                        .row(edge_id.into())
+                        .iter()
+                        .map(|s| s.round() as i8)
+                        .collect();
+                    let new_external_signature = new_external_signatures
+                        .row(edge_id.into())
+                        .iter()
+                        .map(|s| s.round() as i8)
+                        .collect();
+
+                    LoopExtSignature {
+                        internal: new_virtual_signature,
+                        external: new_external_signature,
+                    }
+                });
+
+                LoopMomentumBasis {
+                    tree: None,
+                    basis,
+                    edge_signatures: new_signatures,
+                }
+            })
+            .collect_vec();
+
+        lmbs
     }
 }
 

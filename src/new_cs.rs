@@ -907,7 +907,7 @@ impl CrossSectionCut {
         if self.is_s_channel(cross_section_graph)? {
             let mut cut_content = self
                 .cut
-                .iter_edges_relative(&cross_section_graph.graph.underlying)
+                .iter_edges(&cross_section_graph.graph.underlying)
                 .map(|(orientation, edge_data)| {
                     if orientation == Orientation::Reversed {
                         edge_data.data.particle.get_anti_particle(model)
