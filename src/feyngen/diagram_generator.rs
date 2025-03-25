@@ -59,10 +59,10 @@ use crate::{
     model::Model,
 };
 use itertools::Itertools;
-use linnet::half_edge::involution::{Flow, Orientation};
+use linnet::half_edge::involution::Flow;
 use linnet::half_edge::subgraph::{OrientedCut, SubGraph};
+use linnet::half_edge::HedgeGraph;
 use linnet::half_edge::NodeIndex;
-use linnet::half_edge::{EdgeAccessors, HedgeGraph};
 use symbolica::{atom::Atom, graph::Graph as SymbolicaGraph};
 
 const CANONIZE_GRAPH_FLOWS: bool = true;
@@ -101,7 +101,7 @@ struct CanonizedGraphInfo {
     canonized_graph: SymbolicaGraph<NodeColorWithoutVertexRule, String>,
     graph: SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>,
     graph_with_canonized_flow: SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>,
-    symmetry_factor: String,
+    symmetry_factor: Atom,
 }
 
 pub trait NodeColorFunctions: Sized + std::fmt::Display {
@@ -141,6 +141,7 @@ impl NodeColorFunctions for NodeColorWithVertexRule {
     fn get_external_tag(&self) -> i32 {
         self.external_tag
     }
+
     fn set_external_tag(&mut self, external_tag: i32) {
         self.external_tag = external_tag;
     }
@@ -249,6 +250,38 @@ pub struct FeynGen {
 impl FeynGen {
     pub fn new(options: FeynGenOptions) -> Self {
         Self { options }
+    }
+
+    pub fn evaluate_overall_factor(factor: AtomView) -> Atom {
+        let mut res = factor.to_owned();
+        for header in [
+            "AutG",
+            "CouplingsMultiplicity",
+            "InternalFermionLoopSign",
+            "ExternalFermionOrderingSign",
+            "NumeratorIndependentSymmetryGrouping",
+        ] {
+            res = res.replace_all(
+                &function!(symb!(header), Atom::new_var(symb!("x_"))).to_pattern(),
+                Atom::new_var(symb!("x_")).to_pattern(),
+                None,
+                None,
+            );
+        }
+        res = res.replace_all(
+            &function!(
+                symb!("NumeratorDependentGrouping"),
+                Atom::new_var(symb!("GraphId_")),
+                Atom::new_var(symb!("ratio_")),
+                Atom::new_var(symb!("GraphSymmetryFactor_"))
+            )
+            .to_pattern(),
+            (Atom::new_var(symb!("ratio_")) * Atom::new_var(symb!("GraphSymmetryFactor_")))
+                .to_pattern(),
+            None,
+            None,
+        );
+        res.expand()
     }
 
     #[allow(clippy::type_complexity)]
@@ -1412,13 +1445,21 @@ impl FeynGen {
                 });
         });
         bar.finish_and_clear();
-
         let iso_buckets_guard = iso_buckets.lock().unwrap();
         iso_buckets_guard
             .iter()
             .map(
                 |(_canonized_g, (count, (g, _external_ordering, symmetry_factor)))| {
-                    (g.clone(), symmetry_factor * Atom::new_num(*count as i64))
+                    let new_symmetry_factor = if *count != 1 {
+                        symmetry_factor
+                            * function!(
+                                symb!("NumeratorIndependentSymmetryGrouping"),
+                                Atom::new_num(*count as i64)
+                            )
+                    } else {
+                        symmetry_factor.clone()
+                    };
+                    (g.clone(), new_symmetry_factor)
                 },
             )
             .collect()
@@ -1948,8 +1989,11 @@ impl FeynGen {
         let graph_edges = graph.edges();
         // Pairing of the external fermion flows. The keys are (sorted) two-tuple of the PDGs of the external fermions (assuming all incoming)
         // and the values are the external leg ids of the fermions connected and in the order of the sorted key.
-        let mut external_fermion_flow_pairings: AHashMap<(i64, i64), Vec<(usize, usize)>> =
-            AHashMap::default();
+        #[allow(clippy::type_complexity)]
+        let mut external_fermion_flow_pairings: AHashMap<
+            (Arc<Particle>, Arc<Particle>),
+            Vec<(usize, usize)>,
+        > = AHashMap::default();
         // First fix flows connected to external only and after that fix all internal fermion/ghost flows
         for do_external_only in [true, false] {
             for (i_e, e) in graph_edges.iter().enumerate() {
@@ -2093,80 +2137,75 @@ impl FeynGen {
                     let connected_leg_pdgs = (0..=1)
                         .map(|i| {
                             if connected_leg_ids_vec[i] <= self.options.initial_pdgs.len() {
-                                self.options.initial_pdgs[connected_leg_ids_vec[i] - 1]
+                                model.get_particle_from_pdg(
+                                    self.options.initial_pdgs[connected_leg_ids_vec[i] - 1]
+                                        as isize,
+                                )
                             } else {
                                 // Assign line types assuming all incoming particles
-                                if self.options.generation_type == GenerationType::CrossSection {
-                                    model
-                                        .get_particle_from_pdg(
-                                            self.options.initial_pdgs[connected_leg_ids_vec[i]
-                                                - self.options.initial_pdgs.len()
-                                                - 1]
-                                                as isize,
-                                        )
-                                        .get_anti_particle(model)
-                                        .pdg_code as i64
+                                let right_side_pdgs = if self.options.generation_type
+                                    == GenerationType::CrossSection
+                                {
+                                    &self.options.initial_pdgs
                                 } else {
-                                    model
-                                        .get_particle_from_pdg(
-                                            self.options.final_pdgs_lists[0][connected_leg_ids_vec
-                                                [i]
-                                                - self.options.initial_pdgs.len()
-                                                - 1]
-                                                as isize,
-                                        )
-                                        .get_anti_particle(model)
-                                        .pdg_code as i64
-                                }
+                                    &self.options.final_pdgs_lists[0]
+                                };
+                                model
+                                    .get_particle_from_pdg(
+                                        right_side_pdgs[connected_leg_ids_vec[i]
+                                            - self.options.initial_pdgs.len()
+                                            - 1] as isize,
+                                    )
+                                    .get_anti_particle(model)
                             }
                         })
                         .collect::<Vec<_>>();
                     if connected_leg_pdgs
                         .iter()
-                        .any(|&pdg| !model.get_particle_from_pdg(pdg as isize).is_fermion())
+                        .any(|particle| !particle.is_fermion())
                     {
                         return Err(FeynGenError::GenericError(
                             "External fermion flow must connect two fermions".to_string(),
                         ));
                     }
-                    if connected_leg_pdgs[0] == connected_leg_pdgs[1] {
+                    if connected_leg_pdgs[0].is_antiparticle()
+                        && !connected_leg_pdgs[1].is_antiparticle()
+                    {
+                        external_fermion_flow_pairings
+                            .entry((connected_leg_pdgs[0].clone(), connected_leg_pdgs[1].clone()))
+                            .or_default()
+                            .push((connected_leg_ids_vec[0], connected_leg_ids_vec[1]));
+                    } else if connected_leg_pdgs[1].is_antiparticle()
+                        && !connected_leg_pdgs[0].is_antiparticle()
+                    {
+                        external_fermion_flow_pairings
+                            .entry((connected_leg_pdgs[1].clone(), connected_leg_pdgs[0].clone()))
+                            .or_default()
+                            .push((connected_leg_ids_vec[1], connected_leg_ids_vec[0]));
+                    } else {
                         return Err(FeynGenError::GenericError(
                             "External fermion flow must connect a fermion and an anti-fermion. GammaLoop has no support for Majorana particles yet.".to_string(),
                         ));
-                    }
-                    if connected_leg_pdgs[0] < connected_leg_pdgs[1] {
-                        external_fermion_flow_pairings
-                            .entry((connected_leg_pdgs[0], connected_leg_pdgs[1]))
-                            .or_default()
-                            .push((connected_leg_ids_vec[0], connected_leg_ids_vec[1]));
-                    } else {
-                        external_fermion_flow_pairings
-                            .entry((connected_leg_pdgs[1], connected_leg_pdgs[0]))
-                            .or_default()
-                            .push((connected_leg_ids_vec[1], connected_leg_ids_vec[0]));
                     }
                 }
             }
         }
 
         let mut external_fermion_flow_sign = 1;
-        for (_line_type, lines) in external_fermion_flow_pairings.iter() {
-            // println!("Line type: {:?}, lines: {:?}", _line_type, lines);
-            if lines.len() > 1 {
-                let mut concatenated_lines = vec![];
-                for (a, b) in lines.iter() {
-                    concatenated_lines.push(*a);
-                    concatenated_lines.push(*b);
-                }
-                if Permutation::sort(&concatenated_lines)
-                    .transpositions()
-                    .len()
-                    % 2
-                    == 1
-                {
-                    external_fermion_flow_sign *= -1;
-                }
+        let mut concatenated_lines = vec![];
+        for (_line_type, lines) in external_fermion_flow_pairings.iter().sorted() {
+            for (a, b) in lines.iter() {
+                concatenated_lines.push(*a);
+                concatenated_lines.push(*b);
             }
+        }
+        if Permutation::sort(&concatenated_lines)
+            .transpositions()
+            .len()
+            % 2
+            == 1
+        {
+            external_fermion_flow_sign *= -1;
         }
 
         // Finally make sure that all virtual non-self-antiparticles that are not fermions or ghost (like the W-boson) are set to particles
@@ -2649,7 +2688,8 @@ impl FeynGen {
             .map(|(g, symmetry_factor)| {
                 (
                     g.clone(),
-                    Atom::new_num(1) / Atom::new_num(symmetry_factor.clone()),
+                    Atom::new_num(1)
+                        / function!(symb!("AutG"), Atom::new_num(symmetry_factor.clone())),
                 )
             })
             .collect::<HashMap<_, _>>();
@@ -2682,7 +2722,7 @@ impl FeynGen {
             for (colored_g, multiplicity) in FeynGen::assign_node_colors(model, g, &node_colors)? {
                 processed_graphs.push((
                     colored_g.canonize().graph,
-                    (Atom::new_num(multiplicity as i64) * symmetry_factor).to_canonical_string(),
+                    (Atom::new_num(multiplicity as i64) * symmetry_factor),
                 ));
             }
         }
@@ -2702,8 +2742,14 @@ impl FeynGen {
                             .map(|(colored_g, multiplicity)| {
                                 (
                                     colored_g.canonize().graph,
-                                    (Atom::new_num(*multiplicity as i64) * symmetry_factor)
-                                        .to_canonical_string(),
+                                    if *multiplicity != 1 {
+                                        function!(
+                                            symb!("CouplingsMultiplicity"),
+                                            Atom::new_num(*multiplicity as i64)
+                                        ) * symmetry_factor
+                                    } else {
+                                        symmetry_factor.clone()
+                                    },
                                 )
                             })
                             .collect::<Vec<_>>()
@@ -2758,8 +2804,7 @@ impl FeynGen {
                     match self.count_closed_fermion_loops(g, model) {
                         Ok(n_closed_fermion_loops) => {
                             let new_symmetry_factor = if n_closed_fermion_loops % 2 == 1 {
-                                (Atom::new_num(-1) * Atom::parse(symmetry_factor).unwrap())
-                                    .to_canonical_string()
+                                function!(symb!("InternalFermionLoopSign"), -1) * symmetry_factor
                             } else {
                                 symmetry_factor.clone()
                             };
@@ -3066,16 +3111,13 @@ impl FeynGen {
             && !node_colors_for_canonicalization.is_empty()
         {
             processed_graphs = FeynGen::group_isomorphic_graphs_after_node_color_change(
-                &processed_graphs
-                    .iter()
-                    .map(|(g, m)| (g.clone(), Atom::parse(m).unwrap()))
-                    .collect::<HashMap<_, _>>(),
+                &processed_graphs.iter().cloned().collect::<HashMap<_, _>>(),
                 &node_colors_for_canonicalization,
                 &pool,
                 &progress_bar_style,
             )
             .iter()
-            .map(|(g, m)| (g.clone(), m.to_canonical_string()))
+            .map(|(g, m)| (g.clone(), m.clone()))
             .collect::<Vec<_>>();
         }
 
@@ -3153,19 +3195,14 @@ impl FeynGen {
                                 || (self.options.symmetrize_initial_states
                                     && self.options.symmetrize_final_states))
                         {
-                            Atom::parse(&format!(
-                                // TODO: Add head to the various pieces building the overall factor
-                                //"ExternalFermionSign({})*({})",
-                                "({})*({})",
-                                if is_external_fermion_flow_sign_negative {
-                                    "-1"
+                            function!(
+                                symb!("ExternalFermionOrderingSign"),
+                                Atom::new_num(if is_external_fermion_flow_sign_negative {
+                                    -1
                                 } else {
-                                    "1"
-                                },
-                                symmetry_factor
-                            ))
-                            .unwrap()
-                            .to_canonical_string()
+                                    1
+                                })
+                            ) * symmetry_factor
                         } else {
                             symmetry_factor.clone()
                         };
@@ -3183,15 +3220,54 @@ impl FeynGen {
 
         // Combine duplicates
         let mut combined_canonized_processed_graphs = HashMap::default();
+        let numerator_independent_symmetry_pattern = function!(
+            symb!("NumeratorIndependentSymmetryGrouping"),
+            Atom::new_var(symb!("x_"))
+        )
+        .to_pattern();
         for canonized_graph in canonized_processed_graphs {
             let g_with_canonical_flows_clone = canonized_graph.graph_with_canonized_flow.clone();
             combined_canonized_processed_graphs
                 .entry(g_with_canonical_flows_clone)
                 .and_modify(|entry: &mut CanonizedGraphInfo| {
-                    entry.symmetry_factor = (Atom::parse(entry.symmetry_factor.as_str()).unwrap()
-                        + Atom::parse(canonized_graph.symmetry_factor.as_str()).unwrap())
-                    .expand()
-                    .to_canonical_string();
+                    // NumeratorIndependentSymmetryGrouping
+                    let ratio = (FeynGen::evaluate_overall_factor(
+                        canonized_graph.symmetry_factor.as_view(),
+                    ) / FeynGen::evaluate_overall_factor(
+                        entry
+                            .symmetry_factor
+                            .replace_all(
+                                &numerator_independent_symmetry_pattern,
+                                Atom::new_num(1).to_pattern(),
+                                None,
+                                None,
+                            )
+                            .as_view(),
+                    ))
+                    .expand();
+                    if entry
+                        .symmetry_factor
+                        .pattern_match(&numerator_independent_symmetry_pattern, None, None)
+                        .next()
+                        .is_some()
+                    {
+                        entry.symmetry_factor.replace_all(
+                            &numerator_independent_symmetry_pattern,
+                            function!(
+                                symb!("NumeratorIndependentSymmetryGrouping"),
+                                (Atom::new_var(symb!("x_")) + ratio).expand()
+                            )
+                            .to_pattern(),
+                            None,
+                            None,
+                        );
+                    } else {
+                        entry.symmetry_factor = &entry.symmetry_factor
+                            * function!(
+                                symb!("NumeratorIndependentSymmetryGrouping"),
+                                (Atom::new_num(1) + ratio).expand()
+                            );
+                    }
                 })
                 .or_insert(canonized_graph);
         }
@@ -3455,21 +3531,13 @@ impl FeynGen {
                                                     ));
                                                 }
                                                 found_match = true;
-                                                other_graph.overall_factor =
-                                                    (Atom::parse(other_graph.overall_factor.as_str())
-                                                        .unwrap()
-                                                        + ratio
-                                                            * Atom::parse(
-                                                                bare_graph.overall_factor.as_str(),
-                                                            )
-                                                            .unwrap())
-                                                    .expand()
-                                                    .to_canonical_string();
+                                                other_graph.overall_factor = &other_graph.overall_factor + function!(symb!("NumeratorDependentGrouping"),Atom::new_num(numerator_data.as_ref().unwrap().diagram_id as i64), ratio, bare_graph.overall_factor);
+                                                //other_graph.overall_factor = (&other_graph.overall_factor + &ratio * &bare_graph.overall_factor).expand();
                                                 // TOFIX: Current version of symbolica (v0.14.0 rev: e534d9f7f8972e22d2a4fb7cd6cb5943373d3bb3)
                                                 // has a bug when cancelling terms where it does not yield 0. So this can be removed when updating to latest symbolica version.
-                                                if other_graph.overall_factor.is_empty() {
-                                                    other_graph.overall_factor = "0".to_string();
-                                                }
+                                                // if other_graph.overall_factor.is_zero() {
+                                                //     other_graph.overall_factor = "0".to_string();
+                                                // }
                                             }
                                         }
                                         if !found_match {
@@ -3495,8 +3563,7 @@ impl FeynGen {
                     .values()
                     .flatten()
                     .filter_map(|(graph_id, _numerator, graph)| {
-                        if Atom::parse(&graph.overall_factor)
-                            .unwrap()
+                        if FeynGen::evaluate_overall_factor(graph.overall_factor.as_view())
                             .expand()
                             .is_zero()
                         {

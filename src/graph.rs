@@ -1017,7 +1017,7 @@ impl SerializableGraph {
                 .map(|e| SerializableEdge::from_edge(graph, e))
                 .collect(),
 
-            overall_factor: graph.overall_factor.clone(),
+            overall_factor: graph.overall_factor.to_canonical_string(),
             external_connections: graph
                 .external_connections
                 .iter()
@@ -1143,7 +1143,7 @@ pub struct BareGraph {
     pub vertices: Vec<Vertex>,
     pub edges: Vec<Edge>,
     pub external_edges: Vec<usize>,
-    pub overall_factor: String,
+    pub overall_factor: Atom,
     pub external_connections: Vec<(Option<usize>, Option<usize>)>,
     pub loop_momentum_basis: LoopMomentumBasis,
     pub vertex_name_to_position: HashMap<SmartString<LazyCompact>, usize, RandomState>,
@@ -1381,7 +1381,7 @@ impl BareGraph {
             vertices,
             edges: vec![],
             external_edges: vec![],
-            overall_factor: graph.overall_factor.clone(),
+            overall_factor: Atom::parse(&graph.overall_factor).unwrap(),
             external_connections: vec![],
             loop_momentum_basis: LoopMomentumBasis {
                 basis: vec![],
@@ -1571,7 +1571,7 @@ impl BareGraph {
         model: &model::Model,
         name: String,
         graph: &SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>,
-        symmetry_factor: String,
+        symmetry_factor: Atom,
         external_connections: Vec<(Option<usize>, Option<usize>)>,
         forced_lmb: Option<Vec<SmartString<LazyCompact>>>,
     ) -> Result<BareGraph, FeynGenError> {

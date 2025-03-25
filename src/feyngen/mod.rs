@@ -9,6 +9,7 @@ use rayon::iter::ParallelIterator;
 use smartstring::{LazyCompact, SmartString};
 use std::ops::RangeInclusive;
 use std::{fmt, str::FromStr};
+use symbolica::atom::Atom;
 use symbolica::graph::Graph as SymbolicaGraph;
 use thiserror::Error;
 
@@ -317,7 +318,7 @@ impl FeynGenFilters {
     #[allow(clippy::type_complexity)]
     pub fn apply_filters<NodeColor: diagram_generator::NodeColorFunctions + Send + Sync + Clone>(
         &self,
-        graphs: &mut Vec<(SymbolicaGraph<NodeColor, EdgeColor>, String)>,
+        graphs: &mut Vec<(SymbolicaGraph<NodeColor, EdgeColor>, Atom)>,
         pool: &rayon::ThreadPool,
         progress_bar_style: &ProgressStyle,
     ) -> Result<(), FeynGenError> {
