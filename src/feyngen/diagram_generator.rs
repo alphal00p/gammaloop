@@ -592,6 +592,7 @@ impl FeynGen {
         // Tuple format: (back_edge_start_node_position, back_edge_position_in_list, chain_id)
         let mut self_loops: HashSet<(usize, usize, usize)> = HashSet::default();
         let mut n_factorizable_loops = 0;
+
         for &i_n in &spanning_tree.order {
             let node = &spanning_tree.nodes[i_n];
             for (i_back_edge, &back_edge) in node.back_edges.iter().enumerate() {
@@ -707,16 +708,39 @@ impl FeynGen {
             debug!("bridge_node_positions={:?}", tree_bridge_node_indices);
         }
 
+        // pub fn count_bridges(&self) -> usize {
+        //     self.nodes
+        //         .iter()
+        //         .enumerate()
+        //         .filter(|(n, x)| {
+        //             x.chain_id.is_none()
+        //                 && !self.nodes[x.parent].external
+        //                 && !x.external
+        //                 && x.parent != *n // exclude the root
+        //                 && !self.nodes[x.parent].back_edges.iter().any(|end| n == end)
+        //         })
+        //         .count()
+        // }
+
         // For self-energies we must confirm that they are self-energies by checking if the back edge start node is a bridge
-        for (leg_id, back_edge_start_node_index, _back_edge_position_in_list, _chain_id) in
+        for (leg_id, back_edge_start_node_index, back_edge_position_in_list, _chain_id) in
             self_energy_attachments.iter()
         {
-            if tree_bridge_node_indices.contains(back_edge_start_node_index) {
+            // We must verify that *both* end of the self-energy correspond to a tree bridge
+            let back_edge_target_node_index = spanning_tree.nodes[*back_edge_start_node_index]
+                .back_edges[*back_edge_position_in_list];
+            if tree_bridge_node_indices.contains(back_edge_start_node_index)
+                && node_children[back_edge_target_node_index].len() == 1
+                && (tree_bridge_node_indices
+                    .contains(&node_children[back_edge_target_node_index][0])
+                    || spanning_tree.nodes[node_children[back_edge_target_node_index][0]].external)
+            {
+                // if tree_bridge_node_indices.contains(back_edge_start_node_index) {
                 if let Some(veto_self_energy_options) = veto_self_energy {
                     if debug {
                         debug!(
                             "Vetoing self-energy for leg_id={}, back_edge_start_node_index={}, back_edge_position_in_list={}, chain_id={}, with options:\n{:?}",
-                            leg_id, back_edge_start_node_index, _back_edge_position_in_list, _chain_id, veto_self_energy_options
+                            leg_id, back_edge_start_node_index, back_edge_position_in_list, _chain_id, veto_self_energy_options
                         );
                     }
                     if veto_self_energy_options.veto_only_scaleless_self_energy {
@@ -3280,7 +3304,7 @@ impl FeynGen {
                         .next()
                         .is_some()
                     {
-                        entry.symmetry_factor.replace_all(
+                        entry.symmetry_factor = entry.symmetry_factor.replace_all(
                             &numerator_independent_symmetry_pattern,
                             function!(
                                 symb!("NumeratorIndependentSymmetryGrouping"),
@@ -3654,7 +3678,7 @@ impl FeynGen {
             }
         }
         // println!(
-        //     "Graphs: [{}]",
+        //     "Graphs: [\n{}\n]",
         //     bare_graphs
         //         .iter()
         //         .map(|(_graph_id, graph)| format!(
@@ -3663,7 +3687,7 @@ impl FeynGen {
         //             graph.overall_factor
         //         ))
         //         .collect::<Vec<_>>()
-        //         .join(", "),
+        //         .join("\n"),
         // );
 
         Ok(bare_graphs
