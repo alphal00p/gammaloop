@@ -193,7 +193,7 @@
           cargo-watch
           # python311
           texlive.combined.scheme-medium
-          poetry
+          uv
           ghostscript
           graphviz
           mupdf

@@ -633,5 +633,6 @@ impl fmt::Display for FeynGenOptions {
     }
 }
 
+pub mod half_edge_filters;
 #[cfg(test)]
 pub mod test;

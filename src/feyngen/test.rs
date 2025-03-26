@@ -51,6 +51,8 @@ fn cut_content() {
             FeynGenFilter::PerturbativeOrders(pert),
             FeynGenFilter::CouplingOrders(coupling),
             FeynGenFilter::LoopCountRange((3, 3)),
+            FeynGenFilter::BlobRange(1..=1),
+            FeynGenFilter::SpectatorRange(0..=0),
         ]),
     });
 
@@ -212,6 +214,8 @@ fn cut_content() {
             FeynGenFilter::PerturbativeOrders(pert),
             FeynGenFilter::CouplingOrders(coupling),
             FeynGenFilter::LoopCountRange((4, 4)),
+            FeynGenFilter::BlobRange(1..=1),
+            FeynGenFilter::SpectatorRange(0..=0),
         ]),
     });
 

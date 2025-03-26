@@ -43,11 +43,12 @@ use super::SnailFilterOptions;
 use super::TadpolesFilterOptions;
 use super::{FeynGenError, FeynGenOptions};
 
+use crate::feyngen::half_edge_filters::FeynGenHedgeGraph;
 use crate::graph::{EdgeType, HedgeGraphExt};
 use crate::model::ColorStructure;
 use crate::model::Particle;
 use crate::model::VertexRule;
-use crate::momentum::SignOrZero;
+use crate::momentum::{Pow, Sign, SignOrZero};
 use crate::numerator::AtomStructure;
 use crate::numerator::Numerator;
 use crate::numerator::SymbolicExpression;
@@ -72,7 +73,7 @@ pub struct NodeColorWithVertexRule {
     pub vertex_rule: Arc<VertexRule>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Default, Copy)]
 pub struct NodeColorWithoutVertexRule {
     pub external_tag: i32,
 }
@@ -108,7 +109,30 @@ pub trait NodeColorFunctions: Sized + std::fmt::Display {
     fn get_external_tag(&self) -> i32;
     fn set_external_tag(&mut self, external_tag: i32);
     fn is_external(&self) -> bool {
-        self.get_external_tag() == 0
+        self.get_external_tag() > 0
+    }
+
+    fn is_incoming(&self, n_initial_states: usize) -> bool {
+        self.is_external() && (self.get_external_tag() <= (n_initial_states as i32))
+    }
+
+    fn is_outgoing(&self, n_initial_states: usize) -> bool {
+        self.is_external() && (self.get_external_tag() > (n_initial_states as i32))
+    }
+
+    /// Only applicable for XS
+    fn pairing_tag(&self, n_initial_states: usize) -> i32 {
+        let tag = self.get_external_tag();
+
+        if tag > 0 {
+            if tag > (n_initial_states as i32) {
+                tag - (n_initial_states as i32)
+            } else {
+                tag
+            }
+        } else {
+            tag
+        }
     }
 
     fn coupling_orders(&self) -> AHashMap<SmartString<LazyCompact>, usize> {
@@ -179,7 +203,7 @@ impl NodeColorFunctions for NodeColorWithVertexRule {
             let mut coupling_orders = AHashMap::default();
             for (_, s) in graph.iter_node_data(amplitude_subgraph) {
                 // println!("node {}:{}", s.vertex_rule.name, s.get_external_tag());
-                if s.is_external() {
+                if !s.is_external() {
                     for (k, v) in s.coupling_orders() {
                         *coupling_orders.entry(k).or_insert(0) += v;
                     }
@@ -3204,7 +3228,12 @@ impl FeynGen {
                                 })
                             ) * symmetry_factor
                         } else {
-                            symmetry_factor.clone()
+                            symmetry_factor
+                                * self.external_xs_fermion_signs(
+                                    &g_with_canonical_flows,
+                                    model,
+                                    self.options.initial_pdgs.len(),
+                                )
                         };
 
                     CanonizedGraphInfo {
@@ -3971,6 +4000,26 @@ impl FeynGen {
             res = res.replace_all(&src.to_pattern(), trgt.to_pattern(), None, None);
         }
         res.expand()
+    }
+
+    fn external_xs_fermion_signs(
+        &self,
+        graph: &SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>,
+        model: &Model,
+        n_initials: usize,
+    ) -> Atom {
+        let mut he_graph =
+            FeynGenHedgeGraph::from_feyn_gen_symbolica(graph.clone(), model, n_initials);
+        let n_external_fermion_loops = he_graph.number_of_external_fermion_loops();
+
+        let sign = Sign::Negative.pow(n_external_fermion_loops);
+        function!(
+            symb!("ExternalFermionOrderingSign"),
+            Atom::new_num(match sign {
+                Sign::Positive => 1,
+                Sign::Negative => -1,
+            })
+        )
     }
 }
 

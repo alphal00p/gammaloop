@@ -48,7 +48,7 @@ spenso = { version = "0.4.0", features = ["shadowing"] }
 linnet = { git = "https://github.com/alphal00p/linnet", features = [
     # "symbolica",
     "drawing",
-] , rev="3401fa7e22138ea2cf947aee4618357ae2c75057"}
+] , rev="79d1568568b0b5d86875d254f2d18e18a9c5e24c"}
 
 
 momtrop = { git = "https://github.com/alphal00p/momtrop", features = ["log"] }
