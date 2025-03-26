@@ -51,7 +51,7 @@ linnet = { git = "https://github.com/alphal00p/linnet", features = [
 ] }
 
 
-momtrop = { git = "https://github.com/alphal00p/momtrop", features = ["log"] }
+momtrop = { git = "https://github.com/alphal00p/momtrop", features = ["log"], rev = "a77a7e3a6681892008ebbfbd92788d48e7009136" }
 serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "*"
 bincode = { git = "https://github.com/branchseer/bincode", branch = "decode_context", features = [
