@@ -3563,37 +3563,48 @@ impl FeynGen {
                                         entry.insert(vec![(i_g, numerator_data, canonized_fermion_flow_bare_graph)]);
                                     }
                                     Entry::Occupied(mut entry) => {
-                                        let mut found_match = false;
-                                        for (_graph_id, other_numerator, other_graph) in entry.get_mut() {
-                                            if let Some(ratio) = FeynGen::compare_numerator_tensors(
-                                                numerator_aware_isomorphism_grouping,
-                                                numerator_data.as_ref().unwrap(),
-                                                other_numerator.as_ref().unwrap(),
-                                            ) {
-                                                {
-                                                    let n_zeroes_color_value = n_zeroes_color.lock().unwrap();
-                                                    let n_zeroes_lorentz_value = n_zeroes_lorentz.lock().unwrap();
-                                                    let mut n_groupings_value =
-                                                        n_groupings.lock().unwrap();
-                                                    *n_groupings_value += 1;
-                                                    bar.set_message(format!("Final numerator-aware processing of remaining graphs ({} found: {} | {} found: {})...",
-                                                        "#zeros".green(),
-                                                        format!("{}",*n_zeroes_color_value+ *n_zeroes_lorentz_value).green().bold(),
-                                                        "#groupings".green(),
-                                                        format!("{}",n_groupings_value).green().bold(),
-                                                    ));
+                                        let match_found = entry.get().iter().enumerate().find_map(|(i_entry, (graph_id, other_numerator, other_graph))| {
+                                            if *graph_id < i_g {
+                                                if let Some(ratio) = FeynGen::compare_numerator_tensors(
+                                                    numerator_aware_isomorphism_grouping,
+                                                    numerator_data.as_ref().unwrap(),
+                                                    other_numerator.as_ref().unwrap(),
+                                                ) {
+                                                    let mut new_graph = other_graph.clone();
+                                                    new_graph.overall_factor = &new_graph.overall_factor + function!(symb!("NumeratorDependentGrouping"),Atom::new_num(i_g as i64), ratio, canonized_fermion_flow_bare_graph.overall_factor);
+                                                    Some((i_entry, (*graph_id, other_numerator.clone(), new_graph)))
                                                 }
-                                                found_match = true;
-                                                other_graph.overall_factor = &other_graph.overall_factor + function!(symb!("NumeratorDependentGrouping"),Atom::new_num(numerator_data.as_ref().unwrap().diagram_id as i64), ratio, bare_graph.overall_factor);
-                                                //other_graph.overall_factor = (&other_graph.overall_factor + &ratio * &bare_graph.overall_factor).expand();
-                                                // TOFIX: Current version of symbolica (v0.14.0 rev: e534d9f7f8972e22d2a4fb7cd6cb5943373d3bb3)
-                                                // has a bug when cancelling terms where it does not yield 0. So this can be removed when updating to latest symbolica version.
-                                                // if other_graph.overall_factor.is_zero() {
-                                                //     other_graph.overall_factor = "0".to_string();
-                                                // }
+                                                else {
+                                                    None
+                                                } 
+                                             } else if let Some(ratio) = FeynGen::compare_numerator_tensors(
+                                                    numerator_aware_isomorphism_grouping,
+                                                    other_numerator.as_ref().unwrap(),
+                                                    numerator_data.as_ref().unwrap(),
+                                                ) {
+                                                    let mut new_graph = canonized_fermion_flow_bare_graph.clone();
+                                                    new_graph.overall_factor = &new_graph.overall_factor + function!(symb!("NumeratorDependentGrouping"),Atom::new_num(*graph_id as i64), ratio, other_graph.overall_factor);
+                                                    Some((i_entry, (i_g, numerator_data.clone(), new_graph)))
+                                            } else {
+                                                None
                                             }
-                                        }
-                                        if !found_match {
+                                        });
+                                        if let Some((i_entry, new_entry)) = match_found {
+                                            {
+                                                let n_zeroes_color_value = n_zeroes_color.lock().unwrap();
+                                                let n_zeroes_lorentz_value = n_zeroes_lorentz.lock().unwrap();
+                                                let mut n_groupings_value =
+                                                    n_groupings.lock().unwrap();
+                                                *n_groupings_value += 1;
+                                                bar.set_message(format!("Final numerator-aware processing of remaining graphs ({} found: {} | {} found: {})...",
+                                                    "#zeros".green(),
+                                                    format!("{}",*n_zeroes_color_value+ *n_zeroes_lorentz_value).green().bold(),
+                                                    "#groupings".green(),
+                                                    format!("{}",n_groupings_value).green().bold(),
+                                                ));
+                                            }
+                                            entry.get_mut()[i_entry] = new_entry;
+                                        } else {
                                             entry.get_mut().push((i_g, numerator_data, canonized_fermion_flow_bare_graph));
                                         }
                                     }
@@ -4047,6 +4058,7 @@ impl FeynGen {
     }
 }
 
+#[derive(Clone)]
 struct ProcessedNumeratorForComparison {
     diagram_id: usize,
     canonized_numerator: Option<Atom>,
