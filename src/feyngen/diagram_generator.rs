@@ -3362,12 +3362,13 @@ impl FeynGen {
         let n_zeroes_color = Arc::new(Mutex::new(0));
         let n_zeroes_lorentz = Arc::new(Mutex::new(0));
         let n_groupings = Arc::new(Mutex::new(0));
+        // the pooled bare graphs have keys being the skeletton graphs identifying the topology
         #[allow(clippy::type_complexity)]
         let pooled_bare_graphs: Arc<
             Mutex<
                 HashMap<
                     SymbolicaGraph<NodeColorWithoutVertexRule, std::string::String>,
-                    Vec<(usize, Option<ProcessedNumeratorForComparison>, BareGraph)>,
+                    Vec<Vec<PooledGraphData>>,
                 >,
             >,
         > = Arc::new(Mutex::new(HashMap::default()));
@@ -3431,6 +3432,12 @@ impl FeynGen {
                     //     bare_graph.dot()
                     // );
                     // When disabling numerator-aware graph isomorphism, each graph is added separately
+                    let pooled_graph = PooledGraphData {
+                        graph_id: i_g,
+                        numerator_data: None,
+                        ratio: Atom::new_num(1),
+                        bare_graph: canonized_fermion_flow_bare_graph.clone(),
+                    };
                     if matches!(
                         numerator_aware_isomorphism_grouping,
                         NumeratorAwareGraphGroupingOption::NoGrouping
@@ -3439,10 +3446,10 @@ impl FeynGen {
                             let mut pooled_bare_graphs_lock = pooled_bare_graphs_clone.lock().unwrap();
                             match pooled_bare_graphs_lock.entry(canonical_graph.canonized_graph.clone()) {
                                 Entry::Vacant(entry) => {
-                                    entry.insert(vec![(i_g, None, canonized_fermion_flow_bare_graph)]);
+                                    entry.insert(vec![vec![pooled_graph]]);
                                 }
                                 Entry::Occupied(mut entry) => {
-                                    entry.get_mut().push((i_g, None, canonized_fermion_flow_bare_graph));
+                                    entry.get_mut().push(vec![pooled_graph]);
                                 }
                             }
                         }
@@ -3500,13 +3507,12 @@ impl FeynGen {
                         ) {
                             {
                                 let mut pooled_bare_graphs_lock = pooled_bare_graphs_clone.lock().unwrap();
-
                                 match pooled_bare_graphs_lock.entry(canonical_graph.canonized_graph.clone()) {
                                     Entry::Vacant(entry) => {
-                                        entry.insert(vec![(i_g, None, canonized_fermion_flow_bare_graph)]);
+                                        entry.insert(vec![vec![pooled_graph]]);
                                     }
                                     Entry::Occupied(mut entry) => {
-                                        entry.get_mut().push((i_g, None, canonized_fermion_flow_bare_graph));
+                                        entry.get_mut().push(vec![pooled_graph]);
                                     }
                                 }
                             }
@@ -3560,34 +3566,31 @@ impl FeynGen {
 
                                 match pooled_bare_graphs_lock.entry(canonical_graph.canonized_graph.clone()) {
                                     Entry::Vacant(entry) => {
-                                        entry.insert(vec![(i_g, numerator_data, canonized_fermion_flow_bare_graph)]);
+                                        entry.insert(vec![vec![
+                                            PooledGraphData {
+                                                graph_id: i_g,
+                                                numerator_data,
+                                                ratio: Atom::new_num(1),
+                                                bare_graph: canonized_fermion_flow_bare_graph,
+                                            }
+                                            ]]);
                                     }
                                     Entry::Occupied(mut entry) => {
-                                        let match_found = entry.get().iter().enumerate().find_map(|(i_entry, (graph_id, other_numerator, other_graph))| {
-                                            if *graph_id < i_g {
-                                                if let Some(ratio) = FeynGen::compare_numerator_tensors(
-                                                    numerator_aware_isomorphism_grouping,
-                                                    numerator_data.as_ref().unwrap(),
-                                                    other_numerator.as_ref().unwrap(),
-                                                ) {
-                                                    let mut new_graph = other_graph.clone();
-                                                    new_graph.overall_factor = &new_graph.overall_factor + function!(symb!("NumeratorDependentGrouping"),Atom::new_num(i_g as i64), ratio, canonized_fermion_flow_bare_graph.overall_factor);
-                                                    Some((i_entry, (*graph_id, other_numerator.clone(), new_graph)))
-                                                }
-                                                else {
-                                                    None
-                                                } 
-                                             } else if let Some(ratio) = FeynGen::compare_numerator_tensors(
-                                                    numerator_aware_isomorphism_grouping,
-                                                    other_numerator.as_ref().unwrap(),
-                                                    numerator_data.as_ref().unwrap(),
-                                                ) {
-                                                    let mut new_graph = canonized_fermion_flow_bare_graph.clone();
-                                                    new_graph.overall_factor = &new_graph.overall_factor + function!(symb!("NumeratorDependentGrouping"),Atom::new_num(*graph_id as i64), ratio, other_graph.overall_factor);
-                                                    Some((i_entry, (i_g, numerator_data.clone(), new_graph)))
-                                            } else {
-                                                None
-                                            }
+
+                                        let match_found = entry.get().iter().enumerate().find_map(|(i_entry, pooled_graphs_lists_for_this_topology)| {
+                                            let reference_pooled_graph_data = &pooled_graphs_lists_for_this_topology[0];
+                                            FeynGen::compare_numerator_tensors(
+                                                numerator_aware_isomorphism_grouping,
+                                                numerator_data.as_ref().unwrap(),
+                                                reference_pooled_graph_data.numerator_data.as_ref().unwrap(),
+                                            ).map(|ratio| {
+                                                (i_entry, PooledGraphData {
+                                                    graph_id: i_g,
+                                                    numerator_data: None,
+                                                    ratio,
+                                                    bare_graph: canonized_fermion_flow_bare_graph.clone(),
+                                                })
+                                            })
                                         });
                                         if let Some((i_entry, new_entry)) = match_found {
                                             {
@@ -3603,9 +3606,16 @@ impl FeynGen {
                                                     format!("{}",n_groupings_value).green().bold(),
                                                 ));
                                             }
-                                            entry.get_mut()[i_entry] = new_entry;
+                                            entry.get_mut()[i_entry].push(new_entry);
                                         } else {
-                                            entry.get_mut().push((i_g, numerator_data, canonized_fermion_flow_bare_graph));
+                                            entry.get_mut().push(vec![
+                                                PooledGraphData {
+                                                    graph_id: i_g,
+                                                    numerator_data,
+                                                    ratio: Atom::new_num(1),
+                                                    bare_graph: canonized_fermion_flow_bare_graph,
+                                                }
+                                            ]);
                                         }
                                     }
                                 }
@@ -3618,29 +3628,52 @@ impl FeynGen {
         })?;
         bar.finish_and_clear();
 
+        // Now combine the pooled graphs identified to be combined.
+        let mut bare_graphs: Vec<(usize, BareGraph)> = Vec::default();
+        let mut pooled_bare_graphs_len = 0;
         let mut n_cancellations: i32 = 0;
-        let (mut bare_graphs, pooled_bare_graphs_len) = {
-            let pooled_bare_graphs_lock = pooled_bare_graphs.lock().unwrap();
-
-            (
-                pooled_bare_graphs_lock
-                    .values()
-                    .flatten()
-                    .filter_map(|(graph_id, _numerator, graph)| {
-                        if FeynGen::evaluate_overall_factor(graph.overall_factor.as_view())
-                            .expand()
-                            .is_zero()
-                        {
-                            n_cancellations += 1;
-                            None
-                        } else {
-                            Some((*graph_id, graph.clone()))
-                        }
-                    })
-                    .collect::<Vec<_>>(),
-                pooled_bare_graphs_lock.len(),
-            )
-        };
+        for (_canonical_repr, pooled_graphs_lists_for_this_topology) in
+            pooled_bare_graphs.lock().unwrap().iter()
+        {
+            for pooled_graphs_list in pooled_graphs_lists_for_this_topology {
+                let previous_reference_ratio = pooled_graphs_list[0].ratio.clone();
+                let sorted_graphs_to_combine = pooled_graphs_list
+                    .iter()
+                    .sorted_by_key(|pooled_graph| pooled_graph.graph_id)
+                    .collect::<Vec<_>>();
+                let mut combined_overall_factor = Atom::new_num(0);
+                let mut bare_graph_representative = pooled_graphs_list[0].bare_graph.clone();
+                if sorted_graphs_to_combine.len() > 1 {
+                    for graph_to_combine in sorted_graphs_to_combine {
+                        pooled_bare_graphs_len += 1;
+                        // The computation of &graph_to_combine.ratio / &previous_reference_ratio is necessary so that if we started with this order of graphs to combine
+                        //   (A, B, C), with ratios (r_1 = 1, r_2 = B/A, r_3 = C/A)
+                        // And when forcing the reference diagram to be e.g. C, (so that we get a predictive ref graph in the multi-thread case), we need to pick C as the
+                        // reference and have A and B be multiplied by the ratios A/C and B/C respectively. respectively.
+                        // These will here be computed as A/C = r_1 / r_3 and B/C = r_2 / r_3. In general `r_i / r_ref` always yield the desired ratio.
+                        combined_overall_factor = combined_overall_factor
+                            + function!(
+                                symb!("NumeratorDependentGrouping"),
+                                Atom::new_num(graph_to_combine.graph_id as i64),
+                                (&graph_to_combine.ratio / &previous_reference_ratio).expand(),
+                                graph_to_combine.bare_graph.overall_factor.clone()
+                            );
+                    }
+                } else {
+                    pooled_bare_graphs_len += 1;
+                    combined_overall_factor = bare_graph_representative.overall_factor.clone();
+                }
+                if FeynGen::evaluate_overall_factor(combined_overall_factor.as_view())
+                    .expand()
+                    .is_zero()
+                {
+                    n_cancellations += 1;
+                } else {
+                    bare_graph_representative.overall_factor = combined_overall_factor;
+                    bare_graphs.push((pooled_graphs_list[0].graph_id, bare_graph_representative));
+                }
+            }
+        }
         bare_graphs.sort_by(|a: &(usize, BareGraph), b| (a.0).cmp(&b.0));
 
         let (n_zeroes_color_value, n_zeroes_lorentz_value, n_groupings_value) = {
@@ -4056,6 +4089,13 @@ impl FeynGen {
             })
         )
     }
+}
+
+struct PooledGraphData {
+    graph_id: usize,
+    numerator_data: Option<ProcessedNumeratorForComparison>,
+    ratio: Atom,
+    bare_graph: BareGraph,
 }
 
 #[derive(Clone)]
