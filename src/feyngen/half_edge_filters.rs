@@ -2,7 +2,7 @@ use std::{fmt::Display, sync::Arc};
 
 use bitvec::vec::BitVec;
 use linnet::half_edge::{
-    involution::{EdgeIndex, Flow, HedgePair},
+    involution::{EdgeData, EdgeIndex, Flow, HedgePair, Orientation},
     nodestorage::NodeStorageOps,
     subgraph::{cut::PossiblyCutEdge, SubGraph, SubGraphOps},
     HedgeGraph,
@@ -118,10 +118,15 @@ impl<V> FeynGenHedgeGraph<Arc<Particle>, V> {
     where
         V: Clone,
     {
+        // println!("number_of_external_fermion_loops");
+        // println!("{}", self);
+
         self.remove_external_nodes();
         let internal = self.number_of_fermion_loops();
+        // println!("{}", self);
 
         self.glue_external_hedges();
+        // println!("{}", self);
 
         let all_fermion_loops = self.number_of_fermion_loops();
 
@@ -148,11 +153,16 @@ impl<V> FeynGenHedgeGraph<Arc<Particle>, V> {
                 }
             },
             |inv, _, pair, d| {
-                d.map(|d| {
-                    let id = inv[pair.any_hedge()];
-
-                    PossiblyCutEdge::uncut(model.get_particle_from_pdg(d.pdg), id)
-                })
+                let mut particle = model.get_particle_from_pdg(d.data.pdg);
+                let mut o = d.orientation;
+                if !particle.is_fermion() {
+                    o = Orientation::Undirected;
+                } else if particle.is_antiparticle() {
+                    o = Orientation::Reversed;
+                    particle = particle.get_anti_particle(model);
+                }
+                let id = inv[pair.any_hedge()];
+                EdgeData::new(PossiblyCutEdge::uncut(particle, id), o)
             },
         );
 
