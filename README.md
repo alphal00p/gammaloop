@@ -1,13 +1,11 @@
 <div align="center">
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/gammalooplogo-dark.svg">
-  <img src="assets/gammalooplogo-light.svg", width="300">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/alphal00p/gammaloop/main/python/gammaloop/data/assets/gammalooplogo-dark.svg">
+  <img src="https://raw.githubusercontent.com/alphal00p/gammaloop/main/python/gammaloop/data/assets/gammalooplogo-light.svg", width="300">
 </picture>
 </div> 
 
-| |
-|:--:|
-| ![tests status](https://github.com/alphal00p/gammaloop/actions/workflows/gamma_loop_tests.yml/badge.svg?event=push) |
+![tests status](https://github.com/alphal00p/gammaloop/actions/workflows/gamma_loop_tests.yml/badge.svg?event=push)
 
 *Computation of differential cross-sections using Local Unitarity.*
 
@@ -17,7 +15,7 @@ See the [wiki](https://wiki.alphaloop.ch/) for more information on the project.
 
 ## TL;DR: I want to be running γLoop already!
 
-We salute the eagerness of our users.
+We salute the eagerness of our users!
 
 If you want to jump right in, run the following to immediately start integrating the scalar three-loop mercedes diagram,
 
@@ -35,10 +33,27 @@ or a one-loop hexagon diagram from the scattering process $\gamma \gamma \righta
 
 You can also generate diagrams for the computation of cross-sections or amplitudes with:
 ```bash
-./bin/gammaloop -c "import_model sm; generate_amplitude d d~ > d d~ e+ e- | u d g ghg e- a QED=2 [{2} QCD=2]"
+> ./bin/gammaloop -c "import_model sm;\
+generate_amplitude d d~ > d d~ e+ e- | u d g ghg e- a QED=2 [{2} QCD=2];\
+output MyProcess -exp -mr -ef mathematica --yaml_only;"
 [...]
 INFO    : A total of 2214 graphs have been generated in 00:00:49.142.
 ```
+You can then visualize all diagrams with: 
+```bash
+> cd ./MyProcess/sources/amplitudes/GL_ddx_ddxepem/drawings/dot
+> make -j &> /dev/null
+> ls feynman_diagrams.pdf
+```
+and import their corresponding symbolic expressions from:
+```bash
+> ls ./MyProcess/sources/amplitudes/GL_ddx_ddxepem/expressions
+[...] GL1016_exp.json  GL1223_exp.json  GL1426_exp.json  GL1816_exp.json [...]
+> head -2 ./MyProcess/sources/amplitudes/GL_ddx_ddxepem/expressions/GL84_exp.json
+[
+  "-2/3 𝑖 ee^2 G^6 Metric[mink[4,6],mink[4,13]] Metric[mink[4,7],mink[4,12]] Metric[mink[4,8],mink[4,11]] Metric[mink[4,9],[mink[4,10]] T[coad[8,10],cof[3,9],dind[cof[3,8]]] T[coad[8,13],cof[3,12],dind[cof[3,11]]] [...]",
+```
+which can be further processed to your liking using e.g. [Mathematica](https://www.wolfram.com/mathematica), [Symbolica](https://github.com/benruijl/symbolica-community) and / or [spenso](https://github.com/alphal00p/spenso).
 
 Process generation syntax is detailed on γLoop's [wiki](https://wiki.alphaloop.ch/en/gammaLoop/ProcessGeneration).
 

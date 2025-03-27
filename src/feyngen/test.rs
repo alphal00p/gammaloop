@@ -18,13 +18,13 @@ fn cut_content() {
     let model = load_generic_model("sm");
 
     let mut coupling = HashMap::new();
-    coupling.insert("QED".into(), 6);
+    coupling.insert("QED".into(), (6, Some(6)));
     let mut pert = HashMap::new();
     pert.insert("QCD".into(), 1);
     let filters = FeynGen::new(FeynGenOptions {
         generation_type: GenerationType::CrossSection,
         initial_pdgs: vec![-11, 11],
-        final_pdgs: vec![5, -5, 25],
+        final_pdgs_lists: vec![vec![5, -5, 25]],
         loop_count_range: (3, 3),
         symmetrize_initial_states: true,
         symmetrize_final_states: true,
@@ -51,6 +51,8 @@ fn cut_content() {
             FeynGenFilter::PerturbativeOrders(pert),
             FeynGenFilter::CouplingOrders(coupling),
             FeynGenFilter::LoopCountRange((3, 3)),
+            FeynGenFilter::BlobRange(1..=1),
+            FeynGenFilter::SpectatorRange(0..=0),
         ]),
     });
 
@@ -58,19 +60,19 @@ fn cut_content() {
     #[allow(non_snake_case)]
     let bbH = NodeColorWithVertexRule {
         external_tag: 0,
-        vertex_rule: model.get_vertex_rule(&"V_78".into()),
+        vertex_rule: model.get_vertex_rule("V_78"),
     };
     let bba = NodeColorWithVertexRule {
         external_tag: 0,
-        vertex_rule: model.get_vertex_rule(&"V_73".into()),
+        vertex_rule: model.get_vertex_rule("V_73"),
     };
     let bbg = NodeColorWithVertexRule {
         external_tag: 0,
-        vertex_rule: model.get_vertex_rule(&"V_76".into()),
+        vertex_rule: model.get_vertex_rule("V_76"),
     };
     let epema = NodeColorWithVertexRule {
         external_tag: 0,
-        vertex_rule: model.get_vertex_rule(&"V_98".into()),
+        vertex_rule: model.get_vertex_rule("V_98"),
     };
 
     let dummy_external_vertex_rule = Arc::new(VertexRule {
@@ -105,18 +107,14 @@ fn cut_content() {
     let v10 = graph.add_node(e3.clone());
     let v11 = graph.add_node(e4.clone());
 
-    let h = EdgeColor::from_particle(model.get_particle(&"H".to_string().into()));
+    let h = EdgeColor::from_particle(model.get_particle("H"));
 
-    let b = EdgeColor::from_particle(model.get_particle(&"b".to_string().into()));
-    let bbar = EdgeColor::from_particle(
-        model
-            .get_particle(&"b".to_string().into())
-            .get_anti_particle(&model),
-    );
-    let g = EdgeColor::from_particle(model.get_particle(&"g".to_string().into()));
-    let a = EdgeColor::from_particle(model.get_particle(&"a".to_string().into()));
-    let eplus = EdgeColor::from_particle(model.get_particle(&"e+".to_string().into()));
-    let eminus = EdgeColor::from_particle(model.get_particle(&"e-".to_string().into()));
+    let b = EdgeColor::from_particle(model.get_particle("b"));
+    let bbar = EdgeColor::from_particle(model.get_particle("b").get_anti_particle(&model));
+    let g = EdgeColor::from_particle(model.get_particle("g"));
+    let a = EdgeColor::from_particle(model.get_particle("a"));
+    let eplus = EdgeColor::from_particle(model.get_particle("e+"));
+    let eminus = EdgeColor::from_particle(model.get_particle("e-"));
     graph.add_edge(v0, v1, true, h).unwrap();
     graph.add_edge(v0, v5, true, b).unwrap();
     graph.add_edge(v1, v3, true, b).unwrap();
@@ -133,7 +131,7 @@ fn cut_content() {
     graph.add_edge(v9, v7, false, eminus).unwrap();
 
     let (n_unresolved, unresolved_type) = filters.unresolved_cut_content(&model);
-    assert!(!filters.contains_cut(&model, &graph, n_unresolved, &unresolved_type));
+    assert!(!filters.half_edge_filters(&model, &graph, &[], n_unresolved, &unresolved_type));
 
     let mut double_double_triangle = Graph::new();
     let v0 = double_double_triangle.add_node(e1.clone());
@@ -183,13 +181,13 @@ fn cut_content() {
         .unwrap();
 
     let mut coupling = HashMap::new();
-    coupling.insert("QED".into(), 6);
+    coupling.insert("QED".into(), (6, Some(6)));
     let mut pert = HashMap::new();
     pert.insert("QCD".into(), 2);
     let filters = FeynGen::new(FeynGenOptions {
         generation_type: GenerationType::CrossSection,
         initial_pdgs: vec![-11, 11],
-        final_pdgs: vec![5, -5, 25],
+        final_pdgs_lists: vec![vec![5, -5, 25]],
         loop_count_range: (4, 4),
         symmetrize_initial_states: true,
         symmetrize_final_states: true,
@@ -216,13 +214,16 @@ fn cut_content() {
             FeynGenFilter::PerturbativeOrders(pert),
             FeynGenFilter::CouplingOrders(coupling),
             FeynGenFilter::LoopCountRange((4, 4)),
+            FeynGenFilter::BlobRange(1..=1),
+            FeynGenFilter::SpectatorRange(0..=0),
         ]),
     });
 
     let (n_unresolved, unresolved_type) = filters.unresolved_cut_content(&model);
-    assert!(!filters.contains_cut(
+    assert!(!filters.half_edge_filters(
         &model,
         &double_double_triangle,
+        &[],
         n_unresolved,
         &unresolved_type
     ));

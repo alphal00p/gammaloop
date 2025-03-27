@@ -1055,11 +1055,11 @@ fn dumb_four_gluon() {
 
     let gggg = NodeColorWithVertexRule {
         external_tag: 0,
-        vertex_rule: model.get_vertex_rule(&"V_37".into()),
+        vertex_rule: model.get_vertex_rule("V_37"),
     };
     let mut four_gluon = symbolica::graph::Graph::new();
     let v = four_gluon.add_node(gggg);
-    let g = EdgeColor::from_particle(model.get_particle(&"g".to_string().into()));
+    let g = EdgeColor::from_particle(model.get_particle("g"));
 
     four_gluon.add_edge(v, v, false, g).unwrap();
     four_gluon.add_edge(v, v, false, g).unwrap();
@@ -1068,7 +1068,7 @@ fn dumb_four_gluon() {
         &model,
         "gggg".into(),
         &four_gluon,
-        "1".into(),
+        Atom::new_num(1),
         vec![],
         None,
     )

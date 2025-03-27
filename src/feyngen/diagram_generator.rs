@@ -1,3 +1,4 @@
+use bitvec::vec::BitVec;
 use indicatif::ProgressBar;
 use indicatif::{ParallelProgressIterator, ProgressStyle};
 
@@ -12,7 +13,9 @@ use spenso::data::{DataTensor, StorageTensor};
 use spenso::iterators::IteratableTensor;
 use spenso::network::TensorNetwork;
 use spenso::parametric::{MixedTensor, ParamOrConcrete, ParamTensor};
+use spenso::permutation::Permutation;
 use spenso::structure::representation::ExtendibleReps;
+use spenso::structure::slot::DualSlotTo;
 use spenso::structure::{HasStructure, SmartShadowStructure};
 use spenso::symbolica_utils::{SerializableAtom, SerializableSymbol};
 use std::cmp::Ordering;
@@ -20,6 +23,7 @@ use std::collections::hash_map::Entry;
 use std::collections::HashSet;
 use std::fs::{create_dir_all, File, OpenOptions};
 use std::io::Write;
+use std::ops::RangeInclusive;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
@@ -36,6 +40,7 @@ use ahash::HashMap;
 use colored::Colorize;
 use log::info;
 use log::{debug, warn};
+use log::{debug, warn};
 use smartstring::{LazyCompact, SmartString};
 use symbolica::atom::AtomCore;
 
@@ -45,11 +50,16 @@ use super::SnailFilterOptions;
 use super::TadpolesFilterOptions;
 use super::{FeynGenError, FeynGenOptions};
 
-use crate::graph::{EdgeType, LoopMomentumBasis};
+use crate::feyngen::half_edge_filters::FeynGenHedgeGraph;
+use crate::graph::{
+    HedgeGraphExt, {EdgeType, LoopMomentumBasis},
+};
 use crate::model::ColorStructure;
 use crate::model::Particle;
 use crate::model::VertexRule;
-use crate::momentum::{self, SignOrZero, Signature};
+use crate::momentum::{
+    self, {Pow, Sign, SignOrZero, Signature},
+};
 use crate::numerator::AtomStructure;
 use crate::numerator::Numerator;
 use crate::numerator::SymbolicExpression;
@@ -61,21 +71,20 @@ use crate::{
     model::Model,
 };
 use itertools::Itertools;
-use linnet::half_edge::subgraph::InternalSubGraph;
-use linnet::half_edge::subgraph::OrientedCut;
+use linnet::half_edge::involution::Flow;
+use linnet::half_edge::subgraph::{OrientedCut, SubGraph};
 use linnet::half_edge::HedgeGraph;
 use linnet::half_edge::NodeIndex;
-use linnet::half_edge::Orientation;
 use symbolica::{atom::Atom, graph::Graph as SymbolicaGraph};
 
-const CANONIZE_FERMION_FLOW: bool = true;
+const CANONIZE_GRAPH_FLOWS: bool = true;
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct NodeColorWithVertexRule {
     pub external_tag: i32,
     pub vertex_rule: Arc<VertexRule>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Default, Copy)]
 pub struct NodeColorWithoutVertexRule {
     pub external_tag: i32,
 }
@@ -99,9 +108,43 @@ impl EdgeColor {
     }
 }
 
-pub trait NodeColorFunctions: Sized {
+#[derive(Clone)]
+struct CanonizedGraphInfo {
+    canonized_graph: SymbolicaGraph<NodeColorWithoutVertexRule, String>,
+    graph: SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>,
+    graph_with_canonized_flow: SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>,
+    symmetry_factor: Atom,
+}
+
+pub trait NodeColorFunctions: Sized + std::fmt::Display {
     fn get_external_tag(&self) -> i32;
     fn set_external_tag(&mut self, external_tag: i32);
+    fn is_external(&self) -> bool {
+        self.get_external_tag() > 0
+    }
+
+    fn is_incoming(&self, n_initial_states: usize) -> bool {
+        self.is_external() && (self.get_external_tag() <= (n_initial_states as i32))
+    }
+
+    fn is_outgoing(&self, n_initial_states: usize) -> bool {
+        self.is_external() && (self.get_external_tag() > (n_initial_states as i32))
+    }
+
+    /// Only applicable for XS
+    fn pairing_tag(&self, n_initial_states: usize) -> i32 {
+        let tag = self.get_external_tag();
+
+        if tag > 0 {
+            if tag > (n_initial_states as i32) {
+                tag - (n_initial_states as i32)
+            } else {
+                tag
+            }
+        } else {
+            tag
+        }
+    }
 
     fn coupling_orders(&self) -> AHashMap<SmartString<LazyCompact>, usize> {
         AHashMap::default()
@@ -119,24 +162,27 @@ pub trait NodeColorFunctions: Sized {
         }
     }
 
+    #[allow(clippy::type_complexity)]
     fn passes_amplitude_filter(
-        _amplitude_subgraph: &InternalSubGraph,
+        _amplitude_subgraph: &BitVec,
         _graph: &HedgeGraph<Arc<Particle>, Self>,
-        _amp_couplings: Option<&std::collections::HashMap<String, usize, ahash::RandomState>>,
-    ) -> bool {
-        true
-    }
+        _amp_couplings: Option<
+            &std::collections::HashMap<String, (usize, Option<usize>), ahash::RandomState>,
+        >,
+    ) -> bool;
 }
 
 impl NodeColorFunctions for NodeColorWithVertexRule {
     fn get_external_tag(&self) -> i32 {
         self.external_tag
     }
+
     fn set_external_tag(&mut self, external_tag: i32) {
         self.external_tag = external_tag;
     }
 
     fn coupling_orders(&self) -> AHashMap<SmartString<LazyCompact>, usize> {
+        // info!("looking at :{}", self.vertex_rule.name);
         let mut coupling_orders = AHashMap::default();
         let vr = self.vertex_rule.clone();
         if vr.name == "external" {
@@ -149,25 +195,46 @@ impl NodeColorFunctions for NodeColorWithVertexRule {
     }
 
     fn passes_amplitude_filter(
-        amplitude_subgraph: &InternalSubGraph,
+        amplitude_subgraph: &BitVec,
         graph: &HedgeGraph<Arc<Particle>, Self>,
-        amp_couplings: Option<&std::collections::HashMap<String, usize, ahash::RandomState>>,
+        amp_couplings: Option<
+            &std::collections::HashMap<String, (usize, Option<usize>), ahash::RandomState>,
+        >,
     ) -> bool {
+        // info!(
+        //     "//looking at \n{}\n",
+        //     graph.dot_impl(
+        //         amplitude_subgraph,
+        //         "",
+        //         &|a| Some(format!("label=\"{}\"", a.name)),
+        //         &|b| { None }
+        //     )
+        // );
         if let Some(amp_couplings) = amp_couplings {
             let mut coupling_orders = AHashMap::default();
             for (_, s) in graph.iter_node_data(amplitude_subgraph) {
-                if s.get_external_tag() != 0 {
+                // println!("node {}:{}", s.vertex_rule.name, s.get_external_tag());
+                if !s.is_external() {
                     for (k, v) in s.coupling_orders() {
                         *coupling_orders.entry(k).or_insert(0) += v;
                     }
                 }
             }
 
-            amp_couplings.iter().all(|(k, v)| {
+            // info!("Coupling orders: {:?}", coupling_orders);
+            // info!("Amplitude couplings: {:?}", amp_couplings);
+
+            let ans = amp_couplings.iter().all(|(k, (lower_bound, upper_bound))| {
                 coupling_orders
                     .get(&SmartString::from(k))
-                    .map_or(0 == *v, |o| *o == *v)
-            })
+                    .map_or(*lower_bound == 0, |o| {
+                        lower_bound <= o && upper_bound.map(|a| *o <= a).unwrap_or(true)
+                    })
+            });
+            // if ans {
+            //     info!("Passes amplitude filter");
+            // }
+            ans
         } else {
             true
         }
@@ -180,6 +247,16 @@ impl NodeColorFunctions for NodeColorWithoutVertexRule {
     }
     fn set_external_tag(&mut self, external_tag: i32) {
         self.external_tag = external_tag;
+    }
+
+    fn passes_amplitude_filter(
+        _amplitude_subgraph: &BitVec,
+        _graph: &HedgeGraph<Arc<Particle>, Self>,
+        _amp_couplings: Option<
+            &std::collections::HashMap<String, (usize, Option<usize>), ahash::RandomState>,
+        >,
+    ) -> bool {
+        panic!("Cannot apply amplitude filters without vertex information.");
     }
 }
 
@@ -208,6 +285,38 @@ pub struct FeynGen {
 impl FeynGen {
     pub fn new(options: FeynGenOptions) -> Self {
         Self { options }
+    }
+
+    pub fn evaluate_overall_factor(factor: AtomView) -> Atom {
+        let mut res = factor.to_owned();
+        for header in [
+            "AutG",
+            "CouplingsMultiplicity",
+            "InternalFermionLoopSign",
+            "ExternalFermionOrderingSign",
+            "NumeratorIndependentSymmetryGrouping",
+        ] {
+            res = res.replace_all(
+                &function!(symb!(header), Atom::new_var(symb!("x_"))).to_pattern(),
+                Atom::new_var(symb!("x_")).to_pattern(),
+                None,
+                None,
+            );
+        }
+        res = res.replace_all(
+            &function!(
+                symb!("NumeratorDependentGrouping"),
+                Atom::new_var(symb!("GraphId_")),
+                Atom::new_var(symb!("ratio_")),
+                Atom::new_var(symb!("GraphSymmetryFactor_"))
+            )
+            .to_pattern(),
+            (Atom::new_var(symb!("ratio_")) * Atom::new_var(symb!("GraphSymmetryFactor_")))
+                .to_pattern(),
+            None,
+            None,
+        );
+        res.expand()
     }
 
     #[allow(clippy::type_complexity)]
@@ -494,6 +603,7 @@ impl FeynGen {
         // Tuple format: (back_edge_start_node_position, back_edge_position_in_list, chain_id)
         let mut self_loops: HashSet<(usize, usize, usize)> = HashSet::default();
         let mut n_factorizable_loops = 0;
+
         for &i_n in &spanning_tree.order {
             let node = &spanning_tree.nodes[i_n];
             for (i_back_edge, &back_edge) in node.back_edges.iter().enumerate() {
@@ -609,16 +719,39 @@ impl FeynGen {
             debug!("bridge_node_positions={:?}", tree_bridge_node_indices);
         }
 
+        // pub fn count_bridges(&self) -> usize {
+        //     self.nodes
+        //         .iter()
+        //         .enumerate()
+        //         .filter(|(n, x)| {
+        //             x.chain_id.is_none()
+        //                 && !self.nodes[x.parent].external
+        //                 && !x.external
+        //                 && x.parent != *n // exclude the root
+        //                 && !self.nodes[x.parent].back_edges.iter().any(|end| n == end)
+        //         })
+        //         .count()
+        // }
+
         // For self-energies we must confirm that they are self-energies by checking if the back edge start node is a bridge
-        for (leg_id, back_edge_start_node_index, _back_edge_position_in_list, _chain_id) in
+        for (leg_id, back_edge_start_node_index, back_edge_position_in_list, _chain_id) in
             self_energy_attachments.iter()
         {
-            if tree_bridge_node_indices.contains(back_edge_start_node_index) {
+            // We must verify that *both* end of the self-energy correspond to a tree bridge
+            let back_edge_target_node_index = spanning_tree.nodes[*back_edge_start_node_index]
+                .back_edges[*back_edge_position_in_list];
+            if tree_bridge_node_indices.contains(back_edge_start_node_index)
+                && node_children[back_edge_target_node_index].len() == 1
+                && (tree_bridge_node_indices
+                    .contains(&node_children[back_edge_target_node_index][0])
+                    || spanning_tree.nodes[node_children[back_edge_target_node_index][0]].external)
+            {
+                // if tree_bridge_node_indices.contains(back_edge_start_node_index) {
                 if let Some(veto_self_energy_options) = veto_self_energy {
                     if debug {
                         debug!(
                             "Vetoing self-energy for leg_id={}, back_edge_start_node_index={}, back_edge_position_in_list={}, chain_id={}, with options:\n{:?}",
-                            leg_id, back_edge_start_node_index, _back_edge_position_in_list, _chain_id, veto_self_energy_options
+                            leg_id, back_edge_start_node_index, back_edge_position_in_list, _chain_id, veto_self_energy_options
                         );
                     }
                     if veto_self_energy_options.veto_only_scaleless_self_energy {
@@ -750,10 +883,11 @@ impl FeynGen {
         }
     }
 
-    pub fn contains_cut<NodeColor>(
+    pub fn half_edge_filters<NodeColor>(
         &self,
         model: &Model,
         graph: &SymbolicaGraph<NodeColor, EdgeColor>,
+        external_connections: &[(Option<usize>, Option<usize>)],
         n_unresolved: usize,
         unresolved_type: &AHashSet<Arc<Particle>>,
         force_other_final_state: Option<Vec<isize>>,
@@ -763,48 +897,99 @@ impl FeynGen {
         NodeColor: NodeColorFunctions + Clone,
     {
         #[allow(clippy::too_many_arguments)]
+        #[allow(clippy::type_complexity)]
         fn is_valid_cut<NodeColor: NodeColorFunctions>(
-            cut: &(InternalSubGraph, OrientedCut, InternalSubGraph),
-            s_set: &AHashSet<NodeIndex>,
-            t_set: &AHashSet<NodeIndex>,
+            cut: &(BitVec, OrientedCut, BitVec),
+            blob_range: &RangeInclusive<usize>,
+            spectator_range: &RangeInclusive<usize>,
             model: &Model,
             n_unresolved: usize,
             unresolved_type: &AHashSet<Arc<Particle>>,
-            particle_content: &[Arc<Particle>],
-            amp_couplings: Option<&std::collections::HashMap<String, usize, ahash::RandomState>>,
+            particle_content_options: &[Vec<Arc<Particle>>],
+            amp_couplings: Option<
+                &std::collections::HashMap<String, (usize, Option<usize>), ahash::RandomState>,
+            >,
             amp_loop_count: Option<(usize, usize)>,
             graph: &HedgeGraph<Arc<Particle>, NodeColor>,
             force_t_channel: bool,
         ) -> bool {
-            if is_s_channel(cut, s_set, t_set, graph, force_t_channel) {
-                let mut cut_content: Vec<_> = cut
+            if validate_connectivity(&cut.0, blob_range, spectator_range, graph)
+                && validate_connectivity(&cut.2, blob_range, spectator_range, graph)
+            {
+                let cut_content: Vec<_> = cut
                     .1
-                    .iter_edges_relative(graph)
-                    .map(|(o, d)| {
-                        if matches!(o, Orientation::Reversed) {
-                            d.data.as_ref().unwrap().get_anti_particle(model)
+                    .iter_left_hedges()
+                    .map(|h| {
+                        let o = graph.flow(h);
+                        if matches!(o, Flow::Sink) {
+                            graph[[&h]].as_ref().get_anti_particle(model)
                         } else {
-                            d.data.as_ref().unwrap().clone()
+                            graph[[&h]].clone()
                         }
                     })
                     .collect();
 
-                for p in particle_content.iter() {
-                    if let Some(pos) = cut_content.iter().position(|c| c == p) {
-                        cut_content.swap_remove(pos);
-                    } else {
+                // info!(
+                //     "//left\n{}\n",
+                //     graph.dot_impl(
+                //         &cut.0,
+                //         "",
+                //         &|a| Some(format!("label=\"{}\"", a.name)),
+                //         &|b| None
+                //     )
+                // // );
+
+                // info!(
+                //     "//cut\n{}\n",
+                //     graph.dot_impl(
+                //         &cut.1.reference,
+                //         "",
+                //         &|a| Some(format!("label=\"{}\"", a.name)),
+                //         &|b| None
+                //     )
+                // );
+                // for p in cut_content.iter() {
+                //     info!("Particle {} in cut", p.name);
+                // }
+                // info!(
+                //     "//right\n{}\n",
+                //     graph.dot_impl(
+                //         &cut.2,
+                //         "",
+                //         &|a| Some(format!("label=\"{}\"", a.name)),
+                //         &|b| None
+                //     )
+                // );
+                if !particle_content_options.iter().any(|particle_content| {
+                    let mut cut_content_clone = cut_content.clone();
+                    for p in particle_content.iter() {
+                        if let Some(pos) = cut_content_clone.iter().position(|c| c == p) {
+                            cut_content_clone.swap_remove(pos);
+                        } else {
+                            // info!("Particle {} not found in cut content", p.name);
+                            return false;
+                        }
+                    }
+                    if cut_content_clone.len() > n_unresolved {
+                        // info!(
+                        //     "Cut content has {} more particles than {} allowed unresolved particles",
+                        //     cut_content.len() - n_unresolved,
+                        //     n_unresolved
+                        // );
                         return false;
                     }
-                }
 
-                if cut_content.len() > n_unresolved {
+                    for p in cut_content_clone.iter() {
+                        if !unresolved_type.contains(p) {
+                            // info!("Particle {} not found in unresolved type", p.name);
+                            return false;
+                        }
+                    }
+
+                    true
+                }) {
+                    // info!("Cut content not right");
                     return false;
-                }
-
-                for p in cut_content.iter() {
-                    if !unresolved_type.contains(p) {
-                        return false;
-                    }
                 }
 
                 if let Some((min_loop, max_loop)) = amp_loop_count {
@@ -813,138 +998,203 @@ impl FeynGen {
 
                     let sum = left_loop + right_loop;
                     if sum < min_loop || sum > max_loop {
+                        // info!(
+                        //     "Loop count sum {} not within range [{}, {}]",
+                        //     sum, min_loop, max_loop
+                        // );
                         return false;
                     }
                 }
-                NodeColor::passes_amplitude_filter(&cut.0, graph, amp_couplings)
-                    && NodeColor::passes_amplitude_filter(&cut.2, graph, amp_couplings)
+                let left = NodeColor::passes_amplitude_filter(&cut.0, graph, amp_couplings);
+
+                let right = NodeColor::passes_amplitude_filter(&cut.2, graph, amp_couplings);
+
+                if !left {
+                    // info!("Left node color not valid");
+                    return false;
+                }
+                if !right {
+                    // info!("Right node color not valid");
+                    return false;
+                }
+
+                left && right
             } else {
+                // info!("isn't s-channel");
                 false
             }
         }
 
-        fn is_s_channel<NodeColor>(
-            cut: &(InternalSubGraph, OrientedCut, InternalSubGraph),
-            s_set: &AHashSet<NodeIndex>,
-            t_set: &AHashSet<NodeIndex>,
+        fn validate_connectivity<NodeColor>(
+            subgraph: &BitVec,
+            blob_range: &RangeInclusive<usize>,
+            spectator_range: &RangeInclusive<usize>,
             graph: &HedgeGraph<Arc<Particle>, NodeColor>,
             force_t_channel: bool,
         ) -> bool {
-            let nodes: AHashSet<_> = graph
-                .iter_node_data(&cut.0)
-                .map(|(i, _)| graph.id_from_hairs(i).unwrap())
-                .collect();
+            let components = graph.connected_components(subgraph);
 
-            if !force_t_channel {
-                // the left graph should only contain s-set particles
+            let mut n_blobs = 0;
+            let mut n_spectators = 0;
 
-                s_set.is_subset(&nodes) && t_set.intersection(&nodes).count() == 0
-            } else {
-                let right_nodes: AHashSet<_> = graph
-                    .iter_node_data(&cut.2)
-                    .map(|(i, _)| graph.id_from_hairs(i).unwrap())
-                    .collect();
-
-                s_set.intersection(&nodes).count() == 1
-                    && s_set.intersection(&right_nodes).count() == 1
-                    && t_set.intersection(&nodes).count() == 1
-                    && t_set.intersection(&right_nodes).count() == 1
+            for component in components {
+                if component.nhedges() > 1 {
+                    n_blobs += 1;
+                } else {
+                    n_spectators += 1;
+                }
             }
-        }
 
-        let particle_content = if let Some(final_state) = force_other_final_state {
-            final_state
-                .iter()
-                .map(|&pdg| model.get_particle_from_pdg(pdg as isize))
-                .collect::<Vec<_>>()
-        } else {
-            self.options
-                .final_pdgs
-                .iter()
-                .map(|&pdg| model.get_particle_from_pdg(pdg as isize))
-                .collect::<Vec<_>>()
-        };
+            blob_range.contains(&n_blobs) && spectator_range.contains(&n_spectators)
+        }
 
         let amp_couplings = self.options.amplitude_filters.get_coupling_orders();
         let amp_loop_count = self.options.amplitude_filters.get_loop_count_range();
-        let n_particles = self.options.initial_pdgs.len();
-        let he_graph = HedgeGraph::from(graph.clone()).map(
-            |node_color| node_color,
-            |_, d| d.map(|d| model.get_particle_from_pdg(d.pdg)),
-        );
+        let blob_range = self.options.cross_section_filters.get_blob_range().unwrap();
+        let spectator_range = self
+            .options
+            .cross_section_filters
+            .get_spectator_range()
+            .unwrap();
 
-        let mut s_set = AHashSet::new();
-        let mut t_set = AHashSet::new();
+        let n_particles = self.options.initial_pdgs.len();
+        let mut he_graph = HedgeGraph::<EdgeColor, NodeColor>::from_sym(graph.clone()).map(
+            |_, _, _, node_color| node_color,
+            |_, _, _, d| d.map(|d| model.get_particle_from_pdg(d.pdg)),
+        );
+        // info!(
+        //     "Looking at\n{}",
+        //     he_graph.dot_impl(
+        //         &he_graph.full_filter(),
+        //         "",
+        //         &|a| Some(format!("label=\"{}\"", a.name)),
+        //         &|b| None
+        //     )
+        // );
+        let mut s_set = Vec::new();
+        let mut t_set = Vec::new();
 
         for (n, f) in he_graph.iter_nodes() {
             let id = he_graph.id_from_hairs(n).unwrap();
             match f.get_sign(n_particles) {
                 SignOrZero::Plus => {
-                    s_set.insert(id);
+                    s_set.push(id);
                 }
                 SignOrZero::Minus => {
-                    t_set.insert(id);
+                    t_set.push(id);
                 }
                 _ => {}
             }
         }
 
-        if force_t_channel {
-            let mut possible_source_target_combos = s_set.iter().cartesian_product(t_set.iter());
+        // info!("HI");
+        if !s_set.is_empty() && !t_set.is_empty() {
+            // info!("{}-{}", s, t);
+            let cuts = he_graph.all_cuts_from_ids(&s_set, &t_set);
 
-            // this is stupid because we will get duplicates, but we don't give a shit for what we are trying to do
-            let mut all_cuts_with_duplicates_probably = Vec::new();
-            while let Some((s, t)) = possible_source_target_combos.next() {
-                let cuts = he_graph.all_cuts(*s, *t);
+            // info!("found {} cuts", cuts.len());
+            let particle_content_options = self
+                .options
+                .final_pdgs_lists
+                .iter()
+                .map(|pdg_list| {
+                    pdg_list
+                        .iter()
+                        .map(|pdg| model.get_particle_from_pdg((*pdg) as isize))
+                        .collect::<Vec<_>>()
+                })
+                .collect::<Vec<_>>();
+            let pass_cut_filter = cuts.iter().any(|c| {
+                is_valid_cut(
+                    c,
+                    blob_range,
+                    spectator_range,
+                    model,
+                    n_unresolved,
+                    unresolved_type,
+                    &particle_content_options,
+                    amp_couplings,
+                    amp_loop_count,
+                    &he_graph,
+                )
+            });
 
-                let valid_cuts = cuts
-                    .into_iter()
-                    .filter(|c| {
-                        is_valid_cut(
-                            c,
-                            &s_set,
-                            &t_set,
-                            model,
-                            n_unresolved,
-                            unresolved_type,
-                            &particle_content,
-                            amp_couplings,
-                            amp_loop_count,
-                            &he_graph,
-                            force_t_channel,
-                        )
-                    })
-                    .collect_vec();
-
-                all_cuts_with_duplicates_probably.extend(valid_cuts);
+            if !pass_cut_filter {
+                return false;
             }
 
-            all_cuts_with_duplicates_probably
+            if self
+                .options
+                .cross_section_filters
+                .filter_cross_section_tadpoles()
+            {
+                let externals: Vec<_> = he_graph
+                    .iter_nodes()
+                    .filter_map(|(h, n)| {
+                        if n.is_external() {
+                            he_graph.id_from_hairs(h)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+
+                let connected_components_before = he_graph.tadpoles(&externals).len() + 1;
+                for (i, f) in external_connections {
+                    if let (Some(i), Some(f)) = (i, f) {
+                        let i = he_graph
+                            .iter_nodes()
+                            .find_position(|a| a.1.get_external_tag() == *i as i32);
+                        let f = he_graph
+                            .iter_nodes()
+                            .find_position(|a| a.1.get_external_tag() == *f as i32);
+
+                        if let (Some((id_i, (_, c_i))), Some((id_f, (_, _)))) = (i, f) {
+                            he_graph
+                                .identify_nodes(&[NodeIndex(id_i), NodeIndex(id_f)], c_i.clone());
+                        }
+                    }
+                }
+
+                // info!("Identified nodes");
+
+                let non_bridges = he_graph.non_bridges();
+
+                // info!("\\he_graph:\n{}", he_graph.dot(&non_bridges));
+
+                let connected_components = he_graph.count_connected_components(&non_bridges);
+                if connected_components == connected_components_before {
+                    return true;
+                } else {
+                    // info!(
+                    //     "Vetoed: \n{}\n because it had {} connected components",
+                    //     he_graph.dot_impl(
+                    //         &non_bridges,
+                    //         "",
+                    //         &|a| Some(format!("label=\"{}\"", a.name)),
+                    //         &|b| Some(format!("label=\"{}\"", b.get_external_tag()))
+                    //     ),
+                    //     connected_components
+                    // );
+                    // info!(
+                    //     "OG:\n {}",
+                    //     og_he.dot_impl(
+                    //         &non_bridges,
+                    //         "",
+                    //         &|a| Some(format!("label=\"{}\"", a.name)),
+                    //         &|b| Some(format!("label=\"{}\"", b.get_external_tag()))
+                    //     ),
+                    // );
+                    // info!("{}", graph.to_dot());
+
+                    return false;
+                }
+            }
+
+            true
         } else {
-            if let (Some(&s), Some(&t)) = (s_set.iter().next(), t_set.iter().next()) {
-                let cuts = he_graph.all_cuts(s, t);
-
-                cuts.into_iter()
-                    .filter(|c| {
-                        is_valid_cut(
-                            c,
-                            &s_set,
-                            &t_set,
-                            model,
-                            n_unresolved,
-                            unresolved_type,
-                            &particle_content,
-                            amp_couplings,
-                            amp_loop_count,
-                            &he_graph,
-                            force_t_channel,
-                        )
-                    })
-                    .collect()
-            } else {
-                // true //TODO still check the amplitude level filters in the case where there is no initial-state specified
-                Vec::new()
-            }
+            warn!("No external particles found");
+            true //TODO still check the amplitude level filters in the case where there is no initial-state specified
         }
     }
 
@@ -1258,13 +1508,21 @@ impl FeynGen {
                 });
         });
         bar.finish_and_clear();
-
         let iso_buckets_guard = iso_buckets.lock().unwrap();
         iso_buckets_guard
             .iter()
             .map(
                 |(_canonized_g, (count, (g, _external_ordering, symmetry_factor)))| {
-                    (g.clone(), symmetry_factor * Atom::new_num(*count as i64))
+                    let new_symmetry_factor = if *count != 1 {
+                        symmetry_factor
+                            * function!(
+                                symb!("NumeratorIndependentSymmetryGrouping"),
+                                Atom::new_num(*count as i64)
+                            )
+                    } else {
+                        symmetry_factor.clone()
+                    };
+                    (g.clone(), new_symmetry_factor)
                 },
             )
             .collect()
@@ -1292,8 +1550,7 @@ impl FeynGen {
                 .map(|(i_n, pdg)| (pdg, i_n + 1 + initial_pdgs.len()))
                 .collect::<Vec<_>>()
         } else {
-            self.options
-                .final_pdgs
+            self.options.final_pdgs_lists[0]
                 .iter()
                 .enumerate()
                 .map(|(i_n, pdg)| (pdg, i_n + 1 + initial_pdgs.len()))
@@ -1625,7 +1882,7 @@ impl FeynGen {
             input_graph_node_pos_to_can_graph_node_pos[*input_graph_node_pos] = can_graph_node_pos;
         }
 
-        // Sort nodes according to the canonized skeletton graph
+        // Sort nodes according to the canonized skeleton graph
         // This will also ensure that EMR variables line up
         let mut sorted_g: SymbolicaGraph<NodeColorWithVertexRule, EdgeColor> =
             SymbolicaGraph::new();
@@ -1752,17 +2009,17 @@ impl FeynGen {
         }
     }
 
-    pub fn normalize_fermion_flow(
+    // This function normalize fermion and ghost flows and makes sure that all virtual charged particles without flows (like the W boson) are particles
+    pub fn normalize_flows(
         &self,
         graph: &SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>,
         model: &Model,
-    ) -> Result<SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>, FeynGenError> {
+    ) -> Result<(SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>, bool), FeynGenError> {
         let mut adj_map: HashMap<usize, Vec<(usize, usize)>> = HashMap::default();
         for (i_e, e) in graph.edges().iter().enumerate() {
             // Build an adjacency list including only fermions
-            if !(model.get_particle_from_pdg(e.data.pdg).is_fermion()
-                || model.get_particle_from_pdg(e.data.pdg).is_ghost())
-            {
+            let p = model.get_particle_from_pdg(e.data.pdg);
+            if !(p.is_fermion() || p.is_ghost()) {
                 continue;
             }
             adj_map
@@ -1781,8 +2038,8 @@ impl FeynGen {
             .edges()
             .iter()
             .map(|e| {
-                !(model.get_particle_from_pdg(e.data.pdg).is_fermion()
-                    || model.get_particle_from_pdg(e.data.pdg).is_ghost())
+                let p = model.get_particle_from_pdg(e.data.pdg);
+                !(p.is_fermion() || p.is_ghost())
             })
             .collect();
         let mut new_edges: AHashMap<usize, (usize, usize, bool, EdgeColor)> = AHashMap::default();
@@ -1793,122 +2050,248 @@ impl FeynGen {
         }
 
         let graph_edges = graph.edges();
-        for (i_e, e) in graph_edges.iter().enumerate() {
-            if vetoed_edges[i_e] {
-                if !new_edges.contains_key(&i_e) {
-                    new_edges.insert(i_e, (e.vertices.0, e.vertices.1, e.directed, e.data));
-                }
-                continue;
-            }
-            let mut is_starting_antiparticle =
-                model.get_particle_from_pdg(e.data.pdg).is_antiparticle();
-            let starting_vertices = if graph.nodes()[e.vertices.0].data.external_tag == 0
-                && graph.nodes()[e.vertices.1].data.external_tag == 0
-                && is_starting_antiparticle
-            {
-                // Force all virtual closed fermion loops to be particles
-                is_starting_antiparticle = false;
-                if !new_edges.contains_key(&i_e) {
-                    new_edges.insert(
-                        i_e,
-                        (
-                            e.vertices.1,
-                            e.vertices.0,
-                            e.directed,
-                            EdgeColor::from_particle(
-                                model
-                                    .get_particle_from_pdg(e.data.pdg)
-                                    .get_anti_particle(model),
-                            ),
-                        ),
-                    );
-                    (e.vertices.1, e.vertices.0)
-                } else {
+        // Pairing of the external fermion flows. The keys are (sorted) two-tuple of the PDGs of the external fermions (assuming all incoming)
+        // and the values are the external leg ids of the fermions connected and in the order of the sorted key.
+        #[allow(clippy::type_complexity)]
+        let mut external_fermion_flow_pairings: AHashMap<
+            (Arc<Particle>, Arc<Particle>),
+            Vec<(usize, usize)>,
+        > = AHashMap::default();
+        // First fix flows connected to external only and after that fix all internal fermion/ghost flows
+        for do_external_only in [true, false] {
+            for (i_e, e) in graph_edges.iter().enumerate() {
+                let is_a_virtual_edge = graph.nodes()[e.vertices.0].data.external_tag == 0
+                    && graph.nodes()[e.vertices.1].data.external_tag == 0;
+                if do_external_only && is_a_virtual_edge {
                     continue;
                 }
-            } else if !new_edges.contains_key(&i_e) {
-                new_edges.insert(i_e, (e.vertices.0, e.vertices.1, e.directed, e.data));
-                (e.vertices.0, e.vertices.1)
-            } else {
-                continue;
-            };
-
-            vetoed_edges[i_e] = true;
-            for read_to_the_right in [true, false] {
-                let mut previous_node_position = if read_to_the_right {
-                    starting_vertices.1
-                } else {
-                    starting_vertices.0
-                };
-                // println!(
-                //     "Starting reading chain from edge {}->{}, from {}",
-                //     starting_vertices.0, starting_vertices.1, previous_node_position
-                // );
-                'fermion_chain: loop {
-                    let (next_fermion_edge_position, next_fermion_node_position) =
-                        FeynGen::follow_chain(
-                            previous_node_position,
-                            &mut vetoed_edges,
-                            &adj_map,
-                            true,
-                        )?;
-                    // println!(
-                    //     "Next edge: {}",
-                    //     if let Some(nfep) = next_fermion_edge_position {
-                    //         format!(
-                    //             "{}, {} -> {}",
-                    //             graph_edges[nfep].vertices.0, graph_edges[nfep].vertices.1, nfep
-                    //         )
-                    //     } else {
-                    //         "None".to_string()
-                    //     }
-                    // );
-                    if let Some(nfep) = next_fermion_edge_position {
-                        let this_has_same_orientation_starting = (read_to_the_right
-                            && graph_edges[nfep].vertices.1 == next_fermion_node_position)
-                            || (!read_to_the_right
-                                && graph_edges[nfep].vertices.0 == next_fermion_node_position);
-                        if !new_edges.contains_key(&nfep) {
-                            if this_has_same_orientation_starting {
-                                new_edges.insert(
-                                    nfep,
-                                    (
-                                        graph_edges[nfep].vertices.0,
-                                        graph_edges[nfep].vertices.1,
-                                        graph_edges[nfep].directed,
-                                        graph_edges[nfep].data,
-                                    ),
-                                );
-                            } else {
-                                let this_edge_particle =
-                                    model.get_particle_from_pdg(graph_edges[nfep].data.pdg);
-                                new_edges.insert(
-                                    nfep,
-                                    (
-                                        graph_edges[nfep].vertices.1,
-                                        graph_edges[nfep].vertices.0,
-                                        graph_edges[nfep].directed,
-                                        // Force fermion to be the same species as the one starting the chain
-                                        if this_edge_particle.is_antiparticle()
-                                            != is_starting_antiparticle
-                                        {
-                                            EdgeColor::from_particle(
-                                                this_edge_particle.get_anti_particle(model),
-                                            )
-                                        } else {
-                                            EdgeColor::from_particle(this_edge_particle)
-                                        },
-                                    ),
-                                );
-                            }
-                        }
-                        previous_node_position = next_fermion_node_position;
+                if vetoed_edges[i_e] {
+                    if !new_edges.contains_key(&i_e) {
+                        new_edges.insert(i_e, (e.vertices.0, e.vertices.1, e.directed, e.data));
+                    }
+                    continue;
+                }
+                let starting_particle = model.get_particle_from_pdg(e.data.pdg);
+                let mut is_starting_antiparticle = starting_particle.is_antiparticle();
+                let starting_vertices = if is_a_virtual_edge && is_starting_antiparticle {
+                    // Force all virtual closed fermion loops to be particles
+                    is_starting_antiparticle = false;
+                    if !new_edges.contains_key(&i_e) {
+                        new_edges.insert(
+                            i_e,
+                            (
+                                e.vertices.1,
+                                e.vertices.0,
+                                e.directed,
+                                EdgeColor::from_particle(
+                                    model
+                                        .get_particle_from_pdg(e.data.pdg)
+                                        .get_anti_particle(model),
+                                ),
+                            ),
+                        );
+                        (e.vertices.1, e.vertices.0)
                     } else {
-                        break 'fermion_chain;
+                        continue;
+                    }
+                } else if !new_edges.contains_key(&i_e) {
+                    new_edges.insert(i_e, (e.vertices.0, e.vertices.1, e.directed, e.data));
+                    (e.vertices.0, e.vertices.1)
+                } else {
+                    continue;
+                };
+
+                vetoed_edges[i_e] = true;
+                let mut connected_leg_ids: AHashSet<usize> = AHashSet::new();
+                for read_to_the_right in [true, false] {
+                    let mut previous_node_position = if read_to_the_right {
+                        starting_vertices.1
+                    } else {
+                        starting_vertices.0
+                    };
+                    // println!(
+                    //     "Starting reading chain from edge {}->{}, from {}",
+                    //     starting_vertices.0, starting_vertices.1, previous_node_position
+                    // );
+                    if graph.nodes()[previous_node_position].data.external_tag > 0 {
+                        connected_leg_ids.insert(
+                            graph.nodes()[previous_node_position].data.external_tag as usize,
+                        );
+                    }
+
+                    'fermion_chain: loop {
+                        let (next_fermion_edge_position, next_fermion_node_position) =
+                            FeynGen::follow_chain(
+                                previous_node_position,
+                                &mut vetoed_edges,
+                                &adj_map,
+                                true,
+                            )?;
+                        if graph.nodes()[next_fermion_node_position].data.external_tag > 0 {
+                            connected_leg_ids.insert(
+                                graph.nodes()[next_fermion_node_position].data.external_tag
+                                    as usize,
+                            );
+                        }
+                        // println!(
+                        //     "Next edge: {}",
+                        //     if let Some(nfep) = next_fermion_edge_position {
+                        //         format!(
+                        //             "{}, {} -> {}",
+                        //             graph_edges[nfep].vertices.0, graph_edges[nfep].vertices.1, nfep
+                        //         )
+                        //     } else {
+                        //         "None".to_string()
+                        //     }
+                        // );
+                        if let Some(nfep) = next_fermion_edge_position {
+                            let this_has_same_orientation_starting = (read_to_the_right
+                                && graph_edges[nfep].vertices.1 == next_fermion_node_position)
+                                || (!read_to_the_right
+                                    && graph_edges[nfep].vertices.0 == next_fermion_node_position);
+                            if !new_edges.contains_key(&nfep) {
+                                if this_has_same_orientation_starting {
+                                    new_edges.insert(
+                                        nfep,
+                                        (
+                                            graph_edges[nfep].vertices.0,
+                                            graph_edges[nfep].vertices.1,
+                                            graph_edges[nfep].directed,
+                                            graph_edges[nfep].data,
+                                        ),
+                                    );
+                                } else {
+                                    let this_edge_particle =
+                                        model.get_particle_from_pdg(graph_edges[nfep].data.pdg);
+                                    new_edges.insert(
+                                        nfep,
+                                        (
+                                            graph_edges[nfep].vertices.1,
+                                            graph_edges[nfep].vertices.0,
+                                            graph_edges[nfep].directed,
+                                            // Force fermion to be the same species as the one starting the chain
+                                            if this_edge_particle.is_antiparticle()
+                                                != is_starting_antiparticle
+                                            {
+                                                EdgeColor::from_particle(
+                                                    this_edge_particle.get_anti_particle(model),
+                                                )
+                                            } else {
+                                                EdgeColor::from_particle(this_edge_particle)
+                                            },
+                                        ),
+                                    );
+                                }
+                            }
+                            previous_node_position = next_fermion_node_position;
+                        } else {
+                            break 'fermion_chain;
+                        }
+                    }
+                }
+                if do_external_only && starting_particle.is_fermion() {
+                    if connected_leg_ids.len() != 2 {
+                        return Err(FeynGenError::GenericError(
+                            "External fermion flow must have exactly two legs".to_string(),
+                        ));
+                    }
+                    let connected_leg_ids_vec =
+                        connected_leg_ids.iter().copied().collect::<Vec<_>>();
+                    let connected_leg_pdgs = (0..=1)
+                        .map(|i| {
+                            if connected_leg_ids_vec[i] <= self.options.initial_pdgs.len() {
+                                model.get_particle_from_pdg(
+                                    self.options.initial_pdgs[connected_leg_ids_vec[i] - 1]
+                                        as isize,
+                                )
+                            } else {
+                                // Assign line types assuming all incoming particles
+                                let right_side_pdgs = if self.options.generation_type
+                                    == GenerationType::CrossSection
+                                {
+                                    &self.options.initial_pdgs
+                                } else {
+                                    &self.options.final_pdgs_lists[0]
+                                };
+                                model
+                                    .get_particle_from_pdg(
+                                        right_side_pdgs[connected_leg_ids_vec[i]
+                                            - self.options.initial_pdgs.len()
+                                            - 1] as isize,
+                                    )
+                                    .get_anti_particle(model)
+                            }
+                        })
+                        .collect::<Vec<_>>();
+                    if connected_leg_pdgs
+                        .iter()
+                        .any(|particle| !particle.is_fermion())
+                    {
+                        return Err(FeynGenError::GenericError(
+                            "External fermion flow must connect two fermions".to_string(),
+                        ));
+                    }
+                    if connected_leg_pdgs[0].is_antiparticle()
+                        && !connected_leg_pdgs[1].is_antiparticle()
+                    {
+                        external_fermion_flow_pairings
+                            .entry((connected_leg_pdgs[0].clone(), connected_leg_pdgs[1].clone()))
+                            .or_default()
+                            .push((connected_leg_ids_vec[0], connected_leg_ids_vec[1]));
+                    } else if connected_leg_pdgs[1].is_antiparticle()
+                        && !connected_leg_pdgs[0].is_antiparticle()
+                    {
+                        external_fermion_flow_pairings
+                            .entry((connected_leg_pdgs[1].clone(), connected_leg_pdgs[0].clone()))
+                            .or_default()
+                            .push((connected_leg_ids_vec[1], connected_leg_ids_vec[0]));
+                    } else {
+                        return Err(FeynGenError::GenericError(
+                            "External fermion flow must connect a fermion and an anti-fermion. GammaLoop has no support for Majorana particles yet.".to_string(),
+                        ));
                     }
                 }
             }
         }
+
+        let mut external_fermion_flow_sign = 1;
+        let mut concatenated_lines = vec![];
+        for (_line_type, lines) in external_fermion_flow_pairings.iter().sorted() {
+            for (a, b) in lines.iter() {
+                concatenated_lines.push(*a);
+                concatenated_lines.push(*b);
+            }
+        }
+        if Permutation::sort(&concatenated_lines)
+            .transpositions()
+            .len()
+            % 2
+            == 1
+        {
+            external_fermion_flow_sign *= -1;
+        }
+
+        // Finally make sure that all virtual non-self-antiparticles that are not fermions or ghost (like the W-boson) are set to particles
+        for (i_e, e) in graph_edges.iter().enumerate() {
+            let is_a_virtual_edge = graph.nodes()[e.vertices.0].data.external_tag == 0
+                && graph.nodes()[e.vertices.1].data.external_tag == 0;
+            let this_edge_particle = model.get_particle_from_pdg(e.data.pdg);
+            if is_a_virtual_edge
+                && this_edge_particle.is_antiparticle()
+                && !(this_edge_particle.is_fermion() || this_edge_particle.is_ghost())
+            {
+                new_edges.insert(
+                    i_e,
+                    (
+                        e.vertices.1,
+                        e.vertices.0,
+                        e.directed,
+                        EdgeColor::from_particle(this_edge_particle.get_anti_particle(model)),
+                    ),
+                );
+            }
+        }
+
         let mut sorted_new_edges = new_edges.iter().collect::<Vec<_>>();
         sorted_new_edges.sort_by(|(i_e_0, _), (i_e_1, _)| i_e_0.cmp(i_e_1));
 
@@ -1918,7 +2301,8 @@ impl FeynGen {
                 .map_err(|e| FeynGenError::GenericError(e.to_string()))?;
         }
         assert!(normalized_graph.edges().len() == graph.edges().len());
-        Ok(normalized_graph)
+
+        Ok((normalized_graph, external_fermion_flow_sign == -1))
     }
 
     // Note, this function will not work as intended with four-fermion vertices, and only aggregated self-loops or fermion-loops not involving four-femion vertices
@@ -2041,6 +2425,32 @@ impl FeynGen {
         )
         .unwrap();
 
+        if self.options.final_pdgs_lists.is_empty() {
+            return Err(FeynGenError::GenericError(
+                "No specification of final states is provided".to_string(),
+            ));
+        }
+
+        let representative_final_pdgs = if self.options.generation_type
+            == GenerationType::CrossSection
+        {
+            if self.options.final_pdgs_lists.len() > 1
+                && self.options.final_pdgs_lists.iter().any(|fs| fs.is_empty())
+            {
+                return Err(FeynGenError::GenericError(
+                        "When specifying multiple possible set of final states in cross-section generation, each must contain at least one particle".to_string(),
+                    ));
+            }
+            self.options.final_pdgs_lists[0].clone()
+        } else {
+            if self.options.final_pdgs_lists.len() > 1 {
+                return Err(FeynGenError::GenericError(
+                    "Multiple selection of possible final states is not supported for amplitude generation".to_string(),
+                ));
+            }
+            self.options.final_pdgs_lists[0].clone()
+        };
+
         // Build a custom ThreadPool. If `Some(threads)` is given, use that;
         // otherwise, default to the number of logical CPUs on the system.
         let pool = match num_threads {
@@ -2126,13 +2536,12 @@ impl FeynGen {
                     external_connections.push((Some(i_initial), None));
                 }
                 for i_final in (self.options.initial_pdgs.len() + 1)
-                    ..=(self.options.initial_pdgs.len() + self.options.final_pdgs.len())
+                    ..=(self.options.initial_pdgs.len() + representative_final_pdgs.len())
                 {
                     external_connections.push((None, Some(i_final)));
                 }
                 external_edges.extend(
-                    self.options
-                        .final_pdgs
+                    representative_final_pdgs
                         .iter()
                         .enumerate()
                         .map(|(i_final, pdg)| {
@@ -2212,7 +2621,7 @@ impl FeynGen {
             vertex_signatures_for_generation
         );
 
-        debug!("feygen options: {:?}", self);
+        debug!("feygen options: {:#?}", self);
 
         // Record the start time
         let start = Instant::now();
@@ -2246,53 +2655,77 @@ impl FeynGen {
         );
         last_step = step;
 
-        let unoriented_final_state_particles = if self.options.generation_type
+        let unoriented_final_state_particles_lists = if self.options.generation_type
             == GenerationType::CrossSection
-            && !self.options.final_pdgs.is_empty()
+            && !representative_final_pdgs.is_empty()
         {
             self.options
-                .final_pdgs
+                .final_pdgs_lists
                 .iter()
-                .map(|pdg| {
-                    let p = model.get_particle_from_pdg(*pdg as isize);
-                    if p.is_antiparticle() {
-                        p.get_anti_particle(model).pdg_code
-                    } else {
-                        p.pdg_code
-                    }
+                .map(|final_pdgs| {
+                    final_pdgs
+                        .iter()
+                        .map(|pdg| {
+                            let p = model.get_particle_from_pdg(*pdg as isize);
+                            if p.is_antiparticle() {
+                                p.get_anti_particle(model).pdg_code
+                            } else {
+                                p.pdg_code
+                            }
+                        })
+                        .collect::<Vec<_>>()
                 })
                 .collect::<Vec<_>>()
         } else {
             vec![]
         };
 
-        if !unoriented_final_state_particles.is_empty() {
-            let bar = ProgressBar::new(graphs.len() as u64);
-            bar.set_style(progress_bar_style.clone());
-            bar.set_message("Enforcing particle content...");
-            pool.install(|| {
-                graphs = graphs
-                    .par_iter()
-                    .progress_with(bar.clone())
-                    .filter(|(g, _symmetry_factor)| {
-                        FeynGen::contains_particles(g, unoriented_final_state_particles.as_slice())
-                    })
-                    .map(|(g, sf)| (g.clone(), sf.clone()))
-                    .collect::<HashMap<_, _>>()
-            });
-            bar.finish_and_clear();
+        if !unoriented_final_state_particles_lists.is_empty() {
+            let mut unoriented_final_state_particles_always_present: HashSet<isize> =
+                HashSet::from_iter(unoriented_final_state_particles_lists[0].iter().cloned());
+            for final_pdgs in unoriented_final_state_particles_lists.iter().skip(1) {
+                unoriented_final_state_particles_always_present =
+                    unoriented_final_state_particles_always_present
+                        .intersection(&HashSet::from_iter(final_pdgs.iter().cloned()))
+                        .cloned()
+                        .collect();
+            }
+            let unoriented_final_state_particles_always_present_vec =
+                unoriented_final_state_particles_always_present
+                    .iter()
+                    .cloned()
+                    .collect::<Vec<_>>();
+            if !unoriented_final_state_particles_always_present_vec.is_empty() {
+                let bar = ProgressBar::new(graphs.len() as u64);
+                bar.set_style(progress_bar_style.clone());
+                bar.set_message("Enforcing particle content...");
+                pool.install(|| {
+                    graphs = graphs
+                        .par_iter()
+                        .progress_with(bar.clone())
+                        .filter(|(g, _symmetry_factor)| {
+                            FeynGen::contains_particles(
+                                g,
+                                unoriented_final_state_particles_always_present_vec.as_slice(),
+                            )
+                        })
+                        .map(|(g, sf)| (g.clone(), sf.clone()))
+                        .collect::<HashMap<_, _>>()
+                });
+                bar.finish_and_clear();
 
-            step = Instant::now();
-            info!(
-                "{} | Δ={} | {:<95}{}",
-                format!("{:<6}", utils::format_wdhms_from_duration(step - start))
-                    .blue()
-                    .bold(),
-                format!("{:<6}", utils::format_wdhms_from_duration(step - last_step)).blue(),
-                "Number of graphs retained after enforcing supergraph particle content:",
-                format!("{}", graphs.len()).green()
-            );
-            last_step = step;
+                step = Instant::now();
+                info!(
+                    "{} | Δ={} | {:<95}{}",
+                    format!("{:<6}", utils::format_wdhms_from_duration(step - start))
+                        .blue()
+                        .bold(),
+                    format!("{:<6}", utils::format_wdhms_from_duration(step - last_step)).blue(),
+                    "Number of graphs retained after enforcing supergraph particle content:",
+                    format!("{}", graphs.len()).green()
+                );
+                last_step = step;
+            }
         }
 
         let tadpole_filter = filters
@@ -2374,7 +2807,8 @@ impl FeynGen {
             .map(|(g, symmetry_factor)| {
                 (
                     g.clone(),
-                    Atom::new_num(1) / Atom::new_num(symmetry_factor.clone()),
+                    Atom::new_num(1)
+                        / function!(symb!("AutG"), Atom::new_num(symmetry_factor.clone())),
                 )
             })
             .collect::<HashMap<_, _>>();
@@ -2407,7 +2841,7 @@ impl FeynGen {
             for (colored_g, multiplicity) in FeynGen::assign_node_colors(model, g, &node_colors)? {
                 processed_graphs.push((
                     colored_g.canonize().graph,
-                    (Atom::new_num(multiplicity as i64) * symmetry_factor).to_canonical_string(),
+                    (Atom::new_num(multiplicity as i64) * symmetry_factor),
                 ));
             }
         }
@@ -2427,8 +2861,14 @@ impl FeynGen {
                             .map(|(colored_g, multiplicity)| {
                                 (
                                     colored_g.canonize().graph,
-                                    (Atom::new_num(*multiplicity as i64) * symmetry_factor)
-                                        .to_canonical_string(),
+                                    if *multiplicity != 1 {
+                                        function!(
+                                            symb!("CouplingsMultiplicity"),
+                                            Atom::new_num(*multiplicity as i64)
+                                        ) * symmetry_factor
+                                    } else {
+                                        symmetry_factor.clone()
+                                    },
                                 )
                             })
                             .collect::<Vec<_>>()
@@ -2483,8 +2923,7 @@ impl FeynGen {
                     match self.count_closed_fermion_loops(g, model) {
                         Ok(n_closed_fermion_loops) => {
                             let new_symmetry_factor = if n_closed_fermion_loops % 2 == 1 {
-                                (Atom::new_num(-1) * Atom::parse(symmetry_factor).unwrap())
-                                    .to_canonical_string()
+                                function!(symb!("InternalFermionLoopSign"), -1) * symmetry_factor
                             } else {
                                 symmetry_factor.clone()
                             };
@@ -2526,8 +2965,15 @@ impl FeynGen {
         // The fast cutksoky filter is only fast for up to ~ 6 particles to check
         let mut applied_fast_cutksosky_cut_filter = false;
         if self.options.generation_type == GenerationType::CrossSection
-            && !self.options.final_pdgs.is_empty()
-            && self.options.final_pdgs.len() + n_unresolved
+            && !representative_final_pdgs.is_empty()
+            && self
+                .options
+                .final_pdgs_lists
+                .iter()
+                .map(|pdgs| pdgs.len())
+                .max()
+                .unwrap_or(0)
+                + n_unresolved
                 <= self.options.max_multiplicity_for_fast_cut_filter
         {
             applied_fast_cutksosky_cut_filter = true;
@@ -2540,12 +2986,16 @@ impl FeynGen {
                     .par_iter()
                     .progress_with(bar.clone())
                     .filter(|(g, _symmetry_factor)| {
-                        self.contains_cut_fast(
-                            model,
-                            g,
-                            n_unresolved,
-                            &unresolved_type,
-                            unoriented_final_state_particles.as_slice(),
+                        unoriented_final_state_particles_lists.iter().any(
+                            |unoriented_final_state_particles| {
+                                self.contains_cut_fast(
+                                    model,
+                                    g,
+                                    n_unresolved,
+                                    &unresolved_type,
+                                    unoriented_final_state_particles.as_slice(),
+                                )
+                            },
                         )
                     })
                     .map(|(g, sf)| (g.clone(), sf.clone()))
@@ -2569,7 +3019,7 @@ impl FeynGen {
         // This secondary cutkosky cut filter is always necessary as the fast one can have false positives
         // even in the absence of constraints on amplitudes on either side of the cut
         if self.options.generation_type == GenerationType::CrossSection
-            && !self.options.final_pdgs.is_empty()
+            && !representative_final_pdgs.is_empty()
             && (self
                 .options
                 .amplitude_filters
@@ -2594,8 +3044,13 @@ impl FeynGen {
                     .par_iter()
                     .progress_with(bar.clone())
                     .filter(|(g, _)| {
-                        self.contains_cut(model, g, n_unresolved, &unresolved_type, None, false)
-                            .is_empty()
+                        self.half_edge_filters(
+                            model,
+                            g,
+                            &external_connections,
+                            n_unresolved,
+                            &unresolved_type,
+                        )
                     })
                     .map(|(g, sf)| (g.clone(), sf.clone()))
                     .collect::<Vec<_>>()
@@ -2675,11 +3130,11 @@ impl FeynGen {
                             }
                         }
                         for final_color in self.options.initial_pdgs.len() + 1
-                            ..=self.options.initial_pdgs.len() + self.options.final_pdgs.len()
+                            ..=self.options.initial_pdgs.len() + representative_final_pdgs.len()
                         {
                             if !model
                                 .get_particle_from_pdg(
-                                    self.options.final_pdgs
+                                    representative_final_pdgs
                                         [final_color - self.options.initial_pdgs.len() - 1]
                                         as isize,
                                 )
@@ -2709,11 +3164,11 @@ impl FeynGen {
                     }
                     (false, true, false) => {
                         for final_color in self.options.initial_pdgs.len() + 1
-                            ..=self.options.initial_pdgs.len() + self.options.final_pdgs.len()
+                            ..=self.options.initial_pdgs.len() + representative_final_pdgs.len()
                         {
                             if !model
                                 .get_particle_from_pdg(
-                                    self.options.final_pdgs
+                                    representative_final_pdgs
                                         [final_color - self.options.initial_pdgs.len() - 1]
                                         as isize,
                                 )
@@ -2741,11 +3196,11 @@ impl FeynGen {
                             }
                         }
                         for final_color in self.options.initial_pdgs.len() + 1
-                            ..=self.options.initial_pdgs.len() + self.options.final_pdgs.len()
+                            ..=self.options.initial_pdgs.len() + representative_final_pdgs.len()
                         {
                             if !model
                                 .get_particle_from_pdg(
-                                    self.options.final_pdgs
+                                    representative_final_pdgs
                                         [final_color - self.options.initial_pdgs.len() - 1]
                                         as isize,
                                 )
@@ -2775,16 +3230,13 @@ impl FeynGen {
             && !node_colors_for_canonicalization.is_empty()
         {
             processed_graphs = FeynGen::group_isomorphic_graphs_after_node_color_change(
-                &processed_graphs
-                    .iter()
-                    .map(|(g, m)| (g.clone(), Atom::parse(m).unwrap()))
-                    .collect::<HashMap<_, _>>(),
+                &processed_graphs.iter().cloned().collect::<HashMap<_, _>>(),
                 &node_colors_for_canonicalization,
                 &pool,
                 &progress_bar_style,
             )
             .iter()
-            .map(|(g, m)| (g.clone(), m.to_canonical_string()))
+            .map(|(g, m)| (g.clone(), m.clone()))
             .collect::<Vec<_>>();
         }
 
@@ -2802,7 +3254,7 @@ impl FeynGen {
 
         let bar = ProgressBar::new(graphs.len() as u64);
         bar.set_style(progress_bar_style.clone());
-        bar.set_message("Canonalizing edge and ndoes ordering of selected graphs, including leg symmetrization...");
+        bar.set_message("Canonalizing edge and nodes ordering of selected graphs, including leg symmetrization...");
         // println!(
         //     "Before edge and vertex canonization, first graph:\n{}",
         //     processed_graphs.first().unwrap().0.to_dot()
@@ -2850,35 +3302,144 @@ impl FeynGen {
                     // NOTE: The normalization of the fermion flow cannot be performed at this stage yet because
                     // it involves flipping edge orientation which modifies the sign of the momenta for the local
                     // numerator comparison during the grouping of graphs. This is done later in the process then.
-                    //sorted_g = self.normalize_fermion_flow(&sorted_g, model).unwrap();
+                    let (g_with_canonical_flows, is_external_fermion_flow_sign_negative) = self
+                        .normalize_flows(&sorted_g, model)
+                        .expect("Failed to normalize fermion flow");
 
-                    (canonical_repr, sorted_g, symmetry_factor.clone())
+                    let symmetry_factor_with_external_fermion_flow_sign =
+                        if self.options.generation_type == GenerationType::Amplitude
+                            && ((!self
+                                .options
+                                .allow_symmetrization_of_external_fermions_in_amplitudes)
+                                || (self.options.symmetrize_initial_states
+                                    && self.options.symmetrize_final_states))
+                        {
+                            function!(
+                                symb!("ExternalFermionOrderingSign"),
+                                Atom::new_num(if is_external_fermion_flow_sign_negative {
+                                    -1
+                                } else {
+                                    1
+                                })
+                            ) * symmetry_factor
+                        } else {
+                            symmetry_factor
+                                * self.external_xs_fermion_signs(
+                                    &g_with_canonical_flows,
+                                    model,
+                                    self.options.initial_pdgs.len(),
+                                )
+                        };
+
+                    CanonizedGraphInfo {
+                        canonized_graph: canonical_repr,
+                        graph: sorted_g,
+                        graph_with_canonized_flow: g_with_canonical_flows,
+                        symmetry_factor: symmetry_factor_with_external_fermion_flow_sign,
+                    }
                 })
                 .collect::<Vec<_>>()
         });
         bar.finish_and_clear();
+
+        // Combine duplicates
+        let mut combined_canonized_processed_graphs = HashMap::default();
+        let numerator_independent_symmetry_pattern = function!(
+            symb!("NumeratorIndependentSymmetryGrouping"),
+            Atom::new_var(symb!("x_"))
+        )
+        .to_pattern();
+        for canonized_graph in canonized_processed_graphs {
+            let g_with_canonical_flows_clone = canonized_graph.graph_with_canonized_flow.clone();
+            combined_canonized_processed_graphs
+                .entry(g_with_canonical_flows_clone)
+                .and_modify(|entry: &mut CanonizedGraphInfo| {
+                    // NumeratorIndependentSymmetryGrouping
+                    let ratio = (FeynGen::evaluate_overall_factor(
+                        canonized_graph.symmetry_factor.as_view(),
+                    ) / FeynGen::evaluate_overall_factor(
+                        entry
+                            .symmetry_factor
+                            .replace_all(
+                                &numerator_independent_symmetry_pattern,
+                                Atom::new_num(1).to_pattern(),
+                                None,
+                                None,
+                            )
+                            .as_view(),
+                    ))
+                    .expand();
+                    if entry
+                        .symmetry_factor
+                        .pattern_match(&numerator_independent_symmetry_pattern, None, None)
+                        .next()
+                        .is_some()
+                    {
+                        entry.symmetry_factor = entry.symmetry_factor.replace_all(
+                            &numerator_independent_symmetry_pattern,
+                            function!(
+                                symb!("NumeratorIndependentSymmetryGrouping"),
+                                (Atom::new_var(symb!("x_")) + ratio).expand()
+                            )
+                            .to_pattern(),
+                            None,
+                            None,
+                        );
+                    } else {
+                        entry.symmetry_factor = &entry.symmetry_factor
+                            * function!(
+                                symb!("NumeratorIndependentSymmetryGrouping"),
+                                (Atom::new_num(1) + ratio).expand()
+                            );
+                    }
+                })
+                .or_insert(canonized_graph);
+        }
+        canonized_processed_graphs = combined_canonized_processed_graphs
+            .values()
+            .map(|v| v.to_owned())
+            .collect::<Vec<_>>();
+
         // println!(
         //     "After edge and vertex canonization, first graph:\n{}",
         //     canonized_processed_graphs.first().unwrap().1.to_dot()
         // );
 
-        canonized_processed_graphs.sort_by(|a, b| (a.1).partial_cmp(&b.1).unwrap());
+        // Make the graph order deterministic and already filter out the identical ones using the canonical representation with normalized fermion flow
+        canonized_processed_graphs.sort_by(|a, b| {
+            let ordering = (a.graph_with_canonized_flow)
+                .partial_cmp(&b.graph_with_canonized_flow)
+                .unwrap();
+            if ordering.is_eq() {
+                panic!(
+                    "Two graphs are identical after canonization with normalized fermion flow. This should never happen."
+                );
+            }
+            ordering
+        });
 
-        //for _i in 451..=457 {
-        //println!("{}", canonized_processed_graphs[451].0.to_dot());
-        //println!("{:?}", canonized_processed_graphs[i].2);
-        //}
-        //panic!("aaaaaaaa");
+        step = Instant::now();
+        info!(
+            "{} | Δ={} | {:<95}{}",
+            format!("{:<6}", utils::format_wdhms_from_duration(step - start))
+                .blue()
+                .bold(),
+            format!("{:<6}", utils::format_wdhms_from_duration(step - last_step)).blue(),
+            "Number of graphs after canonization of vertices, edges and flows (graph labels assigned here):",
+            format!("{}", canonized_processed_graphs.len()).green()
+        );
+        last_step = step;
 
         let n_zeroes_color = Arc::new(Mutex::new(0));
         let n_zeroes_lorentz = Arc::new(Mutex::new(0));
         let n_groupings = Arc::new(Mutex::new(0));
+        // the pooled bare graphs have keys being the skeletton graphs identifying the topology
         #[allow(clippy::type_complexity)]
         let pooled_bare_graphs: Arc<
             Mutex<
                 HashMap<
                     SymbolicaGraph<NodeColorWithoutVertexRule, std::string::String>,
-                    Vec<(usize, Option<ProcessedNumeratorForComparison>, BareGraph)>,
+                    Vec<Vec<PooledGraphData>>,
                 >,
             >,
         > = Arc::new(Mutex::new(HashMap::default()));
@@ -2898,7 +3459,7 @@ impl FeynGen {
                 .par_iter()
                 .progress_with(bar.clone())
                 .enumerate()
-                .map(|(i_g, (canonical_repr, g, symmetry_factor))| {
+                .map(|(i_g, canonical_graph)| {
                     let graph_name = format!("{}{}", graph_prefix, i_g);
                     if let Some(selected_graphs) = &selected_graphs {
                         if !selected_graphs.contains(&graph_name) {
@@ -2913,8 +3474,8 @@ impl FeynGen {
                     let bare_graph = BareGraph::from_symbolica_graph(
                         model,
                         graph_name.clone(),
-                        g,
-                        symmetry_factor.clone(),
+                        &canonical_graph.graph,
+                        canonical_graph.symmetry_factor.clone(),
                         external_connections.clone(),
                         None,
                     )?;
@@ -2923,14 +3484,13 @@ impl FeynGen {
                     // Notice that we cannot do this on the bare graph used for numerator local comparisons and diagram grouping because
                     // it induces a misalignment of the LMB (w.r.t to their sign/orientation) due to the flip of the edges.
                     // In principle this could be fixed by forcing to pick an LMB for edges that have not been flipped and allowing closed loops
-                    // of antiparticles as well, but I prefer this post re-processing option instead.
-                    let canonized_fermion_flow_bare_graph = if CANONIZE_FERMION_FLOW {
-                        let canonied_fermion_flow_symbolica_graph = self.normalize_fermion_flow(g, model)?;
+                    // of antiparticles as well, but I prefer to leave this a post-re-processing option instead.
+                    let canonized_fermion_flow_bare_graph = if CANONIZE_GRAPH_FLOWS {
                         BareGraph::from_symbolica_graph(
                             model,
                             graph_name,
-                            &canonied_fermion_flow_symbolica_graph,
-                            symmetry_factor.clone(),
+                            &canonical_graph.graph_with_canonized_flow,
+                            canonical_graph.symmetry_factor.clone(),
                             external_connections.clone(),
                             None,
                         )?
@@ -2943,24 +3503,50 @@ impl FeynGen {
                     //     bare_graph.dot()
                     // );
                     // When disabling numerator-aware graph isomorphism, each graph is added separately
+                    let pooled_graph = PooledGraphData {
+                        graph_id: i_g,
+                        numerator_data: None,
+                        ratio: Atom::new_num(1),
+                        bare_graph: canonized_fermion_flow_bare_graph.clone(),
+                    };
                     if matches!(
                         numerator_aware_isomorphism_grouping,
                         NumeratorAwareGraphGroupingOption::NoGrouping
                     ) {
                         {
                             let mut pooled_bare_graphs_lock = pooled_bare_graphs_clone.lock().unwrap();
-                            match pooled_bare_graphs_lock.entry(canonical_repr.clone()) {
+                            match pooled_bare_graphs_lock.entry(canonical_graph.canonized_graph.clone()) {
                                 Entry::Vacant(entry) => {
-                                    entry.insert(vec![(i_g, None, canonized_fermion_flow_bare_graph)]);
+                                    entry.insert(vec![vec![pooled_graph]]);
                                 }
                                 Entry::Occupied(mut entry) => {
-                                    entry.get_mut().push((i_g, None, canonized_fermion_flow_bare_graph));
+                                    entry.get_mut().push(vec![pooled_graph]);
                                 }
                             }
                         }
                     } else {
-                        let numerator =
+                        // println!("Processing graph #{}...", i_g);
+                        // println!("Bare graph: {}",bare_graph.dot());
+                        let mut numerator =
                             Numerator::default().from_graph(&bare_graph, &numerator_global_prefactor);
+                        // println!("Num single atom: {}",numerator.get_single_atom().unwrap());
+                        for connection in bare_graph.external_connections.iter() {
+                            if let (Some(left_external_node_pos), Some(right_external_node_pos)) =
+                                connection
+                            {
+                                let color_a = &bare_graph.vertex_slots[*left_external_node_pos].edge_slots[0].color;
+                                let color_b = &bare_graph.vertex_slots[*right_external_node_pos].edge_slots[0].color;
+
+                                let color = color_a
+                                    .iter()
+                                    .zip(color_b.iter())
+                                    .map(|(a, b)| a.dual().kroneker_atom(&b.dual()))
+                                    .fold(Atom::parse("1").unwrap(), |acc, x| acc * x);
+
+                                numerator.state.color.map_data_mut(|a|{a.0 = &a.0*&color});
+
+                            }
+                        }
 
                         let numerator_color_simplified =
                             numerator.clone().color_simplify().canonize_color().unwrap();
@@ -2992,13 +3578,12 @@ impl FeynGen {
                         ) {
                             {
                                 let mut pooled_bare_graphs_lock = pooled_bare_graphs_clone.lock().unwrap();
-
-                                match pooled_bare_graphs_lock.entry(canonical_repr.clone()) {
+                                match pooled_bare_graphs_lock.entry(canonical_graph.canonized_graph.clone()) {
                                     Entry::Vacant(entry) => {
-                                        entry.insert(vec![(i_g, None, canonized_fermion_flow_bare_graph)]);
+                                        entry.insert(vec![vec![pooled_graph]]);
                                     }
                                     Entry::Occupied(mut entry) => {
-                                        entry.get_mut().push((i_g, None, canonized_fermion_flow_bare_graph));
+                                        entry.get_mut().push(vec![pooled_graph]);
                                     }
                                 }
                             }
@@ -3050,51 +3635,58 @@ impl FeynGen {
                             {
                                 let mut pooled_bare_graphs_lock = pooled_bare_graphs_clone.lock().unwrap();
 
-                                match pooled_bare_graphs_lock.entry(canonical_repr.clone()) {
+                                match pooled_bare_graphs_lock.entry(canonical_graph.canonized_graph.clone()) {
                                     Entry::Vacant(entry) => {
-                                        entry.insert(vec![(i_g, numerator_data, canonized_fermion_flow_bare_graph)]);
+                                        entry.insert(vec![vec![
+                                            PooledGraphData {
+                                                graph_id: i_g,
+                                                numerator_data,
+                                                ratio: Atom::new_num(1),
+                                                bare_graph: canonized_fermion_flow_bare_graph,
+                                            }
+                                            ]]);
                                     }
                                     Entry::Occupied(mut entry) => {
-                                        let mut found_match = false;
-                                        for (_graph_id, other_numerator, other_graph) in entry.get_mut() {
-                                            if let Some(ratio) = FeynGen::compare_numerator_tensors(
+
+                                        let match_found = entry.get().iter().enumerate().find_map(|(i_entry, pooled_graphs_lists_for_this_topology)| {
+                                            let reference_pooled_graph_data = &pooled_graphs_lists_for_this_topology[0];
+                                            FeynGen::compare_numerator_tensors(
                                                 numerator_aware_isomorphism_grouping,
                                                 numerator_data.as_ref().unwrap(),
-                                                other_numerator.as_ref().unwrap(),
-                                            ) {
-                                                {
-                                                    let n_zeroes_color_value = n_zeroes_color.lock().unwrap();
-                                                    let n_zeroes_lorentz_value = n_zeroes_lorentz.lock().unwrap();
-                                                    let mut n_groupings_value =
-                                                        n_groupings.lock().unwrap();
-                                                    *n_groupings_value += 1;
-                                                    bar.set_message(format!("Final numerator-aware processing of remaining graphs ({} found: {} | {} found: {})...",
-                                                        "#zeros".green(),
-                                                        format!("{}",*n_zeroes_color_value+ *n_zeroes_lorentz_value).green().bold(),
-                                                        "#groupings".green(),
-                                                        format!("{}",n_groupings_value).green().bold(),
-                                                    ));
-                                                }
-                                                found_match = true;
-                                                other_graph.overall_factor =
-                                                    (Atom::parse(other_graph.overall_factor.as_str())
-                                                        .unwrap()
-                                                        + ratio
-                                                            * Atom::parse(
-                                                                bare_graph.overall_factor.as_str(),
-                                                            )
-                                                            .unwrap())
-                                                    .expand()
-                                                    .to_canonical_string();
-                                                // TOFIX: Current version of symbolica (v0.14.0 rev: e534d9f7f8972e22d2a4fb7cd6cb5943373d3bb3)
-                                                // has a bug when cancelling terms where it does not yield 0. So this can be removed when updating to latest symbolica version.
-                                                if other_graph.overall_factor.is_empty() {
-                                                    other_graph.overall_factor = "0".to_string();
-                                                }
+                                                reference_pooled_graph_data.numerator_data.as_ref().unwrap(),
+                                            ).map(|ratio| {
+                                                (i_entry, PooledGraphData {
+                                                    graph_id: i_g,
+                                                    numerator_data: None,
+                                                    ratio,
+                                                    bare_graph: canonized_fermion_flow_bare_graph.clone(),
+                                                })
+                                            })
+                                        });
+                                        if let Some((i_entry, new_entry)) = match_found {
+                                            {
+                                                let n_zeroes_color_value = n_zeroes_color.lock().unwrap();
+                                                let n_zeroes_lorentz_value = n_zeroes_lorentz.lock().unwrap();
+                                                let mut n_groupings_value =
+                                                    n_groupings.lock().unwrap();
+                                                *n_groupings_value += 1;
+                                                bar.set_message(format!("Final numerator-aware processing of remaining graphs ({} found: {} | {} found: {})...",
+                                                    "#zeros".green(),
+                                                    format!("{}",*n_zeroes_color_value+ *n_zeroes_lorentz_value).green().bold(),
+                                                    "#groupings".green(),
+                                                    format!("{}",n_groupings_value).green().bold(),
+                                                ));
                                             }
-                                        }
-                                        if !found_match {
-                                            entry.get_mut().push((i_g, numerator_data, canonized_fermion_flow_bare_graph));
+                                            entry.get_mut()[i_entry].push(new_entry);
+                                        } else {
+                                            entry.get_mut().push(vec![
+                                                PooledGraphData {
+                                                    graph_id: i_g,
+                                                    numerator_data,
+                                                    ratio: Atom::new_num(1),
+                                                    bare_graph: canonized_fermion_flow_bare_graph,
+                                                }
+                                            ]);
                                         }
                                     }
                                 }
@@ -3107,30 +3699,52 @@ impl FeynGen {
         })?;
         bar.finish_and_clear();
 
+        // Now combine the pooled graphs identified to be combined.
+        let mut bare_graphs: Vec<(usize, BareGraph)> = Vec::default();
+        let mut pooled_bare_graphs_len = 0;
         let mut n_cancellations: i32 = 0;
-        let (mut bare_graphs, pooled_bare_graphs_len) = {
-            let pooled_bare_graphs_lock = pooled_bare_graphs.lock().unwrap();
-
-            (
-                pooled_bare_graphs_lock
-                    .values()
-                    .flatten()
-                    .filter_map(|(graph_id, _numerator, graph)| {
-                        if Atom::parse(&graph.overall_factor)
-                            .unwrap()
-                            .expand()
-                            .is_zero()
-                        {
-                            n_cancellations += 1;
-                            None
-                        } else {
-                            Some((*graph_id, graph.clone()))
-                        }
-                    })
-                    .collect::<Vec<_>>(),
-                pooled_bare_graphs_lock.len(),
-            )
-        };
+        for (_canonical_repr, pooled_graphs_lists_for_this_topology) in
+            pooled_bare_graphs.lock().unwrap().iter()
+        {
+            for pooled_graphs_list in pooled_graphs_lists_for_this_topology {
+                let previous_reference_ratio = pooled_graphs_list[0].ratio.clone();
+                let sorted_graphs_to_combine = pooled_graphs_list
+                    .iter()
+                    .sorted_by_key(|pooled_graph| pooled_graph.graph_id)
+                    .collect::<Vec<_>>();
+                let mut combined_overall_factor = Atom::new_num(0);
+                let mut bare_graph_representative = pooled_graphs_list[0].bare_graph.clone();
+                if sorted_graphs_to_combine.len() > 1 {
+                    for graph_to_combine in sorted_graphs_to_combine {
+                        pooled_bare_graphs_len += 1;
+                        // The computation of &graph_to_combine.ratio / &previous_reference_ratio is necessary so that if we started with this order of graphs to combine
+                        //   (A, B, C), with ratios (r_1 = 1, r_2 = B/A, r_3 = C/A)
+                        // And when forcing the reference diagram to be e.g. C, (so that we get a predictive ref graph in the multi-thread case), we need to pick C as the
+                        // reference and have A and B be multiplied by the ratios A/C and B/C respectively. respectively.
+                        // These will here be computed as A/C = r_1 / r_3 and B/C = r_2 / r_3. In general `r_i / r_ref` always yield the desired ratio.
+                        combined_overall_factor = combined_overall_factor
+                            + function!(
+                                symb!("NumeratorDependentGrouping"),
+                                Atom::new_num(graph_to_combine.graph_id as i64),
+                                (&graph_to_combine.ratio / &previous_reference_ratio).expand(),
+                                graph_to_combine.bare_graph.overall_factor.clone()
+                            );
+                    }
+                } else {
+                    pooled_bare_graphs_len += 1;
+                    combined_overall_factor = bare_graph_representative.overall_factor.clone();
+                }
+                if FeynGen::evaluate_overall_factor(combined_overall_factor.as_view())
+                    .expand()
+                    .is_zero()
+                {
+                    n_cancellations += 1;
+                } else {
+                    bare_graph_representative.overall_factor = combined_overall_factor;
+                    bare_graphs.push((pooled_graphs_list[0].graph_id, bare_graph_representative));
+                }
+            }
+        }
         bare_graphs.sort_by(|a: &(usize, BareGraph), b| (a.0).cmp(&b.0));
 
         let (n_zeroes_color_value, n_zeroes_lorentz_value, n_groupings_value) = {
@@ -3396,12 +4010,16 @@ impl FeynGen {
             //}
         }
         // println!(
-        //     "Graphs: [{}]",
+        //     "Graphs: [\n{}\n]",
         //     bare_graphs
         //         .iter()
-        //         .map(|(_graph_id, graph)| format!("\"{}\"", graph.name.clone()))
+        //         .map(|(_graph_id, graph)| format!(
+        //             "\"{}@{{{}}}\"",
+        //             graph.name.clone(),
+        //             graph.overall_factor
+        //         ))
         //         .collect::<Vec<_>>()
-        //         .join(", "),
+        //         .join("\n"),
         // );
 
         let main_path_to_output = PathBuf::from("alphaloop_outputs");
@@ -3799,8 +4417,36 @@ impl FeynGen {
         }
         res.expand()
     }
+
+    fn external_xs_fermion_signs(
+        &self,
+        graph: &SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>,
+        model: &Model,
+        n_initials: usize,
+    ) -> Atom {
+        let mut he_graph =
+            FeynGenHedgeGraph::from_feyn_gen_symbolica(graph.clone(), model, n_initials);
+        let n_external_fermion_loops = he_graph.number_of_external_fermion_loops();
+
+        let sign = Sign::Negative.pow(n_external_fermion_loops);
+        function!(
+            symb!("ExternalFermionOrderingSign"),
+            Atom::new_num(match sign {
+                Sign::Positive => 1,
+                Sign::Negative => -1,
+            })
+        )
+    }
 }
 
+struct PooledGraphData {
+    graph_id: usize,
+    numerator_data: Option<ProcessedNumeratorForComparison>,
+    ratio: Atom,
+    bare_graph: BareGraph,
+}
+
+#[derive(Clone)]
 struct ProcessedNumeratorForComparison {
     diagram_id: usize,
     canonized_numerator: Option<Atom>,
@@ -3867,6 +4513,7 @@ impl ProcessedNumeratorForComparison {
                     {
                         let left_edge = &bare_graph.edges
                             [bare_graph.vertices[*left_external_node_pos].edges[0]];
+
                         let right_edge = &bare_graph.edges
                             [bare_graph.vertices[*right_external_node_pos].edges[0]];
                         let connected_external_id = bare_graph.external_connections.len() + i_ext;
@@ -4240,7 +4887,7 @@ impl ProcessedNumeratorForComparison {
                             let processed = tn_res.to_bare_dense();
                             Ok(processed.scalar().map(|s| {
                                 Atom::new_num(s.re) + Atom::new_num(s.im) * Atom::I
-                            }).unwrap()*tn_scalar.unwrap_or(Atom::new_num(1)))
+                            }).expect("Expected scalar in numerator evaluation.")*tn_scalar.unwrap_or(Atom::new_num(1)))
                         },
                         Err(spenso::network::TensorNetworkError::NoNodes) => {
                             let s = tn_complex

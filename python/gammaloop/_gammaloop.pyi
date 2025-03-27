@@ -38,6 +38,14 @@ class SnailFilterOptions:
         """ Creates options for vetoing snail diagrams. """
 
 
+class SewedFilterOptions:
+    @classmethod
+    def __new__(_cls,
+                filter_tadpoles: Optional[bool] = True,
+                ) -> SewedFilterOptions:
+        """ Creates options for vetoing tadpoles when sewing diagrams. """
+
+
 class SelfEnergyFilterOptions:
     @classmethod
     def __new__(_cls,
@@ -54,6 +62,7 @@ class TadpolesFilterOptions:
                 veto_tadpoles_attached_to_massive_lines: Optional[bool] = True,
                 veto_tadpoles_attached_to_massless_lines: Optional[bool] = True,
                 veto_only_scaleless_tadpoles: Optional[bool] = False,
+                 veto_cross_section_sewed_tadpoles:Optional[bool]=False,
                 ) -> TadpolesFilterOptions:
         """ Creates options for vetoing tadpole diagrams. """
 
@@ -65,11 +74,13 @@ class FeynGenFilters:
                 include_external_self_energy: Optional[bool] = False,
                 particle_veto: Optional[list[int]] = [],
                 max_number_of_bridges: Optional[int] = 0,
+                sewed_filter: Optional[SewedFilterOptions] = None,
                 self_energy_filter: Optional[SelfEnergyFilterOptions] = None,
                 tadpoles_filter: Optional[TadpolesFilterOptions] = None,
                 zero_snails_filter: Optional[SnailFilterOptions] = None,
                 perturbative_orders: Optional[dict[str, int]] = None,
-                coupling_orders: Optional[dict[str, int]] = {},
+                coupling_orders: Optional[dict[str,
+                                               tuple[int, int | None]]] = {},
                 loop_count_range: Optional[tuple[int, int]] = None,
                 fermion_loop_count_range: Optional[tuple[int, int]] = None,
                 factorized_loop_topologies_count_range: Optional[tuple[int, int]] = None,
@@ -83,8 +94,10 @@ class FeynGenOptions:
     def __new__(_cls,
                 generation_type: str,
                 initial_particles: list[int],
-                final_particles: list[int],
+                final_particles: list[list[int]],
                 loop_count_range: tuple[int, int],
+                cut_blob_range: tuple[int, int],
+                cut_spectator_range: tuple[int, int],
                 symmetrize_initial_states: bool,
                 symmetrize_final_states: bool,
                 symmetrize_left_right_states: bool,
