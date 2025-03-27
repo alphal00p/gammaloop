@@ -2,6 +2,7 @@ use bitvec::vec::BitVec;
 use indicatif::ProgressBar;
 use indicatif::{ParallelProgressIterator, ProgressStyle};
 
+use nalgebra::OPoint;
 use petgraph::graph;
 use rayon::iter::ParallelIterator;
 use rayon::prelude::*;
@@ -39,7 +40,6 @@ use ahash::AHashSet;
 use ahash::HashMap;
 use colored::Colorize;
 use log::info;
-use log::{debug, warn};
 use log::{debug, warn};
 use smartstring::{LazyCompact, SmartString};
 use symbolica::atom::AtomCore;
@@ -256,7 +256,8 @@ impl NodeColorFunctions for NodeColorWithoutVertexRule {
             &std::collections::HashMap<String, (usize, Option<usize>), ahash::RandomState>,
         >,
     ) -> bool {
-        panic!("Cannot apply amplitude filters without vertex information.");
+        // panic!("Cannot apply amplitude filters without vertex information.");
+        true
     }
 }
 
@@ -891,8 +892,37 @@ impl FeynGen {
         n_unresolved: usize,
         unresolved_type: &AHashSet<Arc<Particle>>,
         force_other_final_state: Option<Vec<isize>>,
-        force_t_channel: bool,
-    ) -> Vec<(InternalSubGraph, OrientedCut, InternalSubGraph)>
+        force_other_s_t_set: Option<(Vec<NodeIndex>, Vec<NodeIndex>)>,
+    ) -> Vec<(BitVec, OrientedCut, BitVec)>
+    where
+        NodeColor: NodeColorFunctions + Clone,
+    {
+        let he_graph = HedgeGraph::<EdgeColor, NodeColor>::from_sym(graph.clone()).map(
+            |_, _, _, node_color| node_color,
+            |_, _, _, d| d.map(|d| model.get_particle_from_pdg(d.pdg)),
+        );
+
+        self.half_edge_filters_impl(
+            model,
+            &he_graph,
+            external_connections,
+            n_unresolved,
+            unresolved_type,
+            force_other_final_state,
+            force_other_s_t_set,
+        )
+    }
+
+    pub fn half_edge_filters_impl<NodeColor>(
+        &self,
+        model: &Model,
+        graph: &HedgeGraph<Arc<Particle>, NodeColor>,
+        external_connections: &[(Option<usize>, Option<usize>)],
+        n_unresolved: usize,
+        unresolved_type: &AHashSet<Arc<Particle>>,
+        force_other_final_state: Option<Vec<isize>>,
+        force_other_s_t_set: Option<(Vec<NodeIndex>, Vec<NodeIndex>)>,
+    ) -> Vec<(BitVec, OrientedCut, BitVec)>
     where
         NodeColor: NodeColorFunctions + Clone,
     {
@@ -911,7 +941,6 @@ impl FeynGen {
             >,
             amp_loop_count: Option<(usize, usize)>,
             graph: &HedgeGraph<Arc<Particle>, NodeColor>,
-            force_t_channel: bool,
         ) -> bool {
             if validate_connectivity(&cut.0, blob_range, spectator_range, graph)
                 && validate_connectivity(&cut.2, blob_range, spectator_range, graph)
@@ -929,37 +958,6 @@ impl FeynGen {
                     })
                     .collect();
 
-                // info!(
-                //     "//left\n{}\n",
-                //     graph.dot_impl(
-                //         &cut.0,
-                //         "",
-                //         &|a| Some(format!("label=\"{}\"", a.name)),
-                //         &|b| None
-                //     )
-                // // );
-
-                // info!(
-                //     "//cut\n{}\n",
-                //     graph.dot_impl(
-                //         &cut.1.reference,
-                //         "",
-                //         &|a| Some(format!("label=\"{}\"", a.name)),
-                //         &|b| None
-                //     )
-                // );
-                // for p in cut_content.iter() {
-                //     info!("Particle {} in cut", p.name);
-                // }
-                // info!(
-                //     "//right\n{}\n",
-                //     graph.dot_impl(
-                //         &cut.2,
-                //         "",
-                //         &|a| Some(format!("label=\"{}\"", a.name)),
-                //         &|b| None
-                //     )
-                // );
                 if !particle_content_options.iter().any(|particle_content| {
                     let mut cut_content_clone = cut_content.clone();
                     for p in particle_content.iter() {
@@ -1030,7 +1028,6 @@ impl FeynGen {
             blob_range: &RangeInclusive<usize>,
             spectator_range: &RangeInclusive<usize>,
             graph: &HedgeGraph<Arc<Particle>, NodeColor>,
-            force_t_channel: bool,
         ) -> bool {
             let components = graph.connected_components(subgraph);
 
@@ -1045,7 +1042,9 @@ impl FeynGen {
                 }
             }
 
-            blob_range.contains(&n_blobs) && spectator_range.contains(&n_spectators)
+            let res = blob_range.contains(&n_blobs) && spectator_range.contains(&n_spectators);
+
+            res
         }
 
         let amp_couplings = self.options.amplitude_filters.get_coupling_orders();
@@ -1058,10 +1057,8 @@ impl FeynGen {
             .unwrap();
 
         let n_particles = self.options.initial_pdgs.len();
-        let mut he_graph = HedgeGraph::<EdgeColor, NodeColor>::from_sym(graph.clone()).map(
-            |_, _, _, node_color| node_color,
-            |_, _, _, d| d.map(|d| model.get_particle_from_pdg(d.pdg)),
-        );
+        let mut he_graph = graph.clone();
+
         // info!(
         //     "Looking at\n{}",
         //     he_graph.dot_impl(
@@ -1087,40 +1084,55 @@ impl FeynGen {
             }
         }
 
+        if let Some((forced_s_set, forced_t_set)) = force_other_s_t_set {
+            s_set = forced_s_set;
+            t_set = forced_t_set;
+        }
+
         // info!("HI");
         if !s_set.is_empty() && !t_set.is_empty() {
             // info!("{}-{}", s, t);
             let cuts = he_graph.all_cuts_from_ids(&s_set, &t_set);
 
             // info!("found {} cuts", cuts.len());
-            let particle_content_options = self
-                .options
-                .final_pdgs_lists
-                .iter()
-                .map(|pdg_list| {
-                    pdg_list
-                        .iter()
-                        .map(|pdg| model.get_particle_from_pdg((*pdg) as isize))
-                        .collect::<Vec<_>>()
-                })
-                .collect::<Vec<_>>();
-            let pass_cut_filter = cuts.iter().any(|c| {
-                is_valid_cut(
-                    c,
-                    blob_range,
-                    spectator_range,
-                    model,
-                    n_unresolved,
-                    unresolved_type,
-                    &particle_content_options,
-                    amp_couplings,
-                    amp_loop_count,
-                    &he_graph,
-                )
-            });
+            let particle_content_options = if let Some(final_state) = force_other_final_state {
+                vec![final_state
+                    .iter()
+                    .map(|pdg| model.get_particle_from_pdg(*pdg))
+                    .collect::<Vec<_>>()]
+            } else {
+                self.options
+                    .final_pdgs_lists
+                    .iter()
+                    .map(|pdg_list| {
+                        pdg_list
+                            .iter()
+                            .map(|pdg| model.get_particle_from_pdg((*pdg) as isize))
+                            .collect::<Vec<_>>()
+                    })
+                    .collect::<Vec<_>>()
+            };
 
-            if !pass_cut_filter {
-                return false;
+            let pass_cut_filter = cuts
+                .into_iter()
+                .filter(|c| {
+                    is_valid_cut(
+                        c,
+                        blob_range,
+                        spectator_range,
+                        model,
+                        n_unresolved,
+                        unresolved_type,
+                        &particle_content_options,
+                        amp_couplings,
+                        amp_loop_count,
+                        &he_graph,
+                    )
+                })
+                .collect_vec();
+
+            if pass_cut_filter.is_empty() {
+                return pass_cut_filter;
             }
 
             if self
@@ -1164,7 +1176,7 @@ impl FeynGen {
 
                 let connected_components = he_graph.count_connected_components(&non_bridges);
                 if connected_components == connected_components_before {
-                    return true;
+                    return pass_cut_filter;
                 } else {
                     // info!(
                     //     "Vetoed: \n{}\n because it had {} connected components",
@@ -1187,14 +1199,14 @@ impl FeynGen {
                     // );
                     // info!("{}", graph.to_dot());
 
-                    return false;
+                    return vec![];
                 }
             }
 
-            true
+            pass_cut_filter
         } else {
             warn!("No external particles found");
-            true //TODO still check the amplitude level filters in the case where there is no initial-state specified
+            vec![] //TODO still check the amplitude level filters in the case where there is no initial-state specified
         }
     }
 
@@ -3044,13 +3056,17 @@ impl FeynGen {
                     .par_iter()
                     .progress_with(bar.clone())
                     .filter(|(g, _)| {
-                        self.half_edge_filters(
-                            model,
-                            g,
-                            &external_connections,
-                            n_unresolved,
-                            &unresolved_type,
-                        )
+                        !self
+                            .half_edge_filters(
+                                model,
+                                g,
+                                &external_connections,
+                                n_unresolved,
+                                &unresolved_type,
+                                None,
+                                None,
+                            )
+                            .is_empty()
                     })
                     .map(|(g, sf)| (g.clone(), sf.clone()))
                     .collect::<Vec<_>>()
@@ -3802,6 +3818,8 @@ impl FeynGen {
             }
 
             let mut symbolica_graph = SymbolicaGraph::new();
+            let mut node_data = Vec::new();
+
             let mut external_tag_counter = 1;
             for vertex in graph.vertices.iter() {
                 let mut external_tag = 0;
@@ -3811,6 +3829,7 @@ impl FeynGen {
                 }
 
                 let data = NodeColorWithoutVertexRule { external_tag };
+                node_data.push(data);
                 symbolica_graph.add_node(data);
             }
 
@@ -3818,23 +3837,24 @@ impl FeynGen {
                 let edge_color = EdgeColor {
                     pdg: edge.particle.pdg_code,
                 };
-
                 symbolica_graph
                     .add_edge(edge.vertices[0], edge.vertices[1], true, edge_color)
                     .unwrap();
             }
-            //let graph_passed = if graph.name == "GL280" {
-            //    Some(graph.clone())
-            //} else {
-            //    None
 
-            let cuts = self.contains_cut(
+            let he_graph_for_cuts = graph.hedge_representation.clone().map(
+                |_, _, _, data| node_data[data],
+                |_, _, _, data| data.map(|data| graph.edges[data].particle.clone()),
+            );
+
+            let cuts = self.half_edge_filters_impl(
                 model,
-                &symbolica_graph,
+                &he_graph_for_cuts,
+                &graph.external_connections,
                 n_unresolved,
                 &unresolved_type,
                 None,
-                false,
+                None,
             );
 
             if cuts.is_empty() {
@@ -3843,8 +3863,8 @@ impl FeynGen {
 
             // count the non-top fermion loops
             let veto_for_nf = Some(vec![
-                model.get_particle(&SmartString::from("t")).pdg_code,
-                model.get_particle(&SmartString::from("t~")).pdg_code,
+                model.get_particle("t").pdg_code,
+                model.get_particle("t~").pdg_code,
             ]);
 
             let n_closed_fermion_loops_without_top = self
@@ -3856,40 +3876,109 @@ impl FeynGen {
                 .unwrap();
 
             // two gluons
-            let s_channel_singlet_final_state =
-                Some(vec![
-                    model.get_particle(&SmartString::from("g")).pdg_code;
-                    2
-                ]);
+            let s_channel_singlet_final_state = Some(vec![model.get_particle("g").pdg_code; 2]);
 
-            let s_channel_singlet_cuts = self.contains_cut(
+            let s_channel_singlet_cuts = self.half_edge_filters_impl(
                 model,
-                &symbolica_graph,
+                &he_graph_for_cuts,
+                &graph.external_connections,
                 0,
                 &unresolved_type,
                 s_channel_singlet_final_state.clone(),
-                false,
+                None,
             );
 
-            let t_channel_singlet_cuts = self.contains_cut(
+            let s_set_for_t_channel_cuts_as_usize = vec![
+                graph.external_connections[0].0.unwrap(),
+                graph.external_connections[0].1.unwrap(),
+            ];
+
+            let mut s_set_for_t_channel_cuts = s_set_for_t_channel_cuts_as_usize
+                .into_iter()
+                .map(|node_usize| {
+                    let hedge_node = graph
+                        .hedge_representation
+                        .iter_nodes()
+                        .find(|(_hedge_node, iterating_node_usize)| {
+                            **iterating_node_usize == node_usize
+                        })
+                        .unwrap()
+                        .0;
+
+                    graph
+                        .hedge_representation
+                        .id_from_hairs(hedge_node)
+                        .unwrap()
+                })
+                .collect_vec();
+
+            let t_set_for_t_channel_cuts_as_usize = vec![
+                graph.external_connections[1].0.unwrap(),
+                graph.external_connections[1].1.unwrap(),
+            ];
+
+            let mut t_set_for_t_channel_cuts = t_set_for_t_channel_cuts_as_usize
+                .into_iter()
+                .map(|node_usize| {
+                    let hedge_node = graph
+                        .hedge_representation
+                        .iter_nodes()
+                        .find(|(hedge_node, iterating_node_usize)| {
+                            **iterating_node_usize == node_usize
+                        })
+                        .unwrap()
+                        .0;
+
+                    graph
+                        .hedge_representation
+                        .id_from_hairs(hedge_node)
+                        .unwrap()
+                })
+                .collect_vec();
+
+            let t_channel_singlet_cuts_set_1 = self.half_edge_filters_impl(
                 model,
-                &symbolica_graph,
+                &he_graph_for_cuts,
+                &graph.external_connections,
+                0,
+                &unresolved_type,
+                s_channel_singlet_final_state.clone(),
+                Some((
+                    s_set_for_t_channel_cuts.clone(),
+                    t_set_for_t_channel_cuts.clone(),
+                )),
+            );
+
+            std::mem::swap(
+                &mut s_set_for_t_channel_cuts[1],
+                &mut t_set_for_t_channel_cuts[1],
+            );
+
+            let t_channel_singlet_cuts_set_2 = self.half_edge_filters_impl(
+                model,
+                &he_graph_for_cuts,
+                &graph.external_connections,
                 0,
                 &unresolved_type,
                 s_channel_singlet_final_state,
-                true,
+                Some((s_set_for_t_channel_cuts, t_set_for_t_channel_cuts)),
             );
+
+            let t_channel_singlet_cuts = t_channel_singlet_cuts_set_1
+                .into_iter()
+                .chain(t_channel_singlet_cuts_set_2.into_iter())
+                .collect_vec();
 
             if n_closed_fermion_loops_without_top == 1 {
                 nf_graphs.push(graph.name.clone());
                 if cuts.iter().all(|(_, cut, _)| {
                     let is_all_fermion = graph
                         .hedge_representation
-                        .iter_egdes(cut)
-                        .map(|(_, edge_data)| &graph.edges[*edge_data.data.unwrap()].particle)
+                        .iter_edges(cut)
+                        .map(|(_, edge_id, edge_data)| &graph.edges[*edge_data.data].particle)
                         .all(|p| p.is_fermion());
 
-                    let has_4_edges = graph.hedge_representation.iter_egdes(cut).count() == 4;
+                    let has_4_edges = graph.hedge_representation.iter_edges(cut).count() == 4;
 
                     is_all_fermion
                         && has_4_edges
@@ -3908,13 +3997,25 @@ impl FeynGen {
             let mut lmbs_good_for_all_cuts = Vec::new();
 
             for lmb in lmbs.into_iter() {
+                let edges_in_lmb = lmb
+                    .basis
+                    .iter()
+                    .map(|edge| graph.edges[*edge].name.clone())
+                    .collect_vec();
+
                 if (*cuts).iter().all(|(_, cut, _)| {
+                    let cut_edges_names = graph
+                        .hedge_representation
+                        .iter_edges(cut)
+                        .map(|(_, edge_id, data)| graph.edges[*data.data].name.clone())
+                        .collect::<Vec<_>>();
+
                     graph
                         .hedge_representation
-                        .iter_egdes(cut)
-                        .all(|(_, edge_data)| {
-                            let external_signature =
-                                &lmb.edge_signatures[*edge_data.data.unwrap()].external;
+                        .iter_edges(cut)
+                        .all(|(_, edge_id, data)| {
+                            let edge_name = graph.edges[*data.data].name.clone();
+                            let external_signature = &lmb.edge_signatures[*data.data].external;
                             get_allowed_external_signatures().contains(external_signature)
                         })
                 }) {
@@ -3953,7 +4054,11 @@ impl FeynGen {
 
             if lmbs_good_for_all_cuts.is_empty() {
                 no_valid_lmb.push(graph.name.clone());
-                warn!("could not find good lmb for graph: {}", graph.name);
+                warn!(
+                    "could not find good lmb for graph: {}, num cuts: {}",
+                    graph.name,
+                    cuts.len()
+                );
             } else {
                 lmbs_good_for_all_cuts.sort_by(|lmb_1, lmb_2| lmb_2.cmp(lmb_1));
                 graph.loop_momentum_basis = lmbs_good_for_all_cuts[0].lmb.clone();
@@ -5194,7 +5299,7 @@ impl PythonGraph {
         PythonGraph {
             edges: shifted_python_edges,
             nodes: shifted_python_nodes,
-            overall_factor: bare_graph.overall_factor.clone(),
+            overall_factor: bare_graph.overall_factor.to_canonical_string(),
         }
     }
 }
