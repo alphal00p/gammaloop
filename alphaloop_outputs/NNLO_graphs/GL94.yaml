@@ -1,0 +1,337 @@
+edges:
+  4:
+    name: p4
+    PDG: 22
+    type: out
+    momentum: p0+p1-p2
+    indices:
+    - 7
+    vertices:
+    - 10
+    - 3
+  3:
+    name: p3
+    PDG: 22
+    type: out
+    momentum: p2
+    indices:
+    - 5
+    vertices:
+    - 9
+    - 4
+  9:
+    name: q5
+    PDG: 6
+    type: virtual
+    momentum: k2-p0
+    indices:
+    - 17
+    - 18
+    vertices:
+    - 6
+    - 11
+  13:
+    name: q9
+    PDG: 6
+    type: virtual
+    momentum: k2
+    indices:
+    - 25
+    - 26
+    vertices:
+    - 11
+    - 9
+  2:
+    name: p2
+    PDG: 22
+    type: in
+    momentum: p1
+    indices:
+    - 3
+    vertices:
+    - 1
+    - 12
+  8:
+    name: q4
+    PDG: 21
+    type: virtual
+    momentum: k1
+    indices:
+    - 15
+    - 16
+    vertices:
+    - 6
+    - 8
+  1:
+    name: p1
+    PDG: 22
+    type: in
+    momentum: p0
+    indices:
+    - 1
+    vertices:
+    - 2
+    - 11
+  6:
+    name: q2
+    PDG: 6
+    type: virtual
+    momentum: k0+k1+k2-p0
+    indices:
+    - 11
+    - 12
+    vertices:
+    - 7
+    - 5
+  7:
+    name: q3
+    PDG: 21
+    type: virtual
+    momentum: k0
+    indices:
+    - 13
+    - 14
+    vertices:
+    - 5
+    - 7
+  10:
+    name: q6
+    PDG: 6
+    type: virtual
+    momentum: k1+k2-p0
+    indices:
+    - 19
+    - 20
+    vertices:
+    - 12
+    - 7
+  14:
+    name: q10
+    PDG: 6
+    type: virtual
+    momentum: k1+k2-p0-p1
+    indices:
+    - 27
+    - 28
+    vertices:
+    - 10
+    - 12
+  11:
+    name: q7
+    PDG: 6
+    type: virtual
+    momentum: k2-p2
+    indices:
+    - 21
+    - 22
+    vertices:
+    - 9
+    - 8
+  12:
+    name: q8
+    PDG: 6
+    type: virtual
+    momentum: k1+k2-p2
+    indices:
+    - 23
+    - 24
+    vertices:
+    - 8
+    - 10
+  5:
+    name: q1
+    PDG: 6
+    type: virtual
+    momentum: k1+k2-p0
+    indices:
+    - 9
+    - 10
+    vertices:
+    - 5
+    - 6
+nodes:
+  9:
+    PDGs:
+    - -6
+    - 22
+    - 6
+    momenta:
+    - -k2+p2
+    - -p2
+    - k2
+    indices:
+    - 21
+    - 5
+    - 26
+    vertex_id: 0
+    edge_ids:
+    - 11
+    - 3
+    - 13
+  7:
+    PDGs:
+    - -6
+    - 21
+    - 6
+    momenta:
+    - -k0-k1-k2+p0
+    - k0
+    - k1+k2-p0
+    indices:
+    - 11
+    - 14
+    - 20
+    vertex_id: 0
+    edge_ids:
+    - 6
+    - 7
+    - 10
+  3:
+    PDGs:
+    - 22
+    momenta:
+    - p0+p1-p2
+    indices:
+    - 7
+    vertex_id: -2
+    edge_ids:
+    - 4
+  2:
+    PDGs:
+    - 22
+    momenta:
+    - -p0
+    indices:
+    - 1
+    vertex_id: -1
+    edge_ids:
+    - 1
+  10:
+    PDGs:
+    - -6
+    - 22
+    - 6
+    momenta:
+    - -k1-k2+p0+p1
+    - -p0-p1+p2
+    - k1+k2-p2
+    indices:
+    - 27
+    - 7
+    - 24
+    vertex_id: 0
+    edge_ids:
+    - 14
+    - 4
+    - 12
+  11:
+    PDGs:
+    - -6
+    - 22
+    - 6
+    momenta:
+    - -k2
+    - p0
+    - k2-p0
+    indices:
+    - 25
+    - 1
+    - 18
+    vertex_id: 0
+    edge_ids:
+    - 13
+    - 1
+    - 9
+  5:
+    PDGs:
+    - -6
+    - 21
+    - 6
+    momenta:
+    - -k1-k2+p0
+    - -k0
+    - k0+k1+k2-p0
+    indices:
+    - 9
+    - 13
+    - 12
+    vertex_id: 0
+    edge_ids:
+    - 5
+    - 7
+    - 6
+  1:
+    PDGs:
+    - 22
+    momenta:
+    - -p1
+    indices:
+    - 3
+    vertex_id: -1
+    edge_ids:
+    - 2
+  6:
+    PDGs:
+    - -6
+    - 21
+    - 6
+    momenta:
+    - -k2+p0
+    - -k1
+    - k1+k2-p0
+    indices:
+    - 17
+    - 15
+    - 10
+    vertex_id: 0
+    edge_ids:
+    - 9
+    - 8
+    - 5
+  12:
+    PDGs:
+    - -6
+    - 22
+    - 6
+    momenta:
+    - -k1-k2+p0
+    - p1
+    - k1+k2-p0-p1
+    indices:
+    - 19
+    - 3
+    - 28
+    vertex_id: 0
+    edge_ids:
+    - 10
+    - 2
+    - 14
+  4:
+    PDGs:
+    - 22
+    momenta:
+    - p2
+    indices:
+    - 5
+    vertex_id: -2
+    edge_ids:
+    - 3
+  8:
+    PDGs:
+    - -6
+    - 21
+    - 6
+    momenta:
+    - -k1-k2+p2
+    - k1
+    - k2-p2
+    indices:
+    - 23
+    - 16
+    - 22
+    vertex_id: 0
+    edge_ids:
+    - 12
+    - 8
+    - 11
+overall_factor: NumeratorDependentGrouping(94,1,AutG(1)^-1*ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)*NumeratorIndependentSymmetryGrouping(4))+NumeratorDependentGrouping(95,1,AutG(1)^-1*ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)*NumeratorIndependentSymmetryGrouping(4))
