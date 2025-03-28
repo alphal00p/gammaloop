@@ -381,11 +381,11 @@ class CrossSectionsExporter(GammaLoopExporter):
             drawing_file_paths = one_cross_section.draw(
                 self.gammaloop.model, drawings_path, **self.gammaloop.config['drawing'])
             self.finalize_drawing(Path(drawings_path), drawing_file_paths)
-            if not self.output_options.yaml_only:
-                self.gammaloop.rust_worker.add_cross_section_from_yaml_str(
-                    yaml_xs)
+            # if not self.output_options.yaml_only:
+            #    self.gammaloop.rust_worker.add_cross_section_from_yaml_str(
+            #        yaml_xs)
 
-        if not self.output_options.yaml_only:
-            # Now address the rust export aspect
-            self.gammaloop.rust_worker.export_cross_sections(
-                str(export_root), [cs.name for cs in cross_sections])
+        # if not self.output_options.yaml_only:
+        #    # Now address the rust export aspect
+        #    self.gammaloop.rust_worker.export_cross_sections(
+        #        str(export_root), [cs.name for cs in cross_sections])
