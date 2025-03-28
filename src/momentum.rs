@@ -1866,6 +1866,38 @@ pub enum Sign {
     Negative = -1,
 }
 
+pub trait Pow<E> {
+    fn pow(&self, exponent: E) -> Self;
+}
+
+macro_rules! impl_pow_for_sign {
+    ($type:ty, $exponent:ty,$pos:expr) => {
+        impl Pow<$exponent> for $type {
+            fn pow(&self, exponent: $exponent) -> Self {
+                match exponent {
+                    0 => $pos,
+                    a => {
+                        if a % 2 == 0 {
+                            $pos
+                        } else {
+                            *self
+                        }
+                    }
+                }
+            }
+        }
+    };
+}
+
+impl_pow_for_sign!(Sign, i32, Sign::Positive);
+impl_pow_for_sign!(Sign, u32, Sign::Positive);
+impl_pow_for_sign!(Sign, i64, Sign::Positive);
+impl_pow_for_sign!(Sign, u64, Sign::Positive);
+impl_pow_for_sign!(Sign, isize, Sign::Positive);
+impl_pow_for_sign!(Sign, usize, Sign::Positive);
+impl_pow_for_sign!(Sign, i128, Sign::Positive);
+impl_pow_for_sign!(Sign, u128, Sign::Positive);
+
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -1954,6 +1986,34 @@ pub enum SignOrZero {
     Zero = 0,
     Plus = 1,
     Minus = -1,
+}
+
+impl_pow_for_sign!(SignOrZero, i32, SignOrZero::Plus);
+impl_pow_for_sign!(SignOrZero, u32, SignOrZero::Plus);
+impl_pow_for_sign!(SignOrZero, i64, SignOrZero::Plus);
+impl_pow_for_sign!(SignOrZero, u64, SignOrZero::Plus);
+impl_pow_for_sign!(SignOrZero, isize, SignOrZero::Plus);
+impl_pow_for_sign!(SignOrZero, usize, SignOrZero::Plus);
+impl_pow_for_sign!(SignOrZero, i128, SignOrZero::Plus);
+impl_pow_for_sign!(SignOrZero, u128, SignOrZero::Plus);
+
+impl From<linnet::half_edge::involution::Orientation> for SignOrZero {
+    fn from(value: linnet::half_edge::involution::Orientation) -> Self {
+        match value {
+            linnet::half_edge::involution::Orientation::Default => SignOrZero::Plus,
+            linnet::half_edge::involution::Orientation::Reversed => SignOrZero::Minus,
+            linnet::half_edge::involution::Orientation::Undirected => SignOrZero::Zero,
+        }
+    }
+}
+
+impl From<linnet::half_edge::involution::Flow> for SignOrZero {
+    fn from(value: linnet::half_edge::involution::Flow) -> Self {
+        match value {
+            linnet::half_edge::involution::Flow::Source => SignOrZero::Plus,
+            linnet::half_edge::involution::Flow::Sink => SignOrZero::Minus,
+        }
+    }
 }
 
 impl TryFrom<i8> for SignOrZero {

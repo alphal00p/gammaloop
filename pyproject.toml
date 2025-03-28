@@ -1,58 +1,55 @@
-[tool.poetry]
-name = "gammaloop"
-version = "0.3.2"
-description = "Gammaloop computes differential cross-sections using Local Unitarity"
-authors = [
-    "Valentin Hirschi <valentin.hirschi@gmail.com>",
-    "Mathijs Fraaije <mathijsfraaije@gmail.com>",
-    "Lucien Huber <mail@lcnbr.ch>",
-]
-package-mode = false
-
-[tool.poetry.dependencies]
-python = "^3.12"
-pytest = "^7.4.2"
-autopep8 = "^2.0.4"
-pyaml = "^23.12.0"
-pyright = "^1.1.367"
-pymupdf = "^1.24.5"
-pytest-profiling = "^1.7.0"
-pyyaml = "^6.0.1"
-pydot = "^3.0.1"
-
-[tool.poetry.group.dev.dependencies]
-symbolica = "^0.14.0"
-black = "^23.12.1"
-PyYAML = "^6.0.1"
-
-[build-system]
-requires = ["maturin>=1.0,<2.0"]
-build-backend = "maturin"
-
 [project]
 name = "gammaloop"
 version = "0.3.2"
 description = "Gammaloop computes differential cross-sections using Local Unitarity"
-readme = "README.md"
-license = { file = "LICENSE.md" }
-keywords = ["physics", "collider", "cross-section", "perturbative", "loop"]
 authors = [
     { name = "Valentin Hirschi", email = "valentin.hirschi@gmail.com" },
     { name = "Mathijs Fraaije", email = "mathijsfraaije@gmail.com" },
     { name = "Lucien Huber", email = "mail@lcnbr.ch" },
 ]
-
-dependencies = ["PyYAML>=6.0.1", "PyMuPDF>=1.23.4", "pydot>=3.0.1"]
-
+requires-python = "==3.12.*"
+readme = "README.md"
+license = { file = "LICENSE.md" }
+keywords = [
+    "physics",
+    "collider",
+    "cross-section",
+    "perturbative",
+    "loop",
+]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Programming Language :: Rust",
     "Topic :: Scientific/Engineering :: Physics",
 ]
+dependencies = [
+    "PyYAML>=6.0.1",
+    "PyMuPDF>=1.23.4",
+    "pydot>=3.0.1",
+]
 
 [project.urls]
 homepage = "https://alphaloop.ch"
 repository = "https://github.com/alphal00p/gammaloop"
+
+[project.scripts]
+gammaloop_rust_cli = "gammaloop._gammaloop:rust_cli"
+gammaloop = "gammaloop:cli"
+
+[dependency-groups]
+dev = [
+    "symbolica>=0.14.0,<0.15",
+    "black>=23.12.1,<24",
+    "PyYAML>=6.0.1,<7",
+    "pytest>=8.3.5",
+]
+
+[tool.uv]
+package = false
+
+[build-system]
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
 
 [tool.maturin]
 features = ["python_api"]
@@ -78,10 +75,6 @@ include = [
     "gammaloop/data/assets",
     "gammaloop/data/assets/*",
 ]
-
-[project.scripts]
-gammaloop_rust_cli = "gammaloop._gammaloop:rust_cli"
-gammaloop = "gammaloop:cli"
 
 [tool.pytest.ini_options]
 markers = [

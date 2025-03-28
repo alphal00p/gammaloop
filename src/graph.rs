@@ -29,9 +29,15 @@ use crate::{
     ExportSettings, Settings, TropicalSubgraphTableSettings,
 };
 
-use linnet::half_edge::{subgraph::SubGraphOps, HedgeGraph, HedgeGraphBuilder};
+use linnet::half_edge::{
+    builder::HedgeGraphBuilder,
+    involution::{HedgePair, Orientation},
+    nodestorage::NodeStorageOps,
+    subgraph::SubGraphOps,
+    HedgeGraph, HedgeGraphError, NodeIndex,
+};
 
-use ahash::{HashSet, RandomState};
+use ahash::{AHashMap, HashSet, RandomState};
 
 use bincode::{Decode, Encode};
 use color_eyre::Result;
@@ -92,6 +98,86 @@ use symbolica::{
     graph::Graph as SymbolicaGraph,
     printer::{AtomPrinter, PrintOptions},
 };
+
+pub trait HedgeGraphExt<N, E> {
+    type Error;
+    fn from_sym(graph: SymbolicaGraph<N, E>) -> Self;
+
+    fn to_sym(graph: &Self) -> Result<SymbolicaGraph<&N, &E>, Self::Error>;
+}
+
+impl<N: Clone, E: Clone, S: NodeStorageOps<NodeData = N>> HedgeGraphExt<N, E>
+    for HedgeGraph<E, N, S>
+{
+    fn from_sym(graph: SymbolicaGraph<N, E>) -> Self {
+        let mut builder = HedgeGraphBuilder::new();
+        let mut map = AHashMap::new();
+
+        for (i, node) in graph.nodes().iter().enumerate() {
+            map.insert(i, builder.add_node(node.data.clone()));
+        }
+
+        // let mut edges = graph.edges().to_vec();
+        // edges.sort_by(|a, b| a.vertices.cmp(&b.vertices));
+
+        for edge in graph
+            .edges()
+            .iter()
+            .sorted_by(|a, b| a.vertices.cmp(&b.vertices))
+        {
+            let vertices = edge.vertices;
+            let source = map[&vertices.0];
+            let sink = map[&vertices.1];
+            builder.add_edge(source, sink, edge.data.clone(), edge.directed);
+        }
+
+        builder.into()
+    }
+
+    type Error = HedgeGraphError;
+
+    fn to_sym(value: &HedgeGraph<E, N, S>) -> Result<SymbolicaGraph<&N, &E>, Self::Error> {
+        let mut graph = SymbolicaGraph::new();
+        let mut map = AHashMap::new();
+
+        for (n, (_, node)) in value.iter_nodes().enumerate() {
+            map.insert(NodeIndex(n), graph.add_node(node));
+        }
+
+        for (i, _, d) in value.iter_all_edges() {
+            if let HedgePair::Paired { source, sink } = i {
+                let source = map[&value.node_id(source)];
+                let sink = map[&value.node_id(sink)];
+
+                let data = d.data;
+                let orientation = d.orientation;
+
+                match orientation {
+                    Orientation::Default => {
+                        graph
+                            .add_edge(source, sink, true, data)
+                            .map_err(HedgeGraphError::SymbolicaError)?;
+                    }
+                    Orientation::Reversed => {
+                        graph
+                            .add_edge(sink, source, true, data)
+                            .map_err(HedgeGraphError::SymbolicaError)?;
+                    }
+                    Orientation::Undirected => {
+                        graph
+                            .add_edge(source, sink, false, data)
+                            .map_err(HedgeGraphError::SymbolicaError)?;
+                    }
+                }
+            } else {
+                return Err(HedgeGraphError::HasIdentityHedge);
+            }
+        }
+
+        Ok(graph)
+    }
+}
+
 //use symbolica::{atom::Symbol,state::State};
 //pub mod half_edge;
 #[derive(Debug, Default, Clone, Copy, Serialize, Deserialize, PartialEq)]
@@ -208,7 +294,7 @@ pub struct SerializableExternalVertexInfo {
 
 #[derive(Debug, Clone)]
 pub struct ExternalVertexInfo {
-    direction: EdgeType,
+    pub direction: EdgeType,
     pub particle: Arc<model::Particle>,
 }
 
@@ -533,7 +619,7 @@ impl Edge {
 
     pub fn denominator(&self, graph: &BareGraph) -> (Atom, Atom) {
         let num = *graph.edge_name_to_position.get(&self.name).unwrap();
-        let mom = Atom::parse(&format!("Q{num}")).unwrap();
+        let mom = Atom::parse(&format!("Q({num})")).unwrap();
         let mass = self
             .particle
             .mass
@@ -931,7 +1017,7 @@ impl SerializableGraph {
                 .map(|e| SerializableEdge::from_edge(graph, e))
                 .collect(),
 
-            overall_factor: graph.overall_factor.clone(),
+            overall_factor: graph.overall_factor.to_canonical_string(),
             external_connections: graph
                 .external_connections
                 .iter()
@@ -1057,7 +1143,7 @@ pub struct BareGraph {
     pub vertices: Vec<Vertex>,
     pub edges: Vec<Edge>,
     pub external_edges: Vec<usize>,
-    pub overall_factor: String,
+    pub overall_factor: Atom,
     pub external_connections: Vec<(Option<usize>, Option<usize>)>,
     pub loop_momentum_basis: LoopMomentumBasis,
     pub vertex_name_to_position: HashMap<SmartString<LazyCompact>, usize, RandomState>,
@@ -1079,7 +1165,7 @@ pub struct Shifts {
 
 impl BareGraph {
     pub fn rep_rules_print(&self, printer_ops: PrintOptions) -> Vec<(String, String)> {
-        self.generate_lmb_replacement_rules("Q<i>(x<j>__)", "K<i>(x<j>__)", "P<i>(x<j>__)")
+        self.generate_lmb_replacement_rules("Q(<i>,x___)", "K(<i>,x___)", "P(<i>,x___)")
             .iter()
             .map(|(lhs, rhs)| {
                 (
@@ -1098,18 +1184,22 @@ impl BareGraph {
     pub fn denominator_print(&self, printer_ops: PrintOptions) -> Vec<(String, String)> {
         self.edges
             .iter()
-            .map(|e| {
-                let (mom, mass) = e.denominator(self);
-                (
-                    format!(
-                        "{}",
-                        AtomPrinter::new_with_options(mom.as_view(), printer_ops)
-                    ),
-                    format!(
-                        "{}",
-                        AtomPrinter::new_with_options(mass.as_view(), printer_ops)
-                    ),
-                )
+            .filter_map(|e| {
+                if let EdgeType::Virtual = e.edge_type {
+                    let (mom, mass) = e.denominator(self);
+                    Some((
+                        format!(
+                            "{}",
+                            AtomPrinter::new_with_options(mom.as_view(), printer_ops)
+                        ),
+                        format!(
+                            "{}",
+                            AtomPrinter::new_with_options(mass.as_view(), printer_ops)
+                        ),
+                    ))
+                } else {
+                    None
+                }
             })
             .collect()
     }
@@ -1291,7 +1381,7 @@ impl BareGraph {
             vertices,
             edges: vec![],
             external_edges: vec![],
-            overall_factor: graph.overall_factor.clone(),
+            overall_factor: Atom::parse(&graph.overall_factor).unwrap(),
             external_connections: vec![],
             loop_momentum_basis: LoopMomentumBasis {
                 basis: vec![],
@@ -1339,7 +1429,7 @@ impl BareGraph {
         g.edge_name_to_position = edge_name_to_position;
 
         // set the half-edge graph representation
-        g.hedge_representation = HedgeGraph::from(&g);
+        g.hedge_representation = HedgeGraph::<usize, usize>::from(&g);
 
         let mut edge_signatures: Vec<_> = vec![None; graph.edges.len()];
         for (e_name, sig) in graph.edge_signatures.iter() {
@@ -1481,7 +1571,7 @@ impl BareGraph {
         model: &model::Model,
         name: String,
         graph: &SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>,
-        symmetry_factor: String,
+        symmetry_factor: Atom,
         external_connections: Vec<(Option<usize>, Option<usize>)>,
         forced_lmb: Option<Vec<SmartString<LazyCompact>>>,
     ) -> Result<BareGraph, FeynGenError> {
@@ -1841,8 +1931,12 @@ impl BareGraph {
             //     self.hedge_representation.dot(&spanning_tree_half_edge_node)
             // );
             self.hedge_representation
-                .iter_internal_edge_data(&spanning_tree.tree.complement(&self.hedge_representation))
-                .map(|e| *e.data.unwrap())
+                .iter_internal_edge_data(
+                    &spanning_tree
+                        .tree_subgraph
+                        .complement(&self.hedge_representation),
+                )
+                .map(|e| *e.data)
                 .collect::<Vec<_>>()
         };
         debug!(
