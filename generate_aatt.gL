@@ -1,0 +1,14 @@
+import_model sm
+#LO
+generate a a > t t~ | d t a g ghg QED^2=4 [{{1}} QCD=0] -num_grouping group_identical_graphs_up_to_scalar_rescaling --symmetrize_initial_states --symmetrize_left_right -nt 1
+!rm -rf GL_OUTPUT_XS_aa_ttx_LO
+output GL_OUTPUT_XS_aa_ttx_LO
+#NLO
+generate a a > t t~ | d t a g ghg QED^2=4 [{{2}} QCD=1] -num_grouping group_identical_graphs_up_to_scalar_rescaling --symmetrize_initial_states --symmetrize_left_right -nt 1
+!rm -rf GL_OUTPUT_XS_aa_ttx_NLO
+output GL_OUTPUT_XS_aa_ttx_NLO
+#NNLO
+generate a a > t t~ | d t a g ghg QED^2=4 [{{3}} QCD=2] -num_grouping group_identical_graphs_up_to_scalar_rescaling --symmetrize_initial_states --symmetrize_left_right -nt 16 
+!rm -rf GL_OUTPUT_XS_aa_ttx_NNLO
+output GL_OUTPUT_XS_aa_ttx_NNLO
+
