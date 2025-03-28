@@ -5332,7 +5332,8 @@ impl PythonGraph {
         PythonGraph {
             edges: shifted_python_edges,
             nodes: shifted_python_nodes,
-            overall_factor: bare_graph.overall_factor.to_canonical_string(),
+            overall_factor: FeynGen::evaluate_overall_factor(bare_graph.overall_factor.as_view())
+                .to_canonical_string(),
         }
     }
 }
