@@ -988,9 +988,9 @@ dependencies = [
 
 [[package]]
 name = "dot-parser"
-version = "0.3.3"
+version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d00c3f07b522d71a52224101feac980593454fd9cbb03c8b91afcf1d225646a8"
+checksum = "41af7e0cf7b1d89ebff0a50f75bf5480733678e907114cc709dd0297ec785ab7"
 dependencies = [
  "either",
  "pest",
@@ -1664,7 +1664,7 @@ checksum = "0717cef1bc8b636c6e1c1bbdefc09e6322da8a9321966e8928ef80d20f7f770f"
 [[package]]
 name = "linnet"
 version = "0.1.0"
-source = "git+https://github.com/alphal00p/linnet?rev=5eac9ea87086c97edcd7dcc2a70555de7366d2a6#5eac9ea87086c97edcd7dcc2a70555de7366d2a6"
+source = "git+https://github.com/alphal00p/linnet?rev=d92db2259a08b75c3e0c31a3a6cf1e85de7860aa#d92db2259a08b75c3e0c31a3a6cf1e85de7860aa"
 dependencies = [
  "ahash",
  "argmin",
