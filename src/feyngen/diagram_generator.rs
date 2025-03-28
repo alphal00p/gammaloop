@@ -449,7 +449,6 @@ impl FeynGen {
         }
         None
     }
-
     pub fn veto_special_topologies(
         model: &Model,
         graph: &SymbolicaGraph<NodeColorWithoutVertexRule, EdgeColor>,
@@ -458,6 +457,68 @@ impl FeynGen {
         veto_snails: Option<&SnailFilterOptions>,
         factorized_loop_topologies_count_range: Option<&(usize, usize)>,
     ) -> bool {
+        let graph_nodes: &[symbolica::graph::Node<NodeColorWithoutVertexRule>] = graph.nodes();
+        let graph_edges: &[symbolica::graph::Edge<EdgeColor>] = graph.edges();
+
+        let max_external = graph_nodes
+            .iter()
+            .filter(|n| n.data.external_tag > 0)
+            .map(|n| n.data.external_tag)
+            .max()
+            .unwrap_or(0) as usize;
+
+        let mut external_partices: Vec<Arc<Particle>> =
+            vec![model.particles[0].clone(); max_external];
+        for e in graph_edges {
+            if graph_nodes[e.vertices.0].data.external_tag != 0 {
+                external_partices[(graph_nodes[e.vertices.0].data.external_tag - 1) as usize] =
+                    model.get_particle_from_pdg(e.data.pdg);
+            } else if graph_nodes[e.vertices.1].data.external_tag != 0 {
+                external_partices[(graph_nodes[e.vertices.1].data.external_tag - 1) as usize] =
+                    model.get_particle_from_pdg(e.data.pdg);
+            }
+        }
+
+        // Test vetoing of from all external spanning tree root positions to test that there are no issues from spanning tree directions
+        // TODO rewrite and improve the vetoing logic of special topologies
+        (0..=(max_external - 1).max(0)).all(|shift| {
+            // (0..=0).all(|shift: usize| {
+            let spanning_tree_root_node_position = graph_nodes
+                .iter()
+                .position(|n| n.data.external_tag == ((max_external - shift) as i32))
+                .unwrap();
+            debug!(
+                "Spanning tree root position: external_tag={},node_position={}",
+                max_external - shift,
+                spanning_tree_root_node_position
+            );
+
+            FeynGen::veto_special_topologies_with_spanning_tree_root(
+                model,
+                graph,
+                veto_self_energy,
+                veto_tadpole,
+                veto_snails,
+                factorized_loop_topologies_count_range,
+                &external_partices,
+                spanning_tree_root_node_position,
+            )
+        })
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn veto_special_topologies_with_spanning_tree_root(
+        model: &Model,
+        graph: &SymbolicaGraph<NodeColorWithoutVertexRule, EdgeColor>,
+        veto_self_energy: Option<&SelfEnergyFilterOptions>,
+        veto_tadpole: Option<&TadpolesFilterOptions>,
+        veto_snails: Option<&SnailFilterOptions>,
+        factorized_loop_topologies_count_range: Option<&(usize, usize)>,
+        external_particles: &[Arc<Particle>],
+        spanning_tree_root: usize,
+    ) -> bool {
+        let max_external = external_particles.len();
+
         if graph.nodes().iter().any(|n| n.data.external_tag < 0) {
             panic!("External tag must be positive, but found negative as obtained when performing external state symmetrization");
         }
@@ -500,48 +561,10 @@ impl FeynGen {
         {
             return false;
         }
-        let graph_nodes: &[symbolica::graph::Node<NodeColorWithoutVertexRule>] = graph.nodes();
         let graph_edges: &[symbolica::graph::Edge<EdgeColor>] = graph.edges();
-
-        let max_external = graph
-            .nodes()
-            .iter()
-            .filter(|n| n.data.external_tag > 0)
-            .map(|n| n.data.external_tag)
-            .max()
-            .unwrap_or(0) as usize;
-
-        // Special topology filter should be working for vaccuum topologies too
-        // if max_external == 0 {
-        //     // Do not implement any veto for vacuum graphs
-        //     return false;
-        // }
-
-        let max_external_node_position = graph
-            .nodes()
-            .iter()
-            .position(|n| n.data.external_tag == (max_external as i32))
-            .unwrap();
-        if debug {
-            debug!(
-                "Spanning tree root position: max_external={},max_external_node_position={}",
-                max_external, max_external_node_position
-            );
-        }
-
-        let mut external_partices: Vec<Arc<Particle>> =
-            vec![model.particles[0].clone(); max_external];
-        for e in graph_edges {
-            if graph_nodes[e.vertices.0].data.external_tag != 0 {
-                external_partices[(graph_nodes[e.vertices.0].data.external_tag - 1) as usize] =
-                    model.get_particle_from_pdg(e.data.pdg);
-            } else if graph_nodes[e.vertices.1].data.external_tag != 0 {
-                external_partices[(graph_nodes[e.vertices.1].data.external_tag - 1) as usize] =
-                    model.get_particle_from_pdg(e.data.pdg);
-            }
-        }
-
-        let mut spanning_tree = graph.get_spanning_tree(max_external_node_position);
+        let spanning_tree_node_external_tag =
+            graph.nodes()[spanning_tree_root].data.external_tag as usize;
+        let mut spanning_tree = graph.get_spanning_tree(spanning_tree_root);
         spanning_tree.chain_decomposition();
 
         if debug {
@@ -570,7 +593,7 @@ impl FeynGen {
         let mut external_momenta_routing: Vec<Vec<usize>> = vec![vec![]; spanning_tree.nodes.len()];
         for (i_n, node) in graph.nodes().iter().enumerate() {
             if (node.edges.len() != 1)
-                || node.data.external_tag == (max_external_node_position as i32)
+                || node.data.external_tag == (spanning_tree_node_external_tag as i32)
             {
                 continue;
             }
@@ -581,14 +604,14 @@ impl FeynGen {
             // println!("external_momenta_routing={:?}", external_momenta_routing);
             // println!("spanning_tree={:?}", spanning_tree);
             // println!("Starting from node #{} = {:?}", i_n, node);
-            while next_node != max_external_node_position {
+            while next_node != spanning_tree_root {
                 external_momenta_routing[next_node].push(external_index);
                 next_node = spanning_tree.nodes[next_node].parent;
             }
         }
         for route in external_momenta_routing.iter_mut() {
             if route.len() == max_external - 1 {
-                *route = vec![max_external];
+                *route = vec![spanning_tree_node_external_tag];
             }
         }
         if debug {
@@ -611,6 +634,7 @@ impl FeynGen {
                 let i_chain = i_n;
                 if back_edge == i_n {
                     n_factorizable_loops += 1;
+
                     self_loops.insert((i_n, i_back_edge, i_chain));
                     continue;
                 }
@@ -720,34 +744,11 @@ impl FeynGen {
             debug!("bridge_node_positions={:?}", tree_bridge_node_indices);
         }
 
-        // pub fn count_bridges(&self) -> usize {
-        //     self.nodes
-        //         .iter()
-        //         .enumerate()
-        //         .filter(|(n, x)| {
-        //             x.chain_id.is_none()
-        //                 && !self.nodes[x.parent].external
-        //                 && !x.external
-        //                 && x.parent != *n // exclude the root
-        //                 && !self.nodes[x.parent].back_edges.iter().any(|end| n == end)
-        //         })
-        //         .count()
-        // }
-
         // For self-energies we must confirm that they are self-energies by checking if the back edge start node is a bridge
         for (leg_id, back_edge_start_node_index, back_edge_position_in_list, _chain_id) in
             self_energy_attachments.iter()
         {
-            // We must verify that *both* end of the self-energy correspond to a tree bridge
-            let back_edge_target_node_index = spanning_tree.nodes[*back_edge_start_node_index]
-                .back_edges[*back_edge_position_in_list];
-            if tree_bridge_node_indices.contains(back_edge_start_node_index)
-                && node_children[back_edge_target_node_index].len() == 1
-                && (tree_bridge_node_indices
-                    .contains(&node_children[back_edge_target_node_index][0])
-                    || spanning_tree.nodes[node_children[back_edge_target_node_index][0]].external)
-            {
-                // if tree_bridge_node_indices.contains(back_edge_start_node_index) {
+            if tree_bridge_node_indices.contains(back_edge_start_node_index) {
                 if let Some(veto_self_energy_options) = veto_self_energy {
                     if debug {
                         debug!(
@@ -761,7 +762,7 @@ impl FeynGen {
                         );
                     } else {
                         #[allow(clippy::unnecessary_unwrap)]
-                        if external_partices[leg_id - 1].is_massive() {
+                        if external_particles[leg_id - 1].is_massive() {
                             if veto_self_energy_options.veto_self_energy_of_massive_lines {
                                 return true;
                             }
@@ -781,7 +782,11 @@ impl FeynGen {
         {
             let attachment_particle_is_massive = if max_external > 0 {
                 let mut first_tree_attachment_node_index = *back_edge_start_node_index;
-                while external_momenta_routing[first_tree_attachment_node_index].is_empty() {
+                while external_momenta_routing[first_tree_attachment_node_index].is_empty()
+                    && spanning_tree.nodes[first_tree_attachment_node_index]
+                        .chain_id
+                        .is_none()
+                {
                     first_tree_attachment_node_index =
                         spanning_tree.nodes[first_tree_attachment_node_index].parent;
                 }
@@ -801,10 +806,16 @@ impl FeynGen {
                     .get_particle_from_pdg(attachment_edge.data.pdg)
                     .is_massive()
             } else {
+                // Always consider the attachment particle as massive for vaccuum graphs as it does not matter in that case
+                // given that there is no support for differentiating massive and massless attachments in that case.
                 true
             };
 
-            if !tree_bridge_node_indices.contains(back_edge_start_node_index) {
+            if !tree_bridge_node_indices.contains(back_edge_start_node_index)
+                && spanning_tree.nodes[*back_edge_start_node_index]
+                    .chain_id
+                    .is_none()
+            {
                 // Tadpole
                 if let Some(veto_tadpole_options) = veto_tadpole {
                     if debug {
@@ -866,6 +877,7 @@ impl FeynGen {
         if debug {
             debug!(">> No special topology veto applied to this graph");
         }
+
         false
     }
 
@@ -2070,11 +2082,29 @@ impl FeynGen {
             Vec<(usize, usize)>,
         > = AHashMap::default();
         // First fix flows connected to external only and after that fix all internal fermion/ghost flows
-        for do_external_only in [true, false] {
+        let mut external_tags_ordering = (1..=self.options.initial_pdgs.len()).collect::<Vec<_>>();
+        if self.options.generation_type == GenerationType::CrossSection {
+            external_tags_ordering.extend(
+                (1..=self.options.initial_pdgs.len()).map(|i| i + self.options.initial_pdgs.len()),
+            );
+        } else {
+            external_tags_ordering.extend(
+                (1..=self.options.final_pdgs_lists[0].len())
+                    .map(|i| i + self.options.initial_pdgs.len()),
+            );
+        }
+        external_tags_ordering.push(0);
+        for external_tag_to_consider in external_tags_ordering {
             for (i_e, e) in graph_edges.iter().enumerate() {
-                let is_a_virtual_edge = graph.nodes()[e.vertices.0].data.external_tag == 0
-                    && graph.nodes()[e.vertices.1].data.external_tag == 0;
-                if do_external_only && is_a_virtual_edge {
+                let edge_tag = if graph.nodes()[e.vertices.0].data.external_tag != 0 {
+                    graph.nodes()[e.vertices.0].data.external_tag
+                } else {
+                    graph.nodes()[e.vertices.1].data.external_tag
+                };
+                assert!(edge_tag >= 0);
+
+                let is_a_virtual_edge = edge_tag == 0;
+                if external_tag_to_consider != (edge_tag as usize) {
                     continue;
                 }
                 if vetoed_edges[i_e] {
@@ -2201,7 +2231,7 @@ impl FeynGen {
                         }
                     }
                 }
-                if do_external_only && starting_particle.is_fermion() {
+                if external_tag_to_consider > 0 && starting_particle.is_fermion() {
                     if connected_leg_ids.len() != 2 {
                         return Err(FeynGenError::GenericError(
                             "External fermion flow must have exactly two legs".to_string(),
@@ -4114,18 +4144,21 @@ impl FeynGen {
             //    );
             //}
         }
-        // println!(
-        //     "Graphs: [\n{}\n]",
-        //     bare_graphs
-        //         .iter()
-        //         .map(|(_graph_id, graph)| format!(
-        //             "\"{}@{{{}}}\"",
-        //             graph.name.clone(),
-        //             graph.overall_factor
-        //         ))
-        //         .collect::<Vec<_>>()
-        //         .join("\n"),
-        // );
+        println!(
+            "Graphs: [\n{}\n]",
+            bare_graphs
+                .iter()
+                .map(|(_graph_id, graph)| format!(
+                    "{:-6} @ {} = {{{}}}",
+                    graph.name.clone(),
+                    FeynGen::evaluate_overall_factor(graph.overall_factor.as_view())
+                        .expand()
+                        .to_canonical_string(),
+                    graph.overall_factor
+                ))
+                .collect::<Vec<_>>()
+                .join("\n"),
+        );
 
         let main_path_to_output = PathBuf::from("alphaloop_outputs");
         let order = if bare_graphs[0].1.loop_momentum_basis.basis.len() == 1 {
