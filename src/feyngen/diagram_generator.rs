@@ -469,15 +469,15 @@ impl FeynGen {
 
         // Test vetoing of from all external spanning tree root positions to test that there are no issues from spanning tree directions
         // TODO rewrite and improve the vetoing logic of special topologies
-        (0..=(max_external - 1).max(0)).all(|shift| {
+        (0..=((max_external as isize) - 1).max(0)).all(|shift| {
             // (0..=0).all(|shift: usize| {
             let spanning_tree_root_node_position = graph_nodes
                 .iter()
-                .position(|n| n.data.external_tag == ((max_external - shift) as i32))
+                .position(|n| n.data.external_tag == ((max_external - shift as usize) as i32))
                 .unwrap();
             debug!(
                 "Spanning tree root position: external_tag={},node_position={}",
-                max_external - shift,
+                max_external - shift as usize,
                 spanning_tree_root_node_position
             );
 
@@ -3751,20 +3751,29 @@ impl FeynGen {
                 graph.set_loop_momentum_basis(&forced_lmb)?;
             }
         }
-        println!(
-            "Graphs: [\n{}\n]",
-            bare_graphs
-                .iter()
-                .map(|(_graph_id, graph)| format!(
-                    "{:-6} @ {} = {{{}}}",
-                    graph.name.clone(),
-                    FeynGen::evaluate_overall_factor(graph.overall_factor.as_view())
-                        .expand()
-                        .to_canonical_string(),
-                    graph.overall_factor
-                ))
-                .collect::<Vec<_>>()
-                .join("\n"),
+        // println!(
+        //     "Graphs: [\n{}\n]",
+        //     bare_graphs
+        //         .iter()
+        //         .map(|(_graph_id, graph)| format!(
+        //             "{:-6} @ {} = {{{}}}",
+        //             graph.name.clone(),
+        //             FeynGen::evaluate_overall_factor(graph.overall_factor.as_view())
+        //                 .expand()
+        //                 .to_canonical_string(),
+        //             graph.overall_factor
+        //         ))
+        //         .collect::<Vec<_>>()
+        //         .join("\n"),
+        // );
+        let mut total_sym_factor = Atom::new_num(0);
+        for (_i_g, g) in bare_graphs.iter() {
+            total_sym_factor =
+                total_sym_factor + FeynGen::evaluate_overall_factor(g.overall_factor.as_view());
+        }
+        debug!(
+            "Total symmetry factor from all graphs generated = {}",
+            format!("{}", total_sym_factor).green()
         );
 
         Ok(bare_graphs

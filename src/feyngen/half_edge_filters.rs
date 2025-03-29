@@ -136,6 +136,7 @@ impl<V> FeynGenHedgeGraph<Arc<Particle>, V> {
 
         for (p, _, d) in self.graph.iter_all_edges() {
             if d.data.edge_data().is_fermion() {
+                #[allow(clippy::single_match)]
                 match p {
                     HedgePair::Paired { source, sink } => {
                         fermions.set(source.0, true);
@@ -164,15 +165,15 @@ impl<V> FeynGenHedgeGraph<Arc<Particle>, V> {
     where
         V: Clone,
     {
-        println!("number_of_external_fermion_loops");
-        println!("{}", self);
+        // println!("number_of_external_fermion_loops");
+        // println!("{}", self);
 
         self.remove_external_nodes();
         let internal = self.number_of_fermion_loops();
-        println!("{}", self);
+        // println!("{}", self);
 
         self.glue_external_hedges();
-        println!("{}", self);
+        // println!("{}", self);
 
         let all_fermion_loops = self.number_of_fermion_loops();
 
