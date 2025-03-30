@@ -168,27 +168,27 @@ class TestProcessGeneration:
         gloop.run(CommandList.from_string(
             "import_model sm"))
         tests: list[tuple[str, int, str | None]] = [
-            ('e+ e- > d d~ | d a e- ghg g QED^2==4 [{{2}}] -num_grouping only_detect_zeroes', 3, "3"),
-            ('e+ e- > b b~ h | d b h a e- ghg g QED^2==6 [{{2}}] -num_grouping only_detect_zeroes', 3, "3"),
-            ('e+ e- > b b~ h | d b h a e- ghg g QED^2==6 [{{3}} QCD=1] -num_grouping only_detect_zeroes', 30, "30"),
-            ('e+ e- > b b~ h | d b h a e- ghg g QED^2==6 [{{4}} QCD=2] -num_grouping only_detect_zeroes', 594, "261"),
-            ('e+ e- > b b~ h | d b h a e- ghg g z QED^2==6 [{{2}}] -num_grouping only_detect_zeroes', 21, "21"),
-            ('e+ e- > b b~ h | d b h a e- ghg g z QED^2==6 [{{3}} QCD=2] -num_grouping only_detect_zeroes', 171, "171"),
+            ('e+ e- > d d~ | d a e- ghg g QED^2==4 [{{2}}] -num_grouping only_detect_zeroes', 3, "-3"),
+            ('e+ e- > b b~ h | d b h a e- ghg g QED^2==6 [{{2}}] -num_grouping only_detect_zeroes', 3, "-3"),
+            ('e+ e- > b b~ h | d b h a e- ghg g QED^2==6 [{{3}} QCD=1] -num_grouping only_detect_zeroes', 30, "-30"),
+            ('e+ e- > b b~ h | d b h a e- ghg g QED^2==6 [{{4}} QCD=2] -num_grouping only_detect_zeroes', 594, "-261"),
+            ('e+ e- > b b~ h | d b h a e- ghg g z QED^2==6 [{{2}}] -num_grouping only_detect_zeroes', 21, "-21"),
+            ('e+ e- > b b~ h | d b h a e- ghg g z QED^2==6 [{{3}} QCD=2] -num_grouping only_detect_zeroes', 171, "-171"),
             # Enable grouping
-            ('e+ e- > d d~ | d a e- ghg g QED^2==4 [{{2}}] -num_grouping group_identical_graphs_up_to_scalar_rescaling', 2, "3"),
-            ('e+ e- > b b~ h | d b h a e- ghg g QED^2==6 [{{2}}] -num_grouping group_identical_graphs_up_to_scalar_rescaling', 2, "3"),
-            ('e+ e- > b b~ h | d b h a e- ghg g QED^2==6 [{{3}} QCD=1] -num_grouping group_identical_graphs_up_to_scalar_rescaling', 16, "30"),
+            ('e+ e- > d d~ | d a e- ghg g QED^2==4 [{{2}}] -num_grouping group_identical_graphs_up_to_scalar_rescaling', 2, "-3"),
+            ('e+ e- > b b~ h | d b h a e- ghg g QED^2==6 [{{2}}] -num_grouping group_identical_graphs_up_to_scalar_rescaling', 2, "-3"),
+            ('e+ e- > b b~ h | d b h a e- ghg g QED^2==6 [{{3}} QCD=1] -num_grouping group_identical_graphs_up_to_scalar_rescaling', 16, "-30"),
             # This grouping involves 21 new cancellations between graphs, so that modifies the total overall factor
-            ('e+ e- > b b~ h | d b h a e- ghg g QED^2==6 [{{4}} QCD=2] -num_grouping group_identical_graphs_up_to_scalar_rescaling', 266, "327"),
-            ('e+ e- > b b~ h | d b h a e- ghg g z QED^2==6 [{{2}}] -num_grouping group_identical_graphs_up_to_scalar_rescaling', 20, "21"),
-            ('e+ e- > b b~ h | d b h a e- ghg g z QED^2==6 [{{3}} QCD=1] -num_grouping group_identical_graphs_up_to_scalar_rescaling', 157, "171"),
+            ('e+ e- > b b~ h | d b h a e- ghg g QED^2==6 [{{4}} QCD=2] -num_grouping group_identical_graphs_up_to_scalar_rescaling', 266, "-327"),
+            ('e+ e- > b b~ h | d b h a e- ghg g z QED^2==6 [{{2}}] -num_grouping group_identical_graphs_up_to_scalar_rescaling', 20, "-21"),
+            ('e+ e- > b b~ h | d b h a e- ghg g z QED^2==6 [{{3}} QCD=1] -num_grouping group_identical_graphs_up_to_scalar_rescaling', 157, "-171"),
             # Enable left-right-symmetry
-            ('e+ e- > d d~ | d a e- ghg g QED^2==4 [{{2}}] --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_scalar_rescaling', 2, "3"),
-            ('e+ e- > b b~ h | d b h a e- ghg g QED^2==6 [{{2}}] --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_scalar_rescaling', 2, "3"),
-            ('e+ e- > b b~ h | d b h a e- ghg g QED^2==6 [{{3}} QCD=1] --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_scalar_rescaling', 11, "30"),
-            ('e+ e- > b b~ h | d b h a e- ghg g QED^2==6 [{{4}} QCD=2] --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_scalar_rescaling', 166, "327"),
-            ('e+ e- > b b~ h | d b h a e- ghg g z QED^2==6 [{{2}}] --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_scalar_rescaling', 16, "21"),
-            ('e+ e- > b b~ h | d b h a e- ghg g z QED^2==6 [{{3}} QCD=1] --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_scalar_rescaling', 104, "171"),
+            ('e+ e- > d d~ | d a e- ghg g QED^2==4 [{{2}}] --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_scalar_rescaling', 2, "-3"),
+            ('e+ e- > b b~ h | d b h a e- ghg g QED^2==6 [{{2}}] --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_scalar_rescaling', 2, "-3"),
+            ('e+ e- > b b~ h | d b h a e- ghg g QED^2==6 [{{3}} QCD=1] --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_scalar_rescaling', 11, "-30"),
+            ('e+ e- > b b~ h | d b h a e- ghg g QED^2==6 [{{4}} QCD=2] --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_scalar_rescaling', 166, "-327"),
+            ('e+ e- > b b~ h | d b h a e- ghg g z QED^2==6 [{{2}}] --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_scalar_rescaling', 16, "-21"),
+            ('e+ e- > b b~ h | d b h a e- ghg g z QED^2==6 [{{3}} QCD=1] --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_scalar_rescaling', 104, "-171"),
             # Too slow sadly
             # ('e+ e- > b b~ h | d b h a e- ghg g z QED^2==6 [{{4}} QCD=4] --symmetrize_left_right_states -num_grouping group_identical_graphs_up_to_scalar_rescaling', ?),
         ]

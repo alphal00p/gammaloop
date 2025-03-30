@@ -3265,13 +3265,13 @@ impl FeynGen {
                         .normalize_flows(&sorted_g, model)
                         .expect("Failed to normalize fermion flow");
 
-                    let symmetry_factor_with_external_fermion_flow_sign =
-                        if self.options.generation_type == GenerationType::Amplitude
-                            && ((!self
-                                .options
-                                .allow_symmetrization_of_external_fermions_in_amplitudes)
-                                || (self.options.symmetrize_initial_states
-                                    && self.options.symmetrize_final_states))
+                    let fermion_sign = if self.options.generation_type == GenerationType::Amplitude
+                    {
+                        if (!self
+                            .options
+                            .allow_symmetrization_of_external_fermions_in_amplitudes)
+                            || (!self.options.symmetrize_initial_states
+                                && !self.options.symmetrize_final_states)
                         {
                             function!(
                                 symb!("ExternalFermionOrderingSign"),
@@ -3280,21 +3280,23 @@ impl FeynGen {
                                 } else {
                                     1
                                 })
-                            ) * symmetry_factor
+                            )
                         } else {
-                            symmetry_factor
-                                * self.external_xs_fermion_signs(
-                                    &g_with_canonical_flows,
-                                    model,
-                                    self.options.initial_pdgs.len(),
-                                )
-                        };
+                            Atom::new_num(1)
+                        }
+                    } else {
+                        self.cross_section_external_fermion_ordering_sign(
+                            &g_with_canonical_flows,
+                            model,
+                            self.options.initial_pdgs.len(),
+                        )
+                    };
 
                     CanonizedGraphInfo {
                         canonized_graph: canonical_repr,
                         graph: sorted_g,
                         graph_with_canonized_flow: g_with_canonical_flows,
-                        symmetry_factor: symmetry_factor_with_external_fermion_flow_sign,
+                        symmetry_factor: symmetry_factor * fermion_sign,
                     }
                 })
                 .collect::<Vec<_>>()
@@ -4112,7 +4114,7 @@ impl FeynGen {
         res.expand()
     }
 
-    fn external_xs_fermion_signs(
+    fn cross_section_external_fermion_ordering_sign(
         &self,
         graph: &SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>,
         model: &Model,
@@ -4122,7 +4124,18 @@ impl FeynGen {
             FeynGenHedgeGraph::from_feyn_gen_symbolica(graph.clone(), model, n_initials);
         let n_external_fermion_loops = he_graph.number_of_external_fermion_loops();
 
-        let sign = Sign::Negative.pow(n_external_fermion_loops);
+        let number_of_initial_antifermions = self
+            .options
+            .initial_pdgs
+            .iter()
+            .filter(|&pdg| {
+                let p = model.get_particle_from_pdg(*pdg as isize);
+                p.is_antiparticle() && p.is_fermion()
+            })
+            .count();
+
+        let sign = Sign::Negative.pow(n_external_fermion_loops + number_of_initial_antifermions);
+
         function!(
             symb!("ExternalFermionOrderingSign"),
             Atom::new_num(match sign {
