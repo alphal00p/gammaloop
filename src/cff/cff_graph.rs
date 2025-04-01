@@ -871,10 +871,10 @@ impl CFFGenerationGraph {
 
         if !vertex_exists_with_connected_comlement && res.vertices.len() > 1 {
             println!(
-                "No vertex with connected complement found: {:#?}\n 
-                input dot: \n 
+                "No vertex with connected complement found: {:#?}\n
+                input dot: \n
                 {}
-            
+
             ",
                 res,
                 graph.dot(subgraph)
@@ -1563,7 +1563,7 @@ mod test {
             println!("{:?}", hedge_pair);
         }
 
-        let global_orientation = hedge_graph.new_hedgevec(&|_, _| Orientation::Default);
+        let global_orientation = hedge_graph.new_hedgevec(|_, _, _| Orientation::Default);
 
         //let cff_graph =
         //    CFFGenerationGraph::new_from_subgraph(&hedge_graph, global_orientation, &left_triangle);

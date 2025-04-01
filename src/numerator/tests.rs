@@ -450,7 +450,7 @@ pub fn validate_gamma(g: Graph<UnInit>, model: &Model, path: PathBuf) {
             &ExtraInfo {
                 path,
                 orientations: vec![utils::dummy_hedge_graph(g.bare_graph.edges.len())
-                    .new_hedgevec(&|_, _| Orientation::Default)],
+                    .new_hedgevec(|_, _, _| Orientation::Default)],
             },
             &export_settings,
         );
@@ -467,7 +467,7 @@ pub fn validate_gamma(g: Graph<UnInit>, model: &Model, path: PathBuf) {
             &ExtraInfo {
                 path: path_gamma,
                 orientations: vec![utils::dummy_hedge_graph(g.bare_graph.edges.len())
-                    .new_hedgevec(&|_, _| Orientation::Default)],
+                    .new_hedgevec(|_, _, _| Orientation::Default)],
             },
             &export_settings,
         );

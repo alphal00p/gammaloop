@@ -1,24 +1,19 @@
 use crate::{
     cff::{
-        esurface::{
-            generate_esurface_data, get_existing_esurfaces, EsurfaceDerivedData, ExistingEsurfaces,
-            ExternalShift,
-        },
+        esurface::{get_existing_esurfaces, EsurfaceDerivedData, ExistingEsurfaces, ExternalShift},
         expression::CFFExpression,
-        generation::generate_cff_expression,
     },
     disable,
     feyngen::{
         diagram_generator::{EdgeColor, NodeColorWithVertexRule},
         FeynGenError,
     },
-    gammaloop_integrand::{BareSample, DefaultSample},
+    gammaloop_integrand::DefaultSample,
     ltd::{generate_ltd_expression, LTDExpression},
     model::{self, ColorStructure, EdgeSlots, Model, Particle, VertexSlots},
-    momentum::{FourMomentum, Polarization, Rotation, SignOrZero, Signature, ThreeMomentum},
+    momentum::{FourMomentum, Polarization, Rotation, SignOrZero, ThreeMomentum},
     momentum_sample::{
-        BareMomentumSample, ExternalFourMomenta, ExternalIndex, LoopIndex, LoopMomenta,
-        MomentumSample,
+        BareMomentumSample, ExternalFourMomenta, ExternalIndex, LoopMomenta, MomentumSample,
     },
     new_graph::LoopMomentumBasis,
     numerator::{
@@ -27,18 +22,22 @@ use crate::{
         Numerator, NumeratorParseMode, NumeratorState, NumeratorStateError, PythonState,
         RepeatingIteratorTensorOrScalar, TypedNumeratorState, UnInit,
     },
-    signature::{ExternalSignature, LoopExtSignature, LoopSignature, SignatureLike},
-    subtraction::overlap::{find_maximal_overlap, OverlapStructure},
+    signature::{ExternalSignature, LoopExtSignature, SignatureLike},
+    subtraction::overlap::OverlapStructure,
     utils::{self, sorted_vectorize, FloatLike, F, GS},
     ProcessSettings, Settings, TropicalSubgraphTableSettings,
 };
 
 use linnet::half_edge::{
-    builder::HedgeGraphBuilder, hedgevec::HedgeVec, involution::EdgeIndex, subgraph::SubGraphOps,
-    HedgeGraph,
+    builder::HedgeGraphBuilder, involution::EdgeIndex, subgraph::SubGraphOps, HedgeGraph,
+};
+use linnet::half_edge::{
+    involution::{HedgePair, Orientation},
+    nodestorage::NodeStorageOps,
+    HedgeGraphError, NodeIndex,
 };
 
-use ahash::{HashSet, RandomState};
+use ahash::{AHashMap, HashSet, RandomState};
 
 use bincode::{Decode, Encode};
 use color_eyre::Result;
@@ -102,6 +101,86 @@ use symbolica::{
     graph::Graph as SymbolicaGraph,
     printer::{AtomPrinter, PrintOptions},
 };
+
+pub trait HedgeGraphExt<N, E> {
+    type Error;
+    fn from_sym(graph: SymbolicaGraph<N, E>) -> Self;
+
+    fn to_sym(graph: &Self) -> Result<SymbolicaGraph<&N, &E>, Self::Error>;
+}
+
+impl<N: Clone, E: Clone, S: NodeStorageOps<NodeData = N>> HedgeGraphExt<N, E>
+    for HedgeGraph<E, N, S>
+{
+    fn from_sym(graph: SymbolicaGraph<N, E>) -> Self {
+        let mut builder = HedgeGraphBuilder::new();
+        let mut map = AHashMap::new();
+
+        for (i, node) in graph.nodes().iter().enumerate() {
+            map.insert(i, builder.add_node(node.data.clone()));
+        }
+
+        // let mut edges = graph.edges().to_vec();
+        // edges.sort_by(|a, b| a.vertices.cmp(&b.vertices));
+
+        for edge in graph
+            .edges()
+            .iter()
+            .sorted_by(|a, b| a.vertices.cmp(&b.vertices))
+        {
+            let vertices = edge.vertices;
+            let source = map[&vertices.0];
+            let sink = map[&vertices.1];
+            builder.add_edge(source, sink, edge.data.clone(), edge.directed);
+        }
+
+        builder.into()
+    }
+
+    type Error = HedgeGraphError;
+
+    fn to_sym(value: &HedgeGraph<E, N, S>) -> Result<SymbolicaGraph<&N, &E>, Self::Error> {
+        let mut graph = SymbolicaGraph::new();
+        let mut map = AHashMap::new();
+
+        for (n, (_, node)) in value.iter_nodes().enumerate() {
+            map.insert(NodeIndex(n), graph.add_node(node));
+        }
+
+        for (i, _, d) in value.iter_all_edges() {
+            if let HedgePair::Paired { source, sink } = i {
+                let source = map[&value.node_id(source)];
+                let sink = map[&value.node_id(sink)];
+
+                let data = d.data;
+                let orientation = d.orientation;
+
+                match orientation {
+                    Orientation::Default => {
+                        graph
+                            .add_edge(source, sink, true, data)
+                            .map_err(HedgeGraphError::SymbolicaError)?;
+                    }
+                    Orientation::Reversed => {
+                        graph
+                            .add_edge(sink, source, true, data)
+                            .map_err(HedgeGraphError::SymbolicaError)?;
+                    }
+                    Orientation::Undirected => {
+                        graph
+                            .add_edge(source, sink, false, data)
+                            .map_err(HedgeGraphError::SymbolicaError)?;
+                    }
+                }
+            } else {
+                return Err(HedgeGraphError::HasIdentityHedge);
+            }
+        }
+
+        Ok(graph)
+    }
+}
+
 //use symbolica::{atom::Symbol,state::State};
 //pub mod half_edge;
 #[derive(Debug, Default, Clone, Copy, Serialize, Deserialize, PartialEq)]
@@ -497,7 +576,7 @@ pub struct SerializableExternalVertexInfo {
 
 #[derive(Debug, Clone)]
 pub struct ExternalVertexInfo {
-    direction: EdgeType,
+    pub direction: EdgeType,
     pub particle: Arc<model::Particle>,
 }
 
@@ -1139,7 +1218,7 @@ impl BareGraph {
     }
 
     pub fn rep_rules_print(&self, printer_ops: PrintOptions) -> Vec<(String, String)> {
-        self.generate_lmb_replacement_rules("Q<i>(x<j>__)", "K<i>(x<j>__)", "P<i>(x<j>__)")
+        self.generate_lmb_replacement_rules("Q(<i>,x___)", "K(<i>,x___)", "P(<i>,x___)")
             .iter()
             .map(|(lhs, rhs)| {
                 (
@@ -1158,18 +1237,22 @@ impl BareGraph {
     pub fn denominator_print(&self, printer_ops: PrintOptions) -> Vec<(String, String)> {
         self.edges
             .iter()
-            .map(|e| {
-                let (mom, mass) = e.denominator(self);
-                (
-                    format!(
-                        "{}",
-                        AtomPrinter::new_with_options(mom.as_view(), printer_ops)
-                    ),
-                    format!(
-                        "{}",
-                        AtomPrinter::new_with_options(mass.as_view(), printer_ops)
-                    ),
-                )
+            .filter_map(|e| {
+                if let EdgeType::Virtual = e.edge_type {
+                    let (mom, mass) = e.denominator(self);
+                    Some((
+                        format!(
+                            "{}",
+                            AtomPrinter::new_with_options(mom.as_view(), printer_ops)
+                        ),
+                        format!(
+                            "{}",
+                            AtomPrinter::new_with_options(mass.as_view(), printer_ops)
+                        ),
+                    ))
+                } else {
+                    None
+                }
             })
             .collect()
     }
@@ -1358,7 +1441,7 @@ impl BareGraph {
             loop_momentum_basis: LoopMomentumBasis {
                 tree: None,
                 basis: TiVec::new(),
-                edge_signatures: dummy_hedge_graph.new_hedgevec(&|_, _| LoopExtSignature {
+                edge_signatures: dummy_hedge_graph.new_hedgevec(|_, _, _| LoopExtSignature {
                     internal: SignatureLike::from_iter(std::iter::empty::<SignOrZero>()),
                     external: SignatureLike::from_iter(std::iter::empty::<SignOrZero>()),
                 }),
@@ -1405,7 +1488,7 @@ impl BareGraph {
         g.edge_name_to_position = edge_name_to_position;
 
         // set the half-edge graph representation
-        g.hedge_representation = HedgeGraph::from(&g);
+        g.hedge_representation = HedgeGraph::<usize, usize>::from(&g);
 
         let mut edge_signatures = vec![(vec![], vec![]); graph.edges.len()];
         for (e_name, sig) in graph.edge_signatures.iter() {
@@ -1695,7 +1778,7 @@ impl BareGraph {
             loop_momentum_basis: LoopMomentumBasis {
                 tree: None,
                 basis: TiVec::new(),
-                edge_signatures: dummy_hedge_graph.new_hedgevec(&|_, _| LoopExtSignature {
+                edge_signatures: dummy_hedge_graph.new_hedgevec(|_, _, _| LoopExtSignature {
                     internal: SignatureLike::from_iter(std::iter::empty::<SignOrZero>()),
                     external: SignatureLike::from_iter(std::iter::empty::<SignOrZero>()),
                 }),
@@ -1950,7 +2033,7 @@ impl BareGraph {
 
         let temp_edge_signatures =
             self.hedge_representation
-                .new_hedgevec(&|_, _| LoopExtSignature {
+                .new_hedgevec(|_, _, _| LoopExtSignature {
                     internal: SignatureLike::from_iter(std::iter::empty::<SignOrZero>()),
                     external: SignatureLike::from_iter(std::iter::empty::<SignOrZero>()),
                 });

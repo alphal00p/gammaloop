@@ -35,6 +35,7 @@ use spenso::{
         slot::Slot,
     },
 };
+use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
 use std::fs;
 use symbolica::coefficient::CoefficientView;
@@ -231,7 +232,7 @@ impl VertexRule {
     #[allow(clippy::complexity)]
     pub fn get_coupling_orders(
         &self,
-    ) -> Vec<Vec<Option<HashMap<SmartString<LazyCompact>, usize, RandomState>>>> {
+    ) -> Vec<Vec<Option<BTreeMap<SmartString<LazyCompact>, usize>>>> {
         self.couplings
             .iter()
             .map(|row| {
@@ -546,7 +547,7 @@ pub struct SerializableCoupling {
     name: SmartString<LazyCompact>,
     expression: SmartString<LazyCompact>,
     #[serde(with = "vectorize")]
-    orders: HashMap<SmartString<LazyCompact>, usize, RandomState>,
+    orders: BTreeMap<SmartString<LazyCompact>, usize>,
     value: Option<(f64, f64)>,
 }
 
@@ -565,7 +566,7 @@ impl SerializableCoupling {
 pub struct Coupling {
     pub name: SmartString<LazyCompact>,
     pub expression: Atom,
-    pub orders: HashMap<SmartString<LazyCompact>, usize, RandomState>,
+    pub orders: BTreeMap<SmartString<LazyCompact>, usize>,
     pub value: Option<Complex<f64>>,
 }
 

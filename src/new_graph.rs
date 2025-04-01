@@ -371,7 +371,7 @@ impl FeynmanGraph for HedgeGraph<Edge, Vertex> {
             .collect()
     }
 
-    /// This includes the factor 2 for each edge, inversion already performed           
+    /// This includes the factor 2 for each edge, inversion already performed
     fn get_cff_inverse_energy_product(&self) -> Atom {
         Atom::new_num(1)
             / self
@@ -395,7 +395,7 @@ impl FeynmanGraph for HedgeGraph<Edge, Vertex> {
     }
 
     fn get_real_mass_vector<T: FloatLike>(&self) -> HedgeVec<F<T>> {
-        self.new_hedgevec(&|edge, _edge_id| match edge.particle.mass.value {
+        self.new_hedgevec(|edge, _edge_id, _| match edge.particle.mass.value {
             Some(mass) => F::from_ff64(mass.re),
             None => F::from_f64(0.0),
         })
@@ -794,7 +794,7 @@ impl LoopMomentumBasis {
     }
 
     pub fn set_edge_signatures<E, V>(&mut self, graph: &HedgeGraph<E, V>) -> Result<(), Report> {
-        self.edge_signatures = graph.new_hedgevec(&|_, _edge_index| LoopExtSignature {
+        self.edge_signatures = graph.new_hedgevec(|_, _edge_index, _| LoopExtSignature {
             internal: LoopSignature::from_iter(vec![SignOrZero::Zero; self.basis.len()]),
             external: ExternalSignature::from_iter(vec![SignOrZero::Zero; graph.n_externals()]),
         });
@@ -1113,7 +1113,7 @@ impl LoopMomentumBasis {
                         * reduced_signature_matrix_inverse.clone()
                         * reduced_external_signatures;
 
-                let new_signatures = graph.new_hedgevec(&|_, edge_id| {
+                let new_signatures = graph.new_hedgevec(|_, edge_id, _| {
                     let new_virtual_signature = new_virtual_signatures
                         .row(edge_id.into())
                         .iter()

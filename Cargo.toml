@@ -39,6 +39,9 @@ lto = "fat"
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
 
+[profile.dev.package]
+insta.opt-level = 3
+similar.opt-level = 3
 
 [dependencies]
 # These will be patched
@@ -46,8 +49,9 @@ symbolica = { version = "0.15.1" }
 
 spenso = { version = "0.4.0", features = ["shadowing"] }
 
-linnet = {git =  "https://github.com/alphal00p/linnet",features = ["symbolica","drawing"],branch="refactor"}
-
+linnet = {version = "0.2.0", features = [
+    # "symbolica",
+    "drawing",]}
 
 
 momtrop = { git = "https://github.com/alphal00p/momtrop", features = ["log"] }
@@ -92,7 +96,7 @@ pprof = { version = "0.13.0", features = ["criterion", "flamegraph"] }
 derive_more = "0.99.17"
 serde_json = "1.0.115"
 ctrlc = "3.4.4"
-constcat = "0.5.0"
+# constcat = "0.5.0"
 ref-ops = "0.2.5"
 delegate = "0.12.0"
 typed-index-collections = { version = "3.1.0", features = [
@@ -108,14 +112,14 @@ uuid = { version = "1.10.0", features = ["serde", "v4"] }
 serde_with = "3.9.0"
 insta = { version = "1.40.0", features = ["ron", "toml"] }
 bitvec = { version = "1.0.1", features = ["serde"] }
-pathfinding = "4.11.0"
+# pathfinding = "4.11.0"
 brotli = "7.0.0"
-cgmath = "0.18.0"
-argmin = "0.10.0"
-by_address = "1.2.1"
+# cgmath = "0.18.0"
+# argmin = "0.10.0"
+# by_address = "1.2.1"
 pyo3-pylogger = { version = "0.3.0", optional = true }
 fern = "0.7.1"
-humantime = "2.1.0"
+# humantime = "2.1.0"
 chrono = "0.4.39"
 
 [dependencies.pyo3]
@@ -151,6 +155,5 @@ no_python = []
 symbolica = { path = "./python/gammaloop/dependencies/symbolica" }
 spenso = { git = "https://github.com/alphal00p/spenso", rev = "46850d7ee82ab5559950b3b5080609f216c2c6ef" }
 # spenso = { path = "../spenso" }
-
 [patch."https://github.com/alphal00p/linnet"]
-# linnet = { path = "../linnet" }
+# linnet = { path = "../../linnet" }

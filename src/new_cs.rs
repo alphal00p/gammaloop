@@ -66,7 +66,7 @@ use derive_more::{From, Into};
 #[derive(Debug, Clone)]
 pub struct ProcessDefinition {
     pub initial_pdgs: Vec<i64>, // Do we want a pub type Pdg = i64;?
-    pub final_pdgs: Vec<i64>,
+    pub final_pdgs_lists: Vec<Vec<i64>>,
     pub n_unresolved: usize, // we need al this information to know what cuts are considered at runtime
     pub unresolved_cut_content: AHashSet<Arc<Particle>>,
     pub amplitude_filters: FeynGenFilters,
@@ -109,7 +109,7 @@ fn test_process_cross_section() -> GenerationOptions {
             FeynGenFilter::ZeroSnailsFilter(SnailFilterOptions::default()),
         ]),
         initial_pdgs: vec![11, -11],
-        final_pdgs: vec![1, -1, 21],
+        final_pdgs_lists: vec![vec![1, -1, 21]],
         generation_type: GenerationType::CrossSection,
         symmetrize_final_states: false,
         symmetrize_initial_states: false,
@@ -145,7 +145,7 @@ fn test_process_amplitude() -> GenerationOptions {
         cross_section_filters: FeynGenFilters(vec![]),
         generation_type: GenerationType::Amplitude,
         initial_pdgs: vec![22, 22],
-        final_pdgs: vec![22, 22],
+        final_pdgs_lists: vec![vec![22, 22]],
         symmetrize_final_states: true,
         symmetrize_initial_states: true,
         symmetrize_left_right_states: false,
@@ -918,7 +918,9 @@ impl CrossSectionCut {
                 .collect_vec();
 
             let particle_content = process
-                .final_pdgs
+                .final_pdgs_lists
+                .first()
+                .unwrap()
                 .iter()
                 .map(|pdg| model.get_particle_from_pdg(*pdg as isize));
 
