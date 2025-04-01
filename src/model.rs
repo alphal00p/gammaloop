@@ -69,7 +69,7 @@ pub fn normalise_complex(atom: &Atom) -> Atom {
     let i = Atom::new_var(Atom::I);
     let complexpanded = &re + i * &im;
 
-    atom.replace_all(&complexfn, complexpanded.to_pattern(), None, None)
+    atom.replace(&complexfn).with(complexpanded.to_pattern())
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -1697,13 +1697,16 @@ impl Model {
         for cpl in self.couplings.iter() {
             let [pattern, rhs] = cpl.rep_rule();
 
-            sub_atom = sub_atom.replace_all(&pattern.to_pattern(), rhs.to_pattern(), None, None);
+            sub_atom = sub_atom
+                .replace(&pattern.to_pattern())
+                .with(rhs.to_pattern());
         }
 
         for para in self.parameters.iter() {
             if let Some([pattern, rhs]) = para.rep_rule() {
-                sub_atom =
-                    sub_atom.replace_all(&pattern.to_pattern(), rhs.to_pattern(), None, None);
+                sub_atom = sub_atom
+                    .replace(&pattern.to_pattern())
+                    .with(rhs.to_pattern());
             }
         }
         sub_atom

@@ -151,7 +151,7 @@ pub fn preprocess_ufo_color_wrapped(atom: Atom) -> Atom {
         .map(|(a, b)| Replacement::new(a.to_pattern(), b.to_pattern()))
         .collect();
 
-    atom.replace_all_multiple(&reps)
+    atom.replace_multiple(&reps)
 }
 pub fn preprocess_ufo_spin_wrapped(atom: Atom) -> Atom {
     let a_ = symbol!("a_");
@@ -227,7 +227,7 @@ pub fn preprocess_ufo_spin_wrapped(atom: Atom) -> Atom {
         })
         .collect();
 
-    atom.replace_all_multiple(&reps)
+    atom.replace_multiple(&reps)
 }
 
 #[cfg(test)]

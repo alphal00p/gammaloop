@@ -75,8 +75,7 @@ use symbolica::atom::{Atom, AtomView, FunctionBuilder};
 use symbolica::domains::float::{Complex as SymComplex, NumericalFloatLike, Real};
 use symbolica::evaluate::{CompileOptions, ExpressionEvaluator, FunctionMap, OptimizationSettings};
 use symbolica::id::{
-    AtomMatchIterator, Condition, Match, MatchSettings, MatchStack, Pattern, PatternOrMap,
-    Replacement,
+    AtomMatchIterator, Condition, Match, MatchSettings, MatchStack, Pattern, Replacement,
 };
 use symbolica::state::{State, Workspace};
 use symbolica::{self, function, symbol};

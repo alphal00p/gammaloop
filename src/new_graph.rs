@@ -318,7 +318,7 @@ impl FeynmanGraph for HedgeGraph<Edge, Vertex> {
         let num = Into::<usize>::into(edge);
         let mom = parse!(&format!("Q({num},x_)")).unwrap().to_pattern();
         let mom_rep = lmb.pattern(edge);
-        atom.replace_all(&mom, &mom_rep, None, None)
+        atom.replace(mom).with(mom_rep)
     }
 
     fn in_slot(&self, edge: EdgeIndex) -> EdgeSlots<Minkowski> {
@@ -556,36 +556,29 @@ impl Edge {
 
                 let pfun = parse!("P(x_)").unwrap().to_pattern();
                 if self.particle.is_antiparticle() {
-                    atom = atom.replace_all(
-                        &pfun,
+                    atom = atom.replace(&pfun).with(
                         parse!(&format!(
                             "-Q({},mink(4,indexid(x_)))",
                             Into::<usize>::into(num)
                         ))
                         .unwrap()
                         .to_pattern(),
-                        None,
-                        None,
                     );
                 } else {
-                    atom = atom.replace_all(
-                        &pfun,
+                    atom = atom.replace(&pfun).with(
                         parse!(&format!(
                             "Q({},mink(4,indexid(x_)))",
                             Into::<usize>::into(num)
                         ))
                         .unwrap()
                         .to_pattern(),
-                        None,
-                        None,
                     );
                 }
 
                 let pslashfun = parse!("PSlash(i_,j_)").unwrap().to_pattern();
                 let pindex_num: usize = self.internal_index[0].into();
                 if self.particle.is_antiparticle() {
-                    atom = atom.replace_all(
-                        &pslashfun,
+                    atom = atom.replace(&pslashfun).with(
                         parse!(&format!(
                             "-Q({},mink(4,{}))*Gamma({},i_,j_)",
                             Into::<usize>::into(num),
@@ -594,12 +587,9 @@ impl Edge {
                         ))
                         .unwrap()
                         .to_pattern(),
-                        None,
-                        None,
                     );
                 } else {
-                    atom = atom.replace_all(
-                        &pslashfun,
+                    atom = atom.replace(&pslashfun).with(
                         parse!(&format!(
                             "Q({},mink(4,{}))*Gamma({},i_,j_)",
                             Into::<usize>::into(num),
@@ -608,8 +598,6 @@ impl Edge {
                         ))
                         .unwrap()
                         .to_pattern(),
-                        None,
-                        None,
                     );
                 }
 
@@ -663,8 +651,8 @@ impl Edge {
                     .chain(replacements_out)
                     .collect();
 
-                let atom = atom.replace_all_multiple(&reps);
-                let color_atom = color_atom.replace_all_multiple(&reps);
+                let atom = atom.replace_multiple(&reps);
+                let color_atom = color_atom.replace_multiple(&reps);
 
                 let indexid_reps: Vec<_> = dummies
                     .into_iter()
@@ -680,22 +668,15 @@ impl Edge {
                     })
                     .collect();
 
-                let atom = atom.replace_all_multiple(&indexid_reps);
-                let color_atom = color_atom.replace_all_multiple(&indexid_reps);
+                let atom = atom.replace_multiple(&indexid_reps);
+                let color_atom = color_atom.replace_multiple(&indexid_reps);
 
                 [
-                    atom.replace_all(
-                        &parse!("indexid(x_)").unwrap().to_pattern(),
-                        Atom::new_var(GS.x_).to_pattern(),
-                        None,
-                        None,
-                    ),
-                    color_atom.replace_all(
-                        &parse!("indexid(x_)").unwrap().to_pattern(),
-                        Atom::new_var(GS.x_).to_pattern(),
-                        None,
-                        None,
-                    ),
+                    atom.replace(&parse!("indexid(x_)").unwrap().to_pattern())
+                        .with(Atom::new_var(GS.x_).to_pattern()),
+                    color_atom
+                        .replace(&parse!("indexid(x_)").unwrap().to_pattern())
+                        .with(Atom::new_var(GS.x_).to_pattern()),
                 ]
             }
         }

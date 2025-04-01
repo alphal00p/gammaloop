@@ -285,7 +285,7 @@ impl BareEdge {
         let num = *graph.edge_name_to_position.get(&self.name).unwrap();
         let mom = parse!(&format!("Q({num},x_)")).unwrap().to_pattern();
         let mom_rep = lmb.pattern(num.into());
-        atom.replace_all(&mom, &mom_rep, None, None)
+        atom.replace(&mom).with(&mom_rep)
     }
 
     pub fn edge_momentum_symbol(&self, graph: &BareGraph) -> Symbol {
@@ -337,36 +337,29 @@ impl BareEdge {
 
                 let pfun = parse!("P(x_)").unwrap().to_pattern();
                 if self.particle.is_antiparticle() {
-                    atom = atom.replace_all(
-                        &pfun,
+                    atom = atom.replace(&pfun).with(
                         parse!(&format!(
                             "-Q({},mink(4,indexid(x_)))",
                             Into::<usize>::into(num)
                         ))
                         .unwrap()
                         .to_pattern(),
-                        None,
-                        None,
                     );
                 } else {
-                    atom = atom.replace_all(
-                        &pfun,
+                    atom = atom.replace(&pfun).with(
                         parse!(&format!(
                             "Q({},mink(4,indexid(x_)))",
                             Into::<usize>::into(num)
                         ))
                         .unwrap()
                         .to_pattern(),
-                        None,
-                        None,
                     );
                 }
 
                 let pslashfun = parse!("PSlash(i_,j_)").unwrap().to_pattern();
                 let pindex_num: usize = self.internal_index[0].into();
                 if self.particle.is_antiparticle() {
-                    atom = atom.replace_all(
-                        &pslashfun,
+                    atom = atom.replace(&pslashfun).with(
                         parse!(&format!(
                             "-Q({},mink(4,{}))*Gamma({},i_,j_)",
                             Into::<usize>::into(num),
@@ -375,12 +368,9 @@ impl BareEdge {
                         ))
                         .unwrap()
                         .to_pattern(),
-                        None,
-                        None,
                     );
                 } else {
-                    atom = atom.replace_all(
-                        &pslashfun,
+                    atom = atom.replace(&pslashfun).with(
                         parse!(&format!(
                             "Q({},mink(4,{}))*Gamma({},i_,j_)",
                             Into::<usize>::into(num),
@@ -389,8 +379,6 @@ impl BareEdge {
                         ))
                         .unwrap()
                         .to_pattern(),
-                        None,
-                        None,
                     );
                 }
 
@@ -444,8 +432,8 @@ impl BareEdge {
                     .chain(replacements_out)
                     .collect();
 
-                let atom = atom.replace_all_multiple(&reps);
-                let color_atom = color_atom.replace_all_multiple(&reps);
+                let atom = atom.replace_multiple(&reps);
+                let color_atom = color_atom.replace_multiple(&reps);
 
                 let indexid_reps: Vec<_> = dummies
                     .into_iter()
@@ -461,22 +449,15 @@ impl BareEdge {
                     })
                     .collect();
 
-                let atom = atom.replace_all_multiple(&indexid_reps);
-                let color_atom = color_atom.replace_all_multiple(&indexid_reps);
+                let atom = atom.replace_multiple(&indexid_reps);
+                let color_atom = color_atom.replace_multiple(&indexid_reps);
 
                 [
-                    atom.replace_all(
-                        &parse!("indexid(x_)").unwrap().to_pattern(),
-                        Atom::new_var(GS.x_).to_pattern(),
-                        None,
-                        None,
-                    ),
-                    color_atom.replace_all(
-                        &parse!("indexid(x_)").unwrap().to_pattern(),
-                        Atom::new_var(GS.x_).to_pattern(),
-                        None,
-                        None,
-                    ),
+                    atom.replace(&parse!("indexid(x_)").unwrap().to_pattern())
+                        .with(Atom::new_var(GS.x_).to_pattern()),
+                    color_atom
+                        .replace(&parse!("indexid(x_)").unwrap().to_pattern())
+                        .with(Atom::new_var(GS.x_).to_pattern()),
                 ]
             }
         }
@@ -662,12 +643,9 @@ impl HasVertexInfo for InteractionVertexInfo {
                         //TODO flip based on flow
                     };
 
-                    atom = atom.replace_all(
-                        &momentum_in_pattern.to_pattern(),
-                        &momentum_out_pattern.to_pattern(),
-                        None,
-                        None,
-                    );
+                    atom = atom
+                        .replace(&momentum_in_pattern.to_pattern())
+                        .with(&momentum_out_pattern.to_pattern());
                 }
 
                 atom = preprocess_ufo_spin_wrapped(atom);
@@ -675,7 +653,7 @@ impl HasVertexInfo for InteractionVertexInfo {
                 for (i, _) in edges.iter().enumerate() {
                     let replacements = vertex_slots[i].replacements(i + 1);
 
-                    atom = atom.replace_all_multiple(&replacements);
+                    atom = atom.replace_multiple(&replacements);
                 }
 
                 let n_dummies = ls.number_of_dummies();
@@ -684,14 +662,11 @@ impl HasVertexInfo for InteractionVertexInfo {
                         .unwrap()
                         .to_pattern();
 
-                    atom = atom.replace_all(
-                        &pat,
+                    atom = atom.replace(&pat).with(
                         Atom::new_num(
                             usize::from(vertex_slots.internal_dummy.lorentz_and_spin[i]) as i64
                         )
                         .to_pattern(),
-                        None,
-                        None,
                     );
                 }
                 atom
@@ -730,25 +705,19 @@ impl HasVertexInfo for InteractionVertexInfo {
                         i => panic!("Color {i} not supported "),
                     };
 
-                    atom = atom.replace_all(
-                        &id1,
-                        function!(ETS.id, ind, symbol!("x_")).to_pattern(),
-                        None,
-                        None,
-                    );
+                    atom = atom
+                        .replace(&id1)
+                        .with(function!(ETS.id, ind, symbol!("x_")).to_pattern());
 
-                    atom = atom.replace_all(
-                        &id2,
-                        function!(ETS.id, symbol!("x_"), ind).to_pattern(),
-                        None,
-                        None,
-                    );
+                    atom = atom
+                        .replace(&id2)
+                        .with(function!(ETS.id, symbol!("x_"), ind).to_pattern());
                 }
 
                 for (i, _) in edges.iter().enumerate() {
                     let replacements = vertex_slots[i].replacements(i + 1);
 
-                    atom = atom.replace_all_multiple(&replacements);
+                    atom = atom.replace_multiple(&replacements);
                 }
 
                 for i in 0..n_dummies {
@@ -756,12 +725,9 @@ impl HasVertexInfo for InteractionVertexInfo {
                         .unwrap()
                         .to_pattern();
 
-                    atom = atom.replace_all(
-                        &pat,
+                    atom = atom.replace(&pat).with(
                         Atom::new_num(usize::from(vertex_slots.internal_dummy.color[i]) as i64)
                             .to_pattern(),
-                        None,
-                        None,
                     );
                 }
 
@@ -3333,7 +3299,7 @@ impl DerivedGraphData<PythonState> {
                 let derived_data: DerivedGraphData<S> = bincode::decode_from_slice_with_context(
                     &derived_data_bytes,
                     bincode::config::standard(),
-                    &mut statemap,
+                    statemap,
                 )?
                 .0;
                 Ok(derived_data.forget_type())
@@ -3971,7 +3937,7 @@ impl<NumState: NumeratorState> DerivedGraphData<NumState> {
                 let derived_data: Self = bincode::decode_from_slice_with_context(
                     &derived_data_bytes,
                     bincode::config::standard(),
-                    &mut statemap,
+                    statemap,
                 )?
                 .0;
                 Ok(derived_data)

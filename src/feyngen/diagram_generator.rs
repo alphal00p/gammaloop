@@ -286,26 +286,24 @@ impl FeynGen {
             "ExternalFermionOrderingSign",
             "NumeratorIndependentSymmetryGrouping",
         ] {
-            res = res.replace_all(
-                &function!(symbol!(header), Atom::new_var(symbol!("x_"))).to_pattern(),
-                Atom::new_var(symbol!("x_")).to_pattern(),
-                None,
-                None,
-            );
+            res = res
+                .replace(&function!(symbol!(header), Atom::new_var(symbol!("x_"))).to_pattern())
+                .with(Atom::new_var(symbol!("x_")).to_pattern());
         }
-        res = res.replace_all(
-            &function!(
-                symbol!("NumeratorDependentGrouping"),
-                Atom::new_var(symbol!("GraphId_")),
-                Atom::new_var(symbol!("ratio_")),
-                Atom::new_var(symbol!("GraphSymmetryFactor_"))
-            )
-            .to_pattern(),
-            (Atom::new_var(symbol!("ratio_")) * Atom::new_var(symbol!("GraphSymmetryFactor_")))
+        res = res
+            .replace(
+                &function!(
+                    symbol!("NumeratorDependentGrouping"),
+                    Atom::new_var(symbol!("GraphId_")),
+                    Atom::new_var(symbol!("ratio_")),
+                    Atom::new_var(symbol!("GraphSymmetryFactor_"))
+                )
                 .to_pattern(),
-            None,
-            None,
-        );
+            )
+            .with(
+                (Atom::new_var(symbol!("ratio_")) * Atom::new_var(symbol!("GraphSymmetryFactor_")))
+                    .to_pattern(),
+            );
         res.expand()
     }
 
@@ -3335,12 +3333,8 @@ impl FeynGen {
                     ) / FeynGen::evaluate_overall_factor(
                         entry
                             .symmetry_factor
-                            .replace_all(
-                                &numerator_independent_symmetry_pattern,
-                                Atom::new_num(1).to_pattern(),
-                                None,
-                                None,
-                            )
+                            .replace(&numerator_independent_symmetry_pattern)
+                            .with(Atom::new_num(1).to_pattern())
                             .as_view(),
                     ))
                     .expand();
@@ -3350,16 +3344,16 @@ impl FeynGen {
                         .next()
                         .is_some()
                     {
-                        entry.symmetry_factor = entry.symmetry_factor.replace_all(
-                            &numerator_independent_symmetry_pattern,
-                            function!(
-                                symbol!("NumeratorIndependentSymmetryGrouping"),
-                                (Atom::new_var(symbol!("x_")) + ratio).expand()
-                            )
-                            .to_pattern(),
-                            None,
-                            None,
-                        );
+                        entry.symmetry_factor = entry
+                            .symmetry_factor
+                            .replace(&numerator_independent_symmetry_pattern)
+                            .with(
+                                function!(
+                                    symbol!("NumeratorIndependentSymmetryGrouping"),
+                                    (Atom::new_var(symbol!("x_")) + ratio).expand()
+                                )
+                                .to_pattern(),
+                            );
                     } else {
                         entry.symmetry_factor = &entry.symmetry_factor
                             * function!(
@@ -4123,7 +4117,7 @@ impl FeynGen {
         ];
         let mut res = expr.to_owned();
         for (src, trgt) in replacements {
-            res = res.replace_all(&src.to_pattern(), trgt.to_pattern(), None, None);
+            res = res.replace(&src.to_pattern()).with(trgt.to_pattern());
         }
         res.expand()
     }
@@ -4241,14 +4235,14 @@ impl ProcessedNumeratorForComparison {
                             [bare_graph.vertices[*right_external_node_pos].edges[0]];
                         let connected_external_id = bare_graph.external_connections.len() + i_ext;
                         for rep in lmb_replacements.iter_mut() {
-                            rep.1 = rep.1.replace_all(
-                                &parse!(&format!("P({},x__)", connected_external_id))
-                                    .unwrap()
-                                    .to_pattern(),
-                                parse!(&format!("P({},x__)", i_ext)).unwrap().to_pattern(),
-                                None,
-                                None,
-                            );
+                            rep.1 = rep
+                                .1
+                                .replace(
+                                    &parse!(&format!("P({},x__)", connected_external_id))
+                                        .unwrap()
+                                        .to_pattern(),
+                                )
+                                .with(parse!(&format!("P({},x__)", i_ext)).unwrap().to_pattern());
                         }
                         let left_edge_pol = match left_edge.edge_type {
                             EdgeType::Incoming => left_edge.particle.in_pol_symbol(),
@@ -4574,12 +4568,12 @@ impl ProcessedNumeratorForComparison {
                                 d.map_data_ref_result::<_, FeynGenError>(|a| {
                                     let mut b = a.clone();
                                     for (src, trgt) in replacements.iter() {
-                                        b = b.replace_all(&src.to_pattern(), trgt.to_pattern(), None, None);
+                                        b = b.replace(&src.to_pattern()).with( trgt.to_pattern());
                                     }
                                     b = b.expand();
                                     let mut re = Rational::zero();
                                     let mut im = Rational::zero();
-                                    for (var, coeff) in b.coefficient_list::<u8,_>(&[Atom::new_var(Atom::I)]).iter() {
+                                    for (var, coeff) in b.coefficient_list::<u8>(&[Atom::new_var(Atom::I)]).iter() {
                                         let c = coeff.try_into().map_err(|e| {
                                             FeynGenError::NumeratorEvaluationError(format!(
                                                 "Could not convert tensor coefficient to integer: error: {}, expresssion: {}",
@@ -4637,7 +4631,7 @@ impl ProcessedNumeratorForComparison {
                     d.map_data_ref_self(|a| {
                         let mut b = a.clone();
                         for (src, trgt) in rep_atoms.iter() {
-                            b = b.replace_all(&src.to_pattern(), trgt.to_pattern(), None, None);
+                            b = b.replace(&src.to_pattern()).with(trgt.to_pattern());
                         }
                         b
                         //let b = a.replace_all_multiple(&reps);

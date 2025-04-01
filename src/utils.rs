@@ -1548,7 +1548,8 @@ pub fn to_str_expression(expression: &Atom) -> String {
                 precision: None,
                 color_namespace: true,
                 hide_all_namespaces: false,
-                hide_namespace: None
+                hide_namespace: None,
+                ..Default::default()
             },
         )
     )

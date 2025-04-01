@@ -45,9 +45,9 @@ similar.opt-level = 3
 
 [dependencies]
 # These will be patched
-symbolica = { version = "0.15.1" }
+symbolica = { version = "0.16.0",features = ["serde","bincode"] }
 
-spenso = { version = "0.4.0", features = ["shadowing"] }
+spenso = { git = "https://github.com/alphal00p/spenso", rev="04095a4035d78b2ee7b28d87f7655020ef24e93d" ,features= ["shadowing"] }
 
 linnet = {version = "0.2.0", features = [
     # "symbolica",
@@ -57,9 +57,7 @@ linnet = {version = "0.2.0", features = [
 momtrop = { git = "https://github.com/alphal00p/momtrop", features = ["log"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "*"
-bincode = { git = "https://github.com/branchseer/bincode", branch = "decode_context", features = [
-    "serde",
-] }
+bincode = {version="2.0.0" ,features=["serde","derive"]}
 clap = "2.34"
 color-eyre = { version = "^0.3", default-features = false }
 eyre = "^0.4"
@@ -152,8 +150,9 @@ no_python = []
 # insta.opt-level = 3
 
 [patch.crates-io]
-symbolica = { path = "./python/gammaloop/dependencies/symbolica" }
-spenso = { git = "https://github.com/alphal00p/spenso", rev = "46850d7ee82ab5559950b3b5080609f216c2c6ef" }
-# spenso = { path = "../spenso" }
+# symbolica = { path = "./python/gammaloop/dependencies/symbolica" }
+symbolica = {git = "https://github.com/alphal00p/symbolica", branch = "main"}
+# spenso = { git = "https://github.com/alphal00p/spenso", rev = "04095a4035d78b2ee7b28d87f7655020ef24e93d" }
+# # spenso = { path = "../spenso" }
 [patch."https://github.com/alphal00p/linnet"]
 # linnet = { path = "../../linnet" }

@@ -982,10 +982,10 @@ impl Numerator<Global> {
             .factor()
         };
 
-        let mut expression =
-            expression
-                .0
-                .replace_all(&color_pat, Atom::new_num(1).to_pattern(), None, None);
+        let mut expression = expression
+            .0
+            .replace(&color_pat)
+            .with(Atom::new_num(1).to_pattern());
         expression = expression * color_simplified;
 
         if fully {
@@ -1126,7 +1126,7 @@ impl AppliedFeynmanRule {
             .collect();
 
         self.colorless
-            .map_data_mut(|a| a.replace_all_multiple_repeat_mut(&reps));
+            .map_data_mut(|a| a.replace_multiple_repeat_mut(&reps));
     }
     pub fn from_graph(graph: &BareGraph, prefactor: &GlobalPrefactor) -> Self {
         debug!("Generating numerator for graph: {}", graph.name);
@@ -1229,12 +1229,10 @@ impl<T: Copy + Default> Numerator<SymbolicExpression<T>> {
         ];
 
         let mut color = self.state.color.map_data_ref(|a| {
-            SerializableAtom::from(a.0.replace_all(
-                &function!(symbol!(DOWNIND), GS.x__).to_pattern(),
-                Atom::new_var(GS.x__).to_pattern(),
-                None,
-                None,
-            ))
+            SerializableAtom::from(
+                a.0.replace(&function!(symbol!(DOWNIND), GS.x__).to_pattern())
+                    .with(Atom::new_var(GS.x__).to_pattern()),
+            )
         });
 
         let mut indices_map = AHashMap::new();
@@ -1355,7 +1353,7 @@ impl ColorSimplified {
             })
             .collect();
 
-        expression.replace_all_multiple_repeat_mut(&reps);
+        expression.replace_multiple_repeat_mut(&reps);
 
         // let mut color = Atom::new();
 
@@ -1540,16 +1538,12 @@ impl ColorSimplified {
 
         let mut expression = expression.clone();
         let mut first = true;
-        while first
-            || expression
-                .0
-                .replace_all_multiple_into(&replacements, &mut atom)
-        {
+        while first || expression.0.replace_multiple_into(&replacements, &mut atom) {
             if !first {
                 std::mem::swap(&mut expression.0, &mut atom)
             };
             first = false;
-            expression.0 = expression.0.replace_all_multiple(&frep);
+            expression.0 = expression.0.replace_multiple(&frep);
             expression.0 = expression.0.expand();
         }
 
@@ -2012,7 +2006,7 @@ impl Numerator<PolyContracted> {
 
         Numerator {
             state: Contracted {
-                tensor: self.state.tensor.replace_all_multiple(&reps),
+                tensor: self.state.tensor.replace_multiple(&reps),
             },
         }
     }
@@ -2252,7 +2246,7 @@ impl GammaSimplified {
             ),
         ];
 
-        expr = expr.replace_all_multiple_repeat(&pats);
+        expr = expr.replace_multiple_repeat(&pats);
         let pats = vec![
             (
                 parse!("ProjP(a_,b_)").unwrap().to_pattern(),
@@ -2308,9 +2302,9 @@ impl GammaSimplified {
             .map(|(lhs, rhs)| Replacement::new(lhs, rhs))
             .collect();
         expr.0 = expr.0.expand();
-        expr.replace_all_multiple_repeat_mut(&reps);
+        expr.replace_multiple_repeat_mut(&reps);
         expr.0 = expr.0.expand();
-        expr.replace_all_multiple_repeat_mut(&reps);
+        expr.replace_multiple_repeat_mut(&reps);
 
         let pat = parse!("gamma_trace(a__)").unwrap().to_pattern();
 
@@ -2401,9 +2395,9 @@ impl GammaSimplified {
         .collect();
 
         expr.0 = expr.0.expand();
-        expr.replace_all_multiple_repeat_mut(&reps);
+        expr.replace_multiple_repeat_mut(&reps);
         expr.0 = expr.0.expand();
-        expr.replace_all_multiple_repeat_mut(&reps);
+        expr.replace_multiple_repeat_mut(&reps);
 
         let _pat = function!(gamma_chain, GS.a_, GS.a___, GS.b_, GS.a_).to_pattern();
         // let patodd = (-2 * function!(gamma_chain, GS.a___, GS.b_)).to_pattern();
@@ -2464,12 +2458,11 @@ impl GammaSimplified {
             }
         }
 
-        expr.replace_all_repeat_mut(
-            &(function!(gamma_chain, GS.a__, GS.x_, GS.x_).to_pattern()),
-            function!(gamma_trace, GS.a__).to_pattern(),
-            None,
-            None,
-        );
+        expr.0 = expr
+            .0
+            .replace(function!(gamma_chain, GS.a__, GS.x_, GS.x_).to_pattern())
+            .repeat()
+            .with(function!(gamma_trace, GS.a__).to_pattern());
 
         // //Chisholm identity:
         // expr.replace_all_repeat_mut(
@@ -2553,9 +2546,9 @@ impl GammaSimplified {
         .map(|(a, b)| Replacement::new(a.to_pattern(), b.to_pattern()))
         .collect();
 
-        expr.replace_all_multiple_repeat_mut(&reps);
+        expr.replace_multiple_repeat_mut(&reps);
         expr.0 = expr.0.expand();
-        expr.replace_all_multiple_repeat_mut(&reps);
+        expr.replace_multiple_repeat_mut(&reps);
         expr
     }
 
@@ -2747,7 +2740,7 @@ impl<T: Copy + Default> Numerator<SymbolicExpression<T>> {
             colorless: self.state.colorless.map_data_ref_self(|a| {
                 let mut b: Atom = a.0.clone();
                 for (src, trgt) in rep_atoms.iter() {
-                    b = b.replace_all(&src.to_pattern(), trgt.to_pattern(), None, None);
+                    b = b.replace(&src.to_pattern()).with(trgt.to_pattern());
                 }
                 //let b = a.0.replace_all_multiple(&reps).into();
                 // println!("AFTER: {}", b);
@@ -2768,7 +2761,7 @@ impl<T: Copy + Default> Numerator<SymbolicExpression<T>> {
                 let mut b: Atom = a.0.clone();
                 // println!("BEFORE: {}", a.0);
                 for (src, trgt) in rep_atoms.iter() {
-                    b = b.replace_all(&src.to_pattern(), trgt.to_pattern(), None, None);
+                    b = b.replace(&src.to_pattern()).with(trgt.to_pattern());
                 }
                 b = b.replace_map(&|term: AtomView<'_>, ctx: &Context, out: &mut Atom| {
                     if ctx.function_level == 0
@@ -2813,12 +2806,12 @@ impl Numerator<Network> {
                 d.map_data_ref_result::<_, FeynGenError>(|a| {
                     let mut b = a.clone();
                     for (src, trgt) in replacements.iter() {
-                        b = b.replace_all(&src.to_pattern(), trgt.to_pattern(), None, None);
+                        b = b.replace(&src.to_pattern()).with(trgt.to_pattern());
                     }
                     b = b.expand();
                     let mut re = Rational::zero();
                     let mut im = Rational::zero();
-                    for (var, coeff) in b.coefficient_list::<u8,_>(&[Atom::new_var(Atom::I)]).iter() {
+                    for (var, coeff) in b.coefficient_list::<u8>(&[Atom::new_var(Atom::I)]).iter() {
                         let c = coeff.try_into().map_err(|e| {
                             FeynGenError::NumeratorEvaluationError(format!(
                                 "Could not convert tensor coefficient to integer: error: {}, expresssion: {}",
@@ -2869,7 +2862,7 @@ impl Numerator<Network> {
                 d.map_data_ref_self(|a| {
                     let mut b = a.clone();
                     for (src, trgt) in rep_atoms.iter() {
-                        b = b.replace_all(&src.to_pattern(), trgt.to_pattern(), None, None);
+                        b = b.replace(&src.to_pattern()).with(trgt.to_pattern());
                     }
                     b
                     //let b = a.replace_all_multiple(&reps);
@@ -3640,7 +3633,7 @@ impl EvaluatorSingle {
                 .collect_vec();
 
             let time = Instant::now();
-            let orientation_replaced_net = self.tensor.replace_all_multiple(&reps);
+            let orientation_replaced_net = self.tensor.replace_multiple(&reps);
             let elapsed = time.elapsed();
 
             let time = Instant::now();
@@ -3830,7 +3823,7 @@ impl EvaluatorSingle {
                 .collect_vec();
 
             let time = Instant::now();
-            let orientation_replaced_net = self.tensor.replace_all_multiple(&reps);
+            let orientation_replaced_net = self.tensor.replace_multiple(&reps);
             let elapsed = time.elapsed();
 
             let time = Instant::now();
@@ -4022,7 +4015,7 @@ impl<E> CompiledEvaluator<E> {
 }
 use symbolica::state::StateMap;
 
-#[derive(Clone, Debug, Encode, Decode)]
+#[derive(Clone, Encode, Decode, Debug)]
 #[bincode(decode_context = "StateMap")]
 pub struct Evaluators {
     #[bincode(with_serde)]

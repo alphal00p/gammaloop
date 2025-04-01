@@ -496,7 +496,7 @@ pub struct SurfaceCache {
 impl SurfaceCache {
     pub fn substitute_energies(&self, atom: &Atom) -> Atom {
         let replacement_rules = self.get_all_replacements();
-        atom.replace_all_multiple(&replacement_rules)
+        atom.replace_multiple(&replacement_rules)
     }
 
     pub fn iter_all_surfaces(
