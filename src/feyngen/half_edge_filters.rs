@@ -165,15 +165,11 @@ impl<V> FeynGenHedgeGraph<Arc<Particle>, V> {
     where
         V: Clone,
     {
-        // println!("number_of_external_fermion_loops");
-        // println!("{}", self);
-
         self.remove_external_nodes();
         let internal = self.number_of_fermion_loops();
         // println!("{}", self);
 
         self.glue_external_hedges();
-        // println!("{}", self);
 
         let all_fermion_loops = self.number_of_fermion_loops();
 

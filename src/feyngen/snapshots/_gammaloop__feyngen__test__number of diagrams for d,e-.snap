@@ -1,0 +1,5 @@
+---
+source: src/feyngen/test.rs
+expression: diagrams.len()
+---
+6

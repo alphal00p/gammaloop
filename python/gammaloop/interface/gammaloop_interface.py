@@ -29,7 +29,6 @@ import gammaloop._gammaloop as gl_rust
 import gammaloop.interface.debug_display as debug_display
 # pylint: disable=unused-variable
 
-
 class TaggedScalar(yaml.ScalarNode):
     def __init__(self, tag, value):
         super().__init__(tag, value)

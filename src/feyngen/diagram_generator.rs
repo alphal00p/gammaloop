@@ -3291,7 +3291,6 @@ impl FeynGen {
                             self.options.initial_pdgs.len(),
                         )
                     };
-
                     CanonizedGraphInfo {
                         canonized_graph: canonical_repr,
                         graph: sorted_g,
@@ -4122,6 +4121,8 @@ impl FeynGen {
     ) -> Atom {
         let mut he_graph =
             FeynGenHedgeGraph::from_feyn_gen_symbolica(graph.clone(), model, n_initials);
+
+        info!("Number of external fermion loops: {}", he_graph);
         let n_external_fermion_loops = he_graph.number_of_external_fermion_loops();
 
         let number_of_initial_antifermions = self
