@@ -7,11 +7,13 @@ import os
 import sys
 
 import yaml
+import time
 import re
 from pprint import pformat
 
 import gammaloop.misc.common as common
 from gammaloop.misc import LOGGING_PREFIX_FORMAT
+import gammaloop._gammaloop as gl_rust
 
 from symbolica import Expression as SBE  # type: ignore # pylint: disable=import-error # nopep8
 import symbolica as sb  # pylint: disable=import-error # type: ignore # nopep8
@@ -144,6 +146,16 @@ def replace_to_sqrt(expr: sb.Expression) -> sb.Expression:
     return expr
 
 
+def replace_from_sqrt(expr: sb.Expression) -> sb.Expression:
+    expr = expr.replace_all(sb.Expression.parse(
+        'sqrt(x__)'), sb.Expression.parse('x__^(1/2)'))
+    str_expr = expression_to_string(expr)
+    if str_expr is None or re.match(r'\^\(\d+/\d+\)', str_expr):
+        raise common.GammaLoopError(
+            "Expoentiation with real arguments not supported in model expressions: %s", str_expr)
+    return expr
+
+
 def parse_python_expression_safe(expr: str) -> sb.Expression:
 
     sanitized_expr = expr.replace('**', '^')\
@@ -162,7 +174,8 @@ def parse_python_expression_safe(expr: str) -> sb.Expression:
         raise common.GammaLoopError(
             "Symbolica (@%s) failed to parse expression:\n%s\nwith exception:\n%s", sb.__file__, sanitized_expr, exception)
 
-    sb_expr_processed = replace_to_sqrt(sb_expr)
+    # sb_expr_processed = replace_to_sqrt(sb_expr)
+    sb_expr_processed = replace_from_sqrt(sb_expr)
 
     return sb_expr_processed
 
@@ -213,19 +226,15 @@ class GammaLoopCustomFormatter(logging.Formatter):
             record.name = f"{record.name:20}"
         match record.levelno:
             case logging.DEBUG:
-                record.levelname = f"{Colour.GRAY}{
-                    record.levelname:8}{Colour.END}"
+                record.levelname = f"{Colour.GRAY}{record.levelname:8}{Colour.END}" # nopep8
             case logging.INFO:
-                record.levelname = f"{record.levelname:8}"
+                record.levelname = f"{record.levelname:8}" # nopep8
             case logging.WARNING:
-                record.levelname = f"{Colour.YELLOW}{
-                    record.levelname:8}{Colour.END}"
+                record.levelname = f"{Colour.YELLOW}{record.levelname:8}{Colour.END}" # nopep8
             case logging.ERROR:
-                record.levelname = f"{Colour.RED}{
-                    record.levelname:8}{Colour.END}"
+                record.levelname = f"{Colour.RED}{record.levelname:8}{Colour.END}" # nopep8
             case logging.CRITICAL:
-                record.levelname = f"{Colour.RED}{Colour.BOLD}{
-                    record.levelname:8}{Colour.END}"
+                record.levelname = f"{Colour.RED}{Colour.BOLD}{record.levelname:8}{Colour.END}" # nopep8
             case _:
                 record.levelname = f"{record.levelname:8}"
         record.asctime = self.formatTime(record, self.datefmt)
@@ -247,12 +256,10 @@ def setup_logging() -> logging.StreamHandler[TextIO]:
             console_format = f'%(levelname)s: %(message)s'
             time_format = "%H:%M:%S"
         case 'short':
-            console_format = f'[{Colour.GREEN}%(asctime)s{
-                Colour.END}] %(levelname)s: %(message)s'
+            console_format = f'[{Colour.GREEN}%(asctime)s{Colour.END}] %(levelname)s: %(message)s' # nopep8
             time_format = "%H:%M:%S"
         case 'long':
-            console_format = f'[{Colour.GREEN}%(asctime)s.%(msecs)03d{
-                Colour.END}] @{Colour.BLUE}%(name)s{Colour.END} %(levelname)s: %(message)s'
+            console_format = f'[{Colour.GREEN}%(asctime)s.%(msecs)03d{Colour.END}] @{Colour.BLUE}%(name)s{Colour.END} %(levelname)s: %(message)s' # nopep8
             time_format = '%Y-%m-%d %H:%M:%S'
         case _:
             raise common.GammaLoopError(
@@ -263,6 +270,7 @@ def setup_logging() -> logging.StreamHandler[TextIO]:
     file_formatter = GammaLoopCustomFormatter(file_format)
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(logging.INFO)
+
     console_handler.setFormatter(console_formatter)
     logging.getLogger().handlers = []
     logging.getLogger().addHandler(console_handler)
@@ -281,6 +289,10 @@ def setup_logging() -> logging.StreamHandler[TextIO]:
         logging.getLogger().addHandler(error_file_handler)
 
     logging.getLogger().setLevel(logging.DEBUG)
+
+    gl_rust.setup_rust_logging(logging.getLevelName(
+        console_handler.level), LOGGING_PREFIX_FORMAT)
+
     return console_handler
 
 
@@ -573,3 +585,18 @@ def generate_momentum_flow(edge_map: list[tuple[int, int]], loop_momenta: list[i
                         break
 
     return signatures
+
+
+def format_elapsed(elapsed_seconds: float) -> str:
+    ms_in_a_day = 86400000
+    time_in_ms = round(elapsed_seconds*1000)
+    time_remainder = time_in_ms % ms_in_a_day
+    n_days = int((time_in_ms-time_remainder)/ms_in_a_day)
+    day_prefix = "" if n_days == 0 else f"{n_days} day{'s' if n_days > 1 else ''}, " # nopep8
+    if time_remainder < 60_000:
+        hours_suffix = time.strftime('%H:%M:%S.{:03d}'.format(
+            time_remainder % 1000), time.gmtime(time_remainder/1000.))
+    else:
+        hours_suffix = time.strftime(
+            '%H:%M:%S', time.gmtime(time_remainder/1000.))
+    return day_prefix+hours_suffix

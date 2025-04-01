@@ -218,3 +218,4 @@ ignore/
 .ignore/
 # the default log file
 log.glog/
+!.jj/repo/config.toml

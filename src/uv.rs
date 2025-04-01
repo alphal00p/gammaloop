@@ -6,7 +6,7 @@ use std::{
     ops::{Deref, Index},
 };
 
-use crate::{momentum::Sign, utils::GS};
+use crate::{momentum::Sign, new_graph::LoopMomentumBasis, utils::GS};
 use ahash::{AHashMap, AHashSet};
 use bitvec::{slice::IterOnes, vec::BitVec};
 use color_eyre::Report;
@@ -17,25 +17,31 @@ use pathfinding::prelude::BfsReachable;
 use rand::{rngs::SmallRng, Rng, SeedableRng};
 use ref_ops::RefNeg;
 use serde::{Deserialize, Serialize};
-use spenso::{parametric::ParamTensor, structure::VecStructure, symbolica_utils::SerializableAtom};
+use spenso::{
+    data::StorageTensor,
+    parametric::{atomcore::PatternReplacement, ParamTensor},
+    structure::VecStructure,
+    symbolica_utils::SerializableAtom,
+};
 use symbolica::{
-    atom::{Atom, AtomView, FunctionBuilder, Symbol},
-    fun,
+    atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol},
+    function,
     id::{Pattern, Replacement},
+    parse,
     printer::PrintOptions,
     state::State,
-    symb,
+    symbol,
 };
 use trie_rs::{try_collect::TryFromIterator, Trie, TrieBuilder};
 
+use linnet::half_edge::{builder::HedgeGraphBuilder, HedgeGraph, NodeIndex, PowersetIterator};
+use linnet::half_edge::{
+    involution::Flow,
+    subgraph::{HedgeNode, InternalSubGraph, SubGraph, SubGraphOps},
+};
+
 use crate::{
-    graph::{
-        half_edge::{
-            subgraph::{HedgeNode, InternalSubGraph, SubGraph},
-            HedgeGraph, HedgeGraphBuilder, NodeIndex, PowersetIterator,
-        },
-        BareGraph, Edge, EdgeType, LoopMomentumBasis, Vertex,
-    },
+    graph::{BareEdge, BareGraph, BareVertex, EdgeType},
     model::normalise_complex,
 };
 
@@ -275,14 +281,14 @@ struct UVEdge {
 }
 
 impl UVEdge {
-    pub fn from_edge(edge: &Edge, id: usize, bare_graph: &BareGraph) -> Self {
+    pub fn from_edge(edge: &BareEdge, id: usize, bare_graph: &BareGraph) -> Self {
         let index = (id) as i32;
-        let [colorless, _] = edge.color_separated_numerator(bare_graph);
+        let [colorless, _] = edge.color_separated_numerator(bare_graph, id);
         UVEdge {
             og_edge: id,
             dod: edge.dod() as i32,
             num: normalise_complex(&colorless).into(),
-            den: edge.full_den(bare_graph, index).into(),
+            den: Atom::new_num(1).into(), // edge.full_den(bare_graph, index).into(),
         }
     }
 
@@ -299,7 +305,7 @@ struct UVNode {
 }
 
 impl UVNode {
-    pub fn from_vertex(vertex: &Vertex, graph: &BareGraph) -> Self {
+    pub fn from_vertex(vertex: &BareVertex, graph: &BareGraph) -> Self {
         if let Some((colorless, color)) = vertex.contracted_colorless_vertex_rule(graph) {
             UVNode {
                 dod: vertex.dod() as i32,
@@ -340,13 +346,23 @@ impl UVGraph {
 
             match edge.edge_type {
                 EdgeType::Virtual => {
-                    uv_graph.add_edge(source, sink, UVEdge::from_edge(edge, i, graph));
+                    uv_graph.add_edge(source, sink, UVEdge::from_edge(edge, i, graph), false);
                 }
                 EdgeType::Outgoing => {
-                    uv_graph.add_external_edge(source, UVEdge::from_edge(edge, i, graph));
+                    uv_graph.add_external_edge(
+                        source,
+                        UVEdge::from_edge(edge, i, graph),
+                        false,
+                        Flow::Sink,
+                    );
                 }
                 EdgeType::Incoming => {
-                    uv_graph.add_external_edge(sink, UVEdge::from_edge(edge, i, graph));
+                    uv_graph.add_external_edge(
+                        sink,
+                        UVEdge::from_edge(edge, i, graph),
+                        false,
+                        Flow::Source,
+                    );
                 }
             }
         }
@@ -354,81 +370,81 @@ impl UVGraph {
         UVGraph(uv_graph.into())
     }
 
-    pub fn half_edge_id(&self, g: &BareGraph, id: usize) -> usize {
-        self.0
-            .involution
-            .find_from_data(&UVEdge::from_edge(&g.edges[id], id, g))
-            .unwrap()
-    }
+    // pub fn edge_id(&self, g: &BareGraph, id: usize) -> EdgeIndex {
+    //     self.0
+    //         .as_ref()
+    //         .find_from_data(&UVEdge::from_edge(&g.edges[id], id, g))
+    //         .unwrap()
+    // }
 
-    pub fn node_id(&self, g: &BareGraph, id: usize) -> HedgeNode {
-        let e_id = g.vertices[id].edges.first().unwrap();
-        self.0
-            .involution
-            .get_node_id(self.half_edge_id(g, *e_id))
-            .clone()
-    }
+    // pub fn node_id(&self, g: &BareGraph, id: usize) -> HedgeNode {
+    //     let e_id = g.vertices[id].edges.first().unwrap();
+    //     self.0
+    //         .as_ref()
+    //         .get_node_id(self.half_edge_id(g, *e_id))
+    //         .clone()
+    // }
 
-    pub fn cycle_basis_from_lmb(&self, lmb: &LoopMomentumBasis) -> Vec<HedgeNode> {
-        let mut cycle_basis = Vec::new();
-        let cut_edges = self.0.paired_filter_from_pos(&lmb.basis);
+    // pub fn cycle_basis_from_lmb(&self, lmb: &LoopMomentumBasis) -> Vec<HedgeNode> {
+    //     let mut cycle_basis = Vec::new();
+    //     let cut_edges = self.0.paired_filter_from_pos(&lmb.basis);
 
-        for v in lmb.basis.iter() {
-            let loop_edge = self.0.paired_filter_from_pos(&[*v]);
+    //     for v in lmb.basis.iter() {
+    //         let loop_edge = self.0.paired_filter_from_pos(&[*v]);
 
-            let mut hairy_loop =
-                self.0
-                    .nesting_node_from_subgraph(InternalSubGraph::cleaned_filter_optimist(
-                        !cut_edges.clone() | &loop_edge,
-                        &self.0,
-                    ));
+    //         let mut hairy_loop =
+    //             self.0
+    //                 .nesting_node_from_subgraph(InternalSubGraph::cleaned_filter_optimist(
+    //                     !cut_edges.clone() | &loop_edge,
+    //                     &self.0,
+    //                 ));
 
-            self.0.cut_branches(&mut hairy_loop);
-            cycle_basis.push(hairy_loop);
-        }
-        cycle_basis
-    }
+    //         self.0.cut_branches(&mut hairy_loop);
+    //         cycle_basis.push(hairy_loop);
+    //     }
+    //     cycle_basis
+    // }
 
-    fn spanning_forest_from_lmb(&self, lmb: LoopMomentumBasis) -> HedgeNode {
-        let cutting_edges = self.0.paired_filter_from_pos(&lmb.basis);
+    // fn spanning_forest_from_lmb(&self, lmb: LoopMomentumBasis) -> HedgeNode {
+    //     let cutting_edges = self.0.paired_filter_from_pos(&lmb.basis);
 
-        self.0
-            .nesting_node_from_subgraph(InternalSubGraph::cleaned_filter_optimist(
-                !cutting_edges,
-                &self.0,
-            ))
-    }
+    //     self.0
+    //         .nesting_node_from_subgraph(InternalSubGraph::cleaned_filter_optimist(
+    //             !cutting_edges,
+    //             &self.0,
+    //         ))
+    // }
 
-    fn connected_spinneys(&self) -> AHashSet<InternalSubGraph> {
-        let cycles = self.0.all_cycles();
+    // fn connected_spinneys(&self) -> AHashSet<InternalSubGraph> {
+    //     let cycles = self.0.all_cycles();
 
-        let mut spinneys = AHashSet::new();
+    //     let mut spinneys = AHashSet::new();
 
-        for (ci, cj) in cycles.iter().tuple_combinations().map(|(a, b)| {
-            (
-                self.0.nesting_node_from_subgraph(a.clone()),
-                self.0.nesting_node_from_subgraph(b.clone()),
-            )
-        }) {
-            if !ci.strongly_disjoint(&cj) {
-                let union = ci.internal_graph.union(&cj.internal_graph); //pairwise unions uffices up to 5 loops, then you need to do three unions.
-                if self.dod(&union) >= 0 {
-                    spinneys.insert(union);
-                } else {
-                    // println!("not dod >=0 spinney :{}", self.dod(&union));
-                }
-            }
-        }
+    //     for (ci, cj) in cycles.iter().tuple_combinations().map(|(a, b)| {
+    //         (
+    //             self.0.nesting_node_from_subgraph(a.clone()),
+    //             self.0.nesting_node_from_subgraph(b.clone()),
+    //         )
+    //     }) {
+    //         if !ci.strongly_disjoint(&cj) {
+    //             let union = ci.internal_graph.union(&cj.internal_graph); //pairwise unions uffices up to 5 loops, then you need to do three unions.
+    //             if self.dod(&union) >= 0 {
+    //                 spinneys.insert(union);
+    //             } else {
+    //                 // println!("not dod >=0 spinney :{}", self.dod(&union));
+    //             }
+    //         }
+    //     }
 
-        for c in cycles {
-            if self.dod(&c) >= 0 {
-                spinneys.insert(c);
-            }
-        }
+    //     for c in cycles {
+    //         if self.dod(&c) >= 0 {
+    //             spinneys.insert(c);
+    //         }
+    //     }
 
-        spinneys.insert(self.0.empty_subgraph());
-        spinneys
-    }
+    //     spinneys.insert(self.0.empty_subgraph());
+    //     spinneys
+    // }
 
     fn spinneys(&self) -> AHashSet<InternalSubGraph> {
         let mut spinneys: AHashSet<_> = InternalSubGraph::all_ops_iterative_filter_map(
@@ -467,7 +483,7 @@ impl UVGraph {
         // println!("nloops: {}", dod / 4);
 
         for e in self.0.iter_internal_edge_data(subgraph) {
-            dod += e.dod;
+            dod += e.data.dod;
         }
 
         for (_, n) in self.0.iter_node_data(subgraph) {
@@ -484,10 +500,10 @@ impl UVGraph {
         }
 
         for e in self.0.iter_internal_edge_data(subgraph) {
-            num = num * &e.num.0;
+            num = num * &e.data.num.0;
         }
 
-        FunctionBuilder::new(State::get_symbol("num"))
+        FunctionBuilder::new(symbol!("num"))
             .add_arg(&num)
             .finish()
             .into()
@@ -497,10 +513,10 @@ impl UVGraph {
         let mut den = Atom::new_num(1);
 
         for e in self.0.iter_internal_edge_data(subgraph) {
-            den = den * &e.den.0;
+            den = den * &e.data.den.0;
         }
 
-        FunctionBuilder::new(State::get_symbol("den"))
+        FunctionBuilder::new(symbol!("den"))
             .add_arg(&den)
             .finish()
             .into()
@@ -518,7 +534,7 @@ impl UVGraph {
     fn t_op<I: Iterator<Item = InternalSubGraph>>(&self, mut subgraph_iter: I) -> Atom {
         if let Some(subgraph) = subgraph_iter.next() {
             let t = self.t_op(subgraph_iter);
-            FunctionBuilder::new(State::get_symbol("Top"))
+            FunctionBuilder::new(symbol!("Top"))
                 .add_arg(&Atom::new_num(self.dod(&subgraph)))
                 .add_arg(&t)
                 .finish()
@@ -706,12 +722,12 @@ impl Top {
             let num = &integrand.num.0;
             let den = &integrand.den.0;
             let dod = self.dod;
-            FunctionBuilder::new(State::get_symbol("Top"))
+            FunctionBuilder::new(symbol!("Top"))
                 .add_arg(&Atom::new_num(dod))
                 .add_arg(num)
                 .add_arg(den)
         } else {
-            FunctionBuilder::new(State::get_symbol("Top"))
+            FunctionBuilder::new(symbol!("Top"))
         }
     }
 }
@@ -909,7 +925,8 @@ impl Wood {
     //     for (i, _) in self.coverset.nodes.iter().enumerate() {
 
     //         let mut t = graph.t_op(self.coverset.bfs_iter(v));
-    //         t = FunctionBuilder::new(State::get_symbol("Top"))
+    //         t = FunctionBuilder::new(symbol!
+    //("Top"))
     //             .add_arg(&Atom::new_num(v.numerator_rank()))
     //             .add_arg(&t)
     //             .finish();
@@ -944,7 +961,7 @@ pub struct SimpleApprox {
 
 impl SimpleApprox {
     fn subgraph_shadow(graph: &BitVec, subgraph: &InternalSubGraph) -> Symbol {
-        symb!(&format!(
+        symbol!(&format!(
             "S_{}⊛{}",
             graph.string_label(),
             subgraph.string_label()
@@ -961,7 +978,7 @@ impl SimpleApprox {
     }
 
     pub fn t_op(&self, bigger_graph: &BitVec) -> Atom {
-        fun!(GS.top, self.expr(bigger_graph))
+        function!(GS.top, self.expr(bigger_graph))
     }
 
     pub fn root(subgraph: InternalSubGraph) -> Self {
@@ -1020,27 +1037,27 @@ impl Approximation {
     pub fn simplify_notation(expr: &SerializableAtom) -> SerializableAtom {
         let replacements = [
             (
-                Pattern::parse("ZERO").unwrap(),
-                Atom::new_num(0).into_pattern().into(),
+                parse!("ZERO").unwrap().to_pattern(),
+                Atom::new_num(0).to_pattern(),
             ),
             (
-                fun!(GS.num, Atom::new_num(1)).into_pattern(),
-                Atom::new_num(1).into_pattern().into(),
+                function!(GS.num, Atom::new_num(1)).to_pattern(),
+                Atom::new_num(1).to_pattern(),
             ),
             (
-                fun!(GS.den, Atom::new_num(1)).into_pattern(),
-                Atom::new_num(1).into_pattern().into(),
+                function!(GS.den, Atom::new_num(1)).to_pattern(),
+                Atom::new_num(1).to_pattern(),
             ),
         ];
 
         let mut expr = expr.clone();
 
         let reps: Vec<_> = replacements
-            .iter()
+            .into_iter()
             .map(|(a, b)| Replacement::new(a, b))
             .collect();
 
-        expr.replace_repeat_multiple(&reps);
+        expr.replace_multiple_repeat(&reps);
         expr
     }
 
@@ -1329,7 +1346,8 @@ impl Wood {
     //     predecessors: &[Vec<usize>],
     //     node_index: usize,
     // ) -> Atom {
-    //     let t = FunctionBuilder::new(State::get_symbol("Top"))
+    //     let t = FunctionBuilder::new(symbol!
+    //("Top"))
     //         .add_arg(&Atom::new_num(graph.dod(subgraph)));
 
     //     let mut result = graph.numerator(subgraph).0 * graph.denominator(subgraph).0;

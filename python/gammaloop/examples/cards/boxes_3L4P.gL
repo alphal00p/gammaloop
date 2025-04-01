@@ -4,7 +4,7 @@ import_graphs ./python/gammaloop/tests/test_data/graph_inputs/boxes_3L4P.dot
 output examples/cards/boxes_3L4P
 launch examples/cards/boxes_3L4P
 # Tropical sampling
-set sampling {'type':'discrete_graph_sampling','subtype':'tropical','upcast_on_failure':True}
+set sampling {'type':'discrete_graph_sampling','subtype':'tropical'}
 # Regular sampling with cartesian product of spherical parameterisation
 #set sampling {'type':'default'}
 # K1 point below

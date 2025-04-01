@@ -1,7 +1,10 @@
 use crate::{
     cli_functions::cli,
     cross_section::{Amplitude, AmplitudeList, CrossSection, CrossSectionList},
-    feyngen::{self, diagram_generator::FeynGen, FeynGenError, FeynGenFilters, FeynGenOptions},
+    feyngen::{
+        self, diagram_generator::FeynGen, FeynGenError, FeynGenFilters, FeynGenOptions,
+        NumeratorAwareGraphGroupingOption, SewedFilterOptions,
+    },
     graph::SerializableGraph,
     inspect,
     integrands::Integrand,
@@ -10,26 +13,30 @@ use crate::{
         SerializableIntegrationState,
     },
     model::Model,
-    numerator::{Numerator, PythonState},
+    new_cs::{Process, ProcessDefinition, ProcessList},
+    numerator::{GlobalPrefactor, Numerator, PythonState},
     utils::F,
-    ExportSettings, HasIntegrand, Settings,
+    HasIntegrand, ProcessSettings, Settings,
 };
 use ahash::HashMap;
-use colored::Colorize;
+use chrono::{Datelike, Local, Timelike};
+use colored::{ColoredString, Colorize};
 use feyngen::{
     FeynGenFilter, GenerationType, SelfEnergyFilterOptions, SnailFilterOptions,
     TadpolesFilterOptions,
 };
 use git_version::git_version;
 use itertools::{self, Itertools};
-use log::{info, warn};
+use log::{debug, info, warn, LevelFilter};
+use pyo3::types::PyDict;
 use spenso::complex::Complex;
 use std::{
     fs,
     path::{Path, PathBuf},
     str::FromStr,
+    sync::{LazyLock, Mutex},
 };
-use symbolica::printer::PrintOptions;
+use symbolica::{parse, printer::PrintOptions};
 const GIT_VERSION: &str = git_version!();
 
 #[allow(unused)]
@@ -42,6 +49,30 @@ use pyo3::{
     types::{PyComplex, PyModule, PyTuple, PyType},
     wrap_pyfunction, FromPyObject, IntoPy, PyObject, PyRef, PyResult, Python,
 };
+
+//use pyo3_log;
+
+pub enum LogFormat {
+    Long,
+    Short,
+    Min,
+    None,
+}
+impl FromStr for LogFormat {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "long" => Ok(LogFormat::Long),
+            "short" => Ok(LogFormat::Short),
+            "min" => Ok(LogFormat::Min),
+            "none" => Ok(LogFormat::None),
+            _ => Err(format!("Unknown log format: {}", s)),
+        }
+    }
+}
+
+pub static LOG_LEVEL: LazyLock<Mutex<Option<LevelFilter>>> = LazyLock::new(|| Mutex::new(None));
+pub static LOG_FORMAT: LazyLock<Mutex<LogFormat>> = LazyLock::new(|| Mutex::new(LogFormat::Long));
 
 #[pyfunction]
 #[pyo3(name = "rust_cli")]
@@ -68,20 +99,134 @@ fn cli_wrapper(py: Python) -> PyResult<()> {
     .map_err(|e| exceptions::PyException::new_err(e.to_string()))
 }
 
+pub fn format_level(level: log::Level) -> ColoredString {
+    match level {
+        log::Level::Error => format!("{:<8}", "ERROR").red(),
+        log::Level::Warn => format!("{:<8}", "WARNING").yellow(),
+        log::Level::Info => format!("{:<8}", "INFO").into(),
+        log::Level::Debug => format!("{:<8}", "DEBUG").bright_black(),
+        log::Level::Trace => format!("{:<8}", "TRACE").into(),
+    }
+}
+
+pub fn format_target(target: String, level: log::Level) -> ColoredString {
+    let split_targets = target.split("::").collect::<Vec<_>>();
+    //[-2..].iter().join("::");
+    let start = split_targets.len().saturating_sub(2);
+    let mut shortened_path = split_targets[start..].join("::");
+    if level < log::Level::Debug && shortened_path.len() > 20 {
+        shortened_path = format!("{}...", shortened_path.chars().take(17).collect::<String>());
+    }
+    format!("{:<20}", shortened_path).bright_blue()
+}
+
+#[pyfunction]
+#[pyo3(name = "setup_rust_logging")]
+fn setup_logging(level: String, format: String) -> PyResult<()> {
+    let log_format_guard = &mut *LOG_FORMAT.lock().unwrap();
+    *log_format_guard = LogFormat::from_str(&format).map_err(exceptions::PyException::new_err)?;
+
+    let level = convert_log_level(&level);
+    if (*LOG_LEVEL.lock().unwrap()).is_none() {
+        // Configure logger at runtime
+        fern::Dispatch::new()
+            .filter(|metadata| metadata.level() <= (*LOG_LEVEL.lock().unwrap()).unwrap())
+            // Perform allocation-free log formatting
+            .format(|out, message, record| {
+                let now = Local::now();
+                match *LOG_FORMAT.lock().unwrap() {
+                    LogFormat::Long => out.finish(format_args!(
+                        "[{}] @{} {}: {}",
+                        format!(
+                            "{:04}-{:02}-{:02} {:02}:{:02}:{:02}.{:03}",
+                            now.year(),
+                            now.month(),
+                            now.day(),
+                            now.hour(),
+                            now.minute(),
+                            now.second(),
+                            now.timestamp_subsec_millis()
+                        )
+                        .bright_green(),
+                        format_target(record.target().into(), record.level()),
+                        format_level(record.level()),
+                        message
+                    )),
+                    LogFormat::Short => out.finish(format_args!(
+                        "[{}] {}: {}",
+                        format!("{:02}:{:02}:{:02}", now.hour(), now.minute(), now.second())
+                            .bright_green(),
+                        format_level(record.level()),
+                        message
+                    )),
+                    LogFormat::Min => out.finish(format_args!(
+                        "{}: {}",
+                        format_level(record.level()),
+                        message
+                    )),
+                    LogFormat::None => out.finish(format_args!("{}", message)),
+                }
+            })
+            // Output to stdout, files, and other Dispatch configurations
+            .chain(std::io::stdout())
+            .chain(fern::log_file("gammaloop_rust_output.log")?)
+            // Apply globally
+            .apply()
+            .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
+    }
+    let log_level_guard = &mut *LOG_LEVEL.lock().unwrap();
+    *log_level_guard = Some(level);
+
+    Ok(())
+}
+
+pub fn get_python_log_level() -> Result<String, pyo3::PyErr> {
+    Python::with_gil(|py| {
+        let py_code = r#"
+def get_gamma_loop_log_level():
+    import logging
+    return logging.getLevelName(logging.getLogger('GammaLoop').level)
+"#;
+        let locals = PyDict::new_bound(py);
+        py.run_bound(py_code, None, Some(&locals))?;
+        let log_level: String = locals
+            .get_item("get_gamma_loop_log_level")?
+            .unwrap()
+            .call0()?
+            .extract()?;
+        Ok(log_level)
+    })
+}
+
+pub fn convert_log_level(level: &str) -> LevelFilter {
+    match level {
+        "DEBUG" => LevelFilter::Debug,
+        "INFO" => LevelFilter::Info,
+        "WARNING" => LevelFilter::Warn,
+        "ERROR" => LevelFilter::Error,
+        "CRITICAL" => LevelFilter::Error, // No direct mapping for CRITICAL, map to ERROR
+        "TRACE" => LevelFilter::Trace,    // Python does not have TRACE, but we allow it
+        _ => LevelFilter::Trace,          // Default to TRACE if unknown
+    }
+}
+
 #[pymodule]
 #[pyo3(name = "_gammaloop")]
 fn gammalooprs(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
-    // TODO: Verify that indeed Python logger level is used in that case.
-    pyo3_log::init();
+    pyo3_pylogger::register("GammaLoopRust");
+
     crate::set_interrupt_handler();
     m.add_class::<PythonWorker>()?;
     m.add_class::<PyFeynGenFilters>()?;
     m.add_class::<PySnailFilterOptions>()?;
+    m.add_class::<PySewedFilterOptions>()?;
     m.add_class::<PyTadpolesFilterOptions>()?;
     m.add_class::<PySelfEnergyFilterOptions>()?;
     m.add_class::<PyFeynGenOptions>()?;
+    m.add_class::<PyNumeratorAwareGroupingOption>()?;
     m.add("git_version", GIT_VERSION)?;
     m.add_wrapped(wrap_pyfunction!(cli_wrapper))?;
+    m.add_wrapped(wrap_pyfunction!(setup_logging))?;
     Ok(())
 }
 
@@ -91,6 +236,7 @@ pub struct OutputOptions {}
 pub struct PythonWorker {
     pub model: Model,
     pub cross_sections: CrossSectionList,
+    pub process_list: ProcessList,
     pub amplitudes: AmplitudeList<PythonState>,
     pub integrands: HashMap<String, Integrand>,
     pub master_node: Option<MasterNode>,
@@ -101,6 +247,7 @@ impl Clone for PythonWorker {
         PythonWorker {
             model: self.model.clone(),
             cross_sections: self.cross_sections.clone(),
+            process_list: self.process_list.clone(),
             amplitudes: self.amplitudes.clone(),
             integrands: self.integrands.clone(),
             master_node: self.master_node.clone(),
@@ -166,6 +313,23 @@ impl PySelfEnergyFilterOptions {
     }
 }
 
+#[pyclass(name = "SewedFilterOptions")]
+pub struct PySewedFilterOptions {
+    pub filter_options: SewedFilterOptions,
+}
+
+#[pymethods]
+impl PySewedFilterOptions {
+    #[new]
+    pub fn __new__(filter_tadpoles: Option<bool>) -> PyResult<PySewedFilterOptions> {
+        Ok(PySewedFilterOptions {
+            filter_options: SewedFilterOptions {
+                filter_tadpoles: filter_tadpoles.unwrap_or(false),
+            },
+        })
+    }
+}
+
 #[pyclass(name = "TadpolesFilterOptions")]
 pub struct PyTadpolesFilterOptions {
     pub filter_options: TadpolesFilterOptions,
@@ -218,15 +382,24 @@ impl PyFeynGenFilters {
     }
 
     #[new]
+    #[allow(clippy::too_many_arguments)]
     pub fn __new__(
         particle_veto: Option<Vec<i64>>,
         max_number_of_bridges: Option<usize>,
+        sewed_filter: Option<PyRef<PySewedFilterOptions>>,
         self_energy_filter: Option<PyRef<PySelfEnergyFilterOptions>>,
         tadpoles_filter: Option<PyRef<PyTadpolesFilterOptions>>,
         zero_snails_filter: Option<PyRef<PySnailFilterOptions>>,
-        coupling_orders: Option<HashMap<String, usize>>,
+        perturbative_orders: Option<HashMap<String, usize>>,
+        coupling_orders: Option<HashMap<String, (usize, Option<usize>)>>,
+        loop_count_range: Option<(usize, usize)>,
+        fermion_loop_count_range: Option<(usize, usize)>,
+        factorized_loop_topologies_count_range: Option<(usize, usize)>,
     ) -> PyResult<PyFeynGenFilters> {
         let mut filters = Vec::new();
+        if let Some(sewed_filter) = sewed_filter {
+            filters.push(FeynGenFilter::SewedFilter(sewed_filter.filter_options));
+        }
         if let Some(self_energy_filter) = self_energy_filter {
             filters.push(FeynGenFilter::SelfEnergyFilter(
                 self_energy_filter.filter_options,
@@ -248,8 +421,25 @@ impl PyFeynGenFilters {
                 zero_snails_filter.filter_options,
             ));
         }
+        if let Some(perturbative_orders) = perturbative_orders {
+            filters.push(FeynGenFilter::PerturbativeOrders(perturbative_orders));
+        }
         if let Some(coupling_orders) = coupling_orders {
             filters.push(FeynGenFilter::CouplingOrders(coupling_orders));
+        }
+        if let Some(loop_count_range) = loop_count_range {
+            filters.push(FeynGenFilter::LoopCountRange(loop_count_range));
+        }
+        if let Some(fermion_loop_count_range) = fermion_loop_count_range {
+            filters.push(FeynGenFilter::FermionLoopCountRange(
+                fermion_loop_count_range,
+            ));
+        }
+        if let Some(factorized_loop_topologies_count_range) = factorized_loop_topologies_count_range
+        {
+            filters.push(FeynGenFilter::FactorizedLoopTopologiesCountRange(
+                factorized_loop_topologies_count_range,
+            ));
         }
         Ok(PyFeynGenFilters { filters })
     }
@@ -285,26 +475,106 @@ impl PyFeynGenOptions {
     pub fn __new__(
         generation_type: String,
         initial_particles: Vec<i64>,
-        final_particles: Vec<i64>,
+        final_particles_lists: Vec<Vec<i64>>,
         loop_count_range: (usize, usize),
+        n_cut_blobs: (usize, usize),
+        n_cut_spectators: (usize, usize),
         symmetrize_initial_states: bool,
         symmetrize_final_states: bool,
         symmetrize_left_right_states: bool,
-        filters: Option<PyRef<PyFeynGenFilters>>,
+        allow_symmetrization_of_external_fermions_in_amplitudes: bool,
+        max_multiplicity_for_fast_cut_filter: usize,
+        amplitude_filters: Option<PyRef<PyFeynGenFilters>>,
+        cross_section_filters: Option<PyRef<PyFeynGenFilters>>,
     ) -> PyResult<PyFeynGenOptions> {
+        let amplitude_filters = FeynGenFilters(
+            amplitude_filters
+                .map(|f| f.filters.clone())
+                .unwrap_or_default(),
+        );
+
+        let mut cross_section_filters = FeynGenFilters(
+            cross_section_filters
+                .map(|f| f.filters.clone())
+                .unwrap_or_default(),
+        );
+
+        cross_section_filters
+            .0
+            .push(FeynGenFilter::BlobRange(n_cut_blobs.0..=n_cut_blobs.1));
+        cross_section_filters.0.push(FeynGenFilter::SpectatorRange(
+            n_cut_spectators.0..=n_cut_spectators.1,
+        ));
+
+        let feyngen_options = FeynGenOptions {
+            generation_type: GenerationType::from_str(&generation_type)
+                .map_err(feyngen_to_python_error)?,
+            initial_pdgs: initial_particles,
+            final_pdgs_lists: final_particles_lists,
+            loop_count_range,
+            symmetrize_initial_states,
+            symmetrize_final_states,
+            symmetrize_left_right_states,
+            allow_symmetrization_of_external_fermions_in_amplitudes,
+            max_multiplicity_for_fast_cut_filter,
+            amplitude_filters,
+            cross_section_filters,
+        };
+        if feyngen_options.generation_type == GenerationType::Amplitude {
+            if feyngen_options.final_pdgs_lists.len() > 1 {
+                return Err(exceptions::PyValueError::new_err(
+                    "Multiple set of final states are not allowed for amplitude generation",
+                ));
+            }
+        } else if feyngen_options.final_pdgs_lists.len() > 1
+            && feyngen_options
+                .final_pdgs_lists
+                .iter()
+                .any(|l| l.is_empty())
+        {
+            return Err(exceptions::PyValueError::new_err(
+                    "When specifying multiple set of final states options, each must contain at least one particle",
+                ));
+        }
         Ok(PyFeynGenOptions {
-            options: FeynGenOptions {
-                generation_type: GenerationType::from_str(&generation_type)
-                    .map_err(feyngen_to_python_error)?,
-                initial_pdgs: initial_particles,
-                final_pdgs: final_particles,
-                loop_count_range,
-                symmetrize_initial_states,
-                symmetrize_final_states,
-                symmetrize_left_right_states,
-                filters: FeynGenFilters(filters.map(|f| f.filters.clone()).unwrap_or_default()),
-            },
+            options: feyngen_options,
         })
+    }
+}
+
+#[pyclass(name = "NumeratorAwareGroupingOption")]
+pub struct PyNumeratorAwareGroupingOption {
+    pub grouping_options: NumeratorAwareGraphGroupingOption,
+}
+
+#[pymethods]
+impl PyNumeratorAwareGroupingOption {
+    #[new]
+    pub fn __new__(
+        numerator_aware_grouping_option: Option<String>,
+        compare_canonized_numerator: Option<bool>,
+        number_of_samples_for_numerator_comparisons: Option<usize>,
+        consider_internal_masses_only_in_numerator_isomorphisms: Option<bool>,
+        fully_numerical_substitution_when_comparing_numerators: Option<bool>,
+        numerical_samples_seed: Option<u16>,
+    ) -> PyResult<PyNumeratorAwareGroupingOption> {
+        Ok(PyNumeratorAwareGroupingOption {
+            grouping_options: NumeratorAwareGraphGroupingOption::new_with_attributes(
+                numerator_aware_grouping_option
+                    .unwrap_or("group_identical_graphs_up_to_scalar_rescaling".into())
+                    .as_str(),
+                numerical_samples_seed,
+                number_of_samples_for_numerator_comparisons,
+                consider_internal_masses_only_in_numerator_isomorphisms,
+                fully_numerical_substitution_when_comparing_numerators,
+                compare_canonized_numerator,
+            )
+            .map_err(|e| exceptions::PyException::new_err(e.to_string()))?,
+        })
+    }
+
+    pub fn __str__(&self) -> PyResult<String> {
+        Ok(format!("{}", self.grouping_options))
     }
 }
 
@@ -317,6 +587,7 @@ impl PythonWorker {
         Ok(PythonWorker {
             model: Model::default(),
             cross_sections: CrossSectionList::default(),
+            process_list: ProcessList::new(),
             amplitudes: AmplitudeList::default(),
             integrands: HashMap::default(),
             master_node: None,
@@ -341,6 +612,20 @@ impl PythonWorker {
     pub fn get_model(&self) -> PyResult<String> {
         self.model
             .to_yaml()
+            .map_err(|e| exceptions::PyException::new_err(e.to_string()))
+    }
+
+    pub fn preprocess(&mut self, export_yaml_str: &str) -> PyResult<()> {
+        let process_settings: ProcessSettings = serde_yaml::from_str(export_yaml_str)
+            .map_err(|e| exceptions::PyException::new_err(e.to_string()))
+            .unwrap();
+
+        if self.process_list.processes.is_empty() {
+            warn!("No processes to preprocess");
+        }
+
+        self.process_list
+            .preprocess(&self.model, process_settings)
             .map_err(|e| exceptions::PyException::new_err(e.to_string()))
     }
 
@@ -399,12 +684,15 @@ impl PythonWorker {
     pub fn generate_diagrams(
         &mut self,
         generation_options: PyRef<PyFeynGenOptions>,
-        numerator_aware_isomorphism_grouping: Option<bool>,
+        numerator_aware_isomorphism_grouping: Option<PyRef<PyNumeratorAwareGroupingOption>>,
         filter_self_loop: Option<bool>,
         graph_prefix: Option<String>,
         selected_graphs: Option<Vec<String>>,
         vetoed_graphs: Option<Vec<String>>,
         loop_momentum_bases: Option<HashMap<String, Vec<String>>>,
+        global_prefactor_color: Option<String>,
+        global_prefactor_colorless: Option<String>,
+        num_threads: Option<usize>,
     ) -> PyResult<Vec<String>> {
         if self.model.is_empty() {
             return Err(exceptions::PyException::new_err(
@@ -413,23 +701,66 @@ impl PythonWorker {
         }
         let feyngen_options = generation_options.options.clone();
 
+        // clone some of the options that will be used in the process definition
+        let initial_pdgs = feyngen_options.initial_pdgs.clone();
+        let final_pdgs_lists = feyngen_options.final_pdgs_lists.clone();
+        let generation_type = feyngen_options.generation_type.clone();
+        let amplitude_filters = feyngen_options.amplitude_filters.clone();
+        let cross_section_filters = feyngen_options.cross_section_filters.clone();
+
         let diagram_generator = FeynGen::new(feyngen_options);
+
+        let mut global_prefactor = GlobalPrefactor::default();
+        if let Some(global_prefactor_color) = global_prefactor_color {
+            global_prefactor.color = parse!(&global_prefactor_color)
+                .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
+        }
+        if let Some(global_prefactor_colorless) = global_prefactor_colorless {
+            global_prefactor.colorless = parse!(&global_prefactor_colorless)
+                .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
+        }
 
         let diagrams = diagram_generator
             .generate(
                 &self.model,
-                numerator_aware_isomorphism_grouping.unwrap_or(true),
+                &numerator_aware_isomorphism_grouping
+                    .map(|o| o.grouping_options.clone())
+                    .unwrap_or(NumeratorAwareGraphGroupingOption::NoGrouping),
                 filter_self_loop.unwrap_or(false),
                 graph_prefix.unwrap_or("GL".to_string()),
                 selected_graphs,
                 vetoed_graphs,
                 loop_momentum_bases,
+                global_prefactor,
+                num_threads,
             )
             .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
-        Ok(diagrams
+
+        let res = Ok(diagrams
             .iter()
             .map(|d| serde_yaml::to_string(&SerializableGraph::from_graph(d)).unwrap())
-            .collect())
+            .collect());
+
+        // load everything into processlist
+        let (n_unresolved, unresolved_cut_content) =
+            diagram_generator.unresolved_cut_content(&self.model);
+
+        let process_definition = ProcessDefinition {
+            initial_pdgs,
+            final_pdgs_lists,
+            n_unresolved,
+            unresolved_cut_content,
+            amplitude_filters,
+            cross_section_filters,
+        };
+
+        let process =
+            Process::from_bare_graph_list(diagrams, generation_type, process_definition, None)
+                .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
+
+        self.process_list.add_process(process);
+
+        res
     }
 
     pub fn add_amplitude_from_yaml_str(&mut self, yaml_str: &str) -> PyResult<()> {
@@ -486,14 +817,14 @@ impl PythonWorker {
     }
 
     pub fn apply_feynman_rules(&mut self, export_yaml_str: &str) {
-        let export_settings: ExportSettings = serde_yaml::from_str(export_yaml_str)
+        let export_settings: ProcessSettings = serde_yaml::from_str(export_yaml_str)
             .map_err(|e| exceptions::PyException::new_err(e.to_string()))
             .unwrap();
         self.amplitudes.map_mut_graphs(|g| {
             let a = Numerator::default()
                 .from_graph(
                     &g.bare_graph,
-                    export_settings.numerator_settings.global_prefactor.as_ref(),
+                    &export_settings.numerator_settings.global_prefactor,
                 )
                 .forget_type();
 
@@ -532,7 +863,7 @@ impl PythonWorker {
         }
         if n_exported != cross_section_names.len() {
             return Err(exceptions::PyException::new_err(format!(
-                "Could not find all cross sections to export: {:?}",
+                "Could not find all cross sections to export: {:#?}",
                 cross_section_names
             )));
         }
@@ -544,15 +875,19 @@ impl PythonWorker {
         export_root: &str,
         amplitude_names: Vec<String>,
         export_yaml_str: &str,
+        no_evaluators: bool,
     ) -> PyResult<String> {
+        debug!("importing settings: {}", export_yaml_str);
         let export_settings = serde_yaml::from_str(export_yaml_str)
             .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
 
+        debug!("Export settings loaded:\n{:#?}", export_settings);
         let mut n_exported: usize = 0;
         for amplitude in self.amplitudes.container.iter_mut() {
             if amplitude_names.contains(&amplitude.name.to_string()) {
                 n_exported += 1;
-                let res = amplitude.export(export_root, &self.model, &export_settings);
+                let res =
+                    amplitude.export(export_root, &self.model, &export_settings, no_evaluators);
                 if let Err(err) = res {
                     return Err(exceptions::PyException::new_err(err.to_string()));
                 }
@@ -595,16 +930,27 @@ impl PythonWorker {
     pub fn export_expressions(
         &mut self,
         export_root: &str,
+        amplitued_list: Vec<String>,
         format: &str,
         export_yaml_str: &str,
     ) -> PyResult<String> {
-        let export_settings: ExportSettings = serde_yaml::from_str(export_yaml_str)
+        let export_settings: ProcessSettings = serde_yaml::from_str(export_yaml_str)
             .map_err(|e| exceptions::PyException::new_err(e.to_string()))
             .unwrap();
-        for amplitude in self.amplitudes.container.iter_mut() {
-            amplitude
-                .export_expressions(export_root, Self::printer_options(format), &export_settings)
-                .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
+
+        for amplitude in amplitued_list.into_iter() {
+            match Amplitude::from_yaml_str(&self.model, amplitude) {
+                Ok(amp) => {
+                    amp.map(|a| a.map(|ag| ag.forget_type()))
+                        .export_expressions(
+                            export_root,
+                            Self::printer_options(format),
+                            &export_settings,
+                        )
+                        .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
+                }
+                Err(e) => return Err(exceptions::PyException::new_err(e.to_string())),
+            }
         }
         Ok("Exported expressions".to_string())
     }
@@ -760,7 +1106,7 @@ impl PythonWorker {
         let target = target.map(|(re, im)| (F(re), F(im)));
         match self.integrands.get_mut(integrand) {
             Some(integrand_enum) => match integrand_enum {
-                Integrand::GammaLoopIntegrand(gloop_integrand) => {
+                Integrand::NewIntegrand(gloop_integrand) => {
                     let target = match target {
                         Some((re, im)) => Some(Complex::new(re, im)),
                         _ => None,
@@ -798,7 +1144,7 @@ impl PythonWorker {
                                     .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
 
                             // force the settings to be the same as the ones used in the previous integration
-                            gloop_integrand.global_data.settings = workspace_settings.clone();
+                            *gloop_integrand.get_mut_settings() = workspace_settings.clone();
 
                             let state =
                                 serializable_state.into_integration_state(&workspace_settings);
@@ -831,7 +1177,7 @@ impl PythonWorker {
                         }
                     };
 
-                    let settings = gloop_integrand.global_data.settings.clone();
+                    let settings = gloop_integrand.get_settings().clone();
                     let result = havana_integrate(
                         &settings,
                         |set| gloop_integrand.user_data_generator(num_cores, set),
@@ -953,6 +1299,14 @@ impl PythonWorker {
     pub fn sync(&mut self) {
         self.amplitudes.sync(&self.model);
         self.cross_sections.sync(&self.model);
+    }
+
+    pub fn generate_integrands(&mut self, settings_yaml_str: &str) {
+        let mut settings =
+            serde_yaml::from_str::<Settings>(settings_yaml_str).expect("Could not parse settings");
+
+        let integrands = self.process_list.generate_integrands(settings);
+        self.integrands = integrands;
     }
 }
 

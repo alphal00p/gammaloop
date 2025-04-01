@@ -4,7 +4,7 @@ use ahash::HashMap;
 use smartstring::SmartString;
 
 use crate::{
-    feyngen::diagram_generator::FeynGen,
+    feyngen::diagram_generator::{EdgeColor, FeynGen, NodeColorWithVertexRule},
     tests_from_pytest::{load_amplitude_output, load_generic_model},
     uv::{PoSet, UVGraph},
 };
@@ -28,7 +28,7 @@ fn lbl() {
 
     let lmb = graph.bare_graph.loop_momentum_basis.clone();
 
-    let cycles = uv_graph.cycle_basis_from_lmb(&lmb);
+    // let cycles = uv_graph.cycle_basis_from_lmb(&lmb);
 
     // let all_cycles = uv_graph.0.read_tarjan();
     // assert_eq!(all_cycles.len(), 1);
@@ -90,30 +90,38 @@ fn bugblatter_forest() {
     println!("{}", model.vertex_rules[0].name);
     let mut symbolica_graph = symbolica::graph::Graph::new();
 
-    let l1 = symbolica_graph.add_node((0, "V_137".into()));
-    let l2 = symbolica_graph.add_node((0, "V_137".into()));
-    let l3 = symbolica_graph.add_node((0, "V_137".into()));
-    let l4 = symbolica_graph.add_node((0, "V_137".into()));
-    let l5 = symbolica_graph.add_node((0, "V_137".into()));
-    let l6 = symbolica_graph.add_node((0, "V_137".into()));
+    let ttg = NodeColorWithVertexRule {
+        external_tag: 0,
+        vertex_rule: model.get_vertex_rule("V_137"),
+    };
 
-    symbolica_graph.add_edge(l1, l2, true, "t");
-    symbolica_graph.add_edge(l2, l3, true, "t");
-    symbolica_graph.add_edge(l3, l1, true, "t");
+    let t = EdgeColor::from_particle(model.get_particle("t"));
+    let g = EdgeColor::from_particle(model.get_particle("g"));
 
-    symbolica_graph.add_edge(l4, l5, true, "t");
-    symbolica_graph.add_edge(l5, l6, true, "t");
-    symbolica_graph.add_edge(l6, l4, true, "t");
+    let l1 = symbolica_graph.add_node(ttg.clone());
+    let l2 = symbolica_graph.add_node(ttg.clone());
+    let l3 = symbolica_graph.add_node(ttg.clone());
+    let l4 = symbolica_graph.add_node(ttg.clone());
+    let l5 = symbolica_graph.add_node(ttg.clone());
+    let l6 = symbolica_graph.add_node(ttg.clone());
 
-    symbolica_graph.add_edge(l1, l4, true, "g");
-    symbolica_graph.add_edge(l2, l5, true, "g");
-    symbolica_graph.add_edge(l3, l6, true, "g");
+    symbolica_graph.add_edge(l1, l2, true, t);
+    symbolica_graph.add_edge(l2, l3, true, t);
+    symbolica_graph.add_edge(l3, l1, true, t);
+
+    symbolica_graph.add_edge(l4, l5, true, t);
+    symbolica_graph.add_edge(l5, l6, true, t);
+    symbolica_graph.add_edge(l6, l4, true, t);
+
+    symbolica_graph.add_edge(l1, l4, true, g);
+    symbolica_graph.add_edge(l2, l5, true, g);
+    symbolica_graph.add_edge(l3, l6, true, g);
 
     let bare_graph = BareGraph::from_symbolica_graph(
         &model,
         "bugblatter".into(),
         &symbolica_graph,
-        "str".into(),
+        Atom::new_num(1),
         vec![],
         None,
     )
@@ -148,22 +156,29 @@ fn kaapo_triplering() {
     let model = load_generic_model("scalars");
     let mut symbolica_graph = symbolica::graph::Graph::new();
 
-    let l1 = symbolica_graph.add_node((0, "V_4_SCALAR_0000".into()));
-    let l2 = symbolica_graph.add_node((0, "V_4_SCALAR_0000".into()));
-    let l3 = symbolica_graph.add_node((0, "V_4_SCALAR_0000".into()));
+    let four_scalar = NodeColorWithVertexRule {
+        external_tag: 0,
+        vertex_rule: model.get_vertex_rule("V_4_SCALAR_0000"),
+    };
 
-    symbolica_graph.add_edge(l1, l2, true, "scalar_0");
-    symbolica_graph.add_edge(l2, l3, true, "scalar_0");
-    symbolica_graph.add_edge(l3, l1, true, "scalar_0");
-    symbolica_graph.add_edge(l1, l2, true, "scalar_0");
-    symbolica_graph.add_edge(l2, l3, true, "scalar_0");
-    symbolica_graph.add_edge(l3, l1, true, "scalar_0");
+    let scalar = EdgeColor::from_particle(model.get_particle("scalar_0"));
+
+    let l1 = symbolica_graph.add_node(four_scalar.clone());
+    let l2 = symbolica_graph.add_node(four_scalar.clone());
+    let l3 = symbolica_graph.add_node(four_scalar.clone());
+
+    symbolica_graph.add_edge(l1, l2, true, scalar.clone());
+    symbolica_graph.add_edge(l2, l3, true, scalar.clone());
+    symbolica_graph.add_edge(l3, l1, true, scalar.clone());
+    symbolica_graph.add_edge(l1, l2, true, scalar.clone());
+    symbolica_graph.add_edge(l2, l3, true, scalar.clone());
+    symbolica_graph.add_edge(l3, l1, true, scalar.clone());
 
     let bare_graph = BareGraph::from_symbolica_graph(
         &model,
         "threeringscalar".into(),
         &symbolica_graph,
-        "1".into(),
+        Atom::new_num(1),
         vec![],
         None,
     )
@@ -194,22 +209,37 @@ fn kaapo_quintic_scalar() {
     let model = load_generic_model("scalars");
     let mut symbolica_graph = symbolica::graph::Graph::new();
 
-    let l1 = symbolica_graph.add_node((0, "V_3_SCALAR_000".into()));
-    let l2 = symbolica_graph.add_node((0, "V_4_SCALAR_0000".into()));
-    let l3 = symbolica_graph.add_node((0, "V_5_SCALAR_00000".into()));
+    let three = NodeColorWithVertexRule {
+        external_tag: 0,
+        vertex_rule: model.get_vertex_rule("V_3_SCALAR_000"),
+    };
+    let four = NodeColorWithVertexRule {
+        external_tag: 0,
+        vertex_rule: model.get_vertex_rule("V_4_SCALAR_0000"),
+    };
+    let five = NodeColorWithVertexRule {
+        external_tag: 0,
+        vertex_rule: model.get_vertex_rule("V_5_SCALAR_00000"),
+    };
 
-    symbolica_graph.add_edge(l1, l2, true, "scalar_0");
-    symbolica_graph.add_edge(l2, l3, true, "scalar_0");
-    symbolica_graph.add_edge(l3, l1, true, "scalar_0");
-    symbolica_graph.add_edge(l3, l2, true, "scalar_0");
-    symbolica_graph.add_edge(l2, l3, true, "scalar_0");
-    symbolica_graph.add_edge(l3, l1, true, "scalar_0");
+    let scalar = EdgeColor::from_particle(model.get_particle("scalar_0"));
+
+    let l1 = symbolica_graph.add_node(three);
+    let l2 = symbolica_graph.add_node(four);
+    let l3 = symbolica_graph.add_node(five);
+
+    symbolica_graph.add_edge(l1, l2, true, scalar.clone());
+    symbolica_graph.add_edge(l2, l3, true, scalar.clone());
+    symbolica_graph.add_edge(l3, l1, true, scalar.clone());
+    symbolica_graph.add_edge(l3, l2, true, scalar.clone());
+    symbolica_graph.add_edge(l2, l3, true, scalar.clone());
+    symbolica_graph.add_edge(l3, l1, true, scalar.clone());
 
     let bare_graph = BareGraph::from_symbolica_graph(
         &model,
         "threeringscalar".into(),
         &symbolica_graph,
-        "1".into(),
+        Atom::new_num(1),
         vec![],
         None,
     )

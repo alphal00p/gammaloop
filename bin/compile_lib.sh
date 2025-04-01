@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 RETCODE=0;
-echo "Building pyo3 library..."
+echo "Building pyo3 library... ["$@"]"
 cargo build "$@" --lib --features="python_api";
 RETCODE=$RETCODE+$?;
 rm -f ./python/gammaloop/_gammaloop.so;

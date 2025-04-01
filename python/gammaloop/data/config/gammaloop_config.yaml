@@ -48,15 +48,18 @@ drawing:
 export_settings:
   compile_cff: true
   numerator_settings:
+    dump_expression: 'Mathematica'
     eval_settings:
       type: Joint
       cpe_rounds: 1
       compile_options:
         subtype: Compiled
     global_numerator: null
-    global_prefactor: null
+    global_prefactor:
+      color: "1"
+      colorless: "1"
     gamma_algebra: Concrete
-    parse_mode: Direct
+    parse_mode: Polynomial
   cpe_rounds_cff: 1
   compile_separate_orientations: false
   gammaloop_compile_options:

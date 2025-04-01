@@ -1,18 +1,38 @@
 use crate::{
     cff::{
+        cut_expression::CFFCutExpression,
         esurface::add_external_shifts,
-        expression::{CompiledCFFExpression, OrientationExpression},
+        expression::CompiledCFFExpression,
         hsurface::HsurfaceID,
         surface::{HybridSurface, HybridSurfaceID},
         tree::Tree,
     },
-    graph::BareGraph,
+    disable,
+    new_cs::{CrossSectionCut, CutId},
 };
 use ahash::HashMap;
 use color_eyre::Report;
 use color_eyre::Result;
 use itertools::Itertools;
-use std::fmt::Debug;
+use linnet::half_edge::{
+    hedgevec::HedgeVec, involution::HedgePair, subgraph::OrientedCut, HedgeGraph,
+};
+use linnet::half_edge::{
+    involution::{EdgeIndex, Orientation},
+    subgraph::InternalSubGraph,
+};
+use rayon::result;
+use std::{
+    fmt::Debug,
+    iter::{Chain, Enumerate, Map},
+    ops::Index,
+    vec::IntoIter,
+};
+use symbolica::{
+    atom::{Atom, AtomCore},
+    id::{Pattern, Replacement},
+};
+use typed_index_collections::TiVec;
 
 use serde::{Deserialize, Serialize};
 
@@ -20,48 +40,35 @@ use log::debug;
 
 use super::{
     cff_graph::{CFFGenerationGraph, VertexSet},
+    cut_expression::{
+        CutOrientationExpression, OrientationData, OrientationExpression, OrientationID,
+    },
     esurface::{Esurface, EsurfaceCollection, EsurfaceID, ExternalShift},
-    expression::{CFFExpression, CFFExpressionNode, CFFLimit, TermId},
-    hsurface::HsurfaceCollection,
+    expression::{CFFExpression, CFFLimit, TermId},
+    hsurface::{self, Hsurface, HsurfaceCollection},
+    surface::{HybridSurfaceRef, Surface, UnitSurface},
     tree::NodeId,
 };
 
 #[derive(Debug, Clone)]
-enum GenerationData {
-    Data {
-        graph: CFFGenerationGraph,
-        surface_id: Option<HybridSurfaceID>,
-    },
-    Pointer {
-        term_id: usize,
-        node_id: usize,
-    },
+struct GenerationData {
+    graph: CFFGenerationGraph,
+    surface_id: Option<HybridSurfaceID>,
 }
 
-fn forget_graphs(data: GenerationData) -> CFFExpressionNode {
-    match data {
-        GenerationData::Data {
-            surface_id: esurface_id,
-            ..
-        } => CFFExpressionNode::Data(esurface_id.unwrap()),
-        GenerationData::Pointer { term_id, node_id } => CFFExpressionNode::Pointer {
-            term_id: Into::<TermId>::into(term_id),
-            node_id: Into::<NodeId>::into(node_id),
-        },
-    }
+#[derive(Debug, Clone)]
+pub struct ShiftRewrite {
+    pub dependent_momentum: EdgeIndex,
+    pub dependent_momentum_expr: ExternalShift,
+}
+
+fn forget_graphs(data: GenerationData) -> HybridSurfaceID {
+    data.surface_id.expect("corrupted expression tree")
 }
 
 impl GenerationData {
     fn insert_esurface(&mut self, surface_id: HybridSurfaceID) {
-        match self {
-            GenerationData::Data {
-                surface_id: ref mut id,
-                ..
-            } => {
-                *id = Some(surface_id);
-            }
-            GenerationData::Pointer { .. } => {}
-        }
+        self.surface_id = Some(surface_id);
     }
 }
 
@@ -90,7 +97,7 @@ impl OrientationGenerator {
 }
 
 impl IntoIterator for OrientationGenerator {
-    type Item = bool;
+    type Item = Orientation;
     type IntoIter = OrientationIterator;
 
     fn into_iter(self) -> Self::IntoIter {
@@ -111,10 +118,15 @@ struct OrientationIterator {
 }
 
 impl Iterator for OrientationIterator {
-    type Item = bool;
+    type Item = Orientation;
     fn next(&mut self) -> Option<Self::Item> {
         if self.current_location < self.num_edges {
-            let result = self.identifier & (1 << self.current_location) == 0;
+            let result_bool = self.identifier & (1 << self.current_location) == 0;
+            let result = match result_bool {
+                true => Orientation::Default,
+                false => Orientation::Reversed,
+            };
+
             self.current_location += 1;
             Some(result)
         } else {
@@ -136,33 +148,242 @@ fn iterate_possible_orientations(num_edges: usize) -> impl Iterator<Item = Orien
     })
 }
 
-fn get_orientations(graph: &BareGraph) -> Vec<CFFGenerationGraph> {
-    let num_virtual_edges = graph.get_virtual_edges_iterator().count();
-    let possible_orientations = iterate_possible_orientations(num_virtual_edges);
+fn get_orientations<E, V>(graph: &HedgeGraph<E, V>) -> Vec<CFFGenerationGraph> {
+    let internal_subgraph = InternalSubGraph::cleaned_filter_pessimist(graph.full_filter(), graph);
+    let num_virtual_edges = graph.count_internal_edges(&internal_subgraph);
+    let virtual_possible_orientations = iterate_possible_orientations(num_virtual_edges);
 
-    possible_orientations
+    virtual_possible_orientations
         .map(|orientation_of_virtuals| {
-            let orientation_of_virtuals = orientation_of_virtuals.into_iter().collect_vec();
+            let mut orientation_of_virtuals = orientation_of_virtuals.into_iter();
 
-            CFFGenerationGraph::new(graph, orientation_of_virtuals)
+            let global_orientation = graph
+                .new_hedgevec_from_iter(graph.iter_all_edges().map(|(hedge_pair, __, _)| {
+                    match hedge_pair {
+                        HedgePair::Unpaired { .. } => Orientation::Default,
+                        HedgePair::Paired { .. } => orientation_of_virtuals
+                            .next()
+                            .expect(" unable to reconstruct orientation"),
+                        HedgePair::Split { .. } => todo!(),
+                    }
+                }))
+                .expect("unable to construct global orientation");
+
+            assert!(
+                orientation_of_virtuals.next().is_none(),
+                "did not saturate virtual orientations when constructing global orientation"
+            );
+
+            CFFGenerationGraph::new_new(graph, global_orientation)
+        })
+        .collect_vec()
+}
+
+fn get_orientations_with_cut<E, V>(
+    graph: &HedgeGraph<E, V>,
+    oriented_cut: &OrientedCut,
+) -> Vec<HedgeVec<Orientation>> {
+    let internal_subgraph = InternalSubGraph::cleaned_filter_pessimist(graph.full_filter(), graph);
+    let num_virtual_edges = graph.count_internal_edges(&internal_subgraph);
+
+    let virtual_possible_orientations = iterate_possible_orientations(num_virtual_edges);
+
+    let orientations_consistent_with_cut = virtual_possible_orientations
+        .map(|orientation_of_virtuals| {
+            // pad a virtual orientation with orientations of externals.
+            let mut orientation_of_virtuals = orientation_of_virtuals.into_iter();
+
+            let global_orientation = graph
+                .new_hedgevec_from_iter(graph.iter_all_edges().map(|(hedge_pair, __, _)| {
+                    match hedge_pair {
+                        HedgePair::Unpaired { .. } => Orientation::Default,
+                        HedgePair::Paired { .. } => orientation_of_virtuals
+                            .next()
+                            .expect(" unable to reconstruct orientation"),
+                        HedgePair::Split { .. } => todo!(),
+                    }
+                }))
+                .expect("unable to construct global orientation");
+
+            assert!(
+                orientation_of_virtuals.next().is_none(),
+                "did not saturate virtual orientations when constructing global orientation"
+            );
+
+            global_orientation
+        })
+        .filter(|global_orientation| {
+            // filter out orientations that are not consistent with the cut
+            let edges_in_cut = graph.iter_edges(oriented_cut).map(|(_, id, _)| id);
+            let orientation_of_edges_in_cut = oriented_cut.iter_edges(graph).map(|(or, _)| or);
+
+            edges_in_cut
+                .zip(orientation_of_edges_in_cut)
+                .all(|(edge_id, orientation)| global_orientation[edge_id] == orientation)
+        })
+        .filter(|global_orientation| {
+            // filter out orientations that have a directed cycle
+            let graph = CFFGenerationGraph::new_new(graph, global_orientation.clone());
+            !graph.has_directed_cycle_initial()
+        });
+
+    orientations_consistent_with_cut.collect_vec()
+}
+
+fn get_possible_orientations_for_cut_list<E, V>(
+    graph: &HedgeGraph<E, V>,
+    cuts: &TiVec<CutId, CrossSectionCut>,
+) -> TiVec<OrientationID, OrientationData> {
+    let internal_subgraph = InternalSubGraph::cleaned_filter_pessimist(graph.full_filter(), graph);
+    let num_virtual_edges = graph.count_internal_edges(&internal_subgraph);
+
+    let virtual_possible_orientations = iterate_possible_orientations(num_virtual_edges);
+
+    let global_orientations = virtual_possible_orientations.map(|orientation_of_virtuals| {
+        // pad a virtual orientation with orientations of externals.
+        let mut orientation_of_virtuals = orientation_of_virtuals.into_iter();
+
+        let global_orientation = graph
+            .new_hedgevec_from_iter(graph.iter_all_edges().map(|(hedge_pair, __, _)| {
+                match hedge_pair {
+                    HedgePair::Unpaired { .. } => Orientation::Default,
+                    HedgePair::Paired { .. } => orientation_of_virtuals
+                        .next()
+                        .expect(" unable to reconstruct orientation"),
+                    HedgePair::Split { .. } => todo!(),
+                }
+            }))
+            .expect("unable to construct global orientation");
+
+        assert!(
+            orientation_of_virtuals.next().is_none(),
+            "did not saturate virtual orientations when constructing global orientation"
+        );
+
+        global_orientation
+    });
+
+    // filter out orientations that are not dags
+    let filter_non_dag = global_orientations.filter(|global_orientation| {
+        let graph = CFFGenerationGraph::new_new(graph, global_orientation.clone());
+        !graph.has_directed_cycle_initial()
+    });
+
+    // find the cuts that are consistent with the orientation
+    // remove orientations with no consistent cuts
+    let orientations = filter_non_dag
+        .filter_map(|global_orientation| {
+            let cuts_consistent_with_orientation = cuts
+                .iter_enumerated()
+                .filter(|(_cut_id, cut)| {
+                    let edges_in_cut = graph.iter_edges(&cut.cut).map(|(_, id, _)| id);
+                    let orientation_of_edges_in_cut = cut.cut.iter_edges(graph).map(|(or, _)| or);
+
+                    edges_in_cut
+                        .zip(orientation_of_edges_in_cut)
+                        .all(|(edge_id, orientation)| global_orientation[edge_id] == orientation)
+                })
+                .map(|(cut_id, _)| cut_id)
+                .collect_vec();
+
+            if cuts_consistent_with_orientation.is_empty() {
+                None
+            } else {
+                Some(OrientationData {
+                    orientation: global_orientation,
+                    cuts: cuts_consistent_with_orientation,
+                })
+            }
+        })
+        .collect();
+
+    orientations
+}
+
+pub fn generate_cff_expression<E, V>(
+    graph: &HedgeGraph<E, V>,
+    canonize_esurface: &Option<ShiftRewrite>,
+) -> Result<CFFExpression, Report> {
+    let graphs = get_orientations(graph);
+    debug!("number of orientations: {}", graphs.len());
+
+    let graph_cff = generate_cff_from_orientations(graphs, None, None, None, canonize_esurface)?;
+
+    Ok(graph_cff)
+}
+
+fn generate_cff_for_orientation<E, V>(
+    graph: &HedgeGraph<E, V>,
+    canonize_esurface: &Option<ShiftRewrite>,
+    cache: &mut SurfaceCache,
+    cuts: &TiVec<CutId, CrossSectionCut>,
+    orientation_data: &OrientationData,
+) -> Vec<CutOrientationExpression> {
+    orientation_data
+        .cuts
+        .iter()
+        .map(|cut_id| {
+            let cut = &cuts[*cut_id];
+            let left_diagram = CFFGenerationGraph::new_from_subgraph(
+                graph,
+                orientation_data.orientation.clone(),
+                &cut.left,
+            );
+            let right_diagram = CFFGenerationGraph::new_from_subgraph(
+                graph,
+                orientation_data.orientation.clone(),
+                &cut.right,
+            );
+
+            let left_tree =
+                generate_tree_for_orientation(left_diagram, cache, None, canonize_esurface)
+                    .map(forget_graphs);
+
+            let right_tree =
+                generate_tree_for_orientation(right_diagram, cache, None, canonize_esurface)
+                    .map(forget_graphs);
+
+            CutOrientationExpression {
+                left: left_tree,
+                right: right_tree,
+            }
         })
         .collect()
 }
 
-pub fn generate_cff_expression(graph: &BareGraph) -> Result<CFFExpression, Report> {
-    // construct a hashmap that contains as keys all vertices that connect to external edges
-    // and as values those external edges that it connects to
+pub fn generate_cff_with_cuts<E, V>(
+    graph: &HedgeGraph<E, V>,
+    canonize_esurface: &Option<ShiftRewrite>,
+    cuts: &TiVec<CutId, CrossSectionCut>,
+) -> CFFCutExpression {
+    let orientations = get_possible_orientations_for_cut_list(graph, cuts);
+    let mut surface_cache = SurfaceCache {
+        esurface_cache: EsurfaceCollection::from_iter(std::iter::empty()),
+        hsurface_cache: HsurfaceCollection::from_iter(std::iter::empty()),
+    };
 
-    let graphs = get_orientations(graph);
-    debug!("generating cff for graph: {}", graph.name);
-    debug!("number of orientations: {}", graphs.len());
+    let orientation_expressions = orientations
+        .into_iter()
+        .map(|orientation_data| {
+            let cut_expressions = generate_cff_for_orientation(
+                graph,
+                canonize_esurface,
+                &mut surface_cache,
+                cuts,
+                &orientation_data,
+            );
 
-    let (dep_mom, dep_mom_expr) = graph.get_dep_mom_expr();
+            OrientationExpression {
+                data: orientation_data,
+                expressions: cut_expressions,
+            }
+        })
+        .collect();
 
-    let graph_cff =
-        generate_cff_from_orientations(graphs, None, None, None, dep_mom, &dep_mom_expr)?;
-
-    Ok(graph_cff)
+    CFFCutExpression {
+        orientations: orientation_expressions,
+        surfaces: surface_cache,
+    }
 }
 
 pub fn generate_cff_limit(
@@ -170,8 +391,7 @@ pub fn generate_cff_limit(
     right_dags: Vec<CFFGenerationGraph>,
     esurfaces: &EsurfaceCollection,
     limit_esurface: &Esurface,
-    dep_mom: usize,
-    dep_mom_expr: &ExternalShift,
+    canonize_esurface: &Option<ShiftRewrite>,
     orientations_in_limit: (Vec<Vec<bool>>, Vec<TermId>),
 ) -> Result<CFFLimit, String> {
     assert_eq!(
@@ -185,8 +405,7 @@ pub fn generate_cff_limit(
         Some(esurfaces.clone()),
         None,
         Some(limit_esurface),
-        dep_mom,
-        dep_mom_expr,
+        canonize_esurface,
     )
     .unwrap();
     let right = generate_cff_from_orientations(
@@ -194,8 +413,7 @@ pub fn generate_cff_limit(
         Some(esurfaces.clone()),
         None,
         Some(limit_esurface),
-        dep_mom,
-        dep_mom_expr,
+        canonize_esurface,
     )
     .unwrap();
 
@@ -211,8 +429,7 @@ fn generate_cff_from_orientations(
     optional_esurface_cache: Option<EsurfaceCollection>,
     optional_hsurface_cache: Option<HsurfaceCollection>,
     rewrite_at_cache_growth: Option<&Esurface>,
-    dep_mom: usize,
-    dep_mom_expr: &ExternalShift,
+    canonize_esurface: &Option<ShiftRewrite>,
 ) -> Result<CFFExpression, Report> {
     let esurface_cache = if let Some(cache) = optional_esurface_cache {
         cache
@@ -226,15 +443,9 @@ fn generate_cff_from_orientations(
         HsurfaceCollection::from_iter(std::iter::empty())
     };
 
-    let graph_cache = HashMap::default();
-
-    let mut generator_cache = GeneratorCache {
-        graph_cache,
+    let mut generator_cache = SurfaceCache {
         esurface_cache,
         hsurface_cache,
-        vertices_used: vec![],
-        cache_hits: 0,
-        non_cache_hits: 0,
     };
 
     // filter cyclic orientations beforehand
@@ -250,47 +461,23 @@ fn generate_cff_from_orientations(
 
     let terms = acyclic_orientations_and_graphs
         .into_iter()
-        .enumerate()
-        .map(|(term_id, graph)| {
+        .map(|graph| {
             let global_orientation = graph.global_orientation.clone();
             let tree = generate_tree_for_orientation(
                 graph.clone(),
-                term_id,
                 &mut generator_cache,
                 rewrite_at_cache_growth,
-                dep_mom,
-                dep_mom_expr,
+                canonize_esurface,
             );
             let expression = tree.map(forget_graphs);
 
-            OrientationExpression {
+            crate::cff::expression::OrientationExpression {
                 expression,
                 orientation: global_orientation,
                 dag: graph,
             }
         })
         .collect_vec();
-
-    debug!("number of cache hits: {}", generator_cache.cache_hits);
-    debug!(
-        "percentage of cache hits: {:.1}%",
-        generator_cache.cache_hits as f64
-            / (generator_cache.cache_hits + generator_cache.non_cache_hits) as f64
-            * 100.0
-    );
-
-    //#[cfg(test)]
-    //{
-    //    println!("number of cache hits: {}", generator_cache.cache_hits);
-    //    println!(
-    //        "percentage of cache hits: {:.1}%",
-    //        generator_cache.cache_hits as f64
-    //            / (generator_cache.cache_hits + generator_cache.non_cache_hits) as f64
-    //            * 100.0
-    //    );
-    //}
-
-    // let terms =vec![terms[0].clone(),terms[1].clone(),terms[2].clone(),terms[3].clone()];
 
     Ok(CFFExpression {
         orientations: terms.into(),
@@ -300,35 +487,73 @@ fn generate_cff_from_orientations(
     })
 }
 
-struct GeneratorCache {
-    graph_cache: HashMap<CFFGenerationGraph, (usize, usize)>,
-    esurface_cache: EsurfaceCollection,
-    hsurface_cache: HsurfaceCollection,
-    vertices_used: Vec<VertexSet>,
-    cache_hits: usize,
-    non_cache_hits: usize,
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SurfaceCache {
+    pub esurface_cache: EsurfaceCollection,
+    pub hsurface_cache: HsurfaceCollection,
+}
+
+impl SurfaceCache {
+    pub fn substitute_energies(&self, atom: &Atom) -> Atom {
+        let replacement_rules = self.get_all_replacements();
+        atom.replace_multiple(&replacement_rules)
+    }
+
+    pub fn iter_all_surfaces(
+        &self,
+    ) -> impl Iterator<Item = (HybridSurfaceID, HybridSurfaceRef)> + '_ {
+        let esurface_id_iter = self.esurface_cache.iter_enumerated().map(|(id, esurface)| {
+            (
+                HybridSurfaceID::Esurface(id),
+                HybridSurfaceRef::Esurface(esurface),
+            )
+        });
+
+        let hsurface_id_iter = self.hsurface_cache.iter_enumerated().map(|(id, hsurface)| {
+            (
+                HybridSurfaceID::Hsurface(id),
+                HybridSurfaceRef::Hsurface(hsurface),
+            )
+        });
+
+        esurface_id_iter.chain(hsurface_id_iter)
+    }
+
+    pub fn get_all_replacements(&self) -> Vec<Replacement> {
+        self.iter_all_surfaces()
+            .map(|(id, surface)| {
+                let id_atom = Pattern::from(Atom::from(id));
+                let surface_atom = Pattern::from(Atom::from(surface));
+                Replacement::new(id_atom, surface_atom)
+            })
+            .collect()
+    }
+
+    pub fn get_surface(&self, surface_id: HybridSurfaceID) -> HybridSurfaceRef {
+        match surface_id {
+            HybridSurfaceID::Esurface(id) => HybridSurfaceRef::Esurface(&self.esurface_cache[id]),
+            HybridSurfaceID::Hsurface(id) => HybridSurfaceRef::Hsurface(&self.hsurface_cache[id]),
+            HybridSurfaceID::Unit => HybridSurfaceRef::Unit(UnitSurface {}),
+        }
+    }
 }
 
 fn generate_tree_for_orientation(
     graph: CFFGenerationGraph,
-    term_id: usize,
-    generator_cache: &mut GeneratorCache,
+    generator_cache: &mut SurfaceCache,
     rewrite_at_cache_growth: Option<&Esurface>,
-    dep_mom: usize,
-    dep_mom_expr: &ExternalShift,
+    canonize_esurface: &Option<ShiftRewrite>,
 ) -> Tree<GenerationData> {
-    let mut tree = Tree::from_root(GenerationData::Data {
+    let mut tree = Tree::from_root(GenerationData {
         graph,
         surface_id: None,
     });
 
     while let Some(()) = advance_tree(
         &mut tree,
-        term_id,
         generator_cache,
         rewrite_at_cache_growth,
-        dep_mom,
-        dep_mom_expr,
+        canonize_esurface,
     ) {}
 
     tree
@@ -336,17 +561,11 @@ fn generate_tree_for_orientation(
 
 fn advance_tree(
     tree: &mut Tree<GenerationData>,
-    term_id: usize,
-    generator_cache: &mut GeneratorCache,
+    generator_cache: &mut SurfaceCache,
     rewrite_at_cache_growth: Option<&Esurface>,
-    dep_mom: usize,
-    dep_mom_expr: &ExternalShift,
+    canonize_esurface: &Option<ShiftRewrite>,
 ) -> Option<()> {
-    let bottom_layer = tree
-        .get_bottom_layer()
-        .into_iter()
-        .filter(|&node_id| matches!(&tree.get_node(node_id).data, GenerationData::Data { .. }))
-        .collect_vec(); // allocation needed because tree is mutable
+    let bottom_layer = tree.get_bottom_layer();
 
     let (children_optional, new_surfaces_for_tree): (
         Vec<Option<Vec<CFFGenerationGraph>>>,
@@ -355,19 +574,15 @@ fn advance_tree(
         .iter()
         .map(|&node_id| {
             let node = &tree.get_node(node_id);
-            let graph = match &node.data {
-                GenerationData::Data { graph, .. } => graph,
-                GenerationData::Pointer { .. } => {
-                    unreachable!("filtered")
-                }
-            };
+            let graph = &node.data.graph;
 
-            let (option_children, surface) =
-                graph.generate_children(&mut generator_cache.vertices_used);
+            let (option_children, surface) = graph.generate_children();
 
             let surface_id = match surface {
                 HybridSurface::Esurface(mut esurface) => {
-                    esurface.canonicalize_shift(dep_mom, dep_mom_expr);
+                    if let Some(shift_rewrite) = canonize_esurface {
+                        esurface.canonicalize_shift(shift_rewrite);
+                    }
                     let option_esurface_id = generator_cache
                         .esurface_cache
                         .position(|val| *val == esurface);
@@ -391,7 +606,10 @@ fn advance_tree(
                                     &negative_rewriter_esurface_shift,
                                 );
 
-                                esurface.canonicalize_shift(dep_mom, dep_mom_expr);
+                                if let Some(shift_rewrite) = canonize_esurface {
+                                    esurface.canonicalize_shift(shift_rewrite);
+                                }
+
                                 let new_option_esurface_id = generator_cache
                                     .esurface_cache
                                     .position(|val| *val == esurface);
@@ -464,49 +682,30 @@ fn advance_tree(
         .zip(children)
         .for_each(|(&node_id, children)| {
             children.into_iter().for_each(|child| {
-                let hashable_child = child.clone();
-                if let Some((cff_expression_term_id, cff_expression_node_id)) =
-                    generator_cache.graph_cache.get(&hashable_child)
-                {
-                    let new_pointer = GenerationData::Pointer {
-                        term_id: *cff_expression_term_id,
-                        node_id: *cff_expression_node_id,
-                    };
-                    tree.insert_node(node_id, new_pointer);
-                    generator_cache.cache_hits += 1;
-                } else {
-                    let child_node_id = tree.get_num_nodes();
-                    let child_node = GenerationData::Data {
-                        graph: child,
-                        surface_id: None,
-                    };
+                let child_node = GenerationData {
+                    graph: child,
+                    surface_id: None,
+                };
 
-                    generator_cache
-                        .graph_cache
-                        .insert(hashable_child, (term_id, child_node_id));
-                    tree.insert_node(node_id, child_node);
-                    generator_cache.non_cache_hits += 1;
-                }
+                tree.insert_node(node_id, child_node);
             });
         });
-
     Some(())
 }
 
 #[cfg(test)]
 mod tests_cff {
-    use symbolica::{
-        atom::Atom,
-        domains::float::{NumericalFloatLike, Real},
-        id::Pattern,
+    use linnet::half_edge::{
+        builder::HedgeGraphBuilder, involution::Flow, nodestorage::NodeStorageVec,
     };
+    use symbolica::domains::float::{NumericalFloatLike, Real};
     use utils::FloatLike;
 
     use crate::{
         cff::cff_graph::CFFEdgeType,
         momentum::{FourMomentum, ThreeMomentum},
         tests::{self, load_default_settings},
-        utils::{self, RefDefault, F},
+        utils::{self, dummy_hedge_graph, RefDefault, F},
     };
 
     use super::*;
@@ -528,19 +727,21 @@ mod tests_cff {
                 let orientation_vector = or.into_iter().collect_vec();
                 let mut new_edges = edges.clone();
                 for (edge_id, edge_orientation) in orientation_vector.iter().enumerate() {
-                    if *edge_orientation {
-                        new_edges[edge_id] = edges[edge_id];
-                    } else {
-                        let rotated_edge = (edges[edge_id].1, edges[edge_id].0);
-                        new_edges[edge_id] = rotated_edge;
+                    match edge_orientation {
+                        Orientation::Default => {
+                            new_edges[edge_id] = edges[edge_id];
+                        }
+                        Orientation::Reversed => {
+                            let rotated_edge = (edges[edge_id].1, edges[edge_id].0);
+                            new_edges[edge_id] = rotated_edge;
+                        }
+                        Orientation::Undirected => {
+                            unreachable!("unexpected orientation")
+                        }
                     }
                 }
 
-                CFFGenerationGraph::from_vec(
-                    new_edges,
-                    incoming_vertices.clone(),
-                    orientation_vector,
-                )
+                CFFGenerationGraph::from_vec(new_edges, incoming_vertices.clone(), None)
             })
             .filter(|graph| !graph.has_directed_cycle_initial())
             .collect_vec()
@@ -561,28 +762,84 @@ mod tests_cff {
         assert_eq!(orientations.len(), 8);
 
         let orientation1 = orientations[0].into_iter().collect_vec();
-        assert_eq!(orientation1, vec![true, true, true]);
+        assert_eq!(
+            orientation1,
+            vec![
+                Orientation::Default,
+                Orientation::Default,
+                Orientation::Default
+            ]
+        );
 
         let orientation2 = orientations[1].into_iter().collect_vec();
-        assert_eq!(orientation2, vec![false, true, true]);
+        assert_eq!(
+            orientation2,
+            vec![
+                Orientation::Reversed,
+                Orientation::Default,
+                Orientation::Default
+            ]
+        );
 
         let orientation3 = orientations[2].into_iter().collect_vec();
-        assert_eq!(orientation3, vec![true, false, true]);
+        assert_eq!(
+            orientation3,
+            vec![
+                Orientation::Default,
+                Orientation::Reversed,
+                Orientation::Default
+            ]
+        );
 
         let orientation4 = orientations[3].into_iter().collect_vec();
-        assert_eq!(orientation4, vec![false, false, true]);
+        assert_eq!(
+            orientation4,
+            vec![
+                Orientation::Reversed,
+                Orientation::Reversed,
+                Orientation::Default
+            ]
+        );
 
         let orientation5 = orientations[4].into_iter().collect_vec();
-        assert_eq!(orientation5, vec![true, true, false]);
+        assert_eq!(
+            orientation5,
+            vec![
+                Orientation::Default,
+                Orientation::Default,
+                Orientation::Reversed
+            ]
+        );
 
         let orientation6 = orientations[5].into_iter().collect_vec();
-        assert_eq!(orientation6, vec![false, true, false]);
+        assert_eq!(
+            orientation6,
+            vec![
+                Orientation::Reversed,
+                Orientation::Default,
+                Orientation::Reversed
+            ]
+        );
 
         let orientation7 = orientations[6].into_iter().collect_vec();
-        assert_eq!(orientation7, vec![true, false, false]);
+        assert_eq!(
+            orientation7,
+            vec![
+                Orientation::Default,
+                Orientation::Reversed,
+                Orientation::Reversed
+            ]
+        );
 
         let orientation8 = orientations[7].into_iter().collect_vec();
-        assert_eq!(orientation8, vec![false, false, false]);
+        assert_eq!(
+            orientation8,
+            vec![
+                Orientation::Reversed,
+                Orientation::Reversed,
+                Orientation::Reversed
+            ]
+        );
     }
 
     #[test]
@@ -593,11 +850,16 @@ mod tests_cff {
         let orientations = generate_orientations_for_testing(triangle, incoming_vertices);
         assert_eq!(orientations.len(), 6);
 
-        let dep_mom = 2;
-        let dep_mom_expr = vec![(0, -1), (1, -1)];
+        let dep_mom = EdgeIndex::from(2);
+        let dep_mom_expr = vec![(EdgeIndex::from(0), -1), (EdgeIndex::from(1), -1)];
+
+        let shift_rewrite = Some(ShiftRewrite {
+            dependent_momentum: dep_mom,
+            dependent_momentum_expr: dep_mom_expr,
+        });
 
         let cff =
-            generate_cff_from_orientations(orientations, None, None, None, dep_mom, &dep_mom_expr)
+            generate_cff_from_orientations(orientations, None, None, None, &shift_rewrite.clone())
                 .unwrap();
         assert_eq!(
             cff.esurfaces.len(),
@@ -626,6 +888,10 @@ mod tests_cff {
         let mut energy_cache = external_energy_cache.to_vec();
         energy_cache.extend(virtual_energy_cache);
 
+        let energy_cache = dummy_hedge_graph(6)
+            .new_hedgevec_from_iter(energy_cache)
+            .unwrap();
+
         let energy_prefactor = virtual_energy_cache
             .iter()
             .map(|e| (F(2.) * e).inv())
@@ -650,38 +916,46 @@ mod tests_cff {
             cff_res
         );
 
-        // test the generation for each possible limit
-        for (esurface_id, _) in cff.esurfaces.iter_enumerated() {
-            let expanded_limit = cff.expand_limit_to_atom(HybridSurfaceID::Esurface(esurface_id));
+        // test cff from hedge graph
+        let mut triangle_hedge_graph_builder = HedgeGraphBuilder::new();
 
-            let limit = cff
-                .limit_for_esurface(esurface_id, dep_mom, &dep_mom_expr)
-                .unwrap();
-            let limit_atom = limit.limit_to_atom_with_rewrite(Some(&cff.esurfaces[esurface_id]));
+        let nodes = (0..3)
+            .map(|_| triangle_hedge_graph_builder.add_node(()))
+            .collect_vec();
 
-            let p2_atom = Atom::parse("p2").unwrap();
-            let rhs = Atom::parse("- p0 - p1").unwrap();
-
-            let p2_pattern = Pattern::Literal(p2_atom);
-            let rhs_pattern = Pattern::Literal(rhs).into();
-
-            let conditions = None;
-            let settings = None;
-
-            let atom_limit_0 = p2_pattern.replace_all(
-                expanded_limit.as_view(),
-                &rhs_pattern,
-                conditions,
-                settings,
+        for node in nodes.clone() {
+            triangle_hedge_graph_builder.add_external_edge(
+                node,
+                (),
+                Orientation::Undirected,
+                Flow::Sink,
             );
-
-            let limit_atom =
-                p2_pattern.replace_all(limit_atom.as_view(), &rhs_pattern, conditions, settings);
-
-            let diff = (limit_atom - &atom_limit_0).expand();
-            assert_eq!(diff, Atom::new());
         }
-    } //
+
+        triangle_hedge_graph_builder.add_edge(nodes[2], nodes[0], (), Orientation::Undirected);
+        triangle_hedge_graph_builder.add_edge(nodes[0], nodes[1], (), Orientation::Undirected);
+        triangle_hedge_graph_builder.add_edge(nodes[1], nodes[2], (), Orientation::Undirected);
+
+        let triangle_hedge_graph = triangle_hedge_graph_builder.build::<NodeStorageVec<()>>();
+
+        let cff_hedge = generate_cff_expression(&triangle_hedge_graph, &shift_rewrite).unwrap();
+
+        let cff_res: F<f64> = energy_prefactor
+            * cff_hedge.eager_evaluate(&energy_cache, &settings)
+            * F((2. * std::f64::consts::PI).powi(-3));
+
+        let target_res = F(6.333_549_225_536_17e-9_f64);
+        let absolute_error = cff_res - target_res;
+        let relative_error = absolute_error.abs() / cff_res.abs();
+
+        assert!(
+            relative_error.abs() < F(1.0e-15),
+            "relative error: {:+e} (ground truth: {:+e} vs reproduced: {:+e})",
+            relative_error,
+            target_res,
+            cff_res
+        );
+    }
 
     #[test]
     fn test_cff_test_double_triangle() {
@@ -691,12 +965,16 @@ mod tests_cff {
         let orientations =
             generate_orientations_for_testing(double_triangle_edges, incoming_vertices);
 
-        let dep_mom = 1;
-        let dep_mom_expr = vec![(0, -1)];
+        let dep_mom = EdgeIndex::from(1);
+        let dep_mom_expr = vec![(EdgeIndex::from(0), -1)];
+
+        let shift_rewrite = Some(ShiftRewrite {
+            dependent_momentum: dep_mom,
+            dependent_momentum_expr: dep_mom_expr,
+        });
 
         let cff =
-            generate_cff_from_orientations(orientations, None, None, None, dep_mom, &dep_mom_expr)
-                .unwrap();
+            generate_cff_from_orientations(orientations, None, None, None, &shift_rewrite).unwrap();
 
         let q = FourMomentum::from_args(F(1.), F(2.), F(3.), F(4.));
         let zero = FourMomentum::from_args(F(0.), F(0.), F(0.), F(0.));
@@ -720,6 +998,10 @@ mod tests_cff {
         let mut energy_cache = external_energy_cache.to_vec();
         energy_cache.extend(virtual_energy_cache);
 
+        let energy_cache = dummy_hedge_graph(energy_cache.len())
+            .new_hedgevec_from_iter(energy_cache)
+            .unwrap();
+
         let energy_prefactor = virtual_energy_cache
             .iter()
             .map(|e| (F(2.) * e).inv())
@@ -740,21 +1022,65 @@ mod tests_cff {
             cff_res
         );
 
-        // this does not work yet
+        let mut hedge_double_triangle_builder = HedgeGraphBuilder::new();
+        let nodes = (0..4)
+            .map(|_| hedge_double_triangle_builder.add_node(()))
+            .collect_vec();
 
-        // for (esurface_id, esurface) in cff.esurfaces.iter_enumerated() {
+        hedge_double_triangle_builder.add_external_edge(
+            nodes[0],
+            (),
+            Orientation::Undirected,
+            Flow::Sink,
+        );
+        hedge_double_triangle_builder.add_external_edge(
+            nodes[3],
+            (),
+            Orientation::Undirected,
+            Flow::Sink,
+        );
 
-        // let expanded_limit: RationalPolynomial<IntegerRing, u8> = cff.expand_limit_to_atom(HybridSurfaceID::Esurface(esurface_id)).to_rational_polynomial(&Z, &Z, None);
+        hedge_double_triangle_builder.add_edge(nodes[0], nodes[1], (), Orientation::Undirected);
+        hedge_double_triangle_builder.add_edge(nodes[0], nodes[2], (), Orientation::Undirected);
+        hedge_double_triangle_builder.add_edge(nodes[1], nodes[2], (), Orientation::Undirected);
+        hedge_double_triangle_builder.add_edge(nodes[1], nodes[3], (), Orientation::Undirected);
+        hedge_double_triangle_builder.add_edge(nodes[2], nodes[3], (), Orientation::Undirected);
 
-        // let factorised_limit = cff.limit_for_esurface(esurface_id, dep_mom, &dep_mom_expr).unwrap();
-        // let factorised_limit_atom = factorised_limit.limit_to_atom_with_rewrite(Some(esurface)).to_rational_polynomial(&Z, &Z, None);
+        let hedge_double_traingle = hedge_double_triangle_builder.build::<NodeStorageVec<()>>();
+        let cff_hedge = generate_cff_expression(&hedge_double_traingle, &shift_rewrite).unwrap();
 
-        // apply energy conservation
-        // let diff = expanded_limit - factorised_limit_atom;
-        // println!("diff: {}", diff);
-        // can't test all, but probably works?
-        // symbolica crash, probably works on newer version? can't change because everything is outdated, need to merge with main
-        //}
+        let cff_res = energy_prefactor * cff_hedge.eager_evaluate(&energy_cache, &settings);
+
+        let target = F(1.0794792137096797e-13);
+        let absolute_error = cff_res - target;
+        let relative_error = absolute_error / cff_res;
+
+        assert!(
+            relative_error.abs() < F(1.0e-15),
+            "relative error: {:+e}, target: {:+e}, result: {:+e}",
+            relative_error,
+            target,
+            cff_res
+        );
+
+        let cuts = hedge_double_traingle.all_cuts(
+            hedge_double_traingle[&nodes[3]].clone(),
+            hedge_double_traingle[&nodes[0]].clone(),
+        );
+        let mut num_with_6_ors = 0;
+        let mut num_with_4_ors = 0;
+        assert_eq!(cuts.len(), 4);
+        for (_, cut, _) in &cuts {
+            let orientations = get_orientations_with_cut(&hedge_double_traingle, cut);
+            if orientations.len() == 4 {
+                num_with_4_ors += 1
+            } else if orientations.len() == 6 {
+                num_with_6_ors += 1
+            }
+        }
+
+        assert_eq!(num_with_4_ors, 2);
+        assert_eq!(num_with_6_ors, 2);
     }
 
     #[test]
@@ -772,13 +1098,17 @@ mod tests_cff {
 
         let incoming_vertices = vec![0, 5];
 
-        let dep_mom = 1;
-        let dep_mom_expr = vec![(0, -1)];
+        let dep_mom = EdgeIndex::from(1);
+        let dep_mom_expr = vec![(EdgeIndex::from(0), -1)];
+
+        let shift_rewrite = Some(ShiftRewrite {
+            dependent_momentum: dep_mom,
+            dependent_momentum_expr: dep_mom_expr,
+        });
 
         let orientataions = generate_orientations_for_testing(tbt_edges, incoming_vertices);
-        let cff =
-            generate_cff_from_orientations(orientataions, None, None, None, dep_mom, &dep_mom_expr)
-                .unwrap();
+        let cff = generate_cff_from_orientations(orientataions, None, None, None, &shift_rewrite)
+            .unwrap();
 
         let q = FourMomentum::from_args(F(1.0), F(2.0), F(3.0), F(4.0));
         let zero_vector = q.default();
@@ -813,6 +1143,10 @@ mod tests_cff {
             .reduce(|acc, x| acc * x)
             .unwrap();
 
+        let energies_cache = dummy_hedge_graph(energies_cache.len())
+            .new_hedgevec_from_iter(energies_cache)
+            .unwrap();
+
         let settings = tests::load_default_settings();
 
         let res = cff.eager_evaluate(&energies_cache, &settings) * energy_prefactor;
@@ -824,6 +1158,59 @@ mod tests_cff {
             "relative error: {:+e}",
             relative_error
         );
+
+        let mut tbt_hedge_builder = HedgeGraphBuilder::new();
+        let nodes = (0..6).map(|_| tbt_hedge_builder.add_node(())).collect_vec();
+        tbt_hedge_builder.add_external_edge(nodes[0], (), Orientation::Undirected, Flow::Sink);
+        tbt_hedge_builder.add_external_edge(nodes[5], (), Orientation::Undirected, Flow::Sink);
+
+        tbt_hedge_builder.add_edge(nodes[0], nodes[1], (), Orientation::Undirected);
+        tbt_hedge_builder.add_edge(nodes[2], nodes[0], (), Orientation::Undirected);
+        tbt_hedge_builder.add_edge(nodes[1], nodes[2], (), Orientation::Undirected);
+        tbt_hedge_builder.add_edge(nodes[1], nodes[3], (), Orientation::Undirected);
+        tbt_hedge_builder.add_edge(nodes[2], nodes[4], (), Orientation::Undirected);
+        tbt_hedge_builder.add_edge(nodes[3], nodes[4], (), Orientation::Undirected);
+        tbt_hedge_builder.add_edge(nodes[3], nodes[5], (), Orientation::Undirected);
+        tbt_hedge_builder.add_edge(nodes[5], nodes[4], (), Orientation::Undirected);
+
+        let tbt_hedge = tbt_hedge_builder.build::<NodeStorageVec<()>>();
+        let cff_hedge = generate_cff_expression(&tbt_hedge, &shift_rewrite).unwrap();
+        let res = cff_hedge.eager_evaluate(&energies_cache, &settings) * energy_prefactor;
+
+        let absolute_error = res - F(1.2625322619777278e-21);
+        let relative_error = absolute_error / res;
+        assert!(
+            relative_error.abs() < F(1.0e-15),
+            "relative error: {:+e}",
+            relative_error
+        );
+
+        let cuts = tbt_hedge.all_cuts(tbt_hedge[&nodes[0]].clone(), tbt_hedge[&nodes[5]].clone());
+        assert_eq!(cuts.len(), 9);
+        let mut num_with_24 = 0;
+        let mut num_with_16 = 0;
+        let mut num_with_42 = 0;
+        let mut num_with_36 = 0;
+        for (_, cut, _) in cuts.iter() {
+            let orientations = get_orientations_with_cut(&tbt_hedge, cut);
+            if orientations.len() == 24 {
+                num_with_24 += 1;
+            }
+            if orientations.len() == 16 {
+                num_with_16 += 1;
+            }
+            if orientations.len() == 42 {
+                num_with_42 += 1
+            }
+            if orientations.len() == 36 {
+                num_with_36 += 1;
+            }
+        }
+
+        assert_eq!(num_with_24, 4);
+        assert_eq!(num_with_16, 2);
+        assert_eq!(num_with_42, 2);
+        assert_eq!(num_with_36, 1);
     }
 
     #[test]
@@ -846,8 +1233,17 @@ mod tests_cff {
 
         let incoming_vertices = vec![0, 2, 6, 8];
 
-        let dep_mom = 3;
-        let dep_mom_expr = vec![(0, -1), (1, -1), (2, -1)];
+        let dep_mom = EdgeIndex::from(3);
+        let dep_mom_expr = vec![
+            (EdgeIndex::from(0), -1),
+            (EdgeIndex::from(1), -1),
+            (EdgeIndex::from(2), -1),
+        ];
+
+        let shift_rewrite = ShiftRewrite {
+            dependent_momentum: dep_mom,
+            dependent_momentum_expr: dep_mom_expr,
+        };
 
         let orientations = generate_orientations_for_testing(edges, incoming_vertices);
 
@@ -855,7 +1251,7 @@ mod tests_cff {
         let start = std::time::Instant::now();
 
         let _cff =
-            generate_cff_from_orientations(orientations, None, None, None, dep_mom, &dep_mom_expr)
+            generate_cff_from_orientations(orientations, None, None, None, &Some(shift_rewrite))
                 .unwrap();
 
         let finish = std::time::Instant::now();
@@ -890,8 +1286,13 @@ mod tests_cff {
             position_map.insert(i, i);
         }
 
-        let dep_mom = 7;
-        let dep_mom_expr = (0..7).map(|i| (i, -1)).collect();
+        let dep_mom = EdgeIndex::from(7);
+        let dep_mom_expr = (0..7).map(|i| (EdgeIndex::from(i), -1)).collect();
+
+        let shift_rewrite = ShiftRewrite {
+            dependent_momentum: dep_mom,
+            dependent_momentum_expr: dep_mom_expr,
+        };
 
         let incoming_vertices = vec![0, 1, 2, 3, 4, 5, 6, 7];
 
@@ -901,7 +1302,7 @@ mod tests_cff {
         let _start = std::time::Instant::now();
 
         let _cff =
-            generate_cff_from_orientations(orientations, None, None, None, dep_mom, &dep_mom_expr)
+            generate_cff_from_orientations(orientations, None, None, None, &Some(shift_rewrite))
                 .unwrap();
 
         let _finish = std::time::Instant::now();
@@ -932,13 +1333,22 @@ mod tests_cff {
 
         let incoming_vertices = vec![];
 
-        let dep_mom = 3;
-        let dep_mom_expr = vec![(0, -1), (1, -1), (2, -1)];
+        let dep_mom = EdgeIndex::from(3);
+        let dep_mom_expr = vec![
+            (EdgeIndex::from(0), -1),
+            (EdgeIndex::from(1), -1),
+            (EdgeIndex::from(2), -1),
+        ];
+
+        let shift_rewrite = ShiftRewrite {
+            dependent_momentum: dep_mom,
+            dependent_momentum_expr: dep_mom_expr,
+        };
 
         let start = std::time::Instant::now();
         let orientations = generate_orientations_for_testing(edges, incoming_vertices);
         let cff =
-            generate_cff_from_orientations(orientations, None, None, None, dep_mom, &dep_mom_expr)
+            generate_cff_from_orientations(orientations, None, None, None, &Some(shift_rewrite))
                 .unwrap();
         let finish = std::time::Instant::now();
         println!("time to generate cff: {:?}", finish - start);
@@ -946,6 +1356,10 @@ mod tests_cff {
         let settings = load_default_settings();
 
         let energy_cache = [F(3.0); 17];
+
+        let energy_cache = dummy_hedge_graph(energy_cache.len())
+            .new_hedgevec_from_iter(energy_cache)
+            .unwrap();
         let start = std::time::Instant::now();
         for _ in 0..100 {
             let _res = cff.evaluate(&energy_cache, &settings);

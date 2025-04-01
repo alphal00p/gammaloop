@@ -3,12 +3,12 @@ use std::{env, path::PathBuf};
 use _gammaloop::{
     graph::Graph,
     numerator::{
-        ContractionSettings, EvaluatorOptions, GammaAlgebraMode, NumeratorCompileOptions,
-        NumeratorEvaluatorOptions, NumeratorParseMode, NumeratorSettings,
+        ContractionSettings, EvaluatorOptions, GammaAlgebraMode, GlobalPrefactor,
+        NumeratorCompileOptions, NumeratorEvaluatorOptions, NumeratorParseMode, NumeratorSettings,
     },
     tests::load_default_settings,
     tests_from_pytest::{kinematics_builder, load_amplitude_output},
-    ExportSettings, GammaloopCompileOptions, TropicalSubgraphTableSettings,
+    GammaloopCompileOptions, ProcessSettings, TropicalSubgraphTableSettings,
 };
 use criterion::{criterion_group, criterion_main, Criterion};
 use pprof::criterion::{Output, PProfProfiler};
@@ -18,14 +18,15 @@ fn load_helper(path: &str) -> Graph {
     let (model, mut amplitude, _) = load_amplitude_output(path, true);
 
     amplitude.amplitude_graphs[0].graph.generate_cff();
-    let export_settings = ExportSettings {
+    let export_settings = ProcessSettings {
         compile_cff: true,
         numerator_settings: NumeratorSettings {
             eval_settings: NumeratorEvaluatorOptions::Single(EvaluatorOptions {
                 compile_options: NumeratorCompileOptions::Compiled,
                 cpe_rounds: Some(1),
             }),
-            global_prefactor: None,
+            dump_expression: None,
+            global_prefactor: GlobalPrefactor::default(),
             gamma_algebra: GammaAlgebraMode::Concrete,
             global_numerator: None,
             parse_mode: NumeratorParseMode::Direct,

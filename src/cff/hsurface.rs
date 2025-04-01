@@ -4,8 +4,11 @@ use crate::cff::surface::Surface;
 use crate::utils::{FloatLike, F};
 use derive_more::{From, Into};
 use itertools::Itertools;
+use linnet::half_edge::hedgevec::HedgeVec;
+use linnet::half_edge::involution::EdgeIndex;
 use serde::{Deserialize, Serialize};
 use symbolica::atom::Atom;
+use symbolica::{parse, symbol};
 use typed_index_collections::TiVec;
 
 use super::esurface::ExternalShift;
@@ -18,21 +21,21 @@ pub type HsurfaceCache<T> = TiVec<HsurfaceID, T>;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Hsurface {
-    pub positive_energies: Vec<usize>,
-    pub negative_energies: Vec<usize>,
+    pub positive_energies: Vec<EdgeIndex>,
+    pub negative_energies: Vec<EdgeIndex>,
     pub external_shift: ExternalShift,
 }
 
 impl Surface for Hsurface {
-    fn get_positive_energies(&self) -> impl Iterator<Item = &usize> {
+    fn get_positive_energies(&self) -> impl Iterator<Item = &EdgeIndex> {
         self.positive_energies.iter()
     }
 
-    fn get_negative_energies(&self) -> impl Iterator<Item = &usize> {
+    fn get_negative_energies(&self) -> impl Iterator<Item = &EdgeIndex> {
         self.negative_energies.iter()
     }
 
-    fn get_external_shift(&self) -> impl Iterator<Item = &(usize, i64)> {
+    fn get_external_shift(&self) -> impl Iterator<Item = &(EdgeIndex, i64)> {
         self.external_shift.iter()
     }
 }
@@ -46,12 +49,12 @@ impl PartialEq for Hsurface {
 
 impl Hsurface {
     #[inline]
-    pub fn compute_value<T: FloatLike>(&self, energy_cache: &[F<T>]) -> F<T> {
+    pub fn compute_value<T: FloatLike>(&self, energy_cache: &HedgeVec<F<T>>) -> F<T> {
         surface::compute_value(self, energy_cache)
     }
 
     #[inline]
-    pub fn compute_shift_part<T: FloatLike>(&self, energy_cache: &[F<T>]) -> F<T> {
+    pub fn compute_shift_part<T: FloatLike>(&self, energy_cache: &HedgeVec<F<T>>) -> F<T> {
         surface::compute_shift_part(self, energy_cache)
     }
 
@@ -62,7 +65,9 @@ impl Hsurface {
                 .map(|energies| {
                     energies
                         .iter()
-                        .map(|i| Atom::parse(&format!("E{}", i)).unwrap())
+                        .map(|i| {
+                            parse!(&format!("Q({}, cind(0))", Into::<usize>::into(*i))).unwrap()
+                        })
                         .collect_vec()
                 })
                 .collect_tuple()
@@ -72,7 +77,9 @@ impl Hsurface {
             .external_shift
             .iter()
             .fold(Atom::new(), |sum, (i, sign)| {
-                Atom::new_num(*sign) * &Atom::parse(&format!("p{}", i)).unwrap() + &sum
+                Atom::new_num(*sign)
+                    * &parse!(&format!("P({}, cind(0))", Into::<usize>::into(*i))).unwrap()
+                    + &sum
             });
 
         let symbolic_sum_positive_energies = symbolic_positive_energies
@@ -115,8 +122,6 @@ impl Hsurface {
         let dummy_esurface = Esurface {
             energies,
             external_shift,
-            sub_orientation: vec![],
-            circled_vertices: VertexSet::dummy(),
         };
 
         Some(dummy_esurface.to_atom())
@@ -125,7 +130,7 @@ impl Hsurface {
 
 pub fn compute_hsurface_cache<T: FloatLike>(
     hsurfaces: &HsurfaceCollection,
-    energy_cache: &[F<T>],
+    energy_cache: &HedgeVec<F<T>>,
 ) -> HsurfaceCache<F<T>> {
     hsurfaces
         .iter()
@@ -136,7 +141,14 @@ pub fn compute_hsurface_cache<T: FloatLike>(
 
 #[cfg(test)]
 mod tests {
-    use symbolica::atom::Atom;
+    use linnet::half_edge::{
+        builder::HedgeGraphBuilder,
+        involution::{EdgeIndex, Orientation},
+        HedgeGraph, NodeIndex,
+    };
+    use symbolica::atom::{Atom, AtomCore};
+
+    use symbolica::{parse, symbol};
 
     use crate::{
         cff::{cff_graph::VertexSet, esurface::Esurface},
@@ -145,47 +157,64 @@ mod tests {
 
     use super::Hsurface;
 
+    fn dummy_hedge_graph(num_edges: usize) -> HedgeGraph<(), ()> {
+        let mut graph = HedgeGraphBuilder::new();
+        graph.add_node(());
+
+        for _ in 0..num_edges {
+            graph.add_edge(NodeIndex(0), NodeIndex(0), (), Orientation::Default);
+        }
+
+        graph.build()
+    }
+
     #[test]
     fn test_compute_shift_part() {
-        let external_shift = vec![(2, 1), (3, -1)];
+        let dummy_graph = dummy_hedge_graph(4);
+        let external_shift = vec![(EdgeIndex::from(2), 1), (EdgeIndex::from(3), -1)];
 
         let h_surface = Hsurface {
-            positive_energies: vec![0],
-            negative_energies: vec![1],
+            positive_energies: vec![EdgeIndex::from(0)],
+            negative_energies: vec![EdgeIndex::from(1)],
             external_shift,
         };
 
-        let energy_cache = [F(1.0), F(2.0), F(3.0), F(4.0)];
+        let energy_cache = dummy_graph
+            .new_hedgevec_from_iter(vec![F(1.0), F(2.0), F(3.0), F(4.0)])
+            .unwrap();
         let shift_part = h_surface.compute_shift_part(&energy_cache);
         assert_eq!(shift_part.0, -1.0);
     }
 
     #[test]
     fn test_compute_value() {
-        let external_shift = vec![(4, -1), (5, 1)];
+        let dummy_graph = dummy_hedge_graph(6);
+        let external_shift = vec![(EdgeIndex::from(4), -1), (EdgeIndex::from(5), 1)];
 
         let h_surface = Hsurface {
-            positive_energies: vec![0, 1],
-            negative_energies: vec![2, 3],
+            positive_energies: vec![EdgeIndex::from(0), EdgeIndex::from(1)],
+            negative_energies: vec![EdgeIndex::from(2), EdgeIndex::from(3)],
             external_shift,
         };
 
-        let energy_cache = [F(1.0), F(2.0), F(3.0), F(4.0), F(5.0), F(6.0)];
+        let energy_cache = dummy_graph
+            .new_hedgevec_from_iter(vec![F(1.0), F(2.0), F(3.0), F(4.0), F(5.0), F(6.0)])
+            .unwrap();
         let value = h_surface.compute_value(&energy_cache);
         assert_eq!(value.0, 1.0 + 2.0 - 3.0 - 4.0 - 5.0 + 6.0);
     }
 
     #[test]
     fn test_to_atom() {
-        let external_shift = vec![(4, -1), (5, 1)];
+        let external_shift = vec![(EdgeIndex::from(4), -1), (EdgeIndex::from(5), 1)];
         let h_surface = Hsurface {
-            positive_energies: vec![0, 1],
-            negative_energies: vec![2, 3],
+            positive_energies: vec![EdgeIndex::from(0), EdgeIndex::from(1)],
+            negative_energies: vec![EdgeIndex::from(2), EdgeIndex::from(3)],
             external_shift,
         };
 
         let h_surface_atom = h_surface.to_atom();
-        let expected_atom = Atom::parse("E0 + E1 - E2 - E3 - p4 + p5").unwrap();
+        let expected_atom = parse!("Q(0, cind(0)) + Q(1, cind(0)) - Q(2, cind(0)) - Q(3, cind(0)) - P(4, cind(0)) + P(5, cind(0))").unwrap();
         let diff = h_surface_atom - &expected_atom;
         let diff = diff.expand();
         assert_eq!(diff, Atom::new());
@@ -193,19 +222,17 @@ mod tests {
 
     #[test]
     fn test_to_atom_with_rewrite() {
-        let external_shift = vec![(4, -1), (5, 1)];
+        let external_shift = vec![(EdgeIndex::from(4), -1), (EdgeIndex::from(5), 1)];
 
         let h_surface = Hsurface {
-            positive_energies: vec![0, 1],
-            negative_energies: vec![2, 3],
+            positive_energies: vec![EdgeIndex::from(0), EdgeIndex::from(1)],
+            negative_energies: vec![EdgeIndex::from(2), EdgeIndex::from(3)],
             external_shift: external_shift.clone(),
         };
 
         let e_surface = Esurface {
-            energies: vec![2, 3, 6],
-            external_shift: vec![(4, 1)],
-            sub_orientation: vec![true, true],
-            circled_vertices: VertexSet::dummy(),
+            energies: vec![EdgeIndex::from(2), EdgeIndex::from(3), EdgeIndex::from(6)],
+            external_shift: vec![(EdgeIndex::from(4), 1)],
         };
 
         let h_surface_atom = h_surface.to_atom().expand();
@@ -215,23 +242,31 @@ mod tests {
         println!("with {}", e_surface_atom);
 
         let rewritten = h_surface.to_atom_with_rewrite(&e_surface).unwrap();
-        let target = Atom::parse("E0 + E1 + E6 + p5").unwrap();
+        let target =
+            parse!("Q(0, cind(0)) + Q(1, cind(0)) + Q(6, cind(0)) + P(5, cind(0))").unwrap();
         let diff = rewritten - &target;
         let diff = diff.expand();
 
         assert_eq!(diff, Atom::new(), "diff: {}", diff);
 
         let h_surface_2 = Hsurface {
-            positive_energies: vec![1, 7],
-            negative_energies: vec![3, 6],
+            positive_energies: vec![EdgeIndex::from(1), EdgeIndex::from(7)],
+            negative_energies: vec![EdgeIndex::from(3), EdgeIndex::from(6)],
             external_shift,
         };
 
         let rewritten = h_surface_2.to_atom_with_rewrite(&e_surface).unwrap();
-        let target = Atom::parse("E1 + E7 + E2 + p5").unwrap();
+        let target =
+            parse!("Q(1, cind(0)) + Q(7, cind(0)) + Q(2, cind(0)) + P(5, cind(0))").unwrap();
         let diff = rewritten - &target;
         let diff = diff.expand();
 
         assert_eq!(diff, Atom::new(), "diff: {}", diff);
+    }
+}
+
+impl From<HsurfaceID> for Atom {
+    fn from(value: HsurfaceID) -> Self {
+        parse!(&format!("H({})", Into::<usize>::into(value))).unwrap()
     }
 }

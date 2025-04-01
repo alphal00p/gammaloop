@@ -7,14 +7,14 @@ then
     echo "ERROR: could not build dependencies";
     exit $(($RETCODE))
 fi
-./bin/compile_lib.sh "$@"
+./bin/compile_lib.sh --release "$@"
 RETCODE=$RETCODE+$?;
 if [ ! $(($RETCODE)) == 0 ]
 then
     echo "ERROR: could not build compile gammaloop library";
     exit $(($RETCODE))
 fi
-./bin/compile_bin.sh "$@"
+./bin/compile_bin.sh --release "$@"
 RETCODE=$RETCODE+$?;
 if [ ! $(($RETCODE)) == 0 ]
 then

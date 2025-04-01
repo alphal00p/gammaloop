@@ -73,7 +73,7 @@ impl HFunctionTestIntegrand {
         let parameterization_time = parameterization_start.elapsed();
 
         let evaluation_time = std::time::Instant::now();
-        let h = utils::h(t, None, None, &self.integrand_settings.h_function);
+        let h = utils::h(&t, None, None, &self.integrand_settings.h_function);
         let evaluation_time = evaluation_time.elapsed();
 
         ((h * jac).into(), parameterization_time, evaluation_time)

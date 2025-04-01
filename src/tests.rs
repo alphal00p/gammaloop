@@ -3,10 +3,9 @@ use crate::integrands::IntegrandSettings;
 use crate::utils::{self, ApproxEq, F};
 use crate::{
     h_function_test::HFunctionTestSettings, integrand_factory, integrands::UnitVolumeSettings,
-    observables::JetSliceSettings, observables::PhaseSpaceSelectorSettings, IntegratedPhase,
-    Settings,
+    IntegratedPhase, Settings,
 };
-
+use crate::{observables::JetSliceSettings, observables::PhaseSpaceSelectorSettings};
 use colored::Colorize;
 use hyperdual::Zero;
 use spenso::complex::Complex;

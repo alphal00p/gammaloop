@@ -1,11 +1,13 @@
 use crate::cff::expression::CFFFloat;
-use crate::momentum::{FourMomentum, Signature, ThreeMomentum};
+use crate::momentum::{FourMomentum, ThreeMomentum};
+use crate::momentum_sample::{ExternalFourMomenta, ExternalIndex, LoopMomenta};
 use crate::numerator::NumeratorEvaluateFloat;
+use crate::signature::{ExternalSignature, LoopSignature};
 use crate::SamplingSettings;
+use crate::GAMMALOOP_NAMESPACE;
 use crate::{ParameterizationMapping, ParameterizationMode, Settings, MAX_LOOP};
 use bincode::{Decode, Encode};
 use colored::Colorize;
-
 use itertools::{izip, Itertools};
 use rand::Rng;
 use ref_ops::{RefAdd, RefDiv, RefMul, RefNeg, RefRem, RefSub};
@@ -14,7 +16,6 @@ use rug::ops::{CompleteRound, Pow};
 use rug::Float;
 use serde::{Deserialize, Deserializer, Serialize};
 use spenso::complex::SymbolicaComplex;
-use spenso::symbolica_utils::{SerializableAtom, SerializableSymbol};
 use spenso::{
     complex::{Complex, R},
     contraction::{RefOne, RefZero},
@@ -25,8 +26,8 @@ use symbolica::domains::float::{
     ConstructibleFloat, NumericalFloatLike, RealNumberLike, SingleFloat,
 };
 use symbolica::domains::integer::Integer;
-use symbolica::evaluate::{CompiledEvaluatorFloat, FunctionMap};
-use symbolica::symb;
+use symbolica::evaluate::CompiledEvaluatorFloat;
+use symbolica::{symbol, with_default_namespace};
 
 use statrs::function::gamma::{gamma, gamma_lr, gamma_ur};
 use std::cmp::{Ord, Ordering};
@@ -39,7 +40,7 @@ use symbolica::domains::float::Real;
 use symbolica::domains::rational::Rational;
 // use symbolica::domains::Field;
 use symbolica::numerical_integration::Sample;
-use typed_index_collections::TiSlice;
+use typed_index_collections::{TiSlice, TiVec};
 
 #[allow(unused_imports)]
 use log::{debug, info};
@@ -49,6 +50,12 @@ use symbolica::printer::{AtomPrinter, PrintOptions};
 use git_version::git_version;
 pub const GIT_VERSION: &str = git_version!();
 pub const VERSION: &str = "0.0.1";
+
+/// can be used instead of commenting out code
+#[macro_export]
+macro_rules! disable {
+    ($($tokens:tt)*) => {};
+}
 
 #[allow(unused)]
 const MAX_DIMENSION: usize = MAX_LOOP * 3;
@@ -159,7 +166,7 @@ impl<const N: u32> FromStr for VarFloat<N> {
     }
 }
 
-impl<'a, const N: u32> Rem<&VarFloat<N>> for &'a VarFloat<N> {
+impl<const N: u32> Rem<&VarFloat<N>> for &VarFloat<N> {
     type Output = VarFloat<N>;
 
     fn rem(self, rhs: &VarFloat<N>) -> Self::Output {
@@ -217,7 +224,7 @@ impl<const N: u32> std::ops::Mul<&VarFloat<N>> for VarFloat<N> {
     }
 }
 
-impl<'a, const N: u32> std::ops::Mul<VarFloat<N>> for &'a VarFloat<N> {
+impl<const N: u32> std::ops::Mul<VarFloat<N>> for &VarFloat<N> {
     type Output = VarFloat<N>;
 
     fn mul(self, rhs: VarFloat<N>) -> Self::Output {
@@ -225,7 +232,7 @@ impl<'a, const N: u32> std::ops::Mul<VarFloat<N>> for &'a VarFloat<N> {
     }
 }
 
-impl<'a, const N: u32> std::ops::Mul<&VarFloat<N>> for &'a VarFloat<N> {
+impl<const N: u32> std::ops::Mul<&VarFloat<N>> for &VarFloat<N> {
     type Output = VarFloat<N>;
 
     fn mul(self, rhs: &VarFloat<N>) -> Self::Output {
@@ -263,7 +270,7 @@ impl<const N: u32> std::ops::Add<&VarFloat<N>> for VarFloat<N> {
     }
 }
 
-impl<'a, const N: u32> std::ops::Add<VarFloat<N>> for &'a VarFloat<N> {
+impl<const N: u32> std::ops::Add<VarFloat<N>> for &VarFloat<N> {
     type Output = VarFloat<N>;
 
     fn add(self, rhs: VarFloat<N>) -> Self::Output {
@@ -271,7 +278,7 @@ impl<'a, const N: u32> std::ops::Add<VarFloat<N>> for &'a VarFloat<N> {
     }
 }
 
-impl<'a, const N: u32> std::ops::Add<&VarFloat<N>> for &'a VarFloat<N> {
+impl<const N: u32> std::ops::Add<&VarFloat<N>> for &VarFloat<N> {
     type Output = VarFloat<N>;
 
     fn add(self, rhs: &VarFloat<N>) -> Self::Output {
@@ -309,7 +316,7 @@ impl<const N: u32> std::ops::Sub<&VarFloat<N>> for VarFloat<N> {
     }
 }
 
-impl<'a, const N: u32> std::ops::Sub<VarFloat<N>> for &'a VarFloat<N> {
+impl<const N: u32> std::ops::Sub<VarFloat<N>> for &VarFloat<N> {
     type Output = VarFloat<N>;
 
     fn sub(self, rhs: VarFloat<N>) -> Self::Output {
@@ -317,7 +324,7 @@ impl<'a, const N: u32> std::ops::Sub<VarFloat<N>> for &'a VarFloat<N> {
     }
 }
 
-impl<'a, const N: u32> std::ops::Sub<&VarFloat<N>> for &'a VarFloat<N> {
+impl<const N: u32> std::ops::Sub<&VarFloat<N>> for &VarFloat<N> {
     type Output = VarFloat<N>;
 
     fn sub(self, rhs: &VarFloat<N>) -> Self::Output {
@@ -355,7 +362,7 @@ impl<const N: u32> Div<&VarFloat<N>> for VarFloat<N> {
     }
 }
 
-impl<'a, const N: u32> Div<VarFloat<N>> for &'a VarFloat<N> {
+impl<const N: u32> Div<VarFloat<N>> for &VarFloat<N> {
     type Output = VarFloat<N>;
 
     fn div(self, rhs: VarFloat<N>) -> Self::Output {
@@ -363,7 +370,7 @@ impl<'a, const N: u32> Div<VarFloat<N>> for &'a VarFloat<N> {
     }
 }
 
-impl<'a, const N: u32> Div<&VarFloat<N>> for &'a VarFloat<N> {
+impl<const N: u32> Div<&VarFloat<N>> for &VarFloat<N> {
     type Output = VarFloat<N>;
 
     fn div(self, rhs: &VarFloat<N>) -> Self::Output {
@@ -393,7 +400,7 @@ impl<const N: u32> std::ops::Neg for VarFloat<N> {
     }
 }
 
-impl<'a, const N: u32> std::ops::Neg for &'a VarFloat<N> {
+impl<const N: u32> std::ops::Neg for &VarFloat<N> {
     type Output = VarFloat<N>;
 
     fn neg(self) -> Self::Output {
@@ -530,6 +537,9 @@ impl<const N: u32> RealNumberLike for VarFloat<N> {
 }
 
 impl<const N: u32> Real for VarFloat<N> {
+    fn i(&self) -> Option<Self> {
+        None
+    }
     #[inline(always)]
     fn pi(&self) -> Self {
         Float::with_val(N, rug::float::Constant::Pi).into()
@@ -844,7 +854,7 @@ pub struct F<T: FloatLike>(pub T);
 
 impl<T: FloatLike> R for F<T> {}
 
-impl<'a, T: FloatLike> Rem<&F<T>> for &'a F<T> {
+impl<T: FloatLike> Rem<&F<T>> for &F<T> {
     type Output = F<T>;
 
     fn rem(self, rhs: &F<T>) -> Self::Output {
@@ -1007,6 +1017,10 @@ impl<T: FloatLike + ConstructibleFloat> ConstructibleFloat for F<T> {
 impl<T: FloatLike> Real for F<T> {
     fn atan2(&self, x: &Self) -> Self {
         F(self.0.atan2(&x.0))
+    }
+
+    fn i(&self) -> Option<Self> {
+        None
     }
 
     fn powf(&self, e: &Self) -> Self {
@@ -1174,14 +1188,14 @@ impl<T: FloatLike> Add<&F<T>> for F<T> {
     }
 }
 
-impl<'a, T: FloatLike> Add<&F<T>> for &'a F<T> {
+impl<T: FloatLike> Add<&F<T>> for &F<T> {
     type Output = F<T>;
     fn add(self, rhs: &F<T>) -> Self::Output {
         F(self.0.ref_add(&rhs.0))
     }
 }
 
-impl<'a, T: FloatLike> Add<F<T>> for &'a F<T> {
+impl<T: FloatLike> Add<F<T>> for &F<T> {
     type Output = F<T>;
     fn add(self, rhs: F<T>) -> Self::Output {
         F(self.0.ref_add(rhs.0))
@@ -1214,14 +1228,14 @@ impl<T: FloatLike> Sub<&F<T>> for F<T> {
     }
 }
 
-impl<'a, T: FloatLike> Sub<&F<T>> for &'a F<T> {
+impl<T: FloatLike> Sub<&F<T>> for &F<T> {
     type Output = F<T>;
     fn sub(self, rhs: &F<T>) -> Self::Output {
         F(self.0.ref_sub(&rhs.0))
     }
 }
 
-impl<'a, T: FloatLike> Sub<F<T>> for &'a F<T> {
+impl<T: FloatLike> Sub<F<T>> for &F<T> {
     type Output = F<T>;
     fn sub(self, rhs: F<T>) -> Self::Output {
         F(self.0.ref_sub(rhs.0))
@@ -1254,14 +1268,14 @@ impl<T: FloatLike> Mul<&F<T>> for F<T> {
     }
 }
 
-impl<'a, T: FloatLike> Mul<&F<T>> for &'a F<T> {
+impl<T: FloatLike> Mul<&F<T>> for &F<T> {
     type Output = F<T>;
     fn mul(self, rhs: &F<T>) -> Self::Output {
         F(self.0.ref_mul(&rhs.0))
     }
 }
 
-impl<'a, T: FloatLike> Mul<F<T>> for &'a F<T> {
+impl<T: FloatLike> Mul<F<T>> for &F<T> {
     type Output = F<T>;
     fn mul(self, rhs: F<T>) -> Self::Output {
         F(self.0.ref_mul(rhs.0))
@@ -1294,14 +1308,14 @@ impl<T: FloatLike> Div<&F<T>> for F<T> {
     }
 }
 
-impl<'a, T: FloatLike> Div<&F<T>> for &'a F<T> {
+impl<T: FloatLike> Div<&F<T>> for &F<T> {
     type Output = F<T>;
     fn div(self, rhs: &F<T>) -> Self::Output {
         F(self.0.ref_div(&rhs.0))
     }
 }
 
-impl<'a, T: FloatLike> Div<F<T>> for &'a F<T> {
+impl<T: FloatLike> Div<F<T>> for &F<T> {
     type Output = F<T>;
     fn div(self, rhs: F<T>) -> Self::Output {
         F(self.0.ref_div(rhs.0))
@@ -1327,7 +1341,7 @@ impl<T: FloatLike> Neg for F<T> {
     }
 }
 
-impl<'a, T: FloatLike> Neg for &'a F<T> {
+impl<T: FloatLike> Neg for &F<T> {
     type Output = F<T>;
     fn neg(self) -> Self::Output {
         F(self.0.ref_neg())
@@ -1499,14 +1513,17 @@ pub fn parse_python_expression(expression: &str) -> Atom {
         .replace("cmath.pi", "pi")
         .replace("math.sqrt", "sqrt")
         .replace("math.pi", "pi");
-    Atom::parse(processed_string.as_str())
-        .map_err(|e| {
-            format!(
-                "Failed to parse expression : '{}'\nError: {}",
-                processed_string, e
-            )
-        })
-        .unwrap()
+    Atom::parse(with_default_namespace!(
+        processed_string.as_str(),
+        GAMMALOOP_NAMESPACE
+    ))
+    .map_err(|e| {
+        format!(
+            "Failed to parse expression : '{}'\nError: {}",
+            processed_string, e
+        )
+    })
+    .unwrap()
 }
 
 pub fn to_str_expression(expression: &Atom) -> String {
@@ -1515,6 +1532,7 @@ pub fn to_str_expression(expression: &Atom) -> String {
         AtomPrinter::new_with_options(
             expression.as_view(),
             PrintOptions {
+                pretty_matrix: true,
                 terms_on_new_line: false,
                 color_top_level_sum: false,
                 color_builtin_symbols: false,
@@ -1527,7 +1545,11 @@ pub fn to_str_expression(expression: &Atom) -> String {
                 num_exp_as_superscript: false,
                 latex: false,
                 double_star_for_exponentiation: false,
-                precision: None
+                precision: None,
+                color_namespace: true,
+                hide_all_namespaces: false,
+                hide_namespace: None,
+                ..Default::default()
             },
         )
     )
@@ -1773,7 +1795,7 @@ pub fn pinch_dampening_function<T: FloatLike>(
 }
 
 pub fn h<T: FloatLike>(
-    t: F<T>,
+    t: &F<T>,
     tstar: Option<F<T>>,
     sigma: Option<F<T>>,
     h_function_settings: &crate::HFunctionSettings,
@@ -1811,7 +1833,7 @@ pub fn h<T: FloatLike>(
             };
             let prefactor = match power {
                 None | Some(0) => normalisation.inv(),
-                Some(p) => (&t / &sig).powi(-(p as i32)) / normalisation,
+                Some(p) => (t / &sig).powi(-(p as i32)) / normalisation,
             };
             prefactor
                 * (F::<T>::from_f64(2_f64)
@@ -1847,7 +1869,7 @@ pub fn h<T: FloatLike>(
 
             let prefactor = match power {
                 None | Some(0) => normalisation.inv(),
-                Some(p) => (&t / &sig).powi(-(p as i32)) / normalisation,
+                Some(p) => (t / &sig).powi(-(p as i32)) / normalisation,
             };
 
             // println!("prefactor: {}", prefactor);
@@ -1856,7 +1878,7 @@ pub fn h<T: FloatLike>(
                     .exp()
         }
         crate::HFunction::ExponentialCT => {
-            let delta_t_sq = (tstar.clone().unwrap() - &t).square();
+            let delta_t_sq = (tstar.clone().unwrap() - t).square();
             let tstar_sq = tstar.unwrap().square();
             // info!("dampener: {}", dampener);
             // info!("delta_t_sq: {}", delta_t_sq);
@@ -1994,27 +2016,28 @@ pub fn next_combination_with_replacement(state: &mut [usize], max_entry: usize) 
 }
 
 pub fn compute_loop_part<T: FloatLike>(
-    loop_signature: &Signature,
-    loop_moms: &[ThreeMomentum<F<T>>],
+    loop_signature: &LoopSignature,
+    loop_moms: &LoopMomenta<F<T>>,
 ) -> ThreeMomentum<F<T>> {
-    loop_signature.apply(loop_moms)
+    loop_signature.apply_typed(loop_moms)
 }
 
 pub fn compute_shift_part<T: FloatLike>(
-    external_signature: &Signature,
-    external_moms: &[FourMomentum<F<T>>],
+    external_signature: &ExternalSignature,
+    external_moms: &ExternalFourMomenta<F<T>>,
 ) -> FourMomentum<F<T>> {
-    external_signature.apply(external_moms)
+    external_signature
+        .apply_typed::<FourMomentum<F<T>>, ExternalIndex, ExternalFourMomenta<F<T>>>(external_moms)
 }
 
 pub fn compute_t_part_of_shift_part<T: FloatLike>(
-    external_signature: &Signature,
-    external_moms: &[FourMomentum<F<T>>],
+    external_signature: &ExternalSignature,
+    external_moms: &ExternalFourMomenta<F<T>>,
 ) -> F<T> {
     // external_signature.panic_validate_basis(external_moms);
     external_signature
         .apply_iter(external_moms.iter().map(|m| m.temporal.value.clone()))
-        .unwrap_or(external_moms[0].temporal.value.zero())
+        .unwrap_or(external_moms[ExternalIndex(0)].temporal.value.zero())
 }
 
 // Bilinear form for E-surface defined as sqrt[(k+p1)^2+m1sq] + sqrt[(k+p2)^2+m2sq] + e_shift
@@ -2359,7 +2382,7 @@ pub fn get_n_dim_for_n_loop_momenta(
         settings.sampling,
         SamplingSettings::DiscreteGraphs(crate::DiscreteGraphSamplingSettings::TropicalSampling(_))
     ) {
-        let tropical_part = 2 * n_edges.unwrap() - 1;
+        let tropical_part = 2 * n_edges.expect("No tropical subgraph table generated, please run without tropical sampling or regenerate with tables") - 1;
         let d_l = 3 * n_loop_momenta;
         return if d_l % 2 == 1 {
             tropical_part + d_l + 1
@@ -2860,6 +2883,10 @@ pub fn format_wdhms(seconds: usize) -> String {
     compound_duration.join(" ")
 }
 
+pub fn format_wdhms_from_duration(duration: Duration) -> String {
+    format_wdhms(duration.as_secs() as usize)
+}
+
 #[allow(unused)]
 pub fn inverse_gamma_lr(a: f64, p: f64, n_iter: usize) -> f64 {
     // this algorithm is taken from https://dl.acm.org/doi/pdf/10.1145/22721.23109
@@ -3192,27 +3219,97 @@ pub struct GammaloopSymbols {
     pub vbar: Symbol,
     pub v: Symbol,
     pub u: Symbol,
+    pub color_wrap: Symbol,
     pub epsilon: Symbol,
     pub epsilonbar: Symbol,
+    pub x_: Symbol,
+    pub y_: Symbol,
+    pub z_: Symbol,
+    pub a_: Symbol,
+    pub b_: Symbol,
+    pub c_: Symbol,
+    pub d_: Symbol,
+    pub e_: Symbol,
+    pub f_: Symbol,
+    pub g_: Symbol,
+    pub h_: Symbol,
+
+    pub x__: Symbol,
+    pub y__: Symbol,
+    pub z__: Symbol,
+    pub a__: Symbol,
+    pub b__: Symbol,
+    pub c__: Symbol,
+    pub d__: Symbol,
+    pub e__: Symbol,
+    pub f__: Symbol,
+    pub g__: Symbol,
+    pub h__: Symbol,
+
+    pub x___: Symbol,
+    pub y___: Symbol,
+    pub z___: Symbol,
+    pub a___: Symbol,
+    pub b___: Symbol,
+    pub c___: Symbol,
+    pub d___: Symbol,
+    pub e___: Symbol,
+    pub f___: Symbol,
+    pub g___: Symbol,
+    pub h___: Symbol,
+    pub dim: Symbol,
     pub coeff: Symbol,
     pub top: Symbol,
     pub num: Symbol,
     pub den: Symbol,
 }
 
-use symbolica::state::{FunctionAttribute, State};
-
 pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
-    ubar: symb!("ubar"),
-    vbar: symb!("vbar"),
-    v: symb!("v"),
-    u: symb!("u"),
-    epsilon: symb!("ϵ"),
-    epsilonbar: symb!("ϵbar"),
-    coeff: symb!("coef"),
-    top: State::get_symbol_with_attributes("Top", &[]).unwrap(),
-    num: symb!("num"),
-    den: symb!("den"),
+    top: symbol!("Top"),
+    num: symbol!("num"),
+    den: symbol!("den"),
+    ubar: symbol!("ubar"),
+    vbar: symbol!("vbar"),
+    dim: symbol!("dim"),
+    v: symbol!("v"),
+    u: symbol!("u"),
+    epsilon: symbol!("ϵ"),
+    color_wrap: symbol!("color"),
+    epsilonbar: symbol!("ϵbar"),
+    coeff: symbol!("coef"),
+    x_: symbol!("x_"),
+    y_: symbol!("y_"),
+    z_: symbol!("z_"),
+    a_: symbol!("a_"),
+    b_: symbol!("b_"),
+    c_: symbol!("c_"),
+    d_: symbol!("d_"),
+    e_: symbol!("e_"),
+    f_: symbol!("f_"),
+    g_: symbol!("g_"),
+    h_: symbol!("h_"),
+    x__: symbol!("x__"),
+    y__: symbol!("y__"),
+    z__: symbol!("z__"),
+    a__: symbol!("a__"),
+    b__: symbol!("b__"),
+    c__: symbol!("c__"),
+    d__: symbol!("d__"),
+    e__: symbol!("e__"),
+    f__: symbol!("f__"),
+    g__: symbol!("g__"),
+    h__: symbol!("h__"),
+    x___: symbol!("x___"),
+    y___: symbol!("y___"),
+    z___: symbol!("z___"),
+    a___: symbol!("a___"),
+    b___: symbol!("b___"),
+    c___: symbol!("c___"),
+    d___: symbol!("d___"),
+    e___: symbol!("e___"),
+    f___: symbol!("f___"),
+    g___: symbol!("g___"),
+    h___: symbol!("h___"),
 });
 
 /// Checks if two lists are permutations of eachother, and establish a map between indices
@@ -3248,139 +3345,6 @@ pub fn is_permutation<T: PartialEq>(left: &[T], right: &[T]) -> Option<Permutati
     })
 }
 
-#[derive(PartialEq, Eq, Hash, Clone, Serialize, Deserialize, Debug)]
-enum OwnedAtomOrTaggedFunction {
-    Atom(SerializableAtom),
-    TaggedFunction(SerializableSymbol, Vec<SerializableAtom>),
-}
-
-use ahash::AHashMap;
-
-#[derive(Clone, Serialize, Deserialize, Debug)]
-pub struct OwnedFunctionMap<T = Rational> {
-    map: AHashMap<OwnedAtomOrTaggedFunction, OwnedConstOrExpr<T>>,
-    tag: AHashMap<SerializableSymbol, usize>,
-}
-
-impl<T> Default for OwnedFunctionMap<T> {
-    fn default() -> Self {
-        OwnedFunctionMap::new()
-    }
-}
-
-impl<T> OwnedFunctionMap<T> {
-    #[allow(clippy::new_without_default)]
-    pub fn new() -> Self {
-        OwnedFunctionMap {
-            map: AHashMap::default(),
-            tag: AHashMap::default(),
-        }
-    }
-
-    pub fn add_constant<A: Into<Atom>>(&mut self, key: A, value: T) {
-        self.map.insert(
-            OwnedAtomOrTaggedFunction::Atom(<A as Into<Atom>>::into(key).into()),
-            OwnedConstOrExpr::Const(value),
-        );
-    }
-
-    pub fn add_function(
-        &mut self,
-        name: Symbol,
-        rename: String,
-        args: Vec<Symbol>,
-        body: Atom,
-    ) -> Result<(), &str> {
-        if let Some(t) = self.tag.insert(name.into(), 0) {
-            if t != 0 {
-                return Err("Cannot add the same function with a different number of parameters");
-            }
-        }
-
-        self.map.insert(
-            OwnedAtomOrTaggedFunction::TaggedFunction(name.into(), vec![]),
-            OwnedConstOrExpr::Expr(
-                rename,
-                0,
-                args.into_iter().map(SerializableSymbol::from).collect(),
-                body.into(),
-            ),
-        );
-
-        Ok(())
-    }
-
-    pub fn add_tagged_function(
-        &mut self,
-        name: Symbol,
-        tags: Vec<Atom>,
-        rename: String,
-        args: Vec<Symbol>,
-        body: Atom,
-    ) -> Result<(), &str> {
-        if let Some(t) = self.tag.insert(name.into(), tags.len()) {
-            if t != tags.len() {
-                return Err("Cannot add the same function with a different number of parameters");
-            }
-        }
-
-        let tag_len = tags.len();
-
-        self.map.insert(
-            OwnedAtomOrTaggedFunction::TaggedFunction(
-                name.into(),
-                tags.into_iter().map(SerializableAtom::from).collect(),
-            ),
-            OwnedConstOrExpr::Expr(
-                rename,
-                tag_len,
-                args.into_iter().map(SerializableSymbol::from).collect(),
-                body.into(),
-            ),
-        );
-
-        Ok(())
-    }
-}
-
-#[derive(Clone, Serialize, Deserialize, Debug)]
-enum OwnedConstOrExpr<T> {
-    Const(T),
-    Expr(String, usize, Vec<SerializableSymbol>, SerializableAtom),
-}
-
-impl<'a, T: Clone, U: From<T>> From<&'a OwnedFunctionMap<T>> for FunctionMap<'a, U> {
-    fn from(owned: &'a OwnedFunctionMap<T>) -> Self {
-        let mut fn_map = FunctionMap::new();
-
-        for (k, v) in owned.map.iter() {
-            match v {
-                OwnedConstOrExpr::Const(v) => {
-                    if let OwnedAtomOrTaggedFunction::Atom(a) = k {
-                        fn_map.add_constant(a.0.as_view(), v.clone().into());
-                    }
-                }
-
-                OwnedConstOrExpr::Expr(rename, _, args, body) => {
-                    if let OwnedAtomOrTaggedFunction::TaggedFunction(name, tags) = k {
-                        fn_map
-                            .add_tagged_function(
-                                (*name).into(),
-                                tags.iter().map(|a| a.0.as_view().into()).collect(),
-                                rename.clone(),
-                                args.iter().map(|&a| a.into()).collect(),
-                                body.0.as_view(),
-                            )
-                            .unwrap();
-                    }
-                }
-            }
-        }
-
-        fn_map
-    }
-}
-
 #[derive(Clone, Debug)]
 pub struct PermutationMap {
     left_to_right: Vec<usize>,
@@ -3412,5 +3376,115 @@ fn test_is_permutation() {
     for ind in 0..5 {
         assert_eq!(a[ind], b[permutation_map.left_to_right[ind]]);
         assert_eq!(b[ind], a[permutation_map.right_to_left[ind]]);
+    }
+}
+
+impl<T: FloatLike> momtrop::float::MomTropFloat for F<T> {
+    #[inline]
+    fn PI(&self) -> Self {
+        self.PI()
+    }
+
+    #[inline]
+    fn abs(&self) -> Self {
+        self.abs()
+    }
+
+    #[inline]
+    fn cos(&self) -> Self {
+        <F<T> as Real>::cos(self)
+    }
+
+    #[inline]
+    fn exp(&self) -> Self {
+        <F<T> as Real>::exp(self)
+    }
+
+    #[inline]
+    fn one(&self) -> Self {
+        <F<T> as NumericalFloatLike>::one(self)
+    }
+
+    #[inline]
+    fn from_f64(&self, value: f64) -> Self {
+        F::from_f64(value)
+    }
+
+    #[inline]
+    fn from_isize(&self, value: isize) -> Self {
+        Self(self.0.from_i64(value as i64))
+    }
+
+    #[inline]
+    fn inv(&self) -> Self {
+        <F<T> as NumericalFloatLike>::inv(self)
+    }
+
+    #[inline]
+    fn ln(&self) -> Self {
+        <F<T> as Real>::log(self)
+    }
+
+    #[inline]
+    fn powf(&self, power: &Self) -> Self {
+        <F<T> as Real>::powf(self, power)
+    }
+
+    #[inline]
+    fn sin(&self) -> Self {
+        <F<T> as Real>::sin(self)
+    }
+
+    #[inline]
+    fn sqrt(&self) -> Self {
+        <F<T> as Real>::sqrt(self)
+    }
+
+    #[inline]
+    fn zero(&self) -> Self {
+        <F<T> as NumericalFloatLike>::zero(self)
+    }
+
+    #[inline]
+    fn to_f64(&self) -> f64 {
+        self.into_f64()
+    }
+}
+
+pub fn dummy_hedge_graph(num_edges: usize) -> linnet::half_edge::HedgeGraph<(), ()> {
+    use linnet::half_edge::builder::HedgeGraphBuilder;
+    use linnet::half_edge::involution::Orientation;
+    use linnet::half_edge::NodeIndex;
+
+    let mut graph = HedgeGraphBuilder::new();
+    graph.add_node(());
+
+    for _ in 0..num_edges {
+        graph.add_edge(NodeIndex(0), NodeIndex(0), (), Orientation::Default);
+    }
+
+    graph.build()
+}
+
+pub trait Length {
+    fn len(&self) -> usize;
+    fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+}
+
+impl<I, T> Length for TiVec<I, T> {
+    fn len(&self) -> usize {
+        self.len()
+    }
+
+    fn is_empty(&self) -> bool {
+        self.is_empty()
+    }
+}
+
+impl<T> Length for Vec<T> {
+    fn len(&self) -> usize {
+        self.len()
     }
 }

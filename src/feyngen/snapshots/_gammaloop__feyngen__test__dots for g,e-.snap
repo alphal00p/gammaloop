@@ -1,0 +1,79 @@
+---
+source: src/feyngen/test.rs
+expression: dots
+---
+digraph G {
+label="DIS0";
+noverlap="scale"; layout="neato";
+graph [ fontsize=10 ];
+node [ fontsize=7,shape=circle,margin=0,height=0.01 ];
+edge [ fontsize=5,arrowsize=0.4 ];
+"v1" -> "v8" [label="p1 | g | Q(0) "];
+"v0" -> "v9" [label="p2 | e- | Q(1) "];
+"v6" -> "v3" [label="p3 | g | Q(2) "];
+"v7" -> "v2" [label="p4 | e- | Q(3) "];
+"v4" -> "v5" [label="q1 | d | Q(4) "];
+"v8" -> "v4" [label="q2 | d | Q(5) "];
+"v4" -> "v9" [label="q3 | a | Q(6) "];
+"v5" -> "v6" [label="q4 | d | Q(7) "];
+"v5" -> "v7" [label="q5 | a | Q(8) "];
+"v6" -> "v8" [label="q6 | d | Q(9) "];
+"v9" -> "v7" [label="q7 | e- | Q(10) "];
+}
+
+digraph G {
+label="DIS1";
+noverlap="scale"; layout="neato";
+graph [ fontsize=10 ];
+node [ fontsize=7,shape=circle,margin=0,height=0.01 ];
+edge [ fontsize=5,arrowsize=0.4 ];
+"v1" -> "v8" [label="p1 | g | Q(0) "];
+"v0" -> "v9" [label="p2 | e- | Q(1) "];
+"v6" -> "v3" [label="p3 | g | Q(2) "];
+"v7" -> "v2" [label="p4 | e- | Q(3) "];
+"v5" -> "v4" [label="q1 | d | Q(4) "];
+"v4" -> "v8" [label="q2 | d | Q(5) "];
+"v4" -> "v9" [label="q3 | a | Q(6) "];
+"v6" -> "v5" [label="q4 | d | Q(7) "];
+"v5" -> "v7" [label="q5 | a | Q(8) "];
+"v8" -> "v6" [label="q6 | d | Q(9) "];
+"v9" -> "v7" [label="q7 | e- | Q(10) "];
+}
+
+digraph G {
+label="DIS2";
+noverlap="scale"; layout="neato";
+graph [ fontsize=10 ];
+node [ fontsize=7,shape=circle,margin=0,height=0.01 ];
+edge [ fontsize=5,arrowsize=0.4 ];
+"v1" -> "v8" [label="p1 | g | Q(0) "];
+"v0" -> "v9" [label="p2 | e- | Q(1) "];
+"v6" -> "v3" [label="p3 | g | Q(2) "];
+"v7" -> "v2" [label="p4 | e- | Q(3) "];
+"v4" -> "v6" [label="q1 | d | Q(4) "];
+"v8" -> "v4" [label="q2 | d | Q(5) "];
+"v4" -> "v9" [label="q3 | a | Q(6) "];
+"v6" -> "v5" [label="q4 | d | Q(7) "];
+"v5" -> "v7" [label="q5 | a | Q(8) "];
+"v5" -> "v8" [label="q6 | d | Q(9) "];
+"v9" -> "v7" [label="q7 | e- | Q(10) "];
+}
+
+digraph G {
+label="DIS3";
+noverlap="scale"; layout="neato";
+graph [ fontsize=10 ];
+node [ fontsize=7,shape=circle,margin=0,height=0.01 ];
+edge [ fontsize=5,arrowsize=0.4 ];
+"v1" -> "v8" [label="p1 | g | Q(0) "];
+"v0" -> "v9" [label="p2 | e- | Q(1) "];
+"v6" -> "v3" [label="p3 | g | Q(2) "];
+"v7" -> "v2" [label="p4 | e- | Q(3) "];
+"v6" -> "v4" [label="q1 | d | Q(4) "];
+"v4" -> "v8" [label="q2 | d | Q(5) "];
+"v4" -> "v9" [label="q3 | a | Q(6) "];
+"v5" -> "v6" [label="q4 | d | Q(7) "];
+"v5" -> "v7" [label="q5 | a | Q(8) "];
+"v8" -> "v5" [label="q6 | d | Q(9) "];
+"v9" -> "v7" [label="q7 | e- | Q(10) "];
+}

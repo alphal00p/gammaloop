@@ -6,7 +6,10 @@
 // #![warn(clippy::nursery)]
 // #![warn(clippy::cargo)]
 // #![feature(min_specialization)]
+//
+#[cfg(feature = "python_api")]
 pub mod api;
+
 pub mod cff;
 pub mod cli_functions;
 pub mod cross_section;
@@ -22,10 +25,14 @@ pub mod integrate;
 pub mod ltd;
 pub mod model;
 pub mod momentum;
+pub mod momentum_sample;
+pub mod new_cs;
+pub mod new_gammaloop_integrand;
+pub mod new_graph;
 pub mod numerator;
 pub mod observables;
+pub mod signature;
 pub mod subtraction;
-
 pub mod tests;
 pub mod tests_from_pytest;
 pub mod utils;
@@ -36,8 +43,10 @@ use color_eyre::{Help, Report, Result};
 #[allow(unused)]
 use colored::Colorize;
 use cross_section::Amplitude;
+use cross_section::CrossSection;
 use eyre::WrapErr;
 use integrands::*;
+use itertools::Itertools;
 use log::debug;
 
 use model::Particle;
@@ -51,10 +60,17 @@ use momentum::RotationMethod;
 use momentum::SignOrZero;
 use momentum::Signature;
 use momentum::ThreeMomentum;
+use momentum_sample::ExternalFourMomenta;
+use momentum_sample::ExternalIndex;
+use new_graph::ExternalConnection;
 use numerator::NumeratorSettings;
+use typed_index_collections::TiVec;
+
 use observables::ObservableSettings;
+
 use observables::PhaseSpaceSelectorSettings;
 
+use signature::ExternalSignature;
 use spenso::complex::Complex;
 use std::fmt::Display;
 use std::fs::File;
@@ -69,6 +85,7 @@ use serde::{Deserialize, Serialize};
 
 pub static INTERRUPTED: AtomicBool = AtomicBool::new(false);
 
+pub const GAMMALOOP_NAMESPACE: &str = "GL";
 pub const MAX_CORES: usize = 1000;
 
 #[cfg(not(feature = "higher_loops"))]
@@ -579,17 +596,38 @@ impl Externals {
     pub fn generate_polarizations(
         &self,
         external_particles: &[Arc<Particle>],
-        external_signature: &Signature,
+        dependent_momenta_constructor: DependentMomentaConstructor,
     ) -> Polarizations {
         let mut polarizations = vec![];
 
-        let dep_ext = self.get_dependent_externals(external_signature);
+        let external_signatture = match dependent_momenta_constructor {
+            DependentMomentaConstructor::Amplitude(external_signature) => {
+                external_signature.clone()
+            }
+            DependentMomentaConstructor::CrossSection {
+                external_connections,
+            } => {
+                let mut external_signature = ExternalSignature::from_iter(std::iter::repeat_n(
+                    SignOrZero::Zero,
+                    external_connections.len() * 2,
+                ));
+
+                for external_connection in external_connections.iter() {
+                    external_signature[external_connection.incoming_index] = SignOrZero::Plus;
+                    external_signature[external_connection.outgoing_index] = SignOrZero::Minus;
+                }
+
+                external_signature
+            }
+        };
+
+        let dep_ext = self.get_dependent_externals(dependent_momenta_constructor);
         let helicities = self.get_helicities();
         for (((ext_mom, hel), p), s) in dep_ext
             .iter()
             .zip(helicities.iter())
             .zip(external_particles.iter())
-            .zip(external_signature.iter())
+            .zip(external_signatture.iter())
         {
             match s {
                 SignOrZero::Minus => {
@@ -609,7 +647,7 @@ impl Externals {
 
     pub fn set_dependent_at_end(
         &mut self,
-        signature: &Signature,
+        signature: &ExternalSignature,
     ) -> Result<(), ExternalsValidationError> {
         match self {
             Externals::Constant { momenta, .. } => {
@@ -652,9 +690,9 @@ impl Externals {
         }
     }
 
-    pub fn get_dependent_externals<T: FloatLike>(
+    pub fn old_get_dependent_externals<T: FloatLike>(
         &self,
-        external_signature: &Signature,
+        external_signature: &ExternalSignature,
     ) -> Vec<FourMomentum<F<T>>>
 // where
     //     T::Higher: PrecisionUpgradable<Lower = T> + FloatLike,
@@ -689,6 +727,87 @@ impl Externals {
 
                 dependent_momenta[pos_dep] = dependent_sign * sum; //.lower();
                 dependent_momenta
+            }
+        }
+    }
+
+    pub fn get_dependent_externals<T: FloatLike>(
+        &self,
+        dependent_momenta_constructor: DependentMomentaConstructor,
+    ) -> ExternalFourMomenta<F<T>>
+// where
+    //     T::Higher: PrecisionUpgradable<Lower = T> + FloatLike,
+    {
+        match self {
+            Externals::Constant { momenta, .. } => {
+                match dependent_momenta_constructor {
+                    DependentMomentaConstructor::Amplitude(external_signature) => {
+                        let mut sum: FourMomentum<F<T>> = FourMomentum::from([
+                            F::<T>::from_f64(0.0),
+                            F::from_f64(0.0),
+                            F::from_f64(0.0),
+                            F::from_f64(0.0),
+                        ]);
+                        // .higher();
+                        let mut pos_dep = 0;
+
+                        let mut dependent_sign = SignOrZero::Plus;
+
+                        let mut dependent_momenta = vec![];
+
+                        for ((i, m), s) in momenta.iter().enumerate().zip(external_signature.iter())
+                        {
+                            if let Ok(a) = FourMomentum::try_from(*m) {
+                                // println!("external{i}: {}", a);
+                                let a = FourMomentum::<F<T>>::from_ff64(&a);
+                                sum -= *s * a.clone(); //.higher();
+                                dependent_momenta.push(a);
+                            } else {
+                                pos_dep = i;
+                                dependent_sign = *s;
+                                dependent_momenta.push(sum.clone()); //.lower());
+                            }
+                        }
+
+                        dependent_momenta[pos_dep] = dependent_sign * sum; //.lower();
+                        dependent_momenta.into()
+                    }
+                    DependentMomentaConstructor::CrossSection {
+                        external_connections,
+                    } => {
+                        assert_eq!(external_connections.len(), momenta.len());
+
+                        // set all_to_zero
+                        let mut dependent_momenta = (0..momenta.len() * 2)
+                            .map(|_| {
+                                FourMomentum::<F<T>>::from_ff64(&FourMomentum::from([F(0.0); 4]))
+                            })
+                            .collect::<ExternalFourMomenta<F<T>>>();
+
+                        let incoming_momenta = momenta
+                            .iter()
+                            .map(|m| {
+                                FourMomentum::<F<T>>::from_ff64(
+                                    &FourMomentum::try_from(*m)
+                                        .expect("dependent momenta in cross section not allowed"),
+                                )
+                            })
+                            .collect_vec();
+
+                        for (external_connection, incoming_momentum) in
+                            external_connections.iter().zip(incoming_momenta)
+                        {
+                            dependent_momenta[external_connection.incoming_index] =
+                                incoming_momentum.clone();
+                            dependent_momenta[external_connection.outgoing_index] =
+                                incoming_momentum;
+                        }
+
+                        debug!("dependent_momenta: {:?}", dependent_momenta);
+
+                        dependent_momenta
+                    }
+                }
             }
         }
     }
@@ -730,7 +849,7 @@ fn external_inv() {
         helicities: vec![Helicity::Plus; 4],
     };
 
-    let signs: Signature = [1i8, 1, 1, 1].into_iter().collect();
+    let signs: ExternalSignature = [1i8, 1, 1, 1].into_iter().collect();
     ext.set_dependent_at_end(&signs).unwrap();
 
     let momenta = vec![
@@ -801,8 +920,11 @@ impl GammaloopTropicalSamplingSettings {
         &self,
         debug: usize,
     ) -> momtrop::TropicalSamplingSettings {
+        if self.upcast_on_failure {
+            unimplemented!("upcast_on_failure removed from momtrop, implement automatic upcast of parameterization in gammaloop and then remove this crash")
+        }
+
         momtrop::TropicalSamplingSettings {
-            upcast_on_failure: self.upcast_on_failure,
             matrix_stability_test: self.matrix_stability_test,
             print_debug_info: debug > 0,
             return_metadata: false,
@@ -910,7 +1032,7 @@ pub struct SubtractionSettings {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ExportSettings {
+pub struct ProcessSettings {
     // Generation Time settings
     pub compile_cff: bool,
     pub numerator_settings: NumeratorSettings,
@@ -933,7 +1055,7 @@ pub struct GammaloopCompileOptions {
 impl GammaloopCompileOptions {
     pub fn inline_asm(&self) -> InlineASM {
         if self.inline_asm {
-            InlineASM::X64
+            InlineASM::default()
         } else {
             InlineASM::None
         }
@@ -956,4 +1078,11 @@ impl GammaloopCompileOptions {
 pub struct TropicalSubgraphTableSettings {
     pub panic_on_fail: bool,
     pub target_omega: f64,
+}
+
+pub enum DependentMomentaConstructor<'a> {
+    Amplitude(&'a ExternalSignature),
+    CrossSection {
+        external_connections: &'a [ExternalConnection],
+    }, // at the moment I assume the first n/2 externals are incoming and the second n/2 are outgoing, the mapping is (0, n/2), (1, n/2+1), (2, n/2+2), ...
 }

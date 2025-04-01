@@ -6,15 +6,17 @@ import importlib
 from argparse import ArgumentParser, BooleanOptionalAction, Namespace
 import subprocess
 import os
+import time
 from typing import Any, Dict
 from pprint import pformat
 import yaml  # type: ignore
 import shutil
 import copy
+import logging
 import pydot
 from gammaloop import __version__
-from gammaloop.misc.common import GammaLoopError, logger, Side, pjoin, load_configuration, GAMMALOOP_CONFIG_PATHS, gl_is_symbolica_registered, GL_PATH, GL_WARNINGS_ISSUED, GIT_REVISION, GammaLoopWarning
-from gammaloop.misc.utils import Colour, verbose_yaml_dump
+from gammaloop.misc.common import GammaLoopError, logger, Side, pjoin, load_configuration, GL_CONSOLE_HANDLER, GAMMALOOP_CONFIG_PATHS, gl_is_symbolica_registered, GL_PATH, GL_WARNINGS_ISSUED, GIT_REVISION, GammaLoopWarning
+from gammaloop.misc.utils import Colour, verbose_yaml_dump, format_elapsed
 from gammaloop.base_objects.model import Model, InputParamCard
 from gammaloop.base_objects.param_card import ParamCard, ParamCardWriter
 from gammaloop.base_objects.graph import Graph
@@ -26,7 +28,6 @@ from gammaloop.exporters.exporters import AmplitudesExporter, CrossSectionsExpor
 import gammaloop._gammaloop as gl_rust
 import gammaloop.interface.debug_display as debug_display
 # pylint: disable=unused-variable
-
 
 class TaggedScalar(yaml.ScalarNode):
     def __init__(self, tag, value):
@@ -60,7 +61,8 @@ AVAILABLE_COMMANDS = [
     'define_graph',
     'generate',
     'generate_amplitude',
-    'display_debug_log'
+    'display_debug_log',
+    'preprocess',
 ]
 
 
@@ -126,6 +128,7 @@ class GammaLoopConfiguration(object):
             'export_settings': {
                 'compile_cff': True,
                 'numerator_settings': {
+                    'dump_expression': 'Mathematica',
                     'eval_settings': {
                         'type': 'Joint',
                         'cpe_rounds': 1,
@@ -134,7 +137,8 @@ class GammaLoopConfiguration(object):
                         }
                     },
                     'global_numerator': None,
-                    'global_prefactor': None,
+                    'global_prefactor': {'color': "1", 'colorless': "1"},
+                    'dump_expression': 'Mathematica',
                     'gamma_algebra': 'Concrete',
                     'parse_mode':'Polynomial',
                 },
@@ -223,7 +227,7 @@ class GammaLoopConfiguration(object):
                 'sampling': {
                     'type': 'discrete_graph_sampling',
                     'subtype': 'tropical',
-                    'upcast_on_failure': True
+                    'upcast_on_failure': False
                 },
                 'subtraction': {
                     'local_ct_settings': {
@@ -286,6 +290,7 @@ class GammaLoopConfiguration(object):
                     cur_path=cur_path + [key,], root_dict=value)
 
     def _update_config_chunk(self, root_path: str, config_chunk: dict[str, Any] | None, updater: Any) -> None:
+
         for key, value in updater.items():
             if root_path == '':
                 setting_path = key
@@ -318,19 +323,22 @@ class GammaLoopConfiguration(object):
                         config_chunk[key] = updater
                         continue
                 else:
-                    self._update_config_chunk(
-                        setting_path, config_chunk[key], value)
+
+                    if config_chunk[key] is None:
+                        config_chunk[key] = value
+                    else:
+                        self._update_config_chunk(
+                            setting_path, config_chunk[key], value)
+
             else:
                 if value is not None and config_chunk[key] is not None and type(value) is not type(config_chunk[key]):
                     if isinstance(value, str) and isinstance(config_chunk[key], dict):
                         try:
                             value = eval(value)
                         except:
-                            raise GammaLoopError(f"Invalid value for setting {
-                                                 setting_path}. It is a string that needs to evaluate to a python dictionary:\n{pformat(updater)}")
+                            raise GammaLoopError(f"Invalid value for setting {setting_path}. It is a string that needs to evaluate to a python dictionary:\n{pformat(updater)}")  # nopep8
                         if not isinstance(value, dict):
-                            raise GammaLoopError(f"Invalid value for setting {
-                                                 setting_path}. It is a string that needs to evaluate to a python dictionary:\n{pformat(updater)}")
+                            raise GammaLoopError(f"Invalid value for setting {setting_path}. It is a string that needs to evaluate to a python dictionary:\n{pformat(updater)}")  # nopep8
                     else:
                         raise GammaLoopError(
                             f"Invalid value for setting {setting_path}. Default value of type '{type(config_chunk[key]).__name__}' is:\n{pformat(config_chunk[key])}\nand you supplied this value of type '{type(value).__name__}':\n{pformat(value)}")
@@ -339,20 +347,26 @@ class GammaLoopConfiguration(object):
 
     def update(self, new_setting: Any, path: str = '', allow_shorthands: bool = True) -> None:
         context = self._config
-        for key in path.split('.'):
+        p_split = path.split('.')
+        for key in p_split[:-1]:
             if key == "":
                 break
             if key not in context:
                 raise GammaLoopError(
                     f"No settings '{path}' in gammaloop configuration.")
             context = context[key]
-        self._update_config_chunk(path, context, new_setting)
+        if path != '' and isinstance(new_setting, dict):
+            context[p_split[-1]].update(new_setting)
+        else:
+            if path != '':
+                context = context[p_split[-1]]
+            self._update_config_chunk(path, context, new_setting)
 
     def set_setting(self, path: str, new_setting: Any, allow_shorthands: bool = True) -> str:
-        if allow_shorthands and path in self._shorthands:
-            return self.set_setting(self._shorthands[path], new_setting, allow_shorthands=False)
-
         p = path.split('.')
+        if allow_shorthands and p[0] in self._shorthands:
+            return self.set_setting('.'.join([self._shorthands[p[0]],]+p[1:]), new_setting, allow_shorthands=False)
+
         self.update({p[-1]: new_setting}, path=('.'.join(p[:-1])
                     if len(p) > 1 else ''), allow_shorthands=allow_shorthands)
         return path
@@ -455,6 +469,7 @@ class GammaLoop(object):
 
         # Initialize a gammaloop rust engine worker which will be used throughout the session
         self.rust_worker: gl_rust.Worker = gl_rust.Worker()
+
         logger.debug('Starting interface of GammaLoop v%s%s',
                      __version__,
                      (f' (git rev.: {GIT_REVISION})' if GIT_REVISION is not None else ''))
@@ -563,7 +578,6 @@ class GammaLoop(object):
         str_setting = pformat(config_value)
         logger.info("Setting '%s%s%s' to:%s%s%s%s", Colour.GREEN,
                     full_path, Colour.END, Colour.BLUE, '\n' if len(str_setting) > 80 else ' ', str_setting, Colour.END)
-
         if not args.no_update_run_card and self.launched_output is not None:
             # Update the run card in the output with the current configuration
             update_run_card_in_output(self.launched_output, self.config)
@@ -765,23 +779,38 @@ class GammaLoop(object):
     generate_parser = ArgumentParser(prog='generate')
     generate_parser.add_argument(
         'process', metavar='process', type=str, nargs="+", help='Process to generate.')
+    generate_parser.add_argument('--clear_existing_processes', '-clear', default=False, action='store_true',
+                                 help='Clear existing processes stored before adding this one..')
+    generate_parser.add_argument('--num_threads', '-nt', default=None, type=int,
+                                 help='Number of threads to parallelize the generation on. (default: all available cores)')
+    generate_parser.add_argument('--max_multiplicity_for_fast_cut_filter', '-mmfcf', default=6, type=int,
+                                 help='Specify the maximum cut multiplicity before switching to an alternative Cutkosky cut filter that is faster for large multiplicities. (default: %(default)s)')
     generate_parser.add_argument('--graph_prefix', '-gp', type=str, default="GL",
                                  help='Graph name prefix. default: "GL"')
     generate_parser.add_argument('--max_n_bridges', '-mnb', type=int, default=None,
                                  help='Specify the maximum number of bridges for the graphs to generate. Set negative to disable. (default: 0)')
     generate_parser.add_argument('--filter_self_loop', default=False, action=BooleanOptionalAction,
                                  help='Filter all self-loops directly during generation.')
-    generate_parser.add_argument('--numerator_aware_isomorphism_grouping', default=True, action=BooleanOptionalAction,
-                                 help='Group identical diagrams (in absolute value) after generation and including numerator')
+    generate_parser.add_argument('--numerator_aware_isomorphism_grouping', '-num_grouping', default="group_identical_graphs_up_to_scalar_rescaling", type=str,
+                                 choices=["no_grouping", "only_detect_zeroes", "group_identical_graphs_up_to_sign",
+                                          "group_identical_graphs_up_to_scalar_rescaling"],
+                                 help='Group identical diagrams after generation and including numerator (default: group_identical_graphs_up_to_scalar_rescaling)')
+    generate_parser.add_argument('--number_of_fermion_loops', '-nfl', default=None, type=int,
+                                 help='Number of fermion loops to consider in the amplitude generation. (default: any)')
+    generate_parser.add_argument('--number_of_factorized_loop_subtopologies', '-nfactl', default=None, type=int,
+                                 help='Number of factorizable loops (seoarated graph ears) to consider in the amplitude generation. (default: any)')
     # Tadpole filter
+
+    generate_parser.add_argument('--filter_cross_section_tadpoles', default=None, action=BooleanOptionalAction,
+             help='Filter tadpoles when sewing cross-section.')
     generate_parser.add_argument('--filter_tadpoles', default=None, action=BooleanOptionalAction,
                                  help='Filter tadpole diagrams.')
-    generate_parser.add_argument('--no_tadpole_attached_to_massive', dest='veto_tadpoles_attached_to_massive_lines', default=None, action=BooleanOptionalAction,
+    generate_parser.add_argument('--veto_tadpole_attached_to_massive', dest='veto_tadpoles_attached_to_massive_lines', default=None, action=BooleanOptionalAction,
                                  help='Filter tadpole diagrams attached to massive lines.')
-    generate_parser.add_argument('--no_tadpole_attached_to_massless', dest='veto_tadpoles_attached_to_massless_lines', default=None, action=BooleanOptionalAction,
+    generate_parser.add_argument('--veto_tadpole_attached_to_massless', dest='veto_tadpoles_attached_to_massless_lines', default=None, action=BooleanOptionalAction,
                                  help='Filter tadpole diagrams attached to massive lines.')
-    generate_parser.add_argument('--no_scaleless_tadpole', dest='veto_only_scaleless_tadpoles', default=None, action=BooleanOptionalAction,
-                                 help='Filter scalless tadpole diagrams.')
+    generate_parser.add_argument('--veto_scaleless_tadpole', dest='veto_only_scaleless_tadpoles', default=None, action=BooleanOptionalAction,
+                                 help='Filter scaleless! tadpole diagrams.')
     # Snail filter
     generate_parser.add_argument('--filter_snails', default=None, action=BooleanOptionalAction,
                                  help='Filter snail diagrams.')
@@ -790,7 +819,7 @@ class GammaLoop(object):
     generate_parser.add_argument('--veto_snail_attached_to_massless', dest='veto_snails_attached_to_massless_lines', default=None, action=BooleanOptionalAction,
                                  help='Filter snail diagrams attached to massive lines.')
     generate_parser.add_argument('--veto_scaleless_snail', dest='veto_only_scaleless_snails', default=None, action=BooleanOptionalAction,
-                                 help='Filter scalless snail diagrams.')
+                                 help='Filter scaleless! snail diagrams.')
     # Selfenergy filter
     generate_parser.add_argument('--filter_selfenergies', default=None, action=BooleanOptionalAction,
                                  help='Filter out (external) self energy contributions.')
@@ -799,7 +828,7 @@ class GammaLoop(object):
     generate_parser.add_argument('--veto_selfenergy_of_massless_lines', dest='veto_self_energy_of_massless_lines', default=None, action=BooleanOptionalAction,
                                  help='Filter snail diagrams attached to massive lines.')
     generate_parser.add_argument('--veto_scaleless_selfenergy', dest='veto_only_scaleless_self_energy', default=None, action=BooleanOptionalAction,
-                                 help='Filter scalless tadpole diagrams.')
+                                 help='Filter scaleless! tadpole diagrams.')
     # Symmetrization options
     generate_parser.add_argument('--symmetrize_initial_states', default=None, action=BooleanOptionalAction,
                                  help='Symmetrize initial states in diagram generation. (default: Automatic)')
@@ -807,12 +836,34 @@ class GammaLoop(object):
                                  help='Symmetrize final states in diagram generation. (default: Automatic)')
     generate_parser.add_argument('--symmetrize_left_right_states', '-slrs', default=None, action=BooleanOptionalAction,
                                  help='Symmetrize left and right forward scattering states in cross-section diagram generation. (default: Automatic)')
+    generate_parser.add_argument('--allow_symmetrization_of_external_fermions_in_amplitudes', '-symferm', default=False, action=BooleanOptionalAction,
+                                 help='Allow symmetrization of external fermions for amplitude generation. Disabled by default as it requires care from the user because of the fermion swap negative signs. (default: False)')
+
+    # Cross-section cut options
+    generate_parser.add_argument('--n_cut_blobs', '-ncb', type=int, nargs=2, default=[1, 1],
+                                help='Set the range of cut blobs on either side of the cut for cross-section generation')
+    generate_parser.add_argument('--n_cut_spectators', '-ncs', type=int, nargs=2, default=[0, 0],
+                                help='Set the range of cut spectators on either side of the cut for cross-section generation')
+
+    # Selection options
     generate_parser.add_argument('--loop_momentum_bases', '-lmbs', default=None, type=str,
                                  help='Specify LMB to use with a string corresponding to a python dictionary with format "{graph_name: list[edge_names]}" (default: Automatic)')
     generate_parser.add_argument('--select_graphs', '-selected_graphs', default=None, type=str, nargs="+",
                                  help='Select only the graphs with the specified names (default: all)')
     generate_parser.add_argument('--veto_graphs', '-veto_graphs', default=None, type=str, nargs="+",
                                  help='Veto graphs with the specified names (default: no veto)')
+
+    # grouping options
+    generate_parser.add_argument('--compare_canonized_numerator', '-can_num', default=None, action=BooleanOptionalAction,
+                                 help='Enable comparison of canonized numerators when grouping diagrams. (default: Automatic)')
+    generate_parser.add_argument('--number_of_samples_for_numerator_comparisons', '-n_num_samples', default=None, type=int,
+                                 help='Number of numerical samples to consider when performing comparison of numerators when grouping graphs (default: Automatic)')
+    generate_parser.add_argument('--consider_internal_masses_only_in_numerator_isomorphisms', '-masses_only', default=None, action=BooleanOptionalAction,
+                                 help='Consider internal masses only (and not PDGS) when grouping isomorphic diagrams. (default: Automatic)')
+    generate_parser.add_argument('--numerical_samples_seed', '-sseed', type=int, default=None,
+                                 help='Seed for generation of numerical prime samples when grouping diagrams. (default: Automatic)')
+    generate_parser.add_argument('--fully_numerical_substitution_when_comparing_numerators', '-full_num', default=None, action=BooleanOptionalAction,
+                                 help='Substitute all parameters and square roots to num numerical values when sampling numerators for grouping diagrams. (default: Automatic)')
 
     # generate_amplitude command, without the --amplitude option
     generate_amplitude_parser = copy.deepcopy(generate_parser)
@@ -827,12 +878,17 @@ class GammaLoop(object):
             if input_args == 'help':
                 self.generate_parser.print_help()
                 return
-            args = self.generate_parser.parse_args(split_str_args(input_args))
+            split_args = split_str_args(input_args)
+            args = self.generate_parser.parse_args(split_args)
         else:
+            split_args = None
             args = input_args
 
-        if args.max_n_bridges is not None and args.max_n_bridges < 0:
-            args.max_n_bridges = None
+        if args.clear_existing_processes:
+            if args.amplitude:
+                self.amplitudes.clear()
+            else:
+                self.cross_sections.clear()
 
         parsed_process = Process.from_input_args(self.model, args)
 
@@ -841,13 +897,10 @@ class GammaLoop(object):
                 "Amplitude generation requested but cross section orders are also specified. Ignoring cross section orders.")
             parsed_process.cross_section_orders = None
 
-        if not args.amplitude and parsed_process.amplitude_orders is not None:
-            raise GammaLoopError(
-                "Cross section generation requested but amplitude orders are also specified. This option is not yet supported.")
-
-        if not args.amplitude and parsed_process.amplitude_loop_count is not None:
-            raise GammaLoopError(
-                "Cross section generation requested but amplitude loop count is also specified. This option is not yet supported.")
+        if args.amplitude and parsed_process.cross_section_loop_count is not None:
+            logger.warning(
+                "Amplitude generation requested but cross section loop count is also specified. Ignoring cross section loop count.")
+            parsed_process.cross_section_loop_count = None
 
         # if parsed_process.perturbative_orders is not None:
         #     logger.warning(
@@ -855,16 +908,36 @@ class GammaLoop(object):
 
         self.process = parsed_process
 
-        logger.info("Generating diagrams for process: %s%s%s",
-                    Colour.GREEN, self.process, Colour.END)
+        generation_args = []
+        if split_args is not None:
+            aggregate = False
+            for arg in split_args:
+                if aggregate:
+                    generation_args.append(arg)
+                else:
+                    if arg.startswith('-'):
+                        generation_args.append(arg)
+                        aggregate = True
+        generation_args_str = ' '.join(generation_args)
+        logger.info("Generating diagrams for process: %s%s%s%s",
+                    Colour.GREEN,
+                    self.process,
+                    Colour.END,
+                    "" if generation_args_str == '' else f" {Colour.BLUE}{generation_args_str}{Colour.END}"  # nopep8
+                    )  # nopep8
+        t_start = time.time()
         all_graphs: list[Graph] = self.process.generate_diagrams(
-            self.rust_worker, self.model, args)
+            self.rust_worker, self.model, args,
+            self.config.get_setting("global_prefactor.color"),
+            self.config.get_setting("global_prefactor.colorless"),
+        )
         if len(all_graphs) > 0:
-            logger.info("A total of %s%s graphs%s have been generated.",
-                        Colour.GREEN, len(all_graphs), Colour.END)
+            logger.info("A total of %s%s%s graphs%s have been generated in %s%s%s.",
+                        Colour.GREEN, Colour.BOLD, len(all_graphs), Colour.END,
+                        Colour.GREEN, format_elapsed(time.time()-t_start), Colour.END)
         else:
-            raise GammaLoopError(f"No graphs were generated for process:\n{
-                                 repr(self.process)}.")
+            raise GammaLoopError(
+                f"No graphs were generated for process:\n{(self.process)}.")
 
         if args.amplitude:
             self.amplitudes.add_amplitude(cross_section.Amplitude(
@@ -1064,22 +1137,22 @@ class GammaLoop(object):
         for a_graph, _attributes in graphs:
             if len(a_graph.get_incoming_edges()) == 0 and len(a_graph.get_outgoing_edges()) == 0:
                 if graph_type is None:
-                    graph_type = 'supergraph'
-                elif graph_type != 'supergraph':
+                    graph_type = 'amplitude'
+                elif graph_type != 'amplitude':
                     raise GammaLoopError(
-                        "Mixed type of graphs (supergraph, forward scattering graph and/or amplitude graph) found in qgraph output loaded.")
+                        "Mixed type of graphs (amplitude, forward scattering graph and/or amplitude graph) found in {}.".format(args.file_path))
             elif len(a_graph.get_incoming_edges()) == len(a_graph.get_outgoing_edges()) == len(a_graph.external_connections) and not any(None in c for c in a_graph.external_connections):
                 if graph_type is None:
                     graph_type = 'forward_scattering_graph'
                 elif graph_type != 'forward_scattering_graph':
                     raise GammaLoopError(
-                        "Mixed type of graphs (supergraph, forward scattering graph and/or amplitude graph) found in qgraph output loaded.")
+                        "Mixed type of graphs (supergraph, forward scattering graph and/or amplitude graph) found in {}.".format(args.file_path))
             else:
                 if graph_type is None:
                     graph_type = 'amplitude'
                 elif graph_type != 'amplitude':
                     raise GammaLoopError(
-                        "Mixed type of graphs (supergraph, forward scattering graph and/or amplitude graph) found in qgraph output loaded.")
+                        "Mixed type of graphs (supergraph, forward scattering graph and/or amplitude graph) found in {}.".format(args.file_path))
 
         if graph_type == 'supergraph':
             raise GammaLoopError(
@@ -1250,6 +1323,8 @@ class GammaLoop(object):
     output_parser = ArgumentParser(prog='output')
     output_parser.add_argument(
         'output_path', type=str, help='Path to output the cross section to')
+    output_parser.add_argument('-nev', '--no_evaluators', default=False, action='store_true',
+                               help='Do not generate evaluators')
     output_parser.add_argument('-exp', '--expression', default=False, action='store_true',
                                help='Generate expression associated to the graph and output it to a text file')
     output_parser.add_argument('-mr', '--model_replacements', default=False, action='store_true',
@@ -1279,16 +1354,6 @@ class GammaLoop(object):
             raise GammaLoopError(
                 "No model loaded. Please load a model first with 'import_model' command.")
 
-        if self.config.get_setting('export_settings.gammaloop_compile_options.inline_asm'):
-            architecture = platform.machine()
-            if "arm" in architecture:
-                logger.warning(
-                    f"Inline assembly is only supported for x86 architectures, and this machine is {architecture}.")
-                logger.warning(
-                    f"{Colour.RED}Inline assembly will now be disabled now in your gammaLoop configuration.{Colour.END}")
-                self.config.set_setting(
-                    'export_settings.gammaloop_compile_options.inline_asm', False)
-
         if args.model_replacements:
             self.rust_worker.export_coupling_replacement_rules(
                 args.output_path, args.expression_format)
@@ -1306,16 +1371,21 @@ class GammaLoop(object):
 
         if len(self.amplitudes) > 0:
             amplitude_exporter = AmplitudesExporter(self, args)
-            amplitude_exporter.export(
-                args.output_path, self.amplitudes)
+
             if args.expression:
                 amplitude_exporter.export_expression(
                     args.output_path, self.amplitudes, args.expression_format)
+            amplitude_exporter.export(
+                args.output_path, self.amplitudes, args.no_evaluators)
 
             logger.info("Amplitudes exported to '%s'.", args.output_path)
     #
     # Run interface type of commands below (those bound to a particular output already generated)
     #
+
+    def do_preprocess(self, str_args: str) -> None:
+        export_config = yaml.dump(self.config["export_settings"])
+        self.rust_worker.preprocess(export_config)
 
     # launch command
     launch_parser = ArgumentParser(prog='launch')
@@ -1546,16 +1616,21 @@ class GammaLoop(object):
         help='Do not sync rust worker with the process output (safe to do if not config change was issued since launch).')
 
     def do_integrate(self, str_args: str) -> list[complex]:
+        settings = yaml.dump(self.config["run_settings"])
+        self.rust_worker.generate_integrands(settings)
+
         if str_args == 'help':
             self.integrate_parser.print_help()
             return []
         args = self.integrate_parser.parse_args(split_str_args(str_args))
 
         if self.launched_output is None:
-            raise GammaLoopError(
-                "No output launched. Please launch an output first with 'launch' command.")
+            self.launched_output = Path("launchless_run")
+            os.mkdir(self.launched_output)
+            # raise GammaLoopError(
+            #    "No output launched. Please launch an output first with 'launch' command.")
 
-        self.sync_worker_with_output(args.no_sync)
+        # self.sync_worker_with_output(args.no_sync)
 
         target: tuple[float, float] | None = None
         if args.target is not None:

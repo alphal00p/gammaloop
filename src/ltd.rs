@@ -2,14 +2,18 @@ use core::panic;
 
 use crate::{
     gammaloop_integrand::DefaultSample,
-    graph::{BareGraph, EdgeType, Graph, LoopExtSignature, LoopMomentumBasis},
+    graph::{BareGraph, EdgeType, Graph},
     momentum::{Energy, FourMomentum, Polarization, Signature, ThreeMomentum},
+    momentum_sample::MomentumSample,
+    new_graph::LoopMomentumBasis,
     numerator::{Evaluate, Evaluators, Numerator, NumeratorState},
+    signature::LoopExtSignature,
     utils::{FloatLike, F},
     Settings,
 };
 use bincode::{Decode, Encode};
 use itertools::Itertools;
+use linnet::half_edge::involution::EdgeIndex;
 use log::debug;
 use nalgebra::DMatrix;
 use serde::{Deserialize, Serialize};
@@ -498,7 +502,7 @@ impl LTDTerm {
             } else {
                 match edge.edge_type {
                     EdgeType::Virtual => {
-                        let momentum = self.signature_of_lmb[index].compute_momentum(
+                        let momentum = self.signature_of_lmb[index].compute_momentum_untyped(
                             &edge_momenta_of_associated_lmb_rot,
                             external_moms.1.unwrap_or(external_moms.0),
                         );
@@ -506,7 +510,7 @@ impl LTDTerm {
                         if setting.stability.rotate_numerator {
                             ltd_emr.push(momentum.clone());
                         } else {
-                            ltd_emr.push(self.signature_of_lmb[index].compute_momentum(
+                            ltd_emr.push(self.signature_of_lmb[index].compute_momentum_untyped(
                                 &edge_momenta_of_associated_lmb,
                                 external_moms.0,
                             ));
@@ -529,12 +533,12 @@ impl LTDTerm {
                     }
                     _ => {
                         if setting.stability.rotate_numerator {
-                            ltd_emr.push(self.signature_of_lmb[index].compute_momentum(
+                            ltd_emr.push(self.signature_of_lmb[index].compute_momentum_untyped(
                                 &edge_momenta_of_associated_lmb_rot,
                                 external_moms.1.unwrap_or(external_moms.0),
                             ));
                         } else {
-                            ltd_emr.push(self.signature_of_lmb[index].compute_momentum(
+                            ltd_emr.push(self.signature_of_lmb[index].compute_momentum_untyped(
                                 &edge_momenta_of_associated_lmb,
                                 external_moms.0,
                             ));
@@ -564,67 +568,69 @@ pub struct LTDExpression {
 impl LTDExpression {
     pub fn evaluate<T: FloatLike>(
         &self,
-        sample: &DefaultSample<T>,
+        sample: &MomentumSample<T>,
         graph: &BareGraph,
         num: &mut Numerator<Evaluators>,
         setting: &Settings,
     ) -> DataTensor<Complex<F<T>>> {
-        let zero = sample.zero();
-        let possibly_rotated_emr = sample
-            .rotated_sample
-            .as_ref()
-            .map(|s| graph.compute_emr(&s.loop_moms, &s.external_moms));
-        let unrotated_emr =
-            graph.compute_emr(&sample.sample.loop_moms, &sample.sample.external_moms);
+        todo!("support basic ltd")
+        //let zero = sample.zero();
+        //let possibly_rotated_emr = sample
+        //    .rotated_sample
+        //    .as_ref()
+        //    .map(|s| graph.compute_emr(&s.loop_moms, &s.external_moms));
+        //let unrotated_emr =
+        //    graph.compute_emr(&sample.sample.loop_moms, &sample.sample.external_moms);
 
-        let external_moms = sample.external_mom_pair();
+        //let external_moms = sample.external_mom_pair();
 
-        self.terms
-            .iter()
-            .map(|term| {
-                term.evaluate(
-                    (&unrotated_emr, possibly_rotated_emr.as_deref()),
-                    external_moms,
-                    sample.polarizations_pair(),
-                    graph,
-                    num,
-                    setting,
-                )
-            })
-            .reduce(|acc, e| acc.add_fallible(&e).unwrap())
-            .unwrap_or(DataTensor::new_scalar(Complex::new_re(zero)))
+        //self.terms
+        //    .iter()
+        //    .map(|term| {
+        //        term.evaluate(
+        //            (&unrotated_emr, possibly_rotated_emr.as_deref()),
+        //            external_moms,
+        //            sample.polarizations_pair(),
+        //            graph,
+        //            num,
+        //            setting,
+        //        )
+        //    })
+        //    .reduce(|acc, e| acc.add_fallible(&e).unwrap())
+        //    .unwrap_or(DataTensor::new_scalar(Complex::new_re(zero)))
     }
 
     pub fn evaluate_in_lmb<T: FloatLike>(
         &self,
-        sample: &DefaultSample<T>,
+        sample: &MomentumSample<T>,
         graph: &BareGraph,
         lmb: &LoopMomentumBasis,
         num: &mut Numerator<Evaluators>,
         setting: &Settings,
     ) -> DataTensor<Complex<F<T>>> {
-        let zero = sample.zero();
-        let possibly_rotated_emr = sample
-            .rotated_sample
-            .as_ref()
-            .map(|s| graph.compute_emr_in_lmb(&s.loop_moms, &s.external_moms, lmb));
-        let unrotated_emr =
-            graph.compute_emr_in_lmb(&sample.sample.loop_moms, &sample.sample.external_moms, lmb);
-        let external_moms = sample.external_mom_pair();
-        self.terms
-            .iter()
-            .map(|term| {
-                term.evaluate(
-                    (&unrotated_emr, possibly_rotated_emr.as_deref()),
-                    external_moms,
-                    sample.polarizations_pair(),
-                    graph,
-                    num,
-                    setting,
-                )
-            })
-            .reduce(|acc, e| acc.add_fallible(&e).unwrap())
-            .unwrap_or(DataTensor::new_scalar(Complex::new_re(zero)))
+        todo!("support basic ltd")
+        //let zero = sample.zero();
+        //let possibly_rotated_emr = sample
+        //    .rotated_sample
+        //    .as_ref()
+        //    .map(|s| graph.compute_emr_in_lmb(&s.loop_moms, &s.external_moms, lmb));
+        //let unrotated_emr =
+        //    graph.compute_emr_in_lmb(&sample.sample.loop_moms, &sample.sample.external_moms, lmb);
+        //let external_moms = sample.external_mom_pair();
+        //self.terms
+        //    .iter()
+        //    .map(|term| {
+        //        term.evaluate(
+        //            (&unrotated_emr, possibly_rotated_emr.as_deref()),
+        //            external_moms,
+        //            sample.polarizations_pair(),
+        //            graph,
+        //            num,
+        //            setting,
+        //        )
+        //    })
+        //    .reduce(|acc, e| acc.add_fallible(&e).unwrap())
+        //    .unwrap_or(DataTensor::new_scalar(Complex::new_re(zero)))
     }
 }
 
@@ -638,7 +644,7 @@ pub fn generate_ltd_expression<S: NumeratorState>(graph: &mut Graph<S>) -> LTDEx
         .bare_graph
         .get_virtual_edges_iterator()
         .map(|(index, _e)| {
-            graph.bare_graph.loop_momentum_basis.edge_signatures[index]
+            graph.bare_graph.loop_momentum_basis.edge_signatures[EdgeIndex::from(index)]
                 .internal
                 .clone()
         })
@@ -652,7 +658,8 @@ pub fn generate_ltd_expression<S: NumeratorState>(graph: &mut Graph<S>) -> LTDEx
         .map(|(index, _e)| index)
         .collect_vec();
 
-    let cut_structure_generator = CutStructureGenerator::new(loop_line_signatures);
+    // let cut_structure_generator = CutStructureGenerator::new(loop_line_signatures);
+    let cut_structure_generator = CutStructureGenerator::new(todo!("support basic ltd"));
     let countour_closure =
         vec![ContourClosure::Above; graph.bare_graph.loop_momentum_basis.basis.len()];
     let cut_structure = cut_structure_generator.generate_structure(&countour_closure, true);
@@ -696,11 +703,11 @@ pub fn generate_ltd_expression<S: NumeratorState>(graph: &mut Graph<S>) -> LTDEx
                 .basis
                 .iter()
                 .zip(associated_lmb.iter())
-                .all(|(a, b)| *a == b.0)
+                .all(|(a, b)| (*a) == EdgeIndex::from(b.0))
             {
                 ltd_terms.push(LTDTerm {
                     associated_lmb: associated_lmb.clone(),
-                    signature_of_lmb: loop_momentum_basis.edge_signatures.clone(),
+                    signature_of_lmb: todo!("fix ltd"),
                 });
                 found_signature = true;
                 break;

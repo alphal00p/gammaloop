@@ -1,20 +1,27 @@
+use crate::debug_info::DEBUG_LOGGER;
+use crate::feyngen::FeynGenError;
+use linnet::half_edge::hedgevec::HedgeVec;
+use linnet::half_edge::involution::{EdgeIndex, Orientation};
+use log::warn;
 use std::fmt::Debug;
+use std::fs;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
-
-use crate::debug_info::DEBUG_LOGGER;
+// use crate::feyngen::dis::{DisEdge, DisVertex};
 use crate::graph::{BareGraph, VertexInfo};
 use crate::model::normalise_complex;
 use crate::momentum::Polarization;
-use crate::utils::{f128, OwnedFunctionMap, GS};
+use crate::utils::{f128, GS};
 use crate::{
     graph::EdgeType,
     model::Model,
     momentum::FourMomentum,
     utils::{FloatLike, F},
 };
-use crate::{ExportSettings, Settings};
+
+use crate::{ProcessSettings, Settings};
+use ahash::{AHashMap, HashSet};
 use bincode::{Decode, Encode};
 use color_eyre::{Report, Result};
 use eyre::eyre;
@@ -25,48 +32,54 @@ use itertools::Itertools;
 
 use log::{debug, trace};
 
+use ref_ops::RefNeg;
 use serde::de::DeserializeOwned;
 use serde::ser::SerializeStruct;
 use serde::{Deserialize, Serialize};
 use spenso::arithmetic::ScalarMul;
 use spenso::contraction::Contract;
-use spenso::data::{DataTensor, GetTensorData};
+use spenso::data::{DataTensor, GetTensorData, StorageTensor};
 
-use spenso::network::Levels;
+use spenso::iterators::IteratableTensor;
+use spenso::parametric::atomcore::{PatternReplacement, TensorAtomMaps, TensorAtomOps};
 use spenso::parametric::{
     EvalTensor, EvalTensorSet, LinearizedEvalTensorSet, MixedTensor, ParamTensorSet,
     SerializableCompiledEvaluator, TensorSet,
 };
 use spenso::shadowing::ETS;
-use spenso::structure::concrete_index::ExpandedIndex;
-use spenso::structure::representation::{BaseRepName, ColorAdjoint, ColorFundamental};
+use spenso::structure::abstract_index::DOWNIND;
+use spenso::structure::concrete_index::{ExpandedIndex, FlatIndex};
+
+use spenso::structure::representation::{
+    BaseRepName, Bispinor, ColorAdjoint, ColorFundamental, ColorSextet, Minkowski,
+};
 use spenso::structure::{HasStructure, ScalarTensor, SmartShadowStructure, VecStructure};
 use spenso::symbolica_utils::SerializableAtom;
 use spenso::symbolica_utils::SerializableSymbol;
+use spenso::upgrading_arithmetic::FallibleSub;
 use spenso::{
     complex::Complex,
     network::TensorNetwork,
-    parametric::{ParamTensor, PatternReplacement},
+    parametric::ParamTensor,
     shadowing::Shadowable,
     structure::{
         representation::{Lorentz, PhysReps, RepName},
         NamedStructure, TensorStructure,
     },
 };
+use symbolica::domains::finite_field::PrimeIteratorU64;
 use symbolica::domains::rational::Rational;
 use symbolica::poly::Variable;
+use symbolica::printer::{AtomPrinter, PrintOptions};
 use symbolica::state::Workspace;
 
 use crate::numerator::ufo::UFO;
-use symbolica::atom::AtomView;
-use symbolica::evaluate::ExpressionEvaluator;
-use symbolica::id::{Condition, Match, MatchSettings, PatternOrMap};
-
+use symbolica::atom::{AtomCore, AtomView, Symbol};
+use symbolica::evaluate::{CompileOptions, ExpressionEvaluator, InlineASM};
+use symbolica::id::{Context, Match, MatchSettings};
 use symbolica::{
     atom::{Atom, FunctionBuilder},
-    fun,
-    state::State,
-    symb,
+    function, parse, symbol,
 };
 use symbolica::{
     domains::float::NumericalFloatLike,
@@ -76,12 +89,36 @@ use symbolica::{
 
 pub mod ufo;
 #[derive(Debug, Clone, Serialize, Deserialize)]
+/// Settings for the numerator
 pub struct NumeratorSettings {
     pub eval_settings: NumeratorEvaluatorOptions,
+    /// Parse mode for the numerator, once all processing is done. `Polynomial` turns it into a polynomial in the energies, while `Direct` keeps it as is
     pub parse_mode: NumeratorParseMode,
+    /// If set, dump the expression the expression at each step in this format
+    pub dump_expression: Option<ExpressionFormat>,
+    /// If set, instead of deriving the numerator from feynman rules, use this as the numerator
+    /// Will be parsed to a symbolica expression
     pub global_numerator: Option<String>,
-    pub global_prefactor: Option<GlobalPrefactor>,
+    /// If set, multiply the numerator by this prefactor
+    pub global_prefactor: GlobalPrefactor,
+    /// Type of Gamma algebra to use, either symbolic (replacement rules) or concrete (replace by value using spenso)
     pub gamma_algebra: GammaAlgebraMode,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default)]
+pub enum ExpressionFormat {
+    Mathematica,
+    #[default]
+    Symbolica,
+}
+
+impl From<ExpressionFormat> for PrintOptions {
+    fn from(value: ExpressionFormat) -> Self {
+        match value {
+            ExpressionFormat::Symbolica => PrintOptions::file(),
+            ExpressionFormat::Mathematica => PrintOptions::mathematica(),
+        }
+    }
 }
 
 impl Default for NumeratorSettings {
@@ -89,7 +126,8 @@ impl Default for NumeratorSettings {
         NumeratorSettings {
             eval_settings: Default::default(),
             global_numerator: None,
-            global_prefactor: None,
+            global_prefactor: GlobalPrefactor::default(),
+            dump_expression: None,
             gamma_algebra: GammaAlgebraMode::Symbolic,
             parse_mode: NumeratorParseMode::Polynomial,
         }
@@ -105,7 +143,7 @@ pub enum GammaAlgebraMode {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExtraInfo {
     pub path: PathBuf,
-    pub orientations: Vec<Vec<bool>>,
+    pub orientations: Vec<HedgeVec<Orientation>>,
 }
 
 pub type AtomStructure = SmartShadowStructure<SerializableSymbol, Vec<SerializableAtom>>;
@@ -243,7 +281,10 @@ impl<T: HasStructure> From<TensorSet<T>> for RepeatingIteratorTensorOrScalar<T> 
 }
 
 impl<T> LendingIterator for RepeatingIterator<T> {
-    type Item<'a> = &'a T where Self:'a ;
+    type Item<'a>
+        = &'a T
+    where
+        Self: 'a;
 
     fn next(&mut self) -> Option<Self::Item<'_>> {
         Some(&self.elements[self.positions.next()?])
@@ -319,11 +360,17 @@ impl NumeratorEvaluateFloat for f64 {
             let mut tensors = Vec::new();
             let orientations = &num.state.orientations;
             for o in orientations {
-                for (i, &sign) in o.iter().enumerate() {
-                    if !sign {
-                        params[4 * i] = -base_params[4 * i];
-                    } else {
-                        params[4 * i] = base_params[4 * i];
+                for (i, &sign) in o.into_iter() {
+                    match sign {
+                        Orientation::Reversed => {
+                            params[4 * Into::<usize>::into(i)] =
+                                -base_params[4 * Into::<usize>::into(i)];
+                        }
+                        Orientation::Default => {
+                            params[4 * Into::<usize>::into(i)] =
+                                base_params[4 * Into::<usize>::into(i)];
+                        }
+                        Orientation::Undirected => panic!("undirected edge in cff"),
                     }
                 }
 
@@ -399,11 +446,17 @@ impl NumeratorEvaluateFloat for f128 {
             let mut tensors = Vec::new();
             let orientations = &num.state.orientations;
             for o in orientations {
-                for (i, &sign) in o.iter().enumerate() {
-                    if !sign {
-                        params[4 * i] = -(base_params[4 * i].clone());
-                    } else {
-                        params[4 * i] = base_params[4 * i].clone();
+                for (i, &sign) in o.into_iter() {
+                    match sign {
+                        Orientation::Reversed => {
+                            params[4 * Into::<usize>::into(i)] =
+                                -base_params[4 * Into::<usize>::into(i)].clone();
+                        }
+                        Orientation::Default => {
+                            params[4 * Into::<usize>::into(i)] =
+                                base_params[4 * Into::<usize>::into(i)].clone();
+                        }
+                        Orientation::Undirected => panic!("undirected edge in cff"),
                     }
                 }
                 let t = num.state.single.eval_quad.evaluate(params);
@@ -443,12 +496,12 @@ impl<S: NumeratorState> Numerator<S> {
         self.state.update_model(model)
     }
 
-    fn add_consts_to_fn_map(fn_map: &mut OwnedFunctionMap<F<f64>>) {
-        fn_map.add_constant(Atom::parse("Nc").unwrap(), F(3.));
+    fn add_consts_to_fn_map(fn_map: &mut FunctionMap) {
+        fn_map.add_constant(parse!("Nc").unwrap(), Rational::from_unchecked(3, 1));
 
-        fn_map.add_constant(Atom::parse("TR").unwrap(), F(0.5));
+        fn_map.add_constant(parse!("TR").unwrap(), Rational::from_unchecked(1, 2));
 
-        fn_map.add_constant(Atom::parse("pi").unwrap(), F(std::f64::consts::PI));
+        fn_map.add_constant(parse!("pi").unwrap(), std::f64::consts::PI.into());
     }
 }
 
@@ -486,7 +539,7 @@ impl Numerator<PythonState> {
         S::apply(self, f)
     }
 }
-pub trait NumeratorState: Serialize + Clone + DeserializeOwned + Debug + Encode + Decode {
+pub trait NumeratorState: Clone + Debug + Encode + Decode<StateMap> {
     fn export(&self) -> String;
 
     fn forget_type(self) -> PythonState;
@@ -563,6 +616,15 @@ pub struct GlobalPrefactor {
     pub colorless: Atom,
 }
 
+impl Default for GlobalPrefactor {
+    fn default() -> Self {
+        GlobalPrefactor {
+            color: Atom::new_num(1),
+            colorless: Atom::new_num(1),
+        }
+    }
+}
+
 impl Serialize for GlobalPrefactor {
     fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
     where
@@ -587,8 +649,8 @@ impl<'de> Deserialize<'de> for GlobalPrefactor {
         }
         let helper = GlobalPrefactorHelper::deserialize(deserializer)?;
         Ok(GlobalPrefactor {
-            color: Atom::parse(&helper.color).unwrap(),
-            colorless: Atom::parse(&helper.colorless).unwrap(),
+            color: parse!(&helper.color).unwrap(),
+            colorless: parse!(&helper.colorless).unwrap(),
         })
     }
 }
@@ -597,7 +659,7 @@ impl Numerator<UnInit> {
     pub fn from_graph(
         self,
         graph: &BareGraph,
-        prefactor: Option<&GlobalPrefactor>,
+        prefactor: &GlobalPrefactor,
     ) -> Numerator<AppliedFeynmanRule> {
         debug!("Applying feynman rules");
         let state = AppliedFeynmanRule::from_graph(graph, prefactor);
@@ -612,16 +674,32 @@ impl Numerator<UnInit> {
         self,
         global: Atom,
         // _graph: &BareGraph,
-        prefactor: Option<&GlobalPrefactor>,
+        prefactor: &GlobalPrefactor,
     ) -> Numerator<Global> {
         debug!("Setting global numerator");
-        let state = if let Some(prefactor) = prefactor {
+        let state = {
             let mut global = global;
             global = global * &prefactor.color * &prefactor.colorless;
+            Global::new(global.into())
+        };
+        debug!(
+            "Global numerator:\n\tcolor:{}\n\tcolorless:{}",
+            state.color, state.colorless
+        );
+        Numerator { state }
+    }
 
-            Global::new(global.into())
-        } else {
-            Global::new(global.into())
+    pub fn from_global_color(
+        self,
+        global: Atom,
+        // _graph: &BareGraph,
+        prefactor: &GlobalPrefactor,
+    ) -> Numerator<Global> {
+        debug!("Setting global numerator");
+        let state = {
+            let mut global = global;
+            global = global * &prefactor.color * &prefactor.colorless;
+            Global::new_color(global.into())
         };
         debug!(
             "Global numerator:\n\tcolor:{}\n\tcolorless:{}",
@@ -701,10 +779,13 @@ impl<E: ExpressionState> SymbolicExpression<E> {
     pub fn new(expression: SerializableAtom) -> Self {
         E::new(expression)
     }
+    pub fn new_color(expression: SerializableAtom) -> Self {
+        E::new_color(expression)
+    }
 }
 
 pub trait ExpressionState:
-    Serialize + Clone + DeserializeOwned + Debug + Encode + Decode + Default
+    Serialize + Clone + DeserializeOwned + Debug + Encode + Decode<StateMap> + Default
 {
     fn forget_type(data: SymbolicExpression<Self>) -> PythonState;
 
@@ -712,6 +793,14 @@ pub trait ExpressionState:
         SymbolicExpression {
             colorless: DataTensor::new_scalar(expression),
             color: DataTensor::new_scalar(Atom::new_num(1).into()),
+            state: Self::default(),
+        }
+    }
+
+    fn new_color(expression: SerializableAtom) -> SymbolicExpression<Self> {
+        SymbolicExpression {
+            color: DataTensor::new_scalar(expression),
+            colorless: DataTensor::new_scalar(Atom::new_num(1).into()),
             state: Self::default(),
         }
     }
@@ -753,7 +842,7 @@ impl<E: ExpressionState> TryFrom<PythonState> for SymbolicExpression<E> {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, Default)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Encode, Decode, Default)]
 pub struct Local {}
 pub type AppliedFeynmanRule = SymbolicExpression<Local>;
 
@@ -777,7 +866,7 @@ impl ExpressionState for Local {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, Default)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, Encode, Decode, Default)]
 pub struct NonLocal {}
 pub type Global = SymbolicExpression<NonLocal>;
 
@@ -802,15 +891,62 @@ impl ExpressionState for NonLocal {
 }
 
 impl Numerator<Global> {
-    pub fn color_simplify(self) -> Numerator<ColorSimplified> {
+    pub fn write(
+        &self,
+        extra_info: &ExtraInfo,
+        bare_graph: &BareGraph,
+        numerator_format: ExpressionFormat,
+    ) -> std::io::Result<()> {
+        debug!("Writing global numerator");
+        let file_path = extra_info.path.join("expressions");
+
+        let printer_ops = numerator_format.into();
+
+        let out = format!(
+            "{}",
+            AtomPrinter::new_with_options(self.get_single_atom().unwrap().0.as_view(), printer_ops)
+        );
+
+        fs::write(
+            file_path.join(format!("global_{}_exp.json", bare_graph.name)),
+            serde_json::to_string_pretty(&out).unwrap(),
+        )?;
+
+        Ok(())
+    }
+
+    pub fn color_simplify(mut self) -> Numerator<ColorSimplified> {
         debug!("Color simplifying global numerator");
-        let state = ColorSimplified {
-            colorless: self
-                .state
+        let mut fully_simplified = true;
+
+        let colorless =
+            self.state
                 .colorless
-                .map_data(Self::color_simplify_global_impl),
-            color: self.state.color,
-            state: Default::default(),
+                .map_data_ref_mut(|a| match Self::color_simplify_global_impl(a) {
+                    Ok(expression) => expression,
+                    Err(ColorError::NotFully(expression)) => {
+                        fully_simplified = false;
+                        expression
+                    }
+                });
+        let color =
+            self.state
+                .color
+                .map_data_ref_mut(|a| match ColorSimplified::color_simplify_impl(a) {
+                    Ok(expression) => expression,
+                    Err(ColorError::NotFully(expression)) => {
+                        fully_simplified = false;
+                        expression
+                    }
+                });
+        let state = ColorSimplified {
+            colorless,
+            color,
+            state: if fully_simplified {
+                Color::Fully
+            } else {
+                Color::Partially
+            },
         };
         debug!(
             "Color simplified numerator: color:{}\n colorless:{}",
@@ -819,38 +955,53 @@ impl Numerator<Global> {
         Numerator { state }
     }
 
-    fn color_simplify_global_impl(mut expression: SerializableAtom) -> SerializableAtom {
+    fn color_simplify_global_impl(
+        expression: &SerializableAtom,
+    ) -> Result<SerializableAtom, ColorError> {
+        let mut expression = expression.clone();
         ColorSimplified::isolate_color(&mut expression);
-        // println!("{}", expression);
-        let (mut coefs, rem) = expression.0.coefficient_list(State::get_symbol("color"));
-        let mut atom = Atom::new_num(0);
-        for (key, coef) in coefs.iter_mut() {
-            if let AtomView::Fun(f) = key.as_view() {
-                let mut key = Atom::new();
+        let color_pat = function!(GS.color_wrap, GS.x_).to_pattern();
 
-                key.set_from_view(&f.iter().next().unwrap());
+        let mut fully = true;
 
-                // println!("{key}");
-                let color_simplified = ColorSimplified::color_symplify_impl(key.clone().into())
-                    .0
-                    .factor();
+        let color_simplified = {
+            let pat = expression
+                .0
+                .pattern_match(&color_pat, None, None)
+                .next()
+                .unwrap();
 
-                // println!("{coef}");
-
-                atom = atom + coef.factor() * color_simplified;
-            } else {
-                panic!("not a color fun");
+            match ColorSimplified::color_simplify_impl(&pat[&GS.x_].clone().into()) {
+                Ok(s) => s,
+                Err(ColorError::NotFully(s)) => {
+                    fully = false;
+                    s
+                }
             }
-            // println!("coef {i}:{}\n", coef.factor());
+            .0
+            .factor()
+        };
+
+        let mut expression = expression
+            .0
+            .replace(&color_pat)
+            .with(Atom::new_num(1).to_pattern());
+        expression = expression * color_simplified;
+
+        if fully {
+            Ok(expression.into())
+        } else {
+            Err(ColorError::NotFully(expression.into()))
         }
-        atom = atom + rem;
-        expression.0 = atom;
-        expression
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, Default)]
-pub struct Color {}
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, Encode, Decode, Default)]
+pub enum Color {
+    #[default]
+    Fully,
+    Partially,
+}
 pub type ColorSimplified = SymbolicExpression<Color>;
 
 impl ExpressionState for Color {
@@ -897,7 +1048,7 @@ impl ExpressionState for Color {
 //     }
 // }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, Default)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, Encode, Decode, Default)]
 pub struct Gamma {}
 pub type GammaSimplified = SymbolicExpression<Gamma>;
 
@@ -923,7 +1074,7 @@ impl ExpressionState for Gamma {
 
 impl<State: ExpressionState> NumeratorState for SymbolicExpression<State> {
     fn export(&self) -> String {
-        self.get_single_atom().unwrap().0.to_string()
+        self.get_single_atom().unwrap().0.to_canonical_string()
     }
 
     fn forget_type(self) -> PythonState {
@@ -937,22 +1088,30 @@ impl<State: ExpressionState> NumeratorState for SymbolicExpression<State> {
 
 impl AppliedFeynmanRule {
     pub fn simplify_ids(&mut self) {
-        let replacements: Vec<(Pattern, PatternOrMap)> = vec![
-            (
-                Pattern::parse("f_(i_,aind(loru(a__)))*id(aind(lord(a__),loru(b__)))").unwrap(),
-                Pattern::parse("f_(i_,aind(loru(b__)))").unwrap().into(),
+        let replacements: Vec<Replacement> = vec![
+            Replacement::new(
+                parse!("f_(i_,aind(loru(a__)))*id(aind(lord(a__),loru(b__)))")
+                    .unwrap()
+                    .to_pattern(),
+                parse!("f_(i_,aind(loru(b__)))").unwrap().to_pattern(),
             ),
-            (
-                Pattern::parse("f_(i_,aind(lord(a__)))*id(aind(loru(a__),lord(b__)))").unwrap(),
-                Pattern::parse("f_(i_,aind(lord(b__)))").unwrap().into(),
+            Replacement::new(
+                parse!("f_(i_,aind(lord(a__)))*id(aind(loru(a__),lord(b__)))")
+                    .unwrap()
+                    .to_pattern(),
+                parse!("f_(i_,aind(lord(b__)))").unwrap().to_pattern(),
             ),
-            (
-                Pattern::parse("f_(i_,aind(loru(a__)))*id(aind(loru(b__),lord(a__)))").unwrap(),
-                Pattern::parse("f_(i_,aind(loru(b__)))").unwrap().into(),
+            Replacement::new(
+                parse!("f_(i_,aind(loru(a__)))*id(aind(loru(b__),lord(a__)))")
+                    .unwrap()
+                    .to_pattern(),
+                parse!("f_(i_,aind(loru(b__)))").unwrap().to_pattern(),
             ),
-            (
-                Pattern::parse("f_(i_,aind(lord(a__)))*id(aind(lord(b__),loru(a__)))").unwrap(),
-                Pattern::parse("f_(i_,aind(lord(b__)))").unwrap().into(),
+            Replacement::new(
+                parse!("f_(i_,aind(lord(a__)))*id(aind(lord(b__),loru(a__)))")
+                    .unwrap()
+                    .to_pattern(),
+                parse!("f_(i_,aind(lord(b__)))").unwrap().to_pattern(),
             ),
         ];
 
@@ -962,16 +1121,16 @@ impl AppliedFeynmanRule {
         };
 
         let reps: Vec<Replacement> = replacements
-            .iter()
-            .map(|(lhs, rhs)| Replacement::new(lhs, rhs).with_settings(&settings))
+            .into_iter()
+            .map(|r| r.with_settings(settings.clone()))
             .collect();
 
         self.colorless
-            .map_data_mut(|a| a.replace_repeat_multiple(&reps));
+            .map_data_mut(|a| a.replace_multiple_repeat_mut(&reps));
     }
-    pub fn from_graph(graph: &BareGraph, prefactor: Option<&GlobalPrefactor>) -> Self {
+    pub fn from_graph(graph: &BareGraph, prefactor: &GlobalPrefactor) -> Self {
         debug!("Generating numerator for graph: {}", graph.name);
-        debug!("momentum: {}", graph.dot_lmb());
+        // debug!("momentum: {}", graph.dot_lmb());
 
         let vatoms: Vec<_> = graph
             .vertices
@@ -980,9 +1139,9 @@ impl AppliedFeynmanRule {
             .collect();
 
         let mut eatoms: Vec<_> = vec![];
-        let i = Atom::new_var(State::I);
-        for e in &graph.edges {
-            let [n, c] = e.color_separated_numerator(graph);
+        let i = Atom::new_var(Atom::I);
+        for (j, e) in graph.edges.iter().enumerate() {
+            let [n, c] = e.color_separated_numerator(graph, j);
             let n = if matches!(e.edge_type, EdgeType::Virtual) {
                 &n * &i
             } else {
@@ -997,6 +1156,8 @@ impl AppliedFeynmanRule {
         let mut colorful_builder = DataTensor::new_scalar(Atom::new_num(1));
 
         for [colorless, color] in &vatoms {
+            // println!("colorless vertex: {}", colorless);
+            // println!("colorful vertex: {}", color);
             colorless_builder = colorless_builder.contract(colorless).unwrap();
             colorful_builder = colorful_builder.contract(color).unwrap();
             // println!("vertex: {v}");
@@ -1004,14 +1165,14 @@ impl AppliedFeynmanRule {
         }
 
         for [n, c] in &eatoms {
+            // println!("colorless edge {n}");
+            // println!("colorfull edge {c}");
             colorless_builder = colorless_builder.scalar_mul(n).unwrap();
             colorful_builder = colorful_builder.scalar_mul(c).unwrap();
         }
 
-        if let Some(prefactor) = prefactor {
-            colorless_builder = colorless_builder.scalar_mul(&prefactor.colorless).unwrap();
-            colorful_builder = colorful_builder.scalar_mul(&prefactor.color).unwrap();
-        }
+        colorless_builder = colorless_builder.scalar_mul(&prefactor.colorless).unwrap();
+        colorful_builder = colorful_builder.scalar_mul(&prefactor.color).unwrap();
 
         let mut num = AppliedFeynmanRule {
             colorless: colorless_builder.map_data(|a| normalise_complex(&a).into()),
@@ -1023,7 +1184,123 @@ impl AppliedFeynmanRule {
     }
 }
 
+impl<T: Copy + Default> Numerator<SymbolicExpression<T>> {
+    pub fn canonize_lorentz(&self) -> Result<Self, String> {
+        let pats: Vec<_> = vec![Minkowski::selfless_symbol(), Bispinor::selfless_symbol()];
+
+        let mut indices_map = AHashMap::new();
+
+        self.state.colorless.iter_flat().for_each(|(_, v)| {
+            for p in &pats {
+                for a in
+                    v.0.pattern_match(&function!(*p, GS.x_, GS.y_).to_pattern(), None, None)
+                {
+                    indices_map.insert(
+                        function!(*p, a[&GS.x_], a[&GS.y_]),
+                        function!(*p, a[&GS.x_]),
+                    );
+                }
+            }
+        });
+
+        let sorted = indices_map.into_iter().sorted().collect::<Vec<_>>();
+
+        let color = self.state.color.clone(); //map_data_ref_result(|a| a.0.canonize_tensors(&indices, None).map(|a| a.into()))?;
+
+        let colorless = self
+            .state
+            .colorless
+            .map_data_ref_result(|a| a.0.canonize_tensors(&sorted).map(|a| a.into()))?;
+
+        Ok(Self {
+            state: SymbolicExpression {
+                colorless,
+                color,
+                state: T::default(),
+            },
+        })
+    }
+
+    pub fn canonize_color(&self) -> Result<Self, String> {
+        let pats: Vec<_> = vec![ColorAdjoint::selfless_symbol()];
+        let dualizablepats: Vec<_> = vec![
+            ColorFundamental::selfless_symbol(),
+            ColorSextet::selfless_symbol(),
+        ];
+
+        let mut color = self.state.color.map_data_ref(|a| {
+            SerializableAtom::from(
+                a.0.replace(&function!(symbol!(DOWNIND), GS.x__).to_pattern())
+                    .with(Atom::new_var(GS.x__).to_pattern()),
+            )
+        });
+
+        let mut indices_map = AHashMap::new();
+
+        color.iter_flat().for_each(|(_, v)| {
+            for p in pats.iter().chain(&dualizablepats) {
+                for a in
+                    v.0.pattern_match(&function!(*p, GS.x_, GS.y_).to_pattern(), None, None)
+                {
+                    indices_map.insert(
+                        function!(*p, a[&GS.x_], a[&GS.y_]),
+                        function!(*p, a[&GS.x_]),
+                    );
+                }
+            }
+        });
+
+        let sorted = indices_map.into_iter().sorted().collect::<Vec<_>>();
+        // println!(
+        //     "indices sorted [{}]",
+        //     sorted
+        //         .iter()
+        //         .map(|(a, b)| format!(
+        //             "(Atom::parse(\"{}\").unwrap(),Atom::parse(\"{}\").unwrap())",
+        //             a, b
+        //         ))
+        //         .collect::<Vec<_>>()
+        //         .join(", ")
+        // );
+
+        color = color.map_data_ref_result(|a| a.0.canonize_tensors(&sorted).map(|a| a.into()))?;
+
+        let colorless = self.state.colorless.clone();
+        Ok(Self {
+            state: SymbolicExpression {
+                colorless,
+                color,
+                state: T::default(),
+            },
+        })
+    }
+}
+
 impl Numerator<AppliedFeynmanRule> {
+    pub fn write(
+        &self,
+        extra_info: &ExtraInfo,
+        bare_graph: &BareGraph,
+        numerator_format: ExpressionFormat,
+    ) -> std::io::Result<()> {
+        debug!("Writing local numerator");
+        let file_path = extra_info.path.join("expressions");
+
+        let printer_ops = numerator_format.into();
+
+        let out = format!(
+            "{}",
+            AtomPrinter::new_with_options(self.get_single_atom().unwrap().0.as_view(), printer_ops)
+        );
+
+        fs::write(
+            file_path.join(format!("local_{}_exp.json", bare_graph.name)),
+            serde_json::to_string_pretty(&out).unwrap(),
+        )?;
+
+        Ok(())
+    }
+
     pub fn color_simplify(self) -> Numerator<ColorSimplified> {
         debug!("Color simplifying local numerator");
 
@@ -1038,30 +1315,30 @@ impl Numerator<AppliedFeynmanRule> {
     }
 }
 
+#[derive(Debug, Error)]
+pub enum ColorError {
+    #[error("Not fully simplified: {0}")]
+    NotFully(SerializableAtom),
+}
+
 impl ColorSimplified {
     fn isolate_color(expression: &mut SerializableAtom) {
-        let color_fn = FunctionBuilder::new(State::get_symbol("color"))
-            .add_arg(&Atom::new_num(1))
+        let color_fn = FunctionBuilder::new(symbol!("color"))
+            .add_arg(Atom::new_num(1))
             .finish();
         expression.0 = &expression.0 * color_fn;
         let replacements = vec![
             (
-                Pattern::parse("f_(x___,cof(3,i_),z___)*color(a___)").unwrap(),
-                Pattern::parse("color(a___*f_(x___,cof(3,i_),z___))")
-                    .unwrap()
-                    .into(),
+                parse!("f_(x___,cof(3,i_),z___)*color(a___)").unwrap(),
+                parse!("color(a___*f_(x___,cof(3,i_),z___))").unwrap(),
             ),
             (
-                Pattern::parse("f_(x___,dind(cof(3,i_)),z___)*color(a___)").unwrap(),
-                Pattern::parse("color(a___*f_(x___,dind(cof(3,i_)),z___))")
-                    .unwrap()
-                    .into(),
+                parse!("f_(x___,dind(cof(3,i_)),z___)*color(a___)").unwrap(),
+                parse!("color(a___*f_(x___,dind(cof(3,i_)),z___))").unwrap(),
             ),
             (
-                Pattern::parse("f_(x___,coad(i__),z___)*color(a___)").unwrap(),
-                Pattern::parse("color(a___*f_(x___,coad(i__),z___))")
-                    .unwrap()
-                    .into(),
+                parse!("f_(x___,coad(i__),z___)*color(a___)").unwrap(),
+                parse!("color(a___*f_(x___,coad(i__),z___))").unwrap(),
             ),
         ];
         let settings = MatchSettings {
@@ -1070,18 +1347,20 @@ impl ColorSimplified {
         };
 
         let reps: Vec<Replacement> = replacements
-            .iter()
-            .map(|(lhs, rhs)| Replacement::new(lhs, rhs).with_settings(&settings))
+            .into_iter()
+            .map(|(lhs, rhs)| {
+                Replacement::new(lhs.to_pattern(), rhs.to_pattern()).with_settings(settings.clone())
+            })
             .collect();
 
-        expression.replace_repeat_multiple(&reps);
+        expression.replace_multiple_repeat_mut(&reps);
 
         // let mut color = Atom::new();
 
         // if let AtomView::Mul(mul) = expression.0.as_view() {
         //     for a in mul {
         //         if let AtomView::Fun(f) = a {
-        //             if f.get_symbol() == State::get_symbol("color") {
+        //             if f.get_symbol() == Symbol::new("color") {
         //                 color.set_from_view(&f.iter().next().unwrap());
         //             }
         //         }
@@ -1089,7 +1368,7 @@ impl ColorSimplified {
         // }
 
         // expression.0.replace_all(
-        //     &Pattern::Fn(State::get_symbol("color"), vec![]),
+        //     &Pattern::Fn(Symbol::new("color"), vec![]),
         //     &Pattern::Literal(Atom::new_num(1)).into(),
         //     None,
         //     None,
@@ -1098,162 +1377,245 @@ impl ColorSimplified {
         // color.into()
     }
 
-    pub fn color_symplify_impl(mut expression: SerializableAtom) -> SerializableAtom {
-        let f_ = symb!("f_");
+    pub fn color_simplify_impl(
+        expression: &SerializableAtom,
+    ) -> Result<SerializableAtom, ColorError> {
+        let f_ = symbol!("f_");
         let cof = ColorFundamental::rep(3);
         let coaf = ColorFundamental::rep(3).dual();
         let coad = ColorAdjoint::rep(8);
-        let a___ = Atom::new_var(symb!("a___"));
-        let a_ = Atom::new_var(symb!("a_"));
-        let b_ = Atom::new_var(symb!("b_"));
-        let c___ = Atom::new_var(symb!("c___"));
-        let c_ = Atom::new_var(symb!("c_"));
-        let d_ = Atom::new_var(symb!("d_"));
-        let e_ = Atom::new_var(symb!("e_"));
-        let i_ = Atom::new_var(symb!("i_"));
-        let i = symb!("i");
-        let j = symb!("j");
-        let k = symb!("k");
+        let a___ = Atom::new_var(symbol!("a___"));
+        let a_ = Atom::new_var(symbol!("a_"));
+        let b_ = Atom::new_var(symbol!("b_"));
+        let c___ = Atom::new_var(symbol!("c___"));
+        let c_ = Atom::new_var(symbol!("c_"));
+        let d_ = Atom::new_var(symbol!("d_"));
+        let e_ = Atom::new_var(symbol!("e_"));
+        let i_ = Atom::new_var(symbol!("i_"));
+        let i = symbol!("i");
+        let j = symbol!("j");
+        let k = symbol!("k");
 
-        let tr = Atom::new_var(symb!("TR"));
-        let nc = Atom::new_var(symb!("Nc"));
+        let tr = Atom::new_var(symbol!("TR"));
+        let nc = Atom::new_var(symbol!("Nc"));
         let reps = vec![
             (
-                fun!(f_, a___, cof.pattern(&b_), c___)
-                    * fun!(ETS.id, coaf.pattern(&b_), cof.pattern(&c_)),
-                fun!(f_, a___, cof.pattern(&c_), c___),
+                function!(f_, a___, cof.pattern(&b_), c___)
+                    * function!(ETS.id, coaf.pattern(&b_), cof.pattern(&c_)),
+                function!(f_, a___, cof.pattern(&c_), c___),
             ),
             // (
-            //     fun!(f_, a___, cof.pattern(&c_), c___)
-            //         * fun!(ETS.id, cof.pattern(&b_), coaf.pattern(&c_)),
-            //     fun!(f_, a___, cof.pattern(&b_), c___),
+            //     function!(f_, a___, cof.pattern(&c_), c___)
+            //         * function!(ETS.id, cof.pattern(&b_), coaf.pattern(&c_)),
+            //     function!(f_, a___, cof.pattern(&b_), c___),
             // ),
             (
-                fun!(f_, a___, coaf.pattern(&b_), c___)
-                    * fun!(ETS.id, cof.pattern(&b_), coaf.pattern(&c_)),
-                fun!(f_, a___, coaf.pattern(&c_), c___),
+                function!(f_, a___, coaf.pattern(&b_), c___)
+                    * function!(ETS.id, cof.pattern(&b_), coaf.pattern(&c_)),
+                function!(f_, a___, coaf.pattern(&c_), c___),
             ),
             // (
-            //     fun!(f_, a___, coaf.pattern(&c_), c___)
-            //         * fun!(ETS.id, coaf.pattern(&b_), cof.pattern(&c_)),
-            //     fun!(f_, a___, coaf.pattern(&b_), c___),
+            //     function!(f_, a___, coaf.pattern(&c_), c___)
+            //         * function!(ETS.id, coaf.pattern(&b_), cof.pattern(&c_)),
+            //     function!(f_, a___, coaf.pattern(&b_), c___),
             // ),
             (
-                fun!(f_, a___, coad.pattern(&b_), c___)
-                    * fun!(ETS.id, coad.pattern(&b_), coad.pattern(&a_)),
-                fun!(f_, a___, coad.pattern(&a_), c___),
+                function!(f_, a___, coad.pattern(&b_), c___)
+                    * function!(ETS.id, coad.pattern(&b_), coad.pattern(&a_)),
+                function!(f_, a___, coad.pattern(&a_), c___),
             ),
             (
-                fun!(f_, a___, coad.pattern(&a_), c___)
-                    * fun!(ETS.id, coad.pattern(&b_), coad.pattern(&a_)),
-                fun!(f_, a___, coad.pattern(&b_), c___),
+                function!(f_, a___, coad.pattern(&a_), c___)
+                    * function!(ETS.id, coad.pattern(&b_), coad.pattern(&a_)),
+                function!(f_, a___, coad.pattern(&b_), c___),
             ),
             (
-                fun!(ETS.id, coaf.pattern(&a_), cof.pattern(&a_)),
+                function!(ETS.id, coaf.pattern(&a_), cof.pattern(&a_)),
                 nc.clone(),
             ),
             (
-                fun!(ETS.id, cof.pattern(&a_), coaf.pattern(&a_)),
+                function!(ETS.id, cof.pattern(&a_), coaf.pattern(&a_)),
                 nc.clone(),
             ),
             (
-                fun!(ETS.id, coad.pattern(&a_), coad.pattern(&a_)),
+                function!(ETS.id, coad.pattern(&a_), coad.pattern(&a_)),
                 (&nc * &nc) - 1,
             ),
             (
-                fun!(UFO.t, a_, cof.pattern(&b_), coaf.pattern(&b_)),
+                function!(UFO.t, a_, cof.pattern(&b_), coaf.pattern(&b_)),
                 Atom::new_num(0),
             ),
             (
-                fun!(UFO.t, a_, cof.pattern(&c_), coaf.pattern(&e_))
-                    * fun!(UFO.t, b_, cof.pattern(&e_), coaf.pattern(&c_)),
-                &tr * fun!(ETS.id, a_, b_),
+                function!(UFO.t, a_, cof.pattern(&c_), coaf.pattern(&e_))
+                    * function!(UFO.t, b_, cof.pattern(&e_), coaf.pattern(&c_)),
+                &tr * function!(ETS.id, a_, b_),
             ),
             (
-                fun!(UFO.t, &e_, a_, b_) * fun!(UFO.t, &e_, c_, d_),
-                &tr * (fun!(ETS.id, a_, d_) * fun!(ETS.id, c_, b_)
-                    - (fun!(ETS.id, a_, b_) * fun!(ETS.id, c_, d_) / &nc)),
+                function!(UFO.t, a_, cof.pattern(&c_), coaf.pattern(&e_)).pow(Atom::new_num(2)),
+                &tr * function!(ETS.id, a_, a_),
             ),
             (
-                fun!(UFO.t, i_, a_, coaf.pattern(&b_))
-                    * fun!(UFO.t, e_, cof.pattern(&b_), coaf.pattern(&c_))
-                    * fun!(UFO.t, i_, cof.pattern(&c_), d_),
-                -(&tr / &nc) * fun!(UFO.t, e_, a_, d_),
+                function!(UFO.t, &e_, a_, b_) * function!(UFO.t, &e_, c_, d_),
+                &tr * (function!(ETS.id, a_, d_) * function!(ETS.id, c_, b_)
+                    - (function!(ETS.id, a_, b_) * function!(ETS.id, c_, d_) / &nc)),
             ),
             (
-                fun!(
+                function!(UFO.t, i_, a_, coaf.pattern(&b_))
+                    * function!(UFO.t, e_, cof.pattern(&b_), coaf.pattern(&c_))
+                    * function!(UFO.t, i_, cof.pattern(&c_), d_),
+                -(&tr / &nc) * function!(UFO.t, e_, a_, d_),
+            ),
+            (
+                function!(
                     UFO.f,
                     coad.pattern(&a_),
                     coad.pattern(&b_),
                     coad.pattern(&c_)
-                ),
-                (fun!(
-                    UFO.t,
-                    coad.pattern(&a_),
-                    cof.pattern(&fun!(i, a_, b_, c_)),
-                    coaf.pattern(&fun!(j, a_, b_, c_))
-                ) * fun!(
-                    UFO.t,
-                    coad.pattern(&b_),
-                    cof.pattern(&fun!(j, a_, b_, c_)),
-                    coaf.pattern(&fun!(k, a_, b_, c_))
-                ) * fun!(
-                    UFO.t,
-                    coad.pattern(&c_),
-                    cof.pattern(&fun!(k, a_, b_, c_)),
-                    coaf.pattern(&fun!(i, a_, b_, c_))
-                ) - fun!(
-                    UFO.t,
-                    coad.pattern(&a_),
-                    cof.pattern(&fun!(j, a_, b_, c_)),
-                    coaf.pattern(&fun!(k, a_, b_, c_))
-                ) * fun!(
-                    UFO.t,
-                    coad.pattern(&b_),
-                    cof.pattern(&fun!(i, a_, b_, c_)),
-                    coaf.pattern(&fun!(j, a_, b_, c_))
-                ) * fun!(
-                    UFO.t,
-                    coad.pattern(&c_),
-                    cof.pattern(&fun!(k, a_, b_, c_)),
-                    coaf.pattern(&fun!(i, a_, b_, c_))
-                )) / &tr,
+                )
+                .pow(Atom::new_num(2)),
+                &nc * (&nc * &nc - 1),
             ),
         ];
 
-        let replacements: Vec<(Pattern, PatternOrMap)> = reps
-            .into_iter()
-            .map(|(a, b)| (a.into_pattern(), b.into_pattern().into()))
-            .collect();
+        let frep = [Replacement::new(
+            function!(
+                UFO.f,
+                coad.pattern(&a_),
+                coad.pattern(&b_),
+                coad.pattern(&c_)
+            )
+            .to_pattern(),
+            (((function!(
+                UFO.t,
+                coad.pattern(&a_),
+                cof.pattern(&function!(i, a_, b_, c_)),
+                coaf.pattern(&function!(j, a_, b_, c_))
+            ) * function!(
+                UFO.t,
+                coad.pattern(&b_),
+                cof.pattern(&function!(j, a_, b_, c_)),
+                coaf.pattern(&function!(k, a_, b_, c_))
+            ) * function!(
+                UFO.t,
+                coad.pattern(&c_),
+                cof.pattern(&function!(k, a_, b_, c_)),
+                coaf.pattern(&function!(i, a_, b_, c_))
+            ) - function!(
+                UFO.t,
+                coad.pattern(&a_),
+                cof.pattern(&function!(i, a_, b_, c_)),
+                coaf.pattern(&function!(j, a_, b_, c_))
+            ) * function!(
+                UFO.t,
+                coad.pattern(&c_),
+                cof.pattern(&function!(j, a_, b_, c_)),
+                coaf.pattern(&function!(k, a_, b_, c_))
+            ) * function!(
+                UFO.t,
+                coad.pattern(&b_),
+                cof.pattern(&function!(k, a_, b_, c_)),
+                coaf.pattern(&function!(i, a_, b_, c_))
+            )) / &tr)
+                * Atom::new_var(Atom::I).ref_neg())
+            .to_pattern(),
+        )];
 
         let settings = MatchSettings {
             rhs_cache_size: 0,
             ..Default::default()
         };
-
-        let reps: Vec<Replacement> = replacements
-            .iter()
-            .map(|(lhs, rhs)| Replacement::new(lhs, rhs).with_settings(&settings))
+        let replacements: Vec<Replacement> = reps
+            .into_iter()
+            .map(|(a, b)| {
+                Replacement::new(a.to_pattern(), b.to_pattern()).with_settings(settings.clone())
+            })
             .collect();
 
-        SerializableAtom::replace_repeat_multiple_atom_expand(&mut expression.0, &reps);
-        expression
-    }
+        let mut atom = Atom::new_num(0);
+        // for r in &replacements {
+        //     println!("{r}")
+        // }
 
-    pub fn color_simplify<T: ExpressionState>(expr: SymbolicExpression<T>) -> ColorSimplified {
-        let colorless = expr.colorless;
-        let color = expr.color.map_data(Self::color_symplify_impl);
+        let mut expression = expression.clone();
+        let mut first = true;
+        while first || expression.0.replace_multiple_into(&replacements, &mut atom) {
+            if !first {
+                std::mem::swap(&mut expression.0, &mut atom)
+            };
+            first = false;
+            expression.0 = expression.0.replace_multiple(&frep);
+            expression.0 = expression.0.expand();
+        }
 
-        ColorSimplified {
-            colorless,
-            color,
-            state: Default::default(),
+        let pats: Vec<_> = vec![ColorAdjoint::selfless_symbol()];
+        let dualizablepats: Vec<_> = vec![
+            ColorFundamental::selfless_symbol(),
+            ColorSextet::selfless_symbol(),
+        ];
+
+        let mut fully_simplified = true;
+        for p in pats.iter().chain(&dualizablepats) {
+            if expression
+                .0
+                .pattern_match(&function!(*p, GS.x_, GS.y_).to_pattern(), None, None)
+                .next()
+                .is_some()
+            {
+                fully_simplified = false;
+            }
+        }
+
+        if fully_simplified {
+            Ok(expression)
+        } else {
+            Err(ColorError::NotFully(expression))
         }
     }
 
+    pub fn color_simplify<T: ExpressionState>(mut expr: SymbolicExpression<T>) -> ColorSimplified {
+        let colorless = expr.colorless;
+        let mut fully_simplified = true;
+
+        expr.color.map_data_mut(|a| {
+            *a = match Self::color_simplify_impl(a) {
+                Ok(expression) => expression,
+                Err(ColorError::NotFully(expression)) => {
+                    fully_simplified = false;
+                    expression
+                }
+            }
+        });
+
+        ColorSimplified {
+            colorless,
+            color: expr.color,
+            state: if fully_simplified {
+                Color::Fully
+            } else {
+                Color::Partially
+            },
+        }
+    }
+
+    /// Parses the color simplified numerator into a network,
+    /// If the color hasn't been fully simplified,
     pub fn parse(self) -> Network {
+        let a = match self.state {
+            Color::Fully => self.get_single_atom().unwrap().0,
+            Color::Partially => {
+                warn!(
+                    "Not fully simplified, taking the colorless part associated to {}",
+                    self.color.get_owned_linear(FlatIndex::from(0)).unwrap()
+                );
+                self.colorless
+                    .get_owned_linear(FlatIndex::from(0))
+                    .unwrap()
+                    .0
+            }
+        };
+
         let net = TensorNetwork::<MixedTensor<f64, AtomStructure>, SerializableAtom>::try_from(
-            self.get_single_atom().unwrap().0.as_view(),
+            a.as_view(),
         )
         .unwrap()
         .to_fully_parametric()
@@ -1267,6 +1629,68 @@ impl ColorSimplified {
 pub type Gloopoly =
     symbolica::poly::polynomial::MultivariatePolynomial<symbolica::domains::atom::AtomField, u8>;
 impl Numerator<ColorSimplified> {
+    pub fn validate_against_branches(&self, seed: usize) -> bool {
+        let gamma = self.clone().gamma_simplify().parse();
+        let nogamma = self.clone().parse();
+        let mut iter = PrimeIteratorU64::new(seed as u64);
+        let reps = nogamma.random_concretize_reps(Some(&mut iter), false);
+
+        let reps_view = reps
+            .iter()
+            .map(|(a, b)| (a.as_view(), b.as_view()))
+            .collect::<Vec<_>>();
+        let gammat = gamma
+            .apply_reps(reps_view.clone())
+            .contract::<Rational>(ContractionSettings::Normal)
+            .unwrap()
+            .state
+            .tensor;
+
+        let nogammat = nogamma
+            .apply_reps(reps_view)
+            .contract::<Rational>(ContractionSettings::Normal)
+            .unwrap()
+            .state
+            .tensor;
+
+        // println!("{gammat}\n{nogammat}");
+
+        gammat
+            .tensor
+            .sub_fallible(&nogammat.tensor)
+            .unwrap()
+            .iter_flat()
+            .all(|(_, a)| {
+                let a = a.expand();
+                // println!("{a}");
+                a.is_zero()
+            })
+    }
+
+    pub fn write(
+        &self,
+        extra_info: &ExtraInfo,
+        bare_graph: &BareGraph,
+        numerator_format: ExpressionFormat,
+    ) -> std::io::Result<()> {
+        debug!("Writing color simplified numerator");
+        let file_path = extra_info.path.join("expressions");
+
+        let printer_ops = numerator_format.into();
+
+        let out = format!(
+            "{}",
+            AtomPrinter::new_with_options(self.get_single_atom().unwrap().0.as_view(), printer_ops)
+        );
+
+        fs::write(
+            file_path.join(format!("color_simplified_{}_exp.json", bare_graph.name)),
+            serde_json::to_string_pretty(&out).unwrap(),
+        )?;
+
+        Ok(())
+    }
+
     pub fn gamma_simplify(self) -> Numerator<GammaSimplified> {
         debug!("Gamma simplifying color symplified numerator");
 
@@ -1292,7 +1716,11 @@ impl Numerator<ColorSimplified> {
 
     pub fn parse(self) -> Numerator<Network> {
         debug!("Parsing color simplified numerator into network");
+
+        // debug!("colorless: {}", self.state.colorless);
+        // debug!("color: {}", self.state.color);
         let state = self.state.parse();
+
         // debug!("");
         Numerator { state }
     }
@@ -1304,6 +1732,7 @@ pub struct PolySplit {
     pub var_map: Arc<Vec<Variable>>,
     pub energies: Vec<usize>,
     pub color: ParamTensor,
+    pub colorsimplified: Color,
 }
 
 impl PolySplit {
@@ -1343,7 +1772,7 @@ impl PolySplit {
                         a.0.as_view(),
                     )
                     .unwrap();
-                net.contract();
+                net.contract().unwrap();
                 net.to_fully_parametric()
                     .result_tensor_smart()
                     .unwrap()
@@ -1372,7 +1801,7 @@ impl PolySplit {
                         a.0.as_view(),
                     )
                     .unwrap();
-                net.contract();
+                net.contract().unwrap();
                 net.to_fully_parametric()
                     .result_tensor_smart()
                     .unwrap()
@@ -1388,6 +1817,7 @@ impl PolySplit {
             var_map,
             energies,
             color: ParamTensor::composite(color_simplified.state.color.map_data(|a| a.0)),
+            colorsimplified: color_simplified.state.state,
         }
     }
 
@@ -1401,7 +1831,7 @@ impl PolySplit {
         }
 
         let mut add = Atom::new_num(0);
-        let coef = symb!("coef");
+        let coef = symbol!("coef");
         let shift = reps.as_ref().lock().unwrap().len();
 
         let mut mul_h;
@@ -1440,7 +1870,7 @@ impl PolySplit {
                 .unwrap()
                 .push(monomial.coefficient.clone());
 
-            mul_h = mul_h * fun!(coef, Atom::new_num((i + shift) as i64));
+            mul_h = mul_h * function!(coef, Atom::new_num((i + shift) as i64));
             add = add + mul_h.as_view();
         }
 
@@ -1457,9 +1887,18 @@ impl PolySplit {
             .colorless
             .map_data(|a| Self::shadow_poly(a, reps.clone()));
 
-        let out = ParamTensor::composite(colorless)
-            .contract(&self.color)
-            .unwrap();
+        let out = match self.colorsimplified {
+            Color::Fully => ParamTensor::composite(colorless)
+                .contract(&self.color)
+                .unwrap(),
+            Color::Partially => {
+                warn!(
+                    "Not fully color-simplified, taking the colorless part associated to {}",
+                    self.color.get_owned_linear(FlatIndex::from(0)).unwrap()
+                );
+                ParamTensor::new_scalar(colorless.get_owned_linear(FlatIndex::from(0)).unwrap())
+            }
+        };
 
         let reps = Arc::try_unwrap(reps).unwrap().into_inner().unwrap();
 
@@ -1504,39 +1943,76 @@ impl Numerator<PolySplit> {
     }
 }
 
+#[derive(Debug, Clone, Encode, Decode)]
+#[bincode(decode_context = "StateMap")]
 pub struct PolyContracted {
+    #[bincode(with_serde)]
     pub tensor: ParamTensor,
     pub coef_map: Vec<Atom>,
 }
 
 impl Numerator<PolyContracted> {
+    pub fn write(
+        &self,
+        extra_info: &ExtraInfo,
+        bare_graph: &BareGraph,
+        numerator_format: ExpressionFormat,
+    ) -> std::io::Result<()> {
+        debug!("Writing poly contracted numerator");
+        let file_path = extra_info.path.join("expressions");
+
+        let printer_ops = numerator_format.into();
+
+        let out = (
+            self.state
+                .coef_map
+                .iter()
+                .map(|a| {
+                    format!(
+                        "{}",
+                        AtomPrinter::new_with_options(a.as_view(), printer_ops)
+                    )
+                })
+                .collect_vec(),
+            format!(
+                "{}",
+                AtomPrinter::new_with_options(
+                    self.state.tensor.iter_flat().next().unwrap().1,
+                    printer_ops
+                )
+            ),
+        );
+
+        fs::write(
+            file_path.join(format!("poly_contracted_{}_exp.json", bare_graph.name)),
+            serde_json::to_string_pretty(&out).unwrap(),
+        )?;
+
+        Ok(())
+    }
+
     pub fn to_contracted(self) -> Numerator<Contracted> {
         let coefs: Vec<_> = (0..self.state.coef_map.len())
-            .map(|i| fun!(GS.coeff, Atom::new_num(i as i64)).into_pattern())
+            .map(|i| function!(GS.coeff, Atom::new_num(i as i64)).to_pattern())
             .collect();
 
-        let coefs_reps: Vec<_> = self
-            .state
-            .coef_map
-            .iter()
-            .map(|a| a.into_pattern().into())
-            .collect();
+        let coefs_reps: Vec<_> = self.state.coef_map.iter().map(|a| a.to_pattern()).collect();
 
         let reps: Vec<_> = coefs
-            .iter()
-            .zip(coefs_reps.iter())
+            .into_iter()
+            .zip(coefs_reps)
             .map(|(p, rhs)| Replacement::new(p, rhs))
             .collect();
 
         Numerator {
             state: Contracted {
-                tensor: self.state.tensor.replace_all_multiple(&reps),
+                tensor: self.state.tensor.replace_multiple(&reps),
             },
         }
     }
 
-    fn generate_fn_map(&self) -> OwnedFunctionMap<F<f64>> {
-        let mut fn_map = OwnedFunctionMap::new();
+    fn generate_fn_map(&self) -> FunctionMap {
+        let mut fn_map = FunctionMap::new();
 
         for (v, k) in self.state.coef_map.clone().iter().enumerate() {
             fn_map
@@ -1558,36 +2034,40 @@ impl Numerator<PolyContracted> {
         model: &Model,
         graph: &BareGraph,
         extra_info: &ExtraInfo,
-        export_settings: &ExportSettings,
+        export_settings: &ProcessSettings,
     ) -> Numerator<Evaluators> {
+        let s = &export_settings.numerator_settings.eval_settings;
         debug!("generating evaluators for contracted numerator");
         let (params, double_param_values, quad_param_values, model_params_start) =
             Contracted::generate_params(graph, model);
 
         let emr_len = graph.edges.len();
 
-        let owned_fn_map = self.generate_fn_map();
+        let fn_map = self.generate_fn_map();
 
-        let fn_map: FunctionMap = (&owned_fn_map).into();
+        // let fn_map: FunctionMap = (&owned_fn_map).into();
+        let settings = NumeratorEvaluatorSettings {
+            options: s,
+            inline_asm: export_settings.gammaloop_compile_options.inline_asm(),
+            compile_options: export_settings
+                .gammaloop_compile_options
+                .to_symbolica_compile_options(),
+        };
 
         let single = self.state.evaluator(
             extra_info.path.clone(),
             &graph.name,
-            export_settings,
+            &settings,
             &params,
             &fn_map,
         );
 
-        match export_settings.numerator_settings.eval_settings {
+        match s {
             NumeratorEvaluatorOptions::Joint(_) => Numerator {
                 state: Evaluators {
-                    orientated: Some(single.orientated_joint(
-                        graph,
-                        &params,
-                        extra_info,
-                        export_settings,
-                        &fn_map,
-                    )),
+                    orientated: Some(
+                        single.orientated_joint(graph, &params, extra_info, &settings, &fn_map),
+                    ),
                     single,
                     choice: SingleOrCombined::Combined,
                     orientations: extra_info.orientations.clone(),
@@ -1595,7 +2075,7 @@ impl Numerator<PolyContracted> {
                     double_param_values,
                     model_params_start,
                     emr_len,
-                    fn_map: owned_fn_map,
+                    fn_map,
                 },
             },
             NumeratorEvaluatorOptions::Iterative(IterativeOptions {
@@ -1609,10 +2089,10 @@ impl Numerator<PolyContracted> {
                         graph,
                         &params,
                         extra_info,
-                        export_settings,
-                        iterations,
-                        n_cores,
-                        verbose,
+                        &settings,
+                        *iterations,
+                        *n_cores,
+                        *verbose,
                         &fn_map,
                     )),
                     single,
@@ -1622,7 +2102,7 @@ impl Numerator<PolyContracted> {
                     double_param_values,
                     model_params_start,
                     emr_len,
-                    fn_map: owned_fn_map,
+                    fn_map,
                 },
             },
             _ => Numerator {
@@ -1635,10 +2115,29 @@ impl Numerator<PolyContracted> {
                     double_param_values,
                     model_params_start,
                     emr_len,
-                    fn_map: owned_fn_map,
+                    fn_map,
                 },
             },
         }
+
+        // else {
+        //     let first = self.state.tensor.iter_flat().next().unwrap().1.to_owned();
+
+        //     Err(self)
+        // }
+    }
+}
+
+impl NumeratorState for PolyContracted {
+    fn export(&self) -> String {
+        self.tensor.to_string()
+    }
+    fn forget_type(self) -> PythonState {
+        PythonState::PolyContracted(Some(self))
+    }
+
+    fn update_model(&mut self, _model: &Model) -> Result<()> {
+        Err(eyre!("Only applied feynman rule, simplified color, gamma, parsed into network and contracted, nothing to update"))
     }
 }
 
@@ -1647,7 +2146,7 @@ impl PolyContracted {
         self,
         path: PathBuf,
         name: &str,
-        export_settings: &ExportSettings,
+        eval_options: &NumeratorEvaluatorSettings,
         params: &[Atom],
         fn_map: &FunctionMap,
     ) -> EvaluatorSingle {
@@ -1656,17 +2155,14 @@ impl PolyContracted {
 
         debug!("Generate eval tree set with {} params", params.len());
 
-        let mut eval_tree = self.tensor.eval_tree(fn_map, params).unwrap();
+        let mut eval_tree = self.tensor.to_evaluation_tree(fn_map, params).unwrap();
         debug!("Horner scheme");
 
         eval_tree.horner_scheme();
         debug!("Common subexpression elimination");
         eval_tree.common_subexpression_elimination();
         debug!("Linearize double");
-        let cpe_rounds = export_settings
-            .numerator_settings
-            .eval_settings
-            .cpe_rounds();
+        let cpe_rounds = eval_options.options.cpe_rounds();
         let eval_double = eval_tree
             .map_coeff::<Complex<F<f64>>, _>(&|r| Complex {
                 re: F(r.into()),
@@ -1685,12 +2181,7 @@ impl PolyContracted {
         let eval = eval_tree
             .map_coeff::<F<f64>, _>(&|r| r.into())
             .linearize(cpe_rounds);
-        let compiled = if export_settings
-            .numerator_settings
-            .eval_settings
-            .compile_options()
-            .compile()
-        {
+        let compiled = if eval_options.options.compile_options().compile() {
             debug!("Compiling iterative evaluator");
             let path = path.join("compiled");
             // let res = std::fs::create_dir_all(&path);
@@ -1712,16 +2203,11 @@ impl PolyContracted {
 
             let library_name = path.join(format!("{}_numerator_single.so", name));
             let library_name = library_name.to_string_lossy();
-            let inline_asm = export_settings.gammaloop_compile_options.inline_asm();
-
-            let compile_options = export_settings
-                .gammaloop_compile_options
-                .to_symbolica_compile_options();
 
             CompiledEvaluator::new(
-                eval.export_cpp(&filename, &function_name, true, inline_asm)
+                eval.export_cpp(&filename, &function_name, true, eval_options.inline_asm)
                     .unwrap()
-                    .compile(&library_name, compile_options)
+                    .compile(&library_name, eval_options.compile_options.clone())
                     .unwrap()
                     .load()
                     .unwrap(),
@@ -1742,80 +2228,92 @@ impl PolyContracted {
 
 impl GammaSimplified {
     pub fn gamma_symplify_impl(mut expr: SerializableAtom) -> SerializableAtom {
+        // let mink = Minkowski::rep(4);
+        fn mink(wildcard: Symbol) -> Atom {
+            Minkowski::rep(4).pattern(Atom::new_var(wildcard))
+        }
         expr.0 = expr.0.expand();
-        let pats = [(
-            Pattern::parse("id(a_,b_)*t_(d___,b_,c___)").unwrap(),
-            Pattern::parse("t_(d___,a_,c___)").unwrap().into(),
-        )];
+        let pats = [
+            Replacement::new(
+                parse!("id(a_,b_)*t_(d___,b_,c___)").unwrap().to_pattern(),
+                parse!("t_(d___,a_,c___)").unwrap().to_pattern(),
+            ),
+            Replacement::new(
+                parse!("Metric(mink(a_),mink(b_))*t_(d___,mink(b_),c___)")
+                    .unwrap()
+                    .to_pattern(),
+                parse!("t_(d___,mink(a_),c___)").unwrap().to_pattern(),
+            ),
+        ];
 
-        let reps: Vec<Replacement> = pats
-            .iter()
-            .map(|(lhs, rhs)| Replacement::new(lhs, rhs))
-            .collect();
-        expr.replace_repeat_multiple(&reps);
+        expr = expr.replace_multiple_repeat(&pats);
         let pats = vec![
             (
-                Pattern::parse("ProjP(a_,b_)").unwrap(),
-                Pattern::parse("1/2*id(a_,b_)-1/2*gamma5(a_,b_)")
+                parse!("ProjP(a_,b_)").unwrap().to_pattern(),
+                parse!("1/2*id(a_,b_)-1/2*gamma5(a_,b_)")
                     .unwrap()
-                    .into(),
+                    .to_pattern(),
             ),
             (
-                Pattern::parse("ProjM(a_,b_)").unwrap(),
-                Pattern::parse("1/2*id(a_,b_)+1/2*gamma5(a_,b_)")
+                parse!("ProjM(a_,b_)").unwrap().to_pattern(),
+                parse!("1/2*id(a_,b_)+1/2*gamma5(a_,b_)")
                     .unwrap()
-                    .into(),
+                    .to_pattern(),
             ),
             (
-                Pattern::parse("id(a_,b_)*f_(d___,b_,e___)").unwrap(),
-                Pattern::parse("f_(c___,a_,e___)").unwrap().into(),
+                parse!("id(a_,b_)*f_(d___,b_,e___)").unwrap().to_pattern(),
+                parse!("f_(c___,a_,e___)").unwrap().to_pattern(),
             ),
             // (
-            //     Pattern::parse("id(aind(a_,b_))*f_(c___,aind(d___,a_,e___))").unwrap(),
-            //     Pattern::parse("f_(c___,aind(d___,b_,e___))")
-            //         .unwrap()
-            //         .into(),
+            //     parse!("id(aind(a_,b_))*f_(c___,aind(d___,a_,e___))").unwrap().to_pattern(),
+            //     parse!("f_(c___,aind(d___,b_,e___))")
+            //         .unwrap().to_pattern()
+            //         ,
             // ),
             (
-                Pattern::parse("γ(a_,b_,c_)*γ(d_,c_,e_)").unwrap(),
-                Pattern::parse("gamma_chain(a_,d_,b_,e_)").unwrap().into(),
+                parse!("γ(a_,b_,c_)*γ(d_,c_,e_)").unwrap().to_pattern(),
+                parse!("gamma_chain(a_,d_,b_,e_)").unwrap().to_pattern(),
             ),
             (
-                Pattern::parse("gamma_chain(a__,b_,c_)*gamma_chain(d__,c_,e_)").unwrap(),
-                Pattern::parse("gamma_chain(a__,d__,b_,e_)").unwrap().into(),
+                parse!("gamma_chain(a__,b_,c_)*gamma_chain(d__,c_,e_)")
+                    .unwrap()
+                    .to_pattern(),
+                parse!("gamma_chain(a__,d__,b_,e_)").unwrap().to_pattern(),
             ),
             (
-                Pattern::parse("γ(a_,b_,c_)*gamma_chain(d__,c_,e_)").unwrap(),
-                Pattern::parse("gamma_chain(a_,d__,b_,e_)").unwrap().into(),
+                parse!("γ(a_,b_,c_)*gamma_chain(d__,c_,e_)")
+                    .unwrap()
+                    .to_pattern(),
+                parse!("gamma_chain(a_,d__,b_,e_)").unwrap().to_pattern(),
             ),
             (
-                Pattern::parse("gamma_chain(a__,b_,c_)*γ(d_,c_,e_)").unwrap(),
-                Pattern::parse("gamma_chain(a__,d_,b_,e_)").unwrap().into(),
+                parse!("gamma_chain(a__,b_,c_)*γ(d_,c_,e_)")
+                    .unwrap()
+                    .to_pattern(),
+                parse!("gamma_chain(a__,d_,b_,e_)").unwrap().to_pattern(),
             ),
             (
-                Pattern::parse("gamma_chain(a__,b_,b_)").unwrap(),
-                Pattern::parse("gamma_trace(a__)").unwrap().into(),
+                parse!("gamma_chain(a__,b_,b_)").unwrap().to_pattern(),
+                parse!("gamma_trace(a__)").unwrap().to_pattern(),
             ),
         ];
         let reps: Vec<Replacement> = pats
-            .iter()
+            .into_iter()
             .map(|(lhs, rhs)| Replacement::new(lhs, rhs))
             .collect();
         expr.0 = expr.0.expand();
-        expr.replace_repeat_multiple(&reps);
+        expr.replace_multiple_repeat_mut(&reps);
         expr.0 = expr.0.expand();
-        expr.replace_repeat_multiple(&reps);
+        expr.replace_multiple_repeat_mut(&reps);
 
-        let pat = Pattern::parse("gamma_trace(a__)").unwrap();
+        let pat = parse!("gamma_trace(a__)").unwrap().to_pattern();
 
-        let set = MatchSettings::default();
-        let cond = Condition::default();
-
-        let mut it = pat.pattern_match(expr.0.as_view(), &cond, &set);
+        let mut it = expr.0.pattern_match(&pat, None, None);
 
         let mut max_nargs = 0;
-        while let Some(a) = it.next() {
-            for (_, v) in a.match_stack {
+
+        while let Some(p) = it.next_detailed() {
+            for (_, v) in p.match_stack {
                 match v {
                     Match::Single(_) => {
                         if max_nargs < 1 {
@@ -1829,139 +2327,228 @@ impl GammaSimplified {
                     }
                     _ => panic!("should be a single match"),
                 }
-                // println!();
             }
         }
 
-        let mut reps = vec![];
-        for n in 1..=max_nargs {
-            if n % 2 == 0 {
-                let mut sum = Atom::new_num(0);
-
-                // sum((-1)**(k+1) * d(p_[0], p_[k]) * f(*p_[1:k], *p_[k+1:l])
-                for j in 1..n {
-                    let mut gamma_chain_builder_slots =
-                        FunctionBuilder::new(State::get_symbol("gamma_trace"));
-
-                    let metric_builder_slots = FunctionBuilder::new(State::get_symbol("Metric"));
-
-                    for k in 1..j {
-                        let mu = Atom::parse(&format!("a{}_", k)).unwrap();
-                        gamma_chain_builder_slots = gamma_chain_builder_slots.add_arg(&mu);
-                    }
-
-                    for k in (j + 1)..n {
-                        let mu = Atom::parse(&format!("a{}_", k)).unwrap();
-                        gamma_chain_builder_slots = gamma_chain_builder_slots.add_arg(&mu);
-                    }
-
-                    let metric = metric_builder_slots
-                        .add_args(&[
-                            &Atom::parse(&format!("a{}_", 0)).unwrap(),
-                            &Atom::parse(&format!("a{}_", j)).unwrap(),
-                        ])
-                        .finish();
-
-                    let gamma = gamma_chain_builder_slots.finish() * &metric;
-
-                    if j % 2 == 0 {
-                        sum = &sum - &gamma;
-                    } else {
-                        sum = &sum + &gamma;
-                    }
-                }
-
-                let mut gamma_chain_builder_slots =
-                    FunctionBuilder::new(State::get_symbol("gamma_trace"));
-                for k in 0..n {
-                    let mu = Atom::parse(&format!("a{}_", k)).unwrap();
-                    gamma_chain_builder_slots = gamma_chain_builder_slots.add_arg(&mu);
-                }
-                let a = gamma_chain_builder_slots.finish();
-
-                reps.push((a.into_pattern(), sum.into_pattern().into()));
-            } else {
-                let mut gamma_chain_builder_slots =
-                    FunctionBuilder::new(State::get_symbol("gamma_trace"));
-                for k in 0..n {
-                    let mu = Atom::parse(&format!("a{}_", k)).unwrap();
-                    gamma_chain_builder_slots = gamma_chain_builder_slots.add_arg(&mu);
-                }
-                let a = gamma_chain_builder_slots.finish();
-                // println!("{}", a);
-                reps.push((a.into_pattern(), Atom::new_num(0).into_pattern().into()));
-            }
-        }
-
-        reps.push((
-            Pattern::parse("gamma_trace()").unwrap(),
-            Pattern::parse("4").unwrap().into(),
-        ));
-
-        // Dd
-        reps.push((
-            Pattern::parse("f_(i_,a_)*Metric(a_,b_)").unwrap(),
-            Pattern::parse("f_(i_,b_)").unwrap().into(),
-        ));
-        // Du
-        // reps.push((
-        //     Pattern::parse("f_(i_,a_)*Metric(a_,b_)").unwrap(),
-        //     Pattern::parse("f_(i_,b_)").unwrap().into(),
-        // ));
-        reps.push((
-            Pattern::parse("f_(i_,a_)*id(a_,b_)").unwrap(),
-            Pattern::parse("f_(i_,b_)").unwrap().into(),
-        ));
-        // Uu
-        // reps.push((
-        //     Pattern::parse("f_(i_,mink(a__)))*g(mink(a__),mink(b__)))").unwrap(),
-        //     Pattern::parse("f_(i_,mink(b__)))").unwrap().into(),
-        // ));
-        // // Ud
-        // reps.push((
-        //     Pattern::parse("f_(i_,mink(a__)))*g(mink(a__),mink(b__)))").unwrap(),
-        //     Pattern::parse("f_(i_,mink(b__)))").unwrap().into(),
-        // ));
-        // reps.push((
-        //     Pattern::parse("f_(i_,mink(a__)))*id(mink(a__),mink(b__)))").unwrap(),
-        //     Pattern::parse("f_(i_,mink(b__)))").unwrap().into(),
-        // ));
-        // // dD
-        // reps.push((
-        //     Pattern::parse("f_(i_,mink(a__)))*g(mink(b__),mink(a__)))").unwrap(),
-        //     Pattern::parse("f_(i_,mink(b__)))").unwrap().into(),
-        // ));
-        // // uD
-        // reps.push((
-        //     Pattern::parse("f_(i_,mink(a__)))*g(mink(b__),mink(a__)))").unwrap(),
-        //     Pattern::parse("f_(i_,mink(b__)))").unwrap().into(),
-        // ));
-        // reps.push((
-        //     Pattern::parse("f_(i_,mink(a__)))*id(mink(b__),mink(a__)))").unwrap(),
-        //     Pattern::parse("f_(i_,mink(b__)))").unwrap().into(),
-        // ));
-        // // uU
-        // reps.push((
-        //     Pattern::parse("f_(i_,mink(a__)))*g(mink(b__),mink(a__)))").unwrap(),
-        //     Pattern::parse("f_(i_,mink(b__)))").unwrap().into(),
-        // ));
-        // dU
-        // reps.push((
-        // Pattern::parse("f_(i_,mink(a__)))*g(mink(b__),mink(a__)))").unwrap(),
-        // Pattern::parse("f_(i_,mink(b__)))").unwrap().into(),
-        // ));
-        // reps.push((
-        // Pattern::parse("f_(i_,mink(a__)))*id(mink(b__),mink(a__)))").unwrap(),
-        // Pattern::parse("f_(i_,mink(b__)))").unwrap().into(),
-        // ));
-
-        let reps = reps
-            .iter()
-            .map(|(lhs, rhs)| Replacement::new(lhs, rhs))
-            .collect_vec();
-        expr.replace_repeat_multiple(&reps);
         expr.0 = expr.0.expand();
-        expr.replace_repeat_multiple(&reps);
+        // let pats: Vec<_> = [
+        //     (
+        //         function!(ETS.id, GS.a_, GS.b_) * function!(GS.f_, GS.d___, GS.b_, GS.c___),
+        //         function!(GS.f_, GS.d___, GS.a_, GS.c___),
+        //     ),
+        //     (
+        //         function!(ETS.metric, mink(GS.a_), mink(GS.b_))
+        //             * function!(GS.f_, GS.d___, mink(GS.b_), GS.c___),
+        //         function!(GS.f_, GS.d___, mink(GS.a_), GS.c___),
+        //     ),
+        // ]
+        // .iter()
+        // .map(|(a, b)| Replacement::new(a.to_pattern(), b.to_pattern()))
+        // .collect();
+
+        // expr = expr.replace_all_multiple_repeat(&pats);
+
+        let gamma_chain = symbol!("gamma_chain");
+        let gamma_trace = symbol!("gamma_trace");
+        let reps: Vec<_> = [
+            (
+                function!(ETS.id, GS.a_, GS.b_) * function!(GS.f_, GS.d___, GS.b_, GS.c___),
+                function!(GS.f_, GS.d___, GS.a_, GS.c___),
+            ),
+            (
+                function!(ETS.metric, mink(GS.a_), mink(GS.b_))
+                    * function!(GS.f_, GS.d___, mink(GS.b_), GS.c___),
+                function!(GS.f_, GS.d___, mink(GS.a_), GS.c___),
+            ),
+            (
+                function!(UFO.projp, GS.a_, GS.b_),
+                (function!(ETS.id, GS.a_, GS.b_) - function!(ETS.gamma5, GS.a_, GS.b_)) / 2,
+            ),
+            (
+                function!(UFO.projm, GS.a_, GS.b_),
+                (function!(ETS.id, GS.a_, GS.b_) + function!(ETS.gamma5, GS.a_, GS.b_)) / 2,
+            ),
+            (
+                function!(ETS.gamma, GS.a_, GS.b_, GS.c_)
+                    * function!(ETS.gamma, GS.d_, GS.c_, GS.e_),
+                function!(gamma_chain, GS.a_, GS.d_, GS.b_, GS.e_),
+            ),
+            (function!(ETS.gamma, GS.a_, GS.b_, GS.b_), Atom::Zero),
+            (
+                function!(gamma_chain, GS.a__, GS.a_, GS.b_)
+                    * function!(gamma_chain, GS.b__, GS.b_, GS.c_),
+                function!(gamma_chain, GS.a__, GS.b__, GS.a_, GS.c_),
+            ),
+            (
+                function!(gamma_chain, GS.a__, GS.a_, GS.b_)
+                    * function!(ETS.gamma, GS.y_, GS.b_, GS.c_),
+                function!(gamma_chain, GS.a__, GS.y_, GS.a_, GS.c_),
+            ),
+            (
+                function!(ETS.gamma, GS.a_, GS.a_, GS.b_)
+                    * function!(gamma_chain, GS.y__, GS.b_, GS.c_),
+                function!(gamma_chain, GS.a_, GS.y__, GS.a_, GS.c_),
+            ),
+        ]
+        .iter()
+        .map(|(a, b)| Replacement::new(a.to_pattern(), b.to_pattern()))
+        .collect();
+
+        expr.0 = expr.0.expand();
+        expr.replace_multiple_repeat_mut(&reps);
+        expr.0 = expr.0.expand();
+        expr.replace_multiple_repeat_mut(&reps);
+
+        let _pat = function!(gamma_chain, GS.a_, GS.a___, GS.b_, GS.a_).to_pattern();
+        // let patodd = (-2 * function!(gamma_chain, GS.a___, GS.b_)).to_pattern();
+        // let pateven = (2 * (function!(gamma_chain, GS.b_, GS.a___))).to_pattern();
+
+        // let rhs = PatternOrMap::Map(Box::new(move |m| m.));
+        //
+        fn gamma_chain_perm(arg: AtomView, _context: &Context, out: &mut Atom) -> bool {
+            let gamma_chain = symbol!("gamma_chain");
+            let mut found = false;
+            if let AtomView::Fun(f) = arg {
+                if f.get_symbol() == gamma_chain {
+                    found = true;
+                    let args = f.iter().collect::<Vec<_>>();
+                    let len = args.len();
+                    if len <= 3 {
+                        return false;
+                    }
+
+                    if args[len - 3] == args[0] {
+                        if len == 4 {
+                            *out = function!(ETS.id, args[len - 2], args[len - 1]) * 4;
+                            return true;
+                        } else if len % 2 == 0 {
+                            let mut gcn = FunctionBuilder::new(gamma_chain);
+                            let mut gcnp = FunctionBuilder::new(gamma_chain);
+                            gcn = gcn.add_arg(args[len - 4]);
+                            gcn = gcn.add_args(&args[1..(len - 4)]);
+                            for a in &args[1..(len - 4)] {
+                                gcnp = gcnp.add_arg(*a);
+                            }
+                            gcnp = gcnp.add_arg(args[len - 4]);
+                            gcnp = gcnp.add_args(&args[(len - 2)..len]);
+                            gcn = gcn.add_args(&args[(len - 2)..len]);
+                            *out = (gcn.finish() + gcnp.finish()) * 2;
+                        } else {
+                            let mut gcn = FunctionBuilder::new(gamma_chain);
+                            gcn = gcn.add_args(&args[1..(len - 4)]);
+                            gcn = gcn.add_args(&args[(len - 2)..len]);
+                            *out = gcn.finish() * -2;
+                        }
+
+                        // println!("{}->{}", arg, out);
+                    } else {
+                        return false;
+                    }
+                }
+            }
+            found
+        }
+
+        loop {
+            let new = expr.0.replace_map(&gamma_chain_perm);
+            if new == expr.0 {
+                break;
+            } else {
+                expr.0 = new;
+            }
+        }
+
+        expr.0 = expr
+            .0
+            .replace(function!(gamma_chain, GS.a__, GS.x_, GS.x_).to_pattern())
+            .repeat()
+            .with(function!(gamma_trace, GS.a__).to_pattern());
+
+        // //Chisholm identity:
+        // expr.replace_all_repeat_mut(
+        //     &(function!(ETS.gamma, GS.a_, GS.x_, GS.y_) * function!(gamma_trace, GS.a_, GS.a__)).to_pattern(),
+        //     (function!(gamma_chain, GS.a__)).to_pattern(),
+        //     None,
+        //     None,
+        // );
+        //
+        fn gamma_tracer(arg: AtomView, _context: &Context, out: &mut Atom) -> bool {
+            let gamma_trace = symbol!("gamma_trace");
+
+            let mut found = false;
+            if let AtomView::Fun(f) = arg {
+                if f.get_symbol() == gamma_trace {
+                    found = true;
+                    let mut sum = Atom::Zero;
+
+                    if f.get_nargs() == 1 {
+                        *out = Atom::Zero;
+                    }
+                    let args = f.iter().collect::<Vec<_>>();
+
+                    for i in 1..args.len() {
+                        let sign = if i % 2 == 0 { -1 } else { 1 };
+
+                        let mut gcn = FunctionBuilder::new(gamma_trace);
+                        #[allow(clippy::needless_range_loop)]
+                        for j in 1..args.len() {
+                            if i != j {
+                                gcn = gcn.add_arg(args[j]);
+                            }
+                        }
+
+                        let metric = if args[0] == args[i] {
+                            Atom::new_num(4)
+                            // Atom::new_var(GS.dim)
+                        } else {
+                            function!(ETS.metric, args[0], args[i])
+                        };
+                        if args.len() == 2 {
+                            sum = sum + metric * sign * 4;
+                        } else {
+                            sum = sum + metric * gcn.finish() * sign;
+                        }
+                    }
+                    *out = sum;
+
+                    // println!("{}->{}", arg, out);
+                }
+            }
+
+            found
+        }
+
+        loop {
+            let new = expr.0.replace_map(&gamma_tracer);
+            if new == expr.0 {
+                break;
+            } else {
+                expr.0 = new;
+            }
+        }
+
+        let reps: Vec<_> = [
+            (
+                function!(ETS.metric, mink(GS.a_), mink(GS.b_))
+                    * function!(GS.f_, GS.d___, mink(GS.b_), GS.c___),
+                function!(GS.f_, GS.d___, mink(GS.a_), GS.c___),
+            ),
+            (
+                function!(ETS.metric, mink(GS.a_), mink(GS.b_)).pow(Atom::new_num(2)),
+                Atom::new_num(4),
+            ),
+            (
+                function!(ETS.gamma, GS.a__).pow(Atom::new_num(2)),
+                Atom::new_num(16),
+            ),
+        ]
+        .iter()
+        .map(|(a, b)| Replacement::new(a.to_pattern(), b.to_pattern()))
+        .collect();
+
+        expr.replace_multiple_repeat_mut(&reps);
+        expr.0 = expr.0.expand();
+        expr.replace_multiple_repeat_mut(&reps);
         expr
     }
 
@@ -2001,6 +2588,29 @@ impl GammaSimplified {
 }
 
 impl Numerator<GammaSimplified> {
+    pub fn write(
+        &self,
+        extra_info: &ExtraInfo,
+        bare_graph: &BareGraph,
+        numerator_format: ExpressionFormat,
+    ) -> std::io::Result<()> {
+        debug!("Writing gamma simplified numerator");
+        let file_path = extra_info.path.join("expressions");
+
+        let printer_ops = numerator_format.into();
+
+        let out = format!(
+            "{}",
+            AtomPrinter::new_with_options(self.get_single_atom().unwrap().0.as_view(), printer_ops)
+        );
+
+        fs::write(
+            file_path.join(format!("gamma_simplified_{}_exp.json", bare_graph.name)),
+            serde_json::to_string_pretty(&out).unwrap(),
+        )?;
+
+        Ok(())
+    }
     pub fn parse(self) -> Numerator<Network> {
         // debug!("GammaSymplified numerator: {}", self.export());
         debug!("Parsing gamma simplified numerator into tensor network");
@@ -2020,7 +2630,7 @@ impl Numerator<GammaSimplified> {
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct Network {
     #[bincode(with_serde)]
-    net: TensorNetwork<ParamTensor<AtomStructure>, SerializableAtom>,
+    pub net: TensorNetwork<ParamTensor<AtomStructure>, SerializableAtom>,
 }
 
 impl TryFrom<PythonState> for Network {
@@ -2039,8 +2649,8 @@ impl TryFrom<PythonState> for Network {
         }
     }
 }
-pub enum ContractionSettings<'a, 'b, R = Rational> {
-    Levelled((usize, &'a mut FunctionMap<'b, R>)),
+pub enum ContractionSettings<R = Rational> {
+    Levelled((usize, FunctionMap<R>)),
     Normal,
 }
 
@@ -2059,12 +2669,12 @@ impl Network {
     pub fn contract<R>(mut self, settings: ContractionSettings<R>) -> Result<Contracted> {
         match settings {
             ContractionSettings::Levelled((_depth, _fn_map)) => {
-                let _levels: Levels<_, _> = self.net.into();
+                // let levels: Levels<_, _> = self.net.into();
                 // levels.contract(depth, fn_map);
                 unimplemented!("cannot because of attached dummy lifetime...")
             }
             ContractionSettings::Normal => {
-                self.net.contract();
+                self.net.contract().unwrap();
                 let tensor = self
                     .net
                     .result_tensor_smart()?
@@ -2112,12 +2722,266 @@ impl TypedNumeratorState for Network {
     }
 }
 
+impl<T: Copy + Default> Numerator<SymbolicExpression<T>> {
+    pub fn apply_reps(&self, rep_atoms: Vec<(AtomView, AtomView)>) -> Self {
+        // println!(
+        //     "REPLACEMENTS:\n{}",
+        //     rep_atoms
+        //         .iter()
+        //         .map(|(a, b)| format!("{} -> {}", a, b))
+        //         .collect::<Vec<_>>()
+        //         .join("\n")
+        // );
+        // let reps: Vec<Replacement> = rep_atoms
+        //     .iter()
+        //     .map(|(l, r)| Replacement::new(l.to_pattern(), r.to_pattern()))
+        //     .collect::<Vec<_>>();
+        let expr = SymbolicExpression::<T> {
+            colorless: self.state.colorless.map_data_ref_self(|a| {
+                let mut b: Atom = a.0.clone();
+                for (src, trgt) in rep_atoms.iter() {
+                    b = b.replace(&src.to_pattern()).with(trgt.to_pattern());
+                }
+                //let b = a.0.replace_all_multiple(&reps).into();
+                // println!("AFTER: {}", b);
+                // Expand each inner level
+                b = b.replace_map(&|term: AtomView<'_>, ctx: &Context, out: &mut Atom| {
+                    if ctx.function_level == 0
+                        && ctx.parent_type == Some(symbolica::atom::AtomType::Mul)
+                    {
+                        *out = term.expand();
+                        true
+                    } else {
+                        false
+                    }
+                });
+                b.into()
+            }),
+            color: self.state.color.map_data_ref_self(|a| {
+                let mut b: Atom = a.0.clone();
+                // println!("BEFORE: {}", a.0);
+                for (src, trgt) in rep_atoms.iter() {
+                    b = b.replace(&src.to_pattern()).with(trgt.to_pattern());
+                }
+                b = b.replace_map(&|term: AtomView<'_>, ctx: &Context, out: &mut Atom| {
+                    if ctx.function_level == 0
+                        && ctx.parent_type == Some(symbolica::atom::AtomType::Mul)
+                    {
+                        *out = term.expand();
+                        true
+                    } else {
+                        false
+                    }
+                });
+                //let b = a.0.replace_all_multiple(&reps).into();
+                // println!("AFTER: {}", b);
+                b.into()
+            }),
+            state: self.state.state,
+        };
+        Self { state: { expr } }
+    }
+}
+
 impl Numerator<Network> {
+    pub fn evaluate_with_replacements(
+        &self,
+        replacements: Vec<(AtomView, AtomView)>,
+        fully_numerical_substitutions: bool,
+    ) -> Result<Atom, FeynGenError> {
+        if !fully_numerical_substitutions {
+            let t = self
+                .apply_reps(replacements)
+                .contract::<Rational>(ContractionSettings::Normal)
+                .map_err(|e| FeynGenError::NumeratorEvaluationError(e.to_string()))?;
+            if let Some(s) = t.state.tensor.scalar() {
+                Ok(s.expand())
+            } else {
+                Err(FeynGenError::NumeratorEvaluationError(
+                    "Could not simplify to a scalar.".into(),
+                ))
+            }
+        } else {
+            let g = self.state.net.graph.map_nodes_ref(|(_, d)| {
+                d.map_data_ref_result::<_, FeynGenError>(|a| {
+                    let mut b = a.clone();
+                    for (src, trgt) in replacements.iter() {
+                        b = b.replace(&src.to_pattern()).with(trgt.to_pattern());
+                    }
+                    b = b.expand();
+                    let mut re = Rational::zero();
+                    let mut im = Rational::zero();
+                    for (var, coeff) in b.coefficient_list::<u8>(&[Atom::new_var(Atom::I)]).iter() {
+                        let c = coeff.try_into().map_err(|e| {
+                            FeynGenError::NumeratorEvaluationError(format!(
+                                "Could not convert tensor coefficient to integer: error: {}, expresssion: {}",
+                                e, coeff
+                            ))
+                        })?;
+                        if *var == Atom::new_var(Atom::I) {
+                            re = c;
+                        } else if *var == Atom::new_num(1) {
+                            im = c;
+                        } else {
+                            return Err(FeynGenError::NumeratorEvaluationError(format!(
+                                "Could not convert the following tensor coefficient to a complex integer: {}",
+                                b
+                            )));
+                        }
+                    }
+                    Ok(Complex::<Rational>::new(re, im))
+                })
+                .unwrap()
+            });
+
+            let mut net = TensorNetwork {
+                graph: g,
+                scalar: self.state.net.scalar.clone(),
+            };
+
+            net.contract().unwrap();
+
+            let (result_tensor, scalar) = net
+                .result()
+                .map_err(|e| FeynGenError::NumeratorEvaluationError(e.to_string()))?;
+            if let Some(s) = result_tensor.clone().scalar() {
+                let factor = scalar.unwrap_or(Atom::new_num(1).into()).0;
+                let res = (Atom::new_num(s.re) + Atom::new_num(s.im) * Atom::I) * factor;
+                Ok(res.expand())
+            } else {
+                Err(FeynGenError::NumeratorEvaluationError(
+                    "Could not simplify to a scalar.".into(),
+                ))
+            }
+        }
+    }
+
+    pub fn apply_reps(&self, rep_atoms: Vec<(AtomView, AtomView)>) -> Self {
+        let net = TensorNetwork {
+            graph: self.state.net.graph.map_nodes_ref(|(_, d)| {
+                d.map_data_ref_self(|a| {
+                    let mut b = a.clone();
+                    for (src, trgt) in rep_atoms.iter() {
+                        b = b.replace(&src.to_pattern()).with(trgt.to_pattern());
+                    }
+                    b
+                    //let b = a.replace_all_multiple(&reps);
+                })
+            }),
+            scalar: self.state.net.scalar.clone(),
+        };
+
+        Self {
+            state: Network { net },
+        }
+    }
+    // pub fn random_concretize_reps(&mut self, seed: usize) -> Vec<Replacement> {
+    //     let mut prime = PrimeIteratorU64::new(1)
+    //         .skip(seed)
+    //         .map(|u| Atom::new_num(symbolica::domains::integer::Integer::new(u as i64)));
+
+    //     let mut reps = vec![];
+
+    //     let pat = function!(
+    //         GS.f_,
+    //         Atom::new_var(GS.y___),
+    //         function!(symbol!("cind"), Atom::new_var(GS.x_))
+    //     )
+    //     .to_pattern();
+
+    //     for (n, d) in self.state.net.graph.nodes.iter() {
+    //         for (_, a) in d.tensor.iter_flat() {
+    //             for m in a.pattern_match(&pat, None, None) {
+    //                 if let Atom::Var(f) = m[&GS.f_].to_atom() {
+    //                     let mat = function!(
+    //                         f.get_symbol(),
+    //                         m[&GS.y___].to_atom(),
+    //                         function!(symbol!("cind"), m[&GS.x_].to_atom())
+    //                     );
+    //                     // println!("{mat}");
+
+    //                     reps.push(Replacement::new(
+    //                         mat.to_pattern(),
+    //                         prime.next().unwrap().to_pattern(),
+    //                     ));
+    //                 } else {
+    //                     println!("{}", m[&GS.f_].to_atom());
+    //                 }
+    //             }
+    //         }
+    //     }
+    //     reps
+    // }
+
+    pub fn random_concretize_reps(
+        &self,
+        sample_iterator: Option<&mut PrimeIteratorU64>,
+        fully_numerical_substitution: bool,
+    ) -> Vec<(Atom, Atom)> {
+        let prime_iterator = if let Some(iterator) = sample_iterator {
+            iterator
+        } else {
+            &mut PrimeIteratorU64::new(1)
+        };
+
+        let mut prime = prime_iterator
+            .map(|u| Atom::new_num(symbolica::domains::integer::Integer::new(u as i64)));
+        let mut reps = vec![];
+
+        if !fully_numerical_substitution {
+            let variable = function!(
+                GS.f_,
+                Atom::new_var(GS.y_),
+                function!(symbol!("cind"), Atom::new_var(GS.x_))
+            );
+            let pat = variable.to_pattern();
+
+            for (_n, d) in self.state.net.graph.nodes.iter() {
+                for (_, a) in d.tensor.iter_flat() {
+                    for m in a.pattern_match(&pat, None, None) {
+                        reps.push(pat.replace_wildcards(&m));
+                    }
+                }
+            }
+        } else {
+            for (_n, d) in self.state.net.graph.nodes.iter() {
+                for (_, a) in d.tensor.iter_flat() {
+                    let all_symbols = a.get_all_symbols(true);
+                    for s in all_symbols {
+                        if s == Atom::I {
+                            continue;
+                        }
+                        let mut found_it = false;
+                        let pat = function!(s, symbol!("x__")).to_pattern();
+                        for m in a.pattern_match(&pat, None, None) {
+                            reps.push(pat.replace_wildcards(&m));
+                            found_it = true;
+                        }
+                        if !found_it {
+                            reps.push(Atom::new_var(s));
+                        }
+                    }
+                }
+            }
+        }
+
+        reps = reps
+            .iter()
+            .collect::<HashSet<_>>()
+            .iter()
+            .map(|&a| a.to_owned())
+            .collect::<Vec<_>>();
+        reps.sort();
+        reps.iter()
+            .map(|a: &Atom| (a.clone(), prime.next().unwrap()))
+            .collect()
+    }
+
     pub fn contract<R>(self, settings: ContractionSettings<R>) -> Result<Numerator<Contracted>> {
-        debug!(
-            "contracting network {}",
-            self.state.net.rich_graph().dot_nodes()
-        );
+        // debug!(
+        //     "contracting network {}",
+        //     self.state.net.rich_graph().dot_nodes()
+        // );
         let contracted = self.state.contract(settings)?;
         Ok(Numerator { state: contracted })
     }
@@ -2151,7 +3015,7 @@ impl Contracted {
         self,
         path: PathBuf,
         name: &str,
-        export_settings: &ExportSettings,
+        eval_options: &NumeratorEvaluatorSettings,
         params: &[Atom],
         fn_map: &FunctionMap,
     ) -> EvaluatorSingle {
@@ -2160,17 +3024,14 @@ impl Contracted {
 
         debug!("Generate eval tree set with {} params", params.len());
 
-        let mut eval_tree = self.tensor.eval_tree(fn_map, params).unwrap();
+        let mut eval_tree = self.tensor.to_evaluation_tree(fn_map, params).unwrap();
         debug!("Horner scheme");
 
         eval_tree.horner_scheme();
         debug!("Common subexpression elimination");
         eval_tree.common_subexpression_elimination();
         debug!("Linearize double");
-        let cpe_rounds = export_settings
-            .numerator_settings
-            .eval_settings
-            .cpe_rounds();
+        let cpe_rounds = eval_options.options.cpe_rounds();
         let eval_double = eval_tree
             .map_coeff::<Complex<F<f64>>, _>(&|r| Complex {
                 re: F(r.into()),
@@ -2189,12 +3050,7 @@ impl Contracted {
         let eval = eval_tree
             .map_coeff::<F<f64>, _>(&|r| r.into())
             .linearize(cpe_rounds);
-        let compiled = if export_settings
-            .numerator_settings
-            .eval_settings
-            .compile_options()
-            .compile()
-        {
+        let compiled = if eval_options.options.compile_options().compile() {
             debug!("compiling iterative evaluator");
             let path = path.join("compiled");
             // let res = std::fs::create_dir_all(&path);
@@ -2216,16 +3072,11 @@ impl Contracted {
 
             let library_name = path.join(format!("{}_numerator_single.so", name));
             let library_name = library_name.to_string_lossy();
-            let inline_asm = export_settings.gammaloop_compile_options.inline_asm();
-
-            let compile_options = export_settings
-                .gammaloop_compile_options
-                .to_symbolica_compile_options();
 
             CompiledEvaluator::new(
-                eval.export_cpp(&filename, &function_name, true, inline_asm)
+                eval.export_cpp(&filename, &function_name, true, eval_options.inline_asm)
                     .unwrap()
-                    .compile(&library_name, compile_options)
+                    .compile(&library_name, eval_options.compile_options.clone())
                     .unwrap()
                     .load()
                     .unwrap(),
@@ -2250,10 +3101,10 @@ impl Contracted {
         fn atoms_for_pol(name: String, num: i64, size: usize) -> Vec<Atom> {
             let mut data = vec![];
             for index in 0..size {
-                let e = FunctionBuilder::new(State::get_symbol(&name));
+                let e = FunctionBuilder::new(symbol!(&name));
                 data.push(
-                    e.add_arg(&Atom::new_num(num))
-                        .add_arg(&Atom::parse(&format!("cind({})", index)).unwrap())
+                    e.add_arg(Atom::new_num(num))
+                        .add_arg(parse!(&format!("cind({})", index)).unwrap())
                         .finish(),
                 );
             }
@@ -2284,7 +3135,7 @@ impl Contracted {
         }
 
         params.extend(pols);
-        params.push(Atom::new_var(State::I));
+        params.push(Atom::new_var(Atom::I));
 
         params
     }
@@ -2335,7 +3186,7 @@ impl Contracted {
         params.extend(pols);
 
         param_values.push(Complex::new_i());
-        params.push(Atom::new_var(State::I));
+        params.push(Atom::new_var(Atom::I));
 
         let model_params_start = params.len();
         param_values.extend(model.generate_values());
@@ -2385,8 +3236,34 @@ impl TypedNumeratorState for Contracted {
 }
 
 impl Numerator<Contracted> {
-    fn generate_fn_map(&self) -> OwnedFunctionMap<F<f64>> {
-        let mut map = OwnedFunctionMap::new();
+    pub fn write(
+        &self,
+        extra_info: &ExtraInfo,
+        bare_graph: &BareGraph,
+        numerator_format: ExpressionFormat,
+    ) -> std::io::Result<()> {
+        debug!("Writing contracted numerator");
+        let file_path = extra_info.path.join("expressions");
+
+        let printer_ops = numerator_format.into();
+
+        let out = format!(
+            "{}",
+            AtomPrinter::new_with_options(
+                self.state.tensor.iter_flat().next().unwrap().1,
+                printer_ops
+            )
+        );
+
+        fs::write(
+            file_path.join(format!("contracted_{}_exp.json", bare_graph.name)),
+            serde_json::to_string_pretty(&out).unwrap(),
+        )?;
+
+        Ok(())
+    }
+    fn generate_fn_map(&self) -> FunctionMap {
+        let mut map = FunctionMap::new();
         Numerator::<Contracted>::add_consts_to_fn_map(&mut map);
         map
     }
@@ -2400,20 +3277,32 @@ impl Numerator<Contracted> {
         double_param_values: Vec<Complex<F<f64>>>,
         quad_param_values: Vec<Complex<F<f128>>>,
         extra_info: &ExtraInfo,
-        export_settings: &ExportSettings,
+        export_settings: &ProcessSettings,
     ) -> Numerator<Evaluators> {
+        let o = &export_settings.numerator_settings.eval_settings;
         let owned_fn_map = self.generate_fn_map();
 
-        let fn_map: FunctionMap = (&owned_fn_map).into();
+        let inline_asm = export_settings.gammaloop_compile_options.inline_asm();
+        let compile_options = export_settings
+            .gammaloop_compile_options
+            .to_symbolica_compile_options();
+
+        let eval_settings = NumeratorEvaluatorSettings {
+            options: o,
+            inline_asm,
+            compile_options,
+        };
+
+        let fn_map: FunctionMap = owned_fn_map;
         let single = self.state.evaluator(
             extra_info.path.clone(),
             name,
-            export_settings,
+            &eval_settings,
             params,
             &fn_map,
         );
 
-        match export_settings.numerator_settings.eval_settings {
+        match o {
             NumeratorEvaluatorOptions::Joint(_) => Numerator {
                 state: Evaluators {
                     orientated: Some(single.orientated_joint_impl(
@@ -2421,7 +3310,7 @@ impl Numerator<Contracted> {
                         name,
                         params,
                         extra_info,
-                        export_settings,
+                        &eval_settings,
                         &fn_map,
                     )),
                     single,
@@ -2431,7 +3320,7 @@ impl Numerator<Contracted> {
                     double_param_values,
                     model_params_start,
                     emr_len: n_edges,
-                    fn_map: owned_fn_map,
+                    fn_map,
                 },
             },
             NumeratorEvaluatorOptions::Iterative(IterativeOptions {
@@ -2446,10 +3335,10 @@ impl Numerator<Contracted> {
                         name,
                         params,
                         extra_info,
-                        export_settings,
-                        iterations,
-                        n_cores,
-                        verbose,
+                        &eval_settings,
+                        *iterations,
+                        *n_cores,
+                        *verbose,
                         &fn_map,
                     )),
                     single,
@@ -2459,7 +3348,7 @@ impl Numerator<Contracted> {
                     double_param_values,
                     model_params_start,
                     emr_len: n_edges,
-                    fn_map: owned_fn_map,
+                    fn_map,
                 },
             },
             _ => Numerator {
@@ -2472,7 +3361,7 @@ impl Numerator<Contracted> {
                     double_param_values,
                     model_params_start,
                     emr_len: n_edges,
-                    fn_map: owned_fn_map,
+                    fn_map,
                 },
             },
         }
@@ -2483,8 +3372,9 @@ impl Numerator<Contracted> {
         model: &Model,
         graph: &BareGraph,
         extra_info: &ExtraInfo,
-        export_settings: &ExportSettings,
+        export_settings: &ProcessSettings,
     ) -> Numerator<Evaluators> {
+        let o = &export_settings.numerator_settings.eval_settings;
         debug!("generating evaluators for contracted numerator");
         let (params, double_param_values, quad_param_values, model_params_start) =
             Contracted::generate_params(graph, model);
@@ -2493,28 +3383,30 @@ impl Numerator<Contracted> {
 
         let emr_len = graph.edges.len();
 
-        let owned_fn_map = self.generate_fn_map();
+        let fn_map = self.generate_fn_map();
 
-        let fn_map: FunctionMap = (&owned_fn_map).into();
+        let settings = NumeratorEvaluatorSettings {
+            options: o,
+            inline_asm: export_settings.gammaloop_compile_options.inline_asm(),
+            compile_options: export_settings
+                .gammaloop_compile_options
+                .to_symbolica_compile_options(),
+        };
 
         let single = self.state.evaluator(
             extra_info.path.clone(),
             &graph.name,
-            export_settings,
+            &settings,
             &params,
             &fn_map,
         );
 
-        match export_settings.numerator_settings.eval_settings {
+        match o {
             NumeratorEvaluatorOptions::Joint(_) => Numerator {
                 state: Evaluators {
-                    orientated: Some(single.orientated_joint(
-                        graph,
-                        &params,
-                        extra_info,
-                        export_settings,
-                        &fn_map,
-                    )),
+                    orientated: Some(
+                        single.orientated_joint(graph, &params, extra_info, &settings, &fn_map),
+                    ),
                     single,
                     choice: SingleOrCombined::Combined,
                     orientations: extra_info.orientations.clone(),
@@ -2522,7 +3414,7 @@ impl Numerator<Contracted> {
                     double_param_values,
                     model_params_start,
                     emr_len,
-                    fn_map: owned_fn_map,
+                    fn_map,
                 },
             },
             NumeratorEvaluatorOptions::Iterative(IterativeOptions {
@@ -2536,20 +3428,20 @@ impl Numerator<Contracted> {
                         graph,
                         &params,
                         extra_info,
-                        export_settings,
-                        iterations,
-                        n_cores,
-                        verbose,
+                        &settings,
+                        *iterations,
+                        *n_cores,
+                        *verbose,
                         &fn_map,
                     )),
                     single,
                     choice: SingleOrCombined::Combined,
                     orientations: extra_info.orientations.clone(),
-                    quad_param_values,
                     double_param_values,
+                    quad_param_values,
                     model_params_start,
                     emr_len,
-                    fn_map: owned_fn_map,
+                    fn_map,
                 },
             },
             _ => Numerator {
@@ -2558,11 +3450,11 @@ impl Numerator<Contracted> {
                     single,
                     choice: SingleOrCombined::Single,
                     orientations: extra_info.orientations.clone(),
-                    quad_param_values,
                     double_param_values,
+                    quad_param_values,
                     model_params_start,
                     emr_len,
-                    fn_map: owned_fn_map,
+                    fn_map,
                 },
             },
         }
@@ -2592,6 +3484,13 @@ pub enum NumeratorEvaluatorOptions {
     Joint(EvaluatorOptions),
     #[serde(rename = "Iterative")]
     Iterative(IterativeOptions),
+}
+
+#[derive(Clone)]
+pub struct NumeratorEvaluatorSettings<'a> {
+    pub options: &'a NumeratorEvaluatorOptions,
+    pub inline_asm: InlineASM,
+    pub compile_options: CompileOptions,
 }
 
 impl Default for NumeratorEvaluatorOptions {
@@ -2689,7 +3588,7 @@ impl EvaluatorSingle {
         name: &str,
         params: &[Atom],
         extra_info: &ExtraInfo,
-        export_settings: &ExportSettings,
+        eval_options: &NumeratorEvaluatorSettings,
         iterations: usize,
         n_cores: usize,
         verbose: bool,
@@ -2705,10 +3604,8 @@ impl EvaluatorSingle {
         let reps = (0..n_edges)
             .map(|i| {
                 (
-                    Pattern::parse(&format!("Q({},cind(0))", i)).unwrap(),
-                    Pattern::parse(&format!("-Q({},cind(0))", i))
-                        .unwrap()
-                        .into(),
+                    parse!(&format!("Q({},cind(0))", i)).unwrap(),
+                    parse!(&format!("-Q({},cind(0))", i)).unwrap(),
                 )
             })
             .collect_vec();
@@ -2725,17 +3622,18 @@ impl EvaluatorSingle {
             let reps = reps
                 .iter()
                 .enumerate()
-                .filter_map(|(i, (lhs, rhs))| {
-                    if o[i] {
-                        None
-                    } else {
-                        Some(Replacement::new(lhs, rhs).with_settings(&settings))
-                    }
+                .filter_map(|(i, (lhs, rhs))| match o[EdgeIndex::from(i)] {
+                    Orientation::Default => None,
+                    Orientation::Reversed => Some(
+                        Replacement::new(lhs.to_pattern(), rhs.to_pattern())
+                            .with_settings(settings.clone()),
+                    ),
+                    Orientation::Undirected => panic!("undirected edge in cff"),
                 })
                 .collect_vec();
 
             let time = Instant::now();
-            let orientation_replaced_net = self.tensor.replace_all_multiple(&reps);
+            let orientation_replaced_net = self.tensor.replace_multiple(&reps);
             let elapsed = time.elapsed();
 
             let time = Instant::now();
@@ -2767,10 +3665,7 @@ impl EvaluatorSingle {
 
         debug!("{} tensors in set", set.tensors.len());
 
-        let cpe_rounds = export_settings
-            .numerator_settings
-            .eval_settings
-            .cpe_rounds();
+        let cpe_rounds = eval_options.options.cpe_rounds();
 
         debug!("Generate eval tree set with {} params", params.len());
 
@@ -2789,7 +3684,7 @@ impl EvaluatorSingle {
         debug!("{} linearized tensors", linearized.len());
 
         for (i, t) in new_index_map.iter().enumerate() {
-            let eval_tree = t.eval_tree(fn_map, params).unwrap();
+            let eval_tree = t.to_evaluation_tree(fn_map, params).unwrap();
             debug!("Push optimizing :{}", i + 1);
             linearized.push_optimize(eval_tree, cpe_rounds, iterations, n_cores, verbose);
         }
@@ -2811,12 +3706,7 @@ impl EvaluatorSingle {
 
         let eval = linearized.clone().map_coeff::<F<f64>, _>(&|r| r.into());
 
-        let compiled = if export_settings
-            .numerator_settings
-            .eval_settings
-            .compile_options()
-            .compile()
-        {
+        let compiled = if eval_options.options.compile_options().compile() {
             debug!("compiling iterative evaluator");
             let path = extra_info.path.join("compiled");
             // let res = std::fs::create_dir_all(&path);
@@ -2839,15 +3729,10 @@ impl EvaluatorSingle {
 
             let library_name = path.join(format!("{}_numerator_iterative.so", name));
             let library_name = library_name.to_string_lossy();
-            let inline_asm = export_settings.gammaloop_compile_options.inline_asm();
-
-            let compile_options = export_settings
-                .gammaloop_compile_options
-                .to_symbolica_compile_options();
             CompiledEvaluator::new(
-                eval.export_cpp(&filename, &function_name, true, inline_asm)
+                eval.export_cpp(&filename, &function_name, true, eval_options.inline_asm)
                     .unwrap()
-                    .compile(&library_name, compile_options)
+                    .compile(&library_name, eval_options.compile_options.clone())
                     .unwrap()
                     .load()
                     .unwrap(),
@@ -2870,7 +3755,7 @@ impl EvaluatorSingle {
         graph: &BareGraph,
         params: &[Atom],
         extra_info: &ExtraInfo,
-        export_settings: &ExportSettings,
+        export_settings: &NumeratorEvaluatorSettings,
         iterations: usize,
         n_cores: usize,
         verbose: bool,
@@ -2896,7 +3781,7 @@ impl EvaluatorSingle {
         name: &str,
         params: &[Atom],
         extra_info: &ExtraInfo,
-        export_settings: &ExportSettings,
+        eval_options: &NumeratorEvaluatorSettings,
         fn_map: &FunctionMap,
     ) -> EvaluatorOrientations {
         let mut seen = 0;
@@ -2909,10 +3794,8 @@ impl EvaluatorSingle {
         let reps = (0..n_edges)
             .map(|i| {
                 (
-                    Pattern::parse(&format!("Q({},cind(0))", i)).unwrap(),
-                    Pattern::parse(&format!("-Q({},cind(0))", i))
-                        .unwrap()
-                        .into(),
+                    parse!(&format!("Q({},cind(0))", i)).unwrap(),
+                    parse!(&format!("-Q({},cind(0))", i)).unwrap(),
                 )
             })
             .collect_vec();
@@ -2929,17 +3812,18 @@ impl EvaluatorSingle {
             let reps = reps
                 .iter()
                 .enumerate()
-                .filter_map(|(i, (lhs, rhs))| {
-                    if o[i] {
-                        None
-                    } else {
-                        Some(Replacement::new(lhs, rhs).with_settings(&settings))
-                    }
+                .filter_map(|(i, (lhs, rhs))| match o[EdgeIndex::from(i)] {
+                    Orientation::Default => None,
+                    Orientation::Reversed => Some(
+                        Replacement::new(lhs.to_pattern(), rhs.to_pattern())
+                            .with_settings(settings.clone()),
+                    ),
+                    Orientation::Undirected => panic!("non oriented edge in cff"),
                 })
                 .collect_vec();
 
             let time = Instant::now();
-            let orientation_replaced_net = self.tensor.replace_all_multiple(&reps);
+            let orientation_replaced_net = self.tensor.replace_multiple(&reps);
             let elapsed = time.elapsed();
 
             let time = Instant::now();
@@ -2965,10 +3849,7 @@ impl EvaluatorSingle {
 
         let set = ParamTensorSet::new(index_map.into_iter().collect_vec());
 
-        let cpe_rounds = export_settings
-            .numerator_settings
-            .eval_settings
-            .cpe_rounds();
+        let cpe_rounds = eval_options.options.cpe_rounds();
 
         debug!("Generate eval tree set with {} params", params.len());
 
@@ -2998,12 +3879,7 @@ impl EvaluatorSingle {
             .map_coeff::<F<f64>, _>(&|r| r.into())
             .linearize(cpe_rounds);
 
-        let compiled = if export_settings
-            .numerator_settings
-            .eval_settings
-            .compile_options()
-            .compile()
-        {
+        let compiled = if eval_options.options.compile_options().compile() {
             debug!("Compiling joint evaluator");
             let path = extra_info.path.join("compiled");
             // let res = std::fs::create_dir_all(&path);
@@ -3026,15 +3902,11 @@ impl EvaluatorSingle {
 
             let library_name = path.join(format!("{}_numerator_joint.so", name));
             let library_name = library_name.to_string_lossy();
-            let inline_asm = export_settings.gammaloop_compile_options.inline_asm();
 
-            let compile_options = export_settings
-                .gammaloop_compile_options
-                .to_symbolica_compile_options();
             CompiledEvaluator::new(
-                eval.export_cpp(&filename, &function_name, true, inline_asm)
+                eval.export_cpp(&filename, &function_name, true, eval_options.inline_asm)
                     .unwrap()
-                    .compile(&library_name, compile_options)
+                    .compile(&library_name, eval_options.compile_options.clone())
                     .unwrap()
                     .load()
                     .unwrap(),
@@ -3056,7 +3928,7 @@ impl EvaluatorSingle {
         graph: &BareGraph,
         params: &[Atom],
         extra_info: &ExtraInfo,
-        export_settings: &ExportSettings,
+        eval_options: &NumeratorEvaluatorSettings,
         fn_map: &FunctionMap,
     ) -> EvaluatorOrientations {
         debug!("Generate joint evaluator");
@@ -3065,7 +3937,7 @@ impl EvaluatorSingle {
             &graph.name,
             params,
             extra_info,
-            export_settings,
+            eval_options,
             fn_map,
         )
     }
@@ -3141,23 +4013,25 @@ impl<E> CompiledEvaluator<E> {
         matches!(self.state, CompiledState::Enabled)
     }
 }
+use symbolica::state::StateMap;
 
-#[derive(Clone, Serialize, Deserialize, Debug, Encode, Decode)]
+#[derive(Clone, Encode, Decode, Debug)]
+#[bincode(decode_context = "StateMap")]
 pub struct Evaluators {
     #[bincode(with_serde)]
     orientated: Option<EvaluatorOrientations>,
     #[bincode(with_serde)]
     pub single: EvaluatorSingle,
     choice: SingleOrCombined,
-    orientations: Vec<Vec<bool>>,
+    #[bincode(with_serde)]
+    orientations: Vec<HedgeVec<Orientation>>,
     #[bincode(with_serde)]
     pub double_param_values: Vec<Complex<F<f64>>>,
     #[bincode(with_serde)]
     quad_param_values: Vec<Complex<F<f128>>>,
     model_params_start: usize,
     emr_len: usize,
-    #[bincode(with_serde)]
-    fn_map: OwnedFunctionMap<F<f64>>,
+    fn_map: FunctionMap,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug, Encode, Decode)]
@@ -3244,19 +4118,18 @@ impl Numerator<Evaluators> {
 
     pub fn enable_combined(
         &mut self,
-        generate: Option<(&Model, &BareGraph, &ExtraInfo, &ExportSettings)>,
+        generate: Option<(&Model, &BareGraph, &ExtraInfo, &NumeratorEvaluatorSettings)>,
     ) {
         if self.state.orientated.is_some() {
             self.state.choice = SingleOrCombined::Combined;
         } else if let Some((model, graph, extra_info, export_settings)) = generate {
             let (params, _, _, _) = Contracted::generate_params(graph, model);
-            let fn_map: FunctionMap = (&self.state.fn_map).into();
             let orientated = self.state.single.orientated_joint(
                 graph,
                 &params,
                 extra_info,
                 export_settings,
-                &fn_map,
+                &self.state.fn_map,
             );
             self.state.orientated = Some(orientated);
             self.state.choice = SingleOrCombined::Combined;
@@ -3297,7 +4170,8 @@ pub enum NumeratorStateError {
     Any(#[from] eyre::Report),
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, Encode, Decode)]
+#[bincode(decode_context = "StateMap")]
 #[allow(clippy::large_enum_variant)]
 pub enum PythonState {
     UnInit(Option<UnInit>),
@@ -3308,6 +4182,7 @@ pub enum PythonState {
     GammaSimplified(Option<GammaSimplified>),
     Network(Option<Network>),
     Contracted(Option<Contracted>),
+    PolyContracted(Option<PolyContracted>),
     Evaluators(Option<Evaluators>),
 }
 
@@ -3377,6 +4252,13 @@ impl NumeratorState for PythonState {
                     "None".into()
                 }
             }
+            PythonState::PolyContracted(state) => {
+                if let Some(s) = state {
+                    s.export()
+                } else {
+                    "None".into()
+                }
+            }
             PythonState::Evaluators(state) => {
                 if let Some(s) = state {
                     s.export()
@@ -3435,6 +4317,14 @@ impl NumeratorState for PythonState {
                     Err(NumeratorStateError::NoneVariant.into())
                 }
             }
+            PythonState::PolyContracted(state) => {
+                if let Some(s) = state {
+                    s.update_model(model)
+                } else {
+                    Err(NumeratorStateError::NoneVariant.into())
+                }
+            }
+
             PythonState::Evaluators(state) => {
                 if let Some(s) = state {
                     s.update_model(model)

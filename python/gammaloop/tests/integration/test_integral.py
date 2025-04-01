@@ -17,7 +17,7 @@ class TestScalarTopologies:
         command_list.add_command(
             "set externals.data.momenta [[14.0,-6.6,-40.,0.],[43.,-15.2,-33.,0.],[17.9,50.0,-11.8,0.0],]")
         command_list.add_command(
-            "set sampling {'type':'discrete_graph_sampling','subtype':'tropical','upcast_on_failure':True,'matrix_stability_test':1.0e-5}")
+            "set sampling {'type':'discrete_graph_sampling','subtype':'tropical','upcast_on_failure':False,'matrix_stability_test':1.0e-5}")
         command_list.add_command("set continuous_dim_learning_rate 0.0")
         command_list.add_command("set rotation_axis [{'type':'x'}]")
         command_list.add_command("set n_start 1_000_000")
@@ -38,7 +38,7 @@ class TestScalarTopologies:
         command_list.add_command(
             "set externals.data.momenta [[1,3,4,5],[-1,-6,-7,-8],]")
         command_list.add_command(
-            "set sampling {'type':'discrete_graph_sampling','subtype':'tropical','upcast_on_failure':True,'matrix_stability_test':1.0e-5}")
+            "set sampling {'type':'discrete_graph_sampling','subtype':'tropical','upcast_on_failure':False,'matrix_stability_test':1.0e-5}")
         command_list.add_command("set n_start 10000")
         command_list.add_command("set n_max 10000")
         command_list.add_command("set seed 1")
@@ -58,7 +58,7 @@ class TestScalarTopologies:
         command_list.add_command(
             "set externals.data.momenta [[0.5,1.5,2,2.5],[0.5,1.5,2,2.5],[-1,-6,-7,-8],]")
         command_list.add_command(
-            "set sampling {'type':'discrete_graph_sampling','subtype':'tropical','upcast_on_failure':True,'matrix_stability_test':1.0e-5}")
+            "set sampling {'type':'discrete_graph_sampling','subtype':'tropical','upcast_on_failure':False,'matrix_stability_test':1.0e-5}")
         command_list.add_command("set n_start 10000")
         command_list.add_command("set n_max 10000")
         command_list.add_command("set seed 2")
@@ -77,7 +77,7 @@ class TestScalarTopologies:
         command_list.add_command(
             "set externals.data.momenta [[0,0,0,1],]")
         command_list.add_command(
-            "set sampling {'type':'discrete_graph_sampling','subtype':'tropical','upcast_on_failure':True,'matrix_stability_test':1.0e-5}")
+            "set sampling {'type':'discrete_graph_sampling','subtype':'tropical','upcast_on_failure':False,'matrix_stability_test':1.0e-5}")
         command_list.add_command("set n_start 100000")
         command_list.add_command("set n_max 100000")
         command_list.add_command("set seed 1")
@@ -97,7 +97,7 @@ class TestScalarTopologies:
         command_list.add_command(
             "set externals.data.momenta [[0,0,0,1],]")
         command_list.add_command(
-            "set sampling {'type':'discrete_graph_sampling','subtype':'tropical','upcast_on_failure':True,'matrix_stability_test':1.0e-5}")
+            "set sampling {'type':'discrete_graph_sampling','subtype':'tropical','upcast_on_failure':False,'matrix_stability_test':1.0e-5}")
         command_list.add_command("set n_start 100000")
         command_list.add_command("set n_max 100000")
         command_list.add_command("set seed 1")
@@ -130,7 +130,7 @@ class TestScalarTopologies:
         command_list.add_command("set integrated_phase 'real'")
         command_list.add_command("set e_cm 10.")
         command_list.add_command(
-            "set sampling {'type':'discrete_graph_sampling','subtype':'tropical','upcast_on_failure':True,'matrix_stability_test':1.0e-5}")
+            "set sampling {'type':'discrete_graph_sampling','subtype':'tropical','upcast_on_failure':False,'matrix_stability_test':1.0e-5}")
         command_list.add_command("set n_start 40000")
         command_list.add_command("set n_max 40000")
         command_list.add_command("set continuous_dim_learning_rate 0.0")
@@ -174,7 +174,7 @@ class TestPhysicalTopologies:
         command_list.add_command("set integrated_phase 'real'")
         command_list.add_command("set e_cm 1.")
         command_list.add_command(
-            "set sampling {'type':'discrete_graph_sampling','subtype':'tropical','upcast_on_failure':True}")
+            "set sampling {'type':'discrete_graph_sampling','subtype':'tropical','upcast_on_failure':False}")
         command_list.add_command("set n_start 100000")
         command_list.add_command("set n_max 1000000")
         command_list.add_command("set seed 1")
@@ -215,7 +215,7 @@ class TestPhysicalTopologies:
         command_list.add_command("set integrated_phase 'real'")
         command_list.add_command("set e_cm 1.")
         command_list.add_command(
-            "set sampling {'type':'discrete_graph_sampling','subtype':'tropical','upcast_on_failure':True}")
+            "set sampling {'type':'discrete_graph_sampling','subtype':'tropical','upcast_on_failure':False}")
         command_list.add_command("set n_start 100000")
         command_list.add_command("set n_max 1000000")
         command_list.add_command("set seed 1")

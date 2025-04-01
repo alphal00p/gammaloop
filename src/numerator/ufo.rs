@@ -4,14 +4,14 @@ use spenso::shadowing::ETS;
 use spenso::structure::representation::{
     BaseRepName, Bispinor, ColorAdjoint, ColorFundamental, ColorSextet, Minkowski,
 };
+use symbolica::atom::AtomCore;
+use symbolica::atom::FunctionAttribute;
 use symbolica::id::MatchSettings;
-use symbolica::state::FunctionAttribute;
+use symbolica::symbol;
 use symbolica::{
     atom::{Atom, Symbol},
-    fun,
-    id::{Pattern, PatternOrMap, Replacement},
-    state::State,
-    symb,
+    function,
+    id::Replacement,
 };
 
 #[allow(dead_code)]
@@ -39,31 +39,31 @@ pub struct UFOSymbols {
 
 #[allow(dead_code)]
 pub static UFO: LazyLock<UFOSymbols> = LazyLock::new(|| UFOSymbols {
-    identity: symb!("Identity"),
-    identityl: symb!("IdentityL"),
-    gamma: symb!("Gamma"),
-    gamma5: symb!("Gamma5"),
-    projm: symb!("ProjM"),
-    projp: symb!("ProjP"),
-    sigma: symb!("Sigma"),
-    charge_conj: symb!("C"),
-    metric: State::get_symbol_with_attributes("Metric", &[FunctionAttribute::Symmetric]).unwrap(),
-    momentum: symb!("P"),
-    levicivita: symb!("Epsilon"),
-    t: symb!("T"),
-    f: State::get_symbol_with_attributes("f", &[FunctionAttribute::Antisymmetric]).unwrap(),
-    d: symb!("d"),
-    antilevicivita: symb!("EpsilonBar"),
-    t6: symb!("T6"),
-    k6: symb!("K6"),
-    k6bar: symb!("K6Bar"),
-    pslash: symb!("PSlash"),
+    identity: symbol!("Identity"),
+    identityl: symbol!("IdentityL"),
+    gamma: symbol!("Gamma"),
+    gamma5: symbol!("Gamma5"),
+    projm: symbol!("ProjM"),
+    projp: symbol!("ProjP"),
+    sigma: symbol!("Sigma"),
+    charge_conj: symbol!("C"),
+    metric: symbol!("Metric";Symmetric).unwrap(),
+    momentum: symbol!("P"),
+    levicivita: symbol!("Epsilon"),
+    t: symbol!("T"),
+    f: symbol!("f";Antisymmetric).unwrap(),
+    d: symbol!("d"),
+    antilevicivita: symbol!("EpsilonBar"),
+    t6: symbol!("T6"),
+    k6: symbol!("K6"),
+    k6bar: symbol!("K6Bar"),
+    pslash: symbol!("PSlash"),
 });
 
 pub fn preprocess_ufo_color_wrapped(atom: Atom) -> Atom {
-    let a_ = symb!("a_");
-    let b_ = symb!("b_");
-    let c_ = symb!("c_");
+    let a_ = symbol!("a_");
+    let b_ = symbol!("b_");
+    let c_ = symbol!("c_");
 
     let coad = ColorAdjoint::rep(8);
     let cof = ColorFundamental::rep(3);
@@ -73,8 +73,8 @@ pub fn preprocess_ufo_color_wrapped(atom: Atom) -> Atom {
 
     let reps = vec![
         (
-            fun!(UFO.t, a_, b_, c_),
-            fun!(
+            function!(UFO.t, a_, b_, c_),
+            function!(
                 UFO.t,
                 coad.to_pattern_wrapped(a_),
                 cof.to_pattern_wrapped(b_),
@@ -82,8 +82,8 @@ pub fn preprocess_ufo_color_wrapped(atom: Atom) -> Atom {
             ),
         ),
         (
-            fun!(UFO.f, a_, b_, c_),
-            fun!(
+            function!(UFO.f, a_, b_, c_),
+            function!(
                 UFO.f,
                 coad.to_pattern_wrapped(a_),
                 coad.to_pattern_wrapped(b_),
@@ -91,8 +91,8 @@ pub fn preprocess_ufo_color_wrapped(atom: Atom) -> Atom {
             ),
         ),
         (
-            fun!(UFO.d, a_, b_, c_),
-            fun!(
+            function!(UFO.d, a_, b_, c_),
+            function!(
                 UFO.d,
                 coad.to_pattern_wrapped(a_),
                 coad.to_pattern_wrapped(b_),
@@ -100,8 +100,8 @@ pub fn preprocess_ufo_color_wrapped(atom: Atom) -> Atom {
             ),
         ),
         (
-            fun!(UFO.levicivita, a_, b_, c_),
-            fun!(
+            function!(UFO.levicivita, a_, b_, c_),
+            function!(
                 UFO.levicivita,
                 cof.to_pattern_wrapped(a_),
                 cof.to_pattern_wrapped(b_),
@@ -109,8 +109,8 @@ pub fn preprocess_ufo_color_wrapped(atom: Atom) -> Atom {
             ),
         ),
         (
-            fun!(UFO.antilevicivita, a_, b_, c_),
-            fun!(
+            function!(UFO.antilevicivita, a_, b_, c_),
+            function!(
                 UFO.levicivita,
                 coaf.to_pattern_wrapped(a_),
                 coaf.to_pattern_wrapped(b_),
@@ -118,8 +118,8 @@ pub fn preprocess_ufo_color_wrapped(atom: Atom) -> Atom {
             ),
         ),
         (
-            fun!(UFO.t6, a_, b_, c_),
-            fun!(
+            function!(UFO.t6, a_, b_, c_),
+            function!(
                 UFO.t6,
                 coad.to_pattern_wrapped(a_),
                 cos.to_pattern_wrapped(b_),
@@ -127,8 +127,8 @@ pub fn preprocess_ufo_color_wrapped(atom: Atom) -> Atom {
             ),
         ),
         (
-            fun!(UFO.k6, a_, b_, c_),
-            fun!(
+            function!(UFO.k6, a_, b_, c_),
+            function!(
                 UFO.k6,
                 coaf.to_pattern_wrapped(a_),
                 coaf.to_pattern_wrapped(b_),
@@ -136,8 +136,8 @@ pub fn preprocess_ufo_color_wrapped(atom: Atom) -> Atom {
             ),
         ),
         (
-            fun!(UFO.k6bar, a_, b_, c_),
-            fun!(
+            function!(UFO.k6bar, a_, b_, c_),
+            function!(
                 UFO.k6bar,
                 coas.to_pattern_wrapped(a_),
                 cof.to_pattern_wrapped(b_),
@@ -146,40 +146,38 @@ pub fn preprocess_ufo_color_wrapped(atom: Atom) -> Atom {
         ),
     ];
 
-    let reps: Vec<(Pattern, PatternOrMap)> = reps
+    let reps: Vec<Replacement> = reps
         .into_iter()
-        .map(|(a, b)| (a.into_pattern(), b.into_pattern().into()))
+        .map(|(a, b)| Replacement::new(a.to_pattern(), b.to_pattern()))
         .collect();
 
-    let reps: Vec<_> = reps.iter().map(|(a, b)| Replacement::new(a, b)).collect();
-
-    atom.replace_all_multiple(&reps)
+    atom.replace_multiple(&reps)
 }
 pub fn preprocess_ufo_spin_wrapped(atom: Atom) -> Atom {
-    let a_ = symb!("a_");
-    let b_ = symb!("b_");
-    let c_ = symb!("c_");
-    let d_ = symb!("d_");
-    let wa_ = fun!(symb!("indexid"), Atom::new_var(symb!("a_")));
-    let wb_ = fun!(symb!("indexid"), Atom::new_var(symb!("b_")));
-    let wc_ = fun!(symb!("indexid"), Atom::new_var(symb!("c_")));
-    let wd_ = fun!(symb!("indexid"), Atom::new_var(symb!("d_")));
+    let a_ = symbol!("a_");
+    let b_ = symbol!("b_");
+    let c_ = symbol!("c_");
+    let d_ = symbol!("d_");
+    let wa_ = function!(symbol!("indexid"), Atom::new_var(symbol!("a_")));
+    let wb_ = function!(symbol!("indexid"), Atom::new_var(symbol!("b_")));
+    let wc_ = function!(symbol!("indexid"), Atom::new_var(symbol!("c_")));
+    let wd_ = function!(symbol!("indexid"), Atom::new_var(symbol!("d_")));
 
     let bis = Bispinor::rep(4);
     let mink = Minkowski::rep(4);
 
     let reps = vec![
         (
-            fun!(UFO.identity, a_, b_),
-            fun!(ETS.id, bis.pattern(&wa_), bis.pattern(&wb_)),
+            function!(UFO.identity, a_, b_),
+            function!(ETS.id, bis.pattern(&wa_), bis.pattern(&wb_)),
         ),
         (
-            fun!(UFO.identityl, a_, b_),
-            fun!(ETS.id, mink.pattern(&wa_), mink.pattern(&wb_)),
+            function!(UFO.identityl, a_, b_),
+            function!(ETS.id, mink.pattern(&wa_), mink.pattern(&wb_)),
         ),
         (
-            fun!(UFO.gamma, a_, b_, c_),
-            fun!(
+            function!(UFO.gamma, a_, b_, c_),
+            function!(
                 ETS.gamma,
                 mink.pattern(&wa_),
                 bis.pattern(&wb_),
@@ -187,20 +185,20 @@ pub fn preprocess_ufo_spin_wrapped(atom: Atom) -> Atom {
             ),
         ),
         (
-            fun!(UFO.gamma5, a_, b_),
-            fun!(ETS.gamma5, bis.pattern(&wa_), bis.pattern(&wb_)),
+            function!(UFO.gamma5, a_, b_),
+            function!(ETS.gamma5, bis.pattern(&wa_), bis.pattern(&wb_)),
         ),
         (
-            fun!(UFO.projm, a_, b_),
-            fun!(ETS.proj_m, bis.pattern(&wa_), bis.pattern(&wb_)),
+            function!(UFO.projm, a_, b_),
+            function!(ETS.proj_m, bis.pattern(&wa_), bis.pattern(&wb_)),
         ),
         (
-            fun!(UFO.projp, a_, b_),
-            fun!(ETS.proj_p, bis.pattern(&wa_), bis.pattern(&wb_)),
+            function!(UFO.projp, a_, b_),
+            function!(ETS.proj_p, bis.pattern(&wa_), bis.pattern(&wb_)),
         ),
         (
-            fun!(UFO.sigma, a_, b_, c_, d_),
-            fun!(
+            function!(UFO.sigma, a_, b_, c_, d_),
+            function!(
                 ETS.sigma,
                 mink.pattern(&wa_),
                 mink.pattern(&wb_),
@@ -209,30 +207,27 @@ pub fn preprocess_ufo_spin_wrapped(atom: Atom) -> Atom {
             ),
         ),
         (
-            fun!(UFO.charge_conj, a_, b_),
-            fun!(UFO.charge_conj, bis.pattern(&wa_), bis.pattern(&wb_)),
+            function!(UFO.charge_conj, a_, b_),
+            function!(UFO.charge_conj, bis.pattern(&wa_), bis.pattern(&wb_)),
         ),
         (
-            fun!(UFO.metric, a_, b_),
-            fun!(ETS.metric, mink.pattern(&wa_), mink.pattern(&wb_)),
+            function!(UFO.metric, a_, b_),
+            function!(ETS.metric, mink.pattern(&wa_), mink.pattern(&wb_)),
         ),
     ];
-
-    let reps: Vec<(Pattern, PatternOrMap)> = reps
-        .into_iter()
-        .map(|(a, b)| (a.into_pattern(), b.into_pattern().into()))
-        .collect();
 
     let settings = MatchSettings {
         rhs_cache_size: 0,
         ..Default::default()
     };
     let reps: Vec<_> = reps
-        .iter()
-        .map(|(a, b)| Replacement::new(a, b).with_settings(&settings))
+        .into_iter()
+        .map(|(a, b)| {
+            Replacement::new(a.to_pattern(), b.to_pattern()).with_settings(settings.clone())
+        })
         .collect();
 
-    atom.replace_all_multiple(&reps)
+    atom.replace_multiple(&reps)
 }
 
 #[cfg(test)]

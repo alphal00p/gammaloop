@@ -1,0 +1,3518 @@
+name: sm_dis
+restriction: default
+orders:
+- expansion_order: 99
+  hierarchy: 1
+  name: QCD
+- expansion_order: 99
+  hierarchy: 2
+  name: QED
+- expansion_order: 99
+  hierarchy: 3
+  name: LT
+parameters:
+- lhablock: SMINPUTS
+  lhacode:
+  - 1
+  name: aEWM1
+  nature: external
+  parameter_type: real
+  value:
+  - 132.507
+  - 0.0
+  expression: null
+- lhablock: SMINPUTS
+  lhacode:
+  - 2
+  name: Gf
+  nature: external
+  parameter_type: real
+  value:
+  - 1.16639e-05
+  - 0.0
+  expression: null
+- lhablock: SMINPUTS
+  lhacode:
+  - 3
+  name: aS
+  nature: external
+  parameter_type: real
+  value:
+  - 0.118
+  - 0.0
+  expression: null
+- lhablock: Wolfenstein
+  lhacode:
+  - 1
+  name: lamWS
+  nature: internal
+  parameter_type: real
+  value:
+  - 0.0
+  - 0.0
+  expression: ZERO
+- lhablock: Wolfenstein
+  lhacode:
+  - 2
+  name: AWS
+  nature: internal
+  parameter_type: real
+  value:
+  - 0.0
+  - 0.0
+  expression: ZERO
+- lhablock: Wolfenstein
+  lhacode:
+  - 3
+  name: rhoWS
+  nature: internal
+  parameter_type: real
+  value:
+  - 0.0
+  - 0.0
+  expression: ZERO
+- lhablock: Wolfenstein
+  lhacode:
+  - 4
+  name: etaWS
+  nature: internal
+  parameter_type: real
+  value:
+  - 0.0
+  - 0.0
+  expression: ZERO
+- lhablock: YUKAWA
+  lhacode:
+  - 4
+  name: ymc
+  nature: internal
+  parameter_type: real
+  value:
+  - 0.0
+  - 0.0
+  expression: ZERO
+- lhablock: YUKAWA
+  lhacode:
+  - 5
+  name: ymb
+  nature: external
+  parameter_type: real
+  value:
+  - 4.7
+  - 0.0
+  expression: null
+- lhablock: YUKAWA
+  lhacode:
+  - 6
+  name: ymt
+  nature: external
+  parameter_type: real
+  value:
+  - 173.0
+  - 0.0
+  expression: null
+- lhablock: YUKAWA
+  lhacode:
+  - 11
+  name: yme
+  nature: internal
+  parameter_type: real
+  value:
+  - 0.0
+  - 0.0
+  expression: ZERO
+- lhablock: YUKAWA
+  lhacode:
+  - 13
+  name: ymm
+  nature: internal
+  parameter_type: real
+  value:
+  - 0.0
+  - 0.0
+  expression: ZERO
+- lhablock: YUKAWA
+  lhacode:
+  - 15
+  name: ymtau
+  nature: external
+  parameter_type: real
+  value:
+  - 1.777
+  - 0.0
+  expression: null
+- lhablock: MASS
+  lhacode:
+  - 23
+  name: MZ
+  nature: external
+  parameter_type: real
+  value:
+  - 91.188
+  - 0.0
+  expression: null
+- lhablock: MASS
+  lhacode:
+  - 4
+  name: MC
+  nature: internal
+  parameter_type: real
+  value:
+  - 0.0
+  - 0.0
+  expression: ZERO
+- lhablock: MASS
+  lhacode:
+  - 6
+  name: MT
+  nature: external
+  parameter_type: real
+  value:
+  - 173.0
+  - 0.0
+  expression: null
+- lhablock: MASS
+  lhacode:
+  - 5
+  name: MB
+  nature: external
+  parameter_type: real
+  value:
+  - 4.7
+  - 0.0
+  expression: null
+- lhablock: MASS
+  lhacode:
+  - 25
+  name: MH
+  nature: external
+  parameter_type: real
+  value:
+  - 125.0
+  - 0.0
+  expression: null
+- lhablock: MASS
+  lhacode:
+  - 11
+  name: Me
+  nature: internal
+  parameter_type: real
+  value:
+  - 0.0
+  - 0.0
+  expression: ZERO
+- lhablock: MASS
+  lhacode:
+  - 13
+  name: MM
+  nature: internal
+  parameter_type: real
+  value:
+  - 0.0
+  - 0.0
+  expression: ZERO
+- lhablock: MASS
+  lhacode:
+  - 15
+  name: MTA
+  nature: external
+  parameter_type: real
+  value:
+  - 1.777
+  - 0.0
+  expression: null
+- lhablock: DECAY
+  lhacode:
+  - 23
+  name: WZ
+  nature: external
+  parameter_type: real
+  value:
+  - 2.441404
+  - 0.0
+  expression: null
+- lhablock: DECAY
+  lhacode:
+  - 24
+  name: WW
+  nature: external
+  parameter_type: real
+  value:
+  - 2.0476
+  - 0.0
+  expression: null
+- lhablock: DECAY
+  lhacode:
+  - 6
+  name: WT
+  nature: external
+  parameter_type: real
+  value:
+  - 1.4915
+  - 0.0
+  expression: null
+- lhablock: DECAY
+  lhacode:
+  - 25
+  name: WH
+  nature: external
+  parameter_type: real
+  value:
+  - 0.00638233934
+  - 0.0
+  expression: null
+- lhablock: DECAY
+  lhacode:
+  - 15
+  name: WTau
+  nature: internal
+  parameter_type: real
+  value:
+  - 0.0
+  - 0.0
+  expression: ZERO
+- lhablock: null
+  lhacode: null
+  name: ZERO
+  nature: internal
+  parameter_type: real
+  value:
+  - 0.0
+  - 0.0
+  expression: null
+- lhablock: null
+  lhacode: null
+  name: CKM3x3
+  nature: internal
+  parameter_type: complex
+  value:
+  - 1.0
+  - 0.0
+  expression: null
+- lhablock: null
+  lhacode: null
+  name: CKM1x1
+  nature: internal
+  parameter_type: complex
+  value:
+  - 1.0
+  - 0.0
+  expression: -1/2*lamWS^2+1
+- lhablock: null
+  lhacode: null
+  name: CKM1x2
+  nature: internal
+  parameter_type: complex
+  value:
+  - 0.0
+  - 0.0
+  expression: lamWS
+- lhablock: null
+  lhacode: null
+  name: CKM1x3
+  nature: internal
+  parameter_type: complex
+  value:
+  - 0.0
+  - 0.0
+  expression: lamWS^3*AWS*(rhoWS-etaWS*complex(0,1))
+- lhablock: null
+  lhacode: null
+  name: CKM2x1
+  nature: internal
+  parameter_type: complex
+  value:
+  - 0.0
+  - 0.0
+  expression: -lamWS
+- lhablock: null
+  lhacode: null
+  name: CKM2x2
+  nature: internal
+  parameter_type: complex
+  value:
+  - 1.0
+  - 0.0
+  expression: -1/2*lamWS^2+1
+- lhablock: null
+  lhacode: null
+  name: CKM2x3
+  nature: internal
+  parameter_type: complex
+  value:
+  - 0.0
+  - 0.0
+  expression: lamWS^2*AWS
+- lhablock: null
+  lhacode: null
+  name: CKM3x1
+  nature: internal
+  parameter_type: complex
+  value:
+  - 0.0
+  - 0.0
+  expression: lamWS^3*AWS*(-rhoWS-etaWS*complex(0,1)+1)
+- lhablock: null
+  lhacode: null
+  name: CKM3x2
+  nature: internal
+  parameter_type: complex
+  value:
+  - 0.0
+  - 0.0
+  expression: -lamWS^2*AWS
+- lhablock: null
+  lhacode: null
+  name: aEW
+  nature: internal
+  parameter_type: real
+  value:
+  - 0.0075467711139788835
+  - 0.0
+  expression: aEWM1^-1
+- lhablock: null
+  lhacode: null
+  name: G
+  nature: internal
+  parameter_type: real
+  value:
+  - 1.2177157847767195
+  - 0.0
+  expression: 2*aS^(1/2)*pi^(1/2)
+- lhablock: null
+  lhacode: null
+  name: MW
+  nature: internal
+  parameter_type: real
+  value:
+  - 80.41900244575616
+  - 0.0
+  expression: (1/2*MZ^2+sqrt(1/4*MZ^4-pi*MZ^2*aEW*Gf^-1*sqrt(2)^-1))^(1/2)
+- lhablock: null
+  lhacode: null
+  name: ee
+  nature: internal
+  parameter_type: real
+  value:
+  - 0.3079537672443688
+  - 0.0
+  expression: 2*pi^(1/2)*aEW^(1/2)
+- lhablock: null
+  lhacode: null
+  name: sw2
+  nature: internal
+  parameter_type: real
+  value:
+  - 0.22224648578577766
+  - 0.0
+  expression: -MZ^-2*MW^2+1
+- lhablock: null
+  lhacode: null
+  name: cw
+  nature: internal
+  parameter_type: real
+  value:
+  - 0.8819033474333922
+  - 0.0
+  expression: (-sw2+1)^(1/2)
+- lhablock: null
+  lhacode: null
+  name: sw
+  nature: internal
+  parameter_type: real
+  value:
+  - 0.4714302554840723
+  - 0.0
+  expression: sw2^(1/2)
+- lhablock: null
+  lhacode: null
+  name: g1
+  nature: internal
+  parameter_type: real
+  value:
+  - 0.349192196787333
+  - 0.0
+  expression: ee*cw^-1
+- lhablock: null
+  lhacode: null
+  name: gw
+  nature: internal
+  parameter_type: real
+  value:
+  - 0.6532329303475798
+  - 0.0
+  expression: ee*sw^-1
+- lhablock: null
+  lhacode: null
+  name: vev
+  nature: internal
+  parameter_type: real
+  value:
+  - 246.2184581018163
+  - 0.0
+  expression: 2*MW*ee^-1*sw
+- lhablock: null
+  lhacode: null
+  name: lam
+  nature: internal
+  parameter_type: real
+  value:
+  - 0.1288691060169027
+  - 0.0
+  expression: 1/2*MH^2*vev^-2
+- lhablock: null
+  lhacode: null
+  name: yb
+  nature: internal
+  parameter_type: real
+  value:
+  - 0.026995554250465494
+  - 0.0
+  expression: vev^-1*ymb*2^(1/2)
+- lhablock: null
+  lhacode: null
+  name: yc
+  nature: internal
+  parameter_type: real
+  value:
+  - 0.0
+  - 0.0
+  expression: vev^-1*ymc*2^(1/2)
+- lhablock: null
+  lhacode: null
+  name: ye
+  nature: internal
+  parameter_type: real
+  value:
+  - 0.0
+  - 0.0
+  expression: vev^-1*yme*2^(1/2)
+- lhablock: null
+  lhacode: null
+  name: ym
+  nature: internal
+  parameter_type: real
+  value:
+  - 0.0
+  - 0.0
+  expression: vev^-1*ymm*2^(1/2)
+- lhablock: null
+  lhacode: null
+  name: yt
+  nature: internal
+  parameter_type: real
+  value:
+  - 0.9936661458150063
+  - 0.0
+  expression: vev^-1*ymt*2^(1/2)
+- lhablock: null
+  lhacode: null
+  name: ytau
+  nature: internal
+  parameter_type: real
+  value:
+  - 0.010206617000654719
+  - 0.0
+  expression: vev^-1*ymtau*2^(1/2)
+- lhablock: null
+  lhacode: null
+  name: muH
+  nature: internal
+  parameter_type: real
+  value:
+  - 88.38834764831844
+  - 0.0
+  expression: (vev^2*lam)^(1/2)
+- lhablock: null
+  lhacode: null
+  name: I1x31
+  nature: internal
+  parameter_type: complex
+  value:
+  - 0.0
+  - 0.0
+  expression: yb*complexconjugate(CKM1x3)
+- lhablock: null
+  lhacode: null
+  name: I1x32
+  nature: internal
+  parameter_type: complex
+  value:
+  - 0.0
+  - 0.0
+  expression: yb*complexconjugate(CKM2x3)
+- lhablock: null
+  lhacode: null
+  name: I1x33
+  nature: internal
+  parameter_type: complex
+  value:
+  - 0.026995554250465494
+  - 0.0
+  expression: yb*complexconjugate(CKM3x3)
+- lhablock: null
+  lhacode: null
+  name: I2x12
+  nature: internal
+  parameter_type: complex
+  value:
+  - 0.0
+  - 0.0
+  expression: yc*complexconjugate(CKM2x1)
+- lhablock: null
+  lhacode: null
+  name: I2x13
+  nature: internal
+  parameter_type: complex
+  value:
+  - 0.0
+  - 0.0
+  expression: yt*complexconjugate(CKM3x1)
+- lhablock: null
+  lhacode: null
+  name: I2x22
+  nature: internal
+  parameter_type: complex
+  value:
+  - 0.0
+  - 0.0
+  expression: yc*complexconjugate(CKM2x2)
+- lhablock: null
+  lhacode: null
+  name: I2x23
+  nature: internal
+  parameter_type: complex
+  value:
+  - 0.0
+  - 0.0
+  expression: yt*complexconjugate(CKM3x2)
+- lhablock: null
+  lhacode: null
+  name: I2x32
+  nature: internal
+  parameter_type: complex
+  value:
+  - 0.0
+  - 0.0
+  expression: yc*complexconjugate(CKM2x3)
+- lhablock: null
+  lhacode: null
+  name: I2x33
+  nature: internal
+  parameter_type: complex
+  value:
+  - 0.9936661458150063
+  - 0.0
+  expression: yt*complexconjugate(CKM3x3)
+- lhablock: null
+  lhacode: null
+  name: I3x21
+  nature: internal
+  parameter_type: complex
+  value:
+  - 0.0
+  - 0.0
+  expression: yc*CKM2x1
+- lhablock: null
+  lhacode: null
+  name: I3x22
+  nature: internal
+  parameter_type: complex
+  value:
+  - 0.0
+  - 0.0
+  expression: yc*CKM2x2
+- lhablock: null
+  lhacode: null
+  name: I3x23
+  nature: internal
+  parameter_type: complex
+  value:
+  - 0.0
+  - 0.0
+  expression: CKM2x3*yc
+- lhablock: null
+  lhacode: null
+  name: I3x31
+  nature: internal
+  parameter_type: complex
+  value:
+  - 0.0
+  - 0.0
+  expression: yt*CKM3x1
+- lhablock: null
+  lhacode: null
+  name: I3x32
+  nature: internal
+  parameter_type: complex
+  value:
+  - 0.0
+  - 0.0
+  expression: yt*CKM3x2
+- lhablock: null
+  lhacode: null
+  name: I3x33
+  nature: internal
+  parameter_type: complex
+  value:
+  - 0.9936661458150063
+  - 0.0
+  expression: CKM3x3*yt
+- lhablock: null
+  lhacode: null
+  name: I4x13
+  nature: internal
+  parameter_type: complex
+  value:
+  - 0.0
+  - 0.0
+  expression: yb*CKM1x3
+- lhablock: null
+  lhacode: null
+  name: I4x23
+  nature: internal
+  parameter_type: complex
+  value:
+  - 0.0
+  - 0.0
+  expression: yb*CKM2x3
+- lhablock: null
+  lhacode: null
+  name: I4x33
+  nature: internal
+  parameter_type: complex
+  value:
+  - 0.026995554250465494
+  - 0.0
+  expression: yb*CKM3x3
+particles:
+- pdg_code: 22
+  name: a
+  antiname: a
+  spin: 3
+  color: 1
+  mass: ZERO
+  width: ZERO
+  texname: '{\gamma}'
+  antitexname: '{\gamma}'
+  charge: 0.0
+  ghost_number: 0
+  lepton_number: 0
+  y_charge: 0
+- pdg_code: 23
+  name: Z
+  antiname: Z
+  spin: 3
+  color: 1
+  mass: MZ
+  width: WZ
+  texname: '{Z}'
+  antitexname: '{Z}'
+  charge: 0.0
+  ghost_number: 0
+  lepton_number: 0
+  y_charge: 0
+- pdg_code: 24
+  name: W+
+  antiname: W-
+  spin: 3
+  color: 1
+  mass: MW
+  width: WW
+  texname: '{W^+}'
+  antitexname: '{W^-}'
+  charge: 1.0
+  ghost_number: 0
+  lepton_number: 0
+  y_charge: 0
+- pdg_code: -24
+  name: W-
+  antiname: W+
+  spin: 3
+  color: 1
+  mass: MW
+  width: WW
+  texname: '{W^-}'
+  antitexname: '{W^+}'
+  charge: -1.0
+  ghost_number: 0
+  lepton_number: 0
+  y_charge: 0
+- pdg_code: 21
+  name: g
+  antiname: g
+  spin: 3
+  color: 8
+  mass: ZERO
+  width: ZERO
+  texname: '{g}'
+  antitexname: '{g}'
+  charge: 0.0
+  ghost_number: 0
+  lepton_number: 0
+  y_charge: 0
+- pdg_code: 9000001
+  name: ghA
+  antiname: ghA~
+  spin: -1
+  color: 1
+  mass: ZERO
+  width: ZERO
+  texname: \tilde{\gamma}
+  antitexname: \overline{\tilde{\gamma}}
+  charge: 0.0
+  ghost_number: 1
+  lepton_number: 0
+  y_charge: 0
+- pdg_code: -9000001
+  name: ghA~
+  antiname: ghA
+  spin: -1
+  color: 1
+  mass: ZERO
+  width: ZERO
+  texname: \overline{\tilde{\gamma}}
+  antitexname: \tilde{\gamma}
+  charge: -0.0
+  ghost_number: -1
+  lepton_number: 0
+  y_charge: 0
+- pdg_code: 9000002
+  name: ghZ
+  antiname: ghZ~
+  spin: -1
+  color: 1
+  mass: MZ
+  width: WZ
+  texname: \tilde{Z}
+  antitexname: \bar{\tilde{Z}}
+  charge: 0.0
+  ghost_number: 1
+  lepton_number: 0
+  y_charge: 0
+- pdg_code: -9000002
+  name: ghZ~
+  antiname: ghZ
+  spin: -1
+  color: 1
+  mass: MZ
+  width: WZ
+  texname: \bar{\tilde{Z}}
+  antitexname: \tilde{Z}
+  charge: -0.0
+  ghost_number: -1
+  lepton_number: 0
+  y_charge: 0
+- pdg_code: 9000003
+  name: ghWp
+  antiname: ghWp~
+  spin: -1
+  color: 1
+  mass: MW
+  width: WW
+  texname: '{\tilde{W}^+}'
+  antitexname: '{\bar{\tilde{W}}^+}'
+  charge: 1.0
+  ghost_number: 1
+  lepton_number: 0
+  y_charge: 0
+- pdg_code: -9000003
+  name: ghWp~
+  antiname: ghWp
+  spin: -1
+  color: 1
+  mass: MW
+  width: WW
+  texname: '{\bar{\tilde{W}}^+}'
+  antitexname: '{\tilde{W}^+}'
+  charge: -1.0
+  ghost_number: -1
+  lepton_number: 0
+  y_charge: 0
+- pdg_code: 9000004
+  name: ghWm
+  antiname: ghWm~
+  spin: -1
+  color: 1
+  mass: MW
+  width: WW
+  texname: '{\tilde{W}^-}'
+  antitexname: '{\bar{\tilde{W}}^-}'
+  charge: -1.0
+  ghost_number: 1
+  lepton_number: 0
+  y_charge: 0
+- pdg_code: -9000004
+  name: ghWm~
+  antiname: ghWm
+  spin: -1
+  color: 1
+  mass: MW
+  width: WW
+  texname: '{\bar{\tilde{W}}^-}'
+  antitexname: '{\tilde{W}^-}'
+  charge: 1.0
+  ghost_number: -1
+  lepton_number: 0
+  y_charge: 0
+- pdg_code: 9000005
+  name: ghG
+  antiname: ghG~
+  spin: -1
+  color: 8
+  mass: ZERO
+  width: ZERO
+  texname: '{\tilde{g}}'
+  antitexname: '{\bar{\tilde{g}}}'
+  charge: 0.0
+  ghost_number: 1
+  lepton_number: 0
+  y_charge: 0
+- pdg_code: -9000005
+  name: ghG~
+  antiname: ghG
+  spin: -1
+  color: 8
+  mass: ZERO
+  width: ZERO
+  texname: '{\bar{\tilde{g}}}'
+  antitexname: '{\tilde{g}}'
+  charge: -0.0
+  ghost_number: -1
+  lepton_number: 0
+  y_charge: 0
+- pdg_code: 12
+  name: ve
+  antiname: ve~
+  spin: 2
+  color: 1
+  mass: ZERO
+  width: ZERO
+  texname: '{\nue}'
+  antitexname: '{\overline{\nu}e}'
+  charge: 0.0
+  ghost_number: 0
+  lepton_number: 1
+  y_charge: 0
+- pdg_code: -12
+  name: ve~
+  antiname: ve
+  spin: 2
+  color: 1
+  mass: ZERO
+  width: ZERO
+  texname: '{\overline{\nu}e}'
+  antitexname: '{\nue}'
+  charge: -0.0
+  ghost_number: 0
+  lepton_number: -1
+  y_charge: 0
+- pdg_code: 14
+  name: vm
+  antiname: vm~
+  spin: 2
+  color: 1
+  mass: ZERO
+  width: ZERO
+  texname: '{\nu\mu}'
+  antitexname: '{\overline{\nu}\mu}'
+  charge: 0.0
+  ghost_number: 0
+  lepton_number: 1
+  y_charge: 0
+- pdg_code: -14
+  name: vm~
+  antiname: vm
+  spin: 2
+  color: 1
+  mass: ZERO
+  width: ZERO
+  texname: '{\overline{\nu}\mu}'
+  antitexname: '{\nu\mu}'
+  charge: -0.0
+  ghost_number: 0
+  lepton_number: -1
+  y_charge: 0
+- pdg_code: 16
+  name: vt
+  antiname: vt~
+  spin: 2
+  color: 1
+  mass: ZERO
+  width: ZERO
+  texname: '{\nu\tau}'
+  antitexname: '{\overline{\nu}\tau}'
+  charge: 0.0
+  ghost_number: 0
+  lepton_number: 1
+  y_charge: 0
+- pdg_code: -16
+  name: vt~
+  antiname: vt
+  spin: 2
+  color: 1
+  mass: ZERO
+  width: ZERO
+  texname: '{\overline{\nu}\tau}'
+  antitexname: '{\nu\tau}'
+  charge: -0.0
+  ghost_number: 0
+  lepton_number: -1
+  y_charge: 0
+- pdg_code: 2
+  name: u
+  antiname: u~
+  spin: 2
+  color: 3
+  mass: ZERO
+  width: ZERO
+  texname: '{u}'
+  antitexname: '{\overline{u}}'
+  charge: 0.6666666666666666
+  ghost_number: 0
+  lepton_number: 0
+  y_charge: 0
+- pdg_code: -2
+  name: u~
+  antiname: u
+  spin: 2
+  color: -3
+  mass: ZERO
+  width: ZERO
+  texname: '{\overline{u}}'
+  antitexname: '{u}'
+  charge: -0.6666666666666666
+  ghost_number: 0
+  lepton_number: 0
+  y_charge: 0
+- pdg_code: 4
+  name: c
+  antiname: c~
+  spin: 2
+  color: 3
+  mass: MC
+  width: ZERO
+  texname: '{c}'
+  antitexname: '{\overline{c}}'
+  charge: 0.6666666666666666
+  ghost_number: 0
+  lepton_number: 0
+  y_charge: 0
+- pdg_code: -4
+  name: c~
+  antiname: c
+  spin: 2
+  color: -3
+  mass: MC
+  width: ZERO
+  texname: '{\overline{c}}'
+  antitexname: '{c}'
+  charge: -0.6666666666666666
+  ghost_number: 0
+  lepton_number: 0
+  y_charge: 0
+- pdg_code: 6
+  name: t
+  antiname: t~
+  spin: 2
+  color: 3
+  mass: MT
+  width: WT
+  texname: '{t}'
+  antitexname: '{\overline{t}}'
+  charge: 0.6666666666666666
+  ghost_number: 0
+  lepton_number: 0
+  y_charge: 0
+- pdg_code: -6
+  name: t~
+  antiname: t
+  spin: 2
+  color: -3
+  mass: MT
+  width: WT
+  texname: '{\overline{t}}'
+  antitexname: '{t}'
+  charge: -0.6666666666666666
+  ghost_number: 0
+  lepton_number: 0
+  y_charge: 0
+- pdg_code: 1
+  name: d
+  antiname: d~
+  spin: 2
+  color: 3
+  mass: ZERO
+  width: ZERO
+  texname: '{d}'
+  antitexname: '{\overline{d}}'
+  charge: -0.3333333333333333
+  ghost_number: 0
+  lepton_number: 0
+  y_charge: 0
+- pdg_code: -1
+  name: d~
+  antiname: d
+  spin: 2
+  color: -3
+  mass: ZERO
+  width: ZERO
+  texname: '{\overline{d}}'
+  antitexname: '{d}'
+  charge: 0.3333333333333333
+  ghost_number: 0
+  lepton_number: 0
+  y_charge: 0
+- pdg_code: 3
+  name: s
+  antiname: s~
+  spin: 2
+  color: 3
+  mass: ZERO
+  width: ZERO
+  texname: '{s}'
+  antitexname: '{\overline{s}}'
+  charge: -0.3333333333333333
+  ghost_number: 0
+  lepton_number: 0
+  y_charge: 0
+- pdg_code: -3
+  name: s~
+  antiname: s
+  spin: 2
+  color: -3
+  mass: ZERO
+  width: ZERO
+  texname: '{\overline{s}}'
+  antitexname: '{s}'
+  charge: 0.3333333333333333
+  ghost_number: 0
+  lepton_number: 0
+  y_charge: 0
+- pdg_code: 5
+  name: b
+  antiname: b~
+  spin: 2
+  color: 3
+  mass: MB
+  width: ZERO
+  texname: '{b}'
+  antitexname: '{\overline{b}}'
+  charge: -0.3333333333333333
+  ghost_number: 0
+  lepton_number: 0
+  y_charge: 0
+- pdg_code: -5
+  name: b~
+  antiname: b
+  spin: 2
+  color: -3
+  mass: MB
+  width: ZERO
+  texname: '{\overline{b}}'
+  antitexname: '{b}'
+  charge: 0.3333333333333333
+  ghost_number: 0
+  lepton_number: 0
+  y_charge: 0
+- pdg_code: 25
+  name: H
+  antiname: H
+  spin: 1
+  color: 1
+  mass: MH
+  width: WH
+  texname: '{H}'
+  antitexname: '{H}'
+  charge: 0.0
+  ghost_number: 0
+  lepton_number: 0
+  y_charge: 0
+- pdg_code: 250
+  name: G0
+  antiname: G0
+  spin: 1
+  color: 1
+  mass: MZ
+  width: WZ
+  texname: '{G0}'
+  antitexname: '{G0}'
+  charge: 0.0
+  ghost_number: 0
+  lepton_number: 0
+  y_charge: 0
+- pdg_code: 251
+  name: G+
+  antiname: G-
+  spin: 1
+  color: 1
+  mass: MW
+  width: WW
+  texname: '{G^+}'
+  antitexname: '{G^-}'
+  charge: 1.0
+  ghost_number: 0
+  lepton_number: 0
+  y_charge: 0
+- pdg_code: -251
+  name: G-
+  antiname: G+
+  spin: 1
+  color: 1
+  mass: MW
+  width: WW
+  texname: '{G^-}'
+  antitexname: '{G^+}'
+  charge: -1.0
+  ghost_number: 0
+  lepton_number: 0
+  y_charge: 0
+- pdg_code: 11
+  name: e-
+  antiname: e+
+  spin: 2
+  color: 1
+  mass: Me
+  width: ZERO
+  texname: '{e^-}'
+  antitexname: '{e^+}'
+  charge: -1.0
+  ghost_number: 0
+  lepton_number: 1
+  y_charge: 0
+- pdg_code: -11
+  name: e+
+  antiname: e-
+  spin: 2
+  color: 1
+  mass: Me
+  width: ZERO
+  texname: '{e^+}'
+  antitexname: '{e^-}'
+  charge: 1.0
+  ghost_number: 0
+  lepton_number: -1
+  y_charge: 0
+- pdg_code: 13
+  name: mu-
+  antiname: mu+
+  spin: 2
+  color: 1
+  mass: MM
+  width: ZERO
+  texname: '{\mu^-}'
+  antitexname: '{\mu^+}'
+  charge: -1.0
+  ghost_number: 0
+  lepton_number: 1
+  y_charge: 0
+- pdg_code: -13
+  name: mu+
+  antiname: mu-
+  spin: 2
+  color: 1
+  mass: MM
+  width: ZERO
+  texname: '{\mu^+}'
+  antitexname: '{\mu^-}'
+  charge: 1.0
+  ghost_number: 0
+  lepton_number: -1
+  y_charge: 0
+- pdg_code: 15
+  name: ta-
+  antiname: ta+
+  spin: 2
+  color: 1
+  mass: MTA
+  width: WTau
+  texname: '{\tau^-}'
+  antitexname: '{\tau^+}'
+  charge: -1.0
+  ghost_number: 0
+  lepton_number: 1
+  y_charge: 0
+- pdg_code: -15
+  name: ta+
+  antiname: ta-
+  spin: 2
+  color: 1
+  mass: MTA
+  width: WTau
+  texname: '{\tau^+}'
+  antitexname: '{\tau^-}'
+  charge: 1.0
+  ghost_number: 0
+  lepton_number: -1
+  y_charge: 0
+propagators:
+- name: a_propFeynman
+  particle: a
+  numerator: -Metric(1,2)
+  denominator: P(1)^2
+- name: Z_propFeynman
+  particle: Z
+  numerator: -Metric(1,2)+MZ^-2*P(1)*P(2)
+  denominator: -MZ^2+P(1)^2
+- name: W+_propFeynman
+  particle: W+
+  numerator: -Metric(1,2)+MW^-2*P(1)*P(2)
+  denominator: -MW^2+P(1)^2
+- name: W-_propFeynman
+  particle: W-
+  numerator: -Metric(1,2)+MW^-2*P(1)*P(2)
+  denominator: -MW^2+P(1)^2
+- name: g_propFeynman
+  particle: g
+  numerator: -Metric(1,2)
+  denominator: P(1)^2
+- name: ghA_propFeynman
+  particle: ghA
+  numerator: '1'
+  denominator: P(1)^2
+- name: ghA~_propFeynman
+  particle: ghA~
+  numerator: '1'
+  denominator: P(1)^2
+- name: ghZ_propFeynman
+  particle: ghZ
+  numerator: '1'
+  denominator: -MZ^2+P(1)^2
+- name: ghZ~_propFeynman
+  particle: ghZ~
+  numerator: '1'
+  denominator: -MZ^2+P(1)^2
+- name: ghWp_propFeynman
+  particle: ghWp
+  numerator: '1'
+  denominator: -MW^2+P(1)^2
+- name: ghWp~_propFeynman
+  particle: ghWp~
+  numerator: '1'
+  denominator: -MW^2+P(1)^2
+- name: ghWm_propFeynman
+  particle: ghWm
+  numerator: '1'
+  denominator: -MW^2+P(1)^2
+- name: ghWm~_propFeynman
+  particle: ghWm~
+  numerator: '1'
+  denominator: -MW^2+P(1)^2
+- name: ghG_propFeynman
+  particle: ghG
+  numerator: '1'
+  denominator: P(1)^2
+- name: ghG~_propFeynman
+  particle: ghG~
+  numerator: '1'
+  denominator: P(1)^2
+- name: ve_propFeynman
+  particle: ve
+  numerator: PSlash(1,2)
+  denominator: P(1)^2
+- name: ve~_propFeynman
+  particle: ve~
+  numerator: PSlash(1,2)
+  denominator: P(1)^2
+- name: vm_propFeynman
+  particle: vm
+  numerator: PSlash(1,2)
+  denominator: P(1)^2
+- name: vm~_propFeynman
+  particle: vm~
+  numerator: PSlash(1,2)
+  denominator: P(1)^2
+- name: vt_propFeynman
+  particle: vt
+  numerator: PSlash(1,2)
+  denominator: P(1)^2
+- name: vt~_propFeynman
+  particle: vt~
+  numerator: PSlash(1,2)
+  denominator: P(1)^2
+- name: u_propFeynman
+  particle: u
+  numerator: PSlash(1,2)
+  denominator: P(1)^2
+- name: u~_propFeynman
+  particle: u~
+  numerator: PSlash(1,2)
+  denominator: P(1)^2
+- name: c_propFeynman
+  particle: c
+  numerator: PSlash(1,2)+MC*Identity(1,2)
+  denominator: -MC^2+P(1)^2
+- name: c~_propFeynman
+  particle: c~
+  numerator: PSlash(1,2)+MC*Identity(1,2)
+  denominator: -MC^2+P(1)^2
+- name: t_propFeynman
+  particle: t
+  numerator: PSlash(1,2)+MT*Identity(1,2)
+  denominator: -MT^2+P(1)^2
+- name: t~_propFeynman
+  particle: t~
+  numerator: PSlash(1,2)+MT*Identity(1,2)
+  denominator: -MT^2+P(1)^2
+- name: d_propFeynman
+  particle: d
+  numerator: PSlash(1,2)
+  denominator: P(1)^2
+- name: d~_propFeynman
+  particle: d~
+  numerator: PSlash(1,2)
+  denominator: P(1)^2
+- name: s_propFeynman
+  particle: s
+  numerator: PSlash(1,2)
+  denominator: P(1)^2
+- name: s~_propFeynman
+  particle: s~
+  numerator: PSlash(1,2)
+  denominator: P(1)^2
+- name: b_propFeynman
+  particle: b
+  numerator: PSlash(1,2)+MB*Identity(1,2)
+  denominator: -MB^2+P(1)^2
+- name: b~_propFeynman
+  particle: b~
+  numerator: PSlash(1,2)+MB*Identity(1,2)
+  denominator: -MB^2+P(1)^2
+- name: H_propFeynman
+  particle: H
+  numerator: '1'
+  denominator: -MH^2+P(1)^2
+- name: G0_propFeynman
+  particle: G0
+  numerator: '1'
+  denominator: -MZ^2+P(1)^2
+- name: G+_propFeynman
+  particle: G+
+  numerator: '1'
+  denominator: -MW^2+P(1)^2
+- name: G-_propFeynman
+  particle: G-
+  numerator: '1'
+  denominator: -MW^2+P(1)^2
+- name: e-_propFeynman
+  particle: e-
+  numerator: PSlash(1,2)+Me*Identity(1,2)
+  denominator: -Me^2+P(1)^2
+- name: e+_propFeynman
+  particle: e+
+  numerator: PSlash(1,2)+Me*Identity(1,2)
+  denominator: -Me^2+P(1)^2
+- name: mu-_propFeynman
+  particle: mu-
+  numerator: PSlash(1,2)+MM*Identity(1,2)
+  denominator: -MM^2+P(1)^2
+- name: mu+_propFeynman
+  particle: mu+
+  numerator: PSlash(1,2)+MM*Identity(1,2)
+  denominator: -MM^2+P(1)^2
+- name: ta-_propFeynman
+  particle: ta-
+  numerator: PSlash(1,2)+MTA*Identity(1,2)
+  denominator: -MTA^2+P(1)^2
+- name: ta+_propFeynman
+  particle: ta+
+  numerator: PSlash(1,2)+MTA*Identity(1,2)
+  denominator: -MTA^2+P(1)^2
+lorentz_structures:
+- name: UUS1
+  spins:
+  - -1
+  - -1
+  - 1
+  structure: '1'
+- name: UUV1
+  spins:
+  - -1
+  - -1
+  - 3
+  structure: P(3,2)+P(3,3)
+- name: SSS1
+  spins:
+  - 1
+  - 1
+  - 1
+  structure: '1'
+- name: FFS1
+  spins:
+  - 2
+  - 2
+  - 1
+  structure: ProjM(2,1)
+- name: FFS2
+  spins:
+  - 2
+  - 2
+  - 1
+  structure: ProjM(2,1)-ProjP(2,1)
+- name: FFS3
+  spins:
+  - 2
+  - 2
+  - 1
+  structure: ProjP(2,1)
+- name: FFS4
+  spins:
+  - 2
+  - 2
+  - 1
+  structure: ProjM(2,1)+ProjP(2,1)
+- name: FFV1
+  spins:
+  - 2
+  - 2
+  - 3
+  structure: Gamma(3,2,1)
+- name: FFV2
+  spins:
+  - 2
+  - 2
+  - 3
+  structure: ProjM(-1,1)*Gamma(3,2,-1)
+- name: FFV3
+  spins:
+  - 2
+  - 2
+  - 3
+  structure: ProjM(-1,1)*Gamma(3,2,-1)-2*ProjP(-1,1)*Gamma(3,2,-1)
+- name: FFV4
+  spins:
+  - 2
+  - 2
+  - 3
+  structure: ProjM(-1,1)*Gamma(3,2,-1)+2*ProjP(-1,1)*Gamma(3,2,-1)
+- name: FFV5
+  spins:
+  - 2
+  - 2
+  - 3
+  structure: ProjM(-1,1)*Gamma(3,2,-1)+4*ProjP(-1,1)*Gamma(3,2,-1)
+- name: VSS1
+  spins:
+  - 3
+  - 1
+  - 1
+  structure: P(1,2)-P(1,3)
+- name: VVS1
+  spins:
+  - 3
+  - 3
+  - 1
+  structure: Metric(1,2)
+- name: VVV1
+  spins:
+  - 3
+  - 3
+  - 3
+  structure: Metric(1,2)*P(3,1)-Metric(1,2)*P(3,2)-Metric(1,3)*P(2,1)+Metric(1,3)*P(2,3)+Metric(2,3)*P(1,2)-Metric(2,3)*P(1,3)
+- name: SSSS1
+  spins:
+  - 1
+  - 1
+  - 1
+  - 1
+  structure: '1'
+- name: VVSS1
+  spins:
+  - 3
+  - 3
+  - 1
+  - 1
+  structure: Metric(1,2)
+- name: VVVV1
+  spins:
+  - 3
+  - 3
+  - 3
+  - 3
+  structure: -Metric(1,3)*Metric(2,4)+Metric(1,4)*Metric(2,3)
+- name: VVVV2
+  spins:
+  - 3
+  - 3
+  - 3
+  - 3
+  structure: -2*Metric(1,2)*Metric(3,4)+Metric(1,3)*Metric(2,4)+Metric(1,4)*Metric(2,3)
+- name: VVVV3
+  spins:
+  - 3
+  - 3
+  - 3
+  - 3
+  structure: -Metric(1,2)*Metric(3,4)+Metric(1,4)*Metric(2,3)
+- name: VVVV4
+  spins:
+  - 3
+  - 3
+  - 3
+  - 3
+  structure: -Metric(1,2)*Metric(3,4)+Metric(1,3)*Metric(2,4)
+- name: VVVV5
+  spins:
+  - 3
+  - 3
+  - 3
+  - 3
+  structure: -1/2*Metric(1,2)*Metric(3,4)-1/2*Metric(1,3)*Metric(2,4)+Metric(1,4)*Metric(2,3)
+couplings:
+- name: DIS
+  expression: -ee*complex(0,1)
+  value:
+  - 0.0
+  - -0.3079537672443688
+  orders:
+  - - QED
+    - 1
+  - - LT
+    - 1
+- name: GC_1
+  expression: -1/3*ee*complex(0,1)
+  value:
+  - 0.0
+  - -0.10265125574812292
+  orders:
+  - - QED
+    - 1
+- name: GC_2
+  expression: 2/3*ee*complex(0,1)
+  value:
+  - 0.0
+  - 0.20530251149624584
+  orders:
+  - - QED
+    - 1
+- name: GC_3
+  expression: -ee*complex(0,1)
+  value:
+  - 0.0
+  - -0.3079537672443688
+  orders:
+  - - QED
+    - 1
+- name: GC_4
+  expression: ee*complex(0,1)
+  value:
+  - 0.0
+  - 0.3079537672443688
+  orders:
+  - - QED
+    - 1
+- name: GC_5
+  expression: ee^2*complex(0,1)
+  value:
+  - 0.0
+  - 0.09483552275999887
+  orders:
+  - - QED
+    - 2
+- name: GC_6
+  expression: 2*ee^2*complex(0,1)
+  value:
+  - 0.0
+  - 0.18967104551999775
+  orders:
+  - - QED
+    - 2
+- name: GC_7
+  expression: -1/2*ee^2*cw^-1
+  value:
+  - -0.05376752624649809
+  - 0.0
+  orders:
+  - - QED
+    - 2
+- name: GC_8
+  expression: 1/2*ee^2*cw^-1*complex(0,1)
+  value:
+  - 0.0
+  - 0.05376752624649809
+  orders:
+  - - QED
+    - 2
+- name: GC_9
+  expression: 1/2*ee^2*cw^-1
+  value:
+  - 0.05376752624649809
+  - 0.0
+  orders:
+  - - QED
+    - 2
+- name: GC_10
+  expression: -G
+  value:
+  - -1.2177157847767195
+  - 0.0
+  orders:
+  - - QCD
+    - 1
+- name: GC_11
+  expression: G*complex(0,1)
+  value:
+  - 0.0
+  - 1.2177157847767195
+  orders:
+  - - QCD
+    - 1
+- name: GC_12
+  expression: G^2*complex(0,1)
+  value:
+  - 0.0
+  - 1.4828317324943818
+  orders:
+  - - QCD
+    - 2
+- name: GC_15
+  expression: I1x33
+  value:
+  - 0.026995554250465494
+  - 0.0
+  orders:
+  - - QED
+    - 1
+- name: GC_21
+  expression: -I2x33
+  value:
+  - -0.9936661458150063
+  - 0.0
+  orders:
+  - - QED
+    - 1
+- name: GC_27
+  expression: I3x33
+  value:
+  - 0.9936661458150063
+  - 0.0
+  orders:
+  - - QED
+    - 1
+- name: GC_30
+  expression: -I4x33
+  value:
+  - -0.026995554250465494
+  - 0.0
+  orders:
+  - - QED
+    - 1
+- name: GC_31
+  expression: -2*lam*complex(0,1)
+  value:
+  - 0.0
+  - -0.2577382120338054
+  orders:
+  - - QED
+    - 2
+- name: GC_32
+  expression: -4*lam*complex(0,1)
+  value:
+  - 0.0
+  - -0.5154764240676108
+  orders:
+  - - QED
+    - 2
+- name: GC_33
+  expression: -6*lam*complex(0,1)
+  value:
+  - 0.0
+  - -0.7732146361014163
+  orders:
+  - - QED
+    - 2
+- name: GC_34
+  expression: 1/2*ee^2*sw^-2*complex(0,1)
+  value:
+  - 0.0
+  - 0.2133566306452431
+  orders:
+  - - QED
+    - 2
+- name: GC_35
+  expression: -ee^2*sw^-2*complex(0,1)
+  value:
+  - 0.0
+  - -0.4267132612904862
+  orders:
+  - - QED
+    - 2
+- name: GC_36
+  expression: ee^2*cw^2*sw^-2*complex(0,1)
+  value:
+  - 0.0
+  - 0.33187773853048735
+  orders:
+  - - QED
+    - 2
+- name: GC_37
+  expression: -1/2*ee*sw^-1
+  value:
+  - -0.3266164651737899
+  - 0.0
+  orders:
+  - - QED
+    - 1
+- name: GC_38
+  expression: -1/2*ee*sw^-1*complex(0,1)
+  value:
+  - 0.0
+  - -0.3266164651737899
+  orders:
+  - - QED
+    - 1
+- name: GC_39
+  expression: 1/2*ee*sw^-1*complex(0,1)
+  value:
+  - 0.0
+  - 0.3266164651737899
+  orders:
+  - - QED
+    - 1
+- name: GC_40
+  expression: ee*sw^-1*complex(0,1)*(1/2)^(1/2)
+  value:
+  - 0.0
+  - 0.4619054347431334
+  orders:
+  - - QED
+    - 1
+- name: GC_41
+  expression: ee*sw^-1*CKM1x1*complex(0,1)*(1/2)^(1/2)
+  value:
+  - 0.0
+  - 0.4619054347431334
+  orders:
+  - - QED
+    - 1
+- name: GC_45
+  expression: ee*sw^-1*CKM2x2*complex(0,1)*(1/2)^(1/2)
+  value:
+  - 0.0
+  - 0.4619054347431334
+  orders:
+  - - QED
+    - 1
+- name: GC_49
+  expression: ee*sw^-1*CKM3x3*complex(0,1)*(1/2)^(1/2)
+  value:
+  - 0.0
+  - 0.4619054347431334
+  orders:
+  - - QED
+    - 1
+- name: GC_50
+  expression: -1/2*ee*cw*sw^-1*complex(0,1)
+  value:
+  - 0.0
+  - -0.28804415396362726
+  orders:
+  - - QED
+    - 1
+- name: GC_51
+  expression: 1/2*ee*cw*sw^-1*complex(0,1)
+  value:
+  - 0.0
+  - 0.28804415396362726
+  orders:
+  - - QED
+    - 1
+- name: GC_52
+  expression: -ee*cw*sw^-1*complex(0,1)
+  value:
+  - 0.0
+  - -0.5760883079272545
+  orders:
+  - - QED
+    - 1
+- name: GC_53
+  expression: ee*cw*sw^-1*complex(0,1)
+  value:
+  - 0.0
+  - 0.5760883079272545
+  orders:
+  - - QED
+    - 1
+- name: GC_54
+  expression: -1/2*ee^2*sw^-1
+  value:
+  - -0.1005827708943078
+  - 0.0
+  orders:
+  - - QED
+    - 2
+- name: GC_55
+  expression: -1/2*ee^2*sw^-1*complex(0,1)
+  value:
+  - 0.0
+  - -0.1005827708943078
+  orders:
+  - - QED
+    - 2
+- name: GC_56
+  expression: 1/2*ee^2*sw^-1
+  value:
+  - 0.1005827708943078
+  - 0.0
+  orders:
+  - - QED
+    - 2
+- name: GC_57
+  expression: -2*ee^2*cw*sw^-1*complex(0,1)
+  value:
+  - 0.0
+  - -0.354817129383264
+  orders:
+  - - QED
+    - 2
+- name: GC_58
+  expression: -1/6*ee*cw^-1*sw*complex(0,1)
+  value:
+  - 0.0
+  - -0.02743662775741614
+  orders:
+  - - QED
+    - 1
+- name: GC_59
+  expression: 1/2*ee*cw^-1*sw*complex(0,1)
+  value:
+  - 0.0
+  - 0.08230988327224842
+  orders:
+  - - QED
+    - 1
+- name: GC_60
+  expression: -1/2*ee*cw*sw^-1-1/2*ee*cw^-1*sw
+  value:
+  - -0.3703540372358757
+  - 0.0
+  orders:
+  - - QED
+    - 1
+- name: GC_61
+  expression: -1/2*ee*cw*sw^-1*complex(0,1)+1/2*ee*cw^-1*sw*complex(0,1)
+  value:
+  - 0.0
+  - -0.20573427069137884
+  orders:
+  - - QED
+    - 1
+- name: GC_62
+  expression: 1/2*ee*cw*sw^-1*complex(0,1)+1/2*ee*cw^-1*sw*complex(0,1)
+  value:
+  - 0.0
+  - 0.3703540372358757
+  orders:
+  - - QED
+    - 1
+- name: GC_63
+  expression: ee^2*cw*sw^-1*complex(0,1)-ee^2*cw^-1*sw*complex(0,1)
+  value:
+  - 0.0
+  - 0.12671328742136567
+  orders:
+  - - QED
+    - 2
+- name: GC_64
+  expression: -ee^2*complex(0,1)+1/2*ee^2*cw^-2*sw^2*complex(0,1)+1/2*ee^2*cw^2*sw^-2*complex(0,1)
+  value:
+  - 0.0
+  - 0.08465318027382712
+  orders:
+  - - QED
+    - 2
+- name: GC_65
+  expression: ee^2*complex(0,1)+1/2*ee^2*cw^-2*sw^2*complex(0,1)+1/2*ee^2*cw^2*sw^-2*complex(0,1)
+  value:
+  - 0.0
+  - 0.27432422579382487
+  orders:
+  - - QED
+    - 2
+- name: GC_66
+  expression: -1/2*ee^2*cw^-1*vev
+  value:
+  - -13.238557408361698
+  - 0.0
+  orders:
+  - - QED
+    - 1
+- name: GC_67
+  expression: 1/2*ee^2*cw^-1*vev
+  value:
+  - 13.238557408361698
+  - 0.0
+  orders:
+  - - QED
+    - 1
+- name: GC_68
+  expression: -2*vev*lam*complex(0,1)
+  value:
+  - 0.0
+  - -63.45990516088257
+  orders:
+  - - QED
+    - 1
+- name: GC_69
+  expression: -6*vev*lam*complex(0,1)
+  value:
+  - 0.0
+  - -190.37971548264773
+  orders:
+  - - QED
+    - 1
+- name: GC_70
+  expression: -1/4*ee^2*sw^-2*vev
+  value:
+  - -26.266170311635243
+  - 0.0
+  orders:
+  - - QED
+    - 1
+- name: GC_71
+  expression: -1/4*ee^2*sw^-2*vev*complex(0,1)
+  value:
+  - 0.0
+  - -26.266170311635243
+  orders:
+  - - QED
+    - 1
+- name: GC_72
+  expression: 1/2*ee^2*sw^-2*vev*complex(0,1)
+  value:
+  - 0.0
+  - 52.532340623270485
+  orders:
+  - - QED
+    - 1
+- name: GC_73
+  expression: 1/4*ee^2*sw^-2*vev
+  value:
+  - 26.266170311635243
+  - 0.0
+  orders:
+  - - QED
+    - 1
+- name: GC_74
+  expression: -1/2*ee^2*sw^-1*vev
+  value:
+  - -24.765334761204713
+  - 0.0
+  orders:
+  - - QED
+    - 1
+- name: GC_75
+  expression: 1/2*ee^2*sw^-1*vev
+  value:
+  - 24.765334761204713
+  - 0.0
+  orders:
+  - - QED
+    - 1
+- name: GC_76
+  expression: -1/4*ee^2*cw^-1*vev-1/4*ee^2*cw*sw^-2*vev
+  value:
+  - -29.783502226267554
+  - 0.0
+  orders:
+  - - QED
+    - 1
+- name: GC_77
+  expression: 1/4*ee^2*cw^-1*vev-1/4*ee^2*cw*sw^-2*vev
+  value:
+  - -16.544944817905854
+  - 0.0
+  orders:
+  - - QED
+    - 1
+- name: GC_78
+  expression: -1/4*ee^2*cw^-1*vev+1/4*ee^2*cw*sw^-2*vev
+  value:
+  - 16.544944817905854
+  - 0.0
+  orders:
+  - - QED
+    - 1
+- name: GC_79
+  expression: 1/4*ee^2*cw^-1*vev+1/4*ee^2*cw*sw^-2*vev
+  value:
+  - 29.783502226267554
+  - 0.0
+  orders:
+  - - QED
+    - 1
+- name: GC_80
+  expression: -1/2*ee^2*vev*complex(0,1)-1/4*ee^2*cw^-2*sw^2*vev*complex(0,1)-1/4*ee^2*cw^2*sw^-2*vev*complex(0,1)
+  value:
+  - 0.0
+  - -33.77184394746503
+  orders:
+  - - QED
+    - 1
+- name: GC_81
+  expression: ee^2*vev*complex(0,1)+1/2*ee^2*cw^-2*sw^2*vev*complex(0,1)+1/2*ee^2*cw^2*sw^-2*vev*complex(0,1)
+  value:
+  - 0.0
+  - 67.54368789493006
+  orders:
+  - - QED
+    - 1
+- name: GC_82
+  expression: -yb*(1/2)^(1/2)
+  value:
+  - -0.01908873947239348
+  - 0.0
+  orders:
+  - - QED
+    - 1
+- name: GC_83
+  expression: -yb*complex(0,1)*(1/2)^(1/2)
+  value:
+  - 0.0
+  - -0.01908873947239348
+  orders:
+  - - QED
+    - 1
+- name: GC_94
+  expression: -yt*complex(0,1)*(1/2)^(1/2)
+  value:
+  - 0.0
+  - -0.7026280699412918
+  orders:
+  - - QED
+    - 1
+- name: GC_95
+  expression: yt*(1/2)^(1/2)
+  value:
+  - 0.7026280699412918
+  - 0.0
+  orders:
+  - - QED
+    - 1
+- name: GC_96
+  expression: -ytau
+  value:
+  - -0.010206617000654719
+  - 0.0
+  orders:
+  - - QED
+    - 1
+- name: GC_97
+  expression: ytau
+  value:
+  - 0.010206617000654719
+  - 0.0
+  orders:
+  - - QED
+    - 1
+- name: GC_98
+  expression: -ytau*(1/2)^(1/2)
+  value:
+  - -0.007217168094136852
+  - 0.0
+  orders:
+  - - QED
+    - 1
+- name: GC_99
+  expression: -ytau*complex(0,1)*(1/2)^(1/2)
+  value:
+  - 0.0
+  - -0.007217168094136852
+  orders:
+  - - QED
+    - 1
+- name: GC_100
+  expression: ee*sw^-1*complex(0,1)*complexconjugate(CKM1x1)*(1/2)^(1/2)
+  value:
+  - 0.0
+  - 0.4619054347431334
+  orders:
+  - - QED
+    - 1
+- name: GC_104
+  expression: ee*sw^-1*complex(0,1)*complexconjugate(CKM2x2)*(1/2)^(1/2)
+  value:
+  - 0.0
+  - 0.4619054347431334
+  orders:
+  - - QED
+    - 1
+- name: GC_108
+  expression: ee*sw^-1*complex(0,1)*complexconjugate(CKM3x3)*(1/2)^(1/2)
+  value:
+  - 0.0
+  - 0.4619054347431334
+  orders:
+  - - QED
+    - 1
+vertex_rules:
+- name: V_1
+  particles:
+  - G0
+  - G0
+  - G0
+  - G0
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - SSSS1
+  couplings:
+  - - GC_33
+- name: V_2
+  particles:
+  - G0
+  - G0
+  - G-
+  - G+
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - SSSS1
+  couplings:
+  - - GC_31
+- name: V_3
+  particles:
+  - G-
+  - G-
+  - G+
+  - G+
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - SSSS1
+  couplings:
+  - - GC_32
+- name: V_4
+  particles:
+  - G0
+  - G0
+  - H
+  - H
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - SSSS1
+  couplings:
+  - - GC_31
+- name: V_5
+  particles:
+  - G-
+  - G+
+  - H
+  - H
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - SSSS1
+  couplings:
+  - - GC_31
+- name: V_6
+  particles:
+  - H
+  - H
+  - H
+  - H
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - SSSS1
+  couplings:
+  - - GC_33
+- name: V_7
+  particles:
+  - G0
+  - G0
+  - H
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - SSS1
+  couplings:
+  - - GC_68
+- name: V_8
+  particles:
+  - G-
+  - G+
+  - H
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - SSS1
+  couplings:
+  - - GC_68
+- name: V_9
+  particles:
+  - H
+  - H
+  - H
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - SSS1
+  couplings:
+  - - GC_69
+- name: V_10
+  particles:
+  - a
+  - a
+  - G-
+  - G+
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - VVSS1
+  couplings:
+  - - GC_6
+- name: V_11
+  particles:
+  - a
+  - G-
+  - G+
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - VSS1
+  couplings:
+  - - GC_3
+- name: V_12
+  particles:
+  - ghA
+  - ghWm~
+  - W-
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - UUV1
+  couplings:
+  - - GC_3
+- name: V_13
+  particles:
+  - ghA
+  - ghWp~
+  - W+
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - UUV1
+  couplings:
+  - - GC_4
+- name: V_14
+  particles:
+  - ghWm
+  - ghA~
+  - G+
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - UUS1
+  couplings:
+  - - GC_75
+- name: V_15
+  particles:
+  - ghWm
+  - ghA~
+  - W+
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - UUV1
+  couplings:
+  - - GC_3
+- name: V_16
+  particles:
+  - ghWm
+  - ghWm~
+  - G0
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - UUS1
+  couplings:
+  - - GC_70
+- name: V_17
+  particles:
+  - ghWm
+  - ghWm~
+  - H
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - UUS1
+  couplings:
+  - - GC_71
+- name: V_18
+  particles:
+  - ghWm
+  - ghWm~
+  - a
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - UUV1
+  couplings:
+  - - GC_4
+- name: V_19
+  particles:
+  - ghWm
+  - ghWm~
+  - Z
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - UUV1
+  couplings:
+  - - GC_53
+- name: V_20
+  particles:
+  - ghWm
+  - ghZ~
+  - G+
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - UUS1
+  couplings:
+  - - GC_78
+- name: V_21
+  particles:
+  - ghWm
+  - ghZ~
+  - W+
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - UUV1
+  couplings:
+  - - GC_52
+- name: V_22
+  particles:
+  - ghWp
+  - ghA~
+  - G-
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - UUS1
+  couplings:
+  - - GC_74
+- name: V_23
+  particles:
+  - ghWp
+  - ghA~
+  - W-
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - UUV1
+  couplings:
+  - - GC_4
+- name: V_24
+  particles:
+  - ghWp
+  - ghWp~
+  - G0
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - UUS1
+  couplings:
+  - - GC_73
+- name: V_25
+  particles:
+  - ghWp
+  - ghWp~
+  - H
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - UUS1
+  couplings:
+  - - GC_71
+- name: V_26
+  particles:
+  - ghWp
+  - ghWp~
+  - a
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - UUV1
+  couplings:
+  - - GC_3
+- name: V_27
+  particles:
+  - ghWp
+  - ghWp~
+  - Z
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - UUV1
+  couplings:
+  - - GC_52
+- name: V_28
+  particles:
+  - ghWp
+  - ghZ~
+  - G-
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - UUS1
+  couplings:
+  - - GC_77
+- name: V_29
+  particles:
+  - ghWp
+  - ghZ~
+  - W-
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - UUV1
+  couplings:
+  - - GC_53
+- name: V_30
+  particles:
+  - ghZ
+  - ghWm~
+  - G-
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - UUS1
+  couplings:
+  - - GC_79
+- name: V_31
+  particles:
+  - ghZ
+  - ghWm~
+  - W-
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - UUV1
+  couplings:
+  - - GC_52
+- name: V_32
+  particles:
+  - ghZ
+  - ghWp~
+  - G+
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - UUS1
+  couplings:
+  - - GC_76
+- name: V_33
+  particles:
+  - ghZ
+  - ghWp~
+  - W+
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - UUV1
+  couplings:
+  - - GC_53
+- name: V_34
+  particles:
+  - ghZ
+  - ghZ~
+  - H
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - UUS1
+  couplings:
+  - - GC_80
+- name: V_35
+  particles:
+  - ghG
+  - ghG~
+  - g
+  color_structures:
+  - f(1,2,3)
+  lorentz_structures:
+  - UUV1
+  couplings:
+  - - GC_10
+- name: V_36
+  particles:
+  - g
+  - g
+  - g
+  color_structures:
+  - f(1,2,3)
+  lorentz_structures:
+  - VVV1
+  couplings:
+  - - GC_10
+- name: V_37
+  particles:
+  - g
+  - g
+  - g
+  - g
+  color_structures:
+  - f(3,4,-1)*f(-1,1,2)
+  - f(2,4,-1)*f(-1,1,3)
+  - f(2,3,-1)*f(-1,1,4)
+  lorentz_structures:
+  - VVVV1
+  - VVVV3
+  - VVVV4
+  couplings:
+  - - GC_12
+    - null
+    - null
+  - - null
+    - GC_12
+    - null
+  - - null
+    - null
+    - GC_12
+- name: V_38
+  particles:
+  - a
+  - W-
+  - G0
+  - G+
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - VVSS1
+  couplings:
+  - - GC_55
+- name: V_39
+  particles:
+  - a
+  - W-
+  - G+
+  - H
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - VVSS1
+  couplings:
+  - - GC_54
+- name: V_40
+  particles:
+  - a
+  - W-
+  - G+
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - VVS1
+  couplings:
+  - - GC_74
+- name: V_41
+  particles:
+  - W-
+  - G0
+  - G+
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - VSS1
+  couplings:
+  - - GC_39
+- name: V_42
+  particles:
+  - W-
+  - G+
+  - H
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - VSS1
+  couplings:
+  - - GC_37
+- name: V_43
+  particles:
+  - a
+  - W-
+  - W+
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - VVV1
+  couplings:
+  - - GC_4
+- name: V_44
+  particles:
+  - a
+  - W+
+  - G0
+  - G-
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - VVSS1
+  couplings:
+  - - GC_55
+- name: V_45
+  particles:
+  - a
+  - W+
+  - G-
+  - H
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - VVSS1
+  couplings:
+  - - GC_56
+- name: V_46
+  particles:
+  - a
+  - W+
+  - G-
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - VVS1
+  couplings:
+  - - GC_75
+- name: V_47
+  particles:
+  - W+
+  - G0
+  - G-
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - VSS1
+  couplings:
+  - - GC_38
+- name: V_48
+  particles:
+  - W+
+  - G-
+  - H
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - VSS1
+  couplings:
+  - - GC_37
+- name: V_49
+  particles:
+  - W-
+  - W+
+  - G0
+  - G0
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - VVSS1
+  couplings:
+  - - GC_34
+- name: V_50
+  particles:
+  - W-
+  - W+
+  - G-
+  - G+
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - VVSS1
+  couplings:
+  - - GC_34
+- name: V_51
+  particles:
+  - W-
+  - W+
+  - H
+  - H
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - VVSS1
+  couplings:
+  - - GC_34
+- name: V_52
+  particles:
+  - W-
+  - W+
+  - H
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - VVS1
+  couplings:
+  - - GC_72
+- name: V_53
+  particles:
+  - a
+  - a
+  - W-
+  - W+
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - VVVV2
+  couplings:
+  - - GC_5
+- name: V_54
+  particles:
+  - W-
+  - W+
+  - Z
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - VVV1
+  couplings:
+  - - GC_53
+- name: V_55
+  particles:
+  - W-
+  - W-
+  - W+
+  - W+
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - VVVV2
+  couplings:
+  - - GC_35
+- name: V_56
+  particles:
+  - a
+  - Z
+  - G-
+  - G+
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - VVSS1
+  couplings:
+  - - GC_63
+- name: V_57
+  particles:
+  - Z
+  - G0
+  - H
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - VSS1
+  couplings:
+  - - GC_60
+- name: V_58
+  particles:
+  - Z
+  - G-
+  - G+
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - VSS1
+  couplings:
+  - - GC_61
+- name: V_59
+  particles:
+  - W-
+  - Z
+  - G0
+  - G+
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - VVSS1
+  couplings:
+  - - GC_8
+- name: V_60
+  particles:
+  - W-
+  - Z
+  - G+
+  - H
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - VVSS1
+  couplings:
+  - - GC_9
+- name: V_61
+  particles:
+  - W-
+  - Z
+  - G+
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - VVS1
+  couplings:
+  - - GC_67
+- name: V_62
+  particles:
+  - W+
+  - Z
+  - G0
+  - G-
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - VVSS1
+  couplings:
+  - - GC_8
+- name: V_63
+  particles:
+  - W+
+  - Z
+  - G-
+  - H
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - VVSS1
+  couplings:
+  - - GC_7
+- name: V_64
+  particles:
+  - W+
+  - Z
+  - G-
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - VVS1
+  couplings:
+  - - GC_66
+- name: V_65
+  particles:
+  - a
+  - W-
+  - W+
+  - Z
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - VVVV5
+  couplings:
+  - - GC_57
+- name: V_66
+  particles:
+  - Z
+  - Z
+  - G0
+  - G0
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - VVSS1
+  couplings:
+  - - GC_65
+- name: V_67
+  particles:
+  - Z
+  - Z
+  - G-
+  - G+
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - VVSS1
+  couplings:
+  - - GC_64
+- name: V_68
+  particles:
+  - Z
+  - Z
+  - H
+  - H
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - VVSS1
+  couplings:
+  - - GC_65
+- name: V_69
+  particles:
+  - Z
+  - Z
+  - H
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - VVS1
+  couplings:
+  - - GC_81
+- name: V_70
+  particles:
+  - W-
+  - W+
+  - Z
+  - Z
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - VVVV2
+  couplings:
+  - - GC_36
+- name: V_71
+  particles:
+  - d~
+  - d
+  - a
+  color_structures:
+  - Identity(1,2)
+  lorentz_structures:
+  - FFV1
+  couplings:
+  - - GC_1
+- name: V_72
+  particles:
+  - s~
+  - s
+  - a
+  color_structures:
+  - Identity(1,2)
+  lorentz_structures:
+  - FFV1
+  couplings:
+  - - GC_1
+- name: V_73
+  particles:
+  - b~
+  - b
+  - a
+  color_structures:
+  - Identity(1,2)
+  lorentz_structures:
+  - FFV1
+  couplings:
+  - - GC_1
+- name: V_74
+  particles:
+  - d~
+  - d
+  - g
+  color_structures:
+  - T(3,2,1)
+  lorentz_structures:
+  - FFV1
+  couplings:
+  - - GC_11
+- name: V_75
+  particles:
+  - s~
+  - s
+  - g
+  color_structures:
+  - T(3,2,1)
+  lorentz_structures:
+  - FFV1
+  couplings:
+  - - GC_11
+- name: V_76
+  particles:
+  - b~
+  - b
+  - g
+  color_structures:
+  - T(3,2,1)
+  lorentz_structures:
+  - FFV1
+  couplings:
+  - - GC_11
+- name: V_77
+  particles:
+  - b~
+  - b
+  - G0
+  color_structures:
+  - Identity(1,2)
+  lorentz_structures:
+  - FFS2
+  couplings:
+  - - GC_82
+- name: V_78
+  particles:
+  - b~
+  - b
+  - H
+  color_structures:
+  - Identity(1,2)
+  lorentz_structures:
+  - FFS4
+  couplings:
+  - - GC_83
+- name: V_79
+  particles:
+  - d~
+  - d
+  - Z
+  color_structures:
+  - Identity(1,2)
+  lorentz_structures:
+  - FFV2
+  - FFV3
+  couplings:
+  - - GC_50
+    - GC_58
+- name: V_80
+  particles:
+  - s~
+  - s
+  - Z
+  color_structures:
+  - Identity(1,2)
+  lorentz_structures:
+  - FFV2
+  - FFV3
+  couplings:
+  - - GC_50
+    - GC_58
+- name: V_81
+  particles:
+  - b~
+  - b
+  - Z
+  color_structures:
+  - Identity(1,2)
+  lorentz_structures:
+  - FFV2
+  - FFV3
+  couplings:
+  - - GC_50
+    - GC_58
+- name: V_88
+  particles:
+  - t~
+  - b
+  - G+
+  color_structures:
+  - Identity(1,2)
+  lorentz_structures:
+  - FFS1
+  - FFS3
+  couplings:
+  - - GC_15
+    - GC_21
+- name: V_89
+  particles:
+  - u~
+  - d
+  - W+
+  color_structures:
+  - Identity(1,2)
+  lorentz_structures:
+  - FFV2
+  couplings:
+  - - GC_100
+- name: V_93
+  particles:
+  - c~
+  - s
+  - W+
+  color_structures:
+  - Identity(1,2)
+  lorentz_structures:
+  - FFV2
+  couplings:
+  - - GC_104
+- name: V_97
+  particles:
+  - t~
+  - b
+  - W+
+  color_structures:
+  - Identity(1,2)
+  lorentz_structures:
+  - FFV2
+  couplings:
+  - - GC_108
+- name: V_98
+  particles:
+  - e+
+  - e-
+  - a
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - FFV1
+  couplings:
+  - - DIS
+- name: V_99
+  particles:
+  - mu+
+  - mu-
+  - a
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - FFV1
+  couplings:
+  - - GC_3
+- name: V_100
+  particles:
+  - ta+
+  - ta-
+  - a
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - FFV1
+  couplings:
+  - - GC_3
+- name: V_103
+  particles:
+  - ta+
+  - ta-
+  - G0
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - FFS2
+  couplings:
+  - - GC_98
+- name: V_106
+  particles:
+  - ta+
+  - ta-
+  - H
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - FFS4
+  couplings:
+  - - GC_99
+- name: V_107
+  particles:
+  - e+
+  - e-
+  - Z
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - FFV2
+  - FFV4
+  couplings:
+  - - GC_50
+    - GC_59
+- name: V_108
+  particles:
+  - mu+
+  - mu-
+  - Z
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - FFV2
+  - FFV4
+  couplings:
+  - - GC_50
+    - GC_59
+- name: V_109
+  particles:
+  - ta+
+  - ta-
+  - Z
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - FFV2
+  - FFV4
+  couplings:
+  - - GC_50
+    - GC_59
+- name: V_112
+  particles:
+  - vt~
+  - ta-
+  - G+
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - FFS1
+  couplings:
+  - - GC_97
+- name: V_113
+  particles:
+  - ve~
+  - e-
+  - W+
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - FFV2
+  couplings:
+  - - GC_40
+- name: V_114
+  particles:
+  - vm~
+  - mu-
+  - W+
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - FFV2
+  couplings:
+  - - GC_40
+- name: V_115
+  particles:
+  - vt~
+  - ta-
+  - W+
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - FFV2
+  couplings:
+  - - GC_40
+- name: V_122
+  particles:
+  - b~
+  - t
+  - G-
+  color_structures:
+  - Identity(1,2)
+  lorentz_structures:
+  - FFS1
+  - FFS3
+  couplings:
+  - - GC_27
+    - GC_30
+- name: V_123
+  particles:
+  - d~
+  - u
+  - W-
+  color_structures:
+  - Identity(1,2)
+  lorentz_structures:
+  - FFV2
+  couplings:
+  - - GC_41
+- name: V_127
+  particles:
+  - s~
+  - c
+  - W-
+  color_structures:
+  - Identity(1,2)
+  lorentz_structures:
+  - FFV2
+  couplings:
+  - - GC_45
+- name: V_131
+  particles:
+  - b~
+  - t
+  - W-
+  color_structures:
+  - Identity(1,2)
+  lorentz_structures:
+  - FFV2
+  couplings:
+  - - GC_49
+- name: V_132
+  particles:
+  - u~
+  - u
+  - a
+  color_structures:
+  - Identity(1,2)
+  lorentz_structures:
+  - FFV1
+  couplings:
+  - - GC_2
+- name: V_133
+  particles:
+  - c~
+  - c
+  - a
+  color_structures:
+  - Identity(1,2)
+  lorentz_structures:
+  - FFV1
+  couplings:
+  - - GC_2
+- name: V_134
+  particles:
+  - t~
+  - t
+  - a
+  color_structures:
+  - Identity(1,2)
+  lorentz_structures:
+  - FFV1
+  couplings:
+  - - GC_2
+- name: V_135
+  particles:
+  - u~
+  - u
+  - g
+  color_structures:
+  - T(3,2,1)
+  lorentz_structures:
+  - FFV1
+  couplings:
+  - - GC_11
+- name: V_136
+  particles:
+  - c~
+  - c
+  - g
+  color_structures:
+  - T(3,2,1)
+  lorentz_structures:
+  - FFV1
+  couplings:
+  - - GC_11
+- name: V_137
+  particles:
+  - t~
+  - t
+  - g
+  color_structures:
+  - T(3,2,1)
+  lorentz_structures:
+  - FFV1
+  couplings:
+  - - GC_11
+- name: V_139
+  particles:
+  - t~
+  - t
+  - G0
+  color_structures:
+  - Identity(1,2)
+  lorentz_structures:
+  - FFS2
+  couplings:
+  - - GC_95
+- name: V_141
+  particles:
+  - t~
+  - t
+  - H
+  color_structures:
+  - Identity(1,2)
+  lorentz_structures:
+  - FFS4
+  couplings:
+  - - GC_94
+- name: V_142
+  particles:
+  - u~
+  - u
+  - Z
+  color_structures:
+  - Identity(1,2)
+  lorentz_structures:
+  - FFV2
+  - FFV5
+  couplings:
+  - - GC_51
+    - GC_58
+- name: V_143
+  particles:
+  - c~
+  - c
+  - Z
+  color_structures:
+  - Identity(1,2)
+  lorentz_structures:
+  - FFV2
+  - FFV5
+  couplings:
+  - - GC_51
+    - GC_58
+- name: V_144
+  particles:
+  - t~
+  - t
+  - Z
+  color_structures:
+  - Identity(1,2)
+  lorentz_structures:
+  - FFV2
+  - FFV5
+  couplings:
+  - - GC_51
+    - GC_58
+- name: V_147
+  particles:
+  - ta+
+  - vt
+  - G-
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - FFS3
+  couplings:
+  - - GC_96
+- name: V_148
+  particles:
+  - e+
+  - ve
+  - W-
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - FFV2
+  couplings:
+  - - GC_40
+- name: V_149
+  particles:
+  - mu+
+  - vm
+  - W-
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - FFV2
+  couplings:
+  - - GC_40
+- name: V_150
+  particles:
+  - ta+
+  - vt
+  - W-
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - FFV2
+  couplings:
+  - - GC_40
+- name: V_151
+  particles:
+  - ve~
+  - ve
+  - Z
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - FFV2
+  couplings:
+  - - GC_62
+- name: V_152
+  particles:
+  - vm~
+  - vm
+  - Z
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - FFV2
+  couplings:
+  - - GC_62
+- name: V_153
+  particles:
+  - vt~
+  - vt
+  - Z
+  color_structures:
+  - '1'
+  lorentz_structures:
+  - FFV2
+  couplings:
+  - - GC_62

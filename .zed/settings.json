@@ -6,8 +6,12 @@
   "shell": {
     "program": "bash"
   },
-  "ui_font_family": "Iosevka-Custom-Heavy",
-  "buffer_font_family": "Iosevka-Custom-Heavy",
+  "inlay_hints": {
+    "enabled": true,
+    "show_type_hints": true,
+    "show_parameter_hints": false,
+    "show_other_hints": true
+  },
   "lsp": {
     "rust-analyzer": {
       "initialization_options": {
@@ -16,27 +20,25 @@
           "maxLength": null,
           "lifetimeElisionHints": {
             "useParameterNames": true,
-            "enable": "skip_trivial"
+            "enable": "never"
           },
           "closureReturnTypeHints": {
             "enable": "always"
           }
         },
         "cargo": {
-          // "features": "all"
+          "features": "none"
         },
         "diagnostics": {
           "experimental": {
             "enable": true
           }
         },
-        // To disable the checking entirely
-        // (ignores all cargo and check settings below)
         "checkOnSave": true,
         "check": {
           "onSave": true,
           "features": [],
-          "command": "clippy"
+          "command": "check"
         }
       }
     }

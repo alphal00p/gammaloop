@@ -729,14 +729,13 @@ class Model(object):
                     sorted_parameters.append(
                         remaining_parameters.pop(remaining_parameters.index(p)))
 
-        x_ = SBE.symbol('x_')
         param_variables: dict[str, dict[str, Any]] = {
             p.name: {
                 'var': SBE.symbol(p.name),
-                'dependent_params': [m[x_]  # type: ignore
-                                     for m in p.expression.match(x_, x_.req_type(AtomType.Var))]
+                'dependent_params': p.expression.get_all_symbols(False)
             } for p in remaining_parameters if p.expression is not None
         }
+
 
         while len(remaining_parameters) > 0:
             n_added: int = 0
