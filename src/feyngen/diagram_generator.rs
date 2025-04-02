@@ -67,6 +67,7 @@ use linnet::half_edge::NodeIndex;
 use symbolica::{atom::Atom, graph::Graph as SymbolicaGraph};
 
 const CANONIZE_GRAPH_FLOWS: bool = true;
+const ANALYZE_RATIO_AS_RATIONAL_POLYNOMIAL: bool = true;
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct NodeColorWithVertexRule {
     pub external_tag: i32,
@@ -3958,10 +3959,7 @@ impl FeynGen {
                                         None
                                     } else {
                                         let mut ratio = a / b;
-                                        if !grouping_options
-                                            .fully_numerical_substitution_when_comparing_numerators
-                                        {
-                                            // In that case we may have a non trivial representation of `a` and `b` that require to be normalized as a rational polynomial so that the various ratios match
+                                        if ANALYZE_RATIO_AS_RATIONAL_POLYNOMIAL {
                                             ratio = ratio
                                                 .to_rational_polynomial::<_, _, u8>(
                                                     &symbolica::domains::rational::Q,
@@ -3970,7 +3968,6 @@ impl FeynGen {
                                                 )
                                                 .to_expression();
                                         } else {
-                                            // When fully numerical samples have been considered for the comparison, we should only need the much cheaper expand() operation on the resulting ratio
                                             ratio = ratio.expand();
                                         }
                                         Some(ratio)
@@ -4139,7 +4136,7 @@ impl FeynGen {
         for (src, trgt) in replacements {
             res = res.replace_all(&src.to_pattern(), trgt.to_pattern(), None, None);
         }
-        res.expand()
+        res
     }
 
     fn cross_section_external_fermion_ordering_sign(
@@ -4412,7 +4409,7 @@ impl ProcessedNumeratorForComparison {
                             if grouping_options
                                 .fully_numerical_substitution_when_comparing_numerators
                             {
-                                FeynGen::substitute_color_factors(a.0.as_atom_view())
+                                FeynGen::substitute_color_factors(a.0.as_atom_view()).expand()
                             } else {
                                 a.0.to_owned()
                             }

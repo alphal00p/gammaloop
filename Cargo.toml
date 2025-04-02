@@ -48,9 +48,10 @@ similar.opt-level = 3
 symbolica = { version = "0.14.0" }
 
 spenso = { version = "0.4.0", features = ["shadowing"] }
-linnet = {version = "0.2.0", features = [
+linnet = { version = "0.2.0", features = [
     # "symbolica",
-    "drawing",]}
+    "drawing",
+] }
 
 
 momtrop = { git = "https://github.com/alphal00p/momtrop", features = ["log"] }
@@ -122,7 +123,7 @@ fern = "0.7.1"
 chrono = "0.4.39"
 
 [dependencies.pyo3]
-features = ["multiple-pymethods"]
+features = ["abi3", "abi3-py37"]
 optional = true
 version = "0.21"
 
@@ -139,7 +140,7 @@ name = "cli"
 # required-features = ["binary"]
 bench = false
 [features]
-default = ["python_api", "fjcore"]
+default = ["python_api"]
 extension-module = ["pyo3/extension-module"]
 higher_loops = []
 fjcore = []

@@ -1484,15 +1484,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "inventory"
-version = "0.3.20"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ab08d7cd2c5897f2c949e5383ea7c7db03fb19130ffcfbf7eda795137ae3cb83"
-dependencies = [
- "rustversion",
-]
-
-[[package]]
 name = "is-terminal"
 version = "0.4.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2299,7 +2290,6 @@ checksum = "a5e00b96a521718e08e03b1a622f01c8a8deb50719335de3f60b3b3950f069d8"
 dependencies = [
  "cfg-if",
  "indoc",
- "inventory",
  "libc",
  "memoffset",
  "parking_lot",

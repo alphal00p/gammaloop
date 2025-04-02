@@ -196,19 +196,19 @@ def parse_python_expression_safe(expr: str) -> sb.Expression:
     return sb_expr_processed
 
 
-def expression_to_string(expr: sb.Expression | None) -> str | None:
+def expression_to_string(expr: sb.Expression | None, canonical=False) -> str | None:
     if expr is None:
         return None
     try:
-        return expression_to_string_safe(expr)
+        return expression_to_string_safe(expr, canonical)
     except Exception as exception:  # pylint: disable=broad-except
         common.logger.critical("%s", exception)
         return None
 
 
-def expression_to_string_safe(expr: sb.Expression) -> str:
+def expression_to_string_safe(expr: sb.Expression, canonical=False) -> str:
     try:
-        return expr.format(
+        expr_str = expr.format(
             terms_on_new_line=False,
             color_top_level_sum=False,
             color_builtin_symbols=False,
@@ -219,6 +219,10 @@ def expression_to_string_safe(expr: sb.Expression) -> str:
             square_brackets_for_function=False,
             num_exp_as_superscript=False,
             latex=False)
+        if canonical:
+            return gl_rust.atom_to_canonical_string(expr_str)
+        else:
+            return expr_str
     except Exception as exception:  # pylint: disable=broad-except
         raise common.GammaLoopError(
             "Symbolica (@%s)failed to cast expression to string:\n%s\nwith exception:\n%s", sb.__file__, expr, exception)
