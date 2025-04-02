@@ -9,10 +9,13 @@ from symbolica import Expression, E
 
 USE_SNAPSHOT_TESTS = True
 if USE_SNAPSHOT_TESTS:
-    from inline_snapshot import snapshot  # type: ignore
+    try:
+        from inline_snapshot import snapshot  # type: ignore
+    except ImportError:
+        USE_SNAPSHOT_TESTS = False
+        def snapshot(target): return target  # type: ignore
 else:
-    def snapshot(target):  # type: ignore
-        return target
+    def snapshot(target): return target  # type: ignore
 
 
 class TestProcessGeneration:
