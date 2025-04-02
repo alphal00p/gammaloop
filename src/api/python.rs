@@ -35,11 +35,12 @@ use std::{
     str::FromStr,
     sync::{LazyLock, Mutex},
 };
+
 use symbolica::{
     atom::{Atom, AtomCore},
     printer::PrintOptions,
 };
-const GIT_VERSION: &str = git_version!();
+const GIT_VERSION: &str = git_version!(fallback = "unavailable");
 
 #[allow(unused)]
 use pyo3::{
