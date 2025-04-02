@@ -284,7 +284,7 @@ class Edge(object):
              arc_max_distance: float = 1., external_legs_tension: float = 3., default_tension: float = 1.0, line_width: float = 1.0,
              arrow_size_for_single_line: float = 2.5, arrow_size_for_double_line: float = 2.5, line_color: str = 'black', label_color: str = 'black', lmb_color: str = 'red', non_lmb_color: str = 'blue', **_opts: Any) -> list[str]:
         constant_definitions['arcMaxDistance'] = f'{arc_max_distance:.2f}'
-        constant_definitions['externalLegTension'] = f'{external_legs_tension:.2f}'
+        constant_definitions['externalLegTension'] = f'{external_legs_tension:.2f}'  # nopep8
         constant_definitions['defaultTension'] = f'{default_tension:.2f}'
         constant_definitions['lineWidth'] = f'{line_width:.2f}'
         constant_definitions['lineColor'] = line_color
@@ -293,7 +293,7 @@ class Edge(object):
         constant_definitions['labelSize'] = label_size
         constant_definitions['nonLmbColor'] = non_lmb_color
         constant_definitions['arrowSize'] = f'{arrow_size_for_single_line:.2f}'
-        constant_definitions['doubleArrowSize'] = f'{arrow_size_for_double_line:.2f}'
+        constant_definitions['doubleArrowSize'] = f'{arrow_size_for_double_line:.2f}'  # nopep8
         constant_definitions['labelDistance'] = f'{label_distance:.2f}'
 
         template_line = r'\efmf{%(line_type)s%(comma)s%(options)s}{%(left_vertex)s,%(right_vertex)s}'
@@ -441,8 +441,8 @@ class Edge(object):
 
         replace_dict = {}
         replace_dict['line_type'] = line_type.replace('_arrow', '')
-        replace_dict['left_vertex'] = f'v{graph.get_vertex_position(self.vertices[0].name)}'
-        replace_dict['right_vertex'] = f'v{graph.get_vertex_position(self.vertices[1].name)}'
+        replace_dict['left_vertex'] = f'v{graph.get_vertex_position(self.vertices[0].name)}'  # nopep8
+        replace_dict['right_vertex'] = f'v{graph.get_vertex_position(self.vertices[1].name)}'  # nopep8
         replace_dict['options'] = ','.join(
             f'{k}={v}' for k, v in line_options.items())
         replace_dict['comma'] = ',' if len(replace_dict['options']) > 0 else ''
@@ -1096,8 +1096,16 @@ class Graph(object):
             replace_dict['label'] = replace_dict['graph_name']
         replace_dict['label'] += f" {diagram_id}" if diagram_id else ''
         replace_dict['layout'] = drawing_options['layout']
-        replace_dict['graph_options'] = ','.join(
-            f"{o}={str(v)}" for o, v in drawing_options['graph_options'].items())
+        overall_factor_evaluated_str = utils.expression_to_string(
+            utils.evaluate_graph_overall_factor(self.overall_factor))
+        if drawing_options.get('show_overall_factor', True):
+            replace_dict['label'] += f" x ( {overall_factor_evaluated_str} )"
+        replace_dict['graph_options'] = f'\noverall_factor="{self.overall_factor}",\noverall_factor_evaluated="{overall_factor_evaluated_str}"'  # nopep8
+        if len(drawing_options['graph_options']) == 0:
+            replace_dict['graph_options'] += '\n'
+        else:
+            replace_dict['graph_options'] += ',\n' + ','.join(
+                [f"{o}={str(v)}" for o, v in drawing_options['graph_options'].items()]) + '\n'
         replace_dict['node_options'] = ','.join(
             f"{o}={str(v)}" for o, v in drawing_options['node_options'].items())
         edge_options = dict(drawing_options['edge_options'])

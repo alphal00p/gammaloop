@@ -283,6 +283,7 @@ impl FeynGen {
             "CouplingsMultiplicity",
             "InternalFermionLoopSign",
             "ExternalFermionOrderingSign",
+            "AntiFermionSpinSumSign",
             "NumeratorIndependentSymmetryGrouping",
         ] {
             res = res.replace_all(
@@ -2558,7 +2559,7 @@ impl FeynGen {
         //     .map(|(i, (orientation, name))| (i.clone(), (*orientation, name)))
         //     .collect::<Vec<_>>();
         let external_edges_for_generation = external_edges.clone();
-        let vertex_signatures_for_generation = vertex_signatures
+        let mut vertex_signatures_for_generation = vertex_signatures
             .keys()
             .map(|v| {
                 v.iter()
@@ -2571,6 +2572,8 @@ impl FeynGen {
                     .collect::<Vec<_>>()
             })
             .collect::<Vec<_>>();
+        // Sort vertices to improve reproducibility.
+        vertex_signatures_for_generation.sort();
         debug!(
             "generation_external_edges = {:?}",
             external_edges_for_generation
@@ -2591,6 +2594,20 @@ impl FeynGen {
             format!("{:<6}", utils::format_wdhms(0)).blue(),
             "Starting Feynman graph generation with Symbolica..."
         );
+        // println!(
+        //     "external_edges_for_generation=\n{:?}",
+        //     external_edges_for_generation
+        // );
+        // println!(
+        //     "vertex_signatures_for_generation=\n{:?}",
+        //     vertex_signatures_for_generation
+        // );
+        // println!(
+        //     "Some(self.options.loop_count_range.1)=\n{:?}",
+        //     self.options.loop_count_range.1
+        // );
+        // println!("filters.get_max_bridge()=\n{:?}", filters.get_max_bridge());
+        // println!("!filter_self_loop=\n{:?}", !filter_self_loop);
         let mut graphs = SymbolicaGraph::generate(
             external_edges_for_generation.as_slice(),
             vertex_signatures_for_generation.as_slice(),
@@ -2869,7 +2886,6 @@ impl FeynGen {
         last_step = step;
 
         let fermion_loop_count_range_filter = filters.get_fermion_loop_count_range();
-
         let bar = ProgressBar::new(processed_graphs.len() as u64);
         bar.set_style(progress_bar_style.clone());
         bar.set_message(
@@ -2906,7 +2922,6 @@ impl FeynGen {
                 .collect::<Result<Vec<_>, _>>()
         })?;
         bar.finish_and_clear();
-
         step = Instant::now();
         info!(
             "{} | Δ={} | {:<95}{}",
@@ -3667,13 +3682,13 @@ impl FeynGen {
             pooled_bare_graphs.lock().unwrap().iter()
         {
             for pooled_graphs_list in pooled_graphs_lists_for_this_topology {
-                let previous_reference_ratio = pooled_graphs_list[0].ratio.clone();
                 let sorted_graphs_to_combine = pooled_graphs_list
                     .iter()
                     .sorted_by_key(|pooled_graph| pooled_graph.graph_id)
                     .collect::<Vec<_>>();
+                let new_reference_ratio = sorted_graphs_to_combine[0].ratio.clone();
                 let mut combined_overall_factor = Atom::new_num(0);
-                let mut bare_graph_representative = pooled_graphs_list[0].bare_graph.clone();
+                let mut bare_graph_representative = sorted_graphs_to_combine[0].bare_graph.clone();
                 if sorted_graphs_to_combine.len() > 1 {
                     for graph_to_combine in sorted_graphs_to_combine {
                         pooled_bare_graphs_len += 1;
@@ -3686,7 +3701,7 @@ impl FeynGen {
                             + function!(
                                 symb!("NumeratorDependentGrouping"),
                                 Atom::new_num(graph_to_combine.graph_id as i64),
-                                (&graph_to_combine.ratio / &previous_reference_ratio).expand(),
+                                (&graph_to_combine.ratio / &new_reference_ratio).expand(),
                                 graph_to_combine.bare_graph.overall_factor.clone()
                             );
                     }
@@ -3752,28 +3767,28 @@ impl FeynGen {
                 graph.set_loop_momentum_basis(&forced_lmb)?;
             }
         }
-        // println!(
-        //     "Graphs: [\n{}\n]",
-        //     bare_graphs
-        //         .iter()
-        //         .map(|(_graph_id, graph)| format!(
-        //             "{:-6} @ {} = {{{}}}",
-        //             graph.name.clone(),
-        //             FeynGen::evaluate_overall_factor(graph.overall_factor.as_view())
-        //                 .expand()
-        //                 .to_canonical_string(),
-        //             graph.overall_factor
-        //         ))
-        //         .collect::<Vec<_>>()
-        //         .join("\n"),
-        // );
+        debug!(
+            "Graphs: [\n{}\n]",
+            bare_graphs
+                .iter()
+                .map(|(_graph_id, graph)| format!(
+                    "{:-6} @ {} = {{{}}}",
+                    graph.name.clone(),
+                    FeynGen::evaluate_overall_factor(graph.overall_factor.as_view())
+                        .expand()
+                        .to_canonical_string(),
+                    graph.overall_factor
+                ))
+                .collect::<Vec<_>>()
+                .join("\n"),
+        );
         let mut total_sym_factor = Atom::new_num(0);
         for (_i_g, g) in bare_graphs.iter() {
             total_sym_factor =
                 total_sym_factor + FeynGen::evaluate_overall_factor(g.overall_factor.as_view());
         }
-        debug!(
-            "Total symmetry factor from all graphs generated = {}",
+        info!(
+            "( Sum of the symmetry factors from each graph generated = {} ) ",
             format!("{}", total_sym_factor).green()
         );
 
@@ -3942,7 +3957,23 @@ impl FeynGen {
                                     } else if b.is_zero() {
                                         None
                                     } else {
-                                        Some((a / b).expand())
+                                        let mut ratio = a / b;
+                                        if !grouping_options
+                                            .fully_numerical_substitution_when_comparing_numerators
+                                        {
+                                            // In that case we may have a non trivial representation of `a` and `b` that require to be normalized as a rational polynomial so that the various ratios match
+                                            ratio = ratio
+                                                .to_rational_polynomial::<_, _, u8>(
+                                                    &symbolica::domains::rational::Q,
+                                                    &symbolica::domains::integer::Z,
+                                                    None,
+                                                )
+                                                .to_expression();
+                                        } else {
+                                            // When fully numerical samples have been considered for the comparison, we should only need the much cheaper expand() operation on the resulting ratio
+                                            ratio = ratio.expand();
+                                        }
+                                        Some(ratio)
                                     }
                                 })
                                 .collect::<HashSet<_>>();
@@ -3952,7 +3983,7 @@ impl FeynGen {
                             //     numerator_a.diagram_id,
                             //     ratios
                             //         .iter()
-                            //         .map(|av| av.to_canonical_string())
+                            //         .map(|av| av.as_ref().unwrap().to_canonical_string())
                             //         .collect::<Vec<_>>()
                             //         .join("\n")
                             // );
@@ -4098,8 +4129,6 @@ impl FeynGen {
     }
 
     pub fn substitute_color_factors(expr: AtomView) -> Atom {
-        // To disable numerator-aware graph isomorphism specific to N_c = 3, uncomment below
-        // return expr.to_owned();
         let replacements = vec![
             (Atom::parse("Nc").unwrap(), Atom::new_num(3)),
             (Atom::parse("TR").unwrap(), Atom::parse("1/2").unwrap()),
@@ -4135,11 +4164,18 @@ impl FeynGen {
             })
             .count();
 
-        let sign = Sign::Negative.pow(n_external_fermion_loops + number_of_initial_antifermions);
+        let sign = Sign::Negative.pow(n_external_fermion_loops);
+        let antifermion_spinsum_sign = Sign::Negative.pow(number_of_initial_antifermions);
 
         function!(
             symb!("ExternalFermionOrderingSign"),
             Atom::new_num(match sign {
+                Sign::Positive => 1,
+                Sign::Negative => -1,
+            })
+        ) * function!(
+            symb!("AntiFermionSpinSumSign"),
+            Atom::new_num(match antifermion_spinsum_sign {
                 Sign::Positive => 1,
                 Sign::Negative => -1,
             })
@@ -4309,14 +4345,18 @@ impl ProcessedNumeratorForComparison {
                 //     processed_numerator.get_single_atom().unwrap().0
                 // );
                 let canonized_numerator = if group_options.test_canonized_numerator {
-                    Some(
-                        processed_numerator
-                            .canonize_lorentz()
-                            .unwrap()
-                            .get_single_atom()
-                            .unwrap()
-                            .0,
-                    )
+                    let mut canonized_numerator_to_consider = processed_numerator
+                        .canonize_lorentz()
+                        .unwrap()
+                        .get_single_atom()
+                        .unwrap()
+                        .0;
+                    if group_options.fully_numerical_substitution_when_comparing_numerators {
+                        canonized_numerator_to_consider = FeynGen::substitute_color_factors(
+                            canonized_numerator_to_consider.as_atom_view(),
+                        )
+                    };
+                    Some(canonized_numerator_to_consider)
                 } else {
                     None
                 };
@@ -4632,4 +4672,61 @@ impl ProcessedNumeratorForComparison {
             }
         })
     }
+}
+
+#[test]
+pub fn symbolica_symm_factors_bug() {
+    let external_edges_for_generation: Vec<(usize, (Option<bool>, usize))> = vec![];
+
+    let vertex_signatures_for_generation_a = vec![
+        vec![(None, 21), (None, 21), (None, 21)],
+        vec![(None, 21), (None, 21), (None, 21), (None, 21)],
+        vec![(Some(true), 1), (Some(false), 1), (None, 21)],
+        vec![(Some(true), 6), (Some(false), 6), (None, 21)],
+        vec![(Some(false), 9000005), (Some(true), 9000005), (None, 21)],
+        vec![(Some(true), 2), (Some(false), 2), (None, 21)],
+    ];
+    let mut graphs_a = SymbolicaGraph::generate(
+        &external_edges_for_generation,
+        vertex_signatures_for_generation_a.as_slice(),
+        None,
+        Some(5),
+        Some(0),
+        true,
+    );
+    graphs_a.retain(|g, _| g.num_loops() >= 5);
+
+    let mut tot_symm_fact_graphs_a = Atom::new_num(0);
+    for (_g, s) in graphs_a.iter() {
+        tot_symm_fact_graphs_a =
+            tot_symm_fact_graphs_a + Atom::new_num(1) / Atom::new_num(s.clone());
+    }
+    println!("tot_symm_fact_graphs_A = {}", tot_symm_fact_graphs_a);
+
+    let vertex_signatures_for_generation_b = vec![
+        vec![(Some(true), 1), (Some(false), 1), (None, 21)],
+        vec![(None, 21), (None, 21), (None, 21), (None, 21)],
+        vec![(Some(true), 6), (Some(false), 6), (None, 21)],
+        vec![(None, 21), (None, 21), (None, 21)],
+        vec![(Some(false), 9000005), (Some(true), 9000005), (None, 21)],
+        vec![(Some(true), 2), (Some(false), 2), (None, 21)],
+    ];
+    let mut graphs_b = SymbolicaGraph::generate(
+        &external_edges_for_generation,
+        vertex_signatures_for_generation_b.as_slice(),
+        None,
+        Some(5),
+        Some(0),
+        true,
+    );
+    graphs_b.retain(|g, _| g.num_loops() >= 5);
+
+    let mut tot_symm_fact_graphs_b = Atom::new_num(0);
+    for (_g, s) in graphs_b.iter() {
+        tot_symm_fact_graphs_b =
+            tot_symm_fact_graphs_b + Atom::new_num(1) / Atom::new_num(s.clone());
+    }
+    println!("tot_symm_fact_graphs_B = {}", tot_symm_fact_graphs_b);
+
+    assert!(tot_symm_fact_graphs_a == tot_symm_fact_graphs_b);
 }

@@ -29,6 +29,7 @@ import gammaloop._gammaloop as gl_rust
 import gammaloop.interface.debug_display as debug_display
 # pylint: disable=unused-variable
 
+
 class TaggedScalar(yaml.ScalarNode):
     def __init__(self, tag, value):
         super().__init__(tag, value)
@@ -78,6 +79,7 @@ class GammaLoopConfiguration(object):
                 'combined_graphs_pdf_grid_shape': [3, 2],
                 'dot': {
                     'layout': 'neato',
+                    'show_overall_factor': True,
                     'graph_options': {
                         'fontsize': 10,
                         'ratio': 1.5
@@ -801,7 +803,7 @@ class GammaLoop(object):
     # Tadpole filter
 
     generate_parser.add_argument('--filter_cross_section_tadpoles', default=None, action=BooleanOptionalAction,
-             help='Filter tadpoles when sewing cross-section.')
+                                 help='Filter tadpoles when sewing cross-section.')
     generate_parser.add_argument('--filter_tadpoles', default=None, action=BooleanOptionalAction,
                                  help='Filter tadpole diagrams.')
     generate_parser.add_argument('--veto_tadpole_attached_to_massive', dest='veto_tadpoles_attached_to_massive_lines', default=None, action=BooleanOptionalAction,
@@ -840,9 +842,9 @@ class GammaLoop(object):
 
     # Cross-section cut options
     generate_parser.add_argument('--n_cut_blobs', '-ncb', type=int, nargs=2, default=[1, 1],
-                                help='Set the range of cut blobs on either side of the cut for cross-section generation')
+                                 help='Set the range of cut blobs on either side of the cut for cross-section generation')
     generate_parser.add_argument('--n_cut_spectators', '-ncs', type=int, nargs=2, default=[0, 0],
-                                help='Set the range of cut spectators on either side of the cut for cross-section generation')
+                                 help='Set the range of cut spectators on either side of the cut for cross-section generation')
 
     # Selection options
     generate_parser.add_argument('--loop_momentum_bases', '-lmbs', default=None, type=str,

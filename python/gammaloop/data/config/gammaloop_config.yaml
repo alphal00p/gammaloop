@@ -5,6 +5,7 @@ drawing:
   combined_graphs_pdf_grid_shape: [3, 2]
   dot:
     layout: "neato"
+    show_overall_factor: true
     graph_options:
       "fontsize": 10
       "ratio": 1.5 # aspect-ratio
@@ -48,7 +49,7 @@ drawing:
 export_settings:
   compile_cff: true
   numerator_settings:
-    dump_expression: 'Mathematica'
+    dump_expression: "Mathematica"
     eval_settings:
       type: Joint
       cpe_rounds: 1

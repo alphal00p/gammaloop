@@ -396,13 +396,13 @@ impl<T: Clone> Iterator for CombinationsWithRepetition<T> {
 pub fn dis_cart_prod_impl(initial_states: &[isize], loop_count: usize) -> Vec<FeynGen> {
     let mut options = vec![];
 
-    let initial_states: HashSet<isize> = initial_states.into_iter().cloned().collect();
+    let initial_states: HashSet<isize> = initial_states.iter().cloned().collect();
 
     let initial_state_template = vec![11];
     let final_states = initial_states
         .iter()
         .map(|a| {
-            let mut temp = initial_state_template.iter().map(|b| *b).collect_vec();
+            let mut temp = initial_state_template.iter().copied().collect_vec();
 
             temp.extend([*a]);
             temp
@@ -415,7 +415,7 @@ pub fn dis_cart_prod_impl(initial_states: &[isize], loop_count: usize) -> Vec<Fe
         {
             init_states.extend(initial_state_template.clone());
 
-            let init_states = init_states.into_iter().map(|a| a).collect_vec();
+            let init_states = init_states.into_iter().collect_vec();
 
             // info!("initial states: {:?}\nfinal states: {:?}\ncross_section_orders:{}\nloop_count:{}\nn_unresolved:{}", init_states, final_states,2*loop_count ,loop_count+ 2 - initial_state_mult,loop_count);
 
@@ -453,7 +453,7 @@ pub fn chain_dis_generate(options: &[FeynGen], model: &Model) -> Vec<BareGraph> 
         .iter()
         .flat_map(|a| {
             a.generate(
-                &model,
+                model,
                 &NumeratorAwareGraphGroupingOption::OnlyDetectZeroes,
                 true,
                 "DIS".into(),
