@@ -852,7 +852,7 @@ class Graph(object):
             list(external_connections.items()), key=lambda el: el[0])]
 
         graph = Graph(g.get_name(), graph_vertices, graph_edges,
-                      external_connections_for_graph, None, g.get_attributes().get("overall_factor", "1"), None)
+                      external_connections_for_graph, None, g.get_attributes().get("overall_factor", "1").replace('"', ''), None)
         graph.synchronize_name_map()
 
         # Enforce specified LMB if available
@@ -1097,7 +1097,7 @@ class Graph(object):
         replace_dict['label'] += f" {diagram_id}" if diagram_id else ''
         replace_dict['layout'] = drawing_options['layout']
         overall_factor_evaluated_str = utils.expression_to_string(
-            utils.evaluate_graph_overall_factor(self.overall_factor))
+            utils.evaluate_graph_overall_factor(self.overall_factor), canonical=True)
         if drawing_options.get('show_overall_factor', True):
             replace_dict['label'] += f" x ( {overall_factor_evaluated_str} )"
         replace_dict['graph_options'] = f'\noverall_factor="{self.overall_factor}",\noverall_factor_evaluated="{overall_factor_evaluated_str}"'  # nopep8

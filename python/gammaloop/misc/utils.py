@@ -168,7 +168,7 @@ def replace_from_sqrt(expr: sb.Expression) -> sb.Expression:
     str_expr = expression_to_string(expr)
     if str_expr is None or re.match(r'\^\(\d+/\d+\)', str_expr):
         raise common.GammaLoopError(
-            "Expoentiation with real arguments not supported in model expressions: %s", str_expr)
+            "Exponentiation with real arguments not supported in model expressions: %s", str_expr)
     return expr
 
 
@@ -180,7 +180,6 @@ def parse_python_expression_safe(expr: str) -> sb.Expression:
         .replace('math.sqrt', 'sqrt')\
         .replace('math.pi', 'pi')
     sanitized_expr = replace_pseudo_floats(sanitized_expr)
-
     try:
         sb_expr = sb.Expression.parse(sanitized_expr)
         # No longer needed since we automatically include a `complex(x,y)` function in the function map.
