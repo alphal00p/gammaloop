@@ -54,7 +54,9 @@ linnet = { version = "0.2.0", features = [
 ] }
 
 
-momtrop = { git = "https://github.com/alphal00p/momtrop", features = ["log"], rev = "a77a7e3a6681892008ebbfbd92788d48e7009136" }
+momtrop = { git = "https://github.com/alphal00p/momtrop", features = [
+    "log",
+], rev = "a77a7e3a6681892008ebbfbd92788d48e7009136" }
 serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "*"
 bincode = { git = "https://github.com/branchseer/bincode", branch = "decode_context", features = [
@@ -81,7 +83,7 @@ statrs = "0.16.0"
 smallvec = { version = "1.7", features = ["const_generics", "serde"] }
 itertools = "0.8"
 smartstring = { version = "*", features = ["serde"] }
-log = { version = "*", features = ["release_max_level_info"]}
+log = { version = "*", features = ["release_max_level_debug"] }
 env_logger = "*"
 pyo3-log = { version = "0.11.0", optional = true }
 nalgebra = "0.32.3"

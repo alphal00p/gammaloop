@@ -184,14 +184,14 @@ build_dependencies () {
     fi
 
     if ! test -d symbolica; then
-        CMD_TO_ACCESS_SYMBOLICA="${CMD_TO_ACCESS_SYMBOLICA:-git clone -b main https://github.com/benruijl/symbolica}"
+        CMD_TO_ACCESS_SYMBOLICA="${CMD_TO_ACCESS_SYMBOLICA:-git clone -b no_namespace https://github.com/alphal00p/symbolica}"
         echo "Cloning symbolica with '"$CMD_TO_ACCESS_SYMBOLICA"' ...";
         $CMD_TO_ACCESS_SYMBOLICA >> dependency_build.log 2>&1
         RETCODE=$RETCODE+$?
         if [ ! $(($RETCODE)) == 0 ]
         then
             cat ../dependency_build.log;
-            echo -e "\033[91mERROR: failed to clone symbolica iwth command '"$CMD_TO_ACCESS_SYMBOLICA"'. Check the logs in dependencies/dependency_build.log for more information.\033[0m";
+            echo -e "\033[91mERROR: failed to clone symbolica with command '"$CMD_TO_ACCESS_SYMBOLICA"'. Check the logs in dependencies/dependency_build.log for more information.\033[0m";
             rm -f LOCK
             exit $(($RETCODE))
         fi

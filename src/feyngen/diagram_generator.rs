@@ -512,8 +512,8 @@ impl FeynGen {
         if graph.nodes().iter().any(|n| n.data.external_tag < 0) {
             panic!("External tag must be positive, but found negative as obtained when performing external state symmetrization");
         }
-        let debug = false;
-        if debug {
+        const DEBUG_VETO: bool = false;
+        if DEBUG_VETO {
             debug!(
                 "\n\n>> Vetoing special topologies for the following {}-loop graph:\n{}",
                 graph.num_loops(),
@@ -557,7 +557,7 @@ impl FeynGen {
         let mut spanning_tree = graph.get_spanning_tree(spanning_tree_root);
         spanning_tree.chain_decomposition();
 
-        if debug {
+        if DEBUG_VETO {
             debug!(
                 "Spanning tree: order={:?}\n{}",
                 spanning_tree.order,
@@ -576,7 +576,7 @@ impl FeynGen {
         for (i_n, node) in spanning_tree.nodes.iter().enumerate() {
             node_children[node.parent].push(i_n);
         }
-        if debug {
+        if DEBUG_VETO {
             debug!("node_children={:?}", node_children);
         }
 
@@ -604,7 +604,7 @@ impl FeynGen {
                 *route = vec![spanning_tree_node_external_tag];
             }
         }
-        if debug {
+        if DEBUG_VETO {
             debug!("external_momenta_routing={:?}", external_momenta_routing);
         }
 
@@ -695,7 +695,7 @@ impl FeynGen {
                 }
             }
         }
-        if debug {
+        if DEBUG_VETO {
             debug!("self_energy_attachments={:?}", self_energy_attachments);
             debug!("vacuum_attachments={:?}", vacuum_attachments);
             debug!("self_loops={:?}", self_loops);
@@ -707,7 +707,7 @@ impl FeynGen {
         {
             if n_factorizable_loops < *min_n_fact_loops || n_factorizable_loops > *max_n_fact_loops
             {
-                if debug {
+                if DEBUG_VETO {
                     debug!(
                         "Vetoing graph due to having a number of factorizable loops ({}) outside the range [{}, {}]",
                         n_factorizable_loops, min_n_fact_loops, max_n_fact_loops
@@ -730,7 +730,7 @@ impl FeynGen {
                 tree_bridge_node_indices.insert(i_n);
             }
         }
-        if debug {
+        if DEBUG_VETO {
             debug!("bridge_node_positions={:?}", tree_bridge_node_indices);
         }
 
@@ -740,7 +740,7 @@ impl FeynGen {
         {
             if tree_bridge_node_indices.contains(back_edge_start_node_index) {
                 if let Some(veto_self_energy_options) = veto_self_energy {
-                    if debug {
+                    if DEBUG_VETO {
                         debug!(
                             "Vetoing self-energy for leg_id={}, back_edge_start_node_index={}, back_edge_position_in_list={}, chain_id={}, with options:\n{:?}",
                             leg_id, back_edge_start_node_index, back_edge_position_in_list, _chain_id, veto_self_energy_options
@@ -808,7 +808,7 @@ impl FeynGen {
             {
                 // Tadpole
                 if let Some(veto_tadpole_options) = veto_tadpole {
-                    if debug {
+                    if DEBUG_VETO {
                         debug!(
                             "Vetoing tadpole for back_edge_start_node_index={}, back_edge_position_in_list={}, chain_id={}, with options:\n{:?}",
                             back_edge_start_node_index, back_edge_position_in_list, chain_id, veto_tadpole_options
@@ -836,7 +836,7 @@ impl FeynGen {
                 #[allow(clippy::unnecessary_unwrap)]
                 // Snail
                 if let Some(veto_snails_options) = veto_snails {
-                    if debug {
+                    if DEBUG_VETO {
                         debug!(
                             "Vetoing snail for back_edge_start_node_index={}, back_edge_position_in_list={}, chain_id={}, with options:\n{:?}",
                             back_edge_start_node_index, back_edge_position_in_list, chain_id, veto_snails_options
@@ -864,7 +864,7 @@ impl FeynGen {
             }
         }
 
-        if debug {
+        if DEBUG_VETO {
             debug!(">> No special topology veto applied to this graph");
         }
 
@@ -3682,6 +3682,7 @@ impl FeynGen {
         for (_canonical_repr, pooled_graphs_lists_for_this_topology) in
             pooled_bare_graphs.lock().unwrap().iter()
         {
+            pooled_bare_graphs_len += 1;
             for pooled_graphs_list in pooled_graphs_lists_for_this_topology {
                 let sorted_graphs_to_combine = pooled_graphs_list
                     .iter()
@@ -3692,7 +3693,6 @@ impl FeynGen {
                 let mut bare_graph_representative = sorted_graphs_to_combine[0].bare_graph.clone();
                 if sorted_graphs_to_combine.len() > 1 {
                     for graph_to_combine in sorted_graphs_to_combine {
-                        pooled_bare_graphs_len += 1;
                         // The computation of &graph_to_combine.ratio / &previous_reference_ratio is necessary so that if we started with this order of graphs to combine
                         //   (A, B, C), with ratios (r_1 = 1, r_2 = B/A, r_3 = C/A)
                         // And when forcing the reference diagram to be e.g. C, (so that we get a predictive ref graph in the multi-thread case), we need to pick C as the
@@ -3707,7 +3707,6 @@ impl FeynGen {
                             );
                     }
                 } else {
-                    pooled_bare_graphs_len += 1;
                     combined_overall_factor = bare_graph_representative.overall_factor.clone();
                 }
                 if FeynGen::evaluate_overall_factor(combined_overall_factor.as_view())
