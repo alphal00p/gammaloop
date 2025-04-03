@@ -384,7 +384,7 @@ parameters:
   value:
   - 80.41900244575616
   - 0.0
-  expression: (1/2*MZ^2+sqrt(1/4*MZ^4-pi*aEW*Gf^-1*MZ^2*sqrt(2)^-1))^(1/2)
+  expression: (1/2*MZ^2+sqrt(1/4*MZ^4-pi*MZ^2*aEW*Gf^-1*sqrt(2)^-1))^(1/2)
 - lhablock: null
   lhacode: null
   name: ee
@@ -447,7 +447,7 @@ parameters:
   value:
   - 246.2184581018163
   - 0.0
-  expression: 2*ee^-1*MW*sw
+  expression: 2*MW*ee^-1*sw
 - lhablock: null
   lhacode: null
   name: lam
@@ -519,7 +519,7 @@ parameters:
   value:
   - 88.38834764831844
   - 0.0
-  expression: (lam*vev^2)^(1/2)
+  expression: (vev^2*lam)^(1/2)
 - lhablock: null
   lhacode: null
   name: I1x31
@@ -1505,7 +1505,7 @@ lorentz_structures:
   - 3
   - 3
   - 3
-  structure: P(1,2)*Metric(2,3)-P(1,3)*Metric(2,3)-P(2,1)*Metric(1,3)+P(2,3)*Metric(1,3)+P(3,1)*Metric(1,2)-P(3,2)*Metric(1,2)
+  structure: Metric(1,2)*P(3,1)-Metric(1,2)*P(3,2)-Metric(1,3)*P(2,1)+Metric(1,3)*P(2,3)+Metric(2,3)*P(1,2)-Metric(2,3)*P(1,3)
 - name: SSSS1
   spins:
   - 1
@@ -1933,7 +1933,7 @@ couplings:
   - - QED
     - 1
 - name: GC_68
-  expression: -2*lam*vev*complex(0,1)
+  expression: -2*vev*lam*complex(0,1)
   value:
   - 0.0
   - -63.45990516088257
@@ -1941,7 +1941,7 @@ couplings:
   - - QED
     - 1
 - name: GC_69
-  expression: -6*lam*vev*complex(0,1)
+  expression: -6*vev*lam*complex(0,1)
   value:
   - 0.0
   - -190.37971548264773

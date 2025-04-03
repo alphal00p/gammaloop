@@ -504,7 +504,7 @@ class Edge(object):
 
 class Graph(object):
     def __init__(self, name: str, vertices: list[Vertex], edges: list[Edge], external_connections: list[tuple[Vertex | None, Vertex | None]],
-                 loop_momentum_basis: list[Edge] | None = None, overall_factor: str = "1",
+                 loop_momentum_basis: list[Edge] | None = None, overall_factor: str | int = "1",
                  edge_signatures: dict[str, tuple[list[int], list[int]]] | None = None):
         self.name: str = name
         self.vertices: list[Vertex] = vertices
@@ -515,7 +515,13 @@ class Graph(object):
         else:
             self.edge_signatures: dict[str,
                                        tuple[list[int], list[int]]] = edge_signatures
-        self.overall_factor: str = overall_factor
+
+        if isinstance(overall_factor, str):
+            overall_factor_str = overall_factor.replace('"', '')
+        else:
+            overall_factor_str = str(overall_factor)
+        self.overall_factor: str = overall_factor_str
+
         # For forward scattering graphs, keep track of the bipartite map, i.e. which in and out externals will carry identical momenta.
         self.external_connections: list[tuple[
             Vertex | None, Vertex | None]] = external_connections
@@ -652,10 +658,11 @@ class Graph(object):
         external_connections = [(vertex_name_to_vertex_map[e[0]] if e[0] is not None else None,
                                  vertex_name_to_vertex_map[e[1]] if e[1] is not None else None) for e in serializable_dict['external_connections']]
 
+        overall_factor = serializable_dict['overall_factor']
         loop_momentum_basis: list[Edge] = [edge_name_to_edge_map[e_name]
                                            for e_name in serializable_dict['loop_momentum_basis']]
         graph = Graph(serializable_dict['name'], graph_vertices, graph_edges,
-                      external_connections, loop_momentum_basis, serializable_dict['overall_factor'],
+                      external_connections, loop_momentum_basis, overall_factor,
                       dict(serializable_dict['edge_signatures']))
         graph.synchronize_name_map()
 
@@ -851,8 +858,9 @@ class Graph(object):
         external_connections_for_graph: list[tuple[Vertex | None, Vertex | None]] = [(v[0], v[1]) for _, v in sorted(
             list(external_connections.items()), key=lambda el: el[0])]
 
+        overall_factor = g.get_attributes().get("overall_factor", "1")
         graph = Graph(g.get_name(), graph_vertices, graph_edges,
-                      external_connections_for_graph, None, g.get_attributes().get("overall_factor", "1").replace('"', ''), None)
+                      external_connections_for_graph, None, overall_factor, None)
         graph.synchronize_name_map()
 
         # Enforce specified LMB if available
