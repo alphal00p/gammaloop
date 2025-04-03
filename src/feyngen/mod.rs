@@ -338,7 +338,7 @@ impl FeynGenFilters {
                                     graph_coupling_orders
                                         .get(&SmartString::from(k))
                                         .map_or(0 == *v_min, |o| {
-                                            *o >= *v_min && (*v_max).map_or(true, |max| *o <= max)
+                                            *o >= *v_min && (*v_max).is_none_or(|max| *o <= max)
                                         })
                                 });
                                 // if a {
