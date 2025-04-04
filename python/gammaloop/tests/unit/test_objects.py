@@ -124,18 +124,18 @@ class TestProcess:
             ("e+ e- > d d~ [{{1}} QCD ]", "e+ e- > d d~ [ {{1}} QCD ]"),
             ("e+ e- > d d~ [ {{1}}QCD ]", "e+ e- > d d~ [ {{1}} QCD ]"),
             ("e+ e- > d d~ [ {{1}} QCD]", "e+ e- > d d~ [ {{1}} QCD ]"),
-            ("e+ e- > d d~ QED=2 [ {{1}} QCD ]",
-             "e+ e- > d d~ QED=2 [ {{1}} QCD ]"),
-            ("e+ e- > d d~ QED=2 [ {{1}} QCD=3 ]",
-             "e+ e- > d d~ QED=2 [ {{1}} QCD=3 ]"),
-            ("e+ e- > d d~ QED=2 [ {{1}} QCD = 3 ]",
-             "e+ e- > d d~ QED=2 [ {{1}} QCD=3 ]"),
-            ("e+ e- > d d~ QED=2 QCD=3 [ {{1}} QCD=3 ] QED^2=4 QCD^2=5",
-             "e+ e- > d d~ QCD=3 QED=2 [ {{1}} QCD=3 ] QCD^2=5 QED^2=4"),
+            ("e+ e- > d d~ QED==2 [ {{1}} QCD ]",
+             "e+ e- > d d~ QED==2 [ {{1}} QCD ]"),
+            ("e+ e- > d d~ QED==2 [ {{1}} QCD=3 ]",
+             "e+ e- > d d~ QED==2 [ {{1}} QCD=3 ]"),
+            ("e+ e- > d d~ QED==2 [ {{1}} QCD=3 ]",
+             "e+ e- > d d~ QED==2 [ {{1}} QCD=3 ]"),
+            ("e+ e- > d d~ QED==2 QCD==3 [ {{1}} QCD=3 ] QED^2==4 QCD^2==5",
+             "e+ e- > d d~ QCD==3 QED==2 [ {{1}} QCD=3 ] QCD^2==5 QED^2==4"),
             # Veto or selection cannot differentiate particles and antiparticles
             # gammaLoop should issue a warning!
-            ("e+ e- > d d~ / w+ w- QED=2 [ {{1}} QCD=3 ] QCD^2=3",
-             "e+ e- > d d~ / w+ QED=2 [ {{1}} QCD=3 ] QCD^2=3"),
+            ("e+ e- > d d~ / w+ w- QED==2 [ {{1}} QCD=3 ] QCD^2==3",
+             "e+ e- > d d~ / w+ QED==2 [ {{1}} QCD=3 ] QCD^2==3"),
         ]
 
         for test in tests:
