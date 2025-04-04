@@ -19,7 +19,7 @@ maturin build --release --features "extension-module" -o $TMPDIR/test_gammaloop_
 RETCODE=$RETCODE+$?;
 cd $TMPDIR/test_gammaloop_deployment
 echo "Creating virtual enviroment for testing deployment"
-python3 -m venv
+virtualenv venv
 source ./venv/bin/activate
 python3 -m pip install --upgrade pip
 python3 -m pip install pytest
