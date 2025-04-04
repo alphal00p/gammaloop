@@ -41,6 +41,8 @@ build_dependencies () {
     
     rm -f dependency_build.log
 
+    FINALMESSAGE="\033[92mAll dependencies installed successfully.\033[0m";
+
     CPPCOMPILER="${CXX:-g++}"
     CCOMPILER="${CC:-cc}"
     # We must also test explictly cc as it is used *explicitely* when building some of quadruple precision rust crates
@@ -176,7 +178,9 @@ build_dependencies () {
             $PYTHON3BIN -m pip install -r ../requirements.txt >> dependency_build.log 2>&1
             if [ ! $(($?)) == 0 ]
             then
-                echo -e "\033[93mWARNING: could not install python dependencies with pip. You will need to install them manually with '"$PYTHON3BIN" -m pip install -r requirements.txt'. You can also consider doing this within a virtual environment with '"$PYTHON3BIN" -m venv .venv'\033[0m";
+                FINALMESSAGE="\033[92mAll non Python dependencies installed successfully.\033[0m";
+                FINALMESSAGE=$FINALMESSAGE+"\n\033[93mWARNING: could not install Python dependencies with pip. You will need to install them manually with '"$PYTHON3BIN" -m pip install -r requirements.txt'. You can also consider doing this within a virtual environment with '"$PYTHON3BIN" -m venv .venv'\033[0m"
+                echo -e "\033[93mWARNING: could not install Python dependencies with pip. You will need to install them manually with '"$PYTHON3BIN" -m pip install -r requirements.txt'. You can also consider doing this within a virtual environment with '"$PYTHON3BIN" -m venv .venv'\033[0m";
             fi
         else
             echo "All Python dependencies already installed.";
@@ -290,7 +294,7 @@ build_dependencies () {
     touch INSTALLED
     rm -f LOCK
     
-    echo -e "\033[92mAll dependencies installed successfully.\033[0m";
+    echo -e $FINALMESSAGE;
     cd ..
 }
 

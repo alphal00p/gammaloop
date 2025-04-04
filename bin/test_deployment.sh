@@ -9,7 +9,7 @@ if [ "$1" == "clean" ]
         cargo clean
         ./bin/build_dependencies.sh clean
 fi
-echo "Local build for maturin wheal"
+echo "Local build for maturin wheel"
 ./bin/build_dependencies.sh
 RETCODE=$RETCODE+$?;
 rm -rf $TMPDIR/test_gammaloop_deployment

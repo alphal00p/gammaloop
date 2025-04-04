@@ -7,7 +7,7 @@ authors = [
     { name = "Mathijs Fraaije", email = "mathijsfraaije@gmail.com" },
     { name = "Lucien Huber", email = "mail@lcnbr.ch" },
 ]
-requires-python = "==3.12.*"
+requires-python = ">=3.7"
 readme = "README.md"
 license = { file = "LICENSE.md" }
 keywords = ["physics", "collider", "cross-section", "perturbative", "loop"]
