@@ -83,7 +83,7 @@ gammaloop --build_dependencies
 ```bash
 git clone https://github.com/alphal00p/gammaloop.git
 cd gammaloop
-./bin/compile.sh --release
+./bin/compile.sh
 ```
 The relevant binaries will then be in `./bin/` and the gammaloop python module is located at `./python/gammaloop`.
 
