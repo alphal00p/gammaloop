@@ -967,6 +967,7 @@ impl MasterNode {
     }
 }
 
+#[allow(clippy::format_in_format_args)]
 pub fn show_integration_status(
     integration_state: &IntegrationState,
     cores: usize,

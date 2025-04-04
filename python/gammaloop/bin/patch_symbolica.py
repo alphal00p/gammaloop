@@ -6,12 +6,17 @@ import re
 GL_PATH = os.path.abspath(os.path.join(
     os.path.dirname(os.path.realpath(__file__)), os.path.pardir, os.path.pardir, os.path.pardir))
 
+DEFAULT_SYMBOLICA_REVISION = 'latest'
+# DEFAULT_SYMBOLICA_REVISION = 'eeed330c824e6ad8f4bc78472864e6d8121b1a12'
+
 
 def revert_revision():
+    target_symbolica_revision = os.environ.get(
+        'SYMBOLICA_REVISION_HASH', DEFAULT_SYMBOLICA_REVISION)
     # Pin the revision of the branch currently working for gammaLoop
-    if os.environ.get('SYMBOLICA_REVISION_HASH', 'latest') != 'latest':
+    if target_symbolica_revision != 'latest':
         print(subprocess.check_output(
-            ['git', 'reset', '--hard', os.environ['SYMBOLICA_REVISION_HASH']]).decode('ascii').strip())
+            ['git', 'reset', '--hard', target_symbolica_revision]).decode('ascii').strip())
 
 
 def patch_lib_rs():

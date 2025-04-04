@@ -1,6 +1,6 @@
 [package]
 name = "gammalooprs"
-version = "0.3.2"
+version = "0.3.3"
 edition = "2021"
 authors = ["Valentin Hirschi <valentin.hirschi@gmail.com>"]
 categories = ["science"]
@@ -49,12 +49,16 @@ symbolica = { version = "0.16.0",features = ["serde","bincode"] }
 
 spenso = { git = "https://github.com/alphal00p/spenso", rev="04095a4035d78b2ee7b28d87f7655020ef24e93d" ,features= ["shadowing"] }
 
-linnet = {version = "0.2.0", features = [
+spenso = { version = "0.4.0", features = ["shadowing"] }
+linnet = { version = "0.2.0", features = [
     # "symbolica",
-    "drawing",]}
+    "drawing",
+] }
 
 
-momtrop = { git = "https://github.com/alphal00p/momtrop", features = ["log"] }
+momtrop = { git = "https://github.com/alphal00p/momtrop", features = [
+    "log",
+], rev = "a77a7e3a6681892008ebbfbd92788d48e7009136" }
 serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "*"
 bincode = {version="2.0.0" ,features=["serde","derive"]}
@@ -79,7 +83,7 @@ statrs = "0.16.0"
 smallvec = { version = "1.7", features = ["const_generics", "serde"] }
 itertools = "0.8"
 smartstring = { version = "*", features = ["serde"] }
-log = "*"
+log = { version = "*", features = ["release_max_level_debug"] }
 env_logger = "*"
 pyo3-log = { version = "0.11.0", optional = true }
 nalgebra = "0.32.3"
@@ -126,7 +130,7 @@ chrono = "0.4.39"
 
 
 [dependencies.pyo3]
-features = ["multiple-pymethods"]
+features = ["abi3", "abi3-py37"]
 optional = true
 version = "0.21"
 
@@ -143,7 +147,7 @@ name = "cli"
 # required-features = ["binary"]
 bench = false
 [features]
-default = ["python_api", "fjcore"]
+default = ["python_api"]
 extension-module = ["pyo3/extension-module"]
 higher_loops = []
 fjcore = []

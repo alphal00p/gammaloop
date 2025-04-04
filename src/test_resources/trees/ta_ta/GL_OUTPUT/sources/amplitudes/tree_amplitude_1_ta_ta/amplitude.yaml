@@ -96,7 +96,7 @@ amplitude_graphs:
       - v3
     - - null
       - v4
-    overall_factor: 1
+    overall_factor: '1'
     loop_momentum_basis: []
     edge_signatures:
     - - p1
@@ -227,7 +227,7 @@ amplitude_graphs:
       - v3
     - - null
       - v4
-    overall_factor: 1
+    overall_factor: '1'
     loop_momentum_basis: []
     edge_signatures:
     - - p1

@@ -3,7 +3,7 @@ import sys
 from subprocess import Popen
 from enum import StrEnum
 
-__version__ = "0.0.1"
+__version__ = "0.3.3"
 
 GL_PATH = os.path.abspath(os.path.dirname(os.path.realpath(__file__)))
 
