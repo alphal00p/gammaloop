@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 RETCODE=0;
-python -m pytest -m "not slow" --runrust --codecheck "$@"
+python3 -m pytest -m "not slow" --runrust --codecheck "$@"
 RETCODE=$RETCODE+$?;
 
 #python -m pytest tests/unit/* "$@"

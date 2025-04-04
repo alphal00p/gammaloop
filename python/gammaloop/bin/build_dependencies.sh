@@ -41,6 +41,8 @@ build_dependencies () {
     
     rm -f dependency_build.log
 
+    FINALMESSAGE="\033[92mAll dependencies installed successfully.\033[0m";
+
     CPPCOMPILER="${CXX:-g++}"
     CCOMPILER="${CC:-cc}"
     # We must also test explictly cc as it is used *explicitely* when building some of quadruple precision rust crates
@@ -176,7 +178,9 @@ build_dependencies () {
             $PYTHON3BIN -m pip install -r ../requirements.txt >> dependency_build.log 2>&1
             if [ ! $(($?)) == 0 ]
             then
-                echo -e "\033[93mWARNING: could not install python dependencies with pip. You will need to install them manually with '"$PYTHON3BIN" -m pip install -r requirements.txt'.\033[0m";
+                FINALMESSAGE="\033[92mAll non Python dependencies installed successfully.\033[0m";
+                FINALMESSAGE=$FINALMESSAGE"\n\033[93mWARNING: could not install Python dependencies with pip. You will need to install them manually with '"$PYTHON3BIN" -m pip install -r requirements.txt'. You can also consider doing this within a virtual environment with '"$PYTHON3BIN" -m venv .venv'\033[0m"
+                echo -e "\033[93mWARNING: could not install Python dependencies with pip. You will need to install them manually with '"$PYTHON3BIN" -m pip install -r requirements.txt'. You can also consider doing this within a virtual environment with '"$PYTHON3BIN" -m venv .venv'\033[0m";
             fi
         else
             echo "All Python dependencies already installed.";
@@ -184,14 +188,14 @@ build_dependencies () {
     fi
 
     if ! test -d symbolica; then
-        CMD_TO_ACCESS_SYMBOLICA="${CMD_TO_ACCESS_SYMBOLICA:-git clone -b main https://github.com/benruijl/symbolica}"
+        CMD_TO_ACCESS_SYMBOLICA="${CMD_TO_ACCESS_SYMBOLICA:-git clone -b symbolica_fork_for_v0_3_3 https://github.com/alphal00p/symbolica}"
         echo "Cloning symbolica with '"$CMD_TO_ACCESS_SYMBOLICA"' ...";
         $CMD_TO_ACCESS_SYMBOLICA >> dependency_build.log 2>&1
         RETCODE=$RETCODE+$?
         if [ ! $(($RETCODE)) == 0 ]
         then
             cat ../dependency_build.log;
-            echo -e "\033[91mERROR: failed to clone symbolica iwth command '"$CMD_TO_ACCESS_SYMBOLICA"'. Check the logs in dependencies/dependency_build.log for more information.\033[0m";
+            echo -e "\033[91mERROR: failed to clone symbolica with command '"$CMD_TO_ACCESS_SYMBOLICA"'. Check the logs in dependencies/dependency_build.log for more information.\033[0m";
             rm -f LOCK
             exit $(($RETCODE))
         fi
@@ -289,8 +293,13 @@ build_dependencies () {
 
     touch INSTALLED
     rm -f LOCK
+
+    echo ""
+    echo "---- SUMMARY ----"
+    echo ""
     
-    echo -e "\033[92mAll dependencies installed successfully.\033[0m";
+    echo -e $FINALMESSAGE;
+
     cd ..
 }
 

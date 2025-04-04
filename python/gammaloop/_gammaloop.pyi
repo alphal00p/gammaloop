@@ -62,7 +62,7 @@ class TadpolesFilterOptions:
                 veto_tadpoles_attached_to_massive_lines: Optional[bool] = True,
                 veto_tadpoles_attached_to_massless_lines: Optional[bool] = True,
                 veto_only_scaleless_tadpoles: Optional[bool] = False,
-                 veto_cross_section_sewed_tadpoles:Optional[bool]=False,
+                veto_cross_section_sewed_tadpoles: Optional[bool] = False,
                 ) -> TadpolesFilterOptions:
         """ Creates options for vetoing tadpole diagrams. """
 
@@ -111,6 +111,10 @@ class FeynGenOptions:
 
 def setup_rust_logging(level: str, format: str) -> None:
     """ Setup logging for the rust backend. """
+
+
+def atom_to_canonical_string(atom_str: str) -> str:
+    """ Converts the string representation of a Symbolica expression to a canonical form. """
 
 
 class Worker:

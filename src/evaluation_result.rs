@@ -191,6 +191,7 @@ impl StatisticsCounter {
         self.num_nan_evals as f64 / self.num_evals as f64 * 100.0
     }
 
+    #[allow(clippy::format_in_format_args)]
     pub fn display_status(&self) {
         let time_ltd_formatted = format_evaluation_time(self.get_avg_rep3d_timing());
         let param_time_formatted = format_evaluation_time(self.get_avg_param_timing());

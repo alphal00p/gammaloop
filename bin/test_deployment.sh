@@ -9,21 +9,21 @@ if [ "$1" == "clean" ]
         cargo clean
         ./bin/build_dependencies.sh clean
 fi
-echo "Local build for maturin wheal"
+echo "Local build for maturin wheel"
 ./bin/build_dependencies.sh
 RETCODE=$RETCODE+$?;
 rm -rf $TMPDIR/test_gammaloop_deployment
 mkdir $TMPDIR/test_gammaloop_deployment
 mkdir $TMPDIR/test_gammaloop_deployment/wheel
-maturin build --release --features "extension-module" -o /tmp/test_gammaloop_deployment/wheel
+maturin build --release --features "extension-module" -o $TMPDIR/test_gammaloop_deployment/wheel
 RETCODE=$RETCODE+$?;
 cd $TMPDIR/test_gammaloop_deployment
 echo "Creating virtual enviroment for testing deployment"
 virtualenv venv
 source ./venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install pytest
-python -m pip install `ls -1 $TMPDIR/test_gammaloop_deployment/wheel/*.whl`
+python3 -m pip install --upgrade pip
+python3 -m pip install pytest
+python3 -m pip install `ls -1 $TMPDIR/test_gammaloop_deployment/wheel/*.whl`
 RETCODE=$RETCODE+$?;
 echo "Building dependencies in test deployment"
 gammaloop --build_dependencies
@@ -32,7 +32,7 @@ cd `ls -d1 ./venv/lib/python*/site-packages/gammaloop`
 RETCODE=$RETCODE+$?;
 #source `gammaloop -venv`
 echo "Running gammaloop tests withing deployed environment"
-python -m pytest --max-runtime 15.0 -k "test_scalar_triangle"
+python3 -m pytest --max-runtime 15.0 -k "test_scalar_triangle"
 RETCODE=$RETCODE+$?;
 if [ $(($RETCODE)) == 0 ]
 then
