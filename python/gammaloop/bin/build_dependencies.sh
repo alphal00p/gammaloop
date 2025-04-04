@@ -176,7 +176,7 @@ build_dependencies () {
             $PYTHON3BIN -m pip install -r ../requirements.txt >> dependency_build.log 2>&1
             if [ ! $(($?)) == 0 ]
             then
-                echo -e "\033[93mWARNING: could not install python dependencies with pip. You will need to install them manually with '"$PYTHON3BIN" -m pip install -r requirements.txt'.\033[0m";
+                echo -e "\033[93mWARNING: could not install python dependencies with pip. You will need to install them manually with '"$PYTHON3BIN" -m pip install -r requirements.txt'. You can also consider doing this within a virtual environment with '"$PYTHON3BIN" -m venv .venv'\033[0m";
             fi
         else
             echo "All Python dependencies already installed.";
