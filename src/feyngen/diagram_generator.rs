@@ -4165,7 +4165,7 @@ impl FeynGen {
                 Sign::Negative => -1,
             })
         ) * function!(
-            symb!("AntiFermionSpinSumSign"),
+            symbol!("AntiFermionSpinSumSign"),
             Atom::new_num(match antifermion_spinsum_sign {
                 Sign::Positive => 1,
                 Sign::Negative => -1,
@@ -4696,7 +4696,9 @@ pub fn symbolica_symm_factors_bug() {
         &external_edges_for_generation,
         vertex_signatures_for_generation_a.as_slice(),
         &settings,
-    );
+    )
+    .unwrap();
+
     graphs_a.retain(|g, _| g.num_loops() >= 5);
 
     let mut tot_symm_fact_graphs_a = Atom::new_num(0);
@@ -4718,7 +4720,9 @@ pub fn symbolica_symm_factors_bug() {
         &external_edges_for_generation,
         vertex_signatures_for_generation_b.as_slice(),
         &settings,
-    );
+    )
+    .unwrap();
+
     graphs_b.retain(|g, _| g.num_loops() >= 5);
 
     let mut tot_symm_fact_graphs_b = Atom::new_num(0);
