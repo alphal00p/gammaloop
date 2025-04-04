@@ -78,6 +78,7 @@ use linnet::half_edge::NodeIndex;
 use symbolica::{atom::Atom, graph::Graph as SymbolicaGraph};
 
 const CANONIZE_GRAPH_FLOWS: bool = true;
+const ANALYZE_RATIO_AS_RATIONAL_POLYNOMIAL: bool = true;
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct NodeColorWithVertexRule {
     pub external_tag: i32,
@@ -295,6 +296,7 @@ impl FeynGen {
             "CouplingsMultiplicity",
             "InternalFermionLoopSign",
             "ExternalFermionOrderingSign",
+            "AntiFermionSpinSumSign",
             "NumeratorIndependentSymmetryGrouping",
         ] {
             res = res.replace_all(
@@ -481,15 +483,15 @@ impl FeynGen {
 
         // Test vetoing of from all external spanning tree root positions to test that there are no issues from spanning tree directions
         // TODO rewrite and improve the vetoing logic of special topologies
-        (0..=(max_external - 1).max(0)).all(|shift| {
+        (0..=((max_external as isize) - 1).max(0)).all(|shift| {
             // (0..=0).all(|shift: usize| {
             let spanning_tree_root_node_position = graph_nodes
                 .iter()
-                .position(|n| n.data.external_tag == ((max_external - shift) as i32))
+                .position(|n| n.data.external_tag == ((max_external - shift as usize) as i32))
                 .unwrap();
             debug!(
                 "Spanning tree root position: external_tag={},node_position={}",
-                max_external - shift,
+                max_external - shift as usize,
                 spanning_tree_root_node_position
             );
 
@@ -522,8 +524,8 @@ impl FeynGen {
         if graph.nodes().iter().any(|n| n.data.external_tag < 0) {
             panic!("External tag must be positive, but found negative as obtained when performing external state symmetrization");
         }
-        let debug = false;
-        if debug {
+        const DEBUG_VETO: bool = false;
+        if DEBUG_VETO {
             debug!(
                 "\n\n>> Vetoing special topologies for the following {}-loop graph:\n{}",
                 graph.num_loops(),
@@ -567,7 +569,7 @@ impl FeynGen {
         let mut spanning_tree = graph.get_spanning_tree(spanning_tree_root);
         spanning_tree.chain_decomposition();
 
-        if debug {
+        if DEBUG_VETO {
             debug!(
                 "Spanning tree: order={:?}\n{}",
                 spanning_tree.order,
@@ -586,7 +588,7 @@ impl FeynGen {
         for (i_n, node) in spanning_tree.nodes.iter().enumerate() {
             node_children[node.parent].push(i_n);
         }
-        if debug {
+        if DEBUG_VETO {
             debug!("node_children={:?}", node_children);
         }
 
@@ -614,7 +616,7 @@ impl FeynGen {
                 *route = vec![spanning_tree_node_external_tag];
             }
         }
-        if debug {
+        if DEBUG_VETO {
             debug!("external_momenta_routing={:?}", external_momenta_routing);
         }
 
@@ -705,7 +707,7 @@ impl FeynGen {
                 }
             }
         }
-        if debug {
+        if DEBUG_VETO {
             debug!("self_energy_attachments={:?}", self_energy_attachments);
             debug!("vacuum_attachments={:?}", vacuum_attachments);
             debug!("self_loops={:?}", self_loops);
@@ -717,7 +719,7 @@ impl FeynGen {
         {
             if n_factorizable_loops < *min_n_fact_loops || n_factorizable_loops > *max_n_fact_loops
             {
-                if debug {
+                if DEBUG_VETO {
                     debug!(
                         "Vetoing graph due to having a number of factorizable loops ({}) outside the range [{}, {}]",
                         n_factorizable_loops, min_n_fact_loops, max_n_fact_loops
@@ -740,7 +742,7 @@ impl FeynGen {
                 tree_bridge_node_indices.insert(i_n);
             }
         }
-        if debug {
+        if DEBUG_VETO {
             debug!("bridge_node_positions={:?}", tree_bridge_node_indices);
         }
 
@@ -750,7 +752,7 @@ impl FeynGen {
         {
             if tree_bridge_node_indices.contains(back_edge_start_node_index) {
                 if let Some(veto_self_energy_options) = veto_self_energy {
-                    if debug {
+                    if DEBUG_VETO {
                         debug!(
                             "Vetoing self-energy for leg_id={}, back_edge_start_node_index={}, back_edge_position_in_list={}, chain_id={}, with options:\n{:?}",
                             leg_id, back_edge_start_node_index, back_edge_position_in_list, _chain_id, veto_self_energy_options
@@ -818,7 +820,7 @@ impl FeynGen {
             {
                 // Tadpole
                 if let Some(veto_tadpole_options) = veto_tadpole {
-                    if debug {
+                    if DEBUG_VETO {
                         debug!(
                             "Vetoing tadpole for back_edge_start_node_index={}, back_edge_position_in_list={}, chain_id={}, with options:\n{:?}",
                             back_edge_start_node_index, back_edge_position_in_list, chain_id, veto_tadpole_options
@@ -846,7 +848,7 @@ impl FeynGen {
                 #[allow(clippy::unnecessary_unwrap)]
                 // Snail
                 if let Some(veto_snails_options) = veto_snails {
-                    if debug {
+                    if DEBUG_VETO {
                         debug!(
                             "Vetoing snail for back_edge_start_node_index={}, back_edge_position_in_list={}, chain_id={}, with options:\n{:?}",
                             back_edge_start_node_index, back_edge_position_in_list, chain_id, veto_snails_options
@@ -874,7 +876,7 @@ impl FeynGen {
             }
         }
 
-        if debug {
+        if DEBUG_VETO {
             debug!(">> No special topology veto applied to this graph");
         }
 
@@ -2641,7 +2643,7 @@ impl FeynGen {
         //     .map(|(i, (orientation, name))| (i.clone(), (*orientation, name)))
         //     .collect::<Vec<_>>();
         let external_edges_for_generation = external_edges.clone();
-        let vertex_signatures_for_generation = vertex_signatures
+        let mut vertex_signatures_for_generation = vertex_signatures
             .keys()
             .map(|v| {
                 v.iter()
@@ -2654,6 +2656,8 @@ impl FeynGen {
                     .collect::<Vec<_>>()
             })
             .collect::<Vec<_>>();
+        // Sort vertices to improve reproducibility.
+        vertex_signatures_for_generation.sort();
         debug!(
             "generation_external_edges = {:?}",
             external_edges_for_generation
@@ -2674,6 +2678,20 @@ impl FeynGen {
             format!("{:<6}", utils::format_wdhms(0)).blue(),
             "Starting Feynman graph generation with Symbolica..."
         );
+        // println!(
+        //     "external_edges_for_generation=\n{:?}",
+        //     external_edges_for_generation
+        // );
+        // println!(
+        //     "vertex_signatures_for_generation=\n{:?}",
+        //     vertex_signatures_for_generation
+        // );
+        // println!(
+        //     "Some(self.options.loop_count_range.1)=\n{:?}",
+        //     self.options.loop_count_range.1
+        // );
+        // println!("filters.get_max_bridge()=\n{:?}", filters.get_max_bridge());
+        // println!("!filter_self_loop=\n{:?}", !filter_self_loop);
         let mut graphs = SymbolicaGraph::generate(
             external_edges_for_generation.as_slice(),
             vertex_signatures_for_generation.as_slice(),
@@ -2952,7 +2970,6 @@ impl FeynGen {
         last_step = step;
 
         let fermion_loop_count_range_filter = filters.get_fermion_loop_count_range();
-
         let bar = ProgressBar::new(processed_graphs.len() as u64);
         bar.set_style(progress_bar_style.clone());
         bar.set_message(
@@ -2989,7 +3006,6 @@ impl FeynGen {
                 .collect::<Result<Vec<_>, _>>()
         })?;
         bar.finish_and_clear();
-
         step = Instant::now();
         info!(
             "{} | Δ={} | {:<95}{}",
@@ -3352,13 +3368,13 @@ impl FeynGen {
                         .normalize_flows(&sorted_g, model)
                         .expect("Failed to normalize fermion flow");
 
-                    let symmetry_factor_with_external_fermion_flow_sign =
-                        if self.options.generation_type == GenerationType::Amplitude
-                            && ((!self
-                                .options
-                                .allow_symmetrization_of_external_fermions_in_amplitudes)
-                                || (self.options.symmetrize_initial_states
-                                    && self.options.symmetrize_final_states))
+                    let fermion_sign = if self.options.generation_type == GenerationType::Amplitude
+                    {
+                        if (!self
+                            .options
+                            .allow_symmetrization_of_external_fermions_in_amplitudes)
+                            || (!self.options.symmetrize_initial_states
+                                && !self.options.symmetrize_final_states)
                         {
                             function!(
                                 symb!("ExternalFermionOrderingSign"),
@@ -3367,21 +3383,22 @@ impl FeynGen {
                                 } else {
                                     1
                                 })
-                            ) * symmetry_factor
+                            )
                         } else {
-                            symmetry_factor
-                                * self.external_xs_fermion_signs(
-                                    &g_with_canonical_flows,
-                                    model,
-                                    self.options.initial_pdgs.len(),
-                                )
-                        };
-
+                            Atom::new_num(1)
+                        }
+                    } else {
+                        self.cross_section_external_fermion_ordering_sign(
+                            &g_with_canonical_flows,
+                            model,
+                            self.options.initial_pdgs.len(),
+                        )
+                    };
                     CanonizedGraphInfo {
                         canonized_graph: canonical_repr,
                         graph: sorted_g,
                         graph_with_canonized_flow: g_with_canonical_flows,
-                        symmetry_factor: symmetry_factor_with_external_fermion_flow_sign,
+                        symmetry_factor: symmetry_factor * fermion_sign,
                     }
                 })
                 .collect::<Vec<_>>()
@@ -3752,17 +3769,17 @@ impl FeynGen {
         for (_canonical_repr, pooled_graphs_lists_for_this_topology) in
             pooled_bare_graphs.lock().unwrap().iter()
         {
+            pooled_bare_graphs_len += 1;
             for pooled_graphs_list in pooled_graphs_lists_for_this_topology {
-                let previous_reference_ratio = pooled_graphs_list[0].ratio.clone();
                 let sorted_graphs_to_combine = pooled_graphs_list
                     .iter()
                     .sorted_by_key(|pooled_graph| pooled_graph.graph_id)
                     .collect::<Vec<_>>();
+                let new_reference_ratio = sorted_graphs_to_combine[0].ratio.clone();
                 let mut combined_overall_factor = Atom::new_num(0);
-                let mut bare_graph_representative = pooled_graphs_list[0].bare_graph.clone();
+                let mut bare_graph_representative = sorted_graphs_to_combine[0].bare_graph.clone();
                 if sorted_graphs_to_combine.len() > 1 {
                     for graph_to_combine in sorted_graphs_to_combine {
-                        pooled_bare_graphs_len += 1;
                         // The computation of &graph_to_combine.ratio / &previous_reference_ratio is necessary so that if we started with this order of graphs to combine
                         //   (A, B, C), with ratios (r_1 = 1, r_2 = B/A, r_3 = C/A)
                         // And when forcing the reference diagram to be e.g. C, (so that we get a predictive ref graph in the multi-thread case), we need to pick C as the
@@ -3772,12 +3789,11 @@ impl FeynGen {
                             + function!(
                                 symb!("NumeratorDependentGrouping"),
                                 Atom::new_num(graph_to_combine.graph_id as i64),
-                                (&graph_to_combine.ratio / &previous_reference_ratio).expand(),
+                                (&graph_to_combine.ratio / &new_reference_ratio).expand(),
                                 graph_to_combine.bare_graph.overall_factor.clone()
                             );
                     }
                 } else {
-                    pooled_bare_graphs_len += 1;
                     combined_overall_factor = bare_graph_representative.overall_factor.clone();
                 }
                 if FeynGen::evaluate_overall_factor(combined_overall_factor.as_view())
@@ -4144,7 +4160,7 @@ impl FeynGen {
             //    );
             //}
         }
-        println!(
+        debug!(
             "Graphs: [\n{}\n]",
             bare_graphs
                 .iter()
@@ -4385,7 +4401,19 @@ impl FeynGen {
                                     } else if b.is_zero() {
                                         None
                                     } else {
-                                        Some((a / b).expand())
+                                        let mut ratio = a / b;
+                                        if ANALYZE_RATIO_AS_RATIONAL_POLYNOMIAL {
+                                            ratio = ratio
+                                                .to_rational_polynomial::<_, _, u8>(
+                                                    &symbolica::domains::rational::Q,
+                                                    &symbolica::domains::integer::Z,
+                                                    None,
+                                                )
+                                                .to_expression();
+                                        } else {
+                                            ratio = ratio.expand();
+                                        }
+                                        Some(ratio)
                                     }
                                 })
                                 .collect::<HashSet<_>>();
@@ -4395,7 +4423,7 @@ impl FeynGen {
                             //     numerator_a.diagram_id,
                             //     ratios
                             //         .iter()
-                            //         .map(|av| av.to_canonical_string())
+                            //         .map(|av| av.as_ref().unwrap().to_canonical_string())
                             //         .collect::<Vec<_>>()
                             //         .join("\n")
                             // );
@@ -4541,8 +4569,6 @@ impl FeynGen {
     }
 
     pub fn substitute_color_factors(expr: AtomView) -> Atom {
-        // To disable numerator-aware graph isomorphism specific to N_c = 3, uncomment below
-        // return expr.to_owned();
         let replacements = vec![
             (Atom::parse("Nc").unwrap(), Atom::new_num(3)),
             (Atom::parse("TR").unwrap(), Atom::parse("1/2").unwrap()),
@@ -4553,10 +4579,10 @@ impl FeynGen {
         for (src, trgt) in replacements {
             res = res.replace_all(&src.to_pattern(), trgt.to_pattern(), None, None);
         }
-        res.expand()
+        res
     }
 
-    fn external_xs_fermion_signs(
+    fn cross_section_external_fermion_ordering_sign(
         &self,
         graph: &SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>,
         model: &Model,
@@ -4564,12 +4590,32 @@ impl FeynGen {
     ) -> Atom {
         let mut he_graph =
             FeynGenHedgeGraph::from_feyn_gen_symbolica(graph.clone(), model, n_initials);
+
+        // info!("Number of external fermion loops: {}", he_graph);
         let n_external_fermion_loops = he_graph.number_of_external_fermion_loops();
 
+        let number_of_initial_antifermions = self
+            .options
+            .initial_pdgs
+            .iter()
+            .filter(|&pdg| {
+                let p = model.get_particle_from_pdg(*pdg as isize);
+                p.is_antiparticle() && p.is_fermion()
+            })
+            .count();
+
         let sign = Sign::Negative.pow(n_external_fermion_loops);
+        let antifermion_spinsum_sign = Sign::Negative.pow(number_of_initial_antifermions);
+
         function!(
             symb!("ExternalFermionOrderingSign"),
             Atom::new_num(match sign {
+                Sign::Positive => 1,
+                Sign::Negative => -1,
+            })
+        ) * function!(
+            symb!("AntiFermionSpinSumSign"),
+            Atom::new_num(match antifermion_spinsum_sign {
                 Sign::Positive => 1,
                 Sign::Negative => -1,
             })
@@ -4739,14 +4785,18 @@ impl ProcessedNumeratorForComparison {
                 //     processed_numerator.get_single_atom().unwrap().0
                 // );
                 let canonized_numerator = if group_options.test_canonized_numerator {
-                    Some(
-                        processed_numerator
-                            .canonize_lorentz()
-                            .unwrap()
-                            .get_single_atom()
-                            .unwrap()
-                            .0,
-                    )
+                    let mut canonized_numerator_to_consider = processed_numerator
+                        .canonize_lorentz()
+                        .unwrap()
+                        .get_single_atom()
+                        .unwrap()
+                        .0;
+                    if group_options.fully_numerical_substitution_when_comparing_numerators {
+                        canonized_numerator_to_consider = FeynGen::substitute_color_factors(
+                            canonized_numerator_to_consider.as_atom_view(),
+                        )
+                    };
+                    Some(canonized_numerator_to_consider)
                 } else {
                     None
                 };
@@ -4802,7 +4852,7 @@ impl ProcessedNumeratorForComparison {
                             if grouping_options
                                 .fully_numerical_substitution_when_comparing_numerators
                             {
-                                FeynGen::substitute_color_factors(a.0.as_atom_view())
+                                FeynGen::substitute_color_factors(a.0.as_atom_view()).expand()
                             } else {
                                 a.0.to_owned()
                             }
@@ -5415,4 +5465,61 @@ fn test_scored_lmb() {
     };
 
     assert!(scored_lmb > scored_lmb3);
+}
+
+#[test]
+pub fn symbolica_symm_factors_bug() {
+    let external_edges_for_generation: Vec<(usize, (Option<bool>, usize))> = vec![];
+
+    let vertex_signatures_for_generation_a = vec![
+        vec![(None, 21), (None, 21), (None, 21)],
+        vec![(None, 21), (None, 21), (None, 21), (None, 21)],
+        vec![(Some(true), 1), (Some(false), 1), (None, 21)],
+        vec![(Some(true), 6), (Some(false), 6), (None, 21)],
+        vec![(Some(false), 9000005), (Some(true), 9000005), (None, 21)],
+        vec![(Some(true), 2), (Some(false), 2), (None, 21)],
+    ];
+    let mut graphs_a = SymbolicaGraph::generate(
+        &external_edges_for_generation,
+        vertex_signatures_for_generation_a.as_slice(),
+        None,
+        Some(5),
+        Some(0),
+        true,
+    );
+    graphs_a.retain(|g, _| g.num_loops() >= 5);
+
+    let mut tot_symm_fact_graphs_a = Atom::new_num(0);
+    for (_g, s) in graphs_a.iter() {
+        tot_symm_fact_graphs_a =
+            tot_symm_fact_graphs_a + Atom::new_num(1) / Atom::new_num(s.clone());
+    }
+    println!("tot_symm_fact_graphs_A = {}", tot_symm_fact_graphs_a);
+
+    let vertex_signatures_for_generation_b = vec![
+        vec![(Some(true), 1), (Some(false), 1), (None, 21)],
+        vec![(None, 21), (None, 21), (None, 21), (None, 21)],
+        vec![(Some(true), 6), (Some(false), 6), (None, 21)],
+        vec![(None, 21), (None, 21), (None, 21)],
+        vec![(Some(false), 9000005), (Some(true), 9000005), (None, 21)],
+        vec![(Some(true), 2), (Some(false), 2), (None, 21)],
+    ];
+    let mut graphs_b = SymbolicaGraph::generate(
+        &external_edges_for_generation,
+        vertex_signatures_for_generation_b.as_slice(),
+        None,
+        Some(5),
+        Some(0),
+        true,
+    );
+    graphs_b.retain(|g, _| g.num_loops() >= 5);
+
+    let mut tot_symm_fact_graphs_b = Atom::new_num(0);
+    for (_g, s) in graphs_b.iter() {
+        tot_symm_fact_graphs_b =
+            tot_symm_fact_graphs_b + Atom::new_num(1) / Atom::new_num(s.clone());
+    }
+    println!("tot_symm_fact_graphs_B = {}", tot_symm_fact_graphs_b);
+
+    assert!(tot_symm_fact_graphs_a == tot_symm_fact_graphs_b);
 }

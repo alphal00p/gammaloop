@@ -1,24 +1,33 @@
 [
-  {
-    "label": "Run Rust tests",
-    "command": "cargo nextest r -E 'test(~$ZED_STEM)&test(~$ZED_SYMBOL)' --no-default-features --lib  --nocapture",
-    "tags": ["rust-test"],
-    "shell": {
-      "program": "bash"
+    {
+        "label": "Run Rust tests",
+        "command": "cargo nextest r -E 'test(~$ZED_STEM)&test(~$ZED_SYMBOL)' --no-default-features --lib  --nocapture",
+        "tags": ["rust-test"],
+        "shell": {
+            "program": "bash"
+        }
+    },
+
+    {
+        "label": "Run Rust tests accept all",
+        "command": "INSTA_UPDATE=always cargo nextest r -E 'test(~$ZED_STEM)&test(~$ZED_SYMBOL)' --no-default-features --lib  --nocapture",
+        "tags": ["rust-test"],
+        "shell": {
+            "program": "bash"
+        }
+    },
+    {
+        "label": "Run Rust mod tests",
+        "command": "cargo test -p $env.ZED_CUSTOM_RUST_PACKAGE $env.ZED_SYMBOL --no-default-features",
+        "tags": ["rust-mod-test"]
+    },
+    {
+        "label": "Run Rust main function",
+        "command": "cargo run -p $env.ZED_CUSTOM_RUST_PACKAGE --bin $env.ZED_CUSTOM_RUST_BIN_NAME --no-default-features",
+        "tags": ["rust-main"]
+    },
+    {
+        "label": "echo current symbol",
+        "command": "echo $env.ZED_SYMBOL"
     }
-  },
-  {
-    "label": "Run Rust mod tests",
-    "command": "cargo test -p $env.ZED_CUSTOM_RUST_PACKAGE $env.ZED_SYMBOL --no-default-features",
-    "tags": ["rust-mod-test"]
-  },
-  {
-    "label": "Run Rust main function",
-    "command": "cargo run -p $env.ZED_CUSTOM_RUST_PACKAGE --bin $env.ZED_CUSTOM_RUST_BIN_NAME --no-default-features",
-    "tags": ["rust-main"]
-  },
-  {
-    "label": "echo current symbol",
-    "command": "echo $env.ZED_SYMBOL"
-  }
 ]

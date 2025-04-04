@@ -46,7 +46,7 @@ use symbolica::atom::Atom;
 use symbolica::printer::{AtomPrinter, PrintOptions};
 
 use git_version::git_version;
-pub const GIT_VERSION: &str = git_version!();
+pub const GIT_VERSION: &str = git_version!(fallback = "unavailable");
 pub const VERSION: &str = "0.0.1";
 
 #[allow(unused)]

@@ -10,23 +10,13 @@ authors = [
 requires-python = "==3.12.*"
 readme = "README.md"
 license = { file = "LICENSE.md" }
-keywords = [
-    "physics",
-    "collider",
-    "cross-section",
-    "perturbative",
-    "loop",
-]
+keywords = ["physics", "collider", "cross-section", "perturbative", "loop"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Programming Language :: Rust",
     "Topic :: Scientific/Engineering :: Physics",
 ]
-dependencies = [
-    "PyYAML>=6.0.1",
-    "PyMuPDF>=1.23.4",
-    "pydot>=3.0.1",
-]
+dependencies = ["PyYAML>=6.0.1", "PyMuPDF>=1.23.4", "pydot>=3.0.1"]
 
 [project.urls]
 homepage = "https://alphaloop.ch"
@@ -40,8 +30,9 @@ gammaloop = "gammaloop:cli"
 dev = [
     "symbolica>=0.14.0,<0.15",
     "black>=23.12.1,<24",
+    "inline-snapshot>=0.21.2",
     "PyYAML>=6.0.1,<7",
-    "pytest>=8.3.5",
+    "pytest>=8.3.5,<9",
 ]
 
 [tool.uv]

@@ -375,7 +375,7 @@ parameters:
   value:
   - 1.2177157847767195
   - 0.0
-  expression: 2*sqrt(aS)*sqrt(pi)
+  expression: 2*aS^(1/2)*pi^(1/2)
 - lhablock: null
   lhacode: null
   name: MW
@@ -384,7 +384,7 @@ parameters:
   value:
   - 80.41900244575616
   - 0.0
-  expression: sqrt(1/2*MZ^2+sqrt(1/4*MZ^4-pi*aEW*Gf^-1*MZ^2*sqrt(2)^-1))
+  expression: (1/2*MZ^2+sqrt(1/4*MZ^4-pi*MZ^2*aEW*Gf^-1*sqrt(2)^-1))^(1/2)
 - lhablock: null
   lhacode: null
   name: ee
@@ -393,7 +393,7 @@ parameters:
   value:
   - 0.3079537672443688
   - 0.0
-  expression: 2*sqrt(pi)*sqrt(aEW)
+  expression: 2*pi^(1/2)*aEW^(1/2)
 - lhablock: null
   lhacode: null
   name: sw2
@@ -411,7 +411,7 @@ parameters:
   value:
   - 0.8819033474333922
   - 0.0
-  expression: sqrt(-sw2+1)
+  expression: (-sw2+1)^(1/2)
 - lhablock: null
   lhacode: null
   name: sw
@@ -420,7 +420,7 @@ parameters:
   value:
   - 0.4714302554840723
   - 0.0
-  expression: sqrt(sw2)
+  expression: sw2^(1/2)
 - lhablock: null
   lhacode: null
   name: g1
@@ -447,7 +447,7 @@ parameters:
   value:
   - 246.2184581018163
   - 0.0
-  expression: 2*ee^-1*MW*sw
+  expression: 2*MW*ee^-1*sw
 - lhablock: null
   lhacode: null
   name: lam
@@ -465,7 +465,7 @@ parameters:
   value:
   - 0.026995554250465494
   - 0.0
-  expression: vev^-1*ymb*sqrt(2)
+  expression: vev^-1*ymb*2^(1/2)
 - lhablock: null
   lhacode: null
   name: yc
@@ -474,7 +474,7 @@ parameters:
   value:
   - 0.0
   - 0.0
-  expression: vev^-1*ymc*sqrt(2)
+  expression: vev^-1*ymc*2^(1/2)
 - lhablock: null
   lhacode: null
   name: ye
@@ -483,7 +483,7 @@ parameters:
   value:
   - 0.0
   - 0.0
-  expression: vev^-1*yme*sqrt(2)
+  expression: vev^-1*yme*2^(1/2)
 - lhablock: null
   lhacode: null
   name: ym
@@ -492,7 +492,7 @@ parameters:
   value:
   - 0.0
   - 0.0
-  expression: vev^-1*ymm*sqrt(2)
+  expression: vev^-1*ymm*2^(1/2)
 - lhablock: null
   lhacode: null
   name: yt
@@ -501,7 +501,7 @@ parameters:
   value:
   - 0.9936661458150063
   - 0.0
-  expression: vev^-1*ymt*sqrt(2)
+  expression: vev^-1*ymt*2^(1/2)
 - lhablock: null
   lhacode: null
   name: ytau
@@ -510,7 +510,7 @@ parameters:
   value:
   - 0.010206617000654719
   - 0.0
-  expression: vev^-1*ymtau*sqrt(2)
+  expression: vev^-1*ymtau*2^(1/2)
 - lhablock: null
   lhacode: null
   name: muH
@@ -519,7 +519,7 @@ parameters:
   value:
   - 88.38834764831844
   - 0.0
-  expression: sqrt(lam*vev^2)
+  expression: (vev^2*lam)^(1/2)
 - lhablock: null
   lhacode: null
   name: I1x31
@@ -1505,7 +1505,7 @@ lorentz_structures:
   - 3
   - 3
   - 3
-  structure: P(1,2)*Metric(2,3)-P(1,3)*Metric(2,3)-P(2,1)*Metric(1,3)+P(2,3)*Metric(1,3)+P(3,1)*Metric(1,2)-P(3,2)*Metric(1,2)
+  structure: Metric(1,2)*P(3,1)-Metric(1,2)*P(3,2)-Metric(1,3)*P(2,1)+Metric(1,3)*P(2,3)+Metric(2,3)*P(1,2)-Metric(2,3)*P(1,3)
 - name: SSSS1
   spins:
   - 1
@@ -1757,34 +1757,34 @@ couplings:
   - - QED
     - 1
 - name: GC_40
-  expression: ee*sw^-1*sqrt(2)^-1*complex(0,1)
+  expression: ee*sw^-1*complex(0,1)*(1/2)^(1/2)
   value:
   - 0.0
-  - 0.4619054347431333
+  - 0.4619054347431334
   orders:
   - - QED
     - 1
 - name: GC_41
-  expression: ee*sw^-1*CKM1x1*sqrt(2)^-1*complex(0,1)
+  expression: ee*sw^-1*CKM1x1*complex(0,1)*(1/2)^(1/2)
   value:
   - 0.0
-  - 0.4619054347431333
+  - 0.4619054347431334
   orders:
   - - QED
     - 1
 - name: GC_45
-  expression: ee*sw^-1*CKM2x2*sqrt(2)^-1*complex(0,1)
+  expression: ee*sw^-1*CKM2x2*complex(0,1)*(1/2)^(1/2)
   value:
   - 0.0
-  - 0.4619054347431333
+  - 0.4619054347431334
   orders:
   - - QED
     - 1
 - name: GC_49
-  expression: ee*sw^-1*CKM3x3*sqrt(2)^-1*complex(0,1)
+  expression: ee*sw^-1*CKM3x3*complex(0,1)*(1/2)^(1/2)
   value:
   - 0.0
-  - 0.4619054347431333
+  - 0.4619054347431334
   orders:
   - - QED
     - 1
@@ -1933,7 +1933,7 @@ couplings:
   - - QED
     - 1
 - name: GC_68
-  expression: -2*lam*vev*complex(0,1)
+  expression: -2*vev*lam*complex(0,1)
   value:
   - 0.0
   - -63.45990516088257
@@ -1941,7 +1941,7 @@ couplings:
   - - QED
     - 1
 - name: GC_69
-  expression: -6*lam*vev*complex(0,1)
+  expression: -6*vev*lam*complex(0,1)
   value:
   - 0.0
   - -190.37971548264773
@@ -2045,33 +2045,33 @@ couplings:
   - - QED
     - 1
 - name: GC_82
-  expression: -yb*sqrt(2)^-1
+  expression: -yb*(1/2)^(1/2)
   value:
-  - -0.019088739472393475
+  - -0.01908873947239348
   - 0.0
   orders:
   - - QED
     - 1
 - name: GC_83
-  expression: -yb*sqrt(2)^-1*complex(0,1)
+  expression: -yb*complex(0,1)*(1/2)^(1/2)
   value:
   - 0.0
-  - -0.019088739472393475
+  - -0.01908873947239348
   orders:
   - - QED
     - 1
 - name: GC_94
-  expression: -yt*sqrt(2)^-1*complex(0,1)
+  expression: -yt*complex(0,1)*(1/2)^(1/2)
   value:
   - 0.0
-  - -0.7026280699412917
+  - -0.7026280699412918
   orders:
   - - QED
     - 1
 - name: GC_95
-  expression: yt*sqrt(2)^-1
+  expression: yt*(1/2)^(1/2)
   value:
-  - 0.7026280699412917
+  - 0.7026280699412918
   - 0.0
   orders:
   - - QED
@@ -2093,42 +2093,42 @@ couplings:
   - - QED
     - 1
 - name: GC_98
-  expression: -ytau*sqrt(2)^-1
+  expression: -ytau*(1/2)^(1/2)
   value:
-  - -0.0072171680941368515
+  - -0.007217168094136852
   - 0.0
   orders:
   - - QED
     - 1
 - name: GC_99
-  expression: -ytau*sqrt(2)^-1*complex(0,1)
+  expression: -ytau*complex(0,1)*(1/2)^(1/2)
   value:
   - 0.0
-  - -0.0072171680941368515
+  - -0.007217168094136852
   orders:
   - - QED
     - 1
 - name: GC_100
-  expression: ee*sw^-1*sqrt(2)^-1*complex(0,1)*complexconjugate(CKM1x1)
+  expression: ee*sw^-1*complex(0,1)*complexconjugate(CKM1x1)*(1/2)^(1/2)
   value:
   - 0.0
-  - 0.4619054347431333
+  - 0.4619054347431334
   orders:
   - - QED
     - 1
 - name: GC_104
-  expression: ee*sw^-1*sqrt(2)^-1*complex(0,1)*complexconjugate(CKM2x2)
+  expression: ee*sw^-1*complex(0,1)*complexconjugate(CKM2x2)*(1/2)^(1/2)
   value:
   - 0.0
-  - 0.4619054347431333
+  - 0.4619054347431334
   orders:
   - - QED
     - 1
 - name: GC_108
-  expression: ee*sw^-1*sqrt(2)^-1*complex(0,1)*complexconjugate(CKM3x3)
+  expression: ee*sw^-1*complex(0,1)*complexconjugate(CKM3x3)*(1/2)^(1/2)
   value:
   - 0.0
-  - 0.4619054347431333
+  - 0.4619054347431334
   orders:
   - - QED
     - 1

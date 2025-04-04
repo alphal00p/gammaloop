@@ -5,7 +5,7 @@ use linnet::half_edge::{
     involution::{EdgeData, EdgeIndex, Flow, HedgePair, Orientation},
     nodestorage::NodeStorageOps,
     subgraph::{cut::PossiblyCutEdge, SubGraph, SubGraphOps},
-    HedgeGraph,
+    EdgeAccessors, HedgeGraph,
 };
 use symbolica::graph::Graph as SymbolicaGraph;
 
@@ -51,8 +51,53 @@ impl<E, V> FeynGenHedgeGraph<E, V> {
 
     pub fn glue_external_hedges(&mut self) {
         if self.state == CutState::Cut {
-            self.graph.glue_back();
+            self.graph.glue_back_strict();
             self.state = CutState::Vacuum;
+        }
+    }
+
+    /// Only on cut graphs
+    pub fn only_default_orientations(&mut self) {
+        let cut = self.graph.cut();
+
+        for l in cut.iter_left_hedges() {
+            let orientation = self.graph.orientation(l);
+            let flow = self.graph.flow(l);
+
+            match orientation {
+                Orientation::Reversed => match flow {
+                    Flow::Source => self.graph.set_flow(l, Flow::Sink),
+                    Flow::Sink => self.graph.set_flow(l, Flow::Source),
+                },
+                Orientation::Undirected => {
+                    if let Flow::Sink = flow {
+                        self.graph.set_flow(l, Flow::Source);
+                        self.graph[[&l]].cut(Flow::Source);
+                    }
+                    self.graph.set_orientation(l, Orientation::Default);
+                }
+                _ => {}
+            }
+        }
+
+        for l in cut.iter_right_hedges() {
+            let orientation = self.graph.orientation(l);
+            let flow = self.graph.flow(l);
+
+            match orientation {
+                Orientation::Reversed => match flow {
+                    Flow::Source => self.graph.set_flow(l, Flow::Sink),
+                    Flow::Sink => self.graph.set_flow(l, Flow::Source),
+                },
+                Orientation::Undirected => {
+                    if let Flow::Sink = flow {
+                        self.graph.set_flow(l, Flow::Sink);
+                        self.graph[[&l]].cut(Flow::Sink);
+                    }
+                    self.graph.set_orientation(l, Orientation::Default);
+                }
+                _ => {}
+            }
         }
     }
 
@@ -81,6 +126,7 @@ impl<E, V> FeynGenHedgeGraph<E, V> {
 
         excised.align_underlying_to_superficial();
         self.graph = excised;
+        self.only_default_orientations();
         self.state = CutState::Cut;
     }
 }
@@ -90,6 +136,7 @@ impl<V> FeynGenHedgeGraph<Arc<Particle>, V> {
 
         for (p, _, d) in self.graph.iter_all_edges() {
             if d.data.edge_data().is_fermion() {
+                #[allow(clippy::single_match)]
                 match p {
                     HedgePair::Paired { source, sink } => {
                         fermions.set(source.0, true);
@@ -118,15 +165,11 @@ impl<V> FeynGenHedgeGraph<Arc<Particle>, V> {
     where
         V: Clone,
     {
-        // println!("number_of_external_fermion_loops");
-        // println!("{}", self);
-
         self.remove_external_nodes();
         let internal = self.number_of_fermion_loops();
         // println!("{}", self);
 
         self.glue_external_hedges();
-        // println!("{}", self);
 
         let all_fermion_loops = self.number_of_fermion_loops();
 
@@ -214,7 +257,17 @@ impl<V> Display for FeynGenHedgeGraph<Arc<Particle>, V> {
             self.graph.dot_impl(
                 &self.graph.full_filter(),
                 "",
-                &|a| Some(format!("label=\"{}\"", a.edge_data().name)),
+                &|a| {
+                    match a.flow() {
+                        Some(Flow::Sink) => {
+                            Some(format!("label=\"sink{}{}\"", a.index, a.edge_data().name))
+                        }
+                        Some(Flow::Source) => {
+                            Some(format!("label=\"source{}{}\"", a.index, a.edge_data().name))
+                        }
+                        None => Some(format!("label=\"{}\"", a.edge_data().name)),
+                    }
+                },
                 &|a| Some(format!(
                     "label=\"{}\"",
                     match a {
@@ -338,6 +391,56 @@ pub mod test {
         let n_external_fermion_loops = he_graph.number_of_external_fermion_loops();
 
         assert_eq!(n_external_fermion_loops, 2)
+        // SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>,
+    }
+
+    #[test]
+    fn external_gluon() {
+        let mut graph = SymbolicaGraph::new();
+
+        let ext1 = graph.add_node(NodeColorWithoutVertexRule { external_tag: 1 });
+        let ext2 = graph.add_node(NodeColorWithoutVertexRule { external_tag: 3 });
+
+        let ext3 = graph.add_node(NodeColorWithoutVertexRule { external_tag: 4 });
+        let ext4 = graph.add_node(NodeColorWithoutVertexRule { external_tag: 2 });
+
+        let internal = NodeColorWithoutVertexRule { external_tag: 0 };
+        let n1 = graph.add_node(internal);
+        let n2 = graph.add_node(internal);
+        let n3 = graph.add_node(internal);
+        let n4 = graph.add_node(internal);
+        let n5 = graph.add_node(internal);
+        let n6 = graph.add_node(internal);
+
+        graph
+            .add_edge(ext1, n1, true, EdgeColor { pdg: 21 })
+            .unwrap();
+        graph.add_edge(n1, n2, true, EdgeColor { pdg: 21 }).unwrap();
+        graph
+            .add_edge(n2, n3, false, EdgeColor { pdg: 21 })
+            .unwrap();
+        graph.add_edge(n4, n3, true, EdgeColor { pdg: 11 }).unwrap();
+        graph
+            .add_edge(n4, n5, false, EdgeColor { pdg: 21 })
+            .unwrap();
+        graph.add_edge(n5, n6, true, EdgeColor { pdg: 11 }).unwrap();
+        graph.add_edge(n6, n5, true, EdgeColor { pdg: 11 }).unwrap();
+        graph
+            .add_edge(n6, n1, false, EdgeColor { pdg: 21 })
+            .unwrap();
+        graph
+            .add_edge(ext4, n4, true, EdgeColor { pdg: 11 })
+            .unwrap();
+        graph
+            .add_edge(ext2, n2, true, EdgeColor { pdg: 21 })
+            .unwrap();
+        graph
+            .add_edge(n3, ext3, true, EdgeColor { pdg: 11 })
+            .unwrap();
+
+        let model = load_generic_model("sm");
+        let mut he_graph = FeynGenHedgeGraph::from_feyn_gen_symbolica(graph, &model, 2);
+        he_graph.number_of_external_fermion_loops();
         // SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>,
     }
 }

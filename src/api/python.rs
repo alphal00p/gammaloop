@@ -35,8 +35,12 @@ use std::{
     str::FromStr,
     sync::{LazyLock, Mutex},
 };
-use symbolica::{atom::Atom, printer::PrintOptions};
-const GIT_VERSION: &str = git_version!();
+
+use symbolica::{
+    atom::{Atom, AtomCore},
+    printer::PrintOptions,
+};
+const GIT_VERSION: &str = git_version!(fallback = "unavailable");
 
 #[allow(unused)]
 use pyo3::{
@@ -117,6 +121,14 @@ pub fn format_target(target: String, level: log::Level) -> ColoredString {
         shortened_path = format!("{}...", shortened_path.chars().take(17).collect::<String>());
     }
     format!("{:<20}", shortened_path).bright_blue()
+}
+
+#[pyfunction]
+#[pyo3(name = "atom_to_canonical_string")]
+pub fn atom_to_canonical_string(atom_str: &str) -> PyResult<String> {
+    Atom::parse(atom_str)
+        .map(|a| a.to_canonical_string())
+        .map_err(|e| exceptions::PyException::new_err(e.to_string()))
 }
 
 #[pyfunction]
@@ -226,6 +238,7 @@ fn gammalooprs(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     m.add("git_version", GIT_VERSION)?;
     m.add_wrapped(wrap_pyfunction!(cli_wrapper))?;
     m.add_wrapped(wrap_pyfunction!(setup_logging))?;
+    m.add_wrapped(wrap_pyfunction!(atom_to_canonical_string))?;
     Ok(())
 }
 

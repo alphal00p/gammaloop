@@ -42,7 +42,7 @@ impl Default for GraphGroupingOptions {
             number_of_numerical_samples: 5,
             differentiate_particle_masses_only: true,
             fully_numerical_substitution_when_comparing_numerators: true,
-            test_canonized_numerator: true,
+            test_canonized_numerator: false,
         }
     }
 }
@@ -338,7 +338,7 @@ impl FeynGenFilters {
                                     graph_coupling_orders
                                         .get(&SmartString::from(k))
                                         .map_or(0 == *v_min, |o| {
-                                            *o >= *v_min && (*v_max).map_or(true, |max| *o <= max)
+                                            *o >= *v_min && (*v_max).is_none_or(|max| *o <= max)
                                         })
                                 });
                                 // if a {
