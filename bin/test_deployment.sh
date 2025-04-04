@@ -21,9 +21,9 @@ cd $TMPDIR/test_gammaloop_deployment
 echo "Creating virtual enviroment for testing deployment"
 virtualenv venv
 source ./venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install pytest
-python -m pip install `ls -1 $TMPDIR/test_gammaloop_deployment/wheel/*.whl`
+python3 -m pip install --upgrade pip
+python3 -m pip install pytest
+python3 -m pip install `ls -1 $TMPDIR/test_gammaloop_deployment/wheel/*.whl`
 RETCODE=$RETCODE+$?;
 echo "Building dependencies in test deployment"
 gammaloop --build_dependencies
@@ -32,7 +32,7 @@ cd `ls -d1 ./venv/lib/python*/site-packages/gammaloop`
 RETCODE=$RETCODE+$?;
 #source `gammaloop -venv`
 echo "Running gammaloop tests withing deployed environment"
-python -m pytest --max-runtime 15.0 -k "test_scalar_triangle"
+python3 -m pytest --max-runtime 15.0 -k "test_scalar_triangle"
 RETCODE=$RETCODE+$?;
 if [ $(($RETCODE)) == 0 ]
 then
