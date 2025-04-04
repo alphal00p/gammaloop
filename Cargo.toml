@@ -1,6 +1,6 @@
 [package]
 name = "gammalooprs"
-version = "0.3.2"
+version = "0.3.3"
 edition = "2021"
 authors = ["Valentin Hirschi <valentin.hirschi@gmail.com>"]
 categories = ["science"]
@@ -39,19 +39,24 @@ lto = "fat"
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
 
+[profile.dev.package]
+insta.opt-level = 3
+similar.opt-level = 3
 
 [dependencies]
 # These will be patched
 symbolica = { version = "0.14.0" }
 
 spenso = { version = "0.4.0", features = ["shadowing"] }
-linnet = { git = "https://github.com/alphal00p/linnet", features = [
-    "symbolica",
+linnet = { version = "0.2.0", features = [
+    # "symbolica",
     "drawing",
 ] }
 
 
-momtrop = { git = "https://github.com/alphal00p/momtrop", features = ["log"], rev = "a77a7e3a6681892008ebbfbd92788d48e7009136" }
+momtrop = { git = "https://github.com/alphal00p/momtrop", features = [
+    "log",
+], rev = "a77a7e3a6681892008ebbfbd92788d48e7009136" }
 serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "*"
 bincode = { git = "https://github.com/branchseer/bincode", branch = "decode_context", features = [
@@ -78,7 +83,7 @@ statrs = "0.16.0"
 smallvec = { version = "1.7", features = ["const_generics", "serde"] }
 itertools = "0.8"
 smartstring = { version = "*", features = ["serde"] }
-log = { version = "*", features = ["release_max_level_info"]}
+log = { version = "*", features = ["release_max_level_debug"] }
 env_logger = "*"
 pyo3-log = { version = "0.11.0", optional = true }
 nalgebra = "0.32.3"
@@ -93,7 +98,7 @@ pprof = { version = "0.13.0", features = ["criterion", "flamegraph"] }
 derive_more = "0.99.17"
 serde_json = "1.0.115"
 ctrlc = "3.4.4"
-constcat = "0.5.0"
+# constcat = "0.5.0"
 ref-ops = "0.2.5"
 delegate = "0.12.0"
 typed-index-collections = { version = "3.1.0", features = [
@@ -109,18 +114,18 @@ uuid = { version = "1.10.0", features = ["serde", "v4"] }
 serde_with = "3.9.0"
 insta = { version = "1.40.0", features = ["ron", "toml"] }
 bitvec = { version = "1.0.1", features = ["serde"] }
-pathfinding = "4.11.0"
+# pathfinding = "4.11.0"
 brotli = "7.0.0"
-cgmath = "0.18.0"
-argmin = "0.10.0"
-by_address = "1.2.1"
+# cgmath = "0.18.0"
+# argmin = "0.10.0"
+# by_address = "1.2.1"
 pyo3-pylogger = { version = "0.3.0", optional = true }
 fern = "0.7.1"
-humantime = "2.1.0"
+# humantime = "2.1.0"
 chrono = "0.4.39"
 
 [dependencies.pyo3]
-features = ["multiple-pymethods"]
+features = ["abi3", "abi3-py37"]
 optional = true
 version = "0.21"
 
@@ -137,7 +142,7 @@ name = "cli"
 # required-features = ["binary"]
 bench = false
 [features]
-default = ["python_api", "fjcore"]
+default = ["python_api"]
 extension-module = ["pyo3/extension-module"]
 higher_loops = []
 fjcore = []
@@ -152,3 +157,5 @@ no_python = []
 symbolica = { path = "./python/gammaloop/dependencies/symbolica" }
 spenso = { git = "https://github.com/alphal00p/spenso", rev = "47a35775325a4d061af05e2fc00904b221d8bf83" }
 # spenso = { path = "../spenso" }
+[patch."https://github.com/alphal00p/linnet"]
+# linnet = { path = "../../linnet" }

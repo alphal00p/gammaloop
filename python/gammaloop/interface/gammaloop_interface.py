@@ -79,6 +79,7 @@ class GammaLoopConfiguration(object):
                 'combined_graphs_pdf_grid_shape': [3, 2],
                 'dot': {
                     'layout': 'neato',
+                    'show_overall_factor': True,
                     'graph_options': {
                         'fontsize': 10,
                         'ratio': 1.5
@@ -800,6 +801,9 @@ class GammaLoop(object):
     generate_parser.add_argument('--number_of_factorized_loop_subtopologies', '-nfactl', default=None, type=int,
                                  help='Number of factorizable loops (seoarated graph ears) to consider in the amplitude generation. (default: any)')
     # Tadpole filter
+
+    generate_parser.add_argument('--filter_cross_section_tadpoles', default=None, action=BooleanOptionalAction,
+                                 help='Filter tadpoles when sewing cross-section.')
     generate_parser.add_argument('--filter_tadpoles', default=None, action=BooleanOptionalAction,
                                  help='Filter tadpole diagrams.')
     generate_parser.add_argument('--veto_tadpole_attached_to_massive', dest='veto_tadpoles_attached_to_massive_lines', default=None, action=BooleanOptionalAction,
@@ -835,6 +839,12 @@ class GammaLoop(object):
                                  help='Symmetrize left and right forward scattering states in cross-section diagram generation. (default: Automatic)')
     generate_parser.add_argument('--allow_symmetrization_of_external_fermions_in_amplitudes', '-symferm', default=False, action=BooleanOptionalAction,
                                  help='Allow symmetrization of external fermions for amplitude generation. Disabled by default as it requires care from the user because of the fermion swap negative signs. (default: False)')
+
+    # Cross-section cut options
+    generate_parser.add_argument('--n_cut_blobs', '-ncb', type=int, nargs=2, default=[1, 1],
+                                 help='Set the range of cut blobs on either side of the cut for cross-section generation')
+    generate_parser.add_argument('--n_cut_spectators', '-ncs', type=int, nargs=2, default=[0, 0],
+                                 help='Set the range of cut spectators on either side of the cut for cross-section generation')
 
     # Selection options
     generate_parser.add_argument('--loop_momentum_bases', '-lmbs', default=None, type=str,

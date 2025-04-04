@@ -3,10 +3,13 @@ pub mod diagram_generator;
 use ahash::{AHashMap, HashMap};
 use diagram_generator::EdgeColor;
 use indicatif::{ParallelProgressIterator, ProgressBar, ProgressStyle};
+use itertools::Itertools;
 use rayon::iter::IntoParallelRefMutIterator;
 use rayon::iter::ParallelIterator;
 use smartstring::{LazyCompact, SmartString};
+use std::ops::RangeInclusive;
 use std::{fmt, str::FromStr};
+use symbolica::atom::Atom;
 use symbolica::graph::Graph as SymbolicaGraph;
 use thiserror::Error;
 
@@ -39,7 +42,7 @@ impl Default for GraphGroupingOptions {
             number_of_numerical_samples: 5,
             differentiate_particle_masses_only: true,
             fully_numerical_substitution_when_comparing_numerators: true,
-            test_canonized_numerator: true,
+            test_canonized_numerator: false,
         }
     }
 }
@@ -223,11 +226,43 @@ impl FeynGenFilters {
         })
     }
 
+    pub fn get_blob_range(&self) -> Option<&RangeInclusive<usize>> {
+        self.0.iter().find_map(|f| {
+            if let FeynGenFilter::BlobRange(v) = f {
+                Some(v)
+            } else {
+                None
+            }
+        })
+    }
+
+    pub fn get_spectator_range(&self) -> Option<&RangeInclusive<usize>> {
+        self.0.iter().find_map(|f| {
+            if let FeynGenFilter::SpectatorRange(v) = f {
+                Some(v)
+            } else {
+                None
+            }
+        })
+    }
+
     pub fn allow_tadpoles(&self) -> bool {
         !self
             .0
             .iter()
             .any(|f| matches!(f, FeynGenFilter::TadpolesFilter(_)))
+    }
+
+    pub fn filter_cross_section_tadpoles(&self) -> bool {
+        self.0.iter().any(|f| {
+            matches!(
+                f,
+                FeynGenFilter::SewedFilter(SewedFilterOptions {
+                    filter_tadpoles: true,
+                    ..
+                })
+            )
+        })
     }
 
     pub fn get_particle_vetos(&self) -> Option<&[i64]> {
@@ -240,7 +275,7 @@ impl FeynGenFilters {
         })
     }
 
-    pub fn get_coupling_orders(&self) -> Option<&HashMap<String, usize>> {
+    pub fn get_coupling_orders(&self) -> Option<&HashMap<String, (usize, Option<usize>)>> {
         self.0.iter().find_map(|f| {
             if let FeynGenFilter::CouplingOrders(o) = f {
                 Some(o)
@@ -283,7 +318,7 @@ impl FeynGenFilters {
     #[allow(clippy::type_complexity)]
     pub fn apply_filters<NodeColor: diagram_generator::NodeColorFunctions + Send + Sync + Clone>(
         &self,
-        graphs: &mut Vec<(SymbolicaGraph<NodeColor, EdgeColor>, String)>,
+        graphs: &mut Vec<(SymbolicaGraph<NodeColor, EdgeColor>, Atom)>,
         pool: &rayon::ThreadPool,
         progress_bar_style: &ProgressStyle,
     ) -> Result<(), FeynGenError> {
@@ -299,11 +334,21 @@ impl FeynGenFilters {
                             .progress_with(bar.clone())
                             .filter(|(g, _)| {
                                 let graph_coupling_orders = get_coupling_orders(g);
-                                orders.iter().all(|(k, v)| {
+                                let a = orders.iter().all(|(k, (v_min, v_max))| {
                                     graph_coupling_orders
                                         .get(&SmartString::from(k))
-                                        .map_or(0 == *v, |o| *o == *v)
-                                })
+                                        .map_or(0 == *v_min, |o| {
+                                            *o >= *v_min && (*v_max).is_none_or(|max| *o <= max)
+                                        })
+                                });
+                                // if a {
+                                //     info!(
+                                //         "Coupling orders constraints satisfied for graph {}",
+                                //         g.to_dot()
+                                //     );
+                                //     info!("{:?}", graph_coupling_orders);
+                                // }
+                                a
                             })
                             .map(|(g, sf)| (g.clone(), sf.clone()))
                             .collect::<Vec<_>>()
@@ -321,7 +366,10 @@ impl FeynGenFilters {
                 | FeynGenFilter::TadpolesFilter(_)
                 | FeynGenFilter::ZeroSnailsFilter(_)
                 | FeynGenFilter::FermionLoopCountRange(_)
+                | FeynGenFilter::SewedFilter(_)
                 | FeynGenFilter::FactorizedLoopTopologiesCountRange(_)
+                | FeynGenFilter::BlobRange(_)
+                | FeynGenFilter::SpectatorRange(_)
                 | FeynGenFilter::ParticleVeto(_) => {} // These other filters are implemented directly during diagram generation
             }
         }
@@ -435,15 +483,27 @@ impl fmt::Display for TadpolesFilterOptions {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct SewedFilterOptions {
+    pub filter_tadpoles: bool,
+}
+
 #[derive(Debug, Clone)]
 pub enum FeynGenFilter {
     SelfEnergyFilter(SelfEnergyFilterOptions),
     TadpolesFilter(TadpolesFilterOptions),
     ZeroSnailsFilter(SnailFilterOptions),
+    SewedFilter(SewedFilterOptions),
+    /// A list of vetoed pdgs
     ParticleVeto(Vec<i64>),
     MaxNumberOfBridges(usize),
-    CouplingOrders(HashMap<String, usize>),
+    /// A map between the coupling order name and a range of orders, inclusive, with an optional upper bound
+    CouplingOrders(HashMap<String, (usize, Option<usize>)>),
+    /// A range of loop counts, inclusive
     LoopCountRange((usize, usize)),
+    /// A range of blob counts, inclusive
+    BlobRange(RangeInclusive<usize>),
+    SpectatorRange(RangeInclusive<usize>),
     PerturbativeOrders(HashMap<String, usize>),
     FermionLoopCountRange((usize, usize)),
     FactorizedLoopTopologiesCountRange((usize, usize)),
@@ -463,6 +523,8 @@ impl fmt::Display for FeynGenFilter {
                         .collect::<Vec<String>>()
                         .join("|")
                 ),
+                Self::SpectatorRange(r) => format!("SpectatorRange({:?})", r),
+                Self::BlobRange(r) => format!("BlobRange({:?})", r),
                 Self::MaxNumberOfBridges(n) => format!("MaxNumberOfBridges({})", n),
                 Self::TadpolesFilter(opts) => format!("NoTadpoles({})", opts),
                 Self::ZeroSnailsFilter(opts) => format!("NoZeroSnails({})", opts),
@@ -470,7 +532,17 @@ impl fmt::Display for FeynGenFilter {
                     "CouplingOrders({})",
                     orders
                         .iter()
-                        .map(|(k, v)| format!("{}={}", k, v))
+                        .map(|(k, (v_min, v_max_opt))| {
+                            if let Some(v_max) = v_max_opt {
+                                if v_min == v_max {
+                                    format!("{}=={}", k, v_min)
+                                } else {
+                                    format!("{}=[{}..{}]", k, v_min, v_max)
+                                }
+                            } else {
+                                format!("{}>={}", k, v_min)
+                            }
+                        })
                         .collect::<Vec<String>>()
                         .join("|")
                 ),
@@ -493,6 +565,10 @@ impl fmt::Display for FeynGenFilter {
                         "NFactorizableLoopRange({{{},{}}})",
                         loop_count_min, loop_count_max
                     ),
+                Self::SewedFilter(SewedFilterOptions { filter_tadpoles }) => format!(
+                    "SewedCrossSectionFilter(filter_tadpoles={{{}}})",
+                    filter_tadpoles
+                ),
             }
         )
     }
@@ -502,7 +578,7 @@ impl fmt::Display for FeynGenFilter {
 pub struct FeynGenOptions {
     pub generation_type: GenerationType,
     pub initial_pdgs: Vec<i64>,
-    pub final_pdgs: Vec<i64>,
+    pub final_pdgs_lists: Vec<Vec<i64>>,
     pub loop_count_range: (usize, usize),
     pub symmetrize_initial_states: bool,
     pub symmetrize_final_states: bool,
@@ -517,16 +593,20 @@ impl fmt::Display for FeynGenOptions {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "Generation type: {}{}{}\nInitial PDGs: {:?}{}\nFinal PDGs: {:?}{}\nLoop count: {}\nAmplitude filters:{}{}\nCross-section filters:{}{}",
+            "Generation type: {}{}{}\nInitial PDGs: {:?}{}\nFinal PDGs: {}{}\nLoop count: {}\nAmplitude filters:{}{}\nCross-section filters:{}{}",
             self.generation_type,
             if self.symmetrize_left_right_states { " (left-right symmetrized)" } else { "" },
-            if self.allow_symmetrization_of_external_fermions_in_amplitudes 
+            if self.allow_symmetrization_of_external_fermions_in_amplitudes
                 && self.generation_type == GenerationType::Amplitude
                 && (self.symmetrize_initial_states  || self.symmetrize_final_states || self.symmetrize_left_right_states)
                 { " (allowing fermion symmetrization)" } else { "" },
             self.initial_pdgs,
             if self.symmetrize_initial_states { " (symmetrized)" } else { "" },
-            self.final_pdgs,
+            if self.final_pdgs_lists.len() == 1 {
+                format!("{:?}",self.final_pdgs_lists[0])
+            } else {
+                format!("[ {} ]", self.final_pdgs_lists.iter().map(|pdgs| format!("{:?}", pdgs)).join(" | "))
+            },
             if self.symmetrize_final_states { " (symmetrized)" } else { "" },
             if self.loop_count_range.0 == self.loop_count_range.1 {
                 format!("{}", self.loop_count_range.0)
@@ -553,5 +633,6 @@ impl fmt::Display for FeynGenOptions {
     }
 }
 
+pub mod half_edge_filters;
 #[cfg(test)]
 pub mod test;

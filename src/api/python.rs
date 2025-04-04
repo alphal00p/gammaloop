@@ -3,7 +3,7 @@ use crate::{
     cross_section::{Amplitude, AmplitudeList, CrossSection, CrossSectionList},
     feyngen::{
         self, diagram_generator::FeynGen, FeynGenError, FeynGenFilters, FeynGenOptions,
-        NumeratorAwareGraphGroupingOption,
+        NumeratorAwareGraphGroupingOption, SewedFilterOptions,
     },
     graph::SerializableGraph,
     inspect,
@@ -35,7 +35,11 @@ use std::{
     str::FromStr,
     sync::{LazyLock, Mutex},
 };
-use symbolica::{atom::Atom, printer::PrintOptions};
+
+use symbolica::{
+    atom::{Atom, AtomCore},
+    printer::PrintOptions,
+};
 const GIT_VERSION: &str = git_version!(fallback = "unavailable");
 
 #[allow(unused)]
@@ -117,6 +121,14 @@ pub fn format_target(target: String, level: log::Level) -> ColoredString {
         shortened_path = format!("{}...", shortened_path.chars().take(17).collect::<String>());
     }
     format!("{:<20}", shortened_path).bright_blue()
+}
+
+#[pyfunction]
+#[pyo3(name = "atom_to_canonical_string")]
+pub fn atom_to_canonical_string(atom_str: &str) -> PyResult<String> {
+    Atom::parse(atom_str)
+        .map(|a| a.to_canonical_string())
+        .map_err(|e| exceptions::PyException::new_err(e.to_string()))
 }
 
 #[pyfunction]
@@ -218,6 +230,7 @@ fn gammalooprs(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     m.add_class::<PythonWorker>()?;
     m.add_class::<PyFeynGenFilters>()?;
     m.add_class::<PySnailFilterOptions>()?;
+    m.add_class::<PySewedFilterOptions>()?;
     m.add_class::<PyTadpolesFilterOptions>()?;
     m.add_class::<PySelfEnergyFilterOptions>()?;
     m.add_class::<PyFeynGenOptions>()?;
@@ -225,6 +238,7 @@ fn gammalooprs(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     m.add("git_version", GIT_VERSION)?;
     m.add_wrapped(wrap_pyfunction!(cli_wrapper))?;
     m.add_wrapped(wrap_pyfunction!(setup_logging))?;
+    m.add_wrapped(wrap_pyfunction!(atom_to_canonical_string))?;
     Ok(())
 }
 
@@ -309,6 +323,23 @@ impl PySelfEnergyFilterOptions {
     }
 }
 
+#[pyclass(name = "SewedFilterOptions")]
+pub struct PySewedFilterOptions {
+    pub filter_options: SewedFilterOptions,
+}
+
+#[pymethods]
+impl PySewedFilterOptions {
+    #[new]
+    pub fn __new__(filter_tadpoles: Option<bool>) -> PyResult<PySewedFilterOptions> {
+        Ok(PySewedFilterOptions {
+            filter_options: SewedFilterOptions {
+                filter_tadpoles: filter_tadpoles.unwrap_or(false),
+            },
+        })
+    }
+}
+
 #[pyclass(name = "TadpolesFilterOptions")]
 pub struct PyTadpolesFilterOptions {
     pub filter_options: TadpolesFilterOptions,
@@ -365,16 +396,20 @@ impl PyFeynGenFilters {
     pub fn __new__(
         particle_veto: Option<Vec<i64>>,
         max_number_of_bridges: Option<usize>,
+        sewed_filter: Option<PyRef<PySewedFilterOptions>>,
         self_energy_filter: Option<PyRef<PySelfEnergyFilterOptions>>,
         tadpoles_filter: Option<PyRef<PyTadpolesFilterOptions>>,
         zero_snails_filter: Option<PyRef<PySnailFilterOptions>>,
         perturbative_orders: Option<HashMap<String, usize>>,
-        coupling_orders: Option<HashMap<String, usize>>,
+        coupling_orders: Option<HashMap<String, (usize, Option<usize>)>>,
         loop_count_range: Option<(usize, usize)>,
         fermion_loop_count_range: Option<(usize, usize)>,
         factorized_loop_topologies_count_range: Option<(usize, usize)>,
     ) -> PyResult<PyFeynGenFilters> {
         let mut filters = Vec::new();
+        if let Some(sewed_filter) = sewed_filter {
+            filters.push(FeynGenFilter::SewedFilter(sewed_filter.filter_options));
+        }
         if let Some(self_energy_filter) = self_energy_filter {
             filters.push(FeynGenFilter::SelfEnergyFilter(
                 self_energy_filter.filter_options,
@@ -450,8 +485,10 @@ impl PyFeynGenOptions {
     pub fn __new__(
         generation_type: String,
         initial_particles: Vec<i64>,
-        final_particles: Vec<i64>,
+        final_particles_lists: Vec<Vec<i64>>,
         loop_count_range: (usize, usize),
+        n_cut_blobs: (usize, usize),
+        n_cut_spectators: (usize, usize),
         symmetrize_initial_states: bool,
         symmetrize_final_states: bool,
         symmetrize_left_right_states: bool,
@@ -460,29 +497,57 @@ impl PyFeynGenOptions {
         amplitude_filters: Option<PyRef<PyFeynGenFilters>>,
         cross_section_filters: Option<PyRef<PyFeynGenFilters>>,
     ) -> PyResult<PyFeynGenOptions> {
+        let amplitude_filters = FeynGenFilters(
+            amplitude_filters
+                .map(|f| f.filters.clone())
+                .unwrap_or_default(),
+        );
+
+        let mut cross_section_filters = FeynGenFilters(
+            cross_section_filters
+                .map(|f| f.filters.clone())
+                .unwrap_or_default(),
+        );
+
+        cross_section_filters
+            .0
+            .push(FeynGenFilter::BlobRange(n_cut_blobs.0..=n_cut_blobs.1));
+        cross_section_filters.0.push(FeynGenFilter::SpectatorRange(
+            n_cut_spectators.0..=n_cut_spectators.1,
+        ));
+
+        let feyngen_options = FeynGenOptions {
+            generation_type: GenerationType::from_str(&generation_type)
+                .map_err(feyngen_to_python_error)?,
+            initial_pdgs: initial_particles,
+            final_pdgs_lists: final_particles_lists,
+            loop_count_range,
+            symmetrize_initial_states,
+            symmetrize_final_states,
+            symmetrize_left_right_states,
+            allow_symmetrization_of_external_fermions_in_amplitudes,
+            max_multiplicity_for_fast_cut_filter,
+            amplitude_filters,
+            cross_section_filters,
+        };
+        if feyngen_options.generation_type == GenerationType::Amplitude {
+            if feyngen_options.final_pdgs_lists.len() > 1 {
+                return Err(exceptions::PyValueError::new_err(
+                    "Multiple set of final states are not allowed for amplitude generation",
+                ));
+            }
+        } else if feyngen_options.final_pdgs_lists.len() > 1
+            && feyngen_options
+                .final_pdgs_lists
+                .iter()
+                .any(|l| l.is_empty())
+        {
+            return Err(exceptions::PyValueError::new_err(
+                    "When specifying multiple set of final states options, each must contain at least one particle",
+                ));
+        }
         Ok(PyFeynGenOptions {
-            options: FeynGenOptions {
-                generation_type: GenerationType::from_str(&generation_type)
-                    .map_err(feyngen_to_python_error)?,
-                initial_pdgs: initial_particles,
-                final_pdgs: final_particles,
-                loop_count_range,
-                symmetrize_initial_states,
-                symmetrize_final_states,
-                symmetrize_left_right_states,
-                allow_symmetrization_of_external_fermions_in_amplitudes,
-                max_multiplicity_for_fast_cut_filter,
-                amplitude_filters: FeynGenFilters(
-                    amplitude_filters
-                        .map(|f| f.filters.clone())
-                        .unwrap_or_default(),
-                ),
-                cross_section_filters: FeynGenFilters(
-                    cross_section_filters
-                        .map(|f| f.filters.clone())
-                        .unwrap_or_default(),
-                ),
-            },
+            options: feyngen_options,
         })
     }
 }

@@ -1068,7 +1068,7 @@ fn dumb_four_gluon() {
         &model,
         "gggg".into(),
         &four_gluon,
-        "1".into(),
+        Atom::new_num(1),
         vec![],
         None,
     )
