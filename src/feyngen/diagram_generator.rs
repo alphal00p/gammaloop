@@ -4677,13 +4677,25 @@ pub fn symbolica_symm_factors_bug() {
         vec![(Some(false), 9000005), (Some(true), 9000005), (None, 21)],
         vec![(Some(true), 2), (Some(false), 2), (None, 21)],
     ];
+
+    let settings = GenerationSettings::new()
+        .max_loops(5)
+        .max_bridges(0)
+        .allow_self_loops(true);
+
+    //let mut graphs_a = SymbolicaGraph::generate(
+    //    &external_edges_for_generation,
+    //    vertex_signatures_for_generation_a.as_slice(),
+    //    None,
+    //    Some(5),
+    //    Some(0),
+    //    true,
+    //);
+
     let mut graphs_a = SymbolicaGraph::generate(
         &external_edges_for_generation,
         vertex_signatures_for_generation_a.as_slice(),
-        None,
-        Some(5),
-        Some(0),
-        true,
+        &settings,
     );
     graphs_a.retain(|g, _| g.num_loops() >= 5);
 
@@ -4705,10 +4717,7 @@ pub fn symbolica_symm_factors_bug() {
     let mut graphs_b = SymbolicaGraph::generate(
         &external_edges_for_generation,
         vertex_signatures_for_generation_b.as_slice(),
-        None,
-        Some(5),
-        Some(0),
-        true,
+        &settings,
     );
     graphs_b.retain(|g, _| g.num_loops() >= 5);
 
