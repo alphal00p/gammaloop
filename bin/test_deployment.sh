@@ -15,11 +15,11 @@ RETCODE=$RETCODE+$?;
 rm -rf $TMPDIR/test_gammaloop_deployment
 mkdir $TMPDIR/test_gammaloop_deployment
 mkdir $TMPDIR/test_gammaloop_deployment/wheel
-maturin build --release --features "extension-module" -o /tmp/test_gammaloop_deployment/wheel
+maturin build --release --features "extension-module" -o $TMPDIR/test_gammaloop_deployment/wheel
 RETCODE=$RETCODE+$?;
 cd $TMPDIR/test_gammaloop_deployment
 echo "Creating virtual enviroment for testing deployment"
-virtualenv venv
+python3 -m venv
 source ./venv/bin/activate
 python3 -m pip install --upgrade pip
 python3 -m pip install pytest
