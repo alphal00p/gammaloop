@@ -179,7 +179,7 @@ build_dependencies () {
             if [ ! $(($?)) == 0 ]
             then
                 FINALMESSAGE="\033[92mAll non Python dependencies installed successfully.\033[0m";
-                FINALMESSAGE=$FINALMESSAGE+"\n\033[93mWARNING: could not install Python dependencies with pip. You will need to install them manually with '"$PYTHON3BIN" -m pip install -r requirements.txt'. You can also consider doing this within a virtual environment with '"$PYTHON3BIN" -m venv .venv'\033[0m"
+                FINALMESSAGE=$FINALMESSAGE"\n\033[93mWARNING: could not install Python dependencies with pip. You will need to install them manually with '"$PYTHON3BIN" -m pip install -r requirements.txt'. You can also consider doing this within a virtual environment with '"$PYTHON3BIN" -m venv .venv'\033[0m"
                 echo -e "\033[93mWARNING: could not install Python dependencies with pip. You will need to install them manually with '"$PYTHON3BIN" -m pip install -r requirements.txt'. You can also consider doing this within a virtual environment with '"$PYTHON3BIN" -m venv .venv'\033[0m";
             fi
         else
@@ -293,8 +293,13 @@ build_dependencies () {
 
     touch INSTALLED
     rm -f LOCK
+
+    echo ""
+    echo "---- SUMMARY ----"
+    echo ""
     
     echo -e $FINALMESSAGE;
+
     cd ..
 }
 
