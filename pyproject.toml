@@ -1,6 +1,6 @@
 [project]
 name = "gammaloop"
-version = "0.3.2"
+version = "0.3.3"
 description = "Gammaloop computes differential cross-sections using Local Unitarity"
 authors = [
     { name = "Valentin Hirschi", email = "valentin.hirschi@gmail.com" },
