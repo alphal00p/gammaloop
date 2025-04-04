@@ -6,8 +6,8 @@ import re
 GL_PATH = os.path.abspath(os.path.join(
     os.path.dirname(os.path.realpath(__file__)), os.path.pardir, os.path.pardir, os.path.pardir))
 
-# DEFAULT_SYMBOLICA_REVISION = 'latest'
-DEFAULT_SYMBOLICA_REVISION = 'eeed330c824e6ad8f4bc78472864e6d8121b1a12'
+DEFAULT_SYMBOLICA_REVISION = 'latest'
+# DEFAULT_SYMBOLICA_REVISION = 'eeed330c824e6ad8f4bc78472864e6d8121b1a12'
 
 
 def revert_revision():
