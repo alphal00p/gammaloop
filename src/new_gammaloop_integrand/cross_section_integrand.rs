@@ -24,7 +24,10 @@ use crate::{
     DependentMomentaConstructor, IntegratedCounterTermRange, Polarizations, Settings,
 };
 
-use super::gammaloop_sample::{self, parameterize, DiscreteGraphSample, GammaLoopSample};
+use super::{
+    create_stability_iterator,
+    gammaloop_sample::{self, parameterize, DiscreteGraphSample, GammaLoopSample},
+};
 const TOLERANCE: F<f64> = F(2.0);
 
 #[derive(Clone)]
@@ -130,7 +133,7 @@ impl CrossSectionGraphTerm {
 impl HasIntegrand for CrossSectionIntegrand {
     fn create_grid(&self) -> Grid<F<f64>> {
         Grid::Continuous(ContinuousGrid::new(
-            3,
+            self.get_n_dim(),
             self.settings.integrator.n_bins,
             self.settings.integrator.min_samples_for_update,
             self.settings.integrator.bin_number_evolution.clone(),
@@ -146,6 +149,8 @@ impl HasIntegrand for CrossSectionIntegrand {
         use_f128: bool,
         max_eval: F<f64>,
     ) -> EvaluationResult {
+        let stability_iterator = create_stability_iterator(&self.settings.stability, use_f128);
+
         let gammaloop_sample = parameterize(
             sample,
             &self.polarizations,
@@ -199,7 +204,13 @@ impl HasIntegrand for CrossSectionIntegrand {
     }
 
     fn get_n_dim(&self) -> usize {
-        3
+        assert!(self
+            .graph_terms
+            .iter()
+            .map(|term| term.graph.underlying.get_loop_number())
+            .all_equal());
+
+        self.graph_terms[0].graph.underlying.get_loop_number() * 3
     }
 }
 
