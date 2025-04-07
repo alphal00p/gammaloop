@@ -51,14 +51,14 @@ def evaluate_graph_overall_factor(overall_factor: str) -> SBE:
                    "ExternalFermionOrderingSign",
                    "AntiFermionSpinSumSign",
                    "NumeratorIndependentSymmetryGrouping"]:
-        e = e.replace_all(sb.Expression.parse(
+        e = e.replace(sb.Expression.parse(
             f"{header}(x_)"), sb.Expression.parse("x_"))
-    e = e.replace_all(
+    e = e.replace(
         sb.Expression.parse("NumeratorDependentGrouping(GraphId_,ratio_,GraphSymmetryFactor_)"), sb.Expression.parse("ratio_*GraphSymmetryFactor_"))
     return e.expand().collect_num()
 
 
-def recursive_replace_all(expr: sb.Expression, replace: Callable[[SBE], SBE], max_recursion: int = 1000) -> SBE:
+def recursive_replace(expr: sb.Expression, replace: Callable[[SBE], SBE], max_recursion: int = 1000) -> SBE:
     n_iter = 0
     while n_iter < max_recursion:
         replaced_expr = replace(expr)
@@ -147,13 +147,13 @@ def replace_pseudo_floats(expression: str) -> str:
 
 
 def replace_to_sqrt(expr: sb.Expression) -> sb.Expression:
-    expr = expr.replace_all(sb.Expression.parse(
+    expr = expr.replace(sb.Expression.parse(
         'x__^(1/2)'), sb.Expression.parse('sqrt(x__)'))
-    expr = expr.replace_all(sb.Expression.parse(
+    expr = expr.replace(sb.Expression.parse(
         'x__^(-1/2)'), sb.Expression.parse('(sqrt(x__))^-1'))
-    expr = expr.replace_all(sb.Expression.parse(
+    expr = expr.replace(sb.Expression.parse(
         'x__^(1/4)'), sb.Expression.parse('sqrt(sqrt(x__))'))
-    expr = expr.replace_all(sb.Expression.parse(
+    expr = expr.replace(sb.Expression.parse(
         'x__^(-1/4)'), sb.Expression.parse('(sqrt(sqrt(x__)))^-1'))
     str_expr = expression_to_string(expr)
     if str_expr is None or re.match(r'\^\(\d+/\d+\)', str_expr):
@@ -163,7 +163,7 @@ def replace_to_sqrt(expr: sb.Expression) -> sb.Expression:
 
 
 def replace_from_sqrt(expr: sb.Expression) -> sb.Expression:
-    expr = expr.replace_all(sb.Expression.parse(
+    expr = expr.replace(sb.Expression.parse(
         'sqrt(x__)'), sb.Expression.parse('x__^(1/2)'))
     str_expr = expression_to_string(expr)
     if str_expr is None or re.match(r'\^\(\d+/\d+\)', str_expr):
@@ -183,7 +183,7 @@ def parse_python_expression_safe(expr: str) -> sb.Expression:
     try:
         sb_expr = sb.Expression.parse(sanitized_expr)
         # No longer needed since we automatically include a `complex(x,y)` function in the function map.
-        # sb_expr = recursive_replace_all(sb_expr, lambda e: e.replace_all(
+        # sb_expr = recursive_replace(sb_expr, lambda e: e.replace(
         #     SBE.parse('complex(x_,y_)'), SBE.parse('x_+I*y_')), max_recursion=1000)
     except Exception as exception:  # pylint: disable=broad-except
         raise common.GammaLoopError(
