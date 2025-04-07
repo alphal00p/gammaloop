@@ -459,20 +459,18 @@ impl RotationSetting {
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq, Copy, Hash, Eq)]
 pub enum Precision {
-    Single, // this might be useful for eventual deployment on gpu
     #[default]
     Double,
     Quad,
-    Arb(usize),
+    Arb,
 }
 
 impl Precision {
     fn as_string(self) -> String {
         match self {
-            Self::Single => "f32".to_owned(),
             Self::Double => "f64".to_owned(),
             Self::Quad => "f128".to_owned(),
-            Self::Arb(prec) => format!("arb_prec_{}", prec),
+            Self::Arb => "arb".to_owned(),
         }
     }
 }

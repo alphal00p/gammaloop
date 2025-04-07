@@ -1,4 +1,5 @@
 use std::{
+    cell::{Ref, RefCell},
     collections::BTreeMap,
     fmt::{Display, Formatter},
     marker::PhantomData,
@@ -11,6 +12,7 @@ use bincode::de;
 use bitvec::vec::BitVec;
 use color_eyre::Result;
 
+use crate::{new_gammaloop_integrand::GenericEvaluator, utils::f128};
 use eyre::eyre;
 use itertools::Itertools;
 use linnet::half_edge::{
@@ -827,8 +829,16 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
             tree.horner_scheme();
             tree.common_subexpression_elimination();
 
-            let tree_ft = tree.map_coeff::<F<f64>, _>(&|r| r.into());
-            evaluators.push(tree_ft.linearize(Some(1)));
+            let tree_double = tree.map_coeff::<F<f64>, _>(&|r| r.into());
+            let tree_quad = tree.map_coeff::<F<f128>, _>(&|r| r.into());
+
+            let generic_evaluator = GenericEvaluator {
+                f64_compiled: None,
+                f64_eager: RefCell::new(tree_double.linearize(Some(1))),
+                f128: RefCell::new(tree_quad.linearize(Some(1))),
+            };
+
+            evaluators.push(generic_evaluator);
         }
 
         CrossSectionGraphTerm {
