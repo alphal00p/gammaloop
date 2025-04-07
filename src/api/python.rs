@@ -39,6 +39,7 @@ use std::{
 
 use symbolica::{
     atom::{Atom, AtomCore},
+    parse,
     printer::PrintOptions,
 };
 const GIT_VERSION: &str = git_version!(fallback = "unavailable");
@@ -127,7 +128,7 @@ pub fn format_target(target: String, level: log::Level) -> ColoredString {
 #[pyfunction]
 #[pyo3(name = "atom_to_canonical_string")]
 pub fn atom_to_canonical_string(atom_str: &str) -> PyResult<String> {
-    Atom::parse(atom_str)
+    parse!(atom_str)
         .map(|a| a.to_canonical_string())
         .map_err(|e| exceptions::PyException::new_err(e.to_string()))
 }
