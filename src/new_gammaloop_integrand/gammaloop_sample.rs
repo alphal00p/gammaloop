@@ -16,16 +16,16 @@ use super::IntegrandType;
 
 // helper functions can maybe moved to utils
 #[inline]
-fn unwrap_cont_sample(sample: &Sample<F<f64>>) -> &[F<f64>] {
+fn unwrap_cont_sample<T: FloatLike>(sample: &Sample<F<f64>>) -> Vec<F<T>> {
     if let Sample::Continuous(_, xs) = sample {
-        xs
+        xs.iter().map(|x| F::from_ff64(*x)).collect()
     } else {
         panic!("Invalid sample structure")
     }
 }
 
 #[inline]
-fn unwrap_single_discrete_sample(sample: &Sample<F<f64>>) -> (usize, &[F<f64>]) {
+fn unwrap_single_discrete_sample<T: FloatLike>(sample: &Sample<F<f64>>) -> (usize, Vec<F<T>>) {
     if let Sample::Discrete(_, index, Some(cont_sample)) = sample {
         (*index, unwrap_cont_sample(cont_sample))
     } else {
@@ -34,7 +34,9 @@ fn unwrap_single_discrete_sample(sample: &Sample<F<f64>>) -> (usize, &[F<f64>]) 
 }
 
 #[inline]
-fn unwrap_double_discrete_sample(sample: &Sample<F<f64>>) -> (usize, (usize, &[F<f64>])) {
+fn unwrap_double_discrete_sample<T: FloatLike>(
+    sample: &Sample<F<f64>>,
+) -> (usize, (usize, Vec<F<T>>)) {
     if let Sample::Discrete(_, index, Some(discrete_sample)) = sample {
         (*index, unwrap_single_discrete_sample(discrete_sample))
     } else {
@@ -380,18 +382,18 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
 }
 
 #[inline]
-pub fn parameterize(
+pub fn parameterize<T: FloatLike>(
     sample_point: &Sample<F<f64>>,
     polarizations: &[Polarizations],
     dependent_momenta_constructor: DependentMomentaConstructor,
     settings: &Settings,
     graphs: Option<&[Graph]>, // this is only needed for tropical sampling
-) -> Result<GammaLoopSample<f64>, String> {
+) -> Result<GammaLoopSample<T>, String> {
     match &settings.sampling {
         SamplingSettings::Default => {
             let xs = unwrap_cont_sample(sample_point);
             Ok(GammaLoopSample::Default(default_parametrize(
-                xs,
+                &xs,
                 dependent_momenta_constructor,
                 polarizations,
                 settings,
@@ -402,7 +404,7 @@ pub fn parameterize(
             Ok(GammaLoopSample::MultiChanneling {
                 alpha: multichanneling_settings.alpha,
                 sample: default_parametrize(
-                    xs,
+                    &xs,
                     dependent_momenta_constructor,
                     polarizations,
                     settings,
@@ -416,7 +418,7 @@ pub fn parameterize(
                     Ok(GammaLoopSample::DiscreteGraph {
                         graph_id,
                         sample: DiscreteGraphSample::Default(default_parametrize(
-                            xs,
+                            &xs,
                             dependent_momenta_constructor,
                             polarizations,
                             settings,
@@ -430,7 +432,7 @@ pub fn parameterize(
                         sample: DiscreteGraphSample::MultiChanneling {
                             alpha: multichanneling_settings.alpha,
                             sample: default_parametrize(
-                                xs,
+                                &xs,
                                 dependent_momenta_constructor,
                                 polarizations,
                                 settings,
@@ -522,7 +524,7 @@ pub fn parameterize(
                             alpha: multichanneling_settings.alpha,
                             channel_id,
                             sample: default_parametrize(
-                                xs,
+                                &xs,
                                 dependent_momenta_constructor,
                                 polarizations,
                                 settings,
@@ -537,20 +539,24 @@ pub fn parameterize(
 
 /// Default parametrize is basically everything except tropical sampling.
 #[inline]
-fn default_parametrize(
-    xs: &[F<f64>],
+fn default_parametrize<T: FloatLike>(
+    xs: &[F<T>],
     dependent_momenta_constructor: DependentMomentaConstructor,
     polarizations: &[Polarizations],
     settings: &Settings,
-) -> MomentumSample<f64> {
+) -> MomentumSample<T> {
     let externals = &settings.kinematics.externals;
 
-    let (loop_moms_vec, param_jacobian) =
-        global_parameterize(xs, settings.kinematics.e_cm.square(), settings, false);
+    let (loop_moms_vec, param_jacobian) = global_parameterize(
+        xs,
+        F::from_ff64(settings.kinematics.e_cm.square()),
+        settings,
+        false,
+    );
 
     let loop_moms = loop_moms_vec.into_iter().map(ThreeMomentum::from).collect();
 
-    let jacobian = param_jacobian * externals.pdf(xs);
+    let jacobian = param_jacobian;
 
     MomentumSample::new(
         loop_moms,
