@@ -783,9 +783,6 @@ impl GammaLoopIntegrand {
         let start = std::time::Instant::now();
         // cast the momenta to the relevant precision
         let results: Vec<_> = match precision {
-            Precision::Single => {
-                unimplemented!("From<f64> for f32 can't be implemented")
-            }
             Precision::Double => match &mut self.graph_integrands {
                 GraphIntegrands::Amplitude(graph_integrands) => samples
                     .iter()
@@ -867,7 +864,7 @@ impl GammaLoopIntegrand {
                     })
                     .collect(),
             },
-            Precision::Arb(_prec) => {
+            Precision::Arb => {
                 unimplemented!("need better traits to use arb prec")
             }
         };

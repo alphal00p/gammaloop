@@ -1,10 +1,12 @@
-use std::time::Duration;
+use std::{cell::RefCell, time::Duration};
 
 use itertools::Itertools;
 use log::info;
 use serde::Serialize;
 use spenso::{complex::Complex, ufo::gamma};
+use statrs::distribution::Gamma;
 use symbolica::{
+    domains::float::NumericalFloatLike,
     evaluate::ExpressionEvaluator,
     numerical_integration::{ContinuousGrid, Grid, Sample},
 };
@@ -20,13 +22,14 @@ use crate::{
     new_cs::{CrossSectionGraph, CutId},
     new_graph::{ExternalConnection, FeynmanGraph, Graph},
     signature::ExternalSignature,
-    utils::{self, FloatLike, F},
-    DependentMomentaConstructor, IntegratedCounterTermRange, Polarizations, Settings,
+    utils::{self, f128, FloatLike, F},
+    DependentMomentaConstructor, IntegratedCounterTermRange, Polarizations, Precision, Settings,
 };
 
 use super::{
     create_stability_iterator,
     gammaloop_sample::{self, parameterize, DiscreteGraphSample, GammaLoopSample},
+    GenericEvaluator, GenericEvaluatorFloat,
 };
 const TOLERANCE: F<f64> = F(2.0);
 
@@ -41,14 +44,14 @@ pub struct CrossSectionIntegrand {
 
 #[derive(Clone)]
 pub struct CrossSectionGraphTerm {
-    pub bare_cff_evaluators: TiVec<CutId, ExpressionEvaluator<F<f64>>>,
+    pub bare_cff_evaluators: TiVec<CutId, GenericEvaluator>,
     pub graph: Graph,
     pub cut_esurface: TiVec<CutId, Esurface>,
 }
 
 impl CrossSectionGraphTerm {
     fn evaluate<T: FloatLike>(
-        &mut self,
+        &self,
         momentum_sample: &MomentumSample<T>,
         settings: &Settings,
     ) -> F<T> {
@@ -113,18 +116,17 @@ impl CrossSectionGraphTerm {
                     &self.graph.loop_momentum_basis,
                 )
                 .into_iter()
-                .map(|(_, x)| x.into_ff64())
+                .map(|(_, x)| x)
                 .collect_vec();
 
-            params.push(newton_result.solution.into_ff64());
-            params.push(h_function.into_ff64());
-            params.push(newton_result.derivative_at_solution.into_ff64());
+            params.push(newton_result.solution);
+            params.push(h_function);
+            params.push(newton_result.derivative_at_solution);
 
-            let mut out = [F(0.0)];
-            self.bare_cff_evaluators[cut_id].evaluate(&params, &mut out);
+            let evaluator =
+                <T as GenericEvaluatorFloat>::get_evaluator(&self.bare_cff_evaluators[cut_id]);
 
-            let res = out[0];
-            result += F::from_ff64(res);
+            result += evaluator(&params);
         }
         result
     }
@@ -248,4 +250,50 @@ struct NewtonIterationResult<T: FloatLike> {
     derivative_at_solution: F<T>,
     error_of_function: F<T>,
     num_iterations_used: usize,
+}
+
+impl CrossSectionIntegrand {
+    fn evaluate_all_rotations<T: FloatLike>(
+        &self,
+        gammaloop_sample: &GammaLoopSample<T>,
+        settings: &Settings,
+    ) -> (Vec<Complex<F<T>>>, Duration) {
+        // rotate the momenta for the stability tests.
+        let gammaloop_samples: Vec<_> = todo!("rotate the samples");
+
+        let start_time = std::time::Instant::now();
+        let evaluation_results = gammaloop_samples
+            .iter()
+            .map(|gammaloop_sample| self.evaluate_single_rotation(gammaloop_sample))
+            .collect_vec();
+        let duration = start_time.elapsed() / gammaloop_samples.len() as u32;
+
+        (evaluation_results, duration)
+    }
+
+    fn evaluate_single_rotation<T: FloatLike>(
+        &self,
+        gammaloop_sample: &GammaLoopSample<T>,
+    ) -> Complex<F<T>> {
+        let result = match &gammaloop_sample {
+            GammaLoopSample::Default(sample) => self
+                .graph_terms
+                .iter()
+                .map(|term| term.evaluate(sample, &self.settings))
+                .fold(gammaloop_sample.get_default_sample().zero(), |sum, term| {
+                    sum + term
+                }),
+            GammaLoopSample::DiscreteGraph { graph_id, sample } => match sample {
+                DiscreteGraphSample::Default(sample) => {
+                    self.graph_terms[*graph_id].evaluate(sample, &self.settings)
+                }
+                _ => todo!(),
+            },
+            _ => todo!(),
+        };
+
+        let res = result * gammaloop_sample.get_default_sample().jacobian();
+
+        Complex::new_re(res)
+    }
 }

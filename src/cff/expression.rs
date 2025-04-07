@@ -100,7 +100,7 @@ impl CFFExpression {
             // DEBUG_LOGGER.write("onshell_energies", &energy_cache);
         }
 
-        T::get_evaluator(self)(energy_cache, settings)
+        <T as CFFFloat<T>>::get_evaluator(self)(energy_cache, settings)
     }
 
     #[inline]

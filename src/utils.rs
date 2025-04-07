@@ -1,11 +1,12 @@
 use crate::cff::expression::CFFFloat;
 use crate::momentum::{FourMomentum, ThreeMomentum};
 use crate::momentum_sample::{ExternalFourMomenta, ExternalIndex, LoopMomenta};
+use crate::new_gammaloop_integrand::GenericEvaluatorFloat;
 use crate::numerator::NumeratorEvaluateFloat;
 use crate::signature::{ExternalSignature, LoopSignature};
-use crate::SamplingSettings;
 use crate::GAMMALOOP_NAMESPACE;
 use crate::{ParameterizationMapping, ParameterizationMode, Settings, MAX_LOOP};
+use crate::{Precision, SamplingSettings};
 use bincode::{Decode, Encode};
 use colored::Colorize;
 use itertools::{izip, Itertools};
@@ -778,6 +779,7 @@ pub trait FloatLike:
     + Display
     + CFFFloat<Self>
     + NumeratorEvaluateFloat
+    + GenericEvaluatorFloat
     {
 
     #[allow(non_snake_case)]

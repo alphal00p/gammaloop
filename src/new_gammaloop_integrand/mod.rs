@@ -1,18 +1,24 @@
+use std::cell::RefCell;
+
 use colored::Colorize;
 use enum_dispatch::enum_dispatch;
 use itertools::Itertools;
+use momtrop::float::MomTropFloat;
 use spenso::complex::Complex;
 use spenso::contraction::IsZero;
+use spenso::parametric::SerializableCompiledEvaluator;
+use symbolica::evaluate::ExpressionEvaluator;
 
 use crate::evaluation_result::EvaluationResult;
 use crate::integrands::{HasIntegrand, Integrand};
 use crate::integrate::UserData;
-use crate::utils::{format_for_compare_digits, F};
+use crate::utils::{format_for_compare_digits, FloatLike, F};
 use symbolica::numerical_integration::{Grid, Sample};
 pub mod amplitude_integrand;
 pub mod cross_section_integrand;
 pub mod gammaloop_sample;
 use crate::observables::EventManager;
+use crate::utils::f128;
 use crate::{
     IntegratedPhase, IntegratorSettings, Precision, Settings, StabilityLevelSetting,
     StabilitySettings,
@@ -164,4 +170,47 @@ fn stability_check(
     };
 
     (average, stable && below_wgt_threshold)
+}
+
+#[derive(Clone)]
+pub struct GenericEvaluator {
+    pub f64_compiled: Option<RefCell<SerializableCompiledEvaluator>>,
+    pub f64_eager: RefCell<ExpressionEvaluator<F<f64>>>,
+    pub f128: RefCell<ExpressionEvaluator<F<f128>>>,
+}
+
+pub trait GenericEvaluatorFloat<T: FloatLike = Self> {
+    fn get_evaluator(generic_evaluator: &GenericEvaluator) -> impl Fn(&[F<T>]) -> F<T>;
+}
+
+impl GenericEvaluatorFloat for f64 {
+    fn get_evaluator(generic_evaluator: &GenericEvaluator) -> impl Fn(&[F<f64>]) -> F<f64> {
+        |params: &[F<f64>]| {
+            let mut out = vec![F(0.)];
+            if let Some(compiled) = &generic_evaluator.f64_compiled {
+                compiled.borrow_mut().evaluate(params, &mut out);
+            } else {
+                generic_evaluator
+                    .f64_eager
+                    .borrow_mut()
+                    .evaluate(params, &mut out);
+            }
+
+            out[0]
+        }
+    }
+}
+
+impl GenericEvaluatorFloat for f128 {
+    fn get_evaluator(generic_evaluator: &GenericEvaluator) -> impl Fn(&[F<f128>]) -> F<f128> {
+        |params: &[F<f128>]| {
+            let mut out = vec![params[0].zero()];
+            generic_evaluator
+                .f128
+                .borrow_mut()
+                .evaluate(params, &mut out);
+
+            out[0].clone()
+        }
+    }
 }
