@@ -24,7 +24,7 @@ use linnet::half_edge::{
     HedgeGraph, NodeIndex,
 };
 use nalgebra::DMatrix;
-use petgraph::Direction::Outgoing;
+// use petgraph::Direction::Outgoing;
 use serde::{de::value, Deserialize, Serialize};
 use smartstring::{LazyCompact, SmartString};
 use spenso::{
