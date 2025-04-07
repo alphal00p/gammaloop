@@ -46,6 +46,7 @@ use typed_index_collections::TiVec;
 use crate::{
     cff::generation::ShiftRewrite,
     disable,
+    feyngen::diagram_generator::FeynGen,
     gammaloop_integrand::BareSample,
     graph::{
         BareEdge, BareGraph, BareVertex, DerivedGraphData, EdgeType, HasVertexInfo, Shifts,
@@ -77,7 +78,7 @@ impl From<BareGraph> for Graph {
     fn from(value: BareGraph) -> Self {
         let loop_momentum_basis = value.loop_momentum_basis.clone();
         let vertex_slots = value.vertex_slots.clone().into();
-        let multiplicity = value.overall_factor.clone();
+        let multiplicity = FeynGen::evaluate_overall_factor(value.overall_factor.as_view());
         let name = value.name.clone();
 
         // convert old external connections to new format
