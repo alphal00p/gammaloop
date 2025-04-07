@@ -4015,7 +4015,7 @@ impl<E> CompiledEvaluator<E> {
 }
 use symbolica::state::StateMap;
 
-#[derive(Clone, Encode, Decode, Debug)]
+#[derive(Clone, Encode, Decode)]
 #[bincode(decode_context = "StateMap")]
 pub struct Evaluators {
     #[bincode(with_serde)]
@@ -4032,6 +4032,22 @@ pub struct Evaluators {
     model_params_start: usize,
     emr_len: usize,
     fn_map: FunctionMap,
+}
+
+impl Debug for Evaluators {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Evaluators")
+            .field("orientated", &self.orientated)
+            .field("single", &self.single)
+            .field("choice", &self.choice)
+            .field("orientations", &self.orientations)
+            .field("double_param_values", &self.double_param_values)
+            .field("quad_param_values", &self.quad_param_values)
+            .field("model_params_start", &self.model_params_start)
+            .field("emr_len", &self.emr_len)
+            // .field("fn_map")
+            .finish()
+    }
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug, Encode, Decode)]

@@ -37,7 +37,7 @@ authors = [
     { name = "Mathijs Fraaije", email = "mathijsfraaije@gmail.com" },
     { name = "Lucien Huber", email = "mail@lcnbr.ch" },
 ]
-requires-python = ">=3.7"
+requires-python = ">=3.8"
 readme = "README.md"
 license = { file = "LICENSE.md" }
 keywords = ["physics", "collider", "cross-section", "perturbative", "loop"]
@@ -46,7 +46,12 @@ classifiers = [
     "Programming Language :: Rust",
     "Topic :: Scientific/Engineering :: Physics",
 ]
-dependencies = ["PyYAML>=6.0.1", "PyMuPDF>=1.23.4", "pydot>=3.0.1"]
+dependencies = [
+    "PyYAML>=6.0.1",
+ "PyMuPDF>=1.23.4",
+ "pydot",
+ "symbolica>=0.14.0",
+]
 
 [project.urls]
 homepage = "https://alphaloop.ch"
@@ -58,7 +63,7 @@ gammaloop = "gammaloop:cli"
 
 [dependency-groups]
 dev = [
-    "symbolica>=0.14.0,<0.15",
+    "symbolica>=0.16.0",
     "black>=23.12.1,<24",
     "inline-snapshot>=0.21.2",
     "PyYAML>=6.0.1,<7",

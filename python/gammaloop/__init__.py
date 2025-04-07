@@ -90,21 +90,21 @@ def check_gammaloop_dependencies(clean_dependencies=False, build_dependencies=Fa
                 additional_python_paths.extend([sp for sp in site_paths if sp.startswith(
                     venv_path) and (len(sys.path) == 0 or sp != sys.path[0])])
 
-    if external_symbolica or os.environ.get('GL_EXTERNAL_SYMBOLICA', None) is not None:
-        additional_python_paths = []
-    else:
-        if not os.path.isfile(os.path.join(gammaloop_root_path, 'dependencies', 'symbolica', 'symbolica_path.txt')):
-            print("\nSymbolica dependency appears to be incorrectly %sinstalled%s. Run '%sgammaloop --clean_dependencies --build_dependencies%s' to re-install gammaloop dependencies. Exiting.\n" % (
-                CLIColour.RED, CLIColour.END, CLIColour.GREEN, CLIColour.END))
-            sys.exit(1)
-        else:
-            with open(os.path.join(gammaloop_root_path, 'dependencies', 'symbolica', 'symbolica_path.txt'), 'r') as f:
-                symbolica_path = f.read().strip()
-            if symbolica_path == '.':
-                symbolica_path = os.path.join(
-                    gammaloop_root_path, 'dependencies', 'symbolica')
-            if symbolica_path not in sys.path:
-                additional_python_paths.append(symbolica_path)
+    # if external_symbolica or os.environ.get('GL_EXTERNAL_SYMBOLICA', None) is not None:
+    #     additional_python_paths = []
+    # else:
+    #     if not os.path.isfile(os.path.join(gammaloop_root_path, 'dependencies', 'symbolica', 'symbolica_path.txt')):
+    #         print("\nSymbolica dependency appears to be incorrectly %sinstalled%s. Run '%sgammaloop --clean_dependencies --build_dependencies%s' to re-install gammaloop dependencies. Exiting.\n" % (
+    #             CLIColour.RED, CLIColour.END, CLIColour.GREEN, CLIColour.END))
+    #         sys.exit(1)
+    #     else:
+    #         with open(os.path.join(gammaloop_root_path, 'dependencies', 'symbolica', 'symbolica_path.txt'), 'r') as f:
+    #             symbolica_path = f.read().strip()
+    #         if symbolica_path == '.':
+    #             symbolica_path = os.path.join(
+    #                 gammaloop_root_path, 'dependencies', 'symbolica')
+    #         if symbolica_path not in sys.path:
+    #             additional_python_paths.append(symbolica_path)
 
     if len(additional_python_paths) > 0:
         print("%sINFO:%s The following paths have been automatically and temporarily added by gammaloop to your PYTHONPATH:\n%s" % (

@@ -228,6 +228,7 @@ pub fn convert_log_level(level: &str) -> LevelFilter {
 fn gammalooprs(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     pyo3_pylogger::register("GammaLoopRust");
 
+    crate::initialisation::initialise();
     crate::set_interrupt_handler();
     m.add_class::<PythonWorker>()?;
     m.add_class::<PyFeynGenFilters>()?;

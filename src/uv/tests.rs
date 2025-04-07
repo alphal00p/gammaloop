@@ -86,6 +86,7 @@ fn tbt() {
 #[test]
 #[allow(unused)]
 fn bugblatter_forest() {
+    // println!("{}", env!("CARGO_CRATE_NAME"));
     let model = load_generic_model("sm");
     println!("{}", model.vertex_rules[0].name);
     let mut symbolica_graph = symbolica::graph::Graph::new();

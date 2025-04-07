@@ -19,6 +19,7 @@ pub mod feyngen;
 pub mod gammaloop_integrand;
 pub mod graph;
 pub mod h_function_test;
+pub mod initialisation;
 pub mod inspect;
 pub mod integrands;
 pub mod integrate;
