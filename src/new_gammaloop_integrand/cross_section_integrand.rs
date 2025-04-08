@@ -17,7 +17,7 @@ use crate::{
     evaluation_result::{EvaluationMetaData, EvaluationResult},
     graph,
     integrands::HasIntegrand,
-    momentum::ThreeMomentum,
+    momentum::{Rotation, ThreeMomentum},
     momentum_sample::{ExternalFourMomenta, LoopMomenta, MomentumSample},
     new_cs::{CrossSectionGraph, CutId},
     new_graph::{ExternalConnection, FeynmanGraph, Graph},
@@ -29,14 +29,16 @@ use crate::{
 use super::{
     create_stability_iterator,
     gammaloop_sample::{self, parameterize, DiscreteGraphSample, GammaLoopSample},
-    GenericEvaluator, GenericEvaluatorFloat,
+    stability_check, GenericEvaluator, GenericEvaluatorFloat, StabilityLevelResult,
 };
+
 const TOLERANCE: F<f64> = F(2.0);
 
 #[derive(Clone)]
 pub struct CrossSectionIntegrand {
     pub settings: Settings,
     pub polarizations: Vec<Polarizations>,
+    pub rotations: Vec<Rotation>,
     pub graph_terms: Vec<CrossSectionGraphTerm>,
     pub n_incoming: usize,
     pub external_connections: Vec<ExternalConnection>,
@@ -123,10 +125,11 @@ impl CrossSectionGraphTerm {
             params.push(h_function);
             params.push(newton_result.derivative_at_solution);
 
-            let evaluator =
-                <T as GenericEvaluatorFloat>::get_evaluator(&self.bare_cff_evaluators[cut_id]);
+            let cut_results = <T as GenericEvaluatorFloat>::get_evaluator(
+                &self.bare_cff_evaluators[cut_id],
+            )(&params);
 
-            result += evaluator(&params);
+            result += cut_results
         }
         result
     }
@@ -151,57 +154,121 @@ impl HasIntegrand for CrossSectionIntegrand {
         use_f128: bool,
         max_eval: F<f64>,
     ) -> EvaluationResult {
+        let start_eval = std::time::Instant::now();
         let stability_iterator = create_stability_iterator(&self.settings.stability, use_f128);
+        let dependent_momenta_constructor = DependentMomentaConstructor::CrossSection {
+            external_connections: &self.external_connections,
+        };
 
-        let gammaloop_sample = parameterize(
-            sample,
-            &self.polarizations,
-            DependentMomentaConstructor::CrossSection {
-                external_connections: &self.external_connections,
-            },
-            &self.settings,
-            None,
-        )
-        .unwrap();
+        let mut results_of_stability_levels = Vec::with_capacity(stability_iterator.len());
 
-        let result = match &gammaloop_sample {
-            GammaLoopSample::Default(sample) => {
-                let mut res = F(0.0);
-                for term in &mut self.graph_terms {
-                    res += term.evaluate(sample, &self.settings);
-                }
-                res
+        for stability_level in stability_iterator.into_iter() {
+            let before_parameterization = std::time::Instant::now();
+            let ((results, ltd_evaluation_time), parameterization_time) =
+                match stability_level.precision {
+                    Precision::Double => {
+                        if let Ok(gammaloop_sample) = parameterize::<f64>(
+                            sample,
+                            &self.polarizations,
+                            dependent_momenta_constructor,
+                            &self.settings,
+                            None,
+                        ) {
+                            let parameterization_time = before_parameterization.elapsed();
+                            (
+                                self.evaluate_all_rotations(&gammaloop_sample),
+                                parameterization_time,
+                            )
+                        } else {
+                            continue;
+                        }
+                    }
+                    Precision::Quad => {
+                        if let Ok(gammaloop_sample) = parameterize::<f128>(
+                            sample,
+                            &self.polarizations,
+                            dependent_momenta_constructor,
+                            &self.settings,
+                            None,
+                        ) {
+                            let parameterization_time = before_parameterization.elapsed();
+                            (
+                                self.evaluate_all_rotations(&gammaloop_sample),
+                                parameterization_time,
+                            )
+                        } else {
+                            continue;
+                        }
+                    }
+                    Precision::Arb => {
+                        todo!()
+                    }
+                };
+
+            let (average_result, is_stable) =
+                stability_check(&self.settings, &results, &stability_level, max_eval, wgt);
+
+            let result_of_level = StabilityLevelResult {
+                result: average_result,
+                stability_level_used: stability_level.precision,
+                parameterization_time,
+                ltd_evaluation_time,
+                is_stable,
+            };
+
+            results_of_stability_levels.push(result_of_level);
+
+            if is_stable {
+                break;
             }
-            GammaLoopSample::DiscreteGraph { graph_id, sample } => match sample {
-                DiscreteGraphSample::Default(sample) => {
-                    self.graph_terms[*graph_id].evaluate(sample, &self.settings)
-                }
-                _ => todo!(),
-            },
-            _ => todo!(),
-        };
+        }
 
-        let mut res = result * gammaloop_sample.get_default_sample().jacobian();
+        if let Some(stability_level_result) = results_of_stability_levels.last() {
+            let re_is_nan = stability_level_result.result.re.is_nan();
+            let im_is_nan = stability_level_result.result.im.is_nan();
+            let is_nan = re_is_nan || im_is_nan;
 
-        let is_nan = if res.is_nan() {
-            res = F(0.0);
-            res.is_nan()
-        } else {
-            res.is_nan()
-        };
-
-        EvaluationResult {
-            integrand_result: Complex::new(res, F(0.0)),
-            integrator_weight: wgt,
-            event_buffer: vec![],
-            evaluation_metadata: EvaluationMetaData {
-                total_timing: Duration::ZERO,
-                rep3d_evaluation_time: Duration::ZERO,
-                parameterization_time: Duration::ZERO,
-                relative_instability_error: Complex::new(F(0.0), F(0.0)),
+            let meta_data = EvaluationMetaData {
+                total_timing: start_eval.elapsed(),
+                rep3d_evaluation_time: stability_level_result.ltd_evaluation_time,
+                highest_precision: stability_level_result.stability_level_used,
+                parameterization_time: stability_level_result.parameterization_time,
+                relative_instability_error: Complex::new_zero(),
                 is_nan,
-                highest_precision: crate::Precision::Double,
-            },
+            };
+
+            let nanless_result = if re_is_nan && !im_is_nan {
+                Complex::new(F(0.0), stability_level_result.result.im)
+            } else if im_is_nan && !re_is_nan {
+                Complex::new(stability_level_result.result.re, F(0.0))
+            } else if im_is_nan && re_is_nan {
+                Complex::new(F(0.0), F(0.0))
+            } else {
+                stability_level_result.result
+            };
+
+            EvaluationResult {
+                integrand_result: nanless_result,
+                integrator_weight: wgt,
+                event_buffer: vec![],
+                evaluation_metadata: meta_data,
+            }
+        } else {
+            // this happens if parameterization fails at all levels
+            println!("Parameterization failed at all levels");
+            EvaluationResult {
+                integrand_result: Complex::new(F(0.0), F(0.0)),
+                integrator_weight: wgt,
+                event_buffer: vec![],
+                evaluation_metadata: EvaluationMetaData {
+                    total_timing: Duration::ZERO,
+                    rep3d_evaluation_time: Duration::ZERO,
+                    parameterization_time: Duration::ZERO,
+                    relative_instability_error: Complex::new(F(0.0), F(0.0)),
+                    is_nan: true,
+                    highest_precision: crate::Precision::Double,
+                },
+            }
         }
     }
 
@@ -256,10 +323,13 @@ impl CrossSectionIntegrand {
     fn evaluate_all_rotations<T: FloatLike>(
         &self,
         gammaloop_sample: &GammaLoopSample<T>,
-        settings: &Settings,
-    ) -> (Vec<Complex<F<T>>>, Duration) {
+    ) -> (Vec<Complex<F<f64>>>, Duration) {
         // rotate the momenta for the stability tests.
-        let gammaloop_samples: Vec<_> = todo!("rotate the samples");
+        let gammaloop_samples: Vec<_> = self
+            .rotations
+            .iter()
+            .map(|rotation| gammaloop_sample.get_rotated_sample(rotation))
+            .collect();
 
         let start_time = std::time::Instant::now();
         let evaluation_results = gammaloop_samples
@@ -274,7 +344,7 @@ impl CrossSectionIntegrand {
     fn evaluate_single_rotation<T: FloatLike>(
         &self,
         gammaloop_sample: &GammaLoopSample<T>,
-    ) -> Complex<F<T>> {
+    ) -> Complex<F<f64>> {
         let result = match &gammaloop_sample {
             GammaLoopSample::Default(sample) => self
                 .graph_terms
@@ -294,6 +364,6 @@ impl CrossSectionIntegrand {
 
         let res = result * gammaloop_sample.get_default_sample().jacobian();
 
-        Complex::new_re(res)
+        Complex::new_re(res.into_ff64())
     }
 }

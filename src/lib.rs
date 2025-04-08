@@ -1079,6 +1079,7 @@ pub struct TropicalSubgraphTableSettings {
     pub target_omega: f64,
 }
 
+#[derive(Debug, Clone, Copy)]
 pub enum DependentMomentaConstructor<'a> {
     Amplitude(&'a ExternalSignature),
     CrossSection {

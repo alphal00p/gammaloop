@@ -61,7 +61,7 @@ pub enum GammaLoopSample<T: FloatLike> {
 impl GammaLoopSample<f64> {
     /// Rotation for stability checks
     #[inline]
-    fn get_rotated_sample(
+    fn get_rotated_sample_cached(
         &self,
         rotation: &Rotation,
         rotated_externals: Externals,
@@ -96,7 +96,7 @@ impl GammaLoopSample<f64> {
             }
             GammaLoopSample::DiscreteGraph { graph_id, sample } => GammaLoopSample::DiscreteGraph {
                 graph_id: *graph_id,
-                sample: sample.get_rotated_sample(
+                sample: sample.get_rotated_sample_cached(
                     rotation,
                     rotated_externals,
                     rotated_polarizations,
@@ -107,6 +107,28 @@ impl GammaLoopSample<f64> {
 }
 
 impl<T: FloatLike> GammaLoopSample<T> {
+    pub fn get_rotated_sample(&self, rotation: &Rotation) -> Self {
+        if rotation.is_identity() {
+            return self.clone();
+        }
+
+        match self {
+            GammaLoopSample::Default(sample) => {
+                GammaLoopSample::Default(sample.get_rotated_sample(rotation))
+            }
+            GammaLoopSample::MultiChanneling { alpha, sample } => {
+                GammaLoopSample::MultiChanneling {
+                    alpha: *alpha,
+                    sample: sample.get_rotated_sample(rotation),
+                }
+            }
+            GammaLoopSample::DiscreteGraph { graph_id, sample } => GammaLoopSample::DiscreteGraph {
+                graph_id: *graph_id,
+                sample: sample.get_rotated_sample(rotation),
+            },
+        }
+    }
+
     pub fn zero(&self) -> F<T> {
         match self {
             GammaLoopSample::Default(sample) => sample.zero(),
@@ -233,7 +255,7 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
     }
     /// Rotation for stability checks
     #[inline]
-    fn get_rotated_sample(
+    fn get_rotated_sample_cached(
         &self,
         rotation: &Rotation,
         rotated_externals: ExternalFourMomenta<F<T>>,
@@ -276,6 +298,34 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
                     rotated_externals,
                     rotated_polarizations,
                 ),
+            },
+        }
+    }
+
+    /// Rotation for stability checks
+    #[inline]
+    fn get_rotated_sample(&self, rotation: &Rotation) -> Self {
+        match self {
+            DiscreteGraphSample::Default(sample) => {
+                DiscreteGraphSample::Default(sample.get_rotated_sample(rotation))
+            }
+            DiscreteGraphSample::MultiChanneling { alpha, sample } => {
+                DiscreteGraphSample::MultiChanneling {
+                    alpha: *alpha,
+                    sample: sample.get_rotated_sample(rotation),
+                }
+            }
+            DiscreteGraphSample::Tropical(sample) => {
+                DiscreteGraphSample::Tropical(sample.get_rotated_sample(rotation))
+            }
+            DiscreteGraphSample::DiscreteMultiChanneling {
+                alpha,
+                channel_id,
+                sample,
+            } => DiscreteGraphSample::DiscreteMultiChanneling {
+                alpha: *alpha,
+                channel_id: *channel_id,
+                sample: sample.get_rotated_sample(rotation),
             },
         }
     }

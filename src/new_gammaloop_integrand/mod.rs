@@ -7,6 +7,7 @@ use momtrop::float::MomTropFloat;
 use spenso::complex::Complex;
 use spenso::contraction::IsZero;
 use spenso::parametric::SerializableCompiledEvaluator;
+use std::time::Duration;
 use symbolica::evaluate::ExpressionEvaluator;
 
 use crate::evaluation_result::EvaluationResult;
@@ -90,7 +91,6 @@ fn stability_check(
     settings: &Settings,
     results: &[Complex<F<f64>>],
     stability_settings: &StabilityLevelSetting,
-    integrated_phase: IntegratedPhase,
     max_eval: F<f64>,
     wgt: F<f64>,
 ) -> (Complex<F<f64>>, bool) {
@@ -152,7 +152,8 @@ fn stability_check(
 
     let stable = unstable_sample.is_none();
 
-    let average_for_comparison = match integrated_phase {
+    // todo provide max wgt as Complex<F<f64>>
+    let average_for_comparison = match settings.integrator.integrated_phase {
         IntegratedPhase::Real => average.re,
         IntegratedPhase::Imag => average.im,
         IntegratedPhase::Both => {
@@ -213,4 +214,13 @@ impl GenericEvaluatorFloat for f128 {
             out[0].clone()
         }
     }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct StabilityLevelResult {
+    pub result: Complex<F<f64>>,
+    pub stability_level_used: Precision,
+    pub parameterization_time: Duration,
+    pub ltd_evaluation_time: Duration,
+    pub is_stable: bool,
 }
