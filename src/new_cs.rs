@@ -554,6 +554,7 @@ impl<S: NumeratorState> CrossSection<S> {
             .collect();
 
         let cross_section_integrand = CrossSectionIntegrand {
+            rotations,
             external_connections: self.external_connections.clone(),
             n_incoming: self.n_incmoming,
             polarizations,
