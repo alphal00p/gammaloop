@@ -321,6 +321,23 @@ where
         }
         result
     }
+
+    /// Canonization function to compare two signatures up to an overall sign,  
+    /// If the first nonzero entry is positive, it will return itself,
+    /// otherwise it will return the negative of itself.
+    pub fn first_abs(&self) -> Self {
+        let sign = self.iter().find(|x| x.is_sign());
+
+        if let Some(sign) = sign {
+            if sign.is_positive() {
+                self.clone()
+            } else {
+                self.iter().map(|x| -*x).collect()
+            }
+        } else {
+            self.clone()
+        }
+    }
 }
 
 #[test]
