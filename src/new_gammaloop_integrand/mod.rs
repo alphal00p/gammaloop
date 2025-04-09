@@ -1,20 +1,26 @@
 use std::cell::RefCell;
 
+use crate::evaluation_result::EvaluationResult;
+use crate::integrands::{HasIntegrand, Integrand};
+use crate::integrate::UserData;
+use crate::momentum::Energy;
+use crate::momentum_sample::{BareMomentumSample, LoopMomenta, MomentumSample};
+use crate::new_graph::{FeynmanGraph, Graph, LmbIndex, LoopMomentumBasis};
+use crate::utils::{format_for_compare_digits, FloatLike, F};
 use colored::Colorize;
+use derive_more::{From, Into};
 use enum_dispatch::enum_dispatch;
 use itertools::Itertools;
+use linnet::half_edge::involution::EdgeIndex;
 use momtrop::float::MomTropFloat;
+use serde::{Deserialize, Serialize};
 use spenso::complex::Complex;
 use spenso::contraction::IsZero;
 use spenso::parametric::SerializableCompiledEvaluator;
 use std::time::Duration;
 use symbolica::evaluate::ExpressionEvaluator;
-
-use crate::evaluation_result::EvaluationResult;
-use crate::integrands::{HasIntegrand, Integrand};
-use crate::integrate::UserData;
-use crate::utils::{format_for_compare_digits, FloatLike, F};
 use symbolica::numerical_integration::{Grid, Sample};
+use typed_index_collections::TiVec;
 pub mod amplitude_integrand;
 pub mod cross_section_integrand;
 pub mod gammaloop_sample;
@@ -223,4 +229,125 @@ pub struct StabilityLevelResult {
     pub parameterization_time: Duration,
     pub ltd_evaluation_time: Duration,
     pub is_stable: bool,
+}
+
+#[derive(
+    Debug, Clone, Copy, From, Into, PartialEq, Eq, Ord, PartialOrd, Hash, Serialize, Deserialize,
+)]
+pub struct ChannelIndex(usize);
+
+/// Helper struct for the LMB multi-channeling setup
+pub struct LmbMultiChannelingSetup {
+    pub alpha: F<f64>,
+    pub channels: TiVec<ChannelIndex, LmbIndex>,
+}
+
+impl LmbMultiChannelingSetup {
+    fn reinterpret_loop_momenta_impl<T: FloatLike>(
+        &self,
+        channel_index: ChannelIndex,
+        momentum_sample: &BareMomentumSample<T>,
+        base_lmb: &LoopMomentumBasis,
+        all_bases: &TiVec<LmbIndex, LoopMomentumBasis>,
+    ) -> BareMomentumSample<T> {
+        let channel_lmb = &all_bases[self.channels[channel_index]];
+        let new_loop_moms: LoopMomenta<F<T>> = base_lmb
+            .basis
+            .iter()
+            .map(|&edge_index| {
+                let signature_of_edge_channel_lmb = &channel_lmb.edge_signatures[edge_index];
+
+                signature_of_edge_channel_lmb
+                    .internal
+                    .apply_typed(&momentum_sample.loop_moms)
+                    + signature_of_edge_channel_lmb
+                        .external
+                        .apply(&momentum_sample.external_moms.raw)
+                        .spatial
+            })
+            .collect();
+
+        BareMomentumSample {
+            loop_moms: new_loop_moms,
+            external_moms: momentum_sample.external_moms.clone(),
+            polarizations: momentum_sample.polarizations.clone(),
+            jacobian: momentum_sample.jacobian.clone(),
+        }
+    }
+
+    /// This function is used to do do LMB multi-channeling without fully switching to a different lmb
+    /// for each channel. The momenta provided are reinterpreted as loop momenta of the lmb corresponding to the channel_index.
+    /// Then we transform these loop momenta to the fixed lmb of the graph. The prefactor is immediately computed for the requested channel
+    pub fn reinterpret_loop_momenta_and_compute_prefactor<T: FloatLike>(
+        &self,
+        channel_index: ChannelIndex,
+        momentum_sample: &MomentumSample<T>,
+        graph: &Graph,
+        all_bases: &TiVec<LmbIndex, LoopMomentumBasis>,
+    ) -> (MomentumSample<T>, F<T>) {
+        let base_lmb = &graph.loop_momentum_basis;
+
+        let sample = MomentumSample {
+            sample: self.reinterpret_loop_momenta_impl(
+                channel_index,
+                &momentum_sample.sample,
+                base_lmb,
+                all_bases,
+            ),
+            rotated_sample: momentum_sample
+                .rotated_sample
+                .as_ref()
+                .map(|rotated_sample| {
+                    self.reinterpret_loop_momenta_impl(
+                        channel_index,
+                        rotated_sample,
+                        base_lmb,
+                        all_bases,
+                    )
+                }),
+            uuid: momentum_sample.uuid,
+        };
+
+        let prefactor = self.compute_prefactor_impl(channel_index, &sample, graph, all_bases);
+
+        (sample, prefactor)
+    }
+
+    /// Computes the prefactor for the given channel index and momentum sample.
+    fn compute_prefactor_impl<T: FloatLike>(
+        &self,
+        channel_index: ChannelIndex,
+        momentum_sample: &MomentumSample<T>,
+        graph: &Graph,
+        all_bases: &TiVec<LmbIndex, LoopMomentumBasis>,
+    ) -> F<T> {
+        let all_energies = graph.underlying.get_energy_cache(
+            &momentum_sample.sample.loop_moms,
+            &momentum_sample.sample.external_moms,
+            &graph.loop_momentum_basis,
+        );
+
+        let mut numerator = momentum_sample.zero();
+
+        let denominators = self
+            .channels
+            .iter()
+            .map(|&lmb_index| {
+                let channel_product = all_bases[lmb_index]
+                    .basis
+                    .iter()
+                    .map(|&edge_index| &all_energies[edge_index])
+                    .fold(momentum_sample.one(), |product, energy| product * energy)
+                    .powf(&-F::from_ff64(self.alpha));
+
+                if self.channels[channel_index] == lmb_index {
+                    numerator = channel_product.clone();
+                }
+
+                channel_product
+            })
+            .fold(momentum_sample.zero(), |sum, summand| sum + summand);
+
+        numerator / denominators
+    }
 }
