@@ -1127,7 +1127,20 @@ impl LoopMomentumBasis {
 }
 
 #[derive(
-    Debug, Clone, Serialize, Deserialize, Encode, Decode, Copy, Hash, From, Into, Eq, PartialEq,
+    Debug,
+    Clone,
+    Serialize,
+    Deserialize,
+    Encode,
+    Decode,
+    Copy,
+    Hash,
+    From,
+    Into,
+    Eq,
+    PartialEq,
+    Ord,
+    PartialOrd,
 )]
 pub struct LmbIndex(usize);
 
