@@ -429,12 +429,32 @@ impl CrossSectionIntegrand {
                 .fold(gammaloop_sample.get_default_sample().zero(), |sum, term| {
                     sum + term
                 }),
-            GammaLoopSample::DiscreteGraph { graph_id, sample } => match sample {
-                DiscreteGraphSample::Default(sample) => {
-                    self.graph_terms[*graph_id].evaluate(sample, &self.settings)
+            GammaLoopSample::DiscreteGraph { graph_id, sample } => {
+                let graph_term = &self.graph_terms[*graph_id];
+                match sample {
+                    DiscreteGraphSample::Default(sample) => {
+                        graph_term.evaluate(sample, &self.settings)
+                    }
+                    DiscreteGraphSample::DiscreteMultiChanneling {
+                        alpha,
+                        channel_id,
+                        sample,
+                    } => {
+                        let (reparameterized_sample, prefactor) = self.graph_terms[*graph_id]
+                            .multi_channeling_setup
+                            .reinterpret_loop_momenta_and_compute_prefactor(
+                                *channel_id,
+                                sample,
+                                &graph_term.graph,
+                                &graph_term.lmbs,
+                                alpha,
+                            );
+
+                        prefactor * graph_term.evaluate(&reparameterized_sample, &self.settings)
+                    }
+                    _ => todo!(),
                 }
-                _ => todo!(),
-            },
+            }
             _ => todo!(),
         };
 
