@@ -284,7 +284,7 @@ impl LmbMultiChannelingSetup {
         momentum_sample: &MomentumSample<T>,
         graph: &Graph,
         all_bases: &TiVec<LmbIndex, LoopMomentumBasis>,
-        alpha: F<f64>,
+        alpha: &F<T>,
     ) -> (MomentumSample<T>, F<T>) {
         let base_lmb = &graph.loop_momentum_basis;
 
@@ -322,7 +322,7 @@ impl LmbMultiChannelingSetup {
         momentum_sample: &MomentumSample<T>,
         graph: &Graph,
         all_bases: &TiVec<LmbIndex, LoopMomentumBasis>,
-        alpha: F<f64>,
+        alpha: &F<T>,
     ) -> F<T> {
         let all_energies = graph.underlying.get_energy_cache(
             &momentum_sample.sample.loop_moms,
@@ -341,7 +341,7 @@ impl LmbMultiChannelingSetup {
                     .iter()
                     .map(|&edge_index| &all_energies[edge_index])
                     .fold(momentum_sample.one(), |product, energy| product * energy)
-                    .powf(&-F::from_ff64(alpha));
+                    .powf(&-alpha);
 
                 if self.channels[channel_index] == lmb_index {
                     numerator = channel_product.clone();
