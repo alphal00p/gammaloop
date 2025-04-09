@@ -1,6 +1,6 @@
 use std::{
     cell::{Ref, RefCell},
-    collections::BTreeMap,
+    collections::{BTreeMap, HashSet},
     fmt::{Display, Formatter},
     marker::PhantomData,
     path::PathBuf,
@@ -12,7 +12,11 @@ use bincode::de;
 use bitvec::vec::BitVec;
 use color_eyre::Result;
 
-use crate::{new_gammaloop_integrand::GenericEvaluator, utils::f128};
+use crate::{
+    new_gammaloop_integrand::{GenericEvaluator, LmbMultiChannelingSetup},
+    new_graph::LmbIndex,
+    utils::f128,
+};
 use eyre::eyre;
 use itertools::Itertools;
 use linnet::half_edge::{
@@ -842,10 +846,88 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
             evaluators.push(generic_evaluator);
         }
 
+        let lmbs = self
+            .graph
+            .loop_momentum_basis
+            .generate_loop_momentum_bases(&self.graph.underlying);
+
+        let mut channels: HashSet<LmbIndex> = HashSet::new();
+
+        // Filter out channels that are non-singular, or have the same singularities as another channel already included
+        for (lmb_index, lmb) in lmbs.iter_enumerated() {
+            let massless_edges = lmb
+                .basis
+                .iter()
+                .filter(|&edge_id| self.graph.underlying[*edge_id].particle.is_massless())
+                .collect_vec();
+
+            if massless_edges.is_empty() {
+                continue;
+            }
+
+            if channels.iter().any(|channel| {
+                let basis_of_included_channel = &lmbs[*channel].basis;
+                massless_edges
+                    .iter()
+                    .all(|edge_id| basis_of_included_channel.contains(edge_id))
+            }) {
+                continue;
+            }
+
+            // only for 1 to n for now, assuming center of mass
+            if self.graph.external_connections.as_ref().unwrap().len() == 1
+                && channels.iter().any(|channel| {
+                    let massless_edges_of_included_channel = lmbs[*channel]
+                        .basis
+                        .iter()
+                        .filter(|&edge_id| self.graph.underlying[*edge_id].particle.is_massless())
+                        .collect_vec();
+
+                    let loop_signatures_of_massless_edges_of_included_channel =
+                        massless_edges_of_included_channel
+                            .iter()
+                            .map(|edge_index| {
+                                self.graph.loop_momentum_basis.edge_signatures[**edge_index]
+                                    .internal
+                                    .first_abs()
+                            })
+                            .collect::<HashSet<_>>();
+
+                    let loop_signatures_of_massless_edges_of_potential_channel = massless_edges
+                        .iter()
+                        .map(|edge_index| {
+                            self.graph.loop_momentum_basis.edge_signatures[**edge_index]
+                                .internal
+                                .first_abs()
+                        })
+                        .collect::<HashSet<_>>();
+
+                    loop_signatures_of_massless_edges_of_included_channel
+                        == loop_signatures_of_massless_edges_of_potential_channel
+                })
+            {
+                continue;
+            }
+
+            channels.insert(lmb_index);
+        }
+
+        let channels: TiVec<_, _> = channels.into_iter().sorted().collect();
+
+        debug!(
+            "number of lmbs: {}, number of channels: {}",
+            lmbs.len(),
+            channels.len()
+        );
+
+        let multi_channeling_setup = LmbMultiChannelingSetup { channels };
+
         CrossSectionGraphTerm {
+            multi_channeling_setup,
             bare_cff_evaluators: evaluators,
             graph: self.graph.clone(),
             cut_esurface: self.cut_esurface.clone(),
+            lmbs,
         }
     }
 }
