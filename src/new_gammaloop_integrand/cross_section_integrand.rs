@@ -8,7 +8,7 @@ use statrs::distribution::Gamma;
 use symbolica::{
     domains::float::NumericalFloatLike,
     evaluate::ExpressionEvaluator,
-    numerical_integration::{ContinuousGrid, Grid, Sample},
+    numerical_integration::{ContinuousGrid, DiscreteGrid, Grid, Sample},
 };
 use typed_index_collections::TiVec;
 
@@ -20,16 +20,18 @@ use crate::{
     momentum::{Rotation, ThreeMomentum},
     momentum_sample::{ExternalFourMomenta, LoopMomenta, MomentumSample},
     new_cs::{CrossSectionGraph, CutId},
-    new_graph::{ExternalConnection, FeynmanGraph, Graph},
+    new_graph::{ExternalConnection, FeynmanGraph, Graph, LmbIndex, LoopMomentumBasis},
     signature::ExternalSignature,
     utils::{self, f128, FloatLike, F},
-    DependentMomentaConstructor, IntegratedCounterTermRange, Polarizations, Precision, Settings,
+    DependentMomentaConstructor, DiscreteGraphSamplingSettings, IntegratedCounterTermRange,
+    MultiChannelingSettings, Polarizations, Precision, SamplingSettings, Settings,
 };
 
 use super::{
     create_stability_iterator,
     gammaloop_sample::{self, parameterize, DiscreteGraphSample, GammaLoopSample},
-    stability_check, GenericEvaluator, GenericEvaluatorFloat, StabilityLevelResult,
+    stability_check, GenericEvaluator, GenericEvaluatorFloat, LmbMultiChannelingSetup,
+    StabilityLevelResult,
 };
 
 const TOLERANCE: F<f64> = F(2.0);
@@ -49,6 +51,8 @@ pub struct CrossSectionGraphTerm {
     pub bare_cff_evaluators: TiVec<CutId, GenericEvaluator>,
     pub graph: Graph,
     pub cut_esurface: TiVec<CutId, Esurface>,
+    pub multi_channeling_setup: LmbMultiChannelingSetup,
+    pub lmbs: TiVec<LmbIndex, LoopMomentumBasis>,
 }
 
 impl CrossSectionGraphTerm {
@@ -133,17 +137,89 @@ impl CrossSectionGraphTerm {
         }
         result
     }
+
+    fn create_grid(&self, settings: &Settings) -> Grid<F<f64>> {
+        match &settings.sampling {
+            SamplingSettings::Default => unreachable!(),
+            SamplingSettings::MultiChanneling(_) => unreachable!(),
+            SamplingSettings::DiscreteGraphs(disrete_graph_settings) => {
+                match disrete_graph_settings {
+                    DiscreteGraphSamplingSettings::Default => {
+                        Grid::Continuous(ContinuousGrid::new(
+                            self.graph.underlying.get_loop_number() * 3,
+                            settings.integrator.n_bins,
+                            settings.integrator.min_samples_for_update,
+                            settings.integrator.bin_number_evolution.clone(),
+                            settings.integrator.train_on_avg,
+                        ))
+                    }
+                    DiscreteGraphSamplingSettings::MultiChanneling(_) => {
+                        Grid::Continuous(ContinuousGrid::new(
+                            self.graph.underlying.get_loop_number() * 3,
+                            settings.integrator.n_bins,
+                            settings.integrator.min_samples_for_update,
+                            settings.integrator.bin_number_evolution.clone(),
+                            settings.integrator.train_on_avg,
+                        ))
+                    }
+                    DiscreteGraphSamplingSettings::DiscreteMultiChanneling(
+                        _multichanneling_settings,
+                    ) => {
+                        let continuous_grid = Grid::Continuous(ContinuousGrid::new(
+                            self.graph.underlying.get_loop_number() * 3,
+                            settings.integrator.n_bins,
+                            settings.integrator.min_samples_for_update,
+                            settings.integrator.bin_number_evolution.clone(),
+                            settings.integrator.train_on_avg,
+                        ));
+
+                        let continuous_grids = self
+                            .multi_channeling_setup
+                            .channels
+                            .iter()
+                            .map(|_| Some(continuous_grid.clone()))
+                            .collect();
+
+                        Grid::Discrete(DiscreteGrid::new(
+                            continuous_grids,
+                            settings.integrator.max_prob_ratio,
+                            settings.integrator.train_on_avg,
+                        ))
+                    }
+
+                    DiscreteGraphSamplingSettings::TropicalSampling(_) => todo!(),
+                }
+            }
+        }
+    }
 }
 
 impl HasIntegrand for CrossSectionIntegrand {
     fn create_grid(&self) -> Grid<F<f64>> {
-        Grid::Continuous(ContinuousGrid::new(
-            self.get_n_dim(),
-            self.settings.integrator.n_bins,
-            self.settings.integrator.min_samples_for_update,
-            self.settings.integrator.bin_number_evolution.clone(),
-            self.settings.integrator.train_on_avg,
-        ))
+        match self.settings.sampling {
+            SamplingSettings::Default => Grid::Continuous(ContinuousGrid::new(
+                self.get_n_dim(),
+                self.settings.integrator.n_bins,
+                self.settings.integrator.min_samples_for_update,
+                self.settings.integrator.bin_number_evolution.clone(),
+                self.settings.integrator.train_on_avg,
+            )),
+            SamplingSettings::MultiChanneling(_) => Grid::Continuous(ContinuousGrid::new(
+                self.get_n_dim(),
+                self.settings.integrator.n_bins,
+                self.settings.integrator.min_samples_for_update,
+                self.settings.integrator.bin_number_evolution.clone(),
+                self.settings.integrator.train_on_avg,
+            )),
+            SamplingSettings::DiscreteGraphs(_) => Grid::Discrete(DiscreteGrid::new(
+                self.graph_terms
+                    .iter()
+                    .map(|term| Some(term.create_grid(&self.settings)))
+                    .collect(),
+                self.settings.integrator.max_prob_ratio,
+                self.settings.integrator.train_on_avg,
+            )),
+        }
     }
 
     fn evaluate_sample(

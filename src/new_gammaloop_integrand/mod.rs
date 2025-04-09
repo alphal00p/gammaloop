@@ -237,8 +237,8 @@ pub struct StabilityLevelResult {
 pub struct ChannelIndex(usize);
 
 /// Helper struct for the LMB multi-channeling setup
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LmbMultiChannelingSetup {
-    pub alpha: F<f64>,
     pub channels: TiVec<ChannelIndex, LmbIndex>,
 }
 
@@ -284,6 +284,7 @@ impl LmbMultiChannelingSetup {
         momentum_sample: &MomentumSample<T>,
         graph: &Graph,
         all_bases: &TiVec<LmbIndex, LoopMomentumBasis>,
+        alpha: F<f64>,
     ) -> (MomentumSample<T>, F<T>) {
         let base_lmb = &graph.loop_momentum_basis;
 
@@ -308,7 +309,8 @@ impl LmbMultiChannelingSetup {
             uuid: momentum_sample.uuid,
         };
 
-        let prefactor = self.compute_prefactor_impl(channel_index, &sample, graph, all_bases);
+        let prefactor =
+            self.compute_prefactor_impl(channel_index, &sample, graph, all_bases, alpha);
 
         (sample, prefactor)
     }
@@ -320,6 +322,7 @@ impl LmbMultiChannelingSetup {
         momentum_sample: &MomentumSample<T>,
         graph: &Graph,
         all_bases: &TiVec<LmbIndex, LoopMomentumBasis>,
+        alpha: F<f64>,
     ) -> F<T> {
         let all_energies = graph.underlying.get_energy_cache(
             &momentum_sample.sample.loop_moms,
@@ -338,7 +341,7 @@ impl LmbMultiChannelingSetup {
                     .iter()
                     .map(|&edge_index| &all_energies[edge_index])
                     .fold(momentum_sample.one(), |product, energy| product * energy)
-                    .powf(&-F::from_ff64(self.alpha));
+                    .powf(&-F::from_ff64(alpha));
 
                 if self.channels[channel_index] == lmb_index {
                     numerator = channel_product.clone();
