@@ -9,6 +9,7 @@ use ahash::{AHashMap, AHashSet, HashMap, HashMapExt, HashSet};
 use bincode::{Decode, Encode};
 use bitvec::vec::BitVec;
 use color_eyre::{Report, Result};
+use derive_more::{From, Into};
 use eyre::eyre;
 use hyperdual::Num;
 use itertools::Itertools;
@@ -993,7 +994,7 @@ impl LoopMomentumBasis {
     pub fn generate_loop_momentum_bases<E, V>(
         &self,
         graph: &HedgeGraph<E, V>,
-    ) -> Vec<LoopMomentumBasis> {
+    ) -> TiVec<LmbIndex, LoopMomentumBasis> {
         let loop_number = self.basis.len();
         let num_edges = graph.iter_all_edges().count();
         let external_signature_length = self.edge_signatures[EdgeIndex::from(0)].external.len();
@@ -1119,11 +1120,14 @@ impl LoopMomentumBasis {
                     edge_signatures: new_signatures,
                 }
             })
-            .collect_vec();
+            .collect();
 
         lmbs
     }
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, Copy, Hash, From, Into)]
+pub struct LmbIndex(usize);
 
 #[derive(Debug, Clone)]
 pub struct Vertex {
