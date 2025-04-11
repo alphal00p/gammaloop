@@ -622,7 +622,7 @@ impl HasIntegrand for GammaLoopIntegrand {
         wgt: F<f64>,
         iter: usize,
         use_f128: bool,
-        max_eval: F<f64>,
+        max_eval: Complex<F<f64>>,
     ) -> EvaluationResult {
         if self.global_data.settings.general.debug > 0 {
             DEBUG_LOGGER.write("new_evaluation", &());
@@ -697,7 +697,7 @@ impl HasIntegrand for GammaLoopIntegrand {
                 &results_scaled,
                 stability_level,
                 self.global_data.settings.integrator.integrated_phase,
-                max_eval,
+                max_eval.re,
                 wgt,
             );
 

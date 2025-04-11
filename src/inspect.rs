@@ -71,7 +71,7 @@ pub fn inspect(
         }
     };
 
-    let eval_result = integrand.evaluate_sample(&sample, F(0.), 1, use_f128, F(0.0));
+    let eval_result = integrand.evaluate_sample(&sample, F(0.), 1, use_f128, Complex::new_zero());
     let eval = eval_result.integrand_result;
 
     info!(

@@ -281,7 +281,7 @@ pub fn cli(args: &Vec<String>) -> Result<(), Report> {
                 F(1.),
                 1,
                 false,
-                F(0.0),
+                Complex::new_zero(),
             );
         }
         let total_time = now.elapsed().as_secs_f64();

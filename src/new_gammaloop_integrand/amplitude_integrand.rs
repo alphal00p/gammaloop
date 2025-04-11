@@ -1,3 +1,4 @@
+use spenso::complex::Complex;
 use symbolica::numerical_integration::{Grid, Sample};
 
 use crate::{evaluation_result::EvaluationResult, integrands::HasIntegrand, utils::F, Settings};
@@ -18,7 +19,7 @@ impl HasIntegrand for AmplitudeIntegrand {
         wgt: F<f64>,
         iter: usize,
         use_f128: bool,
-        max_eval: F<f64>,
+        max_eval: Complex<F<f64>>,
     ) -> EvaluationResult {
         todo!()
     }

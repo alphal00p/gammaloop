@@ -58,7 +58,7 @@ impl EvaluationMetaData {
 }
 
 /// This struct merges the evaluation metadata of many evaluations into a single struct
-#[derive(Copy, Clone, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct StatisticsCounter {
     pub num_evals: usize,
     sum_rep3d_evaluation_time: Duration,
