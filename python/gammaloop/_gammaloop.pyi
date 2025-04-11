@@ -202,8 +202,8 @@ class Worker:
     def inspect_integrand(self, integrand: str, pt: list[float], term: list[int], force_radius: bool, is_momentum_space: bool, use_f128: bool) -> tuple[float, float]:
         """ Inspects the integrand given in argument at the point given in argument. """
 
-    def inspect_lmw_integrand(self, integrand: str, workspace_path: str, use_f128: bool) -> tuple[float, float]:
-        """ inspects the integrand given at the max weight point of the previous run. """
+    def inspect_lmw_integrand(self, integrand: str, workspace_path: str, use_f128: bool) -> None:
+        """ inspects the integrand given at all max weight points of the previous run and prints the results. """
 
     def integrate_integrand(self, integrand: str, num_cores: int, result_path: str, workspace_path: str, target: tuple[float, float] | None) -> list[tuple[float, float]]:
         """ Integrates the integrand given in argument over the target given in argument. """
