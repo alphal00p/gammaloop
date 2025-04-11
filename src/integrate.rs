@@ -323,8 +323,11 @@ where
         let cur_points =
             settings.integrator.n_start + settings.integrator.n_increase * integration_state.iter;
 
-        // the number of points per core for all cores but the last, which may have fewer
-        let nvec_per_core = (cur_points - 1) / cores + 1;
+        // the number of points per core is the same for all cores, except for the last one
+        let target_points_per_core = (cur_points - 1) / cores + 1;
+        let n_points_per_core = repeatn(target_points_per_core, cores - 1).chain(
+            rayon::iter::once(cur_points - target_points_per_core * (cores - 1)),
+        );
 
         let current_max_evals = integration_state.integral.get_worst_case();
 
@@ -335,14 +338,15 @@ where
             .par_iter_mut()
             .enumerate()
             .zip(grids)
-            .map(|((core_id, integrand), mut grid)| {
+            .zip(n_points_per_core)
+            .map(|(((core_id, integrand), mut grid), n_points)| {
                 // set the rng for the current core
                 let mut rng = MonteCarloRng::new(
                     settings.integrator.seed,
                     cores * integration_state.iter + core_id,
                 );
 
-                let samples = (0..nvec_per_core)
+                let samples = (0..n_points)
                     .map(|_| {
                         let mut sample = Sample::new();
                         grid.sample(&mut rng, &mut sample);
