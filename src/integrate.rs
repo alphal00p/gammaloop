@@ -320,8 +320,17 @@ where
 
     let mut n_samples_evaluated = 0;
     'integrateLoop: while integration_state.num_points < settings.integrator.n_max {
-        let cur_points =
-            settings.integrator.n_start + settings.integrator.n_increase * integration_state.iter;
+        // ensure we do not overshoot
+        let cur_points = {
+            let cur_points_not_final_iter = settings.integrator.n_start
+                + settings.integrator.n_increase * integration_state.iter;
+            if cur_points_not_final_iter + integration_state.num_points > settings.integrator.n_max
+            {
+                settings.integrator.n_max - integration_state.num_points
+            } else {
+                cur_points_not_final_iter
+            }
+        };
 
         // the number of points per core is the same for all cores, except for the last one
         let target_points_per_core = (cur_points - 1) / cores + 1;
