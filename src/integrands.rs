@@ -58,7 +58,7 @@ pub trait HasIntegrand {
         wgt: F<f64>,
         iter: usize,
         use_f128: bool,
-        max_eval: F<f64>,
+        max_eval: Complex<F<f64>>,
     ) -> EvaluationResult;
 
     fn get_n_dim(&self) -> usize;
@@ -106,7 +106,7 @@ impl HasIntegrand for Integrand {
         wgt: F<f64>,
         iter: usize,
         use_f128: bool,
-        max_eval: F<f64>,
+        max_eval: Complex<F<f64>>,
     ) -> EvaluationResult {
         match self {
             Integrand::UnitSurface(integrand) => {
@@ -250,7 +250,7 @@ impl HasIntegrand for UnitSurfaceIntegrand {
         wgt: F<f64>,
         iter: usize,
         use_f128: bool,
-        max_eval: F<f64>,
+        max_eval: Complex<F<f64>>,
     ) -> EvaluationResult {
         let start_evaluate_sample = std::time::Instant::now();
 
@@ -396,7 +396,7 @@ impl HasIntegrand for UnitVolumeIntegrand {
         wgt: F<f64>,
         iter: usize,
         use_f128: bool,
-        max_eval: F<f64>,
+        max_eval: Complex<F<f64>>,
     ) -> EvaluationResult {
         let start_evaluate_sample = std::time::Instant::now();
 

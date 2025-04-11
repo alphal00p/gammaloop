@@ -228,7 +228,7 @@ impl HasIntegrand for CrossSectionIntegrand {
         wgt: F<f64>,
         iter: usize,
         use_f128: bool,
-        max_eval: F<f64>,
+        max_eval: Complex<F<f64>>,
     ) -> EvaluationResult {
         let start_eval = std::time::Instant::now();
         let stability_iterator = create_stability_iterator(&self.settings.stability, use_f128);

@@ -97,7 +97,7 @@ fn stability_check(
     settings: &Settings,
     results: &[Complex<F<f64>>],
     stability_settings: &StabilityLevelSetting,
-    max_eval: F<f64>,
+    max_eval: Complex<F<f64>>,
     wgt: F<f64>,
 ) -> (Complex<F<f64>>, bool) {
     if results.len() == 1 {
@@ -158,20 +158,13 @@ fn stability_check(
 
     let stable = unstable_sample.is_none();
 
-    // todo provide max wgt as Complex<F<f64>>
-    let average_for_comparison = match settings.integrator.integrated_phase {
-        IntegratedPhase::Real => average.re,
-        IntegratedPhase::Imag => average.im,
-        IntegratedPhase::Both => {
-            unimplemented!("max wgt test unimplemented for integrated phase both")
-        }
-    };
-
     let below_wgt_threshold = if stability_settings.escalate_for_large_weight_threshold > F(0.)
         && max_eval.is_non_zero()
     {
-        average_for_comparison.abs() * wgt
-            < stability_settings.escalate_for_large_weight_threshold * max_eval.abs()
+        average.re.abs() * wgt
+            < stability_settings.escalate_for_large_weight_threshold * max_eval.re
+            || average.im.abs() * wgt
+                < stability_settings.escalate_for_large_weight_threshold * max_eval.im
     } else {
         true
     };

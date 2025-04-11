@@ -102,7 +102,7 @@ impl HasIntegrand for HFunctionTestIntegrand {
         wgt: F<f64>,
         iter: usize,
         use_f128: bool,
-        _max_eval: F<f64>,
+        _max_eval: Complex<F<f64>>,
     ) -> EvaluationResult {
         let start_evaluate_sample = std::time::Instant::now();
 

@@ -9,14 +9,13 @@ use crate::{
     inspect,
     integrands::Integrand,
     integrate::{
-        havana_integrate, print_integral_result, BatchResult, MasterNode,
-        SerializableIntegrationState,
+        havana_integrate, print_integral_result, BatchResult, IntegrationState, MasterNode,
     },
     model::Model,
     new_cs::{Process, ProcessDefinition, ProcessList},
     numerator::{GlobalPrefactor, Numerator, PythonState},
     utils::F,
-    HasIntegrand, ProcessSettings, Settings,
+    HasIntegrand, IntegratedPhase, ProcessSettings, Settings,
 };
 use ahash::HashMap;
 use chrono::{Datelike, Local, Timelike};
@@ -30,6 +29,7 @@ use itertools::{self, Itertools};
 use log::{debug, info, warn, LevelFilter};
 use pyo3::types::PyDict;
 use spenso::complex::Complex;
+use std::cmp::Ordering;
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -1024,7 +1024,7 @@ impl PythonWorker {
         integrand: &str,
         workspace_path: &str,
         use_f128: bool,
-    ) -> PyResult<(f64, f64)> {
+    ) -> PyResult<()> {
         match self.integrands.get_mut(integrand) {
             Some(integrand_struct) => {
                 let new_settings = match integrand_struct {
@@ -1039,8 +1039,8 @@ impl PythonWorker {
 
                 match fs::read(path_to_state) {
                     Ok(state_bytes) => {
-                        let serializable_state: SerializableIntegrationState =
-                            bincode::decode_from_slice::<SerializableIntegrationState, _>(
+                        let integration_state: IntegrationState =
+                            bincode::decode_from_slice::<IntegrationState, _>(
                                 &state_bytes,
                                 bincode::config::standard(),
                             )
@@ -1057,35 +1057,29 @@ impl PythonWorker {
 
                         workspace_settings.general.debug = new_settings.general.debug;
 
-                        let integration_state =
-                            serializable_state.into_integration_state(&workspace_settings);
+                        let max_weight_samples = vec![
+                            integration_state.integral.re.max_eval_positive_xs,
+                            integration_state.integral.re.max_eval_negative_xs,
+                            integration_state.integral.im.max_eval_positive_xs,
+                            integration_state.integral.im.max_eval_negative_xs,
+                        ];
 
-                        let max_weight_sample = if integration_state.integral.max_eval_positive
-                            > integration_state.integral.max_eval_negative.abs()
+                        for max_weight_sample in max_weight_samples
+                            .into_iter()
+                            .filter_map(std::convert::identity)
                         {
-                            integration_state
-                                .integral
-                                .max_eval_positive_xs
-                                .expect("no max eval found")
-                        } else {
-                            integration_state
-                                .integral
-                                .max_eval_negative_xs
-                                .expect("no max eval found")
-                        };
+                            // bypass inspect function as it does not take a symbolica sample as input
+                            let eval_result = integrand_struct.evaluate_sample(
+                                &max_weight_sample,
+                                F(0.0),
+                                1,
+                                use_f128,
+                                Complex::new_zero(),
+                            );
 
-                        // bypass inspect function as it does not take a symbolica sample as input
-                        let eval_result = integrand_struct.evaluate_sample(
-                            &max_weight_sample,
-                            F(0.0),
-                            1,
-                            use_f128,
-                            F(0.0),
-                        );
+                            let eval = eval_result.integrand_result;
 
-                        let eval = eval_result.integrand_result;
-
-                        info!(
+                            info!(
                             "\nFor input point xs: \n\n{}\n\nThe evaluation of integrand '{}' is:\n\n{}\n",
                             format!(
                                 "( {:?} )",
@@ -1095,8 +1089,9 @@ impl PythonWorker {
                             integrand,
                             format!("( {:+.16e}, {:+.16e} i)", eval.re, eval.im).blue(),
                         );
+                        }
 
-                        Ok((eval.re.0, eval.im.0))
+                        Ok(())
                     }
                     Err(_) => Err(exceptions::PyException::new_err(
                         "No previous run to extract max weight from".to_string(),
@@ -1141,8 +1136,8 @@ impl PythonWorker {
                             );
                             info!("");
 
-                            let serializable_state: SerializableIntegrationState =
-                                bincode::decode_from_slice::<SerializableIntegrationState, _>(
+                            let state: IntegrationState =
+                                bincode::decode_from_slice::<IntegrationState, _>(
                                     &state_bytes,
                                     bincode::config::standard(),
                                 )
@@ -1161,11 +1156,8 @@ impl PythonWorker {
                             // force the settings to be the same as the ones used in the previous integration
                             *gloop_integrand.get_mut_settings() = workspace_settings.clone();
 
-                            let state =
-                                serializable_state.into_integration_state(&workspace_settings);
-
                             print_integral_result(
-                                &state.all_integrals[0],
+                                &state.integral.re,
                                 1,
                                 state.iter,
                                 "re",
@@ -1173,7 +1165,7 @@ impl PythonWorker {
                             );
 
                             print_integral_result(
-                                &state.all_integrals[1],
+                                &state.integral.im,
                                 2,
                                 state.iter,
                                 "im",

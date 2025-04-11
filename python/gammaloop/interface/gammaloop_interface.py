@@ -142,7 +142,7 @@ class GammaLoopConfiguration(object):
                     'global_prefactor': {'color': "1", 'colorless': "1"},
                     'dump_expression': 'Mathematica',
                     'gamma_algebra': 'Concrete',
-                    'parse_mode':'Polynomial',
+                    'parse_mode': 'Polynomial',
                 },
                 'cpe_rounds_cff': 1,
                 'compile_separate_orientations': False,
@@ -1584,16 +1584,15 @@ class GammaLoop(object):
 
         self.sync_worker_with_output(args.no_sync)
 
+        log_res: dict[str, Any] = {}
         if args.last_max_weight:
             workspace_path = self.launched_output.joinpath("workspace")
-            res: tuple[float, float] = self.rust_worker.inspect_lmw_integrand(
+            self.rust_worker.inspect_lmw_integrand(
                 args.integrand, str(workspace_path), args.use_f128)
         else:
             res: tuple[float, float] = self.rust_worker.inspect_integrand(
                 args.integrand, args.point, args.term, args.force_radius, args.is_momentum_space, args.use_f128)
-
-        log_res: dict[str, Any] = {}
-        log_res['final_result'] = complex(res[0], res[1])
+            log_res['final_result'] = complex(res[0], res[1])
 
         for file in os.listdir('log.glog'):
             file_location = pjoin('log.glog', file)
