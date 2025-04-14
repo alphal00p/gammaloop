@@ -388,11 +388,13 @@ where
                             IntegratedPhase::Both => unimplemented!(),
                         };
 
-                        grid.add_training_sample(s, training_eval);
+                        if let Err(err) = grid.add_training_sample(s, training_eval) {
+                            println!("Error adding training sample to grid: {}", err);
+                        };
 
                         result
                     })
-                    .take_while(|_| !INTERRUPTED.load(std::sync::atomic::Ordering::Relaxed))
+                    .take_while(|_| !INTERRUPTED.load(std::sync::atomic::Ordering::Relaxed)) // make sure ctrl+c does it's job
                     .collect_vec();
 
                 let evaluation_statistics = StatisticsCounter::from_evaluation_results(&results);
@@ -421,7 +423,9 @@ where
 
         let mut first_grid = core_results[0].grid.clone();
         for core_result in core_results[1..].iter() {
-            first_grid.merge(&core_result.grid);
+            first_grid
+                .merge(&core_result.grid)
+                .expect("could not merge grids");
         }
 
         integration_state.grid = first_grid;
