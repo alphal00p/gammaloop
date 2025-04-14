@@ -73,6 +73,7 @@ use observables::PhaseSpaceSelectorSettings;
 
 use signature::ExternalSignature;
 use spenso::complex::Complex;
+use std::default;
 use std::fmt::Display;
 use std::fs::File;
 use std::sync::atomic::AtomicBool;
@@ -263,7 +264,7 @@ impl Default for IntegratorSettings {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct ParameterizationSettings {
     pub mode: ParameterizationMode,
     pub mapping: ParameterizationMapping,
@@ -272,6 +273,7 @@ pub struct ParameterizationSettings {
     pub input_rescaling: Vec<Vec<(f64, f64)>>,
     #[serde(default = "_default_shifts")]
     pub shifts: Vec<(f64, f64, f64, f64)>,
+    pub sample_orientations: bool,
 }
 
 impl Default for ParameterizationSettings {
@@ -282,6 +284,7 @@ impl Default for ParameterizationSettings {
             mapping: ParameterizationMapping::Linear,
             input_rescaling: vec![vec![(0.0, 1.0); 3]; 15],
             shifts: vec![(1.0, 0.0, 0.0, 0.0); 15],
+            sample_orientations: false,
         }
     }
 }
@@ -295,8 +298,6 @@ pub struct Settings {
     pub hard_coded_integrand: IntegrandSettings,
     #[serde(rename = "Kinematics")]
     pub kinematics: KinematicsSettings,
-    #[serde(rename = "Parameterization")]
-    pub parameterization: ParameterizationSettings,
     #[serde(rename = "Integrator")]
     pub integrator: IntegratorSettings,
     #[serde(rename = "Observables")]
@@ -876,26 +877,56 @@ impl Default for Externals {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type")]
 pub enum SamplingSettings {
-    #[default]
     #[serde(rename = "default")]
-    Default,
+    Default(ParameterizationSettings),
     #[serde(rename = "multi_channeling")]
     MultiChanneling(MultiChannelingSettings),
     #[serde(rename = "discrete_graph_sampling")]
     DiscreteGraphs(DiscreteGraphSamplingSettings),
 }
 
+impl Default for SamplingSettings {
+    fn default() -> Self {
+        Self::Default(ParameterizationSettings::default())
+    }
+}
+
+impl SamplingSettings {
+    fn get_parameterization_settings(&self) -> Option<ParameterizationSettings> {
+        match self {
+            SamplingSettings::Default(settings) => Some(settings.clone()),
+            SamplingSettings::MultiChanneling(settings) => {
+                Some(settings.parameterization_settings.clone())
+            }
+            SamplingSettings::DiscreteGraphs(settings) => match settings {
+                DiscreteGraphSamplingSettings::Default(settings) => Some(settings.clone()),
+                DiscreteGraphSamplingSettings::MultiChanneling(settings) => {
+                    Some(settings.parameterization_settings.clone())
+                }
+                DiscreteGraphSamplingSettings::DiscreteMultiChanneling(settings) => {
+                    Some(settings.parameterization_settings.clone())
+                }
+                DiscreteGraphSamplingSettings::TropicalSampling(_) => None,
+            },
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct MultiChannelingSettings {
     pub alpha: f64,
+    pub parameterization_settings: ParameterizationSettings,
 }
 
 impl Default for MultiChannelingSettings {
     fn default() -> Self {
-        Self { alpha: 3.0 }
+        Self {
+            alpha: 3.0,
+            parameterization_settings: ParameterizationSettings::default(),
+        }
     }
 }
 
@@ -903,6 +934,7 @@ impl Default for MultiChannelingSettings {
 pub struct GammaloopTropicalSamplingSettings {
     pub upcast_on_failure: bool,
     pub matrix_stability_test: Option<f64>,
+    pub sample_orientations: bool,
 }
 
 impl Default for GammaloopTropicalSamplingSettings {
@@ -910,6 +942,7 @@ impl Default for GammaloopTropicalSamplingSettings {
         Self {
             upcast_on_failure: true,
             matrix_stability_test: Some(1.0e-5),
+            sample_orientations: false,
         }
     }
 }
@@ -931,12 +964,11 @@ impl GammaloopTropicalSamplingSettings {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "subtype")]
 pub enum DiscreteGraphSamplingSettings {
-    #[default]
     #[serde(rename = "default")]
-    Default,
+    Default(ParameterizationSettings),
     #[serde(rename = "multi_channeling")]
     MultiChanneling(MultiChannelingSettings),
     #[serde(rename = "discrete_multi_channeling")]

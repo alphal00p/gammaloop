@@ -505,48 +505,51 @@ fn evaluate<I: GraphIntegrand, T: FloatLike>(
 
 /// Create a havana grid for a single graph
 fn create_grid<T: GraphIntegrand>(graph_integrand: &T, settings: &Settings) -> Grid<F<f64>> {
-    let num_loops = get_loop_count(graph_integrand);
+    disable! {
+        let num_loops = get_loop_count(graph_integrand);
 
-    let n_edges = graph_integrand
-        .get_graph()
-        .derived_data
-        .as_ref()
-        .unwrap()
-        .tropical_subgraph_table
-        .as_ref()
-        .map(|t| t.get_num_edges());
+        let n_edges = graph_integrand
+            .get_graph()
+            .derived_data
+            .as_ref()
+            .unwrap()
+            .tropical_subgraph_table
+            .as_ref()
+            .map(|t| t.get_num_edges());
 
-    let continious_dimension = get_n_dim_for_n_loop_momenta(settings, num_loops, false, n_edges);
+        let continious_dimension = get_n_dim_for_n_loop_momenta(settings, num_loops, false, n_edges);
 
-    let continous_grid = Grid::Continuous(ContinuousGrid::new(
-        continious_dimension,
-        settings.integrator.n_bins,
-        settings.integrator.min_samples_for_update,
-        settings.integrator.bin_number_evolution.clone(),
-        settings.integrator.train_on_avg,
-    ));
+        let continous_grid = Grid::Continuous(ContinuousGrid::new(
+            continious_dimension,
+            settings.integrator.n_bins,
+            settings.integrator.min_samples_for_update,
+            settings.integrator.bin_number_evolution.clone(),
+            settings.integrator.train_on_avg,
+        ));
 
-    match &settings.sampling {
-        SamplingSettings::DiscreteGraphs(
-            DiscreteGraphSamplingSettings::DiscreteMultiChanneling(_),
-        ) => {
-            // if the channel list is empty, we use all channels.
-            let num_channels = if graph_integrand.get_multi_channeling_channels().is_empty() {
-                get_lmb_count(graph_integrand)
-            } else {
-                graph_integrand.get_multi_channeling_channels().len()
-            };
+        match &settings.sampling {
+            SamplingSettings::DiscreteGraphs(
+                DiscreteGraphSamplingSettings::DiscreteMultiChanneling(_),
+            ) => {
+                // if the channel list is empty, we use all channels.
+                let num_channels = if graph_integrand.get_multi_channeling_channels().is_empty() {
+                    get_lmb_count(graph_integrand)
+                } else {
+                    graph_integrand.get_multi_channeling_channels().len()
+                };
 
-            let cont_grids = vec![Some(continous_grid); num_channels];
+                let cont_grids = vec![Some(continous_grid); num_channels];
 
-            Grid::Discrete(DiscreteGrid::new(
-                cont_grids,
-                settings.integrator.max_prob_ratio,
-                settings.integrator.train_on_avg,
-            ))
+                Grid::Discrete(DiscreteGrid::new(
+                    cont_grids,
+                    settings.integrator.max_prob_ratio,
+                    settings.integrator.train_on_avg,
+                ))
+            }
+            _ => continous_grid,
         }
-        _ => continous_grid,
     }
+    panic!("gammaloop integrand deprecated");
 }
 
 /// Struct that represents a list of graph contirbuting to a single amplitude or cross-section.

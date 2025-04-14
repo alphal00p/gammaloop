@@ -1,5 +1,6 @@
 use std::fmt::Display;
 
+use crate::cff::cut_expression::OrientationID;
 use crate::momentum::{FourMomentum, Polarization, Rotatable, Rotation, ThreeMomentum};
 use crate::signature::ExternalSignature;
 use crate::utils::{FloatLike, Length, F};
@@ -138,6 +139,7 @@ pub struct BareMomentumSample<T: FloatLike> {
     pub external_moms: ExternalFourMomenta<F<T>>,
     pub polarizations: PolarizationVectors<Complex<F<T>>>,
     pub jacobian: F<T>,
+    pub orientation: Option<OrientationID>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -173,6 +175,7 @@ impl<T: FloatLike> BareMomentumSample<T> {
         jacobian: F<T>,
         polarizations: &Polarizations,
         dependent_momenta_constructor: DependentMomentaConstructor,
+        orientation: Option<OrientationID>,
     ) -> Self {
         let polarizations = match polarizations {
             Polarizations::None => PolarizationVectors::new(),
@@ -188,6 +191,7 @@ impl<T: FloatLike> BareMomentumSample<T> {
             loop_moms,
             external_moms,
             jacobian,
+            orientation,
         }
     }
 
@@ -226,6 +230,7 @@ impl<T: FloatLike> BareMomentumSample<T> {
                 .map(Polarization::complex_cast)
                 .collect(),
             jacobian: self.jacobian.clone().into(),
+            orientation: self.orientation,
         }
     }
 
@@ -246,6 +251,7 @@ impl<T: FloatLike> BareMomentumSample<T> {
                 .map(Polarization::higher)
                 .collect(),
             jacobian: self.jacobian.higher(),
+            orientation: self.orientation,
         }
     }
 
@@ -258,6 +264,7 @@ impl<T: FloatLike> BareMomentumSample<T> {
             external_moms: self.external_moms.iter().map(FourMomentum::lower).collect(),
             polarizations: self.polarizations.iter().map(Polarization::lower).collect(),
             jacobian: self.jacobian.lower(),
+            orientation: self.orientation,
         }
     }
 
@@ -274,6 +281,7 @@ impl<T: FloatLike> BareMomentumSample<T> {
             external_moms: rotated_externals,
             polarizations: rotated_polarizations,
             jacobian: self.jacobian.clone(),
+            orientation: self.orientation,
         }
     }
 
@@ -292,6 +300,7 @@ impl<T: FloatLike> BareMomentumSample<T> {
                 .map(|l| l.rotate(rotation))
                 .collect(),
             jacobian: self.jacobian.clone(),
+            orientation: self.orientation,
         }
     }
 
@@ -302,6 +311,7 @@ impl<T: FloatLike> BareMomentumSample<T> {
             external_moms: self.external_moms.clone(),
             polarizations: self.polarizations.clone(),
             jacobian: self.jacobian.clone(),
+            orientation: self.orientation,
         }
     }
 }
@@ -407,6 +417,7 @@ impl<T: FloatLike> MomentumSample<T> {
         jacobian: F<T>,
         polarizations: &Polarizations,
         dependent_momenta_constructor: DependentMomentaConstructor,
+        orientation: Option<OrientationID>,
     ) -> Self {
         Self {
             sample: BareMomentumSample::new(
@@ -415,6 +426,7 @@ impl<T: FloatLike> MomentumSample<T> {
                 jacobian,
                 polarizations,
                 dependent_momenta_constructor,
+                orientation,
             ),
             rotated_sample: None,
             uuid: Uuid::new_v4(),

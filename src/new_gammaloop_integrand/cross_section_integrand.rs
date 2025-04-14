@@ -140,11 +140,11 @@ impl CrossSectionGraphTerm {
 
     fn create_grid(&self, settings: &Settings) -> Grid<F<f64>> {
         match &settings.sampling {
-            SamplingSettings::Default => unreachable!(),
+            SamplingSettings::Default(_) => unreachable!(),
             SamplingSettings::MultiChanneling(_) => unreachable!(),
             SamplingSettings::DiscreteGraphs(disrete_graph_settings) => {
                 match disrete_graph_settings {
-                    DiscreteGraphSamplingSettings::Default => {
+                    DiscreteGraphSamplingSettings::Default(_) => {
                         Grid::Continuous(ContinuousGrid::new(
                             self.graph.underlying.get_loop_number() * 3,
                             settings.integrator.n_bins,
@@ -197,7 +197,7 @@ impl CrossSectionGraphTerm {
 impl HasIntegrand for CrossSectionIntegrand {
     fn create_grid(&self) -> Grid<F<f64>> {
         match self.settings.sampling {
-            SamplingSettings::Default => Grid::Continuous(ContinuousGrid::new(
+            SamplingSettings::Default(_) => Grid::Continuous(ContinuousGrid::new(
                 self.get_n_dim(),
                 self.settings.integrator.n_bins,
                 self.settings.integrator.min_samples_for_update,

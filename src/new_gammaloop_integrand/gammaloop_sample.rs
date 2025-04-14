@@ -2,45 +2,41 @@ use serde::{Deserialize, Serialize};
 use spenso::complex::Complex;
 use typed_index_collections::TiVec;
 
+use crate::cff::cut_expression::OrientationID;
 use crate::momentum::{Rotation, ThreeMomentum};
 use crate::momentum_sample::{ExternalFourMomenta, MomentumSample, PolarizationVectors};
 use crate::new_graph::{FeynmanGraph, Graph};
 use crate::utils::{global_parameterize, FloatLike, F};
 use crate::{
-    disable, DependentMomentaConstructor, DiscreteGraphSamplingSettings, Externals, Polarizations,
-    SamplingSettings, Settings,
+    disable, DependentMomentaConstructor, DiscreteGraphSamplingSettings, Externals,
+    KinematicsSettings, ParameterizationSettings, Polarizations, SamplingSettings, Settings,
 };
 use symbolica::numerical_integration::Sample;
 
 use super::{ChannelIndex, IntegrandType};
 
-// helper functions can maybe moved to utils
-#[inline]
-fn unwrap_cont_sample<T: FloatLike>(sample: &Sample<F<f64>>) -> Vec<F<T>> {
-    if let Sample::Continuous(_, xs) = sample {
-        xs.iter().map(|x| F::from_ff64(*x)).collect()
-    } else {
-        panic!("Invalid sample structure")
-    }
+// discrete dimensions, continious dimensions
+fn unwrap_sample<T: FloatLike>(sample: &Sample<F<f64>>) -> (Vec<usize>, Vec<F<T>>) {
+    let discrete_dimensions = Vec::new();
+    unwrap_sample_impl(discrete_dimensions, sample)
 }
 
-#[inline]
-fn unwrap_single_discrete_sample<T: FloatLike>(sample: &Sample<F<f64>>) -> (usize, Vec<F<T>>) {
-    if let Sample::Discrete(_, index, Some(cont_sample)) = sample {
-        (*index, unwrap_cont_sample(cont_sample))
-    } else {
-        panic!("Invalid sample structure")
-    }
-}
-
-#[inline]
-fn unwrap_double_discrete_sample<T: FloatLike>(
+fn unwrap_sample_impl<T: FloatLike>(
+    mut discrete_dimensions: Vec<usize>,
     sample: &Sample<F<f64>>,
-) -> (usize, (usize, Vec<F<T>>)) {
-    if let Sample::Discrete(_, index, Some(discrete_sample)) = sample {
-        (*index, unwrap_single_discrete_sample(discrete_sample))
-    } else {
-        panic!("Invalid sample structure")
+) -> (Vec<usize>, Vec<F<T>>) {
+    match sample {
+        Sample::Continuous(_, xs) => {
+            let xs = xs.iter().map(|x| F::from_ff64(*x)).collect();
+            (discrete_dimensions, xs)
+        }
+        Sample::Discrete(_, index, sample) => {
+            discrete_dimensions.push(*index);
+            unwrap_sample_impl(
+                discrete_dimensions,
+                sample.as_ref().expect("invalid sample structure"),
+            )
+        }
     }
 }
 
@@ -439,44 +435,78 @@ pub fn parameterize<T: FloatLike>(
     settings: &Settings,
     graphs: Option<&[Graph]>, // this is only needed for tropical sampling
 ) -> Result<GammaLoopSample<T>, String> {
+    let (discrete_indices, xs) = unwrap_sample(sample_point);
+
     match &settings.sampling {
-        SamplingSettings::Default => {
-            let xs = unwrap_cont_sample(sample_point);
+        SamplingSettings::Default(parameterization_settings) => {
+            let orientation = if parameterization_settings.sample_orientations {
+                Some(OrientationID::from(discrete_indices[0]))
+            } else {
+                None
+            };
+
             Ok(GammaLoopSample::Default(default_parametrize(
                 &xs,
                 dependent_momenta_constructor,
                 polarizations,
-                settings,
+                parameterization_settings,
+                &settings.kinematics,
+                orientation,
             )))
         }
         SamplingSettings::MultiChanneling(multichanneling_settings) => {
-            let xs = unwrap_cont_sample(sample_point);
+            let orientation = if multichanneling_settings
+                .parameterization_settings
+                .sample_orientations
+            {
+                Some(OrientationID::from(discrete_indices[0]))
+            } else {
+                None
+            };
+
             Ok(GammaLoopSample::MultiChanneling {
                 alpha: multichanneling_settings.alpha,
                 sample: default_parametrize(
                     &xs,
                     dependent_momenta_constructor,
                     polarizations,
-                    settings,
+                    &multichanneling_settings.parameterization_settings,
+                    &settings.kinematics,
+                    orientation,
                 ),
             })
         }
         SamplingSettings::DiscreteGraphs(discrete_graph_settings) => {
+            let graph_id = discrete_indices[0];
             match discrete_graph_settings {
-                DiscreteGraphSamplingSettings::Default => {
-                    let (graph_id, xs) = unwrap_single_discrete_sample(sample_point);
+                DiscreteGraphSamplingSettings::Default(parameterization_settings) => {
+                    let orientation = if parameterization_settings.sample_orientations {
+                        Some(OrientationID::from(discrete_indices[1]))
+                    } else {
+                        None
+                    };
                     Ok(GammaLoopSample::DiscreteGraph {
                         graph_id,
                         sample: DiscreteGraphSample::Default(default_parametrize(
                             &xs,
                             dependent_momenta_constructor,
                             polarizations,
-                            settings,
+                            parameterization_settings,
+                            &settings.kinematics,
+                            orientation,
                         )),
                     })
                 }
                 DiscreteGraphSamplingSettings::MultiChanneling(multichanneling_settings) => {
-                    let (graph_id, xs) = unwrap_single_discrete_sample(sample_point);
+                    let orientation = if multichanneling_settings
+                        .parameterization_settings
+                        .sample_orientations
+                    {
+                        Some(OrientationID::from(discrete_indices[1]))
+                    } else {
+                        None
+                    };
+
                     Ok(GammaLoopSample::DiscreteGraph {
                         graph_id,
                         sample: DiscreteGraphSample::MultiChanneling {
@@ -485,7 +515,9 @@ pub fn parameterize<T: FloatLike>(
                                 &xs,
                                 dependent_momenta_constructor,
                                 polarizations,
-                                settings,
+                                &multichanneling_settings.parameterization_settings,
+                                &settings.kinematics,
+                                orientation,
                             ),
                         },
                     })
@@ -567,7 +599,16 @@ pub fn parameterize<T: FloatLike>(
                 DiscreteGraphSamplingSettings::DiscreteMultiChanneling(
                     multichanneling_settings,
                 ) => {
-                    let (graph_id, (channel_id, xs)) = unwrap_double_discrete_sample(sample_point);
+                    let channel_id = discrete_indices[1];
+                    let orientation = if multichanneling_settings
+                        .parameterization_settings
+                        .sample_orientations
+                    {
+                        Some(OrientationID::from(discrete_indices[2]))
+                    } else {
+                        None
+                    };
+
                     Ok(GammaLoopSample::DiscreteGraph {
                         graph_id,
                         sample: DiscreteGraphSample::DiscreteMultiChanneling {
@@ -577,7 +618,9 @@ pub fn parameterize<T: FloatLike>(
                                 &xs,
                                 dependent_momenta_constructor,
                                 polarizations,
-                                settings,
+                                &multichanneling_settings.parameterization_settings,
+                                &settings.kinematics,
+                                orientation,
                             ),
                         },
                     })
@@ -593,14 +636,16 @@ fn default_parametrize<T: FloatLike>(
     xs: &[F<T>],
     dependent_momenta_constructor: DependentMomentaConstructor,
     polarizations: &[Polarizations],
-    settings: &Settings,
+    parameterization_settings: &ParameterizationSettings,
+    kinematics: &KinematicsSettings,
+    orientation: Option<OrientationID>,
 ) -> MomentumSample<T> {
-    let externals = &settings.kinematics.externals;
+    let externals = &kinematics.externals;
 
     let (loop_moms_vec, param_jacobian) = global_parameterize(
         xs,
-        F::from_ff64(settings.kinematics.e_cm.square()),
-        settings,
+        F::from_ff64(kinematics.e_cm.square()),
+        parameterization_settings,
         false,
     );
 
@@ -614,5 +659,6 @@ fn default_parametrize<T: FloatLike>(
         jacobian,
         &polarizations[0],
         dependent_momenta_constructor,
+        orientation,
     )
 }

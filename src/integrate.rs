@@ -252,54 +252,59 @@ where
         IntegrationState::new_from_settings(|| user_data.integrand[0].create_grid())
     };
 
-    let grid_str = match &settings.sampling {
-        SamplingSettings::MultiChanneling(_multi_channeling_settings) => {
-            let cont_dimension = match &integration_state.grid {
-                Grid::Continuous(g) => g.continuous_dimensions.len(),
-                _ => unreachable!(),
-            };
+    disable! {
+        let grid_str = match &settings.sampling {
+            SamplingSettings::MultiChanneling(_multi_channeling_settings) => {
+                let cont_dimension = match &integration_state.grid {
+                    Grid::Continuous(g) => g.continuous_dimensions.len(),
+                    _ => unreachable!(),
+                };
 
-            // I don't specify the number of channels, because they are different for each graph
-            format!(
-                "a continuous {}-dimensional grid with multi-channeling over lmbs",
-                cont_dimension
-            )
-        }
-        SamplingSettings::Default => {
-            let cont_dimension = match &integration_state.grid {
-                Grid::Continuous(g) => g.continuous_dimensions.len(),
-                _ => unreachable!(),
-            };
+                // I don't specify the number of channels, because they are different for each graph
+                format!(
+                    "a continuous {}-dimensional grid with multi-channeling over lmbs",
+                    cont_dimension
+                )
+            }
+            SamplingSettings::Default => {
+                let cont_dimension = match &integration_state.grid {
+                    Grid::Continuous(g) => g.continuous_dimensions.len(),
+                    _ => unreachable!(),
+                };
 
-            format!("a continuous {}-dimensional grid", cont_dimension)
-        }
-        SamplingSettings::DiscreteGraphs(discrete_graph_sampling_settings) => {
-            let num_graphs = match &integration_state.grid {
-                Grid::Discrete(g) => g.bins.len(),
-                _ => unreachable!(),
-            };
+                format!("a continuous {}-dimensional grid", cont_dimension)
+            }
+            SamplingSettings::DiscreteGraphs(discrete_graph_sampling_settings) => {
+                let num_graphs = match &integration_state.grid {
+                    Grid::Discrete(g) => g.bins.len(),
+                    _ => unreachable!(),
+                };
 
-            let inner_settings_string = match discrete_graph_sampling_settings {
-                DiscreteGraphSamplingSettings::Default => String::from(""),
-                DiscreteGraphSamplingSettings::DiscreteMultiChanneling(_) => {
-                    String::from(" and a nested discrete grid over lmb-channels")
-                }
-                DiscreteGraphSamplingSettings::TropicalSampling(_) => {
-                    format!(" and 🌴🥥 {} 🥥🌴", "tropical sampling".green().bold())
-                }
-                DiscreteGraphSamplingSettings::MultiChanneling(_) => {
-                    String::from(" and multi-channeling over lmb-channels")
-                }
-            };
 
-            format!(
-                "a discrete grid with {} {}{}",
-                num_graphs,
-                if num_graphs > 1 { "graphs" } else { "graph" },
-                inner_settings_string
-            )
-        }
-    };
+                let inner_settings_string = match momentum_sampling_settings {
+                    DiscreteGraphSamplingSettings::Default => String::from(""),
+                    DiscreteGraphSamplingSettings::DiscreteMultiChanneling(_) => {
+                        String::from(" and a nested discrete grid over lmb-channels")
+                    }
+                    DiscreteGraphSamplingSettings::TropicalSampling(_) => {
+                        format!(" and 🌴🥥 {} 🥥🌴", "tropical sampling".green().bold())
+                    }
+                    DiscreteGraphSamplingSettings::MultiChanneling(_) => {
+                        String::from(" and multi-channeling over lmb-channels")
+                    }
+                };
+
+                format!(
+                    "a discrete grid with {} {}{}",
+                    num_graphs,
+                    if num_graphs > 1 { "graphs" } else { "graph" },
+                    inner_settings_string
+                )
+            }
+        };
+    }
+
+    let grid_str = "grid info currently unavailable";
 
     let cores = user_data.integrand.len();
 

@@ -203,7 +203,10 @@ fn get_unit_volume_integrand() -> UnitVolumeSettings {
 mod tests_integral {
     use symbolica::domains::float::ConstructibleFloat;
 
-    use crate::{HFunction, HFunctionSettings, ParameterizationMode};
+    use crate::{
+        HFunction, HFunctionSettings, ParameterizationMode, ParameterizationSettings,
+        SamplingSettings,
+    };
 
     use super::*;
 
@@ -217,8 +220,15 @@ mod tests_integral {
         settings.integrator.n_increase = 0;
         settings.kinematics.e_cm = F(1.);
 
+        let sampling_settings = SamplingSettings::Default(ParameterizationSettings {
+            mode: ParameterizationMode::HyperSphericalFlat,
+            ..Default::default()
+        });
+
+        settings.sampling = sampling_settings;
+
         itg.n_3d_momenta = 11;
-        settings.parameterization.mode = ParameterizationMode::HyperSphericalFlat;
+
         settings.hard_coded_integrand = IntegrandSettings::UnitVolume(itg.clone());
         assert!(compare_integration(
             &mut settings,
@@ -239,7 +249,14 @@ mod tests_integral {
         settings.kinematics.e_cm = F(1.);
 
         itg.n_3d_momenta = 3;
-        settings.parameterization.mode = ParameterizationMode::HyperSpherical;
+
+        let sampling_settings = SamplingSettings::Default(ParameterizationSettings {
+            mode: ParameterizationMode::HyperSpherical,
+            ..Default::default()
+        });
+
+        settings.sampling = sampling_settings;
+
         settings.hard_coded_integrand = IntegrandSettings::UnitVolume(itg.clone());
         assert!(compare_integration(
             &mut settings,
@@ -260,7 +277,12 @@ mod tests_integral {
         settings.kinematics.e_cm = F(1.);
 
         itg.n_3d_momenta = 3;
-        settings.parameterization.mode = ParameterizationMode::Spherical;
+
+        let sampling_settings = SamplingSettings::Default(ParameterizationSettings {
+            mode: ParameterizationMode::Spherical,
+            ..Default::default()
+        });
+        settings.sampling = sampling_settings;
         settings.hard_coded_integrand = IntegrandSettings::UnitVolume(itg.clone());
         assert!(compare_integration(
             &mut settings,
@@ -298,7 +320,10 @@ mod tests_integral {
 
 #[cfg(test)]
 mod tests_inspect {
-    use crate::{HFunction, HFunctionSettings, ParameterizationMode};
+    use crate::{
+        HFunction, HFunctionSettings, ParameterizationMode, ParameterizationSettings,
+        SamplingSettings,
+    };
 
     use super::*;
 
@@ -314,7 +339,12 @@ mod tests_inspect {
         let mut itg = get_unit_volume_integrand();
         itg.n_3d_momenta = 6;
         settings.kinematics.e_cm = F(1.);
-        settings.parameterization.mode = ParameterizationMode::Spherical;
+        let sampling_settings = SamplingSettings::Default(ParameterizationSettings {
+            mode: ParameterizationMode::Spherical,
+            ..Default::default()
+        });
+        settings.sampling = sampling_settings;
+
         settings.hard_coded_integrand = IntegrandSettings::UnitVolume(itg.clone());
         assert!(compare_inspect(
             &mut settings,
@@ -326,7 +356,13 @@ mod tests_inspect {
 
         itg.n_3d_momenta = 9;
         settings.kinematics.e_cm = F(100.);
-        settings.parameterization.mode = ParameterizationMode::HyperSpherical;
+
+        let sampling_settings = SamplingSettings::Default(ParameterizationSettings {
+            mode: ParameterizationMode::HyperSpherical,
+            ..Default::default()
+        });
+
+        settings.sampling = sampling_settings;
         settings.hard_coded_integrand = IntegrandSettings::UnitVolume(itg.clone());
         assert!(compare_inspect(
             &mut settings,
