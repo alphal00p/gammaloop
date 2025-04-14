@@ -186,11 +186,6 @@ class GammaLoopConfiguration(object):
                         }
                     }
                 },
-                'Parameterization': {
-                    'mode': 'spherical',
-                    'mapping': 'linear',
-                    'b': 10.0
-                },
                 'Integrator': {
                     'n_bins': 16,
                     'bin_number_evolution': None,
