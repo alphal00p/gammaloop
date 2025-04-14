@@ -36,7 +36,7 @@ pub fn inspect(
                 .map(|x| ThreeMomentum::new(x[0], x[1], x[2]).higher())
                 .collect::<Vec<ThreeMomentum<F<f128>>>>(),
             settings.kinematics.e_cm.square().higher(),
-            settings,
+            &settings.sampling.get_parameterization_settings().unwrap(),
             force_radius,
         );
         if settings.general.debug > 1 {

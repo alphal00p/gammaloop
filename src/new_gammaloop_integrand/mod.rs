@@ -265,6 +265,7 @@ impl LmbMultiChannelingSetup {
             external_moms: momentum_sample.external_moms.clone(),
             polarizations: momentum_sample.polarizations.clone(),
             jacobian: momentum_sample.jacobian.clone(),
+            orientation: momentum_sample.orientation,
         }
     }
 

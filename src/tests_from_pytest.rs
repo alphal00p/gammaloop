@@ -192,6 +192,7 @@ where
             DependentMomentaConstructor::Amplitude(&external_signature),
         ),
         DependentMomentaConstructor::Amplitude(&external_signature),
+        None,
     )
 }
 
@@ -245,6 +246,7 @@ pub fn kinematics_builder(
             DependentMomentaConstructor::Amplitude(&external_signature),
         ),
         DependentMomentaConstructor::Amplitude(&external_signature),
+        None,
     )
 }
 pub fn load_generic_model(name: &str) -> Model {
@@ -784,6 +786,7 @@ fn pytest_scalar_massless_triangle() {
         F(1.),
         &crate::Polarizations::None,
         DependentMomentaConstructor::Amplitude(&ExternalSignature::from_iter([1i8, 1, -1])),
+        None,
     );
     let amp_check = AmplitudeCheck {
         name: "massless_scalar_triangle",
@@ -843,6 +846,7 @@ fn pytest_scalar_fishnet_2x2() {
         F(1.),
         &Polarizations::None,
         DependentMomentaConstructor::Amplitude(&ExternalSignature::from_iter([1i8, 1, -1, -1])),
+        None,
     );
 
     let amp_check = AmplitudeCheck {
@@ -1129,6 +1133,7 @@ fn pytest_scalar_isopod() {
         F(1.),
         &crate::Polarizations::None,
         DependentMomentaConstructor::Amplitude(&ExternalSignature::from_iter([1i8, 1, -1i8])),
+        None,
     );
     let amp_check = AmplitudeCheck {
         name: "scalar_isopod",
@@ -2086,6 +2091,7 @@ fn scalar_box_to_triangle() {
         DependentMomentaConstructor::Amplitude(
             &triangle_graph.bare_graph.external_in_or_out_signature(),
         ),
+        None,
     );
 
     let triangle_energy = triangle_graph

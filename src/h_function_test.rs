@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use crate::disable;
 use crate::evaluation_result::EvaluationMetaData;
 use crate::evaluation_result::EvaluationResult;
 use crate::integrands::*;
@@ -9,6 +10,7 @@ use crate::utils::FloatLike;
 use crate::utils::F;
 use crate::ParameterizationMapping;
 use crate::Precision;
+use crate::SamplingSettings;
 use crate::Settings;
 use serde::{Deserialize, Serialize};
 use spenso::complex::Complex;
@@ -51,22 +53,29 @@ impl HFunctionTestIntegrand {
 
         let parameterization_start = std::time::Instant::now();
 
-        let t = match self.settings.parameterization.mapping {
-            ParameterizationMapping::Log => {
-                // r = e_cm * ln(1 + b*x/(1-x))
-                let x = xs[0].clone();
-                let b: F<T> = F::<T>::from_f64(self.settings.parameterization.b);
-                let r = &e_cm * (&one + &b * &x / (&one - &x)).ln();
-                jac *= &e_cm * &b / (&one - &x) / (&one + &x * (&b - &one));
+        let t = match &self.settings.sampling {
+            SamplingSettings::Default(parameterization_settings) => {
+                match parameterization_settings.mapping {
+                    ParameterizationMapping::Log => {
+                        // r = e_cm * ln(1 + b*x/(1-x))
+                        let x = xs[0].clone();
+                        let b: F<T> = F::<T>::from_f64(parameterization_settings.b);
+                        let r = &e_cm * (&one + &b * &x / (&one - &x)).ln();
+                        jac *= &e_cm * &b / (&one - &x) / (&one + &x * (&b - &one));
 
-                r
+                        r
+                    }
+                    ParameterizationMapping::Linear => {
+                        // r = e_cm * b * x/(1-x)
+                        let b: F<T> = F::<T>::from_f64(parameterization_settings.b);
+                        let radius = &e_cm * &b * &xs[0] / (&one - &xs[0]);
+                        jac *= (&e_cm * &b + &radius).powi(2) / &e_cm / &b;
+                        radius
+                    }
+                }
             }
-            ParameterizationMapping::Linear => {
-                // r = e_cm * b * x/(1-x)
-                let b: F<T> = F::<T>::from_f64(self.settings.parameterization.b);
-                let radius = &e_cm * &b * &xs[0] / (&one - &xs[0]);
-                jac *= (&e_cm * &b + &radius).powi(2) / &e_cm / &b;
-                radius
+            _ => {
+                panic!("Unsupported sampling type");
             }
         };
 

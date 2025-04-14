@@ -180,6 +180,7 @@ fn trees() {
             DependentMomentaConstructor::Amplitude(&external_signature),
         ),
         DependentMomentaConstructor::Amplitude(&external_signature),
+        None,
     );
     let settings = Settings::default();
 
@@ -374,6 +375,7 @@ fn tree_ta_ta_1() {
             DependentMomentaConstructor::Amplitude(&external_signature),
         ),
         DependentMomentaConstructor::Amplitude(&external_signature),
+        None,
     );
 
     let cff_val = graph.evaluate_cff_expression(&sample, &Settings::default())
@@ -666,6 +668,7 @@ fn tree_hh_ttxaa_1() {
             DependentMomentaConstructor::Amplitude(&external_signature),
         ),
         DependentMomentaConstructor::Amplitude(&external_signature),
+        None,
     );
 
     let cff_val = graph.evaluate_cff_expression(&sample, &Settings::default())

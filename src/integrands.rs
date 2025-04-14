@@ -195,7 +195,7 @@ impl UnitSurfaceIntegrand {
         integrand_settings: UnitSurfaceSettings,
     ) -> UnitSurfaceIntegrand {
         let n_dim = utils::get_n_dim_for_n_loop_momenta(
-            &settings,
+            &settings.sampling,
             integrand_settings.n_3d_momenta,
             true,
             None,
@@ -222,7 +222,11 @@ impl UnitSurfaceIntegrand {
         utils::global_parameterize(
             xs,
             F::<T>::from_ff64(self.settings.kinematics.e_cm * self.settings.kinematics.e_cm),
-            &self.settings,
+            &self
+                .settings
+                .sampling
+                .get_parameterization_settings()
+                .unwrap(),
             true,
         )
     }
@@ -329,7 +333,7 @@ pub struct UnitVolumeIntegrand {
 impl UnitVolumeIntegrand {
     pub fn new(settings: Settings, integrand_settings: UnitVolumeSettings) -> UnitVolumeIntegrand {
         let n_dim = utils::get_n_dim_for_n_loop_momenta(
-            &settings,
+            &settings.sampling,
             integrand_settings.n_3d_momenta,
             false,
             None,
@@ -368,7 +372,11 @@ impl UnitVolumeIntegrand {
         utils::global_parameterize(
             xs,
             F::<T>::from_ff64(self.settings.kinematics.e_cm * self.settings.kinematics.e_cm),
-            &self.settings,
+            &self
+                .settings
+                .sampling
+                .get_parameterization_settings()
+                .unwrap(),
             false,
         )
     }
