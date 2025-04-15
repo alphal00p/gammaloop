@@ -23,8 +23,9 @@ use crate::{
     new_graph::{ExternalConnection, FeynmanGraph, Graph, LmbIndex, LoopMomentumBasis},
     signature::ExternalSignature,
     utils::{self, f128, FloatLike, F},
-    DependentMomentaConstructor, DiscreteGraphSamplingSettings, IntegratedCounterTermRange,
-    MultiChannelingSettings, Polarizations, Precision, SamplingSettings, Settings,
+    DependentMomentaConstructor, DiscreteGraphSamplingSettings, DiscreteGraphSamplingType,
+    IntegratedCounterTermRange, MultiChannelingSettings, Polarizations, Precision,
+    SamplingSettings, Settings,
 };
 
 use super::{
@@ -143,8 +144,15 @@ impl CrossSectionGraphTerm {
             SamplingSettings::Default(_) => unreachable!(),
             SamplingSettings::MultiChanneling(_) => unreachable!(),
             SamplingSettings::DiscreteGraphs(disrete_graph_settings) => {
-                match disrete_graph_settings {
-                    DiscreteGraphSamplingSettings::Default(_) => {
+                match &disrete_graph_settings.sampling_type {
+                    DiscreteGraphSamplingType::Default(_) => Grid::Continuous(ContinuousGrid::new(
+                        self.graph.underlying.get_loop_number() * 3,
+                        settings.integrator.n_bins,
+                        settings.integrator.min_samples_for_update,
+                        settings.integrator.bin_number_evolution.clone(),
+                        settings.integrator.train_on_avg,
+                    )),
+                    DiscreteGraphSamplingType::MultiChanneling(_) => {
                         Grid::Continuous(ContinuousGrid::new(
                             self.graph.underlying.get_loop_number() * 3,
                             settings.integrator.n_bins,
@@ -153,16 +161,7 @@ impl CrossSectionGraphTerm {
                             settings.integrator.train_on_avg,
                         ))
                     }
-                    DiscreteGraphSamplingSettings::MultiChanneling(_) => {
-                        Grid::Continuous(ContinuousGrid::new(
-                            self.graph.underlying.get_loop_number() * 3,
-                            settings.integrator.n_bins,
-                            settings.integrator.min_samples_for_update,
-                            settings.integrator.bin_number_evolution.clone(),
-                            settings.integrator.train_on_avg,
-                        ))
-                    }
-                    DiscreteGraphSamplingSettings::DiscreteMultiChanneling(
+                    DiscreteGraphSamplingType::DiscreteMultiChanneling(
                         _multichanneling_settings,
                     ) => {
                         let continuous_grid = Grid::Continuous(ContinuousGrid::new(
@@ -187,7 +186,7 @@ impl CrossSectionGraphTerm {
                         ))
                     }
 
-                    DiscreteGraphSamplingSettings::TropicalSampling(_) => todo!(),
+                    DiscreteGraphSamplingType::TropicalSampling(_) => todo!(),
                 }
             }
         }
