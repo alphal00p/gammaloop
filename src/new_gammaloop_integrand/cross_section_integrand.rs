@@ -88,7 +88,22 @@ impl CrossSectionGraphTerm {
         momentum_sample: &MomentumSample<T>,
         settings: &Settings,
     ) -> F<T> {
-        let mut result = momentum_sample.zero();
+        // implementation of forced orientations, only works with sample orientation disabled
+        if let Some(forced_orientations) = &settings.general.force_orientations {
+            if momentum_sample.sample.orientation.is_none() {
+                return forced_orientations
+                    .iter()
+                    .map(|orientation_usize| {
+                        let mut new_sample = momentum_sample.clone();
+                        new_sample.sample.orientation =
+                            Some(OrientationID::from(*orientation_usize));
+                        self.evaluate(&new_sample, settings)
+                    })
+                    .fold(momentum_sample.zero(), |sum, orientation_result| {
+                        sum + orientation_result
+                    });
+            }
+        }
 
         let center = LoopMomenta::from_iter(vec![
             ThreeMomentum::from([
@@ -219,35 +234,28 @@ impl CrossSectionGraphTerm {
             }
             DiscreteGraphSamplingType::DiscreteMultiChanneling(_multichanneling_settings) => {
                 let continuous_grid = self.create_default_continous_grid(integrator_settings);
-
-                let lmb_channel_grids = self
-                    .multi_channeling_setup
-                    .channels
-                    .iter()
-                    .map(|_| {
-                        if settings.sample_orientations {
-                            let continuous_grids = self
-                                .bare_cff_orientation_evaluators
-                                .iter()
-                                .map(|_| Some(continuous_grid.clone()))
-                                .collect();
-
-                            Some(Grid::Discrete(DiscreteGrid::new(
-                                continuous_grids,
-                                integrator_settings.max_prob_ratio,
-                                integrator_settings.train_on_avg,
-                            )))
-                        } else {
-                            Some(continuous_grid.clone())
-                        }
-                    })
-                    .collect();
-
-                Grid::Discrete(DiscreteGrid::new(
-                    lmb_channel_grids,
+                let lmb_channel_grid = Grid::Discrete(DiscreteGrid::new(
+                    self.multi_channeling_setup
+                        .channels
+                        .iter()
+                        .map(|_| Some(continuous_grid.clone()))
+                        .collect_vec(),
                     integrator_settings.max_prob_ratio,
                     integrator_settings.train_on_avg,
-                ))
+                ));
+
+                if settings.sample_orientations {
+                    Grid::Discrete(DiscreteGrid::new(
+                        self.bare_cff_orientation_evaluators
+                            .iter()
+                            .map(|_| Some(lmb_channel_grid.clone()))
+                            .collect(),
+                        integrator_settings.max_prob_ratio,
+                        integrator_settings.train_on_avg,
+                    ))
+                } else {
+                    lmb_channel_grid
+                }
             }
 
             DiscreteGraphSamplingType::TropicalSampling(_) => todo!(),
