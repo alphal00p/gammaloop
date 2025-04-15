@@ -69,6 +69,28 @@ impl CFFCutExpression {
             })
             .fold(Atom::new(), |acc, x| acc + x)
     }
+
+    pub fn get_orientation_atom(&self, orientation_id: OrientationID) -> Vec<Atom> {
+        self.orientations[orientation_id]
+            .expressions
+            .iter()
+            .map(|expr| Atom::from(expr))
+            .collect()
+    }
+
+    pub fn get_orientation_atoms(&self) -> TiVec<OrientationID, Vec<Atom>> {
+        self.orientations
+            .iter()
+            .map(|orientation| {
+                let atoms = orientation
+                    .expressions
+                    .iter()
+                    .map(|expr| Atom::from(expr))
+                    .collect();
+                atoms
+            })
+            .collect()
+    }
 }
 
 #[cfg(test)]
