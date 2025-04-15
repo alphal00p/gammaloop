@@ -911,6 +911,33 @@ impl SamplingSettings {
             },
         }
     }
+
+    fn sample_orientations(&self) -> bool {
+        match self {
+            SamplingSettings::Default(_) => false,
+            SamplingSettings::MultiChanneling(_) => false,
+            SamplingSettings::DiscreteGraphs(settings) => settings.sample_orientations,
+        }
+    }
+
+    fn discrete_depth(&self) -> usize {
+        match self {
+            SamplingSettings::Default(_) => 0,
+            SamplingSettings::MultiChanneling(_) => 0,
+            SamplingSettings::DiscreteGraphs(settings) => {
+                let depth_from_orientations = settings.sample_orientations as usize;
+
+                match &settings.sampling_type {
+                    DiscreteGraphSamplingType::Default(_) => 1 + depth_from_orientations,
+                    DiscreteGraphSamplingType::MultiChanneling(_) => 1 + depth_from_orientations,
+                    DiscreteGraphSamplingType::DiscreteMultiChanneling(_) => {
+                        2 + depth_from_orientations
+                    }
+                    DiscreteGraphSamplingType::TropicalSampling(_) => 1 + depth_from_orientations,
+                }
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
