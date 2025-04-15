@@ -13,7 +13,10 @@ use symbolica::{
 use typed_index_collections::TiVec;
 
 use crate::{
-    cff::{cut_expression::OrientationID, esurface::Esurface},
+    cff::{
+        cut_expression::{OrientationData, OrientationID},
+        esurface::Esurface,
+    },
     evaluation_result::{EvaluationMetaData, EvaluationResult},
     graph,
     integrands::HasIntegrand,
@@ -49,7 +52,7 @@ pub struct CrossSectionIntegrand {
 
 #[derive(Clone)]
 pub struct OrientationEvaluator {
-    pub cuts_in_orientation: Vec<CutId>,
+    pub orientation_data: OrientationData,
     pub evaluators: Vec<GenericEvaluator>,
 }
 

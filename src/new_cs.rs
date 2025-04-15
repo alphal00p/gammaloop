@@ -13,8 +13,10 @@ use bitvec::vec::BitVec;
 use color_eyre::Result;
 
 use crate::{
-    new_gammaloop_integrand::{GenericEvaluator, LmbMultiChannelingSetup},
-    new_graph::LmbIndex,
+    new_gammaloop_integrand::{
+        cross_section_integrand::OrientationEvaluator, GenericEvaluator, LmbMultiChannelingSetup,
+    },
+    new_graph::{LmbIndex, LoopMomentumBasis},
     utils::f128,
 };
 use eyre::eyre;
@@ -761,6 +763,10 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
             .surfaces
             .substitute_energies(&cut_atom);
 
+        self.add_additional_factors_to_cff_atom(&cut_atom_energy_sub)
+    }
+
+    fn add_additional_factors_to_cff_atom(&self, cut_atom: &Atom) -> Atom {
         let inverse_energy_product = self.graph.underlying.get_cff_inverse_energy_product();
 
         let t_star_factor = parse!(&format!(
@@ -778,7 +784,7 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
         ))
         .unwrap();
 
-        let result = cut_atom_energy_sub
+        let result = cut_atom
             * inverse_energy_product
             * t_star_factor
             * h_function
@@ -820,37 +826,97 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
         fn_map
     }
 
-    fn generate_term_for_graph(&self, settings: &Settings) -> CrossSectionGraphTerm {
-        let mut evaluators = TiVec::new();
+    fn build_cut_evaluators(&self) -> TiVec<CutId, GenericEvaluator> {
+        self.cuts
+            .iter_enumerated()
+            .map(|(cut_id, _)| {
+                let atom = self.build_atom_for_cut(cut_id);
 
-        for (cut_id, _) in self.cuts.iter_enumerated() {
-            let atom = self.build_atom_for_cut(cut_id);
+                let params = self.get_params();
+                let mut tree = atom
+                    .to_evaluation_tree(&self.get_function_map(), &params)
+                    .unwrap();
 
-            let params = self.get_params();
-            let mut tree = atom
-                .to_evaluation_tree(&self.get_function_map(), &params)
-                .unwrap();
+                tree.horner_scheme();
+                tree.common_subexpression_elimination();
 
-            tree.horner_scheme();
-            tree.common_subexpression_elimination();
+                let tree_double = tree.map_coeff::<F<f64>, _>(&|r| r.into());
+                let tree_quad = tree.map_coeff::<F<f128>, _>(&|r| r.into());
 
-            let tree_double = tree.map_coeff::<F<f64>, _>(&|r| r.into());
-            let tree_quad = tree.map_coeff::<F<f128>, _>(&|r| r.into());
+                GenericEvaluator {
+                    f64_compiled: None,
+                    f64_eager: RefCell::new(tree_double.linearize(Some(1))),
+                    f128: RefCell::new(tree_quad.linearize(Some(1))),
+                }
+            })
+            .collect()
+    }
 
-            let generic_evaluator = GenericEvaluator {
-                f64_compiled: None,
-                f64_eager: RefCell::new(tree_double.linearize(Some(1))),
-                f128: RefCell::new(tree_quad.linearize(Some(1))),
-            };
+    fn build_orientation_evaluators(&self) -> TiVec<OrientationID, OrientationEvaluator> {
+        let orientation_atoms = self.derived_data.cff_expression.get_orientation_atoms();
+        let substituted_energies = orientation_atoms
+            .iter()
+            .map(|cut_atoms| {
+                cut_atoms
+                    .iter()
+                    .map(|atom| {
+                        let substituded_atom = self
+                            .derived_data
+                            .cff_expression
+                            .surfaces
+                            .substitute_energies(atom);
+                        substituded_atom
+                    })
+                    .collect_vec()
+            })
+            .collect::<TiVec<OrientationID, _>>();
 
-            evaluators.push(generic_evaluator);
-        }
+        let orientation_datas = self
+            .derived_data
+            .cff_expression
+            .orientations
+            .iter()
+            .map(|orienatation| orienatation.data.clone());
 
-        let lmbs = self
-            .graph
-            .loop_momentum_basis
-            .generate_loop_momentum_bases(&self.graph.underlying);
+        substituted_energies
+            .iter()
+            .zip(orientation_datas)
+            .map(|(cut_atoms, orientation_data)| {
+                let cut_evaluators = cut_atoms
+                    .iter()
+                    .map(|cut_atom| {
+                        let cut_atom = self.add_additional_factors_to_cff_atom(cut_atom);
+                        let params = self.get_params();
+                        let mut tree = cut_atom
+                            .to_evaluation_tree(&self.get_function_map(), &params)
+                            .unwrap();
 
+                        tree.horner_scheme();
+                        tree.common_subexpression_elimination();
+
+                        let tree_double = tree.map_coeff::<F<f64>, _>(&|r| r.into());
+                        let tree_quad = tree.map_coeff::<F<f128>, _>(&|r| r.into());
+
+                        GenericEvaluator {
+                            f64_compiled: None,
+                            f64_eager: RefCell::new(tree_double.linearize(Some(1))),
+                            f128: RefCell::new(tree_quad.linearize(Some(1))),
+                        }
+                    })
+                    .collect_vec();
+
+                OrientationEvaluator {
+                    orientation_data,
+                    evaluators: cut_evaluators,
+                }
+            })
+            .collect()
+    }
+
+    fn build_multi_channeling_channels(
+        &self,
+        lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
+    ) -> LmbMultiChannelingSetup {
         let mut channels: HashSet<LmbIndex> = HashSet::new();
 
         // Filter out channels that are non-singular, or have the same singularities as another channel already included
@@ -920,11 +986,23 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
             channels.len()
         );
 
-        let multi_channeling_setup = LmbMultiChannelingSetup { channels };
+        LmbMultiChannelingSetup { channels }
+    }
+
+    fn generate_term_for_graph(&self, settings: &Settings) -> CrossSectionGraphTerm {
+        let evaluators = self.build_cut_evaluators();
+        let lmbs = self
+            .graph
+            .loop_momentum_basis
+            .generate_loop_momentum_bases(&self.graph.underlying);
+
+        let multi_channeling_setup = self.build_multi_channeling_channels(&lmbs);
+        let orientation_evaluators = self.build_orientation_evaluators();
 
         CrossSectionGraphTerm {
             multi_channeling_setup,
             bare_cff_evaluators: evaluators,
+            bare_cff_orientation_evaluators: orientation_evaluators,
             graph: self.graph.clone(),
             cut_esurface: self.cut_esurface.clone(),
             lmbs,
