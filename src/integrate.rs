@@ -229,75 +229,34 @@ impl IntegrationState {
     // this thing is an unholy mess
     fn display_orientation_results(&self, settings: &Settings) {
         if settings.sampling.sample_orientations() {
-            let discrete_depth = settings.sampling.discrete_depth();
             if let Grid::Discrete(graph_grids) = &self.grid {
                 for (i_graph, graph_grid) in graph_grids.bins.iter().enumerate() {
                     info!("results for graph #{}", i_graph);
                     info!("-------------------------");
-                    if discrete_depth == 2 {
-                        if let Grid::Discrete(orientation_grids) =
-                            graph_grid.sub_grid.as_ref().unwrap()
+                    if let Grid::Discrete(orientation_grids) = graph_grid.sub_grid.as_ref().unwrap()
+                    {
+                        let mut sum_all_positive = F(0.0);
+                        let mut sum_all_negative = F(0.0);
+                        for (i_orientation, orientation_grid) in
+                            orientation_grids.bins.iter().enumerate()
                         {
-                            for (i_orientation, orientation_grid) in
-                                orientation_grids.bins.iter().enumerate()
-                            {
-                                print_integral_result(
-                                    &orientation_grid.accumulator,
-                                    1,
-                                    self.iter,
-                                    &format!("orientation_{i_orientation}"),
-                                    None,
-                                );
-                            }
-                        }
-                    } else if discrete_depth == 3 {
-                        // now we need to do some trickery, because the orientations are a layer beneath the lmbs
-                        if let Grid::Discrete(lmb_channel_grids) =
-                            graph_grid.sub_grid.as_ref().unwrap()
-                        {
-                            let orientation_grids_of_lmb_channel_0 =
-                                lmb_channel_grids.bins[0].sub_grid.as_ref().unwrap();
-                            let mut orientation_accumulators = vec![];
-                            if let Grid::Discrete(orientation_grids_of_channel_0) =
-                                orientation_grids_of_lmb_channel_0
-                            {
-                                for grid in orientation_grids_of_channel_0.bins.iter() {
-                                    orientation_accumulators.push(grid.accumulator.clone());
-                                }
+                            print_integral_result(
+                                &orientation_grid.accumulator,
+                                1,
+                                self.iter,
+                                &format!("orientation_{i_orientation}"),
+                                None,
+                            );
+
+                            if orientation_grid.accumulator.avg.positive() {
+                                sum_all_positive += orientation_grid.accumulator.avg;
                             } else {
-                                panic!()
-                            }
-
-                            let num_lmbs = lmb_channel_grids.bins.len();
-                            for i_lmb in 1..num_lmbs {
-                                let lmb_channel_grid =
-                                    lmb_channel_grids.bins[i_lmb].sub_grid.as_ref().unwrap();
-                                if let Grid::Discrete(orientation_grids_of_channel_i_lmb) =
-                                    lmb_channel_grid
-                                {
-                                    for (i_orientation, orientation_grid) in
-                                        orientation_grids_of_channel_i_lmb.bins.iter().enumerate()
-                                    {
-                                        orientation_accumulators[i_orientation]
-                                            .merge_samples_no_reset(&orientation_grid.accumulator);
-                                    }
-                                } else {
-                                    panic!()
-                                }
-                            }
-
-                            for (i_orientation, orientation_accumulator) in
-                                orientation_accumulators.iter().enumerate()
-                            {
-                                print_integral_result(
-                                    orientation_accumulator,
-                                    1,
-                                    self.iter,
-                                    &format!("orientation_{i_orientation}"),
-                                    None,
-                                );
+                                sum_all_negative += orientation_grid.accumulator.avg;
                             }
                         }
+
+                        info!("sum_all_positive: {}", sum_all_positive);
+                        info!("sum_all_negative: {}", sum_all_negative);
                     }
                 }
             }

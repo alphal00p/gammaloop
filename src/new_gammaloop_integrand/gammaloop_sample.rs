@@ -465,9 +465,7 @@ pub fn parameterize<T: FloatLike>(
         SamplingSettings::DiscreteGraphs(discrete_graph_settings) => {
             let graph_id = discrete_indices[0];
             let orientation_id = if discrete_graph_settings.sample_orientations {
-                Some(OrientationID::from(
-                    *discrete_indices.last().expect("invalid sample structure"),
-                ))
+                Some(OrientationID::from(discrete_indices[1]))
             } else {
                 None
             };
@@ -577,7 +575,7 @@ pub fn parameterize<T: FloatLike>(
                     }
                 }
                 DiscreteGraphSamplingType::DiscreteMultiChanneling(multichanneling_settings) => {
-                    let channel_id = discrete_indices[1];
+                    let channel_id = *discrete_indices.last().expect("invalid_sample_structure");
 
                     Ok(GammaLoopSample::DiscreteGraph {
                         graph_id,
