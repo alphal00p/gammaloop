@@ -67,6 +67,22 @@ pub struct CrossSectionGraphTerm {
 }
 
 impl CrossSectionGraphTerm {
+    fn self_get_cuts_to_evaluate(
+        &self,
+        orientation: Option<OrientationID>,
+    ) -> Vec<(CutId, &Esurface)> {
+        if let Some(orientation_id) = orientation {
+            self.bare_cff_orientation_evaluators[orientation_id]
+                .orientation_data
+                .cuts
+                .iter()
+                .map(|cut_id| (*cut_id, &self.cut_esurface[*cut_id]))
+                .collect()
+        } else {
+            self.cut_esurface.iter_enumerated().collect()
+        }
+    }
+
     fn evaluate<T: FloatLike>(
         &self,
         momentum_sample: &MomentumSample<T>,
@@ -83,69 +99,95 @@ impl CrossSectionGraphTerm {
             self.graph.underlying.get_loop_number()
         ]);
 
-        for (cut_id, esurface) in self.cut_esurface.iter_enumerated() {
-            let (tstar_initial, _tstar_initial_negative) = esurface.get_radius_guess(
-                momentum_sample.loop_moms(),
-                momentum_sample.external_moms(),
-                &self.graph.loop_momentum_basis,
-            );
-
-            let root_function = |t: &_| {
-                esurface.compute_self_and_r_derivative(
-                    t,
+        let params = self
+            .self_get_cuts_to_evaluate(momentum_sample.sample.orientation)
+            .into_iter()
+            .map(|(cut_id, esurface)| {
+                let (tstar_initial, _tstar_initial_negative) = esurface.get_radius_guess(
                     momentum_sample.loop_moms(),
-                    &center,
                     momentum_sample.external_moms(),
                     &self.graph.loop_momentum_basis,
-                    &self.graph.underlying.get_real_mass_vector(),
-                )
-            };
+                );
 
-            let e_cm = F::from_ff64(settings.kinematics.e_cm);
-            let tolerance = F::from_ff64(TOLERANCE);
+                let root_function = |t: &_| {
+                    esurface.compute_self_and_r_derivative(
+                        t,
+                        momentum_sample.loop_moms(),
+                        &center,
+                        momentum_sample.external_moms(),
+                        &self.graph.loop_momentum_basis,
+                        &self.graph.underlying.get_real_mass_vector(),
+                    )
+                };
 
-            let newton_result = newton_iteration_and_derivative(
-                &tstar_initial,
-                root_function,
-                &tolerance,
-                20,
-                &e_cm,
-            );
+                let e_cm = F::from_ff64(settings.kinematics.e_cm);
+                let tolerance = F::from_ff64(TOLERANCE);
 
-            let rescaled_sample =
-                momentum_sample.rescaled_loop_momenta(&newton_result.solution, None);
+                let newton_result = newton_iteration_and_derivative(
+                    &tstar_initial,
+                    root_function,
+                    &tolerance,
+                    20,
+                    &e_cm,
+                );
 
-            let h_function_settings = match &settings.subtraction.integrated_ct_settings.range {
-                IntegratedCounterTermRange::Compact => panic!(),
-                IntegratedCounterTermRange::Infinite {
-                    h_function_settings,
-                } => h_function_settings,
-            };
+                let rescaled_sample =
+                    momentum_sample.rescaled_loop_momenta(&newton_result.solution, None);
 
-            let h_function = utils::h(&newton_result.solution, None, None, h_function_settings);
+                let h_function_settings = match &settings.subtraction.integrated_ct_settings.range {
+                    IntegratedCounterTermRange::Compact => panic!(),
+                    IntegratedCounterTermRange::Infinite {
+                        h_function_settings,
+                    } => h_function_settings,
+                };
 
-            let mut params = self
-                .graph
-                .underlying
-                .get_energy_cache(
-                    rescaled_sample.loop_moms(),
-                    rescaled_sample.external_moms(),
-                    &self.graph.loop_momentum_basis,
-                )
-                .into_iter()
-                .map(|(_, x)| x)
-                .collect_vec();
+                let h_function = utils::h(&newton_result.solution, None, None, h_function_settings);
 
-            params.push(newton_result.solution);
-            params.push(h_function);
-            params.push(newton_result.derivative_at_solution);
+                let mut params = self
+                    .graph
+                    .underlying
+                    .get_energy_cache(
+                        rescaled_sample.loop_moms(),
+                        rescaled_sample.external_moms(),
+                        &self.graph.loop_momentum_basis,
+                    )
+                    .into_iter()
+                    .map(|(_, x)| x)
+                    .collect_vec();
 
-            let cut_results = <T as GenericEvaluatorFloat>::get_evaluator(
-                &self.bare_cff_evaluators[cut_id],
-            )(&params);
+                params.push(newton_result.solution);
+                params.push(h_function);
+                params.push(newton_result.derivative_at_solution);
 
-            result += cut_results
-        }
+                params
+            });
+
+        let result = match momentum_sample.sample.orientation {
+            Some(orientation_id) => {
+                let orientation_evaluator = &self.bare_cff_orientation_evaluators[orientation_id];
+                orientation_evaluator
+                    .evaluators
+                    .iter()
+                    .zip(params)
+                    .map(|(evaluator, params)| {
+                        let cut_results =
+                            <T as GenericEvaluatorFloat>::get_evaluator(evaluator)(&params);
+                        cut_results
+                    })
+                    .fold(momentum_sample.zero(), |sum, cut_result| sum + cut_result)
+            }
+            None => self
+                .bare_cff_evaluators
+                .iter()
+                .zip(params)
+                .map(|(evaluator, params)| {
+                    let cut_results =
+                        <T as GenericEvaluatorFloat>::get_evaluator(evaluator)(&params);
+                    cut_results
+                })
+                .fold(momentum_sample.zero(), |sum, cut_result| sum + cut_result),
+        };
+
         result
     }
 
