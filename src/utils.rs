@@ -22,6 +22,7 @@ use spenso::{
     contraction::{RefOne, RefZero},
     upgrading_arithmetic::TrySmallestUpgrade,
 };
+use statrs::distribution::Discrete;
 use symbolica::atom::Symbol;
 use symbolica::domains::float::{
     ConstructibleFloat, NumericalFloatLike, RealNumberLike, SingleFloat,
@@ -2380,49 +2381,37 @@ pub fn get_n_dim_for_n_loop_momenta(
     force_radius: bool,
     n_edges: Option<usize>, // for tropical parameterization, we need to know the number of edges
 ) -> usize {
-    if matches!(
-        settings,
-        SamplingSettings::DiscreteGraphs(crate::DiscreteGraphSamplingSettings::TropicalSampling(_))
-    ) {
+    if let Some(parameterization_settings) = settings.get_parameterization_settings() {
+        match parameterization_settings.mode {
+            ParameterizationMode::HyperSphericalFlat => {
+                // Because we use Box-Muller, we need to have an even number of angular dimensions
+                let mut n_dim = 3 * n_loop_momenta;
+                if n_dim % 2 == 1 {
+                    n_dim += 1;
+                }
+                // Then if the radius is not forced, then we need to add mul_unit more dimension
+                if !force_radius {
+                    n_dim += 1;
+                }
+                n_dim
+            }
+            ParameterizationMode::HyperSpherical
+            | ParameterizationMode::Cartesian
+            | ParameterizationMode::Spherical => {
+                if force_radius {
+                    3 * n_loop_momenta - 1
+                } else {
+                    3 * n_loop_momenta
+                }
+            }
+        }
+    } else {
         let tropical_part = 2 * n_edges.expect("No tropical subgraph table generated, please run without tropical sampling or regenerate with tables") - 1;
         let d_l = 3 * n_loop_momenta;
-        return if d_l % 2 == 1 {
+        if d_l % 2 == 1 {
             tropical_part + d_l + 1
         } else {
             tropical_part + d_l
-        };
-    } else {
-        let settings = settings.get_parameterization_settings().unwrap();
-        get_n_dim_for_n_loop_momenta_not_tropical(&settings, n_loop_momenta, force_radius)
-    }
-}
-
-fn get_n_dim_for_n_loop_momenta_not_tropical(
-    settings: &ParameterizationSettings,
-    n_loop_momenta: usize,
-    force_radius: bool,
-) -> usize {
-    match settings.mode {
-        ParameterizationMode::HyperSphericalFlat => {
-            // Because we use Box-Muller, we need to have an even number of angular dimensions
-            let mut n_dim = 3 * n_loop_momenta;
-            if n_dim % 2 == 1 {
-                n_dim += 1;
-            }
-            // Then if the radius is not forced, then we need to add mul_unit more dimension
-            if !force_radius {
-                n_dim += 1;
-            }
-            n_dim
-        }
-        ParameterizationMode::HyperSpherical
-        | ParameterizationMode::Cartesian
-        | ParameterizationMode::Spherical => {
-            if force_radius {
-                3 * n_loop_momenta - 1
-            } else {
-                3 * n_loop_momenta
-            }
         }
     }
 }

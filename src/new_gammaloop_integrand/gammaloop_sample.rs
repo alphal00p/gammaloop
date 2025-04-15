@@ -8,8 +8,9 @@ use crate::momentum_sample::{ExternalFourMomenta, MomentumSample, PolarizationVe
 use crate::new_graph::{FeynmanGraph, Graph};
 use crate::utils::{global_parameterize, FloatLike, F};
 use crate::{
-    disable, DependentMomentaConstructor, DiscreteGraphSamplingSettings, Externals,
-    KinematicsSettings, ParameterizationSettings, Polarizations, SamplingSettings, Settings,
+    disable, DependentMomentaConstructor, DiscreteGraphSamplingSettings, DiscreteGraphSamplingType,
+    Externals, KinematicsSettings, ParameterizationSettings, Polarizations, SamplingSettings,
+    Settings,
 };
 use symbolica::numerical_integration::Sample;
 
@@ -439,31 +440,16 @@ pub fn parameterize<T: FloatLike>(
 
     match &settings.sampling {
         SamplingSettings::Default(parameterization_settings) => {
-            let orientation = if parameterization_settings.sample_orientations {
-                Some(OrientationID::from(discrete_indices[0]))
-            } else {
-                None
-            };
-
             Ok(GammaLoopSample::Default(default_parametrize(
                 &xs,
                 dependent_momenta_constructor,
                 polarizations,
                 parameterization_settings,
                 &settings.kinematics,
-                orientation,
+                None,
             )))
         }
         SamplingSettings::MultiChanneling(multichanneling_settings) => {
-            let orientation = if multichanneling_settings
-                .parameterization_settings
-                .sample_orientations
-            {
-                Some(OrientationID::from(discrete_indices[0]))
-            } else {
-                None
-            };
-
             Ok(GammaLoopSample::MultiChanneling {
                 alpha: multichanneling_settings.alpha,
                 sample: default_parametrize(
@@ -472,19 +458,22 @@ pub fn parameterize<T: FloatLike>(
                     polarizations,
                     &multichanneling_settings.parameterization_settings,
                     &settings.kinematics,
-                    orientation,
+                    None,
                 ),
             })
         }
         SamplingSettings::DiscreteGraphs(discrete_graph_settings) => {
             let graph_id = discrete_indices[0];
-            match discrete_graph_settings {
-                DiscreteGraphSamplingSettings::Default(parameterization_settings) => {
-                    let orientation = if parameterization_settings.sample_orientations {
-                        Some(OrientationID::from(discrete_indices[1]))
-                    } else {
-                        None
-                    };
+            let orientation_id = if discrete_graph_settings.sample_orientations {
+                Some(OrientationID::from(
+                    *discrete_indices.last().expect("invalid sample structure"),
+                ))
+            } else {
+                None
+            };
+
+            match &discrete_graph_settings.sampling_type {
+                DiscreteGraphSamplingType::Default(parameterization_settings) => {
                     Ok(GammaLoopSample::DiscreteGraph {
                         graph_id,
                         sample: DiscreteGraphSample::Default(default_parametrize(
@@ -493,20 +482,11 @@ pub fn parameterize<T: FloatLike>(
                             polarizations,
                             parameterization_settings,
                             &settings.kinematics,
-                            orientation,
+                            orientation_id,
                         )),
                     })
                 }
-                DiscreteGraphSamplingSettings::MultiChanneling(multichanneling_settings) => {
-                    let orientation = if multichanneling_settings
-                        .parameterization_settings
-                        .sample_orientations
-                    {
-                        Some(OrientationID::from(discrete_indices[1]))
-                    } else {
-                        None
-                    };
-
+                DiscreteGraphSamplingType::MultiChanneling(multichanneling_settings) => {
                     Ok(GammaLoopSample::DiscreteGraph {
                         graph_id,
                         sample: DiscreteGraphSample::MultiChanneling {
@@ -517,12 +497,12 @@ pub fn parameterize<T: FloatLike>(
                                 polarizations,
                                 &multichanneling_settings.parameterization_settings,
                                 &settings.kinematics,
-                                orientation,
+                                orientation_id,
                             ),
                         },
                     })
                 }
-                DiscreteGraphSamplingSettings::TropicalSampling(tropical_sampling_settings) => {
+                DiscreteGraphSamplingType::TropicalSampling(tropical_sampling_settings) => {
                     todo!("add tropical sampling support");
                     disable! {
                         let (graph_id, xs) = unwrap_single_discrete_sample(sample_point);
@@ -596,18 +576,8 @@ pub fn parameterize<T: FloatLike>(
                         })
                     }
                 }
-                DiscreteGraphSamplingSettings::DiscreteMultiChanneling(
-                    multichanneling_settings,
-                ) => {
+                DiscreteGraphSamplingType::DiscreteMultiChanneling(multichanneling_settings) => {
                     let channel_id = discrete_indices[1];
-                    let orientation = if multichanneling_settings
-                        .parameterization_settings
-                        .sample_orientations
-                    {
-                        Some(OrientationID::from(discrete_indices[2]))
-                    } else {
-                        None
-                    };
 
                     Ok(GammaLoopSample::DiscreteGraph {
                         graph_id,
@@ -620,7 +590,7 @@ pub fn parameterize<T: FloatLike>(
                                 polarizations,
                                 &multichanneling_settings.parameterization_settings,
                                 &settings.kinematics,
-                                orientation,
+                                orientation_id,
                             ),
                         },
                     })

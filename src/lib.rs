@@ -273,7 +273,6 @@ pub struct ParameterizationSettings {
     pub input_rescaling: Vec<Vec<(f64, f64)>>,
     #[serde(default = "_default_shifts")]
     pub shifts: Vec<(f64, f64, f64, f64)>,
-    pub sample_orientations: bool,
 }
 
 impl Default for ParameterizationSettings {
@@ -284,7 +283,6 @@ impl Default for ParameterizationSettings {
             mapping: ParameterizationMapping::Linear,
             input_rescaling: vec![vec![(0.0, 1.0); 3]; 15],
             shifts: vec![(1.0, 0.0, 0.0, 0.0); 15],
-            sample_orientations: false,
         }
     }
 }
@@ -901,15 +899,15 @@ impl SamplingSettings {
             SamplingSettings::MultiChanneling(settings) => {
                 Some(settings.parameterization_settings.clone())
             }
-            SamplingSettings::DiscreteGraphs(settings) => match settings {
-                DiscreteGraphSamplingSettings::Default(settings) => Some(settings.clone()),
-                DiscreteGraphSamplingSettings::MultiChanneling(settings) => {
+            SamplingSettings::DiscreteGraphs(settings) => match &settings.sampling_type {
+                DiscreteGraphSamplingType::Default(settings) => Some(settings.clone()),
+                DiscreteGraphSamplingType::MultiChanneling(settings) => {
                     Some(settings.parameterization_settings.clone())
                 }
-                DiscreteGraphSamplingSettings::DiscreteMultiChanneling(settings) => {
+                DiscreteGraphSamplingType::DiscreteMultiChanneling(settings) => {
                     Some(settings.parameterization_settings.clone())
                 }
-                DiscreteGraphSamplingSettings::TropicalSampling(_) => None,
+                DiscreteGraphSamplingType::TropicalSampling(_) => None,
             },
         }
     }
@@ -934,7 +932,6 @@ impl Default for MultiChannelingSettings {
 pub struct GammaloopTropicalSamplingSettings {
     pub upcast_on_failure: bool,
     pub matrix_stability_test: Option<f64>,
-    pub sample_orientations: bool,
 }
 
 impl Default for GammaloopTropicalSamplingSettings {
@@ -942,7 +939,6 @@ impl Default for GammaloopTropicalSamplingSettings {
         Self {
             upcast_on_failure: true,
             matrix_stability_test: Some(1.0e-5),
-            sample_orientations: false,
         }
     }
 }
@@ -966,7 +962,7 @@ impl GammaloopTropicalSamplingSettings {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "subtype")]
-pub enum DiscreteGraphSamplingSettings {
+pub enum DiscreteGraphSamplingType {
     #[serde(rename = "default")]
     Default(ParameterizationSettings),
     #[serde(rename = "multi_channeling")]
@@ -975,6 +971,12 @@ pub enum DiscreteGraphSamplingSettings {
     DiscreteMultiChanneling(MultiChannelingSettings),
     #[serde(rename = "tropical")]
     TropicalSampling(GammaloopTropicalSamplingSettings),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct DiscreteGraphSamplingSettings {
+    pub sample_orientations: bool,
+    pub sampling_type: DiscreteGraphSamplingType,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
