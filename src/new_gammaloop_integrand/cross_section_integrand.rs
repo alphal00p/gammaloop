@@ -518,6 +518,31 @@ impl CrossSectionIntegrand {
                 .fold(gammaloop_sample.get_default_sample().zero(), |sum, term| {
                     sum + term
                 }),
+            GammaLoopSample::MultiChanneling { alpha, sample } => self
+                .graph_terms
+                .iter()
+                .map(|term| {
+                    let channels_samples = term
+                        .multi_channeling_setup
+                        .reinterpret_loop_momenta_and_compute_prefactor_all_channels(
+                            sample,
+                            &term.graph,
+                            &term.lmbs,
+                            alpha,
+                        );
+
+                    channels_samples
+                        .into_iter()
+                        .map(|(reparameterized_sample, prefactor)| {
+                            prefactor * term.evaluate(&reparameterized_sample, &self.settings)
+                        })
+                        .fold(gammaloop_sample.get_default_sample().zero(), |sum, term| {
+                            sum + term
+                        })
+                })
+                .fold(gammaloop_sample.get_default_sample().zero(), |sum, term| {
+                    sum + term
+                }),
             GammaLoopSample::DiscreteGraph { graph_id, sample } => {
                 let graph_term = &self.graph_terms[*graph_id];
                 match sample {
@@ -540,6 +565,26 @@ impl CrossSectionIntegrand {
                             );
 
                         prefactor * graph_term.evaluate(&reparameterized_sample, &self.settings)
+                    }
+                    DiscreteGraphSample::MultiChanneling { alpha, sample } => {
+                        let channel_samples = self.graph_terms[*graph_id]
+                            .multi_channeling_setup
+                            .reinterpret_loop_momenta_and_compute_prefactor_all_channels(
+                                sample,
+                                &graph_term.graph,
+                                &graph_term.lmbs,
+                                alpha,
+                            );
+
+                        channel_samples
+                            .into_iter()
+                            .map(|(reparameterized_sample, prefactor)| {
+                                prefactor
+                                    * graph_term.evaluate(&reparameterized_sample, &self.settings)
+                            })
+                            .fold(gammaloop_sample.get_default_sample().zero(), |sum, term| {
+                                sum + term
+                            })
                     }
                     _ => todo!(),
                 }

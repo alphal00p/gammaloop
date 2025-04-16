@@ -46,7 +46,7 @@ fn unwrap_sample_impl<T: FloatLike>(
 pub enum GammaLoopSample<T: FloatLike> {
     Default(MomentumSample<T>),
     MultiChanneling {
-        alpha: f64,
+        alpha: F<T>,
         sample: MomentumSample<T>,
     },
     DiscreteGraph {
@@ -115,7 +115,7 @@ impl<T: FloatLike> GammaLoopSample<T> {
             }
             GammaLoopSample::MultiChanneling { alpha, sample } => {
                 GammaLoopSample::MultiChanneling {
-                    alpha: *alpha,
+                    alpha: alpha.clone(),
                     sample: sample.get_rotated_sample(rotation),
                 }
             }
@@ -154,7 +154,7 @@ impl<T: FloatLike> GammaLoopSample<T> {
             GammaLoopSample::Default(sample) => GammaLoopSample::Default(sample.cast_sample()),
             GammaLoopSample::MultiChanneling { alpha, sample } => {
                 GammaLoopSample::MultiChanneling {
-                    alpha: *alpha,
+                    alpha: alpha.clone().into(),
                     sample: sample.cast_sample(),
                 }
             }
@@ -173,7 +173,7 @@ impl<T: FloatLike> GammaLoopSample<T> {
             GammaLoopSample::Default(sample) => GammaLoopSample::Default(sample.higher_precision()),
             GammaLoopSample::MultiChanneling { alpha, sample } => {
                 GammaLoopSample::MultiChanneling {
-                    alpha: *alpha,
+                    alpha: alpha.higher(),
                     sample: sample.higher_precision(),
                 }
             }
@@ -193,7 +193,7 @@ impl<T: FloatLike> GammaLoopSample<T> {
             GammaLoopSample::Default(sample) => GammaLoopSample::Default(sample.lower_precision()),
             GammaLoopSample::MultiChanneling { alpha, sample } => {
                 GammaLoopSample::MultiChanneling {
-                    alpha: *alpha,
+                    alpha: alpha.lower(),
                     sample: sample.lower_precision(),
                 }
             }
@@ -220,7 +220,7 @@ impl<T: FloatLike> GammaLoopSample<T> {
 pub enum DiscreteGraphSample<T: FloatLike> {
     Default(MomentumSample<T>),
     MultiChanneling {
-        alpha: f64,
+        alpha: F<T>,
         sample: MomentumSample<T>,
     },
     /// This variant is equivalent to Default, but needs to be handled differently in the evaluation.
@@ -268,7 +268,7 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
             }
             DiscreteGraphSample::MultiChanneling { alpha, sample } => {
                 DiscreteGraphSample::MultiChanneling {
-                    alpha: *alpha,
+                    alpha: alpha.clone(),
                     sample: sample.get_rotated_sample_cached(
                         rotation,
                         rotated_externals,
@@ -308,7 +308,7 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
             }
             DiscreteGraphSample::MultiChanneling { alpha, sample } => {
                 DiscreteGraphSample::MultiChanneling {
-                    alpha: *alpha,
+                    alpha: alpha.clone(),
                     sample: sample.get_rotated_sample(rotation),
                 }
             }
@@ -339,7 +339,7 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
             }
             DiscreteGraphSample::MultiChanneling { alpha, sample } => {
                 DiscreteGraphSample::MultiChanneling {
-                    alpha: *alpha,
+                    alpha: Into::<F<T2>>::into(alpha.clone()),
                     sample: sample.cast_sample(),
                 }
             }
@@ -368,7 +368,7 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
             }
             DiscreteGraphSample::MultiChanneling { alpha, sample } => {
                 DiscreteGraphSample::MultiChanneling {
-                    alpha: *alpha,
+                    alpha: alpha.higher(),
                     sample: sample.higher_precision(),
                 }
             }
@@ -397,7 +397,7 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
             }
             DiscreteGraphSample::MultiChanneling { alpha, sample } => {
                 DiscreteGraphSample::MultiChanneling {
-                    alpha: *alpha,
+                    alpha: alpha.lower(),
                     sample: sample.lower_precision(),
                 }
             }
@@ -451,7 +451,7 @@ pub fn parameterize<T: FloatLike>(
         }
         SamplingSettings::MultiChanneling(multichanneling_settings) => {
             Ok(GammaLoopSample::MultiChanneling {
-                alpha: multichanneling_settings.alpha,
+                alpha: F::from_f64(multichanneling_settings.alpha),
                 sample: default_parametrize(
                     &xs,
                     dependent_momenta_constructor,
@@ -488,7 +488,7 @@ pub fn parameterize<T: FloatLike>(
                     Ok(GammaLoopSample::DiscreteGraph {
                         graph_id,
                         sample: DiscreteGraphSample::MultiChanneling {
-                            alpha: multichanneling_settings.alpha,
+                            alpha: F::from_f64(multichanneling_settings.alpha),
                             sample: default_parametrize(
                                 &xs,
                                 dependent_momenta_constructor,

@@ -19,6 +19,7 @@ use spenso::contraction::IsZero;
 use spenso::parametric::SerializableCompiledEvaluator;
 use std::time::Duration;
 use symbolica::evaluate::ExpressionEvaluator;
+use symbolica::graph;
 use symbolica::numerical_integration::{Grid, Sample};
 use typed_index_collections::TiVec;
 pub mod amplitude_integrand;
@@ -267,6 +268,27 @@ impl LmbMultiChannelingSetup {
             jacobian: momentum_sample.jacobian.clone(),
             orientation: momentum_sample.orientation,
         }
+    }
+
+    pub fn reinterpret_loop_momenta_and_compute_prefactor_all_channels<T: FloatLike>(
+        &self,
+        momentum_sample: &MomentumSample<T>,
+        graph: &Graph,
+        all_bases: &TiVec<LmbIndex, LoopMomentumBasis>,
+        alpha: &F<T>,
+    ) -> TiVec<ChannelIndex, (MomentumSample<T>, F<T>)> {
+        self.channels
+            .iter_enumerated()
+            .map(|(channel_index, _)| {
+                self.reinterpret_loop_momenta_and_compute_prefactor(
+                    channel_index,
+                    momentum_sample,
+                    graph,
+                    all_bases,
+                    alpha,
+                )
+            })
+            .collect()
     }
 
     /// This function is used to do do LMB multi-channeling without fully switching to a different lmb
