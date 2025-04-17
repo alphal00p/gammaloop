@@ -2822,11 +2822,12 @@ impl BareGraph {
 
         derived_data.numerator.update_model(model)?;
 
-        derived_data
-            .cff_expression
-            .as_mut()
-            .unwrap()
-            .load_compiled(path.into(), self.name.clone(), settings)?;
+        todo!("deprecated graph struct");
+        //derived_data
+        //    .cff_expression
+        //    .as_mut()
+        //    .unwrap()
+        //    .load_compiled(path.into(), self.name.clone(), settings)?;
 
         // if the user has edited the lmb in amplitude.yaml, this will set the right signature.
         // let lmb_indices = self.loop_momentum_basis.basis.clone();
@@ -2967,7 +2968,7 @@ impl<S: NumeratorState> Graph<S> {
         settings: &Settings,
     ) -> ExistingEsurfaces {
         get_existing_esurfaces(
-            &self.get_cff().esurfaces,
+            &self.get_cff().surfaces.esurface_cache,
             self.get_esurface_derived_data(),
             externals,
             &self.bare_graph.loop_momentum_basis,
@@ -3000,17 +3001,20 @@ impl<S: NumeratorState> Graph<S> {
         export_path: PathBuf,
         export_settings: &ProcessSettings,
     ) -> Result<(), Report> {
-        let params = self.bare_graph.build_params_for_cff();
-        match self.derived_data.as_mut().unwrap().cff_expression.as_mut() {
-            Some(cff) => cff.build_compiled_expression::<f64>(
-                &params,
-                export_path,
-                self.bare_graph.name.clone(),
-                export_settings,
-            ),
-            None => {
-                self.generate_cff();
-                self.build_compiled_expression(export_path, export_settings)
+        todo!("deprecated");
+        disable! {
+            let params = self.bare_graph.build_params_for_cff();
+            match self.derived_data.as_mut().unwrap().cff_expression.as_mut() {
+                Some(cff) => cff.build_compiled_expression::<f64>(
+                    &params,
+                    export_path,
+                    self.bare_graph.name.clone(),
+                    export_settings,
+                ),
+                None => {
+                    self.generate_cff();
+                    self.build_compiled_expression(export_path, export_settings)
+                }
             }
         }
     }
@@ -3887,7 +3891,7 @@ impl<NumState: NumeratorState> DerivedGraphData<NumState> {
                 .unwrap()
                 .orientations
                 .iter()
-                .map(|a| a.orientation.clone())
+                .map(|a| a.data.orientation.clone())
                 .collect(),
             path: export_path,
         }

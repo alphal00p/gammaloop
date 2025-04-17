@@ -36,7 +36,7 @@ use typed_index_collections::TiVec;
 
 use crate::{
     cff::{
-        cut_expression::{CFFCutExpression, OrientationData, OrientationID},
+        cut_expression::{CFFCutExpression, CutOrientationData, OrientationID},
         esurface::{Esurface, EsurfaceID},
         generation::generate_cff_with_cuts,
     },
@@ -884,7 +884,7 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
 
 #[derive(Clone)]
 pub struct CrossSectionDerivedData<S: NumeratorState = PythonState> {
-    pub orientations: TiVec<OrientationID, OrientationData>,
+    pub orientations: TiVec<OrientationID, CutOrientationData>,
     pub cff_expression: CFFCutExpression,
     temp_numerator: PhantomData<S>,
 }

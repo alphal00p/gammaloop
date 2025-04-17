@@ -1,4 +1,3 @@
-use crate::cff::expression::CFFFloat;
 use crate::momentum::{FourMomentum, ThreeMomentum};
 use crate::momentum_sample::{ExternalFourMomenta, ExternalIndex, LoopMomenta};
 use crate::new_gammaloop_integrand::GenericEvaluatorFloat;
@@ -778,7 +777,6 @@ pub trait FloatLike:
     + PrecisionUpgradable
     + Serialize
     + Display
-    + CFFFloat<Self>
     + NumeratorEvaluateFloat
     + GenericEvaluatorFloat
     {

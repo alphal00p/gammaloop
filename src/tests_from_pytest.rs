@@ -419,10 +419,10 @@ fn check_cff_generation<N: NumeratorState>(
         .as_ref()
         .ok_or(eyre!("No cff expression"))?;
 
-    assert!(!cff.esurfaces.is_empty());
+    assert!(!cff.surfaces.esurface_cache.is_empty());
 
-    let num_trees = cff.get_num_trees();
-    let esurfaces = cff.esurfaces.len();
+    let num_trees = cff.orientations.len();
+    let esurfaces = cff.surfaces.esurface_cache.len();
     assert_eq!(
         num_trees, amp_check.n_cff_trees,
         "Graph should have {} cff trees, but has {}",
@@ -433,13 +433,10 @@ fn check_cff_generation<N: NumeratorState>(
         "Graph should have {} esurfaces, but has {}",
         amp_check.n_esurfaces, esurfaces
     );
-    let unfolded = cff.expand_terms();
+    let unfolded = cff.num_unfolded_terms();
 
-    assert_eq!(unfolded.len(), amp_check.n_expanded_terms);
+    assert_eq!(unfolded, amp_check.n_expanded_terms);
 
-    for term in unfolded.iter() {
-        assert_eq!(term.len(), amp_check.n_terms_unfolded);
-    }
     Ok(graph)
 }
 
@@ -614,7 +611,7 @@ fn check_esurface_existance<N: NumeratorState>(
         .as_ref()
         .ok_or(eyre!("No cff expression"))?;
     let existing = get_existing_esurfaces(
-        &cff.esurfaces,
+        &cff.surfaces.esurface_cache,
         graph
             .derived_data
             .as_ref()
@@ -645,7 +642,7 @@ fn check_esurface_existance<N: NumeratorState>(
     find_maximal_overlap(
         &graph.bare_graph.loop_momentum_basis,
         &existing,
-        &cff.esurfaces,
+        &cff.surfaces.esurface_cache,
         &edge_masses,
         sample.external_moms(),
         &settings,
@@ -654,7 +651,7 @@ fn check_esurface_existance<N: NumeratorState>(
     let maximal_overlap = find_maximal_overlap(
         &graph.bare_graph.loop_momentum_basis,
         &existing,
-        &cff.esurfaces,
+        &cff.surfaces.esurface_cache,
         &edge_masses,
         sample.external_moms(),
         &settings,
@@ -1197,7 +1194,8 @@ fn pytest_scalar_hexagon() {
         .cff_expression
         .as_ref()
         .unwrap()
-        .esurfaces;
+        .surfaces
+        .esurface_cache;
 
     let kinematics = ExternalFourMomenta::from_iter([
         FourMomentum::from_args(F(24.), F(-21.2), F(71.), F(0.)),
@@ -1342,7 +1340,8 @@ fn pytest_scalar_ltd_topology_c() {
         .cff_expression
         .as_ref()
         .unwrap()
-        .esurfaces;
+        .surfaces
+        .esurface_cache;
 
     let kinematics = ExternalFourMomenta::from_iter([
         FourMomentum::from_args(F(9.0), F(0.0), F(0.0), F(8.94427190999916)),
@@ -1490,7 +1489,8 @@ fn pytest_scalar_massless_pentabox() {
             .cff_expression
             .as_ref()
             .unwrap()
-            .esurfaces,
+            .surfaces
+            .esurface_cache,
         graph
             .derived_data
             .as_ref()
@@ -1516,7 +1516,8 @@ fn pytest_scalar_massless_pentabox() {
             .cff_expression
             .as_ref()
             .unwrap()
-            .esurfaces,
+            .surfaces
+            .esurface_cache,
         &edge_masses,
         &kinematics,
         &settings,
@@ -1610,7 +1611,8 @@ fn pytest_scalar_massless_3l_pentabox() {
             .cff_expression
             .as_ref()
             .unwrap()
-            .esurfaces,
+            .surfaces
+            .esurface_cache,
         graph
             .derived_data
             .as_ref()
@@ -1638,7 +1640,8 @@ fn pytest_scalar_massless_3l_pentabox() {
             .cff_expression
             .as_ref()
             .unwrap()
-            .esurfaces,
+            .surfaces
+            .esurface_cache,
         &edge_masses,
         &kinematics,
         &settings,

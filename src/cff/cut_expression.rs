@@ -12,19 +12,19 @@ use super::{generation::SurfaceCache, surface::HybridSurfaceID, tree::Tree};
 pub struct OrientationID(usize);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct OrientationData {
+pub struct CutOrientationData {
     pub orientation: HedgeVec<Orientation>,
     pub cuts: Vec<CutId>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CutOrientationExpression {
+pub struct SingleCutOrientationExpression {
     pub left: Tree<HybridSurfaceID>,
     pub right: Tree<HybridSurfaceID>,
 }
 
-impl From<&CutOrientationExpression> for Atom {
-    fn from(value: &CutOrientationExpression) -> Self {
+impl From<&SingleCutOrientationExpression> for Atom {
+    fn from(value: &SingleCutOrientationExpression) -> Self {
         let left_atom = value.left.to_atom_inv();
         let right_atom = value.right.to_atom_inv();
         left_atom * right_atom
@@ -32,14 +32,14 @@ impl From<&CutOrientationExpression> for Atom {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct OrientationExpression {
-    pub data: OrientationData,
-    pub expressions: Vec<CutOrientationExpression>,
+pub struct CutOrientationExpression {
+    pub data: CutOrientationData,
+    pub expressions: Vec<SingleCutOrientationExpression>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CFFCutExpression {
-    pub orientations: TiVec<OrientationID, OrientationExpression>,
+    pub orientations: TiVec<OrientationID, CutOrientationExpression>,
     pub surfaces: SurfaceCache,
 }
 
