@@ -13,6 +13,7 @@ use crate::{
     },
     model::Model,
     new_cs::{Process, ProcessDefinition, ProcessList},
+    new_graph::Graph,
     numerator::{GlobalPrefactor, Numerator, PythonState},
     utils::F,
     HasIntegrand, IntegratedPhase, ProcessSettings, Settings,
@@ -784,10 +785,27 @@ impl PythonWorker {
                 "Model must be loaded before cross sections",
             ));
         }
+
         match Amplitude::from_yaml_str(&self.model, String::from(yaml_str)) {
             Ok(amp) => {
-                self.amplitudes
-                    .add_amplitude(amp.map(|a| a.map(|ag| ag.forget_type())));
+                let amplitude_bare_graphs = amp
+                    .amplitude_graphs
+                    .into_iter()
+                    .map(|amplitude_graph| amplitude_graph.graph.bare_graph)
+                    .collect_vec();
+
+                let process = Process::from_bare_graph_list(
+                    amplitude_bare_graphs,
+                    GenerationType::Amplitude,
+                    ProcessDefinition::new_empty(),
+                    None,
+                )
+                .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
+
+                self.process_list.add_process(process);
+
+                //self.amplitudes
+                //   .add_amplitude(amp.map(|a| a.map(|ag| ag.forget_type())));
                 Ok(())
             }
             Err(e) => Err(exceptions::PyException::new_err(e.to_string())),

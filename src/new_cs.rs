@@ -1,6 +1,6 @@
 use std::{
-    cell::{Ref, RefCell},
-    collections::{BTreeMap, HashSet},
+    cell::RefCell,
+    collections::HashSet,
     fmt::{Display, Formatter},
     marker::PhantomData,
     path::PathBuf,
@@ -8,7 +8,6 @@ use std::{
 };
 
 use ahash::{AHashSet, HashMap};
-use bincode::de;
 use bitvec::vec::BitVec;
 use color_eyre::Result;
 
@@ -22,50 +21,38 @@ use crate::{
 use eyre::eyre;
 use itertools::Itertools;
 use linnet::half_edge::{
-    builder::HedgeGraphBuilder,
     involution::{Flow, HedgePair, Orientation},
     subgraph::{HedgeNode, Inclusion, InternalSubGraph, OrientedCut},
-    HedgeGraph, NodeIndex,
 };
 use log::{debug, warn};
 use serde::{Deserialize, Serialize};
-use spenso::upgrading_arithmetic::GreaterThan;
 use symbolica::{
-    atom::{Atom, AtomCore, Symbol},
-    coefficient::ConvertToRing,
-    domains::{float::NumericalFloatLike, rational::Rational},
-    evaluate::{ExpressionEvaluator, FunctionMap, OptimizationSettings},
-    parse, symbol,
+    atom::{Atom, AtomCore},
+    domains::rational::Rational,
+    evaluate::FunctionMap,
+    parse,
 };
 use typed_index_collections::TiVec;
 
 use crate::{
     cff::{
-        cut_expression::{
-            CFFCutExpression, CutOrientationExpression, OrientationData, OrientationID,
-        },
-        esurface::{self, Esurface, EsurfaceID},
-        generation::{generate_cff_with_cuts, ShiftRewrite},
+        cut_expression::{CFFCutExpression, OrientationData, OrientationID},
+        esurface::{Esurface, EsurfaceID},
+        generation::generate_cff_with_cuts,
     },
-    cross_section::{self, IsPolarizable},
-    disable,
-    feyngen::{
-        diagram_generator::FeynGen, FeynGenFilter, FeynGenFilters, FeynGenOptions, GenerationType,
-        NumeratorAwareGraphGroupingOption, SelfEnergyFilterOptions, SnailFilterOptions,
-        TadpolesFilterOptions,
-    },
-    graph::{self, BareGraph, BareVertex, EdgeType},
+    cross_section::IsPolarizable,
+    feyngen::{FeynGenFilters, FeynGenOptions, GenerationType, NumeratorAwareGraphGroupingOption},
+    graph::BareGraph,
     integrands::Integrand,
-    model::{self, Model, Particle},
+    model::{Model, Particle},
     momentum::{Rotatable, Rotation, RotationMethod},
-    momentum_sample::ExternalIndex,
     new_gammaloop_integrand::{
-        cross_section_integrand::{self, CrossSectionGraphTerm, CrossSectionIntegrand},
+        cross_section_integrand::{CrossSectionGraphTerm, CrossSectionIntegrand},
         NewIntegrand,
     },
-    new_graph::{Edge, ExternalConnection, FeynmanGraph, Graph, Vertex},
+    new_graph::{ExternalConnection, FeynmanGraph, Graph},
     numerator::{GlobalPrefactor, NumeratorState, PythonState},
-    utils::{F, GS},
+    utils::F,
     DependentMomentaConstructor, Externals, Polarizations, ProcessSettings, Settings,
 };
 
@@ -79,6 +66,19 @@ pub struct ProcessDefinition {
     pub unresolved_cut_content: AHashSet<Arc<Particle>>,
     pub amplitude_filters: FeynGenFilters,
     pub cross_section_filters: FeynGenFilters,
+}
+
+impl ProcessDefinition {
+    pub fn new_empty() -> Self {
+        Self {
+            initial_pdgs: vec![],
+            final_pdgs_lists: vec![],
+            n_unresolved: 0,
+            unresolved_cut_content: AHashSet::new(),
+            amplitude_filters: FeynGenFilters(vec![]),
+            cross_section_filters: FeynGenFilters(vec![]),
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -106,147 +106,7 @@ pub struct GenerationOptions {
     pub num_threads: Option<usize>,
 }
 
-// should produce e+e- -> d d~ g
-#[cfg(test)]
-fn test_process_cross_section() -> GenerationOptions {
-    let feyngen_options = FeynGenOptions {
-        amplitude_filters: FeynGenFilters(vec![]),
-        cross_section_filters: FeynGenFilters(vec![
-            FeynGenFilter::SelfEnergyFilter(SelfEnergyFilterOptions::default()),
-            FeynGenFilter::TadpolesFilter(TadpolesFilterOptions::default()),
-            FeynGenFilter::ZeroSnailsFilter(SnailFilterOptions::default()),
-        ]),
-        initial_pdgs: vec![11, -11],
-        final_pdgs_lists: vec![vec![1, -1, 21]],
-        generation_type: GenerationType::CrossSection,
-        symmetrize_final_states: false,
-        symmetrize_initial_states: false,
-        symmetrize_left_right_states: false,
-        loop_count_range: (2, 2),
-        allow_symmetrization_of_external_fermions_in_amplitudes: false,
-        max_multiplicity_for_fast_cut_filter: 6,
-    };
-
-    GenerationOptions {
-        feyngen_options,
-        numerator_aware_isomorphism_grouping: NumeratorAwareGraphGroupingOption::OnlyDetectZeroes,
-        filter_self_loop: true,
-        graph_prefix: "GL".to_string(),
-        selected_graphs: None,
-        vetoed_graphs: None,
-        loop_momentum_bases: None,
-        global_prefactor: GlobalPrefactor::default(),
-        num_threads: None,
-    }
-}
-
-#[cfg(test)]
-fn test_process_amplitude() -> GenerationOptions {
-    use crate::numerator::GlobalPrefactor;
-
-    let feyngen_options = FeynGenOptions {
-        amplitude_filters: FeynGenFilters(vec![
-            FeynGenFilter::SelfEnergyFilter(SelfEnergyFilterOptions::default()),
-            FeynGenFilter::TadpolesFilter(TadpolesFilterOptions::default()),
-            FeynGenFilter::ZeroSnailsFilter(SnailFilterOptions::default()),
-        ]),
-        cross_section_filters: FeynGenFilters(vec![]),
-        generation_type: GenerationType::Amplitude,
-        initial_pdgs: vec![22, 22],
-        final_pdgs_lists: vec![vec![22, 22]],
-        symmetrize_final_states: true,
-        symmetrize_initial_states: true,
-        symmetrize_left_right_states: false,
-        allow_symmetrization_of_external_fermions_in_amplitudes: false,
-        loop_count_range: (1, 1),
-        max_multiplicity_for_fast_cut_filter: 6,
-    };
-
-    GenerationOptions {
-        feyngen_options,
-        numerator_aware_isomorphism_grouping: NumeratorAwareGraphGroupingOption::OnlyDetectZeroes,
-        filter_self_loop: true,
-        graph_prefix: "GL".to_string(),
-        selected_graphs: None,
-        vetoed_graphs: None,
-        loop_momentum_bases: None,
-        global_prefactor: GlobalPrefactor::default(),
-        num_threads: None,
-    }
-}
-
 impl Process {
-    pub fn generate(options: GenerationOptions, model: &Model) -> Result<Self> {
-        disable! {
-        let definition = ProcessDefinition {
-            initial_pdgs: options.feyngen_options.initial_pdgs.clone(),
-            final_pdgs: options.feyngen_options.final_pdgs.clone(),
-        };
-
-        let diagram_generator = FeynGen::new(options.feyngen_options.clone());
-
-        let bare_collection = diagram_generator.generate(
-            model,
-            &options.numerator_aware_isomorphism_grouping,
-            options.filter_self_loop,
-            options.graph_prefix,
-            options.selected_graphs,
-            options.vetoed_graphs,
-            options.loop_momentum_bases,
-            options.global_prefactor,
-            options.num_threads,
-        )?;
-
-        let hedge_collection = bare_collection
-            .into_iter()
-            .map(|bare_graph| {
-                let mut hedge_graph_builder = HedgeGraphBuilder::<Edge, Vertex>::new();
-                for vertex in bare_graph.vertices {
-                    // do not add the vertices attached to externals
-                    if vertex.edges.len() != 1 {
-                        hedge_graph_builder.add_node(vertex.clone().into());
-                    }
-                }
-
-                for edge in bare_graph.edges {
-                    match edge.edge_type {
-                        EdgeType::Virtual => {
-                            hedge_graph_builder.add_edge(
-                                NodeIndex(edge.vertices[0]),
-                                NodeIndex(edge.vertices[1]),
-                                edge.into(),
-                                true,
-                            );
-                        }
-                        EdgeType::Incoming => {
-                            hedge_graph_builder.add_external_edge(
-                                NodeIndex(edge.vertices[1]),
-                                edge.into(),
-                                // I am not sure what to put for these two
-                                true,
-                                Flow::Source,
-                            );
-                        }
-                        EdgeType::Outgoing => {
-                            hedge_graph_builder.add_external_edge(
-                                NodeIndex(edge.vertices[0]),
-                                edge.into(),
-                                // I am not sure what to put for these two
-                                true,
-                                Flow::Sink,
-                            );
-                        }
-                    }
-                }
-
-                Graph::new(bare_graph.overall_factor, hedge_graph_builder.build())
-            })
-            .collect::<Result<Vec<Graph>, _>>()?;
-
-        }
-        todo!();
-    }
-
     pub fn from_bare_graph_list(
         bare_graphs: Vec<BareGraph>,
         generation_type: GenerationType,
@@ -330,12 +190,6 @@ impl ProcessList {
         self.processes.push(process);
     }
 
-    /// given the process definition generates a new process and adds it to the list
-    pub fn generate(&mut self, options: GenerationOptions, model: &Model) -> Result<()> {
-        self.processes.push(Process::generate(options, model)?);
-        Ok(())
-    }
-
     /// imports a process list from a folder
     pub fn import(settings: ExportSettings) -> Result<Self> {
         Ok(Self::new())
@@ -344,7 +198,7 @@ impl ProcessList {
     ///preprocesses the process list according to the settings
     pub fn preprocess(&mut self, model: &Model, settings: ProcessSettings) -> Result<()> {
         for process in self.processes.iter_mut() {
-            process.preprocess(&model)?;
+            process.preprocess(model)?;
         }
 
         Ok(())
@@ -399,7 +253,9 @@ impl<S: NumeratorState> ProcessCollection<S> {
     fn preprocess(&mut self, model: &Model, process_definition: &ProcessDefinition) -> Result<()> {
         match self {
             Self::Amplitudes(amplitudes) => {
-                todo!()
+                for amplitude in amplitudes {
+                    amplitude.preprocess(model)?;
+                }
             }
             Self::CrossSections(cross_sections) => {
                 for cross_section in cross_sections {
@@ -431,6 +287,15 @@ pub struct Amplitude<S: NumeratorState = PythonState> {
     graphs: Vec<AmplitudeGraph<S>>,
 }
 
+impl<S: NumeratorState> Amplitude<S> {
+    pub fn preprocess(&mut self, model: &Model) -> Result<()> {
+        for amplitude_graph in self.graphs.iter_mut() {
+            amplitude_graph.preprocess(model)?;
+        }
+        Ok(())
+    }
+}
+
 #[derive(Clone)]
 pub struct AmplitudeGraph<S: NumeratorState = PythonState> {
     graph: Graph,
@@ -445,6 +310,13 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
                 temp_numerator: PhantomData,
             },
         }
+    }
+
+    fn preprocess(&mut self, model: &Model) -> Result<()> {
+        self.graph
+            .loop_momentum_basis
+            .set_edge_signatures(&self.graph.underlying)?;
+        Ok(())
     }
 }
 
@@ -1165,22 +1037,4 @@ impl CrossSectionCut {
             Ok(false)
         }
     }
-}
-
-#[test]
-fn test_new_structure_cross_section() {
-    let model = crate::tests_from_pytest::load_generic_model("sm");
-    let generation_options = test_process_cross_section();
-
-    let mut process_list = ProcessList::new();
-    process_list.generate(generation_options, &model).unwrap();
-}
-
-#[test]
-fn test_new_structure_ampltiude() {
-    let model = crate::tests_from_pytest::load_generic_model("sm");
-    let generation_options = test_process_amplitude();
-
-    let mut process_list = ProcessList::new();
-    process_list.generate(generation_options, &model).unwrap();
 }
