@@ -1,3 +1,4 @@
+use bincode::{Decode, Encode};
 use derive_more::{From, Into};
 use serde::{Deserialize, Serialize};
 use symbolica::atom::Atom;
@@ -5,7 +6,7 @@ use typed_index_collections::TiVec;
 
 /// data structure for a tree
 
-#[derive(Debug, From, Into, Copy, Clone, Serialize, Deserialize)]
+#[derive(Debug, From, Into, Copy, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct NodeId(usize);
 
 impl NodeId {
@@ -14,7 +15,7 @@ impl NodeId {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct TreeNode<T> {
     pub data: T,
     pub node_id: NodeId,

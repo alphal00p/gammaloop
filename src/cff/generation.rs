@@ -2,7 +2,7 @@ use crate::{
     cff::{
         cut_expression::CFFCutExpression,
         esurface::add_external_shifts,
-        expression::CompiledCFFExpression,
+        expression::OrientationData,
         hsurface::HsurfaceID,
         surface::{HybridSurface, HybridSurfaceID},
         tree::Tree,
@@ -11,6 +11,7 @@ use crate::{
     new_cs::{CrossSectionCut, CutId},
 };
 use ahash::HashMap;
+use bincode::{Decode, Encode};
 use color_eyre::Report;
 use color_eyre::Result;
 use itertools::Itertools;
@@ -41,10 +42,10 @@ use log::debug;
 use super::{
     cff_graph::{CFFGenerationGraph, VertexSet},
     cut_expression::{
-        CutOrientationExpression, OrientationData, OrientationExpression, OrientationID,
+        CutOrientationData, CutOrientationExpression, OrientationID, SingleCutOrientationExpression,
     },
     esurface::{Esurface, EsurfaceCollection, EsurfaceID, ExternalShift},
-    expression::{CFFExpression, CFFLimit, TermId},
+    expression::CFFExpression,
     hsurface::{self, Hsurface, HsurfaceCollection},
     surface::{HybridSurfaceRef, Surface, UnitSurface},
     tree::NodeId,
@@ -233,7 +234,7 @@ fn get_orientations_with_cut<E, V>(
 fn get_possible_orientations_for_cut_list<E, V>(
     graph: &HedgeGraph<E, V>,
     cuts: &TiVec<CutId, CrossSectionCut>,
-) -> TiVec<OrientationID, OrientationData> {
+) -> TiVec<OrientationID, CutOrientationData> {
     let internal_subgraph = InternalSubGraph::cleaned_filter_pessimist(graph.full_filter(), graph);
     let num_virtual_edges = graph.count_internal_edges(&internal_subgraph);
 
@@ -289,7 +290,7 @@ fn get_possible_orientations_for_cut_list<E, V>(
             if cuts_consistent_with_orientation.is_empty() {
                 None
             } else {
-                Some(OrientationData {
+                Some(CutOrientationData {
                     orientation: global_orientation,
                     cuts: cuts_consistent_with_orientation,
                 })
@@ -317,8 +318,8 @@ fn generate_cff_for_orientation<E, V>(
     canonize_esurface: &Option<ShiftRewrite>,
     cache: &mut SurfaceCache,
     cuts: &TiVec<CutId, CrossSectionCut>,
-    orientation_data: &OrientationData,
-) -> Vec<CutOrientationExpression> {
+    orientation_data: &CutOrientationData,
+) -> Vec<SingleCutOrientationExpression> {
     orientation_data
         .cuts
         .iter()
@@ -343,7 +344,7 @@ fn generate_cff_for_orientation<E, V>(
                 generate_tree_for_orientation(right_diagram, cache, None, canonize_esurface)
                     .map(forget_graphs);
 
-            CutOrientationExpression {
+            SingleCutOrientationExpression {
                 left: left_tree,
                 right: right_tree,
             }
@@ -373,7 +374,7 @@ pub fn generate_cff_with_cuts<E, V>(
                 &orientation_data,
             );
 
-            OrientationExpression {
+            CutOrientationExpression {
                 data: orientation_data,
                 expressions: cut_expressions,
             }
@@ -384,44 +385,6 @@ pub fn generate_cff_with_cuts<E, V>(
         orientations: orientation_expressions,
         surfaces: surface_cache,
     }
-}
-
-pub fn generate_cff_limit(
-    left_dags: Vec<CFFGenerationGraph>,
-    right_dags: Vec<CFFGenerationGraph>,
-    esurfaces: &EsurfaceCollection,
-    limit_esurface: &Esurface,
-    canonize_esurface: &Option<ShiftRewrite>,
-    orientations_in_limit: (Vec<Vec<bool>>, Vec<TermId>),
-) -> Result<CFFLimit, String> {
-    assert_eq!(
-        left_dags.len(),
-        right_dags.len(),
-        "number of left and right dags must match"
-    );
-
-    let left = generate_cff_from_orientations(
-        left_dags,
-        Some(esurfaces.clone()),
-        None,
-        Some(limit_esurface),
-        canonize_esurface,
-    )
-    .unwrap();
-    let right = generate_cff_from_orientations(
-        right_dags,
-        Some(esurfaces.clone()),
-        None,
-        Some(limit_esurface),
-        canonize_esurface,
-    )
-    .unwrap();
-
-    Ok(CFFLimit {
-        left,
-        right,
-        orientations_in_limit,
-    })
 }
 
 fn generate_cff_from_orientations(
@@ -473,23 +436,24 @@ fn generate_cff_from_orientations(
 
             crate::cff::expression::OrientationExpression {
                 expression,
-                orientation: global_orientation,
-                dag: graph,
+                data: OrientationData {
+                    orientation: global_orientation,
+                },
             }
         })
         .collect_vec();
 
     Ok(CFFExpression {
         orientations: terms.into(),
-        esurfaces: generator_cache.esurface_cache,
-        hsurfaces: generator_cache.hsurface_cache,
-        compiled: CompiledCFFExpression::None,
+        surfaces: generator_cache,
     })
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, Encode, Decode)]
 pub struct SurfaceCache {
+    #[bincode(with_serde)]
     pub esurface_cache: EsurfaceCollection,
+    #[bincode(with_serde)]
     pub hsurface_cache: HsurfaceCollection,
 }
 
@@ -695,20 +659,59 @@ fn advance_tree(
 
 #[cfg(test)]
 mod tests_cff {
+    use std::{ops::Range, vec};
+
     use linnet::half_edge::{
         builder::HedgeGraphBuilder, involution::Flow, nodestorage::NodeStorageVec,
     };
-    use symbolica::domains::float::{NumericalFloatLike, Real};
+    use symbolica::{
+        domains::float::{NumericalFloatLike, Real},
+        evaluate::{ExpressionEvaluator, FunctionMap},
+        parse,
+    };
     use utils::FloatLike;
 
     use crate::{
         cff::cff_graph::CFFEdgeType,
         momentum::{FourMomentum, ThreeMomentum},
-        tests::{self, load_default_settings},
         utils::{self, dummy_hedge_graph, RefDefault, F},
     };
 
     use super::*;
+
+    // helper function to make a symbolica evaluator
+    impl CFFExpression {
+        fn quick_symbolica_evaluator(
+            &self,
+            external_range: Range<usize>,
+            virtual_range: Range<usize>,
+        ) -> ExpressionEvaluator<F<f64>> {
+            let expression_atom_no_energy_sub = self.to_atom();
+            let expression_atom = self
+                .surfaces
+                .substitute_energies(&expression_atom_no_energy_sub);
+
+            let external_energies =
+                external_range.map(|i| parse!(&format!("P({}, cind(0))", i)).unwrap());
+
+            let virtual_energies =
+                virtual_range.map(|i| parse!(&format!("Q({}, cind(0))", i)).unwrap());
+
+            let params = external_energies.chain(virtual_energies).collect_vec();
+
+            let function_map = FunctionMap::new();
+
+            let mut tree = expression_atom
+                .to_evaluation_tree(&function_map, &params)
+                .unwrap();
+
+            tree.horner_scheme();
+            tree.common_subexpression_elimination();
+
+            let tree_double = tree.map_coeff(&|c| c.into());
+            tree_double.linearize(None)
+        }
+    }
 
     // helper function to do some quick tests
     #[allow(unused)]
@@ -862,10 +865,10 @@ mod tests_cff {
             generate_cff_from_orientations(orientations, None, None, None, &shift_rewrite.clone())
                 .unwrap();
         assert_eq!(
-            cff.esurfaces.len(),
+            cff.surfaces.esurface_cache.len(),
             6,
             "too many esurfaces: {:#?}",
-            cff.esurfaces
+            cff.surfaces.esurface_cache,
         );
 
         let p1 = FourMomentum::from_args(F(1.), F(3.), F(4.), F(5.));
@@ -898,10 +901,10 @@ mod tests_cff {
             .reduce(|acc, x| acc * x)
             .unwrap();
 
-        let settings = tests::load_default_settings();
+        let mut evaluator = cff.quick_symbolica_evaluator(0..3, 3..6);
 
         let cff_res: F<f64> = energy_prefactor
-            * cff.eager_evaluate(&energy_cache, &settings)
+            * evaluator.evaluate_single(&energy_cache.clone().get_raw())
             * F((2. * std::f64::consts::PI).powi(-3));
 
         let target_res = F(6.333_549_225_536_17e-9_f64);
@@ -939,9 +942,10 @@ mod tests_cff {
         let triangle_hedge_graph = triangle_hedge_graph_builder.build::<NodeStorageVec<()>>();
 
         let cff_hedge = generate_cff_expression(&triangle_hedge_graph, &shift_rewrite).unwrap();
+        let mut cff_hedge_evaluator = cff_hedge.quick_symbolica_evaluator(0..3, 3..6);
 
         let cff_res: F<f64> = energy_prefactor
-            * cff_hedge.eager_evaluate(&energy_cache, &settings)
+            * cff_hedge_evaluator.evaluate_single(&energy_cache.get_raw())
             * F((2. * std::f64::consts::PI).powi(-3));
 
         let target_res = F(6.333_549_225_536_17e-9_f64);
@@ -993,7 +997,6 @@ mod tests_cff {
         ];
 
         let external_energy_cache = [q.temporal.value, -q.temporal.value];
-        let settings = tests::load_default_settings();
 
         let mut energy_cache = external_energy_cache.to_vec();
         energy_cache.extend(virtual_energy_cache);
@@ -1008,7 +1011,9 @@ mod tests_cff {
             .reduce(|acc, x| acc * x)
             .unwrap();
 
-        let cff_res = energy_prefactor * cff.eager_evaluate(&energy_cache, &settings);
+        let mut evaluator = cff.quick_symbolica_evaluator(0..2, 2..7);
+
+        let cff_res = energy_prefactor * evaluator.evaluate_single(&energy_cache.clone().get_raw());
 
         let target = F(1.0794792137096797e-13);
         let absolute_error = cff_res - target;
@@ -1048,8 +1053,9 @@ mod tests_cff {
 
         let hedge_double_traingle = hedge_double_triangle_builder.build::<NodeStorageVec<()>>();
         let cff_hedge = generate_cff_expression(&hedge_double_traingle, &shift_rewrite).unwrap();
-
-        let cff_res = energy_prefactor * cff_hedge.eager_evaluate(&energy_cache, &settings);
+        let mut cff_hedge_evaluator = cff_hedge.quick_symbolica_evaluator(0..2, 2..7);
+        let cff_res =
+            energy_prefactor * cff_hedge_evaluator.evaluate_single(&energy_cache.get_raw());
 
         let target = F(1.0794792137096797e-13);
         let absolute_error = cff_res - target;
@@ -1147,9 +1153,9 @@ mod tests_cff {
             .new_hedgevec_from_iter(energies_cache)
             .unwrap();
 
-        let settings = tests::load_default_settings();
+        let mut evaluator = cff.quick_symbolica_evaluator(0..2, 2..10);
 
-        let res = cff.eager_evaluate(&energies_cache, &settings) * energy_prefactor;
+        let res = evaluator.evaluate_single(&energies_cache.clone().get_raw()) * energy_prefactor;
 
         let absolute_error = res - F(1.2625322619777278e-21);
         let relative_error = absolute_error / res;
@@ -1175,7 +1181,9 @@ mod tests_cff {
 
         let tbt_hedge = tbt_hedge_builder.build::<NodeStorageVec<()>>();
         let cff_hedge = generate_cff_expression(&tbt_hedge, &shift_rewrite).unwrap();
-        let res = cff_hedge.eager_evaluate(&energies_cache, &settings) * energy_prefactor;
+
+        let mut cff_hedge_evaluator = cff_hedge.quick_symbolica_evaluator(0..2, 2..10);
+        let res = cff_hedge_evaluator.evaluate_single(&energies_cache.get_raw()) * energy_prefactor;
 
         let absolute_error = res - F(1.2625322619777278e-21);
         let relative_error = absolute_error / res;
@@ -1353,16 +1361,16 @@ mod tests_cff {
         let finish = std::time::Instant::now();
         println!("time to generate cff: {:?}", finish - start);
 
-        let settings = load_default_settings();
-
         let energy_cache = [F(3.0); 17];
 
-        let energy_cache = dummy_hedge_graph(energy_cache.len())
-            .new_hedgevec_from_iter(energy_cache)
-            .unwrap();
+        //let energy_cache = dummy_hedge_graph(energy_cache.len())
+        //    .new_hedgevec_from_iter(energy_cache)
+        //    .unwrap();
+
+        let mut evaluator = cff.quick_symbolica_evaluator(0..4, 4..17);
         let start = std::time::Instant::now();
         for _ in 0..100 {
-            let _res = cff.evaluate(&energy_cache, &settings);
+            let _res = evaluator.evaluate_single(&energy_cache);
         }
         let finish = std::time::Instant::now();
         println!("time to evaluate cff: {:?}", (finish - start) / 100);

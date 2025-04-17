@@ -14,7 +14,7 @@ use typed_index_collections::TiVec;
 
 use crate::{
     cff::{
-        cut_expression::{OrientationData, OrientationID},
+        cut_expression::{CutOrientationData, OrientationID},
         esurface::Esurface,
     },
     evaluation_result::{EvaluationMetaData, EvaluationResult},
@@ -52,7 +52,7 @@ pub struct CrossSectionIntegrand {
 
 #[derive(Clone)]
 pub struct OrientationEvaluator {
-    pub orientation_data: OrientationData,
+    pub orientation_data: CutOrientationData,
     pub evaluators: Vec<GenericEvaluator>,
 }
 
