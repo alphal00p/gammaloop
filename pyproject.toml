@@ -21,6 +21,7 @@ dependencies = [
  "PyMuPDF>=1.23.4",
  "pydot",
  "symbolica>=0.14.0",
+ "pytest"
 ]
 
 [project.urls]
