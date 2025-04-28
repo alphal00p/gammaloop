@@ -74,7 +74,7 @@ impl CFFCutExpression {
         self.orientations[orientation_id]
             .expressions
             .iter()
-            .map(|expr| Atom::from(expr))
+            .map(Atom::from)
             .collect()
     }
 
@@ -82,11 +82,7 @@ impl CFFCutExpression {
         self.orientations
             .iter()
             .map(|orientation| {
-                let atoms = orientation
-                    .expressions
-                    .iter()
-                    .map(|expr| Atom::from(expr))
-                    .collect();
+                let atoms = orientation.expressions.iter().map(Atom::from).collect();
                 atoms
             })
             .collect()
@@ -95,8 +91,6 @@ impl CFFCutExpression {
 
 #[cfg(test)]
 mod tests {
-    use core::panic;
-
     use itertools::Itertools;
     use linnet::half_edge::{
         builder::HedgeGraphBuilder,
@@ -106,7 +100,7 @@ mod tests {
     use typed_index_collections::TiVec;
 
     use crate::{
-        cff, disable,
+        cff,
         new_cs::{CrossSectionCut, CutId},
     };
 

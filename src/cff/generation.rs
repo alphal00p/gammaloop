@@ -7,10 +7,8 @@ use crate::{
         surface::{HybridSurface, HybridSurfaceID},
         tree::Tree,
     },
-    disable,
     new_cs::{CrossSectionCut, CutId},
 };
-use ahash::HashMap;
 use bincode::{Decode, Encode};
 use color_eyre::Report;
 use color_eyre::Result;
@@ -21,13 +19,6 @@ use linnet::half_edge::{
 use linnet::half_edge::{
     involution::{EdgeIndex, Orientation},
     subgraph::InternalSubGraph,
-};
-use rayon::result;
-use std::{
-    fmt::Debug,
-    iter::{Chain, Enumerate, Map},
-    ops::Index,
-    vec::IntoIter,
 };
 use symbolica::{
     atom::{Atom, AtomCore},
@@ -40,15 +31,14 @@ use serde::{Deserialize, Serialize};
 use log::debug;
 
 use super::{
-    cff_graph::{CFFGenerationGraph, VertexSet},
+    cff_graph::CFFGenerationGraph,
     cut_expression::{
         CutOrientationData, CutOrientationExpression, OrientationID, SingleCutOrientationExpression,
     },
     esurface::{Esurface, EsurfaceCollection, EsurfaceID, ExternalShift},
     expression::CFFExpression,
-    hsurface::{self, Hsurface, HsurfaceCollection},
-    surface::{HybridSurfaceRef, Surface, UnitSurface},
-    tree::NodeId,
+    hsurface::HsurfaceCollection,
+    surface::{HybridSurfaceRef, UnitSurface},
 };
 
 #[derive(Debug, Clone)]
@@ -175,11 +165,12 @@ fn get_orientations<E, V>(graph: &HedgeGraph<E, V>) -> Vec<CFFGenerationGraph> {
                 "did not saturate virtual orientations when constructing global orientation"
             );
 
-            CFFGenerationGraph::new_new(graph, global_orientation)
+            CFFGenerationGraph::new(graph, global_orientation)
         })
         .collect_vec()
 }
 
+#[allow(unused)]
 fn get_orientations_with_cut<E, V>(
     graph: &HedgeGraph<E, V>,
     oriented_cut: &OrientedCut,
@@ -224,7 +215,7 @@ fn get_orientations_with_cut<E, V>(
         })
         .filter(|global_orientation| {
             // filter out orientations that have a directed cycle
-            let graph = CFFGenerationGraph::new_new(graph, global_orientation.clone());
+            let graph = CFFGenerationGraph::new(graph, global_orientation.clone());
             !graph.has_directed_cycle_initial()
         });
 
@@ -266,7 +257,7 @@ fn get_possible_orientations_for_cut_list<E, V>(
 
     // filter out orientations that are not dags
     let filter_non_dag = global_orientations.filter(|global_orientation| {
-        let graph = CFFGenerationGraph::new_new(graph, global_orientation.clone());
+        let graph = CFFGenerationGraph::new(graph, global_orientation.clone());
         !graph.has_directed_cycle_initial()
     });
 
@@ -661,6 +652,7 @@ fn advance_tree(
 mod tests_cff {
     use std::{ops::Range, vec};
 
+    use ahash::HashMap;
     use linnet::half_edge::{
         builder::HedgeGraphBuilder, involution::Flow, nodestorage::NodeStorageVec,
     };

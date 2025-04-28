@@ -14,23 +14,21 @@ use ref_ops::RefNeg;
 use serde::{Deserialize, Serialize};
 use symbolica::atom::Atom;
 use symbolica::domains::float::{NumericalFloatLike, Real};
-use symbolica::{parse, symbol};
+use symbolica::parse;
 use typed_index_collections::TiVec;
 
 use crate::debug_info::DEBUG_LOGGER;
-use crate::momentum::{FourMomentum, ThreeMomentum};
+use crate::momentum::FourMomentum;
 use crate::momentum_sample::{
     ExternalFourMomenta, ExternalIndex, ExternalThreeMomenta, LoopIndex, LoopMomenta,
 };
 use crate::new_cs::CrossSectionCut;
 use crate::new_graph::{self, LoopMomentumBasis};
-use crate::numerator::NumeratorState;
 use crate::signature::ExternalSignature;
 use crate::utils::{
     compute_loop_part, compute_shift_part, compute_t_part_of_shift_part, FloatLike, F,
 };
 
-use super::cff_graph::VertexSet;
 use super::generation::ShiftRewrite;
 use super::surface::{self, Surface};
 
@@ -493,12 +491,12 @@ impl EsurfaceData {
 
 pub fn generate_esurface_data(
     graph: &new_graph::Graph,
-    lmbs: &Vec<LoopMomentumBasis>,
+    lmbs: &[LoopMomentumBasis],
     esurfaces: &EsurfaceCollection,
 ) -> Result<EsurfaceDerivedData, Report> {
     let edge_masses = graph
         .underlying
-        .new_hedgevec(|edge, edge_index, _| edge.particle.mass.value);
+        .new_hedgevec(|edge, _, _| edge.particle.mass.value);
 
     let data = esurfaces
         .iter()
@@ -620,15 +618,14 @@ impl From<EsurfaceID> for Atom {
 mod tests {
     use itertools::Itertools;
     use linnet::half_edge::builder::HedgeGraphBuilder;
-    use linnet::half_edge::involution::{EdgeIndex, Flow, Hedge, Orientation};
+    use linnet::half_edge::involution::{EdgeIndex, Flow, Orientation};
     use linnet::half_edge::nodestorage::NodeStorageVec;
-    use momtrop::Edge;
     use symbolica::atom::{Atom, AtomCore};
     use symbolica::parse;
 
     use crate::new_cs::CrossSectionCut;
     use crate::{
-        cff::{cff_graph::VertexSet, esurface::Esurface, generation::ShiftRewrite},
+        cff::{esurface::Esurface, generation::ShiftRewrite},
         utils::{dummy_hedge_graph, F},
     };
 
