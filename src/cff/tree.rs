@@ -117,5 +117,3 @@ where
         self.to_atom_inv_impl(NodeId::root())
     }
 }
-
-pub type NodeCache<T> = TiVec<NodeId, T>;
