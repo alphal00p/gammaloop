@@ -4,17 +4,12 @@ use itertools::Itertools;
 use linnet::half_edge::{
     hedgevec::HedgeVec,
     involution::{EdgeIndex, Flow, HedgePair, Orientation},
-    subgraph::{HedgeNode, OrientedCut},
     HedgeGraph,
 };
 use serde::{Deserialize, Serialize};
 use std::hash::Hash;
 
-use crate::{
-    cff::hsurface::Hsurface,
-    graph::{BareGraph, EdgeType},
-    new_cs::CrossSectionCut,
-};
+use crate::cff::hsurface::Hsurface;
 
 use super::{
     esurface::{Esurface, ExternalShift},
@@ -686,13 +681,8 @@ impl CFFGenerationGraph {
     }
 
     /// for now only non-cut graphs are supported
-    pub fn new_new<E, V>(
-        graph: &HedgeGraph<E, V>,
-        global_orientation: HedgeVec<Orientation>,
-    ) -> Self {
-        let mut vertices = (0..graph.n_nodes())
-            .map(|id| CFFVertex::new(id))
-            .collect_vec();
+    pub fn new<E, V>(graph: &HedgeGraph<E, V>, global_orientation: HedgeVec<Orientation>) -> Self {
+        let mut vertices = (0..graph.n_nodes()).map(CFFVertex::new).collect_vec();
 
         for (hedge_pair, edge_id, _) in graph.iter_all_edges() {
             match hedge_pair {
@@ -729,11 +719,7 @@ impl CFFGenerationGraph {
                         }
                     }
                 }
-                HedgePair::Split {
-                    source,
-                    sink,
-                    split,
-                } => todo!(),
+                HedgePair::Split { .. } => unreachable!(),
             }
         }
 
@@ -891,113 +877,6 @@ impl CFFGenerationGraph {
         res
     }
 
-    pub fn new(graph: &BareGraph, virtual_orientation: Vec<bool>) -> Self {
-        let virtual_index_to_edge_index = graph
-            .get_virtual_edges_iterator()
-            .map(|(_virtual_id, edge)| graph.get_edge_position(&edge.name).unwrap())
-            .collect_vec();
-
-        let edge_index_to_virtual_index = virtual_index_to_edge_index
-            .iter()
-            .enumerate()
-            .map(|(index, &value)| (value, index))
-            .collect::<HashMap<_, _>>();
-
-        let global_orientation = graph
-            .edges
-            .iter()
-            .map(|edge| match edge.edge_type {
-                EdgeType::Virtual => {
-                    let edge_id = graph.get_edge_position(&edge.name).unwrap();
-                    virtual_orientation[edge_index_to_virtual_index[&edge_id]]
-                }
-                EdgeType::Incoming => true,
-                EdgeType::Outgoing => true,
-            })
-            .collect_vec();
-
-        let mut vertices = vec![];
-        let mut cff_vertex_to_graph_vertex = vec![];
-        let mut graph_vertex_to_cff_vertex = HashMap::default();
-
-        graph
-            .vertices
-            .iter()
-            .enumerate()
-            .filter(|(_, vertex)| vertex.edges.len() > 1)
-            .enumerate()
-            .for_each(|(cff_vertex_id, (graph_vertex_id, _vertex))| {
-                let cff_vertex = CFFVertex::new(cff_vertex_id);
-                vertices.push(cff_vertex);
-                cff_vertex_to_graph_vertex.push(graph_vertex_id);
-                graph_vertex_to_cff_vertex.insert(graph_vertex_id, cff_vertex_id);
-            });
-
-        for edge in graph.edges.iter() {
-            let edge_id = graph.get_edge_position(&edge.name).unwrap();
-            match edge.edge_type {
-                EdgeType::Virtual => {
-                    let from = edge.vertices[0];
-                    let to = edge.vertices[1];
-                    let orientation = global_orientation[edge_id];
-
-                    if orientation {
-                        vertices[graph_vertex_to_cff_vertex[&from]]
-                            .outgoing_edges
-                            .push(CFFEdge {
-                                edge_id: EdgeIndex::from(edge_id),
-                                edge_type: CFFEdgeType::Virtual,
-                            });
-                        vertices[graph_vertex_to_cff_vertex[&to]]
-                            .incoming_edges
-                            .push(CFFEdge {
-                                edge_id: EdgeIndex::from(edge_id),
-                                edge_type: CFFEdgeType::Virtual,
-                            });
-                    } else {
-                        vertices[graph_vertex_to_cff_vertex[&from]]
-                            .incoming_edges
-                            .push(CFFEdge {
-                                edge_id: EdgeIndex::from(edge_id),
-                                edge_type: CFFEdgeType::Virtual,
-                            });
-                        vertices[graph_vertex_to_cff_vertex[&to]]
-                            .outgoing_edges
-                            .push(CFFEdge {
-                                edge_id: EdgeIndex::from(edge_id),
-                                edge_type: CFFEdgeType::Virtual,
-                            });
-                    }
-                }
-                EdgeType::Incoming => {
-                    let vertex_id = edge.vertices[1];
-                    vertices[graph_vertex_to_cff_vertex[&vertex_id]]
-                        .incoming_edges
-                        .push(CFFEdge {
-                            edge_id: EdgeIndex::from(edge_id),
-                            edge_type: CFFEdgeType::External,
-                        });
-                }
-                EdgeType::Outgoing => {
-                    let vertex_id = edge.vertices[0];
-                    vertices[graph_vertex_to_cff_vertex[&vertex_id]]
-                        .outgoing_edges
-                        .push(CFFEdge {
-                            edge_id: EdgeIndex::from(edge_id),
-                            edge_type: CFFEdgeType::External,
-                        });
-                }
-            }
-        }
-
-        unimplemented!("deprecated")
-
-        // Self {
-        //     vertices,
-        //     global_orientation,
-        // }
-    }
-
     pub fn generate_cut(&self, circled_vertices: VertexSet) -> (Self, Self) {
         let vertices_in_cut = circled_vertices.contains_vertices();
         let mut vertices = self.vertices.clone();
@@ -1080,14 +959,11 @@ mod test {
     use super::CFFGenerationGraph;
     use crate::cff::cff_graph::{CFFEdgeType, VertexSet};
     use itertools::Itertools;
-    use linnet::{
-        half_edge::{
-            builder::HedgeGraphBuilder,
-            involution::{EdgeIndex, Flow, Orientation},
-            nodestorage::NodeStorageVec,
-            subgraph::{HedgeNode, InternalSubGraph, SubGraphOps},
-        },
-        union_find::left,
+    use linnet::half_edge::{
+        builder::HedgeGraphBuilder,
+        involution::{EdgeIndex, Flow, Orientation},
+        nodestorage::NodeStorageVec,
+        subgraph::SubGraphOps,
     };
 
     #[test]
@@ -1553,21 +1429,33 @@ mod test {
         let hedge_graph = hedge_graph_builder.build::<NodeStorageVec<_>>();
 
         let left_triangle = hedge_graph[&nodes[0]]
-            .union(&hedge_graph[&nodes[1]])
-            .union(&hedge_graph[&nodes[2]]);
-
-        let dot = hedge_graph.dot(&left_triangle);
-        println!("{}", dot);
-
-        for (hedge_pair, _, _) in hedge_graph.iter_edges(&left_triangle) {
-            println!("{:?}", hedge_pair);
-        }
+            .hairs
+            .union(&hedge_graph[&nodes[1]].hairs)
+            .union(&hedge_graph[&nodes[2]].hairs);
 
         let global_orientation = hedge_graph.new_hedgevec(|_, _, _| Orientation::Default);
 
-        //let cff_graph =
-        //    CFFGenerationGraph::new_from_subgraph(&hedge_graph, global_orientation, &left_triangle);
+        let cff_graph =
+            CFFGenerationGraph::new_from_subgraph(&hedge_graph, global_orientation, &left_triangle);
 
-        //println!("{:#?}", cff_graph);
+        assert!(cff_graph.has_edge(EdgeIndex::from(0)));
+        assert!(cff_graph.has_edge(EdgeIndex::from(1)));
+        assert!(cff_graph.has_edge(EdgeIndex::from(2)));
+        assert!(cff_graph.has_edge(EdgeIndex::from(3)));
+        assert!(cff_graph.has_edge(EdgeIndex::from(4)));
+        assert!(cff_graph.has_edge(EdgeIndex::from(5)));
+        assert!(!cff_graph.has_edge(EdgeIndex::from(6)));
+
+        for edge in cff_graph.iter_all_edges() {
+            match edge.edge_id.into() {
+                0 => assert_eq!(edge.edge_type, CFFEdgeType::Virtual),
+                1 => assert_eq!(edge.edge_type, CFFEdgeType::Virtual),
+                2 => assert_eq!(edge.edge_type, CFFEdgeType::Virtual),
+                3 => assert_eq!(edge.edge_type, CFFEdgeType::VirtualExternal),
+                4 => assert_eq!(edge.edge_type, CFFEdgeType::VirtualExternal),
+                5 => assert_eq!(edge.edge_type, CFFEdgeType::External),
+                _ => unreachable!(),
+            }
+        }
     }
 }

@@ -1,4 +1,3 @@
-use crate::cff::cff_graph::VertexSet;
 use crate::cff::esurface::add_external_shifts;
 use crate::cff::surface::Surface;
 use crate::utils::{FloatLike, F};
@@ -8,7 +7,7 @@ use linnet::half_edge::hedgevec::HedgeVec;
 use linnet::half_edge::involution::EdgeIndex;
 use serde::{Deserialize, Serialize};
 use symbolica::atom::Atom;
-use symbolica::{parse, symbol};
+use symbolica::parse;
 use typed_index_collections::TiVec;
 
 use super::esurface::ExternalShift;
@@ -139,6 +138,12 @@ pub fn compute_hsurface_cache<T: FloatLike>(
         .into()
 }
 
+impl From<HsurfaceID> for Atom {
+    fn from(value: HsurfaceID) -> Self {
+        parse!(&format!("H({})", Into::<usize>::into(value))).unwrap()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use linnet::half_edge::{
@@ -148,12 +153,9 @@ mod tests {
     };
     use symbolica::atom::{Atom, AtomCore};
 
-    use symbolica::{parse, symbol};
+    use symbolica::parse;
 
-    use crate::{
-        cff::{cff_graph::VertexSet, esurface::Esurface},
-        utils::F,
-    };
+    use crate::{cff::esurface::Esurface, utils::F};
 
     use super::Hsurface;
 
@@ -262,11 +264,5 @@ mod tests {
         let diff = diff.expand();
 
         assert_eq!(diff, Atom::new(), "diff: {}", diff);
-    }
-}
-
-impl From<HsurfaceID> for Atom {
-    fn from(value: HsurfaceID) -> Self {
-        parse!(&format!("H({})", Into::<usize>::into(value))).unwrap()
     }
 }
