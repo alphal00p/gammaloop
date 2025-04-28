@@ -5,16 +5,15 @@ use typed_index_collections::TiVec;
 use crate::cff::cut_expression::OrientationID;
 use crate::momentum::{Rotation, ThreeMomentum};
 use crate::momentum_sample::{ExternalFourMomenta, MomentumSample, PolarizationVectors};
-use crate::new_graph::{FeynmanGraph, Graph};
+use crate::new_graph::Graph;
 use crate::utils::{global_parameterize, FloatLike, F};
 use crate::{
-    disable, DependentMomentaConstructor, DiscreteGraphSamplingSettings, DiscreteGraphSamplingType,
-    Externals, KinematicsSettings, ParameterizationSettings, Polarizations, SamplingSettings,
-    Settings,
+    disable, DependentMomentaConstructor, DiscreteGraphSamplingType, Externals, KinematicsSettings,
+    ParameterizationSettings, Polarizations, SamplingSettings, Settings,
 };
 use symbolica::numerical_integration::Sample;
 
-use super::{ChannelIndex, IntegrandType};
+use super::ChannelIndex;
 
 // discrete dimensions, continious dimensions
 fn unwrap_sample<T: FloatLike>(sample: &Sample<F<f64>>) -> (Vec<usize>, Vec<F<T>>) {
@@ -58,7 +57,7 @@ pub enum GammaLoopSample<T: FloatLike> {
 impl GammaLoopSample<f64> {
     /// Rotation for stability checks
     #[inline]
-    fn get_rotated_sample_cached(
+    fn _get_rotated_sample_cached(
         &self,
         rotation: &Rotation,
         rotated_externals: Externals,
@@ -165,6 +164,7 @@ impl<T: FloatLike> GammaLoopSample<T> {
         }
     }
 
+    #[allow(unused)]
     fn higher_precision(&self) -> GammaLoopSample<T::Higher>
     where
         T::Higher: FloatLike,
@@ -252,7 +252,7 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
     }
     /// Rotation for stability checks
     #[inline]
-    fn get_rotated_sample_cached(
+    pub fn get_rotated_sample_cached(
         &self,
         rotation: &Rotation,
         rotated_externals: ExternalFourMomenta<F<T>>,
@@ -434,7 +434,7 @@ pub fn parameterize<T: FloatLike>(
     polarizations: &[Polarizations],
     dependent_momenta_constructor: DependentMomentaConstructor,
     settings: &Settings,
-    graphs: Option<&[Graph]>, // this is only needed for tropical sampling
+    _graphs: Option<&[Graph]>, // this is only needed for tropical sampling
 ) -> Result<GammaLoopSample<T>, String> {
     let (discrete_indices, xs) = unwrap_sample(sample_point);
 
@@ -500,7 +500,7 @@ pub fn parameterize<T: FloatLike>(
                         },
                     })
                 }
-                DiscreteGraphSamplingType::TropicalSampling(tropical_sampling_settings) => {
+                DiscreteGraphSamplingType::TropicalSampling(_tropical_sampling_settings) => {
                     todo!("add tropical sampling support");
                     disable! {
                         let (graph_id, xs) = unwrap_single_discrete_sample(sample_point);
