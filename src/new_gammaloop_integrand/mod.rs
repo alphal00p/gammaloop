@@ -3,15 +3,15 @@ use std::cell::RefCell;
 use crate::evaluation_result::EvaluationResult;
 use crate::integrands::{HasIntegrand, Integrand};
 use crate::integrate::UserData;
-use crate::momentum::Energy;
+use crate::momentum::Rotation;
 use crate::momentum_sample::{BareMomentumSample, LoopMomenta, MomentumSample};
 use crate::new_graph::{FeynmanGraph, Graph, LmbIndex, LoopMomentumBasis};
 use crate::utils::{format_for_compare_digits, FloatLike, F};
 use colored::Colorize;
 use derive_more::{From, Into};
 use enum_dispatch::enum_dispatch;
+use gammaloop_sample::{DiscreteGraphSample, GammaLoopSample};
 use itertools::Itertools;
-use linnet::half_edge::involution::EdgeIndex;
 use momtrop::float::MomTropFloat;
 use serde::{Deserialize, Serialize};
 use spenso::complex::Complex;
@@ -19,7 +19,6 @@ use spenso::contraction::IsZero;
 use spenso::parametric::SerializableCompiledEvaluator;
 use std::time::Duration;
 use symbolica::evaluate::ExpressionEvaluator;
-use symbolica::graph;
 use symbolica::numerical_integration::{Grid, Sample};
 use typed_index_collections::TiVec;
 pub mod amplitude_integrand;
@@ -27,10 +26,7 @@ pub mod cross_section_integrand;
 pub mod gammaloop_sample;
 use crate::observables::EventManager;
 use crate::utils::f128;
-use crate::{
-    IntegratedPhase, IntegratorSettings, Precision, Settings, StabilityLevelSetting,
-    StabilitySettings,
-};
+use crate::{IntegratorSettings, Precision, Settings, StabilityLevelSetting, StabilitySettings};
 
 #[derive(Clone)]
 #[enum_dispatch(HasIntegrand)]
@@ -369,4 +365,138 @@ impl LmbMultiChannelingSetup {
 
         numerator / denominators
     }
+}
+
+pub trait GammaloopIntegrand {
+    type G: GraphTerm;
+    fn get_rotations(&self) -> impl Iterator<Item = &Rotation>;
+    fn get_terms(&self) -> impl Iterator<Item = &Self::G>;
+    fn get_settings(&self) -> &Settings;
+    fn get_graph(&self, graph_id: usize) -> &Self::G;
+}
+
+pub trait GraphTerm {
+    fn evaluate<T: FloatLike>(
+        &self,
+        sample: &MomentumSample<T>,
+        settings: &Settings,
+    ) -> Complex<F<T>>;
+
+    fn get_multi_channeling_setup(&self) -> &LmbMultiChannelingSetup;
+    fn get_graph(&self) -> &Graph;
+    fn get_lmbs(&self) -> &TiVec<LmbIndex, LoopMomentumBasis>;
+}
+
+fn evaluate_all_rotations<T: FloatLike, I: GammaloopIntegrand>(
+    integrand: &I,
+    gammaloop_sample: &GammaLoopSample<T>,
+) -> (Vec<Complex<F<f64>>>, Duration) {
+    // rotate the momenta for the stability tests.
+    let gammaloop_samples: Vec<_> = integrand
+        .get_rotations()
+        .map(|rotation| gammaloop_sample.get_rotated_sample(rotation))
+        .collect();
+
+    let start_time = std::time::Instant::now();
+    let evaluation_results = gammaloop_samples
+        .iter()
+        .map(|gammaloop_sample| evaluate_single_rotation(integrand, gammaloop_sample))
+        .collect_vec();
+    let duration = start_time.elapsed() / gammaloop_samples.len() as u32;
+
+    (evaluation_results, duration)
+}
+
+fn evaluate_single_rotation<T: FloatLike, I: GammaloopIntegrand>(
+    integrand: &I,
+    gammaloop_sample: &GammaLoopSample<T>,
+) -> Complex<F<f64>> {
+    let result = match &gammaloop_sample {
+        GammaLoopSample::Default(sample) => integrand
+            .get_terms()
+            .map(|term: &I::G| term.evaluate(sample, integrand.get_settings()))
+            .fold(
+                Complex::new_re(gammaloop_sample.get_default_sample().zero()),
+                |sum, term| sum + term,
+            ),
+        GammaLoopSample::MultiChanneling { alpha, sample } => integrand
+            .get_terms()
+            .map(|term: &I::G| {
+                let channels_samples = term
+                    .get_multi_channeling_setup()
+                    .reinterpret_loop_momenta_and_compute_prefactor_all_channels(
+                        sample,
+                        term.get_graph(),
+                        term.get_lmbs(),
+                        alpha,
+                    );
+
+                channels_samples
+                    .into_iter()
+                    .map(|(reparameterized_sample, prefactor)| {
+                        Complex::new_re(prefactor)
+                            * term.evaluate(&reparameterized_sample, integrand.get_settings())
+                    })
+                    .fold(
+                        Complex::new_re(gammaloop_sample.get_default_sample().zero()),
+                        |sum, term| sum + term,
+                    )
+            })
+            .fold(
+                Complex::new_re(gammaloop_sample.get_default_sample().zero()),
+                |sum, term| sum + term,
+            ),
+        GammaLoopSample::DiscreteGraph { graph_id, sample } => {
+            let graph_term = integrand.get_graph(*graph_id);
+            match sample {
+                DiscreteGraphSample::Default(sample) => {
+                    graph_term.evaluate(sample, integrand.get_settings())
+                }
+                DiscreteGraphSample::DiscreteMultiChanneling {
+                    alpha,
+                    channel_id,
+                    sample,
+                } => {
+                    let (reparameterized_sample, prefactor) = graph_term
+                        .get_multi_channeling_setup()
+                        .reinterpret_loop_momenta_and_compute_prefactor(
+                            *channel_id,
+                            sample,
+                            graph_term.get_graph(),
+                            graph_term.get_lmbs(),
+                            alpha,
+                        );
+
+                    Complex::new_re(prefactor)
+                        * graph_term.evaluate(&reparameterized_sample, integrand.get_settings())
+                }
+                DiscreteGraphSample::MultiChanneling { alpha, sample } => {
+                    let channel_samples = graph_term
+                        .get_multi_channeling_setup()
+                        .reinterpret_loop_momenta_and_compute_prefactor_all_channels(
+                            sample,
+                            graph_term.get_graph(),
+                            graph_term.get_lmbs(),
+                            alpha,
+                        );
+
+                    channel_samples
+                        .into_iter()
+                        .map(|(reparameterized_sample, prefactor)| {
+                            Complex::new_re(prefactor)
+                                * graph_term
+                                    .evaluate(&reparameterized_sample, integrand.get_settings())
+                        })
+                        .fold(
+                            Complex::new_re(gammaloop_sample.get_default_sample().zero()),
+                            |sum, term| sum + term,
+                        )
+                }
+                _ => todo!(),
+            }
+        }
+    };
+
+    let f_t_result = result * gammaloop_sample.get_default_sample().jacobian();
+    Complex::new(f_t_result.re.into_ff64(), f_t_result.im.into_ff64())
 }

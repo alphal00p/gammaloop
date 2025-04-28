@@ -1,15 +1,9 @@
-use std::{cell::RefCell, time::Duration};
+use std::time::Duration;
 
 use itertools::Itertools;
-use log::info;
 use serde::Serialize;
-use spenso::{complex::Complex, ufo::gamma};
-use statrs::distribution::Gamma;
-use symbolica::{
-    domains::float::NumericalFloatLike,
-    evaluate::ExpressionEvaluator,
-    numerical_integration::{ContinuousGrid, DiscreteGrid, Grid, Sample},
-};
+use spenso::complex::Complex;
+use symbolica::numerical_integration::{ContinuousGrid, DiscreteGrid, Grid, Sample};
 use typed_index_collections::TiVec;
 
 use crate::{
@@ -18,24 +12,21 @@ use crate::{
         esurface::Esurface,
     },
     evaluation_result::{EvaluationMetaData, EvaluationResult},
-    graph,
     integrands::HasIntegrand,
     momentum::{Rotation, ThreeMomentum},
-    momentum_sample::{ExternalFourMomenta, LoopMomenta, MomentumSample},
-    new_cs::{CrossSectionGraph, CutId},
+    momentum_sample::{LoopMomenta, MomentumSample},
+    new_cs::CutId,
     new_graph::{ExternalConnection, FeynmanGraph, Graph, LmbIndex, LoopMomentumBasis},
-    signature::ExternalSignature,
     utils::{self, f128, FloatLike, F},
     DependentMomentaConstructor, DiscreteGraphSamplingSettings, DiscreteGraphSamplingType,
-    IntegratedCounterTermRange, IntegratorSettings, MultiChannelingSettings, Polarizations,
-    Precision, SamplingSettings, Settings,
+    IntegratedCounterTermRange, IntegratorSettings, Polarizations, Precision, SamplingSettings,
+    Settings,
 };
 
 use super::{
-    create_stability_iterator,
-    gammaloop_sample::{self, parameterize, DiscreteGraphSample, GammaLoopSample},
-    stability_check, GenericEvaluator, GenericEvaluatorFloat, LmbMultiChannelingSetup,
-    StabilityLevelResult,
+    create_stability_iterator, evaluate_all_rotations, gammaloop_sample::parameterize,
+    stability_check, GammaloopIntegrand, GenericEvaluator, GenericEvaluatorFloat, GraphTerm,
+    LmbMultiChannelingSetup, StabilityLevelResult,
 };
 
 const TOLERANCE: F<f64> = F(2.0);
@@ -48,6 +39,25 @@ pub struct CrossSectionIntegrand {
     pub graph_terms: Vec<CrossSectionGraphTerm>,
     pub n_incoming: usize,
     pub external_connections: Vec<ExternalConnection>,
+}
+
+impl GammaloopIntegrand for CrossSectionIntegrand {
+    type G = CrossSectionGraphTerm;
+    fn get_rotations(&self) -> impl Iterator<Item = &Rotation> {
+        self.rotations.iter()
+    }
+
+    fn get_terms(&self) -> impl Iterator<Item = &Self::G> {
+        self.graph_terms.iter()
+    }
+
+    fn get_settings(&self) -> &Settings {
+        &self.settings
+    }
+
+    fn get_graph(&self, graph_id: usize) -> &Self::G {
+        &self.graph_terms[graph_id]
+    }
 }
 
 #[derive(Clone)]
@@ -64,6 +74,28 @@ pub struct CrossSectionGraphTerm {
     pub cut_esurface: TiVec<CutId, Esurface>,
     pub multi_channeling_setup: LmbMultiChannelingSetup,
     pub lmbs: TiVec<LmbIndex, LoopMomentumBasis>,
+}
+
+impl GraphTerm for CrossSectionGraphTerm {
+    fn evaluate<T: FloatLike>(
+        &self,
+        momentum_sample: &MomentumSample<T>,
+        settings: &Settings,
+    ) -> Complex<F<T>> {
+        self.evaluate(momentum_sample, settings)
+    }
+
+    fn get_multi_channeling_setup(&self) -> &LmbMultiChannelingSetup {
+        &self.multi_channeling_setup
+    }
+
+    fn get_graph(&self) -> &Graph {
+        &self.graph
+    }
+
+    fn get_lmbs(&self) -> &TiVec<LmbIndex, LoopMomentumBasis> {
+        &self.lmbs
+    }
 }
 
 impl CrossSectionGraphTerm {
@@ -87,7 +119,7 @@ impl CrossSectionGraphTerm {
         &self,
         momentum_sample: &MomentumSample<T>,
         settings: &Settings,
-    ) -> F<T> {
+    ) -> Complex<F<T>> {
         // implementation of forced orientations, only works with sample orientation disabled
         if let Some(forced_orientations) = &settings.general.force_orientations {
             if momentum_sample.sample.orientation.is_none() {
@@ -99,9 +131,10 @@ impl CrossSectionGraphTerm {
                             Some(OrientationID::from(*orientation_usize));
                         self.evaluate(&new_sample, settings)
                     })
-                    .fold(momentum_sample.zero(), |sum, orientation_result| {
-                        sum + orientation_result
-                    });
+                    .fold(
+                        Complex::new_re(momentum_sample.zero()),
+                        |sum, orientation_result| sum + orientation_result,
+                    );
             }
         }
 
@@ -117,7 +150,7 @@ impl CrossSectionGraphTerm {
         let params = self
             .self_get_cuts_to_evaluate(momentum_sample.sample.orientation)
             .into_iter()
-            .map(|(cut_id, esurface)| {
+            .map(|(_cut_id, esurface)| {
                 let (tstar_initial, _tstar_initial_negative) = esurface.get_radius_guess(
                     momentum_sample.loop_moms(),
                     momentum_sample.external_moms(),
@@ -203,7 +236,7 @@ impl CrossSectionGraphTerm {
                 .fold(momentum_sample.zero(), |sum, cut_result| sum + cut_result),
         };
 
-        result
+        Complex::new_re(result)
     }
 
     fn create_grid(
@@ -315,7 +348,7 @@ impl HasIntegrand for CrossSectionIntegrand {
         &mut self,
         sample: &Sample<F<f64>>,
         wgt: F<f64>,
-        iter: usize,
+        _iter: usize,
         use_f128: bool,
         max_eval: Complex<F<f64>>,
     ) -> EvaluationResult {
@@ -341,7 +374,7 @@ impl HasIntegrand for CrossSectionIntegrand {
                         ) {
                             let parameterization_time = before_parameterization.elapsed();
                             (
-                                self.evaluate_all_rotations(&gammaloop_sample),
+                                evaluate_all_rotations(self, &gammaloop_sample),
                                 parameterization_time,
                             )
                         } else {
@@ -358,7 +391,7 @@ impl HasIntegrand for CrossSectionIntegrand {
                         ) {
                             let parameterization_time = before_parameterization.elapsed();
                             (
-                                self.evaluate_all_rotations(&gammaloop_sample),
+                                evaluate_all_rotations(self, &gammaloop_sample),
                                 parameterization_time,
                             )
                         } else {
@@ -482,118 +515,4 @@ struct NewtonIterationResult<T: FloatLike> {
     derivative_at_solution: F<T>,
     error_of_function: F<T>,
     num_iterations_used: usize,
-}
-
-impl CrossSectionIntegrand {
-    fn evaluate_all_rotations<T: FloatLike>(
-        &self,
-        gammaloop_sample: &GammaLoopSample<T>,
-    ) -> (Vec<Complex<F<f64>>>, Duration) {
-        // rotate the momenta for the stability tests.
-        let gammaloop_samples: Vec<_> = self
-            .rotations
-            .iter()
-            .map(|rotation| gammaloop_sample.get_rotated_sample(rotation))
-            .collect();
-
-        let start_time = std::time::Instant::now();
-        let evaluation_results = gammaloop_samples
-            .iter()
-            .map(|gammaloop_sample| self.evaluate_single_rotation(gammaloop_sample))
-            .collect_vec();
-        let duration = start_time.elapsed() / gammaloop_samples.len() as u32;
-
-        (evaluation_results, duration)
-    }
-
-    fn evaluate_single_rotation<T: FloatLike>(
-        &self,
-        gammaloop_sample: &GammaLoopSample<T>,
-    ) -> Complex<F<f64>> {
-        let result = match &gammaloop_sample {
-            GammaLoopSample::Default(sample) => self
-                .graph_terms
-                .iter()
-                .map(|term| term.evaluate(sample, &self.settings))
-                .fold(gammaloop_sample.get_default_sample().zero(), |sum, term| {
-                    sum + term
-                }),
-            GammaLoopSample::MultiChanneling { alpha, sample } => self
-                .graph_terms
-                .iter()
-                .map(|term| {
-                    let channels_samples = term
-                        .multi_channeling_setup
-                        .reinterpret_loop_momenta_and_compute_prefactor_all_channels(
-                            sample,
-                            &term.graph,
-                            &term.lmbs,
-                            alpha,
-                        );
-
-                    channels_samples
-                        .into_iter()
-                        .map(|(reparameterized_sample, prefactor)| {
-                            prefactor * term.evaluate(&reparameterized_sample, &self.settings)
-                        })
-                        .fold(gammaloop_sample.get_default_sample().zero(), |sum, term| {
-                            sum + term
-                        })
-                })
-                .fold(gammaloop_sample.get_default_sample().zero(), |sum, term| {
-                    sum + term
-                }),
-            GammaLoopSample::DiscreteGraph { graph_id, sample } => {
-                let graph_term = &self.graph_terms[*graph_id];
-                match sample {
-                    DiscreteGraphSample::Default(sample) => {
-                        graph_term.evaluate(sample, &self.settings)
-                    }
-                    DiscreteGraphSample::DiscreteMultiChanneling {
-                        alpha,
-                        channel_id,
-                        sample,
-                    } => {
-                        let (reparameterized_sample, prefactor) = self.graph_terms[*graph_id]
-                            .multi_channeling_setup
-                            .reinterpret_loop_momenta_and_compute_prefactor(
-                                *channel_id,
-                                sample,
-                                &graph_term.graph,
-                                &graph_term.lmbs,
-                                alpha,
-                            );
-
-                        prefactor * graph_term.evaluate(&reparameterized_sample, &self.settings)
-                    }
-                    DiscreteGraphSample::MultiChanneling { alpha, sample } => {
-                        let channel_samples = self.graph_terms[*graph_id]
-                            .multi_channeling_setup
-                            .reinterpret_loop_momenta_and_compute_prefactor_all_channels(
-                                sample,
-                                &graph_term.graph,
-                                &graph_term.lmbs,
-                                alpha,
-                            );
-
-                        channel_samples
-                            .into_iter()
-                            .map(|(reparameterized_sample, prefactor)| {
-                                prefactor
-                                    * graph_term.evaluate(&reparameterized_sample, &self.settings)
-                            })
-                            .fold(gammaloop_sample.get_default_sample().zero(), |sum, term| {
-                                sum + term
-                            })
-                    }
-                    _ => todo!(),
-                }
-            }
-            _ => todo!(),
-        };
-
-        let res = result * gammaloop_sample.get_default_sample().jacobian();
-
-        Complex::new_re(res.into_ff64())
-    }
 }
