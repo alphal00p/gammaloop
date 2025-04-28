@@ -1327,11 +1327,17 @@ impl PythonWorker {
     }
 
     pub fn generate_integrands(&mut self, settings_yaml_str: &str) {
-        let mut settings =
+        let settings =
             serde_yaml::from_str::<Settings>(settings_yaml_str).expect("Could not parse settings");
 
         let integrands = self.process_list.generate_integrands(settings);
         self.integrands = integrands;
+    }
+
+    pub fn evaluate_overall_factor(&self, overall_factor: &str) -> PyResult<String> {
+        let overall_factor = parse!(overall_factor).map_err(exceptions::PyException::new_err)?;
+        let overall_factor_evaluated = FeynGen::evaluate_overall_factor(overall_factor.as_view());
+        Ok(overall_factor_evaluated.to_canonical_string())
     }
 }
 

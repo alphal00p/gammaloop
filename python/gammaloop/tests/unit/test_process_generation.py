@@ -4,7 +4,7 @@ from gammaloop.interface.gammaloop_interface import CommandList, GammaLoop
 from gammaloop.misc.common import GammaLoopError
 from gammaloop.tests.common import get_gamma_loop_interpreter
 from pathlib import Path
-from gammaloop.misc.utils import parse_python_expression, expression_to_string, evaluate_graph_overall_factor
+from gammaloop.misc.utils import parse_python_expression, expression_to_string
 from symbolica import Expression, E
 
 USE_SNAPSHOT_TESTS = True
@@ -39,7 +39,7 @@ class TestProcessGeneration:
             )
 
             total_overall_factor = E("0")
-            all_overall_factors: list[Expression] = [evaluate_graph_overall_factor(of) for of in all_graphs]  # nopep8 # type: ignore
+            all_overall_factors: list[Expression] = [Expression.parse(gloop.rust_worker.evaluate_overall_factor(of)) for of in all_graphs]  # nopep8 # type: ignore
             for of in all_overall_factors:
                 total_overall_factor += of
             total_overall_factor_str = expression_to_string(total_overall_factor.expand(), canonical=True)  # nopep8
@@ -84,7 +84,7 @@ class TestProcessGeneration:
         ]
         TestProcessGeneration.run_tests(gloop, tests)
 
-    @ pytest.mark.slow
+    @pytest.mark.slow
     def test_slow_generate_sm_a_ddx(self):
         gloop = get_gamma_loop_interpreter()
         gloop.run(CommandList.from_string(
@@ -116,7 +116,7 @@ class TestProcessGeneration:
         # autopep8: on
         TestProcessGeneration.run_tests(gloop, tests)
 
-    @ pytest.mark.slow
+    @pytest.mark.slow
     def test_slow_generate_sm_full_a_ddx(self):
         gloop = get_gamma_loop_interpreter()
         gloop.run(CommandList.from_string(
@@ -151,7 +151,7 @@ class TestProcessGeneration:
         # autopep8: on
         TestProcessGeneration.run_tests(gloop, tests)
 
-    @ pytest.mark.slow
+    @pytest.mark.slow
     def test_slow_generate_sm_h_n_j_cross_section(self):
         gloop = get_gamma_loop_interpreter()
         gloop.run(CommandList.from_string(
@@ -164,7 +164,7 @@ class TestProcessGeneration:
         # autopep8: on
         TestProcessGeneration.run_tests(gloop, tests)
 
-    @ pytest.mark.slow
+    @pytest.mark.slow
     def test_slow_generate_sm_h_n_j(self):
         gloop = get_gamma_loop_interpreter()
         gloop.run(CommandList.from_string(
@@ -307,7 +307,7 @@ class TestProcessGeneration:
         # autopep8: on
         TestProcessGeneration.run_tests(gloop, tests)
 
-    @ pytest.mark.slow
+    @pytest.mark.slow
     def test_slow_vaccuum_amplitude_generation(self):
         gloop = get_gamma_loop_interpreter()
         gloop.run(CommandList.from_string(
@@ -394,7 +394,7 @@ class TestProcessGeneration:
         # autopep8: on
         TestProcessGeneration.run_tests(gloop, tests)
 
-    @ pytest.mark.slow
+    @pytest.mark.slow
     def test_slow_generate_a_qqh(self):
         gloop = get_gamma_loop_interpreter()
         gloop.run(CommandList.from_string(
@@ -449,7 +449,7 @@ class TestProcessGeneration:
         # autopep8: on
         TestProcessGeneration.run_tests(gloop, tests)
 
-    @ pytest.mark.slow
+    @pytest.mark.slow
     def test_slow_generate_amplitude_1l_sm_jets(self):
         gloop = get_gamma_loop_interpreter()
         gloop.run(CommandList.from_string(
@@ -463,8 +463,8 @@ class TestProcessGeneration:
         TestProcessGeneration.run_tests(gloop, tests)
 
     # A bit too slow, let's skip for now
-    @ pytest.mark.skip
-    @ pytest.mark.slow
+    @pytest.mark.skip
+    @pytest.mark.slow
     def test_very_slow_generate_amplitude_1l_sm_jets(self):
         gloop = get_gamma_loop_interpreter()
         gloop.run(CommandList.from_string(
@@ -480,8 +480,8 @@ class TestProcessGeneration:
         # autopep8: on
         TestProcessGeneration.run_tests(gloop, tests)
 
-    @ pytest.mark.skip
-    @ pytest.mark.slow
+    @pytest.mark.skip
+    @pytest.mark.slow
     def test_slow_generate_amplitude_1l_sm_jets_with_grouping(self):
         gloop = get_gamma_loop_interpreter()
         gloop.run(CommandList.from_string(

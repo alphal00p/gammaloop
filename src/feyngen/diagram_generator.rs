@@ -289,12 +289,12 @@ impl FeynGen {
             "NumeratorIndependentSymmetryGrouping",
         ] {
             res = res
-                .replace(&function!(symbol!(header), Atom::new_var(symbol!("x_"))).to_pattern())
+                .replace(function!(symbol!(header), Atom::new_var(symbol!("x_"))).to_pattern())
                 .with(Atom::new_var(symbol!("x_")).to_pattern());
         }
         res = res
             .replace(
-                &function!(
+                function!(
                     symbol!("NumeratorDependentGrouping"),
                     Atom::new_var(symbol!("GraphId_")),
                     Atom::new_var(symbol!("ratio_")),

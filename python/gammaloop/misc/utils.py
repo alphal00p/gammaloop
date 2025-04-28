@@ -42,22 +42,6 @@ class Colour(StrEnum):
     END = '\033[0m'
 
 
-def evaluate_graph_overall_factor(overall_factor: str) -> SBE:
-    e = parse_python_expression(overall_factor)
-    assert e is not None, f"Could not parse overall factor: '{overall_factor}'"  # nopep8
-    for header in ["AutG",
-                   "CouplingsMultiplicity",
-                   "InternalFermionLoopSign",
-                   "ExternalFermionOrderingSign",
-                   "AntiFermionSpinSumSign",
-                   "NumeratorIndependentSymmetryGrouping"]:
-        e = e.replace(sb.Expression.parse(
-            f"{header}(x_)"), sb.Expression.parse("x_"))
-    e = e.replace(
-        sb.Expression.parse("NumeratorDependentGrouping(GraphId_,ratio_,GraphSymmetryFactor_)"), sb.Expression.parse("ratio_*GraphSymmetryFactor_"))
-    return e.expand().collect_num()
-
-
 def recursive_replace(expr: sb.Expression, replace: Callable[[SBE], SBE], max_recursion: int = 1000) -> SBE:
     n_iter = 0
     while n_iter < max_recursion:
