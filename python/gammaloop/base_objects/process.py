@@ -32,7 +32,8 @@ class Process(object):
                  self_energy_filter: gl_rust.SelfEnergyFilterOptions | None = None,
                  tadpole_filter: gl_rust.TadpolesFilterOptions | None = None,
                  zero_snail_filter: gl_rust.SnailFilterOptions | None = None,
-                 fermion_loop_count_range: tuple[int, int] | None = None,
+                 anticommutating_loop_count_range: tuple[int,
+                                                         int] | None = None,
                  factorized_loop_topologies_count_range: tuple[int,
                                                                int] | None = None,
                  max_n_bridges: int | None = None,
@@ -54,7 +55,7 @@ class Process(object):
             max_number_of_bridges=max_n_bridges,
             coupling_orders=amplitude_orders,
             loop_count_range=amplitude_loop_count,
-            fermion_loop_count_range=fermion_loop_count_range,
+            anticommutating_loop_count_range=anticommutating_loop_count_range,
             factorized_loop_topologies_count_range=factorized_loop_topologies_count_range
         )
 
@@ -80,7 +81,7 @@ class Process(object):
             perturbative_orders=self.perturbative_orders,
             coupling_orders=cross_section_orders,
             loop_count_range=cross_section_loop_count,
-            fermion_loop_count_range=fermion_loop_count_range
+            anticommutating_loop_count_range=anticommutating_loop_count_range
         )
 
     def process_shell_name(self, short=True) -> str:
@@ -680,7 +681,8 @@ class Process(object):
             amplitude_loop_count,
             cross_section_loop_count,
             None if len(particle_vetos) == 0 else particle_vetos,
-            sewed_filter=None if not process_args.filter_cross_section_tadpoles else gl_rust.SewedFilterOptions(filter_tadpoles=process_args.filter_cross_section_tadpoles),
+            sewed_filter=None if not process_args.filter_cross_section_tadpoles else gl_rust.SewedFilterOptions(
+                filter_tadpoles=process_args.filter_cross_section_tadpoles),
             self_energy_filter=None if not process_args.filter_selfenergies else gl_rust.SelfEnergyFilterOptions(
                 veto_self_energy_of_massive_lines=process_args.veto_self_energy_of_massive_lines,
                 veto_self_energy_of_massless_lines=process_args.veto_self_energy_of_massless_lines,
@@ -698,8 +700,8 @@ class Process(object):
                 veto_only_scaleless_snails=process_args.veto_only_scaleless_snails
             ),
             max_n_bridges=process_args.max_n_bridges,
-            fermion_loop_count_range=(None if process_args.number_of_fermion_loops is None else (
-                process_args.number_of_fermion_loops, process_args.number_of_fermion_loops)),
+            anticommutating_loop_count_range=(None if process_args.number_of_anticommutating_loops is None else (
+                process_args.number_of_anticommutating_loops, process_args.number_of_anticommutating_loops)),
             factorized_loop_topologies_count_range=(None if process_args.number_of_factorized_loop_subtopologies is None else (
                 process_args.number_of_factorized_loop_subtopologies, process_args.number_of_factorized_loop_subtopologies))
         )

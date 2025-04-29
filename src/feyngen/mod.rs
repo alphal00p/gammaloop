@@ -305,9 +305,9 @@ impl FeynGenFilters {
         })
     }
 
-    pub fn get_fermion_loop_count_range(&self) -> Option<(usize, usize)> {
+    pub fn get_anticommutating_loop_count_range(&self) -> Option<(usize, usize)> {
         self.0.iter().find_map(|f: &FeynGenFilter| {
-            if let FeynGenFilter::FermionLoopCountRange(o) = f {
+            if let FeynGenFilter::AnticommutatingLoopCountRange(o) = f {
                 Some(*o)
             } else {
                 None
@@ -365,7 +365,7 @@ impl FeynGenFilters {
                 | FeynGenFilter::SelfEnergyFilter(_)
                 | FeynGenFilter::TadpolesFilter(_)
                 | FeynGenFilter::ZeroSnailsFilter(_)
-                | FeynGenFilter::FermionLoopCountRange(_)
+                | FeynGenFilter::AnticommutatingLoopCountRange(_)
                 | FeynGenFilter::SewedFilter(_)
                 | FeynGenFilter::FactorizedLoopTopologiesCountRange(_)
                 | FeynGenFilter::BlobRange(_)
@@ -505,7 +505,7 @@ pub enum FeynGenFilter {
     BlobRange(RangeInclusive<usize>),
     SpectatorRange(RangeInclusive<usize>),
     PerturbativeOrders(HashMap<String, usize>),
-    FermionLoopCountRange((usize, usize)),
+    AnticommutatingLoopCountRange((usize, usize)),
     FactorizedLoopTopologiesCountRange((usize, usize)),
 }
 
@@ -556,8 +556,8 @@ impl fmt::Display for FeynGenFilter {
                 ),
                 Self::LoopCountRange((loop_count_min, loop_count_max)) =>
                     format!("LoopCountRange({{{},{}}})", loop_count_min, loop_count_max),
-                Self::FermionLoopCountRange((loop_count_min, loop_count_max)) => format!(
-                    "FermionLoopCountRange({{{},{}}})",
+                Self::AnticommutatingLoopCountRange((loop_count_min, loop_count_max)) => format!(
+                    "AnticommutatingLoopCountRange({{{},{}}})",
                     loop_count_min, loop_count_max
                 ),
                 Self::FactorizedLoopTopologiesCountRange((loop_count_min, loop_count_max)) =>

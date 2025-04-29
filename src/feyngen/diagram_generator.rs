@@ -489,11 +489,11 @@ impl FeynGen {
                 .iter()
                 .position(|n| n.data.external_tag == ((max_external - shift as usize) as i32))
                 .unwrap();
-            debug!(
-                "Spanning tree root position: external_tag={},node_position={}",
-                max_external - shift as usize,
-                spanning_tree_root_node_position
-            );
+            // debug!(
+            //     "Spanning tree root position: external_tag={},node_position={}",
+            //     max_external - shift as usize,
+            //     spanning_tree_root_node_position
+            // );
 
             FeynGen::veto_special_topologies_with_spanning_tree_root(
                 model,
@@ -2043,9 +2043,9 @@ impl FeynGen {
     ) -> Result<(SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>, bool), FeynGenError> {
         let mut adj_map: HashMap<usize, Vec<(usize, usize)>> = HashMap::default();
         for (i_e, e) in graph.edges().iter().enumerate() {
-            // Build an adjacency list including only fermions
+            // Build an adjacency list including only anticommutating edges
             let p = model.get_particle_from_pdg(e.data.pdg);
-            if !(p.is_fermion() || p.is_ghost()) {
+            if !(p.is_anticommutating()) {
                 continue;
             }
             adj_map
@@ -2065,7 +2065,7 @@ impl FeynGen {
             .iter()
             .map(|e| {
                 let p = model.get_particle_from_pdg(e.data.pdg);
-                !(p.is_fermion() || p.is_ghost())
+                !(p.is_anticommutating())
             })
             .collect();
         let mut new_edges: AHashMap<usize, (usize, usize, bool, EdgeColor)> = AHashMap::default();
@@ -2233,7 +2233,7 @@ impl FeynGen {
                         }
                     }
                 }
-                if external_tag_to_consider > 0 && starting_particle.is_fermion() {
+                if external_tag_to_consider > 0 && starting_particle.is_anticommutating() {
                     if connected_leg_ids.len() != 2 {
                         return Err(FeynGenError::GenericError(
                             "External fermion flow must have exactly two legs".to_string(),
@@ -2269,7 +2269,7 @@ impl FeynGen {
                         .collect::<Vec<_>>();
                     if connected_leg_pdgs
                         .iter()
-                        .any(|particle| !particle.is_fermion())
+                        .any(|particle| !particle.is_anticommutating())
                     {
                         return Err(FeynGenError::GenericError(
                             "External fermion flow must connect two fermions".to_string(),
@@ -2322,7 +2322,7 @@ impl FeynGen {
             let this_edge_particle = model.get_particle_from_pdg(e.data.pdg);
             if is_a_virtual_edge
                 && this_edge_particle.is_antiparticle()
-                && !(this_edge_particle.is_fermion() || this_edge_particle.is_ghost())
+                && !this_edge_particle.is_anticommutating()
             {
                 new_edges.insert(
                     i_e,
@@ -2350,7 +2350,7 @@ impl FeynGen {
     }
 
     // Note, this function will not work as intended with four-fermion vertices, and only aggregated self-loops or fermion-loops not involving four-femion vertices
-    pub fn count_closed_fermion_loops(
+    pub fn count_closed_anticommutating_loops(
         &self,
         graph: &SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>,
         model: &Model,
@@ -2358,7 +2358,7 @@ impl FeynGen {
         let mut adj_map: HashMap<usize, Vec<(usize, usize)>> = HashMap::default();
         for (i_e, e) in graph.edges().iter().enumerate() {
             // Build an adjacency list including only fermions
-            if !model.get_particle_from_pdg(e.data.pdg).is_fermion() {
+            if !model.get_particle_from_pdg(e.data.pdg).is_anticommutating() {
                 continue;
             }
             adj_map
@@ -2376,7 +2376,7 @@ impl FeynGen {
         let mut vetoed_edges: Vec<bool> = graph
             .edges()
             .iter()
-            .map(|e| !model.get_particle_from_pdg(e.data.pdg).is_fermion())
+            .map(|e| !model.get_particle_from_pdg(e.data.pdg).is_anticommutating())
             .collect();
         let mut n_fermion_loops = 0;
         for (i_e, e) in graph.edges().iter().enumerate() {
@@ -2969,7 +2969,8 @@ impl FeynGen {
         );
         last_step = step;
 
-        let fermion_loop_count_range_filter = filters.get_fermion_loop_count_range();
+        let anticommutating_loop_count_range_filter =
+            filters.get_anticommutating_loop_count_range();
         let bar = ProgressBar::new(processed_graphs.len() as u64);
         bar.set_style(progress_bar_style.clone());
         bar.set_message(
@@ -2979,18 +2980,20 @@ impl FeynGen {
             processed_graphs
                 .iter()
                 .filter_map(|(g, symmetry_factor)| {
-                    match self.count_closed_fermion_loops(g, model) {
-                        Ok(n_closed_fermion_loops) => {
-                            let new_symmetry_factor = if n_closed_fermion_loops % 2 == 1 {
+                    match self.count_closed_anticommutating_loops(g, model) {
+                        Ok(n_closed_anticommutating_loops) => {
+                            let new_symmetry_factor = if n_closed_anticommutating_loops % 2 == 1 {
                                 function!(symb!("InternalFermionLoopSign"), -1) * symmetry_factor
                             } else {
                                 symmetry_factor.clone()
                             };
-                            if let Some((min_n_fermion_loops, max_n_fermion_loops)) =
-                                fermion_loop_count_range_filter
+                            if let Some((
+                                min_n_anticommutating_loops,
+                                max_n_anticommutating_loops,
+                            )) = anticommutating_loop_count_range_filter
                             {
-                                if n_closed_fermion_loops >= min_n_fermion_loops
-                                    && n_closed_fermion_loops <= max_n_fermion_loops
+                                if n_closed_anticommutating_loops >= min_n_anticommutating_loops
+                                    && n_closed_anticommutating_loops <= max_n_anticommutating_loops
                                 {
                                     Some(Ok((g.clone(), new_symmetry_factor)))
                                 } else {
@@ -3183,7 +3186,7 @@ impl FeynGen {
                                 .get_particle_from_pdg(
                                     self.options.initial_pdgs[initial_color - 1] as isize,
                                 )
-                                .is_fermion()
+                                .is_anticommutating()
                                 || self
                                     .options
                                     .allow_symmetrization_of_external_fermions_in_amplitudes
@@ -3200,7 +3203,7 @@ impl FeynGen {
                                         [final_color - self.options.initial_pdgs.len() - 1]
                                         as isize,
                                 )
-                                .is_fermion()
+                                .is_anticommutating()
                                 || self
                                     .options
                                     .allow_symmetrization_of_external_fermions_in_amplitudes
@@ -3215,7 +3218,7 @@ impl FeynGen {
                                 .get_particle_from_pdg(
                                     self.options.initial_pdgs[initial_color - 1] as isize,
                                 )
-                                .is_fermion()
+                                .is_anticommutating()
                                 || self
                                     .options
                                     .allow_symmetrization_of_external_fermions_in_amplitudes
@@ -3234,7 +3237,7 @@ impl FeynGen {
                                         [final_color - self.options.initial_pdgs.len() - 1]
                                         as isize,
                                 )
-                                .is_fermion()
+                                .is_anticommutating()
                                 || self
                                     .options
                                     .allow_symmetrization_of_external_fermions_in_amplitudes
@@ -3249,7 +3252,7 @@ impl FeynGen {
                                 .get_particle_from_pdg(
                                     self.options.initial_pdgs[initial_color - 1] as isize,
                                 )
-                                .is_fermion()
+                                .is_anticommutating()
                                 || self
                                     .options
                                     .allow_symmetrization_of_external_fermions_in_amplitudes
@@ -3266,7 +3269,7 @@ impl FeynGen {
                                         [final_color - self.options.initial_pdgs.len() - 1]
                                         as isize,
                                 )
-                                .is_fermion()
+                                .is_anticommutating()
                                 || self
                                     .options
                                     .allow_symmetrization_of_external_fermions_in_amplitudes
@@ -3388,7 +3391,7 @@ impl FeynGen {
                             Atom::new_num(1)
                         }
                     } else {
-                        self.cross_section_external_fermion_ordering_sign(
+                        self.cross_section_external_anticommutating_particles_ordering_sign(
                             &g_with_canonical_flows,
                             model,
                             self.options.initial_pdgs.len(),
@@ -4582,7 +4585,7 @@ impl FeynGen {
         res
     }
 
-    fn cross_section_external_fermion_ordering_sign(
+    fn cross_section_external_anticommutating_particles_ordering_sign(
         &self,
         graph: &SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>,
         model: &Model,
@@ -4592,7 +4595,7 @@ impl FeynGen {
             FeynGenHedgeGraph::from_feyn_gen_symbolica(graph.clone(), model, n_initials);
 
         // info!("Number of external fermion loops: {}", he_graph);
-        let n_external_fermion_loops = he_graph.number_of_external_fermion_loops();
+        let n_external_fermion_loops = he_graph.number_of_external_anticommutating_particle_loops();
 
         let number_of_initial_antifermions = self
             .options
@@ -4600,7 +4603,7 @@ impl FeynGen {
             .iter()
             .filter(|&pdg| {
                 let p = model.get_particle_from_pdg(*pdg as isize);
-                p.is_antiparticle() && p.is_fermion()
+                p.is_antiparticle() && p.is_anticommutating()
             })
             .count();
 

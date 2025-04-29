@@ -670,6 +670,10 @@ impl Particle {
     pub fn is_ghost(&self) -> bool {
         self.ghost_number != 0
     }
+
+    pub fn is_anticommutating(&self) -> bool {
+        self.is_fermion() || self.is_ghost()
+    }
 }
 
 impl Ord for Particle {

@@ -403,7 +403,7 @@ impl PyFeynGenFilters {
         perturbative_orders: Option<HashMap<String, usize>>,
         coupling_orders: Option<HashMap<String, (usize, Option<usize>)>>,
         loop_count_range: Option<(usize, usize)>,
-        fermion_loop_count_range: Option<(usize, usize)>,
+        anticommutating_loop_count_range: Option<(usize, usize)>,
         factorized_loop_topologies_count_range: Option<(usize, usize)>,
     ) -> PyResult<PyFeynGenFilters> {
         let mut filters = Vec::new();
@@ -440,9 +440,9 @@ impl PyFeynGenFilters {
         if let Some(loop_count_range) = loop_count_range {
             filters.push(FeynGenFilter::LoopCountRange(loop_count_range));
         }
-        if let Some(fermion_loop_count_range) = fermion_loop_count_range {
-            filters.push(FeynGenFilter::FermionLoopCountRange(
-                fermion_loop_count_range,
+        if let Some(anticommutating_loop_count_range) = anticommutating_loop_count_range {
+            filters.push(FeynGenFilter::AnticommutatingLoopCountRange(
+                anticommutating_loop_count_range,
             ));
         }
         if let Some(factorized_loop_topologies_count_range) = factorized_loop_topologies_count_range

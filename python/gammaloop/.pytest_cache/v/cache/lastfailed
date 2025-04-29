@@ -1,0 +1,19 @@
+{
+  "tests/unit/test_commands.py::TestProcessGeneration::test_generate_epem_a_qqh": true,
+  "tests/unit/test_process_generation.py::TestProcessGeneration::test_vaccuum_amplitude_generation_full_sm": true,
+  "tests/unit/test_process_generation.py::TestProcessGeneration::test_generate_amplitude_1l_sm_jets_with_grouping": true,
+  "tests/unit/test_inspect.py::TestPhysicalTopologies::test_inspect_euclidean_1L_6photons": true,
+  "tests/unit/test_process_generation.py::TestProcessGeneration::test_slow_generate_sm_h_n_j_cross_section": true,
+  "tests/unit/test_process_generation.py::TestProcessGeneration::test_slow_generate_sm_h_n_j": true,
+  "tests/unit/test_process_generation.py::TestProcessGeneration::test_generate_epem_a_qqh": true,
+  "tests/unit/test_process_generation.py::TestProcessGeneration::test_generate_a_qqh": true,
+  "tests/unit/test_process_generation.py::TestProcessGeneration::test_generate_aa_ttx_amplitude": true,
+  "tests/unit/test_process_generation.py::TestProcessGeneration::test_generate_aa_ttx_cross_section": true,
+  "tests/unit/test_process_generation.py::TestProcessGeneration::test_generate_aa_ttx_cross_section_slow_filter": true,
+  "tests/unit/test_process_generation.py::TestProcessGeneration::test_vaccuum_amplitude_generation": true,
+  "tests/unit/test_process_generation.py::TestProcessGeneration::test_slow_vaccuum_amplitude_generation": true,
+  "tests/unit/test_process_generation.py::TestProcessGeneration::test_dis_isr": true,
+  "tests/unit/test_process_generation.py::TestProcessGeneration::test_slow_generate_a_qqh": true,
+  "tests/unit/test_process_generation.py::TestProcessGeneration::test_generate_amplitude_1l_sm_jets": true,
+  "tests/unit/test_process_generation.py::TestProcessGeneration::test_slow_generate_amplitude_1l_sm_jets_with_grouping": true
+}
