@@ -12,7 +12,7 @@ use crate::{
     Polarizations, Settings,
 };
 
-use super::{GammaloopIntegrand, GraphTerm, LmbMultiChannelingSetup};
+use super::{create_grid, GammaloopIntegrand, GraphTerm, LmbMultiChannelingSetup};
 
 #[derive(Clone)]
 pub struct AmplitudeGraphTerm {
@@ -51,6 +51,10 @@ impl GraphTerm for AmplitudeGraphTerm {
     ) -> Complex<F<T>> {
         self.evaluate(momentum_sample, settings)
     }
+
+    fn get_num_orientations(&self) -> usize {
+        todo!()
+    }
 }
 
 #[derive(Clone)]
@@ -83,7 +87,7 @@ impl GammaloopIntegrand for AmplitudeIntegrand {
 
 impl HasIntegrand for AmplitudeIntegrand {
     fn create_grid(&self) -> Grid<F<f64>> {
-        todo!()
+        create_grid(self)
     }
 
     fn evaluate_sample(
