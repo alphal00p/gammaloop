@@ -12,6 +12,7 @@ use bitvec::vec::BitVec;
 use color_eyre::Result;
 
 use crate::{
+    cff::{expression::CFFExpression, generation::generate_cff_expression},
     new_gammaloop_integrand::{
         cross_section_integrand::OrientationEvaluator, GenericEvaluator, LmbMultiChannelingSetup,
     },
@@ -88,8 +89,9 @@ pub struct Process<S: NumeratorState = PythonState> {
 }
 
 impl<S: NumeratorState> Process<S> {
-    pub fn preprocess(&mut self, model: &Model) -> Result<()> {
-        self.collection.preprocess(model, &self.definition)?;
+    pub fn preprocess(&mut self, model: &Model, settings: &ProcessSettings) -> Result<()> {
+        self.collection
+            .preprocess(model, &self.definition, settings)?;
         Ok(())
     }
 }
@@ -169,8 +171,9 @@ pub struct ProcessList<S: NumeratorState = PythonState> {
     pub processes: Vec<Process<S>>,
 }
 
-struct ExportSettings {
-    root_folder: PathBuf,
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ExportSettings {
+    pub root_folder: PathBuf,
 }
 
 impl Default for ProcessList {
@@ -191,14 +194,14 @@ impl ProcessList {
     }
 
     /// imports a process list from a folder
-    pub fn import(settings: ExportSettings) -> Result<Self> {
+    pub fn import(_settings: ExportSettings) -> Result<Self> {
         Ok(Self::new())
     }
 
     ///preprocesses the process list according to the settings
     pub fn preprocess(&mut self, model: &Model, settings: ProcessSettings) -> Result<()> {
         for process in self.processes.iter_mut() {
-            process.preprocess(model)?;
+            process.preprocess(model, &settings)?;
         }
 
         Ok(())
@@ -216,7 +219,7 @@ impl ProcessList {
     }
 
     /// exports a process list to a folder
-    pub fn export(&self, settings: ExportSettings) -> Result<()> {
+    pub fn export(&self, _settings: ExportSettings) -> Result<()> {
         Ok(())
     }
 }
@@ -250,11 +253,16 @@ impl<S: NumeratorState> ProcessCollection<S> {
         }
     }
 
-    fn preprocess(&mut self, model: &Model, process_definition: &ProcessDefinition) -> Result<()> {
+    fn preprocess(
+        &mut self,
+        model: &Model,
+        process_definition: &ProcessDefinition,
+        settings: &ProcessSettings,
+    ) -> Result<()> {
         match self {
             Self::Amplitudes(amplitudes) => {
                 for amplitude in amplitudes {
-                    amplitude.preprocess(model)?;
+                    amplitude.preprocess(model, settings)?;
                 }
             }
             Self::CrossSections(cross_sections) => {
@@ -288,9 +296,9 @@ pub struct Amplitude<S: NumeratorState = PythonState> {
 }
 
 impl<S: NumeratorState> Amplitude<S> {
-    pub fn preprocess(&mut self, model: &Model) -> Result<()> {
+    pub fn preprocess(&mut self, model: &Model, settings: &ProcessSettings) -> Result<()> {
         for amplitude_graph in self.graphs.iter_mut() {
-            amplitude_graph.preprocess(model)?;
+            amplitude_graph.preprocess(model, settings)?;
         }
         Ok(())
     }
@@ -307,21 +315,36 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
         AmplitudeGraph {
             graph,
             derived_data: AmplitudeDerivedData {
+                cff_expression: CFFExpression::new_empty(),
                 temp_numerator: PhantomData,
             },
         }
     }
 
-    fn preprocess(&mut self, model: &Model) -> Result<()> {
+    fn generate_cff(&mut self) -> Result<()> {
+        let shift_rewrite = self
+            .graph
+            .underlying
+            .get_esurface_canonization(&self.graph.loop_momentum_basis);
+
+        let cff_expression = generate_cff_expression(&self.graph.underlying, &shift_rewrite)?;
+        self.derived_data.cff_expression = cff_expression;
+
+        Ok(())
+    }
+
+    fn preprocess(&mut self, _model: &Model, _settings: &ProcessSettings) -> Result<()> {
         self.graph
             .loop_momentum_basis
             .set_edge_signatures(&self.graph.underlying)?;
+        self.generate_cff()?;
         Ok(())
     }
 }
 
 #[derive(Clone)]
 pub struct AmplitudeDerivedData<S: NumeratorState> {
+    cff_expression: CFFExpression,
     temp_numerator: PhantomData<S>,
 }
 
@@ -332,7 +355,7 @@ impl<S: NumeratorState> Amplitude<S> {
 
     pub fn add_graph(&mut self, graph: Graph) -> Result<()> {
         self.graphs.push(AmplitudeGraph::new(graph));
-        /// TODO: validate that the graph is compatible
+        //  TODO: validate that the graph is compatible
         Ok(())
     }
 }
@@ -498,8 +521,6 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
         }
 
         assert_eq!(source_nodes.len(), target_nodes.len());
-
-        let num_incoming = source_nodes.len();
 
         let source_node_vec = source_nodes.into_iter().collect_vec();
         let target_node_vec = target_nodes.into_iter().collect_vec();
@@ -861,7 +882,7 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
         LmbMultiChannelingSetup { channels }
     }
 
-    fn generate_term_for_graph(&self, settings: &Settings) -> CrossSectionGraphTerm {
+    fn generate_term_for_graph(&self, _settings: &Settings) -> CrossSectionGraphTerm {
         let evaluators = self.build_cut_evaluators();
         let lmbs = self
             .graph

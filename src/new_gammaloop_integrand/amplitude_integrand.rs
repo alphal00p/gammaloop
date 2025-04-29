@@ -3,6 +3,7 @@ use symbolica::numerical_integration::{Grid, Sample};
 use typed_index_collections::TiVec;
 
 use crate::{
+    cff::cut_expression::OrientationID,
     evaluation_result::EvaluationResult,
     integrands::HasIntegrand,
     momentum::{Polarization, Rotation},
@@ -12,10 +13,14 @@ use crate::{
     Polarizations, Settings,
 };
 
-use super::{create_grid, GammaloopIntegrand, GraphTerm, LmbMultiChannelingSetup};
+use super::{
+    create_grid, GammaloopIntegrand, GenericEvaluator, GraphTerm, LmbMultiChannelingSetup,
+};
 
 #[derive(Clone)]
 pub struct AmplitudeGraphTerm {
+    bare_cff_evaluator: GenericEvaluator,
+    bare_cff_orientation_evaluatos: TiVec<OrientationID, GenericEvaluator>,
     graph: Graph,
     multi_channeling_setup: LmbMultiChannelingSetup,
     lmbs: TiVec<LmbIndex, LoopMomentumBasis>,
