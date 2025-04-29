@@ -19,14 +19,17 @@ use spenso::contraction::IsZero;
 use spenso::parametric::SerializableCompiledEvaluator;
 use std::time::Duration;
 use symbolica::evaluate::ExpressionEvaluator;
-use symbolica::numerical_integration::{Grid, Sample};
+use symbolica::numerical_integration::{ContinuousGrid, DiscreteGrid, Grid, Sample};
 use typed_index_collections::TiVec;
 pub mod amplitude_integrand;
 pub mod cross_section_integrand;
 pub mod gammaloop_sample;
 use crate::observables::EventManager;
 use crate::utils::f128;
-use crate::{IntegratorSettings, Precision, Settings, StabilityLevelSetting, StabilitySettings};
+use crate::{
+    DiscreteGraphSamplingSettings, DiscreteGraphSamplingType, IntegratorSettings, Precision,
+    SamplingSettings, Settings, StabilityLevelSetting, StabilitySettings,
+};
 
 #[derive(Clone)]
 #[enum_dispatch(HasIntegrand)]
@@ -375,6 +378,26 @@ pub trait GammaloopIntegrand {
     fn get_graph(&self, graph_id: usize) -> &Self::G;
 }
 
+fn get_global_dimension_if_exists<I: GammaloopIntegrand>(integrand: &I) -> Option<usize> {
+    if integrand
+        .get_settings()
+        .sampling
+        .get_parameterization_settings()
+        .is_none()
+    {
+        None
+    } else {
+        Some(
+            integrand
+                .get_graph(0)
+                .get_graph()
+                .underlying
+                .get_loop_number()
+                * 3,
+        )
+    }
+}
+
 pub trait GraphTerm {
     fn evaluate<T: FloatLike>(
         &self,
@@ -385,6 +408,7 @@ pub trait GraphTerm {
     fn get_multi_channeling_setup(&self) -> &LmbMultiChannelingSetup;
     fn get_graph(&self) -> &Graph;
     fn get_lmbs(&self) -> &TiVec<LmbIndex, LoopMomentumBasis>;
+    fn get_num_orientations(&self) -> usize;
 }
 
 fn evaluate_all_rotations<T: FloatLike, I: GammaloopIntegrand>(
@@ -499,4 +523,106 @@ fn evaluate_single_rotation<T: FloatLike, I: GammaloopIntegrand>(
 
     let f_t_result = result * gammaloop_sample.get_default_sample().jacobian();
     Complex::new(f_t_result.re.into_ff64(), f_t_result.im.into_ff64())
+}
+
+fn create_grid_for_graph<G: GraphTerm>(
+    graph_term: &G,
+    settings: &DiscreteGraphSamplingSettings,
+    integrator_settings: &IntegratorSettings,
+) -> Grid<F<f64>> {
+    match &settings.sampling_type {
+        DiscreteGraphSamplingType::Default(_) | DiscreteGraphSamplingType::MultiChanneling(_) => {
+            let continuous_grid = create_default_continous_grid(graph_term, integrator_settings);
+
+            if settings.sample_orientations {
+                let continuous_grids = (0..graph_term.get_num_orientations())
+                    .map(|_| Some(continuous_grid.clone()))
+                    .collect();
+
+                Grid::Discrete(DiscreteGrid::new(
+                    continuous_grids,
+                    integrator_settings.max_prob_ratio,
+                    integrator_settings.train_on_avg,
+                ))
+            } else {
+                continuous_grid
+            }
+        }
+        DiscreteGraphSamplingType::DiscreteMultiChanneling(_multichanneling_settings) => {
+            let continuous_grid = create_default_continous_grid(graph_term, integrator_settings);
+            let lmb_channel_grid = Grid::Discrete(DiscreteGrid::new(
+                graph_term
+                    .get_multi_channeling_setup()
+                    .channels
+                    .iter()
+                    .map(|_| Some(continuous_grid.clone()))
+                    .collect_vec(),
+                integrator_settings.max_prob_ratio,
+                integrator_settings.train_on_avg,
+            ));
+
+            if settings.sample_orientations {
+                Grid::Discrete(DiscreteGrid::new(
+                    (0..graph_term.get_num_orientations())
+                        .map(|_| Some(lmb_channel_grid.clone()))
+                        .collect(),
+                    integrator_settings.max_prob_ratio,
+                    integrator_settings.train_on_avg,
+                ))
+            } else {
+                lmb_channel_grid
+            }
+        }
+
+        DiscreteGraphSamplingType::TropicalSampling(_) => todo!(),
+    }
+}
+
+fn create_default_continous_grid<G: GraphTerm>(
+    graph_term: &G,
+    integrator_settings: &IntegratorSettings,
+) -> Grid<F<f64>> {
+    Grid::Continuous(ContinuousGrid::new(
+        graph_term.get_graph().underlying.get_loop_number() * 3,
+        integrator_settings.n_bins,
+        integrator_settings.min_samples_for_update,
+        integrator_settings.bin_number_evolution.clone(),
+        integrator_settings.train_on_avg,
+    ))
+}
+
+fn create_grid<I: GammaloopIntegrand>(integrand: &I) -> Grid<F<f64>> {
+    let settings = integrand.get_settings();
+    match &settings.sampling {
+        SamplingSettings::Default(_) => Grid::Continuous(ContinuousGrid::new(
+            get_global_dimension_if_exists(integrand).unwrap(),
+            settings.integrator.n_bins,
+            settings.integrator.min_samples_for_update,
+            settings.integrator.bin_number_evolution.clone(),
+            settings.integrator.train_on_avg,
+        )),
+        SamplingSettings::MultiChanneling(_) => Grid::Continuous(ContinuousGrid::new(
+            get_global_dimension_if_exists(integrand).unwrap(),
+            settings.integrator.n_bins,
+            settings.integrator.min_samples_for_update,
+            settings.integrator.bin_number_evolution.clone(),
+            settings.integrator.train_on_avg,
+        )),
+        SamplingSettings::DiscreteGraphs(discrete_graph_sampling_settings) => {
+            Grid::Discrete(DiscreteGrid::new(
+                integrand
+                    .get_terms()
+                    .map(|term| {
+                        Some(create_grid_for_graph(
+                            term,
+                            discrete_graph_sampling_settings,
+                            &settings.integrator,
+                        ))
+                    })
+                    .collect(),
+                settings.integrator.max_prob_ratio,
+                settings.integrator.train_on_avg,
+            ))
+        }
+    }
 }

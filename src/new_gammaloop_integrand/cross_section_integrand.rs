@@ -24,7 +24,7 @@ use crate::{
 };
 
 use super::{
-    create_stability_iterator, evaluate_all_rotations, gammaloop_sample::parameterize,
+    create_grid, create_stability_iterator, evaluate_all_rotations, gammaloop_sample::parameterize,
     stability_check, GammaloopIntegrand, GenericEvaluator, GenericEvaluatorFloat, GraphTerm,
     LmbMultiChannelingSetup, StabilityLevelResult,
 };
@@ -95,6 +95,10 @@ impl GraphTerm for CrossSectionGraphTerm {
 
     fn get_lmbs(&self) -> &TiVec<LmbIndex, LoopMomentumBasis> {
         &self.lmbs
+    }
+
+    fn get_num_orientations(&self) -> usize {
+        self.bare_cff_orientation_evaluators.len()
     }
 }
 
@@ -238,110 +242,11 @@ impl CrossSectionGraphTerm {
 
         Complex::new_re(result)
     }
-
-    fn create_grid(
-        &self,
-        settings: &DiscreteGraphSamplingSettings,
-        integrator_settings: &IntegratorSettings,
-    ) -> Grid<F<f64>> {
-        match &settings.sampling_type {
-            DiscreteGraphSamplingType::Default(_)
-            | DiscreteGraphSamplingType::MultiChanneling(_) => {
-                let continuous_grid = self.create_default_continous_grid(integrator_settings);
-
-                if settings.sample_orientations {
-                    let continuous_grids = self
-                        .bare_cff_orientation_evaluators
-                        .iter()
-                        .map(|_| Some(continuous_grid.clone()))
-                        .collect();
-
-                    Grid::Discrete(DiscreteGrid::new(
-                        continuous_grids,
-                        integrator_settings.max_prob_ratio,
-                        integrator_settings.train_on_avg,
-                    ))
-                } else {
-                    continuous_grid
-                }
-            }
-            DiscreteGraphSamplingType::DiscreteMultiChanneling(_multichanneling_settings) => {
-                let continuous_grid = self.create_default_continous_grid(integrator_settings);
-                let lmb_channel_grid = Grid::Discrete(DiscreteGrid::new(
-                    self.multi_channeling_setup
-                        .channels
-                        .iter()
-                        .map(|_| Some(continuous_grid.clone()))
-                        .collect_vec(),
-                    integrator_settings.max_prob_ratio,
-                    integrator_settings.train_on_avg,
-                ));
-
-                if settings.sample_orientations {
-                    Grid::Discrete(DiscreteGrid::new(
-                        self.bare_cff_orientation_evaluators
-                            .iter()
-                            .map(|_| Some(lmb_channel_grid.clone()))
-                            .collect(),
-                        integrator_settings.max_prob_ratio,
-                        integrator_settings.train_on_avg,
-                    ))
-                } else {
-                    lmb_channel_grid
-                }
-            }
-
-            DiscreteGraphSamplingType::TropicalSampling(_) => todo!(),
-        }
-    }
-
-    fn create_default_continous_grid(
-        &self,
-        integrator_settings: &IntegratorSettings,
-    ) -> Grid<F<f64>> {
-        Grid::Continuous(ContinuousGrid::new(
-            self.graph.underlying.get_loop_number() * 3,
-            integrator_settings.n_bins,
-            integrator_settings.min_samples_for_update,
-            integrator_settings.bin_number_evolution.clone(),
-            integrator_settings.train_on_avg,
-        ))
-    }
 }
 
 impl HasIntegrand for CrossSectionIntegrand {
     fn create_grid(&self) -> Grid<F<f64>> {
-        match &self.settings.sampling {
-            SamplingSettings::Default(_) => Grid::Continuous(ContinuousGrid::new(
-                self.get_n_dim(),
-                self.settings.integrator.n_bins,
-                self.settings.integrator.min_samples_for_update,
-                self.settings.integrator.bin_number_evolution.clone(),
-                self.settings.integrator.train_on_avg,
-            )),
-            SamplingSettings::MultiChanneling(_) => Grid::Continuous(ContinuousGrid::new(
-                self.get_n_dim(),
-                self.settings.integrator.n_bins,
-                self.settings.integrator.min_samples_for_update,
-                self.settings.integrator.bin_number_evolution.clone(),
-                self.settings.integrator.train_on_avg,
-            )),
-            SamplingSettings::DiscreteGraphs(discrete_graph_sampling_settings) => {
-                Grid::Discrete(DiscreteGrid::new(
-                    self.graph_terms
-                        .iter()
-                        .map(|term| {
-                            Some(term.create_grid(
-                                discrete_graph_sampling_settings,
-                                &self.settings.integrator,
-                            ))
-                        })
-                        .collect(),
-                    self.settings.integrator.max_prob_ratio,
-                    self.settings.integrator.train_on_avg,
-                ))
-            }
-        }
+        create_grid(self)
     }
 
     fn evaluate_sample(
