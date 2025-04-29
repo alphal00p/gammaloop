@@ -131,23 +131,23 @@ impl<E, V> FeynGenHedgeGraph<E, V> {
     }
 }
 impl<V> FeynGenHedgeGraph<Arc<Particle>, V> {
-    pub fn number_of_fermion_loops(&self) -> usize {
-        let mut fermions: BitVec = self.graph.empty_subgraph();
+    pub fn number_of_anticommutating_particle_loops(&self) -> usize {
+        let mut anticummutating_particles_graph: BitVec = self.graph.empty_subgraph();
 
         for (p, _, d) in self.graph.iter_all_edges() {
-            if d.data.edge_data().is_fermion() {
+            if d.data.edge_data().is_anticommutating() {
                 #[allow(clippy::single_match)]
                 match p {
                     HedgePair::Paired { source, sink } => {
-                        fermions.set(source.0, true);
-                        fermions.set(sink.0, true);
+                        anticummutating_particles_graph.set(source.0, true);
+                        anticummutating_particles_graph.set(sink.0, true);
                     }
                     _ => {}
                 }
             }
         }
 
-        self.loop_count(&fermions)
+        self.loop_count(&anticummutating_particles_graph)
     }
 
     pub fn loop_count<S: SubGraph>(&self, subgraph: &S) -> usize {
@@ -161,17 +161,17 @@ impl<V> FeynGenHedgeGraph<Arc<Particle>, V> {
     }
 
     ///Mutates because it glues external hedges back together
-    pub fn number_of_external_fermion_loops(&mut self) -> usize
+    pub fn number_of_external_anticommutating_particle_loops(&mut self) -> usize
     where
         V: Clone,
     {
         self.remove_external_nodes();
-        let internal = self.number_of_fermion_loops();
+        let internal = self.number_of_anticommutating_particle_loops();
         // println!("{}", self);
 
         self.glue_external_hedges();
 
-        let all_fermion_loops = self.number_of_fermion_loops();
+        let all_fermion_loops = self.number_of_anticommutating_particle_loops();
 
         all_fermion_loops - internal
     }
@@ -340,7 +340,7 @@ pub mod test {
         let model = load_generic_model("sm");
         let mut he_graph = FeynGenHedgeGraph::from_feyn_gen_symbolica(graph, &model, 2);
 
-        let n_external_fermion_loops = he_graph.number_of_external_fermion_loops();
+        let n_external_fermion_loops = he_graph.number_of_external_anticommutating_particle_loops();
 
         assert_eq!(n_external_fermion_loops, 1);
 
@@ -388,7 +388,7 @@ pub mod test {
 
         let mut he_graph = FeynGenHedgeGraph::from_feyn_gen_symbolica(graph, &model, 2);
 
-        let n_external_fermion_loops = he_graph.number_of_external_fermion_loops();
+        let n_external_fermion_loops = he_graph.number_of_external_anticommutating_particle_loops();
 
         assert_eq!(n_external_fermion_loops, 2)
         // SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>,
@@ -440,7 +440,7 @@ pub mod test {
 
         let model = load_generic_model("sm");
         let mut he_graph = FeynGenHedgeGraph::from_feyn_gen_symbolica(graph, &model, 2);
-        he_graph.number_of_external_fermion_loops();
+        he_graph.number_of_external_anticommutating_particle_loops();
         // SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>,
     }
 }

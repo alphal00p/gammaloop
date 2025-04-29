@@ -581,7 +581,8 @@ class GammaLoop(object):
                     full_path, Colour.END, Colour.BLUE, '\n' if len(str_setting) > 80 else ' ', str_setting, Colour.END)
         if not args.no_update_run_card and self.launched_output is not None:
             # Update the run card in the output with the current configuration
-            update_run_card_in_output(self.launched_output, self.config)
+            update_run_card_in_output(
+                self.launched_output, self.config)  # type: ignore
 
     # show_settings command
     set_model_param_settings = ArgumentParser(prog='set_model_param')
@@ -796,8 +797,8 @@ class GammaLoop(object):
                                  choices=["no_grouping", "only_detect_zeroes", "group_identical_graphs_up_to_sign",
                                           "group_identical_graphs_up_to_scalar_rescaling"],
                                  help='Group identical diagrams after generation and including numerator (default: group_identical_graphs_up_to_scalar_rescaling)')
-    generate_parser.add_argument('--number_of_fermion_loops', '-nfl', default=None, type=int,
-                                 help='Number of fermion loops to consider in the amplitude generation. (default: any)')
+    generate_parser.add_argument('--number_of_anticommutating_loops', '-nal', default=None, type=int,
+                                 help='Number of anticommutating (fermions or ghosts) loops to consider in the amplitude generation. (default: any)')
     generate_parser.add_argument('--number_of_factorized_loop_subtopologies', '-nfactl', default=None, type=int,
                                  help='Number of factorizable loops (seoarated graph ears) to consider in the amplitude generation. (default: any)')
     # Tadpole filter
@@ -1365,13 +1366,14 @@ class GammaLoop(object):
             raise GammaLoopError("No process generated yet.")
 
         if len(self.cross_sections) > 0:
-            cross_section_exporter = CrossSectionsExporter(self, args)
+            cross_section_exporter = CrossSectionsExporter(
+                self, args)  # type: ignore
             cross_section_exporter.export(
                 args.output_path, self.cross_sections)
             logger.info("Cross-sections exported to '%s'.", args.output_path)
 
         if len(self.amplitudes) > 0:
-            amplitude_exporter = AmplitudesExporter(self, args)
+            amplitude_exporter = AmplitudesExporter(self, args)  # type: ignore
 
             if args.expression:
                 amplitude_exporter.export_expression(
@@ -1426,7 +1428,8 @@ class GammaLoop(object):
                 del run_settings['Kinematics']
             self.config.update({'run_settings': run_settings})
         else:
-            update_run_card_in_output(args.path_to_launch, self.config)
+            update_run_card_in_output(
+                args.path_to_launch, self.config)  # type: ignore
 
         # Depending on the type of output, sync cross-section or amplitude
         if output_metadata['output_type'] == 'amplitudes':
