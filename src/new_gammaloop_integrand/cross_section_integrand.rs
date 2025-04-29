@@ -3,7 +3,7 @@ use std::time::Duration;
 use itertools::Itertools;
 use serde::Serialize;
 use spenso::complex::Complex;
-use symbolica::numerical_integration::{ContinuousGrid, DiscreteGrid, Grid, Sample};
+use symbolica::numerical_integration::{Grid, Sample};
 use typed_index_collections::TiVec;
 
 use crate::{
@@ -18,9 +18,7 @@ use crate::{
     new_cs::CutId,
     new_graph::{ExternalConnection, FeynmanGraph, Graph, LmbIndex, LoopMomentumBasis},
     utils::{self, f128, FloatLike, F},
-    DependentMomentaConstructor, DiscreteGraphSamplingSettings, DiscreteGraphSamplingType,
-    IntegratedCounterTermRange, IntegratorSettings, Polarizations, Precision, SamplingSettings,
-    Settings,
+    DependentMomentaConstructor, IntegratedCounterTermRange, Polarizations, Precision, Settings,
 };
 
 use super::{
