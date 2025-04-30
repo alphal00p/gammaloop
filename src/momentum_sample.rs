@@ -186,6 +186,7 @@ impl<T: FloatLike> BareMomentumSample<T> {
         };
 
         let external_moms = external_moms.get_dependent_externals(dependent_momenta_constructor);
+
         Self {
             polarizations,
             loop_moms,

@@ -56,6 +56,16 @@ impl GammaloopIntegrand for CrossSectionIntegrand {
     fn get_graph(&self, graph_id: usize) -> &Self::G {
         &self.graph_terms[graph_id]
     }
+
+    fn get_polarizations(&self) -> &[Polarizations] {
+        &self.polarizations
+    }
+
+    fn get_dependent_momenta_constructor(&self) -> DependentMomentaConstructor {
+        DependentMomentaConstructor::CrossSection {
+            external_connections: &self.external_connections,
+        }
+    }
 }
 
 #[derive(Clone)]

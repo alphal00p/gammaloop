@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 
-use crate::evaluation_result::EvaluationResult;
+use crate::evaluation_result::{EvaluationMetaData, EvaluationResult};
 use crate::integrands::{HasIntegrand, Integrand};
 use crate::integrate::UserData;
 use crate::momentum::Rotation;
@@ -10,7 +10,7 @@ use crate::utils::{format_for_compare_digits, FloatLike, F};
 use colored::Colorize;
 use derive_more::{From, Into};
 use enum_dispatch::enum_dispatch;
-use gammaloop_sample::{DiscreteGraphSample, GammaLoopSample};
+use gammaloop_sample::{parameterize, DiscreteGraphSample, GammaLoopSample};
 use itertools::Itertools;
 use momtrop::float::MomTropFloat;
 use serde::{Deserialize, Serialize};
@@ -27,8 +27,9 @@ pub mod gammaloop_sample;
 use crate::observables::EventManager;
 use crate::utils::f128;
 use crate::{
-    DiscreteGraphSamplingSettings, DiscreteGraphSamplingType, IntegratorSettings, Precision,
-    SamplingSettings, Settings, StabilityLevelSetting, StabilitySettings,
+    DependentMomentaConstructor, DiscreteGraphSamplingSettings, DiscreteGraphSamplingType,
+    IntegratorSettings, Polarizations, Precision, SamplingSettings, Settings,
+    StabilityLevelSetting, StabilitySettings,
 };
 
 #[derive(Clone)]
@@ -376,6 +377,8 @@ pub trait GammaloopIntegrand {
     fn get_terms(&self) -> impl Iterator<Item = &Self::G>;
     fn get_settings(&self) -> &Settings;
     fn get_graph(&self, graph_id: usize) -> &Self::G;
+    fn get_dependent_momenta_constructor(&self) -> DependentMomentaConstructor;
+    fn get_polarizations(&self) -> &[Polarizations];
 }
 
 fn get_global_dimension_if_exists<I: GammaloopIntegrand>(integrand: &I) -> Option<usize> {
@@ -623,6 +626,137 @@ fn create_grid<I: GammaloopIntegrand>(integrand: &I) -> Grid<F<f64>> {
                 settings.integrator.max_prob_ratio,
                 settings.integrator.train_on_avg,
             ))
+        }
+    }
+}
+
+fn evaluate_sample<I: GammaloopIntegrand>(
+    integrand: &I,
+    sample: &Sample<F<f64>>,
+    wgt: F<f64>,
+    _iter: usize,
+    use_f128: bool,
+    max_eval: Complex<F<f64>>,
+) -> EvaluationResult {
+    let start_eval = std::time::Instant::now();
+    let stability_iterator =
+        create_stability_iterator(&integrand.get_settings().stability, use_f128);
+
+    let dependent_momenta_constructor = integrand.get_dependent_momenta_constructor();
+
+    let mut results_of_stability_levels = Vec::with_capacity(stability_iterator.len());
+
+    for stability_level in stability_iterator.into_iter() {
+        let before_parameterization = std::time::Instant::now();
+        let ((results, ltd_evaluation_time), parameterization_time) =
+            match stability_level.precision {
+                Precision::Double => {
+                    if let Ok(gammaloop_sample) = parameterize::<f64>(
+                        sample,
+                        integrand.get_polarizations(),
+                        dependent_momenta_constructor,
+                        integrand.get_settings(),
+                        None,
+                    ) {
+                        let parameterization_time = before_parameterization.elapsed();
+                        (
+                            evaluate_all_rotations(integrand, &gammaloop_sample),
+                            parameterization_time,
+                        )
+                    } else {
+                        continue;
+                    }
+                }
+                Precision::Quad => {
+                    if let Ok(gammaloop_sample) = parameterize::<f128>(
+                        sample,
+                        integrand.get_polarizations(),
+                        dependent_momenta_constructor,
+                        integrand.get_settings(),
+                        None,
+                    ) {
+                        let parameterization_time = before_parameterization.elapsed();
+                        (
+                            evaluate_all_rotations(integrand, &gammaloop_sample),
+                            parameterization_time,
+                        )
+                    } else {
+                        continue;
+                    }
+                }
+                Precision::Arb => {
+                    todo!()
+                }
+            };
+
+        let (average_result, is_stable) = stability_check(
+            integrand.get_settings(),
+            &results,
+            &stability_level,
+            max_eval,
+            wgt,
+        );
+
+        let result_of_level = StabilityLevelResult {
+            result: average_result,
+            stability_level_used: stability_level.precision,
+            parameterization_time,
+            ltd_evaluation_time,
+            is_stable,
+        };
+
+        results_of_stability_levels.push(result_of_level);
+
+        if is_stable {
+            break;
+        }
+    }
+
+    if let Some(stability_level_result) = results_of_stability_levels.last() {
+        let re_is_nan = stability_level_result.result.re.is_nan();
+        let im_is_nan = stability_level_result.result.im.is_nan();
+        let is_nan = re_is_nan || im_is_nan;
+
+        let meta_data = EvaluationMetaData {
+            total_timing: start_eval.elapsed(),
+            rep3d_evaluation_time: stability_level_result.ltd_evaluation_time,
+            highest_precision: stability_level_result.stability_level_used,
+            parameterization_time: stability_level_result.parameterization_time,
+            relative_instability_error: Complex::new_zero(),
+            is_nan,
+        };
+
+        let nanless_result = if re_is_nan && !im_is_nan {
+            Complex::new(F(0.0), stability_level_result.result.im)
+        } else if im_is_nan && !re_is_nan {
+            Complex::new(stability_level_result.result.re, F(0.0))
+        } else if im_is_nan && re_is_nan {
+            Complex::new(F(0.0), F(0.0))
+        } else {
+            stability_level_result.result
+        };
+
+        EvaluationResult {
+            integrand_result: nanless_result,
+            integrator_weight: wgt,
+            event_buffer: vec![],
+            evaluation_metadata: meta_data,
+        }
+    } else {
+        // this happens if parameterization fails at all levels
+        println!("Parameterization failed at all levels");
+        EvaluationResult {
+            integrand_result: Complex::new(F(0.0), F(0.0)),
+            integrator_weight: wgt,
+            event_buffer: vec![],
+            evaluation_metadata: EvaluationMetaData {
+                total_timing: Duration::ZERO,
+                rep3d_evaluation_time: Duration::ZERO,
+                parameterization_time: Duration::ZERO,
+                relative_instability_error: Complex::new(F(0.0), F(0.0)),
+                is_nan: true,
+                highest_precision: crate::Precision::Double,
+            },
         }
     }
 }

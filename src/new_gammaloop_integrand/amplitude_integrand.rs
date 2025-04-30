@@ -1,3 +1,4 @@
+use itertools::{fold, Itertools};
 use spenso::complex::Complex;
 use symbolica::numerical_integration::{Grid, Sample};
 use typed_index_collections::TiVec;
@@ -7,23 +8,25 @@ use crate::{
     evaluation_result::EvaluationResult,
     integrands::HasIntegrand,
     momentum::{Polarization, Rotation},
-    momentum_sample::MomentumSample,
-    new_graph::{Graph, LmbIndex, LoopMomentumBasis},
+    momentum_sample::{ExternalIndex, MomentumSample},
+    new_graph::{FeynmanGraph, Graph, LmbIndex, LoopMomentumBasis},
+    signature::SignatureLike,
     utils::{FloatLike, F},
-    Polarizations, Settings,
+    DependentMomentaConstructor, Polarizations, Settings,
 };
 
 use super::{
-    create_grid, GammaloopIntegrand, GenericEvaluator, GraphTerm, LmbMultiChannelingSetup,
+    create_grid, evaluate_sample, GammaloopIntegrand, GenericEvaluator, GenericEvaluatorFloat,
+    GraphTerm, LmbMultiChannelingSetup,
 };
 
 #[derive(Clone)]
 pub struct AmplitudeGraphTerm {
-    bare_cff_evaluator: GenericEvaluator,
-    bare_cff_orientation_evaluatos: TiVec<OrientationID, GenericEvaluator>,
-    graph: Graph,
-    multi_channeling_setup: LmbMultiChannelingSetup,
-    lmbs: TiVec<LmbIndex, LoopMomentumBasis>,
+    pub bare_cff_evaluator: GenericEvaluator,
+    pub bare_cff_orientation_evaluatos: TiVec<OrientationID, GenericEvaluator>,
+    pub graph: Graph,
+    pub multi_channeling_setup: LmbMultiChannelingSetup,
+    pub lmbs: TiVec<LmbIndex, LoopMomentumBasis>,
 }
 
 impl AmplitudeGraphTerm {
@@ -32,7 +35,47 @@ impl AmplitudeGraphTerm {
         momentum_sample: &MomentumSample<T>,
         settings: &Settings,
     ) -> Complex<F<T>> {
-        todo!()
+        if let Some(forced_orientations) = &settings.general.force_orientations {
+            if momentum_sample.sample.orientation.is_none() {
+                return forced_orientations
+                    .iter()
+                    .map(|orientation_usize| {
+                        let mut new_sample = momentum_sample.clone();
+                        new_sample.sample.orientation =
+                            Some(OrientationID::from(*orientation_usize));
+                        self.evaluate(&new_sample, settings)
+                    })
+                    .fold(
+                        Complex::new_re(momentum_sample.zero()),
+                        |sum, orientation_result| sum + orientation_result,
+                    );
+            }
+        }
+
+        let params = self
+            .graph
+            .underlying
+            .get_energy_cache(
+                momentum_sample.loop_moms(),
+                momentum_sample.external_moms(),
+                &self.graph.loop_momentum_basis,
+            )
+            .into_iter()
+            .map(|x| x.1)
+            .collect_vec();
+
+        let result = match momentum_sample.sample.orientation {
+            Some(orientation_id) => {
+                let orientation_evaluator = &self.bare_cff_orientation_evaluatos[orientation_id];
+                <T as GenericEvaluatorFloat>::get_evaluator(orientation_evaluator)(&params)
+            }
+            None => {
+                let evaluator = &self.bare_cff_evaluator;
+                <T as GenericEvaluatorFloat>::get_evaluator(evaluator)(&params)
+            }
+        };
+
+        Complex::new_re(result)
     }
 }
 
@@ -58,7 +101,7 @@ impl GraphTerm for AmplitudeGraphTerm {
     }
 
     fn get_num_orientations(&self) -> usize {
-        todo!()
+        self.bare_cff_orientation_evaluatos.len()
     }
 }
 
@@ -68,6 +111,7 @@ pub struct AmplitudeIntegrand {
     pub rotations: Vec<Rotation>,
     pub polarizations: Vec<Polarizations>,
     pub graph_terms: Vec<AmplitudeGraphTerm>,
+    pub external_signature: SignatureLike<ExternalIndex>,
 }
 
 impl GammaloopIntegrand for AmplitudeIntegrand {
@@ -88,6 +132,14 @@ impl GammaloopIntegrand for AmplitudeIntegrand {
     fn get_graph(&self, graph_id: usize) -> &Self::G {
         &self.graph_terms[graph_id]
     }
+
+    fn get_polarizations(&self) -> &[Polarizations] {
+        &self.polarizations
+    }
+
+    fn get_dependent_momenta_constructor(&self) -> DependentMomentaConstructor {
+        DependentMomentaConstructor::Amplitude(&self.external_signature)
+    }
 }
 
 impl HasIntegrand for AmplitudeIntegrand {
@@ -103,7 +155,7 @@ impl HasIntegrand for AmplitudeIntegrand {
         use_f128: bool,
         max_eval: Complex<F<f64>>,
     ) -> EvaluationResult {
-        todo!()
+        evaluate_sample(self, sample, wgt, iter, use_f128, max_eval)
     }
 
     fn get_n_dim(&self) -> usize {

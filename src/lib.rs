@@ -688,47 +688,6 @@ impl Externals {
         }
     }
 
-    pub fn old_get_dependent_externals<T: FloatLike>(
-        &self,
-        external_signature: &ExternalSignature,
-    ) -> Vec<FourMomentum<F<T>>>
-// where
-    //     T::Higher: PrecisionUpgradable<Lower = T> + FloatLike,
-    {
-        match self {
-            Externals::Constant { momenta, .. } => {
-                let mut sum: FourMomentum<F<T>> = FourMomentum::from([
-                    F::<T>::from_f64(0.0),
-                    F::from_f64(0.0),
-                    F::from_f64(0.0),
-                    F::from_f64(0.0),
-                ]);
-                // .higher();
-                let mut pos_dep = 0;
-
-                let mut dependent_sign = SignOrZero::Plus;
-
-                let mut dependent_momenta = vec![];
-
-                for ((i, m), s) in momenta.iter().enumerate().zip(external_signature.iter()) {
-                    if let Ok(a) = FourMomentum::try_from(*m) {
-                        // println!("external{i}: {}", a);
-                        let a = FourMomentum::<F<T>>::from_ff64(&a);
-                        sum -= *s * a.clone(); //.higher();
-                        dependent_momenta.push(a);
-                    } else {
-                        pos_dep = i;
-                        dependent_sign = *s;
-                        dependent_momenta.push(sum.clone()); //.lower());
-                    }
-                }
-
-                dependent_momenta[pos_dep] = dependent_sign * sum; //.lower();
-                dependent_momenta
-            }
-        }
-    }
-
     pub fn get_dependent_externals<T: FloatLike>(
         &self,
         dependent_momenta_constructor: DependentMomentaConstructor,
