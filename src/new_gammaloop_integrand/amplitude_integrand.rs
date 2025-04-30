@@ -1,4 +1,5 @@
-use itertools::{fold, Itertools};
+use itertools::Itertools;
+use momtrop::SampleGenerator;
 use spenso::complex::Complex;
 use symbolica::numerical_integration::{Grid, Sample};
 use typed_index_collections::TiVec;
@@ -7,7 +8,7 @@ use crate::{
     cff::cut_expression::OrientationID,
     evaluation_result::EvaluationResult,
     integrands::HasIntegrand,
-    momentum::{Polarization, Rotation},
+    momentum::Rotation,
     momentum_sample::{ExternalIndex, MomentumSample},
     new_graph::{FeynmanGraph, Graph, LmbIndex, LoopMomentumBasis},
     signature::SignatureLike,
@@ -27,6 +28,7 @@ pub struct AmplitudeGraphTerm {
     pub graph: Graph,
     pub multi_channeling_setup: LmbMultiChannelingSetup,
     pub lmbs: TiVec<LmbIndex, LoopMomentumBasis>,
+    pub tropical_sampler: SampleGenerator<3>,
 }
 
 impl AmplitudeGraphTerm {
@@ -102,6 +104,10 @@ impl GraphTerm for AmplitudeGraphTerm {
 
     fn get_num_orientations(&self) -> usize {
         self.bare_cff_orientation_evaluatos.len()
+    }
+
+    fn get_tropical_sampler(&self) -> &SampleGenerator<3> {
+        &self.tropical_sampler
     }
 }
 

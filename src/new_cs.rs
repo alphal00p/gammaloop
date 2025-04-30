@@ -1,6 +1,5 @@
 use std::{
-    cell::{Ref, RefCell},
-    collections::HashSet,
+    cell::RefCell,
     fmt::{Display, Formatter},
     iter,
     marker::PhantomData,
@@ -11,17 +10,17 @@ use std::{
 use ahash::{AHashSet, HashMap};
 use bitvec::vec::BitVec;
 use color_eyre::Result;
-use statrs::function;
+use momtrop::SampleGenerator;
+use spenso::contraction::IsZero;
 
 use crate::{
     cff::{expression::CFFExpression, generation::generate_cff_expression},
     momentum_sample::ExternalIndex,
     new_gammaloop_integrand::{
-        amplitude_integrand::{self, AmplitudeGraphTerm, AmplitudeIntegrand},
+        amplitude_integrand::{AmplitudeGraphTerm, AmplitudeIntegrand},
         cross_section_integrand::OrientationEvaluator,
-        GenericEvaluator, LmbMultiChannelingSetup,
+        GenericEvaluator,
     },
-    new_graph::{LmbIndex, LoopMomentumBasis},
     signature::SignatureLike,
     utils::f128,
 };
@@ -167,8 +166,13 @@ impl Process {
         }
     }
 
-    fn generate_integrands(&self, settings: Settings) -> HashMap<String, Integrand> {
-        self.collection.generate_integrands(settings)
+    fn generate_integrands(
+        &self,
+        settings: Settings,
+        process_settings: &ProcessSettings,
+    ) -> HashMap<String, Integrand> {
+        self.collection
+            .generate_integrands(settings, process_settings)
     }
 }
 
@@ -213,11 +217,15 @@ impl ProcessList {
         Ok(())
     }
 
-    pub fn generate_integrands(&self, settings: Settings) -> HashMap<String, Integrand> {
+    pub fn generate_integrands(
+        &self,
+        settings: Settings,
+        process_settings: &ProcessSettings,
+    ) -> HashMap<String, Integrand> {
         let mut result = HashMap::default();
 
         for process in self.processes.iter() {
-            let integrands = process.generate_integrands(settings.clone());
+            let integrands = process.generate_integrands(settings.clone(), process_settings);
             result.extend(integrands);
         }
 
@@ -280,13 +288,18 @@ impl<S: NumeratorState> ProcessCollection<S> {
         Ok(())
     }
 
-    fn generate_integrands(&self, settings: Settings) -> HashMap<String, Integrand> {
+    fn generate_integrands(
+        &self,
+        settings: Settings,
+        process_settings: &ProcessSettings,
+    ) -> HashMap<String, Integrand> {
         let mut result = HashMap::default();
         match self {
             Self::Amplitudes(amplitudes) => {
                 let name = "default".to_owned();
                 for amplitude in amplitudes {
-                    let integrand = amplitude.generate_integrand(settings.clone());
+                    let integrand =
+                        amplitude.generate_integrand(settings.clone(), process_settings);
                     result.insert(name.clone(), integrand);
                 }
             }
@@ -317,11 +330,15 @@ impl<S: NumeratorState> Amplitude<S> {
         Ok(())
     }
 
-    pub fn generate_integrand(&self, settings: Settings) -> Integrand {
+    pub fn generate_integrand(
+        &self,
+        settings: Settings,
+        process_settings: &ProcessSettings,
+    ) -> Integrand {
         let terms = self
             .graphs
             .iter()
-            .map(|graph| graph.generate_term_for_graph(&settings))
+            .map(|graph| graph.generate_term_for_graph(&settings, process_settings))
             .collect_vec();
 
         let rotations: Vec<Rotation> = Some(Rotation::new(RotationMethod::Identity))
@@ -453,6 +470,100 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
         }
     }
 
+    fn build_tropical_sampler(
+        &self,
+        process_settings: &ProcessSettings,
+    ) -> Result<SampleGenerator<3>> {
+        let num_virtual_loop_edges = self.graph.iter_loop_edges().count();
+        let num_loops = self.graph.loop_momentum_basis.basis.len();
+        let target_omega = process_settings
+            .tropical_subgraph_table_settings
+            .target_omega;
+
+        let weight = (target_omega + (3 * num_loops) as f64 / 2.) / num_virtual_loop_edges as f64;
+
+        debug!(
+            "Building tropical subgraph table with all edge weights set to: {}",
+            weight
+        );
+
+        let tropical_edges = self
+            .graph
+            .iter_loop_edges()
+            .map(|(pair, _edge_id, edge)| {
+                let is_massive = match edge.data.particle.mass.value {
+                    Some(complex_mass) => complex_mass.is_non_zero(),
+                    None => false,
+                };
+
+                let vertices = match pair {
+                    HedgePair::Paired { source, sink } => (
+                        self.graph.underlying.node_id(source).0 as u8,
+                        self.graph.underlying.node_id(sink).0 as u8,
+                    ),
+                    _ => unreachable!(),
+                };
+
+                momtrop::Edge {
+                    is_massive,
+                    weight,
+                    vertices,
+                }
+            })
+            .collect_vec();
+
+        let mut external_vertices_pool = AHashSet::new();
+
+        for (pair, _, _) in self.graph.iter_non_loop_edges() {
+            match pair {
+                HedgePair::Paired { source, sink } => {
+                    let source_id = self.graph.underlying.node_id(source).0 as u8;
+                    let sink_id = self.graph.underlying.node_id(sink).0 as u8;
+
+                    external_vertices_pool.insert(source_id);
+                    external_vertices_pool.insert(sink_id);
+                }
+                HedgePair::Unpaired { hedge, .. } => {
+                    let id = self.graph.underlying.node_id(hedge).0 as u8;
+                    external_vertices_pool.insert(id);
+                }
+                _ => unreachable!(),
+            }
+        }
+
+        let mut external_vertices = vec![];
+
+        for tropical_edge in &tropical_edges {
+            if external_vertices_pool.contains(&tropical_edge.vertices.0) {
+                external_vertices.push(tropical_edge.vertices.0);
+            }
+
+            if external_vertices_pool.contains(&tropical_edge.vertices.1) {
+                external_vertices.push(tropical_edge.vertices.1);
+            }
+        }
+
+        let tropical_graph = momtrop::Graph {
+            edges: tropical_edges,
+            externals: external_vertices,
+        };
+
+        let loop_part = self
+            .graph
+            .iter_loop_edges()
+            .map(|(pair, edge_id, _edge)| {
+                self.graph.loop_momentum_basis.edge_signatures[edge_id]
+                    .internal
+                    .clone()
+                    .to_momtrop_format()
+            })
+            .collect_vec();
+
+        tropical_graph
+            .build_sampler(loop_part)
+            .map_err(|e| eyre!(e))
+    }
+
     fn build_evaluator_for_orientations(&self) -> TiVec<OrientationID, GenericEvaluator> {
         let params = self.get_params();
         let function_map = self.get_function_map();
@@ -486,7 +597,11 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
             .collect()
     }
 
-    fn generate_term_for_graph(&self, _settings: &Settings) -> AmplitudeGraphTerm {
+    fn generate_term_for_graph(
+        &self,
+        _settings: &Settings,
+        process_settings: &ProcessSettings,
+    ) -> AmplitudeGraphTerm {
         let evaluator = self.build_evaluator();
         let lmbs = self
             .graph
@@ -498,6 +613,7 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
         AmplitudeGraphTerm {
             bare_cff_evaluator: evaluator,
             bare_cff_orientation_evaluatos: self.build_evaluator_for_orientations(),
+            tropical_sampler: self.build_tropical_sampler(process_settings).unwrap(),
             graph: self.graph.clone(),
             multi_channeling_setup,
             lmbs,

@@ -22,9 +22,9 @@ use crate::{
 };
 
 use super::{
-    create_grid, create_stability_iterator, evaluate_all_rotations, gammaloop_sample::parameterize,
-    stability_check, GammaloopIntegrand, GenericEvaluator, GenericEvaluatorFloat, GraphTerm,
-    LmbMultiChannelingSetup, StabilityLevelResult,
+    create_grid, create_stability_iterator, evaluate_all_rotations, evaluate_sample,
+    gammaloop_sample::parameterize, stability_check, GammaloopIntegrand, GenericEvaluator,
+    GenericEvaluatorFloat, GraphTerm, LmbMultiChannelingSetup, StabilityLevelResult,
 };
 
 const TOLERANCE: F<f64> = F(2.0);
@@ -107,6 +107,12 @@ impl GraphTerm for CrossSectionGraphTerm {
 
     fn get_num_orientations(&self) -> usize {
         self.bare_cff_orientation_evaluators.len()
+    }
+
+    fn get_tropical_sampler(&self) -> &momtrop::SampleGenerator<3> {
+        unimplemented!(
+            "Don't know how to generate subgraph table for forward scattering graphs yet"
+        )
     }
 }
 
@@ -265,122 +271,7 @@ impl HasIntegrand for CrossSectionIntegrand {
         use_f128: bool,
         max_eval: Complex<F<f64>>,
     ) -> EvaluationResult {
-        let start_eval = std::time::Instant::now();
-        let stability_iterator = create_stability_iterator(&self.settings.stability, use_f128);
-        let dependent_momenta_constructor = DependentMomentaConstructor::CrossSection {
-            external_connections: &self.external_connections,
-        };
-
-        let mut results_of_stability_levels = Vec::with_capacity(stability_iterator.len());
-
-        for stability_level in stability_iterator.into_iter() {
-            let before_parameterization = std::time::Instant::now();
-            let ((results, ltd_evaluation_time), parameterization_time) =
-                match stability_level.precision {
-                    Precision::Double => {
-                        if let Ok(gammaloop_sample) = parameterize::<f64>(
-                            sample,
-                            &self.polarizations,
-                            dependent_momenta_constructor,
-                            &self.settings,
-                            None,
-                        ) {
-                            let parameterization_time = before_parameterization.elapsed();
-                            (
-                                evaluate_all_rotations(self, &gammaloop_sample),
-                                parameterization_time,
-                            )
-                        } else {
-                            continue;
-                        }
-                    }
-                    Precision::Quad => {
-                        if let Ok(gammaloop_sample) = parameterize::<f128>(
-                            sample,
-                            &self.polarizations,
-                            dependent_momenta_constructor,
-                            &self.settings,
-                            None,
-                        ) {
-                            let parameterization_time = before_parameterization.elapsed();
-                            (
-                                evaluate_all_rotations(self, &gammaloop_sample),
-                                parameterization_time,
-                            )
-                        } else {
-                            continue;
-                        }
-                    }
-                    Precision::Arb => {
-                        todo!()
-                    }
-                };
-
-            let (average_result, is_stable) =
-                stability_check(&self.settings, &results, &stability_level, max_eval, wgt);
-
-            let result_of_level = StabilityLevelResult {
-                result: average_result,
-                stability_level_used: stability_level.precision,
-                parameterization_time,
-                ltd_evaluation_time,
-                is_stable,
-            };
-
-            results_of_stability_levels.push(result_of_level);
-
-            if is_stable {
-                break;
-            }
-        }
-
-        if let Some(stability_level_result) = results_of_stability_levels.last() {
-            let re_is_nan = stability_level_result.result.re.is_nan();
-            let im_is_nan = stability_level_result.result.im.is_nan();
-            let is_nan = re_is_nan || im_is_nan;
-
-            let meta_data = EvaluationMetaData {
-                total_timing: start_eval.elapsed(),
-                rep3d_evaluation_time: stability_level_result.ltd_evaluation_time,
-                highest_precision: stability_level_result.stability_level_used,
-                parameterization_time: stability_level_result.parameterization_time,
-                relative_instability_error: Complex::new_zero(),
-                is_nan,
-            };
-
-            let nanless_result = if re_is_nan && !im_is_nan {
-                Complex::new(F(0.0), stability_level_result.result.im)
-            } else if im_is_nan && !re_is_nan {
-                Complex::new(stability_level_result.result.re, F(0.0))
-            } else if im_is_nan && re_is_nan {
-                Complex::new(F(0.0), F(0.0))
-            } else {
-                stability_level_result.result
-            };
-
-            EvaluationResult {
-                integrand_result: nanless_result,
-                integrator_weight: wgt,
-                event_buffer: vec![],
-                evaluation_metadata: meta_data,
-            }
-        } else {
-            // this happens if parameterization fails at all levels
-            println!("Parameterization failed at all levels");
-            EvaluationResult {
-                integrand_result: Complex::new(F(0.0), F(0.0)),
-                integrator_weight: wgt,
-                event_buffer: vec![],
-                evaluation_metadata: EvaluationMetaData {
-                    total_timing: Duration::ZERO,
-                    rep3d_evaluation_time: Duration::ZERO,
-                    parameterization_time: Duration::ZERO,
-                    relative_instability_error: Complex::new(F(0.0), F(0.0)),
-                    is_nan: true,
-                    highest_precision: crate::Precision::Double,
-                },
-            }
-        }
+        evaluate_sample(self, sample, wgt, _iter, use_f128, max_eval)
     }
 
     fn get_n_dim(&self) -> usize {

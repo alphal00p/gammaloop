@@ -229,5 +229,5 @@ class Worker:
     def evaluate_overall_factor(self, overall_factor: str) -> str:
         """Call the feyngen evaluate overall factor"""
 
-    def generate_integrands(self, settings_yaml_str: str) -> None:
+    def generate_integrands(self, settings_yaml_str: str, process_settings_yaml_str: str) -> None:
         """Generates integrands from the settings given in argument. """
