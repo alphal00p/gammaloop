@@ -1,7 +1,8 @@
 use std::{
-    cell::RefCell,
+    cell::{Ref, RefCell},
     collections::HashSet,
     fmt::{Display, Formatter},
+    iter,
     marker::PhantomData,
     path::PathBuf,
     sync::Arc,
@@ -10,13 +11,18 @@ use std::{
 use ahash::{AHashSet, HashMap};
 use bitvec::vec::BitVec;
 use color_eyre::Result;
+use statrs::function;
 
 use crate::{
     cff::{expression::CFFExpression, generation::generate_cff_expression},
+    momentum_sample::ExternalIndex,
     new_gammaloop_integrand::{
-        cross_section_integrand::OrientationEvaluator, GenericEvaluator, LmbMultiChannelingSetup,
+        amplitude_integrand::{self, AmplitudeGraphTerm, AmplitudeIntegrand},
+        cross_section_integrand::OrientationEvaluator,
+        GenericEvaluator, LmbMultiChannelingSetup,
     },
     new_graph::{LmbIndex, LoopMomentumBasis},
+    signature::SignatureLike,
     utils::f128,
 };
 use eyre::eyre;
@@ -277,7 +283,13 @@ impl<S: NumeratorState> ProcessCollection<S> {
     fn generate_integrands(&self, settings: Settings) -> HashMap<String, Integrand> {
         let mut result = HashMap::default();
         match self {
-            Self::Amplitudes(_) => todo!(),
+            Self::Amplitudes(amplitudes) => {
+                let name = "default".to_owned();
+                for amplitude in amplitudes {
+                    let integrand = amplitude.generate_integrand(settings.clone());
+                    result.insert(name.clone(), integrand);
+                }
+            }
             Self::CrossSections(cross_sections) => {
                 let name = "default".to_owned();
                 for cross_section in cross_sections {
@@ -293,6 +305,8 @@ impl<S: NumeratorState> ProcessCollection<S> {
 #[derive(Clone)]
 pub struct Amplitude<S: NumeratorState = PythonState> {
     graphs: Vec<AmplitudeGraph<S>>,
+    external_particles: Vec<Arc<Particle>>,
+    external_signature: SignatureLike<ExternalIndex>,
 }
 
 impl<S: NumeratorState> Amplitude<S> {
@@ -301,6 +315,51 @@ impl<S: NumeratorState> Amplitude<S> {
             amplitude_graph.preprocess(model, settings)?;
         }
         Ok(())
+    }
+
+    pub fn generate_integrand(&self, settings: Settings) -> Integrand {
+        let terms = self
+            .graphs
+            .iter()
+            .map(|graph| graph.generate_term_for_graph(&settings))
+            .collect_vec();
+
+        let rotations: Vec<Rotation> = Some(Rotation::new(RotationMethod::Identity))
+            .into_iter()
+            .chain(
+                settings
+                    .stability
+                    .rotation_axis
+                    .iter()
+                    .map(|axis| Rotation::new(axis.rotation_method())),
+            )
+            .collect();
+
+        let orig_polarizations = self.polarizations(&settings.kinematics.externals);
+
+        let polarizations = rotations
+            .iter()
+            .map(|r| orig_polarizations.rotate(r))
+            .collect();
+
+        let amplitude_integrand = AmplitudeIntegrand {
+            settings,
+            rotations,
+            polarizations,
+            graph_terms: terms,
+            external_signature: self.external_signature.clone(),
+        };
+
+        Integrand::NewIntegrand(NewIntegrand::Amplitude(amplitude_integrand))
+    }
+}
+
+impl<S: NumeratorState> IsPolarizable for Amplitude<S> {
+    fn polarizations(&self, externals: &Externals) -> Polarizations {
+        externals.generate_polarizations(
+            &self.external_particles,
+            DependentMomentaConstructor::Amplitude(&self.external_signature),
+        )
     }
 }
 
@@ -337,8 +396,112 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
         self.graph
             .loop_momentum_basis
             .set_edge_signatures(&self.graph.underlying)?;
+
         self.generate_cff()?;
         Ok(())
+    }
+
+    fn get_params(&self) -> Vec<Atom> {
+        self.graph.underlying.get_energy_atoms()
+    }
+
+    fn get_function_map(&self) -> FunctionMap {
+        let mut fn_map = FunctionMap::new();
+        let pi_rational = Rational::from(std::f64::consts::PI);
+        fn_map.add_constant(parse!("π").unwrap(), pi_rational);
+        fn_map
+    }
+
+    fn add_additional_factors_to_cff_atom(&self, cff_atom: &Atom) -> Atom {
+        let inverse_energy_product = self.graph.underlying.get_cff_inverse_energy_product();
+        let factors_of_pi = parse!(&format!(
+            "(2*π)^{}",
+            3 * self.graph.underlying.get_loop_number()
+        ))
+        .unwrap();
+
+        let result = cff_atom * inverse_energy_product * &self.graph.multiplicity / factors_of_pi;
+        debug!("result: {}", result);
+
+        result
+    }
+
+    fn build_evaluator(&self) -> GenericEvaluator {
+        let atom_unsubstituted = self.derived_data.cff_expression.to_atom();
+        let atom = self
+            .derived_data
+            .cff_expression
+            .surfaces
+            .substitute_energies(&atom_unsubstituted);
+
+        let atom = self.add_additional_factors_to_cff_atom(&atom);
+
+        let params = self.get_params();
+        let function_map = self.get_function_map();
+
+        let mut tree = atom.to_evaluation_tree(&function_map, &params).unwrap();
+        tree.horner_scheme();
+        tree.common_subexpression_elimination();
+
+        let tree_double = tree.map_coeff::<F<f64>, _>(&|r| r.into());
+        let tree_quad = tree.map_coeff::<F<f128>, _>(&|r| r.into());
+
+        GenericEvaluator {
+            f64_compiled: None,
+            f64_eager: RefCell::new(tree_double.linearize(Some(1))),
+            f128: RefCell::new(tree_quad.linearize(Some(1))),
+        }
+    }
+
+    fn build_evaluator_for_orientations(&self) -> TiVec<OrientationID, GenericEvaluator> {
+        let params = self.get_params();
+        let function_map = self.get_function_map();
+
+        self.derived_data
+            .cff_expression
+            .get_orientation_atoms()
+            .iter()
+            .map(|orientation_atom_unsubstituted| {
+                let atom_no_prefactor = self
+                    .derived_data
+                    .cff_expression
+                    .surfaces
+                    .substitute_energies(orientation_atom_unsubstituted);
+
+                let atom = self.add_additional_factors_to_cff_atom(&atom_no_prefactor);
+
+                let mut tree = atom.to_evaluation_tree(&function_map, &params).unwrap();
+                tree.horner_scheme();
+                tree.common_subexpression_elimination();
+
+                let tree_double = tree.map_coeff::<F<f64>, _>(&|r| r.into());
+                let tree_quad = tree.map_coeff::<F<f128>, _>(&|r| r.into());
+
+                GenericEvaluator {
+                    f64_compiled: None,
+                    f64_eager: RefCell::new(tree_double.linearize(Some(1))),
+                    f128: RefCell::new(tree_quad.linearize(Some(1))),
+                }
+            })
+            .collect()
+    }
+
+    fn generate_term_for_graph(&self, _settings: &Settings) -> AmplitudeGraphTerm {
+        let evaluator = self.build_evaluator();
+        let lmbs = self
+            .graph
+            .loop_momentum_basis
+            .generate_loop_momentum_bases(&self.graph.underlying);
+
+        let multi_channeling_setup = self.graph.build_multi_channeling_channels(&lmbs);
+
+        AmplitudeGraphTerm {
+            bare_cff_evaluator: evaluator,
+            bare_cff_orientation_evaluatos: self.build_evaluator_for_orientations(),
+            graph: self.graph.clone(),
+            multi_channeling_setup,
+            lmbs,
+        }
     }
 }
 
@@ -350,11 +513,32 @@ pub struct AmplitudeDerivedData<S: NumeratorState> {
 
 impl<S: NumeratorState> Amplitude<S> {
     pub fn new() -> Self {
-        Self { graphs: vec![] }
+        Self {
+            graphs: vec![],
+            external_particles: vec![],
+            external_signature: SignatureLike::from_iter(iter::empty::<i8>()),
+        }
     }
 
     pub fn add_graph(&mut self, graph: Graph) -> Result<()> {
+        let new_external_particels = graph.underlying.get_external_partcles();
+        let new_external_signature = graph.underlying.get_external_signature();
+
+        if !self.graphs.is_empty() {
+            if self.external_particles != new_external_particels {
+                return Err(eyre!("amplitude graph has different number of externals"));
+            }
+
+            if self.external_signature != new_external_signature {
+                return Err(eyre!("wrong external signature"));
+            }
+        } else {
+            self.external_particles = new_external_particels;
+            self.external_signature = new_external_signature;
+        }
+
         self.graphs.push(AmplitudeGraph::new(graph));
+
         //  TODO: validate that the graph is compatible
         Ok(())
     }
@@ -690,20 +874,7 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
     }
 
     fn get_params(&self) -> Vec<Atom> {
-        let mut params = self
-            .graph
-            .underlying
-            .iter_all_edges()
-            .map(|(pair, edge_id, _)| match pair {
-                HedgePair::Paired { .. } => {
-                    parse!(&format!("Q({}, cind(0))", Into::<usize>::into(edge_id))).unwrap()
-                }
-                HedgePair::Unpaired { .. } => {
-                    parse!(&format!("P({}, cind(0))", Into::<usize>::into(edge_id))).unwrap()
-                }
-                _ => unreachable!(),
-            })
-            .collect_vec();
+        let mut params = self.graph.underlying.get_energy_atoms();
 
         params.push(parse!("tstar").unwrap());
         params.push(parse!("h").unwrap());
@@ -806,82 +977,6 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
             .collect()
     }
 
-    fn build_multi_channeling_channels(
-        &self,
-        lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
-    ) -> LmbMultiChannelingSetup {
-        let mut channels: HashSet<LmbIndex> = HashSet::new();
-
-        // Filter out channels that are non-singular, or have the same singularities as another channel already included
-        for (lmb_index, lmb) in lmbs.iter_enumerated() {
-            let massless_edges = lmb
-                .basis
-                .iter()
-                .filter(|&edge_id| self.graph.underlying[*edge_id].particle.is_massless())
-                .collect_vec();
-
-            if massless_edges.is_empty() {
-                continue;
-            }
-
-            if channels.iter().any(|channel| {
-                let basis_of_included_channel = &lmbs[*channel].basis;
-                massless_edges
-                    .iter()
-                    .all(|edge_id| basis_of_included_channel.contains(edge_id))
-            }) {
-                continue;
-            }
-
-            // only for 1 to n for now, assuming center of mass
-            if self.graph.external_connections.as_ref().unwrap().len() == 1
-                && channels.iter().any(|channel| {
-                    let massless_edges_of_included_channel = lmbs[*channel]
-                        .basis
-                        .iter()
-                        .filter(|&edge_id| self.graph.underlying[*edge_id].particle.is_massless())
-                        .collect_vec();
-
-                    let loop_signatures_of_massless_edges_of_included_channel =
-                        massless_edges_of_included_channel
-                            .iter()
-                            .map(|edge_index| {
-                                self.graph.loop_momentum_basis.edge_signatures[**edge_index]
-                                    .internal
-                                    .first_abs()
-                            })
-                            .collect::<HashSet<_>>();
-
-                    let loop_signatures_of_massless_edges_of_potential_channel = massless_edges
-                        .iter()
-                        .map(|edge_index| {
-                            self.graph.loop_momentum_basis.edge_signatures[**edge_index]
-                                .internal
-                                .first_abs()
-                        })
-                        .collect::<HashSet<_>>();
-
-                    loop_signatures_of_massless_edges_of_included_channel
-                        == loop_signatures_of_massless_edges_of_potential_channel
-                })
-            {
-                continue;
-            }
-
-            channels.insert(lmb_index);
-        }
-
-        let channels: TiVec<_, _> = channels.into_iter().sorted().collect();
-
-        debug!(
-            "number of lmbs: {}, number of channels: {}",
-            lmbs.len(),
-            channels.len()
-        );
-
-        LmbMultiChannelingSetup { channels }
-    }
-
     fn generate_term_for_graph(&self, _settings: &Settings) -> CrossSectionGraphTerm {
         let evaluators = self.build_cut_evaluators();
         let lmbs = self
@@ -889,7 +984,7 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
             .loop_momentum_basis
             .generate_loop_momentum_bases(&self.graph.underlying);
 
-        let multi_channeling_setup = self.build_multi_channeling_channels(&lmbs);
+        let multi_channeling_setup = self.graph.build_multi_channeling_channels(&lmbs);
         let orientation_evaluators = self.build_orientation_evaluators();
 
         CrossSectionGraphTerm {

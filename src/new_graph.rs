@@ -24,6 +24,7 @@ use linnet::half_edge::{
     },
     HedgeGraph, NodeIndex,
 };
+use log::debug;
 use nalgebra::DMatrix;
 // use petgraph::Direction::Outgoing;
 use serde::{de::value, Deserialize, Serialize};
@@ -59,8 +60,9 @@ use crate::{
         BareMomentumSample, ExternalFourMomenta, ExternalIndex, ExternalThreeMomenta, LoopIndex,
         LoopMomenta,
     },
+    new_gammaloop_integrand::LmbMultiChannelingSetup,
     numerator::{ufo::preprocess_ufo_spin_wrapped, NumeratorState, PythonState, UnInit},
-    signature::{ExternalSignature, LoopExtSignature, LoopSignature},
+    signature::{ExternalSignature, LoopExtSignature, LoopSignature, SignatureLike},
     utils::{FloatLike, F, GS},
     ProcessSettings, GAMMALOOP_NAMESPACE,
 };
@@ -151,6 +153,8 @@ pub trait FeynmanGraph {
     fn get_esurface_canonization(&self, lmb: &LoopMomentumBasis) -> Option<ShiftRewrite>;
     fn external_in_or_out_signature(&self) -> ExternalSignature;
     fn get_external_partcles(&self) -> Vec<Arc<Particle>>;
+    fn get_external_signature(&self) -> SignatureLike<ExternalIndex>;
+    fn get_energy_atoms(&self) -> Vec<Atom>;
 }
 
 impl FeynmanGraph for HedgeGraph<Edge, Vertex> {
@@ -484,6 +488,30 @@ impl FeynmanGraph for HedgeGraph<Edge, Vertex> {
             })
             .collect()
     }
+
+    fn get_external_signature(&self) -> SignatureLike<ExternalIndex> {
+        SignatureLike::from_iter(self.iter_all_edges().filter_map(|(pair, _, _)| match pair {
+            HedgePair::Unpaired { flow, .. } => match flow {
+                Flow::Source => Some(SignOrZero::Minus),
+                Flow::Sink => Some(SignOrZero::Plus),
+            },
+            _ => None,
+        }))
+    }
+
+    fn get_energy_atoms(&self) -> Vec<Atom> {
+        self.iter_all_edges()
+            .map(|(pair, edge_id, _)| match pair {
+                HedgePair::Paired { .. } => {
+                    parse!(&format!("Q({}, cind(0))", Into::<usize>::into(edge_id))).unwrap()
+                }
+                HedgePair::Unpaired { .. } => {
+                    parse!(&format!("P({}, cind(0))", Into::<usize>::into(edge_id))).unwrap()
+                }
+                _ => unreachable!(),
+            })
+            .collect_vec()
+    }
 }
 
 impl Graph {
@@ -500,6 +528,86 @@ impl Graph {
             external_connections: None,
             vertex_slots: TiVec::new(),
         })
+    }
+
+    pub fn build_multi_channeling_channels(
+        &self,
+        lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
+    ) -> LmbMultiChannelingSetup {
+        let mut channels: Vec<LmbIndex> = Vec::new();
+
+        // Filter out channels that are non-singular, or have the same singularities as another channel already included
+        for (lmb_index, lmb) in lmbs.iter_enumerated() {
+            let massless_edges = lmb
+                .basis
+                .iter()
+                .filter(|&edge_id| self.underlying[*edge_id].particle.is_massless())
+                .collect_vec();
+
+            if massless_edges.is_empty() {
+                continue;
+            }
+
+            if channels.iter().any(|channel| {
+                let basis_of_included_channel = &lmbs[*channel].basis;
+                massless_edges
+                    .iter()
+                    .all(|edge_id| basis_of_included_channel.contains(edge_id))
+            }) {
+                continue;
+            }
+
+            // only for 1 to n for now, assuming center of mass
+            if self
+                .external_connections
+                .as_ref()
+                .map(|external_connections| external_connections.len() == 1)
+                .unwrap_or(false)
+                && channels.iter().any(|channel| {
+                    let massless_edges_of_included_channel = lmbs[*channel]
+                        .basis
+                        .iter()
+                        .filter(|&edge_id| self.underlying[*edge_id].particle.is_massless())
+                        .collect_vec();
+
+                    let loop_signatures_of_massless_edges_of_included_channel =
+                        massless_edges_of_included_channel
+                            .iter()
+                            .map(|edge_index| {
+                                self.loop_momentum_basis.edge_signatures[**edge_index]
+                                    .internal
+                                    .first_abs()
+                            })
+                            .collect::<HashSet<_>>();
+
+                    let loop_signatures_of_massless_edges_of_potential_channel = massless_edges
+                        .iter()
+                        .map(|edge_index| {
+                            self.loop_momentum_basis.edge_signatures[**edge_index]
+                                .internal
+                                .first_abs()
+                        })
+                        .collect::<HashSet<_>>();
+
+                    loop_signatures_of_massless_edges_of_included_channel
+                        == loop_signatures_of_massless_edges_of_potential_channel
+                })
+            {
+                continue;
+            }
+
+            channels.push(lmb_index);
+        }
+
+        let channels: TiVec<_, _> = channels.into_iter().sorted().collect();
+
+        debug!(
+            "number of lmbs: {}, number of channels: {}",
+            lmbs.len(),
+            channels.len()
+        );
+
+        LmbMultiChannelingSetup { channels }
     }
 }
 
