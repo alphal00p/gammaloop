@@ -6,13 +6,14 @@ use crate::integrate::UserData;
 use crate::momentum::Rotation;
 use crate::momentum_sample::{BareMomentumSample, LoopMomenta, MomentumSample};
 use crate::new_graph::{FeynmanGraph, Graph, LmbIndex, LoopMomentumBasis};
-use crate::utils::{format_for_compare_digits, FloatLike, F};
+use crate::utils::{format_for_compare_digits, get_n_dim_for_n_loop_momenta, FloatLike, F};
 use colored::Colorize;
 use derive_more::{From, Into};
 use enum_dispatch::enum_dispatch;
 use gammaloop_sample::{parameterize, DiscreteGraphSample, GammaLoopSample};
 use itertools::Itertools;
 use momtrop::float::MomTropFloat;
+use momtrop::SampleGenerator;
 use serde::{Deserialize, Serialize};
 use spenso::complex::Complex;
 use spenso::contraction::IsZero;
@@ -412,6 +413,7 @@ pub trait GraphTerm {
     fn get_graph(&self) -> &Graph;
     fn get_lmbs(&self) -> &TiVec<LmbIndex, LoopMomentumBasis>;
     fn get_num_orientations(&self) -> usize;
+    fn get_tropical_sampler(&self) -> &SampleGenerator<3>;
 }
 
 fn evaluate_all_rotations<T: FloatLike, I: GammaloopIntegrand>(
@@ -519,7 +521,27 @@ fn evaluate_single_rotation<T: FloatLike, I: GammaloopIntegrand>(
                             |sum, term| sum + term,
                         )
                 }
-                _ => todo!(),
+                DiscreteGraphSample::Tropical(sample) => {
+                    let energy_cache = graph_term.get_graph().underlying.get_energy_cache(
+                        &sample.loop_moms(),
+                        &sample.external_moms(),
+                        &graph_term.get_graph().loop_momentum_basis,
+                    );
+
+                    let prefactor = graph_term
+                        .get_graph()
+                        .iter_loop_edges()
+                        .map(|(_, edge_index, _)| edge_index)
+                        .zip(graph_term.get_tropical_sampler().iter_edge_weights())
+                        .fold(sample.one(), |product, (edge_id, weight)| {
+                            let energy = &energy_cache[edge_id];
+                            let edge_weight = weight;
+                            product * energy.powf(&F::from_f64(2. * edge_weight))
+                        });
+
+                    Complex::new_re(prefactor)
+                        * graph_term.evaluate(sample, integrand.get_settings())
+                }
             }
         }
     };
@@ -577,7 +599,36 @@ fn create_grid_for_graph<G: GraphTerm>(
             }
         }
 
-        DiscreteGraphSamplingType::TropicalSampling(_) => todo!(),
+        DiscreteGraphSamplingType::TropicalSampling(_) => {
+            let dimension = get_n_dim_for_n_loop_momenta(
+                &SamplingSettings::DiscreteGraphs(settings.clone()),
+                graph_term.get_graph().underlying.get_loop_number(),
+                false,
+                Some(graph_term.get_graph().iter_loop_edges().count()),
+            );
+
+            let continious_grid = Grid::Continuous(ContinuousGrid::new(
+                dimension,
+                integrator_settings.n_bins,
+                integrator_settings.min_samples_for_update,
+                integrator_settings.bin_number_evolution.clone(),
+                integrator_settings.train_on_avg,
+            ));
+
+            if settings.sample_orientations {
+                let continuous_grids = (0..graph_term.get_num_orientations())
+                    .map(|_| Some(continious_grid.clone()))
+                    .collect();
+
+                Grid::Discrete(DiscreteGrid::new(
+                    continuous_grids,
+                    integrator_settings.max_prob_ratio,
+                    integrator_settings.train_on_avg,
+                ))
+            } else {
+                continious_grid
+            }
+        }
     }
 }
 
@@ -642,8 +693,6 @@ fn evaluate_sample<I: GammaloopIntegrand>(
     let stability_iterator =
         create_stability_iterator(&integrand.get_settings().stability, use_f128);
 
-    let dependent_momenta_constructor = integrand.get_dependent_momenta_constructor();
-
     let mut results_of_stability_levels = Vec::with_capacity(stability_iterator.len());
 
     for stability_level in stability_iterator.into_iter() {
@@ -651,13 +700,7 @@ fn evaluate_sample<I: GammaloopIntegrand>(
         let ((results, ltd_evaluation_time), parameterization_time) =
             match stability_level.precision {
                 Precision::Double => {
-                    if let Ok(gammaloop_sample) = parameterize::<f64>(
-                        sample,
-                        integrand.get_polarizations(),
-                        dependent_momenta_constructor,
-                        integrand.get_settings(),
-                        None,
-                    ) {
+                    if let Ok(gammaloop_sample) = parameterize::<f64, I>(sample, integrand) {
                         let parameterization_time = before_parameterization.elapsed();
                         (
                             evaluate_all_rotations(integrand, &gammaloop_sample),
@@ -668,13 +711,7 @@ fn evaluate_sample<I: GammaloopIntegrand>(
                     }
                 }
                 Precision::Quad => {
-                    if let Ok(gammaloop_sample) = parameterize::<f128>(
-                        sample,
-                        integrand.get_polarizations(),
-                        dependent_momenta_constructor,
-                        integrand.get_settings(),
-                        None,
-                    ) {
+                    if let Ok(gammaloop_sample) = parameterize::<f128, I>(sample, integrand) {
                         let parameterization_time = before_parameterization.elapsed();
                         (
                             evaluate_all_rotations(integrand, &gammaloop_sample),
@@ -713,8 +750,10 @@ fn evaluate_sample<I: GammaloopIntegrand>(
     }
 
     if let Some(stability_level_result) = results_of_stability_levels.last() {
-        let re_is_nan = stability_level_result.result.re.is_nan();
-        let im_is_nan = stability_level_result.result.im.is_nan();
+        let re_is_nan = stability_level_result.result.re.is_nan()
+            || stability_level_result.result.re.is_infinite();
+        let im_is_nan = stability_level_result.result.im.is_nan()
+            || stability_level_result.result.im.is_infinite();
         let is_nan = re_is_nan || im_is_nan;
 
         let meta_data = EvaluationMetaData {

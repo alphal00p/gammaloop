@@ -2569,9 +2569,9 @@ impl<T: LowerExp, U: LowerExp> LowerExp for FourMomentum<T, U> {
     }
 }
 
-impl From<Vector<F<f64>, 3>> for ThreeMomentum<F<f64>> {
-    fn from(value: Vector<F<f64>, 3>) -> Self {
-        ThreeMomentum::new(value[0], value[1], value[2])
+impl<T: FloatLike> From<Vector<F<T>, 3>> for ThreeMomentum<F<T>> {
+    fn from(value: Vector<F<T>, 3>) -> Self {
+        ThreeMomentum::new(value[0].clone(), value[1].clone(), value[2].clone())
     }
 }
 

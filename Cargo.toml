@@ -56,9 +56,7 @@ linnet = { version = "0.2.0", features = [
 ] }
 
 
-momtrop = { git = "https://github.com/alphal00p/momtrop", features = [
-    "log",
-], rev = "a77a7e3a6681892008ebbfbd92788d48e7009136" }
+momtrop = { git = "https://github.com/alphal00p/momtrop", features = ["log",] }
 serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "*"
 bincode = {version="2.0.0" ,features=["serde","derive"]}

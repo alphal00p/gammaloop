@@ -16,7 +16,7 @@ use itertools::Itertools;
 use linnet::half_edge::{
     builder::HedgeGraphBuilder,
     hedgevec::HedgeVec,
-    involution::{EdgeIndex, Flow, Hedge, HedgePair, Orientation},
+    involution::{EdgeData, EdgeIndex, Flow, Hedge, HedgePair, Orientation},
     nodestorage::NodeStorageVec,
     subgraph::{
         self, cycle::SignedCycle, node, Inclusion, InternalSubGraph, OrientedCut, SubGraph,
@@ -608,6 +608,30 @@ impl Graph {
         );
 
         LmbMultiChannelingSetup { channels }
+    }
+
+    pub fn iter_loop_edges(&self) -> impl Iterator<Item = (HedgePair, EdgeIndex, EdgeData<&Edge>)> {
+        self.underlying
+            .iter_all_edges()
+            .filter(|(_, edge_index, _)| {
+                self.loop_momentum_basis.edge_signatures[*edge_index]
+                    .internal
+                    .iter()
+                    .any(|sign| sign.is_sign())
+            })
+    }
+
+    pub fn iter_non_loop_edges(
+        &self,
+    ) -> impl Iterator<Item = (HedgePair, EdgeIndex, EdgeData<&Edge>)> {
+        self.underlying
+            .iter_all_edges()
+            .filter(|(_, edge_index, _)| {
+                self.loop_momentum_basis.edge_signatures[*edge_index]
+                    .internal
+                    .iter()
+                    .all(|sign| sign.is_zero())
+            })
     }
 }
 

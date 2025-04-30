@@ -1,19 +1,22 @@
+use itertools::Itertools;
+use momtrop::vector::Vector;
 use serde::{Deserialize, Serialize};
 use spenso::complex::Complex;
 use typed_index_collections::TiVec;
 
 use crate::cff::cut_expression::OrientationID;
+use crate::debug_info::DEBUG_LOGGER;
 use crate::momentum::{Rotation, ThreeMomentum};
 use crate::momentum_sample::{ExternalFourMomenta, MomentumSample, PolarizationVectors};
 use crate::new_graph::Graph;
-use crate::utils::{global_parameterize, FloatLike, F};
+use crate::utils::{self, global_parameterize, FloatLike, F};
 use crate::{
     disable, DependentMomentaConstructor, DiscreteGraphSamplingType, Externals, KinematicsSettings,
     ParameterizationSettings, Polarizations, SamplingSettings, Settings,
 };
 use symbolica::numerical_integration::Sample;
 
-use super::ChannelIndex;
+use super::{ChannelIndex, GammaloopIntegrand, GraphTerm};
 
 // discrete dimensions, continious dimensions
 fn unwrap_sample<T: FloatLike>(sample: &Sample<F<f64>>) -> (Vec<usize>, Vec<F<T>>) {
@@ -429,14 +432,14 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
 }
 
 #[inline]
-pub fn parameterize<T: FloatLike>(
+pub fn parameterize<T: FloatLike, I: GammaloopIntegrand>(
     sample_point: &Sample<F<f64>>,
-    polarizations: &[Polarizations],
-    dependent_momenta_constructor: DependentMomentaConstructor,
-    settings: &Settings,
-    _graphs: Option<&[Graph]>, // this is only needed for tropical sampling
+    integrand: &I,
 ) -> Result<GammaLoopSample<T>, String> {
     let (discrete_indices, xs) = unwrap_sample(sample_point);
+    let settings = integrand.get_settings();
+    let dependent_momenta_constructor = integrand.get_dependent_momenta_constructor();
+    let polarizations = integrand.get_polarizations();
 
     match &settings.sampling {
         SamplingSettings::Default(parameterization_settings) => {
@@ -500,79 +503,68 @@ pub fn parameterize<T: FloatLike>(
                         },
                     })
                 }
-                DiscreteGraphSamplingType::TropicalSampling(_tropical_sampling_settings) => {
-                    todo!("add tropical sampling support");
-                    disable! {
-                        let (graph_id, xs) = unwrap_single_discrete_sample(sample_point);
-                        let externals = &self.global_data.settings.kinematics.externals;
+                DiscreteGraphSamplingType::TropicalSampling(tropical_sampling_settings) => {
+                    let graph = integrand.get_graph(graph_id);
+                    let externals = &settings
+                        .kinematics
+                        .externals
+                        .get_dependent_externals(dependent_momenta_constructor);
 
-                        let graph = match &self.graph_integrands {
-                            GraphIntegrands::Amplitude(graphs) => &graphs[graph_id].graph,
-                            GraphIntegrands::CrossSection(_graphs) => unimplemented!(), //,
-                        };
+                    let sampler = graph.get_tropical_sampler();
 
-                        let sampler = graph
-                                .derived_data
-                                .as_ref()
-                                .unwrap()
-                                .tropical_subgraph_table
-                                .as_ref()
-                                .expect("No tropical subgraph table present, disable tropical sampling or regenerate process with table");
+                    let edge_data = graph
+                        .get_graph()
+                        .iter_loop_edges()
+                        .map(|(_, edge_id, edge)| {
+                            let mass = edge.data.particle.mass.value;
+                            let mass_re = mass.map(|complex_mass| F::from_ff64(complex_mass.re));
 
-                        let edge_data = graph
-                            .bare_graph
-                            .get_loop_edges_iterator()
-                            .map(|(edge_id, edge)| {
-                                let mass = edge.particle.mass.value;
-                                let mass_re = mass.map(|complex_mass| complex_mass.re);
+                            let shift = utils::compute_shift_part(
+                                &graph.get_graph().loop_momentum_basis.edge_signatures[edge_id]
+                                    .external,
+                                externals,
+                            )
+                            .spatial;
 
-                                let shift = utils::compute_shift_part(
-                                    &graph.bare_graph.loop_momentum_basis.edge_signatures[edge_id]
-                                        .external,
-                                    &externals.get_indep_externals(),
-                                )
-                                .spatial;
+                            let shift_momtrop = Vector::from_array([shift.px, shift.py, shift.pz]);
 
-                                let shift_momtrop = Vector::from_array([shift.px, shift.py, shift.pz]);
-
-                                (mass_re, shift_momtrop)
-                            })
-                            .collect_vec();
-
-                        let sampling_result_result = sampler.generate_sample_from_x_space_point(
-                            xs,
-                            edge_data,
-                            &tropical_sampling_settings.into_tropical_sampling_settings(
-                                self.global_data.settings.general.debug,
-                            ),
-                            &DEBUG_LOGGER,
-                        );
-
-                        let sampling_result = match sampling_result_result {
-                            Ok(sampling_result) => sampling_result,
-                            Err(_) => {
-                                return Err(String::from("tropical sampling failed"));
-                            }
-                        };
-
-                        let loop_moms = sampling_result
-                            .loop_momenta
-                            .into_iter()
-                            .map(Into::<ThreeMomentum<F<f64>>>::into)
-                            .collect_vec();
-
-                        let default_sample = MomentumSample::new(
-                            loop_moms,
-                            externals,
-                            sampling_result.jacobian * externals.pdf(xs),
-                            &self.global_data.polarizations[0],
-                            &graph.bare_graph.external_in_or_out_signature(),
-                        );
-                        Ok(GammaLoopSample::DiscreteGraph {
-                            graph_id,
-                            sample: DiscreteGraphSample::Tropical(default_sample),
+                            (mass_re, shift_momtrop)
                         })
-                    }
+                        .collect_vec();
+
+                    let sampling_result_result = sampler.generate_sample_from_x_space_point(
+                        &xs,
+                        edge_data,
+                        &tropical_sampling_settings
+                            .into_tropical_sampling_settings(settings.general.debug),
+                        &DEBUG_LOGGER,
+                    );
+
+                    let sampling_result = match sampling_result_result {
+                        Ok(sampling_result) => sampling_result,
+                        Err(_) => {
+                            return Err(String::from("tropical sampling failed"));
+                        }
+                    };
+
+                    let loop_moms = sampling_result
+                        .loop_momenta
+                        .into_iter()
+                        .map(Into::<ThreeMomentum<F<T>>>::into)
+                        .collect();
+
+                    let default_sample = MomentumSample::new(
+                        loop_moms,
+                        &settings.kinematics.externals,
+                        sampling_result.jacobian,
+                        &integrand.get_polarizations()[0],
+                        dependent_momenta_constructor,
+                        orientation_id,
+                    );
+                    Ok(GammaLoopSample::DiscreteGraph {
+                        graph_id,
+                        sample: DiscreteGraphSample::Tropical(default_sample),
+                    })
                 }
                 DiscreteGraphSamplingType::DiscreteMultiChanneling(multichanneling_settings) => {
                     let channel_id = *discrete_indices.last().expect("invalid_sample_structure");
