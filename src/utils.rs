@@ -3,9 +3,9 @@ use crate::momentum_sample::{ExternalFourMomenta, ExternalIndex, LoopMomenta};
 use crate::new_gammaloop_integrand::GenericEvaluatorFloat;
 use crate::numerator::NumeratorEvaluateFloat;
 use crate::signature::{ExternalSignature, LoopSignature};
-use crate::{ParameterizationMapping, ParameterizationMode, Settings, MAX_LOOP};
+use crate::SamplingSettings;
+use crate::{ParameterizationMapping, ParameterizationMode, MAX_LOOP};
 use crate::{ParameterizationSettings, GAMMALOOP_NAMESPACE};
-use crate::{Precision, SamplingSettings};
 use bincode::{Decode, Encode};
 use colored::Colorize;
 use itertools::{izip, Itertools};
@@ -21,7 +21,6 @@ use spenso::{
     contraction::{RefOne, RefZero},
     upgrading_arithmetic::TrySmallestUpgrade,
 };
-use statrs::distribution::Discrete;
 use symbolica::atom::Symbol;
 use symbolica::domains::float::{
     ConstructibleFloat, NumericalFloatLike, RealNumberLike, SingleFloat,

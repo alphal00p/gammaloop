@@ -44,7 +44,6 @@ use color_eyre::{Help, Report, Result};
 #[allow(unused)]
 use colored::Colorize;
 use cross_section::Amplitude;
-use cross_section::CrossSection;
 use eyre::WrapErr;
 use integrands::*;
 use itertools::Itertools;
@@ -59,13 +58,10 @@ use momentum::Polarization;
 use momentum::Rotatable;
 use momentum::RotationMethod;
 use momentum::SignOrZero;
-use momentum::Signature;
 use momentum::ThreeMomentum;
 use momentum_sample::ExternalFourMomenta;
-use momentum_sample::ExternalIndex;
 use new_graph::ExternalConnection;
 use numerator::NumeratorSettings;
-use typed_index_collections::TiVec;
 
 use observables::ObservableSettings;
 
@@ -73,7 +69,6 @@ use observables::PhaseSpaceSelectorSettings;
 
 use signature::ExternalSignature;
 use spenso::complex::Complex;
-use std::default;
 use std::fmt::Display;
 use std::fs::File;
 use std::sync::atomic::AtomicBool;
@@ -162,6 +157,17 @@ pub enum ParameterizationMode {
     HyperSpherical,
     #[serde(rename = "hyperspherical_flat")]
     HyperSphericalFlat,
+}
+
+impl Display for ParameterizationMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ParameterizationMode::Cartesian => write!(f, "cartesian"),
+            ParameterizationMode::Spherical => write!(f, "spherical"),
+            ParameterizationMode::HyperSpherical => write!(f, "hyperspherical"),
+            ParameterizationMode::HyperSphericalFlat => write!(f, "flat hyperspherical"),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Default, Serialize)]
@@ -893,6 +899,59 @@ impl SamplingSettings {
                         2 + depth_from_orientations
                     }
                     DiscreteGraphSamplingType::TropicalSampling(_) => 1 + depth_from_orientations,
+                }
+            }
+        }
+    }
+
+    fn describe_settings(&self) -> String {
+        match self {
+            SamplingSettings::Default(settings) => {
+                format!("{} coordinates", settings.mode)
+            }
+            SamplingSettings::MultiChanneling(settings) => {
+                format!(
+                    "lmb multichanneling in {} coordinates",
+                    settings.parameterization_settings.mode
+                )
+            }
+            SamplingSettings::DiscreteGraphs(settings) => {
+                let discrete_graph_string = "Monte Carlo over graphs";
+                let orientation_sampling_string = if settings.sample_orientations {
+                    "and Monte Carlo over orientations"
+                } else {
+                    ""
+                };
+
+                match &settings.sampling_type {
+                    DiscreteGraphSamplingType::Default(settings) => {
+                        format!(
+                            "{} {} in {} coordinates",
+                            discrete_graph_string, orientation_sampling_string, settings.mode
+                        )
+                    }
+                    DiscreteGraphSamplingType::MultiChanneling(settings) => {
+                        format!(
+                            "{}, lmb multichanneling in {} coordinates {}",
+                            discrete_graph_string,
+                            settings.parameterization_settings.mode,
+                            orientation_sampling_string,
+                        )
+                    }
+                    DiscreteGraphSamplingType::DiscreteMultiChanneling(settings) => {
+                        format!(
+                            "{}, {} and monte carlo over lmbs in {} coordinates",
+                            discrete_graph_string,
+                            orientation_sampling_string,
+                            settings.parameterization_settings.mode
+                        )
+                    }
+                    DiscreteGraphSamplingType::TropicalSampling(_) => {
+                        format!(
+                            "{} {} using 🌴🥥 tropical sampling 🥥🌴",
+                            discrete_graph_string, orientation_sampling_string,
+                        )
+                    }
                 }
             }
         }

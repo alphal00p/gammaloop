@@ -2,7 +2,6 @@ use std::fmt::Display;
 
 use crate::cff::cut_expression::OrientationID;
 use crate::momentum::{FourMomentum, Polarization, Rotatable, Rotation, ThreeMomentum};
-use crate::signature::ExternalSignature;
 use crate::utils::{FloatLike, Length, F};
 use crate::{DependentMomentaConstructor, Externals, Polarizations, Settings};
 use bincode::{Decode, Encode};
@@ -11,7 +10,6 @@ use serde::{Deserialize, Serialize};
 use spenso::complex::Complex;
 use std::ops::Index;
 use symbolica::domains::float::NumericalFloatLike;
-use symbolica::poly::factor;
 use typed_index_collections::TiVec;
 use uuid::Uuid;
 

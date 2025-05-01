@@ -44,10 +44,8 @@ use symbolica::{
 
 use spenso::complex::Complex;
 use symbolica::{parse, symbol};
-use typed_index_collections::TiVec;
 
 use crate::{
-    momentum_sample::LoopIndex,
     utils::{ApproxEq, FloatLike, RefDefault, F},
     RotationSetting,
 };
@@ -3073,7 +3071,7 @@ mod tests {
         ufo,
         upgrading_arithmetic::{FallibleAdd, FallibleSub},
     };
-    use symbolica::{parse, symbol};
+    use symbolica::parse;
 
     use crate::utils::F;
 
