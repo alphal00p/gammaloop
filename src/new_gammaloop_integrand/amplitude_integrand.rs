@@ -12,8 +12,7 @@ use crate::{
     momentum_sample::{ExternalIndex, MomentumSample},
     new_graph::{FeynmanGraph, Graph, LmbIndex, LoopMomentumBasis},
     signature::SignatureLike,
-    utils::{FloatLike, F},
-    DependentMomentaConstructor, Polarizations, Settings,
+    DependentMomentaConstructor, FloatLike, Polarizations, Settings, F,
 };
 
 use super::{
@@ -165,6 +164,23 @@ impl HasIntegrand for AmplitudeIntegrand {
     }
 
     fn get_n_dim(&self) -> usize {
-        todo!()
+        if self
+            .settings
+            .sampling
+            .get_parameterization_settings()
+            .is_some()
+        {
+            self.graph_terms[0].graph.underlying.get_loop_number() * 3
+        } else {
+            let dimensions = self
+                .graph_terms
+                .iter()
+                .map(|term| term.get_tropical_sampler().get_dimension())
+                .sorted()
+                .collect_vec();
+
+            let median_dimension = dimensions[dimensions.len() / 2];
+            median_dimension
+        }
     }
 }

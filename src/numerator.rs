@@ -81,11 +81,7 @@ use symbolica::{
     atom::{Atom, FunctionBuilder},
     function, parse, symbol,
 };
-use symbolica::{
-    domains::float::NumericalFloatLike,
-    evaluate::FunctionMap,
-    id::{Pattern, Replacement},
-};
+use symbolica::{domains::float::NumericalFloatLike, evaluate::FunctionMap, id::Replacement};
 
 pub mod ufo;
 #[derive(Debug, Clone, Serialize, Deserialize)]

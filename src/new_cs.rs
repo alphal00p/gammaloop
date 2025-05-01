@@ -551,7 +551,7 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
         let loop_part = self
             .graph
             .iter_loop_edges()
-            .map(|(pair, edge_id, _edge)| {
+            .map(|(_, edge_id, _edge)| {
                 self.graph.loop_momentum_basis.edge_signatures[edge_id]
                     .internal
                     .clone()

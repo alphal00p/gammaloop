@@ -1,6 +1,5 @@
 use std::time::Duration;
 
-use crate::disable;
 use crate::evaluation_result::EvaluationMetaData;
 use crate::evaluation_result::EvaluationResult;
 use crate::integrands::*;

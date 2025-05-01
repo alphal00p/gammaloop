@@ -14,9 +14,6 @@ use serde::Deserialize;
 use serde::Serialize;
 use spenso::contraction::IsZero;
 use symbolica::domains::float::ConstructibleFloat;
-use symbolica::domains::float::Real;
-use symbolica::domains::float::RealNumberLike;
-use symbolica::domains::float::SingleFloat;
 use symbolica::numerical_integration::{Grid, MonteCarloRng, Sample, StatisticsAccumulator};
 
 use crate::disable;
@@ -27,28 +24,21 @@ use crate::observables::Event;
 use crate::utils;
 use crate::utils::format_sample;
 use crate::utils::F;
-use crate::DiscreteGraphSamplingSettings;
 use crate::Integrand;
+use crate::IntegratedPhase;
 use crate::IntegratorSettings;
-use crate::SamplingSettings;
 use crate::Settings;
 use crate::INTERRUPTED;
 use crate::{is_interrupted, set_interrupted};
-use crate::{IntegratedPhase, IntegrationResult};
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
 use rayon::prelude::*;
 use spenso::complex::Complex;
 use std::fs;
-use std::fs::File;
-use std::io::{BufWriter, Write};
-use std::iter;
-use std::ops::MulAssign;
 use std::path::PathBuf;
-use std::str::FromStr;
 use std::time::Duration;
 use std::time::Instant;
-use tabled::{Style, Table, Tabled};
+use tabled::Tabled;
 
 // const N_INTEGRAND_ACCUMULATORS: usize = 2;
 
@@ -289,59 +279,32 @@ where
         IntegrationState::new_from_settings(|| user_data.integrand[0].create_grid())
     };
 
-    disable! {
-        let grid_str = match &settings.sampling {
-            SamplingSettings::MultiChanneling(_multi_channeling_settings) => {
-                let cont_dimension = match &integration_state.grid {
-                    Grid::Continuous(g) => g.continuous_dimensions.len(),
-                    _ => unreachable!(),
-                };
+    let sampling_str = settings.sampling.describe_settings();
+    let dimension = user_data.integrand[0].get_n_dim();
+    let discrete_depth = settings.sampling.discrete_depth();
+    let is_tropical_sampling = settings.sampling.get_parameterization_settings().is_none();
 
-                // I don't specify the number of channels, because they are different for each graph
-                format!(
-                    "a continuous {}-dimensional grid with multi-channeling over lmbs",
-                    cont_dimension
-                )
-            }
-            SamplingSettings::Default => {
-                let cont_dimension = match &integration_state.grid {
-                    Grid::Continuous(g) => g.continuous_dimensions.len(),
-                    _ => unreachable!(),
-                };
+    let cont_dim_str = if is_tropical_sampling {
+        format!("a median continious dimension of {}", dimension)
+    } else {
+        format!("{} continuous dimensions", dimension)
+    };
 
-                format!("a continuous {}-dimensional grid", cont_dimension)
-            }
-            SamplingSettings::DiscreteGraphs(discrete_graph_sampling_settings) => {
-                let num_graphs = match &integration_state.grid {
-                    Grid::Discrete(g) => g.bins.len(),
-                    _ => unreachable!(),
-                };
-
-
-                let inner_settings_string = match momentum_sampling_settings {
-                    DiscreteGraphSamplingSettings::Default => String::from(""),
-                    DiscreteGraphSamplingSettings::DiscreteMultiChanneling(_) => {
-                        String::from(" and a nested discrete grid over lmb-channels")
-                    }
-                    DiscreteGraphSamplingSettings::TropicalSampling(_) => {
-                        format!(" and 🌴🥥 {} 🥥🌴", "tropical sampling".green().bold())
-                    }
-                    DiscreteGraphSamplingSettings::MultiChanneling(_) => {
-                        String::from(" and multi-channeling over lmb-channels")
-                    }
-                };
-
-                format!(
-                    "a discrete grid with {} {}{}",
-                    num_graphs,
-                    if num_graphs > 1 { "graphs" } else { "graph" },
-                    inner_settings_string
-                )
-            }
+    let graph_string = if discrete_depth > 0 {
+        let num_graphs = match &integration_state.grid {
+            Grid::Discrete(g) => g.bins.len(),
+            _ => unreachable!(),
         };
-    }
+        format!(
+            "{discrete_depth} nested discrete grids with {} {} and ",
+            num_graphs,
+            if num_graphs > 1 { "graphs" } else { "graph" }
+        )
+    } else {
+        String::new()
+    };
 
-    let grid_str = "grid info currently unavailable";
+    let grid_str = format!("{graph_string}{cont_dim_str} using {sampling_str}");
 
     let cores = user_data.integrand.len();
 

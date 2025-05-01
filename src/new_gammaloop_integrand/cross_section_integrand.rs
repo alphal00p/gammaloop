@@ -272,6 +272,14 @@ impl HasIntegrand for CrossSectionIntegrand {
     }
 
     fn get_n_dim(&self) -> usize {
+        assert!(
+            self.settings
+                .sampling
+                .get_parameterization_settings()
+                .is_some(),
+            "Tropical smapling not implemented for cross sections yet"
+        );
+
         assert!(self
             .graph_terms
             .iter()

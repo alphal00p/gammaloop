@@ -4,7 +4,6 @@ use crate::momentum_sample::{
 };
 use crate::utils::{FloatLike, Length, F};
 use bincode::{BorrowDecode, Decode, Encode};
-use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use spenso::contraction::RefZero;
 use std::fmt::Display;

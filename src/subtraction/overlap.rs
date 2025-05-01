@@ -2,7 +2,6 @@ use crate::cff::esurface::EsurfaceCollection;
 use crate::cff::esurface::ExistingEsurfaceId;
 use crate::cff::esurface::ExistingEsurfaces;
 use crate::debug_info::DEBUG_LOGGER;
-use crate::momentum::FourMomentum;
 use crate::momentum::ThreeMomentum;
 use crate::momentum_sample::ExternalFourMomenta;
 use crate::momentum_sample::LoopMomenta;
@@ -23,7 +22,6 @@ use serde::Deserialize;
 use serde::Serialize;
 use serde_with::serde_as;
 use spenso::complex::Complex;
-use std::borrow::Borrow;
 
 use crate::signature::LoopExtSignature;
 
@@ -683,10 +681,8 @@ mod tests {
     use typed_index_collections::ti_vec;
 
     use crate::{
-        cff::{
-            cff_graph::VertexSet,
-            esurface::{Esurface, EsurfaceID},
-        },
+        cff::esurface::{Esurface, EsurfaceID},
+        momentum::FourMomentum,
         new_graph::LoopMomentumBasis,
         signature::LoopExtSignature,
         utils::dummy_hedge_graph,
