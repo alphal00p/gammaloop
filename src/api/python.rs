@@ -1326,20 +1326,11 @@ impl PythonWorker {
         self.cross_sections.sync(&self.model);
     }
 
-    pub fn generate_integrands(
-        &mut self,
-        settings_yaml_str: &str,
-        process_settings_yaml_str: &str,
-    ) {
+    pub fn generate_integrands(&mut self, settings_yaml_str: &str) {
         let settings =
             serde_yaml::from_str::<Settings>(settings_yaml_str).expect("Could not parse settings");
 
-        let process_settings = serde_yaml::from_str::<ProcessSettings>(process_settings_yaml_str)
-            .expect("could not parse process settings");
-
-        let integrands = self
-            .process_list
-            .generate_integrands(settings, &process_settings);
+        let integrands = self.process_list.generate_integrands(settings);
 
         self.integrands = integrands;
     }

@@ -1617,8 +1617,7 @@ class GammaLoop(object):
 
     def do_integrate(self, str_args: str) -> list[complex]:
         settings = yaml.dump(self.config["run_settings"])
-        process_settings = yaml.dump(self.config["export_settings"])
-        self.rust_worker.generate_integrands(settings, process_settings)
+        self.rust_worker.generate_integrands(settings)
 
         if str_args == 'help':
             self.integrate_parser.print_help()

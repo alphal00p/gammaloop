@@ -155,13 +155,8 @@ impl Process {
         }
     }
 
-    fn generate_integrands(
-        &self,
-        settings: Settings,
-        process_settings: &ProcessSettings,
-    ) -> HashMap<String, Integrand> {
-        self.collection
-            .generate_integrands(settings, process_settings)
+    fn generate_integrands(&self, settings: Settings) -> HashMap<String, Integrand> {
+        self.collection.generate_integrands(settings)
     }
 }
 
@@ -206,15 +201,11 @@ impl ProcessList {
         Ok(())
     }
 
-    pub fn generate_integrands(
-        &self,
-        settings: Settings,
-        process_settings: &ProcessSettings,
-    ) -> HashMap<String, Integrand> {
+    pub fn generate_integrands(&self, settings: Settings) -> HashMap<String, Integrand> {
         let mut result = HashMap::default();
 
         for process in self.processes.iter() {
-            let integrands = process.generate_integrands(settings.clone(), process_settings);
+            let integrands = process.generate_integrands(settings.clone());
             result.extend(integrands);
         }
 
@@ -277,18 +268,13 @@ impl<S: NumeratorState> ProcessCollection<S> {
         Ok(())
     }
 
-    fn generate_integrands(
-        &self,
-        settings: Settings,
-        process_settings: &ProcessSettings,
-    ) -> HashMap<String, Integrand> {
+    fn generate_integrands(&self, settings: Settings) -> HashMap<String, Integrand> {
         let mut result = HashMap::default();
         match self {
             Self::Amplitudes(amplitudes) => {
                 let name = "default".to_owned();
                 for amplitude in amplitudes {
-                    let integrand =
-                        amplitude.generate_integrand(settings.clone(), process_settings);
+                    let integrand = amplitude.generate_integrand(settings.clone());
                     result.insert(name.clone(), integrand);
                 }
             }
@@ -319,15 +305,11 @@ impl<S: NumeratorState> Amplitude<S> {
         Ok(())
     }
 
-    pub fn generate_integrand(
-        &self,
-        settings: Settings,
-        process_settings: &ProcessSettings,
-    ) -> Integrand {
+    pub fn generate_integrand(&self, settings: Settings) -> Integrand {
         let terms = self
             .graphs
             .iter()
-            .map(|graph| graph.generate_term_for_graph(&settings, process_settings))
+            .map(|graph| graph.generate_term_for_graph(&settings))
             .collect_vec();
 
         let rotations: Vec<Rotation> = Some(Rotation::new(RotationMethod::Identity))
@@ -624,11 +606,7 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
         Ok(self.derived_data.bare_cff_orientation_evaluatos = Some(evaluators))
     }
 
-    fn generate_term_for_graph(
-        &self,
-        _settings: &Settings,
-        process_settings: &ProcessSettings,
-    ) -> AmplitudeGraphTerm {
+    fn generate_term_for_graph(&self, _settings: &Settings) -> AmplitudeGraphTerm {
         AmplitudeGraphTerm {
             bare_cff_evaluator: self.derived_data.bare_cff_evaluator.clone().unwrap(),
             bare_cff_orientation_evaluators: self
