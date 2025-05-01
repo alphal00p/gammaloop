@@ -19,8 +19,9 @@ use crate::{
     new_gammaloop_integrand::{
         amplitude_integrand::{AmplitudeGraphTerm, AmplitudeIntegrand},
         cross_section_integrand::OrientationEvaluator,
-        GenericEvaluator,
+        GenericEvaluator, LmbMultiChannelingSetup,
     },
+    new_graph::{LmbIndex, LoopMomentumBasis},
     signature::SignatureLike,
     utils::f128,
 };
@@ -47,7 +48,7 @@ use crate::{
         generation::generate_cff_with_cuts,
     },
     cross_section::IsPolarizable,
-    feyngen::{FeynGenFilters, FeynGenOptions, GenerationType, NumeratorAwareGraphGroupingOption},
+    feyngen::{FeynGenFilters, GenerationType},
     graph::BareGraph,
     integrands::Integrand,
     model::{Model, Particle},
@@ -57,7 +58,7 @@ use crate::{
         NewIntegrand,
     },
     new_graph::{ExternalConnection, FeynmanGraph, Graph},
-    numerator::{GlobalPrefactor, NumeratorState, PythonState},
+    numerator::{NumeratorState, PythonState},
     utils::F,
     DependentMomentaConstructor, Externals, Polarizations, ProcessSettings, Settings,
 };
@@ -99,18 +100,6 @@ impl<S: NumeratorState> Process<S> {
             .preprocess(model, &self.definition, settings)?;
         Ok(())
     }
-}
-
-pub struct GenerationOptions {
-    pub feyngen_options: FeynGenOptions,
-    pub numerator_aware_isomorphism_grouping: NumeratorAwareGraphGroupingOption,
-    pub filter_self_loop: bool,
-    pub graph_prefix: String,
-    pub selected_graphs: Option<Vec<String>>,
-    pub vetoed_graphs: Option<Vec<String>>,
-    pub loop_momentum_bases: Option<HashMap<String, Vec<String>>>,
-    pub global_prefactor: GlobalPrefactor,
-    pub num_threads: Option<usize>,
 }
 
 impl Process {
@@ -391,8 +380,13 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
         AmplitudeGraph {
             graph,
             derived_data: AmplitudeDerivedData {
-                cff_expression: CFFExpression::new_empty(),
-                temp_numerator: PhantomData,
+                cff_expression: None,
+                bare_cff_evaluator: None,
+                bare_cff_orientation_evaluatos: None,
+                temp_numerator: None,
+                lmbs: None,
+                tropical_sampler: None,
+                multi_channeling_setup: None,
             },
         }
     }
@@ -404,18 +398,32 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
             .get_esurface_canonization(&self.graph.loop_momentum_basis);
 
         let cff_expression = generate_cff_expression(&self.graph.underlying, &shift_rewrite)?;
-        self.derived_data.cff_expression = cff_expression;
+        self.derived_data.cff_expression = Some(cff_expression);
 
         Ok(())
     }
 
-    fn preprocess(&mut self, _model: &Model, _settings: &ProcessSettings) -> Result<()> {
+    fn preprocess(&mut self, _model: &Model, settings: &ProcessSettings) -> Result<()> {
         self.graph
             .loop_momentum_basis
             .set_edge_signatures(&self.graph.underlying)?;
 
         self.generate_cff()?;
+        self.build_evaluator();
+        self.build_evaluator_for_orientations()?;
+        self.build_tropical_sampler(settings)?;
+        self.build_loop_momentum_bases();
+        self.build_multi_channeling_channels();
+
         Ok(())
+    }
+
+    fn build_multi_channeling_channels(&mut self) {
+        let channels = self
+            .graph
+            .build_multi_channeling_channels(self.derived_data.lmbs.as_ref().unwrap());
+
+        self.derived_data.multi_channeling_setup = Some(channels)
     }
 
     fn get_params(&self) -> Vec<Atom> {
@@ -443,11 +451,13 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
         result
     }
 
-    fn build_evaluator(&self) -> GenericEvaluator {
-        let atom_unsubstituted = self.derived_data.cff_expression.to_atom();
+    fn build_evaluator(&mut self) {
+        let atom_unsubstituted = self.derived_data.cff_expression.as_ref().unwrap().to_atom();
         let atom = self
             .derived_data
             .cff_expression
+            .as_ref()
+            .unwrap()
             .surfaces
             .substitute_energies(&atom_unsubstituted);
 
@@ -463,17 +473,25 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
         let tree_double = tree.map_coeff::<F<f64>, _>(&|r| r.into());
         let tree_quad = tree.map_coeff::<F<f128>, _>(&|r| r.into());
 
-        GenericEvaluator {
+        let evaluator = GenericEvaluator {
             f64_compiled: None,
             f64_eager: RefCell::new(tree_double.linearize(Some(1))),
             f128: RefCell::new(tree_quad.linearize(Some(1))),
-        }
+        };
+
+        self.derived_data.bare_cff_evaluator = Some(evaluator)
     }
 
-    fn build_tropical_sampler(
-        &self,
-        process_settings: &ProcessSettings,
-    ) -> Result<SampleGenerator<3>> {
+    fn build_loop_momentum_bases(&mut self) {
+        let lmbs = self
+            .graph
+            .loop_momentum_basis
+            .generate_loop_momentum_bases(&self.graph.underlying);
+
+        self.derived_data.lmbs = Some(lmbs)
+    }
+
+    fn build_tropical_sampler(&mut self, process_settings: &ProcessSettings) -> Result<()> {
         let num_virtual_loop_edges = self.graph.iter_loop_edges().count();
         let num_loops = self.graph.loop_momentum_basis.basis.len();
         let target_omega = process_settings
@@ -559,23 +577,30 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
             })
             .collect_vec();
 
-        tropical_graph
+        let sampler = tropical_graph
             .build_sampler(loop_part)
-            .map_err(|e| eyre!(e))
+            .map_err(|e| eyre!(e))?;
+
+        Ok(self.derived_data.tropical_sampler = Some(sampler))
     }
 
-    fn build_evaluator_for_orientations(&self) -> TiVec<OrientationID, GenericEvaluator> {
+    fn build_evaluator_for_orientations(&mut self) -> Result<()> {
         let params = self.get_params();
         let function_map = self.get_function_map();
 
-        self.derived_data
+        let evaluators = self
+            .derived_data
             .cff_expression
+            .as_ref()
+            .unwrap()
             .get_orientation_atoms()
             .iter()
             .map(|orientation_atom_unsubstituted| {
                 let atom_no_prefactor = self
                     .derived_data
                     .cff_expression
+                    .as_ref()
+                    .unwrap()
                     .surfaces
                     .substitute_energies(orientation_atom_unsubstituted);
 
@@ -594,7 +619,9 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
                     f128: RefCell::new(tree_quad.linearize(Some(1))),
                 }
             })
-            .collect()
+            .collect();
+
+        Ok(self.derived_data.bare_cff_orientation_evaluatos = Some(evaluators))
     }
 
     fn generate_term_for_graph(
@@ -602,29 +629,30 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
         _settings: &Settings,
         process_settings: &ProcessSettings,
     ) -> AmplitudeGraphTerm {
-        let evaluator = self.build_evaluator();
-        let lmbs = self
-            .graph
-            .loop_momentum_basis
-            .generate_loop_momentum_bases(&self.graph.underlying);
-
-        let multi_channeling_setup = self.graph.build_multi_channeling_channels(&lmbs);
-
         AmplitudeGraphTerm {
-            bare_cff_evaluator: evaluator,
-            bare_cff_orientation_evaluatos: self.build_evaluator_for_orientations(),
-            tropical_sampler: self.build_tropical_sampler(process_settings).unwrap(),
+            bare_cff_evaluator: self.derived_data.bare_cff_evaluator.clone().unwrap(),
+            bare_cff_orientation_evaluators: self
+                .derived_data
+                .bare_cff_orientation_evaluatos
+                .clone()
+                .unwrap(),
+            tropical_sampler: self.derived_data.tropical_sampler.clone().unwrap(),
             graph: self.graph.clone(),
-            multi_channeling_setup,
-            lmbs,
+            multi_channeling_setup: self.derived_data.multi_channeling_setup.clone().unwrap(),
+            lmbs: self.derived_data.lmbs.clone().unwrap(),
         }
     }
 }
 
 #[derive(Clone)]
 pub struct AmplitudeDerivedData<S: NumeratorState> {
-    cff_expression: CFFExpression,
-    temp_numerator: PhantomData<S>,
+    cff_expression: Option<CFFExpression>,
+    bare_cff_evaluator: Option<GenericEvaluator>,
+    bare_cff_orientation_evaluatos: Option<TiVec<OrientationID, GenericEvaluator>>,
+    temp_numerator: Option<PhantomData<S>>,
+    lmbs: Option<TiVec<LmbIndex, LoopMomentumBasis>>,
+    tropical_sampler: Option<SampleGenerator<3>>,
+    multi_channeling_setup: Option<LmbMultiChannelingSetup>,
 }
 
 impl<S: NumeratorState> Amplitude<S> {
