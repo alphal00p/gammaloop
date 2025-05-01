@@ -365,7 +365,7 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
                 cff_expression: None,
                 bare_cff_evaluator: None,
                 bare_cff_orientation_evaluatos: None,
-                temp_numerator: None,
+                _temp_numerator: None,
                 lmbs: None,
                 tropical_sampler: None,
                 multi_channeling_setup: None,
@@ -627,7 +627,7 @@ pub struct AmplitudeDerivedData<S: NumeratorState> {
     cff_expression: Option<CFFExpression>,
     bare_cff_evaluator: Option<GenericEvaluator>,
     bare_cff_orientation_evaluatos: Option<TiVec<OrientationID, GenericEvaluator>>,
-    temp_numerator: Option<PhantomData<S>>,
+    _temp_numerator: Option<PhantomData<S>>,
     lmbs: Option<TiVec<LmbIndex, LoopMomentumBasis>>,
     tropical_sampler: Option<SampleGenerator<3>>,
     multi_channeling_setup: Option<LmbMultiChannelingSetup>,
@@ -869,14 +869,28 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
                 "cut_id: {:?} \n, esurface: {:#?} \n, expression: {}",
                 cut_id,
                 esurface,
-                self.derived_data.cff_expression.to_atom_for_cut(cut_id)
+                self.derived_data
+                    .cff_expression
+                    .as_ref()
+                    .unwrap()
+                    .to_atom_for_cut(cut_id)
             );
         }
-        Ok(())
+
+        self.build_cut_evaluators();
+        self.build_orientation_evaluators();
+        self.build_lmbs();
+        Ok(self.build_multi_channeling_channels())
     }
 
     pub fn update_surface_cache(&mut self) {
-        let esurface_cache = &mut self.derived_data.cff_expression.surfaces.esurface_cache;
+        let esurface_cache = &mut self
+            .derived_data
+            .cff_expression
+            .as_mut()
+            .unwrap()
+            .surfaces
+            .esurface_cache;
 
         // if a cut was not generated during cff, we still add it to the surface cache such that it has an esurface_id
         for esurface in self.cut_esurface.iter() {
@@ -901,7 +915,7 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
         let cff_cut_expression =
             generate_cff_with_cuts(&self.graph.underlying, &shift_rewrite, &self.cuts);
 
-        self.derived_data.cff_expression = cff_cut_expression;
+        self.derived_data.cff_expression = Some(cff_cut_expression)
     }
 
     fn generate_cuts(
@@ -954,11 +968,18 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
     }
 
     fn build_atom_for_cut(&self, cut_id: CutId) -> Atom {
-        let cut_atom = self.derived_data.cff_expression.to_atom_for_cut(cut_id);
+        let cut_atom = self
+            .derived_data
+            .cff_expression
+            .as_ref()
+            .unwrap()
+            .to_atom_for_cut(cut_id);
 
         let cut_atom_energy_sub = self
             .derived_data
             .cff_expression
+            .as_ref()
+            .unwrap()
             .surfaces
             .substitute_energies(&cut_atom);
 
@@ -1012,8 +1033,9 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
         fn_map
     }
 
-    fn build_cut_evaluators(&self) -> TiVec<CutId, GenericEvaluator> {
-        self.cuts
+    fn build_cut_evaluators(&mut self) {
+        let evaluators = self
+            .cuts
             .iter_enumerated()
             .map(|(cut_id, _)| {
                 let atom = self.build_atom_for_cut(cut_id);
@@ -1035,11 +1057,18 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
                     f128: RefCell::new(tree_quad.linearize(Some(1))),
                 }
             })
-            .collect()
+            .collect();
+
+        self.derived_data.bare_cff_evaluators = Some(evaluators)
     }
 
-    fn build_orientation_evaluators(&self) -> TiVec<OrientationID, OrientationEvaluator> {
-        let orientation_atoms = self.derived_data.cff_expression.get_orientation_atoms();
+    fn build_orientation_evaluators(&mut self) {
+        let orientation_atoms = self
+            .derived_data
+            .cff_expression
+            .as_ref()
+            .unwrap()
+            .get_orientation_atoms();
         let substituted_energies = orientation_atoms
             .iter()
             .map(|cut_atoms| {
@@ -1049,6 +1078,8 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
                         let substituded_atom = self
                             .derived_data
                             .cff_expression
+                            .as_ref()
+                            .unwrap()
                             .surfaces
                             .substitute_energies(atom);
                         substituded_atom
@@ -1060,11 +1091,13 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
         let orientation_datas = self
             .derived_data
             .cff_expression
+            .as_ref()
+            .unwrap()
             .orientations
             .iter()
             .map(|orienatation| orienatation.data.clone());
 
-        substituted_energies
+        let orientation_evaluators = substituted_energies
             .iter()
             .zip(orientation_datas)
             .map(|(cut_atoms, orientation_data)| {
@@ -1096,43 +1129,65 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
                     evaluators: cut_evaluators,
                 }
             })
-            .collect()
+            .collect();
+
+        self.derived_data.bare_cff_orientation_evaluators = Some(orientation_evaluators);
     }
 
-    fn generate_term_for_graph(&self, _settings: &Settings) -> CrossSectionGraphTerm {
-        let evaluators = self.build_cut_evaluators();
+    fn build_lmbs(&mut self) {
         let lmbs = self
             .graph
             .loop_momentum_basis
             .generate_loop_momentum_bases(&self.graph.underlying);
 
-        let multi_channeling_setup = self.graph.build_multi_channeling_channels(&lmbs);
-        let orientation_evaluators = self.build_orientation_evaluators();
+        self.derived_data.lmbs = Some(lmbs)
+    }
 
+    fn build_multi_channeling_channels(&mut self) {
+        let channels = self
+            .graph
+            .build_multi_channeling_channels(self.derived_data.lmbs.as_ref().unwrap());
+
+        self.derived_data.multi_channeling_setup = Some(channels)
+    }
+
+    fn generate_term_for_graph(&self, _settings: &Settings) -> CrossSectionGraphTerm {
         CrossSectionGraphTerm {
-            multi_channeling_setup,
-            bare_cff_evaluators: evaluators,
-            bare_cff_orientation_evaluators: orientation_evaluators,
+            multi_channeling_setup: self.derived_data.multi_channeling_setup.clone().unwrap(),
+            bare_cff_evaluators: self.derived_data.bare_cff_evaluators.clone().unwrap(),
+            bare_cff_orientation_evaluators: self
+                .derived_data
+                .bare_cff_orientation_evaluators
+                .clone()
+                .unwrap(),
             graph: self.graph.clone(),
             cut_esurface: self.cut_esurface.clone(),
-            lmbs,
+            lmbs: self.derived_data.lmbs.clone().unwrap(),
         }
     }
 }
 
 #[derive(Clone)]
 pub struct CrossSectionDerivedData<S: NumeratorState = PythonState> {
-    pub orientations: TiVec<OrientationID, CutOrientationData>,
-    pub cff_expression: CFFCutExpression,
-    temp_numerator: PhantomData<S>,
+    orientations: Option<TiVec<OrientationID, CutOrientationData>>,
+    bare_cff_evaluators: Option<TiVec<CutId, GenericEvaluator>>,
+    bare_cff_orientation_evaluators: Option<TiVec<OrientationID, OrientationEvaluator>>,
+    cff_expression: Option<CFFCutExpression>,
+    lmbs: Option<TiVec<LmbIndex, LoopMomentumBasis>>,
+    multi_channeling_setup: Option<LmbMultiChannelingSetup>,
+    _temp_numerator: Option<PhantomData<S>>,
 }
 
 impl<S: NumeratorState> CrossSectionDerivedData<S> {
     fn new_empty() -> Self {
         Self {
-            orientations: TiVec::new(),
-            cff_expression: CFFCutExpression::new_empty(),
-            temp_numerator: PhantomData,
+            orientations: None,
+            cff_expression: None,
+            _temp_numerator: None,
+            bare_cff_evaluators: None,
+            bare_cff_orientation_evaluators: None,
+            lmbs: None,
+            multi_channeling_setup: None,
         }
     }
 }
