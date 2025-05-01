@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use itertools::Itertools;
 use serde::Serialize;
 use spenso::complex::Complex;
@@ -11,20 +9,19 @@ use crate::{
         cut_expression::{CutOrientationData, OrientationID},
         esurface::Esurface,
     },
-    evaluation_result::{EvaluationMetaData, EvaluationResult},
+    evaluation_result::EvaluationResult,
     integrands::HasIntegrand,
     momentum::{Rotation, ThreeMomentum},
     momentum_sample::{LoopMomenta, MomentumSample},
     new_cs::CutId,
     new_graph::{ExternalConnection, FeynmanGraph, Graph, LmbIndex, LoopMomentumBasis},
-    utils::{self, f128, FloatLike, F},
-    DependentMomentaConstructor, IntegratedCounterTermRange, Polarizations, Precision, Settings,
+    utils::{self, FloatLike, F},
+    DependentMomentaConstructor, IntegratedCounterTermRange, Polarizations, Settings,
 };
 
 use super::{
-    create_grid, create_stability_iterator, evaluate_all_rotations, evaluate_sample,
-    gammaloop_sample::parameterize, stability_check, GammaloopIntegrand, GenericEvaluator,
-    GenericEvaluatorFloat, GraphTerm, LmbMultiChannelingSetup, StabilityLevelResult,
+    create_grid, evaluate_sample, GammaloopIntegrand, GenericEvaluator, GenericEvaluatorFloat,
+    GraphTerm, LmbMultiChannelingSetup,
 };
 
 const TOLERANCE: F<f64> = F(2.0);

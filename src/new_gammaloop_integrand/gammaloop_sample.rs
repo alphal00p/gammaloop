@@ -8,11 +8,10 @@ use crate::cff::cut_expression::OrientationID;
 use crate::debug_info::DEBUG_LOGGER;
 use crate::momentum::{Rotation, ThreeMomentum};
 use crate::momentum_sample::{ExternalFourMomenta, MomentumSample, PolarizationVectors};
-use crate::new_graph::Graph;
 use crate::utils::{self, global_parameterize, FloatLike, F};
 use crate::{
-    disable, DependentMomentaConstructor, DiscreteGraphSamplingType, Externals, KinematicsSettings,
-    ParameterizationSettings, Polarizations, SamplingSettings, Settings,
+    DependentMomentaConstructor, DiscreteGraphSamplingType, Externals, KinematicsSettings,
+    ParameterizationSettings, Polarizations, SamplingSettings,
 };
 use symbolica::numerical_integration::Sample;
 
