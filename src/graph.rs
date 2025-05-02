@@ -10,7 +10,9 @@ use crate::{
     },
     gammaloop_integrand::DefaultSample,
     ltd::{generate_ltd_expression, LTDExpression},
-    model::{self, ArcParticle, ColorStructure, EdgeSlots, Model, Particle, VertexSlots},
+    model::{
+        self, ArcParticle, ArcVertexRule, ColorStructure, EdgeSlots, Model, Particle, VertexSlots,
+    },
     momentum::{FourMomentum, Polarization, Rotation, SignOrZero, ThreeMomentum},
     momentum_sample::{
         BareMomentumSample, ExternalFourMomenta, ExternalIndex, LoopMomenta, MomentumSample,
@@ -494,7 +496,7 @@ pub trait HasVertexInfo {
     ) -> Option<[DataTensor<Atom>; 3]>;
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Encode)]
 // #[enum_dispatch(HasVertexInfo)]
 pub enum VertexInfo {
     ExternalVertexInfo(ExternalVertexInfo),
@@ -553,7 +555,7 @@ impl VertexInfo {
                 }
                 (e.into(), updated_shifts)
             }
-            VertexInfo::InteractonVertexInfo(i) => i.vertex_rule.generate_vertex_slots(shifts),
+            VertexInfo::InteractonVertexInfo(i) => i.vertex_rule.0.generate_vertex_slots(shifts),
         }
     }
 }
@@ -569,7 +571,7 @@ pub struct SerializableExternalVertexInfo {
     particle: SmartString<LazyCompact>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Encode)]
 pub struct ExternalVertexInfo {
     pub direction: EdgeType,
     pub particle: ArcParticle,
@@ -626,15 +628,15 @@ impl HasVertexInfo for ExternalVertexInfo {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Encode)]
 pub struct InteractionVertexInfo {
     #[allow(unused)]
-    pub vertex_rule: Arc<model::VertexRule>,
+    pub vertex_rule: ArcVertexRule,
 }
 
 impl InteractionVertexInfo {
     pub fn dod(&self) -> isize {
-        self.vertex_rule.dod()
+        self.vertex_rule.0.dod()
     }
 }
 
@@ -651,6 +653,7 @@ impl HasVertexInfo for InteractionVertexInfo {
     ) -> Option<[DataTensor<Atom>; 3]> {
         let spin_structure = self
             .vertex_rule
+            .0
             .lorentz_structures
             .iter()
             .map(|ls| {
@@ -700,6 +703,7 @@ impl HasVertexInfo for InteractionVertexInfo {
         let mut color_dummy_shift = 0;
         let color_structure: Vec<Atom> = self
             .vertex_rule
+            .0
             .color_structures
             .iter()
             .map(|cs| {
@@ -710,6 +714,7 @@ impl HasVertexInfo for InteractionVertexInfo {
 
                 let spins: Vec<isize> = self
                     .vertex_rule
+                    .0
                     .particles
                     .iter()
                     .map(|s| s.0.color)
@@ -781,7 +786,7 @@ impl HasVertexInfo for InteractionVertexInfo {
                 j.cast(),
             ])));
 
-        for (i, row) in self.vertex_rule.couplings.iter().enumerate() {
+        for (i, row) in self.vertex_rule.0.couplings.iter().enumerate() {
             for (j, col) in row.iter().enumerate() {
                 if let Some(atom) = col {
                     couplings.set(&[i, j], atom.expression.clone()).unwrap();
@@ -803,7 +808,7 @@ fn serializable_vertex_info(vertex_info: &VertexInfo) -> SerializableVertexInfo 
         }
         VertexInfo::InteractonVertexInfo(interaction_vertex_info) => {
             SerializableVertexInfo::InteractonVertexInfo(SerializableInteractionVertexInfo {
-                vertex_rule: interaction_vertex_info.vertex_rule.name.clone(),
+                vertex_rule: interaction_vertex_info.vertex_rule.0.name.clone(),
             })
         }
     }
@@ -896,7 +901,7 @@ impl BareVertex {
             VertexInfo::InteractonVertexInfo(ref i) => {
                 let mut pdgs_to_position_map =
                     edge_id_and_pdgs_of_current_order.iter().collect::<Vec<_>>();
-                for p in i.vertex_rule.particles.iter() {
+                for p in i.vertex_rule.0.particles.iter() {
                     let matched_pos = if let Some(pos) =
                         pdgs_to_position_map.iter().position(|(_, x)| *x == *p)
                     {
@@ -905,7 +910,7 @@ impl BareVertex {
                         return Err(FeynGenError::GenericError(
                                 format!("Could not match some particles vertex ({}). It is incompatible with the ones in the interaction info ({})",
                                     edge_id_and_pdgs_of_current_order.iter().map(|(_,x)| x.0.name.clone()).join(","),
-                                    i.vertex_rule.particles.iter().map(|x| x.0.name.clone()).join(","),
+                                    i.vertex_rule.0.particles.iter().map(|x| x.0.name.clone()).join(","),
                                 ),
                             ));
                     };
@@ -916,7 +921,7 @@ impl BareVertex {
                     return Err(FeynGenError::GenericError(
                         format!("Not all particle of vertex ({}) were matched with the ones in the interaction info ({})",
                             edge_id_and_pdgs_of_current_order.iter().map(|(_,x)| x.0.name.clone()).join(","),
-                            i.vertex_rule.particles.iter().map(|x| x.0.name.clone()).join(","),
+                            i.vertex_rule.0.particles.iter().map(|x| x.0.name.clone()).join(","),
                         ),
                     ));
                 }
@@ -1568,7 +1573,7 @@ impl BareGraph {
             VertexInfo::InteractonVertexInfo(ref mut i) => i.vertex_rule.clone(),
             VertexInfo::ExternalVertexInfo(_) => return Ok(()),
         };
-        let mut this_interaction_particles = vertex_rule.particles.clone();
+        let mut this_interaction_particles = vertex_rule.0.particles.clone();
         this_interaction_particles.sort();
         if this_interaction_particles == vertex_particles {
             Ok(())
@@ -1589,11 +1594,11 @@ impl BareGraph {
                 .particle_set_to_vertex_rules_map
                 .get(&this_interaction_particles_cp_conjugate)
             {
-                let this_rule_coupling_orders = vertex_rule.get_coupling_orders();
+                let this_rule_coupling_orders = vertex_rule.0.get_coupling_orders();
                 let candidates = vertex_rules
                     .iter()
                     .filter_map(|vr| {
-                        let vr_coupling_orders = vr.get_coupling_orders();
+                        let vr_coupling_orders = vr.0.get_coupling_orders();
                         if vr_coupling_orders == this_rule_coupling_orders {
                             Some(vr.clone())
                         } else {
@@ -1611,7 +1616,7 @@ impl BareGraph {
                     return Err(FeynGenError::GenericError(
                         format!("Could not find the CP conjugate of this vertex in the Feynman rules of the model: ({}). Multiple candidate interactions have matching coupling orders: {}. Consider generating without the option '--symmetrize_left_right_states'.",
                         vertex_particles.iter().map(|p| model.get_particle_from_pdg(p.0.pdg_code).0.name.clone()).collect::<Vec<_>>().join(", "),
-                            candidates.iter().map(|vr| vr.name.clone()).collect::<Vec<_>>().join(", ")
+                            candidates.iter().map(|vr| vr.0.name.clone()).collect::<Vec<_>>().join(", ")
                         ),
                     ));
                 } else {
@@ -1735,7 +1740,7 @@ impl BareGraph {
         //         .collect::<Vec<_>>()
         // );
         for (i_n, node) in graph_nodes.iter().enumerate() {
-            let vertex_info = if node.data.vertex_rule.name == "external" {
+            let vertex_info = if node.data.vertex_rule.0.name == "external" {
                 let (_external_node_position, external_direction, external_particle_name) =
                     external_nodes
                         .get(&(node.data.external_tag as usize))
@@ -1750,7 +1755,7 @@ impl BareGraph {
                 }
 
                 SerializableVertexInfo::InteractonVertexInfo(SerializableInteractionVertexInfo {
-                    vertex_rule: node.data.vertex_rule.name.clone(), //node.data.vertex_rule.name.clone(),
+                    vertex_rule: node.data.vertex_rule.0.name.clone(), //node.data.vertex_rule.name.clone(),
                 })
             };
             let vertex = BareVertex::from_serializable_vertex(
@@ -4388,7 +4393,7 @@ mod tests {
             edges: vec![2, 3],
         };
 
-        let _lorentz = v.lorentz_structures[0].structure.clone();
+        let _lorentz = v.0.lorentz_structures[0].structure.clone();
         // println!("{}");
     }
 }

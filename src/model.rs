@@ -46,11 +46,10 @@ use symbolica::evaluate::FunctionMap;
 use eyre::Result;
 use std::ops::Index;
 use std::path::Path;
-use symbolica::id::{Pattern, Replacement};
-// use std::str::pattern::Pattern;
 use std::sync::Arc;
 use std::{collections::HashMap, fs::File};
 use symbolica::atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol};
+use symbolica::id::{Pattern, Replacement};
 
 use crate::utils::GS;
 use spenso::complex::Complex;
@@ -61,6 +60,8 @@ use symbolica::{function, parse, symbol};
 
 #[derive(Debug, Clone, Eq, Ord, PartialEq, PartialOrd, Hash)]
 pub struct ArcParticle(pub Arc<Particle>);
+#[derive(Debug, Clone, Eq, Ord, PartialEq, PartialOrd, Hash)]
+pub struct ArcVertexRule(pub Arc<VertexRule>);
 
 impl Encode for ArcParticle {
     fn encode<E: bincode::enc::Encoder>(
@@ -81,6 +82,28 @@ impl<T: GammaLoopContext> Decode<T> for ArcParticle {
         let model = context.get_model();
         let particle = model.get_particle_from_pdg(pdg_code);
         Ok(particle)
+    }
+}
+
+impl Encode for ArcVertexRule {
+    fn encode<E: bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> std::result::Result<(), bincode::error::EncodeError> {
+        Encode::encode(&self.0.name.to_string(), encoder)?;
+        Ok(())
+    }
+}
+
+impl<T: GammaLoopContext> Decode<T> for ArcVertexRule {
+    fn decode<D: bincode::de::Decoder<Context = T>>(
+        decoder: &mut D,
+    ) -> std::result::Result<Self, bincode::error::DecodeError> {
+        let vertex_rule_name: String = Decode::decode(decoder)?;
+        let context = decoder.context();
+        let model = context.get_model();
+        let vertex_rule = model.get_vertex_rule(vertex_rule_name);
+        Ok(vertex_rule)
     }
 }
 
@@ -1592,7 +1615,7 @@ impl SerializableModel {
             vertex_rules: model
                 .vertex_rules
                 .iter()
-                .map(|vertex_rule| SerializableVertexRule::from_vertex_rule(vertex_rule.as_ref()))
+                .map(|vertex_rule| SerializableVertexRule::from_vertex_rule(vertex_rule.0.as_ref()))
                 .collect(),
         }
     }
@@ -1608,9 +1631,9 @@ pub struct Model {
     pub propagators: Vec<Arc<Propagator>>,
     pub lorentz_structures: Vec<Arc<LorentzStructure>>,
     pub couplings: Vec<Arc<Coupling>>,
-    pub vertex_rules: Vec<Arc<VertexRule>>,
+    pub vertex_rules: Vec<ArcVertexRule>,
     pub unresolved_particles: HashMap<SmartString<LazyCompact>, HashSet<ArcParticle>>,
-    pub particle_set_to_vertex_rules_map: HashMap<Vec<ArcParticle>, Vec<Arc<VertexRule>>>,
+    pub particle_set_to_vertex_rules_map: HashMap<Vec<ArcParticle>, Vec<ArcVertexRule>>,
     pub order_name_to_position: HashMap<SmartString<LazyCompact>, usize, RandomState>,
     pub parameter_name_to_position: HashMap<SmartString<LazyCompact>, usize, RandomState>,
     pub lorentz_structure_name_to_position: HashMap<SmartString<LazyCompact>, usize, RandomState>,
@@ -1950,10 +1973,10 @@ impl Model {
         let mut map = HashMap::new();
 
         for vertex in self.vertex_rules.iter() {
-            let mut vertex_particles = vertex.particles.clone();
+            let mut vertex_particles = vertex.0.particles.clone();
             vertex_particles.sort();
             map.entry(vertex_particles)
-                .and_modify(|l: &mut Vec<Arc<VertexRule>>| l.push(vertex.clone()))
+                .and_modify(|l: &mut Vec<ArcVertexRule>| l.push(vertex.clone()))
                 .or_insert(vec![vertex.clone()]);
         }
         self.particle_set_to_vertex_rules_map = map;
@@ -1964,12 +1987,12 @@ impl Model {
 
         for v in &self.vertex_rules {
             let mut set = HashSet::default();
-            for p in &v.particles {
+            for p in &v.0.particles {
                 if p.0.is_massless() {
                     set.insert(p.clone());
                 }
             }
-            for (k, _) in v.coupling_orders() {
+            for (k, _) in v.0.coupling_orders() {
                 let current_set = map.entry(k).or_insert(HashSet::<ArcParticle>::default());
 
                 set.iter().for_each(|d| {
@@ -2100,13 +2123,12 @@ impl Model {
             .iter()
             .enumerate()
             .map(|(i_vr, serializable_vertex_rule)| {
-                let vertex_rule = Arc::new(VertexRule::from_serializable_vertex_rule(
-                    &model,
-                    serializable_vertex_rule,
+                let vertex_rule = ArcVertexRule(Arc::new(
+                    VertexRule::from_serializable_vertex_rule(&model, serializable_vertex_rule),
                 ));
                 model
                     .vertex_rule_name_to_position
-                    .insert(vertex_rule.name.clone(), i_vr);
+                    .insert(vertex_rule.0.name.clone(), i_vr);
                 vertex_rule
             })
             .collect();
@@ -2244,7 +2266,7 @@ impl Model {
         }
     }
     #[inline]
-    pub fn get_vertex_rule<S: AsRef<str>>(&self, name: S) -> Arc<VertexRule> {
+    pub fn get_vertex_rule<S: AsRef<str>>(&self, name: S) -> ArcVertexRule {
         if let Some(position) = self.vertex_rule_name_to_position.get(name.as_ref()) {
             self.vertex_rules[*position].clone()
         } else {
