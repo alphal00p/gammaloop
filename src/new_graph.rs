@@ -17,7 +17,6 @@ use linnet::half_edge::{
     builder::HedgeGraphBuilder,
     hedgevec::HedgeVec,
     involution::{EdgeData, EdgeIndex, Flow, Hedge, HedgePair, Orientation},
-    nodestorage::NodeStorageVec,
     subgraph::{
         self, cycle::SignedCycle, node, Inclusion, InternalSubGraph, OrientedCut, SubGraph,
         SubGraphOps,
@@ -67,12 +66,14 @@ use crate::{
     ProcessSettings, GAMMALOOP_NAMESPACE,
 };
 
-#[derive(Clone)]
+#[derive(Clone, Encode)]
 pub struct Graph {
     pub multiplicity: Atom,
+    #[bincode(with_serde)]
     pub name: SmartString<LazyCompact>,
     pub underlying: HedgeGraph<Edge, Vertex>,
     pub loop_momentum_basis: LoopMomentumBasis,
+    #[bincode(with_serde)]
     pub vertex_slots: TiVec<NodeIndex, VertexSlots>,
     pub external_connections: Option<Vec<ExternalConnection>>,
 }
@@ -159,18 +160,18 @@ pub trait FeynmanGraph {
 
 impl FeynmanGraph for HedgeGraph<Edge, Vertex> {
     fn new_lmb(&self) -> Result<LoopMomentumBasis> {
+        todo!();
         // root node should contain a dangling (external edge), that will be the dependent external
+        disable! {
         let root = self
             .iter_nodes()
-            .find(|(a, _)| {
-                self.iter_edges(*a)
+            .find(|(a, _, _)| {
+                self.iter_edges(a)
                     .any(|(e, _, _)| matches!(e, HedgePair::Unpaired { .. }))
             })
             .unwrap_or(self.iter_nodes().next().unwrap())
             .0;
 
-        todo!();
-        disable! {
             let tree = TraversalTree::dfs(self, &self.full_filter(), root, None);
             let tree_complement = tree.tree.complement(self);
 
@@ -355,19 +356,22 @@ impl FeynmanGraph for HedgeGraph<Edge, Vertex> {
     ) -> usize {
         let skip_n = if skip_one { 1 } else { 0 };
 
-        let node_hairs = &self[&node_id].hairs;
+        let node_hairs: BitVec = self.hair_iter(node_id).into();
 
-        self.iter_edges(node_hairs)
+        let res = self
+            .iter_edges(&node_hairs)
             .enumerate()
             .filter(|(_, (_, index, _))| *index == edge_id)
             .nth(skip_n)
             .unwrap()
-            .0
+            .0;
+        res
     }
 
     fn add_signs_to_edges(&self, node_id: NodeIndex) -> Vec<isize> {
-        let node_hairs = &self[&node_id].hairs;
-        self.iter_edges(node_hairs)
+        let node_hairs: BitVec = self.hair_iter(node_id).into();
+
+        self.iter_edges(&node_hairs)
             .map(|(_, edge_index, _)| {
                 if !self.is_incoming_to(edge_index, node_id) {
                     -(Into::<usize>::into(edge_index) as isize)
@@ -1344,7 +1348,7 @@ impl From<BareGraph> for HedgeGraph<Edge, Vertex> {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Encode)]
 pub struct ExternalConnection {
     pub incoming_index: ExternalIndex,
     pub outgoing_index: ExternalIndex,

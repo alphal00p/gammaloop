@@ -3,7 +3,7 @@ use std::{fmt::Display, sync::Arc};
 use bitvec::vec::BitVec;
 use linnet::half_edge::{
     involution::{EdgeData, EdgeIndex, Flow, HedgePair, Orientation},
-    nodestorage::NodeStorageOps,
+    nodestore::NodeStorageOps,
     subgraph::{cut::PossiblyCutEdge, SubGraph, SubGraphOps},
     EdgeAccessors, HedgeGraph,
 };
@@ -111,9 +111,9 @@ impl<E, V> FeynGenHedgeGraph<E, V> {
         }
         let mut excised: BitVec = self.graph.empty_subgraph();
 
-        for (n, d) in self.graph.iter_nodes() {
+        for (n, _, d) in self.graph.iter_nodes() {
             if !matches!(d, VertexType::Internal(_)) {
-                excised.union_with(&n.hairs)
+                excised.union_with(&n.into())
             }
         }
 
@@ -122,7 +122,7 @@ impl<E, V> FeynGenHedgeGraph<E, V> {
         let mut excised = self
             .graph
             .concretize(&excised)
-            .map(|_, _, _, d| d.clone(), |_, _, _, e| e.map(|d| d.clone()));
+            .map(|_, _, d| d.clone(), |_, _, _, e| e.map(|d| d.clone()));
 
         excised.align_underlying_to_superficial();
         self.graph = excised;
@@ -185,7 +185,7 @@ impl<V> FeynGenHedgeGraph<ArcParticle, V> {
         V: NodeColorFunctions + Clone,
     {
         let mut graph = HedgeGraph::<EdgeColor, V>::from_sym(graph).map(
-            |_, _, _, vertex| {
+            |_, _, vertex| {
                 let id = EdgeIndex::from(vertex.pairing_tag(n_initials) as usize);
                 if vertex.is_incoming(n_initials) {
                     VertexType::Right { id, vertex }
@@ -210,7 +210,7 @@ impl<V> FeynGenHedgeGraph<ArcParticle, V> {
         );
 
         graph = graph.map(
-            |_, _, _, v| v,
+            |_, _, v| v,
             |_, node_data, pair, mut e| {
                 if let HedgePair::Paired { source, sink } = pair {
                     let src = node_data.node_id_ref(source);

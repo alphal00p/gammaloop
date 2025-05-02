@@ -95,7 +95,7 @@ mod tests {
     use linnet::half_edge::{
         builder::HedgeGraphBuilder,
         involution::{Flow, Orientation},
-        nodestorage::NodeStorageVec,
+        nodestore::NodeStorageVec,
     };
     use typed_index_collections::TiVec;
 
@@ -122,12 +122,11 @@ mod tests {
         hedge_graph_builder.add_external_edge(nodes[3], (), Orientation::Undirected, Flow::Source);
 
         let hedge_graph = hedge_graph_builder.build::<NodeStorageVec<_>>();
+        let node_0 = hedge_graph.hair_iter(nodes[0]).into();
+        let node_3 = hedge_graph.hair_iter(nodes[3]).into();
 
         let cuts: TiVec<CutId, CrossSectionCut> = hedge_graph
-            .all_cuts(
-                hedge_graph[&nodes[0]].clone(),
-                hedge_graph[&nodes[3]].clone(),
-            )
+            .all_cuts(node_0, node_3)
             .into_iter()
             .map(|(left, cut, right)| CrossSectionCut { left, cut, right })
             .collect();

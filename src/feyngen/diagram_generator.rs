@@ -1065,7 +1065,7 @@ impl FeynGen {
         let n_particles = self.options.initial_pdgs.len();
 
         let mut he_graph = HedgeGraph::<EdgeColor, NodeColor>::from_sym(graph.clone()).map(
-            |_, _, _, node_color| node_color,
+            |_, _, node_color| node_color,
             |_, _, _, d| d.map(|d| model.get_particle_from_pdg(d.pdg)),
         );
         // info!(
@@ -1080,8 +1080,7 @@ impl FeynGen {
         let mut s_set = Vec::new();
         let mut t_set = Vec::new();
 
-        for (n, f) in he_graph.iter_nodes() {
-            let id = he_graph.id_from_hairs(n).unwrap();
+        for (n, id, f) in he_graph.iter_nodes() {
             match f.get_sign(n_particles) {
                 SignOrZero::Plus => {
                     s_set.push(id);
@@ -1136,13 +1135,7 @@ impl FeynGen {
             {
                 let externals: Vec<_> = he_graph
                     .iter_nodes()
-                    .filter_map(|(h, n)| {
-                        if n.is_external() {
-                            he_graph.id_from_hairs(h)
-                        } else {
-                            None
-                        }
-                    })
+                    .filter_map(|(h, id, n)| if n.is_external() { Some(id) } else { None })
                     .collect();
 
                 let connected_components_before = he_graph.tadpoles(&externals).len() + 1;
@@ -1150,12 +1143,12 @@ impl FeynGen {
                     if let (Some(i), Some(f)) = (i, f) {
                         let i = he_graph
                             .iter_nodes()
-                            .find_position(|a| a.1.get_external_tag() == *i as i32);
+                            .find_position(|a| a.2.get_external_tag() == *i as i32);
                         let f = he_graph
                             .iter_nodes()
-                            .find_position(|a| a.1.get_external_tag() == *f as i32);
+                            .find_position(|a| a.2.get_external_tag() == *f as i32);
 
-                        if let (Some((id_i, (_, c_i))), Some((id_f, (_, _)))) = (i, f) {
+                        if let (Some((id_i, (_, _, c_i))), Some((id_f, (_, _, _)))) = (i, f) {
                             he_graph
                                 .identify_nodes(&[NodeIndex(id_i), NodeIndex(id_f)], c_i.clone());
                         }

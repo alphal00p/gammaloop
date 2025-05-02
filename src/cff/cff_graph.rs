@@ -737,7 +737,7 @@ impl CFFGenerationGraph {
         let mut vertices = HashMap::default();
 
         for (hedge_node, _data) in graph.iter_node_data(subgraph) {
-            let node_id = graph.id_from_hairs(hedge_node).unwrap();
+            let node_id = graph.id_from_neighbors(hedge_node).unwrap();
             let vertex = CFFVertex::new(node_id.into());
             vertices.insert(node_id, vertex);
         }
@@ -958,11 +958,12 @@ impl CFFGenerationGraph {
 mod test {
     use super::CFFGenerationGraph;
     use crate::cff::cff_graph::{CFFEdgeType, VertexSet};
+    use bitvec::vec::BitVec;
     use itertools::Itertools;
     use linnet::half_edge::{
         builder::HedgeGraphBuilder,
         involution::{EdgeIndex, Flow, Orientation},
-        nodestorage::NodeStorageVec,
+        nodestore::NodeStorageVec,
         subgraph::SubGraphOps,
     };
 
@@ -1427,11 +1428,11 @@ mod test {
         hedge_graph_builder.add_external_edge(nodes[3], (), Orientation::Undirected, Flow::Source);
 
         let hedge_graph = hedge_graph_builder.build::<NodeStorageVec<_>>();
+        let node_0: BitVec = hedge_graph.hair_iter(nodes[0]).into();
+        let node_1: BitVec = hedge_graph.hair_iter(nodes[1]).into();
+        let node_2: BitVec = hedge_graph.hair_iter(nodes[2]).into();
 
-        let left_triangle = hedge_graph[&nodes[0]]
-            .hairs
-            .union(&hedge_graph[&nodes[1]].hairs)
-            .union(&hedge_graph[&nodes[2]].hairs);
+        let left_triangle = node_0.union(&node_1).union(&node_2);
 
         let global_orientation = hedge_graph.new_hedgevec(|_, _, _| Orientation::Default);
 

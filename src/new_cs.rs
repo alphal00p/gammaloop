@@ -1220,7 +1220,7 @@ impl CrossSectionCut {
                 cross_section_graph
                     .graph
                     .underlying
-                    .id_from_hairs(hedge_node)
+                    .id_from_neighbors(hedge_node)
             })
             .collect();
 

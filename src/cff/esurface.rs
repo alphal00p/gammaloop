@@ -619,7 +619,7 @@ mod tests {
     use itertools::Itertools;
     use linnet::half_edge::builder::HedgeGraphBuilder;
     use linnet::half_edge::involution::{EdgeIndex, Flow, Orientation};
-    use linnet::half_edge::nodestorage::NodeStorageVec;
+    use linnet::half_edge::nodestore::NodeStorageVec;
     use symbolica::atom::{Atom, AtomCore};
     use symbolica::parse;
 
@@ -763,11 +763,10 @@ mod tests {
         hedge_graph_builder.add_external_edge(nodes[3], (), Orientation::Undirected, Flow::Source);
 
         let double_triangle = hedge_graph_builder.build::<NodeStorageVec<()>>();
+        let node_0 = double_triangle.hair_iter(nodes[0]).into();
+        let node_3 = double_triangle.hair_iter(nodes[3]).into();
 
-        let cuts = double_triangle.all_cuts(
-            double_triangle[&nodes[0]].clone(),
-            double_triangle[&nodes[3]].clone(),
-        );
+        let cuts = double_triangle.all_cuts(node_0, node_3);
 
         let cross_section_cuts = cuts
             .into_iter()
@@ -821,7 +820,11 @@ mod tests {
         hedge_graph_builder.add_external_edge(nodes[3], (), Orientation::Undirected, Flow::Sink);
 
         let box_graph = hedge_graph_builder.build::<NodeStorageVec<()>>();
-        let cuts = box_graph.all_cuts(box_graph[&nodes[0]].clone(), box_graph[&nodes[2]].clone());
+
+        let node_0 = box_graph.hair_iter(nodes[0]).into();
+        let node_2 = box_graph.hair_iter(nodes[2]).into();
+
+        let cuts = box_graph.all_cuts(node_0, node_2);
         assert_eq!(cuts.len(), 4);
 
         let cross_section_cuts = cuts
