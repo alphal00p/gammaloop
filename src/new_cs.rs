@@ -12,6 +12,7 @@ use bincode::{Decode, Encode};
 use bitvec::vec::BitVec;
 use color_eyre::Result;
 use momtrop::SampleGenerator;
+use smartstring::{LazyCompact, SmartString};
 use spenso::contraction::IsZero;
 
 use crate::{
@@ -106,6 +107,7 @@ impl<S: NumeratorState> Process<S> {
 
 impl Process {
     pub fn from_bare_graph_list(
+        name: SmartString<LazyCompact>,
         bare_graphs: Vec<BareGraph>,
         generation_type: GenerationType,
         definition: ProcessDefinition,
@@ -121,7 +123,7 @@ impl Process {
                 if let Some(_sub_classes) = sub_classes {
                     todo!("implement seperation of processes into user defined sub classes");
                 } else {
-                    let mut amplitude: Amplitude<PythonState> = Amplitude::new();
+                    let mut amplitude: Amplitude<PythonState> = Amplitude::new(name);
 
                     for amplitude_graph in graphs {
                         amplitude.add_graph(amplitude_graph)?;
@@ -141,7 +143,7 @@ impl Process {
                 if let Some(_sub_classes) = sub_classes {
                     todo!("implement seperation of processes into user defined sub classes");
                 } else {
-                    let mut cross_section: CrossSection<PythonState> = CrossSection::new();
+                    let mut cross_section: CrossSection<PythonState> = CrossSection::new(name);
 
                     for cross_section_graph in graphs {
                         cross_section.add_supergraph(cross_section_graph)?;
@@ -294,6 +296,7 @@ impl<S: NumeratorState> ProcessCollection<S> {
 
 #[derive(Clone)]
 pub struct Amplitude<S: NumeratorState = PythonState> {
+    name: SmartString<LazyCompact>,
     graphs: Vec<AmplitudeGraph<S>>,
     external_particles: Vec<ArcParticle>,
     external_signature: SignatureLike<ExternalIndex>,
@@ -643,8 +646,9 @@ pub struct AmplitudeDerivedData<S: NumeratorState> {
 }
 
 impl<S: NumeratorState> Amplitude<S> {
-    pub fn new() -> Self {
+    pub fn new(name: SmartString<LazyCompact>) -> Self {
         Self {
+            name,
             graphs: vec![],
             external_particles: vec![],
             external_signature: SignatureLike::from_iter(iter::empty::<i8>()),
@@ -677,6 +681,7 @@ impl<S: NumeratorState> Amplitude<S> {
 
 #[derive(Clone)]
 pub struct CrossSection<S: NumeratorState> {
+    name: SmartString<LazyCompact>,
     supergraphs: Vec<CrossSectionGraph<S>>,
     external_particles: Vec<ArcParticle>,
     external_connections: Vec<ExternalConnection>,
@@ -684,8 +689,9 @@ pub struct CrossSection<S: NumeratorState> {
 }
 
 impl<S: NumeratorState> CrossSection<S> {
-    pub fn new() -> Self {
+    pub fn new(name: SmartString<LazyCompact>) -> Self {
         Self {
+            name,
             supergraphs: vec![],
             external_connections: vec![],
             external_particles: vec![],

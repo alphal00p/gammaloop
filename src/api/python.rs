@@ -700,6 +700,7 @@ impl PythonWorker {
     pub fn generate_diagrams(
         &mut self,
         generation_options: PyRef<PyFeynGenOptions>,
+        proccess_name: String,
         numerator_aware_isomorphism_grouping: Option<PyRef<PyNumeratorAwareGroupingOption>>,
         filter_self_loop: Option<bool>,
         graph_prefix: Option<String>,
@@ -770,9 +771,14 @@ impl PythonWorker {
             cross_section_filters,
         };
 
-        let process =
-            Process::from_bare_graph_list(diagrams, generation_type, process_definition, None)
-                .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
+        let process = Process::from_bare_graph_list(
+            proccess_name.into(),
+            diagrams,
+            generation_type,
+            process_definition,
+            None,
+        )
+        .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
 
         self.process_list.add_process(process);
 
@@ -788,6 +794,7 @@ impl PythonWorker {
 
         match Amplitude::from_yaml_str(&self.model, String::from(yaml_str)) {
             Ok(amp) => {
+                let name = amp.name;
                 let amplitude_bare_graphs = amp
                     .amplitude_graphs
                     .into_iter()
@@ -795,6 +802,7 @@ impl PythonWorker {
                     .collect_vec();
 
                 let process = Process::from_bare_graph_list(
+                    name,
                     amplitude_bare_graphs,
                     GenerationType::Amplitude,
                     ProcessDefinition::new_empty(),
