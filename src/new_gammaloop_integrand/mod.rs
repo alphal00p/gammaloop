@@ -7,6 +7,7 @@ use crate::momentum::Rotation;
 use crate::momentum_sample::{BareMomentumSample, LoopMomenta, MomentumSample};
 use crate::new_graph::{FeynmanGraph, Graph, LmbIndex, LoopMomentumBasis};
 use crate::utils::{format_for_compare_digits, get_n_dim_for_n_loop_momenta, FloatLike, F};
+use bincode::Encode;
 use colored::Colorize;
 use derive_more::{From, Into};
 use enum_dispatch::enum_dispatch;
@@ -174,8 +175,9 @@ fn stability_check(
     (average, stable && below_wgt_threshold)
 }
 
-#[derive(Clone)]
+#[derive(Clone, Encode)]
 pub struct GenericEvaluator {
+    #[bincode(with_serde)]
     pub f64_compiled: Option<RefCell<SerializableCompiledEvaluator>>,
     pub f64_eager: RefCell<ExpressionEvaluator<F<f64>>>,
     pub f128: RefCell<ExpressionEvaluator<F<f128>>>,
@@ -232,7 +234,7 @@ pub struct StabilityLevelResult {
 pub struct ChannelIndex(usize);
 
 /// Helper struct for the LMB multi-channeling setup
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode)]
 pub struct LmbMultiChannelingSetup {
     pub channels: TiVec<ChannelIndex, LmbIndex>,
 }

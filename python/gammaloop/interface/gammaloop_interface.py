@@ -904,6 +904,7 @@ class GammaLoop(object):
         #         f"The nature of the specific perturbative orders specified ({' '.join('%s=%s' % (k, v) for k, v in parsed_process.perturbative_orders.items())}) is not yet supported. Only the loop count will be derived from them.")
 
         self.process = parsed_process
+        process_name = f"{args.graph_prefix}_{self.process.process_shell_name()}"
 
         generation_args = []
         if split_args is not None:
@@ -938,7 +939,7 @@ class GammaLoop(object):
 
         if args.amplitude:
             self.amplitudes.add_amplitude(cross_section.Amplitude(
-                f"{args.graph_prefix}_{self.process.process_shell_name()}",
+                process_name,
                 [
                     supergraph.AmplitudeGraph(
                         sg_id=0, sg_cut_id=0, fs_cut_id=i, amplitude_side=Side.LEFT,
@@ -953,7 +954,7 @@ class GammaLoop(object):
             logger.warning(
                 "%sProcessing of forward scattering graphs not fully implemented yet.%s", Colour.RED, Colour.END)
             self.cross_sections.add_cross_section(cross_section.CrossSection(
-                f"{args.graph_prefix}_{self.process.process_shell_name()}",
+                process_name,
                 # Wrap the forward scattering graphs within a dummy supergraph
                 [cross_section.supergraph.SuperGraph(
                     sg_id=i, graph=Graph.empty_graph('DUMMY'), multiplicity="1",

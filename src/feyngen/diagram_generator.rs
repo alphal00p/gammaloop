@@ -46,9 +46,9 @@ use super::{FeynGenError, FeynGenOptions};
 
 use crate::feyngen::half_edge_filters::FeynGenHedgeGraph;
 use crate::graph::{EdgeType, HedgeGraphExt};
+use crate::model::ArcVertexRule;
 use crate::model::VertexRule;
 use crate::model::{ArcParticle, ColorStructure};
-use crate::model::{ArcVertexRule, Particle};
 use crate::momentum::{Pow, Sign, SignOrZero};
 use crate::numerator::AtomStructure;
 use crate::numerator::Numerator;
@@ -1080,7 +1080,7 @@ impl FeynGen {
         let mut s_set = Vec::new();
         let mut t_set = Vec::new();
 
-        for (n, id, f) in he_graph.iter_nodes() {
+        for (_, id, f) in he_graph.iter_nodes() {
             match f.get_sign(n_particles) {
                 SignOrZero::Plus => {
                     s_set.push(id);
@@ -1135,7 +1135,7 @@ impl FeynGen {
             {
                 let externals: Vec<_> = he_graph
                     .iter_nodes()
-                    .filter_map(|(h, id, n)| if n.is_external() { Some(id) } else { None })
+                    .filter_map(|(_, id, n)| if n.is_external() { Some(id) } else { None })
                     .collect();
 
                 let connected_components_before = he_graph.tadpoles(&externals).len() + 1;
