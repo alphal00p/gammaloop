@@ -50,10 +50,11 @@ symbolica = { version = "0.16.0",features = ["serde","bincode"] }
 spenso = { git = "https://github.com/alphal00p/spenso", rev="04095a4035d78b2ee7b28d87f7655020ef24e93d" ,features= ["shadowing"] }
 
 #spenso = { version = "0.4.0", features = ["shadowing"] }
-linnet = { version = "0.2.0", features = [
-    # "symbolica",
-    "drawing",
-] }
+#linnet = { version = "0.2.0", features = [
+#    # "symbolica",
+#    "drawing",
+#] }
+linnet = { git = "https://github.com/alphal00p/linnet", features=["drawing","serde","bincode"]}
 
 
 momtrop = { git = "https://github.com/alphal00p/momtrop", features = ["log",] }

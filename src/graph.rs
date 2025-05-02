@@ -31,11 +31,11 @@ use crate::{
 };
 
 use linnet::half_edge::{
-    builder::HedgeGraphBuilder, involution::EdgeIndex, subgraph::SubGraphOps, HedgeGraph,
+    builder::HedgeGraphBuilder, involution::EdgeIndex, nodestore::NodeStorageOps,
+    subgraph::SubGraphOps, HedgeGraph,
 };
 use linnet::half_edge::{
     involution::{HedgePair, Orientation},
-    nodestorage::NodeStorageOps,
     HedgeGraphError, NodeIndex,
 };
 
@@ -144,7 +144,7 @@ impl<N: Clone, E: Clone, S: NodeStorageOps<NodeData = N>> HedgeGraphExt<N, E>
         let mut graph = SymbolicaGraph::new();
         let mut map = AHashMap::new();
 
-        for (n, (_, node)) in value.iter_nodes().enumerate() {
+        for (n, (_, _, node)) in value.iter_nodes().enumerate() {
             map.insert(NodeIndex(n), graph.add_node(node));
         }
 
