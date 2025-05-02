@@ -11,7 +11,7 @@ use symbolica::graph::Graph as SymbolicaGraph;
 
 use crate::{
     graph::HedgeGraphExt,
-    model::{Model, Particle},
+    model::{ArcParticle, Model, Particle},
 };
 
 use super::diagram_generator::{EdgeColor, NodeColorFunctions};
@@ -130,12 +130,12 @@ impl<E, V> FeynGenHedgeGraph<E, V> {
         self.state = CutState::Cut;
     }
 }
-impl<V> FeynGenHedgeGraph<Arc<Particle>, V> {
+impl<V> FeynGenHedgeGraph<ArcParticle, V> {
     pub fn number_of_fermion_loops(&self) -> usize {
         let mut fermions: BitVec = self.graph.empty_subgraph();
 
         for (p, _, d) in self.graph.iter_all_edges() {
-            if d.data.edge_data().is_fermion() {
+            if d.data.edge_data().0.is_fermion() {
                 #[allow(clippy::single_match)]
                 match p {
                     HedgePair::Paired { source, sink } => {
@@ -198,11 +198,11 @@ impl<V> FeynGenHedgeGraph<Arc<Particle>, V> {
             |inv, _, pair, d| {
                 let mut particle = model.get_particle_from_pdg(d.data.pdg);
                 let mut o = d.orientation;
-                if !particle.is_fermion() {
+                if !particle.0.is_fermion() {
                     o = Orientation::Undirected;
-                } else if particle.is_antiparticle() {
+                } else if particle.0.is_antiparticle() {
                     o = Orientation::Reversed;
-                    particle = particle.get_anti_particle(model);
+                    particle = particle.0.get_anti_particle(model);
                 }
                 let id = inv[pair.any_hedge()];
                 EdgeData::new(PossiblyCutEdge::uncut(particle, id), o)

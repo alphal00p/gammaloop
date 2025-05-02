@@ -452,6 +452,7 @@ impl LTDTerm {
                 let mut momentum = emr.0[*i].clone().into_on_shell_four_momentum(
                     graph.edges[*i]
                         .particle
+                        .0
                         .mass
                         .value
                         .map(|m| F::<T>::from_ff64(m.re)),
@@ -469,6 +470,7 @@ impl LTDTerm {
                     let mut momentum = rot_emr[*i].clone().into_on_shell_four_momentum(
                         graph.edges[*i]
                             .particle
+                            .0
                             .mass
                             .value
                             .map(|m| F::<T>::from_ff64(m.re)),
@@ -516,7 +518,7 @@ impl LTDTerm {
                             ));
                         }
 
-                        match edge.particle.mass.value {
+                        match edge.particle.0.mass.value {
                             Some(mass) => {
                                 inv_res *=
                                     momentum.clone().square() - F::<T>::from_ff64(mass.re).square();

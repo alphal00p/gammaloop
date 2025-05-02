@@ -46,9 +46,9 @@ use super::{FeynGenError, FeynGenOptions};
 
 use crate::feyngen::half_edge_filters::FeynGenHedgeGraph;
 use crate::graph::{EdgeType, HedgeGraphExt};
-use crate::model::ColorStructure;
 use crate::model::Particle;
 use crate::model::VertexRule;
+use crate::model::{ArcParticle, ColorStructure};
 use crate::momentum::{Pow, Sign, SignOrZero};
 use crate::numerator::AtomStructure;
 use crate::numerator::Numerator;
@@ -92,9 +92,9 @@ impl std::fmt::Display for EdgeColor {
 }
 
 impl EdgeColor {
-    pub fn from_particle(particle: Arc<Particle>) -> Self {
+    pub fn from_particle(particle: ArcParticle) -> Self {
         Self {
-            pdg: particle.pdg_code,
+            pdg: particle.0.pdg_code,
         }
     }
 }
@@ -156,7 +156,7 @@ pub trait NodeColorFunctions: Sized + std::fmt::Display {
     #[allow(clippy::type_complexity)]
     fn passes_amplitude_filter(
         _amplitude_subgraph: &BitVec,
-        _graph: &HedgeGraph<Arc<Particle>, Self>,
+        _graph: &HedgeGraph<ArcParticle, Self>,
         _amp_couplings: Option<
             &std::collections::HashMap<String, (usize, Option<usize>), ahash::RandomState>,
         >,
@@ -187,7 +187,7 @@ impl NodeColorFunctions for NodeColorWithVertexRule {
 
     fn passes_amplitude_filter(
         amplitude_subgraph: &BitVec,
-        graph: &HedgeGraph<Arc<Particle>, Self>,
+        graph: &HedgeGraph<ArcParticle, Self>,
         amp_couplings: Option<
             &std::collections::HashMap<String, (usize, Option<usize>), ahash::RandomState>,
         >,
@@ -242,7 +242,7 @@ impl NodeColorFunctions for NodeColorWithoutVertexRule {
 
     fn passes_amplitude_filter(
         _amplitude_subgraph: &BitVec,
-        _graph: &HedgeGraph<Arc<Particle>, Self>,
+        _graph: &HedgeGraph<ArcParticle, Self>,
         _amp_couplings: Option<
             &std::collections::HashMap<String, (usize, Option<usize>), ahash::RandomState>,
         >,
@@ -331,10 +331,10 @@ impl FeynGen {
                     None
                 };
                 let particle = model.get_particle_from_pdg(edges[*e].data.pdg);
-                node_edges.push((orientation, particle.name.clone()));
+                node_edges.push((orientation, particle.0.name.clone()));
                 // self-loop edge must be counted twice
                 if edges[*e].vertices.0 == edges[*e].vertices.1 {
-                    node_edges.push((orientation.map(|o| !o), particle.name.clone()));
+                    node_edges.push((orientation.map(|o| !o), particle.0.name.clone()));
                 }
             }
             node_edges.sort();
@@ -456,7 +456,7 @@ impl FeynGen {
             .max()
             .unwrap_or(0) as usize;
 
-        let mut external_partices: Vec<Arc<Particle>> =
+        let mut external_partices: Vec<ArcParticle> =
             vec![model.particles[0].clone(); max_external];
         for e in graph_edges {
             if graph_nodes[e.vertices.0].data.external_tag != 0 {
@@ -503,7 +503,7 @@ impl FeynGen {
         veto_tadpole: Option<&TadpolesFilterOptions>,
         veto_snails: Option<&SnailFilterOptions>,
         factorized_loop_topologies_count_range: Option<&(usize, usize)>,
-        external_particles: &[Arc<Particle>],
+        external_particles: &[ArcParticle],
         spanning_tree_root: usize,
     ) -> bool {
         let max_external = external_particles.len();
@@ -751,7 +751,7 @@ impl FeynGen {
                         );
                     } else {
                         #[allow(clippy::unnecessary_unwrap)]
-                        if external_particles[leg_id - 1].is_massive() {
+                        if external_particles[leg_id - 1].0.is_massive() {
                             if veto_self_energy_options.veto_self_energy_of_massive_lines {
                                 return true;
                             }
@@ -793,6 +793,7 @@ impl FeynGen {
 
                 model
                     .get_particle_from_pdg(attachment_edge.data.pdg)
+                    .0
                     .is_massive()
             } else {
                 // Always consider the attachment particle as massive for vaccuum graphs as it does not matter in that case
@@ -870,7 +871,7 @@ impl FeynGen {
         false
     }
 
-    pub fn unresolved_cut_content(&self, model: &Model) -> (usize, AHashSet<Arc<Particle>>) {
+    pub fn unresolved_cut_content(&self, model: &Model) -> (usize, AHashSet<ArcParticle>) {
         if let Some(p) = self.options.cross_section_filters.get_perturbative_orders() {
             let mut unresolved = AHashSet::new();
             for k in p.keys() {
@@ -891,7 +892,7 @@ impl FeynGen {
         graph: &SymbolicaGraph<NodeColor, EdgeColor>,
         external_connections: &[(Option<usize>, Option<usize>)],
         n_unresolved: usize,
-        unresolved_type: &AHashSet<Arc<Particle>>,
+        unresolved_type: &AHashSet<ArcParticle>,
     ) -> bool
     where
         NodeColor: NodeColorFunctions + Clone,
@@ -904,13 +905,13 @@ impl FeynGen {
             spectator_range: &RangeInclusive<usize>,
             model: &Model,
             n_unresolved: usize,
-            unresolved_type: &AHashSet<Arc<Particle>>,
-            particle_content_options: &[Vec<Arc<Particle>>],
+            unresolved_type: &AHashSet<ArcParticle>,
+            particle_content_options: &[Vec<ArcParticle>],
             amp_couplings: Option<
                 &std::collections::HashMap<String, (usize, Option<usize>), ahash::RandomState>,
             >,
             amp_loop_count: Option<(usize, usize)>,
-            graph: &HedgeGraph<Arc<Particle>, NodeColor>,
+            graph: &HedgeGraph<ArcParticle, NodeColor>,
         ) -> bool {
             if validate_connectivity(&cut.0, blob_range, spectator_range, graph)
                 && validate_connectivity(&cut.2, blob_range, spectator_range, graph)
@@ -921,7 +922,7 @@ impl FeynGen {
                     .map(|h| {
                         let o = graph.flow(h);
                         if matches!(o, Flow::Sink) {
-                            graph[[&h]].as_ref().get_anti_particle(model)
+                            graph[[&h]].0.as_ref().get_anti_particle(model)
                         } else {
                             graph[[&h]].clone()
                         }
@@ -1034,7 +1035,7 @@ impl FeynGen {
             subgraph: &BitVec,
             blob_range: &RangeInclusive<usize>,
             spectator_range: &RangeInclusive<usize>,
-            graph: &HedgeGraph<Arc<Particle>, NodeColor>,
+            graph: &HedgeGraph<ArcParticle, NodeColor>,
         ) -> bool {
             let components = graph.connected_components(subgraph);
 
@@ -1210,7 +1211,7 @@ impl FeynGen {
         model: &Model,
         graph: &SymbolicaGraph<NodeColor, EdgeColor>,
         n_unresolved: usize,
-        unresolved_type: &AHashSet<Arc<Particle>>,
+        unresolved_type: &AHashSet<ArcParticle>,
         particles: &[isize],
     ) -> bool {
         let n_initial_states = self.options.initial_pdgs.len();
@@ -1229,8 +1230,8 @@ impl FeynGen {
         > = HashMap::default();
         for &p in particles.iter().collect::<HashSet<_>>() {
             let particle = model.get_particle_from_pdg(p);
-            if particle.is_antiparticle() {
-                cut_map.insert(particle.get_anti_particle(model).pdg_code, vec![]);
+            if particle.0.is_antiparticle() {
+                cut_map.insert(particle.0.get_anti_particle(model).0.pdg_code, vec![]);
             } else {
                 cut_map.insert(p, vec![]);
             }
@@ -1244,10 +1245,10 @@ impl FeynGen {
                 continue;
             }
             let particle = model.get_particle_from_pdg(edge.data.pdg);
-            let e = if particle.is_antiparticle() {
-                cut_map.get_mut(&particle.get_anti_particle(model).pdg_code)
+            let e = if particle.0.is_antiparticle() {
+                cut_map.get_mut(&particle.0.get_anti_particle(model).0.pdg_code)
             } else {
-                cut_map.get_mut(&particle.pdg_code)
+                cut_map.get_mut(&particle.0.pdg_code)
             };
             if let Some(cut_entry) = e {
                 cut_entry.push(i_e);
@@ -1634,7 +1635,9 @@ impl FeynGen {
                         let mut e_data = e.data;
                         e_data.pdg = model
                             .get_particle_from_pdg(e_data.pdg)
+                            .0
                             .get_anti_particle(model)
+                            .0
                             .pdg_code;
                         new_edge_data.push((i_e, e_data));
                     }
@@ -1643,9 +1646,9 @@ impl FeynGen {
                     all_pdgs.remove(matched_position);
                 } else if pass_steps == 2 && (-2000..0).contains(&symmetrized_external_tag) {
                     let pdg_code = if is_initial_state {
-                        p.pdg_code
+                        p.0.pdg_code
                     } else {
-                        p.get_anti_particle(model).pdg_code
+                        p.0.get_anti_particle(model).0.pdg_code
                     };
                     if self.options.symmetrize_left_right_states {
                         let matched_external_pos: usize = all_pdgs
@@ -1663,7 +1666,9 @@ impl FeynGen {
                             let mut e_data = e.data;
                             e_data.pdg = model
                                 .get_particle_from_pdg(e_data.pdg)
+                                .0
                                 .get_anti_particle(model)
+                                .0
                                 .pdg_code;
                             new_edge_data.push((i_e, e_data));
                         }
@@ -1833,6 +1838,7 @@ impl FeynGen {
                     remapped_edge_vertices = (remapped_edge_vertices.1, remapped_edge_vertices.0);
                     model
                         .get_particle_from_pdg(edge.data.pdg)
+                        .0
                         .get_anti_particle(model)
                 } else {
                     model.get_particle_from_pdg(edge.data.pdg)
@@ -1851,9 +1857,9 @@ impl FeynGen {
                         remapped_edge_vertices.1,
                         is_edge_external, //edge.directed && is_edge_external,
                         if color_according_to_mass && !is_edge_external {
-                            format!("{} | {}", particle.mass, particle.spin)
+                            format!("{} | {}", particle.0.mass, particle.0.spin)
                         } else {
-                            particle.name.to_string()
+                            particle.0.name.to_string()
                         },
                     )
                     .unwrap();
@@ -1916,6 +1922,7 @@ impl FeynGen {
                 let mut particle = if is_flipped {
                     model
                         .get_particle_from_pdg(e.data.pdg)
+                        .0
                         .get_anti_particle(model)
                 } else {
                     model.get_particle_from_pdg(e.data.pdg)
@@ -1926,7 +1933,7 @@ impl FeynGen {
                 // If one would fix those edges (necessary e.g. for e- d > e- d DIS process) then one could add '&& is_external' below, which
                 // would allow to capture additional groupings involving the charged. W bosons.
                 if *was_left_and_right_swapped {
-                    particle = particle.get_anti_particle(model);
+                    particle = particle.0.get_anti_particle(model);
                 }
                 (
                     (e, is_flipped),
@@ -1942,7 +1949,7 @@ impl FeynGen {
                         } else {
                             input_graph_node_pos_to_can_graph_node_pos[e.vertices.0]
                         },
-                        particle.pdg_code,
+                        particle.0.pdg_code,
                     ),
                 )
             })
@@ -2024,7 +2031,7 @@ impl FeynGen {
         for (i_e, e) in graph.edges().iter().enumerate() {
             // Build an adjacency list including only fermions
             let p = model.get_particle_from_pdg(e.data.pdg);
-            if !(p.is_fermion() || p.is_ghost()) {
+            if !(p.0.is_fermion() || p.0.is_ghost()) {
                 continue;
             }
             adj_map
@@ -2044,7 +2051,7 @@ impl FeynGen {
             .iter()
             .map(|e| {
                 let p = model.get_particle_from_pdg(e.data.pdg);
-                !(p.is_fermion() || p.is_ghost())
+                !(p.0.is_fermion() || p.0.is_ghost())
             })
             .collect();
         let mut new_edges: AHashMap<usize, (usize, usize, bool, EdgeColor)> = AHashMap::default();
@@ -2059,7 +2066,7 @@ impl FeynGen {
         // and the values are the external leg ids of the fermions connected and in the order of the sorted key.
         #[allow(clippy::type_complexity)]
         let mut external_fermion_flow_pairings: AHashMap<
-            (Arc<Particle>, Arc<Particle>),
+            (ArcParticle, ArcParticle),
             Vec<(usize, usize)>,
         > = AHashMap::default();
         // First fix flows connected to external only and after that fix all internal fermion/ghost flows
@@ -2095,7 +2102,7 @@ impl FeynGen {
                     continue;
                 }
                 let starting_particle = model.get_particle_from_pdg(e.data.pdg);
-                let mut is_starting_antiparticle = starting_particle.is_antiparticle();
+                let mut is_starting_antiparticle = starting_particle.0.is_antiparticle();
                 let starting_vertices = if is_a_virtual_edge && is_starting_antiparticle {
                     // Force all virtual closed fermion loops to be particles
                     is_starting_antiparticle = false;
@@ -2109,6 +2116,7 @@ impl FeynGen {
                                 EdgeColor::from_particle(
                                     model
                                         .get_particle_from_pdg(e.data.pdg)
+                                        .0
                                         .get_anti_particle(model),
                                 ),
                             ),
@@ -2193,11 +2201,11 @@ impl FeynGen {
                                             graph_edges[nfep].vertices.0,
                                             graph_edges[nfep].directed,
                                             // Force fermion to be the same species as the one starting the chain
-                                            if this_edge_particle.is_antiparticle()
+                                            if this_edge_particle.0.is_antiparticle()
                                                 != is_starting_antiparticle
                                             {
                                                 EdgeColor::from_particle(
-                                                    this_edge_particle.get_anti_particle(model),
+                                                    this_edge_particle.0.get_anti_particle(model),
                                                 )
                                             } else {
                                                 EdgeColor::from_particle(this_edge_particle)
@@ -2212,7 +2220,7 @@ impl FeynGen {
                         }
                     }
                 }
-                if external_tag_to_consider > 0 && starting_particle.is_fermion() {
+                if external_tag_to_consider > 0 && starting_particle.0.is_fermion() {
                     if connected_leg_ids.len() != 2 {
                         return Err(FeynGenError::GenericError(
                             "External fermion flow must have exactly two legs".to_string(),
@@ -2242,27 +2250,28 @@ impl FeynGen {
                                             - self.options.initial_pdgs.len()
                                             - 1] as isize,
                                     )
+                                    .0
                                     .get_anti_particle(model)
                             }
                         })
                         .collect::<Vec<_>>();
                     if connected_leg_pdgs
                         .iter()
-                        .any(|particle| !particle.is_fermion())
+                        .any(|particle| !particle.0.is_fermion())
                     {
                         return Err(FeynGenError::GenericError(
                             "External fermion flow must connect two fermions".to_string(),
                         ));
                     }
-                    if connected_leg_pdgs[0].is_antiparticle()
-                        && !connected_leg_pdgs[1].is_antiparticle()
+                    if connected_leg_pdgs[0].0.is_antiparticle()
+                        && !connected_leg_pdgs[1].0.is_antiparticle()
                     {
                         external_fermion_flow_pairings
                             .entry((connected_leg_pdgs[0].clone(), connected_leg_pdgs[1].clone()))
                             .or_default()
                             .push((connected_leg_ids_vec[0], connected_leg_ids_vec[1]));
-                    } else if connected_leg_pdgs[1].is_antiparticle()
-                        && !connected_leg_pdgs[0].is_antiparticle()
+                    } else if connected_leg_pdgs[1].0.is_antiparticle()
+                        && !connected_leg_pdgs[0].0.is_antiparticle()
                     {
                         external_fermion_flow_pairings
                             .entry((connected_leg_pdgs[1].clone(), connected_leg_pdgs[0].clone()))
@@ -2300,8 +2309,8 @@ impl FeynGen {
                 && graph.nodes()[e.vertices.1].data.external_tag == 0;
             let this_edge_particle = model.get_particle_from_pdg(e.data.pdg);
             if is_a_virtual_edge
-                && this_edge_particle.is_antiparticle()
-                && !(this_edge_particle.is_fermion() || this_edge_particle.is_ghost())
+                && this_edge_particle.0.is_antiparticle()
+                && !(this_edge_particle.0.is_fermion() || this_edge_particle.0.is_ghost())
             {
                 new_edges.insert(
                     i_e,
@@ -2309,7 +2318,7 @@ impl FeynGen {
                         e.vertices.1,
                         e.vertices.0,
                         e.directed,
-                        EdgeColor::from_particle(this_edge_particle.get_anti_particle(model)),
+                        EdgeColor::from_particle(this_edge_particle.0.get_anti_particle(model)),
                     ),
                 );
             }
@@ -2337,7 +2346,7 @@ impl FeynGen {
         let mut adj_map: HashMap<usize, Vec<(usize, usize)>> = HashMap::default();
         for (i_e, e) in graph.edges().iter().enumerate() {
             // Build an adjacency list including only fermions
-            if !model.get_particle_from_pdg(e.data.pdg).is_fermion() {
+            if !model.get_particle_from_pdg(e.data.pdg).0.is_fermion() {
                 continue;
             }
             adj_map
@@ -2355,7 +2364,7 @@ impl FeynGen {
         let mut vetoed_edges: Vec<bool> = graph
             .edges()
             .iter()
-            .map(|e| !model.get_particle_from_pdg(e.data.pdg).is_fermion())
+            .map(|e| !model.get_particle_from_pdg(e.data.pdg).0.is_fermion())
             .collect();
         let mut n_fermion_loops = 0;
         for (i_e, e) in graph.edges().iter().enumerate() {
@@ -2450,16 +2459,18 @@ impl FeynGen {
         'add_vertex_rules: for vertex_rule in model.vertex_rules.iter() {
             let mut oriented_particles = vec![];
             for p in vertex_rule.particles.iter() {
-                if p.is_self_antiparticle() {
-                    oriented_particles.push((None, p.name.clone()));
-                } else if p.is_antiparticle() {
-                    oriented_particles.push((Some(true), p.get_anti_particle(model).name.clone()));
+                if p.0.is_self_antiparticle() {
+                    oriented_particles.push((None, p.0.name.clone()));
+                } else if p.0.is_antiparticle() {
+                    oriented_particles
+                        .push((Some(true), p.0.get_anti_particle(model).0.name.clone()));
                 } else {
-                    oriented_particles.push((Some(false), p.name.clone()));
+                    oriented_particles.push((Some(false), p.0.name.clone()));
                 }
                 if let Some(vetoed_particles) = filters.get_particle_vetos() {
-                    if vetoed_particles.contains(&(p.pdg_code as i64))
-                        || vetoed_particles.contains(&(p.get_anti_particle(model).pdg_code as i64))
+                    if vetoed_particles.contains(&(p.0.pdg_code as i64))
+                        || vetoed_particles
+                            .contains(&(p.0.get_anti_particle(model).0.pdg_code as i64))
                     {
                         continue 'add_vertex_rules;
                     }
@@ -2482,12 +2493,12 @@ impl FeynGen {
                     NodeColorWithoutVertexRule {
                         external_tag: (i_initial + 1) as i32,
                     },
-                    if p.is_self_antiparticle() {
+                    if p.0.is_self_antiparticle() {
                         (None, EdgeColor::from_particle(p))
-                    } else if p.is_antiparticle() {
+                    } else if p.0.is_antiparticle() {
                         (
                             Some(false),
-                            EdgeColor::from_particle(p.get_anti_particle(model)),
+                            EdgeColor::from_particle(p.0.get_anti_particle(model)),
                         )
                     } else {
                         (Some(true), EdgeColor::from_particle(p))
@@ -2518,12 +2529,12 @@ impl FeynGen {
                                     external_tag: (self.options.initial_pdgs.len() + i_final + 1)
                                         as i32,
                                 },
-                                if p.is_self_antiparticle() {
+                                if p.0.is_self_antiparticle() {
                                     (None, EdgeColor::from_particle(p))
-                                } else if p.is_antiparticle() {
+                                } else if p.0.is_antiparticle() {
                                     (
                                         Some(true),
-                                        EdgeColor::from_particle(p.get_anti_particle(model)),
+                                        EdgeColor::from_particle(p.0.get_anti_particle(model)),
                                     )
                                 } else {
                                     (Some(false), EdgeColor::from_particle(p))
@@ -2543,12 +2554,12 @@ impl FeynGen {
                         NodeColorWithoutVertexRule {
                             external_tag: i_final as i32,
                         },
-                        if p.is_self_antiparticle() {
+                        if p.0.is_self_antiparticle() {
                             (None, EdgeColor::from_particle(p))
-                        } else if p.is_antiparticle() {
+                        } else if p.0.is_antiparticle() {
                             (
                                 Some(true),
-                                EdgeColor::from_particle(p.get_anti_particle(model)),
+                                EdgeColor::from_particle(p.0.get_anti_particle(model)),
                             )
                         } else {
                             (Some(false), EdgeColor::from_particle(p))
@@ -2643,10 +2654,10 @@ impl FeynGen {
                         .iter()
                         .map(|pdg| {
                             let p = model.get_particle_from_pdg(*pdg as isize);
-                            if p.is_antiparticle() {
-                                p.get_anti_particle(model).pdg_code
+                            if p.0.is_antiparticle() {
+                                p.0.get_anti_particle(model).0.pdg_code
                             } else {
-                                p.pdg_code
+                                p.0.pdg_code
                             }
                         })
                         .collect::<Vec<_>>()
@@ -3095,6 +3106,7 @@ impl FeynGen {
                                 .get_particle_from_pdg(
                                     self.options.initial_pdgs[initial_color - 1] as isize,
                                 )
+                                .0
                                 .is_fermion()
                                 || self
                                     .options
@@ -3112,6 +3124,7 @@ impl FeynGen {
                                         [final_color - self.options.initial_pdgs.len() - 1]
                                         as isize,
                                 )
+                                .0
                                 .is_fermion()
                                 || self
                                     .options
@@ -3127,6 +3140,7 @@ impl FeynGen {
                                 .get_particle_from_pdg(
                                     self.options.initial_pdgs[initial_color - 1] as isize,
                                 )
+                                .0
                                 .is_fermion()
                                 || self
                                     .options
@@ -3146,6 +3160,7 @@ impl FeynGen {
                                         [final_color - self.options.initial_pdgs.len() - 1]
                                         as isize,
                                 )
+                                .0
                                 .is_fermion()
                                 || self
                                     .options
@@ -3161,6 +3176,7 @@ impl FeynGen {
                                 .get_particle_from_pdg(
                                     self.options.initial_pdgs[initial_color - 1] as isize,
                                 )
+                                .0
                                 .is_fermion()
                                 || self
                                     .options
@@ -3178,6 +3194,7 @@ impl FeynGen {
                                         [final_color - self.options.initial_pdgs.len() - 1]
                                         as isize,
                                 )
+                                .0
                                 .is_fermion()
                                 || self
                                     .options
@@ -4151,7 +4168,7 @@ impl FeynGen {
             .iter()
             .filter(|&pdg| {
                 let p = model.get_particle_from_pdg(*pdg as isize);
-                p.is_antiparticle() && p.is_fermion()
+                p.0.is_antiparticle() && p.0.is_fermion()
             })
             .count();
 
@@ -4263,13 +4280,13 @@ impl ProcessedNumeratorForComparison {
                                 .with(parse!(&format!("P({},x__)", i_ext)).unwrap().to_pattern());
                         }
                         let left_edge_pol = match left_edge.edge_type {
-                            EdgeType::Incoming => left_edge.particle.in_pol_symbol(),
-                            EdgeType::Outgoing => left_edge.particle.out_pol_symbol(),
+                            EdgeType::Incoming => left_edge.particle.0.in_pol_symbol(),
+                            EdgeType::Outgoing => left_edge.particle.0.out_pol_symbol(),
                             _ => unreachable!(),
                         };
                         let right_edge_pol = match right_edge.edge_type {
-                            EdgeType::Incoming => right_edge.particle.in_pol_symbol(),
-                            EdgeType::Outgoing => right_edge.particle.out_pol_symbol(),
+                            EdgeType::Incoming => right_edge.particle.0.in_pol_symbol(),
+                            EdgeType::Outgoing => right_edge.particle.0.out_pol_symbol(),
                             _ => unreachable!(),
                         };
                         if let (Some(left_edge_pol), Some(right_edge_pol)) =

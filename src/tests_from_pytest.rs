@@ -629,7 +629,7 @@ fn check_esurface_existance<N: NumeratorState>(
         .bare_graph
         .edges
         .iter()
-        .map(|edge| edge.particle.mass.value)
+        .map(|edge| edge.particle.0.mass.value)
         .collect_vec();
 
     let dummy_hedge_graph = utils::dummy_hedge_graph(graph.bare_graph.edges.len());
@@ -1226,7 +1226,7 @@ fn pytest_scalar_hexagon() {
         .bare_graph
         .edges
         .iter()
-        .map(|edge| edge.particle.mass.value)
+        .map(|edge| edge.particle.0.mass.value)
         .collect_vec();
 
     let edge_masses = utils::dummy_hedge_graph(edge_masses.len())
@@ -1365,7 +1365,7 @@ fn pytest_scalar_ltd_topology_c() {
         .bare_graph
         .edges
         .iter()
-        .map(|edge| edge.particle.mass.value)
+        .map(|edge| edge.particle.0.mass.value)
         .map(|mass| {
             if let Some(value) = mass {
                 if value.re.0 == 0.0 {
@@ -1463,7 +1463,7 @@ fn pytest_scalar_massless_pentabox() {
         .bare_graph
         .edges
         .iter()
-        .map(|edge| edge.particle.mass.value)
+        .map(|edge| edge.particle.0.mass.value)
         .map(|mass| {
             if let Some(value) = mass {
                 if value.re.0 == 0.0 {
@@ -1585,7 +1585,7 @@ fn pytest_scalar_massless_3l_pentabox() {
         .bare_graph
         .edges
         .iter()
-        .map(|edge| edge.particle.mass.value)
+        .map(|edge| edge.particle.0.mass.value)
         .map(|mass| {
             if let Some(value) = mass {
                 if value.re.0 == 0.0 {

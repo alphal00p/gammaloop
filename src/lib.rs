@@ -49,7 +49,8 @@ use integrands::*;
 use itertools::Itertools;
 use log::debug;
 
-use model::Particle;
+use model::ArcParticle;
+use model::Model;
 use momentum::Dep;
 use momentum::ExternalMomenta;
 use momentum::FourMomentum;
@@ -75,6 +76,7 @@ use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use symbolica::evaluate::CompileOptions;
 use symbolica::evaluate::InlineASM;
+use symbolica::state::StateMap;
 use utils::FloatLike;
 use utils::F;
 
@@ -84,6 +86,11 @@ pub static INTERRUPTED: AtomicBool = AtomicBool::new(false);
 
 pub const GAMMALOOP_NAMESPACE: &str = "GL";
 pub const MAX_CORES: usize = 1000;
+
+pub trait GammaLoopContext {
+    fn get_state_map(&mut self) -> &mut StateMap;
+    fn get_model(&mut self) -> &mut Model;
+}
 
 #[cfg(not(feature = "higher_loops"))]
 pub const MAX_LOOP: usize = 3;
@@ -599,7 +606,7 @@ impl Externals {
 
     pub fn generate_polarizations(
         &self,
-        external_particles: &[Arc<Particle>],
+        external_particles: &[ArcParticle],
         dependent_momenta_constructor: DependentMomentaConstructor,
     ) -> Polarizations {
         let mut polarizations = vec![];
@@ -635,10 +642,10 @@ impl Externals {
         {
             match s {
                 SignOrZero::Minus => {
-                    polarizations.push(p.incoming_polarization(ext_mom, *hel));
+                    polarizations.push(p.0.incoming_polarization(ext_mom, *hel));
                 }
                 SignOrZero::Plus => {
-                    polarizations.push(p.outgoing_polarization(ext_mom, *hel));
+                    polarizations.push(p.0.outgoing_polarization(ext_mom, *hel));
                 }
                 _ => {
                     panic!("Edge type should not be virtual")

@@ -10,7 +10,7 @@ use crate::{
     },
     gammaloop_integrand::DefaultSample,
     ltd::{generate_ltd_expression, LTDExpression},
-    model::{self, ColorStructure, EdgeSlots, Model, Particle, VertexSlots},
+    model::{self, ArcParticle, ColorStructure, EdgeSlots, Model, Particle, VertexSlots},
     momentum::{FourMomentum, Polarization, Rotation, SignOrZero, ThreeMomentum},
     momentum_sample::{
         BareMomentumSample, ExternalFourMomenta, ExternalIndex, LoopMomenta, MomentumSample,
@@ -182,7 +182,7 @@ impl<N: Clone, E: Clone, S: NodeStorageOps<NodeData = N>> HedgeGraphExt<N, E>
 
 //use symbolica::{atom::Symbol,state::State};
 //pub mod half_edge;
-#[derive(Debug, Default, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Default, Clone, Copy, Serialize, Deserialize, PartialEq, Encode, Decode)]
 pub enum EdgeType {
     #[serde(rename = "in")]
     Incoming,
@@ -217,7 +217,7 @@ impl SerializableBareEdge {
         SerializableBareEdge {
             name: edge.name.clone(),
             edge_type: edge.edge_type,
-            particle: edge.particle.name.clone(),
+            particle: edge.particle.0.name.clone(),
             propagator: edge.propagator.name.clone(),
             vertices: [
                 graph.vertices[edge.vertices[0]].name.clone(),
@@ -232,14 +232,14 @@ pub struct BareEdge {
     pub name: SmartString<LazyCompact>,
     pub edge_type: EdgeType,
     pub propagator: Arc<model::Propagator>,
-    pub particle: Arc<model::Particle>,
+    pub particle: ArcParticle,
     pub vertices: [usize; 2],
     pub internal_index: Vec<AbstractIndex>,
 }
 
 impl BareEdge {
     pub fn dod(&self) -> isize {
-        match self.particle.spin {
+        match self.particle.0.spin {
             2 => -1,
             3 => -2,
             _ => -2,
@@ -280,6 +280,7 @@ impl BareEdge {
         let mom = parse!(&format!("Q{num}")).unwrap();
         let mass = self
             .particle
+            .0
             .mass
             .expression
             .clone()
@@ -343,7 +344,7 @@ impl BareEdge {
                 let mut atom = self.propagator.numerator.clone();
 
                 let pfun = parse!("P(x_)").unwrap().to_pattern();
-                if self.particle.is_antiparticle() {
+                if self.particle.0.is_antiparticle() {
                     atom = atom.replace(&pfun).with(
                         parse!(&format!(
                             "-Q({},mink(4,indexid(x_)))",
@@ -365,7 +366,7 @@ impl BareEdge {
 
                 let pslashfun = parse!("PSlash(i_,j_)").unwrap().to_pattern();
                 let pindex_num: usize = self.internal_index[0].into();
-                if self.particle.is_antiparticle() {
+                if self.particle.0.is_antiparticle() {
                     atom = atom.replace(&pslashfun).with(
                         parse!(&format!(
                             "-Q({},mink(4,{}))*Gamma({},i_,j_)",
@@ -416,7 +417,7 @@ impl BareEdge {
                     })
                     .collect();
 
-                let (replacements_in, replacements_out) = if self.particle.is_antiparticle() {
+                let (replacements_in, replacements_out) = if self.particle.0.is_antiparticle() {
                     (in_slots.replacements(2), out_slots.replacements(1))
                 } else {
                     (in_slots.replacements(1), out_slots.replacements(2))
@@ -536,8 +537,8 @@ impl VertexInfo {
         match self {
             VertexInfo::ExternalVertexInfo(e) => {
                 let (e, mut updated_shifts) = match e.direction {
-                    EdgeType::Outgoing => e.particle.get_anti_particle(model).slots(shifts),
-                    EdgeType::Incoming => e.particle.slots(shifts),
+                    EdgeType::Outgoing => e.particle.0.get_anti_particle(model).0.slots(shifts),
+                    EdgeType::Incoming => e.particle.0.slots(shifts),
                     EdgeType::Virtual => panic!("Virtual external vertex not supported"),
                 };
 
@@ -571,7 +572,7 @@ pub struct SerializableExternalVertexInfo {
 #[derive(Debug, Clone)]
 pub struct ExternalVertexInfo {
     pub direction: EdgeType,
-    pub particle: Arc<model::Particle>,
+    pub particle: ArcParticle,
 }
 
 impl ExternalVertexInfo {
@@ -583,9 +584,11 @@ impl ExternalVertexInfo {
         match self.direction {
             EdgeType::Incoming => self
                 .particle
+                .0
                 .incoming_polarization_atom_concrete(&vertex_slots[0].dual(), vertex_pos),
             EdgeType::Outgoing => self
                 .particle
+                .0
                 .outgoing_polarization_atom_concrete(&vertex_slots[0].dual(), vertex_pos),
             EdgeType::Virtual => panic!("Virtual external vertex not supported"),
         }
@@ -606,9 +609,11 @@ impl HasVertexInfo for ExternalVertexInfo {
         let polarization = match self.direction {
             EdgeType::Incoming => self
                 .particle
+                .0
                 .incoming_polarization_atom(&vertex_slots[0].dual(), vertex_pos),
             EdgeType::Outgoing => self
                 .particle
+                .0
                 .outgoing_polarization_atom(&vertex_slots[0].dual(), vertex_pos),
             EdgeType::Virtual => panic!("Virtual external vertex not supported"),
         };
@@ -703,8 +708,12 @@ impl HasVertexInfo for InteractionVertexInfo {
 
                 atom = preprocess_ufo_color_wrapped(atom);
 
-                let spins: Vec<isize> =
-                    self.vertex_rule.particles.iter().map(|s| s.color).collect();
+                let spins: Vec<isize> = self
+                    .vertex_rule
+                    .particles
+                    .iter()
+                    .map(|s| s.0.color)
+                    .collect();
 
                 for (i, s) in spins.iter().enumerate() {
                     let id1 = function!(UFO.identity, Atom::new_num((i + 1) as i32), symbol!("x_"))
@@ -789,7 +798,7 @@ fn serializable_vertex_info(vertex_info: &VertexInfo) -> SerializableVertexInfo 
         VertexInfo::ExternalVertexInfo(external_vertex_info) => {
             SerializableVertexInfo::ExternalVertexInfo(SerializableExternalVertexInfo {
                 direction: external_vertex_info.direction,
-                particle: external_vertex_info.particle.name.clone(),
+                particle: external_vertex_info.particle.0.name.clone(),
             })
         }
         VertexInfo::InteractonVertexInfo(interaction_vertex_info) => {
@@ -880,7 +889,7 @@ impl BareVertex {
 
     pub fn order_edges_following_interaction(
         &mut self,
-        edge_id_and_pdgs_of_current_order: Vec<(usize, Arc<Particle>)>,
+        edge_id_and_pdgs_of_current_order: Vec<(usize, ArcParticle)>,
     ) -> Result<(), FeynGenError> {
         let mut new_edges_order = vec![];
         match self.vertex_info {
@@ -895,8 +904,8 @@ impl BareVertex {
                     } else {
                         return Err(FeynGenError::GenericError(
                                 format!("Could not match some particles vertex ({}). It is incompatible with the ones in the interaction info ({})",
-                                    edge_id_and_pdgs_of_current_order.iter().map(|(_,x)| x.name.clone()).join(","),
-                                    i.vertex_rule.particles.iter().map(|x| x.name.clone()).join(","),
+                                    edge_id_and_pdgs_of_current_order.iter().map(|(_,x)| x.0.name.clone()).join(","),
+                                    i.vertex_rule.particles.iter().map(|x| x.0.name.clone()).join(","),
                                 ),
                             ));
                     };
@@ -906,8 +915,8 @@ impl BareVertex {
                 if !pdgs_to_position_map.is_empty() {
                     return Err(FeynGenError::GenericError(
                         format!("Not all particle of vertex ({}) were matched with the ones in the interaction info ({})",
-                            edge_id_and_pdgs_of_current_order.iter().map(|(_,x)| x.name.clone()).join(","),
-                            i.vertex_rule.particles.iter().map(|x| x.name.clone()).join(","),
+                            edge_id_and_pdgs_of_current_order.iter().map(|(_,x)| x.0.name.clone()).join(","),
+                            i.vertex_rule.particles.iter().map(|x| x.0.name.clone()).join(","),
                         ),
                     ));
                 }
@@ -1276,11 +1285,11 @@ impl BareGraph {
     pub fn external_particle_spin(&self) -> Vec<isize> {
         self.external_edges
             .iter()
-            .map(|&i| self.edges[i].particle.spin)
+            .map(|&i| self.edges[i].particle.0.spin)
             .collect()
     }
 
-    pub fn external_particles(&self) -> Vec<Arc<Particle>> {
+    pub fn external_particles(&self) -> Vec<ArcParticle> {
         self.external_edges
             .iter()
             .map(|&i| self.edges[i].particle.clone())
@@ -1292,8 +1301,8 @@ impl BareGraph {
             .iter()
             .map(|&i| {
                 (
-                    self.edges[i].particle.spin,
-                    self.edges[i].particle.mass.value.unwrap() == Complex::new_zero(),
+                    self.edges[i].particle.0.spin,
+                    self.edges[i].particle.0.mass.value.unwrap() == Complex::new_zero(),
                 )
             })
             .collect()
@@ -1347,7 +1356,7 @@ impl BareGraph {
             let to = self.vertices[edge.vertices[1]].name.clone();
             dot.push_str(&format!(
                 "\"{}\" -> \"{}\" [label=\"{} | {} | Q({}) \"];\n",
-                from, to, edge.name, edge.particle.name, i
+                from, to, edge.name, edge.particle.0.name, i
             ));
         }
         dot.push_str("}\n");
@@ -1551,7 +1560,7 @@ impl BareGraph {
     pub fn select_cp_variant(
         model: &Model,
         vertex_info: &mut VertexInfo,
-        edge_particles: &[Arc<Particle>],
+        edge_particles: &[ArcParticle],
     ) -> Result<(), FeynGenError> {
         let mut vertex_particles = edge_particles.to_vec();
         vertex_particles.sort();
@@ -1566,14 +1575,14 @@ impl BareGraph {
         } else {
             let mut this_interaction_particles_cp_conjugate = this_interaction_particles
                 .iter()
-                .map(|p| p.get_anti_particle(model))
+                .map(|p| p.0.get_anti_particle(model))
                 .collect::<Vec<_>>();
             this_interaction_particles_cp_conjugate.sort();
             if this_interaction_particles_cp_conjugate != vertex_particles {
                 Err(FeynGenError::GenericError(
                     format!("Neither the vertex rule currently assigned nor its CP conjugate connect particles that match the PDG of the edges connected to this node: ({}) != ({})",
-                        this_interaction_particles.iter().map(|p| model.get_particle_from_pdg(p.pdg_code).name.clone()).collect::<Vec<_>>().join(", "),
-                        vertex_particles.iter().map(|p| model.get_particle_from_pdg(p.pdg_code).name.clone()).collect::<Vec<_>>().join(", "),
+                        this_interaction_particles.iter().map(|p| model.get_particle_from_pdg(p.0.pdg_code).0.name.clone()).collect::<Vec<_>>().join(", "),
+                        vertex_particles.iter().map(|p| model.get_particle_from_pdg(p.0.pdg_code).0.name.clone()).collect::<Vec<_>>().join(", "),
                     ),
                 ))
             } else if let Some(vertex_rules) = model
@@ -1595,13 +1604,13 @@ impl BareGraph {
                 if candidates.is_empty() {
                     return Err(FeynGenError::GenericError(
                         format!("Could not find the CP conjugate of this vertex in the Feynman rules of the model: ({}). None have matching couplings orders. Consider generating without the option '--symmetrize_left_right_states'.",
-                        vertex_particles.iter().map(|p| model.get_particle_from_pdg(p.pdg_code).name.clone()).collect::<Vec<_>>().join(", "),
+                        vertex_particles.iter().map(|p| model.get_particle_from_pdg(p.0.pdg_code).0.name.clone()).collect::<Vec<_>>().join(", "),
                         ),
                     ));
                 } else if candidates.len() > 1 {
                     return Err(FeynGenError::GenericError(
                         format!("Could not find the CP conjugate of this vertex in the Feynman rules of the model: ({}). Multiple candidate interactions have matching coupling orders: {}. Consider generating without the option '--symmetrize_left_right_states'.",
-                        vertex_particles.iter().map(|p| model.get_particle_from_pdg(p.pdg_code).name.clone()).collect::<Vec<_>>().join(", "),
+                        vertex_particles.iter().map(|p| model.get_particle_from_pdg(p.0.pdg_code).0.name.clone()).collect::<Vec<_>>().join(", "),
                             candidates.iter().map(|vr| vr.name.clone()).collect::<Vec<_>>().join(", ")
                         ),
                     ));
@@ -1614,7 +1623,7 @@ impl BareGraph {
             } else {
                 return Err(FeynGenError::GenericError(
                         format!("Could not find the CP conjugate of this vertex in the Feynman rules of the model: ({}). Consider generating without the option '--symmetrize_left_right_states'.",
-                        vertex_particles.iter().map(|p| model.get_particle_from_pdg(p.pdg_code).name.clone()).collect::<Vec<_>>().join(", "),
+                        vertex_particles.iter().map(|p| model.get_particle_from_pdg(p.0.pdg_code).0.name.clone()).collect::<Vec<_>>().join(", "),
                         ),
                     ));
             }
@@ -1692,7 +1701,7 @@ impl BareGraph {
                     });
                 if edge_type_from_symbolica != physical_edge_type {
                     external_edge.vertices = (external_edge.vertices.1, external_edge.vertices.0);
-                    particle = particle.get_anti_particle(model);
+                    particle = particle.0.get_anti_particle(model);
                 }
                 assert!(
                     n.data.external_tag > 0,
@@ -1700,9 +1709,9 @@ impl BareGraph {
                 );
                 external_nodes.insert(
                     n.data.external_tag as usize,
-                    (i_n, physical_edge_type, particle.name.clone()),
+                    (i_n, physical_edge_type, particle.0.name.clone()),
                 );
-                external_edges.insert(n.edges[0], (physical_edge_type, particle.name.clone()));
+                external_edges.insert(n.edges[0], (physical_edge_type, particle.0.name.clone()));
             }
         }
         // First build vertices
@@ -1795,7 +1804,7 @@ impl BareGraph {
                 };
 
             let propagator: Arc<model::Propagator> =
-                model.get_propagator_for_particle(&particle.name);
+                model.get_propagator_for_particle(&particle.0.name);
 
             let (start_vertex, end_vertex) = (edge.vertices.0, edge.vertices.1);
 
@@ -1875,14 +1884,14 @@ impl BareGraph {
                 let edge = &g.edges[*e_pos];
                 // For a self-loop, the particle must be counted twice.
                 if edge.vertices[0] == edge.vertices[1] {
-                    if !edge.particle.is_self_antiparticle() {
+                    if !edge.particle.0.is_self_antiparticle() {
                         // return Err(FeynGenError::GenericError(format!(
                         //     "Self-loop of edge {} *must* be a self-antiparticle",
                         //     edge.name
                         // )));
                         current_vertex_edge_order.push((*e_pos, edge.particle.clone()));
                         current_vertex_edge_order
-                            .push((*e_pos, edge.particle.get_anti_particle(model).clone()));
+                            .push((*e_pos, edge.particle.0.get_anti_particle(model).clone()));
                     } else {
                         current_vertex_edge_order.push((*e_pos, edge.particle.clone()));
                         current_vertex_edge_order.push((*e_pos, edge.particle.clone()));
@@ -1891,7 +1900,7 @@ impl BareGraph {
                     current_vertex_edge_order.push((*e_pos, edge.particle.clone()));
                 } else if edge.vertices[0] == i_v {
                     current_vertex_edge_order
-                        .push((*e_pos, edge.particle.get_anti_particle(model).clone()));
+                        .push((*e_pos, edge.particle.0.get_anti_particle(model).clone()));
                 } else {
                     return Err(FeynGenError::GenericError(format!(
                         "Edge {} is not connected to vertex {}",
@@ -2291,14 +2300,14 @@ impl BareGraph {
 
     #[inline]
     pub fn get_mass_vector(&self) -> Vec<Option<Complex<F<f64>>>> {
-        self.edges.iter().map(|e| e.particle.mass.value).collect()
+        self.edges.iter().map(|e| e.particle.0.mass.value).collect()
     }
 
     #[inline]
     pub fn get_real_mass_vector(&self) -> Vec<F<f64>> {
         self.edges
             .iter()
-            .map(|e| match e.particle.mass.value {
+            .map(|e| match e.particle.0.mass.value {
                 Some(mass) => mass.re,
                 None => F::from_f64(0.0),
             })
@@ -2321,7 +2330,7 @@ impl BareGraph {
                 EdgeType::Virtual => {
                     emr_mom
                         .spatial
-                        .on_shell_energy(edge.particle.mass.value.map(|m| {
+                        .on_shell_energy(edge.particle.0.mass.value.map(|m| {
                             if m.im.is_non_zero() {
                                 panic!("Complex masses not yet supported in gammaLoop")
                             }
@@ -2445,7 +2454,7 @@ impl BareGraph {
             .map(|(edge, emr)| match edge.edge_type {
                 EdgeType::Virtual => {
                     emr.spatial
-                        .into_on_shell_four_momentum(edge.particle.mass.value.map(|m| {
+                        .into_on_shell_four_momentum(edge.particle.0.mass.value.map(|m| {
                             if m.im.is_non_zero() {
                                 panic!("Complex masses not yet supported in gammaLoop")
                             }
@@ -2741,7 +2750,7 @@ impl BareGraph {
         let tropical_edges = self
             .get_loop_edges_iterator()
             .map(|(_edge_id, edge)| {
-                let is_massive = match edge.particle.mass.value {
+                let is_massive = match edge.particle.0.mass.value {
                     Some(complex_mass) => !complex_mass.is_zero(),
                     None => false,
                 };
@@ -3412,7 +3421,7 @@ impl DerivedGraphData<Evaluators> {
         for (e, q) in bare_graph.edges.iter().zip(emr.iter()) {
             if e.edge_type == EdgeType::Virtual {
                 // println!("q: {}", q);
-                if let Some(mass) = e.particle.mass.value {
+                if let Some(mass) = e.particle.0.mass.value {
                     let m2 = mass.norm_squared();
                     let m2: F<T> = F::from_ff64(m2);
                     den *= &q.square() - &m2;

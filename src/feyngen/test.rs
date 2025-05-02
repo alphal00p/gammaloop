@@ -120,7 +120,7 @@ fn cut_content() {
     let h = EdgeColor::from_particle(model.get_particle("H"));
 
     let b = EdgeColor::from_particle(model.get_particle("b"));
-    let bbar = EdgeColor::from_particle(model.get_particle("b").get_anti_particle(&model));
+    let bbar = EdgeColor::from_particle(model.get_particle("b").0.get_anti_particle(&model));
     let g = EdgeColor::from_particle(model.get_particle("g"));
     let a = EdgeColor::from_particle(model.get_particle("a"));
     let eplus = EdgeColor::from_particle(model.get_particle("e+"));
@@ -328,12 +328,12 @@ pub fn dis_options(
 ) -> FeynGen {
     let initial_pdgs: Vec<_> = init
         .iter()
-        .map(|a| model.get_particle(a).pdg_code)
+        .map(|a| model.get_particle(a).0.pdg_code)
         .collect();
 
     let final_pdgs_lists: Vec<_> = final_states
         .iter()
-        .map(|f| f.iter().map(|a| model.get_particle(a).pdg_code).collect())
+        .map(|f| f.iter().map(|a| model.get_particle(a).0.pdg_code).collect())
         .collect();
 
     let initial_state_mult = init.len();
@@ -443,7 +443,7 @@ pub fn dis_cart_prod(
 ) -> Vec<FeynGen> {
     let initial_states: Vec<_> = initial_states
         .iter()
-        .map(|a| model.get_particle(a).pdg_code)
+        .map(|a| model.get_particle(a).0.pdg_code)
         .collect();
     dis_cart_prod_impl(&initial_states, loop_count)
 }
@@ -482,7 +482,7 @@ fn nlo_fs_dis() {
             .options
             .initial_pdgs
             .iter()
-            .map(|a| model.get_particle_from_pdg(*a as isize).name.clone())
+            .map(|a| model.get_particle_from_pdg(*a as isize).0.name.clone())
             .join(",");
 
         assert_snapshot!(

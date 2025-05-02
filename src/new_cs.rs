@@ -3,11 +3,12 @@ use std::{
     fmt::{Display, Formatter},
     iter,
     marker::PhantomData,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::Arc,
 };
 
 use ahash::{AHashSet, HashMap};
+use bincode::{Decode, Encode};
 use bitvec::vec::BitVec;
 use color_eyre::Result;
 use momtrop::SampleGenerator;
@@ -15,6 +16,7 @@ use spenso::contraction::IsZero;
 
 use crate::{
     cff::{expression::CFFExpression, generation::generate_cff_expression},
+    model::ArcParticle,
     momentum_sample::ExternalIndex,
     new_gammaloop_integrand::{
         amplitude_integrand::{AmplitudeGraphTerm, AmplitudeIntegrand},
@@ -70,7 +72,7 @@ pub struct ProcessDefinition {
     pub initial_pdgs: Vec<i64>, // Do we want a pub type Pdg = i64;?
     pub final_pdgs_lists: Vec<Vec<i64>>,
     pub n_unresolved: usize, // we need al this information to know what cuts are considered at runtime
-    pub unresolved_cut_content: AHashSet<Arc<Particle>>,
+    pub unresolved_cut_content: AHashSet<ArcParticle>,
     pub amplitude_filters: FeynGenFilters,
     pub cross_section_filters: FeynGenFilters,
 }
@@ -293,7 +295,7 @@ impl<S: NumeratorState> ProcessCollection<S> {
 #[derive(Clone)]
 pub struct Amplitude<S: NumeratorState = PythonState> {
     graphs: Vec<AmplitudeGraph<S>>,
-    external_particles: Vec<Arc<Particle>>,
+    external_particles: Vec<ArcParticle>,
     external_signature: SignatureLike<ExternalIndex>,
 }
 
@@ -340,6 +342,12 @@ impl<S: NumeratorState> Amplitude<S> {
 
         Integrand::NewIntegrand(NewIntegrand::Amplitude(amplitude_integrand))
     }
+
+    pub fn export(&self, export_root: &str) -> Result<()> {
+        let path = Path::new(export_root).join("sources").join("amplitudes");
+
+        Ok(())
+    }
 }
 
 impl<S: NumeratorState> IsPolarizable for Amplitude<S> {
@@ -352,7 +360,7 @@ impl<S: NumeratorState> IsPolarizable for Amplitude<S> {
 }
 
 #[derive(Clone)]
-pub struct AmplitudeGraph<S: NumeratorState = PythonState> {
+pub struct AmplitudeGraph<S: NumeratorState> {
     graph: Graph,
     derived_data: AmplitudeDerivedData<S>,
 }
@@ -491,7 +499,7 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
             .graph
             .iter_loop_edges()
             .map(|(pair, _edge_id, edge)| {
-                let is_massive = match edge.data.particle.mass.value {
+                let is_massive = match edge.data.particle.0.mass.value {
                     Some(complex_mass) => complex_mass.is_non_zero(),
                     None => false,
                 };
@@ -669,7 +677,7 @@ impl<S: NumeratorState> Amplitude<S> {
 #[derive(Clone)]
 pub struct CrossSection<S: NumeratorState> {
     supergraphs: Vec<CrossSectionGraph<S>>,
-    external_particles: Vec<Arc<Particle>>,
+    external_particles: Vec<ArcParticle>,
     external_connections: Vec<ExternalConnection>,
     n_incmoming: usize,
 }
@@ -1246,7 +1254,7 @@ impl CrossSectionCut {
                 .iter_edges(&cross_section_graph.graph.underlying)
                 .map(|(orientation, edge_data)| {
                     if orientation == Orientation::Reversed {
-                        edge_data.data.particle.get_anti_particle(model)
+                        edge_data.data.particle.0.get_anti_particle(model)
                     } else {
                         edge_data.data.particle.clone()
                     }
@@ -1262,7 +1270,7 @@ impl CrossSectionCut {
 
             debug!(
                 "cut content: {:?}",
-                cut_content.iter().map(|p| p.pdg_code).collect_vec()
+                cut_content.iter().map(|p| p.0.pdg_code).collect_vec()
             );
 
             for particle in particle_content {
