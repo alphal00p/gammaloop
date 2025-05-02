@@ -2,6 +2,8 @@ use crate::graph::Shifts;
 use crate::momentum::{FourMomentum, Helicity, Polarization};
 use crate::numerator::ufo::UFO;
 use crate::utils::{self, FloatLike, F};
+use crate::GammaLoopContext;
+use bincode::{Decode, Encode};
 use linnet::half_edge::drawing::Decoration;
 
 use ahash::{AHashMap, HashSet, RandomState};
@@ -57,6 +59,31 @@ use symbolica::domains::float::NumericalFloatLike;
 use symbolica::printer::{AtomPrinter, PrintOptions};
 use symbolica::{function, parse, symbol};
 
+#[derive(Debug, Clone, Eq, Ord, PartialEq, PartialOrd, Hash)]
+pub struct ArcParticle(pub Arc<Particle>);
+
+impl Encode for ArcParticle {
+    fn encode<E: bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> std::result::Result<(), bincode::error::EncodeError> {
+        Encode::encode(&self.0.pdg_code, encoder)?;
+        Ok(())
+    }
+}
+
+impl<T: GammaLoopContext> Decode<T> for ArcParticle {
+    fn decode<D: bincode::de::Decoder<Context = T>>(
+        decoder: &mut D,
+    ) -> std::result::Result<Self, bincode::error::DecodeError> {
+        let pdg_code: isize = Decode::decode(decoder)?;
+        let context = decoder.context();
+        let model = context.get_model();
+        let particle = model.get_particle_from_pdg(pdg_code);
+        Ok(particle)
+    }
+}
+
 #[allow(unused)]
 pub fn normalise_complex(atom: &Atom) -> Atom {
     let re = parse!("re_").unwrap();
@@ -106,7 +133,7 @@ impl SerializableVertexRule {
             particles: vertex_rule
                 .particles
                 .iter()
-                .map(|particle| particle.name.clone())
+                .map(|particle| particle.0.name.clone())
                 .collect(),
             color_structures: vertex_rule
                 .color_structures
@@ -196,7 +223,7 @@ impl FromIterator<Atom> for ColorStructure {
 #[derive(Debug, Clone)]
 pub struct VertexRule {
     pub name: SmartString<LazyCompact>,
-    pub particles: Vec<Arc<Particle>>,
+    pub particles: Vec<ArcParticle>,
     pub color_structures: ColorStructure,
     pub lorentz_structures: Vec<Arc<LorentzStructure>>,
     pub couplings: Vec<Vec<Option<Arc<Coupling>>>>,
@@ -328,7 +355,7 @@ impl VertexRule {
         let dod;
         let mut spins = vec![];
         for p in &self.particles {
-            spins.push(p.spin);
+            spins.push(p.0.spin);
         }
 
         if spins.iter().all(|&s| s == 3) {
@@ -424,7 +451,7 @@ impl VertexRule {
     pub fn generate_vertex_slots(&self, mut shifts: Shifts) -> (VertexSlots, Shifts) {
         let mut edge_slots = vec![];
         for p in &self.particles {
-            let (e, s) = p.slots(shifts);
+            let (e, s) = p.0.slots(shifts);
             edge_slots.push(e);
             shifts = s;
         }
@@ -513,17 +540,18 @@ impl SerializablePropagator {
     pub fn from_propagator(propagator: &Propagator) -> SerializablePropagator {
         SerializablePropagator {
             name: propagator.name.clone(),
-            particle: propagator.particle.name.clone(),
+            particle: propagator.particle.0.name.clone(),
             numerator: utils::to_str_expression(&propagator.numerator).into(),
             denominator: utils::to_str_expression(&propagator.denominator).into(),
         }
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Encode)]
 pub struct Propagator {
+    #[bincode(with_serde)]
     pub name: SmartString<LazyCompact>,
-    pub particle: Arc<Particle>,
+    pub particle: ArcParticle,
     pub numerator: Atom,
     pub denominator: Atom,
 }
@@ -963,7 +991,7 @@ impl Particle {
         self.pdg_code < 0
     }
 
-    pub fn get_anti_particle(&self, model: &Model) -> Arc<Particle> {
+    pub fn get_anti_particle(&self, model: &Model) -> ArcParticle {
         model.get_particle(&self.antiname)
     }
 
@@ -1542,7 +1570,7 @@ impl SerializableModel {
             particles: model
                 .particles
                 .iter()
-                .map(|particle| SerializableParticle::from_particle(particle.as_ref()))
+                .map(|particle| SerializableParticle::from_particle(particle.0.as_ref()))
                 .collect(),
             propagators: model
                 .propagators
@@ -1576,13 +1604,13 @@ pub struct Model {
     pub restriction: Option<SmartString<LazyCompact>>,
     pub orders: Vec<Arc<Order>>,
     pub parameters: Vec<Arc<Parameter>>,
-    pub particles: Vec<Arc<Particle>>,
+    pub particles: Vec<ArcParticle>,
     pub propagators: Vec<Arc<Propagator>>,
     pub lorentz_structures: Vec<Arc<LorentzStructure>>,
     pub couplings: Vec<Arc<Coupling>>,
     pub vertex_rules: Vec<Arc<VertexRule>>,
-    pub unresolved_particles: HashMap<SmartString<LazyCompact>, HashSet<Arc<Particle>>>,
-    pub particle_set_to_vertex_rules_map: HashMap<Vec<Arc<Particle>>, Vec<Arc<VertexRule>>>,
+    pub unresolved_particles: HashMap<SmartString<LazyCompact>, HashSet<ArcParticle>>,
+    pub particle_set_to_vertex_rules_map: HashMap<Vec<ArcParticle>, Vec<Arc<VertexRule>>>,
     pub order_name_to_position: HashMap<SmartString<LazyCompact>, usize, RandomState>,
     pub parameter_name_to_position: HashMap<SmartString<LazyCompact>, usize, RandomState>,
     pub lorentz_structure_name_to_position: HashMap<SmartString<LazyCompact>, usize, RandomState>,
@@ -1937,12 +1965,12 @@ impl Model {
         for v in &self.vertex_rules {
             let mut set = HashSet::default();
             for p in &v.particles {
-                if p.is_massless() {
+                if p.0.is_massless() {
                     set.insert(p.clone());
                 }
             }
             for (k, _) in v.coupling_orders() {
-                let current_set = map.entry(k).or_insert(HashSet::<Arc<Particle>>::default());
+                let current_set = map.entry(k).or_insert(HashSet::<ArcParticle>::default());
 
                 set.iter().for_each(|d| {
                     current_set.insert(d.clone());
@@ -2012,7 +2040,7 @@ impl Model {
                 model
                     .particle_pdg_to_position
                     .insert(particle.pdg_code, i_part);
-                particle
+                ArcParticle(particle)
             })
             .collect();
 
@@ -2130,7 +2158,7 @@ impl Model {
     }
 
     #[inline]
-    pub fn get_particle<S: AsRef<str>>(&self, name: S) -> Arc<Particle> {
+    pub fn get_particle<S: AsRef<str>>(&self, name: S) -> ArcParticle {
         if let Some(position) = self.particle_name_to_position.get(name.as_ref()) {
             self.particles[*position].clone()
         } else {
@@ -2143,7 +2171,7 @@ impl Model {
         }
     }
     #[inline]
-    pub fn get_particle_from_pdg(&self, pdg: isize) -> Arc<Particle> {
+    pub fn get_particle_from_pdg(&self, pdg: isize) -> ArcParticle {
         if let Some(position) = self.particle_pdg_to_position.get(&pdg) {
             self.particles[*position].clone()
         } else {

@@ -496,7 +496,7 @@ pub fn generate_esurface_data(
 ) -> Result<EsurfaceDerivedData, Report> {
     let edge_masses = graph
         .underlying
-        .new_hedgevec(|edge, _, _| edge.particle.mass.value);
+        .new_hedgevec(|edge, _, _| edge.particle.0.mass.value);
 
     let data = esurfaces
         .iter()

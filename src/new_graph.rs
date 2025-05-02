@@ -54,7 +54,7 @@ use crate::{
         BareEdge, BareGraph, BareVertex, DerivedGraphData, EdgeType, HasVertexInfo, Shifts,
         VertexInfo,
     },
-    model::{self, EdgeSlots, Model, Particle, VertexSlots},
+    model::{self, ArcParticle, EdgeSlots, Model, Particle, VertexSlots},
     momentum::{FourMomentum, SignOrZero, Signature, ThreeMomentum},
     momentum_sample::{
         BareMomentumSample, ExternalFourMomenta, ExternalIndex, ExternalThreeMomenta, LoopIndex,
@@ -152,7 +152,7 @@ pub trait FeynmanGraph {
     ) -> HedgeVec<F<T>>;
     fn get_esurface_canonization(&self, lmb: &LoopMomentumBasis) -> Option<ShiftRewrite>;
     fn external_in_or_out_signature(&self) -> ExternalSignature;
-    fn get_external_partcles(&self) -> Vec<Arc<Particle>>;
+    fn get_external_partcles(&self) -> Vec<ArcParticle>;
     fn get_external_signature(&self) -> SignatureLike<ExternalIndex>;
     fn get_energy_atoms(&self) -> Vec<Atom>;
 }
@@ -312,6 +312,7 @@ impl FeynmanGraph for HedgeGraph<Edge, Vertex> {
         let mom = parse!(&format!("Q{}", Into::<usize>::into(edge))).unwrap();
         let mass = self[edge]
             .particle
+            .0
             .mass
             .expression
             .clone()
@@ -401,7 +402,7 @@ impl FeynmanGraph for HedgeGraph<Edge, Vertex> {
     }
 
     fn get_real_mass_vector<T: FloatLike>(&self) -> HedgeVec<F<T>> {
-        self.new_hedgevec(|edge, _edge_id, _| match edge.particle.mass.value {
+        self.new_hedgevec(|edge, _edge_id, _| match edge.particle.0.mass.value {
             Some(mass) => F::from_ff64(mass.re),
             None => F::from_f64(0.0),
         })
@@ -423,7 +424,7 @@ impl FeynmanGraph for HedgeGraph<Edge, Vertex> {
                     EdgeType::Virtual => {
                         emr_mom
                             .spatial
-                            .on_shell_energy(edge.data.particle.mass.value.map(|m| {
+                            .on_shell_energy(edge.data.particle.0.mass.value.map(|m| {
                                 if m.im.is_non_zero() {
                                     panic!("Complex masses not yet supported in gammaLoop")
                                 }
@@ -480,7 +481,7 @@ impl FeynmanGraph for HedgeGraph<Edge, Vertex> {
             .collect()
     }
 
-    fn get_external_partcles(&self) -> Vec<Arc<Particle>> {
+    fn get_external_partcles(&self) -> Vec<ArcParticle> {
         self.iter_all_edges()
             .filter_map(|(pair, _, data)| match pair {
                 HedgePair::Unpaired { .. } => Some(data.data.particle.clone()),
@@ -541,7 +542,7 @@ impl Graph {
             let massless_edges = lmb
                 .basis
                 .iter()
-                .filter(|&edge_id| self.underlying[*edge_id].particle.is_massless())
+                .filter(|&edge_id| self.underlying[*edge_id].particle.0.is_massless())
                 .collect_vec();
 
             if massless_edges.is_empty() {
@@ -567,7 +568,7 @@ impl Graph {
                     let massless_edges_of_included_channel = lmbs[*channel]
                         .basis
                         .iter()
-                        .filter(|&edge_id| self.underlying[*edge_id].particle.is_massless())
+                        .filter(|&edge_id| self.underlying[*edge_id].particle.0.is_massless())
                         .collect_vec();
 
                     let loop_signatures_of_massless_edges_of_included_channel =
@@ -645,12 +646,14 @@ impl Graph {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Encode)]
 pub struct Edge {
+    #[bincode(with_serde)]
     pub name: SmartString<LazyCompact>,
     pub edge_type: EdgeType,
     pub propagator: Arc<model::Propagator>,
-    pub particle: Arc<model::Particle>,
+    pub particle: ArcParticle,
+    #[bincode(with_serde)]
     pub internal_index: Vec<AbstractIndex>,
 }
 
@@ -689,7 +692,7 @@ impl Edge {
                 let mut atom = self.propagator.numerator.clone();
 
                 let pfun = parse!("P(x_)").unwrap().to_pattern();
-                if self.particle.is_antiparticle() {
+                if self.particle.0.is_antiparticle() {
                     atom = atom.replace(&pfun).with(
                         parse!(&format!(
                             "-Q({},mink(4,indexid(x_)))",
@@ -711,7 +714,7 @@ impl Edge {
 
                 let pslashfun = parse!("PSlash(i_,j_)").unwrap().to_pattern();
                 let pindex_num: usize = self.internal_index[0].into();
-                if self.particle.is_antiparticle() {
+                if self.particle.0.is_antiparticle() {
                     atom = atom.replace(&pslashfun).with(
                         parse!(&format!(
                             "-Q({},mink(4,{}))*Gamma({},i_,j_)",
@@ -762,7 +765,7 @@ impl Edge {
                     })
                     .collect();
 
-                let (replacements_in, replacements_out) = if self.particle.is_antiparticle() {
+                let (replacements_in, replacements_out) = if self.particle.0.is_antiparticle() {
                     (in_slots.replacements(2), out_slots.replacements(1))
                 } else {
                     (in_slots.replacements(1), out_slots.replacements(2))

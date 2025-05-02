@@ -515,7 +515,7 @@ pub fn parameterize<T: FloatLike, I: GammaloopIntegrand>(
                         .get_graph()
                         .iter_loop_edges()
                         .map(|(_, edge_id, edge)| {
-                            let mass = edge.data.particle.mass.value;
+                            let mass = edge.data.particle.0.mass.value;
                             let mass_re = mass.map(|complex_mass| F::from_ff64(complex_mass.re));
 
                             let shift = utils::compute_shift_part(

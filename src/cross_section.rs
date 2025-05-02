@@ -1,7 +1,6 @@
 use crate::gammaloop_integrand::GammaLoopIntegrand;
 use crate::graph::{BareGraph, Graph, SerializableGraph};
-use crate::model::{Model, Particle};
-use crate::momentum::Signature;
+use crate::model::{ArcParticle, Model, Particle};
 use crate::numerator::{
     AppliedFeynmanRule, ContractionSettings, Evaluators, GetSingleAtom, Numerator, NumeratorState,
     PythonState, TypedNumeratorState, UnInit,
@@ -584,7 +583,7 @@ pub trait IsPolarizable {
 pub struct Amplitude<NumState: NumeratorState = Evaluators> {
     pub name: SmartString<LazyCompact>,
     pub external_signature: ExternalSignature,
-    pub external_particles: Vec<Arc<Particle>>,
+    pub external_particles: Vec<ArcParticle>,
     pub amplitude_graphs: Vec<AmplitudeGraph<NumState>>,
 }
 
