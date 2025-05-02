@@ -132,6 +132,7 @@ class Worker:
         """ Returns the yaml string representation of the model currently active. """
 
     def generate_diagrams(self, generation_options: FeynGenOptions,
+                          process_name: str,
                           numerator_aware_isomorphism_grouping: NumeratorAwareGroupingOption,
                           filter_self_loop: Optional[bool] = False,
                           graph_prefix: Optional[str] = "GL",

@@ -928,6 +928,7 @@ class GammaLoop(object):
             self.rust_worker, self.model, args,
             self.config.get_setting("global_prefactor.color"),
             self.config.get_setting("global_prefactor.colorless"),
+            process_name
         )
         if len(all_graphs) > 0:
             logger.info("A total of %s%s%s graphs%s have been generated in %s%s%s.",

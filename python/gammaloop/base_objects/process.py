@@ -204,7 +204,7 @@ class Process(object):
         return ' '.join(process_str_pieces)
 
     def generate_diagrams(self, gl_worker: gl_rust.Worker, model: Model, generation_args: Namespace,
-                          global_prefactor_color: str, global_prefactor_colorless: str) -> list[Graph]:
+                          global_prefactor_color: str, global_prefactor_colorless: str, process_name: str) -> list[Graph]:
 
         if generation_args.number_of_samples_for_numerator_comparisons == 1:
             raise GammaLoopError(
@@ -269,6 +269,7 @@ class Process(object):
                 amplitude_filters=self.amplitude_filters,
                 cross_section_filters=self.cross_section_filters
             ),
+            process_name,
             gl_rust.NumeratorAwareGroupingOption(
                 generation_args.numerator_aware_isomorphism_grouping,
                 generation_args.compare_canonized_numerator,
@@ -680,7 +681,8 @@ class Process(object):
             amplitude_loop_count,
             cross_section_loop_count,
             None if len(particle_vetos) == 0 else particle_vetos,
-            sewed_filter=None if not process_args.filter_cross_section_tadpoles else gl_rust.SewedFilterOptions(filter_tadpoles=process_args.filter_cross_section_tadpoles),
+            sewed_filter=None if not process_args.filter_cross_section_tadpoles else gl_rust.SewedFilterOptions(
+                filter_tadpoles=process_args.filter_cross_section_tadpoles),
             self_energy_filter=None if not process_args.filter_selfenergies else gl_rust.SelfEnergyFilterOptions(
                 veto_self_energy_of_massive_lines=process_args.veto_self_energy_of_massive_lines,
                 veto_self_energy_of_massless_lines=process_args.veto_self_energy_of_massless_lines,
