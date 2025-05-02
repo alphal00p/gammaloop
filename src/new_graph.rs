@@ -1279,8 +1279,9 @@ impl LoopMomentumBasis {
 )]
 pub struct LmbIndex(usize);
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Encode)]
 pub struct Vertex {
+    #[bincode(with_serde)]
     pub name: SmartString<LazyCompact>,
     pub vertex_info: VertexInfo,
 }

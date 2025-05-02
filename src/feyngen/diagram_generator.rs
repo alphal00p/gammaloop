@@ -46,9 +46,9 @@ use super::{FeynGenError, FeynGenOptions};
 
 use crate::feyngen::half_edge_filters::FeynGenHedgeGraph;
 use crate::graph::{EdgeType, HedgeGraphExt};
-use crate::model::Particle;
 use crate::model::VertexRule;
 use crate::model::{ArcParticle, ColorStructure};
+use crate::model::{ArcVertexRule, Particle};
 use crate::momentum::{Pow, Sign, SignOrZero};
 use crate::numerator::AtomStructure;
 use crate::numerator::Numerator;
@@ -72,7 +72,7 @@ const ANALYZE_RATIO_AS_RATIONAL_POLYNOMIAL: bool = true;
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct NodeColorWithVertexRule {
     pub external_tag: i32,
-    pub vertex_rule: Arc<VertexRule>,
+    pub vertex_rule: ArcVertexRule,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Default, Copy)]
@@ -176,10 +176,10 @@ impl NodeColorFunctions for NodeColorWithVertexRule {
         // info!("looking at :{}", self.vertex_rule.name);
         let mut coupling_orders = AHashMap::default();
         let vr = self.vertex_rule.clone();
-        if vr.name == "external" {
+        if vr.0.name == "external" {
             return coupling_orders;
         }
-        for (k, v) in vr.coupling_orders() {
+        for (k, v) in vr.0.coupling_orders() {
             *coupling_orders.entry(k).or_insert(0) += v;
         }
         coupling_orders
@@ -263,7 +263,7 @@ impl std::fmt::Display for NodeColorWithVertexRule {
             f,
             "({}|{})",
             self.external_tag,
-            self.vertex_rule.name.clone()
+            self.vertex_rule.0.name.clone()
         )
     }
 }
@@ -338,13 +338,13 @@ impl FeynGen {
                 }
             }
             node_edges.sort();
-            let dummy_external_vertex_rule = Arc::new(VertexRule {
+            let dummy_external_vertex_rule = ArcVertexRule(Arc::new(VertexRule {
                 name: "external".into(),
                 couplings: vec![],
                 lorentz_structures: vec![],
                 particles: vec![],
                 color_structures: ColorStructure::new(vec![]),
-            });
+            }));
             let colors = if node_edges.len() == 1 {
                 &vec![dummy_external_vertex_rule]
             } else if let Some(cs) = node_colors.get(&node_edges) {
@@ -2458,7 +2458,7 @@ impl FeynGen {
         > = HashMap::default();
         'add_vertex_rules: for vertex_rule in model.vertex_rules.iter() {
             let mut oriented_particles = vec![];
-            for p in vertex_rule.particles.iter() {
+            for p in vertex_rule.0.particles.iter() {
                 if p.0.is_self_antiparticle() {
                     oriented_particles.push((None, p.0.name.clone()));
                 } else if p.0.is_antiparticle() {
@@ -2479,7 +2479,7 @@ impl FeynGen {
             vertex_signatures
                 .entry(oriented_particles)
                 .or_default()
-                .push(vertex_rule.name.clone());
+                .push(vertex_rule.0.name.clone());
         }
 
         let mut external_edges = self

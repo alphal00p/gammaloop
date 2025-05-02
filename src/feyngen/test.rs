@@ -9,6 +9,7 @@ use symbolica::graph::Graph;
 
 use crate::feyngen::diagram_generator::EdgeColor;
 use crate::graph::BareGraph;
+use crate::model::ArcVertexRule;
 use crate::model::ColorStructure;
 use crate::model::Model;
 use crate::model::VertexRule;
@@ -85,13 +86,13 @@ fn cut_content() {
         vertex_rule: model.get_vertex_rule("V_98"),
     };
 
-    let dummy_external_vertex_rule = Arc::new(VertexRule {
+    let dummy_external_vertex_rule = ArcVertexRule(Arc::new(VertexRule {
         name: "external".into(),
         couplings: vec![],
         lorentz_structures: vec![],
         particles: vec![],
         color_structures: ColorStructure::new(vec![]),
-    });
+    }));
 
     let v0 = graph.add_node(bbH.clone());
     let v1 = graph.add_node(bbH.clone());
