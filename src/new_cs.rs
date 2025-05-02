@@ -630,13 +630,14 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Encode)]
 pub struct AmplitudeDerivedData<S: NumeratorState> {
     cff_expression: Option<CFFExpression>,
     bare_cff_evaluator: Option<GenericEvaluator>,
     bare_cff_orientation_evaluatos: Option<TiVec<OrientationID, GenericEvaluator>>,
     _temp_numerator: Option<PhantomData<S>>,
     lmbs: Option<TiVec<LmbIndex, LoopMomentumBasis>>,
+    #[bincode(with_serde)]
     tropical_sampler: Option<SampleGenerator<3>>,
     multi_channeling_setup: Option<LmbMultiChannelingSetup>,
 }
@@ -792,7 +793,7 @@ impl<S: NumeratorState> IsPolarizable for CrossSection<S> {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, From, Into, Hash, PartialEq, Copy, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, From, Into, Hash, PartialEq, Copy, Eq, Encode)]
 pub struct CutId(usize);
 
 impl Display for CutId {
@@ -1175,8 +1176,8 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
     }
 }
 
-#[derive(Clone)]
-pub struct CrossSectionDerivedData<S: NumeratorState = PythonState> {
+#[derive(Clone, Encode)]
+pub struct CrossSectionDerivedData<S: NumeratorState> {
     orientations: Option<TiVec<OrientationID, CutOrientationData>>,
     bare_cff_evaluators: Option<TiVec<CutId, GenericEvaluator>>,
     bare_cff_orientation_evaluators: Option<TiVec<OrientationID, OrientationEvaluator>>,

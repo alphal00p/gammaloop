@@ -1,3 +1,4 @@
+use bincode::Encode;
 use derive_more::{From, Into};
 use linnet::half_edge::{hedgevec::HedgeVec, involution::Orientation};
 use serde::{Deserialize, Serialize};
@@ -8,16 +9,16 @@ use crate::new_cs::CutId;
 
 use super::{generation::SurfaceCache, surface::HybridSurfaceID, tree::Tree};
 
-#[derive(Debug, Clone, Serialize, Deserialize, From, Into, Hash, PartialEq, Eq, Copy)]
+#[derive(Debug, Clone, Serialize, Deserialize, From, Into, Hash, PartialEq, Eq, Copy, Encode)]
 pub struct OrientationID(usize);
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode)]
 pub struct CutOrientationData {
     pub orientation: HedgeVec<Orientation>,
     pub cuts: Vec<CutId>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode)]
 pub struct SingleCutOrientationExpression {
     pub left: Tree<HybridSurfaceID>,
     pub right: Tree<HybridSurfaceID>,
@@ -31,13 +32,13 @@ impl From<&SingleCutOrientationExpression> for Atom {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode)]
 pub struct CutOrientationExpression {
     pub data: CutOrientationData,
     pub expressions: Vec<SingleCutOrientationExpression>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode)]
 pub struct CFFCutExpression {
     pub orientations: TiVec<OrientationID, CutOrientationExpression>,
     pub surfaces: SurfaceCache,

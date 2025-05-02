@@ -73,7 +73,6 @@ use spenso::complex::Complex;
 use std::fmt::Display;
 use std::fs::File;
 use std::sync::atomic::AtomicBool;
-use std::sync::Arc;
 use symbolica::evaluate::CompileOptions;
 use symbolica::evaluate::InlineASM;
 use symbolica::state::StateMap;

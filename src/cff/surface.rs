@@ -3,6 +3,7 @@ use super::{
     hsurface::{Hsurface, HsurfaceID},
 };
 use crate::utils::{FloatLike, F};
+use bincode::Encode;
 use derive_more::From;
 use itertools::Itertools;
 use linnet::half_edge::{hedgevec::HedgeVec, involution::EdgeIndex};
@@ -136,7 +137,7 @@ impl From<HybridSurfaceRef<'_>> for Atom {
     }
 }
 
-#[derive(From, Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(From, Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, Encode)]
 pub enum HybridSurfaceID {
     Esurface(EsurfaceID),
     Hsurface(HsurfaceID),

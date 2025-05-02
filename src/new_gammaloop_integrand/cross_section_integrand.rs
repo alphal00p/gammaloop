@@ -1,3 +1,4 @@
+use bincode::Encode;
 use itertools::Itertools;
 use serde::Serialize;
 use spenso::complex::Complex;
@@ -65,7 +66,7 @@ impl GammaloopIntegrand for CrossSectionIntegrand {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Encode)]
 pub struct OrientationEvaluator {
     pub orientation_data: CutOrientationData,
     pub evaluators: Vec<GenericEvaluator>,

@@ -23,7 +23,7 @@ pub struct TreeNode<T> {
     pub parent: Option<NodeId>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode)]
 pub struct Tree<T> {
     nodes: TiVec<NodeId, TreeNode<T>>,
 }
