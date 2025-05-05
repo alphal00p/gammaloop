@@ -1219,34 +1219,25 @@ impl CrossSectionCut {
         &self,
         cross_section_graph: &CrossSectionGraph<S>,
     ) -> Result<bool> {
-        let nodes_of_left_cut: Option<Vec<_>> = cross_section_graph
+        let nodes_of_left_cut: Vec<_> = cross_section_graph
             .graph
             .underlying
             .iter_node_data(&self.left)
-            .map(|(hedge_node, _)| {
-                cross_section_graph
-                    .graph
-                    .underlying
-                    .id_from_neighbors(hedge_node)
-            })
+            .map(|(nid, _, _)| nid)
             .collect();
 
-        if let Some(nodes_left_of_cut) = nodes_of_left_cut {
-            let left_node = cross_section_graph
-                .graph
-                .underlying
-                .combine_to_single_hedgenode(&nodes_left_of_cut);
-            let res = left_node.includes(&cross_section_graph.source_nodes)
-                && cross_section_graph.target_nodes.weakly_disjoint(&left_node);
+        let left_node = cross_section_graph
+            .graph
+            .underlying
+            .combine_to_single_hedgenode(&nodes_of_left_cut);
+        let res = left_node.includes(&cross_section_graph.source_nodes)
+            && cross_section_graph.target_nodes.weakly_disjoint(&left_node);
 
-            if !res {
-                warn!("s channel check wrong");
-            }
-
-            Ok(true)
-        } else {
-            Err(eyre!("Could not determine nodes in left cut"))
+        if !res {
+            warn!("s channel check wrong");
         }
+
+        Ok(true)
     }
 
     pub fn is_valid_for_process<S: NumeratorState>(

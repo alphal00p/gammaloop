@@ -123,8 +123,8 @@ mod tests {
         hedge_graph_builder.add_external_edge(nodes[3], (), Orientation::Undirected, Flow::Source);
 
         let hedge_graph = hedge_graph_builder.build::<NodeStorageVec<_>>();
-        let node_0 = hedge_graph.hair_iter(nodes[0]).into();
-        let node_3 = hedge_graph.hair_iter(nodes[3]).into();
+        let node_0 = hedge_graph.iter_crown(nodes[0]).into();
+        let node_3 = hedge_graph.iter_crown(nodes[3]).into();
 
         let cuts: TiVec<CutId, CrossSectionCut> = hedge_graph
             .all_cuts(node_0, node_3)

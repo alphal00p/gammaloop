@@ -6,7 +6,7 @@ use std::{
     ops::{Deref, Index},
 };
 
-use crate::{momentum::Sign, new_graph::LoopMomentumBasis, utils::GS};
+use crate::{graph::VertexInfo, momentum::Sign, new_graph::LoopMomentumBasis, utils::GS};
 use ahash::{AHashMap, AHashSet};
 use bitvec::{slice::IterOnes, vec::BitVec};
 use color_eyre::Report;
@@ -332,42 +332,25 @@ pub struct UVGraph(HedgeGraph<UVEdge, UVNode>);
 #[allow(dead_code)]
 impl UVGraph {
     pub fn from_graph(graph: &BareGraph) -> Self {
-        let mut uv_graph = HedgeGraphBuilder::new();
+        let mut excised: BitVec = graph.hedge_representation.empty_subgraph();
 
-        for n in &graph.vertices {
-            uv_graph.add_node(UVNode::from_vertex(n, graph));
-        }
-
-        for (i, edge) in graph.edges.iter().enumerate() {
-            let ves = edge.vertices;
-
-            let sink = NodeIndex(ves[1]);
-            let source = NodeIndex(ves[0]);
-
-            match edge.edge_type {
-                EdgeType::Virtual => {
-                    uv_graph.add_edge(source, sink, UVEdge::from_edge(edge, i, graph), false);
-                }
-                EdgeType::Outgoing => {
-                    uv_graph.add_external_edge(
-                        source,
-                        UVEdge::from_edge(edge, i, graph),
-                        false,
-                        Flow::Sink,
-                    );
-                }
-                EdgeType::Incoming => {
-                    uv_graph.add_external_edge(
-                        sink,
-                        UVEdge::from_edge(edge, i, graph),
-                        false,
-                        Flow::Source,
-                    );
-                }
+        for (n, _, d) in graph.hedge_representation.iter_nodes() {
+            if matches!(
+                graph.vertices[*d].vertex_info,
+                VertexInfo::ExternalVertexInfo(_)
+            ) {
+                excised.union_with(&n.into())
             }
         }
 
-        UVGraph(uv_graph.into())
+        excised = excised.complement(&graph.hedge_representation);
+
+        let excised = graph.hedge_representation.concretize(&excised).map(
+            |_, _, d| UVNode::from_vertex(&graph.vertices[*d], graph),
+            |_, _, _, e| e.map(|d| UVEdge::from_edge(&graph.edges[*d], *d, graph)),
+        );
+
+        UVGraph(excised)
     }
 
     // pub fn edge_id(&self, g: &BareGraph, id: usize) -> EdgeIndex {
@@ -447,6 +430,7 @@ impl UVGraph {
     // }
 
     fn spinneys(&self) -> AHashSet<InternalSubGraph> {
+        println!("{}", self.0.base_dot());
         let mut spinneys: AHashSet<_> = InternalSubGraph::all_ops_iterative_filter_map(
             &self.0.all_cycle_sym_diffs().unwrap(),
             &|a, b| a.union(b),
@@ -486,7 +470,7 @@ impl UVGraph {
             dod += e.data.dod;
         }
 
-        for (_, n) in self.0.iter_node_data(subgraph) {
+        for (_, _, n) in self.0.iter_node_data(subgraph) {
             dod += n.dod;
         }
 
@@ -495,7 +479,7 @@ impl UVGraph {
 
     fn numerator(&self, subgraph: &InternalSubGraph) -> SerializableAtom {
         let mut num = Atom::new_num(1);
-        for (_, n) in self.0.iter_node_data(subgraph) {
+        for (_, _, n) in self.0.iter_node_data(subgraph) {
             num = num * &n.num.0;
         }
 

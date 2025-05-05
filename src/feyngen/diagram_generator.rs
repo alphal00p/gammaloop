@@ -203,7 +203,7 @@ impl NodeColorFunctions for NodeColorWithVertexRule {
         // );
         if let Some(amp_couplings) = amp_couplings {
             let mut coupling_orders = AHashMap::default();
-            for (_, s) in graph.iter_node_data(amplitude_subgraph) {
+            for (_, _, s) in graph.iter_node_data(amplitude_subgraph) {
                 // println!("node {}:{}", s.vertex_rule.name, s.get_external_tag());
                 if !s.is_external() {
                     for (k, v) in s.coupling_orders() {
