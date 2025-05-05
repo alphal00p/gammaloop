@@ -1,13 +1,86 @@
-use std::time::Instant;
+use std::{sync::Arc, time::Instant};
 
 use ahash::HashMap;
 use smartstring::SmartString;
 
 use crate::{
     feyngen::diagram_generator::{EdgeColor, FeynGen, NodeColorWithVertexRule},
+    model::{ArcVertexRule, ColorStructure, VertexRule},
     tests_from_pytest::{load_amplitude_output, load_generic_model},
     uv::{PoSet, UVGraph},
 };
+
+#[test]
+#[allow(unused)]
+fn easy() {
+    let model = load_generic_model("sm");
+    let mut symbolica_graph = symbolica::graph::Graph::new();
+
+    let dummy_external_vertex_rule = ArcVertexRule(Arc::new(VertexRule {
+        name: "external".into(),
+        couplings: vec![],
+        lorentz_structures: vec![],
+        particles: vec![],
+        color_structures: ColorStructure::new(vec![]),
+    }));
+
+    let incoming = symbolica_graph.add_node(NodeColorWithVertexRule {
+        external_tag: 1,
+        vertex_rule: dummy_external_vertex_rule.clone(),
+    });
+
+    let outgoing = symbolica_graph.add_node(NodeColorWithVertexRule {
+        external_tag: 2,
+        vertex_rule: dummy_external_vertex_rule.clone(),
+    });
+
+    let tth = NodeColorWithVertexRule {
+        external_tag: 0,
+        vertex_rule: model.get_vertex_rule("V_141"),
+    };
+
+    let t = EdgeColor::from_particle(model.get_particle("t"));
+    let h = EdgeColor::from_particle(model.get_particle("H"));
+
+    let l1 = symbolica_graph.add_node(tth.clone());
+    let l2 = symbolica_graph.add_node(tth.clone());
+
+    let e1 = symbolica_graph.add_edge(incoming, l1, false, h).unwrap();
+    let e2 = symbolica_graph.add_edge(l2, outgoing, false, h).unwrap();
+    symbolica_graph.add_edge(l1, l2, true, t);
+    symbolica_graph.add_edge(l2, l1, true, t);
+
+    let bare_graph = BareGraph::from_symbolica_graph(
+        &model,
+        "1l_prop".into(),
+        &symbolica_graph,
+        Atom::new_num(1),
+        vec![((Some(1), Some(2)))],
+        None,
+    )
+    .unwrap();
+
+    let uv_graph = UVGraph::from_graph(&bare_graph);
+
+    println!("{}", uv_graph.0.base_dot());
+
+    let wood = uv_graph.wood();
+
+    println!("{}", wood.dot(&uv_graph));
+    println!("{}", wood.show_graphs(&uv_graph));
+
+    let mut ufold = wood.unfold_impl(&uv_graph);
+    // assert_eq!(152, ufold.n_terms());
+    ufold.compute(&uv_graph);
+
+    println!("unfolded : {}", ufold.show_structure(&uv_graph).unwrap());
+    println!("graph: {}", ufold.graphs());
+
+    // let structure = wood.unfold(&uv_graph);
+
+    // println!("{}", structure.show_structure(&wood, &uv_graph));
+    // println!("{}", structure.n_elements());
+}
 
 #[test]
 #[allow(unused)]

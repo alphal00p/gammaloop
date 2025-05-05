@@ -1061,8 +1061,8 @@ mod tests_cff {
             cff_res
         );
 
-        let node_3 = hedge_double_traingle.hair_iter(nodes[3]).into();
-        let node_0 = hedge_double_traingle.hair_iter(nodes[0]).into();
+        let node_3 = hedge_double_traingle.iter_crown(nodes[3]).into();
+        let node_0 = hedge_double_traingle.iter_crown(nodes[0]).into();
 
         let cuts = hedge_double_traingle.all_cuts(node_3, node_0);
         let mut num_with_6_ors = 0;
@@ -1185,8 +1185,8 @@ mod tests_cff {
             relative_error
         );
 
-        let node_0 = tbt_hedge.hair_iter(nodes[0]).into();
-        let node_5 = tbt_hedge.hair_iter(nodes[5]).into();
+        let node_0 = tbt_hedge.iter_crown(nodes[0]).into();
+        let node_5 = tbt_hedge.iter_crown(nodes[5]).into();
 
         let cuts = tbt_hedge.all_cuts(node_0, node_5).clone();
         assert_eq!(cuts.len(), 9);

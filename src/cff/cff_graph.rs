@@ -736,8 +736,7 @@ impl CFFGenerationGraph {
     ) -> Self {
         let mut vertices = HashMap::default();
 
-        for (hedge_node, _data) in graph.iter_node_data(subgraph) {
-            let node_id = graph.id_from_neighbors(hedge_node).unwrap();
+        for (node_id, _, _data) in graph.iter_node_data(subgraph) {
             let vertex = CFFVertex::new(node_id.into());
             vertices.insert(node_id, vertex);
         }
@@ -1428,9 +1427,9 @@ mod test {
         hedge_graph_builder.add_external_edge(nodes[3], (), Orientation::Undirected, Flow::Source);
 
         let hedge_graph = hedge_graph_builder.build::<NodeStorageVec<_>>();
-        let node_0: BitVec = hedge_graph.hair_iter(nodes[0]).into();
-        let node_1: BitVec = hedge_graph.hair_iter(nodes[1]).into();
-        let node_2: BitVec = hedge_graph.hair_iter(nodes[2]).into();
+        let node_0: BitVec = hedge_graph.iter_crown(nodes[0]).into();
+        let node_1: BitVec = hedge_graph.iter_crown(nodes[1]).into();
+        let node_2: BitVec = hedge_graph.iter_crown(nodes[2]).into();
 
         let left_triangle = node_0.union(&node_1).union(&node_2);
 

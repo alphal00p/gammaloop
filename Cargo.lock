@@ -1503,9 +1503,9 @@ checksum = "4a5f13b858c8d314ee3e8f639011f7ccefe71f97f96e50151fb991f267928e2c"
 
 [[package]]
 name = "jiff"
-version = "0.2.11"
+version = "0.2.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "27e77966151130221b079bcec80f1f34a9e414fa489d99152a201c07fd2182bc"
+checksum = "d07d8d955d798e7a4d6f9c58cd1f1916e790b42b092758a9ef6e16fef9f1b3fd"
 dependencies = [
  "jiff-static",
  "log",
@@ -1516,9 +1516,9 @@ dependencies = [
 
 [[package]]
 name = "jiff-static"
-version = "0.2.11"
+version = "0.2.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "97265751f8a9a4228476f2fc17874a9e7e70e96b893368e42619880fe143b48a"
+checksum = "f244cfe006d98d26f859c7abd1318d85327e1882dc9cef80f62daeeb0adcf300"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1569,14 +1569,14 @@ dependencies = [
 
 [[package]]
 name = "libm"
-version = "0.2.13"
+version = "0.2.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c9627da5196e5d8ed0b0495e61e518847578da83483c37288316d9b2e03a7f72"
+checksum = "a25169bd5913a4b437588a7e3d127cd6e90127b60e0ffbd834a38f1599e016b8"
 
 [[package]]
 name = "linnet"
 version = "0.4.0"
-source = "git+https://github.com/alphal00p/linnet#64e4e70a1fad80903c283eee29b63fc40f0405b0"
+source = "git+https://github.com/alphal00p/linnet#271ed5c56480fabcbfb88af38b92690dcf50b40f"
 dependencies = [
  "ahash",
  "argmin",
@@ -2427,9 +2427,9 @@ dependencies = [
 
 [[package]]
 name = "redox_syscall"
-version = "0.5.11"
+version = "0.5.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d2f103c6d277498fbceb16e84d317e2a400f160f46904d5f5410848c829511a3"
+checksum = "928fca9cf2aa042393a8325b9ead81d2f0df4cb12e1e24cef072922ccd99c5af"
 dependencies = [
  "bitflags 2.9.0",
 ]
@@ -3141,7 +3141,7 @@ dependencies = [
 [[package]]
 name = "typed-index-collections"
 version = "3.2.3"
-source = "git+https://github.com/GraDje13/typed-index-collections_bincode_support#972a7d0aa215fbaa41cb5f63ff58a6a47200aa72"
+source = "git+https://github.com/GraDje13/typed-index-collections_bincode_support#1674324f76fb4391f95412f3dba22fd270f29600"
 dependencies = [
  "bincode",
  "serde",

@@ -354,22 +354,11 @@ impl FeynmanGraph for HedgeGraph<Edge, Vertex> {
         edge_id: EdgeIndex,
         skip_one: bool,
     ) -> usize {
-        let skip_n = if skip_one { 1 } else { 0 };
-
-        let node_hairs: BitVec = self.hair_iter(node_id).into();
-
-        let res = self
-            .iter_edges(&node_hairs)
-            .enumerate()
-            .filter(|(_, (_, index, _))| *index == edge_id)
-            .nth(skip_n)
-            .unwrap()
-            .0;
-        res
+        unimplemented!()
     }
 
     fn add_signs_to_edges(&self, node_id: NodeIndex) -> Vec<isize> {
-        let node_hairs: BitVec = self.hair_iter(node_id).into();
+        let node_hairs: BitVec = self.iter_crown(node_id).into();
 
         self.iter_edges(&node_hairs)
             .map(|(_, edge_index, _)| {
