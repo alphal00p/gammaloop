@@ -100,12 +100,12 @@ ctrlc = "3.4.4"
 # constcat = "0.5.0"
 ref-ops = "0.2.5"
 delegate = "0.12.0"
-#typed-index-collections = { version = "3.1.0", features = [
-#    "serde",
-#    "serde-alloc",
-#] }
+typed-index-collections = { version = "3.3.0", features = [
+    "serde",
+    "serde-alloc",
+    "bincode",
+] }
 
-typed-index-collections = {git="https://github.com/GraDje13/typed-index-collections_bincode_support", features = ["serde","serde-alloc","bincode"]}
 gat-lending-iterator = "0.1.5"
 # gxhash = "3.4.1"
 thiserror = "1.0.63"

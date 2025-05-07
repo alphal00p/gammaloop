@@ -3140,8 +3140,9 @@ dependencies = [
 
 [[package]]
 name = "typed-index-collections"
-version = "3.2.3"
-source = "git+https://github.com/GraDje13/typed-index-collections_bincode_support#1674324f76fb4391f95412f3dba22fd270f29600"
+version = "3.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3fd393dbd1e7b23e0cab7396570309b4068aa504e9dac2cd41d827583b4e9ab7"
 dependencies = [
  "bincode",
  "serde",
