@@ -1,6 +1,6 @@
 use std::{
     cell::RefCell,
-    fmt::{Display, Formatter},
+    fmt::{format, Display, Formatter},
     iter,
     marker::PhantomData,
     path::{Path, PathBuf},
@@ -347,7 +347,20 @@ impl<S: NumeratorState> Amplitude<S> {
     }
 
     pub fn export(&self, export_root: &str) -> Result<()> {
-        let path = Path::new(export_root).join("sources").join("amplitudes");
+        let path = Path::new(export_root)
+            .join("sources")
+            .join("amplitudes")
+            .join(self.name.as_str());
+
+        for amplitude_graph in self.graphs.iter() {
+            let file_name = path.clone().join(format!(
+                "amplitude_graph_{}.bin",
+                amplitude_graph.graph.name
+            ));
+
+            let data = bincode::encode_to_vec(amplitude_graph, bincode::config::standard())?;
+            std::fs::write(file_name, &data)?;
+        }
 
         Ok(())
     }
@@ -362,7 +375,7 @@ impl<S: NumeratorState> IsPolarizable for Amplitude<S> {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Encode)]
 pub struct AmplitudeGraph<S: NumeratorState> {
     graph: Graph,
     derived_data: AmplitudeDerivedData<S>,
