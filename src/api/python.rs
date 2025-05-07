@@ -12,7 +12,7 @@ use crate::{
         havana_integrate, print_integral_result, BatchResult, IntegrationState, MasterNode,
     },
     model::Model,
-    new_cs::{Process, ProcessDefinition, ProcessList},
+    new_cs::{Process, ProcessCollection, ProcessDefinition, ProcessList},
     new_graph::Graph,
     numerator::{GlobalPrefactor, Numerator, PythonState},
     utils::F,
@@ -934,6 +934,14 @@ impl PythonWorker {
                 }
             }
         }
+
+        for process in self.process_list.processes.iter_mut() {
+            match &process.collection {
+                &ProcessCollection::Amplitudes(&mut amplitude_list) => {}
+                &ProcessCollection::CrossSections(_) => {}
+            }
+        }
+
         if n_exported != amplitude_names.len() {
             return Err(exceptions::PyException::new_err(format!(
                 "Could not find all amplitudes to export: {:?}",
