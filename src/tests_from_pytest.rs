@@ -149,10 +149,10 @@ where
     let mut external_moms: Vec<ExternalMomenta<F<f64>>> = vec![];
     for _ in 0..n_indep_externals {
         external_moms.push(ExternalMomenta::Independent([
-            F(rng.gen::<f64>()),
-            F(rng.gen::<f64>()),
-            F(rng.gen::<f64>()),
-            F(rng.gen::<f64>()),
+            F(rng.random::<f64>()),
+            F(rng.random::<f64>()),
+            F(rng.random::<f64>()),
+            F(rng.random::<f64>()),
         ]));
     }
 

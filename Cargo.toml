@@ -167,8 +167,8 @@ no_python = []
 # symbolica={git="https://github.com/benruijl/symbolica",rev="a714571c8c8ee1a292237eb3ef1bc8123a4d7db4"}
 symbolica = { git = "https://github.com/alphal00p/symbolica", rev = "8ec5f90129ef74809b48de85354f02347c522f5e" }
 # symbolica = {path="../symbolica"}
-spenso={git="https://github.com/alphal00p/spenso",rev="9f8fc504cfab7cf5cae15d5d2671362470f33e06"}
-spenso-macros = {git="https://github.com/alphal00p/spenso",rev="9f8fc504cfab7cf5cae15d5d2671362470f33e06",features=["shadowing"],optional=true}
+spenso={git="https://github.com/alphal00p/spenso",rev="205f796c6daef11240f1f1b4079b89563b548364"}
+spenso-macros = {git="https://github.com/alphal00p/spenso",rev="205f796c6daef11240f1f1b4079b89563b548364",features=["shadowing"],optional=true}
 # spenso = { path = "../spenso/spenso" }
 # linnet = { path = "../linnet" }
 linnet = {git ="https://github.com/alphal00p/linnet", rev = "d8636fbfed7f924ea240fcb73783f1845a10ba91"}
