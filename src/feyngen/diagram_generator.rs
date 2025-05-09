@@ -2,6 +2,7 @@ use bitvec::vec::BitVec;
 use indicatif::ProgressBar;
 use indicatif::{ParallelProgressIterator, ProgressStyle};
 
+use linnet::permutation::Permutation;
 use rayon::iter::ParallelIterator;
 use rayon::prelude::*;
 use rayon::ThreadPoolBuilder;
@@ -9,16 +10,19 @@ use spenso::complex::{Complex, RealOrComplexTensor};
 use spenso::contraction::Contract;
 use spenso::data::{DataTensor, StorageTensor};
 use spenso::iterators::IteratableTensor;
-use spenso::network::TensorNetwork;
+use spenso::network::library::symbolic::ExplicitKey;
+use spenso::network::parsing::ShadowedStructure;
+use spenso::network::store::NetworkStore;
+// use spenso::network::Network;
 use spenso::parametric::{MixedTensor, ParamOrConcrete, ParamTensor};
-use spenso::permutation::Permutation;
-use spenso::structure::representation::ExtendibleReps;
+
+use spenso::structure::representation::{ExtendibleReps, LibraryRep, RepName};
 use spenso::structure::slot::DualSlotTo;
 use spenso::structure::{HasStructure, SmartShadowStructure};
 use spenso::symbolica_utils::{SerializableAtom, SerializableSymbol};
 use std::collections::hash_map::Entry;
 use std::collections::HashSet;
-use std::ops::RangeInclusive;
+use std::ops::{Deref, RangeInclusive};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use symbolica::atom::AtomView;
@@ -26,7 +30,7 @@ use symbolica::domains::finite_field::PrimeIteratorU64;
 use symbolica::domains::rational::Rational;
 use symbolica::function;
 use symbolica::graph::GenerationSettings;
-use symbolica::id::Context;
+use symbolica::id::{Context, Replacement};
 
 use ahash::AHashMap;
 use ahash::AHashSet;
@@ -50,11 +54,11 @@ use crate::model::ArcVertexRule;
 use crate::model::VertexRule;
 use crate::model::{ArcParticle, ColorStructure};
 use crate::momentum::{Pow, Sign, SignOrZero};
-use crate::numerator::AtomStructure;
-use crate::numerator::Numerator;
 use crate::numerator::SymbolicExpression;
+use crate::numerator::{AtomStructure, Network};
 use crate::numerator::{ExpressionState, GlobalPrefactor};
-use crate::utils::{self, GS};
+use crate::numerator::{Numerator, StandardTensorNet};
+use crate::utils::{self, GS, TENSORLIB};
 use crate::{
     feyngen::{FeynGenFilter, GenerationType},
     graph::BareGraph,
@@ -3524,7 +3528,7 @@ impl FeynGen {
                                     .map(|(a, b)| a.dual().kroneker_atom(&b.dual()))
                                     .fold(Atom::new_num(1), |acc, x| acc * x);
 
-                                numerator.state.color.map_data_mut(|a|{a.0 = &a.0*&color});
+                                numerator.state.color.map_data_mut(|a|{*a *=&color});
 
                             }
                         }
@@ -3536,7 +3540,6 @@ impl FeynGen {
                         if numerator_color_simplified
                             .get_single_atom()
                             .unwrap()
-                            .0
                             .is_zero()
                         {
                             {
@@ -3814,20 +3817,12 @@ impl FeynGen {
             } else {
                 let ratio = ratios.iter().next().unwrap().to_owned();
                 if let Some(r) = ratio {
-                    for head in ExtendibleReps::BUILTIN_SELFDUAL_NAMES
-                        .iter()
-                        .chain(ExtendibleReps::BUILTIN_DUALIZABLE_NAMES.iter())
-                        .chain(["Q"].iter())
-                        .map(|a| symbol!(a))
+                    for head in LibraryRep::all_self_duals()
+                        .chain(LibraryRep::all_inline_metrics())
+                        .chain(LibraryRep::all_dualizables())
+                        .map(|a| a.to_symbolic([GS.a__]).to_pattern())
                     {
-                        if r.pattern_match(
-                            &function!(head, symbol!("args__")).to_pattern(),
-                            None,
-                            None,
-                        )
-                        .next()
-                        .is_some()
-                        {
+                        if r.pattern_match(&head, None, None).next().is_some() {
                             return None;
                         }
                     }
@@ -4348,8 +4343,7 @@ impl ProcessedNumeratorForComparison {
                         .canonize_lorentz()
                         .unwrap()
                         .get_single_atom()
-                        .unwrap()
-                        .0;
+                        .unwrap();
                     if group_options.fully_numerical_substitution_when_comparing_numerators {
                         canonized_numerator_to_consider = FeynGen::substitute_color_factors(
                             canonized_numerator_to_consider.as_atom_view(),
@@ -4365,9 +4359,21 @@ impl ProcessedNumeratorForComparison {
                     > 0
                 {
                     // TODO: Once symbolica supports `collect_factors()`, substitute `collect_num()` below with it.
-                    let decomposed_net = processed_numerator.state.colorless.map_data_ref(|data|
-                            TensorNetwork::<MixedTensor<f64, AtomStructure>, SerializableAtom>::try_from(data.0.collect_num().as_atom_view()).unwrap()
-                        );
+                    let decomposed_net =
+                        processed_numerator
+                            .state
+                            .colorless
+                            .map_data_ref(|data| Numerator {
+                                state: Network {
+                                    net: {
+                                        StandardTensorNet::try_from_view(
+                                            data.collect_num().as_atom_view(),
+                                            TENSORLIB.deref(),
+                                        )
+                                        .unwrap()
+                                    },
+                                },
+                            });
                     // println!(
                     //     "Scalar part: {}",
                     //     decomposed_net
@@ -4405,15 +4411,13 @@ impl ProcessedNumeratorForComparison {
                             })
                             .collect::<Vec<_>>();
 
-                        let decomposed_parametric_net =
-                            decomposed_net.map_data(|tn| tn.to_fully_parametric());
                         let colored_tensor = processed_numerator.state.color.map_data_ref(|a| {
                             if grouping_options
                                 .fully_numerical_substitution_when_comparing_numerators
                             {
-                                FeynGen::substitute_color_factors(a.0.as_atom_view()).expand()
+                                FeynGen::substitute_color_factors(a.as_atom_view()).expand()
                             } else {
-                                a.0.to_owned()
+                                a.to_owned()
                             }
                         });
                         let sample_evaluations = sample_points_decomposed
@@ -4423,12 +4427,13 @@ impl ProcessedNumeratorForComparison {
                                     .iter()
                                     .map(|(a, b)| (a.as_view(), b.as_view()))
                                     .collect::<Vec<_>>();
-                                let res = Self::evaluate_with_replacements(
-                                    &decomposed_parametric_net,
-                                    &reps,
-                                    grouping_options
-                                        .fully_numerical_substitution_when_comparing_numerators,
-                                );
+                                let res = decomposed_net.map_data_ref_result(|n| {
+                                    n.evaluate_with_replacements(
+                                        &reps,
+                                        grouping_options
+                                            .fully_numerical_substitution_when_comparing_numerators,
+                                    )
+                                });
 
                                 res.map(|a| a.contract(&colored_tensor).unwrap().scalar().unwrap())
                             })
@@ -4469,18 +4474,7 @@ impl ProcessedNumeratorForComparison {
 
     #[allow(clippy::type_complexity)]
     fn random_concretize_reps(
-        decomposed_net: &DataTensor<
-            TensorNetwork<
-                ParamOrConcrete<
-                    RealOrComplexTensor<
-                        f64,
-                        SmartShadowStructure<SerializableSymbol, Vec<SerializableAtom>>,
-                    >,
-                    SmartShadowStructure<SerializableSymbol, Vec<SerializableAtom>>,
-                >,
-                SerializableAtom,
-            >,
-        >,
+        decomposed_net: &DataTensor<Numerator<Network>>,
         sample_iterator: Option<&mut PrimeIteratorU64>,
         fully_numerical_substitution: bool,
     ) -> Vec<(Atom, Atom)> {
@@ -4504,7 +4498,7 @@ impl ProcessedNumeratorForComparison {
             let pat = variable.to_pattern();
 
             decomposed_net.iter_flat().for_each(|(_, tn)| {
-                for (_n, d) in tn.graph.nodes.iter() {
+                for d in tn.state.net.store.tensors.iter() {
                     if let Ok(param_tn) = d.clone().try_into_parametric() {
                         for (_, a) in param_tn.iter_flat() {
                             for m in a.pattern_match(&pat, None, None) {
@@ -4518,7 +4512,7 @@ impl ProcessedNumeratorForComparison {
             });
         } else {
             for (_, tn) in decomposed_net.iter_flat() {
-                for (_n, d) in tn.graph.nodes.iter() {
+                for d in tn.state.net.store.tensors.iter() {
                     if let Ok(param_tn) = d.clone().try_into_parametric().to_owned() {
                         for (_, a) in param_tn.tensor.iter_flat() {
                             let res = a.replace_map(
@@ -4575,103 +4569,6 @@ impl ProcessedNumeratorForComparison {
         reps.iter()
             .map(|a: &Atom| (a.clone(), prime.next().unwrap()))
             .collect()
-    }
-
-    fn evaluate_with_replacements(
-        decomposed_net: &DataTensor<TensorNetwork<ParamTensor<AtomStructure>, SerializableAtom>>,
-        replacements: &[(AtomView, AtomView)],
-        fully_numerical_substitutions: bool,
-    ) -> Result<DataTensor<Atom>, FeynGenError> {
-        if !fully_numerical_substitutions {
-            Self::apply_reps(decomposed_net, replacements).map_data_ref_mut_result(|tn| {
-                tn.contract()
-                    .map_err(|e| FeynGenError::NumeratorEvaluationError(e.to_string()))?;
-                tn.clone()
-                    .map_scalar(|a| a.0)
-                    .result_scalar()
-                    .map_err(|e| FeynGenError::NumeratorEvaluationError(e.to_string()))
-            })
-        } else {
-            Self::apply_reps(decomposed_net, replacements).map_data_ref_mut_result(
-                |tn| {
-
-                    let mut tn_complex=TensorNetwork {
-                        graph: tn.graph.map_nodes_ref(|(_, d)| {
-                                d.map_data_ref_result::<_, FeynGenError>(|a| {
-                                    let mut b = a.clone();
-                                    for (src, trgt) in replacements.iter() {
-                                        b = b.replace(&src.to_pattern()).with( trgt.to_pattern());
-                                    }
-                                    b = b.expand();
-                                    let mut re = Rational::zero();
-                                    let mut im = Rational::zero();
-                                    for (var, coeff) in b.coefficient_list::<u8>(&[Atom::new_var(Atom::I)]).iter() {
-                                        let c = coeff.try_into().map_err(|e| {
-                                            FeynGenError::NumeratorEvaluationError(format!(
-                                                "Could not convert tensor coefficient to integer: error: {}, expresssion: {}",
-                                                e, coeff
-                                            ))
-                                        })?;
-                                        if *var == Atom::new_var(Atom::I) {
-                                            re = c;
-                                        } else if *var == Atom::new_num(1) {
-                                            im = c;
-                                        } else {
-                                            return Err(FeynGenError::NumeratorEvaluationError(format!(
-                                                "Could not convert the following tensor coefficient to a complex integer: {}",
-                                                b
-                                            )));
-                                        }
-                                    }
-                                    Ok(Complex::<Rational>::new(re, im))
-                                })
-                                .unwrap()
-                        }),
-                        scalar: tn.scalar.clone().map(|a| a.0),
-                    };
-                    tn_complex.contract().map_err(|e| FeynGenError::NumeratorEvaluationError(e.to_string()))?;
-                    //println!("tn_complex: {}", tn_complex);
-                    match tn_complex.result() {
-                        Ok((tn_res, tn_scalar)) => {
-                            let processed = tn_res.to_bare_dense();
-                            Ok(processed.scalar().map(|s| {
-                                Atom::new_num(s.re) + Atom::new_num(s.im) * Atom::I
-                            }).expect("Expected scalar in numerator evaluation.")*tn_scalar.unwrap_or(Atom::new_num(1)))
-                        },
-                        Err(spenso::network::TensorNetworkError::NoNodes) => {
-                            let s = tn_complex
-                            .scalar
-                            .as_ref()
-                            .ok_or(spenso::network::TensorNetworkError::NoScalar).map_err(|e| FeynGenError::NumeratorEvaluationError(e.to_string()))?
-                            .clone();
-                            Ok(s)
-                        }
-                        Err(e) => Err(FeynGenError::NumeratorEvaluationError(e.to_string())),
-                    }
-                },
-            )
-        }
-    }
-
-    fn apply_reps(
-        decomposed_net: &DataTensor<TensorNetwork<ParamTensor<AtomStructure>, SerializableAtom>>,
-        rep_atoms: &[(AtomView, AtomView)],
-    ) -> DataTensor<TensorNetwork<ParamTensor<AtomStructure>, SerializableAtom>> {
-        decomposed_net.map_data_ref(|data| {
-            TensorNetwork {
-                graph: data.graph.map_nodes_ref(|(_, d)| {
-                    d.map_data_ref_self(|a| {
-                        let mut b = a.clone();
-                        for (src, trgt) in rep_atoms.iter() {
-                            b = b.replace(&src.to_pattern()).with(trgt.to_pattern());
-                        }
-                        b
-                        //let b = a.replace_all_multiple(&reps);
-                    })
-                }),
-                scalar: data.scalar.clone(),
-            }
-        })
     }
 }
 

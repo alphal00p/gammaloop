@@ -23,7 +23,7 @@ use spenso::{
     shadowing::Shadowable,
     structure::{
         abstract_index::AbstractIndex,
-        representation::{BaseRepName, Bispinor, Euclidean, Minkowski, PhysReps, RepName},
+        representation::{BaseRepName, Euclidean, LibraryRep, LibrarySlot, Minkowski, RepName},
         slot::{DualSlotTo, Slot},
         CastStructure, IndexLess, NamedStructure, TensorStructure, ToSymbolic, VecStructure,
     },
@@ -44,13 +44,14 @@ use symbolica::{
 
 use spenso::complex::Complex;
 use symbolica::{parse, symbol};
+use symbolica_community::physics::algebraic_simplification::representations::Bispinor;
 
 use crate::{
     utils::{ApproxEq, FloatLike, RefDefault, F},
     RotationSetting,
 };
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize, Encode, Decode)]
 pub struct Energy<T> {
     pub value: T,
 }
@@ -307,7 +308,7 @@ impl<T> From<T> for Energy<T> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize, Encode, Decode)]
 pub struct ThreeMomentum<T> {
     pub px: T,
     pub py: T,
@@ -500,8 +501,7 @@ impl<T> ThreeMomentum<T> {
     where
         T: Clone,
     {
-        let structure =
-            VecStructure::from_iter(vec![PhysReps::new_slot(Euclidean {}.into(), 3, index)]);
+        let structure = VecStructure::from_iter(vec![Euclidean {}.new_slot(3, index)]);
         DenseTensor::from_data(vec![self.px, self.py, self.pz], structure).unwrap()
     }
 
@@ -509,8 +509,7 @@ impl<T> ThreeMomentum<T> {
     where
         T: Clone,
     {
-        let structure =
-            VecStructure::from_iter(vec![PhysReps::new_slot(Euclidean {}.into(), 3, index)]);
+        let structure = VecStructure::from_iter(vec![Euclidean {}.new_slot(3, index)]);
         DenseTensor::from_data(vec![self.px, self.py, self.pz], structure).unwrap()
     }
 }
@@ -1001,7 +1000,7 @@ impl<T> From<ThreeMomentum<T>> for (T, T, T) {
     }
 }
 
-#[derive(Default, Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize)]
+#[derive(Default, Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize, Encode, Decode)]
 pub struct FourMomentum<T, U = T> {
     pub temporal: Energy<U>,
     pub spatial: ThreeMomentum<T>,
@@ -1140,7 +1139,7 @@ impl<T: RefZero, U: RefZero> RefZero<FourMomentum<T, U>> for &FourMomentum<T, U>
     }
 }
 
-#[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize, Encode, Decode)]
 pub enum PolType {
     U,
     V,
@@ -1179,9 +1178,10 @@ impl Display for PolType {
     }
 }
 
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
+#[trait_decode(trait = symbolica::state::HasStateMap)]
 pub struct Polarization<T> {
-    pub tensor: DenseTensor<T, IndexLess<PhysReps>>,
+    pub tensor: DenseTensor<T, IndexLess<LibraryRep>>,
     pol_type: PolType,
 }
 
@@ -1275,7 +1275,7 @@ impl<T: Clone> Polarization<T> {
     }
 
     pub fn lorentz(value: [T; 4]) -> Self {
-        let structure = IndexLess::new(vec![Minkowski::rep(4).cast()]);
+        let structure = IndexLess::new(vec![Minkowski {}.new_rep(4).cast()]);
         Polarization {
             tensor: DenseTensor {
                 data: value.to_vec(),
@@ -1286,7 +1286,7 @@ impl<T: Clone> Polarization<T> {
     }
 
     pub fn bispinor_u(value: [T; 4]) -> Self {
-        let structure = IndexLess::new(vec![Bispinor::rep(4).cast()]);
+        let structure = IndexLess::new(vec![Bispinor {}.new_rep(4).cast()]);
 
         Polarization {
             tensor: DenseTensor {
@@ -1298,7 +1298,7 @@ impl<T: Clone> Polarization<T> {
     }
 
     pub fn bispinor_v(value: [T; 4]) -> Self {
-        let structure = IndexLess::new(vec![Bispinor::rep(4).cast()]);
+        let structure = IndexLess::new(vec![Bispinor {}.new_rep(4).cast()]);
 
         Polarization {
             tensor: DenseTensor {
@@ -1309,7 +1309,7 @@ impl<T: Clone> Polarization<T> {
         }
     }
 
-    pub fn shadow(&self) -> DenseTensor<Atom, IndexLess<PhysReps>> {
+    pub fn shadow(&self) -> DenseTensor<Atom, IndexLess<LibraryRep>> {
         self.tensor
             .structure
             .clone()
@@ -1563,7 +1563,7 @@ impl<T> FourMomentum<T, T> {
         T: Clone,
     {
         let structure =
-            VecStructure::from_iter([PhysReps::new_slot(Minkowski {}.into(), 4, index)]);
+            VecStructure::from_iter([LibraryRep::new_slot(Minkowski {}.into(), 4, index)]);
         DenseTensor::from_data(
             vec![
                 self.temporal.value,
@@ -1586,7 +1586,7 @@ impl<T> FourMomentum<T, T> {
         T: Clone,
     {
         let structure =
-            VecStructure::from_iter([PhysReps::new_slot(Minkowski {}.into(), 4, index)])
+            VecStructure::from_iter([LibraryRep::new_slot(Minkowski {}.into(), 4, index)])
                 .to_named(name, Some(num));
         DenseTensor::from_data(
             vec![
@@ -2438,7 +2438,7 @@ impl<T> FourMomentum<T, Atom> {
         T: Clone + Into<Coefficient> + Exponent,
     {
         let structure =
-            VecStructure::from_iter([PhysReps::new_slot(Minkowski {}.into(), 4, index)]);
+            VecStructure::from_iter([LibraryRep::new_slot(Minkowski {}.into(), 4, index)]);
         let energy = self
             .temporal
             .value
@@ -2666,7 +2666,7 @@ impl Rotation {
         let mud = mu.dual();
 
         let shadow: NamedStructure<String, ()> =
-            VecStructure::<PhysReps>::from_iter([mu.into()]).to_named("eps".to_string(), None);
+            VecStructure::from_iter([mu.into()]).to_named("eps".to_string(), None);
         let shadow_t: MixedTensor<_, VecStructure> =
             ParamOrConcrete::param(shadow.to_shell().expanded_shadow().unwrap().into())
                 .cast_structure();
@@ -2691,12 +2691,12 @@ impl Rotation {
             .unwrap()
             .linearize(Some(1));
 
-        let i = Bispinor::slot(4, 1);
+        let i = Bispinor {}.new_slot(4, 1);
 
-        let j = Bispinor::slot(4, 3);
+        let j = Bispinor {}.new_slot(4, 3);
 
         let shadow: NamedStructure<String, ()> =
-            VecStructure::from_iter([i.cast::<PhysReps>()]).to_named("u".to_string(), None);
+            VecStructure::from_iter([i.cast::<LibraryRep>()]).to_named("u".to_string(), None);
         let shadow_t: MixedTensor<_, VecStructure> =
             ParamOrConcrete::param(shadow.to_shell().expanded_shadow().unwrap().into())
                 .cast_structure();
@@ -2730,8 +2730,8 @@ impl Rotation {
 impl RotationMethod {
     pub fn generator(&self, i: AbstractIndex, j: AbstractIndex) -> DataTensor<f64, VecStructure> {
         let structure = VecStructure::from_iter([
-            PhysReps::new_slot(Minkowski {}.into(), 4, i),
-            PhysReps::new_slot(Minkowski {}.into(), 4, j),
+            LibraryRep::new_slot(Minkowski {}.into(), 4, i),
+            LibraryRep::new_slot(Minkowski {}.into(), 4, j),
         ]);
         let zero = 0.;
         match self {
@@ -2777,7 +2777,7 @@ impl RotationMethod {
         i: Slot<Minkowski>,
         j: Slot<Minkowski>,
     ) -> DataTensor<f64, VecStructure> {
-        let structure = VecStructure::from_iter([i.cast::<PhysReps>(), j.cast()]);
+        let structure = VecStructure::from_iter([i.cast::<LibraryRep>(), j.cast()]);
 
         match self {
             RotationMethod::Identity => {
@@ -2894,7 +2894,7 @@ impl RotationMethod {
         i: Slot<Bispinor>,
         j: Slot<Bispinor>,
     ) -> DataTensor<Complex<f64>, VecStructure> {
-        let structure = VecStructure::from_iter([i.cast::<PhysReps>(), j.cast()]);
+        let structure = VecStructure::from_iter([i.cast::<LibraryRep>(), j.cast()]);
         let zero = 0.; // F::new_zero();
         let zeroc = Complex::new_re(zero);
 
@@ -3068,7 +3068,6 @@ mod tests {
         contraction::Contract,
         iterators::IteratableTensor,
         structure::{slot::DualSlotTo, TensorStructure},
-        ufo,
         upgrading_arithmetic::{FallibleAdd, FallibleSub},
     };
     use symbolica::parse;
@@ -3590,77 +3589,77 @@ mod tests {
         println!("Pi2X {}", other_u_rot);
     }
 
-    #[test]
-    fn omega() {
-        let mu = PhysReps::new_slot(Minkowski {}.into(), 4, 0);
+    // #[test]
+    // fn omega() {
+    //     let mu = PhysReps::new_slot(Minkowski {}.into(), 4, 0);
 
-        let nu = PhysReps::new_slot(Minkowski {}.into(), 4, 1);
+    //     let nu = PhysReps::new_slot(Minkowski {}.into(), 4, 1);
 
-        let mud = mu.dual();
+    //     let mud = mu.dual();
 
-        let nud = nu.dual();
+    //     let nud = nu.dual();
 
-        let i = PhysReps::new_slot(Bispinor {}.into(), 4, 2);
+    //     let i = PhysReps::new_slot(Bispinor {}.into(), 4, 2);
 
-        let j = PhysReps::new_slot(Bispinor {}.into(), 4, 3);
+    //     let j = PhysReps::new_slot(Bispinor {}.into(), 4, 3);
 
-        let k = PhysReps::new_slot(Bispinor {}.into(), 4, 4);
+    //     let k = PhysReps::new_slot(Bispinor {}.into(), 4, 4);
 
-        let zero = Atom::new_num(0);
-        let theta_x = parse!("theta_x").unwrap();
-        let theta_y = parse!("theta_y").unwrap();
-        let theta_z = parse!("theta_z").unwrap();
+    //     let zero = Atom::new_num(0);
+    //     let theta_x = parse!("theta_x").unwrap();
+    //     let theta_y = parse!("theta_y").unwrap();
+    //     let theta_z = parse!("theta_z").unwrap();
 
-        let omega = DenseTensor::from_data(
-            vec![
-                zero.clone(),
-                zero.clone(),
-                zero.clone(),
-                zero.clone(),
-                //
-                zero.clone(),
-                zero.clone(),
-                theta_z.clone(),
-                -theta_y.clone(),
-                //
-                zero.clone(),
-                -theta_z.clone(),
-                zero.clone(),
-                theta_x.clone(),
-                //
-                zero.clone(),
-                theta_y.clone(),
-                -theta_x.clone(),
-                zero.clone(),
-            ],
-            VecStructure::from_iter([mu, nu]),
-        )
-        .unwrap();
+    //     let omega = DenseTensor::from_data(
+    //         vec![
+    //             zero.clone(),
+    //             zero.clone(),
+    //             zero.clone(),
+    //             zero.clone(),
+    //             //
+    //             zero.clone(),
+    //             zero.clone(),
+    //             theta_z.clone(),
+    //             -theta_y.clone(),
+    //             //
+    //             zero.clone(),
+    //             -theta_z.clone(),
+    //             zero.clone(),
+    //             theta_x.clone(),
+    //             //
+    //             zero.clone(),
+    //             theta_y.clone(),
+    //             -theta_x.clone(),
+    //             zero.clone(),
+    //         ],
+    //         VecStructure::from_iter([mu, nu]),
+    //     )
+    //     .unwrap();
 
-        println!("{}", omega);
+    //     println!("{}", omega);
 
-        let gammamujk: SparseTensor<Complex<f64>> =
-            ufo::gamma_data_weyl(VecStructure::from_iter([mud, j, k]));
+    //     let gammamujk: SparseTensor<Complex<f64>> =
+    //         ufo::gamma_data_weyl(VecStructure::from_iter([mud, j, k]));
 
-        let gammamukj: SparseTensor<Complex<f64>> =
-            ufo::gamma_data_weyl(VecStructure::from_iter([mud, k, i]));
+    //     let gammamukj: SparseTensor<Complex<f64>> =
+    //         ufo::gamma_data_weyl(VecStructure::from_iter([mud, k, i]));
 
-        let gammanuki: SparseTensor<Complex<f64>> =
-            ufo::gamma_data_weyl(VecStructure::from_iter([nud, k, i]));
+    //     let gammanuki: SparseTensor<Complex<f64>> =
+    //         ufo::gamma_data_weyl(VecStructure::from_iter([nud, k, i]));
 
-        let gammanujk: SparseTensor<Complex<f64>> =
-            ufo::gamma_data_weyl(VecStructure::from_iter([nud, j, k]));
+    //     let gammanujk: SparseTensor<Complex<f64>> =
+    //         ufo::gamma_data_weyl(VecStructure::from_iter([nud, j, k]));
 
-        let sigma = (gammamujk
-            .contract(&gammanuki)
-            .unwrap()
-            .sub_fallible(&gammanujk.contract(&gammamukj).unwrap())
-            .unwrap())
-        .scalar_mul(&Complex::new_im(0.25))
-        .unwrap();
+    //     let sigma = (gammamujk
+    //         .contract(&gammanuki)
+    //         .unwrap()
+    //         .sub_fallible(&gammanujk.contract(&gammamukj).unwrap())
+    //         .unwrap())
+    //     .scalar_mul(&Complex::new_im(0.25))
+    //     .unwrap();
 
-        println!("{}", sigma);
+    //     println!("{}", sigma);
 
-        println!("{}", omega.contract(&sigma).unwrap());
-    }
+    //     println!("{}", omega.contract(&sigma).unwrap());
+    // }
 }

@@ -901,11 +901,9 @@ impl<S: GetSingleAtom + NumeratorState> Amplitude<S> {
                 .bare_graph
                 .rep_rules_print(printer_ops);
 
+            let a = num.as_ref().map(|a| a.as_view()).unwrap();
             let out = (
-                format!(
-                    "{}",
-                    AtomPrinter::new_with_options(num.as_ref().unwrap().0.as_view(), printer_ops)
-                ),
+                format!("{}", AtomPrinter::new_with_options(a, printer_ops)),
                 rep_rules,
                 dens,
             );

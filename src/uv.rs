@@ -20,7 +20,7 @@ use serde::{Deserialize, Serialize};
 use spenso::{
     data::StorageTensor,
     parametric::{atomcore::PatternReplacement, ParamTensor},
-    structure::VecStructure,
+    structure::{HasStructure, VecStructure},
     symbolica_utils::SerializableAtom,
 };
 use symbolica::{
@@ -253,7 +253,7 @@ where
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct BitFilter {
     data: u128,
 }
@@ -272,7 +272,7 @@ impl PartialOrd for BitFilter {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 struct UVEdge {
     og_edge: usize,
     dod: i32,
@@ -297,7 +297,7 @@ impl UVEdge {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug)]
 struct UVNode {
     dod: i32,
     num: SerializableAtom,
@@ -326,7 +326,7 @@ impl UVNode {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug)]
 pub struct UVGraph(HedgeGraph<UVEdge, UVNode>);
 
 #[allow(dead_code)]
