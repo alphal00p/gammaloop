@@ -2964,7 +2964,7 @@ dependencies = [
 [[package]]
 name = "spenso"
 version = "0.4.1"
-source = "git+https://github.com/alphal00p/spenso?rev=9f8fc504cfab7cf5cae15d5d2671362470f33e06#9f8fc504cfab7cf5cae15d5d2671362470f33e06"
+source = "git+https://github.com/alphal00p/spenso?rev=205f796c6daef11240f1f1b4079b89563b548364#205f796c6daef11240f1f1b4079b89563b548364"
 dependencies = [
  "ahash",
  "anyhow",
@@ -2994,7 +2994,7 @@ dependencies = [
  "serde",
  "serde_json",
  "slotmap",
- "spenso-macros 0.1.0 (git+https://github.com/alphal00p/spenso?rev=9f8fc504cfab7cf5cae15d5d2671362470f33e06)",
+ "spenso-macros 0.1.0 (git+https://github.com/alphal00p/spenso?rev=205f796c6daef11240f1f1b4079b89563b548364)",
  "symbolica",
  "thiserror 1.0.69",
 ]
@@ -3002,7 +3002,7 @@ dependencies = [
 [[package]]
 name = "spenso-macros"
 version = "0.1.0"
-source = "git+https://github.com/alphal00p/spenso?rev=9f8fc504cfab7cf5cae15d5d2671362470f33e06#9f8fc504cfab7cf5cae15d5d2671362470f33e06"
+source = "git+https://github.com/alphal00p/spenso?rev=205f796c6daef11240f1f1b4079b89563b548364#205f796c6daef11240f1f1b4079b89563b548364"
 dependencies = [
  "proc-macro2",
  "quote",

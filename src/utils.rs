@@ -15,10 +15,13 @@ use rug::float::{Constant, ParseFloatError};
 use rug::ops::{CompleteRound, Pow};
 use rug::Float;
 use serde::{Deserialize, Deserializer, Serialize};
+use spenso::arithmetic::ScalarMul;
 use spenso::complex::SymbolicaComplex;
 use spenso::network::library::symbolic::{ExplicitKey, TensorLibrary};
 use spenso::network::library::TensorLibraryData;
-use spenso::parametric::MixedTensor;
+use spenso::parametric::to_param::ToAtom;
+use spenso::parametric::{MixedTensor, ParamTensor};
+use spenso::structure::TensorStructure;
 use spenso::{
     complex::{Complex, R},
     contraction::{RefOne, RefZero},
@@ -875,6 +878,34 @@ impl From<F<f64>> for Coefficient {
     }
 }
 
+impl<'a> From<&'a F<f64>> for Coefficient {
+    fn from(x: &'a F<f64>) -> Self {
+        x.0.into()
+    }
+}
+
+impl ToAtom for F<f64> {
+    fn to_atom(self) -> Atom {
+        Atom::new_num(self.0)
+    }
+}
+
+impl TrySmallestUpgrade<F<f64>> for Atom {
+    type LCM = Atom;
+
+    fn try_upgrade(&self) -> Option<std::borrow::Cow<Self::LCM>> {
+        Some(std::borrow::Cow::Borrowed(self))
+    }
+}
+
+impl TrySmallestUpgrade<Atom> for F<f64> {
+    type LCM = Atom;
+
+    fn try_upgrade(&self) -> Option<std::borrow::Cow<Self::LCM>> {
+        <f64 as TrySmallestUpgrade<Atom>>::try_upgrade(&self.0)
+    }
+}
+
 impl<T: FloatLike> R for F<T> {}
 
 impl<T: FloatLike> Rem<&F<T>> for &F<T> {
@@ -954,6 +985,15 @@ impl<T: FloatLike> TrySmallestUpgrade<F<T>> for Complex<F<T>> {
     type LCM = Complex<F<T>>;
     fn try_upgrade(&self) -> Option<std::borrow::Cow<Self::LCM>> {
         Some(std::borrow::Cow::Borrowed(self))
+    }
+}
+
+impl<T: FloatLike> TrySmallestUpgrade<Complex<F<T>>> for F<T> {
+    type LCM = Complex<F<T>>;
+    fn try_upgrade(&self) -> Option<std::borrow::Cow<Self::LCM>> {
+        let z = self.ref_zero();
+
+        Some(std::borrow::Cow::Owned(Complex::new(self.clone(), z)))
     }
 }
 

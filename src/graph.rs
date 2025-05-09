@@ -3345,13 +3345,14 @@ impl DerivedGraphData<PythonState> {
         let mut statemap = State::import(&mut source, None)?;
         match std::fs::read(path) {
             Ok(derived_data_bytes) => {
-                let derived_data: DerivedGraphData<S> = bincode::decode_from_slice_with_context(
-                    &derived_data_bytes,
-                    bincode::config::standard(),
-                    statemap,
-                )?
-                .0;
-                Ok(derived_data.forget_type())
+                // let derived_data: DerivedGraphData<S> = bincode::decode_from_slice_with_context(
+                //     &derived_data_bytes,
+                //     bincode::config::standard(),
+                //     statemap,
+                // )?
+                // .0;
+                // Ok(derived_data.forget_type())
+                todo!();
             }
             Err(_) => {
                 Err(eyre!(
@@ -3983,13 +3984,14 @@ impl<NumState: NumeratorState> DerivedGraphData<NumState> {
         let mut statemap = State::import(&mut source, None)?;
         match std::fs::read(derived_data_path) {
             Ok(derived_data_bytes) => {
-                let derived_data: Self = bincode::decode_from_slice_with_context(
-                    &derived_data_bytes,
-                    bincode::config::standard(),
-                    statemap,
-                )?
-                .0;
-                Ok(derived_data)
+                // let derived_data: Self = bincode::decode_from_slice_with_context(
+                //     &derived_data_bytes,
+                //     bincode::config::standard(),
+                //     statemap,
+                // )?
+                // .0;
+                // Ok(derived_data)
+                todo!()
             }
             Err(_) => {
                 Err(eyre!(

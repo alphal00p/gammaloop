@@ -10,6 +10,7 @@ use spenso::network::store::{NetworkStore, TensorScalarStoreMapping};
 use spenso::network::{ExecutionResult, Sequential, SmallestDegree, TensorOrScalarOrKey};
 use std::fmt::Debug;
 use std::fs;
+use std::ops::Deref;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
@@ -2222,9 +2223,9 @@ impl Numerator<Network> {
         }
 
         if !fully_numerical_substitutions {
-            let t = self.apply_reps(replacements).state.net;
+            let mut t = self.apply_reps(replacements).state.net;
 
-            t.execute::<Sequential, SmallestDegree, _>(&TENSORLIB);
+            t.execute::<Sequential, SmallestDegree, _>(TENSORLIB.deref());
 
             let r = match t
                 .result_scalar()
@@ -2268,7 +2269,9 @@ impl Numerator<Network> {
             {
                 ExecutionResult::One => Atom::new_num(1),
                 ExecutionResult::Zero => Atom::Zero,
-                ExecutionResult::Val(r) => Atom::new_num(r.re) + Atom::new_num(r.im) * Atom::I,
+                ExecutionResult::Val(r) => {
+                    Atom::new_num(r.re.clone()) + Atom::new_num(r.im.clone()) * Atom::I
+                }
             };
 
             Ok(r)
