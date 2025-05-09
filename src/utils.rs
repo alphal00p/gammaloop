@@ -3266,6 +3266,8 @@ pub struct GammaloopSymbols {
     pub color_wrap: Symbol,
     pub epsilon: Symbol,
     pub epsilonbar: Symbol,
+
+    pub emr_mom: Symbol,
     pub x_: Symbol,
     pub y_: Symbol,
     pub z_: Symbol,
@@ -3337,6 +3339,7 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
     dim: symbol!("dim"),
     v: symbol!("v"),
     u: symbol!("u"),
+    emr_mom: symbol!("Q"),
     epsilon: symbol!("ϵ"),
     color_wrap: symbol!("color"),
     epsilonbar: symbol!("ϵbar"),

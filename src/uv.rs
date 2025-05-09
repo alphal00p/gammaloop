@@ -276,8 +276,8 @@ impl PartialOrd for BitFilter {
 struct UVEdge {
     og_edge: usize,
     dod: i32,
-    num: SerializableAtom,
-    den: SerializableAtom,
+    num: Atom,
+    den: Atom,
 }
 
 impl UVEdge {
@@ -300,7 +300,7 @@ impl UVEdge {
 #[derive(Clone, Debug)]
 struct UVNode {
     dod: i32,
-    num: SerializableAtom,
+    num: Atom,
     color: Option<ParamTensor>,
 }
 
@@ -480,11 +480,11 @@ impl UVGraph {
     fn numerator(&self, subgraph: &InternalSubGraph) -> SerializableAtom {
         let mut num = Atom::new_num(1);
         for (_, _, n) in self.0.iter_node_data(subgraph) {
-            num = num * &n.num.0;
+            num = num * &n.num;
         }
 
         for e in self.0.iter_internal_edge_data(subgraph) {
-            num = num * &e.data.num.0;
+            num = num * &e.data.num;
         }
 
         FunctionBuilder::new(symbol!("num"))
@@ -497,7 +497,7 @@ impl UVGraph {
         let mut den = Atom::new_num(1);
 
         for e in self.0.iter_internal_edge_data(subgraph) {
-            den = den * &e.data.den.0;
+            den = den * &e.data.den;
         }
 
         FunctionBuilder::new(symbol!("den"))

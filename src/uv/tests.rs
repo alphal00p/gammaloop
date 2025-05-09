@@ -2,6 +2,16 @@ use std::{sync::Arc, time::Instant};
 
 use ahash::HashMap;
 use smartstring::SmartString;
+use spenso::{
+    network::parsing::ShadowedStructure,
+    structure::{
+        abstract_index::AbstractIndex,
+        dimension::Dimension,
+        representation::{Minkowski, RepName},
+        NamedStructure, ToSymbolic,
+    },
+};
+use symbolica_community::physics::algebraic_simplification::metric::MetricSimplifier;
 
 use crate::{
     feyngen::diagram_generator::{EdgeColor, FeynGen, NodeColorWithVertexRule},
@@ -9,6 +19,78 @@ use crate::{
     tests_from_pytest::{load_amplitude_output, load_generic_model},
     uv::{PoSet, UVGraph},
 };
+
+pub fn spenso_lor(
+    tag: i32,
+    ind: impl Into<AbstractIndex>,
+    dim: impl Into<Dimension>,
+) -> ShadowedStructure {
+    let mink = Minkowski {}.new_slot(dim, ind);
+    NamedStructure::from_iter([mink], GS.emr_mom, Some(vec![Atom::new_num(tag)]))
+}
+
+pub fn spenso_lor_atom(tag: i32, ind: impl Into<AbstractIndex>, dim: impl Into<Dimension>) -> Atom {
+    let mink = Minkowski {}.new_slot(dim, ind);
+    // spenso_lor(tag, ind, dim).to_symbolic().unwrap()
+    vec![mink].to_symbolic_with(GS.emr_mom, &[Atom::new_num(tag)])
+}
+#[test]
+fn manual() {
+    let mut builder = HedgeGraphBuilder::new();
+
+    let node1 = builder.add_node(UVNode {
+        dod: 0,
+        num: spenso_lor_atom(1, 2, GS.dim),
+        color: None,
+    });
+
+    let node2 = builder.add_node(UVNode {
+        dod: 1,
+        num: parse!("anything").unwrap(),
+        color: None,
+    });
+
+    let edge1 = UVEdge {
+        og_edge: 1, // not needed
+        dod: 1,
+        num: spenso_lor_atom(1, 2, GS.dim),
+        den: spenso_lor_atom(1, -2, GS.dim).npow(2).to_dots(),
+    };
+
+    builder.add_edge(node1, node2, edge1, false);
+
+    let edge2 = UVEdge {
+        og_edge: 1, // not needed
+        dod: 1,
+        num: spenso_lor_atom(2, 2, GS.dim),
+        den: spenso_lor_atom(2, -1, GS.dim).npow(2).to_dots(),
+    };
+
+    builder.add_edge(node2, node1, edge2, false);
+
+    let uv_graph = UVGraph(builder.build());
+    println!(
+        "{}",
+        uv_graph.0.dot_impl(
+            &uv_graph.0.full_filter(),
+            "",
+            &|a| Some(a.den.to_string()),
+            &|n| Some(n.num.to_string())
+        )
+    );
+
+    let wood = uv_graph.wood();
+
+    println!("{}", wood.dot(&uv_graph));
+    println!("{}", wood.show_graphs(&uv_graph));
+
+    let mut ufold = wood.unfold_impl(&uv_graph);
+    // assert_eq!(152, ufold.n_terms());
+    ufold.compute(&uv_graph);
+
+    println!("unfolded : {}", ufold.show_structure(&uv_graph).unwrap());
+    println!("graph: {}", ufold.graphs());
+}
 
 #[test]
 #[allow(unused)]
