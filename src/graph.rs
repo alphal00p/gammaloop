@@ -31,12 +31,15 @@ use crate::{
 };
 
 use linnet::half_edge::{
-    builder::HedgeGraphBuilder, involution::EdgeIndex, nodestore::NodeStorageOps,
-    subgraph::SubGraphOps, HedgeGraph,
-};
-use linnet::half_edge::{
     involution::{HedgePair, Orientation},
     HedgeGraphError, NodeIndex,
+};
+use linnet::{
+    half_edge::{
+        builder::HedgeGraphBuilder, involution::EdgeIndex, nodestore::NodeStorageOps,
+        subgraph::SubGraphOps, HedgeGraph,
+    },
+    permutation::Permutation,
 };
 
 use ahash::{AHashMap, AHashSet, HashSet, RandomState};
@@ -58,17 +61,18 @@ use spenso::{
     complex::Complex,
     contraction::{IsZero, RefZero},
     data::{DataTensor, DenseTensor, GetTensorData, SetTensorData, SparseTensor, StorageTensor},
-    permutation::Permutation,
+    network::library::symbolic::ETS,
     scalar::Scalar,
-    shadowing::{Shadowable, ETS},
+    shadowing::Shadowable,
     structure::{
         abstract_index::AbstractIndex,
-        representation::{
-            BaseRepName, ColorAdjoint, ColorFundamental, ColorSextet, Euclidean, Minkowski,
-        },
+        representation::{BaseRepName, Euclidean, Minkowski, RepName},
         slot::{DualSlotTo, IsAbstractSlot},
         CastStructure, HasStructure, NamedStructure, ScalarTensor, ToSymbolic, VecStructure,
     },
+};
+use symbolica_community::physics::algebraic_simplification::representations::{
+    ColorAdjoint, ColorFundamental, ColorSextet,
 };
 use typed_index_collections::TiVec;
 use uuid::Uuid;
@@ -496,8 +500,8 @@ pub trait HasVertexInfo {
     ) -> Option<[DataTensor<Atom>; 3]>;
 }
 
-#[derive(Debug, Clone, Encode)]
-// #[enum_dispatch(HasVertexInfo)]
+#[derive(Debug, Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
+#[trait_decode(trait = crate::GammaLoopContext)]
 pub enum VertexInfo {
     ExternalVertexInfo(ExternalVertexInfo),
     InteractonVertexInfo(InteractionVertexInfo),
@@ -571,7 +575,8 @@ pub struct SerializableExternalVertexInfo {
     particle: SmartString<LazyCompact>,
 }
 
-#[derive(Debug, Clone, Encode)]
+#[derive(Debug, Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
+#[trait_decode(trait = crate::GammaLoopContext)]
 pub struct ExternalVertexInfo {
     pub direction: EdgeType,
     pub particle: ArcParticle,
@@ -628,7 +633,8 @@ impl HasVertexInfo for ExternalVertexInfo {
     }
 }
 
-#[derive(Debug, Clone, Encode)]
+#[derive(Debug, Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
+#[trait_decode(trait = crate::GammaLoopContext)]
 pub struct InteractionVertexInfo {
     #[allow(unused)]
     pub vertex_rule: ArcVertexRule,
@@ -714,7 +720,6 @@ impl HasVertexInfo for InteractionVertexInfo {
 
                 let spins: Vec<isize> = self
                     .vertex_rule
-                    .0
                     .particles
                     .iter()
                     .map(|s| s.0.color)
@@ -727,14 +732,18 @@ impl HasVertexInfo for InteractionVertexInfo {
                         .to_pattern();
 
                     let ind = match s {
-                        1 => Euclidean::slot(1, i + 1).to_symbolic_wrapped(),
-                        3 => ColorFundamental::slot(3, i + 1).to_symbolic_wrapped(),
-                        -3 => ColorFundamental::slot(3, i + 1)
+                        1 => Euclidean {}.new_slot(1, i + 1).to_symbolic_wrapped(),
+                        3 => ColorFundamental {}.new_slot(3, i + 1).to_symbolic_wrapped(),
+                        -3 => ColorFundamental {}
+                            .new_slot(3, i + 1)
                             .dual()
                             .to_symbolic_wrapped(),
-                        6 => ColorSextet::slot(6, i + 1).to_symbolic_wrapped(),
-                        -6 => ColorSextet::slot(6, i + 1).dual().to_symbolic_wrapped(),
-                        8 => ColorAdjoint::slot(8, i + 1).to_symbolic_wrapped(),
+                        6 => ColorSextet {}.new_slot(6, i + 1).to_symbolic_wrapped(),
+                        -6 => ColorSextet {}
+                            .new_slot(6, i + 1)
+                            .dual()
+                            .to_symbolic_wrapped(),
+                        8 => ColorAdjoint {}.new_slot(8, i + 1).to_symbolic_wrapped(),
                         i => panic!("Color {i} not supported "),
                     };
 

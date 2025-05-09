@@ -3,16 +3,24 @@ use crate::feyngen::FeynGenError;
 use linnet::half_edge::hedgevec::HedgeVec;
 use linnet::half_edge::involution::{EdgeIndex, Orientation};
 use log::warn;
+use spenso::complex::RealOrComplexTensor;
+use spenso::network::library::DummyLibrary;
+use spenso::network::parsing::ShadowedStructure;
+use spenso::network::store::{NetworkStore, TensorScalarStoreMapping};
+use spenso::network::{ExecutionResult, Sequential, SmallestDegree, TensorOrScalarOrKey};
 use std::fmt::Debug;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
+use symbolica_community::physics::algebraic_simplification::color::{ColorError, ColorSimplifier};
+use symbolica_community::physics::algebraic_simplification::gamma::GammaSimplifier;
+use symbolica_community::physics::algebraic_simplification::representations::Bispinor;
 // use crate::feyngen::dis::{DisEdge, DisVertex};
 use crate::graph::{BareGraph, VertexInfo};
 use crate::model::normalise_complex;
 use crate::momentum::Polarization;
-use crate::utils::{f128, GS};
+use crate::utils::{f128, GS, TENSORLIB};
 use crate::{
     graph::EdgeType,
     model::Model,
@@ -20,7 +28,7 @@ use crate::{
     utils::{FloatLike, F},
 };
 
-use crate::{ProcessSettings, Settings};
+use crate::{disable, ProcessSettings, Settings};
 use ahash::{AHashMap, HashSet};
 use bincode::{Decode, Encode};
 use color_eyre::{Report, Result};
@@ -41,29 +49,26 @@ use spenso::contraction::Contract;
 use spenso::data::{DataTensor, GetTensorData, StorageTensor};
 
 use spenso::iterators::IteratableTensor;
+use spenso::network::library::symbolic::{ExplicitKey, ETS};
 use spenso::parametric::atomcore::{PatternReplacement, TensorAtomMaps, TensorAtomOps};
 use spenso::parametric::{
-    EvalTensor, EvalTensorSet, LinearizedEvalTensorSet, MixedTensor, ParamTensorSet,
-    SerializableCompiledEvaluator, TensorSet,
+    EvalTensor, EvalTensorSet, LinearizedEvalTensorSet, MixedTensor, ParamOrConcrete,
+    ParamTensorSet, SerializableCompiledEvaluator, TensorSet,
 };
-use spenso::shadowing::ETS;
 use spenso::structure::abstract_index::DOWNIND;
 use spenso::structure::concrete_index::{ExpandedIndex, FlatIndex};
 
-use spenso::structure::representation::{
-    BaseRepName, Bispinor, ColorAdjoint, ColorFundamental, ColorSextet, Minkowski,
-};
+use spenso::structure::representation::{BaseRepName, LibraryRep, Minkowski};
 use spenso::structure::{HasStructure, ScalarTensor, SmartShadowStructure, VecStructure};
 use spenso::symbolica_utils::SerializableAtom;
 use spenso::symbolica_utils::SerializableSymbol;
 use spenso::upgrading_arithmetic::FallibleSub;
 use spenso::{
     complex::Complex,
-    network::TensorNetwork,
     parametric::ParamTensor,
     shadowing::Shadowable,
     structure::{
-        representation::{Lorentz, PhysReps, RepName},
+        representation::{Lorentz, RepName},
         NamedStructure, TensorStructure,
     },
 };
@@ -502,7 +507,7 @@ impl<S: NumeratorState> Numerator<S> {
 }
 
 impl<S: GetSingleAtom> Numerator<S> {
-    pub fn get_single_atom(&self) -> Result<SerializableAtom, NumeratorStateError> {
+    pub fn get_single_atom(&self) -> Result<Atom, NumeratorStateError> {
         self.state.get_single_atom()
     }
 }
@@ -535,7 +540,7 @@ impl Numerator<PythonState> {
         S::apply(self, f)
     }
 }
-pub trait NumeratorState: Clone + Debug + Encode + Decode<StateMap> {
+pub trait NumeratorState: Clone + Debug + Encode {
     fn export(&self) -> String;
 
     fn forget_type(self) -> PythonState;
@@ -714,31 +719,30 @@ impl Default for Numerator<UnInit> {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
+#[trait_decode(trait = symbolica::state::HasStateMap)]
 pub struct SymbolicExpression<State> {
-    #[bincode(with_serde)]
-    pub colorless: DataTensor<SerializableAtom>,
-    #[bincode(with_serde)]
-    pub color: DataTensor<SerializableAtom>,
+    pub colorless: ParamTensor,
+    pub color: ParamTensor,
     pub state: State,
 }
 
 pub trait GetSingleAtom {
-    fn get_single_atom(&self) -> Result<SerializableAtom, NumeratorStateError>;
+    fn get_single_atom(&self) -> Result<Atom, NumeratorStateError>;
 }
 
 pub trait UnexpandedNumerator: NumeratorState + GetSingleAtom {
     // fn expr(&self) -> Result<SerializableAtom, NumeratorStateError>;
 
-    fn map_color(self, f: impl Fn(SerializableAtom) -> SerializableAtom) -> Self;
+    fn map_color(self, f: impl Fn(Atom) -> Atom) -> Self;
 
-    fn map_color_mut(&mut self, f: impl FnMut(&mut SerializableAtom));
+    fn map_color_mut(&mut self, f: impl FnMut(&mut Atom));
 
-    fn map_colorless(self, f: impl Fn(SerializableAtom) -> SerializableAtom) -> Self;
+    fn map_colorless(self, f: impl Fn(Atom) -> Atom) -> Self;
 }
 
 impl<E: ExpressionState> GetSingleAtom for SymbolicExpression<E> {
-    fn get_single_atom(&self) -> Result<SerializableAtom, NumeratorStateError> {
+    fn get_single_atom(&self) -> Result<Atom, NumeratorStateError> {
         self.colorless
             .contract(&self.color)
             .map_err(|n| NumeratorStateError::Any(n.into()))?
@@ -749,22 +753,22 @@ impl<E: ExpressionState> GetSingleAtom for SymbolicExpression<E> {
 
 impl<E: ExpressionState> SymbolicExpression<E> {
     #[allow(dead_code)]
-    fn map_color(self, f: impl Fn(SerializableAtom) -> SerializableAtom) -> Self {
+    fn map_color(self, f: impl Fn(Atom) -> Atom) -> Self {
         SymbolicExpression {
             colorless: self.colorless,
-            color: self.color.map_data(f),
+            color: self.color.map_data_self(f),
             state: self.state,
         }
     }
 
     #[allow(dead_code)]
-    fn map_color_mut(&mut self, f: impl FnMut(&mut SerializableAtom)) {
+    fn map_color_mut(&mut self, f: impl FnMut(&mut Atom)) {
         self.color.map_data_mut(f);
     }
     #[allow(dead_code)]
-    fn map_colorless(self, f: impl Fn(SerializableAtom) -> SerializableAtom) -> Self {
+    fn map_colorless(self, f: impl Fn(Atom) -> Atom) -> Self {
         SymbolicExpression {
-            colorless: self.colorless.map_data(f),
+            colorless: self.colorless.map_data_self(f),
             color: self.color,
             state: self.state,
         }
@@ -787,16 +791,16 @@ pub trait ExpressionState:
 
     fn new(expression: SerializableAtom) -> SymbolicExpression<Self> {
         SymbolicExpression {
-            colorless: DataTensor::new_scalar(expression),
-            color: DataTensor::new_scalar(Atom::new_num(1).into()),
+            colorless: ParamTensor::composite(DataTensor::new_scalar(expression.0)),
+            color: ParamTensor::composite(DataTensor::new_scalar(Atom::new_num(1))),
             state: Self::default(),
         }
     }
 
     fn new_color(expression: SerializableAtom) -> SymbolicExpression<Self> {
         SymbolicExpression {
-            color: DataTensor::new_scalar(expression),
-            colorless: DataTensor::new_scalar(Atom::new_num(1).into()),
+            color: ParamTensor::composite(DataTensor::new_scalar(expression.0)),
+            colorless: ParamTensor::composite(DataTensor::new_scalar(Atom::new_num(1))),
             state: Self::default(),
         }
     }
@@ -900,7 +904,7 @@ impl Numerator<Global> {
 
         let out = format!(
             "{}",
-            AtomPrinter::new_with_options(self.get_single_atom().unwrap().0.as_view(), printer_ops)
+            AtomPrinter::new_with_options(self.get_single_atom().unwrap().as_view(), printer_ops)
         );
 
         fs::write(
@@ -915,26 +919,26 @@ impl Numerator<Global> {
         debug!("Color simplifying global numerator");
         let mut fully_simplified = true;
 
-        let colorless =
-            self.state
-                .colorless
-                .map_data_ref_mut(|a| match Self::color_simplify_global_impl(a) {
-                    Ok(expression) => expression,
-                    Err(ColorError::NotFully(expression)) => {
-                        fully_simplified = false;
-                        expression
-                    }
-                });
-        let color =
-            self.state
-                .color
-                .map_data_ref_mut(|a| match ColorSimplified::color_simplify_impl(a) {
-                    Ok(expression) => expression,
-                    Err(ColorError::NotFully(expression)) => {
-                        fully_simplified = false;
-                        expression
-                    }
-                });
+        let colorless = self
+            .state
+            .colorless
+            .map_data_ref_mut_self(|a| match a.simplify_color() {
+                Ok(expression) => expression,
+                Err(ColorError::NotFully(expression)) => {
+                    fully_simplified = false;
+                    expression
+                }
+            });
+        let color = self
+            .state
+            .color
+            .map_data_ref_mut_self(|a| match a.simplify_color() {
+                Ok(expression) => expression,
+                Err(ColorError::NotFully(expression)) => {
+                    fully_simplified = false;
+                    expression
+                }
+            });
         let state = ColorSimplified {
             colorless,
             color,
@@ -949,46 +953,6 @@ impl Numerator<Global> {
             state.color, state.colorless
         );
         Numerator { state }
-    }
-
-    fn color_simplify_global_impl(
-        expression: &SerializableAtom,
-    ) -> Result<SerializableAtom, ColorError> {
-        let mut expression = expression.clone();
-        ColorSimplified::isolate_color(&mut expression);
-        let color_pat = function!(GS.color_wrap, GS.x_).to_pattern();
-
-        let mut fully = true;
-
-        let color_simplified = {
-            let pat = expression
-                .0
-                .pattern_match(&color_pat, None, None)
-                .next()
-                .unwrap();
-
-            match ColorSimplified::color_simplify_impl(&pat[&GS.x_].clone().into()) {
-                Ok(s) => s,
-                Err(ColorError::NotFully(s)) => {
-                    fully = false;
-                    s
-                }
-            }
-            .0
-            .factor()
-        };
-
-        let mut expression = expression
-            .0
-            .replace(&color_pat)
-            .with(Atom::new_num(1).to_pattern());
-        expression = expression * color_simplified;
-
-        if fully {
-            Ok(expression.into())
-        } else {
-            Err(ColorError::NotFully(expression.into()))
-        }
     }
 }
 
@@ -1070,7 +1034,7 @@ impl ExpressionState for Gamma {
 
 impl<State: ExpressionState> NumeratorState for SymbolicExpression<State> {
     fn export(&self) -> String {
-        self.get_single_atom().unwrap().0.to_canonical_string()
+        self.get_single_atom().unwrap().to_canonical_string()
     }
 
     fn forget_type(self) -> PythonState {
@@ -1171,8 +1135,12 @@ impl AppliedFeynmanRule {
         colorful_builder = colorful_builder.scalar_mul(&prefactor.color).unwrap();
 
         let mut num = AppliedFeynmanRule {
-            colorless: colorless_builder.map_data(|a| normalise_complex(&a).into()),
-            color: colorful_builder.map_data(|a| normalise_complex(&a).into()),
+            colorless: ParamTensor::composite(
+                colorless_builder.map_data(|a| normalise_complex(&a)),
+            ),
+            color: ParamTensor::composite(
+                colorful_builder.map_data(|a| normalise_complex(&a).into()),
+            ),
             state: Default::default(),
         };
         num.simplify_ids();
@@ -1182,18 +1150,16 @@ impl AppliedFeynmanRule {
 
 impl<T: Copy + Default> Numerator<SymbolicExpression<T>> {
     pub fn canonize_lorentz(&self) -> Result<Self, String> {
-        let pats: Vec<_> = vec![Minkowski::selfless_symbol(), Bispinor::selfless_symbol()];
+        let pats: Vec<LibraryRep> = vec![Minkowski {}.into(), Bispinor {}.into()];
 
         let mut indices_map = AHashMap::new();
 
         self.state.colorless.iter_flat().for_each(|(_, v)| {
             for p in &pats {
-                for a in
-                    v.0.pattern_match(&function!(*p, GS.x_, GS.y_).to_pattern(), None, None)
-                {
+                for a in v.pattern_match(&p.to_symbolic([GS.x_, GS.y_]).to_pattern(), None, None) {
                     indices_map.insert(
-                        function!(*p, a[&GS.x_], a[&GS.y_]),
-                        function!(*p, a[&GS.x_]),
+                        p.to_symbolic([a[&GS.x_].clone(), a[&GS.y_].clone()]),
+                        p.to_symbolic([a[&GS.x_].clone()]),
                     );
                 }
             }
@@ -1206,7 +1172,7 @@ impl<T: Copy + Default> Numerator<SymbolicExpression<T>> {
         let colorless = self
             .state
             .colorless
-            .map_data_ref_result(|a| a.0.canonize_tensors(&sorted).map(|a| a.into()))?;
+            .map_data_ref_result_self(|a| a.canonize_tensors(&sorted).map(|a| a.into()))?;
 
         Ok(Self {
             state: SymbolicExpression {
@@ -1218,7 +1184,8 @@ impl<T: Copy + Default> Numerator<SymbolicExpression<T>> {
     }
 
     pub fn canonize_color(&self) -> Result<Self, String> {
-        let pats: Vec<_> = vec![ColorAdjoint::selfless_symbol()];
+        disable!(
+        let pats: Vec<_> = vec![ColorAdjoint{}];
         let dualizablepats: Vec<_> = vec![
             ColorFundamental::selfless_symbol(),
             ColorSextet::selfless_symbol(),
@@ -1268,7 +1235,8 @@ impl<T: Copy + Default> Numerator<SymbolicExpression<T>> {
                 color,
                 state: T::default(),
             },
-        })
+        }));
+        todo!()
     }
 }
 
@@ -1286,7 +1254,7 @@ impl Numerator<AppliedFeynmanRule> {
 
         let out = format!(
             "{}",
-            AtomPrinter::new_with_options(self.get_single_atom().unwrap().0.as_view(), printer_ops)
+            AtomPrinter::new_with_options(self.get_single_atom().unwrap().as_view(), printer_ops)
         );
 
         fs::write(
@@ -1311,269 +1279,19 @@ impl Numerator<AppliedFeynmanRule> {
     }
 }
 
-#[derive(Debug, Error)]
-pub enum ColorError {
-    #[error("Not fully simplified: {0}")]
-    NotFully(SerializableAtom),
-}
+// #[derive(Debug, Error)]
+// pub enum ColorError {
+//     #[error("Not fully simplified: {0}")]
+//     NotFully(SerializableAtom),
+// }
 
 impl ColorSimplified {
-    fn isolate_color(expression: &mut SerializableAtom) {
-        let color_fn = FunctionBuilder::new(symbol!("color"))
-            .add_arg(Atom::new_num(1))
-            .finish();
-        expression.0 = &expression.0 * color_fn;
-        let replacements = vec![
-            (
-                parse!("f_(x___,cof(3,i_),z___)*color(a___)").unwrap(),
-                parse!("color(a___*f_(x___,cof(3,i_),z___))").unwrap(),
-            ),
-            (
-                parse!("f_(x___,dind(cof(3,i_)),z___)*color(a___)").unwrap(),
-                parse!("color(a___*f_(x___,dind(cof(3,i_)),z___))").unwrap(),
-            ),
-            (
-                parse!("f_(x___,coad(i__),z___)*color(a___)").unwrap(),
-                parse!("color(a___*f_(x___,coad(i__),z___))").unwrap(),
-            ),
-        ];
-        let settings = MatchSettings {
-            rhs_cache_size: 0,
-            ..Default::default()
-        };
-
-        let reps: Vec<Replacement> = replacements
-            .into_iter()
-            .map(|(lhs, rhs)| {
-                Replacement::new(lhs.to_pattern(), rhs.to_pattern()).with_settings(settings.clone())
-            })
-            .collect();
-
-        expression.replace_multiple_repeat_mut(&reps);
-
-        // let mut color = Atom::new();
-
-        // if let AtomView::Mul(mul) = expression.0.as_view() {
-        //     for a in mul {
-        //         if let AtomView::Fun(f) = a {
-        //             if f.get_symbol() == Symbol::new("color") {
-        //                 color.set_from_view(&f.iter().next().unwrap());
-        //             }
-        //         }
-        //     }
-        // }
-
-        // expression.0.replace_all(
-        //     &Pattern::Fn(Symbol::new("color"), vec![]),
-        //     &Pattern::Literal(Atom::new_num(1)).into(),
-        //     None,
-        //     None,
-        // );
-
-        // color.into()
-    }
-
-    pub fn color_simplify_impl(
-        expression: &SerializableAtom,
-    ) -> Result<SerializableAtom, ColorError> {
-        let f_ = symbol!("f_");
-        let cof = ColorFundamental::rep(3);
-        let coaf = ColorFundamental::rep(3).dual();
-        let coad = ColorAdjoint::rep(8);
-        let a___ = Atom::new_var(symbol!("a___"));
-        let a_ = Atom::new_var(symbol!("a_"));
-        let b_ = Atom::new_var(symbol!("b_"));
-        let c___ = Atom::new_var(symbol!("c___"));
-        let c_ = Atom::new_var(symbol!("c_"));
-        let d_ = Atom::new_var(symbol!("d_"));
-        let e_ = Atom::new_var(symbol!("e_"));
-        let i_ = Atom::new_var(symbol!("i_"));
-        let i = symbol!("i");
-        let j = symbol!("j");
-        let k = symbol!("k");
-
-        let tr = Atom::new_var(symbol!("TR"));
-        let nc = Atom::new_var(symbol!("Nc"));
-        let reps = vec![
-            (
-                function!(f_, a___, cof.pattern(&b_), c___)
-                    * function!(ETS.id, coaf.pattern(&b_), cof.pattern(&c_)),
-                function!(f_, a___, cof.pattern(&c_), c___),
-            ),
-            // (
-            //     function!(f_, a___, cof.pattern(&c_), c___)
-            //         * function!(ETS.id, cof.pattern(&b_), coaf.pattern(&c_)),
-            //     function!(f_, a___, cof.pattern(&b_), c___),
-            // ),
-            (
-                function!(f_, a___, coaf.pattern(&b_), c___)
-                    * function!(ETS.id, cof.pattern(&b_), coaf.pattern(&c_)),
-                function!(f_, a___, coaf.pattern(&c_), c___),
-            ),
-            // (
-            //     function!(f_, a___, coaf.pattern(&c_), c___)
-            //         * function!(ETS.id, coaf.pattern(&b_), cof.pattern(&c_)),
-            //     function!(f_, a___, coaf.pattern(&b_), c___),
-            // ),
-            (
-                function!(f_, a___, coad.pattern(&b_), c___)
-                    * function!(ETS.id, coad.pattern(&b_), coad.pattern(&a_)),
-                function!(f_, a___, coad.pattern(&a_), c___),
-            ),
-            (
-                function!(f_, a___, coad.pattern(&a_), c___)
-                    * function!(ETS.id, coad.pattern(&b_), coad.pattern(&a_)),
-                function!(f_, a___, coad.pattern(&b_), c___),
-            ),
-            (
-                function!(ETS.id, coaf.pattern(&a_), cof.pattern(&a_)),
-                nc.clone(),
-            ),
-            (
-                function!(ETS.id, cof.pattern(&a_), coaf.pattern(&a_)),
-                nc.clone(),
-            ),
-            (
-                function!(ETS.id, coad.pattern(&a_), coad.pattern(&a_)),
-                (&nc * &nc) - 1,
-            ),
-            (
-                function!(UFO.t, a_, cof.pattern(&b_), coaf.pattern(&b_)),
-                Atom::new_num(0),
-            ),
-            (
-                function!(UFO.t, a_, cof.pattern(&c_), coaf.pattern(&e_))
-                    * function!(UFO.t, b_, cof.pattern(&e_), coaf.pattern(&c_)),
-                &tr * function!(ETS.id, a_, b_),
-            ),
-            (
-                function!(UFO.t, a_, cof.pattern(&c_), coaf.pattern(&e_)).pow(Atom::new_num(2)),
-                &tr * function!(ETS.id, a_, a_),
-            ),
-            (
-                function!(UFO.t, &e_, a_, b_) * function!(UFO.t, &e_, c_, d_),
-                &tr * (function!(ETS.id, a_, d_) * function!(ETS.id, c_, b_)
-                    - (function!(ETS.id, a_, b_) * function!(ETS.id, c_, d_) / &nc)),
-            ),
-            (
-                function!(UFO.t, i_, a_, coaf.pattern(&b_))
-                    * function!(UFO.t, e_, cof.pattern(&b_), coaf.pattern(&c_))
-                    * function!(UFO.t, i_, cof.pattern(&c_), d_),
-                -(&tr / &nc) * function!(UFO.t, e_, a_, d_),
-            ),
-            (
-                function!(
-                    UFO.f,
-                    coad.pattern(&a_),
-                    coad.pattern(&b_),
-                    coad.pattern(&c_)
-                )
-                .pow(Atom::new_num(2)),
-                &nc * (&nc * &nc - 1),
-            ),
-        ];
-
-        let frep = [Replacement::new(
-            function!(
-                UFO.f,
-                coad.pattern(&a_),
-                coad.pattern(&b_),
-                coad.pattern(&c_)
-            )
-            .to_pattern(),
-            (((function!(
-                UFO.t,
-                coad.pattern(&a_),
-                cof.pattern(&function!(i, a_, b_, c_)),
-                coaf.pattern(&function!(j, a_, b_, c_))
-            ) * function!(
-                UFO.t,
-                coad.pattern(&b_),
-                cof.pattern(&function!(j, a_, b_, c_)),
-                coaf.pattern(&function!(k, a_, b_, c_))
-            ) * function!(
-                UFO.t,
-                coad.pattern(&c_),
-                cof.pattern(&function!(k, a_, b_, c_)),
-                coaf.pattern(&function!(i, a_, b_, c_))
-            ) - function!(
-                UFO.t,
-                coad.pattern(&a_),
-                cof.pattern(&function!(i, a_, b_, c_)),
-                coaf.pattern(&function!(j, a_, b_, c_))
-            ) * function!(
-                UFO.t,
-                coad.pattern(&c_),
-                cof.pattern(&function!(j, a_, b_, c_)),
-                coaf.pattern(&function!(k, a_, b_, c_))
-            ) * function!(
-                UFO.t,
-                coad.pattern(&b_),
-                cof.pattern(&function!(k, a_, b_, c_)),
-                coaf.pattern(&function!(i, a_, b_, c_))
-            )) / &tr)
-                * Atom::new_var(Atom::I).ref_neg())
-            .to_pattern(),
-        )];
-
-        let settings = MatchSettings {
-            rhs_cache_size: 0,
-            ..Default::default()
-        };
-        let replacements: Vec<Replacement> = reps
-            .into_iter()
-            .map(|(a, b)| {
-                Replacement::new(a.to_pattern(), b.to_pattern()).with_settings(settings.clone())
-            })
-            .collect();
-
-        let mut atom = Atom::new_num(0);
-        // for r in &replacements {
-        //     println!("{r}")
-        // }
-
-        let mut expression = expression.clone();
-        let mut first = true;
-        while first || expression.0.replace_multiple_into(&replacements, &mut atom) {
-            if !first {
-                std::mem::swap(&mut expression.0, &mut atom)
-            };
-            first = false;
-            expression.0 = expression.0.replace_multiple(&frep);
-            expression.0 = expression.0.expand();
-        }
-
-        let pats: Vec<_> = vec![ColorAdjoint::selfless_symbol()];
-        let dualizablepats: Vec<_> = vec![
-            ColorFundamental::selfless_symbol(),
-            ColorSextet::selfless_symbol(),
-        ];
-
-        let mut fully_simplified = true;
-        for p in pats.iter().chain(&dualizablepats) {
-            if expression
-                .0
-                .pattern_match(&function!(*p, GS.x_, GS.y_).to_pattern(), None, None)
-                .next()
-                .is_some()
-            {
-                fully_simplified = false;
-            }
-        }
-
-        if fully_simplified {
-            Ok(expression)
-        } else {
-            Err(ColorError::NotFully(expression))
-        }
-    }
-
     pub fn color_simplify<T: ExpressionState>(mut expr: SymbolicExpression<T>) -> ColorSimplified {
         let colorless = expr.colorless;
         let mut fully_simplified = true;
 
         expr.color.map_data_mut(|a| {
-            *a = match Self::color_simplify_impl(a) {
+            *a = match a.simplify_color() {
                 Ok(expression) => expression,
                 Err(ColorError::NotFully(expression)) => {
                     fully_simplified = false;
@@ -1597,18 +1315,16 @@ impl ColorSimplified {
     /// If the color hasn't been fully simplified,
     pub fn parse(self) -> Network {
         let a = match self.state {
-            Color::Fully => self.get_single_atom().unwrap().0,
+            Color::Fully => self.get_single_atom().unwrap(),
             Color::Partially => {
                 warn!(
                     "Not fully simplified, taking the colorless part associated to {}",
                     self.color.get_owned_linear(FlatIndex::from(0)).unwrap()
                 );
-                self.colorless
-                    .get_owned_linear(FlatIndex::from(0))
-                    .unwrap()
-                    .0
+                self.colorless.get_owned_linear(FlatIndex::from(0)).unwrap()
             }
         };
+        disable!(
 
         let net = TensorNetwork::<MixedTensor<f64, AtomStructure>, SerializableAtom>::try_from(
             a.as_view(),
@@ -1619,6 +1335,8 @@ impl ColorSimplified {
 
         // println!("net scalar{}", net.scalar.as_ref().unwrap());
         Network { net }
+        );
+        todo!()
     }
 }
 
@@ -1636,14 +1354,14 @@ impl Numerator<ColorSimplified> {
             .map(|(a, b)| (a.as_view(), b.as_view()))
             .collect::<Vec<_>>();
         let gammat = gamma
-            .apply_reps(reps_view.clone())
+            .apply_reps(&reps_view)
             .contract::<Rational>(ContractionSettings::Normal)
             .unwrap()
             .state
             .tensor;
 
         let nogammat = nogamma
-            .apply_reps(reps_view)
+            .apply_reps(&reps_view)
             .contract::<Rational>(ContractionSettings::Normal)
             .unwrap()
             .state
@@ -1676,7 +1394,7 @@ impl Numerator<ColorSimplified> {
 
         let out = format!(
             "{}",
-            AtomPrinter::new_with_options(self.get_single_atom().unwrap().0.as_view(), printer_ops)
+            AtomPrinter::new_with_options(self.get_single_atom().unwrap().as_view(), printer_ops)
         );
 
         fs::write(
@@ -1690,10 +1408,7 @@ impl Numerator<ColorSimplified> {
     pub fn gamma_simplify(self) -> Numerator<GammaSimplified> {
         debug!("Gamma simplifying color symplified numerator");
 
-        let gamma_simplified = self
-            .state
-            .colorless
-            .map_data(GammaSimplified::gamma_symplify_impl);
+        let gamma_simplified = self.state.colorless.map_data_self(|a| a.simplify_gamma());
 
         Numerator {
             state: GammaSimplified {
@@ -1723,6 +1438,7 @@ impl Numerator<ColorSimplified> {
 }
 
 #[derive(Debug, Clone)]
+// #[trait_decode(trait = symbolica::state::HasStateMap)]
 pub struct PolySplit {
     pub colorless: DataTensor<Gloopoly>,
     pub var_map: Arc<Vec<Variable>>,
@@ -1731,17 +1447,23 @@ pub struct PolySplit {
     pub colorsimplified: Color,
 }
 
+impl Encode for PolySplit {
+    fn encode<E: bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> std::result::Result<(), bincode::error::EncodeError> {
+        todo!()
+    }
+}
+
 impl PolySplit {
     fn generate_variables(bare_graph: &BareGraph) -> Vec<Variable> {
         let mut vars: Vec<Variable> = vec![];
 
         for (i, e) in bare_graph.edges.iter().enumerate() {
             if let EdgeType::Virtual = e.edge_type {
-                let named_structure: NamedStructure<String> = NamedStructure::from_iter(
-                    [PhysReps::new_slot(Lorentz {}.into(), 4, i)],
-                    "Q".into(),
-                    Some(i),
-                );
+                let named_structure: NamedStructure<String> =
+                    NamedStructure::from_iter([Minkowski {}.new_slot(4, i)], "Q".into(), Some(i));
 
                 vars.push(
                     named_structure
@@ -1759,13 +1481,15 @@ impl PolySplit {
     }
 
     pub fn from_color_out(color_simplified: Numerator<ColorSimplified>) -> DataTensor<Atom> {
+        disable!(
+
         let colorless_parsed = color_simplified
             .state
             .colorless
             .map_data(|a| {
                 let mut net =
                     TensorNetwork::<MixedTensor<f64, AtomStructure>, SerializableAtom>::try_from(
-                        a.0.as_view(),
+                        a.as_view(),
                     )
                     .unwrap();
                 net.contract().unwrap();
@@ -1779,6 +1503,8 @@ impl PolySplit {
             .unwrap();
 
         colorless_parsed
+        );
+        todo!()
     }
 
     fn from_color_simplified(
@@ -1788,14 +1514,17 @@ impl PolySplit {
         let var_map = Arc::new(Self::generate_variables(bare_graph));
         let energies: Vec<_> = (0..var_map.len()).collect();
 
+        disable!(
+
         let colorless_parsed = color_simplified
             .state
             .colorless
             .map_data(|a| {
                 let mut net =
-                    TensorNetwork::<MixedTensor<f64, AtomStructure>, SerializableAtom>::try_from(
-                        a.0.as_view(),
-                    )
+                    spenso::network::Network::<
+                        NetworkStore<MixedTensor<f64, AtomStructure>, Atom>,
+                        ExplicitKey,
+                    >::try_from_view(a.as_view(), &DummyLibrary::default())
                     .unwrap();
                 net.contract().unwrap();
                 net.to_fully_parametric()
@@ -1812,9 +1541,11 @@ impl PolySplit {
             colorless: colorless_parsed,
             var_map,
             energies,
-            color: ParamTensor::composite(color_simplified.state.color.map_data(|a| a.0)),
+            color: color_simplified.state.color,
             colorsimplified: color_simplified.state.state,
         }
+        );
+        todo!()
     }
 
     fn to_shadowed_poly_impl(
@@ -1939,10 +1670,9 @@ impl Numerator<PolySplit> {
     }
 }
 
-#[derive(Debug, Clone, Encode, Decode)]
-#[bincode(decode_context = "StateMap")]
+#[derive(Debug, Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
+#[trait_decode(trait = symbolica::state::HasStateMap)]
 pub struct PolyContracted {
-    #[bincode(with_serde)]
     pub tensor: ParamTensor,
     pub coef_map: Vec<Atom>,
 }
@@ -2223,360 +1953,28 @@ impl PolyContracted {
 }
 
 impl GammaSimplified {
-    pub fn gamma_symplify_impl(mut expr: SerializableAtom) -> SerializableAtom {
-        // let mink = Minkowski::rep(4);
-        fn mink(wildcard: Symbol) -> Atom {
-            Minkowski::rep(4).pattern(Atom::new_var(wildcard))
-        }
-        expr.0 = expr.0.expand();
-        let pats = [
-            Replacement::new(
-                parse!("id(a_,b_)*t_(d___,b_,c___)").unwrap().to_pattern(),
-                parse!("t_(d___,a_,c___)").unwrap().to_pattern(),
-            ),
-            Replacement::new(
-                parse!("Metric(mink(a_),mink(b_))*t_(d___,mink(b_),c___)")
-                    .unwrap()
-                    .to_pattern(),
-                parse!("t_(d___,mink(a_),c___)").unwrap().to_pattern(),
-            ),
-        ];
-
-        expr = expr.replace_multiple_repeat(&pats);
-        let pats = vec![
-            (
-                parse!("ProjP(a_,b_)").unwrap().to_pattern(),
-                parse!("1/2*id(a_,b_)-1/2*gamma5(a_,b_)")
-                    .unwrap()
-                    .to_pattern(),
-            ),
-            (
-                parse!("ProjM(a_,b_)").unwrap().to_pattern(),
-                parse!("1/2*id(a_,b_)+1/2*gamma5(a_,b_)")
-                    .unwrap()
-                    .to_pattern(),
-            ),
-            (
-                parse!("id(a_,b_)*f_(d___,b_,e___)").unwrap().to_pattern(),
-                parse!("f_(c___,a_,e___)").unwrap().to_pattern(),
-            ),
-            // (
-            //     parse!("id(aind(a_,b_))*f_(c___,aind(d___,a_,e___))").unwrap().to_pattern(),
-            //     parse!("f_(c___,aind(d___,b_,e___))")
-            //         .unwrap().to_pattern()
-            //         ,
-            // ),
-            (
-                parse!("γ(a_,b_,c_)*γ(d_,c_,e_)").unwrap().to_pattern(),
-                parse!("gamma_chain(a_,d_,b_,e_)").unwrap().to_pattern(),
-            ),
-            (
-                parse!("gamma_chain(a__,b_,c_)*gamma_chain(d__,c_,e_)")
-                    .unwrap()
-                    .to_pattern(),
-                parse!("gamma_chain(a__,d__,b_,e_)").unwrap().to_pattern(),
-            ),
-            (
-                parse!("γ(a_,b_,c_)*gamma_chain(d__,c_,e_)")
-                    .unwrap()
-                    .to_pattern(),
-                parse!("gamma_chain(a_,d__,b_,e_)").unwrap().to_pattern(),
-            ),
-            (
-                parse!("gamma_chain(a__,b_,c_)*γ(d_,c_,e_)")
-                    .unwrap()
-                    .to_pattern(),
-                parse!("gamma_chain(a__,d_,b_,e_)").unwrap().to_pattern(),
-            ),
-            (
-                parse!("gamma_chain(a__,b_,b_)").unwrap().to_pattern(),
-                parse!("gamma_trace(a__)").unwrap().to_pattern(),
-            ),
-        ];
-        let reps: Vec<Replacement> = pats
-            .into_iter()
-            .map(|(lhs, rhs)| Replacement::new(lhs, rhs))
-            .collect();
-        expr.0 = expr.0.expand();
-        expr.replace_multiple_repeat_mut(&reps);
-        expr.0 = expr.0.expand();
-        expr.replace_multiple_repeat_mut(&reps);
-
-        let pat = parse!("gamma_trace(a__)").unwrap().to_pattern();
-
-        let mut it = expr.0.pattern_match(&pat, None, None);
-
-        let mut max_nargs = 0;
-
-        while let Some(p) = it.next_detailed() {
-            for (_, v) in p.match_stack {
-                match v {
-                    Match::Single(_) => {
-                        if max_nargs < 1 {
-                            max_nargs = 1;
-                        }
-                    }
-                    Match::Multiple(_, v) => {
-                        if max_nargs < v.len() {
-                            max_nargs = v.len();
-                        }
-                    }
-                    _ => panic!("should be a single match"),
-                }
-            }
-        }
-
-        expr.0 = expr.0.expand();
-        // let pats: Vec<_> = [
-        //     (
-        //         function!(ETS.id, GS.a_, GS.b_) * function!(GS.f_, GS.d___, GS.b_, GS.c___),
-        //         function!(GS.f_, GS.d___, GS.a_, GS.c___),
-        //     ),
-        //     (
-        //         function!(ETS.metric, mink(GS.a_), mink(GS.b_))
-        //             * function!(GS.f_, GS.d___, mink(GS.b_), GS.c___),
-        //         function!(GS.f_, GS.d___, mink(GS.a_), GS.c___),
-        //     ),
-        // ]
-        // .iter()
-        // .map(|(a, b)| Replacement::new(a.to_pattern(), b.to_pattern()))
-        // .collect();
-
-        // expr = expr.replace_all_multiple_repeat(&pats);
-
-        let gamma_chain = symbol!("gamma_chain");
-        let gamma_trace = symbol!("gamma_trace");
-        let reps: Vec<_> = [
-            (
-                function!(ETS.id, GS.a_, GS.b_) * function!(GS.f_, GS.d___, GS.b_, GS.c___),
-                function!(GS.f_, GS.d___, GS.a_, GS.c___),
-            ),
-            (
-                function!(ETS.metric, mink(GS.a_), mink(GS.b_))
-                    * function!(GS.f_, GS.d___, mink(GS.b_), GS.c___),
-                function!(GS.f_, GS.d___, mink(GS.a_), GS.c___),
-            ),
-            (
-                function!(UFO.projp, GS.a_, GS.b_),
-                (function!(ETS.id, GS.a_, GS.b_) - function!(ETS.gamma5, GS.a_, GS.b_)) / 2,
-            ),
-            (
-                function!(UFO.projm, GS.a_, GS.b_),
-                (function!(ETS.id, GS.a_, GS.b_) + function!(ETS.gamma5, GS.a_, GS.b_)) / 2,
-            ),
-            (
-                function!(ETS.gamma, GS.a_, GS.b_, GS.c_)
-                    * function!(ETS.gamma, GS.d_, GS.c_, GS.e_),
-                function!(gamma_chain, GS.a_, GS.d_, GS.b_, GS.e_),
-            ),
-            (function!(ETS.gamma, GS.a_, GS.b_, GS.b_), Atom::Zero),
-            (
-                function!(gamma_chain, GS.a__, GS.a_, GS.b_)
-                    * function!(gamma_chain, GS.b__, GS.b_, GS.c_),
-                function!(gamma_chain, GS.a__, GS.b__, GS.a_, GS.c_),
-            ),
-            (
-                function!(gamma_chain, GS.a__, GS.a_, GS.b_)
-                    * function!(ETS.gamma, GS.y_, GS.b_, GS.c_),
-                function!(gamma_chain, GS.a__, GS.y_, GS.a_, GS.c_),
-            ),
-            (
-                function!(ETS.gamma, GS.a_, GS.a_, GS.b_)
-                    * function!(gamma_chain, GS.y__, GS.b_, GS.c_),
-                function!(gamma_chain, GS.a_, GS.y__, GS.a_, GS.c_),
-            ),
-        ]
-        .iter()
-        .map(|(a, b)| Replacement::new(a.to_pattern(), b.to_pattern()))
-        .collect();
-
-        expr.0 = expr.0.expand();
-        expr.replace_multiple_repeat_mut(&reps);
-        expr.0 = expr.0.expand();
-        expr.replace_multiple_repeat_mut(&reps);
-
-        let _pat = function!(gamma_chain, GS.a_, GS.a___, GS.b_, GS.a_).to_pattern();
-        // let patodd = (-2 * function!(gamma_chain, GS.a___, GS.b_)).to_pattern();
-        // let pateven = (2 * (function!(gamma_chain, GS.b_, GS.a___))).to_pattern();
-
-        // let rhs = PatternOrMap::Map(Box::new(move |m| m.));
-        //
-        fn gamma_chain_perm(arg: AtomView, _context: &Context, out: &mut Atom) -> bool {
-            let gamma_chain = symbol!("gamma_chain");
-            let mut found = false;
-            if let AtomView::Fun(f) = arg {
-                if f.get_symbol() == gamma_chain {
-                    found = true;
-                    let args = f.iter().collect::<Vec<_>>();
-                    let len = args.len();
-                    if len <= 3 {
-                        return false;
-                    }
-
-                    if args[len - 3] == args[0] {
-                        if len == 4 {
-                            *out = function!(ETS.id, args[len - 2], args[len - 1]) * 4;
-                            return true;
-                        } else if len % 2 == 0 {
-                            let mut gcn = FunctionBuilder::new(gamma_chain);
-                            let mut gcnp = FunctionBuilder::new(gamma_chain);
-                            gcn = gcn.add_arg(args[len - 4]);
-                            gcn = gcn.add_args(&args[1..(len - 4)]);
-                            for a in &args[1..(len - 4)] {
-                                gcnp = gcnp.add_arg(*a);
-                            }
-                            gcnp = gcnp.add_arg(args[len - 4]);
-                            gcnp = gcnp.add_args(&args[(len - 2)..len]);
-                            gcn = gcn.add_args(&args[(len - 2)..len]);
-                            *out = (gcn.finish() + gcnp.finish()) * 2;
-                        } else {
-                            let mut gcn = FunctionBuilder::new(gamma_chain);
-                            gcn = gcn.add_args(&args[1..(len - 4)]);
-                            gcn = gcn.add_args(&args[(len - 2)..len]);
-                            *out = gcn.finish() * -2;
-                        }
-
-                        // println!("{}->{}", arg, out);
-                    } else {
-                        return false;
-                    }
-                }
-            }
-            found
-        }
-
-        loop {
-            let new = expr.0.replace_map(&gamma_chain_perm);
-            if new == expr.0 {
-                break;
-            } else {
-                expr.0 = new;
-            }
-        }
-
-        expr.0 = expr
-            .0
-            .replace(function!(gamma_chain, GS.a__, GS.x_, GS.x_).to_pattern())
-            .repeat()
-            .with(function!(gamma_trace, GS.a__).to_pattern());
-
-        // //Chisholm identity:
-        // expr.replace_all_repeat_mut(
-        //     &(function!(ETS.gamma, GS.a_, GS.x_, GS.y_) * function!(gamma_trace, GS.a_, GS.a__)).to_pattern(),
-        //     (function!(gamma_chain, GS.a__)).to_pattern(),
-        //     None,
-        //     None,
-        // );
-        //
-        fn gamma_tracer(arg: AtomView, _context: &Context, out: &mut Atom) -> bool {
-            let gamma_trace = symbol!("gamma_trace");
-
-            let mut found = false;
-            if let AtomView::Fun(f) = arg {
-                if f.get_symbol() == gamma_trace {
-                    found = true;
-                    let mut sum = Atom::Zero;
-
-                    if f.get_nargs() == 1 {
-                        *out = Atom::Zero;
-                    }
-                    let args = f.iter().collect::<Vec<_>>();
-
-                    for i in 1..args.len() {
-                        let sign = if i % 2 == 0 { -1 } else { 1 };
-
-                        let mut gcn = FunctionBuilder::new(gamma_trace);
-                        #[allow(clippy::needless_range_loop)]
-                        for j in 1..args.len() {
-                            if i != j {
-                                gcn = gcn.add_arg(args[j]);
-                            }
-                        }
-
-                        let metric = if args[0] == args[i] {
-                            Atom::new_num(4)
-                            // Atom::new_var(GS.dim)
-                        } else {
-                            function!(ETS.metric, args[0], args[i])
-                        };
-                        if args.len() == 2 {
-                            sum = sum + metric * sign * 4;
-                        } else {
-                            sum = sum + metric * gcn.finish() * sign;
-                        }
-                    }
-                    *out = sum;
-
-                    // println!("{}->{}", arg, out);
-                }
-            }
-
-            found
-        }
-
-        loop {
-            let new = expr.0.replace_map(&gamma_tracer);
-            if new == expr.0 {
-                break;
-            } else {
-                expr.0 = new;
-            }
-        }
-
-        let reps: Vec<_> = [
-            (
-                function!(ETS.metric, mink(GS.a_), mink(GS.b_))
-                    * function!(GS.f_, GS.d___, mink(GS.b_), GS.c___),
-                function!(GS.f_, GS.d___, mink(GS.a_), GS.c___),
-            ),
-            (
-                function!(ETS.metric, mink(GS.a_), mink(GS.b_)).pow(Atom::new_num(2)),
-                Atom::new_num(4),
-            ),
-            (
-                function!(ETS.gamma, GS.a__).pow(Atom::new_num(2)),
-                Atom::new_num(16),
-            ),
-        ]
-        .iter()
-        .map(|(a, b)| Replacement::new(a.to_pattern(), b.to_pattern()))
-        .collect();
-
-        expr.replace_multiple_repeat_mut(&reps);
-        expr.0 = expr.0.expand();
-        expr.replace_multiple_repeat_mut(&reps);
-        expr
-    }
-
-    // pub fn gamma_symplify(color: ColorProjected) -> GammaSimplified {
-    //     Self::gamma_symplify_impl(color.colorless)
-    // }
-
     pub fn parse(self) -> Network {
-        let net = TensorNetwork::<MixedTensor<f64, AtomStructure>, SerializableAtom>::try_from(
-            self.get_single_atom().unwrap().0.as_view(),
+        let net = StandardTensorNet::try_from_view(
+            self.get_single_atom().unwrap().as_view(),
+            &DummyLibrary::default(),
         )
-        .unwrap()
-        .to_fully_parametric()
-        .cast();
+        .unwrap();
 
         // println!("net scalar{}", net.scalar.as_ref().unwrap());
         Network { net }
     }
 
     pub fn parse_only_colorless(self) -> Network {
-        let net = TensorNetwork::<MixedTensor<f64, AtomStructure>, SerializableAtom>::try_from(
+        let net = StandardTensorNet::try_from_view(
             self.colorless
                 .clone()
                 .scalar()
                 .ok_or(NumeratorStateError::Any(eyre!("not a scalar")))
                 .unwrap()
-                .0
                 .as_view(),
+            &DummyLibrary::default(),
         )
-        .unwrap()
-        .to_fully_parametric()
-        .cast();
+        .unwrap();
 
         // println!("net scalar{}", net.scalar.as_ref().unwrap());
         Network { net }
@@ -2597,7 +1995,7 @@ impl Numerator<GammaSimplified> {
 
         let out = format!(
             "{}",
-            AtomPrinter::new_with_options(self.get_single_atom().unwrap().0.as_view(), printer_ops)
+            AtomPrinter::new_with_options(self.get_single_atom().unwrap().as_view(), printer_ops)
         );
 
         fs::write(
@@ -2623,10 +2021,14 @@ impl Numerator<GammaSimplified> {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
+#[trait_decode(trait = symbolica::state::HasStateMap)]
 pub struct Network {
-    #[bincode(with_serde)]
-    pub net: TensorNetwork<ParamTensor<AtomStructure>, SerializableAtom>,
+    // #[bincode(with_serde
+    pub net: spenso::network::Network<
+        NetworkStore<MixedTensor<F<f64>, ShadowedStructure>, Atom>,
+        ExplicitKey,
+    >,
 }
 
 impl TryFrom<PythonState> for Network {
@@ -2650,13 +2052,14 @@ pub enum ContractionSettings<R = Rational> {
     Normal,
 }
 
+pub type StandardTensorNet = spenso::network::Network<
+    NetworkStore<MixedTensor<F<f64>, ShadowedStructure>, Atom>,
+    ExplicitKey,
+>;
+
 impl Network {
     pub fn parse_impl(expr: AtomView) -> Self {
-        let net =
-            TensorNetwork::<MixedTensor<f64, AtomStructure>, SerializableAtom>::try_from(expr)
-                .unwrap()
-                .to_fully_parametric()
-                .cast();
+        let net = StandardTensorNet::try_from_view(expr, &DummyLibrary::default()).unwrap();
 
         // println!("net scalar{}", net.scalar.as_ref().unwrap());
         Network { net }
@@ -2670,13 +2073,14 @@ impl Network {
                 unimplemented!("cannot because of attached dummy lifetime...")
             }
             ContractionSettings::Normal => {
-                self.net.contract().unwrap();
-                let tensor = self
-                    .net
-                    .result_tensor_smart()?
-                    .map_structure(VecStructure::from);
-                // debug!("contracted tensor: {}", tensor);
-                Ok(Contracted { tensor })
+                // self.net.contract().unwrap();
+                // let tensor = self
+                //     .net
+                //     .result_tensor_smart()?
+                //     .map_structure(VecStructure::from);
+                // // debug!("contracted tensor: {}", tensor);
+                // Ok(Contracted { tensor })
+                todo!()
             }
         }
     }
@@ -2734,7 +2138,7 @@ impl<T: Copy + Default> Numerator<SymbolicExpression<T>> {
         //     .collect::<Vec<_>>();
         let expr = SymbolicExpression::<T> {
             colorless: self.state.colorless.map_data_ref_self(|a| {
-                let mut b: Atom = a.0.clone();
+                let mut b: Atom = a.clone();
                 for (src, trgt) in rep_atoms.iter() {
                     b = b.replace(&src.to_pattern()).with(trgt.to_pattern());
                 }
@@ -2754,7 +2158,7 @@ impl<T: Copy + Default> Numerator<SymbolicExpression<T>> {
                 b.into()
             }),
             color: self.state.color.map_data_ref_self(|a| {
-                let mut b: Atom = a.0.clone();
+                let mut b: Atom = a.clone();
                 // println!("BEFORE: {}", a.0);
                 for (src, trgt) in rep_atoms.iter() {
                     b = b.replace(&src.to_pattern()).with(trgt.to_pattern());
@@ -2782,93 +2186,125 @@ impl<T: Copy + Default> Numerator<SymbolicExpression<T>> {
 impl Numerator<Network> {
     pub fn evaluate_with_replacements(
         &self,
-        replacements: Vec<(AtomView, AtomView)>,
+        replacements: &[(AtomView, AtomView)],
         fully_numerical_substitutions: bool,
     ) -> Result<Atom, FeynGenError> {
-        if !fully_numerical_substitutions {
-            let t = self
-                .apply_reps(replacements)
-                .contract::<Rational>(ContractionSettings::Normal)
-                .map_err(|e| FeynGenError::NumeratorEvaluationError(e.to_string()))?;
-            if let Some(s) = t.state.tensor.scalar() {
-                Ok(s.expand())
-            } else {
-                Err(FeynGenError::NumeratorEvaluationError(
-                    "Could not simplify to a scalar.".into(),
-                ))
+        fn evaluate_atom_with_reps(
+            atom: AtomView,
+            replacements: &[(AtomView, AtomView)],
+        ) -> Result<Complex<Rational>, FeynGenError> {
+            let mut b = atom.to_owned();
+            for (src, trgt) in replacements.iter() {
+                b = b.replace(&src.to_pattern()).with(trgt.to_pattern());
             }
-        } else {
-            let g = self.state.net.graph.map_nodes_ref(|(_, d)| {
-                d.map_data_ref_result::<_, FeynGenError>(|a| {
-                    let mut b = a.clone();
-                    for (src, trgt) in replacements.iter() {
-                        b = b.replace(&src.to_pattern()).with(trgt.to_pattern());
-                    }
-                    b = b.expand();
-                    let mut re = Rational::zero();
-                    let mut im = Rational::zero();
-                    for (var, coeff) in b.coefficient_list::<u8>(&[Atom::new_var(Atom::I)]).iter() {
-                        let c = coeff.try_into().map_err(|e| {
-                            FeynGenError::NumeratorEvaluationError(format!(
-                                "Could not convert tensor coefficient to integer: error: {}, expresssion: {}",
-                                e, coeff
-                            ))
-                        })?;
-                        if *var == Atom::new_var(Atom::I) {
-                            re = c;
-                        } else if *var == Atom::new_num(1) {
-                            im = c;
-                        } else {
-                            return Err(FeynGenError::NumeratorEvaluationError(format!(
-                                "Could not convert the following tensor coefficient to a complex integer: {}",
-                                b
-                            )));
-                        }
-                    }
-                    Ok(Complex::<Rational>::new(re, im))
-                })
-                .unwrap()
-            });
+            b = b.expand();
+            let mut re = Rational::zero();
+            let mut im = Rational::zero();
+            for (var, coeff) in b.coefficient_list::<u8>(&[Atom::new_var(Atom::I)]).iter() {
+                let c = coeff.try_into().map_err(|e| {
+                    FeynGenError::NumeratorEvaluationError(format!(
+                        "Could not convert tensor coefficient to integer: error: {}, expresssion: {}",
+                        e, coeff
+                    ))
+                })?;
+                if *var == Atom::new_var(Atom::I) {
+                    re = c;
+                } else if *var == Atom::new_num(1) {
+                    im = c;
+                } else {
+                    return Err(FeynGenError::NumeratorEvaluationError(format!(
+                        "Could not convert the following tensor coefficient to a complex integer: {}",
+                        b
+                    )));
+                }
+            }
+            Ok(Complex::<Rational>::new(re, im))
+        }
 
-            let mut net = TensorNetwork {
-                graph: g,
-                scalar: self.state.net.scalar.clone(),
+        if !fully_numerical_substitutions {
+            let t = self.apply_reps(replacements).state.net;
+
+            t.execute::<Sequential, SmallestDegree, _>(&TENSORLIB);
+
+            let r = match t
+                .result_scalar()
+                .map_err(|e| FeynGenError::NumeratorEvaluationError(e.to_string()))?
+            {
+                ExecutionResult::One => Atom::new_num(1),
+                ExecutionResult::Zero => Atom::Zero,
+                ExecutionResult::Val(v) => v.into_owned(),
             };
 
-            net.contract().unwrap();
+            Ok(r)
+        } else {
+            let mut g = self
+                .state
+                .net
+                .map_ref_result(
+                    |s| evaluate_atom_with_reps(s.as_view(), &replacements),
+                    |d| match d {
+                        ParamOrConcrete::Param(a) => {
+                            Ok(RealOrComplexTensor::Complex(a.map_data_ref_result(
+                                |a| evaluate_atom_with_reps(a.as_view(), &replacements),
+                            )?))
+                        }
+                        ParamOrConcrete::Concrete(r) => match r {
+                            RealOrComplexTensor::Real(r) => Ok(RealOrComplexTensor::Real(
+                                r.map_data_ref(|f| Rational::from(f.0)),
+                            )),
+                            RealOrComplexTensor::Complex(c) => Ok(RealOrComplexTensor::Complex(
+                                c.map_data_ref(|c| c.map_ref(|r| Rational::from(r.0))),
+                            )),
+                        },
+                    },
+                )
+                .unwrap();
 
-            let (result_tensor, scalar) = net
-                .result()
-                .map_err(|e| FeynGenError::NumeratorEvaluationError(e.to_string()))?;
-            if let Some(s) = result_tensor.clone().scalar() {
-                let factor = scalar.unwrap_or(Atom::new_num(1).into()).0;
-                let res = (Atom::new_num(s.re) + Atom::new_num(s.im) * Atom::I) * factor;
-                Ok(res.expand())
-            } else {
-                Err(FeynGenError::NumeratorEvaluationError(
-                    "Could not simplify to a scalar.".into(),
-                ))
-            }
+            g.execute::<Sequential, SmallestDegree, _>(&DummyLibrary::default());
+
+            let r = match g
+                .result_scalar()
+                .map_err(|e| FeynGenError::NumeratorEvaluationError(e.to_string()))?
+            {
+                ExecutionResult::One => Atom::new_num(1),
+                ExecutionResult::Zero => Atom::Zero,
+                ExecutionResult::Val(r) => Atom::new_num(r.re) + Atom::new_num(r.im) * Atom::I,
+            };
+
+            Ok(r)
         }
     }
 
-    pub fn apply_reps(&self, rep_atoms: Vec<(AtomView, AtomView)>) -> Self {
-        let net = TensorNetwork {
-            graph: self.state.net.graph.map_nodes_ref(|(_, d)| {
-                d.map_data_ref_self(|a| {
-                    let mut b = a.clone();
-                    for (src, trgt) in rep_atoms.iter() {
-                        b = b.replace(&src.to_pattern()).with(trgt.to_pattern());
-                    }
-                    b
-                    //let b = a.replace_all_multiple(&reps);
-                })
-            }),
-            scalar: self.state.net.scalar.clone(),
-        };
+    pub fn apply_reps(&self, replacements: &[(AtomView, AtomView)]) -> Self {
+        fn evaluate_atom_with_reps(atom: AtomView, replacements: &[(AtomView, AtomView)]) -> Atom {
+            let mut b = atom.to_owned();
+            for (src, trgt) in replacements.iter() {
+                b = b.replace(&src.to_pattern()).with(trgt.to_pattern());
+            }
+            b
+        }
 
         Self {
-            state: Network { net },
+            state: Network {
+                net: self.state.net.map_ref(
+                    |s| evaluate_atom_with_reps(s.as_view(), &replacements),
+                    |d| match d {
+                        ParamOrConcrete::Param(a) => {
+                            ParamOrConcrete::composite(a.map_data_ref(|a| {
+                                evaluate_atom_with_reps(a.as_view(), &replacements)
+                            }))
+                        }
+                        ParamOrConcrete::Concrete(r) => match r {
+                            RealOrComplexTensor::Real(r) => ParamOrConcrete::Concrete(
+                                RealOrComplexTensor::Real(r.map_data_ref(|f| *f)),
+                            ),
+                            RealOrComplexTensor::Complex(c) => ParamOrConcrete::Concrete(
+                                RealOrComplexTensor::Complex(c.map_data_ref(|c| *c)),
+                            ),
+                        },
+                    },
+                ),
+            },
         }
     }
     // pub fn random_concretize_reps(&mut self, seed: usize) -> Vec<Replacement> {
@@ -2914,63 +2350,65 @@ impl Numerator<Network> {
         sample_iterator: Option<&mut PrimeIteratorU64>,
         fully_numerical_substitution: bool,
     ) -> Vec<(Atom, Atom)> {
-        let prime_iterator = if let Some(iterator) = sample_iterator {
-            iterator
-        } else {
-            &mut PrimeIteratorU64::new(1)
-        };
+        // let prime_iterator = if let Some(iterator) = sample_iterator {
+        //     iterator
+        // } else {
+        //     &mut PrimeIteratorU64::new(1)
+        // };
 
-        let mut prime = prime_iterator
-            .map(|u| Atom::new_num(symbolica::domains::integer::Integer::new(u as i64)));
-        let mut reps = vec![];
+        // let mut prime = prime_iterator
+        //     .map(|u| Atom::new_num(symbolica::domains::integer::Integer::new(u as i64)));
+        // let mut reps = vec![];
 
-        if !fully_numerical_substitution {
-            let variable = function!(
-                GS.f_,
-                Atom::new_var(GS.y_),
-                function!(symbol!("cind"), Atom::new_var(GS.x_))
-            );
-            let pat = variable.to_pattern();
+        // if !fully_numerical_substitution {
+        //     let variable = function!(
+        //         GS.f_,
+        //         Atom::new_var(GS.y_),
+        //         function!(symbol!("cind"), Atom::new_var(GS.x_))
+        //     );
+        //     let pat = variable.to_pattern();
 
-            for (_n, d) in self.state.net.graph.nodes.iter() {
-                for (_, a) in d.tensor.iter_flat() {
-                    for m in a.pattern_match(&pat, None, None) {
-                        reps.push(pat.replace_wildcards(&m));
-                    }
-                }
-            }
-        } else {
-            for (_n, d) in self.state.net.graph.nodes.iter() {
-                for (_, a) in d.tensor.iter_flat() {
-                    let all_symbols = a.get_all_symbols(true);
-                    for s in all_symbols {
-                        if s == Atom::I {
-                            continue;
-                        }
-                        let mut found_it = false;
-                        let pat = function!(s, symbol!("x__")).to_pattern();
-                        for m in a.pattern_match(&pat, None, None) {
-                            reps.push(pat.replace_wildcards(&m));
-                            found_it = true;
-                        }
-                        if !found_it {
-                            reps.push(Atom::new_var(s));
-                        }
-                    }
-                }
-            }
-        }
+        //     for (_n, d) in self.state.net.graph.nodes.iter() {
+        //         for (_, a) in d.tensor.iter_flat() {
+        //             for m in a.pattern_match(&pat, None, None) {
+        //                 reps.push(pat.replace_wildcards(&m));
+        //             }
+        //         }
+        //     }
+        // } else {
+        //     for (_n, d) in self.state.net.graph.nodes.iter() {
+        //         for (_, a) in d.tensor.iter_flat() {
+        //             let all_symbols = a.get_all_symbols(true);
+        //             for s in all_symbols {
+        //                 if s == Atom::I {
+        //                     continue;
+        //                 }
+        //                 let mut found_it = false;
+        //                 let pat = function!(s, symbol!("x__")).to_pattern();
+        //                 for m in a.pattern_match(&pat, None, None) {
+        //                     reps.push(pat.replace_wildcards(&m));
+        //                     found_it = true;
+        //                 }
+        //                 if !found_it {
+        //                     reps.push(Atom::new_var(s));
+        //                 }
+        //             }
+        //         }
+        //     }
+        // }
 
-        reps = reps
-            .iter()
-            .collect::<HashSet<_>>()
-            .iter()
-            .map(|&a| a.to_owned())
-            .collect::<Vec<_>>();
-        reps.sort();
-        reps.iter()
-            .map(|a: &Atom| (a.clone(), prime.next().unwrap()))
-            .collect()
+        // reps = reps
+        //     .iter()
+        //     .collect::<HashSet<_>>()
+        //     .iter()
+        //     .map(|&a| a.to_owned())
+        //     .collect::<Vec<_>>();
+        // reps.sort();
+        // reps.iter()
+        //     .map(|a: &Atom| (a.clone(), prime.next().unwrap()))
+        //     .collect()
+        //
+        todo!()
     }
 
     pub fn contract<R>(self, settings: ContractionSettings<R>) -> Result<Numerator<Contracted>> {
@@ -2983,9 +2421,9 @@ impl Numerator<Network> {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
+#[trait_decode(trait = symbolica::state::HasStateMap)]
 pub struct Contracted {
-    #[bincode(with_serde)]
     pub tensor: ParamTensor,
 }
 
@@ -3111,11 +2549,8 @@ impl Contracted {
         let mut pols = Vec::new();
 
         for i in 0..n_edges {
-            let named_structure: NamedStructure<String> = NamedStructure::from_iter(
-                [PhysReps::new_slot(Lorentz {}.into(), 4, i)],
-                "Q".into(),
-                Some(i),
-            );
+            let named_structure: NamedStructure<String> =
+                NamedStructure::from_iter([Lorentz {}.new_slot(4, i)], "Q".into(), Some(i));
             params.extend(
                 named_structure
                     .to_shell()
@@ -3150,11 +2585,8 @@ impl Contracted {
         let mut pols = Vec::new();
 
         for (i, _) in graph.edges.iter().enumerate() {
-            let named_structure: NamedStructure<String> = NamedStructure::from_iter(
-                [PhysReps::new_slot(Lorentz {}.into(), 4, i)],
-                "Q".into(),
-                Some(i),
-            );
+            let named_structure: NamedStructure<String> =
+                NamedStructure::from_iter([Lorentz {}.new_slot(4, i)], "Q".into(), Some(i));
             params.extend(
                 named_structure
                     .to_shell()
@@ -3543,7 +2975,8 @@ impl NumeratorCompileOptions {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
+#[trait_decode(trait = symbolica::state::HasStateMap)]
 pub struct EvaluatorOrientations {
     pub eval_double: LinearizedEvalTensorSet<Complex<F<f64>>, VecStructure>,
     pub eval_quad: LinearizedEvalTensorSet<Complex<F<f128>>, VecStructure>,
@@ -3567,7 +3000,8 @@ impl Debug for EvaluatorOrientations {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
+#[trait_decode(trait = symbolica::state::HasStateMap)]
 pub struct EvaluatorSingle {
     tensor: ParamTensor,
     eval_double: EvalTensor<ExpressionEvaluator<Complex<F<f64>>>, VecStructure>,
@@ -3955,13 +3389,13 @@ impl Debug for EvaluatorSingle {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug)]
+#[derive(Clone, Serialize, Deserialize, Debug, Encode, Decode)]
 pub struct CompiledEvaluator<E> {
     pub state: CompiledState,
     pub evaluator: Option<E>,
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug)]
+#[derive(Clone, Serialize, Deserialize, Debug, Encode, Decode)]
 pub enum CompiledState {
     Enabled,
     Disabled,
@@ -4011,19 +3445,14 @@ impl<E> CompiledEvaluator<E> {
 }
 use symbolica::state::StateMap;
 
-#[derive(Clone, Encode, Decode)]
-#[bincode(decode_context = "StateMap")]
+#[derive(Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
+#[trait_decode(trait = symbolica::state::HasStateMap)]
 pub struct Evaluators {
-    #[bincode(with_serde)]
     orientated: Option<EvaluatorOrientations>,
-    #[bincode(with_serde)]
     pub single: EvaluatorSingle,
     choice: SingleOrCombined,
-    #[bincode(with_serde)]
     orientations: Vec<HedgeVec<Orientation>>,
-    #[bincode(with_serde)]
     pub double_param_values: Vec<Complex<F<f64>>>,
-    #[bincode(with_serde)]
     quad_param_values: Vec<Complex<F<f128>>>,
     model_params_start: usize,
     emr_len: usize,
@@ -4182,8 +3611,8 @@ pub enum NumeratorStateError {
     Any(#[from] eyre::Report),
 }
 
-#[derive(Debug, Clone, Encode, Decode)]
-#[bincode(decode_context = "StateMap")]
+#[derive(Debug, Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
+#[trait_decode(trait = symbolica::state::HasStateMap)]
 #[allow(clippy::large_enum_variant)]
 pub enum PythonState {
     UnInit(Option<UnInit>),
@@ -4350,7 +3779,7 @@ impl NumeratorState for PythonState {
 }
 
 impl GetSingleAtom for PythonState {
-    fn get_single_atom(&self) -> Result<SerializableAtom, NumeratorStateError> {
+    fn get_single_atom(&self) -> Result<Atom, NumeratorStateError> {
         match self {
             PythonState::Global(state) => {
                 if let Some(s) = state {

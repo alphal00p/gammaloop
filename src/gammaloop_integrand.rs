@@ -26,6 +26,7 @@ use crate::{
     Settings,
 };
 use crate::{Precision, StabilityLevelSetting};
+use bincode::Encode;
 use colored::Colorize;
 use itertools::Itertools;
 use momtrop::vector::Vector;
@@ -463,10 +464,10 @@ fn evaluate<I: GraphIntegrand, T: FloatLike>(
     settings: &Settings,
 ) -> Complex<F<T>> {
     if settings.general.debug > 0 {
-        DEBUG_LOGGER.write(
-            "momenta_sample",
-            sample.get_default_sample().possibly_rotated_sample(),
-        );
+        // DEBUG_LOGGER.write(
+        //     "momenta_sample",
+        //     sample.get_default_sample().possibly_rotated_sample(),
+        // );
     }
 
     let zero = sample.zero();
@@ -1321,7 +1322,7 @@ impl GammaLoopIntegrand {
 }
 
 /// Sample whose structure depends on the sampling settings, and enforces these settings.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub enum GammaLoopSample<T: FloatLike> {
     Default(DefaultSample<T>),
     MultiChanneling {
@@ -1474,14 +1475,15 @@ impl<T: FloatLike> GammaLoopSample<T> {
 
 /// Sample which contains loop momenta, external momenta and the jacobian of the parameterization.
 /// External momenta are part of the sample in order to facilitate the use of non-constant externals.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct DefaultSample<T: FloatLike> {
     pub sample: BareSample<T>,
     pub rotated_sample: Option<BareSample<T>>,
     pub uuid: Uuid,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
+// #[trait_decode(trait = symbolica::state::HasStateMap)]
 pub struct BareSample<T: FloatLike> {
     pub loop_moms: Vec<ThreeMomentum<F<T>>>,
     pub external_moms: Vec<FourMomentum<F<T>>>,
@@ -1858,7 +1860,7 @@ impl<T: FloatLike> DefaultSample<T> {
 }
 
 /// This sample is used when importance sampling over graphs is used.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub enum DiscreteGraphSample<T: FloatLike> {
     Default(DefaultSample<T>),
     MultiChanneling {

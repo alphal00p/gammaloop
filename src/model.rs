@@ -15,8 +15,10 @@ use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use serde_yaml::Error;
 use smartstring::{LazyCompact, SmartString};
+use spenso::complex::Complex;
+use spenso::network::library::symbolic::ETS;
 use spenso::parametric::ExpandedCoefficent;
-use spenso::structure::representation::Minkowski;
+use spenso::structure::representation::{LibraryRep, Minkowski};
 use spenso::structure::{
     abstract_index::AbstractIndex, concrete_index::CONCRETEIND, representation::Euclidean,
     VecStructure,
@@ -25,16 +27,8 @@ use spenso::structure::{TensorStructure, ToSymbolic};
 use spenso::{
     contraction::IsZero,
     structure::{
-        representation::Lorentz,
-        representation::PhysReps,
-        representation::RepName,
-        representation::Representation,
-        representation::{
-            BaseRepName, Bispinor, ColorAdjoint, ColorFundamental, ColorSextet, Dual,
-        },
-        slot::DualSlotTo,
-        slot::IsAbstractSlot,
-        slot::Slot,
+        representation::BaseRepName, representation::Lorentz, representation::RepName,
+        representation::Representation, slot::DualSlotTo, slot::IsAbstractSlot, slot::Slot,
     },
 };
 use std::collections::BTreeMap;
@@ -42,9 +36,12 @@ use std::fmt::{Display, Formatter};
 use std::fs;
 use symbolica::coefficient::CoefficientView;
 use symbolica::evaluate::FunctionMap;
+use symbolica_community::physics::algebraic_simplification::representations::{
+    Bispinor, ColorAdjoint, ColorFundamental, ColorSextet,
+};
 
 use eyre::Result;
-use std::ops::Index;
+use std::ops::{Deref, Index};
 use std::path::Path;
 use std::sync::Arc;
 use std::{collections::HashMap, fs::File};
@@ -52,16 +49,60 @@ use symbolica::atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol};
 use symbolica::id::{Pattern, Replacement};
 
 use crate::utils::GS;
-use spenso::complex::Complex;
-use spenso::shadowing::ETS;
+
 use symbolica::domains::float::NumericalFloatLike;
 use symbolica::printer::{AtomPrinter, PrintOptions};
 use symbolica::{function, parse, symbol};
 
+#[derive(Debug, Clone)]
+pub struct ArcPropagator(pub Arc<Propagator>);
+impl Deref for ArcPropagator {
+    type Target = Propagator;
+    fn deref(&self) -> &Self::Target {
+        self.0.deref()
+    }
+}
+
+impl Encode for ArcPropagator {
+    fn encode<E: bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> std::result::Result<(), bincode::error::EncodeError> {
+        Encode::encode(&self.0.name.to_string(), encoder)?;
+        Ok(())
+    }
+}
+
+impl<T: GammaLoopContext> Decode<T> for ArcPropagator {
+    fn decode<D: bincode::de::Decoder<Context = T>>(
+        decoder: &mut D,
+    ) -> std::result::Result<Self, bincode::error::DecodeError> {
+        let name: String = Decode::decode(decoder)?;
+        let context = decoder.context();
+        let model = context.get_model();
+        let prop = model.get_propagator(&name);
+        Ok(ArcPropagator(prop))
+    }
+}
+
 #[derive(Debug, Clone, Eq, Ord, PartialEq, PartialOrd, Hash)]
 pub struct ArcParticle(pub Arc<Particle>);
+
+impl Deref for ArcParticle {
+    type Target = Particle;
+    fn deref(&self) -> &Self::Target {
+        self.0.deref()
+    }
+}
+
 #[derive(Debug, Clone, Eq, Ord, PartialEq, PartialOrd, Hash)]
 pub struct ArcVertexRule(pub Arc<VertexRule>);
+impl Deref for ArcVertexRule {
+    type Target = VertexRule;
+    fn deref(&self) -> &Self::Target {
+        self.0.deref()
+    }
+}
 
 impl Encode for ArcParticle {
     fn encode<E: bincode::enc::Encoder>(
@@ -294,7 +335,8 @@ impl VertexRule {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
+#[trait_decode(trait = symbolica::state::HasStateMap)]
 pub struct VertexSlots {
     pub(crate) edge_slots: Vec<EdgeSlots<Minkowski>>,
     pub coupling_indices: Option<[Slot<Euclidean>; 2]>, //None for external vertices
@@ -318,7 +360,16 @@ impl VertexSlots {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(
+    Debug,
+    Clone,
+    Serialize,
+    Deserialize,
+    Default,
+    bincode_trait_derive::Encode,
+    bincode_trait_derive::Decode,
+)]
+#[trait_decode(trait = symbolica::state::HasStateMap)]
 pub struct DummyIndices {
     pub lorentz_and_spin: Vec<AbstractIndex>,
     pub color: Vec<AbstractIndex>,
@@ -488,8 +539,8 @@ impl VertexRule {
         let j_dim = self.lorentz_structures.len();
 
         let coupling_indices = Some([
-            Euclidean::slot(i_dim, coupling_shift),
-            Euclidean::slot(j_dim, coupling_shift + 1),
+            Euclidean {}.new_slot(i_dim, coupling_shift),
+            Euclidean {}.new_slot(j_dim, coupling_shift + 1),
         ]);
 
         (
@@ -820,15 +871,16 @@ impl PartialEq for Particle {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InOutIndex {
-    incoming: Slot<PhysReps>,
-    outgoing: Slot<PhysReps>,
+    incoming: Slot<LibraryRep>,
+    outgoing: Slot<LibraryRep>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
+#[trait_decode(trait = symbolica::state::HasStateMap)]
 pub struct EdgeSlots<LorRep: RepName> {
     pub lorentz: Vec<Slot<LorRep>>,
     spin: Vec<Slot<Bispinor>>,
-    pub color: Vec<Slot<PhysReps>>,
+    pub color: Vec<Slot<LibraryRep>>,
 }
 
 impl From<EdgeSlots<Minkowski>> for VecStructure {
@@ -837,8 +889,8 @@ impl From<EdgeSlots<Minkowski>> for VecStructure {
             structure: value
                 .lorentz
                 .into_iter()
-                .map(|x| x.into())
-                .chain(value.spin.into_iter().map(|x| x.into()))
+                .map(|x| x.to_lib())
+                .chain(value.spin.into_iter().map(|x| x.to_lib()))
                 .chain(value.color)
                 .collect(),
         }
@@ -869,18 +921,15 @@ impl From<EdgeSlots<Lorentz>> for VecStructure {
             structure: value
                 .lorentz
                 .into_iter()
-                .map(|x| x.into())
-                .chain(value.spin.into_iter().map(|a| a.into()))
+                .map(|x| x.to_lib())
+                .chain(value.spin.into_iter().map(|a| a.to_lib()))
                 .chain(value.color)
                 .collect_vec(),
         }
     }
 }
 
-impl<LorRep: BaseRepName> EdgeSlots<LorRep>
-where
-    PhysReps: From<LorRep>,
-{
+impl<LorRep: BaseRepName> EdgeSlots<LorRep> {
     pub fn kroneker(&self, other: &EdgeSlots<LorRep::Dual>) -> [Atom; 3] {
         let lorentz = self
             .lorentz
@@ -943,7 +992,7 @@ where
     pub fn replacements(&self, id: usize) -> Vec<Replacement> {
         let rhs_lor = <Atom as AtomCore>::to_pattern(&LorRep::slot(4, id).to_symbolic_wrapped());
 
-        let rhs_spin = Bispinor::slot(4, id);
+        let rhs_spin = Bispinor {}.new_slot(4, id);
 
         let rhs_spin = <Atom as AtomCore>::to_pattern(&rhs_spin.to_symbolic_wrapped());
 
@@ -1023,19 +1072,19 @@ impl Particle {
     }
 
     fn lorentz_slots<LR: BaseRepName>(&self, shift: usize) -> (Vec<Slot<LR>>, usize) {
-        let fourd_lor = LR::rep(4);
+        let fourd_lor = LR::selfless_rep(4);
 
         match self.spin {
-            3 => (vec![Representation::new_slot(&fourd_lor, shift)], shift + 1),
+            3 => (vec![fourd_lor.slot(shift)], shift + 1),
             _ => (vec![], shift),
         }
     }
 
     fn spin_slots(&self, shift: usize) -> (Vec<Slot<Bispinor>>, usize) {
-        let fourd_bis: Representation<_> = Bispinor::rep(4);
+        let fourd_bis: Representation<_> = Bispinor {}.new_rep(4);
 
         match self.spin {
-            2 => (vec![fourd_bis.new_slot(shift)], shift + 1),
+            2 => (vec![fourd_bis.slot(shift)], shift + 1),
             _ => (vec![], shift),
         }
     }
@@ -1048,17 +1097,17 @@ impl Particle {
         }
     }
 
-    fn color_slots(&self, shift: usize) -> (Vec<Slot<PhysReps>>, usize) {
-        let rep: Representation<PhysReps> = match self.color {
-            3 => ColorFundamental::rep(3).cast(),
-            -3 => Dual::<ColorFundamental>::rep(3).cast(),
-            6 => ColorSextet::rep(6).cast(),
-            -6 => Dual::<ColorSextet>::rep(6).cast(),
-            8 => ColorAdjoint::rep(8).cast(),
+    fn color_slots(&self, shift: usize) -> (Vec<Slot<LibraryRep>>, usize) {
+        let rep: Representation<LibraryRep> = match self.color {
+            3 => ColorFundamental {}.new_rep(3).cast(),
+            -3 => ColorFundamental {}.dual().new_rep(3).cast(),
+            6 => ColorSextet {}.new_rep(6).cast(),
+            -6 => ColorSextet {}.dual().new_rep(6).cast(),
+            8 => ColorAdjoint {}.new_rep(8).cast(),
             _ => return (vec![], shift),
         };
 
-        (vec![rep.new_slot(shift)], shift + 1)
+        (vec![rep.slot(shift)], shift + 1)
     }
 
     pub fn slots<LR: BaseRepName>(&self, shifts: Shifts) -> (EdgeSlots<LR>, Shifts) {
@@ -2007,7 +2056,7 @@ impl Model {
     pub fn from_serializable_model(serializable_model: SerializableModel) -> Model {
         //initialize the UFO and ETS symbols
 
-        let _ = *UFO;
+        // let _ = *UFO;
         let _ = *ETS;
 
         let mut model: Model = Model::default();

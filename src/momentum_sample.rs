@@ -131,7 +131,7 @@ pub type ExternalThreeMomenta<T> = TiVec<ExternalIndex, ThreeMomentum<T>>;
 pub type ExternalFourMomenta<T> = TiVec<ExternalIndex, FourMomentum<T>>;
 pub type PolarizationVectors<T> = TiVec<ExternalIndex, Polarization<T>>; // should be the same length as #externals
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct BareMomentumSample<T: FloatLike> {
     pub loop_moms: LoopMomenta<F<T>>,
     pub external_moms: ExternalFourMomenta<F<T>>,
@@ -140,7 +140,7 @@ pub struct BareMomentumSample<T: FloatLike> {
     pub orientation: Option<OrientationID>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct MomentumSample<T: FloatLike> {
     pub sample: BareMomentumSample<T>,
     pub rotated_sample: Option<BareMomentumSample<T>>,

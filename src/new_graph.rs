@@ -53,7 +53,7 @@ use crate::{
         BareEdge, BareGraph, BareVertex, DerivedGraphData, EdgeType, HasVertexInfo, Shifts,
         VertexInfo,
     },
-    model::{self, ArcParticle, EdgeSlots, Model, Particle, VertexSlots},
+    model::{self, ArcParticle, ArcPropagator, EdgeSlots, Model, Particle, VertexSlots},
     momentum::{FourMomentum, SignOrZero, Signature, ThreeMomentum},
     momentum_sample::{
         BareMomentumSample, ExternalFourMomenta, ExternalIndex, ExternalThreeMomenta, LoopIndex,
@@ -63,17 +63,16 @@ use crate::{
     numerator::{ufo::preprocess_ufo_spin_wrapped, NumeratorState, PythonState, UnInit},
     signature::{ExternalSignature, LoopExtSignature, LoopSignature, SignatureLike},
     utils::{FloatLike, F, GS},
-    ProcessSettings, GAMMALOOP_NAMESPACE,
+    GammaLoopContext, ProcessSettings, GAMMALOOP_NAMESPACE,
 };
 
-#[derive(Clone, Encode)]
+#[derive(Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
+#[trait_decode(trait = crate::GammaLoopContext)]
 pub struct Graph {
     pub multiplicity: Atom,
-    #[bincode(with_serde)]
-    pub name: SmartString<LazyCompact>,
+    pub name: String,
     pub underlying: HedgeGraph<Edge, Vertex>,
     pub loop_momentum_basis: LoopMomentumBasis,
-    #[bincode(with_serde)]
     pub vertex_slots: TiVec<NodeIndex, VertexSlots>,
     pub external_connections: Option<Vec<ExternalConnection>>,
 }
@@ -117,7 +116,7 @@ impl From<BareGraph> for Graph {
 
         let underlying = value.into();
         Self {
-            name,
+            name: name.to_string(),
             external_connections,
             multiplicity,
             vertex_slots,
@@ -515,7 +514,7 @@ impl Graph {
         underlying: HedgeGraph<Edge, Vertex>,
     ) -> Result<Self> {
         Ok(Self {
-            name,
+            name: name.to_string(),
             multiplicity,
             loop_momentum_basis: underlying.new_lmb()?,
             underlying,
@@ -639,14 +638,15 @@ impl Graph {
     }
 }
 
-#[derive(Debug, Clone, Encode)]
+#[derive(Debug, Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
+#[trait_decode(trait = crate::GammaLoopContext)]
 pub struct Edge {
-    #[bincode(with_serde)]
-    pub name: SmartString<LazyCompact>,
+    // #[bincode(with_serde)]
+    pub name: String,
     pub edge_type: EdgeType,
-    pub propagator: Arc<model::Propagator>,
+    pub propagator: ArcPropagator,
     pub particle: ArcParticle,
-    #[bincode(with_serde)]
+    // #[bincode(with_serde)]
     pub internal_index: Vec<AbstractIndex>,
 }
 
@@ -818,8 +818,8 @@ impl From<BareEdge> for Edge {
         Self {
             edge_type: value.edge_type,
             internal_index: value.internal_index,
-            name: value.name,
-            propagator: value.propagator,
+            name: value.name.into(),
+            propagator: ArcPropagator(value.propagator),
             particle: value.particle,
         }
     }
@@ -828,7 +828,7 @@ impl From<BareEdge> for Edge {
 impl From<BareVertex> for Vertex {
     fn from(value: BareVertex) -> Self {
         Self {
-            name: value.name,
+            name: value.name.into(),
             vertex_info: value.vertex_info,
         }
     }
@@ -1272,10 +1272,11 @@ impl LoopMomentumBasis {
 )]
 pub struct LmbIndex(usize);
 
-#[derive(Debug, Clone, Encode)]
+#[derive(Debug, Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
+#[trait_decode(trait = GammaLoopContext)]
 pub struct Vertex {
-    #[bincode(with_serde)]
-    pub name: SmartString<LazyCompact>,
+    // #[bincode(with_serde)]
+    pub name: String,
     pub vertex_info: VertexInfo,
 }
 
@@ -1337,7 +1338,10 @@ impl From<BareGraph> for HedgeGraph<Edge, Vertex> {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Encode)]
+#[derive(
+    Debug, Copy, Clone, PartialEq, Eq, bincode_trait_derive::Encode, bincode_trait_derive::Decode,
+)]
+#[trait_decode(trait = symbolica::state::HasStateMap)]
 pub struct ExternalConnection {
     pub incoming_index: ExternalIndex,
     pub outgoing_index: ExternalIndex,

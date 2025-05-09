@@ -16,12 +16,16 @@ use rug::ops::{CompleteRound, Pow};
 use rug::Float;
 use serde::{Deserialize, Deserializer, Serialize};
 use spenso::complex::SymbolicaComplex;
+use spenso::network::library::symbolic::{ExplicitKey, TensorLibrary};
+use spenso::network::library::TensorLibraryData;
+use spenso::parametric::MixedTensor;
 use spenso::{
     complex::{Complex, R},
     contraction::{RefOne, RefZero},
     upgrading_arithmetic::TrySmallestUpgrade,
 };
 use symbolica::atom::Symbol;
+use symbolica::coefficient::Coefficient;
 use symbolica::domains::float::{
     ConstructibleFloat, NumericalFloatLike, RealNumberLike, SingleFloat,
 };
@@ -38,6 +42,11 @@ use std::sync::LazyLock;
 use std::time::Duration;
 use symbolica::domains::float::Real;
 use symbolica::domains::rational::Rational;
+use symbolica_community::physics::tensors::library::{
+    gamma5_weyl_data, gamma_data_weyl, proj_m_data_weyl, proj_p_data_weyl, SpensorLibrary,
+    TensorNamespace,
+};
+use symbolica_community::physics::tensors::structure::SpensoStucture;
 // use symbolica::domains::Field;
 use symbolica::numerical_integration::Sample;
 use typed_index_collections::{TiSlice, TiVec};
@@ -170,7 +179,7 @@ impl<const N: u32> Rem<&VarFloat<N>> for &VarFloat<N> {
     type Output = VarFloat<N>;
 
     fn rem(self, rhs: &VarFloat<N>) -> Self::Output {
-        (&self.float % &rhs.float).complete(N as i64).into()
+        (&self.float % &rhs.float).complete(N).into()
     }
 }
 
@@ -228,7 +237,7 @@ impl<const N: u32> std::ops::Mul<VarFloat<N>> for &VarFloat<N> {
     type Output = VarFloat<N>;
 
     fn mul(self, rhs: VarFloat<N>) -> Self::Output {
-        (&self.float * &rhs.float).complete(N as i64).into()
+        (&self.float * &rhs.float).complete(N).into()
     }
 }
 
@@ -236,7 +245,7 @@ impl<const N: u32> std::ops::Mul<&VarFloat<N>> for &VarFloat<N> {
     type Output = VarFloat<N>;
 
     fn mul(self, rhs: &VarFloat<N>) -> Self::Output {
-        (&self.float * &rhs.float).complete(N as i64).into()
+        (&self.float * &rhs.float).complete(N).into()
     }
 }
 
@@ -274,7 +283,7 @@ impl<const N: u32> std::ops::Add<VarFloat<N>> for &VarFloat<N> {
     type Output = VarFloat<N>;
 
     fn add(self, rhs: VarFloat<N>) -> Self::Output {
-        (&self.float + &rhs.float).complete(N as i64).into()
+        (&self.float + &rhs.float).complete(N).into()
     }
 }
 
@@ -282,7 +291,7 @@ impl<const N: u32> std::ops::Add<&VarFloat<N>> for &VarFloat<N> {
     type Output = VarFloat<N>;
 
     fn add(self, rhs: &VarFloat<N>) -> Self::Output {
-        (&self.float + &rhs.float).complete(N as i64).into()
+        (&self.float + &rhs.float).complete(N).into()
     }
 }
 
@@ -320,7 +329,7 @@ impl<const N: u32> std::ops::Sub<VarFloat<N>> for &VarFloat<N> {
     type Output = VarFloat<N>;
 
     fn sub(self, rhs: VarFloat<N>) -> Self::Output {
-        (&self.float - &rhs.float).complete(N as i64).into()
+        (&self.float - &rhs.float).complete(N).into()
     }
 }
 
@@ -328,7 +337,7 @@ impl<const N: u32> std::ops::Sub<&VarFloat<N>> for &VarFloat<N> {
     type Output = VarFloat<N>;
 
     fn sub(self, rhs: &VarFloat<N>) -> Self::Output {
-        (&self.float - &rhs.float).complete(N as i64).into()
+        (&self.float - &rhs.float).complete(N).into()
     }
 }
 
@@ -366,7 +375,7 @@ impl<const N: u32> Div<VarFloat<N>> for &VarFloat<N> {
     type Output = VarFloat<N>;
 
     fn div(self, rhs: VarFloat<N>) -> Self::Output {
-        (&self.float / &rhs.float).complete(N as i64).into()
+        (&self.float / &rhs.float).complete(N).into()
     }
 }
 
@@ -374,7 +383,7 @@ impl<const N: u32> Div<&VarFloat<N>> for &VarFloat<N> {
     type Output = VarFloat<N>;
 
     fn div(self, rhs: &VarFloat<N>) -> Self::Output {
-        (&self.float / &rhs.float).complete(N as i64).into()
+        (&self.float / &rhs.float).complete(N).into()
     }
 }
 
@@ -404,7 +413,7 @@ impl<const N: u32> std::ops::Neg for &VarFloat<N> {
     type Output = VarFloat<N>;
 
     fn neg(self) -> Self::Output {
-        (-&self.float).complete(N as i64).into()
+        (-&self.float).complete(N).into()
     }
 }
 
@@ -436,9 +445,7 @@ impl<const N: u32> RefOne for VarFloat<N> {
 
 impl<const N: u32> NumericalFloatLike for VarFloat<N> {
     fn mul_add(&self, a: &Self, b: &Self) -> Self {
-        (&self.float * &a.float + &b.float)
-            .complete(N as i64)
-            .into()
+        (&self.float * &a.float + &b.float).complete(N).into()
     }
 
     // fn norm(&self) -> Self {
@@ -480,7 +487,7 @@ impl<const N: u32> NumericalFloatLike for VarFloat<N> {
     }
 
     fn pow(&self, e: u64) -> Self {
-        rug::ops::Pow::pow(&self.float, e).complete(N as i64).into()
+        rug::ops::Pow::pow(&self.float, e).complete(N).into()
     }
 
     fn sample_unit<R: Rng + ?Sized>(&self, rng: &mut R) -> Self {
@@ -568,7 +575,7 @@ impl<const N: u32> Real for VarFloat<N> {
     }
 
     fn log(&self) -> Self {
-        self.float.ln_ref().complete(N as i64).into()
+        self.float.ln_ref().complete(N).into()
     }
     fn norm(&self) -> Self {
         self.float.clone().abs().into()
@@ -851,6 +858,22 @@ pub trait FloatLike:
     Debug, Clone, PartialEq, PartialOrd, Copy, Default, Serialize, Deserialize, Encode, Decode, Hash,
 )]
 pub struct F<T: FloatLike>(pub T);
+
+impl<T: TensorLibraryData + FloatLike> TensorLibraryData for F<T> {
+    fn one() -> Self {
+        F(<T as TensorLibraryData>::one())
+    }
+
+    fn zero() -> Self {
+        F(<T as TensorLibraryData>::zero())
+    }
+}
+
+impl From<F<f64>> for Coefficient {
+    fn from(value: F<f64>) -> Self {
+        Coefficient::from(value.0)
+    }
+}
 
 impl<T: FloatLike> R for F<T> {}
 
@@ -1543,7 +1566,6 @@ pub fn to_str_expression(expression: &Atom) -> String {
                 multiplication_operator: '*',
                 square_brackets_for_function: false,
                 num_exp_as_superscript: false,
-                latex: false,
                 double_star_for_exponentiation: false,
                 precision: None,
                 color_namespace: true,
@@ -3245,6 +3267,26 @@ pub struct GammaloopSymbols {
     pub num: Symbol,
     pub den: Symbol,
 }
+
+pub static TENSORLIB: LazyLock<TensorLibrary<MixedTensor<F<f64>, ExplicitKey>>> =
+    LazyLock::new(|| {
+        let mut weyl = TensorLibrary::new();
+
+        weyl.update_ids();
+        let gamma_key = SpensoStucture::gamma4D(TensorNamespace::Weyl).structure;
+        weyl.insert_explicit(gamma_data_weyl(gamma_key, F(1.), F(0.)).into());
+
+        let gamma5_key = SpensoStucture::gamma5(TensorNamespace::Weyl).structure;
+        weyl.insert_explicit(gamma5_weyl_data(gamma5_key, F(1.), F(0.)).into());
+
+        let projm_key = SpensoStucture::projm(TensorNamespace::Weyl).structure;
+        weyl.insert_explicit(proj_m_data_weyl(projm_key, F(1.), F(0.)).into());
+
+        let projp_key = SpensoStucture::projp(TensorNamespace::Weyl).structure;
+        weyl.insert_explicit(proj_p_data_weyl(projp_key, F(1.), F(0.)).into());
+
+        weyl
+    });
 
 pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
     top: symbol!("Top"),

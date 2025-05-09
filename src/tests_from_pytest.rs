@@ -44,7 +44,8 @@ use colored::Colorize;
 use indexmap::set::Iter;
 use itertools::{FormatWith, Itertools};
 use nalgebra::Point;
-use rand::distributions::Standard;
+use rand::distr::StandardUniform;
+// use rand::distributions::Standard;
 use rand::prelude::Distribution;
 use ref_ops::RefNeg;
 use spenso::data::GetTensorData;
@@ -59,7 +60,7 @@ use rayon::prelude::IndexedParallelIterator;
 use rayon::vec;
 use serde::{self, Deserialize, Serialize};
 use spenso::complex::{Complex, SymbolicaComplex};
-use spenso::network::TensorNetwork;
+
 use spenso::structure::{representation::Minkowski, representation::RepName, slot::IsAbstractSlot};
 use statrs::function::evaluate;
 use std::borrow::Borrow;
@@ -139,7 +140,7 @@ pub fn sample_generator<T: FloatLike>(
     helicities: Option<Vec<Helicity>>,
 ) -> MomentumSample<T>
 where
-    Standard: Distribution<T> + Distribution<f64>,
+    StandardUniform: Distribution<T> + Distribution<f64>,
 {
     let mut rng = SmallRng::seed_from_u64(seed);
 

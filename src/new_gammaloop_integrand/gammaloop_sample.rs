@@ -43,7 +43,7 @@ fn unwrap_sample_impl<T: FloatLike>(
 }
 
 /// Sample whose structure depends on the sampling settings, and enforces these settings.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub enum GammaLoopSample<T: FloatLike> {
     Default(MomentumSample<T>),
     MultiChanneling {
@@ -218,7 +218,7 @@ impl<T: FloatLike> GammaLoopSample<T> {
 }
 
 /// This sample is used when importance sampling over graphs is used.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub enum DiscreteGraphSample<T: FloatLike> {
     Default(MomentumSample<T>),
     MultiChanneling {

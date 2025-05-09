@@ -46,10 +46,11 @@ similar.opt-level = 3
 [dependencies]
 # These will be patched
 symbolica = { version = "0.16.0",features = ["serde","bincode"] }
+symbolica_community = {git = "https://github.com/alphal00p/symbolica-community",rev="fb7863a0e6dddb26fdc1e4cbcfc4ab698b306342",features=["bincode"]}
 
-spenso = { git = "https://github.com/alphal00p/spenso", rev="04095a4035d78b2ee7b28d87f7655020ef24e93d" ,features= ["shadowing"] }
 
-#spenso = { version = "0.4.0", features = ["shadowing"] }
+
+spenso = { version = "0.4.1", features = ["shadowing"] }
 #linnet = { version = "0.2.0", features = [
 #    # "symbolica",
 #    "drawing",
@@ -69,11 +70,12 @@ lorentz_vector = { git = "https://github.com/benruijl/lorentz_vector", branch = 
     "hyperdual_support",
 ] }
 hyperdual = { git = "https://gitlab.com/benruijl/hyperdual.git" }
-rand = { version = "0.8", features = ["small_rng"] }
+rand = { version = "0.9", features = ["small_rng"] }
 rayon = "1.5"
 tabled = "0.7"
 indicatif = { version = "0.17.9", features = ["improved_unicode", "rayon"] }
-
+# bincode-trait-derive = {path="../bincode-trait-derive"}
+bincode-trait-derive = {git = "https://github.com/alphal00p/bincode-trait-derive.git",rev="c092cba7f80c867fd5646cf68312e1f4f9010658"}
 enum_dispatch = "*"
 git-version = "0.3"
 colored = "*"
@@ -84,9 +86,9 @@ itertools = "0.8"
 smartstring = { version = "*", features = ["serde"] }
 log = { version = "*", features = ["release_max_level_debug"] }
 env_logger = "*"
-pyo3-log = { version = "0.11.0", optional = true }
+pyo3-log = { version = "0.12.0", optional = true }
 nalgebra = "0.32.3"
-rug = { version = "1.22.0", features = ["serde"] }
+rug = { version = "1.27.0", features = ["serde"] }
 clarabel = "0"
 # petgraph = "0.6.4"
 indexmap = "2.2.2"
@@ -133,7 +135,7 @@ chrono = "0.4.39"
 [dependencies.pyo3]
 features = ["abi3", "abi3-py37"]
 optional = true
-version = "0.21"
+version = "0.24"
 
 [build-dependencies]
 pyo3-build-config = "*"
@@ -148,7 +150,7 @@ name = "cli"
 # required-features = ["binary"]
 bench = false
 [features]
-default = ["python_api"]
+default = []
 extension-module = ["pyo3/extension-module"]
 higher_loops = []
 fjcore = []
@@ -162,8 +164,12 @@ no_python = []
 [patch.crates-io]
 # symbolica = { path = "./python/gammaloop/dependencies/symbolica" }
 # symbolica = {git = "https://github.com/alphal00p/symbolica", branch = "main"}
-symbolica={git="https://github.com/benruijl/symbolica",rev="330874ad3307eba09465fb84f5651d2a3d6c3fbb"}
-# spenso = { git = "https://github.com/alphal00p/spenso", rev = "04095a4035d78b2ee7b28d87f7655020ef24e93d" }
-# # spenso = { path = "../spenso" }
-[patch."https://github.com/alphal00p/linnet"]
-# linnet = { path = "../../linnet" }
+# symbolica={git="https://github.com/benruijl/symbolica",rev="a714571c8c8ee1a292237eb3ef1bc8123a4d7db4"}
+symbolica = { git = "https://github.com/alphal00p/symbolica", rev = "8ec5f90129ef74809b48de85354f02347c522f5e" }
+# symbolica = {path="../symbolica"}
+spenso={git="https://github.com/alphal00p/spenso",rev="9f8fc504cfab7cf5cae15d5d2671362470f33e06"}
+spenso-macros = {git="https://github.com/alphal00p/spenso",rev="9f8fc504cfab7cf5cae15d5d2671362470f33e06",features=["shadowing"],optional=true}
+# spenso = { path = "../spenso/spenso" }
+# linnet = { path = "../linnet" }
+linnet = {git ="https://github.com/alphal00p/linnet", rev = "d8636fbfed7f924ea240fcb73783f1845a10ba91"}
+# symbolica-community={path="../symbolica-community"}

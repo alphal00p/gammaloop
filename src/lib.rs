@@ -75,6 +75,7 @@ use std::fs::File;
 use std::sync::atomic::AtomicBool;
 use symbolica::evaluate::CompileOptions;
 use symbolica::evaluate::InlineASM;
+use symbolica::state::HasStateMap;
 use symbolica::state::StateMap;
 use utils::FloatLike;
 use utils::F;
@@ -86,8 +87,8 @@ pub static INTERRUPTED: AtomicBool = AtomicBool::new(false);
 pub const GAMMALOOP_NAMESPACE: &str = "GL";
 pub const MAX_CORES: usize = 1000;
 
-pub trait GammaLoopContext {
-    fn get_state_map(&mut self) -> &mut StateMap;
+pub trait GammaLoopContext: HasStateMap {
+    // fn get_state_map(&mut self) -> &mut StateMap;
     fn get_model(&mut self) -> &mut Model;
 }
 
