@@ -248,7 +248,8 @@ fn gammalooprs(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
 
 pub struct OutputOptions {}
 
-#[pyclass(name = "Worker")]
+/// There should only be 1 worker per instance of gammaloop.
+#[pyclass(name = "Worker", unsendable)]
 pub struct PythonWorker {
     pub model: Model,
     pub cross_sections: CrossSectionList,
@@ -380,7 +381,7 @@ pub struct PyFeynGenFilters {
     pub filters: Vec<FeynGenFilter>,
 }
 impl<'a> FromPyObject<'a> for PyFeynGenFilters {
-    fn extract(ob: &'a pyo3::PyAny) -> PyResult<Self> {
+    fn extract_bound(ob: &Bound<'a, PyAny>) -> PyResult<Self> {
         if let Ok(a) = ob.extract::<PyFeynGenFilters>() {
             Ok(PyFeynGenFilters { filters: a.filters })
         } else {
@@ -466,7 +467,7 @@ pub struct PyFeynGenOptions {
     pub options: FeynGenOptions,
 }
 impl<'a> FromPyObject<'a> for PyFeynGenOptions {
-    fn extract(ob: &'a pyo3::PyAny) -> PyResult<Self> {
+    fn extract_bound(ob: &Bound<'a, PyAny>) -> PyResult<Self> {
         if let Ok(a) = ob.extract::<PyFeynGenOptions>() {
             Ok(PyFeynGenOptions { options: a.options })
         } else {
@@ -936,10 +937,7 @@ impl PythonWorker {
         }
 
         for process in self.process_list.processes.iter_mut() {
-            match &process.collection {
-                &ProcessCollection::Amplitudes(&mut amplitude_list) => {}
-                &ProcessCollection::CrossSections(_) => {}
-            }
+            todo!()
         }
 
         if n_exported != amplitude_names.len() {
