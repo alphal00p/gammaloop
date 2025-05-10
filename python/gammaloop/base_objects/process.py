@@ -49,6 +49,8 @@ class Process(object):
             particle_veto=(None if self.particle_vetos is None else [
                 p.get_pdg_code() for p in self.particle_vetos]),
             self_energy_filter=self_energy_filter,
+            sewed_filter=sewed_filter,
+            perturbative_orders=perturbative_orders,
             tadpoles_filter=tadpole_filter,
             zero_snails_filter=zero_snail_filter,
             max_number_of_bridges=max_n_bridges,
@@ -80,7 +82,8 @@ class Process(object):
             perturbative_orders=self.perturbative_orders,
             coupling_orders=cross_section_orders,
             loop_count_range=cross_section_loop_count,
-            fermion_loop_count_range=fermion_loop_count_range
+            fermion_loop_count_range=fermion_loop_count_range,
+            factorized_loop_topologies_count_range=factorized_loop_topologies_count_range
         )
 
     def process_shell_name(self, short=True) -> str:
