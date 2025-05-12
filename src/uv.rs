@@ -8,7 +8,7 @@ use std::{
 
 use crate::{graph::VertexInfo, momentum::Sign, new_graph::LoopMomentumBasis, utils::GS};
 use ahash::{AHashMap, AHashSet};
-use bitvec::{slice::IterOnes, vec::BitVec};
+use bitvec::vec::BitVec;
 use color_eyre::Report;
 use eyre::eyre;
 use indexmap::IndexMap;
@@ -34,7 +34,10 @@ use symbolica::{
 };
 use trie_rs::{try_collect::TryFromIterator, Trie, TrieBuilder};
 
-use linnet::half_edge::{builder::HedgeGraphBuilder, HedgeGraph, NodeIndex, PowersetIterator};
+use linnet::half_edge::{
+    builder::HedgeGraphBuilder, involution::EdgeIndex, subgraph::ModifySubgraph,
+    tree::SimpleTraversalTree, HedgeGraph, NodeIndex, PowersetIterator,
+};
 use linnet::half_edge::{
     involution::Flow,
     subgraph::{HedgeNode, InternalSubGraph, SubGraph, SubGraphOps},
@@ -327,10 +330,49 @@ impl UVNode {
 }
 
 #[derive(Clone, Debug)]
-pub struct UVGraph(HedgeGraph<UVEdge, UVNode>);
+pub struct UVGraph {
+    hedge_graph: HedgeGraph<UVEdge, UVNode>,
+    cut_edges: BitVec,
+}
+
+impl Deref for UVGraph {
+    type Target = HedgeGraph<UVEdge, UVNode>;
+    fn deref(&self) -> &Self::Target {
+        &self.hedge_graph
+    }
+}
 
 #[allow(dead_code)]
 impl UVGraph {
+    pub fn select_lmb(&self, subgraph: &InternalSubGraph) -> Vec<EdgeIndex> {
+        let n_loops = self.n_loops(subgraph);
+
+        let cut_edges_in_subgraph = subgraph.filter.intersection(&self.cut_edges);
+
+        for v in self
+            .iter_edges(&cut_edges_in_subgraph)
+            .combinations(n_loops)
+        {
+            let mut cut_subgraph = subgraph.filter.clone();
+            let mut lmb = vec![];
+
+            for (p, e, _) in v {
+                cut_subgraph.sub(p);
+                lmb.push(e);
+            }
+
+            if self.count_connected_components(&cut_subgraph) == 1 {
+                return lmb;
+            }
+        }
+
+        panic!(
+            "No lmb found for {} and cut edges {}",
+            self.dot(subgraph),
+            self.dot(&self.cut_edges)
+        )
+    }
+
     pub fn from_graph(graph: &BareGraph) -> Self {
         let mut excised: BitVec = graph.hedge_representation.empty_subgraph();
 
@@ -350,7 +392,19 @@ impl UVGraph {
             |_, _, _, e| e.map(|d| UVEdge::from_edge(&graph.edges[*d], *d, graph)),
         );
 
-        UVGraph(excised)
+        let cut_edges = SimpleTraversalTree::depth_first_traverse(
+            &excised,
+            &excised.full_filter(),
+            &NodeIndex(0),
+            None,
+        )
+        .unwrap()
+        .tree_subgraph;
+
+        UVGraph {
+            hedge_graph: excised,
+            cut_edges,
+        }
     }
 
     // pub fn edge_id(&self, g: &BareGraph, id: usize) -> EdgeIndex {
@@ -776,6 +830,7 @@ impl Wood {
             let cs = graph.0.connected_components(&sg.data);
 
             if cs.len() > 1 {
+                // sg is a disjoint union of spinneys (at the level of half-edges) (strongly disjoint)
                 let mut union = vec![];
 
                 for &c in sg.parents.iter() {
@@ -784,6 +839,7 @@ impl Wood {
                         let comp =
                             InternalSubGraph::cleaned_filter_optimist(comp.clone(), &graph.0);
                         if comp == poset.nodes[c].data {
+                            // find the components in the wood that this union is made of
                             union.push(c);
                             is_in += 1;
                         }
@@ -812,18 +868,22 @@ impl Wood {
         dag: &mut DAG<Approximation, DagNode, ()>,
         unions: &mut SecondaryMap<PosetNode, Option<Vec<(PosetNode, Option<DagNode>)>>>,
         root: PosetNode,
+        cut_edges: &BitVec,
     ) -> DagNode {
         let mut search_front = VecDeque::new();
+
         let tree_root = dag.add_node(Approximation::new(
             self.poset.data(root).clone(),
             graph,
             root,
+            vec![],
         ));
         search_front.push_front((root, tree_root));
 
         while let Some((node, parent)) = search_front.pop_front() {
             for c in &self.poset.nodes[node].children {
                 if let Some(tagged_union) = unions.get_mut(*c) {
+                    // Is this node a disjoint union of spinneys
                     if let Some(mut union) = tagged_union.take() {
                         let mut all_supplied = true;
                         for (p, d) in &mut union {
@@ -850,8 +910,13 @@ impl Wood {
                         }
                     }
                 } else {
-                    let child =
-                        dag.add_node(Approximation::new(self.poset.data(*c).clone(), graph, *c));
+                    let lmb = graph.select_lmb(cut_edges, self.poset.data(*c));
+                    let child = dag.add_node(Approximation::new(
+                        self.poset.data(*c).clone(),
+                        graph,
+                        *c,
+                        lmb,
+                    ));
                     dag.add_edge(parent, child);
                     search_front.push_front((*c, child));
                 }
@@ -860,7 +925,7 @@ impl Wood {
         tree_root
     }
 
-    pub fn unfold_impl(&self, graph: &UVGraph) -> Forest {
+    pub fn unfold_impl(&self, graph: &UVGraph, cut_edges: &BitVec) -> Forest {
         let mut dag: DAG<Approximation, DagNode, ()> = DAG::new();
 
         let root = self.poset.minimum().unwrap();
@@ -872,7 +937,7 @@ impl Wood {
             unions.insert(p, Some(union));
         }
 
-        let root = self.unfold_bfs(graph, &mut dag, &mut unions, root);
+        let root = self.unfold_bfs(graph, &mut dag, &mut unions, root, cut_edges);
 
         Forest {
             dag,
@@ -1013,6 +1078,7 @@ pub struct Approximation {
     subgraph: InternalSubGraph,
     orig: PosetNode,
     dod: i32,
+    lmb: Vec<EdgeIndex>,
     pub approx_op: ApproxOp,
     pub simple_approx: Option<SimpleApprox>,
 }
@@ -1045,11 +1111,17 @@ impl Approximation {
         expr
     }
 
-    pub fn new(spinney: InternalSubGraph, graph: &UVGraph, orig: PosetNode) -> Approximation {
+    pub fn new(
+        spinney: InternalSubGraph,
+        graph: &UVGraph,
+        orig: PosetNode,
+        lmb: Vec<EdgeIndex>,
+    ) -> Approximation {
         Approximation {
             dod: graph.dod(&spinney),
             orig,
             subgraph: spinney,
+            lmb,
             simple_approx: None,
             approx_op: ApproxOp::NotComputed,
         }
