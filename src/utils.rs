@@ -3259,6 +3259,7 @@ fn complex_compare() {
 }
 
 pub struct GammaloopSymbols {
+    pub loop_mom: Symbol,
     pub ubar: Symbol,
     pub vbar: Symbol,
     pub v: Symbol,
@@ -3340,6 +3341,7 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
     v: symbol!("v"),
     u: symbol!("u"),
     emr_mom: symbol!("Q"),
+    loop_mom: symbol!("K"),
     epsilon: symbol!("ϵ"),
     color_wrap: symbol!("color"),
     epsilonbar: symbol!("ϵbar"),
