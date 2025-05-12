@@ -68,11 +68,17 @@ fn manual() {
 
     builder.add_edge(node2, node1, edge2, false);
 
-    let uv_graph = UVGraph(builder.build());
+    let hedge_graph = builder.build();
+    let cut_edges = hedge_graph.cycle_basis().1.tree_subgraph;
+
+    let uv_graph = UVGraph {
+        hedge_graph,
+        cut_edges,
+    };
     println!(
         "{}",
-        uv_graph.0.dot_impl(
-            &uv_graph.0.full_filter(),
+        uv_graph.dot_impl(
+            &uv_graph.full_filter(),
             "",
             &|a| Some(a.den.to_string()),
             &|n| Some(n.num.to_string())
@@ -90,6 +96,8 @@ fn manual() {
 
     println!("unfolded : {}", ufold.show_structure(&uv_graph).unwrap());
     println!("graph: {}", ufold.graphs());
+
+    println!("{}", ufold.expr(&uv_graph).unwrap());
 }
 
 #[test]
@@ -144,7 +152,7 @@ fn easy() {
 
     let uv_graph = UVGraph::from_graph(&bare_graph);
 
-    println!("{}", uv_graph.0.base_dot());
+    println!("{}", uv_graph.base_dot());
 
     let wood = uv_graph.wood();
 
@@ -179,24 +187,24 @@ fn lbl() {
 
     let uv_graph = UVGraph::from_graph(&graph.bare_graph);
 
-    insta::assert_snapshot!("lbl_dot", uv_graph.0.base_dot());
+    insta::assert_snapshot!("lbl_dot", uv_graph.base_dot());
 
     let lmb = graph.bare_graph.loop_momentum_basis.clone();
 
     // let cycles = uv_graph.cycle_basis_from_lmb(&lmb);
 
-    // let all_cycles = uv_graph.0.read_tarjan();
+    // let all_cycles = uv_graph.read_tarjan();
     // assert_eq!(all_cycles.len(), 1);
 
     // for cycle in all_cycles {
-    // println!("{}", uv_graph.0.dot(&cycle));
+    // println!("{}", uv_graph.dot(&cycle));
     // }
 
     // insta::assert_ron_snapshot!("lbl_cycles", cycles);
 
     let uv_graph = UVGraph::from_graph(&graph.bare_graph);
 
-    println!("tbt_dot{}", uv_graph.0.base_dot());
+    println!("tbt_dot{}", uv_graph.base_dot());
 
     let wood = uv_graph.wood();
 
@@ -220,7 +228,7 @@ fn tbt() {
 
     let uv_graph = UVGraph::from_graph(&graph.bare_graph);
 
-    println!("tbt_dot{}", uv_graph.0.base_dot());
+    println!("tbt_dot{}", uv_graph.base_dot());
 
     let wood = uv_graph.wood();
 
@@ -285,7 +293,7 @@ fn bugblatter_forest() {
 
     let uv_graph = UVGraph::from_graph(&bare_graph);
 
-    println!("{}", uv_graph.0.base_dot());
+    println!("{}", uv_graph.base_dot());
 
     let wood = uv_graph.wood();
 
@@ -342,7 +350,7 @@ fn kaapo_triplering() {
 
     let uv_graph = UVGraph::from_graph(&bare_graph);
 
-    // println!("{}", uv_graph.0.base_dot());
+    // println!("{}", uv_graph.base_dot());
 
     let wood = uv_graph.wood();
     assert_eq!(26, wood.n_spinneys());
@@ -403,7 +411,7 @@ fn kaapo_quintic_scalar() {
 
     let uv_graph = UVGraph::from_graph(&bare_graph);
 
-    println!("{}", uv_graph.0.base_dot());
+    println!("{}", uv_graph.base_dot());
 
     let wood = uv_graph.wood();
 

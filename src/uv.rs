@@ -1,6 +1,6 @@
 use std::{
     cmp::Ordering,
-    collections::VecDeque,
+    collections::{HashMap, VecDeque},
     fmt::{self, Display, Formatter},
     hash::Hash,
     ops::{Deref, Index},
@@ -35,8 +35,11 @@ use symbolica::{
 use trie_rs::{try_collect::TryFromIterator, Trie, TrieBuilder};
 
 use linnet::half_edge::{
-    builder::HedgeGraphBuilder, involution::EdgeIndex, subgraph::ModifySubgraph,
-    tree::SimpleTraversalTree, HedgeGraph, NodeIndex, PowersetIterator,
+    builder::HedgeGraphBuilder,
+    involution::{EdgeIndex, Hedge, HedgePair, SignOrZero},
+    subgraph::{cycle::SignedCycle, ModifySubgraph},
+    tree::SimpleTraversalTree,
+    EdgeAccessors, HedgeGraph, NodeIndex, PowersetIterator,
 };
 use linnet::half_edge::{
     involution::Flow,
@@ -276,7 +279,7 @@ impl PartialOrd for BitFilter {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-struct UVEdge {
+pub struct UVEdge {
     og_edge: usize,
     dod: i32,
     num: Atom,
@@ -301,7 +304,7 @@ impl UVEdge {
 }
 
 #[derive(Clone, Debug)]
-struct UVNode {
+pub struct UVNode {
     dod: i32,
     num: Atom,
     color: Option<ParamTensor>,
@@ -346,6 +349,10 @@ impl Deref for UVGraph {
 impl UVGraph {
     pub fn select_lmb(&self, subgraph: &InternalSubGraph) -> Vec<EdgeIndex> {
         let n_loops = self.n_loops(subgraph);
+
+        if n_loops == 0 {
+            return vec![];
+        }
 
         let cut_edges_in_subgraph = subgraph.filter.intersection(&self.cut_edges);
 
@@ -484,9 +491,9 @@ impl UVGraph {
     // }
 
     fn spinneys(&self) -> AHashSet<InternalSubGraph> {
-        println!("{}", self.0.base_dot());
+        println!("{}", self.base_dot());
         let mut spinneys: AHashSet<_> = InternalSubGraph::all_ops_iterative_filter_map(
-            &self.0.all_cycle_sym_diffs().unwrap(),
+            &self.all_cycle_sym_diffs().unwrap(),
             &|a, b| a.union(b),
             &|union| {
                 if self.dod(&union) >= 0 {
@@ -497,7 +504,7 @@ impl UVGraph {
             },
         );
 
-        spinneys.insert(self.0.empty_subgraph());
+        spinneys.insert(self.empty_subgraph());
 
         println!("n_spinneys:{}", spinneys.len());
         spinneys
@@ -507,37 +514,38 @@ impl UVGraph {
         Wood::from_spinneys(self.spinneys(), self)
     }
 
-    fn n_loops(&self, subgraph: &InternalSubGraph) -> usize {
-        if let Some(loop_count) = subgraph.loopcount {
-            // println!("found loop_count nloops: {}", loop_count);
-            loop_count
-        } else {
-            self.0.cyclotomatic_number(subgraph)
-        }
+    fn n_loops<S: SubGraph>(&self, subgraph: &S) -> usize {
+        // if let Some(loop_count) = subgraph.loopcount {
+        //     // println!("found loop_count nloops: {}", loop_count);
+        //     loop_count
+        // } else {
+        self.cyclotomatic_number(subgraph)
+        // }
     }
 
-    fn dod(&self, subgraph: &InternalSubGraph) -> i32 {
+    fn dod<S: SubGraph>(&self, subgraph: &S) -> i32 {
         let mut dod: i32 = 4 * self.n_loops(subgraph) as i32;
         // println!("nloops: {}", dod / 4);
 
-        for e in self.0.iter_internal_edge_data(subgraph) {
+        for e in self.iter_internal_edge_data(subgraph) {
             dod += e.data.dod;
         }
 
-        for (_, _, n) in self.0.iter_node_data(subgraph) {
+        for (_, _, n) in self.iter_node_data(subgraph) {
             dod += n.dod;
         }
 
         dod
     }
 
-    fn numerator(&self, subgraph: &InternalSubGraph) -> SerializableAtom {
+    fn numerator<S: SubGraph>(&self, subgraph: &S) -> SerializableAtom {
         let mut num = Atom::new_num(1);
-        for (_, _, n) in self.0.iter_node_data(subgraph) {
+
+        for (_, _, n) in self.iter_node_data(subgraph) {
             num = num * &n.num;
         }
 
-        for e in self.0.iter_internal_edge_data(subgraph) {
+        for e in self.iter_internal_edge_data(subgraph) {
             num = num * &e.data.num;
         }
 
@@ -550,7 +558,7 @@ impl UVGraph {
     fn denominator(&self, subgraph: &InternalSubGraph) -> SerializableAtom {
         let mut den = Atom::new_num(1);
 
-        for e in self.0.iter_internal_edge_data(subgraph) {
+        for e in self.iter_internal_edge_data(subgraph) {
             den = den * &e.data.den;
         }
 
@@ -560,9 +568,9 @@ impl UVGraph {
             .into()
     }
 
-    fn dot(&self, subgraph: &InternalSubGraph) -> String {
-        self.0.dot_impl(
-            &subgraph.to_hairy_subgraph(&self.0),
+    fn dot<S: SubGraph>(&self, subgraph: &S) -> String {
+        self.dot_impl(
+            subgraph,
             format!("{}", self.dod(subgraph)),
             &|e| Some(format!("label=\"{}\"", e.dod)),
             &|n| Some(format!("label=\"{}\"", n.dod)),
@@ -645,11 +653,11 @@ impl IntegrandExpr {
         subgraph: &InternalSubGraph,
         graph: &UVGraph,
         dod: i32,
-        // add_arg: Option<IntegrandExpr>,
+        reps: &[Replacement], // add_arg: Option<IntegrandExpr>,
     ) -> Self {
         IntegrandExpr {
-            num: graph.numerator(subgraph),
-            den: graph.denominator(subgraph),
+            num: graph.numerator(subgraph).0.replace_multiple(reps).into(),
+            den: graph.denominator(subgraph).0.replace_multiple(reps).into(),
             add_arg: None,
             dod,
         }
@@ -660,10 +668,11 @@ impl IntegrandExpr {
         graph: &UVGraph,
         add_arg: Option<SerializableAtom>,
         dod: i32,
+        reps: &[Replacement],
     ) -> Self {
         IntegrandExpr {
-            num: graph.numerator(subgraph),
-            den: graph.denominator(subgraph),
+            num: graph.numerator(subgraph).0.replace_multiple(reps).into(),
+            den: graph.denominator(subgraph).0.replace_multiple(reps).into(),
             add_arg,
             dod,
         }
@@ -710,8 +719,8 @@ impl Top {
             dod: 0,
             // graph_ref: root_ref,
             t_arg: None,
-            contracted: IntegrandExpr::from_subgraph(&graph.0.full_graph(), graph, 0),
-            graph: TopoOrdered::new(graph.0.empty_subgraph(), 0),
+            contracted: IntegrandExpr::from_subgraph(&graph.full_graph(), graph, 0, &[]),
+            graph: TopoOrdered::new(graph.empty_subgraph(), 0),
         }
     }
 
@@ -728,18 +737,19 @@ impl Top {
         let reduced = self
             .graph
             .data
-            .complement(&graph.0)
+            .complement(&graph)
             .intersection(&subgraph.data);
 
         let dod = graph.dod(&subgraph.data);
         Top {
             // graph_ref,
             dod,
-            t_arg: Some(IntegrandExpr::from_subgraph(&reduced, graph, dod)),
+            t_arg: Some(IntegrandExpr::from_subgraph(&reduced, graph, dod, &[])),
             contracted: IntegrandExpr::from_subgraph(
-                &subgraph.data.complement(&graph.0),
+                &subgraph.data.complement(&graph),
                 graph,
                 dod,
+                &[],
             ),
             graph: subgraph,
         }
@@ -827,7 +837,7 @@ impl Wood {
         let mut unions = SecondaryMap::new();
 
         for (i, sg) in poset.nodes.iter() {
-            let cs = graph.0.connected_components(&sg.data);
+            let cs = graph.connected_components(&sg.data);
 
             if cs.len() > 1 {
                 // sg is a disjoint union of spinneys (at the level of half-edges) (strongly disjoint)
@@ -836,8 +846,7 @@ impl Wood {
                 for &c in sg.parents.iter() {
                     let mut is_in = 0;
                     for comp in &cs {
-                        let comp =
-                            InternalSubGraph::cleaned_filter_optimist(comp.clone(), &graph.0);
+                        let comp = InternalSubGraph::cleaned_filter_optimist(comp.clone(), &graph);
                         if comp == poset.nodes[c].data {
                             // find the components in the wood that this union is made of
                             union.push(c);
@@ -868,7 +877,6 @@ impl Wood {
         dag: &mut DAG<Approximation, DagNode, ()>,
         unions: &mut SecondaryMap<PosetNode, Option<Vec<(PosetNode, Option<DagNode>)>>>,
         root: PosetNode,
-        cut_edges: &BitVec,
     ) -> DagNode {
         let mut search_front = VecDeque::new();
 
@@ -876,7 +884,6 @@ impl Wood {
             self.poset.data(root).clone(),
             graph,
             root,
-            vec![],
         ));
         search_front.push_front((root, tree_root));
 
@@ -910,13 +917,8 @@ impl Wood {
                         }
                     }
                 } else {
-                    let lmb = graph.select_lmb(cut_edges, self.poset.data(*c));
-                    let child = dag.add_node(Approximation::new(
-                        self.poset.data(*c).clone(),
-                        graph,
-                        *c,
-                        lmb,
-                    ));
+                    let child =
+                        dag.add_node(Approximation::new(self.poset.data(*c).clone(), graph, *c));
                     dag.add_edge(parent, child);
                     search_front.push_front((*c, child));
                 }
@@ -925,7 +927,7 @@ impl Wood {
         tree_root
     }
 
-    pub fn unfold_impl(&self, graph: &UVGraph, cut_edges: &BitVec) -> Forest {
+    pub fn unfold_impl(&self, graph: &UVGraph) -> Forest {
         let mut dag: DAG<Approximation, DagNode, ()> = DAG::new();
 
         let root = self.poset.minimum().unwrap();
@@ -937,7 +939,7 @@ impl Wood {
             unions.insert(p, Some(union));
         }
 
-        let root = self.unfold_bfs(graph, &mut dag, &mut unions, root, cut_edges);
+        let root = self.unfold_bfs(graph, &mut dag, &mut unions, root);
 
         Forest {
             dag,
@@ -953,7 +955,7 @@ impl Wood {
                 "label={}, dod={}, n_edges = {},topo_order = {}",
                 n.dot_id(shift),
                 graph.dod(&n.data),
-                graph.0.count_internal_edges(&n.data),
+                graph.count_internal_edges(&n.data),
                 n.order.unwrap()
             )
         })
@@ -965,7 +967,7 @@ impl Wood {
                 "found {} loop spinney with dod {}:{} ",
                 graph.n_loops(s),
                 graph.dod(s),
-                graph.0.dot(&s.to_hairy_subgraph(&graph.0))
+                graph.dot(&s.to_hairy_subgraph(&graph))
             );
         }
     }
@@ -1080,10 +1082,109 @@ pub struct Approximation {
     dod: i32,
     lmb: Vec<EdgeIndex>,
     pub approx_op: ApproxOp,
+    momentum_assignment: HashMap<EdgeIndex, Atom>,
     pub simple_approx: Option<SimpleApprox>,
 }
 
 impl Approximation {
+    fn replacements(&self) -> Vec<Replacement> {
+        self.momentum_assignment
+            .iter()
+            .map(|(edge, mom)| {
+                Replacement::new(
+                    function!(GS.emr_mom, usize::from(*edge) as i64).to_pattern(),
+                    mom.to_pattern(),
+                )
+            })
+            .collect()
+    }
+
+    fn lmb_rep_impl(
+        subgraph: &InternalSubGraph,
+        lmb: &[EdgeIndex],
+        graph: &UVGraph,
+    ) -> HashMap<EdgeIndex, Atom> {
+        let mut edge_rep: HashMap<_, Atom> = HashMap::default();
+
+        let Some(i) = subgraph.filter.first_one() else {
+            return edge_rep;
+        };
+
+        let mut tree: BitVec = graph.full_filter();
+
+        let externals = graph.nesting_node_from_subgraph(subgraph.clone()).hairs;
+
+        let root_node = graph.node_id(Hedge(externals.first_one().unwrap_or(i)));
+
+        for e in lmb {
+            let (_, p) = graph[e];
+            tree.sub(p);
+        }
+
+        let trav_tree =
+            SimpleTraversalTree::depth_first_traverse(&graph, &tree, &root_node, None).unwrap();
+
+        for loop_edge in lmb {
+            let (_, p) = graph[loop_edge];
+            let loop_id: usize = (*loop_edge).into();
+            let loop_mom = function!(GS.loop_mom, loop_id as i64);
+
+            if let Some(c) = trav_tree.get_cycle(p.any_hedge(), &graph.hedge_graph) {
+                if let HedgePair::Paired { source, .. } = p {
+                    if let Some(signed) = SignedCycle::from_cycle(c, source, graph) {
+                        for h in signed.filter.included_iter() {
+                            let eid = graph[&h];
+                            let flow = graph.flow(h);
+
+                            match flow {
+                                Flow::Source => {
+                                    *edge_rep.entry(eid).or_insert(Atom::Zero) += &loop_mom;
+                                }
+                                Flow::Sink => {
+                                    *edge_rep.entry(eid).or_insert(Atom::Zero) -= &loop_mom;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        for ext in externals.included_iter().skip(1) {
+            let ext_sign: SignOrZero = graph.flow(ext).into();
+            let ext_id: usize = graph[&ext].into();
+            let ext_mom = match ext_sign {
+                SignOrZero::Plus => {
+                    function!(GS.emr_mom, ext_id as i64)
+                }
+                SignOrZero::Minus => -function!(GS.emr_mom, ext_id as i64),
+                SignOrZero::Zero => {
+                    panic!("Missing external momentum sign")
+                }
+            };
+
+            for h in trav_tree
+                .ancestor_iter_hedge(ext, &graph.hedge_graph.as_ref())
+                .step_by(2)
+            {
+                let eid = graph[&h];
+                let (_, p) = &graph[&eid];
+
+                if let HedgePair::Paired { source, sink } = p {
+                    if h == *source {
+                        *edge_rep.entry(eid).or_insert(Atom::Zero) += &ext_mom;
+                    } else if h == *sink {
+                        *edge_rep.entry(eid).or_insert(Atom::Zero) -= &ext_mom;
+                    } else {
+                        panic!("Should be in HedgePair");
+                    }
+                }
+            }
+        }
+
+        edge_rep
+    }
+
     pub fn simplify_notation(expr: &SerializableAtom) -> SerializableAtom {
         let replacements = [
             (
@@ -1111,17 +1212,17 @@ impl Approximation {
         expr
     }
 
-    pub fn new(
-        spinney: InternalSubGraph,
-        graph: &UVGraph,
-        orig: PosetNode,
-        lmb: Vec<EdgeIndex>,
-    ) -> Approximation {
+    pub fn new(spinney: InternalSubGraph, graph: &UVGraph, orig: PosetNode) -> Approximation {
+        let lmb = graph.select_lmb(&spinney);
+
+        let momentum_assignment = Self::lmb_rep_impl(&spinney, &lmb, graph);
+
         Approximation {
             dod: graph.dod(&spinney),
             orig,
             subgraph: spinney,
             lmb,
+            momentum_assignment,
             simple_approx: None,
             approx_op: ApproxOp::NotComputed,
         }
@@ -1155,10 +1256,13 @@ impl Approximation {
     pub fn expr(&self, graph: &UVGraph) -> Option<SerializableAtom> {
         let (t, s) = self.approx_op.expr()?;
 
+        let replacements: Vec<_> = self.replacements();
+
         let contracted = s * IntegrandExpr::from_subgraph(
-            &self.reduced_graph(&graph.0.full_graph()),
+            &self.reduced_graph(&graph.full_graph()),
             graph,
             self.dod,
+            &replacements,
         )
         .bare()
         .0;
@@ -1169,7 +1273,7 @@ impl Approximation {
     pub fn simple_expr(&self, graph: &UVGraph) -> Option<SerializableAtom> {
         let simple_approx = self.simple_approx.as_ref()?;
 
-        Some((simple_approx.sign * simple_approx.expr(&graph.0.full_filter())).into())
+        Some((simple_approx.sign * simple_approx.expr(&graph.full_filter())).into())
     }
 }
 
@@ -1208,7 +1312,13 @@ impl ApproxOp {
 
         if let Some((expr, sign)) = dependent.approx_op.expr() {
             Self::Dependent {
-                t_arg: IntegrandExpr::from_subgraph_with_arg(&reduced, graph, Some(expr), dod),
+                t_arg: IntegrandExpr::from_subgraph_with_arg(
+                    &reduced,
+                    graph,
+                    Some(expr),
+                    dod,
+                    &dependent.replacements(),
+                ),
                 sign: -sign,
                 subgraph: reduced,
             }
@@ -1273,7 +1383,7 @@ impl Forest {
             let parents = current.parents.clone();
 
             let (approx, simple_approx) = if parents.is_empty() {
-                let subgraph: InternalSubGraph = graph.0.empty_subgraph();
+                let subgraph: InternalSubGraph = graph.empty_subgraph();
                 self.all_graphs.insert(subgraph.clone(), ());
                 (ApproxOp::Root, SimpleApprox::root(subgraph))
             } else if parents.len() == 1 {
@@ -1347,8 +1457,8 @@ impl Wood {
 
         out.push_str("Graphs:\n");
         for (k, n) in self.poset.nodes.iter() {
-            out.push_str(&graph.0.dot_impl(
-                &n.data.to_hairy_subgraph(&graph.0),
+            out.push_str(&graph.dot_impl(
+                &n.data.to_hairy_subgraph(&graph),
                 format!(
                     "dod={};nodeid ={};\n",
                     graph.dod(&n.data),
