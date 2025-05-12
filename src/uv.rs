@@ -472,6 +472,8 @@ impl UVGraph {
             return vec![];
         }
 
+        // the subgraph may have disconnected components in case the of disjoint graphs in a spinney
+        let components = self.count_connected_components(subgraph);
         let cut_edges_in_subgraph = subgraph.filter.intersection(&self.cut_edges);
 
         for v in self
@@ -486,7 +488,7 @@ impl UVGraph {
                 lmb.push(e);
             }
 
-            if self.count_connected_components(&cut_subgraph) == 1 {
+            if self.count_connected_components(&cut_subgraph) == components {
                 return lmb;
             }
         }

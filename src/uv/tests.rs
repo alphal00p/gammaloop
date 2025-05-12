@@ -37,7 +37,7 @@ pub fn spenso_lor_atom(tag: i32, ind: impl Into<AbstractIndex>, dim: impl Into<D
 }
 
 #[test]
-fn disconnect_forest_scalar() {
+fn nested_bubble_scalar() {
     let scalar_node = UVNode {
         dod: 0,
         num: Atom::new_num(1),
@@ -74,7 +74,7 @@ fn disconnect_forest_scalar() {
     builder.add_external_edge(node2, scalar_edge(5), false, Flow::Source);
 
     let hedge_graph = builder.build();
-    let mut uv_graph = UVGraph::from_hedge(hedge_graph);
+    let uv_graph = UVGraph::from_hedge(hedge_graph);
     println!(
         "{}",
         uv_graph.dot_impl(
@@ -147,6 +147,182 @@ fn disconnect_forest_scalar() {
             4.2,
             1.,
             2.4,
+        ]);
+        println!("{} {}", r, r.abs().log10());
+    }
+}
+
+#[test]
+fn disconnect_forest_scalar() {
+    let scalar_node = UVNode {
+        dod: 0,
+        num: Atom::new_num(1),
+        color: None,
+    };
+
+    fn scalar_edge(eid: i32) -> UVEdge {
+        let m2 = parse!("m^2").unwrap();
+        UVEdge {
+            og_edge: 1, // not needed
+            dod: -2,
+            num: Atom::new_num(1),
+            den: spenso_lor_atom(eid, 1, GS.dim).npow(2).to_dots() + m2,
+        }
+    }
+
+    let mut builder = HedgeGraphBuilder::new();
+
+    let node1 = builder.add_node(scalar_node.clone());
+
+    let node2 = builder.add_node(scalar_node.clone());
+
+    let node3 = builder.add_node(scalar_node.clone());
+    let node4 = builder.add_node(scalar_node.clone());
+
+    builder.add_edge(node1, node2, scalar_edge(0), false);
+
+    builder.add_edge(node1, node4, scalar_edge(1), false);
+    builder.add_edge(node1, node4, scalar_edge(2), false);
+
+    builder.add_edge(node2, node3, scalar_edge(3), false);
+    builder.add_edge(node2, node3, scalar_edge(4), false);
+
+    builder.add_edge(node3, node4, scalar_edge(5), false);
+
+    builder.add_external_edge(node1, scalar_edge(6), false, Flow::Sink);
+
+    builder.add_external_edge(node3, scalar_edge(7), false, Flow::Source);
+
+    let hedge_graph = builder.build();
+    let uv_graph = UVGraph::from_hedge(hedge_graph);
+    println!(
+        "{}",
+        uv_graph.dot_impl(
+            &uv_graph.full_filter(),
+            "",
+            &|a| Some(a.den.to_string()),
+            &|n| Some(n.num.to_string())
+        )
+    );
+
+    let wood = uv_graph.wood();
+
+    println!("{}", wood.dot(&uv_graph));
+    println!("{}", wood.show_graphs(&uv_graph));
+
+    let mut ufold = wood.unfold_impl(&uv_graph);
+    // assert_eq!(152, ufold.n_terms());
+    ufold.compute(&uv_graph);
+
+    println!("unfolded : {}", ufold.show_structure(&uv_graph).unwrap());
+    println!("graph: {}", ufold.graphs());
+
+    let result = ufold.expr(&uv_graph).unwrap().0;
+
+    println!("{}", ufold.structure_and_res(&uv_graph));
+    println!("{:>}", result);
+
+    let exp = result
+        .replace(parse!("symbolica_community::dot(k_(x_),l_(y_))").unwrap())
+        .with(parse!("k(x_,0)*k(y_,0)-k(x_,1)*k(y_,1)-k(x_,2)*k(y_,2)-k(x_,3)*k(y_,3)").unwrap());
+
+    let mut fnmap = FunctionMap::new();
+
+    fnmap.add_constant(Atom::new_var(symbol!("m")), (1.).into());
+    let ev = exp
+        .evaluator(
+            &fnmap,
+            &[
+                parse!("k(2, 0)").unwrap(),
+                parse!("k(2, 1)").unwrap(),
+                parse!("k(2, 2)").unwrap(),
+                parse!("k(2, 3)").unwrap(),
+                parse!("k(4, 0)").unwrap(),
+                parse!("k(4, 1)").unwrap(),
+                parse!("k(4, 2)").unwrap(),
+                parse!("k(4, 3)").unwrap(),
+                parse!("k(5, 0)").unwrap(),
+                parse!("k(5, 1)").unwrap(),
+                parse!("k(5, 2)").unwrap(),
+                parse!("k(5, 3)").unwrap(),
+                parse!("k(7, 0)").unwrap(),
+                parse!("k(7, 1)").unwrap(),
+                parse!("k(7, 2)").unwrap(),
+                parse!("k(7, 3)").unwrap(),
+            ],
+            OptimizationSettings::default(),
+        )
+        .unwrap();
+
+    let mut ev2 = ev.map_coeff(&|x| x.to_f64());
+
+    println!("Single limit");
+    for t in (0..100_000).step_by(5000) {
+        let r = ev2.evaluate_single(&[
+            3.,
+            43.,
+            5.,
+            6.5,
+            t as f64 + 1.,
+            t as f64 * 2. + 2.,
+            t as f64 + 3.,
+            t as f64 + 4.,
+            7.,
+            4.2,
+            1.,
+            2.4,
+            6.5,
+            8.6,
+            3.4,
+            2.1,
+        ]);
+        println!("{} {}", r, r.abs().log10());
+    }
+
+    println!("Single disjoint limit");
+
+    for t in (0..100_000).step_by(5000) {
+        let r = ev2.evaluate_single(&[
+            t as f64 + 3.,
+            t as f64 + 43.,
+            t as f64 * 3. + 5.,
+            t as f64 + 6.5,
+            t as f64 + 1.,
+            t as f64 * 2. + 2.,
+            t as f64 + 3.,
+            t as f64 + 4.,
+            7.,
+            4.2,
+            1.,
+            2.4,
+            6.5,
+            8.6,
+            3.4,
+            2.1,
+        ]);
+        println!("{} {}", r, r.abs().log10());
+    }
+
+    println!("Full graph limit");
+
+    for t in (0..100_000).step_by(5000) {
+        let r = ev2.evaluate_single(&[
+            t as f64 + 3.,
+            t as f64 + 43.,
+            t as f64 * 3. + 5.,
+            t as f64 + 6.5,
+            t as f64 + 1.,
+            t as f64 * 2. + 2.,
+            t as f64 + 3.,
+            t as f64 + 4.,
+            t as f64 * 5. + 7.,
+            t as f64 + 4.2,
+            t as f64 + 1.,
+            t as f64 * 2. + 2.4,
+            6.5,
+            8.6,
+            3.4,
+            2.1,
         ]);
         println!("{} {}", r, r.abs().log10());
     }
