@@ -12,7 +12,7 @@ use crate::{
         havana_integrate, print_integral_result, BatchResult, IntegrationState, MasterNode,
     },
     model::Model,
-    new_cs::{Process, ProcessCollection, ProcessDefinition, ProcessList},
+    new_cs::{ExportSettings, Process, ProcessCollection, ProcessDefinition, ProcessList},
     new_graph::Graph,
     numerator::{GlobalPrefactor, Numerator, PythonState},
     utils::F,
@@ -127,6 +127,14 @@ pub fn format_target(target: String, level: log::Level) -> ColoredString {
 }
 
 #[pyfunction]
+#[pyo3(name = "evaluate_graph_overall_factor")]
+pub fn evaluate_graph_overall_factor(overall_factor: &str) -> PyResult<String> {
+    let overall_factor = parse!(overall_factor).map_err(exceptions::PyException::new_err)?;
+    let overall_factor_evaluated = FeynGen::evaluate_overall_factor(overall_factor.as_view());
+    Ok(overall_factor_evaluated.to_canonical_string())
+}
+
+#[pyfunction]
 #[pyo3(name = "atom_to_canonical_string")]
 pub fn atom_to_canonical_string(atom_str: &str) -> PyResult<String> {
     parse!(atom_str)
@@ -229,7 +237,7 @@ pub fn convert_log_level(level: &str) -> LevelFilter {
 fn gammalooprs(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     pyo3_pylogger::register("GammaLoopRust");
 
-    crate::initialisation::initialise();
+    crate::initialisation::initialise().expect("initialization failed");
     crate::set_interrupt_handler();
     m.add_class::<PythonWorker>()?;
     m.add_class::<PyFeynGenFilters>()?;
@@ -243,6 +251,7 @@ fn gammalooprs(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     m.add_wrapped(wrap_pyfunction!(cli_wrapper))?;
     m.add_wrapped(wrap_pyfunction!(setup_logging))?;
     m.add_wrapped(wrap_pyfunction!(atom_to_canonical_string))?;
+    m.add_wrapped(wrap_pyfunction!(evaluate_graph_overall_factor))?;
     Ok(())
 }
 
@@ -919,33 +928,46 @@ impl PythonWorker {
         export_yaml_str: &str,
         no_evaluators: bool,
     ) -> PyResult<String> {
-        debug!("importing settings: {}", export_yaml_str);
-        let export_settings = serde_yaml::from_str(export_yaml_str)
-            .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
+        //        debug!("importing settings: {}", export_yaml_str);
+        //        let process_settings = serde_yaml::from_str(export_yaml_str)
+        //            .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
+        //
+        //        debug!("Export settings loaded:\n{:#?}", process_settings);
+        //        let mut n_exported: usize = 0;
+        //        for amplitude in self.amplitudes.container.iter_mut() {
+        //            if amplitude_names.contains(&amplitude.name.to_string()) {
+        //                n_exported += 1;
+        //                let res =
+        //                    amplitude.export(export_root, &self.model, &process_settings, no_evaluators);
+        //                if let Err(err) = res {
+        //                    return Err(exceptions::PyException::new_err(err.to_string()));
+        //                }
+        //            }
+        //        }
 
-        debug!("Export settings loaded:\n{:#?}", export_settings);
-        let mut n_exported: usize = 0;
-        for amplitude in self.amplitudes.container.iter_mut() {
-            if amplitude_names.contains(&amplitude.name.to_string()) {
-                n_exported += 1;
-                let res =
-                    amplitude.export(export_root, &self.model, &export_settings, no_evaluators);
-                if let Err(err) = res {
-                    return Err(exceptions::PyException::new_err(err.to_string()));
+        let export_settings = ExportSettings {
+            root_folder: PathBuf::from_str(export_root)?,
+        };
+
+        match self
+            .process_list
+            .export_amplitudes(&amplitude_names, &export_settings)
+        {
+            Ok(n_exported) => {
+                if n_exported < amplitude_names.len() {
+                    return Err(exceptions::PyException::new_err(format!(
+                        "Could not find all amplitudes to export: {:?}\n {} amplitudes exported",
+                        amplitude_names, n_exported
+                    )));
+                } else if n_exported > amplitude_names.len() {
+                    warn!("duplicate amplitudes in memory");
                 }
+            }
+            Err(err) => {
+                return Err(exceptions::PyException::new_err(err.to_string()));
             }
         }
 
-        for process in self.process_list.processes.iter_mut() {
-            todo!("fix exporting process");
-        }
-
-        if n_exported != amplitude_names.len() {
-            return Err(exceptions::PyException::new_err(format!(
-                "Could not find all amplitudes to export: {:?}",
-                amplitude_names
-            )));
-        }
         Ok("Successful export".to_string())
     }
 
@@ -1347,12 +1369,6 @@ impl PythonWorker {
         let integrands = self.process_list.generate_integrands(settings);
 
         self.integrands = integrands;
-    }
-
-    pub fn evaluate_overall_factor(&self, overall_factor: &str) -> PyResult<String> {
-        let overall_factor = parse!(overall_factor).map_err(exceptions::PyException::new_err)?;
-        let overall_factor_evaluated = FeynGen::evaluate_overall_factor(overall_factor.as_view());
-        Ok(overall_factor_evaluated.to_canonical_string())
     }
 }
 

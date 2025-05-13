@@ -13,6 +13,7 @@ from gammaloop.misc.common import GammaLoopError, DATA_PATH, pjoin, logger, EMPT
 import gammaloop.misc.utils as utils
 # type: ignore # pylint: disable=unused-import
 from gammaloop.base_objects.model import Model, Propagator, VertexRule, Particle, Parameter
+from gammaloop._gammaloop import evaluate_graph_overall_factor
 
 
 class EdgeType(StrEnum):
@@ -568,7 +569,7 @@ class Graph(object):
     def get_edge_signature(self, edge_name: str) -> tuple[list[int], list[int]]:
         return self.edge_signatures[edge_name]
 
-    @ staticmethod
+    @staticmethod
     def empty_graph(name: str) -> Graph:
         return Graph(name, [], [], [], loop_momentum_basis=[], overall_factor="1", edge_signatures={})
 
@@ -622,7 +623,7 @@ class Graph(object):
             'edge_signatures': sorted([(k, v) for k, v in self.edge_signatures.items()], key=lambda x: x[0])
         }
 
-    @ staticmethod
+    @staticmethod
     def from_serializable_dict(model: Model, serializable_dict: dict[str, Any]) -> Graph:
 
         graph_vertices: list[Vertex] = []
@@ -668,7 +669,7 @@ class Graph(object):
 
         return graph
 
-    @ staticmethod
+    @staticmethod
     def from_yaml_str(model: Model, yaml_str: str) -> Graph:
         graph_dict = yaml.safe_load(yaml_str)
         return Graph.from_serializable_dict(model, graph_dict)
@@ -1105,7 +1106,7 @@ class Graph(object):
         replace_dict['label'] += f" {diagram_id}" if diagram_id else ''
         replace_dict['layout'] = drawing_options['layout']
         overall_factor_evaluated_str = utils.expression_to_string(
-            utils.evaluate_graph_overall_factor(self.overall_factor), canonical=True)
+            evaluate_graph_overall_factor(self.overall_factor), canonical=True)
         if drawing_options.get('show_overall_factor', True):
             replace_dict['label'] += f" x ( {overall_factor_evaluated_str} )"
         replace_dict['graph_options'] = f'\noverall_factor="{self.overall_factor}",\noverall_factor_evaluated="{overall_factor_evaluated_str}"'  # nopep8

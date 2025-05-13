@@ -117,6 +117,10 @@ def atom_to_canonical_string(atom_str: str) -> str:
     """ Converts the string representation of a Symbolica expression to a canonical form. """
 
 
+def evaluate_graph_overall_factor(overall_factor: str) -> str:
+    """ Evaluates the overall factor of a graph. """
+
+
 class Worker:
     @classmethod
     def __new__(_cls) -> Worker:
