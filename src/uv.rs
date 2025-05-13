@@ -650,7 +650,6 @@ impl UVGraph {
 
         spinneys.insert(self.empty_subgraph());
 
-        println!("n_spinneys:{}", spinneys.len());
         spinneys
     }
 
@@ -866,11 +865,30 @@ impl IntegrandExpr {
         (&self.num.0 * &self.den.0).into()
     }
 
-    pub fn bare_with_add_arg(&self) -> Atom {
+    pub fn with_add_arg(&self) -> Atom {
         if let Some(a) = &self.add_arg {
             (&self.num.0 * &self.den.0) * &a.0
         } else {
             &self.num.0 * &self.den.0
+        }
+    }
+
+    pub fn bare_with_add_arg(&self) -> Atom {
+        if let Some(a) = &self.add_arg {
+            &self.num.0
+                * &self
+                    .den
+                    .0
+                    .replace(function!(GS.den, GS.x__))
+                    .with(Atom::new_var(GS.x__).npow(-1))
+                * &a.0
+        } else {
+            &self.num.0
+                * &self
+                    .den
+                    .0
+                    .replace(function!(GS.den, GS.x__))
+                    .with(Atom::new_var(GS.x__).npow(-1))
         }
     }
 }
@@ -1358,7 +1376,10 @@ impl Approximation {
         // }
         // println!("Before:{t}");
 
-        let t = t.replace_multiple(&graph.lmb_replacement);
+        let t = t
+            .replace_multiple(&graph.lmb_replacement)
+            .replace(function!(GS.den, GS.x__))
+            .with(Atom::new_var(GS.x__).npow(-1));
 
         // println!("After:{t}");
         let contracted = s * IntegrandExpr::from_subgraph(
@@ -1367,8 +1388,7 @@ impl Approximation {
             self.dod,
             &graph.lmb_replacement,
         )
-        .bare()
-        .0;
+        .bare_with_add_arg();
 
         Some(Self::simplify_notation(&(t * contracted).into()))
     }
@@ -1411,11 +1431,11 @@ impl ApproxOp {
             ApproxOp::Union { t_args, sign, .. } => {
                 let mut mul = Atom::new_num(1);
                 for t in t_args {
-                    mul = mul * t.bare_with_add_arg();
+                    mul = mul * t.with_add_arg();
                 }
                 Some((mul, *sign))
             }
-            ApproxOp::Dependent { t_arg, sign, .. } => Some((t_arg.bare_with_add_arg(), *sign)),
+            ApproxOp::Dependent { t_arg, sign, .. } => Some((t_arg.with_add_arg(), *sign)),
             ApproxOp::Root => Some((Atom::new_num(1).into(), Sign::Positive)),
         }
     }
@@ -1433,19 +1453,17 @@ impl ApproxOp {
         if let Some((inner_t, sign)) = dependent.approx_op.bare_expr() {
             let t_arg = IntegrandExpr::from_subgraph(&reduced, graph, dod, mom_reps);
 
-            let mut atomarg = t_arg.bare_with_add_arg() * inner_t;
-
-            let t = symbol!("t");
+            let mut atomarg = t_arg.with_add_arg() * inner_t;
 
             for e in external_edges {
                 atomarg = atomarg
                     .replace(function!(GS.emr_mom, usize::from(*e) as i64))
-                    .with(function!(GS.emr_mom, usize::from(*e) as i64) * t);
+                    .with(function!(GS.emr_mom, usize::from(*e) as i64) * GS.rescale);
             }
 
             let mut masses = AHashSet::new();
+            masses.insert(Atom::new_var(GS.m_uv));
             // scale all masses, including UV masses from subgraphs
-            // TOOD: prevent rescaling in denominators of subgraphs
             for e in graph.iter_internal_edge_data(subgraph) {
                 let e_mass = parse!(&e.data.particle.mass.name).unwrap();
                 masses.insert(e_mass);
@@ -1455,10 +1473,6 @@ impl ApproxOp {
                 let rescaled = m.clone() * GS.rescale;
                 atomarg = atomarg.replace(m).with(rescaled);
             }
-
-            atomarg = atomarg
-                .replace(parse!("mUV").unwrap())
-                .with(parse!("t*mUV").unwrap());
 
             // expand the propagator around a propagator with a UV mass
             atomarg = atomarg
@@ -1470,22 +1484,25 @@ impl ApproxOp {
                 .repeat()
                 .with(parse!("t*symbolica_community::dot(x__,y_)").unwrap());
 
-            println!("atomarg:{}", atomarg);
+            //println!("atomarg:{}", atomarg);
 
             let mut a = atomarg
-                .series(t, Atom::Zero, dod.into(), true)
+                .series(GS.rescale, Atom::Zero, dod.into(), true)
                 .unwrap()
                 .to_atom()
-                .replace(t)
+                .replace(GS.rescale)
                 .with(Atom::new_num(1));
 
-            // replace the denominators back to den so that they can get re-expanded
-            /*a = a
-                .replace(parse!(format!("1/({}(x_))", GS.emr_mom)).unwrap())
-                .with(parse!(format!("den({}(x_))", GS.emr_mom)).unwrap());
+            //println!("Expanded: {:>}", a.expand());
+
+            // replace the denominators back to den so that they can get re-expanded around k^2-mUV^2
+            // TODO: keep den in the above expansion such that we do not accidentally 1/sqrt(2) or so part of the denominator
             a = a
-                .replace(parse!(format!("1/({}(x_) + y___)", GS.emr_mom)).unwrap())
-                .with(parse!(format!("den({}(x_) + y___)", GS.emr_mom)).unwrap());*/
+                .replace(parse!("x_^n_").unwrap())
+                .when(symbol!("n_").filter(|x| x.to_atom() < 0))
+                .with(parse!("den(x_)^-n_").unwrap());
+
+            //println!("RES {:>}", a);
 
             Self::Dependent {
                 t_arg: IntegrandExpr {

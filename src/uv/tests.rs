@@ -55,7 +55,7 @@ fn nested_bubble_scalar_quad() {
             dod: -2,
             particle: higgs,
             num: Atom::new_num(1),
-            den: spenso_lor_atom(eid, 1, GS.dim).npow(2).to_dots() + m2,
+            den: spenso_lor_atom(eid, 1, GS.dim).npow(2).to_dots() - m2,
         }
     }
 
@@ -68,7 +68,7 @@ fn nested_bubble_scalar_quad() {
             dod: -1,
             particle: higgs,
             num: spenso_lor_atom(eid, ind, GS.dim),
-            den: spenso_lor_atom(eid, 1, GS.dim).npow(2).to_dots() + m2,
+            den: spenso_lor_atom(eid, 1, GS.dim).npow(2).to_dots() - m2,
         }
     }
 
@@ -123,13 +123,18 @@ fn nested_bubble_scalar_quad() {
             .repeat()
             .with(parse!("t*symbolica_community::dot(K(x_),y_)").unwrap());
 
+    println!("SERIESINPUT:\n{:>}", series);
+
     let s = series
         .replace(t)
         .with(Atom::new_var(t).npow(-1))
         .series(t, Atom::Zero, 0.into(), true)
         .unwrap();
     println!("Series: {:>}", s);
-    println!("Correct UV cancellation if 0: {:>}", s.to_atom().expand());
+    println!(
+        "Correct UV cancellation if 0: {:>}",
+        s.to_atom().expand().factor()
+    );
 
     let exp = result
         .replace(parse!("symbolica_community::dot(k_(x_),l_(y_))").unwrap())
@@ -138,6 +143,8 @@ fn nested_bubble_scalar_quad() {
     let mut fnmap = FunctionMap::new();
 
     fnmap.add_constant(Atom::new_var(symbol!("m")), (1.).into());
+    fnmap.add_constant(Atom::new_var(symbol!("MH")), (1.).into());
+    fnmap.add_constant(Atom::new_var(symbol!("mUV")), (10.).into());
     let ev = exp
         .evaluator(
             &fnmap,
@@ -198,7 +205,7 @@ fn nested_bubble_scalar() {
             dod: -2,
             particle: higgs,
             num: Atom::new_num(1),
-            den: spenso_lor_atom(eid, 1, GS.dim).npow(2).to_dots() + m2,
+            den: spenso_lor_atom(eid, 1, GS.dim).npow(2).to_dots(), // - m2,
         }
     }
 
@@ -235,20 +242,20 @@ fn nested_bubble_scalar() {
 
     let wood = uv_graph.wood();
 
-    println!("{}", wood.dot(&uv_graph));
-    println!("{}", wood.show_graphs(&uv_graph));
+    //println!("{}", wood.dot(&uv_graph));
+    //println!("{}", wood.show_graphs(&uv_graph));
 
     let mut ufold = wood.unfold_impl(&uv_graph);
     // assert_eq!(152, ufold.n_terms());
     ufold.compute(&uv_graph);
 
-    println!("unfolded : {}", ufold.show_structure(&uv_graph).unwrap());
-    println!("graph: {}", ufold.graphs());
+    //println!("unfolded : {}", ufold.show_structure(&uv_graph).unwrap());
+    //println!("graph: {}", ufold.graphs());
 
     let result = ufold.expr(&uv_graph).unwrap().0;
 
     println!("{}", ufold.structure_and_res(&uv_graph));
-    println!("{:>}", result);
+    println!("RESULT {:>}", result);
 
     let t = symbol!("t");
     let series = Atom::new_var(t).npow(4)
@@ -265,6 +272,7 @@ fn nested_bubble_scalar() {
         .series(t, Atom::Zero, 0.into(), true)
         .unwrap();
     println!("Series: {}", s);
+    println!("Correct UV cancellation if 0: {:>}", s.to_atom().expand());
 
     let exp = result
         .replace(parse!("symbolica_community::dot(k_(x_),l_(y_))").unwrap())
@@ -273,6 +281,8 @@ fn nested_bubble_scalar() {
     let mut fnmap = FunctionMap::new();
 
     fnmap.add_constant(Atom::new_var(symbol!("m")), (1.).into());
+    fnmap.add_constant(Atom::new_var(symbol!("MH")), (1.).into());
+    fnmap.add_constant(Atom::new_var(symbol!("mUV")), (10.).into());
     let ev = exp
         .evaluator(
             &fnmap,
@@ -333,7 +343,7 @@ fn disconnect_forest_scalar() {
             dod: -2,
             particle: higgs,
             num: Atom::new_num(1),
-            den: spenso_lor_atom(eid, 1, GS.dim).npow(2).to_dots() + m2,
+            den: spenso_lor_atom(eid, 1, GS.dim).npow(2).to_dots() - m2,
         }
     }
 
