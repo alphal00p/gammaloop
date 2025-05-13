@@ -812,7 +812,7 @@ impl PythonWorker {
                     .collect_vec();
 
                 let process = Process::from_bare_graph_list(
-                    name,
+                    String::from(name),
                     amplitude_bare_graphs,
                     GenerationType::Amplitude,
                     ProcessDefinition::new_empty(),

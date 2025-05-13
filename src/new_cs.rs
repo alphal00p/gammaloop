@@ -56,7 +56,7 @@ use crate::{
     feyngen::{FeynGenFilters, GenerationType},
     graph::BareGraph,
     integrands::Integrand,
-    model::{Model, Particle},
+    model::Model,
     momentum::{Rotatable, Rotation, RotationMethod},
     new_gammaloop_integrand::{
         cross_section_integrand::{CrossSectionGraphTerm, CrossSectionIntegrand},
@@ -109,7 +109,7 @@ impl<S: NumeratorState> Process<S> {
 
 impl Process {
     pub fn from_bare_graph_list(
-        name: SmartString<LazyCompact>,
+        name: String,
         bare_graphs: Vec<BareGraph>,
         generation_type: GenerationType,
         definition: ProcessDefinition,
@@ -353,9 +353,10 @@ impl<S: NumeratorState> ProcessCollection<S> {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Encode, Decode)]
+#[trait_decode(trait = GammaLoopContext)]
 pub struct Amplitude<S: NumeratorState = PythonState> {
-    name: SmartString<LazyCompact>,
+    name: String,
     graphs: Vec<AmplitudeGraph<S>>,
     external_particles: Vec<ArcParticle>,
     external_signature: SignatureLike<ExternalIndex>,
@@ -405,32 +406,46 @@ impl<S: NumeratorState> Amplitude<S> {
         Integrand::NewIntegrand(NewIntegrand::Amplitude(amplitude_integrand))
     }
 
+    fn get_graph_names(&self) -> Vec<String> {
+        self.graphs
+            .iter()
+            .map(|graph| graph.graph.name.clone())
+            .collect()
+    }
+
     pub fn export(&self, settings: &ExportSettings) -> Result<()> {
         let path = Path::new(&settings.root_folder)
             .join("sources")
             .join("amplitudes")
             .join(self.name.as_str());
 
-        for amplitude_graph in self.graphs.iter() {
-            let file_name = path.clone().join(format!(
-                "amplitude_graph_{}.bin",
-                amplitude_graph.graph.name
-            ));
-
-            let data = bincode::encode_to_vec(amplitude_graph, bincode::config::standard())?;
-            std::fs::write(file_name, &data)?;
-        }
-
+        let data = bincode::encode_to_vec(self, bincode::config::standard())?;
+        std::fs::write(
+            path.clone().join(&format!("amplitude_{}.bin", self.name)),
+            &data,
+        )?;
         Ok(())
     }
+}
 
-    pub fn load_amplitude(
-        &self,
+impl<S> Amplitude<S>
+where
+    S: NumeratorState + for<'a> bincode::de::Decode<GammaLoopContextContainer<'a>>,
+{
+    fn load_from_file(
         name: &str,
         root_folder: &str,
         context: GammaLoopContextContainer,
     ) -> Result<Self> {
-        todo!()
+        let path = Path::new(root_folder)
+            .join("sources")
+            .join("amplitudes")
+            .join(name);
+
+        let data = std::fs::read(path.join(format!("amplitude_{}.bin", name)))?;
+        let (amplitude, _): (Self, _) =
+            bincode::decode_from_slice_with_context(&data, bincode::config::standard(), context)?;
+        Ok(amplitude)
     }
 }
 
@@ -727,7 +742,7 @@ pub struct AmplitudeDerivedData<S: NumeratorState> {
 }
 
 impl<S: NumeratorState> Amplitude<S> {
-    pub fn new(name: SmartString<LazyCompact>) -> Self {
+    pub fn new(name: String) -> Self {
         Self {
             name,
             graphs: vec![],
@@ -762,7 +777,7 @@ impl<S: NumeratorState> Amplitude<S> {
 
 #[derive(Clone)]
 pub struct CrossSection<S: NumeratorState> {
-    name: SmartString<LazyCompact>,
+    name: String,
     supergraphs: Vec<CrossSectionGraph<S>>,
     external_particles: Vec<ArcParticle>,
     external_connections: Vec<ExternalConnection>,
@@ -770,7 +785,7 @@ pub struct CrossSection<S: NumeratorState> {
 }
 
 impl<S: NumeratorState> CrossSection<S> {
-    pub fn new(name: SmartString<LazyCompact>) -> Self {
+    pub fn new(name: String) -> Self {
         Self {
             name,
             supergraphs: vec![],
