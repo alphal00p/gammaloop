@@ -58,7 +58,7 @@ fn nested_bubble_scalar_quad() {
         let m2 = parse!("m^2").unwrap();
         UVEdge {
             og_edge: 1, // not needed
-            dod: -2,
+            dod: -1,
             num: spenso_lor_atom(eid, ind, GS.dim),
             den: spenso_lor_atom(eid, 1, GS.dim).npow(2).to_dots() + m2,
         }
@@ -120,7 +120,8 @@ fn nested_bubble_scalar_quad() {
         .with(Atom::new_var(t).npow(-1))
         .series(t, Atom::Zero, 0.into(), true)
         .unwrap();
-    println!("Series: {}", s);
+    println!("Series: {:>}", s);
+    println!("Correct UV cancellation if 0: {:>}", s.to_atom().expand());
 
     let exp = result
         .replace(parse!("symbolica_community::dot(k_(x_),l_(y_))").unwrap())
