@@ -418,6 +418,7 @@ impl UVGraph {
                             match flow {
                                 Flow::Source => {
                                     *edge_rep.entry(eid).or_insert(Atom::Zero) += &loop_mom;
+                                    //Validated the sign on 13.05.2025
                                 }
                                 Flow::Sink => {
                                     *edge_rep.entry(eid).or_insert(Atom::Zero) -= &loop_mom;
@@ -453,9 +454,9 @@ impl UVGraph {
 
                 if let HedgePair::Paired { source, sink } = p {
                     if h == *source {
-                        *edge_rep.entry(eid).or_insert(Atom::Zero) += &ext_mom;
-                    } else if h == *sink {
                         *edge_rep.entry(eid).or_insert(Atom::Zero) -= &ext_mom;
+                    } else if h == *sink {
+                        *edge_rep.entry(eid).or_insert(Atom::Zero) += &ext_mom;
                     } else {
                         panic!("Should be in HedgePair");
                     }
@@ -1431,18 +1432,31 @@ impl ApproxOp {
 
             let mut atomarg = t_arg.bare_with_add_arg() * inner_t;
 
-            if dod == 0 {
-                for e in external_edges {
-                    atomarg = atomarg
-                        .replace(function!(GS.emr_mom, usize::from(*e) as i64))
-                        .with(Atom::Zero);
-                }
+            let t = symbol!("t");
+
+            for e in external_edges {
+                atomarg = atomarg
+                    .replace(function!(GS.emr_mom, usize::from(*e) as i64))
+                    .with(function!(GS.emr_mom, usize::from(*e) as i64) * t);
             }
+
+            atomarg = atomarg
+                .replace(parse!("symbolica_community::dot(t*x__,y_)").unwrap())
+                .repeat()
+                .with(parse!("t*symbolica_community::dot(x__,y_)").unwrap());
+
+            println!("DOD {}", dod);
+            let a = atomarg
+                .series(t, Atom::Zero, dod.into(), true)
+                .unwrap()
+                .to_atom()
+                .replace(t)
+                .with(Atom::new_num(1));
 
             Self::Dependent {
                 t_arg: IntegrandExpr {
                     dod,
-                    num: atomarg.into(),
+                    num: a.into(),
                     den: Atom::new_num(1).into(),
                     add_arg: None,
                 },
