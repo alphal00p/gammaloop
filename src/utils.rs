@@ -3267,7 +3267,7 @@ pub struct GammaloopSymbols {
     pub color_wrap: Symbol,
     pub epsilon: Symbol,
     pub epsilonbar: Symbol,
-
+    pub rescale: Symbol,
     pub emr_mom: Symbol,
     pub x_: Symbol,
     pub y_: Symbol,
@@ -3332,6 +3332,7 @@ pub static TENSORLIB: LazyLock<TensorLibrary<MixedTensor<F<f64>, ExplicitKey>>> 
     });
 
 pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
+    rescale: symbol!("t"),
     top: symbol!("Top"),
     num: symbol!("num"),
     den: symbol!("den"),
