@@ -1477,7 +1477,7 @@ impl ApproxOp {
             // expand the propagator around a propagator with a UV mass
             atomarg = atomarg
                 .replace(parse!("den(x_)").unwrap())
-                .with(parse!("1/(x_ - mUV^2 + t^2*mUV^2)").unwrap());
+                .with(parse!("1/den(x_ - mUV^2 + t^2*mUV^2)").unwrap());
 
             atomarg = atomarg
                 .replace(parse!("symbolica_community::dot(t*x__,y_)").unwrap())
@@ -1486,23 +1486,21 @@ impl ApproxOp {
 
             //println!("atomarg:{}", atomarg);
 
-            let mut a = atomarg
+            // den(..) tags a propagator, its first derivative is 1 and the rest is 0
+            let a = atomarg
                 .series(GS.rescale, Atom::Zero, dod.into(), true)
                 .unwrap()
                 .to_atom()
                 .replace(GS.rescale)
-                .with(Atom::new_num(1));
+                .with(Atom::new_num(1))
+                .replace(parse!("der(1, den(y_))").unwrap())
+                .with(Atom::new_num(1))
+                .replace(parse!("der(x_, den(y_))").unwrap())
+                .with(Atom::new_num(0))
+                .replace(parse!("den(x_)").unwrap())
+                .with(parse!("1/den(x_)").unwrap());
 
             //println!("Expanded: {:>}", a.expand());
-
-            // replace the denominators back to den so that they can get re-expanded around k^2-mUV^2
-            // TODO: keep den in the above expansion such that we do not accidentally 1/sqrt(2) or so part of the denominator
-            a = a
-                .replace(parse!("x_^n_").unwrap())
-                .when(symbol!("n_").filter(|x| x.to_atom() < 0))
-                .with(parse!("den(x_)^-n_").unwrap());
-
-            //println!("RES {:>}", a);
 
             Self::Dependent {
                 t_arg: IntegrandExpr {
