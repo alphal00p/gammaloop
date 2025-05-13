@@ -37,6 +37,142 @@ pub fn spenso_lor_atom(tag: i32, ind: impl Into<AbstractIndex>, dim: impl Into<D
 }
 
 #[test]
+fn nested_bubble_scalar_quad() {
+    let scalar_node = UVNode {
+        dod: 0,
+        num: Atom::new_num(1),
+        color: None,
+    };
+
+    fn scalar_edge(eid: i32) -> UVEdge {
+        let m2 = parse!("m^2").unwrap();
+        UVEdge {
+            og_edge: 1, // not needed
+            dod: -2,
+            num: Atom::new_num(1),
+            den: spenso_lor_atom(eid, 1, GS.dim).npow(2).to_dots() + m2,
+        }
+    }
+
+    fn scalar_edge_with_p(eid: i32, ind: impl Into<AbstractIndex>) -> UVEdge {
+        let m2 = parse!("m^2").unwrap();
+        UVEdge {
+            og_edge: 1, // not needed
+            dod: -2,
+            num: spenso_lor_atom(eid, ind, GS.dim),
+            den: spenso_lor_atom(eid, 1, GS.dim).npow(2).to_dots() + m2,
+        }
+    }
+
+    let mut builder = HedgeGraphBuilder::new();
+
+    let node1 = builder.add_node(scalar_node.clone());
+    let node2 = builder.add_node(scalar_node.clone());
+    let node3 = builder.add_node(scalar_node.clone());
+
+    builder.add_edge(node1, node2, scalar_edge(0), false);
+    builder.add_edge(node1, node3, scalar_edge(1), false);
+    builder.add_edge(node2, node3, scalar_edge_with_p(2, 1), false);
+    builder.add_edge(node2, node3, scalar_edge_with_p(3, 1), false);
+    builder.add_external_edge(node1, scalar_edge(4), false, Flow::Sink);
+    builder.add_external_edge(node2, scalar_edge(5), false, Flow::Source);
+
+    let hedge_graph = builder.build();
+    let uv_graph = UVGraph::from_hedge(hedge_graph);
+    println!(
+        "{}",
+        uv_graph.dot_impl(
+            &uv_graph.full_filter(),
+            "",
+            &|a| Some(format!("label=\"{}/{}\"", a.num, a.den)),
+            &|n| Some(format!("label=\"{}\"", n.num))
+        )
+    );
+
+    let wood = uv_graph.wood();
+
+    println!("{}", wood.dot(&uv_graph));
+    println!("{}", wood.show_graphs(&uv_graph));
+
+    let mut ufold = wood.unfold_impl(&uv_graph);
+    // assert_eq!(152, ufold.n_terms());
+    ufold.compute(&uv_graph);
+
+    println!("unfolded : {}", ufold.show_structure(&uv_graph).unwrap());
+    println!("graph: {}", ufold.graphs());
+
+    let result = ufold.expr(&uv_graph).unwrap().0;
+
+    println!("{}", ufold.structure_and_res(&uv_graph));
+    println!("{:>}", result);
+
+    let t = symbol!("t");
+    let series = Atom::new_var(t).npow(4)
+        * result
+            .replace(parse!("K(3)").unwrap())
+            .with(parse!("t*K(3)").unwrap())
+            .replace(parse!("symbolica_community::dot(t*K(x_),y_)").unwrap())
+            .repeat()
+            .with(parse!("t*symbolica_community::dot(K(x_),y_)").unwrap());
+
+    let s = series
+        .replace(t)
+        .with(Atom::new_var(t).npow(-1))
+        .series(t, Atom::Zero, 0.into(), true)
+        .unwrap();
+    println!("Series: {}", s);
+
+    let exp = result
+        .replace(parse!("symbolica_community::dot(k_(x_),l_(y_))").unwrap())
+        .with(parse!("k(x_,0)*k(y_,0)-k(x_,1)*k(y_,1)-k(x_,2)*k(y_,2)-k(x_,3)*k(y_,3)").unwrap());
+
+    let mut fnmap = FunctionMap::new();
+
+    fnmap.add_constant(Atom::new_var(symbol!("m")), (1.).into());
+    let ev = exp
+        .evaluator(
+            &fnmap,
+            &[
+                parse!("k(1, 0)").unwrap(),
+                parse!("k(1, 1)").unwrap(),
+                parse!("k(1, 2)").unwrap(),
+                parse!("k(1, 3)").unwrap(),
+                parse!("k(3, 0)").unwrap(),
+                parse!("k(3, 1)").unwrap(),
+                parse!("k(3, 2)").unwrap(),
+                parse!("k(3, 3)").unwrap(),
+                parse!("k(5, 0)").unwrap(),
+                parse!("k(5, 1)").unwrap(),
+                parse!("k(5, 2)").unwrap(),
+                parse!("k(5, 3)").unwrap(),
+            ],
+            OptimizationSettings::default(),
+        )
+        .unwrap();
+
+    let mut ev2 = ev.map_coeff(&|x| x.to_f64());
+
+    for t in (0..100_000).step_by(5000) {
+        let r = (t as f64).powf(4.)
+            * ev2.evaluate_single(&[
+                3.,
+                43.,
+                5.,
+                6.5,
+                t as f64 + 1.,
+                t as f64 * 2. + 2.,
+                t as f64 + 3.,
+                t as f64 + 4.,
+                7.,
+                4.2,
+                1.,
+                2.4,
+            ]);
+        println!("{} {}", r, r.abs().log10());
+    }
+}
+
+#[test]
 fn nested_bubble_scalar() {
     let scalar_node = UVNode {
         dod: 0,

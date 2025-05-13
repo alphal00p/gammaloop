@@ -32,6 +32,7 @@ use symbolica::{
     state::State,
     symbol,
 };
+use symbolica_community::physics::algebraic_simplification::metric::MetricSimplifier;
 use trie_rs::{try_collect::TryFromIterator, Trie, TrieBuilder};
 
 use linnet::half_edge::{
@@ -790,8 +791,18 @@ impl IntegrandExpr {
     ) -> Self {
         println!("{}", graph.denominator(subgraph).0);
         IntegrandExpr {
-            num: graph.numerator(subgraph).0.replace_multiple(reps).into(),
-            den: graph.denominator(subgraph).0.replace_multiple(reps).into(),
+            num: graph
+                .numerator(subgraph)
+                .0
+                .to_dots()
+                .replace_multiple(reps)
+                .into(),
+            den: graph
+                .denominator(subgraph)
+                .0
+                .to_dots()
+                .replace_multiple(reps)
+                .into(),
             add_arg: None,
             dod,
         }
@@ -804,17 +815,22 @@ impl IntegrandExpr {
         dod: i32,
         reps: &[Replacement],
     ) -> Self {
-        println!("OG:{}", graph.denominator(subgraph).0);
-        let den = graph.denominator(subgraph).0;
-        println!("Replacements:");
-        for r in reps {
-            println!("{r}")
-        }
+        // println!("OG:{}", graph.denominator(subgraph).0);
+        let den = graph.denominator(subgraph).0.to_dots();
+        // println!("Replacements:");
+        // for r in reps {
+        // println!("{r}")
+        // }
         let den = den.replace_multiple(reps);
-        println!("Reps:{}", den);
+        // println!("Reps:{}", den);
 
         IntegrandExpr {
-            num: graph.numerator(subgraph).0.replace_multiple(reps).into(),
+            num: graph
+                .numerator(subgraph)
+                .0
+                .to_dots()
+                .replace_multiple(reps)
+                .into(),
             den: den.into(),
             add_arg,
             dod,
