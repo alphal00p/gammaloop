@@ -102,11 +102,26 @@ fn nested_bubble_scalar() {
     println!("{}", ufold.structure_and_res(&uv_graph));
     println!("{:>}", result);
 
+    let t = symbol!("t");
+    let series = Atom::new_var(t).npow(4)
+        * result
+            .replace(parse!("K(3)").unwrap())
+            .with(parse!("t*K(3)").unwrap())
+            .replace(parse!("symbolica_community::dot(t*K(x_),y_)").unwrap())
+            .repeat()
+            .with(parse!("t*symbolica_community::dot(K(x_),y_)").unwrap());
+
+    let s = series
+        .replace(t)
+        .with(Atom::new_var(t).npow(-1))
+        .series(t, Atom::Zero, 0.into(), true)
+        .unwrap();
+    println!("Series: {}", s);
+
     let exp = result
         .replace(parse!("symbolica_community::dot(k_(x_),l_(y_))").unwrap())
         .with(parse!("k(x_,0)*k(y_,0)-k(x_,1)*k(y_,1)-k(x_,2)*k(y_,2)-k(x_,3)*k(y_,3)").unwrap());
 
-    println!("{exp}");
     let mut fnmap = FunctionMap::new();
 
     fnmap.add_constant(Atom::new_var(symbol!("m")), (1.).into());
@@ -133,21 +148,22 @@ fn nested_bubble_scalar() {
 
     let mut ev2 = ev.map_coeff(&|x| x.to_f64());
 
-    for t in (0..100_000).step_by(1000) {
-        let r = ev2.evaluate_single(&[
-            3.,
-            43.,
-            5.,
-            6.5,
-            t as f64 + 1.,
-            t as f64 * 2. + 2.,
-            t as f64 + 3.,
-            t as f64 + 4.,
-            7.,
-            4.2,
-            1.,
-            2.4,
-        ]);
+    for t in (0..100_000).step_by(5000) {
+        let r = (t as f64).powf(4.)
+            * ev2.evaluate_single(&[
+                3.,
+                43.,
+                5.,
+                6.5,
+                t as f64 + 1.,
+                t as f64 * 2. + 2.,
+                t as f64 + 3.,
+                t as f64 + 4.,
+                7.,
+                4.2,
+                1.,
+                2.4,
+            ]);
         println!("{} {}", r, r.abs().log10());
     }
 }
@@ -258,72 +274,75 @@ fn disconnect_forest_scalar() {
 
     println!("Single limit");
     for t in (0..100_000).step_by(5000) {
-        let r = ev2.evaluate_single(&[
-            3.,
-            43.,
-            5.,
-            6.5,
-            t as f64 + 1.,
-            t as f64 * 2. + 2.,
-            t as f64 + 3.,
-            t as f64 + 4.,
-            7.,
-            4.2,
-            1.,
-            2.4,
-            6.5,
-            8.6,
-            3.4,
-            2.1,
-        ]);
+        let r = (t as f64).powf(4.)
+            * ev2.evaluate_single(&[
+                3.,
+                43.,
+                5.,
+                6.5,
+                t as f64 + 1.,
+                t as f64 * 2. + 2.,
+                t as f64 + 3.,
+                t as f64 + 4.,
+                7.,
+                4.2,
+                1.,
+                2.4,
+                6.5,
+                8.6,
+                3.4,
+                2.1,
+            ]);
         println!("{} {}", r, r.abs().log10());
     }
 
     println!("Single disjoint limit");
 
     for t in (0..100_000).step_by(5000) {
-        let r = ev2.evaluate_single(&[
-            t as f64 + 3.,
-            t as f64 + 43.,
-            t as f64 * 3. + 5.,
-            t as f64 + 6.5,
-            t as f64 + 1.,
-            t as f64 * 2. + 2.,
-            t as f64 + 3.,
-            t as f64 + 4.,
-            7.,
-            4.2,
-            1.,
-            2.4,
-            6.5,
-            8.6,
-            3.4,
-            2.1,
-        ]);
+        let r = (t as f64).powf(4.)
+            * ev2.evaluate_single(&[
+                t as f64 + 3.,
+                t as f64 + 43.,
+                t as f64 * 3. + 5.,
+                t as f64 + 6.5,
+                t as f64 + 1.,
+                t as f64 * 2. + 2.,
+                t as f64 + 3.,
+                t as f64 + 4.,
+                7.,
+                4.2,
+                1.,
+                2.4,
+                6.5,
+                8.6,
+                3.4,
+                2.1,
+            ]);
         println!("{} {}", r, r.abs().log10());
     }
 
     println!("Full graph limit");
 
     for t in (0..100_000).step_by(5000) {
-        let r = ev2.evaluate_single(&[
-            t as f64 + 3.,
-            t as f64 + 43.,
-            t as f64 * 3. + 5.,
-            t as f64 + 6.5,
-            t as f64 + 1.,
-            t as f64 * 2. + 2.,
-            t as f64 + 3.,
-            t as f64 + 4.,
-            t as f64 * 5. + 7.,
-            t as f64 + 4.2,
-            t as f64 + 1.,
-            t as f64 * 2. + 2.4,
-            6.5,
-            8.6,
-            3.4,
-            2.1,
-        ]);
+        let r = (t as f64).powf(8.)
+            * ev2.evaluate_single(&[
+                t as f64 + 3.,
+                t as f64 + 43.,
+                t as f64 * 3. + 5.,
+                t as f64 + 6.5,
+                t as f64 + 1.,
+                t as f64 * 2. + 2.,
+                t as f64 + 3.,
+                t as f64 + 4.,
+                t as f64 * 5. + 7.,
+                t as f64 + 4.2,
+                t as f64 + 1.,
+                t as f64 * 2. + 2.4,
+                6.5,
+                8.6,
+                3.4,
+                2.1,
+            ]);
         println!("{} {}", r, r.abs().log10());
     }
 }
