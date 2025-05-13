@@ -112,7 +112,24 @@ pub fn initialize_reps() {
 
 pub trait GammaLoopContext: HasStateMap {
     // fn get_state_map(&mut self) -> &mut StateMap;
-    fn get_model(&mut self) -> &mut Model;
+    fn get_model(&self) -> &Model;
+}
+
+pub struct GammaLoopContextContainer<'a> {
+    pub state_map: &'a StateMap,
+    pub model: &'a Model,
+}
+
+impl<'a> HasStateMap for GammaLoopContextContainer<'a> {
+    fn get_state_map(&self) -> &StateMap {
+        self.state_map
+    }
+}
+
+impl<'a> GammaLoopContext for GammaLoopContextContainer<'a> {
+    fn get_model(&self) -> &Model {
+        self.model
+    }
 }
 
 #[cfg(not(feature = "higher_loops"))]

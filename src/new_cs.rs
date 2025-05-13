@@ -18,7 +18,6 @@ use spenso::contraction::IsZero;
 
 use crate::{
     cff::{expression::CFFExpression, generation::generate_cff_expression},
-    initialize_reps,
     model::ArcParticle,
     momentum_sample::ExternalIndex,
     new_gammaloop_integrand::{
@@ -29,7 +28,7 @@ use crate::{
     new_graph::{LmbIndex, LoopMomentumBasis},
     signature::SignatureLike,
     utils::f128,
-    GammaLoopContext,
+    GammaLoopContext, GammaLoopContextContainer,
 };
 use eyre::eyre;
 use itertools::Itertools;
@@ -423,6 +422,15 @@ impl<S: NumeratorState> Amplitude<S> {
         }
 
         Ok(())
+    }
+
+    pub fn load_amplitude(
+        &self,
+        name: &str,
+        root_folder: &str,
+        context: GammaLoopContextContainer,
+    ) -> Result<Self> {
+        todo!()
     }
 }
 
