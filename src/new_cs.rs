@@ -8,7 +8,8 @@ use std::{
 };
 
 use ahash::{AHashSet, HashMap};
-use bincode::{Decode, Encode};
+// use bincode::{Decode, Encode};
+use bincode_trait_derive::{Decode, Encode};
 use bitvec::vec::BitVec;
 use color_eyre::Result;
 use momtrop::SampleGenerator;
@@ -28,6 +29,7 @@ use crate::{
     new_graph::{LmbIndex, LoopMomentumBasis},
     signature::SignatureLike,
     utils::f128,
+    GammaLoopContext,
 };
 use eyre::eyre;
 use itertools::Itertools;
@@ -433,7 +435,8 @@ impl<S: NumeratorState> IsPolarizable for Amplitude<S> {
     }
 }
 
-#[derive(Clone, Encode)]
+#[derive(Clone, Encode, Decode)]
+#[trait_decode(trait= GammaLoopContext)]
 pub struct AmplitudeGraph<S: NumeratorState> {
     graph: Graph,
     derived_data: AmplitudeDerivedData<S>,
@@ -704,14 +707,13 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
     }
 }
 
-#[derive(Clone, Encode)]
+#[derive(Clone, Encode, Decode)]
 pub struct AmplitudeDerivedData<S: NumeratorState> {
     cff_expression: Option<CFFExpression>,
     bare_cff_evaluator: Option<GenericEvaluator>,
     bare_cff_orientation_evaluatos: Option<TiVec<OrientationID, GenericEvaluator>>,
     _temp_numerator: Option<PhantomData<S>>,
     lmbs: Option<TiVec<LmbIndex, LoopMomentumBasis>>,
-    #[bincode(with_serde)]
     tropical_sampler: Option<SampleGenerator<3>>,
     multi_channeling_setup: Option<LmbMultiChannelingSetup>,
 }
