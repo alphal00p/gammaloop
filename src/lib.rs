@@ -70,13 +70,24 @@ use observables::PhaseSpaceSelectorSettings;
 
 use signature::ExternalSignature;
 use spenso::complex::Complex;
+use spenso::structure::abstract_index::AIND_SYMBOLS;
+use spenso::structure::representation::Euclidean;
+use spenso::structure::representation::Minkowski;
+use spenso::structure::representation::RepName;
 use std::fmt::Display;
 use std::fs::File;
 use std::sync::atomic::AtomicBool;
+use symbolica::atom::Atom;
 use symbolica::evaluate::CompileOptions;
 use symbolica::evaluate::InlineASM;
 use symbolica::state::HasStateMap;
 use symbolica::state::StateMap;
+use symbolica_community::physics::algebraic_simplification::representations::Bispinor;
+use symbolica_community::physics::algebraic_simplification::representations::ColorAdjoint;
+use symbolica_community::physics::algebraic_simplification::representations::ColorFundamental;
+use symbolica_community::physics::algebraic_simplification::representations::ColorSextet;
+use symbolica_community::physics::algebraic_simplification::representations::Lorentz;
+use symbolica_community::physics::algebraic_simplification::representations::SpinFundamental;
 use utils::FloatLike;
 use utils::F;
 
@@ -86,6 +97,18 @@ pub static INTERRUPTED: AtomicBool = AtomicBool::new(false);
 
 pub const GAMMALOOP_NAMESPACE: &str = "GL";
 pub const MAX_CORES: usize = 1000;
+
+pub fn initialize_reps() {
+    let _ = AIND_SYMBOLS.dind;
+    let _ = Minkowski {}.to_symbolic([Atom::Zero]);
+    let _ = Euclidean {}.to_symbolic([Atom::Zero]);
+    let _ = Lorentz {}.to_symbolic([Atom::Zero]);
+    let _ = SpinFundamental {}.to_symbolic([Atom::Zero]);
+    let _ = Bispinor {}.to_symbolic([Atom::Zero]);
+    let _ = ColorAdjoint {}.to_symbolic([Atom::Zero]);
+    let _ = ColorFundamental {}.to_symbolic([Atom::Zero]);
+    let _ = ColorSextet {}.to_symbolic([Atom::Zero]);
+}
 
 pub trait GammaLoopContext: HasStateMap {
     // fn get_state_map(&mut self) -> &mut StateMap;
@@ -772,8 +795,6 @@ impl Externals {
                             dependent_momenta[external_connection.outgoing_index] =
                                 incoming_momentum;
                         }
-
-                        debug!("dependent_momenta: {:?}", dependent_momenta);
 
                         dependent_momenta
                     }

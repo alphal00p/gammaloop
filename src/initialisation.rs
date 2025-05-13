@@ -6,6 +6,7 @@ pub(crate) fn initialise() -> Result<()> {
     if option_env!("SYMBOLICA_OEM_LICENSE").is_some() {
         activate_oem_license!("SYMBOLICA_OEM_KEY_23177b25");
     };
+    crate::initialize_reps();
 
     Ok(())
 }

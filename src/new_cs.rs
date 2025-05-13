@@ -17,6 +17,7 @@ use spenso::contraction::IsZero;
 
 use crate::{
     cff::{expression::CFFExpression, generation::generate_cff_expression},
+    initialize_reps,
     model::ArcParticle,
     momentum_sample::ExternalIndex,
     new_gammaloop_integrand::{

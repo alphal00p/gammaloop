@@ -2621,7 +2621,7 @@ pub enum LorentzRep {
     Bispinor,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum RotationMethod {
     EulerAngles(f64, f64, f64),
     Pi2X,
