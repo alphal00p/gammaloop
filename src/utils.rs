@@ -3316,16 +3316,16 @@ pub static TENSORLIB: LazyLock<TensorLibrary<MixedTensor<F<f64>, ExplicitKey>>> 
         let mut weyl = TensorLibrary::new();
 
         weyl.update_ids();
-        let gamma_key = SpensoStucture::gamma4D(TensorNamespace::Weyl).structure;
+        let gamma_key = SpensoStucture::gamma4D_impl(TensorNamespace::Weyl).structure;
         weyl.insert_explicit(gamma_data_weyl(gamma_key, F(1.), F(0.)).into());
 
-        let gamma5_key = SpensoStucture::gamma5(TensorNamespace::Weyl).structure;
+        let gamma5_key = SpensoStucture::gamma5_impl(TensorNamespace::Weyl).structure;
         weyl.insert_explicit(gamma5_weyl_data(gamma5_key, F(1.), F(0.)).into());
 
-        let projm_key = SpensoStucture::projm(TensorNamespace::Weyl).structure;
+        let projm_key = SpensoStucture::projm_impl(TensorNamespace::Weyl).structure;
         weyl.insert_explicit(proj_m_data_weyl(projm_key, F(1.), F(0.)).into());
 
-        let projp_key = SpensoStucture::projp(TensorNamespace::Weyl).structure;
+        let projp_key = SpensoStucture::projp_impl(TensorNamespace::Weyl).structure;
         weyl.insert_explicit(proj_p_data_weyl(projp_key, F(1.), F(0.)).into());
 
         weyl

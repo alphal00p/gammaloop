@@ -46,7 +46,7 @@ similar.opt-level = 3
 [dependencies]
 # These will be patched
 symbolica = { version = "0.16.0",features = ["serde","bincode"] }
-symbolica_community = {git = "https://github.com/alphal00p/symbolica-community",rev="fb7863a0e6dddb26fdc1e4cbcfc4ab698b306342",features=["bincode"]}
+symbolica_community = {git = "https://github.com/alphal00p/symbolica-community",rev="50890cd87fa29a36ce8e69928ad1c914e0c8eb6e",features=["bincode"]}
 
 
 
@@ -55,7 +55,7 @@ spenso = { version = "0.4.1", features = ["shadowing"] }
 #    # "symbolica",
 #    "drawing",
 #] }
-linnet = { git = "https://github.com/alphal00p/linnet", features=["drawing","serde","bincode"]}
+linnet = { version="0.5.2", features=["drawing","serde","bincode"]}
 
 
 momtrop = { git = "https://github.com/alphal00p/momtrop", features = ["log",] }
@@ -167,9 +167,9 @@ no_python = []
 # symbolica={git="https://github.com/benruijl/symbolica",rev="a714571c8c8ee1a292237eb3ef1bc8123a4d7db4"}
 symbolica = { git = "https://github.com/alphal00p/symbolica", rev = "8ec5f90129ef74809b48de85354f02347c522f5e" }
 # symbolica = {path="../symbolica"}
-spenso={git="https://github.com/alphal00p/spenso",rev="205f796c6daef11240f1f1b4079b89563b548364"}
-spenso-macros = {git="https://github.com/alphal00p/spenso",rev="205f796c6daef11240f1f1b4079b89563b548364",features=["shadowing"],optional=true}
+spenso={git="https://github.com/alphal00p/spenso",rev="c77bf47b8a8012d06c354f1755642f36127dcaeb"}
+spenso-macros = {git="https://github.com/alphal00p/spenso",rev="c77bf47b8a8012d06c354f1755642f36127dcaeb",features=["shadowing"],optional=true}
 # spenso = { path = "../spenso/spenso" }
 # linnet = { path = "../linnet" }
-linnet = {git ="https://github.com/alphal00p/linnet", rev = "d8636fbfed7f924ea240fcb73783f1845a10ba91"}
+# linnet = {git ="https://github.com/alphal00p/linnet", rev = "d8636fbfed7f924ea240fcb73783f1845a10ba91"}
 # symbolica-community={path="../symbolica-community"}
