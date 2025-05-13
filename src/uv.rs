@@ -6,7 +6,9 @@ use std::{
     ops::{Deref, Index},
 };
 
-use crate::{graph::VertexInfo, momentum::Sign, new_graph::LoopMomentumBasis, utils::GS};
+use crate::{
+    graph::VertexInfo, model::ArcParticle, momentum::Sign, new_graph::LoopMomentumBasis, utils::GS,
+};
 use ahash::{AHashMap, AHashSet};
 use bitvec::vec::BitVec;
 use color_eyre::Report;
@@ -283,15 +285,16 @@ impl PartialOrd for BitFilter {
 pub struct UVEdge {
     og_edge: usize,
     dod: i32,
+    particle: ArcParticle,
     num: Atom,
     den: Atom,
 }
 
 impl UVEdge {
     pub fn from_edge(edge: &BareEdge, id: usize, bare_graph: &BareGraph) -> Self {
-        let index = (id) as i32;
         let [colorless, _] = edge.color_separated_numerator(bare_graph, id);
         UVEdge {
+            particle: edge.particle.clone(),
             og_edge: id,
             dod: edge.dod() as i32,
             num: normalise_complex(&colorless).into(),
@@ -632,7 +635,7 @@ impl UVGraph {
     // }
 
     fn spinneys(&self) -> AHashSet<InternalSubGraph> {
-        println!("{}", self.base_dot());
+        // println!("{}", self.base_dot());
         let mut spinneys: AHashSet<_> = InternalSubGraph::all_ops_iterative_filter_map(
             &self.all_cycle_sym_diffs().unwrap(),
             &|a, b| a.union(b),
@@ -697,10 +700,10 @@ impl UVGraph {
         let mut den = Atom::new_num(1);
 
         for e in self.iter_internal_edge_data(subgraph) {
-            den = den * &e.data.den;
+            den = den * function!(GS.den, &e.data.den);
         }
 
-        den.npow(-1).into()
+        den.into()
     }
 
     fn dot<S: SubGraph>(&self, subgraph: &S) -> String {
@@ -790,7 +793,7 @@ impl IntegrandExpr {
         dod: i32,
         reps: &[Replacement], // add_arg: Option<IntegrandExpr>,
     ) -> Self {
-        println!("{}", graph.denominator(subgraph).0);
+        // println!("{}", graph.denominator(subgraph).0);
         IntegrandExpr {
             num: graph
                 .numerator(subgraph)
@@ -1302,7 +1305,7 @@ impl Approximation {
                         function!(GS.emr_mom, usize::from(*edge) as i64).to_pattern(),
                         mom.to_pattern(),
                     );
-                    println!("Rep:{r}");
+                    // println!("Rep:{r}");
                     r
                 })
                 .collect(),
@@ -1349,15 +1352,15 @@ impl Approximation {
     pub fn expr(&self, graph: &UVGraph) -> Option<SerializableAtom> {
         let (t, s) = self.approx_op.bare_expr()?;
 
-        println!("Reps");
-        for r in &graph.lmb_replacement {
-            println!("{r}")
-        }
-        println!("Before:{t}");
+        // println!("Reps");
+        // for r in &graph.lmb_replacement {
+        // println!("{r}")
+        // }
+        // println!("Before:{t}");
 
         let t = t.replace_multiple(&graph.lmb_replacement);
 
-        println!("After:{t}");
+        // println!("After:{t}");
         let contracted = s * IntegrandExpr::from_subgraph(
             &graph.full_node().internal_graph.subtract(&self.subgraph),
             graph,
@@ -1440,18 +1443,49 @@ impl ApproxOp {
                     .with(function!(GS.emr_mom, usize::from(*e) as i64) * t);
             }
 
+            let mut masses = AHashSet::new();
+            // scale all masses, including UV masses from subgraphs
+            // TOOD: prevent rescaling in denominators of subgraphs
+            for e in graph.iter_internal_edge_data(subgraph) {
+                let e_mass = parse!(&e.data.particle.mass.name).unwrap();
+                masses.insert(e_mass);
+            }
+
+            for m in masses {
+                let rescaled = m.clone() * GS.rescale;
+                atomarg = atomarg.replace(m).with(rescaled);
+            }
+
+            atomarg = atomarg
+                .replace(parse!("mUV").unwrap())
+                .with(parse!("t*mUV").unwrap());
+
+            // expand the propagator around a propagator with a UV mass
+            atomarg = atomarg
+                .replace(parse!("den(x_)").unwrap())
+                .with(parse!("1/(x_ - mUV^2 + t^2*mUV^2)").unwrap());
+
             atomarg = atomarg
                 .replace(parse!("symbolica_community::dot(t*x__,y_)").unwrap())
                 .repeat()
                 .with(parse!("t*symbolica_community::dot(x__,y_)").unwrap());
 
-            println!("DOD {}", dod);
-            let a = atomarg
+            println!("atomarg:{}", atomarg);
+
+            let mut a = atomarg
                 .series(t, Atom::Zero, dod.into(), true)
                 .unwrap()
                 .to_atom()
                 .replace(t)
                 .with(Atom::new_num(1));
+
+            // replace the denominators back to den so that they can get re-expanded
+            /*a = a
+                .replace(parse!(format!("1/({}(x_))", GS.emr_mom)).unwrap())
+                .with(parse!(format!("den({}(x_))", GS.emr_mom)).unwrap());
+            a = a
+                .replace(parse!(format!("1/({}(x_) + y___)", GS.emr_mom)).unwrap())
+                .with(parse!(format!("den({}(x_) + y___)", GS.emr_mom)).unwrap());*/
 
             Self::Dependent {
                 t_arg: IntegrandExpr {

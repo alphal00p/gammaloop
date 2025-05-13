@@ -38,6 +38,8 @@ pub fn spenso_lor_atom(tag: i32, ind: impl Into<AbstractIndex>, dim: impl Into<D
 
 #[test]
 fn nested_bubble_scalar_quad() {
+    // let massive_particle = ArcParticle(Arc::new(Particle::))
+
     let scalar_node = UVNode {
         dod: 0,
         num: Atom::new_num(1),
@@ -45,20 +47,26 @@ fn nested_bubble_scalar_quad() {
     };
 
     fn scalar_edge(eid: i32) -> UVEdge {
-        let m2 = parse!("m^2").unwrap();
+        let model = load_generic_model("sm");
+        let higgs = model.get_particle("H");
+        let m2 = parse!(higgs.mass.name).unwrap().npow(2);
         UVEdge {
             og_edge: 1, // not needed
             dod: -2,
+            particle: higgs,
             num: Atom::new_num(1),
             den: spenso_lor_atom(eid, 1, GS.dim).npow(2).to_dots() + m2,
         }
     }
 
     fn scalar_edge_with_p(eid: i32, ind: impl Into<AbstractIndex>) -> UVEdge {
-        let m2 = parse!("m^2").unwrap();
+        let model = load_generic_model("sm");
+        let higgs = model.get_particle("H");
+        let m2 = parse!(higgs.mass.name).unwrap().npow(2);
         UVEdge {
             og_edge: 1, // not needed
             dod: -1,
+            particle: higgs,
             num: spenso_lor_atom(eid, ind, GS.dim),
             den: spenso_lor_atom(eid, 1, GS.dim).npow(2).to_dots() + m2,
         }
@@ -91,19 +99,19 @@ fn nested_bubble_scalar_quad() {
 
     let wood = uv_graph.wood();
 
-    println!("{}", wood.dot(&uv_graph));
-    println!("{}", wood.show_graphs(&uv_graph));
+    // println!("{}", wood.dot(&uv_graph));
+    // println!("{}", wood.show_graphs(&uv_graph));
 
     let mut ufold = wood.unfold_impl(&uv_graph);
     // assert_eq!(152, ufold.n_terms());
     ufold.compute(&uv_graph);
 
-    println!("unfolded : {}", ufold.show_structure(&uv_graph).unwrap());
-    println!("graph: {}", ufold.graphs());
+    // println!("unfolded : {}", ufold.show_structure(&uv_graph).unwrap());
+    // println!("graph: {}", ufold.graphs());
 
     let result = ufold.expr(&uv_graph).unwrap().0;
 
-    println!("{}", ufold.structure_and_res(&uv_graph));
+    // println!("{}", ufold.structure_and_res(&uv_graph));
     println!("{:>}", result);
 
     let t = symbol!("t");
@@ -182,10 +190,13 @@ fn nested_bubble_scalar() {
     };
 
     fn scalar_edge(eid: i32) -> UVEdge {
-        let m2 = parse!("m^2").unwrap();
+        let model = load_generic_model("sm");
+        let higgs = model.get_particle("H");
+        let m2 = parse!(higgs.mass.name).unwrap().npow(2);
         UVEdge {
             og_edge: 1, // not needed
             dod: -2,
+            particle: higgs,
             num: Atom::new_num(1),
             den: spenso_lor_atom(eid, 1, GS.dim).npow(2).to_dots() + m2,
         }
@@ -314,10 +325,13 @@ fn disconnect_forest_scalar() {
     };
 
     fn scalar_edge(eid: i32) -> UVEdge {
-        let m2 = parse!("m^2").unwrap();
+        let model = load_generic_model("sm");
+        let higgs = model.get_particle("H");
+        let m2 = parse!(higgs.mass.name).unwrap().npow(2);
         UVEdge {
             og_edge: 1, // not needed
             dod: -2,
+            particle: higgs,
             num: Atom::new_num(1),
             den: spenso_lor_atom(eid, 1, GS.dim).npow(2).to_dots() + m2,
         }
@@ -482,73 +496,6 @@ fn disconnect_forest_scalar() {
             ]);
         println!("{} {}", r, r.abs().log10());
     }
-}
-
-#[test]
-fn manual() {
-    let mut builder = HedgeGraphBuilder::new();
-
-    let node1 = builder.add_node(UVNode {
-        dod: 0,
-        num: spenso_lor_atom(1, 2, GS.dim),
-        color: None,
-    });
-
-    let node2 = builder.add_node(UVNode {
-        dod: 1,
-        num: parse!("anything").unwrap(),
-        color: None,
-    });
-
-    let edge1 = UVEdge {
-        og_edge: 1, // not needed
-        dod: 1,
-        num: spenso_lor_atom(1, 2, GS.dim),
-        den: spenso_lor_atom(1, -2, GS.dim).npow(2).to_dots(),
-    };
-
-    builder.add_edge(node1, node2, edge1, false);
-
-    let edge2 = UVEdge {
-        og_edge: 1, // not needed
-        dod: 1,
-        num: spenso_lor_atom(2, 2, GS.dim),
-        den: spenso_lor_atom(2, -1, GS.dim).npow(2).to_dots(),
-    };
-
-    builder.add_edge(node2, node1, edge2, false);
-
-    let hedge_graph = builder.build();
-    let cut_edges = hedge_graph.cycle_basis().1.tree_subgraph;
-
-    let uv_graph = UVGraph {
-        hedge_graph,
-        cut_edges,
-        lmb_replacement: vec![],
-    };
-    println!(
-        "{}",
-        uv_graph.dot_impl(
-            &uv_graph.full_filter(),
-            "",
-            &|a| Some(a.den.to_string()),
-            &|n| Some(n.num.to_string())
-        )
-    );
-
-    let wood = uv_graph.wood();
-
-    println!("{}", wood.dot(&uv_graph));
-    println!("{}", wood.show_graphs(&uv_graph));
-
-    let mut ufold = wood.unfold_impl(&uv_graph);
-    // assert_eq!(152, ufold.n_terms());
-    ufold.compute(&uv_graph);
-
-    println!("unfolded : {}", ufold.show_structure(&uv_graph).unwrap());
-    println!("graph: {}", ufold.graphs());
-
-    println!("{}", ufold.expr(&uv_graph).unwrap());
 }
 
 #[test]
