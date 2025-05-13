@@ -163,6 +163,14 @@ impl Process {
     fn generate_integrands(&self, settings: Settings) -> HashMap<String, Integrand> {
         self.collection.generate_integrands(settings)
     }
+
+    fn export_amplitudes(&self, settings: &ExportSettings) -> Result<()> {
+        Ok(())
+    }
+
+    fn export_cross_sections(&self, settings: &ExportSettings) -> Result<()> {
+        Ok(())
+    }
 }
 
 #[derive(Clone)]
@@ -218,7 +226,24 @@ impl ProcessList {
     }
 
     /// exports a process list to a folder
-    pub fn export(&self, _settings: ExportSettings) -> Result<()> {
+    pub fn export_amplitudes(
+        &self,
+        amplitude_names: &[String],
+        settings: &ExportSettings,
+    ) -> Result<usize> {
+        let mut n_exported = 0;
+        for process in self.processes.iter() {
+            n_exported += process
+                .collection
+                .export_amplitudes(amplitude_names, settings)?;
+        }
+        Ok(n_exported)
+    }
+
+    pub fn export_cross_sections(&self, settings: &ExportSettings) -> Result<()> {
+        for process in self.processes.iter() {
+            process.collection.export_cross_sections(settings)?;
+        }
         Ok(())
     }
 }
@@ -293,6 +318,38 @@ impl<S: NumeratorState> ProcessCollection<S> {
         }
         result
     }
+
+    fn export_amplitudes(
+        &self,
+        amplitude_names: &[String],
+        settings: &ExportSettings,
+    ) -> Result<usize> {
+        let mut n_exported = 0;
+        match self {
+            Self::Amplitudes(amplitudes) => {
+                for amplitude in amplitudes {
+                    if amplitude_names.contains(&amplitude.name.to_string()) {
+                        amplitude.export(settings)?;
+                        n_exported += 1;
+                    }
+                }
+            }
+            _ => {}
+        }
+        Ok(n_exported)
+    }
+
+    fn export_cross_sections(&self, settings: &ExportSettings) -> Result<()> {
+        match self {
+            Self::CrossSections(cross_sections) => {
+                for cross_section in cross_sections {
+                    cross_section.export(settings)?;
+                }
+            }
+            _ => {}
+        }
+        Ok(())
+    }
 }
 
 #[derive(Clone)]
@@ -347,8 +404,8 @@ impl<S: NumeratorState> Amplitude<S> {
         Integrand::NewIntegrand(NewIntegrand::Amplitude(amplitude_integrand))
     }
 
-    pub fn export(&self, export_root: &str) -> Result<()> {
-        let path = Path::new(export_root)
+    pub fn export(&self, settings: &ExportSettings) -> Result<()> {
+        let path = Path::new(&settings.root_folder)
             .join("sources")
             .join("amplitudes")
             .join(self.name.as_str());
@@ -799,6 +856,26 @@ impl<S: NumeratorState> CrossSection<S> {
         };
 
         Integrand::NewIntegrand(NewIntegrand::CrossSection(cross_section_integrand))
+    }
+
+    fn export(&self, settings: &ExportSettings) -> Result<()> {
+        let path = Path::new(&settings.root_folder)
+            .join("sources")
+            .join("cross_sections")
+            .join(self.name.as_str());
+
+        for supergraph in self.supergraphs.iter() {
+            let file_name = path
+                .clone()
+                .join(format!("cross_section_graph_{}.bin", supergraph.graph.name));
+
+            todo!("implement export of cross section graph")
+
+            //            let data = bincode::encode_to_vec(supergraph, bincode::config::standard())?;
+            //      std::fs::write(file_name, &data)?;
+        }
+
+        Ok(())
     }
 }
 
