@@ -7,7 +7,8 @@ use std::{
 };
 
 use crate::{
-    graph::VertexInfo, model::ArcParticle, momentum::Sign, new_graph::LoopMomentumBasis, utils::GS,
+    cff::generation::generate_cff_expression_from_subgraph_to_ose_atom, graph::VertexInfo,
+    model::ArcParticle, momentum::Sign, new_graph::LoopMomentumBasis, utils::GS,
 };
 use ahash::{AHashMap, AHashSet};
 use bitvec::vec::BitVec;
@@ -55,231 +56,6 @@ use crate::{
 };
 
 use bitvec::prelude::*;
-
-pub struct PoSet<N>
-where
-    N: PartialOrd,
-{
-    greater_than: Vec<Vec<usize>>,
-    nodes: Vec<N>,
-}
-
-pub struct BfsIterator<N: Index<usize>> {
-    order: Vec<usize>,
-    nodes: N,
-}
-
-impl<N: Index<usize, Output: Sized + Clone>> Iterator for BfsIterator<N> {
-    type Item = N::Output;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        Some(self.nodes[self.order.pop()?].clone())
-    }
-}
-
-pub struct CoverSet<N>
-where
-    N: PartialOrd,
-{
-    covers: Vec<Vec<usize>>,
-    nodes: Vec<N>,
-}
-
-impl<N: PartialOrd> CoverSet<N> {
-    pub fn build_predecessors(&self) -> Vec<Vec<usize>> {
-        let mut predecessors = vec![Vec::new(); self.nodes.len()];
-
-        for (node_index, successors) in self.covers.iter().enumerate() {
-            for &succ_index in successors {
-                predecessors[succ_index].push(node_index);
-            }
-        }
-
-        predecessors
-    }
-
-    pub fn covers(&self, a: usize, b: usize) -> bool {
-        self.covers[a].contains(&b)
-    }
-
-    pub fn dot(&self) -> String {
-        let mut out = "digraph {\n ".to_string();
-        out.push_str("  node [shape=circle,height=0.1,label=\"\"];  overlap=\"scale\";\n ");
-
-        for (i, c) in self.covers.iter().enumerate() {
-            for j in c {
-                out.push_str(&format!("{} -> {};\n", i, j));
-            }
-        }
-
-        out += "}";
-        out
-    }
-
-    pub fn bfs(&self, start: usize) -> Vec<usize> {
-        let mut visited = bitvec![usize, Lsb0; 0; self.nodes.len()];
-        let mut queue = VecDeque::new();
-        let mut order = Vec::new();
-
-        queue.push_back(start);
-
-        while let Some(node) = queue.pop_front() {
-            if visited[node] {
-                continue;
-            }
-
-            visited.set(node, true);
-            order.push(node);
-
-            for &n in &self.covers[node] {
-                queue.push_back(n);
-            }
-        }
-
-        order
-    }
-
-    pub fn bfs_iter(&self, start: usize) -> BfsIterator<Vec<N>>
-    where
-        N: Clone,
-    {
-        BfsIterator {
-            order: self.bfs(start),
-            nodes: self.nodes.clone(),
-        }
-    }
-}
-
-impl<N> PoSet<N>
-where
-    N: Clone + PartialOrd,
-{
-    /// Returns true if a covers b
-    /// a covers b if a > b and there is no c such that a > c > b
-    ///
-    pub fn covers(&self, a: usize, b: usize) -> bool {
-        let mut covers = false;
-        let mut has_c = false;
-        for c in &self.greater_than[b] {
-            if *c == a {
-                covers = true;
-            }
-
-            if self.nodes[a] > self.nodes[*c] {
-                has_c = true;
-            }
-        }
-        covers && !has_c
-    }
-    pub fn to_cover_set(&self) -> CoverSet<N> {
-        let mut covers: Vec<Vec<usize>> = Vec::new();
-        let nodes = self.nodes.clone();
-
-        for (i, _) in nodes.iter().enumerate() {
-            let mut coversacents = Vec::new();
-
-            for j in (i + 1)..nodes.len() {
-                if self.covers(j, i) {
-                    coversacents.push(j);
-                }
-            }
-            covers.push(coversacents);
-        }
-
-        CoverSet { covers, nodes }
-    }
-
-    pub fn dot(&self) -> String {
-        let mut out = "digraph {\n ".to_string();
-        out.push_str("  node [shape=circle,height=0.1,label=\"\"];  overlap=\"scale\";\n ");
-
-        for (i, c) in self.greater_than.iter().enumerate() {
-            for j in c {
-                out.push_str(&format!("{} -> {};\n", i, j));
-            }
-        }
-
-        for (i, _n) in self.nodes.iter().enumerate() {
-            out.push_str(&format!("{};\n", i));
-        }
-
-        out += "}";
-        out
-    }
-
-    pub fn greater_than(&self, a: usize) -> Vec<usize> {
-        self.greater_than[a].clone()
-    }
-
-    pub fn build_predecessors(&self) -> Vec<Vec<usize>> {
-        let mut predecessors = vec![Vec::new(); self.nodes.len()];
-
-        for (node_index, successors) in self.greater_than.iter().enumerate() {
-            for &succ_index in successors {
-                predecessors[succ_index].push(node_index);
-            }
-        }
-
-        predecessors
-    }
-}
-
-impl<N> FromIterator<N> for PoSet<N>
-where
-    N: PartialOrd,
-{
-    fn from_iter<T: IntoIterator<Item = N>>(iter: T) -> Self {
-        let mut nodes = Vec::new();
-        let mut greater_than: Vec<Vec<usize>> = Vec::new();
-
-        // Insert topologically
-        // we want that if n < m then n comes before m in the nodes list
-        for n in iter {
-            let mut pos = nodes.len();
-            for (i, m) in nodes.iter().enumerate().rev() {
-                if n < *m {
-                    pos = i;
-                }
-            }
-            nodes.insert(pos, n);
-        }
-
-        for (i, n) in nodes.iter().enumerate() {
-            let mut greater_thanacents = Vec::new();
-
-            for (j, m) in nodes.iter().enumerate().skip(i) {
-                if *m > *n {
-                    greater_thanacents.push(j);
-                }
-            }
-            greater_than.push(greater_thanacents);
-        }
-
-        PoSet {
-            greater_than,
-            nodes,
-        }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct BitFilter {
-    data: u128,
-}
-
-impl PartialOrd for BitFilter {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        if self.eq(other) {
-            Some(Ordering::Equal)
-        } else if self.data & other.data == self.data {
-            Some(Ordering::Greater)
-        } else if self.data & other.data == other.data {
-            Some(Ordering::Less)
-        } else {
-            None
-        }
-    }
-}
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct UVEdge {
@@ -557,82 +333,6 @@ impl UVGraph {
         uv_graph
     }
 
-    // pub fn edge_id(&self, g: &BareGraph, id: usize) -> EdgeIndex {
-    //     self.0
-    //         .as_ref()
-    //         .find_from_data(&UVEdge::from_edge(&g.edges[id], id, g))
-    //         .unwrap()
-    // }
-
-    // pub fn node_id(&self, g: &BareGraph, id: usize) -> HedgeNode {
-    //     let e_id = g.vertices[id].edges.first().unwrap();
-    //     self.0
-    //         .as_ref()
-    //         .get_node_id(self.half_edge_id(g, *e_id))
-    //         .clone()
-    // }
-
-    // pub fn cycle_basis_from_lmb(&self, lmb: &LoopMomentumBasis) -> Vec<HedgeNode> {
-    //     let mut cycle_basis = Vec::new();
-    //     let cut_edges = self.0.paired_filter_from_pos(&lmb.basis);
-
-    //     for v in lmb.basis.iter() {
-    //         let loop_edge = self.0.paired_filter_from_pos(&[*v]);
-
-    //         let mut hairy_loop =
-    //             self.0
-    //                 .nesting_node_from_subgraph(InternalSubGraph::cleaned_filter_optimist(
-    //                     !cut_edges.clone() | &loop_edge,
-    //                     &self.0,
-    //                 ));
-
-    //         self.0.cut_branches(&mut hairy_loop);
-    //         cycle_basis.push(hairy_loop);
-    //     }
-    //     cycle_basis
-    // }
-
-    // fn spanning_forest_from_lmb(&self, lmb: LoopMomentumBasis) -> HedgeNode {
-    //     let cutting_edges = self.0.paired_filter_from_pos(&lmb.basis);
-
-    //     self.0
-    //         .nesting_node_from_subgraph(InternalSubGraph::cleaned_filter_optimist(
-    //             !cutting_edges,
-    //             &self.0,
-    //         ))
-    // }
-
-    // fn connected_spinneys(&self) -> AHashSet<InternalSubGraph> {
-    //     let cycles = self.0.all_cycles();
-
-    //     let mut spinneys = AHashSet::new();
-
-    //     for (ci, cj) in cycles.iter().tuple_combinations().map(|(a, b)| {
-    //         (
-    //             self.0.nesting_node_from_subgraph(a.clone()),
-    //             self.0.nesting_node_from_subgraph(b.clone()),
-    //         )
-    //     }) {
-    //         if !ci.strongly_disjoint(&cj) {
-    //             let union = ci.internal_graph.union(&cj.internal_graph); //pairwise unions uffices up to 5 loops, then you need to do three unions.
-    //             if self.dod(&union) >= 0 {
-    //                 spinneys.insert(union);
-    //             } else {
-    //                 // println!("not dod >=0 spinney :{}", self.dod(&union));
-    //             }
-    //         }
-    //     }
-
-    //     for c in cycles {
-    //         if self.dod(&c) >= 0 {
-    //             spinneys.insert(c);
-    //         }
-    //     }
-
-    //     spinneys.insert(self.0.empty_subgraph());
-    //     spinneys
-    // }
-
     fn spinneys(&self) -> AHashSet<InternalSubGraph> {
         // println!("{}", self.base_dot());
         let mut spinneys: AHashSet<_> = InternalSubGraph::all_ops_iterative_filter_map(
@@ -680,7 +380,7 @@ impl UVGraph {
         dod
     }
 
-    fn numerator<S: SubGraph>(&self, subgraph: &S) -> SerializableAtom {
+    fn numerator<S: SubGraph>(&self, subgraph: &S) -> Atom {
         let mut num = Atom::new_num(1);
 
         for (_, _, n) in self.iter_node_data(subgraph) {
@@ -694,11 +394,13 @@ impl UVGraph {
         num.into()
     }
 
-    fn denominator(&self, subgraph: &InternalSubGraph) -> SerializableAtom {
+    fn denominator(&self, subgraph: &InternalSubGraph) -> Atom {
         let mut den = Atom::new_num(1);
 
-        for e in self.iter_internal_edge_data(subgraph) {
-            den = den * function!(GS.den, &e.data.den);
+        for (pair, eid, d) in self.iter_edges(subgraph) {
+            if matches!(pair, HedgePair::Paired { .. }) {
+                den = den * function!(GS.den, usize::from(eid) as i64, &d.data.den);
+            }
         }
 
         den.into()
@@ -727,288 +429,26 @@ impl UVGraph {
 }
 
 pub struct Wood {
-    poset: Poset<InternalSubGraph, Option<Top>>,
+    poset: Poset<InternalSubGraph, ()>,
     additional_unions: SecondaryMap<PosetNode, Vec<PosetNode>>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct TrieWood {
-    trie: Trie<Top>,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
-pub struct UnfoldedWoodEl {
-    expr: SerializableAtom,
-    // graphs: Vec<PosetNode>,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
-pub struct UnfoldedWood {
-    elements: Vec<UnfoldedWoodEl>,
-}
-
-impl UnfoldedWood {
-    pub fn n_elements(&self) -> usize {
-        self.elements.len()
-    }
-
-    pub fn show_structure(&self, wood: &Wood, graph: &UVGraph) -> String {
-        let mut out = wood.show_graphs(graph);
-        for e in &self.elements {
-            out.push('\n');
-            // for g in &e.graphs {
-            //     out.push_str(&format!("{} ->", wood.poset.dot_id(*g)));
-            // }
-            out.push('\n');
-            out.push_str(&format!("+{} \n", e.expr));
-        }
-        out
-    }
-}
-
-impl Display for UnfoldedWood {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        for e in &self.elements {
-            writeln!(f, "{}", e.expr)?;
-            writeln!(f, " + ")?;
-        }
-        Ok(())
-    }
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct IntegrandExpr {
-    dod: i32,
-    num: SerializableAtom,
-    den: SerializableAtom,
-    add_arg: Option<SerializableAtom>,
+    integrand: Atom,
+    // add_arg: Option<Atom>,
 }
 
 impl IntegrandExpr {
-    pub fn from_subgraph(
-        subgraph: &InternalSubGraph,
-        graph: &UVGraph,
-        dod: i32,
-        reps: &[Replacement], // add_arg: Option<IntegrandExpr>,
-    ) -> Self {
+    pub fn from_subgraph(subgraph: &InternalSubGraph, graph: &UVGraph) -> Self {
+        let num = graph.numerator(subgraph).to_dots();
+
+        let den = graph.denominator(subgraph);
+
         // println!("{}", graph.denominator(subgraph).0);
         IntegrandExpr {
-            num: graph
-                .numerator(subgraph)
-                .0
-                .to_dots()
-                .replace_multiple(reps)
-                .into(),
-            den: graph
-                .denominator(subgraph)
-                .0
-                .to_dots()
-                .replace_multiple(reps)
-                .into(),
-            add_arg: None,
-            dod,
+            integrand: num / den,
         }
-    }
-
-    pub fn from_subgraph_with_arg(
-        subgraph: &InternalSubGraph,
-        graph: &UVGraph,
-        add_arg: Option<SerializableAtom>,
-        dod: i32,
-        reps: &[Replacement],
-    ) -> Self {
-        // println!("OG:{}", graph.denominator(subgraph).0);
-        let den = graph.denominator(subgraph).0.to_dots();
-        // println!("Replacements:");
-        // for r in reps {
-        // println!("{r}")
-        // }
-        let den = den.replace_multiple(reps);
-        // println!("Reps:{}", den);
-
-        IntegrandExpr {
-            num: graph
-                .numerator(subgraph)
-                .0
-                .to_dots()
-                .replace_multiple(reps)
-                .into(),
-            den: den.into(),
-            add_arg,
-            dod,
-        }
-    }
-
-    pub fn top(&self) -> SerializableAtom {
-        if let Some(add_arg) = &self.add_arg {
-            FunctionBuilder::new(GS.top)
-                .add_arg(&Atom::new_num(self.dod))
-                .add_arg(&self.num.0)
-                .add_arg(&self.den.0)
-                .add_arg(&add_arg.0)
-                .finish()
-                // .ref_neg()
-                .into()
-        } else {
-            FunctionBuilder::new(GS.top)
-                .add_arg(&Atom::new_num(self.dod))
-                .add_arg(&self.num.0)
-                .add_arg(&self.den.0)
-                .finish()
-                // .ref_neg()
-                .into()
-        }
-    }
-
-    pub fn bare(&self) -> SerializableAtom {
-        (&self.num.0 * &self.den.0).into()
-    }
-
-    pub fn with_add_arg(&self) -> Atom {
-        if let Some(a) = &self.add_arg {
-            (&self.num.0 * &self.den.0) * &a.0
-        } else {
-            &self.num.0 * &self.den.0
-        }
-    }
-
-    pub fn bare_with_add_arg(&self) -> Atom {
-        if let Some(a) = &self.add_arg {
-            &self.num.0
-                * &self
-                    .den
-                    .0
-                    .replace(function!(GS.den, GS.x__))
-                    .with(Atom::new_var(GS.x__).npow(-1))
-                * &a.0
-        } else {
-            &self.num.0
-                * &self
-                    .den
-                    .0
-                    .replace(function!(GS.den, GS.x__))
-                    .with(Atom::new_var(GS.x__).npow(-1))
-        }
-    }
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
-pub struct Top {
-    dod: i32,
-    // graph_ref: PosetNode,
-    pub t_arg: Option<IntegrandExpr>,
-    pub contracted: IntegrandExpr,
-    graph: TopoOrdered<InternalSubGraph>,
-}
-
-impl Top {
-    pub fn root(graph: &UVGraph) -> Self {
-        Top {
-            dod: 0,
-            // graph_ref: root_ref,
-            t_arg: None,
-            contracted: IntegrandExpr::from_subgraph(&graph.full_graph(), graph, 0, &[]),
-            graph: TopoOrdered::new(graph.empty_subgraph(), 0),
-        }
-    }
-
-    // pub fn new(&self,subgraph:SubGraph,graph:&UVGraph)->Self{
-
-    // }
-
-    pub fn from_subgraph(
-        &self,
-        subgraph: TopoOrdered<InternalSubGraph>,
-        graph: &UVGraph,
-        // graph_ref: PosetNode,
-    ) -> Self {
-        let reduced = self
-            .graph
-            .data
-            .complement(&graph)
-            .intersection(&subgraph.data);
-
-        let dod = graph.dod(&subgraph.data);
-        Top {
-            // graph_ref,
-            dod,
-            t_arg: Some(IntegrandExpr::from_subgraph(&reduced, graph, dod, &[])),
-            contracted: IntegrandExpr::from_subgraph(
-                &subgraph.data.complement(&graph),
-                graph,
-                dod,
-                &[],
-            ),
-            graph: subgraph,
-        }
-    }
-
-    pub fn to_atom(&self, other: Option<AtomView>) -> SerializableAtom {
-        if let Some(o) = other {
-            self.to_fn_builder().add_arg(o)
-        } else {
-            self.to_fn_builder()
-        }
-        .finish()
-        .into()
-    }
-
-    pub fn to_fn_builder(&self) -> FunctionBuilder {
-        if let Some(integrand) = &self.t_arg {
-            let num = &integrand.num.0;
-            let den = &integrand.den.0;
-            let dod = self.dod;
-            FunctionBuilder::new(symbol!("Top"))
-                .add_arg(&Atom::new_num(dod))
-                .add_arg(num)
-                .add_arg(den)
-        } else {
-            FunctionBuilder::new(symbol!("Top"))
-        }
-    }
-}
-
-#[allow(clippy::non_canonical_partial_ord_impl)]
-impl PartialOrd for Top {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        self.graph.partial_cmp(&other.graph)
-    }
-}
-
-impl Ord for Top {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.graph.cmp(&other.graph)
-    }
-}
-
-impl TryFromIterator<Top, ()> for UnfoldedWoodEl {
-    type Error = Report;
-
-    fn try_from_iter<T>(iter: T) -> Result<Self, Self::Error>
-    where
-        Self: Sized,
-        T: IntoIterator<Item = Top>,
-    {
-        let mut iter = iter.into_iter();
-        let first_top = iter.next().ok_or(eyre!("empty iter.."))?;
-
-        let mut expr = first_top.to_atom(None);
-        let mut sign = 1;
-
-        // let mut graphs = vec![first_top.graph_ref];
-
-        let mut last = first_top.contracted;
-
-        for t in iter {
-            expr = t.to_atom(Some(expr.0.as_view()));
-            // graphs.push(t.graph_ref);
-            sign *= -1;
-            last = t.contracted;
-        }
-
-        expr = (&expr.0 * &last.bare().0 * sign).into();
-
-        Ok(UnfoldedWoodEl { expr })
     }
 }
 
@@ -1017,7 +457,7 @@ impl Wood {
         self.poset.n_nodes()
     }
     pub fn from_spinneys<I: IntoIterator<Item = InternalSubGraph>>(s: I, graph: &UVGraph) -> Self {
-        let mut poset = Poset::from_iter(s.into_iter().map(|s| (s, None)));
+        let mut poset = Poset::from_iter(s.into_iter().map(|s| (s, ())));
 
         poset.invert();
         poset.compute_topological_order();
@@ -1068,11 +508,7 @@ impl Wood {
     ) -> DagNode {
         let mut search_front = VecDeque::new();
 
-        let tree_root = dag.add_node(Approximation::new(
-            self.poset.data(root).clone(),
-            graph,
-            root,
-        ));
+        let tree_root = dag.add_node(Approximation::new(self.poset.data(root).clone(), graph));
         search_front.push_front((root, tree_root));
 
         while let Some((node, parent)) = search_front.pop_front() {
@@ -1089,13 +525,9 @@ impl Wood {
                                 all_supplied = false;
                             }
                         }
-
                         if all_supplied {
-                            let child = dag.add_node(Approximation::new(
-                                self.poset.data(*c).clone(),
-                                graph,
-                                *c,
-                            ));
+                            let child = dag
+                                .add_node(Approximation::new(self.poset.data(*c).clone(), graph));
                             for (_, d) in union {
                                 dag.add_edge(d.unwrap(), child);
                             }
@@ -1106,7 +538,7 @@ impl Wood {
                     }
                 } else {
                     let child =
-                        dag.add_node(Approximation::new(self.poset.data(*c).clone(), graph, *c));
+                        dag.add_node(Approximation::new(self.poset.data(*c).clone(), graph));
                     dag.add_edge(parent, child);
                     search_front.push_front((*c, child));
                 }
@@ -1115,7 +547,7 @@ impl Wood {
         tree_root
     }
 
-    pub fn unfold_impl(&self, graph: &UVGraph) -> Forest {
+    pub fn unfold(&self, graph: &UVGraph) -> Forest {
         let mut dag: DAG<Approximation, DagNode, ()> = DAG::new();
 
         let root = self.poset.minimum().unwrap();
@@ -1127,13 +559,9 @@ impl Wood {
             unions.insert(p, Some(union));
         }
 
-        let root = self.unfold_bfs(graph, &mut dag, &mut unions, root);
+        let _ = self.unfold_bfs(graph, &mut dag, &mut unions, root);
 
-        Forest {
-            dag,
-            orig_shift: self.poset.shift(),
-            all_graphs: AHashMap::new(),
-        }
+        Forest { dag }
     }
 
     pub fn dot(&self, graph: &UVGraph) -> String {
@@ -1159,24 +587,9 @@ impl Wood {
             );
         }
     }
-
-    // pub fn unfold(&self, graph: &UVGraph) -> Atom {
-    //     for (i, _) in self.coverset.nodes.iter().enumerate() {
-
-    //         let mut t = graph.t_op(self.coverset.bfs_iter(v));
-    //         t = FunctionBuilder::new(symbol!
-    //("Top"))
-    //             .add_arg(&Atom::new_num(v.numerator_rank()))
-    //             .add_arg(&t)
-    //             .finish();
-    //     }
-    //     // for s in self.coverset.bfs_iter(0){
-
-    //     // }
-    // }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum ApproxOp {
     NotComputed,
     Union {
@@ -1267,7 +680,6 @@ impl SimpleApprox {
 pub struct Approximation {
     // The union of all spinneys, remaining graph is full graph minus subgraph
     subgraph: InternalSubGraph,
-    orig: PosetNode,
     dod: i32,
     lmb: Vec<EdgeIndex>,
     externals: Vec<EdgeIndex>,
@@ -1279,40 +691,24 @@ pub struct Approximation {
 
 impl Approximation {
     pub fn simplify_notation(expr: &SerializableAtom) -> SerializableAtom {
-        let replacements = [
-            (
-                parse!("ZERO").unwrap().to_pattern(),
-                Atom::new_num(0).to_pattern(),
-            ),
-            (
-                function!(GS.num, Atom::new_num(1)).to_pattern(),
-                Atom::new_num(1).to_pattern(),
-            ),
-            (
-                function!(GS.den, Atom::new_num(1)).to_pattern(),
-                Atom::new_num(1).to_pattern(),
-            ),
-        ];
-
-        let mut expr = expr.clone();
+        let replacements = [(function!(GS.den, GS.a_, GS.x_), Atom::new_var(GS.x_))];
 
         let reps: Vec<_> = replacements
             .into_iter()
-            .map(|(a, b)| Replacement::new(a, b))
+            .map(|(a, b)| Replacement::new(a.to_pattern(), b))
             .collect();
 
-        expr.replace_multiple_repeat(&reps);
-        expr
+        expr.replace_multiple_repeat(&reps)
     }
 
-    pub fn new(spinney: InternalSubGraph, graph: &UVGraph, orig: PosetNode) -> Approximation {
+    pub fn new(spinney: InternalSubGraph, graph: &UVGraph) -> Approximation {
         // let lmb = graph.select_lmb(&spinney);
 
         let (momentum_assignment, externals, lmb) = graph.lmb_reps_for_subgraph(&spinney);
 
         Approximation {
             dod: graph.dod(&spinney),
-            orig,
+
             subgraph: spinney,
             lmb,
             mom_rep: momentum_assignment
@@ -1367,29 +763,19 @@ impl Approximation {
 
     /// Get final expression in the forest sum
     pub fn expr(&self, graph: &UVGraph) -> Option<SerializableAtom> {
-        let (t, s) = self.approx_op.bare_expr()?;
+        let (t, s) = self.approx_op.expr()?;
 
-        // println!("Reps");
-        // for r in &graph.lmb_replacement {
-        // println!("{r}")
-        // }
-        // println!("Before:{t}");
-
-        let t = t
-            .replace_multiple(&graph.lmb_replacement)
-            .replace(function!(GS.den, GS.x__))
-            .with(Atom::new_var(GS.x__).npow(-1));
-
-        // println!("After:{t}");
         let contracted = s * IntegrandExpr::from_subgraph(
             &graph.full_node().internal_graph.subtract(&self.subgraph),
             graph,
-            self.dod,
-            &graph.lmb_replacement,
         )
-        .bare_with_add_arg();
+        .integrand;
 
-        Some(Self::simplify_notation(&(t * contracted).into()))
+        Some(Self::simplify_notation(
+            &(t * contracted)
+                .replace_multiple(&graph.lmb_replacement)
+                .into(),
+        ))
     }
 
     pub fn simple_expr(&self, graph: &UVGraph) -> Option<SerializableAtom> {
@@ -1409,32 +795,17 @@ impl ApproxOp {
         }
     }
 
-    pub fn expr(&self) -> Option<(SerializableAtom, Sign)> {
+    pub fn expr(&self) -> Option<(Atom, Sign)> {
         match self {
             ApproxOp::NotComputed => None,
             ApproxOp::Union { t_args, sign, .. } => {
                 let mut mul = Atom::new_num(1);
                 for t in t_args {
-                    mul = mul * t.top().0;
-                }
-                Some((mul.into(), *sign))
-            }
-            ApproxOp::Dependent { t_arg, sign, .. } => Some((t_arg.top().0.into(), *sign)),
-            ApproxOp::Root => Some((Atom::new_num(1).into(), Sign::Positive)),
-        }
-    }
-
-    pub fn bare_expr(&self) -> Option<(Atom, Sign)> {
-        match self {
-            ApproxOp::NotComputed => None,
-            ApproxOp::Union { t_args, sign, .. } => {
-                let mut mul = Atom::new_num(1);
-                for t in t_args {
-                    mul = mul * t.with_add_arg();
+                    mul = mul * &t.integrand;
                 }
                 Some((mul, *sign))
             }
-            ApproxOp::Dependent { t_arg, sign, .. } => Some((t_arg.with_add_arg(), *sign)),
+            ApproxOp::Dependent { t_arg, sign, .. } => Some((t_arg.integrand.clone(), *sign)),
             ApproxOp::Root => Some((Atom::new_num(1).into(), Sign::Positive)),
         }
     }
@@ -1449,19 +820,18 @@ impl ApproxOp {
     ) -> Self {
         let reduced = subgraph.subtract(&dependent.subgraph);
 
-        if let Some((inner_t, sign)) = dependent.approx_op.bare_expr() {
-            let t_arg = IntegrandExpr::from_subgraph(&reduced, graph, dod, mom_reps);
+        if let Some((inner_t, sign)) = dependent.approx_op.expr() {
+            let t_arg = IntegrandExpr::from_subgraph(&reduced, graph);
 
-            let mut atomarg = t_arg.with_add_arg() * inner_t;
+            let mut atomarg = t_arg.integrand * inner_t;
 
             // rewrite the inner_t as well
             atomarg = atomarg.replace_multiple(mom_reps);
 
-            /*println!(
+            println!(
                 "Expand {} with dod={} in {:?}",
                 atomarg, dod, external_edges
-            );*/
-
+            );
             for e in external_edges {
                 atomarg = atomarg
                     .replace(function!(GS.emr_mom, usize::from(*e) as i64))
@@ -1491,12 +861,8 @@ impl ApproxOp {
 
                 // expand the propagator around a propagator with a UV mass
                 atomarg = atomarg
-                    .replace(parse!("den(x_)").unwrap())
-                    .with(parse!("1/den(x_- mUV^2 + t^2*mUV^2)").unwrap());
-            } else {
-                atomarg = atomarg
-                    .replace(parse!("den(x_)").unwrap())
-                    .with(parse!("1/den(x_)").unwrap());
+                    .replace(parse!("den(n_,x_)").unwrap())
+                    .with(parse!("den(n_,x_- mUV^2 + t^2*mUV^2)").unwrap());
             }
 
             atomarg = atomarg
@@ -1504,16 +870,16 @@ impl ApproxOp {
                 .repeat()
                 .with(parse!("t*symbolica_community::dot(x__,y_)").unwrap());
 
-            //println!("atomarg:{}", atomarg);
+            // println!("atomarg:{}", atomarg);
 
             // den(..) tags a propagator, its first derivative is 1 and the rest is 0
             let mut a = atomarg
                 .series(GS.rescale, Atom::Zero, dod.into(), true)
                 .unwrap()
                 .to_atom()
-                .replace(parse!("der(1, den(y_))").unwrap())
+                .replace(parse!("der(0,1, den(y__))").unwrap())
                 .with(Atom::new_num(1))
-                .replace(parse!("der(x_, den(y_))").unwrap())
+                .replace(parse!("der(x__, den(y__))").unwrap())
                 .with(Atom::new_num(0))
                 .replace(parse!("den(x_)").unwrap())
                 .with(parse!("1/den(x_)").unwrap());
@@ -1531,8 +897,8 @@ impl ApproxOp {
                         }
 
                         i = i
-                            .replace(parse!("den(x_)").unwrap())
-                            .with(parse!("den(x_ - mUV^2)").unwrap());
+                            .replace(parse!("den(n_,x_)").unwrap())
+                            .with(parse!("den(n_,x_ - mUV^2)").unwrap());
                     }
 
                     b += i;
@@ -1543,14 +909,13 @@ impl ApproxOp {
                 a = a.replace(GS.rescale).with(Atom::new_num(1));
             }
 
-            //println!("Expanded: {:>}", a.expand());
+            // println!("Expanded: {:>}", a.expand());
 
             Self::Dependent {
                 t_arg: IntegrandExpr {
-                    dod,
-                    num: a.into(),
-                    den: Atom::new_num(1).into(),
-                    add_arg: None,
+                    integrand: a
+                        .replace(parse!("den(x_)").unwrap())
+                        .with(parse!("1/den(x_)").unwrap()),
                 },
                 sign: -sign,
                 subgraph: reduced,
@@ -1597,9 +962,6 @@ impl ApproxOp {
 
 pub struct Forest {
     dag: DAG<Approximation, DagNode, ()>,
-    all_graphs: AHashMap<InternalSubGraph, ()>,
-    // root: DagNode,
-    orig_shift: u64,
 }
 
 impl Forest {
@@ -1617,15 +979,8 @@ impl Forest {
 
             let (approx, simple_approx) = if parents.is_empty() {
                 let subgraph: InternalSubGraph = graph.empty_subgraph();
-                self.all_graphs.insert(subgraph.clone(), ());
                 (ApproxOp::Root, SimpleApprox::root(subgraph))
             } else if parents.len() == 1 {
-                self.all_graphs.insert(
-                    self.dag.nodes[parents[0]]
-                        .data
-                        .reduced_graph(&current.data.subgraph),
-                    (),
-                );
                 current
                     .data
                     .dependent(&self.dag.nodes[parents[0]].data, graph)
@@ -1717,66 +1072,6 @@ impl Wood {
         }
         out
     }
-    pub fn unfold(&self, graph: &UVGraph) -> UnfoldedWood {
-        let mut trie_builder = TrieBuilder::new();
-        let _shift = self.poset.shift();
-
-        for p in self.poset.bfs_paths().map(|s| {
-            s.into_iter()
-                .map(|k| {
-                    (
-                        self.poset.nodes.get(k).unwrap().to_topo_ordered().unwrap(),
-                        k,
-                    )
-                })
-                .collect::<Vec<_>>()
-        }) {
-            let root = Top::root(graph);
-
-            let mut top_chain = vec![];
-
-            for (s, k) in p {
-                let new_top = top_chain.last().unwrap_or(&root).from_subgraph(s, graph);
-                top_chain.push(new_top);
-            }
-            trie_builder.push(top_chain);
-        }
-        let triewood = TrieWood {
-            trie: trie_builder.build(),
-        };
-
-        UnfoldedWood {
-            elements: triewood.trie.iter::<UnfoldedWoodEl, ()>().collect(),
-        }
-    }
-
-    // fn compute_t_operator(
-    //     &self,
-    //     subgraph: &SubGraph,
-    //     graph: &UVGraph,
-    //     t_results: &AHashMap<SubGraph, Atom>,
-    //     predecessors: &[Vec<usize>],
-    //     node_index: usize,
-    // ) -> Atom {
-    //     let t = FunctionBuilder::new(symbol!
-    //("Top"))
-    //         .add_arg(&Atom::new_num(graph.dod(subgraph)));
-
-    //     let mut result = graph.numerator(subgraph).0 * graph.denominator(subgraph).0;
-    //     for &pred_index in &predecessors[node_index] {
-    //         let predecessor = &self.poset.nodes[pred_index];
-    //         let pred_t_value = t_results.get(predecessor).unwrap();
-
-    //         let complement = subgraph.complement().intersection(subgraph);
-
-    //         let comp_num = graph.numerator(&complement).0;
-    //         let comp_den = graph.denominator(&complement).0;
-
-    //         result = result + comp_den * comp_num * pred_t_value;
-    //     }
-
-    //     -t.add_arg(&result).finish()
-    // }
 }
 
 use slotmap::{new_key_type, Key, SecondaryMap, SlotMap};

@@ -3,8 +3,10 @@ use std::borrow::Borrow;
 use bincode::{Decode, Encode};
 use linnet::half_edge::{hedgevec::HedgeVec, involution::Orientation};
 use serde::{Deserialize, Serialize};
+use spenso::structure::concrete_index::FlatIndex;
 use symbolica::{
     atom::Atom,
+    function,
     id::{Pattern, Replacement},
     parse,
 };
@@ -30,6 +32,7 @@ impl OrientationData {
             .filter_map(|(edge_index, orientation)| {
                 if matches!(orientation, Orientation::Reversed) {
                     let energy_atom = ose_atom_from_index(edge_index);
+
                     let neg_energy_atom = -&energy_atom;
 
                     Some(Replacement::new(
