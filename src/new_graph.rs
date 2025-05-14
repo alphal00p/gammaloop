@@ -62,7 +62,7 @@ use crate::{
     new_gammaloop_integrand::LmbMultiChannelingSetup,
     numerator::{ufo::preprocess_ufo_spin_wrapped, NumeratorState, PythonState, UnInit},
     signature::{ExternalSignature, LoopExtSignature, LoopSignature, SignatureLike},
-    utils::{FloatLike, F, GS},
+    utils::{external_energy_atom_from_index, ose_atom_from_index, FloatLike, F, GS},
     GammaLoopContext, ProcessSettings, GAMMALOOP_NAMESPACE,
 };
 
@@ -484,12 +484,8 @@ impl FeynmanGraph for HedgeGraph<Edge, Vertex> {
     fn get_energy_atoms(&self) -> Vec<Atom> {
         self.iter_all_edges()
             .map(|(pair, edge_id, _)| match pair {
-                HedgePair::Paired { .. } => {
-                    parse!(&format!("Q({}, cind(0))", Into::<usize>::into(edge_id))).unwrap()
-                }
-                HedgePair::Unpaired { .. } => {
-                    parse!(&format!("P({}, cind(0))", Into::<usize>::into(edge_id))).unwrap()
-                }
+                HedgePair::Paired { .. } => ose_atom_from_index(edge_id),
+                HedgePair::Unpaired { .. } => external_energy_atom_from_index(edge_id),
                 _ => unreachable!(),
             })
             .collect_vec()
@@ -1344,11 +1340,9 @@ pub fn get_cff_inverse_energy_product_impl<E, V, S: SubGraph>(
         / graph
             .iter_edges(subgraph)
             .filter_map(|(pair, edge_index, _)| match pair {
-                HedgePair::Paired { .. } => parse!(&format!(
-                    "2*Q({}, cind(0))",
-                    Into::<usize>::into(edge_index)
-                ))
-                .ok(),
+                HedgePair::Paired { .. } => {
+                    Some(Atom::new_num(2) * ose_atom_from_index(edge_index))
+                }
                 _ => None,
             })
             .reduce(|acc, x| acc * x)

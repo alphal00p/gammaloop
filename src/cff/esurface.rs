@@ -26,7 +26,8 @@ use crate::new_cs::CrossSectionCut;
 use crate::new_graph::{self, LoopMomentumBasis};
 use crate::signature::ExternalSignature;
 use crate::utils::{
-    compute_loop_part, compute_shift_part, compute_t_part_of_shift_part, FloatLike, F,
+    compute_loop_part, compute_shift_part, compute_t_part_of_shift_part,
+    external_energy_atom_from_index, ose_atom_from_index, FloatLike, F,
 };
 
 use super::generation::ShiftRewrite;
@@ -62,16 +63,14 @@ impl Esurface {
         let symbolic_energies = self
             .energies
             .iter()
-            .map(|i| parse!(&format!("Q({}, cind(0))", Into::<usize>::into(*i))).unwrap())
+            .map(|i| ose_atom_from_index(*i))
             .collect_vec();
 
         let symbolic_shift = self
             .external_shift
             .iter()
             .fold(Atom::new(), |sum, (i, sign)| {
-                parse!(&format!("P({}, cind(0))", Into::<usize>::into(*i))).unwrap()
-                    * &Atom::new_num(*sign)
-                    + &sum
+                external_energy_atom_from_index(*i) * &Atom::new_num(*sign) + &sum
             });
 
         let builder_atom = Atom::new();
