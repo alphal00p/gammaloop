@@ -28,7 +28,7 @@ use spenso::{
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol},
     function,
-    id::{Pattern, Replacement},
+    id::{AtomMatchIterator, Pattern, Replacement},
     parse,
     printer::PrintOptions,
     state::State,
@@ -370,7 +370,6 @@ impl UVGraph {
                     function!(GS.emr_mom, usize::from(*edge) as i64).to_pattern(),
                     mom.to_pattern(),
                 );
-                // println!("Rep:{r}");
                 r
             })
             .collect();
@@ -1455,11 +1454,26 @@ impl ApproxOp {
 
             let mut atomarg = t_arg.with_add_arg() * inner_t;
 
+            // rewrite the inner_t as well
+            atomarg = atomarg.replace_multiple(mom_reps);
+
+            /*println!(
+                "Expand {} with dod={} in {:?}",
+                atomarg, dod, external_edges
+            );*/
+
             for e in external_edges {
                 atomarg = atomarg
                     .replace(function!(GS.emr_mom, usize::from(*e) as i64))
                     .with(function!(GS.emr_mom, usize::from(*e) as i64) * GS.rescale);
             }
+
+            let soft_ct = graph
+                .nesting_node_from_subgraph(subgraph.clone())
+                .hairs
+                .count_ones()
+                == 2
+                && dod > 0;
 
             let mut masses = AHashSet::new();
             masses.insert(Atom::new_var(GS.m_uv));
@@ -1469,15 +1483,21 @@ impl ApproxOp {
                 masses.insert(e_mass);
             }
 
-            for m in masses {
-                let rescaled = m.clone() * GS.rescale;
-                atomarg = atomarg.replace(m).with(rescaled);
-            }
+            if !soft_ct {
+                for m in &masses {
+                    let rescaled = m.clone() * GS.rescale;
+                    atomarg = atomarg.replace(m.clone()).with(rescaled);
+                }
 
-            // expand the propagator around a propagator with a UV mass
-            atomarg = atomarg
-                .replace(parse!("den(x_)").unwrap())
-                .with(parse!("1/den(x_ - mUV^2 + t^2*mUV^2)").unwrap());
+                // expand the propagator around a propagator with a UV mass
+                atomarg = atomarg
+                    .replace(parse!("den(x_)").unwrap())
+                    .with(parse!("1/den(x_- mUV^2 + t^2*mUV^2)").unwrap());
+            } else {
+                atomarg = atomarg
+                    .replace(parse!("den(x_)").unwrap())
+                    .with(parse!("1/den(x_)").unwrap());
+            }
 
             atomarg = atomarg
                 .replace(parse!("symbolica_community::dot(t*x__,y_)").unwrap())
@@ -1487,18 +1507,41 @@ impl ApproxOp {
             //println!("atomarg:{}", atomarg);
 
             // den(..) tags a propagator, its first derivative is 1 and the rest is 0
-            let a = atomarg
+            let mut a = atomarg
                 .series(GS.rescale, Atom::Zero, dod.into(), true)
                 .unwrap()
                 .to_atom()
-                .replace(GS.rescale)
-                .with(Atom::new_num(1))
                 .replace(parse!("der(1, den(y_))").unwrap())
                 .with(Atom::new_num(1))
                 .replace(parse!("der(x_, den(y_))").unwrap())
                 .with(Atom::new_num(0))
                 .replace(parse!("den(x_)").unwrap())
                 .with(parse!("1/den(x_)").unwrap());
+
+            if soft_ct {
+                let coeffs = a.coefficient_list::<u8>(&[Atom::new_var(GS.rescale)]);
+                let mut b = Atom::Zero;
+                let dod_pow = Atom::new_var(GS.rescale).npow(dod);
+                for (pow, mut i) in coeffs {
+                    if pow == dod_pow {
+                        // set the masses in the t=dod term to 0
+                        // UV rearrange the denominators
+                        for m in &masses {
+                            i = i.replace(m.clone()).with(Atom::Zero);
+                        }
+
+                        i = i
+                            .replace(parse!("den(x_)").unwrap())
+                            .with(parse!("den(x_ - mUV^2)").unwrap());
+                    }
+
+                    b += i;
+                }
+
+                a = b;
+            } else {
+                a = a.replace(GS.rescale).with(Atom::new_num(1));
+            }
 
             //println!("Expanded: {:>}", a.expand());
 
