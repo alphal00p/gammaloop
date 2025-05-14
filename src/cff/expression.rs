@@ -53,6 +53,17 @@ impl CFFExpression {
             .collect()
     }
 
+    pub fn get_orientation_atoms_with_data(&self) -> TiVec<OrientationID, (Atom, OrientationData)> {
+        self.orientations
+            .iter()
+            .map(|orientation| {
+                let atom = orientation.expression.to_atom_inv();
+                let data = orientation.data.clone();
+                (atom, data)
+            })
+            .collect()
+    }
+
     pub fn num_unfolded_terms(&self) -> usize {
         self.orientations
             .iter()

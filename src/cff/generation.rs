@@ -8,13 +8,17 @@ use crate::{
         tree::Tree,
     },
     new_cs::{CrossSectionCut, CutId},
+    new_graph::get_cff_inverse_energy_product_impl,
 };
 use bincode::{Decode, Encode};
 use color_eyre::Report;
 use color_eyre::Result;
 use itertools::Itertools;
 use linnet::half_edge::{
-    hedgevec::HedgeVec, involution::HedgePair, subgraph::OrientedCut, HedgeGraph,
+    hedgevec::HedgeVec,
+    involution::HedgePair,
+    subgraph::{OrientedCut, SubGraph},
+    HedgeGraph,
 };
 use linnet::half_edge::{
     involution::{EdgeIndex, Orientation},
@@ -170,6 +174,39 @@ fn get_orientations<E, V>(graph: &HedgeGraph<E, V>) -> Vec<CFFGenerationGraph> {
         .collect_vec()
 }
 
+fn get_orientations_from_subgraph<E, V, S: SubGraph>(
+    graph: &HedgeGraph<E, V>,
+    subgraph: &S,
+) -> Vec<CFFGenerationGraph> {
+    let num_virtual_edges = graph.count_internal_edges(subgraph);
+    let virtual_possible_orientations = iterate_possible_orientations(num_virtual_edges);
+
+    virtual_possible_orientations
+        .map(|orientation_of_virtuals| {
+            let mut orientation_of_virtuals = orientation_of_virtuals.into_iter();
+
+            let global_orientation = graph
+                .new_hedgevec_from_iter(graph.iter_all_edges().map(|(_, edge_index, _)| {
+                    let is_edge_in_subgraph = graph
+                        .iter_edges(subgraph)
+                        .any(|(_, id, _)| id == edge_index);
+
+                    if is_edge_in_subgraph {
+                        orientation_of_virtuals
+                            .next()
+                            .expect(" unable to reconstruct orientation")
+                    } else {
+                        Orientation::Undirected
+                    }
+                }))
+                .expect("unable to construct global orientation");
+
+            CFFGenerationGraph::new_from_subgraph(graph, global_orientation, subgraph)
+        })
+        .filter(|cff_graph| !cff_graph.has_directed_cycle_initial())
+        .collect()
+}
+
 #[allow(unused)]
 fn get_orientations_with_cut<E, V>(
     graph: &HedgeGraph<E, V>,
@@ -295,13 +332,42 @@ fn get_possible_orientations_for_cut_list<E, V>(
 pub fn generate_cff_expression<E, V>(
     graph: &HedgeGraph<E, V>,
     canonize_esurface: &Option<ShiftRewrite>,
-) -> Result<CFFExpression, Report> {
+) -> Result<CFFExpression> {
     let graphs = get_orientations(graph);
     debug!("number of orientations: {}", graphs.len());
 
     let graph_cff = generate_cff_from_orientations(graphs, None, None, None, canonize_esurface)?;
 
     Ok(graph_cff)
+}
+
+pub fn generate_cff_expression_from_subgraph<E, V, S: SubGraph>(
+    graph: &HedgeGraph<E, V>,
+    subgraph: &S,
+    canonize_esurface: &Option<ShiftRewrite>,
+) -> Result<CFFExpression> {
+    let graphs = get_orientations_from_subgraph(graph, subgraph);
+    let cff = generate_cff_from_orientations(graphs, None, None, None, canonize_esurface)?;
+    Ok(cff)
+}
+
+pub fn generate_cff_expression_from_subgraph_to_ose_atom<E, V, S: SubGraph>(
+    graph: &HedgeGraph<E, V>,
+    subgraph: &S,
+    canonize_esurface: &Option<ShiftRewrite>,
+) -> Result<TiVec<OrientationID, (Atom, OrientationData)>> {
+    let cff = generate_cff_expression_from_subgraph(graph, subgraph, canonize_esurface)?;
+    let inverse_energies = get_cff_inverse_energy_product_impl(graph, subgraph);
+
+    Ok(cff
+        .get_orientation_atoms_with_data()
+        .into_iter()
+        .map(|(atom, data)| {
+            let atom = cff.surfaces.substitute_energies(&atom);
+            let atom = atom * &inverse_energies;
+            (atom, data)
+        })
+        .collect())
 }
 
 fn generate_cff_for_orientation<E, V>(
