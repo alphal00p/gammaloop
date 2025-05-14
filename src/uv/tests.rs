@@ -18,7 +18,7 @@ use crate::{
     feyngen::diagram_generator::{EdgeColor, FeynGen, NodeColorWithVertexRule},
     model::{ArcVertexRule, ColorStructure, VertexRule},
     tests_from_pytest::{load_amplitude_output, load_generic_model},
-    uv::{PoSet, UVGraph},
+    uv::UVGraph,
 };
 
 pub fn spenso_lor(
@@ -104,7 +104,7 @@ fn nested_bubble_soft_ct() {
     //println!("{}", wood.dot(&uv_graph));
     //println!("{}", wood.show_graphs(&uv_graph));
 
-    let mut ufold = wood.unfold_impl(&uv_graph);
+    let mut ufold = wood.unfold(&uv_graph);
     // assert_eq!(152, ufold.n_terms());
     ufold.compute(&uv_graph);
 
@@ -288,7 +288,7 @@ fn nested_bubble_scalar_quad() {
     // println!("{}", wood.dot(&uv_graph));
     // println!("{}", wood.show_graphs(&uv_graph));
 
-    let mut ufold = wood.unfold_impl(&uv_graph);
+    let mut ufold = wood.unfold(&uv_graph);
     // assert_eq!(152, ufold.n_terms());
     ufold.compute(&uv_graph);
 
@@ -452,7 +452,7 @@ fn nested_bubble_scalar() {
     //println!("{}", wood.dot(&uv_graph));
     //println!("{}", wood.show_graphs(&uv_graph));
 
-    let mut ufold = wood.unfold_impl(&uv_graph);
+    let mut ufold = wood.unfold(&uv_graph);
     // assert_eq!(152, ufold.n_terms());
     ufold.compute(&uv_graph);
 
@@ -594,7 +594,7 @@ fn disconnect_forest_scalar() {
     println!("{}", wood.dot(&uv_graph));
     println!("{}", wood.show_graphs(&uv_graph));
 
-    let mut ufold = wood.unfold_impl(&uv_graph);
+    let mut ufold = wood.unfold(&uv_graph);
     // assert_eq!(152, ufold.n_terms());
     ufold.compute(&uv_graph);
 
@@ -774,7 +774,7 @@ fn easy() {
     println!("{}", wood.dot(&uv_graph));
     println!("{}", wood.show_graphs(&uv_graph));
 
-    let mut ufold = wood.unfold_impl(&uv_graph);
+    let mut ufold = wood.unfold(&uv_graph);
     // assert_eq!(152, ufold.n_terms());
     ufold.compute(&uv_graph);
 
@@ -785,48 +785,6 @@ fn easy() {
 
     // println!("{}", structure.show_structure(&wood, &uv_graph));
     // println!("{}", structure.n_elements());
-}
-
-#[test]
-#[allow(unused)]
-fn lbl() {
-    let (model, amplitude, _) = load_amplitude_output("TEST_AMPLITUDE_lbl_box/GL_OUTPUT", true);
-
-    let mut graph = amplitude.amplitude_graphs[0].graph.clone();
-
-    println!("{}", graph.bare_graph.dot());
-
-    // graph.generate_uv();
-
-    graph.generate_loop_momentum_bases();
-
-    let uv_graph = UVGraph::from_graph(&graph.bare_graph);
-
-    insta::assert_snapshot!("lbl_dot", uv_graph.base_dot());
-
-    let lmb = graph.bare_graph.loop_momentum_basis.clone();
-
-    // let cycles = uv_graph.cycle_basis_from_lmb(&lmb);
-
-    // let all_cycles = uv_graph.read_tarjan();
-    // assert_eq!(all_cycles.len(), 1);
-
-    // for cycle in all_cycles {
-    // println!("{}", uv_graph.dot(&cycle));
-    // }
-
-    // insta::assert_ron_snapshot!("lbl_cycles", cycles);
-
-    let uv_graph = UVGraph::from_graph(&graph.bare_graph);
-
-    println!("tbt_dot{}", uv_graph.base_dot());
-
-    let wood = uv_graph.wood();
-
-    let structure = wood.unfold(&uv_graph);
-
-    println!("{}", structure.show_structure(&wood, &uv_graph));
-    println!("{}", structure.n_elements());
 }
 
 #[test]
@@ -849,7 +807,7 @@ fn tbt() {
 
     println!("{}", wood.dot(&uv_graph));
 
-    let mut ufold = wood.unfold_impl(&uv_graph);
+    let mut ufold = wood.unfold(&uv_graph);
     ufold.compute(&uv_graph);
 
     println!("unfolded : {}", ufold.show_structure(&uv_graph).unwrap());
@@ -916,7 +874,7 @@ fn bugblatter_forest() {
     println!("{}", wood.dot(&uv_graph));
     println!("{}", wood.show_graphs(&uv_graph));
 
-    let mut ufold = wood.unfold_impl(&uv_graph);
+    let mut ufold = wood.unfold(&uv_graph);
     assert_eq!(152, ufold.n_terms());
     ufold.compute(&uv_graph);
 
@@ -973,7 +931,7 @@ fn kaapo_triplering() {
     // println!("{}", wood.dot(&uv_graph));
     // println!("{}", wood.show_graphs(&uv_graph));
 
-    let mut ufold = wood.unfold_impl(&uv_graph);
+    let mut ufold = wood.unfold(&uv_graph);
     ufold.compute(&uv_graph);
 
     println!("unfolded : {}", ufold.show_structure(&uv_graph).unwrap());
@@ -1035,7 +993,7 @@ fn kaapo_quintic_scalar() {
     // println!("{}", wood.dot(&uv_graph));
     // println!("{}", wood.show_graphs(&uv_graph));
 
-    let mut ufold = wood.unfold_impl(&uv_graph);
+    let mut ufold = wood.unfold(&uv_graph);
     ufold.compute(&uv_graph);
 
     println!("unfolded : {}", ufold.show_structure(&uv_graph).unwrap());
@@ -1077,64 +1035,4 @@ impl Ord for TestNode {
         // because we know our test cases only involve comparable nodes.
         self.partial_cmp(other).unwrap()
     }
-}
-
-#[test]
-fn test_poset_topological_order() {
-    // Define nodes
-    let nodes = vec![TestNode("A"), TestNode("B"), TestNode("C"), TestNode("D")];
-
-    // Build PoSet from iterator
-    let poset = PoSet::from_iter(nodes.clone());
-
-    // Expected topological order
-    // Since A < B, A < C, B < D, C < D, the expected order is ["A", "B", "C", "D"]
-
-    let expected_order = vec!["A", "B", "C", "D"];
-
-    // Check that the nodes are in the expected order
-    for (node, &expected_label) in poset.nodes.iter().zip(&expected_order) {
-        assert_eq!(node.0, expected_label);
-    }
-}
-
-#[test]
-fn test_coverset_topological_order() {
-    // Define nodes
-    let nodes = vec![TestNode("A"), TestNode("B"), TestNode("C"), TestNode("D")];
-
-    // Build PoSet from iterator
-    let poset = PoSet::from_iter(nodes.clone());
-
-    // Convert PoSet to CoverSet
-    let coverset = poset.to_cover_set();
-
-    // Expected topological order is ["A", "B", "C", "D"]
-    let expected_order = vec!["A", "B", "C", "D"];
-
-    // Check that the nodes are in the expected order
-    for (node, &expected_label) in coverset.nodes.iter().zip(&expected_order) {
-        assert_eq!(node.0, expected_label);
-    }
-
-    // Additionally, we can check that the covers are correct
-    // For example, in the coverset, node A should cover nodes B and C
-    // Node B and C should cover D
-
-    // Get the indices of the nodes
-    let a_index = coverset.nodes.iter().position(|n| n.0 == "A").unwrap();
-    let b_index = coverset.nodes.iter().position(|n| n.0 == "B").unwrap();
-    let c_index = coverset.nodes.iter().position(|n| n.0 == "C").unwrap();
-    let d_index = coverset.nodes.iter().position(|n| n.0 == "D").unwrap();
-
-    // Check that A covers B and C
-    assert!(coverset.covers(a_index, b_index));
-    assert!(coverset.covers(a_index, c_index));
-
-    // Check that B and C cover D
-    assert!(coverset.covers(b_index, d_index));
-    assert!(coverset.covers(c_index, d_index));
-
-    // Check that A does not directly cover D (since there is a node between them)
-    assert!(!coverset.covers(a_index, d_index));
 }

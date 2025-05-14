@@ -3261,6 +3261,7 @@ fn complex_compare() {
 }
 
 pub struct GammaloopSymbols {
+    pub spensocind: Symbol,
     pub loop_mom: Symbol,
     pub ubar: Symbol,
     pub vbar: Symbol,
@@ -3337,6 +3338,7 @@ pub static TENSORLIB: LazyLock<TensorLibrary<MixedTensor<F<f64>, ExplicitKey>>> 
 
 pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
     rescale: symbol!("t"),
+    spensocind: symbol!("spenso::cind"),
     m_uv: symbol!("mUV"),
     top: symbol!("Top"),
     num: symbol!("num"),
