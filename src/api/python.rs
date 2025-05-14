@@ -12,11 +12,12 @@ use crate::{
         havana_integrate, print_integral_result, BatchResult, IntegrationState, MasterNode,
     },
     model::Model,
-    new_cs::{ExportSettings, Process, ProcessCollection, ProcessDefinition, ProcessList},
+    new_cs::{self, ExportSettings, Process, ProcessCollection, ProcessDefinition, ProcessList},
     new_graph::Graph,
     numerator::{GlobalPrefactor, Numerator, PythonState},
     utils::F,
-    HasIntegrand, IntegratedPhase, ProcessSettings, Settings,
+    GammaLoopContextContainer, HasIntegrand, IntegratedPhase, OutputMetadata, ProcessSettings,
+    Settings,
 };
 use ahash::HashMap;
 use chrono::{Datelike, Local, Timelike};
@@ -837,9 +838,66 @@ impl PythonWorker {
                 "Model must be loaded before amplitudes",
             ));
         }
-        AmplitudeList::from_file(&self.model, String::from(file_path))
-            .map_err(|e| exceptions::PyException::new_err(e.to_string()))
-            .map(|a| self.amplitudes = a.map(|a| a.map(|ag| ag.map(|g| g.forget_type()))))
+
+        let root_path = PathBuf::from(file_path);
+
+        let output_medadata_str = fs::read_to_string(root_path.join("output_metadata.yaml"))?;
+        let output_metadata: OutputMetadata = serde_yaml::from_str(&output_medadata_str)
+            .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
+
+        if self.model.name != output_metadata.model_name {
+            return Err(exceptions::PyException::new_err(format!(
+                "Model name mismatch: {} != {}",
+                self.model.name, output_metadata.model_name
+            )));
+        }
+
+        if output_metadata.output_type != "amplitudes" {
+            return Err(exceptions::PyException::new_err(format!(
+                "Output type mismatch: {} != {}",
+                output_metadata.output_type, "amplitudes"
+            )));
+        }
+
+        let mut state_map_file =
+            fs::File::open(root_path.join("sources").join("symbolica_state.bin"))?;
+
+        let state_map = State::import(&mut state_map_file, None)?;
+
+        let context = GammaLoopContextContainer {
+            state_map: &state_map,
+            model: &self.model,
+        };
+
+        let process_definition_data =
+            fs::read(root_path.join("sources").join("process_definition.bin"))?;
+
+        let (process_definition, _) = bincode::decode_from_slice_with_context(
+            &process_definition_data,
+            bincode::config::standard(),
+            context,
+        )
+        .unwrap();
+
+        let mut process = Process {
+            definition: process_definition,
+            collection: ProcessCollection::Amplitudes(vec![]),
+        };
+
+        for amplitude_name in output_metadata.contents {
+            let amplitude = new_cs::Amplitude::load_from_file(&amplitude_name, file_path, context)
+                .map_err(|e| {
+                    exceptions::PyException::new_err(format!(
+                        "Error loading amplitude {}: {}",
+                        amplitude_name, e
+                    ))
+                })?;
+
+            process.collection.add_amplitude(amplitude);
+        }
+
+        self.process_list.add_process(process);
+        Ok(())
     }
 
     pub fn load_amplitudes_from_yaml_str(&mut self, yaml_str: &str) -> PyResult<()> {

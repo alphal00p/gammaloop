@@ -268,7 +268,7 @@ impl<S: NumeratorState> ProcessCollection<S> {
         Self::CrossSections(vec![])
     }
 
-    fn add_amplitude(&mut self, amplitude: Amplitude<S>) {
+    pub fn add_amplitude(&mut self, amplitude: Amplitude<S>) {
         match self {
             Self::Amplitudes(amplitudes) => amplitudes.push(amplitude),
             _ => panic!("Cannot add amplitude to a cross section collection"),
@@ -424,7 +424,7 @@ impl<S: NumeratorState> Amplitude<S> {
         Ok(())
     }
 
-    fn load_from_file(
+    pub fn load_from_file(
         name: &str,
         root_folder: &str,
         context: GammaLoopContextContainer,

@@ -115,6 +115,7 @@ pub trait GammaLoopContext: HasStateMap {
     fn get_model(&self) -> &Model;
 }
 
+#[derive(Clone, Copy)]
 pub struct GammaLoopContextContainer<'a> {
     pub state_map: &'a StateMap,
     pub model: &'a Model,
@@ -204,6 +205,13 @@ pub enum ParameterizationMode {
     HyperSpherical,
     #[serde(rename = "hyperspherical_flat")]
     HyperSphericalFlat,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OutputMetadata {
+    pub model_name: String,
+    pub output_type: String,
+    pub contents: Vec<String>,
 }
 
 impl Display for ParameterizationMode {

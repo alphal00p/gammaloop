@@ -1436,20 +1436,21 @@ class GammaLoop(object):
 
         # Depending on the type of output, sync cross-section or amplitude
         if output_metadata['output_type'] == 'amplitudes':
-            self.amplitudes = cross_section.AmplitudeList()
-            self.rust_worker.reset_amplitudes()
-            for amplitude_name in output_metadata['contents']:
-                with open(pjoin(args.path_to_launch, 'sources', 'amplitudes', f'{amplitude_name}', 'amplitude.yaml'), 'r', encoding='utf-8') as file:
-                    amplitude_yaml = file.read()
-                    self.amplitudes.add_amplitude(
-                        cross_section.Amplitude.from_yaml_str(self.model, amplitude_yaml))
-                    self.rust_worker.add_amplitude_from_yaml_str(
-                        amplitude_yaml)
-            self.rust_worker.load_amplitudes_derived_data(
-                args.path_to_launch)
+            self.rust_worker.load_amplitudes(args.path_to_launch)
+            # self.amplitudes = cross_section.AmplitudeList()
+            # self.rust_worker.reset_amplitudes()
+            # for amplitude_name in output_metadata['contents']:
+            #    with open(pjoin(args.path_to_launch, 'sources', 'amplitudes', f'{amplitude_name}', 'amplitude.yaml'), 'r', encoding='utf-8') as file:
+            #        amplitude_yaml = file.read()
+            #        self.amplitudes.add_amplitude(
+            #            cross_section.Amplitude.from_yaml_str(self.model, amplitude_yaml))
+            #        self.rust_worker.add_amplitude_from_yaml_str(
+            #            amplitude_yaml)
+            # self.rust_worker.load_amplitudes_derived_data(
+            #    args.path_to_launch)
 
-            self.rust_worker.load_amplitude_integrands(
-                pjoin(args.path_to_launch, 'cards', 'run_card.yaml'))
+            # self.rust_worker.load_amplitude_integrands(
+            #    pjoin(args.path_to_launch, 'cards', 'run_card.yaml'))
 
         if output_metadata['output_type'] == 'cross_sections':
             self.cross_sections = cross_section.CrossSectionList()
