@@ -1,7 +1,13 @@
+use std::borrow::Borrow;
+
 use bincode::{Decode, Encode};
 use linnet::half_edge::{hedgevec::HedgeVec, involution::Orientation};
 use serde::{Deserialize, Serialize};
-use symbolica::atom::Atom;
+use symbolica::{
+    atom::Atom,
+    id::{Pattern, Replacement},
+    parse,
+};
 use typed_index_collections::TiVec;
 
 use super::{
@@ -12,6 +18,30 @@ use super::{
 pub struct OrientationData {
     #[bincode(with_serde)]
     pub orientation: HedgeVec<Orientation>,
+}
+
+impl OrientationData {
+    pub fn get_ose_replacements(&self) -> Vec<Replacement> {
+        self.orientation
+            .borrow()
+            .into_iter()
+            .filter_map(|(edge_index, orientation)| {
+                if matches!(orientation, Orientation::Reversed) {
+                    let energy_atom =
+                        parse!(&format!("Q({}, cind(0))", Into::<usize>::into(edge_index)))
+                            .expect("Failed to parse energy atom");
+                    let neg_energy_atom = -&energy_atom;
+
+                    Some(Replacement::new(
+                        Pattern::from(energy_atom),
+                        Pattern::from(neg_energy_atom),
+                    ))
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Encode, Decode)]
