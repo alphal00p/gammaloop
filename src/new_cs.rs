@@ -426,12 +426,7 @@ impl<S: NumeratorState> Amplitude<S> {
         )?;
         Ok(())
     }
-}
 
-impl<S> Amplitude<S>
-where
-    S: NumeratorState + for<'a> bincode::de::Decode<GammaLoopContextContainer<'a>>,
-{
     fn load_from_file(
         name: &str,
         root_folder: &str,
