@@ -828,10 +828,10 @@ impl ApproxOp {
             // rewrite the inner_t as well
             atomarg = atomarg.replace_multiple(mom_reps);
 
-            println!(
-                "Expand {} with dod={} in {:?}",
-                atomarg, dod, external_edges
-            );
+            // println!(
+            //     "Expand {} with dod={} in {:?}",
+            //     atomarg, dod, external_edges
+            // );
             for e in external_edges {
                 atomarg = atomarg
                     .replace(function!(GS.emr_mom, usize::from(*e) as i64))
@@ -880,9 +880,7 @@ impl ApproxOp {
                 .replace(parse!("der(0,1, den(y__))").unwrap())
                 .with(Atom::new_num(1))
                 .replace(parse!("der(x__, den(y__))").unwrap())
-                .with(Atom::new_num(0))
-                .replace(parse!("den(x_)").unwrap())
-                .with(parse!("1/den(x_)").unwrap());
+                .with(Atom::new_num(0));
 
             if soft_ct {
                 let coeffs = a.coefficient_list::<u8>(&[Atom::new_var(GS.rescale)]);
@@ -912,11 +910,7 @@ impl ApproxOp {
             // println!("Expanded: {:>}", a.expand());
 
             Self::Dependent {
-                t_arg: IntegrandExpr {
-                    integrand: a
-                        .replace(parse!("den(x_)").unwrap())
-                        .with(parse!("1/den(x_)").unwrap()),
-                },
+                t_arg: IntegrandExpr { integrand: a },
                 sign: -sign,
                 subgraph: reduced,
             }
