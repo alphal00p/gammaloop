@@ -4,6 +4,7 @@ use itertools::Itertools;
 use linnet::half_edge::{
     hedgevec::HedgeVec,
     involution::{EdgeIndex, Flow, HedgePair, Orientation},
+    subgraph::SubGraph,
     HedgeGraph,
 };
 use serde::{Deserialize, Serialize};
@@ -729,10 +730,10 @@ impl CFFGenerationGraph {
         }
     }
 
-    pub fn new_from_subgraph<E, V>(
+    pub fn new_from_subgraph<E, V, S: SubGraph>(
         graph: &HedgeGraph<E, V>,
         global_orientation: HedgeVec<Orientation>,
-        subgraph: &BitVec,
+        subgraph: &S,
     ) -> Self {
         let mut vertices = HashMap::default();
 
