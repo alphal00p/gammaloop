@@ -42,6 +42,7 @@ use symbolica::{
     atom::{Atom, AtomCore},
     parse,
     printer::PrintOptions,
+    state::State,
 };
 const GIT_VERSION: &str = git_version!(fallback = "unavailable");
 
@@ -931,6 +932,14 @@ impl PythonWorker {
         let export_settings = ExportSettings {
             root_folder: PathBuf::from_str(export_root)?,
         };
+
+        let mut state_file = fs::File::create(
+            PathBuf::from(export_root)
+                .join("sources")
+                .join("symbolica_state.bin"),
+        )?;
+
+        State::export(&mut state_file)?;
 
         match self
             .process_list
