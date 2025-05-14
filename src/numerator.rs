@@ -29,7 +29,7 @@ use crate::{
     utils::{FloatLike, F},
 };
 
-use crate::{disable, ProcessSettings, Settings};
+use crate::{disable, GammaLoopContextContainer, ProcessSettings, Settings};
 use ahash::{AHashMap, HashSet};
 use bincode::{Decode, Encode};
 use color_eyre::{Report, Result};
@@ -541,7 +541,9 @@ impl Numerator<PythonState> {
         S::apply(self, f)
     }
 }
-pub trait NumeratorState: Clone + Debug + Encode {
+pub trait NumeratorState:
+    Clone + Debug + Encode + for<'a> Decode<GammaLoopContextContainer<'a>>
+{
     fn export(&self) -> String;
 
     fn forget_type(self) -> PythonState;
@@ -786,7 +788,13 @@ impl<E: ExpressionState> SymbolicExpression<E> {
 }
 
 pub trait ExpressionState:
-    Serialize + Clone + DeserializeOwned + Debug + Encode + Decode<StateMap> + Default
+    Serialize
+    + Clone
+    + DeserializeOwned
+    + Debug
+    + Encode
+    + for<'a> Decode<GammaLoopContextContainer<'a>>
+    + Default
 {
     fn forget_type(data: SymbolicExpression<Self>) -> PythonState;
 

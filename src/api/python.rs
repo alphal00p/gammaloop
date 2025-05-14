@@ -928,23 +928,6 @@ impl PythonWorker {
         export_yaml_str: &str,
         no_evaluators: bool,
     ) -> PyResult<String> {
-        //        debug!("importing settings: {}", export_yaml_str);
-        //        let process_settings = serde_yaml::from_str(export_yaml_str)
-        //            .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
-        //
-        //        debug!("Export settings loaded:\n{:#?}", process_settings);
-        //        let mut n_exported: usize = 0;
-        //        for amplitude in self.amplitudes.container.iter_mut() {
-        //            if amplitude_names.contains(&amplitude.name.to_string()) {
-        //                n_exported += 1;
-        //                let res =
-        //                    amplitude.export(export_root, &self.model, &process_settings, no_evaluators);
-        //                if let Err(err) = res {
-        //                    return Err(exceptions::PyException::new_err(err.to_string()));
-        //                }
-        //            }
-        //        }
-
         let export_settings = ExportSettings {
             root_folder: PathBuf::from_str(export_root)?,
         };
