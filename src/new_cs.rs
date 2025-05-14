@@ -228,6 +228,16 @@ impl ProcessList {
     ) -> Result<usize> {
         let mut n_exported = 0;
         for process in self.processes.iter() {
+            let process_definition_data =
+                bincode::encode_to_vec(&process.definition, bincode::config::standard())?;
+
+            let path = settings
+                .root_folder
+                .join("sources")
+                .join("process_definition.bin");
+
+            std::fs::write(path, &process_definition_data)?;
+
             n_exported += process
                 .collection
                 .export_amplitudes(amplitude_names, settings)?;
