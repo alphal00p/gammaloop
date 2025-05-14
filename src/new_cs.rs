@@ -1,5 +1,6 @@
 use std::{
     cell::RefCell,
+    collections::HashSet,
     fmt::{format, Display, Formatter},
     iter,
     marker::PhantomData,
@@ -70,12 +71,13 @@ use crate::{
 
 use derive_more::{From, Into};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Encode, Decode)]
+#[trait_decode(trait = GammaLoopContext)]
 pub struct ProcessDefinition {
     pub initial_pdgs: Vec<i64>, // Do we want a pub type Pdg = i64;?
     pub final_pdgs_lists: Vec<Vec<i64>>,
     pub n_unresolved: usize, // we need al this information to know what cuts are considered at runtime
-    pub unresolved_cut_content: AHashSet<ArcParticle>,
+    pub unresolved_cut_content: HashSet<ArcParticle>,
     pub amplitude_filters: FeynGenFilters,
     pub cross_section_filters: FeynGenFilters,
 }
@@ -86,7 +88,7 @@ impl ProcessDefinition {
             initial_pdgs: vec![],
             final_pdgs_lists: vec![],
             n_unresolved: 0,
-            unresolved_cut_content: AHashSet::new(),
+            unresolved_cut_content: HashSet::new(),
             amplitude_filters: FeynGenFilters(vec![]),
             cross_section_filters: FeynGenFilters(vec![]),
         }
@@ -163,14 +165,6 @@ impl Process {
 
     fn generate_integrands(&self, settings: Settings) -> HashMap<String, Integrand> {
         self.collection.generate_integrands(settings)
-    }
-
-    fn export_amplitudes(&self, settings: &ExportSettings) -> Result<()> {
-        Ok(())
-    }
-
-    fn export_cross_sections(&self, settings: &ExportSettings) -> Result<()> {
-        Ok(())
     }
 }
 
@@ -404,13 +398,6 @@ impl<S: NumeratorState> Amplitude<S> {
         };
 
         Integrand::NewIntegrand(NewIntegrand::Amplitude(amplitude_integrand))
-    }
-
-    fn get_graph_names(&self) -> Vec<String> {
-        self.graphs
-            .iter()
-            .map(|graph| graph.graph.name.clone())
-            .collect()
     }
 
     pub fn export(&self, settings: &ExportSettings) -> Result<()> {

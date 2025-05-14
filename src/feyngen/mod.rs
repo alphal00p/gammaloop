@@ -1,6 +1,8 @@
 pub mod diagram_generator;
 
 use ahash::{AHashMap, HashMap};
+use bincode_trait_derive::Decode;
+use bincode_trait_derive::Encode;
 use diagram_generator::EdgeColor;
 use indicatif::{ParallelProgressIterator, ProgressBar, ProgressStyle};
 use itertools::Itertools;
@@ -215,7 +217,7 @@ pub fn get_coupling_orders<NodeColor: diagram_generator::NodeColorFunctions>(
     coupling_orders
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Encode, Decode)]
 pub struct FeynGenFilters(pub Vec<FeynGenFilter>);
 
 impl FeynGenFilters {
@@ -378,7 +380,7 @@ impl FeynGenFilters {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Encode, Decode)]
 pub struct SelfEnergyFilterOptions {
     pub veto_self_energy_of_massive_lines: bool,
     pub veto_self_energy_of_massless_lines: bool,
@@ -411,7 +413,7 @@ impl fmt::Display for SelfEnergyFilterOptions {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Encode, Decode)]
 pub struct SnailFilterOptions {
     pub veto_snails_attached_to_massive_lines: bool,
     pub veto_snails_attached_to_massless_lines: bool,
@@ -447,7 +449,7 @@ impl fmt::Display for SnailFilterOptions {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Encode, Decode)]
 pub struct TadpolesFilterOptions {
     pub veto_tadpoles_attached_to_massive_lines: bool,
     pub veto_tadpoles_attached_to_massless_lines: bool,
@@ -483,12 +485,12 @@ impl fmt::Display for TadpolesFilterOptions {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Encode, Decode)]
 pub struct SewedFilterOptions {
     pub filter_tadpoles: bool,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Encode, Decode)]
 pub enum FeynGenFilter {
     SelfEnergyFilter(SelfEnergyFilterOptions),
     TadpolesFilter(TadpolesFilterOptions),
