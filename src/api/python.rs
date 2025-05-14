@@ -776,7 +776,7 @@ impl PythonWorker {
             initial_pdgs,
             final_pdgs_lists,
             n_unresolved,
-            unresolved_cut_content,
+            unresolved_cut_content: unresolved_cut_content.into_iter().collect(),
             amplitude_filters,
             cross_section_filters,
         };
