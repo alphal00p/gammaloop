@@ -9,6 +9,7 @@ use crate::{ParameterizationSettings, GAMMALOOP_NAMESPACE};
 use bincode::{Decode, Encode};
 use colored::Colorize;
 use itertools::{izip, Itertools};
+use linnet::half_edge::involution::EdgeIndex;
 use rand::Rng;
 use ref_ops::{RefAdd, RefDiv, RefMul, RefNeg, RefRem, RefSub};
 use rug::float::{Constant, ParseFloatError};
@@ -21,6 +22,7 @@ use spenso::network::library::symbolic::{ExplicitKey, TensorLibrary};
 use spenso::network::library::TensorLibraryData;
 use spenso::parametric::to_param::ToAtom;
 use spenso::parametric::{MixedTensor, ParamTensor};
+use spenso::structure::concrete_index::FlatIndex;
 use spenso::structure::TensorStructure;
 use spenso::{
     complex::{Complex, R},
@@ -34,7 +36,7 @@ use symbolica::domains::float::{
 };
 use symbolica::domains::integer::Integer;
 use symbolica::evaluate::CompiledEvaluatorFloat;
-use symbolica::{symbol, with_default_namespace};
+use symbolica::{function, symbol, with_default_namespace};
 
 use statrs::function::gamma::{gamma, gamma_lr, gamma_ur};
 use std::cmp::{Ord, Ordering};
@@ -3270,6 +3272,7 @@ pub struct GammaloopSymbols {
     pub rescale: Symbol,
     pub m_uv: Symbol,
     pub emr_mom: Symbol,
+    pub external_mom: Symbol,
     pub x_: Symbol,
     pub y_: Symbol,
     pub z_: Symbol,
@@ -3344,6 +3347,7 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
     v: symbol!("v"),
     u: symbol!("u"),
     emr_mom: symbol!("Q"),
+    external_mom: symbol!("P"),
     loop_mom: symbol!("K"),
     epsilon: symbol!("ϵ"),
     color_wrap: symbol!("color"),
@@ -3559,4 +3563,20 @@ impl<T> Length for Vec<T> {
     fn len(&self) -> usize {
         self.len()
     }
+}
+
+pub fn ose_atom_from_index(index: EdgeIndex) -> Atom {
+    function!(
+        GS.emr_mom,
+        usize::from(index) as i64,
+        Atom::from(FlatIndex::from(0))
+    )
+}
+
+pub fn external_energy_atom_from_index(index: EdgeIndex) -> Atom {
+    function!(
+        GS.external_mom,
+        usize::from(index) as i64,
+        Atom::from(FlatIndex::from(0))
+    )
 }

@@ -10,6 +10,8 @@ use symbolica::{
 };
 use typed_index_collections::TiVec;
 
+use crate::utils::ose_atom_from_index;
+
 use super::{
     cut_expression::OrientationID, generation::SurfaceCache, surface::HybridSurfaceID, tree::Tree,
 };
@@ -27,9 +29,7 @@ impl OrientationData {
             .into_iter()
             .filter_map(|(edge_index, orientation)| {
                 if matches!(orientation, Orientation::Reversed) {
-                    let energy_atom =
-                        parse!(&format!("Q({}, cind(0))", Into::<usize>::into(edge_index)))
-                            .expect("Failed to parse energy atom");
+                    let energy_atom = ose_atom_from_index(edge_index);
                     let neg_energy_atom = -&energy_atom;
 
                     Some(Replacement::new(

@@ -1,6 +1,6 @@
 use crate::cff::esurface::add_external_shifts;
 use crate::cff::surface::Surface;
-use crate::utils::{FloatLike, F};
+use crate::utils::{external_energy_atom_from_index, ose_atom_from_index, FloatLike, F};
 use bincode::Encode;
 use derive_more::{From, Into};
 use itertools::Itertools;
@@ -65,9 +65,7 @@ impl Hsurface {
                 .map(|energies| {
                     energies
                         .iter()
-                        .map(|i| {
-                            parse!(&format!("Q({}, cind(0))", Into::<usize>::into(*i))).unwrap()
-                        })
+                        .map(|i| ose_atom_from_index(*i))
                         .collect_vec()
                 })
                 .collect_tuple()
@@ -77,9 +75,7 @@ impl Hsurface {
             .external_shift
             .iter()
             .fold(Atom::new(), |sum, (i, sign)| {
-                Atom::new_num(*sign)
-                    * &parse!(&format!("P({}, cind(0))", Into::<usize>::into(*i))).unwrap()
-                    + &sum
+                Atom::new_num(*sign) * external_energy_atom_from_index(*i) + &sum
             });
 
         let symbolic_sum_positive_energies = symbolic_positive_energies
