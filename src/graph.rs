@@ -264,7 +264,7 @@ impl BareEdge {
             name: serializable_edge.name.clone(),
             edge_type: serializable_edge.edge_type,
             particle: model.get_particle(&serializable_edge.particle),
-            propagator: model.get_propagator(&serializable_edge.propagator),
+            propagator: model.get_propagator(&serializable_edge.propagator).0,
             vertices: [
                 graph
                     .get_vertex_position(&serializable_edge.vertices[0])

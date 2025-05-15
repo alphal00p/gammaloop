@@ -932,7 +932,7 @@ pub struct CrossSectionGraph<S: NumeratorState = PythonState> {
 }
 
 impl<S: NumeratorState> CrossSectionGraph<S> {
-    fn new(graph: Graph) -> Self {
+    pub fn new(graph: Graph) -> Self {
         let mut source_nodes = AHashSet::new();
         let mut target_nodes = AHashSet::new();
 
@@ -1311,14 +1311,14 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
 
 #[derive(Clone, Encode)]
 pub struct CrossSectionDerivedData<S: NumeratorState> {
-    orientations: Option<TiVec<OrientationID, CutOrientationData>>,
-    bare_cff_evaluators: Option<TiVec<CutId, GenericEvaluator>>,
-    bare_cff_orientation_evaluators: Option<TiVec<OrientationID, OrientationEvaluator>>,
-    cff_expression: Option<CFFCutExpression>,
-    lmbs: Option<TiVec<LmbIndex, LoopMomentumBasis>>,
-    multi_channeling_setup: Option<LmbMultiChannelingSetup>,
-    esurface_data: Option<EsurfaceDerivedData>,
-    _temp_numerator: Option<PhantomData<S>>,
+    pub orientations: Option<TiVec<OrientationID, CutOrientationData>>,
+    pub bare_cff_evaluators: Option<TiVec<CutId, GenericEvaluator>>,
+    pub bare_cff_orientation_evaluators: Option<TiVec<OrientationID, OrientationEvaluator>>,
+    pub cff_expression: Option<CFFCutExpression>,
+    pub lmbs: Option<TiVec<LmbIndex, LoopMomentumBasis>>,
+    pub multi_channeling_setup: Option<LmbMultiChannelingSetup>,
+    pub esurface_data: Option<EsurfaceDerivedData>,
+    pub _temp_numerator: Option<PhantomData<S>>,
 }
 
 impl<S: NumeratorState> CrossSectionDerivedData<S> {

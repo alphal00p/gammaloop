@@ -10,7 +10,7 @@ use crate::new_cs::CutId;
 use super::{generation::SurfaceCache, surface::HybridSurfaceID, tree::Tree};
 
 #[derive(Debug, Clone, Serialize, Deserialize, From, Into, Hash, PartialEq, Eq, Copy, Encode)]
-pub struct OrientationID(usize);
+pub struct OrientationID(pub usize);
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode)]
 pub struct CutOrientationData {
