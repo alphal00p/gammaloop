@@ -3,6 +3,7 @@ use crate::momentum::{FourMomentum, Helicity, Polarization};
 use crate::numerator::ufo::UFO;
 use crate::utils::{self, FloatLike, F};
 use crate::GammaLoopContext;
+use crate::HasModel;
 use bincode::{Decode, Encode};
 use linnet::half_edge::drawing::Decoration;
 
@@ -73,7 +74,7 @@ impl Encode for ArcPropagator {
     }
 }
 
-impl<T: GammaLoopContext> Decode<T> for ArcPropagator {
+impl<T: HasModel> Decode<T> for ArcPropagator {
     fn decode<D: bincode::de::Decoder<Context = T>>(
         decoder: &mut D,
     ) -> std::result::Result<Self, bincode::error::DecodeError> {
@@ -114,7 +115,7 @@ impl Encode for ArcParticle {
     }
 }
 
-impl<T: GammaLoopContext> Decode<T> for ArcParticle {
+impl<T: HasModel> Decode<T> for ArcParticle {
     fn decode<D: bincode::de::Decoder<Context = T>>(
         decoder: &mut D,
     ) -> std::result::Result<Self, bincode::error::DecodeError> {
@@ -2325,5 +2326,30 @@ impl Model {
                 self.name
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::tests_from_pytest::load_generic_model;
+
+    use super::ArcParticle;
+
+    #[test]
+    fn test_encode_decode_arc_particle() {
+        let model = load_generic_model("scalars");
+        let particle = model.get_particle("scalar_0");
+        let particle_encoded =
+            bincode::encode_to_vec(&particle, bincode::config::standard()).unwrap();
+
+        let particle_decoded: ArcParticle = bincode::decode_from_slice_with_context(
+            &particle_encoded,
+            bincode::config::standard(),
+            model,
+        )
+        .unwrap()
+        .0;
+
+        assert_eq!(particle, particle_decoded);
     }
 }

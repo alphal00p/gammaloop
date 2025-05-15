@@ -110,9 +110,22 @@ pub fn initialize_reps() {
     let _ = ColorSextet {}.to_symbolic([Atom::Zero]);
 }
 
-pub trait GammaLoopContext: HasStateMap {
-    // fn get_state_map(&mut self) -> &mut StateMap;
+pub trait GammaLoopContext: HasStateMap + HasModel {}
+
+pub trait HasModel {
     fn get_model(&self) -> &Model;
+}
+
+impl HasModel for Model {
+    fn get_model(&self) -> &Model {
+        self
+    }
+}
+
+impl HasModel for GammaLoopContextContainer<'_> {
+    fn get_model(&self) -> &Model {
+        self.model
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -127,11 +140,7 @@ impl<'a> HasStateMap for GammaLoopContextContainer<'a> {
     }
 }
 
-impl<'a> GammaLoopContext for GammaLoopContextContainer<'a> {
-    fn get_model(&self) -> &Model {
-        self.model
-    }
-}
+impl<'a> GammaLoopContext for GammaLoopContextContainer<'a> {}
 
 #[cfg(not(feature = "higher_loops"))]
 pub const MAX_LOOP: usize = 3;
