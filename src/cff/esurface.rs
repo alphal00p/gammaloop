@@ -462,9 +462,9 @@ impl Index<EsurfaceID> for EsurfaceDerivedData {
 
 #[derive(Clone, Serialize, Deserialize, Debug, Encode, Decode)]
 pub struct EsurfaceData {
-    cut_momentum_basis: LmbIndex,
-    mass_sum_squared: F<f64>,
-    shift_signature: ExternalSignature,
+    pub cut_momentum_basis: LmbIndex,
+    pub mass_sum_squared: F<f64>,
+    pub shift_signature: ExternalSignature,
 }
 
 impl EsurfaceData {

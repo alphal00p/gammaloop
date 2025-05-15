@@ -31,6 +31,7 @@ use smartstring::{LazyCompact, SmartString};
 use spenso::{
     contraction::IsZero,
     data::DataTensor,
+    scalar::Scalar,
     structure::{
         abstract_index::AbstractIndex, representation::Minkowski, NamedStructure, ToSymbolic,
     },
@@ -631,6 +632,8 @@ pub struct Edge {
     pub edge_type: EdgeType,
     pub propagator: ArcPropagator,
     pub particle: ArcParticle,
+    pub num: Atom,
+    pub dod: i32,
     // #[bincode(with_serde)]
     pub internal_index: Vec<AbstractIndex>,
 }
@@ -806,6 +809,8 @@ impl From<BareEdge> for Edge {
             name: value.name.into(),
             propagator: ArcPropagator(value.propagator),
             particle: value.particle,
+            dod: -2,
+            num: Atom::one(),
         }
     }
 }
@@ -815,6 +820,8 @@ impl From<BareVertex> for Vertex {
         Self {
             name: value.name.into(),
             vertex_info: value.vertex_info,
+            dod: 0,
+            num: Atom::one(),
         }
     }
 }
@@ -1263,6 +1270,8 @@ pub struct Vertex {
     // #[bincode(with_serde)]
     pub name: String,
     pub vertex_info: VertexInfo,
+    pub num: Atom,
+    pub dod: i32,
 }
 
 impl Vertex {

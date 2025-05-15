@@ -1,9 +1,11 @@
 use std::{sync::Arc, time::Instant};
 
 use ahash::HashMap;
+use linnet::half_edge::hedgevec::HedgeVec;
 use smartstring::SmartString;
 use spenso::{
     network::parsing::ShadowedStructure,
+    scalar::Scalar,
     structure::{
         abstract_index::AbstractIndex,
         dimension::Dimension,
@@ -13,10 +15,19 @@ use spenso::{
 };
 use symbolica::evaluate::{FunctionMap, OptimizationSettings};
 use symbolica_community::physics::algebraic_simplification::metric::MetricSimplifier;
+use typed_index_collections::TiVec;
 
 use crate::{
-    feyngen::diagram_generator::{EdgeColor, FeynGen, NodeColorWithVertexRule},
+    feyngen::{
+        diagram_generator::{EdgeColor, FeynGen, NodeColorWithVertexRule},
+        FeynGenFilters,
+    },
+    graph::InteractionVertexInfo,
     model::{ArcVertexRule, ColorStructure, VertexRule},
+    new_cs::{CrossSectionGraph, ProcessDefinition},
+    new_graph::{Edge, Graph, Vertex},
+    numerator::UnInit,
+    signature::LoopExtSignature,
     tests_from_pytest::{load_amplitude_output, load_generic_model},
     uv::UVGraph,
 };
@@ -34,6 +45,220 @@ pub fn spenso_lor_atom(tag: i32, ind: impl Into<AbstractIndex>, dim: impl Into<D
     let mink = Minkowski {}.new_slot(dim, ind);
     // spenso_lor(tag, ind, dim).to_symbolic().unwrap()
     vec![mink].to_symbolic_with(GS.emr_mom, &[Atom::new_num(tag)])
+}
+
+#[test]
+fn double_triangl_LU() {
+    let model = load_generic_model("sm");
+    let mut underlying = HedgeGraphBuilder::new();
+
+    let hhh = VertexInfo::InteractonVertexInfo(InteractionVertexInfo {
+        vertex_rule: model.get_vertex_rule("V_9"),
+    });
+    let htt = VertexInfo::InteractonVertexInfo(InteractionVertexInfo {
+        vertex_rule: model.get_vertex_rule("V_141"),
+    });
+
+    let hprop = model.get_propagator("H");
+    let hp = model.get_particle("H");
+
+    let tprop = model.get_propagator("t");
+    let tp = model.get_particle("t");
+
+    let n1 = underlying.add_node(Vertex {
+        name: "n1".into(),
+        vertex_info: hhh,
+        dod: 0,
+        num: Atom::one(),
+    });
+    let n2 = underlying.add_node(Vertex {
+        name: "n2".into(),
+        vertex_info: htt.clone(),
+        dod: 0,
+
+        num: Atom::one(),
+    });
+    let n3 = underlying.add_node(Vertex {
+        name: "n3".into(),
+        vertex_info: htt.clone(),
+        dod: 0,
+        num: Atom::one(),
+    });
+    let n4 = underlying.add_node(Vertex {
+        name: "n4".into(),
+        vertex_info: htt.clone(),
+        dod: 0,
+
+        num: Atom::one(),
+    });
+
+    underlying.add_edge(
+        n1,
+        n2,
+        Edge {
+            name: "e0".into(),
+            edge_type: EdgeType::Virtual,
+            particle: hp.clone(),
+            propagator: hprop.clone(),
+            internal_index: vec![],
+            dod: -2,
+            num: Atom::one(),
+        },
+        false,
+    );
+
+    underlying.add_edge(
+        n1,
+        n3,
+        Edge {
+            name: "e1".into(),
+            edge_type: EdgeType::Virtual,
+            particle: hp.clone(),
+            propagator: hprop.clone(),
+            internal_index: vec![],
+            dod: -2,
+            num: Atom::one(),
+        },
+        false,
+    );
+
+    underlying.add_edge(
+        n2,
+        n3,
+        Edge {
+            name: "e2".into(),
+            edge_type: EdgeType::Virtual,
+            particle: tp.clone(),
+            propagator: tprop.clone(),
+            internal_index: vec![],
+            dod: -2,
+            num: Atom::one(),
+        },
+        true,
+    );
+
+    underlying.add_edge(
+        n3,
+        n4,
+        Edge {
+            name: "e3".into(),
+            edge_type: EdgeType::Virtual,
+            particle: tp.clone(),
+            propagator: tprop.clone(),
+            internal_index: vec![],
+            dod: -2,
+            num: Atom::one(),
+        },
+        true,
+    );
+
+    underlying.add_edge(
+        n4,
+        n2,
+        Edge {
+            name: "e4".into(),
+            edge_type: EdgeType::Virtual,
+            particle: tp.clone(),
+            propagator: tprop.clone(),
+            internal_index: vec![],
+            dod: -2,
+            num: Atom::one(),
+        },
+        true,
+    );
+
+    underlying.add_external_edge(
+        n1,
+        Edge {
+            name: "q1".into(),
+            edge_type: EdgeType::Incoming,
+            particle: hp.clone(),
+            propagator: hprop.clone(),
+            internal_index: vec![],
+            dod: 0,
+            num: Atom::one(),
+        },
+        false,
+        Flow::Source,
+    );
+
+    underlying.add_external_edge(
+        n4,
+        Edge {
+            name: "q2".into(),
+            edge_type: EdgeType::Outgoing,
+            particle: hp.clone(),
+            propagator: hprop.clone(),
+            internal_index: vec![],
+            dod: 0,
+            num: Atom::one(),
+        },
+        false,
+        Flow::Sink,
+    );
+
+    let underlying = underlying.build();
+
+    let mut loop_momentum_basis = LoopMomentumBasis {
+        tree: None,
+        basis: vec![EdgeIndex::from(0), EdgeIndex::from(4)].into(),
+        edge_signatures: underlying
+            .new_hedgevec(|_, _, _| LoopExtSignature::from((vec![], vec![]))),
+    };
+
+    loop_momentum_basis
+        .set_edge_signatures(&underlying)
+        .unwrap();
+
+    let graph = Graph {
+        multiplicity: Atom::one(),
+        name: "DT".into(),
+        underlying,
+        loop_momentum_basis,
+        vertex_slots: vec![].into(),
+        external_connections: None,
+    };
+
+    let mut cs: CrossSectionGraph<UnInit> = CrossSectionGraph::new(graph);
+
+    let hpdg = hp.pdg_code as i64;
+    let tpdg = tp.pdg_code as i64;
+    cs.preprocess(
+        &model,
+        &ProcessDefinition {
+            initial_pdgs: vec![hpdg],
+            final_pdgs_lists: vec![vec![tpdg, tpdg], vec![tpdg, tpdg, hpdg], vec![hpdg, hpdg]],
+            n_unresolved: 0,
+            unresolved_cut_content: HashSet::new(),
+            amplitude_filters: FeynGenFilters(vec![]),
+            cross_section_filters: FeynGenFilters(vec![]),
+        },
+    )
+    .unwrap();
+
+    let super_uv_graph = UVGraph::from_underlying(&cs.graph.underlying);
+    let orientation_id = OrientationID(0);
+
+    for (id, c) in cs.cuts.iter_enumerated() {
+        let esurface_id = cs.cut_esurface_id_map[id];
+        let cut_mom_basis_id =
+            cs.derived_data.esurface_data.as_ref().unwrap()[esurface_id].cut_momentum_basis;
+        let cut_lmb = &cs.derived_data.lmbs.as_ref().unwrap()[cut_mom_basis_id];
+
+        let mut left_forest = super_uv_graph.wood(&c.left).unfold(&super_uv_graph);
+        left_forest.compute(&super_uv_graph);
+
+        let mut right_forest = super_uv_graph.wood(&c.right).unfold(&super_uv_graph);
+        right_forest.compute(&super_uv_graph);
+
+        let left_expr = left_forest
+            .local_expr(&super_uv_graph, orientation_id)
+            .unwrap();
+
+        let left_expr = left_forest
+            .local_expr(&super_uv_graph, orientation_id)
+            .unwrap();
+    }
 }
 
 #[test]
@@ -99,7 +324,7 @@ fn nested_bubble_soft_ct() {
         )
     );
 
-    let wood = uv_graph.wood();
+    let wood = uv_graph.wood(&uv_graph.full_graph());
 
     //println!("{}", wood.dot(&uv_graph));
     //println!("{}", wood.show_graphs(&uv_graph));
@@ -283,7 +508,7 @@ fn nested_bubble_scalar_quad() {
         )
     );
 
-    let wood = uv_graph.wood();
+    let wood = uv_graph.wood(&uv_graph.full_graph());
 
     // println!("{}", wood.dot(&uv_graph));
     // println!("{}", wood.show_graphs(&uv_graph));
@@ -447,7 +672,7 @@ fn nested_bubble_scalar() {
         )
     );
 
-    let wood = uv_graph.wood();
+    let wood = uv_graph.wood(&uv_graph.full_graph());
 
     //println!("{}", wood.dot(&uv_graph));
     //println!("{}", wood.show_graphs(&uv_graph));
@@ -589,7 +814,7 @@ fn disconnect_forest_scalar() {
         )
     );
 
-    let wood = uv_graph.wood();
+    let wood = uv_graph.wood(&uv_graph.full_graph());
 
     println!("{}", wood.dot(&uv_graph));
     println!("{}", wood.show_graphs(&uv_graph));
@@ -769,7 +994,7 @@ fn easy() {
 
     println!("{}", uv_graph.base_dot());
 
-    let wood = uv_graph.wood();
+    let wood = uv_graph.wood(&uv_graph.full_graph());
 
     println!("{}", wood.dot(&uv_graph));
     println!("{}", wood.show_graphs(&uv_graph));
@@ -803,7 +1028,7 @@ fn tbt() {
 
     println!("tbt_dot{}", uv_graph.base_dot());
 
-    let wood = uv_graph.wood();
+    let wood = uv_graph.wood(&uv_graph.full_graph());
 
     println!("{}", wood.dot(&uv_graph));
 
@@ -868,7 +1093,7 @@ fn bugblatter_forest() {
 
     println!("{}", uv_graph.base_dot());
 
-    let wood = uv_graph.wood();
+    let wood = uv_graph.wood(&uv_graph.full_graph());
 
     assert_eq!(20, wood.n_spinneys());
     println!("{}", wood.dot(&uv_graph));
@@ -925,7 +1150,7 @@ fn kaapo_triplering() {
 
     // println!("{}", uv_graph.base_dot());
 
-    let wood = uv_graph.wood();
+    let wood = uv_graph.wood(&uv_graph.full_graph());
     assert_eq!(26, wood.n_spinneys());
 
     // println!("{}", wood.dot(&uv_graph));
@@ -986,7 +1211,7 @@ fn kaapo_quintic_scalar() {
 
     println!("{}", uv_graph.base_dot());
 
-    let wood = uv_graph.wood();
+    let wood = uv_graph.wood(&uv_graph.full_graph());
 
     assert_eq!(25, wood.n_spinneys());
 

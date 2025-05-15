@@ -7,8 +7,15 @@ use std::{
 };
 
 use crate::{
-    cff::generation::generate_cff_expression_from_subgraph_to_ose_atom, graph::VertexInfo,
-    model::ArcParticle, momentum::Sign, new_graph::LoopMomentumBasis, utils::GS,
+    cff::{
+        cut_expression::OrientationID, expression::OrientationData,
+        generation::generate_cff_expression_from_subgraph_to_ose_atom,
+    },
+    graph::VertexInfo,
+    model::{ArcParticle, ArcPropagator},
+    momentum::Sign,
+    new_graph::{Edge, LoopMomentumBasis, Vertex},
+    utils::GS,
 };
 use ahash::{AHashMap, AHashSet};
 use bitvec::vec::BitVec;
@@ -23,7 +30,12 @@ use serde::{Deserialize, Serialize};
 use spenso::{
     data::StorageTensor,
     parametric::{atomcore::PatternReplacement, ParamTensor},
-    structure::{HasStructure, VecStructure},
+    structure::{
+        abstract_index::AbstractIndex,
+        dimension::Dimension,
+        representation::{Minkowski, RepName},
+        HasStructure, ToSymbolic, VecStructure,
+    },
     symbolica_utils::SerializableAtom,
 };
 use symbolica::{
@@ -35,13 +47,15 @@ use symbolica::{
     state::State,
     symbol,
 };
-use symbolica_community::physics::algebraic_simplification::metric::MetricSimplifier;
+use symbolica_community::physics::algebraic_simplification::{
+    gamma::GammaSimplifier, metric::MetricSimplifier,
+};
 use trie_rs::{try_collect::TryFromIterator, Trie, TrieBuilder};
 
 use linnet::half_edge::{
     builder::HedgeGraphBuilder,
     involution::{EdgeIndex, Hedge, HedgePair, SignOrZero},
-    subgraph::{cycle::SignedCycle, ModifySubgraph},
+    subgraph::{cycle::SignedCycle, Cycle, ModifySubgraph},
     tree::SimpleTraversalTree,
     EdgeAccessors, HedgeGraph, NodeIndex, PowersetIterator,
 };
@@ -49,6 +63,7 @@ use linnet::half_edge::{
     involution::Flow,
     subgraph::{HedgeNode, InternalSubGraph, SubGraph, SubGraphOps},
 };
+use typed_index_collections::TiVec;
 
 use crate::{
     graph::{BareEdge, BareGraph, BareVertex, EdgeType},
@@ -62,6 +77,7 @@ pub struct UVEdge {
     og_edge: usize,
     dod: i32,
     particle: ArcParticle,
+    // prop:ArcPropagator.
     num: Atom,
     den: Atom,
 }
@@ -126,8 +142,39 @@ impl Deref for UVGraph {
     }
 }
 
+pub fn spenso_lor_atom(tag: i32, ind: impl Into<AbstractIndex>, dim: impl Into<Dimension>) -> Atom {
+    let mink = Minkowski {}.new_slot(dim, ind);
+    // spenso_lor(tag, ind, dim).to_symbolic().unwrap()
+    vec![mink].to_symbolic_with(GS.emr_mom, &[Atom::new_num(tag)])
+}
+
 #[allow(dead_code)]
 impl UVGraph {
+    pub fn from_underlying(hedge_graph: &HedgeGraph<Edge, Vertex>) -> Self {
+        Self::from_hedge(hedge_graph.map_data_ref(
+            |_, _, n| UVNode {
+                dod: n.dod,
+                num: n.num.clone(),
+                color: None,
+            },
+            |_, eid, _, n| {
+                n.map(|d| {
+                    let m2 = parse!(d.particle.mass.name).unwrap().npow(2);
+                    UVEdge {
+                        og_edge: 1,
+                        dod: d.dod,
+                        particle: d.particle.clone(),
+                        num: d.num.clone(),
+                        den: spenso_lor_atom(usize::from(eid) as i32, 1, GS.dim)
+                            .npow(2)
+                            .to_dots()
+                            - m2,
+                    }
+                })
+            },
+        ))
+    }
+
     pub fn from_hedge(hedge_graph: HedgeGraph<UVEdge, UVNode>) -> Self {
         let cut_edges = hedge_graph.cycle_basis().1.tree_subgraph;
 
@@ -333,10 +380,21 @@ impl UVGraph {
         uv_graph
     }
 
-    fn spinneys(&self) -> AHashSet<InternalSubGraph> {
+    fn spinneys<S: SubGraph<Base = BitVec>>(&self, subgraph: &S) -> AHashSet<InternalSubGraph> {
+        let init_node = self.iter_node_data(subgraph).next().unwrap().0;
+        let all_subcycles: Vec<_> = Cycle::all_sum_powerset_filter_map(
+            &self
+                .paton_cycle_basis(subgraph, &init_node, None)
+                .unwrap()
+                .0,
+            &Some,
+        )
+        .map(|a| a.into_iter().map(|c| c.internal_graph(self)).collect())
+        .unwrap();
+
         // println!("{}", self.base_dot());
         let mut spinneys: AHashSet<_> = InternalSubGraph::all_ops_iterative_filter_map(
-            &self.all_cycle_sym_diffs().unwrap(),
+            &all_subcycles,
             &|a, b| a.union(b),
             &|union| {
                 if self.dod(&union) >= 0 {
@@ -352,8 +410,8 @@ impl UVGraph {
         spinneys
     }
 
-    fn wood(&self) -> Wood {
-        Wood::from_spinneys(self.spinneys(), self)
+    fn wood<S: SubGraph<Base = BitVec>>(&self, subgraph: &S) -> Wood {
+        Wood::from_spinneys(self.spinneys(subgraph), self)
     }
 
     fn n_loops<S: SubGraph>(&self, subgraph: &S) -> usize {
@@ -392,6 +450,23 @@ impl UVGraph {
         }
 
         num.into()
+    }
+
+    fn oriented_numerator<S: SubGraph>(
+        &self,
+        subgraph: &S,
+        // orientationdata: &OrientationData,
+    ) -> Atom {
+        let mut num = Atom::new_num(1);
+
+        for (_, _, n) in self.iter_node_data(subgraph) {
+            num = num * &n.num;
+        }
+
+        for e in self.iter_internal_edge_data(subgraph) {
+            num = num * &e.data.num;
+        }
+        num
     }
 
     fn denominator(&self, subgraph: &InternalSubGraph) -> Atom {
@@ -683,14 +758,16 @@ pub struct Approximation {
     dod: i32,
     lmb: Vec<EdgeIndex>,
     externals: Vec<EdgeIndex>,
-    pub approx_op: ApproxOp,
+    // pub integrated_ct: ApproxOp,
+    pub t_op: ApproxOp,
+    // pub cff: TiVec<OrientationID, (Atom, OrientationData)>,
     momentum_assignment: HashMap<EdgeIndex, Atom>,
     pub mom_rep: Vec<Replacement>,
     pub simple_approx: Option<SimpleApprox>,
 }
 
 impl Approximation {
-    pub fn simplify_notation(expr: &SerializableAtom) -> SerializableAtom {
+    pub fn simplify_notation(expr: &Atom) -> Atom {
         let replacements = [(function!(GS.den, GS.a_, GS.x_), Atom::new_var(GS.x_))];
 
         let reps: Vec<_> = replacements
@@ -715,7 +792,7 @@ impl Approximation {
                 .iter()
                 .map(|(edge, mom)| {
                     let r = Replacement::new(
-                        function!(GS.emr_mom, usize::from(*edge) as i64).to_pattern(),
+                        function!(GS.emr_mom, usize::from(*edge) as i64, GS.x___).to_pattern(),
                         mom.to_pattern(),
                     );
                     // println!("Rep:{r}");
@@ -725,7 +802,9 @@ impl Approximation {
             momentum_assignment,
             externals,
             simple_approx: None,
-            approx_op: ApproxOp::NotComputed,
+            // cff: vec![].into(),
+            // integrated_ct: ApproxOp::NotComputed,
+            t_op: ApproxOp::NotComputed,
         }
     }
 
@@ -733,25 +812,43 @@ impl Approximation {
         self.subgraph.subtract(subgraph)
     }
 
-    pub fn dependent(&self, dependent: &Self, graph: &UVGraph) -> (ApproxOp, SimpleApprox) {
-        let simple_approx = dependent
+    pub fn structure_approximate(&self, dependent: &Self) -> SimpleApprox {
+        dependent
             .simple_approx
             .as_ref()
             .unwrap()
-            .dependent(self.subgraph.clone());
+            .dependent(self.subgraph.clone())
+    }
 
-        (
-            ApproxOp::dependent(
-                dependent,
-                &self.subgraph,
-                &self.externals,
-                &self.mom_rep,
-                self.dod,
-                graph,
-            ),
-            simple_approx,
+    pub fn approximate(&self, dependent: &Self, graph: &UVGraph) -> ApproxOp {
+        ApproxOp::approximate(
+            dependent,
+            &self.subgraph,
+            &self.externals,
+            &self.mom_rep,
+            self.dod,
+            graph,
         )
     }
+
+    // pub fn local_approximate(
+    //     &self,
+    //     dependent: &Self,
+    //     self_cff: Atom,
+    //     orientationdata: OrientationData,
+    //     graph: &UVGraph,
+    // ) -> ApproxOp {
+    //     ApproxOp::local_approximate(
+    //         dependent,
+    //         &self.subgraph,
+    //         &self.externals,
+    //         &self.mom_rep,
+    //         self_cff,
+    //         orientationdata,
+    //         self.dod,
+    //         graph,
+    //     )
+    // }
 
     pub fn union(&self, dependents: &[&Self], _graph: &UVGraph) -> (ApproxOp, SimpleApprox) {
         let simple_approx = SimpleApprox::union(
@@ -763,8 +860,31 @@ impl Approximation {
 
     /// Get final expression in the forest sum
     pub fn expr(&self, graph: &UVGraph) -> Option<SerializableAtom> {
-        let (t, s) = self.approx_op.expr()?;
+        let (t, s) = self.t_op.expr()?;
 
+        let contracted = s * IntegrandExpr::from_subgraph(
+            &graph.full_node().internal_graph.subtract(&self.subgraph),
+            graph,
+        )
+        .integrand;
+
+        Some(
+            Self::simplify_notation(&(t * contracted).replace_multiple(&graph.lmb_replacement))
+                .into(),
+        )
+    }
+
+    pub fn local_expr(&self, graph: &UVGraph, orientation_id: OrientationID) -> Option<Atom> {
+        let (t, s) = self.t_op.expr()?;
+        let num = graph
+            .oriented_numerator(
+                &graph.full_node().internal_graph.subtract(&self.subgraph),
+                // &self.cff[orientation_id].1,
+            )
+            .simplify_gamma()
+            .to_dots();
+
+        // let uv_mass_cff = self_cff;
         let contracted = s * IntegrandExpr::from_subgraph(
             &graph.full_node().internal_graph.subtract(&self.subgraph),
             graph,
@@ -810,7 +930,7 @@ impl ApproxOp {
         }
     }
 
-    pub fn dependent(
+    pub fn approximate(
         dependent: &Approximation,   //is smaller than subgraph
         subgraph: &InternalSubGraph, //is not necessarily full_graph
         external_edges: &[EdgeIndex],
@@ -820,7 +940,7 @@ impl ApproxOp {
     ) -> Self {
         let reduced = subgraph.subtract(&dependent.subgraph);
 
-        if let Some((inner_t, sign)) = dependent.approx_op.expr() {
+        if let Some((inner_t, sign)) = dependent.t_op.expr() {
             let t_arg = IntegrandExpr::from_subgraph(&reduced, graph);
 
             let mut atomarg = t_arg.integrand * inner_t;
@@ -925,7 +1045,7 @@ impl ApproxOp {
 
         let mut final_sign = Sign::Positive;
         for d in dependent {
-            match &d.approx_op {
+            match &d.t_op {
                 ApproxOp::Dependent {
                     t_arg,
                     sign,
@@ -975,9 +1095,15 @@ impl Forest {
                 let subgraph: InternalSubGraph = graph.empty_subgraph();
                 (ApproxOp::Root, SimpleApprox::root(subgraph))
             } else if parents.len() == 1 {
-                current
+                let approx = current
                     .data
-                    .dependent(&self.dag.nodes[parents[0]].data, graph)
+                    .approximate(&self.dag.nodes[parents[0]].data, graph);
+                (
+                    approx,
+                    current
+                        .data
+                        .structure_approximate(&self.dag.nodes[parents[0]].data),
+                )
             } else {
                 let mut dependents = vec![];
                 for p in parents {
@@ -985,8 +1111,10 @@ impl Forest {
                 }
                 current.data.union(&dependents, graph)
             };
-
-            self.dag.nodes[n].data.approx_op = approx;
+            // if let Some(cff) = cff {
+            //     self.dag.nodes[n].data.cff = cff;
+            // }
+            self.dag.nodes[n].data.t_op = approx;
             self.dag.nodes[n].data.simple_approx = Some(simple_approx);
         }
     }
@@ -995,6 +1123,15 @@ impl Forest {
         let mut sum = Atom::new_num(0).into();
         for (_, n) in &self.dag.nodes {
             sum = sum + n.data.expr(graph)?;
+        }
+
+        Some(sum)
+    }
+
+    pub fn local_expr(&self, graph: &UVGraph, orientation_id: OrientationID) -> Option<Atom> {
+        let mut sum = Atom::new_num(0);
+        for (_, n) in &self.dag.nodes {
+            sum = sum + n.data.local_expr(graph, orientation_id)?;
         }
 
         Some(sum)

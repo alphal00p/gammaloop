@@ -82,7 +82,7 @@ impl<T: HasModel> Decode<T> for ArcPropagator {
         let context = decoder.context();
         let model = context.get_model();
         let prop = model.get_propagator(&name);
-        Ok(ArcPropagator(prop))
+        Ok(prop)
     }
 }
 
@@ -2255,9 +2255,9 @@ impl Model {
     }
 
     #[inline]
-    pub fn get_propagator<S: AsRef<str>>(&self, name: S) -> Arc<Propagator> {
+    pub fn get_propagator<S: AsRef<str>>(&self, name: S) -> ArcPropagator {
         if let Some(position) = self.propagator_name_to_position.get(name.as_ref()) {
-            self.propagators[*position].clone()
+            ArcPropagator(self.propagators[*position].clone())
         } else {
             panic!(
                 "Propagator '{}' not found in model '{}'.",
