@@ -398,36 +398,38 @@ pub fn get_existing_esurfaces<T: FloatLike>(
                 None
             }
         } {
-            let shift_signature = &esurface_derived_data[esurface_to_check_id].shift_signature;
+            if let Some(esurface_derived_data) = &esurface_derived_data[esurface_to_check_id] {
+                let shift_signature = &esurface_derived_data.shift_signature;
 
-            let esurface_shift = compute_shift_part(shift_signature, externals);
+                let esurface_shift = compute_shift_part(shift_signature, externals);
 
-            let shift_spatial_sq = esurface_shift.spatial.norm_squared();
+                let shift_spatial_sq = esurface_shift.spatial.norm_squared();
 
-            let mass_sum_squared = esurface_derived_data[esurface_to_check_id].mass_sum_squared;
+                let mass_sum_squared = esurface_derived_data.mass_sum_squared;
 
-            let existence_condition =
-                &shift_zero_sq - &shift_spatial_sq - F::from_ff64(mass_sum_squared);
+                let existence_condition =
+                    &shift_zero_sq - &shift_spatial_sq - F::from_ff64(mass_sum_squared);
 
-            if debug > 1 {
-                let helper_struct = ExistenceCheckDebug {
-                    esurface_id: esurface_to_check_id,
-                    shift_zero_sq: shift_zero_sq.into_ff64(),
-                    shift_spatial_sq: shift_spatial_sq.into_ff64(),
-                    mass_sum_sq: mass_sum_squared.into_ff64(),
-                    existence_condition: existence_condition.into_ff64(),
-                    threshold: F::from_ff64(
-                        EXISTENCE_THRESHOLD * EXISTENCE_THRESHOLD * e_cm * e_cm,
-                    ),
-                };
+                if debug > 1 {
+                    let helper_struct = ExistenceCheckDebug {
+                        esurface_id: esurface_to_check_id,
+                        shift_zero_sq: shift_zero_sq.into_ff64(),
+                        shift_spatial_sq: shift_spatial_sq.into_ff64(),
+                        mass_sum_sq: mass_sum_squared.into_ff64(),
+                        existence_condition: existence_condition.into_ff64(),
+                        threshold: F::from_ff64(
+                            EXISTENCE_THRESHOLD * EXISTENCE_THRESHOLD * e_cm * e_cm,
+                        ),
+                    };
 
-                DEBUG_LOGGER.write("existence_check", &helper_struct);
-            }
+                    DEBUG_LOGGER.write("existence_check", &helper_struct);
+                }
 
-            if existence_condition
-                > F::from_ff64(EXISTENCE_THRESHOLD * EXISTENCE_THRESHOLD * e_cm * e_cm)
-            {
-                existing_esurfaces.push(esurface_to_check_id);
+                if existence_condition
+                    > F::from_ff64(EXISTENCE_THRESHOLD * EXISTENCE_THRESHOLD * e_cm * e_cm)
+                {
+                    existing_esurfaces.push(esurface_to_check_id);
+                }
             }
         }
     }
@@ -446,12 +448,12 @@ struct ExistenceCheckDebug {
 
 #[derive(Clone, Serialize, Deserialize, Debug, Encode, Decode)]
 pub struct EsurfaceDerivedData {
-    esurface_data: Vec<EsurfaceData>,
+    esurface_data: Vec<Option<EsurfaceData>>,
     orientation_pairs: Vec<(EsurfaceID, EsurfaceID)>,
 }
 
 impl Index<EsurfaceID> for EsurfaceDerivedData {
-    type Output = EsurfaceData;
+    type Output = Option<EsurfaceData>;
 
     fn index(&self, index: EsurfaceID) -> &Self::Output {
         &self.esurface_data[index.0]
@@ -503,34 +505,40 @@ pub fn generate_esurface_data(
             // find the cut momentum basis
             let energies = &esurface.energies;
 
-            let (lmb_index, lmb) = lmbs
-                .iter_enumerated()
-                .find(|(_i, lmb)| {
-                    lmb.basis.iter().filter(|&i| energies.contains(i)).count() == energies.len() - 1
-                })
-                .ok_or_else(|| eyre!("Could not find a cut momentum basis for esurface"))?;
+            if let Some((lmb_index, lmb)) = lmbs.iter_enumerated().find(|(_i, lmb)| {
+                lmb.basis.iter().filter(|&i| energies.contains(i)).count() == energies.len() - 1
+            }) {
+                let energy_not_in_cmb = *energies
+                    .iter()
+                    .find(|&i| !lmb.basis.contains(i))
+                    .ok_or_else(|| eyre!("No remaining edge in esurface"))?;
 
-            let energy_not_in_cmb = *energies
-                .iter()
-                .find(|&i| !lmb.basis.contains(i))
-                .ok_or_else(|| eyre!("No remaining edge in esurface"))?;
+                let shift_signature = lmb.edge_signatures[energy_not_in_cmb].external.clone();
 
-            let shift_signature = lmb.edge_signatures[energy_not_in_cmb].external.clone();
+                let mass_sum: F<f64> = esurface
+                    .energies
+                    .iter()
+                    .map(|&i| edge_masses[i])
+                    .filter(|mass| mass.is_some())
+                    .map(|mass| mass.unwrap_or_else(|| unreachable!()).re)
+                    .reduce(|acc, x| acc + x)
+                    .unwrap_or_else(|| F::from_f64(0.0));
 
-            let mass_sum: F<f64> = esurface
-                .energies
-                .iter()
-                .map(|&i| edge_masses[i])
-                .filter(|mass| mass.is_some())
-                .map(|mass| mass.unwrap_or_else(|| unreachable!()).re)
-                .reduce(|acc, x| acc + x)
-                .unwrap_or_else(|| F::from_f64(0.0));
-
-            Ok(EsurfaceData {
-                cut_momentum_basis: lmb_index,
-                mass_sum_squared: mass_sum * mass_sum,
-                shift_signature,
-            })
+                Ok(Some(EsurfaceData {
+                    cut_momentum_basis: lmb_index,
+                    mass_sum_squared: mass_sum * mass_sum,
+                    shift_signature,
+                }))
+            } else {
+                if esurface.external_shift.is_empty() {
+                    Ok(None)
+                } else {
+                    Err(eyre!(
+                        "Could not find cut momentum basis for esurface: {:?}",
+                        esurface
+                    ))
+                }
+            }
         })
         .collect::<Result<Vec<_>, Report>>()?;
 
@@ -547,35 +555,30 @@ pub fn generate_esurface_data(
             continue;
         }
 
-        let (position, other_esurface_id) = esurface_ids
-            .iter()
-            .enumerate()
-            .find(|(_pos, other_esurface_id)| {
-                let other_esurface = &esurfaces[**other_esurface_id];
+        if let Some((position, other_esurface_id)) =
+            esurface_ids
+                .iter()
+                .enumerate()
+                .find(|(_pos, other_esurface_id)| {
+                    let other_esurface = &esurfaces[**other_esurface_id];
 
-                let energies_match = esurface.energies == other_esurface.energies;
+                    let energies_match = esurface.energies == other_esurface.energies;
 
-                let sign_flipped = esurface
-                    .external_shift
-                    .iter()
-                    .zip(other_esurface.external_shift.iter())
-                    .all(|((index, signature), (other_index, other_signature))| {
-                        index == other_index && *signature == -other_signature
-                    })
-                    && esurface.external_shift.len() == other_esurface.external_shift.len();
+                    let sign_flipped = esurface
+                        .external_shift
+                        .iter()
+                        .zip(other_esurface.external_shift.iter())
+                        .all(|((index, signature), (other_index, other_signature))| {
+                            index == other_index && *signature == -other_signature
+                        })
+                        && esurface.external_shift.len() == other_esurface.external_shift.len();
 
-                energies_match && sign_flipped
-            })
-            .ok_or_else(|| {
-                eyre!(
-                    "Could not find mirror esurface for esurface: {:?}, list of esurfaces: {:#?}",
-                    esurface_id,
-                    esurfaces
-                )
-            })?;
-
-        orientation_pairs.push((esurface_id, *other_esurface_id));
-        esurface_ids.remove(position);
+                    energies_match && sign_flipped
+                })
+        {
+            orientation_pairs.push((esurface_id, *other_esurface_id));
+            esurface_ids.remove(position);
+        }
     }
 
     Ok(EsurfaceDerivedData {
