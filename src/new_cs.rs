@@ -18,7 +18,11 @@ use smartstring::{LazyCompact, SmartString};
 use spenso::contraction::IsZero;
 
 use crate::{
-    cff::{expression::CFFExpression, generation::generate_cff_expression},
+    cff::{
+        esurface::{generate_esurface_data, EsurfaceDerivedData},
+        expression::CFFExpression,
+        generation::generate_cff_expression,
+    },
     model::ArcParticle,
     momentum_sample::ExternalIndex,
     new_gammaloop_integrand::{
@@ -1003,7 +1007,22 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
         self.build_cut_evaluators();
         self.build_orientation_evaluators();
         self.build_lmbs();
+        self.build_esurface_serived_data()?;
         Ok(self.build_multi_channeling_channels())
+    }
+
+    pub fn build_esurface_serived_data(&mut self) -> Result<()> {
+        let lmbs = self.derived_data.lmbs.as_ref().unwrap();
+        let esurfaces = &self
+            .derived_data
+            .cff_expression
+            .as_ref()
+            .unwrap()
+            .surfaces
+            .esurface_cache;
+
+        let esurface_data = generate_esurface_data(&self.graph, lmbs, esurfaces)?;
+        Ok(self.derived_data.esurface_data = Some(esurface_data))
     }
 
     pub fn update_surface_cache(&mut self) {
@@ -1298,6 +1317,7 @@ pub struct CrossSectionDerivedData<S: NumeratorState> {
     cff_expression: Option<CFFCutExpression>,
     lmbs: Option<TiVec<LmbIndex, LoopMomentumBasis>>,
     multi_channeling_setup: Option<LmbMultiChannelingSetup>,
+    esurface_data: Option<EsurfaceDerivedData>,
     _temp_numerator: Option<PhantomData<S>>,
 }
 
@@ -1311,6 +1331,7 @@ impl<S: NumeratorState> CrossSectionDerivedData<S> {
             bare_cff_orientation_evaluators: None,
             lmbs: None,
             multi_channeling_setup: None,
+            esurface_data: None,
         }
     }
 }
