@@ -323,6 +323,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "bincode-trait-derive"
+version = "0.1.0"
+source = "git+https://github.com/alphal00p/bincode-trait-derive.git#90773339fd518b635184ac6280f848823cda99c6"
+dependencies = [
+ "bincode",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.101",
+]
+
+[[package]]
 name = "bincode_derive"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1140,7 +1151,7 @@ dependencies = [
  "ahash",
  "base62",
  "bincode",
- "bincode-trait-derive",
+ "bincode-trait-derive 0.1.0 (git+https://github.com/alphal00p/bincode-trait-derive.git)",
  "bitvec",
  "brotli",
  "chrono",
@@ -2869,7 +2880,7 @@ dependencies = [
  "append-only-vec",
  "approx 0.5.1",
  "bincode",
- "bincode-trait-derive",
+ "bincode-trait-derive 0.1.0 (git+https://github.com/alphal00p/bincode-trait-derive.git?rev=c092cba7f80c867fd5646cf68312e1f4f9010658)",
  "bitvec",
  "constcat",
  "delegate 0.12.0",
@@ -2989,7 +3000,7 @@ dependencies = [
  "ahash",
  "append-only-vec",
  "bincode",
- "bincode-trait-derive",
+ "bincode-trait-derive 0.1.0 (git+https://github.com/alphal00p/bincode-trait-derive.git?rev=c092cba7f80c867fd5646cf68312e1f4f9010658)",
  "brotli",
  "byteorder",
  "bytes",
@@ -3018,7 +3029,7 @@ dependencies = [
  "anyhow",
  "auto_enums",
  "bincode",
- "bincode-trait-derive",
+ "bincode-trait-derive 0.1.0 (git+https://github.com/alphal00p/bincode-trait-derive.git?rev=c092cba7f80c867fd5646cf68312e1f4f9010658)",
  "delegate 0.13.3",
  "env_logger",
  "itertools 0.13.0",
