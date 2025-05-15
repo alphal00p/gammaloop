@@ -75,7 +75,7 @@ rayon = "1.5"
 tabled = "0.7"
 indicatif = { version = "0.17.9", features = ["improved_unicode", "rayon"] }
 # bincode-trait-derive = {path="../bincode-trait-derive"}
-bincode-trait-derive = {git = "https://github.com/alphal00p/bincode-trait-derive.git",rev="c092cba7f80c867fd5646cf68312e1f4f9010658"}
+bincode-trait-derive = {git = "https://github.com/alphal00p/bincode-trait-derive.git"}
 enum_dispatch = "*"
 git-version = "0.3"
 colored = "*"
