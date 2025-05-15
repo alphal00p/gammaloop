@@ -245,10 +245,14 @@ fn double_triangl_LU() {
             cs.derived_data.esurface_data.as_ref().unwrap()[esurface_id].cut_momentum_basis;
         let cut_lmb = &cs.derived_data.lmbs.as_ref().unwrap()[cut_mom_basis_id];
 
-        let mut left_forest = super_uv_graph.wood(&c.left).unfold(&super_uv_graph);
+        let mut left_forest = super_uv_graph
+            .wood(&c.left)
+            .unfold(&super_uv_graph, &super_uv_graph.cut_edges);
         left_forest.compute(&super_uv_graph);
 
-        let mut right_forest = super_uv_graph.wood(&c.right).unfold(&super_uv_graph);
+        let mut right_forest = super_uv_graph
+            .wood(&c.right)
+            .unfold(&super_uv_graph, &super_uv_graph.cut_edges);
         right_forest.compute(&super_uv_graph);
 
         let left_expr = left_forest
@@ -329,7 +333,7 @@ fn nested_bubble_soft_ct() {
     //println!("{}", wood.dot(&uv_graph));
     //println!("{}", wood.show_graphs(&uv_graph));
 
-    let mut ufold = wood.unfold(&uv_graph);
+    let mut ufold = wood.unfold(&uv_graph, &uv_graph.cut_edges);
     // assert_eq!(152, ufold.n_terms());
     ufold.compute(&uv_graph);
 
@@ -513,7 +517,7 @@ fn nested_bubble_scalar_quad() {
     // println!("{}", wood.dot(&uv_graph));
     // println!("{}", wood.show_graphs(&uv_graph));
 
-    let mut ufold = wood.unfold(&uv_graph);
+    let mut ufold = wood.unfold(&uv_graph, &uv_graph.cut_edges);
     // assert_eq!(152, ufold.n_terms());
     ufold.compute(&uv_graph);
 
@@ -677,7 +681,7 @@ fn nested_bubble_scalar() {
     //println!("{}", wood.dot(&uv_graph));
     //println!("{}", wood.show_graphs(&uv_graph));
 
-    let mut ufold = wood.unfold(&uv_graph);
+    let mut ufold = wood.unfold(&uv_graph, &uv_graph.cut_edges);
     // assert_eq!(152, ufold.n_terms());
     ufold.compute(&uv_graph);
 
@@ -819,7 +823,7 @@ fn disconnect_forest_scalar() {
     println!("{}", wood.dot(&uv_graph));
     println!("{}", wood.show_graphs(&uv_graph));
 
-    let mut ufold = wood.unfold(&uv_graph);
+    let mut ufold = wood.unfold(&uv_graph, &uv_graph.cut_edges);
     // assert_eq!(152, ufold.n_terms());
     ufold.compute(&uv_graph);
 
@@ -999,14 +1003,14 @@ fn easy() {
     println!("{}", wood.dot(&uv_graph));
     println!("{}", wood.show_graphs(&uv_graph));
 
-    let mut ufold = wood.unfold(&uv_graph);
+    let mut ufold = wood.unfold(&uv_graph, &uv_graph.cut_edges);
     // assert_eq!(152, ufold.n_terms());
     ufold.compute(&uv_graph);
 
     println!("unfolded : {}", ufold.show_structure(&uv_graph).unwrap());
     println!("graph: {}", ufold.graphs());
 
-    // let structure = wood.unfold(&uv_graph);
+    // let structure = wood.unfold(&uv_graph,&uv_graph.cut_edges);
 
     // println!("{}", structure.show_structure(&wood, &uv_graph));
     // println!("{}", structure.n_elements());
@@ -1032,13 +1036,13 @@ fn tbt() {
 
     println!("{}", wood.dot(&uv_graph));
 
-    let mut ufold = wood.unfold(&uv_graph);
+    let mut ufold = wood.unfold(&uv_graph, &uv_graph.cut_edges);
     ufold.compute(&uv_graph);
 
     println!("unfolded : {}", ufold.show_structure(&uv_graph).unwrap());
     println!("graph: {}", ufold.graphs());
 
-    // let structure = wood.unfold(&uv_graph);
+    // let structure = wood.unfold(&uv_graph,&uv_graph.cut_edges);
 
     // println!("{}", structure.show_structure(&wood, &uv_graph));
     // println!("{}", structure.n_elements());
@@ -1099,14 +1103,14 @@ fn bugblatter_forest() {
     println!("{}", wood.dot(&uv_graph));
     println!("{}", wood.show_graphs(&uv_graph));
 
-    let mut ufold = wood.unfold(&uv_graph);
+    let mut ufold = wood.unfold(&uv_graph, &uv_graph.cut_edges);
     assert_eq!(152, ufold.n_terms());
     ufold.compute(&uv_graph);
 
     println!("unfolded : {}", ufold.show_structure(&uv_graph).unwrap());
     println!("graph: {}", ufold.graphs());
 
-    // let structure = wood.unfold(&uv_graph);
+    // let structure = wood.unfold(&uv_graph,&uv_graph.cut_edges);
 
     // println!("{}", structure.show_structure(&wood, &uv_graph));
     // println!("{}", structure.n_elements());
@@ -1156,7 +1160,7 @@ fn kaapo_triplering() {
     // println!("{}", wood.dot(&uv_graph));
     // println!("{}", wood.show_graphs(&uv_graph));
 
-    let mut ufold = wood.unfold(&uv_graph);
+    let mut ufold = wood.unfold(&uv_graph, &uv_graph.cut_edges);
     ufold.compute(&uv_graph);
 
     println!("unfolded : {}", ufold.show_structure(&uv_graph).unwrap());
@@ -1218,7 +1222,7 @@ fn kaapo_quintic_scalar() {
     // println!("{}", wood.dot(&uv_graph));
     // println!("{}", wood.show_graphs(&uv_graph));
 
-    let mut ufold = wood.unfold(&uv_graph);
+    let mut ufold = wood.unfold(&uv_graph, &uv_graph.cut_edges);
     ufold.compute(&uv_graph);
 
     println!("unfolded : {}", ufold.show_structure(&uv_graph).unwrap());
