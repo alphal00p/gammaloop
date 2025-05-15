@@ -23,7 +23,7 @@ use crate::momentum_sample::{
     ExternalFourMomenta, ExternalIndex, ExternalThreeMomenta, LoopIndex, LoopMomenta,
 };
 use crate::new_cs::CrossSectionCut;
-use crate::new_graph::{self, LoopMomentumBasis};
+use crate::new_graph::{self, LmbIndex, LoopMomentumBasis};
 use crate::signature::ExternalSignature;
 use crate::utils::{
     compute_loop_part, compute_shift_part, compute_t_part_of_shift_part,
@@ -460,7 +460,7 @@ impl Index<EsurfaceID> for EsurfaceDerivedData {
 
 #[derive(Clone, Serialize, Deserialize, Debug, Encode, Decode)]
 pub struct EsurfaceData {
-    cut_momentum_basis: usize,
+    cut_momentum_basis: LmbIndex,
     mass_sum_squared: F<f64>,
     shift_signature: ExternalSignature,
 }
@@ -490,7 +490,7 @@ impl EsurfaceData {
 
 pub fn generate_esurface_data(
     graph: &new_graph::Graph,
-    lmbs: &[LoopMomentumBasis],
+    lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
     esurfaces: &EsurfaceCollection,
 ) -> Result<EsurfaceDerivedData, Report> {
     let edge_masses = graph
@@ -504,8 +504,7 @@ pub fn generate_esurface_data(
             let energies = &esurface.energies;
 
             let (lmb_index, lmb) = lmbs
-                .iter()
-                .enumerate()
+                .iter_enumerated()
                 .find(|(_i, lmb)| {
                     lmb.basis.iter().filter(|&i| energies.contains(i)).count() == energies.len() - 1
                 })
