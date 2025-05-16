@@ -344,6 +344,10 @@ fn nested_bubble_soft_ct() {
 
     let result = ufold.expr(&uv_graph).unwrap().0;
 
+    let result = result
+        .replace(function!(GS.emr_mom, GS.x_, GS.y_))
+        .with(GS.y_);
+
     // println!("{}", ufold.structure_and_res(&uv_graph));
     println!("{:>}", result);
 
@@ -528,6 +532,12 @@ fn nested_bubble_scalar_quad() {
 
     let result = ufold.expr(&uv_graph).unwrap().0;
 
+    println!("{:>}", result);
+
+    let result = result
+        .replace(function!(GS.emr_mom, GS.x_, GS.y_))
+        .with(GS.y_);
+
     // println!("{}", ufold.structure_and_res(&uv_graph));
     println!("{:>}", result);
 
@@ -552,6 +562,8 @@ fn nested_bubble_scalar_quad() {
         "Correct UV cancellation if 0: {:>}",
         s.to_atom().expand().factor()
     );
+
+    panic!("STOP");
 
     let exp = result
         .replace(parse!("symbolica_community::dot(k_(x_),l_(y_))").unwrap())
@@ -643,7 +655,7 @@ fn nested_bubble_scalar() {
             dod: -2,
             particle: higgs,
             num: Atom::new_num(1),
-            den: spenso_lor_atom(eid, 1, GS.dim).npow(2).to_dots(), // - m2,
+            den: spenso_lor_atom(eid, 1, GS.dim).npow(2).to_dots() - m2,
         }
     }
 
@@ -691,6 +703,10 @@ fn nested_bubble_scalar() {
     //println!("graph: {}", ufold.graphs());
 
     let result = ufold.expr(&uv_graph).unwrap().0;
+
+    let result = result
+        .replace(function!(GS.emr_mom, GS.x_, GS.y_))
+        .with(GS.y_);
 
     println!("{}", ufold.structure_and_res(&uv_graph));
     println!("RESULT {:>}", result);
