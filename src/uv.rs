@@ -9,7 +9,7 @@ use std::{
 
 use crate::{
     cff::{
-        cut_expression::OrientationID, expression::OrientationData,
+        expression::{AmplitudeOrientationID, OrientationData},
         generation::generate_cff_expression_from_subgraph_to_ose_atom,
     },
     graph::VertexInfo,
@@ -978,7 +978,11 @@ impl Approximation {
         )
     }
 
-    pub fn local_expr(&self, graph: &UVGraph, orientation_id: OrientationID) -> Option<Atom> {
+    pub fn local_expr(
+        &self,
+        graph: &UVGraph,
+        orientation_id: AmplitudeOrientationID,
+    ) -> Option<Atom> {
         let (t, s) = self.t_op.expr()?;
         let num = graph
             .oriented_numerator(
@@ -1360,7 +1364,11 @@ impl Forest {
         Some(sum)
     }
 
-    pub fn local_expr(&self, graph: &UVGraph, orientation_id: OrientationID) -> Option<Atom> {
+    pub fn local_expr(
+        &self,
+        graph: &UVGraph,
+        orientation_id: AmplitudeOrientationID,
+    ) -> Option<Atom> {
         let mut sum = Atom::new_num(0);
         for (_, n) in &self.dag.nodes {
             sum = sum + n.data.local_expr(graph, orientation_id)?;

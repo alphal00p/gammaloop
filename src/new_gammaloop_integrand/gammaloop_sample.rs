@@ -4,7 +4,6 @@ use serde::{Deserialize, Serialize};
 use spenso::complex::Complex;
 use typed_index_collections::TiVec;
 
-use crate::cff::cut_expression::OrientationID;
 use crate::debug_info::DEBUG_LOGGER;
 use crate::momentum::{Rotation, ThreeMomentum};
 use crate::momentum_sample::{ExternalFourMomenta, MomentumSample, PolarizationVectors};
@@ -467,7 +466,7 @@ pub fn parameterize<T: FloatLike, I: GammaloopIntegrand>(
         SamplingSettings::DiscreteGraphs(discrete_graph_settings) => {
             let graph_id = discrete_indices[0];
             let orientation_id = if discrete_graph_settings.sample_orientations {
-                Some(OrientationID::from(discrete_indices[1]))
+                Some(discrete_indices[1])
             } else {
                 None
             };
@@ -597,7 +596,7 @@ fn default_parametrize<T: FloatLike>(
     polarizations: &[Polarizations],
     parameterization_settings: &ParameterizationSettings,
     kinematics: &KinematicsSettings,
-    orientation: Option<OrientationID>,
+    orientation: Option<usize>,
 ) -> MomentumSample<T> {
     let externals = &kinematics.externals;
 

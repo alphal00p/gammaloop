@@ -5,7 +5,7 @@ use symbolica::numerical_integration::{Grid, Sample};
 use typed_index_collections::TiVec;
 
 use crate::{
-    cff::cut_expression::OrientationID,
+    cff::expression::AmplitudeOrientationID,
     evaluation_result::EvaluationResult,
     integrands::HasIntegrand,
     momentum::Rotation,
@@ -23,7 +23,7 @@ use super::{
 #[derive(Clone)]
 pub struct AmplitudeGraphTerm {
     pub bare_cff_evaluator: GenericEvaluator,
-    pub bare_cff_orientation_evaluators: TiVec<OrientationID, GenericEvaluator>,
+    pub bare_cff_orientation_evaluators: TiVec<AmplitudeOrientationID, GenericEvaluator>,
     pub graph: Graph,
     pub multi_channeling_setup: LmbMultiChannelingSetup,
     pub lmbs: TiVec<LmbIndex, LoopMomentumBasis>,
@@ -42,8 +42,7 @@ impl AmplitudeGraphTerm {
                     .iter()
                     .map(|orientation_usize| {
                         let mut new_sample = momentum_sample.clone();
-                        new_sample.sample.orientation =
-                            Some(OrientationID::from(*orientation_usize));
+                        new_sample.sample.orientation = Some(*orientation_usize);
                         self.evaluate(&new_sample, settings)
                     })
                     .fold(
@@ -67,6 +66,7 @@ impl AmplitudeGraphTerm {
 
         let result = match momentum_sample.sample.orientation {
             Some(orientation_id) => {
+                let orientation_id = AmplitudeOrientationID::from(orientation_id);
                 let orientation_evaluator = &self.bare_cff_orientation_evaluators[orientation_id];
                 <T as GenericEvaluatorFloat>::get_evaluator(orientation_evaluator)(&params)
             }

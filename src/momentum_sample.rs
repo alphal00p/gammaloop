@@ -1,6 +1,5 @@
 use std::fmt::Display;
 
-use crate::cff::cut_expression::OrientationID;
 use crate::momentum::{FourMomentum, Polarization, Rotatable, Rotation, ThreeMomentum};
 use crate::utils::{FloatLike, Length, F};
 use crate::{DependentMomentaConstructor, Externals, Polarizations, Settings};
@@ -137,7 +136,7 @@ pub struct BareMomentumSample<T: FloatLike> {
     pub external_moms: ExternalFourMomenta<F<T>>,
     pub polarizations: PolarizationVectors<Complex<F<T>>>,
     pub jacobian: F<T>,
-    pub orientation: Option<OrientationID>,
+    pub orientation: Option<usize>,
 }
 
 #[derive(Debug, Clone)]
@@ -173,7 +172,7 @@ impl<T: FloatLike> BareMomentumSample<T> {
         jacobian: F<T>,
         polarizations: &Polarizations,
         dependent_momenta_constructor: DependentMomentaConstructor,
-        orientation: Option<OrientationID>,
+        orientation: Option<usize>,
     ) -> Self {
         let polarizations = match polarizations {
             Polarizations::None => PolarizationVectors::new(),
@@ -416,7 +415,7 @@ impl<T: FloatLike> MomentumSample<T> {
         jacobian: F<T>,
         polarizations: &Polarizations,
         dependent_momenta_constructor: DependentMomentaConstructor,
-        orientation: Option<OrientationID>,
+        orientation: Option<usize>,
     ) -> Self {
         Self {
             sample: BareMomentumSample::new(

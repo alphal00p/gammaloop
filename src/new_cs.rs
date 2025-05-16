@@ -19,8 +19,9 @@ use spenso::contraction::IsZero;
 
 use crate::{
     cff::{
+        cut_expression::SuperGraphOrientationID,
         esurface::{generate_esurface_data, EsurfaceDerivedData},
-        expression::CFFExpression,
+        expression::{AmplitudeOrientationID, CFFExpression},
         generation::generate_cff_expression,
     },
     model::ArcParticle,
@@ -53,7 +54,7 @@ use typed_index_collections::TiVec;
 
 use crate::{
     cff::{
-        cut_expression::{CFFCutExpression, CutOrientationData, OrientationID},
+        cut_expression::{CFFCutsExpression, CutOrientationData},
         esurface::{Esurface, EsurfaceID},
         generation::generate_cff_with_cuts,
     },
@@ -730,7 +731,7 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
 pub struct AmplitudeDerivedData<S: NumeratorState> {
     cff_expression: Option<CFFExpression>,
     bare_cff_evaluator: Option<GenericEvaluator>,
-    bare_cff_orientation_evaluatos: Option<TiVec<OrientationID, GenericEvaluator>>,
+    bare_cff_orientation_evaluatos: Option<TiVec<AmplitudeOrientationID, GenericEvaluator>>,
     _temp_numerator: Option<PhantomData<S>>,
     lmbs: Option<TiVec<LmbIndex, LoopMomentumBasis>>,
     tropical_sampler: Option<SampleGenerator<3>>,
@@ -1007,11 +1008,11 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
         self.build_cut_evaluators();
         self.build_orientation_evaluators();
         self.build_lmbs();
-        self.build_esurface_serived_data()?;
+        self.build_esurface_derived_data()?;
         Ok(self.build_multi_channeling_channels())
     }
 
-    pub fn build_esurface_serived_data(&mut self) -> Result<()> {
+    pub fn build_esurface_derived_data(&mut self) -> Result<()> {
         let lmbs = self.derived_data.lmbs.as_ref().unwrap();
         let esurfaces = &self
             .derived_data
@@ -1045,7 +1046,7 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
         }
     }
 
-    fn generate_cff(&mut self) {
+    fn generate_cff(&mut self) -> Result<()> {
         // hardcorde 1 to n for now
         debug!("generating cff");
 
@@ -1055,9 +1056,9 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
             .get_esurface_canonization(&self.graph.loop_momentum_basis);
 
         let cff_cut_expression =
-            generate_cff_with_cuts(&self.graph.underlying, &shift_rewrite, &self.cuts);
+            generate_cff_with_cuts(&self.graph.underlying, &shift_rewrite, &self.cuts)?;
 
-        self.derived_data.cff_expression = Some(cff_cut_expression)
+        Ok(self.derived_data.cff_expression = Some(cff_cut_expression))
     }
 
     fn generate_cuts(
@@ -1228,16 +1229,14 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
                     })
                     .collect_vec()
             })
-            .collect::<TiVec<OrientationID, _>>();
+            .collect::<TiVec<SuperGraphOrientationID, _>>();
 
-        let orientation_datas = self
+        let orientation_datas = &self
             .derived_data
             .cff_expression
             .as_ref()
             .unwrap()
-            .orientations
-            .iter()
-            .map(|orienatation| orienatation.data.clone());
+            .orientation_data;
 
         let orientation_evaluators = substituted_energies
             .iter()
@@ -1267,7 +1266,7 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
                     .collect_vec();
 
                 OrientationEvaluator {
-                    orientation_data,
+                    orientation_data: orientation_data.clone(),
                     evaluators: cut_evaluators,
                 }
             })
@@ -1311,10 +1310,11 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
 
 #[derive(Clone, Encode)]
 pub struct CrossSectionDerivedData<S: NumeratorState> {
-    pub orientations: Option<TiVec<OrientationID, CutOrientationData>>,
+    pub orientations: Option<TiVec<SuperGraphOrientationID, CutOrientationData>>,
     pub bare_cff_evaluators: Option<TiVec<CutId, GenericEvaluator>>,
-    pub bare_cff_orientation_evaluators: Option<TiVec<OrientationID, OrientationEvaluator>>,
-    pub cff_expression: Option<CFFCutExpression>,
+    pub bare_cff_orientation_evaluators:
+        Option<TiVec<SuperGraphOrientationID, OrientationEvaluator>>,
+    pub cff_expression: Option<CFFCutsExpression>,
     pub lmbs: Option<TiVec<LmbIndex, LoopMomentumBasis>>,
     pub multi_channeling_setup: Option<LmbMultiChannelingSetup>,
     pub esurface_data: Option<EsurfaceDerivedData>,
