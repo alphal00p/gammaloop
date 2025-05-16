@@ -49,7 +49,8 @@ use symbolica::{
     symbol,
 };
 use symbolica_community::physics::algebraic_simplification::{
-    gamma::GammaSimplifier, metric::MetricSimplifier,
+    gamma::GammaSimplifier,
+    metric::{MetricSimplifier, MS},
 };
 use trie_rs::{try_collect::TryFromIterator, Trie, TrieBuilder};
 
@@ -514,6 +515,10 @@ pub trait UltravioletGraph {
             }
         }
 
+        for (k, v) in edge_rep.iter_mut() {
+            *v = function!(GS.emr_mom, usize::from(*k) as i64, *v);
+        }
+
         let mut externals_ids = vec![];
         for ext in externals.included_iter().skip(1) {
             let ext_sign: SignOrZero = graph.flow(ext).into();
@@ -896,7 +901,7 @@ impl Approximation {
                 .iter()
                 .map(|(edge, mom)| {
                     let r = Replacement::new(
-                        function!(GS.emr_mom, usize::from(*edge) as i64, GS.x___).to_pattern(),
+                        function!(GS.emr_mom, usize::from(*edge) as i64).to_pattern(),
                         mom.to_pattern(),
                     );
                     // println!("Rep:{r}");
@@ -928,6 +933,7 @@ impl Approximation {
         ApproxOp::approximate(
             dependent,
             &self.subgraph,
+            &self.lmb,
             &self.externals,
             &self.mom_rep,
             self.dod,
@@ -973,7 +979,8 @@ impl Approximation {
         .integrand;
 
         Some(
-            Self::simplify_notation(&(t * contracted).replace_multiple(&graph.lmb_replacement))
+            Self::simplify_notation(&(t * contracted))
+                .replace_multiple(&graph.lmb_replacement)
                 .into(),
         )
     }
@@ -1037,6 +1044,7 @@ impl ApproxOp {
     pub fn approximate(
         dependent: &Approximation,   //is smaller than subgraph
         subgraph: &InternalSubGraph, //is not necessarily full_graph
+        lmb: &[EdgeIndex],
         external_edges: &[EdgeIndex],
         mom_reps: &[Replacement],
         dod: i32,
@@ -1049,13 +1057,23 @@ impl ApproxOp {
 
             let mut atomarg = t_arg.integrand * inner_t;
 
+            println!("Reps:");
+            for r in mom_reps {
+                println!("{r}");
+            }
+
+            println!(
+                "Expand-prerep {} with dod={} in {:?}",
+                atomarg, dod, external_edges
+            );
+
             // rewrite the inner_t as well
             atomarg = atomarg.replace_multiple(mom_reps);
 
-            // println!(
-            //     "Expand {} with dod={} in {:?}",
-            //     atomarg, dod, external_edges
-            // );
+            println!(
+                "Expand {} with dod={} in {:?}",
+                atomarg, dod, external_edges
+            );
             for e in external_edges {
                 atomarg = atomarg
                     .replace(function!(GS.emr_mom, usize::from(*e) as i64))
@@ -1133,7 +1151,7 @@ impl ApproxOp {
 
             println!("Expanded: {:>}", a.expand());
 
-            let mut integrand_vakint = a.expand();
+            /*let mut integrand_vakint = a.expand();
             let mut propagator_id = 1;
             for (pair, index, _data) in graph.iter_edges(&reduced) {
                 // FIXME: not a good way to check for internal edges?
@@ -1186,7 +1204,9 @@ impl ApproxOp {
                     .replace(parse!(format!("vk::k({},x__)", usize::from(*e))).unwrap())
                     .with(parse!(format!("vk::p({},x__)", ei)).unwrap());
             }
-            for (ei, e) in dependent.lmb.iter().enumerate() {
+            for (ei, e) in lmb.iter().enumerate() {
+                // TODO: check if e is in the reduced graph
+                // we need to rewrite loop momentum combinations to a new loop momentum
                 integrand_vakint = integrand_vakint
                     .replace(parse!(format!("vk::k({},x__)", usize::from(*e))).unwrap())
                     .with(parse!(format!("vk::k({},x__)", ei)).unwrap());
@@ -1195,7 +1215,8 @@ impl ApproxOp {
             println!("Integrand vakint: {}", integrand_vakint);
 
             let mut vakint_expr = VakintExpression::try_from(integrand_vakint.clone()).unwrap();
-            println!("\nVakint expression:\n{}", vakint_expr);
+            println!("\nVakint expression:\n{}", vakint_expr);*/
+
             //vakint_expr.evaluate_integral(&VAKINT).unwrap();
 
             // Convert the numerator of the first integral to a dot notation
@@ -1360,13 +1381,53 @@ impl Forest {
         Some(sum)
     }
 
-    pub fn local_expr(&self, graph: &UVGraph, orientation_id: OrientationID) -> Option<Atom> {
-        let mut sum = Atom::new_num(0);
-        for (_, n) in &self.dag.nodes {
-            sum = sum + n.data.local_expr(graph, orientation_id)?;
-        }
+    pub fn local_expr(
+        &self,
+        graph: &UVGraph,
+        cff: Atom,
+        orientation: OrientationData,
+    ) -> Option<Atom> {
+        let expr = (cff * self.expr(graph)?.0).expand();
 
-        Some(sum)
+        let out = expr.map_terms_single_core(|t| {
+            for m in t.pattern_match(
+                &function!(GS.den, GS.a_, GS.b_)
+                    .pow(Atom::new_var(GS.c_))
+                    .to_pattern(),
+                None,
+                None,
+            ) {
+                let eid: i64 = m.get(&GS.a_).unwrap().try_into().unwrap();
+                let pow = -i64::try_from(m.get(&GS.a_).unwrap()).unwrap();
+                let mut mass = Atom::Zero;
+                if let Some(mass_map) = m
+                    .get(&GS.b_)
+                    .unwrap()
+                    .pattern_match(
+                        &(function!(MS.dot, GS.x__) + GS.x_).to_pattern(),
+                        None,
+                        None,
+                    )
+                    .next()
+                {
+                    mass = mass_map.get(&GS.x_).unwrap().clone();
+                };
+            }
+
+            Atom::new()
+        });
+
+        expr.replace(function!(GS.den, GS.x_, GS.x__).pow(Atom::new_var(GS.a_)))
+            .with(function!(GS.denpow, GS.x_, -Atom::new_var(GS.a_), GS.x__))
+            .replace(
+                function!(GS.denpow, GS.x_, GS.x__)
+                    * function!(
+                        GS.den,
+                        GS.x_,
+                        Atom::new_var(GS.x__) + function!(MS.dot, GS.x__)
+                    ),
+            )
+            .with(function!(GS.den, GS.x__, function!(MS.dot, GS.x__)));
     }
 
     pub fn simple_expr(&self, graph: &UVGraph) -> Option<SerializableAtom> {
