@@ -4,6 +4,7 @@ use std::{
     fmt::{self, Display, Formatter},
     hash::Hash,
     ops::{Deref, Index},
+    sync::LazyLock,
 };
 
 use crate::{
@@ -64,6 +65,10 @@ use linnet::half_edge::{
     subgraph::{HedgeNode, InternalSubGraph, SubGraph, SubGraphOps},
 };
 use typed_index_collections::TiVec;
+use vakint::{
+    vakint_parse, vakint_symbol, EvaluationOrder, LoopNormalizationFactor,
+    NumericalEvaluationResult, Vakint, VakintExpression, VakintSettings,
+};
 
 use crate::{
     graph::{BareEdge, BareGraph, BareVertex, EdgeType},
@@ -71,6 +76,16 @@ use crate::{
 };
 
 use bitvec::prelude::*;
+
+static VAKINT: LazyLock<Vakint> = LazyLock::new(|| {
+    Vakint::new(Some(VakintSettings {
+        evaluation_order: EvaluationOrder::alphaloop_only(),
+        integral_normalization_factor: LoopNormalizationFactor::MSbar,
+        run_time_decimal_precision: 16,
+        ..VakintSettings::default()
+    }))
+    .unwrap()
+});
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct UVEdge {
@@ -1116,7 +1131,135 @@ impl ApproxOp {
                 a = a.replace(GS.rescale).with(Atom::new_num(1));
             }
 
-            // println!("Expanded: {:>}", a.expand());
+            println!("Expanded: {:>}", a.expand());
+
+            let mut integrand_vakint = a.expand();
+            let mut propagator_id = 1;
+            for (pair, index, _data) in graph.iter_edges(&reduced) {
+                // FIXME: not a good way to check for internal edges?
+                if let HedgePair::Paired { source, sink } = pair {
+                    integrand_vakint *= vakint_parse!(format!(
+                        "prop({},edge({},{}),{},mUV,0)",
+                        propagator_id,
+                        usize::from(graph.node_id(source)),
+                        usize::from(graph.node_id(sink)),
+                        function!(GS.emr_mom, usize::from(index) as i64)
+                            .replace_multiple(mom_reps)
+                            .to_plain_string()
+                    ))
+                    .unwrap();
+                    propagator_id += 1;
+                }
+            }
+
+            integrand_vakint = integrand_vakint
+                .replace(function!(GS.emr_mom, GS.x__))
+                .with(function!(vakint_symbol!("k"), GS.x__))
+                .replace(function!(GS.loop_mom, GS.x__))
+                .with(function!(vakint_symbol!("k"), GS.x__))
+                .expand()
+                .replace(parse!("vk::prop(x_,y___,p_)*den(x_,z___)^n_").unwrap())
+                .repeat()
+                .with(parse!("vk::prop(x_,y___,p_-n_)").unwrap())
+                .replace(parse!("den(x___)").unwrap())
+                .with(Atom::new_num(1));
+
+            let mut dummy_index = 1;
+            while let Some(r) = integrand_vakint
+                .replace(parse!("symbolica_community::dot(vk::k(x_),vk::k(y_))").unwrap())
+                .iter(parse!(format!("vk::k(x_,{0})*vk::k(x_,{0})", dummy_index)).unwrap())
+                .next()
+            {
+                integrand_vakint = r;
+                dummy_index += 1;
+            }
+
+            integrand_vakint = integrand_vakint
+                .replace(parse!("vk::prop(x__)").unwrap())
+                .with(parse!("vk::topo(vk::prop(x__))").unwrap())
+                .replace(parse!("vk::topo(x_)*vk::topo(y_)").unwrap())
+                .with(parse!("vk::topo(x_ * y_)").unwrap());
+
+            // map loop momenta and external momenta
+            for (ei, e) in external_edges.iter().enumerate() {
+                integrand_vakint = integrand_vakint
+                    .replace(parse!(format!("vk::k({},x__)", usize::from(*e))).unwrap())
+                    .with(parse!(format!("vk::p({},x__)", ei)).unwrap());
+            }
+            for (ei, e) in dependent.lmb.iter().enumerate() {
+                integrand_vakint = integrand_vakint
+                    .replace(parse!(format!("vk::k({},x__)", usize::from(*e))).unwrap())
+                    .with(parse!(format!("vk::k({},x__)", ei)).unwrap());
+            }
+
+            println!("Integrand vakint: {}", integrand_vakint);
+
+            let mut vakint_expr = VakintExpression::try_from(integrand_vakint.clone()).unwrap();
+            println!("\nVakint expression:\n{}", vakint_expr);
+            //vakint_expr.evaluate_integral(&VAKINT).unwrap();
+
+            // Convert the numerator of the first integral to a dot notation
+            /*vakint_expr.0[0].numerator =
+                Vakint::convert_to_dot_notation(vakint_expr.0[0].numerator.as_view());
+            println!("\nInput integral in dot notation:\n{}\n", vakint_expr);
+
+            //let integral = VAKINT.evaluate(integral.as_view()).unwrap();
+            //println!("Evaluated integral:\n{}\n", integral.clone());
+
+            // Set some value for the mass parameters
+            let params = VAKINT.params_from_f64(
+                &[("muvsq".into(), 3.0), ("mursq".into(), 5.0)]
+                    .iter()
+                    .cloned()
+                    .collect(),
+            );
+
+            // And for the external momenta part of the numerator
+            let externals = VAKINT.externals_from_f64(
+                &(1..=2)
+                    .map(|i| {
+                        (
+                            i,
+                            (
+                                0.17 * ((i + 1) as f64),
+                                0.4 * ((i + 2) as f64),
+                                0.3 * ((i + 3) as f64),
+                                0.12 * ((i + 4) as f64),
+                            ),
+                        )
+                    })
+                    .collect(),
+            );
+
+            let (eval, error) = VAKINT
+                .numerical_evaluation(integral.as_view(), &params, Some(&externals))
+                .unwrap();
+            println!("Numerical evaluation:\n{}\n", eval);
+            let eval_atom = eval.to_atom(vakint_symbol!(VAKINT.settings.epsilon_symbol.clone()));
+            println!("Numerical evaluation as atom:\n{}\n", eval_atom);
+            #[rustfmt::skip]
+            let target_eval =  NumericalEvaluationResult::from_vec(
+            vec![
+                    (-3, ( "0.0".into(),  "-10202.59860843888064555902993586".into()),),
+                    (-2, ( "0.0".into(),  "62122.38565651740465978420334366".into()),),
+                    (-1, ( "0.0".into(),  "-188670.2193437045050954664088623".into()),),
+                    ( 0, ( "0.0".into(),  "148095.4883501202267659938351786".into()),),
+                ],
+                &VAKINT.settings);
+            let (matches, match_msg) = target_eval.does_approx_match(
+                &eval,
+                error.as_ref(),
+                10.0_f64.powi(-((VAKINT.settings.run_time_decimal_precision - 4) as i32)),
+                1.0,
+            );
+            if matches {
+                println!("Numerical evaluation matches target result.");
+            } else {
+                println!(
+                    "Numerical evaluation does not match target result:\n{}",
+                    match_msg
+                );
+            }*/
 
             Self::Dependent {
                 t_arg: IntegrandExpr { integrand: a },

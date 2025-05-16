@@ -48,7 +48,7 @@ pub fn spenso_lor_atom(tag: i32, ind: impl Into<AbstractIndex>, dim: impl Into<D
 }
 
 #[test]
-fn double_triangl_LU() {
+fn double_triangle_LU() {
     let model = load_generic_model("sm");
     let mut underlying = HedgeGraphBuilder::new();
 
@@ -241,8 +241,10 @@ fn double_triangl_LU() {
 
     for (id, c) in cs.cuts.iter_enumerated() {
         let esurface_id = cs.cut_esurface_id_map[id];
-        let cut_mom_basis_id =
-            cs.derived_data.esurface_data.as_ref().unwrap()[esurface_id].cut_momentum_basis;
+        let cut_mom_basis_id = cs.derived_data.esurface_data.as_ref().unwrap()[esurface_id]
+            .as_ref()
+            .unwrap()
+            .cut_momentum_basis;
         let cut_lmb = &cs.derived_data.lmbs.as_ref().unwrap()[cut_mom_basis_id];
 
         let mut left_forest = super_uv_graph
