@@ -237,7 +237,7 @@ fn double_triangle_LU() {
     .unwrap();
 
     let super_uv_graph = UVGraph::from_underlying(&cs.graph.underlying);
-    let orientation_id = OrientationID(0);
+    let orientation_id = AmplitudeOrientationID(0);
 
     for (id, c) in cs.cuts.iter_enumerated() {
         let esurface_id = cs.cut_esurface_id_map[id];

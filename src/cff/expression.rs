@@ -1,6 +1,8 @@
 use std::borrow::Borrow;
 
+use crate::utils::ose_atom_from_index;
 use bincode::{Decode, Encode};
+use derive_more::{From, Into};
 use linnet::half_edge::{hedgevec::HedgeVec, involution::Orientation};
 use serde::{Deserialize, Serialize};
 use spenso::structure::concrete_index::FlatIndex;
@@ -12,11 +14,10 @@ use symbolica::{
 };
 use typed_index_collections::TiVec;
 
-use crate::utils::ose_atom_from_index;
+use super::{generation::SurfaceCache, surface::HybridSurfaceID, tree::Tree};
 
-use super::{
-    cut_expression::OrientationID, generation::SurfaceCache, surface::HybridSurfaceID, tree::Tree,
-};
+#[derive(Debug, Clone, Serialize, Deserialize, From, Into, Hash, PartialEq, Eq, Copy, Encode)]
+pub struct AmplitudeOrientationID(pub usize);
 
 #[derive(Clone, Debug, Serialize, Deserialize, Encode, Decode)]
 pub struct OrientationData {
@@ -56,7 +57,7 @@ pub struct OrientationExpression {
 #[derive(Clone, Debug, Serialize, Deserialize, Encode, Decode)]
 pub struct CFFExpression {
     #[bincode(with_serde)]
-    pub orientations: TiVec<OrientationID, OrientationExpression>,
+    pub orientations: TiVec<AmplitudeOrientationID, OrientationExpression>,
     pub surfaces: SurfaceCache,
 }
 
@@ -79,14 +80,16 @@ impl CFFExpression {
             .unwrap_or_default()
     }
 
-    pub fn get_orientation_atoms(&self) -> TiVec<OrientationID, Atom> {
+    pub fn get_orientation_atoms(&self) -> TiVec<AmplitudeOrientationID, Atom> {
         self.orientations
             .iter()
             .map(|orientation| orientation.expression.to_atom_inv())
             .collect()
     }
 
-    pub fn get_orientation_atoms_with_data(&self) -> TiVec<OrientationID, (Atom, OrientationData)> {
+    pub fn get_orientation_atoms_with_data(
+        &self,
+    ) -> TiVec<AmplitudeOrientationID, (Atom, OrientationData)> {
         self.orientations
             .iter()
             .map(|orientation| {
@@ -95,6 +98,10 @@ impl CFFExpression {
                 (atom, data)
             })
             .collect()
+    }
+
+    pub fn get_orientation_atom(&self, orientation_id: AmplitudeOrientationID) -> Atom {
+        self.orientations[orientation_id].expression.to_atom_inv()
     }
 
     pub fn num_unfolded_terms(&self) -> usize {

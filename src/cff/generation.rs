@@ -1,6 +1,6 @@
 use crate::{
     cff::{
-        cut_expression::CFFCutExpression,
+        cut_expression::CFFCutsExpression,
         esurface::add_external_shifts,
         expression::OrientationData,
         hsurface::HsurfaceID,
@@ -28,7 +28,7 @@ use symbolica::{
     atom::{Atom, AtomCore},
     id::{Pattern, Replacement},
 };
-use typed_index_collections::TiVec;
+use typed_index_collections::{ti_vec, TiVec};
 
 use serde::{Deserialize, Serialize};
 
@@ -37,10 +37,11 @@ use log::debug;
 use super::{
     cff_graph::CFFGenerationGraph,
     cut_expression::{
-        CutOrientationData, CutOrientationExpression, OrientationID, SingleCutOrientationExpression,
+        self, amplitude_orientations_to_sg_orientaion, CutOrientationData, OrientationMap,
+        SingleCutExpression, SingleCutOrientationExpression, SuperGraphOrientationID,
     },
     esurface::{Esurface, EsurfaceCollection, EsurfaceID, ExternalShift},
-    expression::CFFExpression,
+    expression::{AmplitudeOrientationID, CFFExpression},
     hsurface::HsurfaceCollection,
     surface::{HybridSurfaceRef, UnitSurface},
 };
@@ -177,6 +178,7 @@ fn get_orientations<E, V>(graph: &HedgeGraph<E, V>) -> Vec<CFFGenerationGraph> {
 fn get_orientations_from_subgraph<E, V, S: SubGraph>(
     graph: &HedgeGraph<E, V>,
     subgraph: &S,
+    reversed_dangling: &[EdgeIndex],
 ) -> Vec<CFFGenerationGraph> {
     let num_virtual_edges = graph.count_internal_edges(subgraph);
     let virtual_possible_orientations = iterate_possible_orientations(num_virtual_edges);
@@ -186,15 +188,25 @@ fn get_orientations_from_subgraph<E, V, S: SubGraph>(
             let mut orientation_of_virtuals = orientation_of_virtuals.into_iter();
 
             let global_orientation = graph
-                .new_hedgevec_from_iter(graph.iter_all_edges().map(|(_, edge_index, _)| {
+                .new_hedgevec_from_iter(graph.iter_all_edges().map(|(pair, edge_index, _)| {
                     let is_edge_in_subgraph = graph
                         .iter_edges(subgraph)
                         .any(|(_, id, _)| id == edge_index);
 
                     if is_edge_in_subgraph {
-                        orientation_of_virtuals
-                            .next()
-                            .expect(" unable to reconstruct orientation")
+                        match pair {
+                            HedgePair::Paired { .. } => orientation_of_virtuals
+                                .next()
+                                .expect(" unable to reconstruct orientation"),
+                            HedgePair::Unpaired { .. } => Orientation::Default,
+                            HedgePair::Split { .. } => {
+                                if reversed_dangling.contains(&edge_index) {
+                                    Orientation::Reversed
+                                } else {
+                                    Orientation::Default
+                                }
+                            }
+                        }
                     } else {
                         Orientation::Undirected
                     }
@@ -262,7 +274,7 @@ fn get_orientations_with_cut<E, V>(
 fn get_possible_orientations_for_cut_list<E, V>(
     graph: &HedgeGraph<E, V>,
     cuts: &TiVec<CutId, CrossSectionCut>,
-) -> TiVec<OrientationID, CutOrientationData> {
+) -> TiVec<SuperGraphOrientationID, CutOrientationData> {
     let internal_subgraph = InternalSubGraph::cleaned_filter_pessimist(graph.full_filter(), graph);
     let num_virtual_edges = graph.count_internal_edges(&internal_subgraph);
 
@@ -345,8 +357,9 @@ pub fn generate_cff_expression_from_subgraph<E, V, S: SubGraph>(
     graph: &HedgeGraph<E, V>,
     subgraph: &S,
     canonize_esurface: &Option<ShiftRewrite>,
+    reversed_dangling: &[EdgeIndex],
 ) -> Result<CFFExpression> {
-    let graphs = get_orientations_from_subgraph(graph, subgraph);
+    let graphs = get_orientations_from_subgraph(graph, subgraph, reversed_dangling);
     let cff = generate_cff_from_orientations(graphs, None, None, None, canonize_esurface)?;
     Ok(cff)
 }
@@ -355,8 +368,14 @@ pub fn generate_cff_expression_from_subgraph_to_ose_atom<E, V, S: SubGraph>(
     graph: &HedgeGraph<E, V>,
     subgraph: &S,
     canonize_esurface: &Option<ShiftRewrite>,
-) -> Result<TiVec<OrientationID, (Atom, OrientationData)>> {
-    let cff = generate_cff_expression_from_subgraph(graph, subgraph, canonize_esurface)?;
+    reversed_dangling: &[EdgeIndex],
+) -> Result<TiVec<AmplitudeOrientationID, (Atom, OrientationData)>> {
+    let cff = generate_cff_expression_from_subgraph(
+        graph,
+        subgraph,
+        canonize_esurface,
+        reversed_dangling,
+    )?;
     let inverse_energies = get_cff_inverse_energy_product_impl(graph, subgraph);
 
     Ok(cff
@@ -413,35 +432,98 @@ pub fn generate_cff_with_cuts<E, V>(
     graph: &HedgeGraph<E, V>,
     canonize_esurface: &Option<ShiftRewrite>,
     cuts: &TiVec<CutId, CrossSectionCut>,
-) -> CFFCutExpression {
-    let orientations = get_possible_orientations_for_cut_list(graph, cuts);
+) -> Result<CFFCutsExpression> {
+    let super_graph_orientations = get_possible_orientations_for_cut_list(graph, cuts);
     let mut surface_cache = SurfaceCache {
         esurface_cache: EsurfaceCollection::from_iter(std::iter::empty()),
         hsurface_cache: HsurfaceCollection::from_iter(std::iter::empty()),
     };
+    let mut cut_expressions = TiVec::new();
+    for cut in cuts.iter() {
+        let edges_in_cut = graph.iter_edges(&cut.cut).map(|(_, id, _)| id);
+        let orientation_of_edges_in_cut = cut.cut.iter_edges(graph).map(|(or, _)| or);
 
-    let orientation_expressions = orientations
-        .into_iter()
-        .map(|orientation_data| {
-            let cut_expressions = generate_cff_for_orientation(
-                graph,
-                canonize_esurface,
-                &mut surface_cache,
-                cuts,
-                &orientation_data,
+        let reversed_dangling = edges_in_cut
+            .zip(orientation_of_edges_in_cut)
+            .filter_map(|(edge_id, orientation)| {
+                if orientation == Orientation::Reversed {
+                    Some(edge_id)
+                } else {
+                    None
+                }
+            })
+            .collect_vec();
+
+        let left_amplitude = generate_cff_expression_from_subgraph(
+            graph,
+            &cut.left,
+            canonize_esurface,
+            &reversed_dangling,
+        )?;
+
+        let right_amplitude = generate_cff_expression_from_subgraph(
+            graph,
+            &cut.right,
+            canonize_esurface,
+            &reversed_dangling,
+        )?;
+
+        // build the orientation map
+        let mut uninit_orientation_map = ti_vec![None; super_graph_orientations.len()];
+
+        let left_orientation_iterator = left_amplitude
+            .orientations
+            .iter_enumerated()
+            .map(|(amplitude_id, expression)| (amplitude_id, &expression.data.orientation));
+
+        let right_orientation_iterator = right_amplitude
+            .orientations
+            .iter_enumerated()
+            .map(|(amplitude_id, expression)| (amplitude_id, &expression.data.orientation));
+
+        let cartesian_product =
+            left_orientation_iterator.cartesian_product(right_orientation_iterator);
+
+        for ((left_amplitude_id, left_orientation), (right_amplitude_id, right_orientation)) in
+            cartesian_product
+        {
+            let merged_orientation =
+                amplitude_orientations_to_sg_orientaion(&left_orientation, &right_orientation)
+                    .unwrap();
+
+            let (sg_id, _) = super_graph_orientations
+                .iter_enumerated()
+                .find(|(id, orientation)| orientation.orientation == merged_orientation)
+                .expect("unable to find orientation");
+
+            uninit_orientation_map[sg_id] = Some((left_amplitude_id, right_amplitude_id));
+        }
+
+        let orientation_map =
+            OrientationMap::new(
+                uninit_orientation_map
+                    .into_iter()
+                    .map(|option| option.expect("missing orientation"))
+                    .collect::<TiVec<
+                        SuperGraphOrientationID,
+                        (AmplitudeOrientationID, AmplitudeOrientationID),
+                    >>(),
             );
 
-            CutOrientationExpression {
-                data: orientation_data,
-                expressions: cut_expressions,
-            }
-        })
-        .collect();
+        let single_cut_expression = SingleCutExpression {
+            left_amplitude,
+            right_amplitude,
+            orientation_map,
+        };
 
-    CFFCutExpression {
-        orientations: orientation_expressions,
-        surfaces: surface_cache,
+        cut_expressions.push(single_cut_expression);
     }
+
+    Ok(CFFCutsExpression {
+        cut_expressions,
+        orientation_data: super_graph_orientations,
+        surfaces: surface_cache,
+    })
 }
 
 fn generate_cff_from_orientations(

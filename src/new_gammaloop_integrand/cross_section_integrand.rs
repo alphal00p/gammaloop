@@ -7,7 +7,7 @@ use typed_index_collections::TiVec;
 
 use crate::{
     cff::{
-        cut_expression::{CutOrientationData, OrientationID},
+        cut_expression::{CutOrientationData, SuperGraphOrientationID},
         esurface::Esurface,
     },
     evaluation_result::EvaluationResult,
@@ -75,7 +75,7 @@ pub struct OrientationEvaluator {
 #[derive(Clone)]
 pub struct CrossSectionGraphTerm {
     pub bare_cff_evaluators: TiVec<CutId, GenericEvaluator>,
-    pub bare_cff_orientation_evaluators: TiVec<OrientationID, OrientationEvaluator>,
+    pub bare_cff_orientation_evaluators: TiVec<SuperGraphOrientationID, OrientationEvaluator>,
     pub graph: Graph,
     pub cut_esurface: TiVec<CutId, Esurface>,
     pub multi_channeling_setup: LmbMultiChannelingSetup,
@@ -117,7 +117,7 @@ impl GraphTerm for CrossSectionGraphTerm {
 impl CrossSectionGraphTerm {
     fn self_get_cuts_to_evaluate(
         &self,
-        orientation: Option<OrientationID>,
+        orientation: Option<SuperGraphOrientationID>,
     ) -> Vec<(CutId, &Esurface)> {
         if let Some(orientation_id) = orientation {
             self.bare_cff_orientation_evaluators[orientation_id]
@@ -143,8 +143,7 @@ impl CrossSectionGraphTerm {
                     .iter()
                     .map(|orientation_usize| {
                         let mut new_sample = momentum_sample.clone();
-                        new_sample.sample.orientation =
-                            Some(OrientationID::from(*orientation_usize));
+                        new_sample.sample.orientation = Some(*orientation_usize);
                         self.evaluate(&new_sample, settings)
                     })
                     .fold(
@@ -164,7 +163,12 @@ impl CrossSectionGraphTerm {
         ]);
 
         let params = self
-            .self_get_cuts_to_evaluate(momentum_sample.sample.orientation)
+            .self_get_cuts_to_evaluate(
+                momentum_sample
+                    .sample
+                    .orientation
+                    .map(SuperGraphOrientationID::from),
+            )
             .into_iter()
             .map(|(_cut_id, esurface)| {
                 let (tstar_initial, _tstar_initial_negative) = esurface.get_radius_guess(
@@ -228,6 +232,7 @@ impl CrossSectionGraphTerm {
 
         let result = match momentum_sample.sample.orientation {
             Some(orientation_id) => {
+                let orientation_id = SuperGraphOrientationID::from(orientation_id);
                 let orientation_evaluator = &self.bare_cff_orientation_evaluators[orientation_id];
                 orientation_evaluator
                     .evaluators

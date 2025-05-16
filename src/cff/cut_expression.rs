@@ -1,16 +1,24 @@
-use bincode::Encode;
+use bincode_trait_derive::{Decode, Encode};
 use derive_more::{From, Into};
 use linnet::half_edge::{hedgevec::HedgeVec, involution::Orientation};
 use serde::{Deserialize, Serialize};
+use std::ops::Index;
 use symbolica::atom::Atom;
 use typed_index_collections::TiVec;
 
 use crate::new_cs::CutId;
 
-use super::{generation::SurfaceCache, surface::HybridSurfaceID, tree::Tree};
+use super::{
+    expression::{AmplitudeOrientationID, CFFExpression},
+    generation::SurfaceCache,
+    surface::HybridSurfaceID,
+    tree::Tree,
+};
 
-#[derive(Debug, Clone, Serialize, Deserialize, From, Into, Hash, PartialEq, Eq, Copy, Encode)]
-pub struct OrientationID(pub usize);
+#[derive(
+    Debug, Clone, Serialize, Deserialize, From, Into, Hash, PartialEq, Eq, Copy, Encode, Decode,
+)]
+pub struct SuperGraphOrientationID(pub usize);
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode)]
 pub struct CutOrientationData {
@@ -33,61 +41,137 @@ impl From<&SingleCutOrientationExpression> for Atom {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode)]
-pub struct CutOrientationExpression {
-    pub data: CutOrientationData,
-    pub expressions: Vec<SingleCutOrientationExpression>,
+pub struct OrientationMap {
+    map: TiVec<SuperGraphOrientationID, (AmplitudeOrientationID, AmplitudeOrientationID)>,
+}
+
+impl Index<SuperGraphOrientationID> for OrientationMap {
+    type Output = (AmplitudeOrientationID, AmplitudeOrientationID);
+
+    fn index(&self, index: SuperGraphOrientationID) -> &Self::Output {
+        &self.map[index]
+    }
+}
+
+impl OrientationMap {
+    // Can't use index trait, because the SuperGraphOrientationID does not actually live in the sturct, so it is impossible to
+    // return a reference to it :(
+    pub fn index_amp(
+        &self,
+        index: (AmplitudeOrientationID, AmplitudeOrientationID),
+    ) -> SuperGraphOrientationID {
+        self.map
+            .iter_enumerated()
+            .find(|(_, (a, b))| *a == index.0 && *b == index.1)
+            .map(|(id, _)| id)
+            .unwrap_or_else(|| panic!("No orientation found for index {:?}", index))
+    }
+
+    pub fn new(
+        map: TiVec<SuperGraphOrientationID, (AmplitudeOrientationID, AmplitudeOrientationID)>,
+    ) -> Self {
+        Self { map }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode)]
-pub struct CFFCutExpression {
-    pub orientations: TiVec<OrientationID, CutOrientationExpression>,
-    pub surfaces: SurfaceCache,
+pub struct SingleCutExpression {
+    pub left_amplitude: CFFExpression,
+    pub right_amplitude: CFFExpression,
+    pub orientation_map: OrientationMap,
 }
 
-impl CFFCutExpression {
+#[derive(Debug, Clone, Serialize, Deserialize, Encode)]
+pub struct CFFCutsExpression {
+    pub cut_expressions: TiVec<CutId, SingleCutExpression>,
+    pub surfaces: SurfaceCache,
+    pub orientation_data: TiVec<SuperGraphOrientationID, CutOrientationData>,
+}
+
+impl CFFCutsExpression {
     pub fn new_empty() -> Self {
         Self {
-            orientations: TiVec::new(),
+            cut_expressions: TiVec::new(),
             surfaces: SurfaceCache {
                 esurface_cache: TiVec::new(),
                 hsurface_cache: TiVec::new(),
             },
+            orientation_data: TiVec::new(),
         }
     }
 
     pub fn to_atom_for_cut(&self, cut: CutId) -> Atom {
-        self.orientations
-            .iter()
-            .filter_map(|orientation| {
-                orientation
-                    .data
-                    .cuts
-                    .iter()
-                    .position(|c| *c == cut)
-                    .map(|cut_orientation_index| {
-                        Atom::from(&orientation.expressions[cut_orientation_index])
-                    })
-            })
-            .fold(Atom::new(), |acc, x| acc + x)
+        let left_amplitude_atom = self.cut_expressions[cut].left_amplitude.to_atom();
+
+        let right_amplitude_atom = self.cut_expressions[cut].right_amplitude.to_atom();
+
+        left_amplitude_atom * right_amplitude_atom
     }
 
-    pub fn get_orientation_atom(&self, orientation_id: OrientationID) -> Vec<Atom> {
-        self.orientations[orientation_id]
-            .expressions
+    pub fn get_orientation_atom(&self, orientation_id: SuperGraphOrientationID) -> Vec<Atom> {
+        self.orientation_data[orientation_id]
+            .cuts
             .iter()
-            .map(Atom::from)
-            .collect()
-    }
+            .map(|cut| {
+                let cut_expression = &self.cut_expressions[*cut];
+                let (left_orientation_id, right_orientation_id) =
+                    cut_expression.orientation_map[orientation_id];
 
-    pub fn get_orientation_atoms(&self) -> TiVec<OrientationID, Vec<Atom>> {
-        self.orientations
-            .iter()
-            .map(|orientation| {
-                let atoms = orientation.expressions.iter().map(Atom::from).collect();
-                atoms
+                let left_amplitude_atom = cut_expression
+                    .left_amplitude
+                    .get_orientation_atom(left_orientation_id);
+                let right_amplitude_atom = cut_expression
+                    .right_amplitude
+                    .get_orientation_atom(right_orientation_id);
+
+                left_amplitude_atom * right_amplitude_atom
             })
             .collect()
     }
+
+    pub fn get_orientation_atoms(&self) -> TiVec<SuperGraphOrientationID, Vec<Atom>> {
+        self.orientation_data
+            .iter_enumerated()
+            .map(|(orientation_id, _)| self.get_orientation_atom(orientation_id))
+            .collect()
+    }
+}
+
+// merge orientations, If one of the entries is undirected, the orientation of the other entry is set. If both are undirected, return None,
+// if two entries are different, return None
+pub fn amplitude_orientations_to_sg_orientaion(
+    left: &HedgeVec<Orientation>,
+    right: &HedgeVec<Orientation>,
+) -> Option<HedgeVec<Orientation>> {
+    let mut result = Vec::with_capacity(left.len());
+
+    for ((_, left_entry), (_, right_entry)) in left.into_iter().zip(right.into_iter()) {
+        match (left_entry, right_entry) {
+            (Orientation::Undirected, Orientation::Undirected) => {
+                return None;
+            }
+            (Orientation::Default, Orientation::Reversed) => {
+                return None;
+            }
+            (Orientation::Reversed, Orientation::Default) => {
+                return None;
+            }
+            (Orientation::Default, Orientation::Default) => {
+                result.push(Orientation::Default);
+            }
+            (Orientation::Reversed, Orientation::Reversed) => {
+                result.push(Orientation::Reversed);
+            }
+            (Orientation::Undirected, _) => {
+                result.push(*right_entry);
+            }
+            (_, Orientation::Undirected) => {
+                result.push(*left_entry);
+            }
+        }
+    }
+
+    Some(HedgeVec::from_raw(result))
 }
 
 #[cfg(test)]
@@ -146,7 +230,8 @@ mod tests {
             println!("Right: {}", right_dot);
         }
 
-        let cut_expression = cff::generation::generate_cff_with_cuts(&hedge_graph, &None, &cuts);
+        let cut_expression =
+            cff::generation::generate_cff_with_cuts(&hedge_graph, &None, &cuts).unwrap();
         let atom_cut_1 = cut_expression.to_atom_for_cut(CutId::from(2));
         let atom_with_energies = cut_expression.surfaces.substitute_energies(&atom_cut_1);
 
