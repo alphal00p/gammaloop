@@ -257,12 +257,16 @@ fn double_triangle_LU() {
             .unfold(&super_uv_graph, &super_uv_graph.cut_edges);
         right_forest.compute(&super_uv_graph);
 
-        let left_expr = left_forest
-            .local_expr(&super_uv_graph, orientation_id)
-            .unwrap();
+        let cff_left = Atom::one(); // TODO
 
         let left_expr = left_forest
-            .local_expr(&super_uv_graph, orientation_id)
+            .local_expr(&super_uv_graph, cff_left, orientation_id)
+            .unwrap();
+
+        let cff_right = Atom::one(); // TODO
+
+        let right_expr = right_forest
+            .local_expr(&super_uv_graph, cff_right, orientation_id)
             .unwrap();
     }
 }
