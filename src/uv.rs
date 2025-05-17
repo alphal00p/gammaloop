@@ -9,7 +9,7 @@ use std::{
 
 use crate::{
     cff::{
-        expression::{AmplitudeOrientationID, OrientationData},
+        expression::AmplitudeOrientationID,
         generation::generate_cff_expression_from_subgraph_to_ose_atom,
     },
     graph::VertexInfo,
@@ -1389,11 +1389,12 @@ impl Forest {
         &self,
         graph: &UVGraph,
         cff: Atom,
-        orientation: OrientationData,
+        orientation: AmplitudeOrientationID,
     ) -> Option<Atom> {
-        let expr = (cff * self.expr(graph)?.0).expand();
+        let expr = self.expr(graph)?.0;
 
-        let out = expr.map_terms_single_core(|t| {
+        expr.map_terms_single_core(|t| {
+            let mut data = Vec::new();
             for m in t.pattern_match(
                 &function!(GS.den, GS.a_, GS.b_)
                     .pow(Atom::new_var(GS.c_))
@@ -1403,7 +1404,7 @@ impl Forest {
             ) {
                 let eid: i64 = m.get(&GS.a_).unwrap().try_into().unwrap();
                 let pow = -i64::try_from(m.get(&GS.a_).unwrap()).unwrap();
-                let mut mass = Atom::Zero;
+                let mut mass_sq = Atom::Zero;
                 if let Some(mass_map) = m
                     .get(&GS.b_)
                     .unwrap()
@@ -1414,24 +1415,21 @@ impl Forest {
                     )
                     .next()
                 {
-                    mass = mass_map.get(&GS.x_).unwrap().clone();
+                    mass_sq = mass_map.get(&GS.x_).unwrap().clone();
                 };
+
+                data.push((eid, pow, mass_sq));
             }
 
-            Atom::new()
-        });
+            // remove all denominators
+            let num = t.replace(function!(GS.den, GS.x__)).with(Atom::new_num(1));
 
-        expr.replace(function!(GS.den, GS.x_, GS.x__).pow(Atom::new_var(GS.a_)))
-            .with(function!(GS.denpow, GS.x_, -Atom::new_var(GS.a_), GS.x__))
-            .replace(
-                function!(GS.denpow, GS.x_, GS.x__)
-                    * function!(
-                        GS.den,
-                        GS.x_,
-                        Atom::new_var(GS.x__) + function!(MS.dot, GS.x__)
-                    ),
-            )
-            .with(function!(GS.den, GS.x__, function!(MS.dot, GS.x__)));
+            let cff_mass_swap = cff.clone(); // TODO: set masses in CFF
+            let der = cff_mass_swap * num; // TODO: take derivative of raised propagators
+
+            der
+        })
+        .into()
     }
 
     pub fn simple_expr(&self, graph: &UVGraph) -> Option<SerializableAtom> {
