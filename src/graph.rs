@@ -42,8 +42,8 @@ use linnet::{
     permutation::Permutation,
 };
 
+use crate::cff::expression::AmplitudeOrientationID;
 use ahash::{AHashMap, AHashSet, HashSet, RandomState};
-
 use bincode::{Decode, Encode};
 use color_eyre::{Help, Report, Result};
 use enum_dispatch::enum_dispatch;
@@ -349,11 +349,11 @@ impl BareEdge {
             EdgeType::Virtual => {
                 let mut atom = self.propagator.numerator.clone();
 
-                let pfun = parse!("P(x_)").unwrap().to_pattern();
+                let pfun = parse!("GL::P(x_)").unwrap().to_pattern();
                 if self.particle.0.is_antiparticle() {
                     atom = atom.replace(&pfun).with(
                         parse!(&format!(
-                            "-Q({},mink(4,indexid(x_)))",
+                            "-Q({},spenso::mink(4,indexid(x_)))",
                             Into::<usize>::into(num)
                         ))
                         .unwrap()
@@ -362,7 +362,7 @@ impl BareEdge {
                 } else {
                     atom = atom.replace(&pfun).with(
                         parse!(&format!(
-                            "Q({},mink(4,indexid(x_)))",
+                            "Q({},spenso::mink(4,indexid(x_)))",
                             Into::<usize>::into(num)
                         ))
                         .unwrap()
@@ -370,12 +370,12 @@ impl BareEdge {
                     );
                 }
 
-                let pslashfun = parse!("PSlash(i_,j_)").unwrap().to_pattern();
+                let pslashfun = parse!("GL::PSlash(i_,j_)").unwrap().to_pattern();
                 let pindex_num: usize = self.internal_index[0].into();
                 if self.particle.0.is_antiparticle() {
                     atom = atom.replace(&pslashfun).with(
                         parse!(&format!(
-                            "-Q({},mink(4,{}))*Gamma({},i_,j_)",
+                            "-Q({},spenso::mink(4,{}))*GL::Gamma({},i_,j_)",
                             Into::<usize>::into(num),
                             pindex_num,
                             pindex_num
@@ -386,7 +386,7 @@ impl BareEdge {
                 } else {
                     atom = atom.replace(&pslashfun).with(
                         parse!(&format!(
-                            "Q({},mink(4,{}))*Gamma({},i_,j_)",
+                            "Q({},spenso::mink(4,{}))*GL::Gamma({},i_,j_)",
                             Into::<usize>::into(num),
                             pindex_num,
                             pindex_num
@@ -2954,7 +2954,7 @@ impl<S: NumeratorState> Graph<S> {
 
     // helper function
     #[inline]
-    pub fn get_cff(&self) -> &CFFExpression {
+    pub fn get_cff(&self) -> &CFFExpression<AmplitudeOrientationID> {
         self.derived_data
             .as_ref()
             .unwrap()
@@ -3328,7 +3328,7 @@ impl Graph<Evaluators> {
 #[derive(Debug, Clone, Deserialize, Serialize, Encode, Decode)]
 pub struct DerivedGraphData<NumState> {
     pub loop_momentum_bases: Option<Vec<LoopMomentumBasis>>,
-    pub cff_expression: Option<CFFExpression>,
+    pub cff_expression: Option<CFFExpression<AmplitudeOrientationID>>,
     pub ltd_expression: Option<LTDExpression>,
     #[bincode(with_serde)]
     pub tropical_subgraph_table: Option<SampleGenerator<3>>,

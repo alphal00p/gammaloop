@@ -84,8 +84,8 @@ impl OrientationMap {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode)]
 pub struct SingleCutExpression {
-    pub left_amplitude: CFFExpression,
-    pub right_amplitude: CFFExpression,
+    pub left_amplitude: CFFExpression<AmplitudeOrientationID>,
+    pub right_amplitude: CFFExpression<AmplitudeOrientationID>,
     pub orientation_map: OrientationMap,
 }
 
@@ -145,8 +145,7 @@ impl CFFCutsExpression {
     }
 }
 
-// merge orientations, If one of the entries is undirected, the orientation of the other entry is set. If both are undirected, return None,
-// if two entries are different, return None
+// merge orientations, return None if there is a conflict
 pub fn amplitude_orientations_to_sg_orientaion(
     left: &HedgeVec<Orientation>,
     right: &HedgeVec<Orientation>,
@@ -156,7 +155,7 @@ pub fn amplitude_orientations_to_sg_orientaion(
     for ((_, left_entry), (_, right_entry)) in left.into_iter().zip(right.into_iter()) {
         match (left_entry, right_entry) {
             (Orientation::Undirected, Orientation::Undirected) => {
-                return None;
+                result.push(Orientation::Undirected);
             }
             (Orientation::Default, Orientation::Reversed) => {
                 return None;

@@ -18,6 +18,7 @@ use symbolica_community::physics::algebraic_simplification::metric::MetricSimpli
 use typed_index_collections::TiVec;
 
 use crate::{
+    cff::cut_expression::SuperGraphOrientationID,
     feyngen::{
         diagram_generator::{EdgeColor, FeynGen, NodeColorWithVertexRule},
         FeynGenFilters,
@@ -59,10 +60,10 @@ fn double_triangle_LU() {
         vertex_rule: model.get_vertex_rule("V_141"),
     });
 
-    let hprop = model.get_propagator("H");
+    let hprop = model.get_propagator("H_propFeynman");
     let hp = model.get_particle("H");
 
-    let tprop = model.get_propagator("t");
+    let tprop = model.get_propagator("t_propFeynman");
     let tp = model.get_particle("t");
 
     let n1 = underlying.add_node(Vertex {
@@ -237,10 +238,23 @@ fn double_triangle_LU() {
     .unwrap();
 
     let super_uv_graph = UVGraph::from_underlying(&cs.graph.underlying);
-    let orientation_id = AmplitudeOrientationID(0);
+    let orientation_id = SuperGraphOrientationID(0);
+    let mut sum = Atom::Zero;
 
     for (id, c) in cs.cuts.iter_enumerated() {
         let esurface_id = cs.cut_esurface_id_map[id];
+        let cff_cut_expr = &cs
+            .derived_data
+            .cff_expression
+            .as_ref()
+            .unwrap()
+            .cut_expressions[id];
+        let (left_orientation, right_orientation) = cff_cut_expr.orientation_map[orientation_id];
+        let left_orientation_data =
+            &cff_cut_expr.left_amplitude.orientations[left_orientation].data;
+        let right_orientation_data =
+            &cff_cut_expr.right_amplitude.orientations[right_orientation].data;
+
         let cut_mom_basis_id = cs.derived_data.esurface_data.as_ref().unwrap()[esurface_id]
             .as_ref()
             .unwrap()
@@ -251,24 +265,22 @@ fn double_triangle_LU() {
             .wood(&c.left)
             .unfold(&super_uv_graph, &super_uv_graph.cut_edges);
         left_forest.compute(&super_uv_graph);
+        left_forest.compute_cff(&super_uv_graph, left_orientation_data, &None);
 
         let mut right_forest = super_uv_graph
             .wood(&c.right)
             .unfold(&super_uv_graph, &super_uv_graph.cut_edges);
         right_forest.compute(&super_uv_graph);
+        right_forest.compute_cff(&super_uv_graph, right_orientation_data, &None);
 
-        let cff_left = Atom::one(); // TODO
+        let left_expr = left_forest.local_expr(&super_uv_graph, &None, left_orientation_data);
+        let right_expr = right_forest.local_expr(&super_uv_graph, &None, right_orientation_data);
 
-        let left_expr = left_forest
-            .local_expr(&super_uv_graph, cff_left, orientation_id)
-            .unwrap();
-
-        let cff_right = Atom::one(); // TODO
-
-        let right_expr = right_forest
-            .local_expr(&super_uv_graph, cff_right, orientation_id)
-            .unwrap();
+        // TODO: add cuts
+        sum += left_expr * right_expr;
     }
+
+    println!("Sum: {}", sum);
 }
 
 #[test]

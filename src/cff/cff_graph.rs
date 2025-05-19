@@ -73,20 +73,26 @@ impl CFFVertex {
         }
     }
 
-    fn join(&self, other: &Self) -> Self {
+    fn contract(&self, other: &Self, remove_single_edge: Option<EdgeIndex>) -> Self {
         let new_vertex_set = self.vertex_set.join(&other.vertex_set);
-        // find all parrallel edges between the vertices
 
         let incoming_edges_of_new = self
             .incoming_edges
             .iter()
-            .filter(|edge| !other.outgoing_edges.contains(edge))
-            .chain(
-                other
-                    .incoming_edges
-                    .iter()
-                    .filter(|edge| !self.outgoing_edges.contains(edge)),
-            )
+            .filter(|edge| {
+                if let Some(edge_to_be_removed) = remove_single_edge {
+                    edge.edge_id != edge_to_be_removed
+                } else {
+                    !other.outgoing_edges.contains(edge)
+                }
+            })
+            .chain(other.incoming_edges.iter().filter(|edge| {
+                if let Some(edge_to_be_removed) = remove_single_edge {
+                    edge.edge_id != edge_to_be_removed
+                } else {
+                    !self.outgoing_edges.contains(edge)
+                }
+            }))
             .copied()
             .sorted_by(|edge_1, edge_2| edge_1.edge_id.cmp(&edge_2.edge_id))
             .collect_vec();
@@ -94,13 +100,20 @@ impl CFFVertex {
         let outgoing_edges_of_new = self
             .outgoing_edges
             .iter()
-            .filter(|edge| !other.incoming_edges.contains(edge))
-            .chain(
-                other
-                    .outgoing_edges
-                    .iter()
-                    .filter(|edge| !self.incoming_edges.contains(edge)),
-            )
+            .filter(|edge| {
+                if let Some(edge_to_be_removed) = remove_single_edge {
+                    edge.edge_id != edge_to_be_removed
+                } else {
+                    !other.incoming_edges.contains(edge)
+                }
+            })
+            .chain(other.outgoing_edges.iter().filter(|edge| {
+                if let Some(edge_to_be_removed) = remove_single_edge {
+                    edge.edge_id != edge_to_be_removed
+                } else {
+                    !self.incoming_edges.contains(edge)
+                }
+            }))
             .copied()
             .sorted_by(|edge_1, edge_2| edge_1.edge_id.cmp(&edge_2.edge_id))
             .collect_vec();
@@ -333,6 +346,29 @@ impl CFFGenerationGraph {
             .collect()
     }
 
+    fn remove_edge(&mut self, edge_id: EdgeIndex) {
+        for vertex in self.vertices.iter_mut() {
+            vertex.incoming_edges.retain(|edge| edge.edge_id != edge_id);
+            vertex.outgoing_edges.retain(|edge| edge.edge_id != edge_id);
+        }
+    }
+
+    pub fn remove_self_edges(&mut self) {
+        let mut self_edges = vec![];
+
+        for vertex in self.vertices.iter() {
+            for edge in vertex.incoming_edges.iter() {
+                if vertex.outgoing_edges.contains(edge) {
+                    self_edges.push(edge.edge_id);
+                }
+            }
+        }
+
+        for self_edge in self_edges.iter() {
+            self.remove_edge(*self_edge);
+        }
+    }
+
     fn depth_first_search(
         &self,
         vertex: &VertexSet,
@@ -456,10 +492,27 @@ impl CFFGenerationGraph {
     }
 
     fn contract_vertices(&self, vertex_1: &VertexSet, vertex_2: &VertexSet) -> Self {
+        self.contract_vertices_impl(vertex_1, vertex_2, None)
+    }
+
+    pub fn contract_edge(&self, edge_id: EdgeIndex) -> Self {
+        let (source, sink) = self.get_source_sink_of_edge(edge_id);
+        let vertex_1 = &source.vertex_set;
+        let vertex_2 = &sink.vertex_set;
+
+        self.contract_vertices_impl(vertex_1, vertex_2, Some(edge_id))
+    }
+
+    fn contract_vertices_impl(
+        &self,
+        vertex_1: &VertexSet,
+        vertex_2: &VertexSet,
+        remove_single_edge: Option<EdgeIndex>,
+    ) -> Self {
         let vertex_1 = self.get_vertex(vertex_1);
         let vertex_2 = self.get_vertex(vertex_2);
 
-        let new_vertex = vertex_1.join(vertex_2);
+        let new_vertex = vertex_1.contract(vertex_2, remove_single_edge);
 
         let mut new_vertices = self.vertices.clone();
 
@@ -535,6 +588,32 @@ impl CFFGenerationGraph {
             .iter()
             .find(|vertex| self.has_connected_complement(&vertex.vertex_set))
             .unwrap_or_else(|| panic!("Could not find vertex with connected complement"))
+    }
+
+    fn get_source_sink_of_edge(&self, edge_id: EdgeIndex) -> (&CFFVertex, &CFFVertex) {
+        let source = self
+            .vertices
+            .iter()
+            .find(|vertex| {
+                vertex
+                    .outgoing_edges
+                    .iter()
+                    .any(|edge| edge.edge_id == edge_id)
+            })
+            .expect("not a virtual edge");
+
+        let sink = self
+            .vertices
+            .iter()
+            .find(|vertex| {
+                vertex
+                    .incoming_edges
+                    .iter()
+                    .any(|edge| edge.edge_id == edge_id)
+            })
+            .expect("not a virtual edge");
+
+        (source, sink)
     }
 
     pub fn generate_children(&self) -> (Option<Vec<Self>>, HybridSurface) {
@@ -957,7 +1036,7 @@ impl CFFGenerationGraph {
 #[cfg(test)]
 mod test {
     use super::CFFGenerationGraph;
-    use crate::cff::cff_graph::{CFFEdgeType, VertexSet};
+    use crate::cff::cff_graph::{CFFEdge, CFFEdgeType, VertexSet};
     use bitvec::vec::BitVec;
     use itertools::Itertools;
     use linnet::half_edge::{
@@ -1408,6 +1487,72 @@ mod test {
 
         //println!("left {:#?}", left_cut);
         //println!("right {:#?}", right_cut);
+    }
+
+    #[test]
+    fn test_contract_edge() {
+        let mut hedge_graph_builder = HedgeGraphBuilder::new();
+        let nodes = (0..2)
+            .map(|_| hedge_graph_builder.add_node(()))
+            .collect_vec();
+
+        hedge_graph_builder.add_edge(nodes[0], nodes[1], (), Orientation::Undirected);
+        hedge_graph_builder.add_edge(nodes[0], nodes[1], (), Orientation::Undirected);
+        hedge_graph_builder.add_edge(nodes[0], nodes[1], (), Orientation::Undirected);
+
+        hedge_graph_builder.add_external_edge(nodes[0], (), Orientation::Undirected, Flow::Sink);
+        hedge_graph_builder.add_external_edge(nodes[1], (), Orientation::Undirected, Flow::Source);
+
+        let hedge_graph = hedge_graph_builder.build::<NodeStorageVec<_>>();
+        let global_orientation = hedge_graph.new_hedgevec(|_, _, _| Orientation::Default);
+
+        let cff_graph = CFFGenerationGraph::new(&hedge_graph, global_orientation);
+        let contracted = cff_graph.contract_edge(EdgeIndex::from(0));
+
+        assert!(!contracted.has_edge(EdgeIndex::from(0)));
+        assert!(contracted.has_edge(EdgeIndex::from(1)));
+        assert!(contracted.has_edge(EdgeIndex::from(2)));
+        assert!(contracted.has_edge(EdgeIndex::from(3)));
+        assert!(contracted.has_edge(EdgeIndex::from(4)));
+
+        assert_eq!(contracted.vertices.len(), 1);
+
+        let vertex = contracted.vertices[0].clone();
+        assert_eq!(
+            vertex.incoming_edges,
+            vec![
+                CFFEdge {
+                    edge_id: EdgeIndex::from(1),
+                    edge_type: CFFEdgeType::Virtual,
+                },
+                CFFEdge {
+                    edge_id: EdgeIndex::from(2),
+                    edge_type: CFFEdgeType::Virtual,
+                },
+                CFFEdge {
+                    edge_id: EdgeIndex::from(3),
+                    edge_type: CFFEdgeType::External
+                }
+            ]
+        );
+
+        assert_eq!(
+            vertex.outgoing_edges,
+            vec![
+                CFFEdge {
+                    edge_id: EdgeIndex::from(1),
+                    edge_type: CFFEdgeType::Virtual,
+                },
+                CFFEdge {
+                    edge_id: EdgeIndex::from(2),
+                    edge_type: CFFEdgeType::Virtual,
+                },
+                CFFEdge {
+                    edge_id: EdgeIndex::from(4),
+                    edge_type: CFFEdgeType::External
+                }
+            ]
+        );
     }
 
     #[test]

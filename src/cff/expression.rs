@@ -14,10 +14,26 @@ use symbolica::{
 };
 use typed_index_collections::TiVec;
 
-use super::{generation::SurfaceCache, surface::HybridSurfaceID, tree::Tree};
+use super::{
+    cut_expression::SuperGraphOrientationID, generation::SurfaceCache, surface::HybridSurfaceID,
+    tree::Tree,
+};
 
-#[derive(Debug, Clone, Serialize, Deserialize, From, Into, Hash, PartialEq, Eq, Copy, Encode)]
+#[derive(
+    Debug, Clone, Serialize, Deserialize, From, Into, Hash, PartialEq, Eq, Copy, Encode, Decode,
+)]
 pub struct AmplitudeOrientationID(pub usize);
+
+#[derive(
+    Debug, Clone, Serialize, Deserialize, From, Into, Hash, PartialEq, Eq, Copy, Encode, Decode,
+)]
+pub struct SubgraphOrientationID(pub usize);
+
+pub trait OrientationID: From<usize> + Into<usize> {}
+
+impl OrientationID for AmplitudeOrientationID {}
+impl OrientationID for SubgraphOrientationID {}
+impl OrientationID for SuperGraphOrientationID {}
 
 #[derive(Clone, Debug, Serialize, Deserialize, Encode, Decode)]
 pub struct OrientationData {
@@ -55,13 +71,16 @@ pub struct OrientationExpression {
     pub expression: Tree<HybridSurfaceID>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize, Encode, Decode)]
-pub struct CFFExpression {
+pub struct CFFExpression<O: OrientationID> {
     #[bincode(with_serde)]
-    pub orientations: TiVec<AmplitudeOrientationID, OrientationExpression>,
+    pub orientations: TiVec<O, OrientationExpression>,
     pub surfaces: SurfaceCache,
 }
 
-impl CFFExpression {
+impl<O: OrientationID> CFFExpression<O>
+where
+    usize: From<O>,
+{
     pub fn new_empty() -> Self {
         Self {
             orientations: TiVec::new(),
@@ -100,7 +119,7 @@ impl CFFExpression {
             .collect()
     }
 
-    pub fn get_orientation_atom(&self, orientation_id: AmplitudeOrientationID) -> Atom {
+    pub fn get_orientation_atom(&self, orientation_id: O) -> Atom {
         self.orientations[orientation_id].expression.to_atom_inv()
     }
 
@@ -109,5 +128,23 @@ impl CFFExpression {
             .iter()
             .map(|o| o.expression.get_bottom_layer().len())
             .sum()
+    }
+}
+
+impl From<CFFExpression<AmplitudeOrientationID>> for CFFExpression<SubgraphOrientationID> {
+    fn from(value: CFFExpression<AmplitudeOrientationID>) -> Self {
+        Self {
+            orientations: value.orientations.raw.into(),
+            surfaces: value.surfaces,
+        }
+    }
+}
+
+impl From<CFFExpression<SubgraphOrientationID>> for CFFExpression<AmplitudeOrientationID> {
+    fn from(value: CFFExpression<SubgraphOrientationID>) -> Self {
+        Self {
+            orientations: value.orientations.raw.into(),
+            surfaces: value.surfaces,
+        }
     }
 }

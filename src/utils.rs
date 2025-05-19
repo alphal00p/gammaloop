@@ -3265,6 +3265,7 @@ pub struct GammaloopSymbols {
     pub loop_mom: Symbol,
     pub ubar: Symbol,
     pub vbar: Symbol,
+    pub ose: Symbol,
     pub v: Symbol,
     pub u: Symbol,
     pub color_wrap: Symbol,
@@ -3273,6 +3274,7 @@ pub struct GammaloopSymbols {
     pub rescale: Symbol,
     pub m_uv: Symbol,
     pub emr_mom: Symbol,
+    pub dot: Symbol,
     pub external_mom: Symbol,
     pub x_: Symbol,
     pub y_: Symbol,
@@ -3345,10 +3347,12 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
     den: symbol!("den"),
     ubar: symbol!("ubar"),
     vbar: symbol!("vbar"),
+    dot: symbol!("dot"),
     dim: symbol!("dim"),
     v: symbol!("v"),
     u: symbol!("u"),
     emr_mom: symbol!("Q"),
+    ose: symbol!("OSE"),
     external_mom: symbol!("P"),
     loop_mom: symbol!("K"),
     epsilon: symbol!("ϵ"),
@@ -3569,9 +3573,8 @@ impl<T> Length for Vec<T> {
 
 pub fn ose_atom_from_index(index: EdgeIndex) -> Atom {
     function!(
-        GS.emr_mom,
-        usize::from(index) as i64,
-        Atom::from(FlatIndex::from(0))
+        GS.ose,
+        usize::from(index) as i64 // Atom::from(FlatIndex::from(0))
     )
 }
 
