@@ -188,16 +188,16 @@ fn get_orientations_from_subgraph<E, V, S: SubGraph>(
             let mut orientation_of_virtuals = orientation_of_virtuals.into_iter();
 
             let global_orientation = graph
-                .new_hedgevec_from_iter(graph.iter_all_edges().map(|(pair, edge_index, _)| {
-                    let is_edge_in_subgraph = graph
+                .new_hedgevec_from_iter(graph.iter_all_edges().map(|(_, edge_index, _)| {
+                    // the pair must be with respect to the subgraph
+                    if let Some((pair, _, _)) = graph
                         .iter_edges(subgraph)
-                        .any(|(_, id, _)| id == edge_index);
-
-                    if is_edge_in_subgraph {
+                        .find(|(_pair, id, _)| *id == edge_index)
+                    {
                         match pair {
                             HedgePair::Paired { .. } => orientation_of_virtuals
                                 .next()
-                                .expect(" unable to reconstruct orientation"),
+                                .expect("orientation generation corrupted, not enough edges"),
                             HedgePair::Unpaired { .. } => Orientation::Default,
                             HedgePair::Split { .. } => {
                                 if reversed_dangling.contains(&edge_index) {
@@ -469,7 +469,7 @@ pub fn generate_cff_with_cuts<E, V>(
         )?;
 
         // build the orientation map
-        let mut uninit_orientation_map = ti_vec![None; super_graph_orientations.len()];
+        let mut orientation_map = OrientationMap::new();
 
         let left_orientation_iterator = left_amplitude
             .orientations
@@ -493,22 +493,11 @@ pub fn generate_cff_with_cuts<E, V>(
 
             let (sg_id, _) = super_graph_orientations
                 .iter_enumerated()
-                .find(|(id, orientation)| orientation.orientation == merged_orientation)
+                .find(|(_, orientation)| orientation.orientation == merged_orientation)
                 .expect("unable to find orientation");
 
-            uninit_orientation_map[sg_id] = Some((left_amplitude_id, right_amplitude_id));
+            orientation_map.insert(sg_id, left_amplitude_id, right_amplitude_id);
         }
-
-        let orientation_map =
-            OrientationMap::new(
-                uninit_orientation_map
-                    .into_iter()
-                    .map(|option| option.expect("missing orientation"))
-                    .collect::<TiVec<
-                        SuperGraphOrientationID,
-                        (AmplitudeOrientationID, AmplitudeOrientationID),
-                    >>(),
-            );
 
         let single_cut_expression = SingleCutExpression {
             left_amplitude,
