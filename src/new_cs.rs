@@ -729,7 +729,7 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
 
 #[derive(Clone, Encode, Decode)]
 pub struct AmplitudeDerivedData<S: NumeratorState> {
-    cff_expression: Option<CFFExpression>,
+    cff_expression: Option<CFFExpression<AmplitudeOrientationID>>,
     bare_cff_evaluator: Option<GenericEvaluator>,
     bare_cff_orientation_evaluatos: Option<TiVec<AmplitudeOrientationID, GenericEvaluator>>,
     _temp_numerator: Option<PhantomData<S>>,

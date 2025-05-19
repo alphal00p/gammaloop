@@ -41,7 +41,7 @@ use super::{
         SingleCutExpression, SingleCutOrientationExpression, SuperGraphOrientationID,
     },
     esurface::{Esurface, EsurfaceCollection, EsurfaceID, ExternalShift},
-    expression::{AmplitudeOrientationID, CFFExpression},
+    expression::{AmplitudeOrientationID, CFFExpression, OrientationID, SubgraphOrientationID},
     hsurface::HsurfaceCollection,
     surface::{HybridSurfaceRef, UnitSurface},
 };
@@ -344,11 +344,15 @@ fn get_possible_orientations_for_cut_list<E, V>(
 pub fn generate_cff_expression<E, V>(
     graph: &HedgeGraph<E, V>,
     canonize_esurface: &Option<ShiftRewrite>,
-) -> Result<CFFExpression> {
+) -> Result<CFFExpression<AmplitudeOrientationID>> {
     let graphs = get_orientations(graph);
     debug!("number of orientations: {}", graphs.len());
-
-    let graph_cff = generate_cff_from_orientations(graphs, None, None, None, canonize_esurface)?;
+    let mut surface_cache = SurfaceCache {
+        esurface_cache: EsurfaceCollection::from_iter(std::iter::empty()),
+        hsurface_cache: HsurfaceCollection::from_iter(std::iter::empty()),
+    };
+    let graph_cff =
+        generate_cff_from_orientations(graphs, &mut surface_cache, None, canonize_esurface)?;
 
     Ok(graph_cff)
 }
@@ -358,35 +362,47 @@ pub fn generate_cff_expression_from_subgraph<E, V, S: SubGraph>(
     subgraph: &S,
     canonize_esurface: &Option<ShiftRewrite>,
     reversed_dangling: &[EdgeIndex],
-) -> Result<CFFExpression> {
+    surface_cache: &mut SurfaceCache,
+) -> Result<CFFExpression<SubgraphOrientationID>> {
     let graphs = get_orientations_from_subgraph(graph, subgraph, reversed_dangling);
-    let cff = generate_cff_from_orientations(graphs, None, None, None, canonize_esurface)?;
+    let cff = generate_cff_from_orientations(graphs, surface_cache, None, canonize_esurface)?;
     Ok(cff)
 }
 
-pub fn generate_cff_expression_from_subgraph_to_ose_atom<E, V, S: SubGraph>(
+pub fn generate_uv_cff<E, V, S: SubGraph>(
     graph: &HedgeGraph<E, V>,
     subgraph: &S,
     canonize_esurface: &Option<ShiftRewrite>,
-    reversed_dangling: &[EdgeIndex],
-) -> Result<TiVec<AmplitudeOrientationID, (Atom, OrientationData)>> {
-    let cff = generate_cff_expression_from_subgraph(
-        graph,
-        subgraph,
+    contract_edges: &[EdgeIndex],
+    orientation: &HedgeVec<Orientation>,
+) -> Atom {
+    let mut generation_graph =
+        CFFGenerationGraph::new_from_subgraph(graph, orientation.clone(), subgraph);
+
+    for contracted_edge in contract_edges {
+        generation_graph = generation_graph.contract_edge(*contracted_edge);
+    }
+
+    generation_graph.remove_self_edges();
+
+    let mut surface_cache = SurfaceCache {
+        esurface_cache: EsurfaceCollection::from_iter(std::iter::empty()),
+        hsurface_cache: HsurfaceCollection::from_iter(std::iter::empty()),
+    };
+
+    let generate_tree_for_orientation = generate_tree_for_orientation(
+        generation_graph,
+        &mut surface_cache,
+        None,
         canonize_esurface,
-        reversed_dangling,
-    )?;
+    );
+
+    let tree: Tree<HybridSurfaceID> = generate_tree_for_orientation.map(forget_graphs);
+    let atom_tree = tree.to_atom_inv();
+    let atom_tree_substituted = surface_cache.substitute_energies(&atom_tree);
     let inverse_energies = get_cff_inverse_energy_product_impl(graph, subgraph);
 
-    Ok(cff
-        .get_orientation_atoms_with_data()
-        .into_iter()
-        .map(|(atom, data)| {
-            let atom = cff.surfaces.substitute_energies(&atom);
-            let atom = atom * &inverse_energies;
-            (atom, data)
-        })
-        .collect())
+    atom_tree_substituted * &inverse_energies
 }
 
 fn generate_cff_for_orientation<E, V>(
@@ -454,19 +470,25 @@ pub fn generate_cff_with_cuts<E, V>(
             })
             .collect_vec();
 
-        let left_amplitude = generate_cff_expression_from_subgraph(
-            graph,
-            &cut.left,
-            canonize_esurface,
-            &reversed_dangling,
-        )?;
+        let left_amplitude: CFFExpression<AmplitudeOrientationID> =
+            generate_cff_expression_from_subgraph(
+                graph,
+                &cut.left,
+                canonize_esurface,
+                &reversed_dangling,
+                &mut surface_cache,
+            )?
+            .into();
 
-        let right_amplitude = generate_cff_expression_from_subgraph(
-            graph,
-            &cut.right,
-            canonize_esurface,
-            &reversed_dangling,
-        )?;
+        let right_amplitude: CFFExpression<AmplitudeOrientationID> =
+            generate_cff_expression_from_subgraph(
+                graph,
+                &cut.right,
+                canonize_esurface,
+                &reversed_dangling,
+                &mut surface_cache,
+            )?
+            .into();
 
         // build the orientation map
         let mut orientation_map = OrientationMap::new();
@@ -515,30 +537,12 @@ pub fn generate_cff_with_cuts<E, V>(
     })
 }
 
-fn generate_cff_from_orientations(
+fn generate_cff_from_orientations<O: OrientationID>(
     orientations_and_graphs: Vec<CFFGenerationGraph>,
-    optional_esurface_cache: Option<EsurfaceCollection>,
-    optional_hsurface_cache: Option<HsurfaceCollection>,
+    generator_cache: &mut SurfaceCache,
     rewrite_at_cache_growth: Option<&Esurface>,
     canonize_esurface: &Option<ShiftRewrite>,
-) -> Result<CFFExpression, Report> {
-    let esurface_cache = if let Some(cache) = optional_esurface_cache {
-        cache
-    } else {
-        EsurfaceCollection::from_iter(std::iter::empty())
-    };
-
-    let hsurface_cache = if let Some(cache) = optional_hsurface_cache {
-        cache
-    } else {
-        HsurfaceCollection::from_iter(std::iter::empty())
-    };
-
-    let mut generator_cache = SurfaceCache {
-        esurface_cache,
-        hsurface_cache,
-    };
-
+) -> Result<CFFExpression<O>, Report> {
     // filter cyclic orientations beforehand
     let acyclic_orientations_and_graphs = orientations_and_graphs
         .into_iter()
@@ -556,7 +560,7 @@ fn generate_cff_from_orientations(
             let global_orientation = graph.global_orientation.clone();
             let tree = generate_tree_for_orientation(
                 graph.clone(),
-                &mut generator_cache,
+                generator_cache,
                 rewrite_at_cache_growth,
                 canonize_esurface,
             );
@@ -573,7 +577,7 @@ fn generate_cff_from_orientations(
 
     Ok(CFFExpression {
         orientations: terms.into(),
-        surfaces: generator_cache,
+        surfaces: generator_cache.clone(),
     })
 }
 
@@ -626,6 +630,13 @@ impl SurfaceCache {
             HybridSurfaceID::Esurface(id) => HybridSurfaceRef::Esurface(&self.esurface_cache[id]),
             HybridSurfaceID::Hsurface(id) => HybridSurfaceRef::Hsurface(&self.hsurface_cache[id]),
             HybridSurfaceID::Unit => HybridSurfaceRef::Unit(UnitSurface {}),
+        }
+    }
+
+    pub fn new() -> Self {
+        Self {
+            esurface_cache: EsurfaceCollection::from_iter(std::iter::empty()),
+            hsurface_cache: HsurfaceCollection::from_iter(std::iter::empty()),
         }
     }
 }
@@ -809,7 +820,7 @@ mod tests_cff {
     use super::*;
 
     // helper function to make a symbolica evaluator
-    impl CFFExpression {
+    impl CFFExpression<AmplitudeOrientationID> {
         fn quick_symbolica_evaluator(
             &self,
             external_range: Range<usize>,
@@ -990,9 +1001,15 @@ mod tests_cff {
             dependent_momentum_expr: dep_mom_expr,
         });
 
-        let cff =
-            generate_cff_from_orientations(orientations, None, None, None, &shift_rewrite.clone())
-                .unwrap();
+        let mut surface_cache = SurfaceCache::new();
+
+        let cff = generate_cff_from_orientations(
+            orientations,
+            &mut surface_cache,
+            None,
+            &shift_rewrite.clone(),
+        )
+        .unwrap();
         assert_eq!(
             cff.surfaces.esurface_cache.len(),
             6,
@@ -1106,8 +1123,11 @@ mod tests_cff {
             dependent_momentum_expr: dep_mom_expr,
         });
 
+        let mut surface_cache = SurfaceCache::new();
+
         let cff =
-            generate_cff_from_orientations(orientations, None, None, None, &shift_rewrite).unwrap();
+            generate_cff_from_orientations(orientations, &mut surface_cache, None, &shift_rewrite)
+                .unwrap();
 
         let q = FourMomentum::from_args(F(1.), F(2.), F(3.), F(4.));
         let zero = FourMomentum::from_args(F(0.), F(0.), F(0.), F(0.));
@@ -1240,10 +1260,11 @@ mod tests_cff {
             dependent_momentum: dep_mom,
             dependent_momentum_expr: dep_mom_expr,
         });
-
+        let mut surface_cache = SurfaceCache::new();
         let orientataions = generate_orientations_for_testing(tbt_edges, incoming_vertices);
-        let cff = generate_cff_from_orientations(orientataions, None, None, None, &shift_rewrite)
-            .unwrap();
+        let cff =
+            generate_cff_from_orientations(orientataions, &mut surface_cache, None, &shift_rewrite)
+                .unwrap();
 
         let q = FourMomentum::from_args(F(1.0), F(2.0), F(3.0), F(4.0));
         let zero_vector = q.default();
@@ -1390,9 +1411,15 @@ mod tests_cff {
         // get time before cff generation
         let start = std::time::Instant::now();
 
-        let _cff =
-            generate_cff_from_orientations(orientations, None, None, None, &Some(shift_rewrite))
-                .unwrap();
+        let mut surface_cache = SurfaceCache::new();
+
+        let _cff = generate_cff_from_orientations::<AmplitudeOrientationID>(
+            orientations,
+            &mut surface_cache,
+            None,
+            &Some(shift_rewrite),
+        )
+        .unwrap();
 
         let finish = std::time::Instant::now();
         println!("time to generate cff: {:?}", finish - start);
@@ -1441,9 +1468,15 @@ mod tests_cff {
         // get time before cff generation
         let _start = std::time::Instant::now();
 
-        let _cff =
-            generate_cff_from_orientations(orientations, None, None, None, &Some(shift_rewrite))
-                .unwrap();
+        let mut surface_cache = SurfaceCache::new();
+
+        let _cff = generate_cff_from_orientations::<AmplitudeOrientationID>(
+            orientations,
+            &mut surface_cache,
+            None,
+            &Some(shift_rewrite),
+        )
+        .unwrap();
 
         let _finish = std::time::Instant::now();
     }
@@ -1487,9 +1520,15 @@ mod tests_cff {
 
         let start = std::time::Instant::now();
         let orientations = generate_orientations_for_testing(edges, incoming_vertices);
-        let cff =
-            generate_cff_from_orientations(orientations, None, None, None, &Some(shift_rewrite))
-                .unwrap();
+        let mut surface_cache = SurfaceCache::new();
+
+        let cff = generate_cff_from_orientations(
+            orientations,
+            &mut surface_cache,
+            None,
+            &Some(shift_rewrite),
+        )
+        .unwrap();
         let finish = std::time::Instant::now();
         println!("time to generate cff: {:?}", finish - start);
 
