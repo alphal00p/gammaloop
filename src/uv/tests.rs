@@ -249,35 +249,40 @@ fn double_triangle_LU() {
             .as_ref()
             .unwrap()
             .cut_expressions[id];
-        let (left_orientation, right_orientation) = cff_cut_expr.orientation_map[orientation_id];
-        let left_orientation_data =
-            &cff_cut_expr.left_amplitude.orientations[left_orientation].data;
-        let right_orientation_data =
-            &cff_cut_expr.right_amplitude.orientations[right_orientation].data;
 
-        let cut_mom_basis_id = cs.derived_data.esurface_data.as_ref().unwrap()[esurface_id]
-            .as_ref()
-            .unwrap()
-            .cut_momentum_basis;
-        let cut_lmb = &cs.derived_data.lmbs.as_ref().unwrap()[cut_mom_basis_id];
+        if let Some((left_orientation, right_orientation)) =
+            cff_cut_expr.orientation_map.get_lr_or(orientation_id)
+        {
+            let left_orientation_data =
+                &cff_cut_expr.left_amplitude.orientations[left_orientation].data;
+            let right_orientation_data =
+                &cff_cut_expr.right_amplitude.orientations[right_orientation].data;
 
-        let mut left_forest = super_uv_graph
-            .wood(&c.left)
-            .unfold(&super_uv_graph, &super_uv_graph.cut_edges);
-        left_forest.compute(&super_uv_graph);
-        left_forest.compute_cff(&super_uv_graph, left_orientation_data, &None);
+            let cut_mom_basis_id = cs.derived_data.esurface_data.as_ref().unwrap()[esurface_id]
+                .as_ref()
+                .unwrap()
+                .cut_momentum_basis;
+            let cut_lmb = &cs.derived_data.lmbs.as_ref().unwrap()[cut_mom_basis_id];
 
-        let mut right_forest = super_uv_graph
-            .wood(&c.right)
-            .unfold(&super_uv_graph, &super_uv_graph.cut_edges);
-        right_forest.compute(&super_uv_graph);
-        right_forest.compute_cff(&super_uv_graph, right_orientation_data, &None);
+            let mut left_forest = super_uv_graph
+                .wood(&c.left)
+                .unfold(&super_uv_graph, &super_uv_graph.cut_edges);
+            left_forest.compute(&super_uv_graph);
+            left_forest.compute_cff(&super_uv_graph, left_orientation_data, &None);
 
-        let left_expr = left_forest.local_expr(&super_uv_graph, &None, left_orientation_data);
-        let right_expr = right_forest.local_expr(&super_uv_graph, &None, right_orientation_data);
+            let mut right_forest = super_uv_graph
+                .wood(&c.right)
+                .unfold(&super_uv_graph, &super_uv_graph.cut_edges);
+            right_forest.compute(&super_uv_graph);
+            right_forest.compute_cff(&super_uv_graph, right_orientation_data, &None);
 
-        // TODO: add cuts
-        sum += left_expr * right_expr;
+            let left_expr = left_forest.local_expr(&super_uv_graph, &None, left_orientation_data);
+            let right_expr =
+                right_forest.local_expr(&super_uv_graph, &None, right_orientation_data);
+
+            // TODO: add cuts
+            sum += left_expr * right_expr;
+        }
     }
 
     println!("Sum: {}", sum);

@@ -31,9 +31,9 @@ use crate::{
         cross_section_integrand::OrientationEvaluator,
         GenericEvaluator, LmbMultiChannelingSetup,
     },
-    new_graph::{LmbIndex, LoopMomentumBasis},
+    new_graph::{get_cff_inverse_energy_product_impl, LmbIndex, LoopMomentumBasis},
     signature::SignatureLike,
-    utils::f128,
+    utils::{f128, LEFT},
     GammaLoopContext, GammaLoopContextContainer,
 };
 use eyre::eyre;
@@ -992,19 +992,6 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
         self.generate_cff();
         self.update_surface_cache();
 
-        for (cut_id, esurface) in self.cut_esurface.iter_enumerated() {
-            debug!(
-                "cut_id: {:?} \n, esurface: {:#?} \n, expression: {}",
-                cut_id,
-                esurface,
-                self.derived_data
-                    .cff_expression
-                    .as_ref()
-                    .unwrap()
-                    .to_atom_for_cut(cut_id)
-            );
-        }
-
         self.build_cut_evaluators();
         self.build_orientation_evaluators();
         self.build_lmbs();
@@ -1110,28 +1097,89 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
         self.cut_esurface = esurfaces;
     }
 
-    fn build_atom_for_cut(&self, cut_id: CutId) -> Atom {
-        let cut_atom = self
+    fn build_left_right_amplitudes(&self, cut: CutId) -> (Atom, Atom) {
+        let (left_amplitude, right_amplitude) = self
             .derived_data
             .cff_expression
             .as_ref()
             .unwrap()
-            .to_atom_for_cut(cut_id);
+            .to_atom_for_cut(cut);
 
-        let cut_atom_energy_sub = self
+        let left_amplitude_energy_sub = self
             .derived_data
             .cff_expression
             .as_ref()
             .unwrap()
             .surfaces
-            .substitute_energies(&cut_atom);
+            .substitute_energies(&left_amplitude);
 
-        self.add_additional_factors_to_cff_atom(&cut_atom_energy_sub)
+        let right_amplitude_energy_sub = self
+            .derived_data
+            .cff_expression
+            .as_ref()
+            .unwrap()
+            .surfaces
+            .substitute_energies(&right_amplitude);
+
+        let left_ose_product =
+            get_cff_inverse_energy_product_impl(&self.graph.underlying, &self.cuts[cut].left);
+        let right_ose_product =
+            get_cff_inverse_energy_product_impl(&self.graph.underlying, &self.cuts[cut].right);
+
+        (
+            left_amplitude_energy_sub * left_ose_product,
+            right_amplitude_energy_sub * right_ose_product,
+        )
     }
 
-    fn add_additional_factors_to_cff_atom(&self, cut_atom: &Atom) -> Atom {
-        let inverse_energy_product = self.graph.underlying.get_cff_inverse_energy_product();
+    pub fn build_left_right_amplitudes_for_orientation(
+        &self,
+        cut: CutId,
+        orientation: SuperGraphOrientationID,
+    ) -> (Atom, Atom) {
+        let (left_amplitude, right_amplitude) = self
+            .derived_data
+            .cff_expression
+            .as_ref()
+            .unwrap()
+            .get_atom_for_orientation_and_cut(orientation, cut);
 
+        let left_amplitude_energy_sub = self
+            .derived_data
+            .cff_expression
+            .as_ref()
+            .unwrap()
+            .surfaces
+            .substitute_energies(&left_amplitude);
+
+        let right_amplitude_energy_sub = self
+            .derived_data
+            .cff_expression
+            .as_ref()
+            .unwrap()
+            .surfaces
+            .substitute_energies(&right_amplitude);
+
+        let left_ose_product =
+            get_cff_inverse_energy_product_impl(&self.graph.underlying, &self.cuts[cut].left);
+        let right_ose_product =
+            get_cff_inverse_energy_product_impl(&self.graph.underlying, &self.cuts[cut].right);
+
+        (
+            left_amplitude_energy_sub * left_ose_product,
+            right_amplitude_energy_sub * right_ose_product,
+        )
+    }
+
+    fn build_atom_for_cut(&self, cut_id: CutId) -> Atom {
+        let (left_amplitude, right_amplitude) = self.build_left_right_amplitudes(cut_id);
+
+        let product = left_amplitude * right_amplitude;
+
+        self.add_additional_factors_to_cff_atom(&product, cut_id)
+    }
+
+    fn add_additional_factors_to_cff_atom(&self, cut_atom: &Atom, cut_id: CutId) -> Atom {
         let t_star_factor = parse!(&format!(
             "tstar^({})",
             3 * self.graph.underlying.get_loop_number()
@@ -1147,8 +1195,11 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
         ))
         .unwrap();
 
+        let cut_inverse_energy_product =
+            get_cff_inverse_energy_product_impl(&self.graph.underlying, &self.cuts[cut_id].cut);
+
         let result = cut_atom
-            * inverse_energy_product
+            * cut_inverse_energy_product
             * t_star_factor
             * h_function
             * &self.graph.multiplicity
@@ -1212,6 +1263,7 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
             .as_ref()
             .unwrap()
             .get_orientation_atoms();
+
         let substituted_energies = orientation_atoms
             .iter()
             .map(|cut_atoms| {
@@ -1224,7 +1276,8 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
                             .as_ref()
                             .unwrap()
                             .surfaces
-                            .substitute_energies(atom);
+                            .substitute_energies(&atom.0);
+                        todo!("fix this function");
                         substituded_atom
                     })
                     .collect_vec()
@@ -1245,7 +1298,10 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
                 let cut_evaluators = cut_atoms
                     .iter()
                     .map(|cut_atom| {
-                        let cut_atom = self.add_additional_factors_to_cff_atom(cut_atom);
+                        let cut_atom = self.add_additional_factors_to_cff_atom(
+                            cut_atom,
+                            todo!("fix this function"),
+                        );
                         let params = self.get_params();
                         let mut tree = cut_atom
                             .to_evaluation_tree(&self.get_function_map(), &params)
