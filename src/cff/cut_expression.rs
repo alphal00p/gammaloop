@@ -1,3 +1,4 @@
+use ahash::HashMap;
 use bincode_trait_derive::{Decode, Encode};
 use derive_more::{From, Into};
 use linnet::half_edge::{hedgevec::HedgeVec, involution::Orientation};
@@ -42,35 +43,42 @@ impl From<&SingleCutOrientationExpression> for Atom {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode)]
 pub struct OrientationMap {
-    map: TiVec<SuperGraphOrientationID, (AmplitudeOrientationID, AmplitudeOrientationID)>,
+    map: HashMap<SuperGraphOrientationID, (AmplitudeOrientationID, AmplitudeOrientationID)>,
+    revesed_map: HashMap<(AmplitudeOrientationID, AmplitudeOrientationID), SuperGraphOrientationID>,
 }
 
 impl Index<SuperGraphOrientationID> for OrientationMap {
     type Output = (AmplitudeOrientationID, AmplitudeOrientationID);
 
     fn index(&self, index: SuperGraphOrientationID) -> &Self::Output {
-        &self.map[index]
+        &self.map[&index]
+    }
+}
+
+impl Index<(AmplitudeOrientationID, AmplitudeOrientationID)> for OrientationMap {
+    type Output = SuperGraphOrientationID;
+
+    fn index(&self, index: (AmplitudeOrientationID, AmplitudeOrientationID)) -> &Self::Output {
+        &self.revesed_map[&index]
     }
 }
 
 impl OrientationMap {
-    // Can't use index trait, because the SuperGraphOrientationID does not actually live in the sturct, so it is impossible to
-    // return a reference to it :(
-    pub fn index_amp(
-        &self,
-        index: (AmplitudeOrientationID, AmplitudeOrientationID),
-    ) -> SuperGraphOrientationID {
-        self.map
-            .iter_enumerated()
-            .find(|(_, (a, b))| *a == index.0 && *b == index.1)
-            .map(|(id, _)| id)
-            .unwrap_or_else(|| panic!("No orientation found for index {:?}", index))
+    pub fn new() -> Self {
+        Self {
+            map: HashMap::default(),
+            revesed_map: HashMap::default(),
+        }
     }
 
-    pub fn new(
-        map: TiVec<SuperGraphOrientationID, (AmplitudeOrientationID, AmplitudeOrientationID)>,
-    ) -> Self {
-        Self { map }
+    pub fn insert(
+        &mut self,
+        orientation_id: SuperGraphOrientationID,
+        left: AmplitudeOrientationID,
+        right: AmplitudeOrientationID,
+    ) {
+        self.map.insert(orientation_id, (left, right));
+        self.revesed_map.insert((left, right), orientation_id);
     }
 }
 
