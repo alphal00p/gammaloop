@@ -989,11 +989,11 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
             .set_edge_signatures(&self.graph.underlying)?;
         self.generate_cuts(model, process_definition)?;
         self.generate_esurface_cuts();
-        self.generate_cff();
+        self.generate_cff()?;
         self.update_surface_cache();
 
         self.build_cut_evaluators();
-        self.build_orientation_evaluators();
+        //self.build_orientation_evaluators();
         self.build_lmbs();
         self.build_esurface_derived_data()?;
         Ok(self.build_multi_channeling_channels())
@@ -1432,7 +1432,7 @@ impl CrossSectionCut {
         model: &Model,
     ) -> Result<bool> {
         if self.is_s_channel(cross_section_graph)? {
-            let mut cut_content = self
+            let cut_content_builder = self
                 .cut
                 .iter_edges(&cross_section_graph.graph.underlying)
                 .map(|(orientation, edge_data)| {
@@ -1444,37 +1444,47 @@ impl CrossSectionCut {
                 })
                 .collect_vec();
 
-            let particle_content = process
+            let any_pdg_list_passes = process
                 .final_pdgs_lists
-                .first()
-                .unwrap()
                 .iter()
-                .map(|pdg| model.get_particle_from_pdg(*pdg as isize));
+                .map(|x| {
+                    x.iter()
+                        .map(|pdg| model.get_particle_from_pdg(*pdg as isize))
+                })
+                .any(|particle_content| {
+                    let mut cut_content = cut_content_builder.clone();
+                    debug!(
+                        "cut content: {:?}",
+                        cut_content.iter().map(|p| p.0.pdg_code).collect_vec()
+                    );
 
-            debug!(
-                "cut content: {:?}",
-                cut_content.iter().map(|p| p.0.pdg_code).collect_vec()
-            );
+                    for particle in particle_content {
+                        if let Some(index) = cut_content.iter().position(|p| p == &particle) {
+                            cut_content.remove(index);
+                        } else {
+                            debug!("wrong particles");
+                            return false;
+                        }
+                    }
 
-            for particle in particle_content {
-                if let Some(index) = cut_content.iter().position(|p| p == &particle) {
-                    cut_content.remove(index);
-                } else {
-                    debug!("wrong particles");
-                    return Ok(false);
-                }
-            }
+                    if cut_content.len() > process.n_unresolved {
+                        debug!(" too many unresolved particles");
+                        return false;
+                    }
 
-            if cut_content.len() > process.n_unresolved {
-                debug!(" too many unresolved particles");
-                return Ok(false);
-            }
+                    if !cut_content
+                        .iter()
+                        .all(|particle| process.unresolved_cut_content.contains(particle))
+                    {
+                        debug!("wrong unresolved particles");
+                        return false;
+                    }
 
-            if !cut_content
-                .iter()
-                .all(|particle| process.unresolved_cut_content.contains(particle))
-            {
-                debug!("wrong unresolved particles");
+                    true
+                });
+
+            if !any_pdg_list_passes {
+                debug!("wrong pdg list");
                 return Ok(false);
             }
 
