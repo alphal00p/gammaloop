@@ -1008,10 +1008,11 @@ impl Approximation {
             canonize_esurface,
             &contracted_edges,
             &orientation.orientation,
-        ); //* Cff::from_subgraph(
-           //     &graph.full_node().internal_graph.subtract(&self.subgraph),
-           //     graph,
-           // );
+        )
+        .unwrap(); //* Cff::from_subgraph(
+                   //     &graph.full_node().internal_graph.subtract(&self.subgraph),
+                   //     graph,
+                   // );
 
         Some(t * contracted)
     }
@@ -1075,7 +1076,9 @@ impl ApproxOp {
                 canonize_esurface,
                 &contracted_edges,
                 &orientation.orientation,
-            ) * inner_t;
+            )
+            .unwrap()
+                * inner_t;
 
             Self::Dependent {
                 t_arg: IntegrandExpr { integrand: cff },

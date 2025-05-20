@@ -1,5 +1,8 @@
+use crate::cff::hsurface::Hsurface;
 use ahash::{HashMap, HashSet, HashSetExt};
 use bitvec::vec::BitVec;
+use color_eyre::Result;
+use eyre::eyre;
 use itertools::Itertools;
 use linnet::half_edge::{
     hedgevec::HedgeVec,
@@ -9,8 +12,6 @@ use linnet::half_edge::{
 };
 use serde::{Deserialize, Serialize};
 use std::hash::Hash;
-
-use crate::cff::hsurface::Hsurface;
 
 use super::{
     esurface::{Esurface, ExternalShift},
@@ -813,7 +814,7 @@ impl CFFGenerationGraph {
         graph: &HedgeGraph<E, V>,
         global_orientation: HedgeVec<Orientation>,
         subgraph: &S,
-    ) -> Self {
+    ) -> Result<Self> {
         let mut vertices = HashMap::default();
 
         for (node_id, _, _data) in graph.iter_node_data(subgraph) {
@@ -874,7 +875,11 @@ impl CFFGenerationGraph {
                                 .push(edge);
                         }
                         Orientation::Undirected => {
-                            panic!("Can not generate CFF with undirected edges")
+                            return Err(eyre!(
+                                "undirected edge found, edge_id: {}, subgraph: \n {}",
+                                edge_index,
+                                graph.dot(subgraph)
+                            ));
                         }
                     }
                 }
@@ -899,7 +904,11 @@ impl CFFGenerationGraph {
                                     vertices.get_mut(&vertex).unwrap().incoming_edges.push(edge)
                                 }
                                 Orientation::Undirected => {
-                                    panic!("Can not generate CFF with undirected edges")
+                                    return Err(eyre!(
+                                        "undirected edge found, edge_id: {}, subgraph: \n {}",
+                                        edge_index,
+                                        graph.dot(subgraph)
+                                    ))
                                 }
                             }
                         }
@@ -913,7 +922,11 @@ impl CFFGenerationGraph {
                                     vertices.get_mut(&vertex).unwrap().outgoing_edges.push(edge)
                                 }
                                 Orientation::Undirected => {
-                                    panic!("Can not generate CFF with undirected edges")
+                                    return Err(eyre!(
+                                        "undirected edge found, edge_id: {}, subgraph: \n {}",
+                                        edge_index,
+                                        graph.dot(subgraph)
+                                    ))
                                 }
                             }
                         }
@@ -929,31 +942,7 @@ impl CFFGenerationGraph {
             global_orientation,
         };
 
-        let vertex_exists_with_connected_comlement = res
-            .vertices
-            .iter()
-            .any(|vertex| res.has_connected_complement(&vertex.vertex_set));
-
-        if !vertex_exists_with_connected_comlement && res.vertices.len() > 1 {
-            println!(
-                "No vertex with connected complement found: {:#?}\n
-                input dot: \n
-                {}
-
-            ",
-                res,
-                graph.dot(subgraph)
-            );
-
-            println!(
-                "num edges in subgraph: {}",
-                graph.iter_edges(subgraph).count()
-            );
-
-            panic!("aborting")
-        }
-
-        res
+        Ok(res)
     }
 
     pub fn generate_cut(&self, circled_vertices: VertexSet) -> (Self, Self) {
@@ -1582,7 +1571,8 @@ mod test {
         let global_orientation = hedge_graph.new_hedgevec(|_, _, _| Orientation::Default);
 
         let cff_graph =
-            CFFGenerationGraph::new_from_subgraph(&hedge_graph, global_orientation, &left_triangle);
+            CFFGenerationGraph::new_from_subgraph(&hedge_graph, global_orientation, &left_triangle)
+                .unwrap();
 
         assert!(cff_graph.has_edge(EdgeIndex::from(0)));
         assert!(cff_graph.has_edge(EdgeIndex::from(1)));

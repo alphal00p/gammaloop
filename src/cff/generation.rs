@@ -213,7 +213,7 @@ fn get_orientations_from_subgraph<E, V, S: SubGraph>(
                 }))
                 .expect("unable to construct global orientation");
 
-            CFFGenerationGraph::new_from_subgraph(graph, global_orientation, subgraph)
+            CFFGenerationGraph::new_from_subgraph(graph, global_orientation, subgraph).unwrap()
         })
         .filter(|cff_graph| !cff_graph.has_directed_cycle_initial())
         .collect()
@@ -375,9 +375,9 @@ pub fn generate_uv_cff<E, V, S: SubGraph>(
     canonize_esurface: &Option<ShiftRewrite>,
     contract_edges: &[EdgeIndex],
     orientation: &HedgeVec<Orientation>,
-) -> Atom {
+) -> Result<Atom> {
     let mut generation_graph =
-        CFFGenerationGraph::new_from_subgraph(graph, orientation.clone(), subgraph);
+        CFFGenerationGraph::new_from_subgraph(graph, orientation.clone(), subgraph)?;
 
     for contracted_edge in contract_edges {
         generation_graph = generation_graph.contract_edge(*contracted_edge);
@@ -402,7 +402,7 @@ pub fn generate_uv_cff<E, V, S: SubGraph>(
     let atom_tree_substituted = surface_cache.substitute_energies(&atom_tree);
     let inverse_energies = get_cff_inverse_energy_product_impl(graph, subgraph);
 
-    atom_tree_substituted * &inverse_energies
+    Ok(atom_tree_substituted * &inverse_energies)
 }
 
 fn generate_cff_for_orientation<E, V>(
@@ -421,12 +421,14 @@ fn generate_cff_for_orientation<E, V>(
                 graph,
                 orientation_data.orientation.clone(),
                 &cut.left,
-            );
+            )
+            .unwrap();
             let right_diagram = CFFGenerationGraph::new_from_subgraph(
                 graph,
                 orientation_data.orientation.clone(),
                 &cut.right,
-            );
+            )
+            .unwrap();
 
             let left_tree =
                 generate_tree_for_orientation(left_diagram, cache, None, canonize_esurface)
