@@ -319,19 +319,17 @@ fn double_triangle_LU() {
             // let mut cut_res = cs.add_additional_factors_to_cff_atom(&(left_expr * right_expr), id);
 
             // add Feynman rules
-            for (_p, _edge_id, d) in super_uv_graph.iter_edges(&c.cut.left) {
+            for (_p, edge_index, d) in super_uv_graph.iter_edges(&c.cut.left) {
+                let edge_id = usize::from(edge_index) as i64;
                 let orientation = supergraph_orientation_data.orientation.clone();
                 cut_res = cut_res
                     * &d.data
                         .num
-                        .replace(function!(GS.emr_mom, GS.x_, GS.x__))
+                        .replace(function!(GS.emr_mom, edge_id, GS.y_))
                         .with_map(move |m| {
-                            let edge_id = i64::try_from(m.get(GS.x_).unwrap().to_atom()).unwrap();
-                            let index = m.get(GS.x__).unwrap().to_atom();
+                            let index = m.get(GS.y_).unwrap().to_atom();
 
-                            let sign = SignOrZero::from(
-                                (&orientation[EdgeIndex::from(edge_id as usize)]).clone(),
-                            ) * 1;
+                            let sign = SignOrZero::from((&orientation[edge_index]).clone()) * 1;
 
                             function!(GS.ose, edge_id, index) * sign
                                 + function!(GS.emr_vec, edge_id, index)
@@ -349,16 +347,18 @@ fn double_triangle_LU() {
                     function!(GS.emr_vec, GS.x_)
                 ))
                 .replace(function!(GS.emr_vec, GS.x_, GS.a_) * function!(GS.emr_vec, GS.y_, GS.a_))
+                .repeat()
                 .with(function!(
                     MS.dot,
                     function!(GS.emr_vec, GS.x_),
                     function!(GS.emr_vec, GS.y_)
                 ))
-                .replace(function!(GS.ose, GS.x_, GS.y_).npow(2))
-                .with(function!(GS.ose, GS.x_).npow(2))
-                .replace(function!(GS.ose, GS.x_, GS.a_) * function!(GS.ose, GS.y_, GS.a_))
-                .with(function!(GS.ose, GS.x_) * function!(GS.ose, GS.y_))
-                .replace(function!(GS.emr_vec, GS.x_, GS.a_) * function!(GS.ose, GS.y_, GS.a_))
+                .replace(function!(GS.ose, GS.y_, GS.x_).npow(2))
+                .with(function!(GS.ose, GS.y_).npow(2))
+                .replace(function!(GS.ose, GS.y_, GS.x_) * function!(GS.ose, GS.y__, GS.x_))
+                .repeat()
+                .with(function!(GS.ose, GS.y_) * function!(GS.ose, GS.y__))
+                .replace(function!(GS.emr_vec, GS.y_, GS.a_) * function!(GS.ose, GS.y__, GS.a_))
                 .with(Atom::Zero)
                 .replace(function!(
                     MS.dot,
@@ -372,6 +372,18 @@ fn double_triangle_LU() {
                     function!(GS.ose, GS.y_)
                 ))
                 .with(function!(GS.ose, GS.x_) * function!(GS.ose, GS.y_));
+
+            // substitute all OSEs from subgraphs, they are in the form OSE(edge_id, momentum, mass)
+            cut_res = cut_res
+                .replace(function!(GS.ose, GS.x_, GS.y_, GS.z_))
+                .with(
+                    (-function!(
+                        MS.dot,
+                        function!(GS.emr_vec, GS.y_),
+                        function!(GS.emr_vec, GS.y_)
+                    ) + GS.z_)
+                        .sqrt(),
+                );
 
             // substitute all OSEs (add minus sign to cancel minus sign from 4d dot product)
             for (_p, edge_id, d) in super_uv_graph.iter_edges(&c.cut.left) {
