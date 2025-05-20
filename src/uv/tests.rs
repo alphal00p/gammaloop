@@ -292,26 +292,13 @@ fn double_triangle_LU() {
             right_forest.compute(&super_uv_graph);
             right_forest.compute_cff(&super_uv_graph, right_orientation_data, &None);
 
-            let left_amplitude =
-                InternalSubGraph::cleaned_filter_pessimist(c.left.clone(), &super_uv_graph);
-            let right_amplitude =
-                InternalSubGraph::cleaned_filter_pessimist(c.right.clone(), &super_uv_graph);
+            println!("//left: \n{}", super_uv_graph.dot(&c.left));
 
-            println!("//left: \n{}", super_uv_graph.dot(&left_amplitude));
-
-            println!("//right: \n{}", super_uv_graph.dot(&right_amplitude));
-            let left_expr = left_forest.local_expr(
-                &super_uv_graph,
-                &left_amplitude,
-                &None,
-                left_orientation_data,
-            );
-            let right_expr = right_forest.local_expr(
-                &super_uv_graph,
-                &right_amplitude,
-                &None,
-                right_orientation_data,
-            );
+            println!("//right: \n{}", super_uv_graph.dot(&c.right));
+            let left_expr =
+                left_forest.local_expr(&super_uv_graph, &c.left, &None, left_orientation_data);
+            let right_expr =
+                right_forest.local_expr(&super_uv_graph, &c.right, &None, right_orientation_data);
 
             let cut_inverse_energies = get_cff_inverse_energy_product_impl(&super_uv_graph, &c.cut);
             let mut cut_res = left_expr * right_expr * cut_inverse_energies;
@@ -323,9 +310,9 @@ fn double_triangle_LU() {
                 let edge_id = usize::from(edge_index) as i64;
                 let orientation = supergraph_orientation_data.orientation.clone();
                 cut_res = (cut_res * &d.data.num)
-                    .replace(function!(GS.emr_mom, edge_id, GS.y_))
+                    .replace(function!(GS.emr_mom, edge_id, W_.y_))
                     .with_map(move |m| {
-                        let index = m.get(GS.y_).unwrap().to_atom();
+                        let index = m.get(W_.y_).unwrap().to_atom();
 
                         let sign = SignOrZero::from((&orientation[edge_index]).clone()) * 1;
 
@@ -339,9 +326,9 @@ fn double_triangle_LU() {
             {
                 let edge_id = usize::from(edge_index) as i64;
                 cut_res = (cut_res * &d.data.num)
-                    .replace(function!(GS.emr_mom, edge_id, GS.y_))
+                    .replace(function!(GS.emr_mom, edge_id, W_.y_))
                     .with_map(move |m| {
-                        let index = m.get(GS.y_).unwrap().to_atom();
+                        let index = m.get(W_.y_).unwrap().to_atom();
 
                         function!(GS.ose, edge_id, index) // NOTE: not OSE for external edge, understood as taking 0th part
                                 + function!(GS.emr_vec, edge_id, index)
@@ -353,50 +340,50 @@ fn double_triangle_LU() {
             cut_res = cut_res
                 .expand()
                 // .to_dots()//need to allow x___
-                .replace(function!(GS.emr_vec, GS.x__, GS.y_).npow(2))
+                .replace(function!(GS.emr_vec, W_.x__, W_.y_).npow(2))
                 .with(function!(
                     MS.dot,
-                    function!(GS.emr_vec, GS.x__),
-                    function!(GS.emr_vec, GS.x__)
+                    function!(GS.emr_vec, W_.x__),
+                    function!(GS.emr_vec, W_.x__)
                 ))
                 .replace(
-                    function!(GS.emr_vec, GS.x__, GS.a_) * function!(GS.emr_vec, GS.y__, GS.a_),
+                    function!(GS.emr_vec, W_.x__, W_.a_) * function!(GS.emr_vec, W_.y__, W_.a_),
                 )
                 .repeat()
                 .with(function!(
                     MS.dot,
-                    function!(GS.emr_vec, GS.x__),
-                    function!(GS.emr_vec, GS.y__)
+                    function!(GS.emr_vec, W_.x__),
+                    function!(GS.emr_vec, W_.y__)
                 ))
-                .replace(function!(GS.ose, GS.y__, GS.x_).npow(2))
-                .with(function!(GS.ose, GS.y__).npow(2))
-                .replace(function!(GS.ose, GS.x__, GS.x_) * function!(GS.ose, GS.y__, GS.x_))
+                .replace(function!(GS.ose, W_.y__, W_.x_).npow(2))
+                .with(function!(GS.ose, W_.y__).npow(2))
+                .replace(function!(GS.ose, W_.x__, W_.x_) * function!(GS.ose, W_.y__, W_.x_))
                 .repeat()
-                .with(function!(GS.ose, GS.x__) * function!(GS.ose, GS.y__))
-                .replace(function!(GS.emr_vec, GS.x__, GS.a_) * function!(GS.ose, GS.y__, GS.a_))
+                .with(function!(GS.ose, W_.x__) * function!(GS.ose, W_.y__))
+                .replace(function!(GS.emr_vec, W_.x__, W_.a_) * function!(GS.ose, W_.y__, W_.a_))
                 .with(Atom::Zero)
                 .replace(function!(
                     MS.dot,
-                    function!(GS.emr_vec, GS.x_),
-                    function!(GS.ose, GS.y_)
+                    function!(GS.emr_vec, W_.x_),
+                    function!(GS.ose, W_.y_)
                 ))
                 .with(Atom::Zero)
                 .replace(function!(
                     MS.dot,
-                    function!(GS.ose, GS.x_),
-                    function!(GS.ose, GS.y_)
+                    function!(GS.ose, W_.x_),
+                    function!(GS.ose, W_.y_)
                 ))
-                .with(function!(GS.ose, GS.x_) * function!(GS.ose, GS.y_));
+                .with(function!(GS.ose, W_.x_) * function!(GS.ose, W_.y_));
 
             // substitute all OSEs from subgraphs, they are in the form OSE(edge_id, momentum, mass)
             cut_res = cut_res
-                .replace(function!(GS.ose, GS.x_, GS.y_, GS.z_))
+                .replace(function!(GS.ose, W_.x_, W_.y_, W_.z_))
                 .with(
                     (-function!(
                         MS.dot,
-                        function!(GS.emr_vec, GS.y_),
-                        function!(GS.emr_vec, GS.y_)
-                    ) + GS.z_)
+                        function!(GS.emr_vec, W_.y_),
+                        function!(GS.emr_vec, W_.y_)
+                    ) + W_.z_)
                         .sqrt(),
                 );
 
@@ -502,8 +489,8 @@ fn nested_bubble_soft_ct() {
     let result = ufold.expr(&uv_graph, &uv_graph.full_graph()).unwrap().0;
 
     let result = result
-        .replace(function!(GS.emr_mom, GS.x_, GS.y_))
-        .with(GS.y_);
+        .replace(function!(GS.emr_mom, W_.x_, W_.y_))
+        .with(W_.y_);
 
     // println!("{}", ufold.structure_and_res(&uv_graph));
     println!("{:>}", result);
@@ -692,8 +679,8 @@ fn nested_bubble_scalar_quad() {
     println!("{:>}", result);
 
     let result = result
-        .replace(function!(GS.emr_mom, GS.x_, GS.y_))
-        .with(GS.y_);
+        .replace(function!(GS.emr_mom, W_.x_, W_.y_))
+        .with(W_.y_);
 
     // println!("{}", ufold.structure_and_res(&uv_graph));
     println!("{:>}", result);
@@ -862,8 +849,8 @@ fn nested_bubble_scalar() {
     let result = ufold.expr(&uv_graph, &uv_graph.full_graph()).unwrap().0;
 
     let result = result
-        .replace(function!(GS.emr_mom, GS.x_, GS.y_))
-        .with(GS.y_);
+        .replace(function!(GS.emr_mom, W_.x_, W_.y_))
+        .with(W_.y_);
 
     println!(
         "{}",

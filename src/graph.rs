@@ -26,7 +26,7 @@ use crate::{
     },
     signature::{ExternalSignature, LoopExtSignature, SignatureLike},
     subtraction::overlap::OverlapStructure,
-    utils::{self, sorted_vectorize, FloatLike, F, GS},
+    utils::{self, sorted_vectorize, FloatLike, F, GS, W_},
     ProcessSettings, Settings, TropicalSubgraphTableSettings,
 };
 
@@ -402,7 +402,7 @@ impl BareEdge {
                 let dummies: HashSet<_> = atom
                     .pattern_match(&indexidpat, None, None)
                     .filter_map(|a| {
-                        if let AtomView::Num(n) = a[&GS.x_].as_view() {
+                        if let AtomView::Num(n) = a[&W_.x_].as_view() {
                             let e = if let CoefficientView::Natural(a, b) = n.get_coeff_view() {
                                 if b == 1 {
                                     a
@@ -468,10 +468,10 @@ impl BareEdge {
 
                 [
                     atom.replace(&parse!("indexid(x_)").unwrap().to_pattern())
-                        .with(Atom::new_var(GS.x_).to_pattern()),
+                        .with(Atom::new_var(W_.x_).to_pattern()),
                     color_atom
                         .replace(&parse!("indexid(x_)").unwrap().to_pattern())
-                        .with(Atom::new_var(GS.x_).to_pattern()),
+                        .with(Atom::new_var(W_.x_).to_pattern()),
                 ]
             }
         }
