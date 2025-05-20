@@ -1179,7 +1179,7 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
         self.add_additional_factors_to_cff_atom(&product, cut_id)
     }
 
-    fn add_additional_factors_to_cff_atom(&self, cut_atom: &Atom, cut_id: CutId) -> Atom {
+    pub fn add_additional_factors_to_cff_atom(&self, cut_atom: &Atom, cut_id: CutId) -> Atom {
         let t_star_factor = parse!(&format!(
             "tstar^({})",
             3 * self.graph.underlying.get_loop_number()

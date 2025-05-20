@@ -26,7 +26,7 @@ use crate::{
     graph::InteractionVertexInfo,
     model::{ArcVertexRule, ColorStructure, VertexRule},
     new_cs::{CrossSectionGraph, ProcessDefinition},
-    new_graph::{Edge, Graph, Vertex},
+    new_graph::{get_cff_inverse_energy_product_impl, Edge, Graph, Vertex},
     numerator::UnInit,
     signature::LoopExtSignature,
     tests_from_pytest::{load_amplitude_output, load_generic_model},
@@ -50,6 +50,8 @@ pub fn spenso_lor_atom(tag: i32, ind: impl Into<AbstractIndex>, dim: impl Into<D
 
 #[test]
 fn double_triangle_LU() {
+    let with_log_uv = true;
+
     let model = load_generic_model("sm");
     let mut underlying = HedgeGraphBuilder::new();
 
@@ -147,8 +149,12 @@ fn double_triangle_LU() {
             particle: tp.clone(),
             propagator: tprop.clone(),
             internal_index: vec![],
-            dod: -2,
-            num: Atom::one(),
+            dod: if with_log_uv { -1 } else { -2 },
+            num: if with_log_uv {
+                spenso_lor_atom(3, 1, GS.dim)
+            } else {
+                Atom::one()
+            },
         },
         true,
     );
@@ -162,8 +168,12 @@ fn double_triangle_LU() {
             particle: tp.clone(),
             propagator: tprop.clone(),
             internal_index: vec![],
-            dod: -2,
-            num: Atom::one(),
+            dod: if with_log_uv { -1 } else { -2 },
+            num: if with_log_uv {
+                spenso_lor_atom(4, 1, GS.dim)
+            } else {
+                Atom::one()
+            },
         },
         true,
     );
@@ -239,10 +249,15 @@ fn double_triangle_LU() {
 
     let super_uv_graph = UVGraph::from_underlying(&cs.graph.underlying);
     let orientation_id = SuperGraphOrientationID(0);
+    let supergraph_orientation_data = &cs
+        .derived_data
+        .cff_expression
+        .as_ref()
+        .unwrap()
+        .orientation_data[orientation_id];
     let mut sum = Atom::Zero;
 
     for (id, c) in cs.cuts.iter_enumerated() {
-        println!("Cutting {}", id);
         let esurface_id = cs.cut_esurface_id_map[id];
         let cff_cut_expr = &cs
             .derived_data
@@ -265,9 +280,9 @@ fn double_triangle_LU() {
                 .cut_momentum_basis;
             let cut_lmb = &cs.derived_data.lmbs.as_ref().unwrap()[cut_mom_basis_id];
 
-            let mut left_forest = super_uv_graph
-                .wood(&c.left)
-                .unfold(&super_uv_graph, &super_uv_graph.cut_edges);
+            let mut left_wood = super_uv_graph.wood(&c.left);
+
+            let mut left_forest = left_wood.unfold(&super_uv_graph, &super_uv_graph.cut_edges);
             left_forest.compute(&super_uv_graph);
             left_forest.compute_cff(&super_uv_graph, left_orientation_data, &None);
 
@@ -282,9 +297,9 @@ fn double_triangle_LU() {
             let right_amplitude =
                 InternalSubGraph::cleaned_filter_pessimist(c.right.clone(), &super_uv_graph);
 
-            println!("\\left: \n{}", super_uv_graph.dot(&left_amplitude));
+            println!("//left: \n{}", super_uv_graph.dot(&left_amplitude));
 
-            println!("\\right: \n{}", super_uv_graph.dot(&right_amplitude));
+            println!("//right: \n{}", super_uv_graph.dot(&right_amplitude));
             let left_expr = left_forest.local_expr(
                 &super_uv_graph,
                 &left_amplitude,
@@ -298,12 +313,88 @@ fn double_triangle_LU() {
                 right_orientation_data,
             );
 
-            // TODO: add cuts
-            sum += left_expr * right_expr;
+            let cut_inverse_energies = get_cff_inverse_energy_product_impl(&super_uv_graph, &c.cut);
+            let mut cut_res = left_expr * right_expr * cut_inverse_energies;
+
+            // let mut cut_res = cs.add_additional_factors_to_cff_atom(&(left_expr * right_expr), id);
+
+            // add Feynman rules
+            for (_p, _edge_id, d) in super_uv_graph.iter_edges(&c.cut.left) {
+                let orientation = supergraph_orientation_data.orientation.clone();
+                cut_res = cut_res
+                    * &d.data
+                        .num
+                        .replace(function!(GS.emr_mom, GS.x_, GS.x__))
+                        .with_map(move |m| {
+                            let edge_id = i64::try_from(m.get(GS.x_).unwrap().to_atom()).unwrap();
+                            let index = m.get(GS.x__).unwrap().to_atom();
+
+                            let sign = SignOrZero::from(
+                                (&orientation[EdgeIndex::from(edge_id as usize)]).clone(),
+                            ) * 1;
+
+                            function!(GS.ose, edge_id, index) * sign
+                                + function!(GS.emr_vec, edge_id, index)
+                        });
+            }
+
+            // contract all dot products, set all cross terms ose.q3 to 0
+            // MS.dot is a 4d dot product
+            cut_res = cut_res
+                .expand()
+                .replace(function!(GS.emr_vec, GS.x_, GS.y_).npow(2))
+                .with(function!(
+                    MS.dot,
+                    function!(GS.emr_vec, GS.x_),
+                    function!(GS.emr_vec, GS.x_)
+                ))
+                .replace(function!(GS.emr_vec, GS.x_, GS.a_) * function!(GS.emr_vec, GS.y_, GS.a_))
+                .with(function!(
+                    MS.dot,
+                    function!(GS.emr_vec, GS.x_),
+                    function!(GS.emr_vec, GS.y_)
+                ))
+                .replace(function!(GS.ose, GS.x_, GS.y_).npow(2))
+                .with(function!(GS.ose, GS.x_).npow(2))
+                .replace(function!(GS.ose, GS.x_, GS.a_) * function!(GS.ose, GS.y_, GS.a_))
+                .with(function!(GS.ose, GS.x_) * function!(GS.ose, GS.y_))
+                .replace(function!(GS.emr_vec, GS.x_, GS.a_) * function!(GS.ose, GS.y_, GS.a_))
+                .with(Atom::Zero)
+                .replace(function!(
+                    MS.dot,
+                    function!(GS.emr_vec, GS.x_),
+                    function!(GS.ose, GS.y_)
+                ))
+                .with(Atom::Zero)
+                .replace(function!(
+                    MS.dot,
+                    function!(GS.ose, GS.x_),
+                    function!(GS.ose, GS.y_)
+                ))
+                .with(function!(GS.ose, GS.x_) * function!(GS.ose, GS.y_));
+
+            // substitute all OSEs (add minus sign to cancel minus sign from 4d dot product)
+            for (_p, edge_id, d) in super_uv_graph.iter_edges(&c.cut.left) {
+                let mass2 = Atom::new_var(symbol!(d.data.particle.mass.name.as_str())).npow(2);
+                cut_res = cut_res
+                    .replace(function!(GS.ose, usize::from(edge_id) as i64))
+                    .with(
+                        (-function!(
+                            MS.dot,
+                            function!(GS.emr_vec, usize::from(edge_id) as i64),
+                            function!(GS.emr_vec, usize::from(edge_id) as i64)
+                        ) + mass2)
+                            .sqrt(),
+                    );
+            }
+
+            println!("Cut {} result: {:>}", id, cut_res.expand());
+
+            sum += cut_res;
         }
     }
 
-    println!("Sum: {}", sum);
+    println!("Final result: {:>}", sum.expand());
 }
 
 #[test]
