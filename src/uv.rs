@@ -214,7 +214,7 @@ impl UVGraph {
             .iter()
             .map(|(edge, mom)| {
                 let r = Replacement::new(
-                    function!(GS.emr_mom, usize::from(*edge) as i64).to_pattern(),
+                    function!(GS.emr_mom, usize::from(*edge) as i64, GS.x_).to_pattern(),
                     mom.to_pattern(),
                 );
                 r
@@ -265,7 +265,7 @@ impl UVGraph {
             .iter()
             .map(|(edge, mom)| {
                 let r = Replacement::new(
-                    function!(GS.emr_mom, usize::from(*edge) as i64).to_pattern(),
+                    function!(GS.emr_mom, usize::from(*edge) as i64, GS.x_).to_pattern(),
                     mom.to_pattern(),
                 );
                 // println!("Rep:{r}");
@@ -398,7 +398,7 @@ pub struct IntegrandExpr {
 
 impl IntegrandExpr {
     pub fn from_subgraph<S: SubGraph>(subgraph: &S, graph: &UVGraph) -> Self {
-        let num = graph.numerator(subgraph).to_dots();
+        let num = graph.numerator(subgraph);
 
         let den = graph.denominator(subgraph);
 
@@ -516,7 +516,7 @@ pub trait UltravioletGraph {
         }
 
         for (k, v) in edge_rep.iter_mut() {
-            *v = function!(GS.emr_mom, usize::from(*k) as i64, *v);
+            *v = function!(GS.emr_mom, usize::from(*k) as i64, *v, GS.x_);
         }
 
         let mut externals_ids = vec![];
@@ -526,9 +526,9 @@ pub trait UltravioletGraph {
             let ext_id: usize = graph[&ext].into();
             let ext_mom = match ext_sign {
                 SignOrZero::Plus => {
-                    function!(GS.emr_mom, ext_id as i64)
+                    function!(GS.emr_mom, ext_id as i64, GS.x_)
                 }
-                SignOrZero::Minus => -function!(GS.emr_mom, ext_id as i64),
+                SignOrZero::Minus => -function!(GS.emr_mom, ext_id as i64, GS.x_),
                 SignOrZero::Zero => {
                     panic!("Missing external momentum sign")
                 }
@@ -901,7 +901,7 @@ impl Approximation {
                 .iter()
                 .map(|(edge, mom)| {
                     let r = Replacement::new(
-                        function!(GS.emr_mom, usize::from(*edge) as i64).to_pattern(),
+                        function!(GS.emr_mom, usize::from(*edge) as i64, GS.x_).to_pattern(),
                         mom.to_pattern(),
                     );
                     // println!("Rep:{r}");
@@ -988,7 +988,7 @@ impl Approximation {
         let contracted =
             s * IntegrandExpr::from_subgraph(&amplitude.subtract(&self.subgraph), graph).integrand;
 
-        Some(t * contracted)
+        Some((t * contracted).replace_multiple(&graph.lmb_replacement))
     }
 
     pub fn cff(
@@ -1018,10 +1018,7 @@ impl Approximation {
             &contracted_edges,
             &orientation.orientation,
         )
-        .unwrap(); //* Cff::from_subgraph(
-                   //     &graph.full_node().internal_graph.subtract(&self.subgraph),
-                   //     graph,
-                   // );
+        .unwrap();
 
         Some(t * contracted)
     }
@@ -1137,8 +1134,8 @@ impl ApproxOp {
             );
             for e in external_edges {
                 atomarg = atomarg
-                    .replace(function!(GS.emr_mom, usize::from(*e) as i64))
-                    .with(function!(GS.emr_mom, usize::from(*e) as i64) * GS.rescale);
+                    .replace(function!(GS.emr_mom, usize::from(*e) as i64, GS.x___))
+                    .with(function!(GS.emr_mom, usize::from(*e) as i64, GS.x___) * GS.rescale);
             }
 
             let soft_ct = graph
@@ -1169,9 +1166,9 @@ impl ApproxOp {
             }
 
             atomarg = atomarg
-                .replace(parse!("symbolica_community::dot(t*x__,y_)").unwrap())
+                .replace(function!(MS.dot, GS.rescale * GS.x_, GS.y_))
                 .repeat()
-                .with(parse!("t*symbolica_community::dot(x__,y_)").unwrap());
+                .with(function!(MS.dot, GS.x_, GS.y_) * GS.rescale);
 
             // println!("atomarg:{}", atomarg);
 
@@ -1519,7 +1516,7 @@ impl Forest {
                     .unwrap();
         }
 
-        // println!("SUM {:>}", sum.expand());
+        //println!("SUM {:>}", sum.expand());
 
         sum.expand().map_terms_single_core(|t| {
             let mut data = Vec::new();
@@ -1536,11 +1533,7 @@ impl Forest {
                 if let Some(mass_map) = m
                     .get(&GS.b_)
                     .unwrap()
-                    .pattern_match(
-                        &(function!(MS.dot, GS.x__) - GS.x_).to_pattern(),
-                        None,
-                        None,
-                    )
+                    .pattern_match(&(function!(MS.dot, GS.y_) - GS.x_).to_pattern(), None, None)
                     .next()
                 {
                     mass_sq = mass_map.get(&GS.x_).unwrap().clone();
@@ -1551,60 +1544,39 @@ impl Forest {
 
             let orientation = orientation.clone();
 
-            // FIXME: Remove K from Qs! We need to keep the index
             // remove all denominators
+            let mut expr = t.replace(function!(GS.den, GS.y_)).with(Atom::new_num(1));
+
             // split momenta into energies and spatial part
-            let mut expr = t
-                .replace(function!(GS.den, GS.x__))
-                .with(Atom::new_num(1))
-                .replace(function!(GS.emr_mom, GS.x_, GS.x___))
-                .with_map(move |m| {
-                    let edge_id = i64::try_from(m.get(GS.x_).unwrap().to_atom()).unwrap();
-                    let rest = m.get(GS.x___).unwrap().to_atom();
-
-                    let sign = SignOrZero::from(
-                        orientation.orientation[EdgeIndex::from(edge_id as usize)].clone(),
-                    ) * 1;
-
-                    function!(GS.ose, edge_id, rest) * sign + function!(GS.emr_vec, edge_id, rest)
-                })
-                .replace(function!(
-                    MS.dot,
-                    function!(GS.emr_vec, GS.x_),
-                    function!(GS.ose, GS.y_)
-                ))
-                .with(Atom::Zero)
-                .replace(function!(
-                    MS.dot,
-                    function!(GS.ose, GS.x_),
-                    function!(GS.ose, GS.y_)
-                ))
-                .with(function!(GS.ose, GS.x_) * function!(GS.ose, GS.y_));
-
+            // modified OSE represented as OSE(edge_id, momentum, mass_sq, index)
+            // in the next step, a mass will be added
             // take derivative of raised propagators
-            // write the on-shell energies with the proper mass
-            for (edge_id, pow, new_mass_sq) in &data {
-                for _ in 2..*pow {
+            for (edge_id, pow, new_mass_sq) in data {
+                let orientation = orientation.orientation.clone();
+                expr = expr
+                    .replace(function!(GS.emr_mom, edge_id, GS.y_, GS.a_))
+                    .with_map(move |m| {
+                        let momentum = m.get(GS.y_).unwrap().to_atom();
+                        let index = m.get(GS.a_).unwrap().to_atom();
+
+                        let sign = SignOrZero::from(
+                            orientation[EdgeIndex::from(edge_id as usize)].clone(),
+                        ) * 1;
+
+                        function!(GS.ose, edge_id, momentum, new_mass_sq, index) * sign
+                            + function!(GS.emr_vec, momentum, index)
+                    });
+
+                for _ in 2..pow {
                     expr = expr
-                        .replace(function!(GS.ose, *edge_id, GS.x___))
-                        .with(function!(GS.ose, *edge_id, GS.x___) * GS.rescale) // TODO: check if derivative is in the correct quantity
+                        .replace(function!(GS.ose, edge_id, GS.x___))
+                        .with(function!(GS.ose, edge_id, GS.x___) * GS.rescale) // TODO: check if derivative is in the correct quantity
                         .derivative(GS.rescale)
                         .replace(GS.rescale)
                         .with(Atom::new_num(1));
                 }
 
-                expr = expr / Integer::factorial(*pow as u32 - 1);
-
-                // add minus sign to cancel the minus sign coming from the 4d dot product
-                expr = expr.replace(function!(GS.ose, *edge_id, GS.x___)).with(
-                    (-function!(
-                        MS.dot,
-                        function!(GS.emr_vec, edge_id),
-                        function!(GS.emr_vec, edge_id),
-                        GS.x___
-                    ) + new_mass_sq)
-                        .sqrt(),
-                );
+                expr = expr / Integer::factorial(pow as u32 - 1);
             }
 
             expr
