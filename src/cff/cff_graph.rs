@@ -156,11 +156,6 @@ impl VertexSet {
     }
 
     fn join(&self, other: &VertexSet) -> VertexSet {
-        assert!(
-            self.vertex_set & other.vertex_set == 0,
-            "Vertex sets overlap"
-        );
-
         VertexSet {
             vertex_set: self.vertex_set | other.vertex_set,
         }

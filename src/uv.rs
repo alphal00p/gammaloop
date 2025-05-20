@@ -290,7 +290,6 @@ impl UVGraph {
         .map(|a| a.into_iter().map(|c| c.internal_graph(self)).collect())
         .unwrap();
 
-        // println!("{}", self.base_dot());
         let mut spinneys: AHashSet<_> = InternalSubGraph::all_ops_iterative_filter_map(
             &all_subcycles,
             &|a, b| a.union(b),
@@ -367,7 +366,7 @@ impl UVGraph {
     fn dot<S: SubGraph>(&self, subgraph: &S) -> String {
         self.dot_impl(
             subgraph,
-            format!("{}", self.dod(subgraph)),
+            format!("dod_of_subgraph={}", self.dod(subgraph)),
             &|e| Some(format!("label=\"{}\"", e.dod)),
             &|n| Some(format!("label=\"{}\"", n.dod)),
         )
@@ -403,7 +402,6 @@ impl IntegrandExpr {
 
         let den = graph.denominator(subgraph);
 
-        println!("Dens: {}", graph.denominator(subgraph));
         IntegrandExpr {
             integrand: num / den,
         }
@@ -1521,7 +1519,7 @@ impl Forest {
                     .unwrap();
         }
 
-        println!("{:>}", sum.expand());
+        // println!("SUM {:>}", sum.expand());
 
         sum.expand().map_terms_single_core(|t| {
             let mut data = Vec::new();
@@ -1539,7 +1537,7 @@ impl Forest {
                     .get(&GS.b_)
                     .unwrap()
                     .pattern_match(
-                        &(function!(MS.dot, GS.x__) + GS.x_).to_pattern(),
+                        &(function!(MS.dot, GS.x__) - GS.x_).to_pattern(),
                         None,
                         None,
                     )
@@ -1553,40 +1551,43 @@ impl Forest {
 
             let orientation = orientation.clone();
 
+            // FIXME: Remove K from Qs! We need to keep the index
             // remove all denominators
-            // splot dot products into energies and spatial part
-            // eta(1)-> sqrt(Q(1,cind(0))^2-mUV^2)
+            // split momenta into energies and spatial part
             let mut expr = t
                 .replace(function!(GS.den, GS.x__))
                 .with(Atom::new_num(1))
-                .replace(function!(GS.emr_mom, GS.x_, GS.x__))
-                .with(function!(GS.emr_mom, GS.x_))
-                .replace(function!(
-                    MS.dot,
-                    function!(GS.emr_mom, GS.x_),
-                    function!(GS.emr_mom, GS.y_)
-                ))
+                .replace(function!(GS.emr_mom, GS.x_, GS.x___))
                 .with_map(move |m| {
-                    let edge_1 = i64::try_from(m.get(GS.x_).unwrap().to_atom()).unwrap();
-                    let edge_2 = i64::try_from(m.get(GS.y_).unwrap().to_atom()).unwrap();
+                    let edge_id = i64::try_from(m.get(GS.x_).unwrap().to_atom()).unwrap();
+                    let rest = m.get(GS.x___).unwrap().to_atom();
 
                     let sign = SignOrZero::from(
-                        orientation.orientation[EdgeIndex::from(edge_1 as usize)].clone()
-                            * orientation.orientation[EdgeIndex::from(edge_2 as usize)].clone(),
+                        orientation.orientation[EdgeIndex::from(edge_id as usize)].clone(),
                     ) * 1;
 
-                    function!(GS.ose, edge_1) * function!(GS.ose, edge_2) * sign
-                        - function!(GS.dot, edge_1, edge_2)
-                });
+                    function!(GS.ose, edge_id, rest) * sign + function!(GS.emr_vec, edge_id, rest)
+                })
+                .replace(function!(
+                    MS.dot,
+                    function!(GS.emr_vec, GS.x_),
+                    function!(GS.ose, GS.y_)
+                ))
+                .with(Atom::Zero)
+                .replace(function!(
+                    MS.dot,
+                    function!(GS.ose, GS.x_),
+                    function!(GS.ose, GS.y_)
+                ))
+                .with(function!(GS.ose, GS.x_) * function!(GS.ose, GS.y_));
 
             // take derivative of raised propagators
             // write the on-shell energies with the proper mass
             for (edge_id, pow, new_mass_sq) in &data {
-                println!("{}", expr);
                 for _ in 2..*pow {
                     expr = expr
-                        .replace(function!(GS.ose, *edge_id))
-                        .with(function!(GS.ose, *edge_id) * GS.rescale) // TODO: check if derivative is in the correct quantity
+                        .replace(function!(GS.ose, *edge_id, GS.x___))
+                        .with(function!(GS.ose, *edge_id, GS.x___) * GS.rescale) // TODO: check if derivative is in the correct quantity
                         .derivative(GS.rescale)
                         .replace(GS.rescale)
                         .with(Atom::new_num(1));
@@ -1594,9 +1595,16 @@ impl Forest {
 
                 expr = expr / Integer::factorial(*pow as u32 - 1);
 
-                expr = expr
-                    .replace(function!(GS.ose, *edge_id))
-                    .with((function!(GS.dot, *edge_id, *edge_id) - new_mass_sq).sqrt());
+                // add minus sign to cancel the minus sign coming from the 4d dot product
+                expr = expr.replace(function!(GS.ose, *edge_id, GS.x___)).with(
+                    (-function!(
+                        MS.dot,
+                        function!(GS.emr_vec, edge_id),
+                        function!(GS.emr_vec, edge_id),
+                        GS.x___
+                    ) + new_mass_sq)
+                        .sqrt(),
+                );
             }
 
             expr
