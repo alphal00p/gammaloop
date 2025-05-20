@@ -242,6 +242,7 @@ fn double_triangle_LU() {
     let mut sum = Atom::Zero;
 
     for (id, c) in cs.cuts.iter_enumerated() {
+        println!("Cutting {}", id);
         let esurface_id = cs.cut_esurface_id_map[id];
         let cff_cut_expr = &cs
             .derived_data
@@ -276,9 +277,26 @@ fn double_triangle_LU() {
             right_forest.compute(&super_uv_graph);
             right_forest.compute_cff(&super_uv_graph, right_orientation_data, &None);
 
-            let left_expr = left_forest.local_expr(&super_uv_graph, &None, left_orientation_data);
-            let right_expr =
-                right_forest.local_expr(&super_uv_graph, &None, right_orientation_data);
+            let left_amplitude =
+                InternalSubGraph::cleaned_filter_pessimist(c.left.clone(), &super_uv_graph);
+            let right_amplitude =
+                InternalSubGraph::cleaned_filter_pessimist(c.right.clone(), &super_uv_graph);
+
+            println!("\\left: \n{}", super_uv_graph.dot(&left_amplitude));
+
+            println!("\\right: \n{}", super_uv_graph.dot(&right_amplitude));
+            let left_expr = left_forest.local_expr(
+                &super_uv_graph,
+                &left_amplitude,
+                &None,
+                left_orientation_data,
+            );
+            let right_expr = right_forest.local_expr(
+                &super_uv_graph,
+                &right_amplitude,
+                &None,
+                right_orientation_data,
+            );
 
             // TODO: add cuts
             sum += left_expr * right_expr;
@@ -363,7 +381,7 @@ fn nested_bubble_soft_ct() {
     // println!("unfolded : {}", ufold.show_structure(&uv_graph).unwrap());
     // println!("graph: {}", ufold.graphs());
 
-    let result = ufold.expr(&uv_graph).unwrap().0;
+    let result = ufold.expr(&uv_graph, &uv_graph.full_graph()).unwrap().0;
 
     let result = result
         .replace(function!(GS.emr_mom, GS.x_, GS.y_))
@@ -551,7 +569,7 @@ fn nested_bubble_scalar_quad() {
     // println!("unfolded : {}", ufold.show_structure(&uv_graph).unwrap());
     // println!("graph: {}", ufold.graphs());
 
-    let result = ufold.expr(&uv_graph).unwrap().0;
+    let result = ufold.expr(&uv_graph, &uv_graph.full_graph()).unwrap().0;
 
     println!("{:>}", result);
 
@@ -723,13 +741,16 @@ fn nested_bubble_scalar() {
     //println!("unfolded : {}", ufold.show_structure(&uv_graph).unwrap());
     //println!("graph: {}", ufold.graphs());
 
-    let result = ufold.expr(&uv_graph).unwrap().0;
+    let result = ufold.expr(&uv_graph, &uv_graph.full_graph()).unwrap().0;
 
     let result = result
         .replace(function!(GS.emr_mom, GS.x_, GS.y_))
         .with(GS.y_);
 
-    println!("{}", ufold.structure_and_res(&uv_graph));
+    println!(
+        "{}",
+        ufold.structure_and_res(&uv_graph, &uv_graph.full_graph())
+    );
     println!("RESULT {:>}", result);
 
     let t = symbol!("t");
@@ -866,12 +887,20 @@ fn disconnect_forest_scalar() {
     // assert_eq!(152, ufold.n_terms());
     ufold.compute(&uv_graph);
 
-    println!("unfolded : {}", ufold.show_structure(&uv_graph).unwrap());
+    println!(
+        "unfolded : {}",
+        ufold
+            .show_structure(&uv_graph, &uv_graph.full_graph())
+            .unwrap()
+    );
     println!("graph: {}", ufold.graphs());
 
-    let result = ufold.expr(&uv_graph).unwrap().0;
+    let result = ufold.expr(&uv_graph, &uv_graph.full_graph()).unwrap().0;
 
-    println!("{}", ufold.structure_and_res(&uv_graph));
+    println!(
+        "{}",
+        ufold.structure_and_res(&uv_graph, &uv_graph.full_graph())
+    );
     println!("{:>}", result);
 
     let exp = result
@@ -1046,7 +1075,12 @@ fn easy() {
     // assert_eq!(152, ufold.n_terms());
     ufold.compute(&uv_graph);
 
-    println!("unfolded : {}", ufold.show_structure(&uv_graph).unwrap());
+    println!(
+        "unfolded : {}",
+        ufold
+            .show_structure(&uv_graph, &uv_graph.full_graph())
+            .unwrap()
+    );
     println!("graph: {}", ufold.graphs());
 
     // let structure = wood.unfold(&uv_graph,&uv_graph.cut_edges);
@@ -1078,7 +1112,12 @@ fn tbt() {
     let mut ufold = wood.unfold(&uv_graph, &uv_graph.cut_edges);
     ufold.compute(&uv_graph);
 
-    println!("unfolded : {}", ufold.show_structure(&uv_graph).unwrap());
+    println!(
+        "unfolded : {}",
+        ufold
+            .show_structure(&uv_graph, &uv_graph.full_graph())
+            .unwrap()
+    );
     println!("graph: {}", ufold.graphs());
 
     // let structure = wood.unfold(&uv_graph,&uv_graph.cut_edges);
@@ -1146,7 +1185,12 @@ fn bugblatter_forest() {
     assert_eq!(152, ufold.n_terms());
     ufold.compute(&uv_graph);
 
-    println!("unfolded : {}", ufold.show_structure(&uv_graph).unwrap());
+    println!(
+        "unfolded : {}",
+        ufold
+            .show_structure(&uv_graph, &uv_graph.full_graph())
+            .unwrap()
+    );
     println!("graph: {}", ufold.graphs());
 
     // let structure = wood.unfold(&uv_graph,&uv_graph.cut_edges);
@@ -1202,7 +1246,12 @@ fn kaapo_triplering() {
     let mut ufold = wood.unfold(&uv_graph, &uv_graph.cut_edges);
     ufold.compute(&uv_graph);
 
-    println!("unfolded : {}", ufold.show_structure(&uv_graph).unwrap());
+    println!(
+        "unfolded : {}",
+        ufold
+            .show_structure(&uv_graph, &uv_graph.full_graph())
+            .unwrap()
+    );
     println!("graph: {}", ufold.graphs());
 
     assert_eq!(242, ufold.n_terms());
@@ -1264,7 +1313,12 @@ fn kaapo_quintic_scalar() {
     let mut ufold = wood.unfold(&uv_graph, &uv_graph.cut_edges);
     ufold.compute(&uv_graph);
 
-    println!("unfolded : {}", ufold.show_structure(&uv_graph).unwrap());
+    println!(
+        "unfolded : {}",
+        ufold
+            .show_structure(&uv_graph, &uv_graph.full_graph())
+            .unwrap()
+    );
     println!("graph: {}", ufold.graphs());
 
     assert_eq!(248, ufold.n_terms());
