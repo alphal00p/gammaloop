@@ -180,7 +180,7 @@ fn double_triangle_LU() {
             num: Atom::one(),
         },
         false,
-        Flow::Source,
+        Flow::Sink,
     );
 
     underlying.add_external_edge(
@@ -195,7 +195,7 @@ fn double_triangle_LU() {
             num: Atom::one(),
         },
         false,
-        Flow::Sink,
+        Flow::Source,
     );
 
     let underlying = underlying.build();
@@ -228,7 +228,7 @@ fn double_triangle_LU() {
         &model,
         &ProcessDefinition {
             initial_pdgs: vec![hpdg],
-            final_pdgs_lists: vec![vec![tpdg, tpdg], vec![tpdg, tpdg, hpdg], vec![hpdg, hpdg]],
+            final_pdgs_lists: vec![vec![tpdg, -tpdg], vec![tpdg, -tpdg, hpdg], vec![hpdg, hpdg]],
             n_unresolved: 0,
             unresolved_cut_content: HashSet::new(),
             amplitude_filters: FeynGenFilters(vec![]),
