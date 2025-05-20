@@ -21,7 +21,7 @@ use symbolica_community::physics::algebraic_simplification::representations::Bis
 use crate::graph::{BareGraph, VertexInfo};
 use crate::model::normalise_complex;
 use crate::momentum::Polarization;
-use crate::utils::{f128, GS, TENSORLIB};
+use crate::utils::{f128, GS, TENSORLIB, W_};
 use crate::{
     graph::EdgeType,
     model::Model,
@@ -1165,10 +1165,10 @@ impl<T: Copy + Default> Numerator<SymbolicExpression<T>> {
 
         self.state.colorless.iter_flat().for_each(|(_, v)| {
             for p in &pats {
-                for a in v.pattern_match(&p.to_symbolic([GS.x_, GS.y_]).to_pattern(), None, None) {
+                for a in v.pattern_match(&p.to_symbolic([W_.x_, W_.y_]).to_pattern(), None, None) {
                     indices_map.insert(
-                        p.to_symbolic([a[&GS.x_].clone(), a[&GS.y_].clone()]),
-                        p.to_symbolic([a[&GS.x_].clone()]),
+                        p.to_symbolic([a[&W_.x_].clone(), a[&W_.y_].clone()]),
+                        p.to_symbolic([a[&W_.x_].clone()]),
                     );
                 }
             }

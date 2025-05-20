@@ -58,7 +58,7 @@ use crate::numerator::SymbolicExpression;
 use crate::numerator::{AtomStructure, Network};
 use crate::numerator::{ExpressionState, GlobalPrefactor};
 use crate::numerator::{Numerator, StandardTensorNet};
-use crate::utils::{self, GS, TENSORLIB};
+use crate::utils::{self, GS, TENSORLIB, W_};
 use crate::{
     feyngen::{FeynGenFilter, GenerationType},
     graph::BareGraph,
@@ -3820,7 +3820,7 @@ impl FeynGen {
                     for head in LibraryRep::all_self_duals()
                         .chain(LibraryRep::all_inline_metrics())
                         .chain(LibraryRep::all_dualizables())
-                        .map(|a| a.to_symbolic([GS.a__]).to_pattern())
+                        .map(|a| a.to_symbolic([W_.a__]).to_pattern())
                     {
                         if r.pattern_match(&head, None, None).next().is_some() {
                             return None;
@@ -4491,9 +4491,9 @@ impl ProcessedNumeratorForComparison {
 
         if !fully_numerical_substitution {
             let variable = function!(
-                GS.f_,
-                Atom::new_var(GS.y_),
-                function!(symbol!("cind"), Atom::new_var(GS.x_))
+                W_.f_,
+                Atom::new_var(W_.y_),
+                function!(symbol!("cind"), Atom::new_var(W_.x_))
             );
             let pat = variable.to_pattern();
 
@@ -4551,12 +4551,12 @@ impl ProcessedNumeratorForComparison {
                                 },
                             );
                             for m in res.pattern_match(
-                                &function!(symbol!("MARKER_TO_REPLACE"), Atom::new_var(GS.x_))
+                                &function!(symbol!("MARKER_TO_REPLACE"), Atom::new_var(W_.x_))
                                     .to_pattern(),
                                 None,
                                 None,
                             ) {
-                                reps.insert(m.get(&GS.x_).unwrap().to_owned());
+                                reps.insert(m.get(&W_.x_).unwrap().to_owned());
                             }
                         }
                     }

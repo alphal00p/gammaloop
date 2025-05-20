@@ -1,7 +1,7 @@
 use crate::graph::Shifts;
 use crate::momentum::{FourMomentum, Helicity, Polarization};
 use crate::numerator::ufo::UFO;
-use crate::utils::{self, FloatLike, F};
+use crate::utils::{self, FloatLike, F, W_};
 use crate::GammaLoopContext;
 use crate::HasModel;
 use bincode::{Decode, Encode};
@@ -476,12 +476,12 @@ impl VertexRule {
     }
 
     fn n_dummy_atom(atom: &Atom) -> usize {
-        let pat = function!(GS.f_, GS.x___, GS.x_, GS.y___).to_pattern();
+        let pat = function!(W_.f_, W_.x___, W_.x_, W_.y___).to_pattern();
 
         let n_dummy = atom
             .pattern_match(&pat, None, None)
             .filter_map(|a| {
-                if let AtomView::Num(n) = a[&GS.x_].as_view() {
+                if let AtomView::Num(n) = a[&W_.x_].as_view() {
                     let e = if let CoefficientView::Natural(a, b) = n.get_coeff_view() {
                         if b == 1 {
                             a
