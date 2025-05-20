@@ -15,6 +15,7 @@ use crate::{
     graph::VertexInfo,
     model::{ArcParticle, ArcPropagator},
     momentum::Sign,
+    new_gammaloop_integrand::amplitude_integrand,
     new_graph::{Edge, LoopMomentumBasis, Vertex},
     utils::GS,
 };
@@ -351,7 +352,7 @@ impl UVGraph {
         num
     }
 
-    fn denominator(&self, subgraph: &InternalSubGraph) -> Atom {
+    fn denominator<S: SubGraph>(&self, subgraph: &S) -> Atom {
         let mut den = Atom::new_num(1);
 
         for (pair, eid, d) in self.iter_edges(subgraph) {
@@ -397,12 +398,12 @@ pub struct IntegrandExpr {
 }
 
 impl IntegrandExpr {
-    pub fn from_subgraph(subgraph: &InternalSubGraph, graph: &UVGraph) -> Self {
+    pub fn from_subgraph<S: SubGraph>(subgraph: &S, graph: &UVGraph) -> Self {
         let num = graph.numerator(subgraph).to_dots();
 
         let den = graph.denominator(subgraph);
 
-        // println!("{}", graph.denominator(subgraph).0);
+        println!("Dens: {}", graph.denominator(subgraph));
         IntegrandExpr {
             integrand: num / den,
         }
@@ -945,7 +946,6 @@ impl Approximation {
         &self,
         dependent: &Self,
         orientation: &OrientationData,
-
         canonize_esurface: &Option<ShiftRewrite>,
         graph: &UVGraph,
     ) -> ApproxOp {
@@ -967,14 +967,15 @@ impl Approximation {
     }
 
     /// Get final expression in the forest sum
-    pub fn expr(&self, graph: &UVGraph) -> Option<SerializableAtom> {
+    pub fn unwrapped_expr(
+        &self,
+        graph: &UVGraph,
+        amplitude: &InternalSubGraph,
+    ) -> Option<SerializableAtom> {
         let (t, s) = self.t_op.expr()?;
 
-        let contracted = s * IntegrandExpr::from_subgraph(
-            &graph.full_node().internal_graph.subtract(&self.subgraph),
-            graph,
-        )
-        .integrand;
+        let contracted =
+            s * IntegrandExpr::from_subgraph(&amplitude.subtract(&self.subgraph), graph).integrand;
 
         Some(
             Self::simplify_notation(&(t * contracted))
@@ -983,10 +984,20 @@ impl Approximation {
         )
     }
 
+    pub fn expr(&self, graph: &UVGraph, amplitude: &InternalSubGraph) -> Option<Atom> {
+        let (t, s) = self.t_op.expr()?;
+
+        let contracted =
+            s * IntegrandExpr::from_subgraph(&amplitude.subtract(&self.subgraph), graph).integrand;
+
+        Some(t * contracted)
+    }
+
     pub fn cff(
         &self,
         graph: &UVGraph,
         canonize_esurface: &Option<ShiftRewrite>,
+        amplitude: &InternalSubGraph,
         orientation: &OrientationData,
     ) -> Option<Atom> {
         let (t, s) = self.cff_expr.expr()?;
@@ -1004,7 +1015,7 @@ impl Approximation {
 
         let contracted = s * generate_uv_cff(
             graph,
-            &graph.full_filter(),
+            amplitude,
             canonize_esurface,
             &contracted_edges,
             &orientation.orientation,
@@ -1017,10 +1028,14 @@ impl Approximation {
         Some(t * contracted)
     }
 
-    pub fn simple_expr(&self, graph: &UVGraph) -> Option<SerializableAtom> {
+    pub fn simple_expr(
+        &self,
+        graph: &UVGraph,
+        amplitude: &InternalSubGraph,
+    ) -> Option<SerializableAtom> {
         let simple_approx = self.simple_approx.as_ref()?;
 
-        Some((simple_approx.sign * simple_approx.expr(&graph.full_filter())).into())
+        Some((simple_approx.sign * simple_approx.expr(&amplitude.filter)).into())
     }
 }
 
@@ -1480,10 +1495,11 @@ impl Forest {
         }
     }
 
-    pub fn expr(&self, graph: &UVGraph) -> Option<SerializableAtom> {
+    ///4d expr with unwrapped dens
+    pub fn expr(&self, graph: &UVGraph, amplitude: &InternalSubGraph) -> Option<SerializableAtom> {
         let mut sum = Atom::new_num(0).into();
         for (_, n) in &self.dag.nodes {
-            sum = sum + n.data.expr(graph)?;
+            sum = sum + n.data.unwrapped_expr(graph, amplitude)?;
         }
 
         Some(sum)
@@ -1492,14 +1508,20 @@ impl Forest {
     pub fn local_expr(
         &self,
         graph: &UVGraph,
+        amplitude: &InternalSubGraph,
         canonize_esurface: &Option<ShiftRewrite>,
         orientation: &OrientationData,
     ) -> Atom {
         let mut sum = Atom::new();
+
         for (_, n) in &self.dag.nodes {
-            sum += n.data.expr(graph).unwrap().0
-                * n.data.cff(graph, canonize_esurface, orientation).unwrap();
+            sum += n.data.expr(graph, amplitude).unwrap()
+                * n.data
+                    .cff(graph, canonize_esurface, amplitude, orientation)
+                    .unwrap();
         }
+
+        println!("{:>}", sum.expand());
 
         sum.expand().map_terms_single_core(|t| {
             let mut data = Vec::new();
@@ -1511,7 +1533,7 @@ impl Forest {
                 None,
             ) {
                 let eid: i64 = m.get(&GS.a_).unwrap().try_into().unwrap();
-                let pow = -i64::try_from(m.get(&GS.a_).unwrap()).unwrap();
+                let pow = -i64::try_from(m.get(&GS.c_).unwrap()).unwrap();
                 let mut mass_sq = Atom::Zero;
                 if let Some(mass_map) = m
                     .get(&GS.b_)
@@ -1560,6 +1582,7 @@ impl Forest {
             // take derivative of raised propagators
             // write the on-shell energies with the proper mass
             for (edge_id, pow, new_mass_sq) in &data {
+                println!("{}", expr);
                 for _ in 2..*pow {
                     expr = expr
                         .replace(function!(GS.ose, *edge_id))
@@ -1580,23 +1603,27 @@ impl Forest {
         })
     }
 
-    pub fn simple_expr(&self, graph: &UVGraph) -> Option<SerializableAtom> {
+    pub fn simple_expr(
+        &self,
+        graph: &UVGraph,
+        amplitude: &InternalSubGraph,
+    ) -> Option<SerializableAtom> {
         let mut sum = Atom::new_num(0).into();
         for (_, n) in &self.dag.nodes {
-            sum = sum + n.data.simple_expr(graph)?;
+            sum = sum + n.data.simple_expr(graph, amplitude)?;
         }
 
         Some(sum)
     }
 
-    pub fn structure_and_res(&self, graph: &UVGraph) -> String {
+    pub fn structure_and_res(&self, graph: &UVGraph, amplitude: &InternalSubGraph) -> String {
         let mut out = String::new();
 
         for (_, n) in &self.dag.nodes {
             out.push_str(&format!(
                 "{}:{}\n",
-                n.data.simple_expr(graph).unwrap(),
-                n.data.expr(graph).unwrap()
+                n.data.simple_expr(graph, amplitude).unwrap(),
+                n.data.expr(graph, amplitude).unwrap()
             ));
         }
         out
@@ -1607,12 +1634,12 @@ impl Forest {
             .to_dot_impl(&|n| format!("label=S_{}", n.data.subgraph.string_label()))
     }
 
-    pub fn show_structure(&self, graph: &UVGraph) -> Option<String> {
+    pub fn show_structure(&self, graph: &UVGraph, amplitude: &InternalSubGraph) -> Option<String> {
         let mut out = String::new();
 
         out.push_str(
             &self
-                .simple_expr(graph)?
+                .simple_expr(graph, amplitude)?
                 .0
                 .printer(PrintOptions {
                     terms_on_new_line: true,

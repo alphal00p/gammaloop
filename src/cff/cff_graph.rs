@@ -905,7 +905,7 @@ impl CFFGenerationGraph {
                                 }
                                 Orientation::Undirected => {
                                     return Err(eyre!(
-                                        "undirected edge found, edge_id: {}, subgraph: \n {}",
+                                        "undirected edge found for source split, edge_id: {}, subgraph: \n {}",
                                         edge_index,
                                         graph.dot(subgraph)
                                     ))
@@ -923,7 +923,7 @@ impl CFFGenerationGraph {
                                 }
                                 Orientation::Undirected => {
                                     return Err(eyre!(
-                                        "undirected edge found, edge_id: {}, subgraph: \n {}",
+                                        "undirected edge found for sink split, edge_id: {}, subgraph: \n {}",
                                         edge_index,
                                         graph.dot(subgraph)
                                     ))
