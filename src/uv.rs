@@ -327,8 +327,10 @@ impl UVGraph {
             num = num * &n.num;
         }
 
-        for e in self.iter_internal_edge_data(subgraph) {
-            num = num * &e.data.num;
+        for (pair, _eid, d) in self.iter_edges(subgraph) {
+            if matches!(pair, HedgePair::Paired { .. }) {
+                num = num * &d.data.num;
+            }
         }
 
         num.into()
@@ -345,9 +347,12 @@ impl UVGraph {
             num = num * &n.num;
         }
 
-        for e in self.iter_internal_edge_data(subgraph) {
-            num = num * &e.data.num;
+        for (pair, _eid, d) in self.iter_edges(subgraph) {
+            if matches!(pair, HedgePair::Paired { .. }) {
+                num = num * &d.data.num;
+            }
         }
+
         num
     }
 
@@ -491,7 +496,7 @@ pub trait UltravioletGraph {
         for loop_edge in &lmb {
             let (_, p) = graph[loop_edge];
             let loop_id: usize = (*loop_edge).into();
-            let loop_mom = function!(GS.loop_mom, loop_id as i64);
+            let loop_mom = function!(GS.emr_mom, loop_id as i64);
 
             if let Some(c) = trav_tree.get_cycle(p.any_hedge(), graph) {
                 if let HedgePair::Paired { source, .. } = p {
@@ -1516,9 +1521,10 @@ impl Forest {
                     .unwrap();
         }
 
-        //println!("SUM {:>}", sum.expand());
+        println!("SUM {:>}", sum.expand());
 
         sum.expand().map_terms_single_core(|t| {
+            let mut expr = t.to_owned();
             let mut data = Vec::new();
             for m in t.pattern_match(
                 &function!(GS.den, GS.a_, GS.b_)
@@ -1529,42 +1535,65 @@ impl Forest {
             ) {
                 let eid: i64 = m.get(&GS.a_).unwrap().try_into().unwrap();
                 let pow = -i64::try_from(m.get(&GS.c_).unwrap()).unwrap();
-                let mut mass_sq = Atom::Zero;
+                let mass_sq;
+                let momentum;
                 if let Some(mass_map) = m
                     .get(&GS.b_)
                     .unwrap()
-                    .pattern_match(&(function!(MS.dot, GS.y_) - GS.x_).to_pattern(), None, None)
+                    .pattern_match(
+                        &(function!(MS.dot, GS.y_, GS.y_) - GS.x_).to_pattern(),
+                        None,
+                        None,
+                    )
                     .next()
                 {
                     mass_sq = mass_map.get(&GS.x_).unwrap().clone();
+                    momentum = mass_map.get(&GS.y_).unwrap().clone();
+                } else {
+                    let mm = m
+                        .get(&GS.b_)
+                        .unwrap()
+                        .pattern_match(&(function!(MS.dot, GS.y_, GS.y_)).to_pattern(), None, None)
+                        .next()
+                        .unwrap();
+
+                    momentum = mm.get(&GS.y_).unwrap().clone();
+                    mass_sq = Atom::Zero;
                 };
 
-                data.push((eid, pow, mass_sq));
+                expr = expr
+                    .replace(function!(GS.den, eid, GS.y__))
+                    .with(Atom::new_num(1));
+
+                data.push((eid, pow, momentum, mass_sq));
             }
 
             let orientation = orientation.clone();
-
-            // remove all denominators
-            let mut expr = t.replace(function!(GS.den, GS.y_)).with(Atom::new_num(1));
 
             // split momenta into energies and spatial part
             // modified OSE represented as OSE(edge_id, momentum, mass_sq, index)
             // in the next step, a mass will be added
             // take derivative of raised propagators
-            for (edge_id, pow, new_mass_sq) in data {
+            for (edge_id, pow, momentum, new_mass_sq) in data {
                 let orientation = orientation.orientation.clone();
+                let new_mass_sqm = new_mass_sq.clone();
+                let momentumm = momentum.clone();
+                // TODO: do not store loop momentum in Q() anymore, it can always taken from the denominator?
                 expr = expr
                     .replace(function!(GS.emr_mom, edge_id, GS.y_, GS.a_))
                     .with_map(move |m| {
-                        let momentum = m.get(GS.y_).unwrap().to_atom();
+                        let momentum2 = m.get(GS.y_).unwrap().to_atom();
+                        if momentumm != momentum2 {
+                            println!("BUG: momentum mismatch {} vs {}", momentumm, momentum2);
+                        }
                         let index = m.get(GS.a_).unwrap().to_atom();
 
                         let sign = SignOrZero::from(
                             orientation[EdgeIndex::from(edge_id as usize)].clone(),
                         ) * 1;
 
-                        function!(GS.ose, edge_id, momentum, new_mass_sq, index) * sign
-                            + function!(GS.emr_vec, momentum, index)
+                        function!(GS.ose, edge_id, momentumm, new_mass_sqm, index) * sign
+                            + function!(GS.emr_vec, momentumm, index)
                     });
 
                 for _ in 2..pow {
@@ -1577,6 +1606,14 @@ impl Forest {
                 }
 
                 expr = expr / Integer::factorial(pow as u32 - 1);
+
+                // set OSE from  CFF with the proper momentum and mass
+                expr = expr.replace(function!(GS.ose, edge_id)).with(function!(
+                    GS.ose,
+                    edge_id,
+                    momentum,
+                    new_mass_sq
+                ));
             }
 
             expr
