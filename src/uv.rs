@@ -214,7 +214,7 @@ impl UVGraph {
             .iter()
             .map(|(edge, mom)| {
                 let r = Replacement::new(
-                    function!(GS.emr_mom, usize::from(*edge) as i64, GS.x_).to_pattern(),
+                    function!(GS.emr_mom, usize::from(*edge) as i64, GS.x___).to_pattern(),
                     mom.to_pattern(),
                 );
                 r
@@ -265,7 +265,7 @@ impl UVGraph {
             .iter()
             .map(|(edge, mom)| {
                 let r = Replacement::new(
-                    function!(GS.emr_mom, usize::from(*edge) as i64, GS.x_).to_pattern(),
+                    function!(GS.emr_mom, usize::from(*edge) as i64, GS.x___).to_pattern(),
                     mom.to_pattern(),
                 );
                 // println!("Rep:{r}");
@@ -361,7 +361,18 @@ impl UVGraph {
 
         for (pair, eid, d) in self.iter_edges(subgraph) {
             if matches!(pair, HedgePair::Paired { .. }) {
-                den = den * function!(GS.den, usize::from(eid) as i64, &d.data.den);
+                let m2 = parse!(d.data.particle.mass.name).unwrap().npow(2);
+                den = den
+                    * function!(
+                        GS.den,
+                        usize::from(eid) as i64,
+                        function!(GS.emr_mom, usize::from(eid) as i64),
+                        m2,
+                        spenso_lor_atom(usize::from(eid) as i32, 1, GS.dim)
+                            .npow(2)
+                            .to_dots()
+                            - m2
+                    );
             }
         }
 
@@ -521,7 +532,7 @@ pub trait UltravioletGraph {
         }
 
         for (k, v) in edge_rep.iter_mut() {
-            *v = function!(GS.emr_mom, usize::from(*k) as i64, *v, GS.x_);
+            *v = function!(GS.emr_mom, usize::from(*k) as i64, *v, GS.x___);
         }
 
         let mut externals_ids = vec![];
@@ -531,9 +542,9 @@ pub trait UltravioletGraph {
             let ext_id: usize = graph[&ext].into();
             let ext_mom = match ext_sign {
                 SignOrZero::Plus => {
-                    function!(GS.emr_mom, ext_id as i64, GS.x_)
+                    function!(GS.emr_mom, ext_id as i64, GS.x___)
                 }
-                SignOrZero::Minus => -function!(GS.emr_mom, ext_id as i64, GS.x_),
+                SignOrZero::Minus => -function!(GS.emr_mom, ext_id as i64, GS.x___),
                 SignOrZero::Zero => {
                     panic!("Missing external momentum sign")
                 }
@@ -906,7 +917,7 @@ impl Approximation {
                 .iter()
                 .map(|(edge, mom)| {
                     let r = Replacement::new(
-                        function!(GS.emr_mom, usize::from(*edge) as i64, GS.x_).to_pattern(),
+                        function!(GS.emr_mom, usize::from(*edge) as i64, GS.x___).to_pattern(),
                         mom.to_pattern(),
                     );
                     // println!("Rep:{r}");
@@ -990,10 +1001,20 @@ impl Approximation {
     pub fn expr(&self, graph: &UVGraph, amplitude: &InternalSubGraph) -> Option<Atom> {
         let (t, s) = self.t_op.expr()?;
 
-        let contracted =
+        let mut contracted =
             s * IntegrandExpr::from_subgraph(&amplitude.subtract(&self.subgraph), graph).integrand;
 
-        Some((t * contracted).replace_multiple(&graph.lmb_replacement))
+        // set the momenta flowing through the edge to the identity wrt the supergraph
+        contracted = contracted
+            .replace(function!(GS.emr_mom, GS.x_, GS.y_))
+            .with(function!(
+                GS.emr_mom,
+                GS.x_,
+                function!(GS.emr_mom, GS.x_),
+                GS.y_
+            ));
+
+        Some(t * contracted)
     }
 
     pub fn cff(
@@ -1166,8 +1187,11 @@ impl ApproxOp {
 
                 // expand the propagator around a propagator with a UV mass
                 atomarg = atomarg
-                    .replace(parse!("den(n_,x_)").unwrap())
-                    .with(parse!("den(n_,x_- mUV^2 + t^2*mUV^2)").unwrap());
+                    .replace(parse!("den(n_,q_,mass_,prop_)").unwrap())
+                    .with(
+                        parse!("den(n_,q_,mass_- mUV^2 + t^2*mUV^2, prop_- mUV^2 + t^2*mUV^2)")
+                            .unwrap(),
+                    );
             }
 
             atomarg = atomarg
@@ -1182,7 +1206,7 @@ impl ApproxOp {
                 .series(GS.rescale, Atom::Zero, dod.into(), true)
                 .unwrap()
                 .to_atom()
-                .replace(parse!("der(0,1, den(y__))").unwrap())
+                .replace(parse!("der(0,0,0,1, den(y__))").unwrap())
                 .with(Atom::new_num(1))
                 .replace(parse!("der(x__, den(y__))").unwrap())
                 .with(Atom::new_num(0));
@@ -1200,8 +1224,8 @@ impl ApproxOp {
                         }
 
                         i = i
-                            .replace(parse!("den(n_,x_)").unwrap())
-                            .with(parse!("den(n_,x_ - mUV^2)").unwrap());
+                            .replace(parse!("den(n_,q_,mass_,prop_)").unwrap())
+                            .with(parse!("den(n_,q_,mass_ - mUV^2,prop_-mUV^2)").unwrap());
                     }
 
                     b += i;
@@ -1211,6 +1235,16 @@ impl ApproxOp {
             } else {
                 a = a.replace(GS.rescale).with(Atom::new_num(1));
             }
+
+            // strip the momentum wrapper from the denominator
+            a = a
+                .replace(function!(
+                    GS.den,
+                    GS.prop_,
+                    function!(GS.emr_mom, GS.prop_, GS.mom_),
+                    GS.x__
+                ))
+                .with(function!(GS.den, GS.mom_, GS.x__));
 
             println!("Expanded: {:>}", a.expand());
 
@@ -1527,45 +1561,22 @@ impl Forest {
             let mut expr = t.to_owned();
             let mut data = Vec::new();
             for m in t.pattern_match(
-                &function!(GS.den, GS.a_, GS.b_)
+                &function!(GS.den, GS.edgeid_, GS.mom_, GS.mass_, GS.x_)
                     .pow(Atom::new_var(GS.c_))
                     .to_pattern(),
                 None,
                 None,
             ) {
-                let eid: i64 = m.get(&GS.a_).unwrap().try_into().unwrap();
+                let eid: i64 = m.get(&GS.edgeid_).unwrap().try_into().unwrap();
                 let pow = -i64::try_from(m.get(&GS.c_).unwrap()).unwrap();
-                let mass_sq;
-                let momentum;
-                if let Some(mass_map) = m
-                    .get(&GS.b_)
-                    .unwrap()
-                    .pattern_match(
-                        &(function!(MS.dot, GS.y_, GS.y_) - GS.x_).to_pattern(),
-                        None,
-                        None,
-                    )
-                    .next()
-                {
-                    mass_sq = mass_map.get(&GS.x_).unwrap().clone();
-                    momentum = mass_map.get(&GS.y_).unwrap().clone();
-                } else {
-                    let mm = m
-                        .get(&GS.b_)
-                        .unwrap()
-                        .pattern_match(&(function!(MS.dot, GS.y_, GS.y_)).to_pattern(), None, None)
-                        .next()
-                        .unwrap();
-
-                    momentum = mm.get(&GS.y_).unwrap().clone();
-                    mass_sq = Atom::Zero;
-                };
+                let mom = m.get(&GS.mom_).unwrap().clone();
+                let mass = m.get(&GS.mass_).unwrap().clone();
 
                 expr = expr
                     .replace(function!(GS.den, eid, GS.y__))
                     .with(Atom::new_num(1));
 
-                data.push((eid, pow, momentum, mass_sq));
+                data.push((eid, pow, mom, mass));
             }
 
             let orientation = orientation.clone();
@@ -1584,7 +1595,10 @@ impl Forest {
                     .with_map(move |m| {
                         let momentum2 = m.get(GS.y_).unwrap().to_atom();
                         if momentumm != momentum2 {
-                            println!("BUG: momentum mismatch {} vs {}", momentumm, momentum2);
+                            println!(
+                                "BUG: momentum mismatch for edge {}: {} vs {}",
+                                edge_id, momentumm, momentum2
+                            );
                         }
                         let index = m.get(GS.a_).unwrap().to_atom();
 
