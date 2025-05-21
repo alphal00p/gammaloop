@@ -3,9 +3,15 @@ use std::borrow::Borrow;
 use crate::utils::ose_atom_from_index;
 use bincode::{Decode, Encode};
 use derive_more::{From, Into};
-use linnet::half_edge::{hedgevec::HedgeVec, involution::Orientation};
+use linnet::half_edge::{
+    hedgevec::HedgeVec,
+    involution::Orientation,
+    nodestore::{NodeStorage, NodeStorageOps},
+    GVEdgeAttrs, HedgeGraph,
+};
 use serde::{Deserialize, Serialize};
 use spenso::structure::concrete_index::FlatIndex;
+use std::fmt::Write;
 use symbolica::{
     atom::Atom,
     function,
@@ -42,6 +48,30 @@ pub struct OrientationData {
 }
 
 impl OrientationData {
+    pub fn dot<E, V, N: NodeStorageOps<NodeData = V>>(&self, graph: &HedgeGraph<E, V, N>) {
+        let mut writer = String::new();
+        writer.push_str("digraph {{");
+
+        writer.push_str(&format!(
+            "  node [shape=circle,height=0.1,label=\"\"];  overlap=\"scale\"; layout=\"neato\";",
+        ));
+
+        for (hedge_pair, id, _) in graph.iter_all_edges() {
+            let attr = GVEdgeAttrs {
+                color: None,
+                label: None,
+                other: None,
+            };
+            writer.push_str("  ");
+
+            let attr = hedge_pair.fill_color(attr);
+            hedge_pair
+                .dot_fmt(&mut writer, graph, self.orientation[id], attr)
+                .unwrap();
+        }
+        writer.push_str("}}");
+    }
+
     pub fn get_ose_replacements(&self) -> Vec<Replacement> {
         self.orientation
             .borrow()

@@ -17,7 +17,7 @@ use crate::{
     momentum::Sign,
     new_gammaloop_integrand::amplitude_integrand,
     new_graph::{Edge, LoopMomentumBasis, Vertex},
-    utils::GS,
+    utils::{GS, W_},
 };
 use ahash::{AHashMap, AHashSet};
 use bitvec::vec::BitVec;
@@ -214,7 +214,7 @@ impl UVGraph {
             .iter()
             .map(|(edge, mom)| {
                 let r = Replacement::new(
-                    function!(GS.emr_mom, usize::from(*edge) as i64, GS.x___).to_pattern(),
+                    function!(GS.emr_mom, usize::from(*edge) as i64, W_.x___).to_pattern(),
                     mom.to_pattern(),
                 );
                 r
@@ -265,7 +265,7 @@ impl UVGraph {
             .iter()
             .map(|(edge, mom)| {
                 let r = Replacement::new(
-                    function!(GS.emr_mom, usize::from(*edge) as i64, GS.x___).to_pattern(),
+                    function!(GS.emr_mom, usize::from(*edge) as i64, W_.x___).to_pattern(),
                     mom.to_pattern(),
                 );
                 // println!("Rep:{r}");
@@ -276,39 +276,6 @@ impl UVGraph {
         uv_graph.lmb_replacement = reps;
 
         uv_graph
-    }
-
-    fn spinneys<S: SubGraph<Base = BitVec>>(&self, subgraph: &S) -> AHashSet<InternalSubGraph> {
-        let init_node = self.iter_node_data(subgraph).next().unwrap().0;
-        let all_subcycles: Vec<_> = Cycle::all_sum_powerset_filter_map(
-            &self
-                .paton_cycle_basis(subgraph, &init_node, None)
-                .unwrap()
-                .0,
-            &Some,
-        )
-        .map(|a| a.into_iter().map(|c| c.internal_graph(self)).collect())
-        .unwrap();
-
-        let mut spinneys: AHashSet<_> = InternalSubGraph::all_ops_iterative_filter_map(
-            &all_subcycles,
-            &|a, b| a.union(b),
-            &|union| {
-                if self.dod(&union) >= 0 {
-                    Some(union)
-                } else {
-                    None
-                }
-            },
-        );
-
-        spinneys.insert(self.empty_subgraph());
-
-        spinneys
-    }
-
-    fn wood<S: SubGraph<Base = BitVec>>(&self, subgraph: &S) -> Wood {
-        Wood::from_spinneys(self.spinneys(subgraph), self)
     }
 
     fn n_loops<S: SubGraph>(&self, subgraph: &S) -> usize {
@@ -424,7 +391,48 @@ impl IntegrandExpr {
     }
 }
 
+// pub fn limit(&)
+
 pub trait UltravioletGraph {
+    fn all_cycle_unions<E, V, S: SubGraph<Base = BitVec>>(
+        &self,
+        subgraph: &S,
+    ) -> AHashSet<InternalSubGraph>
+    where
+        Self: AsRef<HedgeGraph<E, V>>,
+    {
+        let ref_graph = self.as_ref();
+        let init_node = ref_graph.iter_node_data(subgraph).next().unwrap().0;
+        let all_subcycles: Vec<_> = Cycle::all_sum_powerset_filter_map(
+            &ref_graph
+                .paton_cycle_basis(subgraph, &init_node, None)
+                .unwrap()
+                .0,
+            &Some,
+        )
+        .map(|a| a.into_iter().map(|c| c.internal_graph(ref_graph)).collect())
+        .unwrap();
+
+        // println!("{}", self.base_dot());
+        let mut spinneys: AHashSet<_> = InternalSubGraph::all_unions_iterative(&all_subcycles);
+
+        spinneys
+    }
+    fn limit<E, V, S: SubGraph>(&self, subgraph: &S, expr: &Atom, expansion: Symbol) -> Atom
+    where
+        Self: AsRef<HedgeGraph<E, V>>,
+    {
+        let mut expr = expr.clone();
+        for (p, eid, d) in self.as_ref().iter_edges(subgraph) {
+            if matches!(p, HedgePair::Paired { .. }) {
+                expr = expr
+                    .replace(function!(GS.emr_mom, usize::from(eid) as i32, W_.x___))
+                    .with(function!(GS.emr_mom, usize::from(eid) as i32, W_.x___) * expansion);
+            }
+        }
+        expr
+    }
+
     fn wood<E, V, S: SubGraph<Base = BitVec>>(&self, subgraph: &S) -> Wood
     where
         Self: AsRef<HedgeGraph<E, V>>,
@@ -532,7 +540,7 @@ pub trait UltravioletGraph {
         }
 
         for (k, v) in edge_rep.iter_mut() {
-            *v = function!(GS.emr_mom, usize::from(*k) as i64, *v, GS.x___);
+            *v = function!(GS.emr_mom, usize::from(*k) as i64, *v, W_.x___);
         }
 
         let mut externals_ids = vec![];
@@ -542,9 +550,9 @@ pub trait UltravioletGraph {
             let ext_id: usize = graph[&ext].into();
             let ext_mom = match ext_sign {
                 SignOrZero::Plus => {
-                    function!(GS.emr_mom, ext_id as i64, GS.x___)
+                    function!(GS.emr_mom, ext_id as i64, W_.x___)
                 }
-                SignOrZero::Minus => -function!(GS.emr_mom, ext_id as i64, GS.x___),
+                SignOrZero::Minus => -function!(GS.emr_mom, ext_id as i64, W_.x___),
                 SignOrZero::Zero => {
                     panic!("Missing external momentum sign")
                 }
@@ -889,7 +897,7 @@ pub struct Approximation {
 
 impl Approximation {
     pub fn simplify_notation(expr: &Atom) -> Atom {
-        let replacements = [(function!(GS.den, GS.a_, GS.x_), Atom::new_var(GS.x_))];
+        let replacements = [(function!(GS.den, W_.a_, W_.x_), Atom::new_var(W_.x_))];
 
         let reps: Vec<_> = replacements
             .into_iter()
@@ -917,7 +925,7 @@ impl Approximation {
                 .iter()
                 .map(|(edge, mom)| {
                     let r = Replacement::new(
-                        function!(GS.emr_mom, usize::from(*edge) as i64, GS.x___).to_pattern(),
+                        function!(GS.emr_mom, usize::from(*edge) as i64, W_.x___).to_pattern(),
                         mom.to_pattern(),
                     );
                     // println!("Rep:{r}");
@@ -998,30 +1006,37 @@ impl Approximation {
         )
     }
 
-    pub fn expr(&self, graph: &UVGraph, amplitude: &InternalSubGraph) -> Option<Atom> {
+    pub fn final_expr<S: SubGraph<Base = BitVec>>(
+        &self,
+        graph: &UVGraph,
+        amplitude: &S,
+    ) -> Option<Atom> {
         let (t, s) = self.t_op.expr()?;
 
-        let mut contracted =
-            s * IntegrandExpr::from_subgraph(&amplitude.subtract(&self.subgraph), graph).integrand;
+        let mut contracted = s * IntegrandExpr::from_subgraph(
+            &amplitude.included().subtract(&self.subgraph.included()),
+            graph,
+        )
+        .integrand;
 
         // set the momenta flowing through the edge to the identity wrt the supergraph
         contracted = contracted
-            .replace(function!(GS.emr_mom, GS.x_, GS.y_))
+            .replace(function!(GS.emr_mom, W_.x_, W_.y_))
             .with(function!(
                 GS.emr_mom,
-                GS.x_,
-                function!(GS.emr_mom, GS.x_),
-                GS.y_
+                W_.x_,
+                function!(GS.emr_mom, W_.x_),
+                W_.y_
             ));
 
         Some(t * contracted)
     }
 
-    pub fn cff(
+    pub fn final_cff<S: SubGraph>(
         &self,
         graph: &UVGraph,
         canonize_esurface: &Option<ShiftRewrite>,
-        amplitude: &InternalSubGraph,
+        amplitude: &S,
         orientation: &OrientationData,
     ) -> Option<Atom> {
         let (t, s) = self.cff_expr.expr()?;
@@ -1160,8 +1175,8 @@ impl ApproxOp {
             );
             for e in external_edges {
                 atomarg = atomarg
-                    .replace(function!(GS.emr_mom, usize::from(*e) as i64, GS.x___))
-                    .with(function!(GS.emr_mom, usize::from(*e) as i64, GS.x___) * GS.rescale);
+                    .replace(function!(GS.emr_mom, usize::from(*e) as i64, W_.x___))
+                    .with(function!(GS.emr_mom, usize::from(*e) as i64, W_.x___) * GS.rescale);
             }
 
             let soft_ct = graph
@@ -1195,9 +1210,9 @@ impl ApproxOp {
             }
 
             atomarg = atomarg
-                .replace(function!(MS.dot, GS.rescale * GS.x_, GS.y_))
+                .replace(function!(MS.dot, GS.rescale * W_.x_, W_.y_))
                 .repeat()
-                .with(function!(MS.dot, GS.x_, GS.y_) * GS.rescale);
+                .with(function!(MS.dot, W_.x_, W_.y_) * GS.rescale);
 
             // println!("atomarg:{}", atomarg);
 
@@ -1240,11 +1255,11 @@ impl ApproxOp {
             a = a
                 .replace(function!(
                     GS.den,
-                    GS.prop_,
-                    function!(GS.emr_mom, GS.prop_, GS.mom_),
-                    GS.x__
+                    W_.prop_,
+                    function!(GS.emr_mom, W_.prop_, W_.mom_),
+                    W_.x__
                 ))
-                .with(function!(GS.den, GS.prop_, GS.mom_, GS.x__));
+                .with(function!(GS.den, W_.prop_, W_.mom_, W_.x__));
 
             println!("Expanded: {:>}", a.expand());
 
@@ -1539,19 +1554,19 @@ impl Forest {
         Some(sum)
     }
 
-    pub fn local_expr(
+    pub fn local_expr<S: SubGraph<Base = BitVec>>(
         &self,
         graph: &UVGraph,
-        amplitude: &InternalSubGraph,
+        amplitude: &S,
         canonize_esurface: &Option<ShiftRewrite>,
         orientation: &OrientationData,
     ) -> Atom {
         let mut sum = Atom::new();
 
         for (_, n) in &self.dag.nodes {
-            sum += n.data.expr(graph, amplitude).unwrap()
+            sum += n.data.final_expr(graph, amplitude).unwrap()
                 * n.data
-                    .cff(graph, canonize_esurface, amplitude, orientation)
+                    .final_cff(graph, canonize_esurface, amplitude, orientation)
                     .unwrap();
         }
 
@@ -1561,19 +1576,19 @@ impl Forest {
             let mut expr = t.to_owned();
             let mut data = Vec::new();
             for m in t.pattern_match(
-                &function!(GS.den, GS.edgeid_, GS.mom_, GS.mass_, GS.x_)
-                    .pow(Atom::new_var(GS.c_))
+                &function!(GS.den, W_.edgeid_, W_.mom_, W_.mass_, W_.x_)
+                    .pow(Atom::new_var(W_.c_))
                     .to_pattern(),
                 None,
                 None,
             ) {
-                let eid: i64 = m.get(&GS.edgeid_).unwrap().try_into().unwrap();
-                let pow = -i64::try_from(m.get(&GS.c_).unwrap()).unwrap();
-                let mom = m.get(&GS.mom_).unwrap().clone();
-                let mass = m.get(&GS.mass_).unwrap().clone();
+                let eid: i64 = m.get(&W_.edgeid_).unwrap().try_into().unwrap();
+                let pow = -i64::try_from(m.get(&W_.c_).unwrap()).unwrap();
+                let mom = m.get(&W_.mom_).unwrap().clone();
+                let mass = m.get(&W_.mass_).unwrap().clone();
 
                 expr = expr
-                    .replace(function!(GS.den, eid, GS.y__))
+                    .replace(function!(GS.den, eid, W_.y__))
                     .with(Atom::new_num(1));
 
                 data.push((eid, pow, mom, mass));
@@ -1591,16 +1606,16 @@ impl Forest {
                 let momentumm = momentum.clone();
                 // TODO: do not store loop momentum in Q() anymore, it can always taken from the denominator?
                 expr = expr
-                    .replace(function!(GS.emr_mom, edge_id, GS.mom_, GS.a_))
+                    .replace(function!(GS.emr_mom, edge_id, W_.mom_, W_.a_))
                     .with_map(move |m| {
-                        let momentum2 = m.get(GS.mom_).unwrap().to_atom();
+                        let momentum2 = m.get(W_.mom_).unwrap().to_atom();
                         if momentumm != momentum2 {
                             println!(
                                 "BUG: momentum mismatch for edge {}: {} vs {}",
                                 edge_id, momentumm, momentum2
                             );
                         }
-                        let index = m.get(GS.a_).unwrap().to_atom();
+                        let index = m.get(W_.a_).unwrap().to_atom();
 
                         let sign = SignOrZero::from(
                             orientation[EdgeIndex::from(edge_id as usize)].clone(),
@@ -1612,8 +1627,8 @@ impl Forest {
 
                 for _ in 2..pow {
                     expr = expr
-                        .replace(function!(GS.ose, edge_id, GS.x___))
-                        .with(function!(GS.ose, edge_id, GS.x___) * GS.rescale) // TODO: check if derivative is in the correct quantity
+                        .replace(function!(GS.ose, edge_id, W_.x___))
+                        .with(function!(GS.ose, edge_id, W_.x___) * GS.rescale) // TODO: check if derivative is in the correct quantity
                         .derivative(GS.rescale)
                         .replace(GS.rescale)
                         .with(Atom::new_num(1));
@@ -1654,7 +1669,7 @@ impl Forest {
             out.push_str(&format!(
                 "{}:{}\n",
                 n.data.simple_expr(graph, amplitude).unwrap(),
-                n.data.expr(graph, amplitude).unwrap()
+                n.data.final_expr(graph, amplitude).unwrap()
             ));
         }
         out
