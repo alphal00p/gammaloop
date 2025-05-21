@@ -352,25 +352,28 @@ fn double_triangle_LU() {
             // MS.dot is a 4d dot product
             cut_res = cut_res
                 .expand()
-                .replace(function!(GS.emr_vec, GS.x_, GS.y_).npow(2))
+                // .to_dots()//need to allow x___
+                .replace(function!(GS.emr_vec, GS.x__, GS.y_).npow(2))
                 .with(function!(
                     MS.dot,
-                    function!(GS.emr_vec, GS.x_),
-                    function!(GS.emr_vec, GS.x_)
+                    function!(GS.emr_vec, GS.x__),
+                    function!(GS.emr_vec, GS.x__)
                 ))
-                .replace(function!(GS.emr_vec, GS.x_, GS.a_) * function!(GS.emr_vec, GS.y_, GS.a_))
+                .replace(
+                    function!(GS.emr_vec, GS.x__, GS.a_) * function!(GS.emr_vec, GS.y__, GS.a_),
+                )
                 .repeat()
                 .with(function!(
                     MS.dot,
-                    function!(GS.emr_vec, GS.x_),
-                    function!(GS.emr_vec, GS.y_)
+                    function!(GS.emr_vec, GS.x__),
+                    function!(GS.emr_vec, GS.y__)
                 ))
-                .replace(function!(GS.ose, GS.y_, GS.x_).npow(2))
-                .with(function!(GS.ose, GS.y_).npow(2))
+                .replace(function!(GS.ose, GS.y__, GS.x_).npow(2))
+                .with(function!(GS.ose, GS.y__).npow(2))
                 .replace(function!(GS.ose, GS.x__, GS.x_) * function!(GS.ose, GS.y__, GS.x_))
                 .repeat()
                 .with(function!(GS.ose, GS.x__) * function!(GS.ose, GS.y__))
-                .replace(function!(GS.emr_vec, GS.y_, GS.a_) * function!(GS.ose, GS.y__, GS.a_))
+                .replace(function!(GS.emr_vec, GS.x__, GS.a_) * function!(GS.ose, GS.y__, GS.a_))
                 .with(Atom::Zero)
                 .replace(function!(
                     MS.dot,

@@ -1244,7 +1244,7 @@ impl ApproxOp {
                     function!(GS.emr_mom, GS.prop_, GS.mom_),
                     GS.x__
                 ))
-                .with(function!(GS.den, GS.mom_, GS.x__));
+                .with(function!(GS.den, GS.prop_, GS.mom_, GS.x__));
 
             println!("Expanded: {:>}", a.expand());
 
@@ -1591,9 +1591,9 @@ impl Forest {
                 let momentumm = momentum.clone();
                 // TODO: do not store loop momentum in Q() anymore, it can always taken from the denominator?
                 expr = expr
-                    .replace(function!(GS.emr_mom, edge_id, GS.y_, GS.a_))
+                    .replace(function!(GS.emr_mom, edge_id, GS.mom_, GS.a_))
                     .with_map(move |m| {
-                        let momentum2 = m.get(GS.y_).unwrap().to_atom();
+                        let momentum2 = m.get(GS.mom_).unwrap().to_atom();
                         if momentumm != momentum2 {
                             println!(
                                 "BUG: momentum mismatch for edge {}: {} vs {}",
