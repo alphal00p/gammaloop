@@ -16,6 +16,8 @@ use color_eyre::Result;
 use momtrop::SampleGenerator;
 use smartstring::{LazyCompact, SmartString};
 use spenso::contraction::IsZero;
+use statrs::statistics::Mode;
+use symbolica_community::physics::algebraic_simplification::metric::MS;
 
 use crate::{
     cff::{
@@ -24,7 +26,7 @@ use crate::{
         expression::{AmplitudeOrientationID, CFFExpression},
         generation::generate_cff_expression,
     },
-    model::ArcParticle,
+    model::{self, ArcParticle},
     momentum_sample::ExternalIndex,
     new_gammaloop_integrand::{
         amplitude_integrand::{AmplitudeGraphTerm, AmplitudeIntegrand},
@@ -33,7 +35,7 @@ use crate::{
     },
     new_graph::{get_cff_inverse_energy_product_impl, LmbIndex, LoopMomentumBasis},
     signature::SignatureLike,
-    utils::{f128, LEFT},
+    utils::{f128, GS, LEFT},
     GammaLoopContext, GammaLoopContextContainer,
 };
 use eyre::eyre;
@@ -48,7 +50,7 @@ use symbolica::{
     atom::{Atom, AtomCore},
     domains::rational::Rational,
     evaluate::FunctionMap,
-    parse,
+    function, parse,
 };
 use typed_index_collections::TiVec;
 
@@ -168,8 +170,8 @@ impl Process {
         }
     }
 
-    fn generate_integrands(&self, settings: Settings) -> HashMap<String, Integrand> {
-        self.collection.generate_integrands(settings)
+    fn generate_integrands(&self, settings: Settings, model: &Model) -> HashMap<String, Integrand> {
+        self.collection.generate_integrands(settings, model)
     }
 }
 
@@ -214,11 +216,15 @@ impl ProcessList {
         Ok(())
     }
 
-    pub fn generate_integrands(&self, settings: Settings) -> HashMap<String, Integrand> {
+    pub fn generate_integrands(
+        &self,
+        settings: Settings,
+        model: &Model,
+    ) -> HashMap<String, Integrand> {
         let mut result = HashMap::default();
 
         for process in self.processes.iter() {
-            let integrands = process.generate_integrands(settings.clone());
+            let integrands = process.generate_integrands(settings.clone(), model);
             result.extend(integrands);
         }
 
@@ -308,7 +314,7 @@ impl<S: NumeratorState> ProcessCollection<S> {
         Ok(())
     }
 
-    fn generate_integrands(&self, settings: Settings) -> HashMap<String, Integrand> {
+    fn generate_integrands(&self, settings: Settings, model: &Model) -> HashMap<String, Integrand> {
         let mut result = HashMap::default();
         match self {
             Self::Amplitudes(amplitudes) => {
@@ -321,7 +327,7 @@ impl<S: NumeratorState> ProcessCollection<S> {
             Self::CrossSections(cross_sections) => {
                 let name = "default".to_owned();
                 for cross_section in cross_sections {
-                    let integrand = cross_section.generate_integrand(settings.clone());
+                    let integrand = cross_section.generate_integrand(settings.clone(), model);
                     result.insert(name.clone(), integrand);
                 }
             }
@@ -843,7 +849,7 @@ impl<S: NumeratorState> CrossSection<S> {
         Ok(())
     }
 
-    pub fn generate_integrand(&self, settings: Settings) -> Integrand {
+    pub fn generate_integrand(&self, settings: Settings, model: &Model) -> Integrand {
         let terms = self
             .supergraphs
             .iter()
@@ -868,6 +874,8 @@ impl<S: NumeratorState> CrossSection<S> {
             .map(|r| orig_polarizations.rotate(r))
             .collect();
 
+        let model_parameter_cache = model.generate_values();
+
         let cross_section_integrand = CrossSectionIntegrand {
             rotations,
             external_connections: self.external_connections.clone(),
@@ -875,6 +883,7 @@ impl<S: NumeratorState> CrossSection<S> {
             polarizations,
             settings,
             graph_terms: terms,
+            model_parameter_cache,
         };
 
         Integrand::NewIntegrand(NewIntegrand::CrossSection(cross_section_integrand))
@@ -992,8 +1001,8 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
         self.generate_cff()?;
         self.update_surface_cache();
 
-        self.build_cut_evaluators();
-        //self.build_orientation_evaluators();
+        self.build_cut_evaluators(model);
+        self.build_orientation_evaluators(model);
         self.build_lmbs();
         self.build_esurface_derived_data()?;
         Ok(self.build_multi_channeling_channels())
@@ -1176,24 +1185,62 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
 
         let product = left_amplitude * right_amplitude;
 
-        self.add_additional_factors_to_cff_atom(&product, cut_id)
+        let ose_atom = self.add_additional_factors_to_cff_atom(&product, cut_id);
+        let replacements = self.graph.underlying.get_ose_replacements();
+        let replaced_atom = ose_atom.replace_multiple(&replacements);
+        let replace_dots = replaced_atom
+            .replace(function!(
+                MS.dot,
+                function!(GS.emr_vec, GS.x_),
+                function!(GS.emr_vec, GS.y_)
+            ))
+            .with(
+                -(function!(GS.emr_vec, GS.x_, 1) * function!(GS.emr_vec, GS.y_, 1)
+                    + function!(GS.emr_vec, GS.x_, 2) * function!(GS.emr_vec, GS.y_, 2)
+                    + function!(GS.emr_vec, GS.x_, 3) * function!(GS.emr_vec, GS.y_, 3)),
+            );
+
+        debug!("replaced atom: {}", replace_dots);
+        replace_dots
+    }
+
+    fn build_atom_for_orientation_and_cut(
+        &self,
+        cut_id: CutId,
+        orientation: SuperGraphOrientationID,
+    ) -> Atom {
+        let (left_amplitude, right_amplitude) =
+            self.build_left_right_amplitudes_for_orientation(cut_id, orientation);
+
+        let product = left_amplitude * right_amplitude;
+
+        let ose_atom = self.add_additional_factors_to_cff_atom(&product, cut_id);
+        let replacements = self.graph.underlying.get_ose_replacements();
+        let replaced_atom = ose_atom.replace_multiple(&replacements);
+        let replace_dots = replaced_atom
+            .replace(function!(
+                MS.dot,
+                function!(GS.emr_vec, GS.x_),
+                function!(GS.emr_vec, GS.y_)
+            ))
+            .with(
+                -(function!(GS.emr_vec, GS.x_, 1) * function!(GS.emr_vec, GS.y_, 1)
+                    + function!(GS.emr_vec, GS.x_, 2) * function!(GS.emr_vec, GS.y_, 2)
+                    + function!(GS.emr_vec, GS.x_, 3) * function!(GS.emr_vec, GS.y_, 3)),
+            );
+
+        debug!("replaced atom: {}", replace_dots);
+        replace_dots
     }
 
     pub fn add_additional_factors_to_cff_atom(&self, cut_atom: &Atom, cut_id: CutId) -> Atom {
-        let t_star_factor = parse!(&format!(
-            "tstar^({})",
-            3 * self.graph.underlying.get_loop_number()
-        ))
-        .unwrap();
+        let loop_3 = self.graph.underlying.get_loop_number() as i64 * 3;
+        let t_star_factor = Atom::new_var(GS.rescale_star).npow(loop_3);
 
-        let h_function = parse!("h").unwrap();
-        let grad_eta = parse!("∇η").unwrap();
+        let h_function = Atom::new_var(GS.hfunction);
+        let grad_eta = Atom::new_var(GS.deta);
 
-        let factors_of_pi = parse!(&format!(
-            "(2*π)^{}",
-            3 * self.graph.underlying.get_loop_number()
-        ))
-        .unwrap();
+        let factors_of_pi = (Atom::new_num(2) * Atom::new_var(GS.pi)).npow(loop_3);
 
         let cut_inverse_energy_product =
             get_cff_inverse_energy_product_impl(&self.graph.underlying, &self.cuts[cut_id].cut);
@@ -1210,12 +1257,30 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
         result
     }
 
-    fn get_params(&self) -> Vec<Atom> {
-        let mut params = self.graph.underlying.get_energy_atoms();
+    fn get_params(&self, model: &Model) -> Vec<Atom> {
+        let mut params = vec![];
 
-        params.push(parse!("tstar").unwrap());
-        params.push(parse!("h").unwrap());
-        params.push(parse!("∇η").unwrap());
+        params.extend(self.graph.underlying.get_external_energy_atoms());
+
+        for (pair, edge_id, _) in self.graph.underlying.iter_all_edges() {
+            match pair {
+                HedgePair::Paired { .. } => {
+                    let i64_id = Into::<usize>::into(edge_id) as i64;
+                    let emr_components = [
+                        function!(GS.emr_vec, i64_id, 1),
+                        function!(GS.emr_vec, i64_id, 2),
+                        function!(GS.emr_vec, i64_id, 3),
+                    ];
+                    params.extend(emr_components)
+                }
+                _ => {}
+            }
+        }
+
+        params.extend(model.generate_params());
+        params.push(Atom::new_var(GS.rescale_star));
+        params.push(Atom::new_var(GS.hfunction));
+        params.push(Atom::new_var(GS.deta));
 
         params
     }
@@ -1227,14 +1292,14 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
         fn_map
     }
 
-    fn build_cut_evaluators(&mut self) {
+    fn build_cut_evaluators(&mut self, model: &Model) {
         let evaluators = self
             .cuts
             .iter_enumerated()
             .map(|(cut_id, _)| {
                 let atom = self.build_atom_for_cut(cut_id);
 
-                let params = self.get_params();
+                let params = self.get_params(model);
                 let mut tree = atom
                     .to_evaluation_tree(&self.get_function_map(), &params)
                     .unwrap();
@@ -1256,53 +1321,32 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
         self.derived_data.bare_cff_evaluators = Some(evaluators)
     }
 
-    fn build_orientation_evaluators(&mut self) {
-        let orientation_atoms = self
-            .derived_data
-            .cff_expression
-            .as_ref()
-            .unwrap()
-            .get_orientation_atoms();
-
-        let substituted_energies = orientation_atoms
-            .iter()
-            .map(|cut_atoms| {
-                cut_atoms
-                    .iter()
-                    .map(|atom| {
-                        let substituded_atom = self
-                            .derived_data
-                            .cff_expression
-                            .as_ref()
-                            .unwrap()
-                            .surfaces
-                            .substitute_energies(&atom.0);
-                        todo!("fix this function");
-                        substituded_atom
-                    })
-                    .collect_vec()
-            })
-            .collect::<TiVec<SuperGraphOrientationID, _>>();
-
-        let orientation_datas = &self
+    fn build_orientation_evaluators(&mut self, model: &Model) {
+        let orientation_data = &self
             .derived_data
             .cff_expression
             .as_ref()
             .unwrap()
             .orientation_data;
 
+        let substituted_energies = orientation_data
+            .iter_enumerated()
+            .map(|(orientation_id, data)| {
+                data.cuts
+                    .iter()
+                    .map(|cut_id| self.build_atom_for_orientation_and_cut(*cut_id, orientation_id))
+                    .collect_vec()
+            })
+            .collect::<TiVec<SuperGraphOrientationID, _>>();
+
         let orientation_evaluators = substituted_energies
             .iter()
-            .zip(orientation_datas)
+            .zip(orientation_data)
             .map(|(cut_atoms, orientation_data)| {
                 let cut_evaluators = cut_atoms
                     .iter()
                     .map(|cut_atom| {
-                        let cut_atom = self.add_additional_factors_to_cff_atom(
-                            cut_atom,
-                            todo!("fix this function"),
-                        );
-                        let params = self.get_params();
+                        let params = self.get_params(model);
                         let mut tree = cut_atom
                             .to_evaluation_tree(&self.get_function_map(), &params)
                             .unwrap();

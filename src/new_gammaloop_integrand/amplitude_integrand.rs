@@ -97,6 +97,7 @@ impl GraphTerm for AmplitudeGraphTerm {
         &self,
         momentum_sample: &MomentumSample<T>,
         settings: &Settings,
+        model_parameter_cache: &[Complex<F<T>>],
     ) -> Complex<F<T>> {
         self.evaluate(momentum_sample, settings)
     }
@@ -144,6 +145,10 @@ impl GammaloopIntegrand for AmplitudeIntegrand {
 
     fn get_dependent_momenta_constructor(&self) -> DependentMomentaConstructor {
         DependentMomentaConstructor::Amplitude(&self.external_signature)
+    }
+
+    fn get_model_parameter_cache<T: FloatLike>(&self) -> Vec<Complex<F<T>>> {
+        todo!()
     }
 }
 

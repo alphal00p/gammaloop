@@ -12,6 +12,7 @@ use crate::{
     },
     evaluation_result::EvaluationResult,
     integrands::HasIntegrand,
+    model,
     momentum::{Rotation, ThreeMomentum},
     momentum_sample::{LoopMomenta, MomentumSample},
     new_cs::CutId,
@@ -35,6 +36,7 @@ pub struct CrossSectionIntegrand {
     pub graph_terms: Vec<CrossSectionGraphTerm>,
     pub n_incoming: usize,
     pub external_connections: Vec<ExternalConnection>,
+    pub model_parameter_cache: Vec<Complex<F<f64>>>,
 }
 
 impl GammaloopIntegrand for CrossSectionIntegrand {
@@ -64,6 +66,13 @@ impl GammaloopIntegrand for CrossSectionIntegrand {
             external_connections: &self.external_connections,
         }
     }
+
+    fn get_model_parameter_cache<T: FloatLike>(&self) -> Vec<Complex<F<T>>> {
+        self.model_parameter_cache
+            .iter()
+            .map(|x| Complex::new(F::from_ff64(x.re), F::from_ff64(x.im)))
+            .collect()
+    }
 }
 
 #[derive(Clone, Encode)]
@@ -87,8 +96,9 @@ impl GraphTerm for CrossSectionGraphTerm {
         &self,
         momentum_sample: &MomentumSample<T>,
         settings: &Settings,
+        model_parameter_cache: &[Complex<F<T>>],
     ) -> Complex<F<T>> {
-        self.evaluate(momentum_sample, settings)
+        self.evaluate(momentum_sample, settings, model_parameter_cache)
     }
 
     fn get_multi_channeling_setup(&self) -> &LmbMultiChannelingSetup {
@@ -135,6 +145,7 @@ impl CrossSectionGraphTerm {
         &self,
         momentum_sample: &MomentumSample<T>,
         settings: &Settings,
+        model_parameter_cache: &[Complex<F<T>>],
     ) -> Complex<F<T>> {
         // implementation of forced orientations, only works with sample orientation disabled
         if let Some(forced_orientations) = &settings.general.force_orientations {
@@ -144,7 +155,7 @@ impl CrossSectionGraphTerm {
                     .map(|orientation_usize| {
                         let mut new_sample = momentum_sample.clone();
                         new_sample.sample.orientation = Some(*orientation_usize);
-                        self.evaluate(&new_sample, settings)
+                        self.evaluate(&new_sample, settings, model_parameter_cache)
                     })
                     .fold(
                         Complex::new_re(momentum_sample.zero()),
@@ -211,17 +222,26 @@ impl CrossSectionGraphTerm {
 
                 let h_function = utils::h(&newton_result.solution, None, None, h_function_settings);
 
-                let mut params = self
-                    .graph
-                    .underlying
-                    .get_energy_cache(
-                        rescaled_sample.loop_moms(),
-                        rescaled_sample.external_moms(),
-                        &self.graph.loop_momentum_basis,
-                    )
-                    .into_iter()
-                    .map(|(_, x)| x)
+                // todo, with_capacity
+                let mut params = rescaled_sample
+                    .external_moms()
+                    .iter()
+                    .map(|x| x.temporal.value.clone())
                     .collect_vec();
+
+                params.extend(self.graph.underlying.get_emr_vec_cache(
+                    rescaled_sample.loop_moms(),
+                    rescaled_sample.external_moms(),
+                    &self.graph.loop_momentum_basis,
+                ));
+
+                // todo, make evaluator complex
+                let real_parameter_cache = model_parameter_cache
+                    .iter()
+                    .map(|x| x.re.clone())
+                    .collect_vec();
+
+                params.extend(real_parameter_cache);
 
                 params.push(newton_result.solution);
                 params.push(h_function);
