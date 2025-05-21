@@ -65,7 +65,7 @@ use crate::{
     new_gammaloop_integrand::LmbMultiChannelingSetup,
     numerator::{ufo::preprocess_ufo_spin_wrapped, NumeratorState, PythonState, UnInit},
     signature::{ExternalSignature, LoopExtSignature, LoopSignature, SignatureLike},
-    utils::{external_energy_atom_from_index, ose_atom_from_index, FloatLike, F, GS},
+    utils::{external_energy_atom_from_index, ose_atom_from_index, FloatLike, F, GS, W_},
     GammaLoopContext, ProcessSettings, GAMMALOOP_NAMESPACE,
 };
 
@@ -782,7 +782,7 @@ impl Edge {
                 let dummies: HashSet<_> = atom
                     .pattern_match(&indexidpat, None, None)
                     .filter_map(|a| {
-                        if let AtomView::Num(n) = a[&GS.x_].as_view() {
+                        if let AtomView::Num(n) = a[&W_.x_].as_view() {
                             let e = if let CoefficientView::Natural(a, b) = n.get_coeff_view() {
                                 if b == 1 {
                                     a
@@ -848,10 +848,10 @@ impl Edge {
 
                 [
                     atom.replace(&parse!("indexid(x_)").unwrap().to_pattern())
-                        .with(Atom::new_var(GS.x_).to_pattern()),
+                        .with(Atom::new_var(W_.x_).to_pattern()),
                     color_atom
                         .replace(&parse!("indexid(x_)").unwrap().to_pattern())
-                        .with(Atom::new_var(GS.x_).to_pattern()),
+                        .with(Atom::new_var(W_.x_).to_pattern()),
                 ]
             }
         }
