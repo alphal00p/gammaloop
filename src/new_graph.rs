@@ -39,10 +39,12 @@ use spenso::{
 use symbolica::{
     atom::{representation::InlineNum, Atom, AtomCore, AtomView},
     coefficient::CoefficientView,
+    function,
     graph::Node,
     id::{Pattern, Replacement},
     parse, with_default_namespace,
 };
+use symbolica_community::physics::algebraic_simplification::metric::MS;
 use typed_index_collections::TiVec;
 
 use crate::{
@@ -128,6 +130,12 @@ impl From<BareGraph> for Graph {
 }
 
 pub trait FeynmanGraph {
+    fn get_emr_vec_cache<T: FloatLike>(
+        &self,
+        loop_moms: &LoopMomenta<F<T>>,
+        external_moms: &ExternalFourMomenta<F<T>>,
+        lmb: &LoopMomentumBasis,
+    ) -> Vec<F<T>>;
     fn new_lmb(&self) -> Result<LoopMomentumBasis>;
     fn num_virtual_edges(&self, subgraph: BitVec) -> usize;
     fn is_incoming_to(&self, edge: EdgeIndex, vertex: NodeIndex) -> bool;
@@ -156,6 +164,9 @@ pub trait FeynmanGraph {
     fn get_external_partcles(&self) -> Vec<ArcParticle>;
     fn get_external_signature(&self) -> SignatureLike<ExternalIndex>;
     fn get_energy_atoms(&self) -> Vec<Atom>;
+    fn get_external_energy_atoms(&self) -> Vec<Atom>;
+    fn explicit_ose_atom(&self, edge: EdgeIndex) -> Atom;
+    fn get_ose_replacements(&self) -> Vec<Replacement>;
 }
 
 impl FeynmanGraph for HedgeGraph<Edge, Vertex> {
@@ -420,6 +431,22 @@ impl FeynmanGraph for HedgeGraph<Edge, Vertex> {
         .unwrap()
     }
 
+    fn get_emr_vec_cache<T: FloatLike>(
+        &self,
+        loop_moms: &LoopMomenta<F<T>>,
+        external_moms: &ExternalFourMomenta<F<T>>,
+        lmb: &LoopMomentumBasis,
+    ) -> Vec<F<T>> {
+        lmb.edge_signatures
+            .borrow()
+            .into_iter()
+            .zip(self.iter_all_edges())
+            .filter(|(_, (pair, _, _))| matches!(pair, HedgePair::Paired { .. }))
+            .map(|((_, sig), _)| sig.compute_three_momentum_from_four(loop_moms, external_moms))
+            .flat_map(|emr_vec| [emr_vec.px, emr_vec.py, emr_vec.pz])
+            .collect()
+    }
+
     fn get_esurface_canonization(&self, lmb: &LoopMomentumBasis) -> Option<ShiftRewrite> {
         let external_edges: TiVec<ExternalIndex, _> = self
             .iter_all_edges()
@@ -488,6 +515,36 @@ impl FeynmanGraph for HedgeGraph<Edge, Vertex> {
                 HedgePair::Paired { .. } => ose_atom_from_index(edge_id),
                 HedgePair::Unpaired { .. } => external_energy_atom_from_index(edge_id),
                 _ => unreachable!(),
+            })
+            .collect_vec()
+    }
+
+    fn explicit_ose_atom(&self, edge: EdgeIndex) -> Atom {
+        let mass = self[edge].particle.symbolic_mass();
+        let mass2 = &mass * &mass;
+
+        let emr_vec = function!(GS.emr_vec, Into::<usize>::into(edge) as i64);
+        let dot = function!(MS.dot, emr_vec, emr_vec);
+
+        (mass2 - dot).sqrt()
+    }
+
+    fn get_ose_replacements(&self) -> Vec<Replacement> {
+        self.iter_all_edges()
+            .filter(|(pair, _, _)| matches!(pair, HedgePair::Paired { .. }))
+            .map(|(_, edge_id, _)| {
+                let ose_atom = ose_atom_from_index(edge_id);
+                let explicit = self.explicit_ose_atom(edge_id);
+                Replacement::new(ose_atom.to_pattern(), explicit.to_pattern())
+            })
+            .collect()
+    }
+
+    fn get_external_energy_atoms(&self) -> Vec<Atom> {
+        self.iter_all_edges()
+            .filter_map(|(pair, edge_id, _)| match pair {
+                HedgePair::Unpaired { .. } => Some(external_energy_atom_from_index(edge_id)),
+                _ => None,
             })
             .collect_vec()
     }

@@ -773,6 +773,19 @@ impl Particle {
     pub fn is_ghost(&self) -> bool {
         self.ghost_number != 0
     }
+
+    pub fn symbolic_mass(&self) -> Atom {
+        match self.mass.value {
+            Some(value) => {
+                if value.is_non_zero() {
+                    parse!(self.mass.name).unwrap()
+                } else {
+                    Atom::new()
+                }
+            }
+            None => Atom::new(),
+        }
+    }
 }
 
 impl Ord for Particle {

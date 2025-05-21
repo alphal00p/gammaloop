@@ -415,13 +415,17 @@ fn double_triangle_LU() {
                     );
             }
 
+            cut_res = cut_res
+                .replace(function!(GS.emr_vec, function!(GS.emr_mom, GS.x_)))
+                .with(function!(GS.emr_vec, GS.x_));
+
             println!("Cut {} result: {:>}", id, cut_res.expand());
 
             sum += cut_res;
         }
     }
 
-    println!("Final result: {:>}", sum.expand());
+    //   println!("Final result: {:>}", sum.expand());
 }
 
 #[test]
