@@ -318,22 +318,34 @@ fn double_triangle_LU() {
 
             // let mut cut_res = cs.add_additional_factors_to_cff_atom(&(left_expr * right_expr), id);
 
-            // add Feynman rules
+            // add Feynman rules of cut edges
             for (_p, edge_index, d) in super_uv_graph.iter_edges(&c.cut.left) {
                 let edge_id = usize::from(edge_index) as i64;
                 let orientation = supergraph_orientation_data.orientation.clone();
-                cut_res = cut_res
-                    * &d.data
-                        .num
-                        .replace(function!(GS.emr_mom, edge_id, GS.y_))
-                        .with_map(move |m| {
-                            let index = m.get(GS.y_).unwrap().to_atom();
+                cut_res = (cut_res * &d.data.num)
+                    .replace(function!(GS.emr_mom, edge_id, GS.y_))
+                    .with_map(move |m| {
+                        let index = m.get(GS.y_).unwrap().to_atom();
 
-                            let sign = SignOrZero::from((&orientation[edge_index]).clone()) * 1;
+                        let sign = SignOrZero::from((&orientation[edge_index]).clone()) * 1;
 
-                            function!(GS.ose, edge_id, index) * sign
+                        function!(GS.ose, edge_id, index) * sign
+                            + function!(GS.emr_vec, edge_id, index)
+                    });
+            }
+
+            // add Feynman rules of external edges
+            for (_p, edge_index, d) in super_uv_graph.iter_edges(&super_uv_graph.external_filter())
+            {
+                let edge_id = usize::from(edge_index) as i64;
+                cut_res = (cut_res * &d.data.num)
+                    .replace(function!(GS.emr_mom, edge_id, GS.y_))
+                    .with_map(move |m| {
+                        let index = m.get(GS.y_).unwrap().to_atom();
+
+                        function!(GS.ose, edge_id, index) // NOTE: not OSE for external edge, understood as taking 0th part
                                 + function!(GS.emr_vec, edge_id, index)
-                        });
+                    });
             }
 
             // contract all dot products, set all cross terms ose.q3 to 0
@@ -355,9 +367,9 @@ fn double_triangle_LU() {
                 ))
                 .replace(function!(GS.ose, GS.y_, GS.x_).npow(2))
                 .with(function!(GS.ose, GS.y_).npow(2))
-                .replace(function!(GS.ose, GS.y_, GS.x_) * function!(GS.ose, GS.y__, GS.x_))
+                .replace(function!(GS.ose, GS.x__, GS.x_) * function!(GS.ose, GS.y__, GS.x_))
                 .repeat()
-                .with(function!(GS.ose, GS.y_) * function!(GS.ose, GS.y__))
+                .with(function!(GS.ose, GS.x__) * function!(GS.ose, GS.y__))
                 .replace(function!(GS.emr_vec, GS.y_, GS.a_) * function!(GS.ose, GS.y__, GS.a_))
                 .with(Atom::Zero)
                 .replace(function!(
