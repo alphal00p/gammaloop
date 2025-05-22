@@ -1578,11 +1578,13 @@ class GammaLoop(object):
             self.inspect_parser.print_help()
             return {}
 
+        settings = yaml.dump(self.config["run_settings"])
+        self.rust_worker.generate_integrands(settings)
         args = self.inspect_parser.parse_args(split_str_args(str_args))
 
-        if self.launched_output is None:
-            raise GammaLoopError(
-                "No output launched. Please launch an output first with 'launch' command.")
+        # if self.launched_output is None:
+        #    raise GammaLoopError(
+        #        "No output launched. Please launch an output first with 'launch' command.")
 
         self.sync_worker_with_output(args.no_sync)
 

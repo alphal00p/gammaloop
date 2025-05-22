@@ -35,7 +35,7 @@ use crate::{
     },
     new_graph::{get_cff_inverse_energy_product_impl, LmbIndex, LoopMomentumBasis},
     signature::SignatureLike,
-    utils::{f128, GS, LEFT, W_},
+    utils::{f128, ose_atom_from_index, GS, LEFT, W_},
     GammaLoopContext, GammaLoopContextContainer,
 };
 use eyre::eyre;
@@ -1071,7 +1071,7 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
 
         debug!("num s_t cuts: {}", all_st_cuts.len());
 
-        let cuts: TiVec<CutId, CrossSectionCut> = all_st_cuts
+        let mut cuts: TiVec<CutId, CrossSectionCut> = all_st_cuts
             .into_iter()
             .map(|(left, cut, right)| CrossSectionCut { cut, left, right })
             .filter_map(
@@ -1082,6 +1082,8 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
                 },
             )
             .collect::<Result<_>>()?;
+
+        cuts.sort_by(|a, b| a.cut.cmp(&b.cut));
 
         self.cuts = cuts;
 
@@ -1186,6 +1188,8 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
         let product = left_amplitude * right_amplitude;
 
         let ose_atom = self.add_additional_factors_to_cff_atom(&product, cut_id);
+        debug!("ose atom for cut: {}: {}", cut_id, ose_atom);
+
         let replacements = self.graph.underlying.get_ose_replacements();
         let replaced_atom = ose_atom.replace_multiple(&replacements);
         let replace_dots = replaced_atom
@@ -1200,7 +1204,7 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
                     + function!(GS.emr_vec, W_.x_, 3) * function!(GS.emr_vec, W_.y_, 3)),
             );
 
-        debug!("replaced atom: {}", replace_dots);
+        // debug!("replaced atom: {}", replace_dots);
         replace_dots
     }
 
@@ -1242,8 +1246,13 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
 
         let factors_of_pi = (Atom::new_num(2) * Atom::new_var(GS.pi)).npow(loop_3);
 
-        let cut_inverse_energy_product =
-            get_cff_inverse_energy_product_impl(&self.graph.underlying, &self.cuts[cut_id].cut);
+        let cut_inverse_energy_product = Atom::new_num(1)
+            / self
+                .graph
+                .underlying
+                .iter_edges(&self.cuts[cut_id].cut)
+                .map(|(_, edge_id, _)| Atom::new_num(2) * ose_atom_from_index(edge_id))
+                .fold(Atom::new_num(1), |product, factor| product * factor);
 
         let result = cut_atom
             * cut_inverse_energy_product
@@ -1253,7 +1262,7 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
             / grad_eta
             / factors_of_pi;
 
-        debug!("result: {}", result);
+        //debug!("result: {}", result);
         result
     }
 
