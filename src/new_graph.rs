@@ -635,7 +635,17 @@ impl Graph {
             channels.push(lmb_index);
         }
 
-        let channels: TiVec<_, _> = channels.into_iter().sorted().collect();
+        let channels: TiVec<_, _> = if !channels.is_empty() {
+            channels.into_iter().sorted().collect()
+        } else {
+            let current_lmb_index = lmbs
+                .iter_enumerated()
+                .find(|(_lmb_index, lmb)| lmb.basis == self.loop_momentum_basis.basis)
+                .map(|(lmb_index, _)| lmb_index)
+                .unwrap();
+
+            vec![current_lmb_index].into()
+        };
 
         debug!(
             "number of lmbs: {}, number of channels: {}",

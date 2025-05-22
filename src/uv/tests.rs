@@ -403,8 +403,8 @@ fn double_triangle_LU() {
             }
 
             cut_res = cut_res
-                .replace(function!(GS.emr_vec, function!(GS.emr_mom, GS.x_)))
-                .with(function!(GS.emr_vec, GS.x_));
+                .replace(function!(GS.emr_vec, function!(GS.emr_mom, W_.x_)))
+                .with(function!(GS.emr_vec, W_.x_));
 
             println!("Cut {} result: {:>}", id, cut_res.expand());
 
