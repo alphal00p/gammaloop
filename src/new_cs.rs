@@ -35,7 +35,7 @@ use crate::{
     },
     new_graph::{get_cff_inverse_energy_product_impl, LmbIndex, LoopMomentumBasis},
     signature::SignatureLike,
-    utils::{f128, GS, LEFT},
+    utils::{f128, GS, LEFT, W_},
     GammaLoopContext, GammaLoopContextContainer,
 };
 use eyre::eyre;
@@ -1191,13 +1191,13 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
         let replace_dots = replaced_atom
             .replace(function!(
                 MS.dot,
-                function!(GS.emr_vec, GS.x_),
-                function!(GS.emr_vec, GS.y_)
+                function!(GS.emr_vec, W_.x_),
+                function!(GS.emr_vec, W_.y_)
             ))
             .with(
-                -(function!(GS.emr_vec, GS.x_, 1) * function!(GS.emr_vec, GS.y_, 1)
-                    + function!(GS.emr_vec, GS.x_, 2) * function!(GS.emr_vec, GS.y_, 2)
-                    + function!(GS.emr_vec, GS.x_, 3) * function!(GS.emr_vec, GS.y_, 3)),
+                -(function!(GS.emr_vec, W_.x_, 1) * function!(GS.emr_vec, W_.y_, 1)
+                    + function!(GS.emr_vec, W_.x_, 2) * function!(GS.emr_vec, W_.y_, 2)
+                    + function!(GS.emr_vec, W_.x_, 3) * function!(GS.emr_vec, W_.y_, 3)),
             );
 
         debug!("replaced atom: {}", replace_dots);
@@ -1220,13 +1220,13 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
         let replace_dots = replaced_atom
             .replace(function!(
                 MS.dot,
-                function!(GS.emr_vec, GS.x_),
-                function!(GS.emr_vec, GS.y_)
+                function!(GS.emr_vec, W_.x_),
+                function!(GS.emr_vec, W_.y_)
             ))
             .with(
-                -(function!(GS.emr_vec, GS.x_, 1) * function!(GS.emr_vec, GS.y_, 1)
-                    + function!(GS.emr_vec, GS.x_, 2) * function!(GS.emr_vec, GS.y_, 2)
-                    + function!(GS.emr_vec, GS.x_, 3) * function!(GS.emr_vec, GS.y_, 3)),
+                -(function!(GS.emr_vec, W_.x_, 1) * function!(GS.emr_vec, W_.y_, 1)
+                    + function!(GS.emr_vec, W_.x_, 2) * function!(GS.emr_vec, W_.y_, 2)
+                    + function!(GS.emr_vec, W_.x_, 3) * function!(GS.emr_vec, W_.y_, 3)),
             );
 
         debug!("replaced atom: {}", replace_dots);
