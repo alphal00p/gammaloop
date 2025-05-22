@@ -1101,6 +1101,7 @@ impl PythonWorker {
                     Integrand::GammaLoopIntegrand(integrand) => {
                         integrand.global_data.settings.clone()
                     }
+                    Integrand::NewIntegrand(integrand) => integrand.get_settings().clone(),
                     _ => todo!(),
                 };
 

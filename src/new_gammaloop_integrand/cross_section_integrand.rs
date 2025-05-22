@@ -164,6 +164,11 @@ impl CrossSectionGraphTerm {
             }
         }
 
+        if settings.general.debug > 0 {
+            println!("loop_momenta: {:?}", momentum_sample.loop_moms());
+            println!("external_momenta: {:?}", momentum_sample.external_moms());
+        }
+
         let center = LoopMomenta::from_iter(vec![
             ThreeMomentum::from([
                 momentum_sample.zero(),
@@ -222,6 +227,14 @@ impl CrossSectionGraphTerm {
 
                 let h_function = utils::h(&newton_result.solution, None, None, h_function_settings);
 
+                if settings.general.debug > 0 {
+                    println!("generated parameters for cut: {}", _cut_id);
+                    println!("t_star: {:16e}", newton_result.solution);
+                    println!("h_function: {:16e}", h_function);
+                    println!("derivative: {:16e}", newton_result.derivative_at_solution);
+                    println!("rescaled loop momenta: {:?}", rescaled_sample.loop_moms());
+                }
+
                 // todo, with_capacity
                 let mut params = rescaled_sample
                     .external_moms()
@@ -268,16 +281,26 @@ impl CrossSectionGraphTerm {
             None => self
                 .bare_cff_evaluators
                 .iter()
-                .zip(params)
-                .map(|(evaluator, params)| {
+                .zip_eq(params)
+                .enumerate()
+                .map(|(id, (evaluator, params))| {
                     let cut_results =
                         <T as GenericEvaluatorFloat>::get_evaluator(evaluator)(&params);
+                    if settings.general.debug > 0 {
+                        println!("------");
+                        println!("cut: {}, result: {:16e}", id, cut_results);
+                        println!("------");
+                    }
                     cut_results
                 })
                 .fold(momentum_sample.zero(), |sum, cut_result| sum + cut_result),
         };
 
-        Complex::new_re(result)
+        let final_result = Complex::new_re(result);
+        if settings.general.debug > 0 {
+            println!("final result: {:16e}", final_result);
+        }
+        final_result
     }
 }
 
@@ -294,7 +317,12 @@ impl HasIntegrand for CrossSectionIntegrand {
         use_f128: bool,
         max_eval: Complex<F<f64>>,
     ) -> EvaluationResult {
-        evaluate_sample(self, sample, wgt, _iter, use_f128, max_eval)
+        let result = evaluate_sample(self, sample, wgt, _iter, use_f128, max_eval);
+        if self.settings.general.debug > 0 {
+            println!("result: {:?}", result.integrand_result);
+        }
+
+        result
     }
 
     fn get_n_dim(&self) -> usize {
