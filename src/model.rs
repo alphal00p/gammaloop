@@ -4,25 +4,25 @@ use crate::numerator::ufo::UFO;
 use crate::utils::{self, FloatLike, F, W_};
 use crate::GammaLoopContext;
 use crate::HasModel;
-use bincode::{Decode, Encode};
-use linnet::half_edge::drawing::Decoration;
-use spenso::structure::PermutedStructure;
 use ahash::{AHashMap, HashSet, RandomState};
+use bincode::{Decode, Encode};
 use color_eyre::{Help, Report};
 use eyre::{eyre, Context};
 use itertools::Itertools;
+use linnet::half_edge::drawing::Decoration;
+use spenso::structure::PermutedStructure;
 
 // use log::{info, trace};
 use serde::{Deserialize, Serialize};
 use serde_yaml::Error;
 use smartstring::{LazyCompact, SmartString};
+use spenso::algebra::algebraic_traits::IsZero;
 use spenso::algebra::complex::Complex;
 use spenso::network::library::symbolic::ETS;
 use spenso::structure::representation::{LibraryRep, Minkowski};
 use spenso::structure::{
     abstract_index::AbstractIndex, concrete_index::CONCRETEIND, representation::Euclidean,
 };
-use spenso::algebra::algebraic_traits::IsZero;
 use spenso::structure::{
     representation::BaseRepName, representation::Lorentz, representation::RepName,
     representation::Representation, slot::DualSlotTo, slot::IsAbstractSlot, slot::Slot,
@@ -134,7 +134,7 @@ impl Encode for ArcVertexRule {
     }
 }
 
-impl<T: GammaLoopContext> Decode<T> for ArcVertexRule {
+impl<T: HasModel> Decode<T> for ArcVertexRule {
     fn decode<D: bincode::de::Decoder<Context = T>>(
         decoder: &mut D,
     ) -> std::result::Result<Self, bincode::error::DecodeError> {
@@ -897,14 +897,15 @@ pub struct EdgeSlots<LorRep: RepName> {
 impl From<EdgeSlots<Minkowski>> for OrderedStructure {
     fn from(value: EdgeSlots<Minkowski>) -> Self {
         PermutedStructure::<OrderedStructure>::from(
-             value
+            value
                 .lorentz
                 .into_iter()
                 .map(|x| x.to_lib())
                 .chain(value.spin.into_iter().map(|x| x.to_lib()))
                 .chain(value.color)
                 .collect_vec(),
-        ).structure
+        )
+        .structure
     }
 }
 
@@ -928,14 +929,16 @@ impl<LorRep: BaseRepName> Display for EdgeSlots<LorRep> {
 
 impl From<EdgeSlots<Lorentz>> for OrderedStructure {
     fn from(value: EdgeSlots<Lorentz>) -> Self {
-        PermutedStructure::<OrderedStructure>::from(value
+        PermutedStructure::<OrderedStructure>::from(
+            value
                 .lorentz
                 .into_iter()
                 .map(|x| x.to_lib())
                 .chain(value.spin.into_iter().map(|a| a.to_lib()))
                 .chain(value.color)
-                .collect_vec()
-        ).structure
+                .collect_vec(),
+        )
+        .structure
     }
 }
 
@@ -2340,7 +2343,10 @@ impl Model {
 
 #[cfg(test)]
 mod tests {
-    use crate::tests_from_pytest::load_generic_model;
+    use crate::{
+        model::{ArcPropagator, ArcVertexRule},
+        tests_from_pytest::load_generic_model,
+    };
 
     use super::ArcParticle;
 
@@ -2360,5 +2366,42 @@ mod tests {
         .0;
 
         assert_eq!(particle, particle_decoded);
+    }
+
+    #[test]
+    fn test_encode_decode_vertex_info() {
+        let model = load_generic_model("sm");
+        let vertex = model.get_vertex_rule("V_141");
+        let vertex_encoded = bincode::encode_to_vec(&vertex, bincode::config::standard()).unwrap();
+
+        let vertex_decoded: ArcVertexRule = bincode::decode_from_slice_with_context(
+            &vertex_encoded,
+            bincode::config::standard(),
+            model,
+        )
+        .unwrap()
+        .0;
+        assert_eq!(vertex, vertex_decoded);
+    }
+
+    #[test]
+    fn test_encode_decode_arc_propagator() {
+        let model = load_generic_model(
+            "sm
+        ",
+        );
+        let propagator = model.get_propagator("t_propFeynman");
+        let propagator_encoded =
+            bincode::encode_to_vec(&propagator, bincode::config::standard()).unwrap();
+
+        let propagator_decoded: ArcPropagator = bincode::decode_from_slice_with_context(
+            &propagator_encoded,
+            bincode::config::standard(),
+            model,
+        )
+        .unwrap()
+        .0;
+
+        assert_eq!(propagator.name, propagator_decoded.name);
     }
 }
