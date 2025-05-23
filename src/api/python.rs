@@ -30,7 +30,7 @@ use git_version::git_version;
 use itertools::{self, Itertools};
 use log::{debug, info, warn, LevelFilter};
 use pyo3::types::PyDict;
-use spenso::complex::Complex;
+use spenso::algebra::complex::Complex;
 use std::cmp::Ordering;
 use std::{
     fs,

@@ -6,6 +6,7 @@ use nalgebra::LU;
 use pathfinding::num_traits::real;
 use smartstring::SmartString;
 use spenso::{
+    algebra::complex::Complex,
     network::{library::TensorLibraryData, parsing::ShadowedStructure},
     structure::{
         abstract_index::AbstractIndex,
@@ -27,13 +28,14 @@ use crate::{
     graph::InteractionVertexInfo,
     integrands::Integrand,
     integrate::{havana_integrate, UserData},
-    model::{ArcVertexRule, ColorStructure, VertexRule},
+    model::{ArcVertexRule, ColorStructure, Model, VertexRule},
     momentum_sample::ExternalIndex,
     new_cs::{CrossSection, CrossSectionGraph, CutId, ProcessDefinition},
     new_graph::{get_cff_inverse_energy_product_impl, Edge, ExternalConnection, Graph, Vertex},
     numerator::UnInit,
     signature::LoopExtSignature,
     tests_from_pytest::{load_amplitude_output, load_generic_model},
+    utils::F,
     uv::UVGraph,
     Settings,
 };
@@ -44,7 +46,9 @@ fn double_triangle_LU() {
 
     let with_log_uv = true;
 
+    // load the model and hack the masses, go through serializable model since arc is not mutable
     let model = load_generic_model("sm");
+
     let mut underlying = HedgeGraphBuilder::new();
 
     let hhh = VertexInfo::InteractonVertexInfo(InteractionVertexInfo {
@@ -57,7 +61,7 @@ fn double_triangle_LU() {
     let hprop = model.get_propagator("H_propFeynman");
     let hp = model.get_particle("H");
 
-    let tprop = model.get_propagator("t_propFeynman");
+    let tprop = model.get_propagator("d_propFeynman");
     let tp = model.get_particle("t");
 
     let n1 = underlying.add_node(Vertex {
@@ -240,7 +244,7 @@ fn double_triangle_LU() {
     .unwrap();
 
     let super_uv_graph = UVGraph::from_underlying(&cs.graph.underlying);
-    let orientation_id = SuperGraphOrientationID(0);
+    let orientation_id = SuperGraphOrientationID(1);
     let supergraph_orientation_data = &cs
         .derived_data
         .cff_expression
@@ -407,6 +411,12 @@ fn double_triangle_LU() {
                         + function!(GS.emr_vec, W_.x_, 2) * function!(GS.emr_vec, W_.y_, 2)
                         + function!(GS.emr_vec, W_.x_, 3) * function!(GS.emr_vec, W_.y_, 3)),
                 );
+
+            cut_res = cut_res
+                .replace(parse!("MT").unwrap())
+                .with(Atom::new())
+                .replace(parse!("MH").unwrap())
+                .with(Atom::new());
 
             let cut_res = cut_res.expand();
             println!("Cut {} result: {:>}", id, cut_res);
