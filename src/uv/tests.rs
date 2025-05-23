@@ -35,6 +35,7 @@ use crate::{
     signature::LoopExtSignature,
     tests_from_pytest::{load_amplitude_output, load_generic_model},
     uv::UVGraph,
+    Settings,
 };
 
 #[test]
@@ -409,6 +410,38 @@ fn double_triangle_LU() {
 
             let cut_res = cut_res.expand();
             println!("Cut {} result: {:>}", id, cut_res);
+
+            if super_uv_graph.dod(&c.right) == 0 {
+                // only check when this graph is a UV subgraph
+                let t = symbol!("t");
+                let series = Atom::new_var(t).npow(3)
+                    * cut_res
+                        .replace(parse!("Q3(3)").unwrap())
+                        .with(parse!("t*Q3(3)").unwrap())
+                        .replace(parse!("Q3(2)").unwrap())
+                        .with(parse!("t*Q3(3)-Q3(1)").unwrap())
+                        .replace(parse!("Q3(4)").unwrap())
+                        .with(parse!("t*Q3(3)-Q3(6)").unwrap())
+                        .replace(parse!("symbolica_community::dot(t*x_,y_)").unwrap())
+                        .repeat()
+                        .with(parse!("t*symbolica_community::dot(x_,y_)").unwrap());
+
+                let s = series
+                    .replace(t)
+                    .with(Atom::new_var(t).npow(-1))
+                    .series(t, Atom::Zero, 0.into(), true)
+                    .unwrap();
+
+                let mut r = s.to_atom().expand();
+                r = r
+                    .replace((-Atom::new_var(W_.x_)).pow(Atom::new_num((-5, 2))))
+                    .with(Atom::new_var(W_.x_).pow(Atom::new_num((-5, 2))) * Atom::I)
+                    .replace((-Atom::new_var(W_.x_)).pow(Atom::new_num((-3, 2))))
+                    .with(-Atom::new_var(W_.x_).pow(Atom::new_num((-3, 2))) * Atom::I)
+                    .expand(); // help Symbolica with cancellations and avoid bad simplification of (-1)^(-5/2)
+                println!("Correct UV cancellation if 0: {:>}", r);
+            }
+
             cut_atoms.push(cut_res);
         } else {
             cut_atoms.push(Atom::new());
@@ -445,7 +478,7 @@ fn double_triangle_LU() {
         _ => unimplemented!(),
     };
 
-    println!("Final result: {:>}", sum.expand());
+    //println!("Final result: {:>}", sum.expand());
 }
 
 #[test]
