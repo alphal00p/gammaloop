@@ -1,7 +1,7 @@
 use crate::cff::esurface::add_external_shifts;
 use crate::cff::surface::Surface;
 use crate::utils::{external_energy_atom_from_index, ose_atom_from_index, FloatLike, F};
-use bincode::Encode;
+use bincode_trait_derive::{Decode, Encode};
 use derive_more::{From, Into};
 use itertools::Itertools;
 use linnet::half_edge::hedgevec::HedgeVec;
@@ -14,7 +14,7 @@ use typed_index_collections::TiVec;
 use super::esurface::ExternalShift;
 use super::{esurface::Esurface, surface};
 
-#[derive(From, Into, Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Encode)]
+#[derive(From, Into, Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Encode, Decode)]
 pub struct HsurfaceID(usize);
 pub type HsurfaceCollection = TiVec<HsurfaceID, Hsurface>;
 pub type HsurfaceCache<T> = TiVec<HsurfaceID, T>;

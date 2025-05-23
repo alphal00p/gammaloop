@@ -1,7 +1,7 @@
 use std::borrow::Borrow;
 
 use crate::utils::ose_atom_from_index;
-use bincode::{Decode, Encode};
+use bincode_trait_derive::{Decode, Encode};
 use derive_more::{From, Into};
 use linnet::half_edge::{
     hedgevec::HedgeVec,
@@ -43,7 +43,6 @@ impl OrientationID for SuperGraphOrientationID {}
 
 #[derive(Clone, Debug, Serialize, Deserialize, Encode, Decode)]
 pub struct OrientationData {
-    #[bincode(with_serde)]
     pub orientation: HedgeVec<Orientation>,
 }
 
@@ -97,12 +96,10 @@ impl OrientationData {
 #[derive(Clone, Debug, Serialize, Deserialize, Encode, Decode)]
 pub struct OrientationExpression {
     pub data: OrientationData,
-    #[bincode(with_serde)]
     pub expression: Tree<HybridSurfaceID>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize, Encode, Decode)]
 pub struct CFFExpression<O: OrientationID> {
-    #[bincode(with_serde)]
     pub orientations: TiVec<O, OrientationExpression>,
     pub surfaces: SurfaceCache,
 }

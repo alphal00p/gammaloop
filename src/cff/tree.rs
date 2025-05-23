@@ -1,4 +1,4 @@
-use bincode::{Decode, Encode};
+use bincode_trait_derive::{Decode, Encode};
 use derive_more::{From, Into};
 use serde::{Deserialize, Serialize};
 use symbolica::atom::Atom;
@@ -23,7 +23,7 @@ pub struct TreeNode<T> {
     pub parent: Option<NodeId>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Encode)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct Tree<T> {
     nodes: TiVec<NodeId, TreeNode<T>>,
 }

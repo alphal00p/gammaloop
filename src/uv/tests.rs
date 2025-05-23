@@ -61,7 +61,7 @@ fn double_triangle_LU() {
     let hprop = model.get_propagator("H_propFeynman");
     let hp = model.get_particle("H");
 
-    let tprop = model.get_propagator("d_propFeynman");
+    let tprop = model.get_propagator("t_propFeynman");
     let tp = model.get_particle("t");
 
     let n1 = underlying.add_node(Vertex {
