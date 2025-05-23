@@ -628,8 +628,10 @@ impl UltravioletGraph for UVGraph {
         let mut dod: i32 = 4 * self.n_loops(subgraph) as i32;
         // println!("nloops: {}", dod / 4);
 
-        for e in self.iter_internal_edge_data(subgraph) {
-            dod += e.data.dod;
+        for (pair, _eid, d) in self.iter_edges(subgraph) {
+            if matches!(pair, HedgePair::Paired { .. }) {
+                dod += d.data.dod;
+            }
         }
 
         for (_, _, n) in self.iter_node_data(subgraph) {
@@ -1197,9 +1199,11 @@ impl ApproxOp {
             let mut masses = AHashSet::new();
             masses.insert(Atom::new_var(GS.m_uv));
             // scale all masses, including UV masses from subgraphs
-            for e in graph.iter_internal_edge_data(subgraph) {
-                let e_mass = parse!(&e.data.particle.mass.name).unwrap();
-                masses.insert(e_mass);
+            for (pair, _eid, d) in graph.iter_edges(subgraph) {
+                if matches!(pair, HedgePair::Paired { .. }) {
+                    let e_mass = parse!(&d.data.particle.mass.name).unwrap();
+                    masses.insert(e_mass);
+                }
             }
 
             if !soft_ct {
