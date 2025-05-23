@@ -48,6 +48,7 @@ use rand::distr::StandardUniform;
 // use rand::distributions::Standard;
 use rand::prelude::Distribution;
 use ref_ops::RefNeg;
+use spenso::tensors::data::GetTensorData;
 use symbolica::domains::rational::{Rational, Q};
 use symbolica::poly::Variable;
 //use libc::__c_anonymous_ptrace_syscall_info_exit;

@@ -3085,11 +3085,9 @@ mod tests {
 
     use eyre::Context;
     use spenso::{
-        arithmetic::ScalarMul,
         contraction::Contract,
         iterators::IteratableTensor,
         structure::{slot::DualSlotTo, TensorStructure},
-        upgrading_arithmetic::{FallibleAdd, FallibleSub},
     };
     use symbolica::parse;
 

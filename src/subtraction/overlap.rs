@@ -677,7 +677,7 @@ fn to_real_mass_vector(edge_masses: &HedgeVec<Option<Complex<F<f64>>>>) -> Hedge
 mod tests {
     use super::*;
     use itertools::Itertools;
-    use spenso::complex::Complex;
+    use spenso::algebra::complex::Complex;
     use typed_index_collections::ti_vec;
 
     use crate::{
