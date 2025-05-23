@@ -780,11 +780,11 @@ impl<S: NumeratorState> Amplitude<S> {
 
 #[derive(Clone)]
 pub struct CrossSection<S: NumeratorState> {
-    name: String,
-    supergraphs: Vec<CrossSectionGraph<S>>,
-    external_particles: Vec<ArcParticle>,
-    external_connections: Vec<ExternalConnection>,
-    n_incmoming: usize,
+    pub name: String,
+    pub supergraphs: Vec<CrossSectionGraph<S>>,
+    pub external_particles: Vec<ArcParticle>,
+    pub external_connections: Vec<ExternalConnection>,
+    pub n_incmoming: usize,
 }
 
 impl<S: NumeratorState> CrossSection<S> {
@@ -1001,7 +1001,7 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
         self.generate_cff()?;
         self.update_surface_cache();
 
-        self.build_cut_evaluators(model);
+        self.build_cut_evaluators(model, None);
         self.build_orientation_evaluators(model);
         self.build_lmbs();
         self.build_esurface_derived_data()?;
@@ -1287,6 +1287,7 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
         }
 
         params.extend(model.generate_params());
+        params.push(Atom::new_var(GS.m_uv));
         params.push(Atom::new_var(GS.rescale_star));
         params.push(Atom::new_var(GS.hfunction));
         params.push(Atom::new_var(GS.deta));
@@ -1301,12 +1302,20 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
         fn_map
     }
 
-    fn build_cut_evaluators(&mut self, model: &Model) {
+    pub fn build_cut_evaluators(
+        &mut self,
+        model: &Model,
+        overwrite_atoms_for_test: Option<TiVec<CutId, Atom>>,
+    ) {
         let evaluators = self
             .cuts
             .iter_enumerated()
             .map(|(cut_id, _)| {
-                let atom = self.build_atom_for_cut(cut_id);
+                let atom = if let Some(atoms) = &overwrite_atoms_for_test {
+                    atoms[cut_id].clone()
+                } else {
+                    self.build_atom_for_cut(cut_id)
+                };
 
                 let params = self.get_params(model);
                 let mut tree = atom
