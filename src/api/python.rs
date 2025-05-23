@@ -1417,6 +1417,9 @@ impl PythonWorker {
         let settings =
             serde_yaml::from_str::<Settings>(settings_yaml_str).expect("Could not parse settings");
 
+        println!("settings: {}", settings_yaml_str);
+        panic!();
+
         let integrands = self.process_list.generate_integrands(settings, &self.model);
 
         self.integrands = integrands;

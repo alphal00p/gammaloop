@@ -27,6 +27,7 @@ use super::{
 };
 
 const TOLERANCE: F<f64> = F(2.0);
+const HARD_CODED_M_UV: F<f64> = F(10000.0);
 
 #[derive(Clone)]
 pub struct CrossSectionIntegrand {
@@ -255,6 +256,9 @@ impl CrossSectionGraphTerm {
                     .collect_vec();
 
                 params.extend(real_parameter_cache);
+
+                let m_uv = F::from_ff64(HARD_CODED_M_UV);
+                params.push(m_uv);
 
                 params.push(newton_result.solution);
                 params.push(h_function);

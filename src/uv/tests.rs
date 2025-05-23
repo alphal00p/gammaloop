@@ -2,6 +2,8 @@ use std::{sync::Arc, time::Instant};
 
 use ahash::HashMap;
 use linnet::half_edge::hedgevec::HedgeVec;
+use nalgebra::LU;
+use pathfinding::num_traits::real;
 use smartstring::SmartString;
 use spenso::{
     network::parsing::ShadowedStructure,
@@ -24,13 +26,17 @@ use crate::{
         FeynGenFilters,
     },
     graph::InteractionVertexInfo,
+    integrands::Integrand,
+    integrate::{havana_integrate, UserData},
     model::{ArcVertexRule, ColorStructure, VertexRule},
-    new_cs::{CrossSectionGraph, ProcessDefinition},
-    new_graph::{get_cff_inverse_energy_product_impl, Edge, Graph, Vertex},
+    momentum_sample::ExternalIndex,
+    new_cs::{CrossSection, CrossSectionGraph, CutId, ProcessDefinition},
+    new_graph::{get_cff_inverse_energy_product_impl, Edge, ExternalConnection, Graph, Vertex},
     numerator::UnInit,
     signature::LoopExtSignature,
     tests_from_pytest::{load_amplitude_output, load_generic_model},
     uv::UVGraph,
+    Externals, Settings,
 };
 
 pub fn spenso_lor(
@@ -50,6 +56,8 @@ pub fn spenso_lor_atom(tag: i32, ind: impl Into<AbstractIndex>, dim: impl Into<D
 
 #[test]
 fn double_triangle_LU() {
+    let _ = env_logger::builder().is_test(true).try_init();
+
     let with_log_uv = true;
 
     let model = load_generic_model("sm");
@@ -255,7 +263,8 @@ fn double_triangle_LU() {
         .as_ref()
         .unwrap()
         .orientation_data[orientation_id];
-    let mut sum = Atom::Zero;
+
+    let mut cut_atoms: TiVec<CutId, Atom> = TiVec::new();
 
     for (id, c) in cs.cuts.iter_enumerated() {
         let esurface_id = cs.cut_esurface_id_map[id];
@@ -300,10 +309,7 @@ fn double_triangle_LU() {
             let right_expr =
                 right_forest.local_expr(&super_uv_graph, &c.right, &None, right_orientation_data);
 
-            let cut_inverse_energies = get_cff_inverse_energy_product_impl(&super_uv_graph, &c.cut);
-            let mut cut_res = left_expr * right_expr * cut_inverse_energies;
-
-            // let mut cut_res = cs.add_additional_factors_to_cff_atom(&(left_expr * right_expr), id);
+            let mut cut_res = cs.add_additional_factors_to_cff_atom(&(left_expr * right_expr), id);
 
             // add Feynman rules of cut edges
             for (_p, edge_index, d) in super_uv_graph.iter_edges(&c.cut.left) {
@@ -406,11 +412,55 @@ fn double_triangle_LU() {
                 .replace(function!(GS.emr_vec, function!(GS.emr_mom, W_.x_)))
                 .with(function!(GS.emr_vec, W_.x_));
 
-            println!("Cut {} result: {:>}", id, cut_res.expand());
+            cut_res = cut_res
+                .replace(function!(
+                    MS.dot,
+                    function!(GS.emr_vec, W_.x_),
+                    function!(GS.emr_vec, W_.y_)
+                ))
+                .with(
+                    -(function!(GS.emr_vec, W_.x_, 1) * function!(GS.emr_vec, W_.y_, 1)
+                        + function!(GS.emr_vec, W_.x_, 2) * function!(GS.emr_vec, W_.y_, 2)
+                        + function!(GS.emr_vec, W_.x_, 3) * function!(GS.emr_vec, W_.y_, 3)),
+                );
 
-            sum += cut_res;
+            let cut_res = cut_res.expand();
+            println!("Cut {} result: {:>}", id, cut_res);
+            cut_atoms.push(cut_res);
+        } else {
+            cut_atoms.push(Atom::new());
         }
     }
+
+    cs.derived_data.bare_cff_evaluators = None;
+    cs.build_cut_evaluators(&model, Some(cut_atoms));
+
+    let external_connection = ExternalConnection {
+        incoming_index: ExternalIndex::from(0),
+        outgoing_index: ExternalIndex::from(1),
+    };
+
+    let cs_struct = CrossSection {
+        name: "LU_test".into(),
+        supergraphs: vec![cs],
+        external_connections: vec![external_connection],
+        external_particles: vec![hp.clone(), hp.clone()],
+        n_incmoming: 1,
+    };
+
+    let settings: Settings = serde_yaml::from_str(LU_TEST_SETTINGS).unwrap();
+    let integrand = cs_struct.generate_integrand(settings.clone(), &model);
+
+    let result = match integrand {
+        Integrand::NewIntegrand(real_integrand) => havana_integrate(
+            &settings,
+            |set| real_integrand.user_data_generator(1, set),
+            None,
+            None,
+            None,
+        ),
+        _ => unimplemented!(),
+    };
 
     //   println!("Final result: {:>}", sum.expand());
 }
@@ -1467,3 +1517,86 @@ impl Ord for TestNode {
         self.partial_cmp(other).unwrap()
     }
 }
+
+const LU_TEST_SETTINGS: &'static str = " 
+General:
+  amplitude_prefactor:
+    im: 1.0
+    re: 0.0
+  debug: 0
+  force_orientations: null
+  joint_numerator_eval: true
+  load_compiled_cff: true
+  load_compiled_numerator: true
+  load_compiled_separate_orientations: false
+  use_ltd: false
+Integrand:
+  type: gamma_loop
+Integrator:
+  bin_number_evolution: null
+  continuous_dim_learning_rate: 0.3
+  discrete_dim_learning_rate: 1.5
+  integrated_phase: real
+  max_prob_ratio: 1000.0
+  min_samples_for_update: 100
+  n_bins: 16
+  n_increase: 0
+  n_max: 100000000
+  n_start: 2000000
+  seed: 2
+  show_max_wgt_info: false
+  train_on_avg: false
+Kinematics:
+  e_cm: 800.0
+  externals:
+    data:
+      helicities: []
+      momenta:
+      - - 800.0
+        - 0.0
+        - 0.0
+        - 0.0
+    type: constant
+Observables: []
+Selectors: []
+Stability:
+  levels:
+  - escalate_for_large_weight_threshold: 0.9
+    precision: Double
+    required_precision_for_im: 1.0e-07
+    required_precision_for_re: 1.0e-07
+  - escalate_for_large_weight_threshold: -1.0
+    precision: Quad
+    required_precision_for_im: 1.0e-10
+    required_precision_for_re: 1.0e-10
+  rotate_numerator: false
+  rotation_axis: []
+sampling:
+  sample_orientations: false
+  sampling_type:
+    b: 1.0
+    mapping: linear
+    mode: spherical
+    subtype: default
+  type: discrete_graph_sampling
+subtraction:
+  integrated_ct_settings:
+    range:
+      h_function_settings:
+        enabled_dampening: true
+        function: poly_exponential
+        power: null
+        sigma: 1.0
+      type: infinite
+  local_ct_settings:
+    dampen_integrable_singularity:
+      type: exponential
+    uv_localisation:
+      dynamic_width: false
+      gaussian_width: 1.0
+      sliver_width: 10.0
+  overlap_settings:
+    check_global_center: true
+    force_global_center: null
+    try_origin: false
+    try_origin_all_lmbs: false";
