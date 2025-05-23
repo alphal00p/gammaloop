@@ -6,7 +6,7 @@ use crate::{DependentMomentaConstructor, Externals, Polarizations, Settings};
 use bincode::{Decode, Encode};
 use derive_more::{From, Into};
 use serde::{Deserialize, Serialize};
-use spenso::complex::Complex;
+use spenso::algebra::complex::Complex;
 use std::ops::Index;
 use symbolica::domains::float::NumericalFloatLike;
 use typed_index_collections::TiVec;

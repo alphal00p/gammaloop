@@ -12,6 +12,7 @@
     "show_parameter_hints": false,
     "show_other_hints": true
   },
+  "load_direnv": "direct",
   "lsp": {
     "rust-analyzer": {
       "initialization_options": {
@@ -27,7 +28,8 @@
           }
         },
         "cargo": {
-          "features": "none"
+          "features": "none",
+          "allTargets": true
         },
         "diagnostics": {
           "experimental": {
@@ -35,6 +37,7 @@
           }
         },
         "checkOnSave": true,
+
         "check": {
           "onSave": true,
           "features": [],

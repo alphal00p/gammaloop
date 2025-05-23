@@ -6,8 +6,7 @@ use nalgebra::LU;
 use pathfinding::num_traits::real;
 use smartstring::SmartString;
 use spenso::{
-    network::parsing::ShadowedStructure,
-    scalar::Scalar,
+    network::{library::TensorLibraryData, parsing::ShadowedStructure},
     structure::{
         abstract_index::AbstractIndex,
         dimension::Dimension,
@@ -36,23 +35,7 @@ use crate::{
     signature::LoopExtSignature,
     tests_from_pytest::{load_amplitude_output, load_generic_model},
     uv::UVGraph,
-    Externals, Settings,
 };
-
-pub fn spenso_lor(
-    tag: i32,
-    ind: impl Into<AbstractIndex>,
-    dim: impl Into<Dimension>,
-) -> ShadowedStructure {
-    let mink = Minkowski {}.new_slot(dim, ind);
-    NamedStructure::from_iter([mink], GS.emr_mom, Some(vec![Atom::new_num(tag)]))
-}
-
-pub fn spenso_lor_atom(tag: i32, ind: impl Into<AbstractIndex>, dim: impl Into<Dimension>) -> Atom {
-    let mink = Minkowski {}.new_slot(dim, ind);
-    // spenso_lor(tag, ind, dim).to_symbolic().unwrap()
-    vec![mink].to_symbolic_with(GS.emr_mom, &[Atom::new_num(tag)])
-}
 
 #[test]
 fn double_triangle_LU() {
@@ -462,7 +445,7 @@ fn double_triangle_LU() {
         _ => unimplemented!(),
     };
 
-    //   println!("Final result: {:>}", sum.expand());
+    println!("Final result: {:>}", sum.expand());
 }
 
 #[test]

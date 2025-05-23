@@ -8,8 +8,8 @@ use crate::{
 use crate::{observables::JetSliceSettings, observables::PhaseSpaceSelectorSettings};
 use colored::Colorize;
 use hyperdual::Zero;
-use spenso::complex::Complex;
-use spenso::contraction::IsZero;
+use spenso::algebra::algebraic_traits::IsZero;
+use spenso::algebra::complex::Complex;
 use symbolica::domains::float::Complex as SymComplex;
 
 use crate::inspect::inspect;

@@ -21,7 +21,7 @@ use linnet::half_edge::involution::EdgeIndex;
 use serde::Deserialize;
 use serde::Serialize;
 use serde_with::serde_as;
-use spenso::complex::Complex;
+use spenso::algebra::complex::Complex;
 
 use crate::signature::LoopExtSignature;
 
@@ -677,7 +677,7 @@ fn to_real_mass_vector(edge_masses: &HedgeVec<Option<Complex<F<f64>>>>) -> Hedge
 mod tests {
     use super::*;
     use itertools::Itertools;
-    use spenso::complex::Complex;
+    use spenso::algebra::complex::Complex;
     use typed_index_collections::ti_vec;
 
     use crate::{

@@ -12,7 +12,7 @@ use crate::Precision;
 use crate::SamplingSettings;
 use crate::Settings;
 use serde::{Deserialize, Serialize};
-use spenso::complex::Complex;
+use spenso::algebra::complex::Complex;
 use symbolica::domains::float::NumericalFloatLike;
 use symbolica::numerical_integration::{ContinuousGrid, Grid, Sample};
 

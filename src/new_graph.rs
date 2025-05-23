@@ -25,16 +25,16 @@ use linnet::half_edge::{
 };
 use log::debug;
 use nalgebra::DMatrix;
+use spenso::algebra::algebraic_traits::IsZero;
 // use petgraph::Direction::Outgoing;
 use serde::{de::value, Deserialize, Serialize};
 use smartstring::{LazyCompact, SmartString};
 use spenso::{
-    contraction::IsZero,
-    data::DataTensor,
-    scalar::Scalar,
+    network::library::TensorLibraryData,
     structure::{
         abstract_index::AbstractIndex, representation::Minkowski, NamedStructure, ToSymbolic,
     },
+    tensors::data::DataTensor,
 };
 use symbolica::{
     atom::{representation::InlineNum, Atom, AtomCore, AtomView},
@@ -827,7 +827,7 @@ impl Edge {
                 let mut color_atom = Atom::new_num(1);
                 for (&cin, &cout) in in_slots.color.iter().zip(out_slots.color.iter()) {
                     let id: NamedStructure<String, ()> =
-                        NamedStructure::from_iter([cin, cout], "id".into(), None);
+                        NamedStructure::from_iter([cin, cout], "id".into(), None).structure;
                     color_atom = color_atom * &id.to_symbolic().unwrap();
                 }
 

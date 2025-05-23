@@ -31,8 +31,8 @@ use colored::Colorize;
 use itertools::Itertools;
 use momtrop::vector::Vector;
 use serde::{Deserialize, Serialize};
-use spenso::complex::Complex;
-use spenso::contraction::IsZero;
+use spenso::algebra::algebraic_traits::IsZero;
+use spenso::algebra::complex::Complex;
 use symbolica::domains::float::{NumericalFloatLike, Real};
 use symbolica::numerical_integration::{ContinuousGrid, DiscreteGrid, Grid, Sample};
 /// Trait to capture the common behaviour of amplitudes and cross sections

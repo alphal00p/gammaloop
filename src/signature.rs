@@ -5,7 +5,7 @@ use crate::momentum_sample::{
 use crate::utils::{FloatLike, Length, F};
 use bincode::{BorrowDecode, Decode, Encode};
 use serde::{Deserialize, Serialize};
-use spenso::contraction::RefZero;
+use spenso::algebra::algebraic_traits::RefZero;
 use std::fmt::Display;
 use std::ops::{AddAssign, Index, IndexMut, Neg, SubAssign};
 use typed_index_collections::TiVec;
@@ -321,7 +321,7 @@ where
         result
     }
 
-    /// Canonization function to compare two signatures up to an overall sign,  
+    /// Canonization function to compare two signatures up to an overall sign,
     /// If the first nonzero entry is positive, it will return itself,
     /// otherwise it will return the negative of itself.
     pub fn first_abs(&self) -> Self {
