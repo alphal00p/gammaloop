@@ -1596,3 +1596,282 @@ impl CrossSectionCut {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        fs::{self, OpenOptions},
+        path::PathBuf,
+    };
+
+    use ahash::HashSet;
+    use linnet::half_edge::{
+        builder::HedgeGraphBuilder,
+        involution::{EdgeIndex, Flow},
+    };
+    use spenso::network::library::TensorLibraryData;
+    use symbolica::{
+        atom::Atom,
+        state::{HasStateMap, State, StateMap},
+    };
+
+    use crate::{
+        feyngen::FeynGenFilters,
+        graph::{EdgeType, InteractionVertexInfo, VertexInfo},
+        new_graph::{Edge, Graph, LoopMomentumBasis, Vertex},
+        numerator::{
+            EvaluatorOptions, GammaAlgebraMode, GlobalPrefactor, NumeratorEvaluatorOptions,
+            NumeratorParseMode, NumeratorSettings, UnInit,
+        },
+        signature::LoopExtSignature,
+        tests_from_pytest::load_generic_model,
+        GammaLoopContextContainer, GammaloopCompileOptions, TropicalSubgraphTableSettings,
+    };
+
+    use super::{Amplitude, AmplitudeGraph, CrossSectionGraph, ProcessDefinition};
+
+    #[test]
+    fn test_encode_decode_amplitude_graph() {
+        // load the model and hack the masses, go through serializable model since arc is not mutable
+        let model = load_generic_model("sm");
+
+        let mut underlying = HedgeGraphBuilder::new();
+
+        let hhh = VertexInfo::InteractonVertexInfo(InteractionVertexInfo {
+            vertex_rule: model.get_vertex_rule("V_9"),
+        });
+        let htt = VertexInfo::InteractonVertexInfo(InteractionVertexInfo {
+            vertex_rule: model.get_vertex_rule("V_141"),
+        });
+
+        let hprop = model.get_propagator("H_propFeynman");
+        let hp = model.get_particle("H");
+
+        let tprop = model.get_propagator("t_propFeynman");
+        let tp = model.get_particle("t");
+
+        let n1 = underlying.add_node(Vertex {
+            name: "n1".into(),
+            vertex_info: hhh,
+            dod: 0,
+            num: Atom::one(),
+        });
+        let n2 = underlying.add_node(Vertex {
+            name: "n2".into(),
+            vertex_info: htt.clone(),
+            dod: 0,
+
+            num: Atom::one(),
+        });
+        let n3 = underlying.add_node(Vertex {
+            name: "n3".into(),
+            vertex_info: htt.clone(),
+            dod: 0,
+            num: Atom::one(),
+        });
+        let n4 = underlying.add_node(Vertex {
+            name: "n4".into(),
+            vertex_info: htt.clone(),
+            dod: 0,
+
+            num: Atom::one(),
+        });
+
+        underlying.add_edge(
+            n1,
+            n2,
+            Edge {
+                name: "e0".into(),
+                edge_type: EdgeType::Virtual,
+                particle: hp.clone(),
+                propagator: hprop.clone(),
+                internal_index: vec![],
+                dod: -2,
+                num: Atom::one(),
+            },
+            false,
+        );
+
+        underlying.add_edge(
+            n1,
+            n3,
+            Edge {
+                name: "e1".into(),
+                edge_type: EdgeType::Virtual,
+                particle: hp.clone(),
+                propagator: hprop.clone(),
+                internal_index: vec![],
+                dod: -2,
+                num: Atom::one(),
+            },
+            false,
+        );
+
+        underlying.add_edge(
+            n2,
+            n3,
+            Edge {
+                name: "e2".into(),
+                edge_type: EdgeType::Virtual,
+                particle: tp.clone(),
+                propagator: tprop.clone(),
+                internal_index: vec![],
+                dod: -2,
+                num: Atom::one(),
+            },
+            true,
+        );
+
+        underlying.add_edge(
+            n3,
+            n4,
+            Edge {
+                name: "e3".into(),
+                edge_type: EdgeType::Virtual,
+                particle: tp.clone(),
+                propagator: tprop.clone(),
+                internal_index: vec![],
+                dod: -2,
+                num: Atom::one(),
+            },
+            true,
+        );
+
+        underlying.add_edge(
+            n4,
+            n2,
+            Edge {
+                name: "e4".into(),
+                edge_type: EdgeType::Virtual,
+                particle: tp.clone(),
+                propagator: tprop.clone(),
+                internal_index: vec![],
+                dod: -2,
+                num: Atom::one(),
+            },
+            true,
+        );
+
+        underlying.add_external_edge(
+            n1,
+            Edge {
+                name: "q1".into(),
+                edge_type: EdgeType::Incoming,
+                particle: hp.clone(),
+                propagator: hprop.clone(),
+                internal_index: vec![],
+                dod: 0,
+                num: Atom::one(),
+            },
+            false,
+            Flow::Sink,
+        );
+
+        underlying.add_external_edge(
+            n4,
+            Edge {
+                name: "q2".into(),
+                edge_type: EdgeType::Outgoing,
+                particle: hp.clone(),
+                propagator: hprop.clone(),
+                internal_index: vec![],
+                dod: 0,
+                num: Atom::one(),
+            },
+            false,
+            Flow::Source,
+        );
+
+        let underlying = underlying.build();
+
+        let mut loop_momentum_basis = LoopMomentumBasis {
+            tree: None,
+            basis: vec![EdgeIndex::from(0), EdgeIndex::from(4)].into(),
+            edge_signatures: underlying
+                .new_hedgevec(|_, _, _| LoopExtSignature::from((vec![], vec![]))),
+        };
+
+        loop_momentum_basis
+            .set_edge_signatures(&underlying)
+            .unwrap();
+
+        let graph = Graph {
+            multiplicity: Atom::one(),
+            name: "DT".into(),
+            underlying,
+            loop_momentum_basis,
+            vertex_slots: vec![].into(),
+            external_connections: None,
+        };
+
+        let mut amplitude: AmplitudeGraph<UnInit> = AmplitudeGraph::new(graph);
+
+        amplitude
+            .preprocess(
+                &model,
+                &crate::ProcessSettings {
+                    compile_cff: false,
+                    compile_separate_orientations: false,
+                    cpe_rounds_cff: None,
+                    numerator_settings: NumeratorSettings {
+                        eval_settings: NumeratorEvaluatorOptions::Single(EvaluatorOptions {
+                            cpe_rounds: None,
+                            compile_options: crate::numerator::NumeratorCompileOptions::NotCompiled,
+                        }),
+                        parse_mode: NumeratorParseMode::Direct,
+                        dump_expression: None,
+                        global_numerator: None,
+                        global_prefactor: GlobalPrefactor {
+                            color: Atom::one(),
+                            colorless: Atom::one(),
+                        },
+                        gamma_algebra: GammaAlgebraMode::Concrete,
+                    },
+                    gammaloop_compile_options: GammaloopCompileOptions {
+                        inline_asm: false,
+                        fast_math: false,
+                        optimization_level: 0,
+                        unsafe_math: false,
+                        compiler: "g++".into(),
+                        custom: Vec::new(),
+                    },
+                    tropical_subgraph_table_settings: TropicalSubgraphTableSettings {
+                        panic_on_fail: false,
+                        target_omega: 1.0,
+                    },
+                },
+            )
+            .unwrap();
+
+        let encoded_amplitude =
+            bincode::encode_to_vec(&amplitude, bincode::config::standard()).unwrap();
+
+        let path = PathBuf::from("test.bin");
+
+        let mut temp = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open("test.bin")
+            .unwrap();
+
+        State::export(&mut temp).unwrap();
+        drop(temp);
+
+        let mut temp = OpenOptions::new().read(true).open("test.bin").unwrap();
+        let state_map = State::import(&mut temp, None).unwrap();
+
+        let context = GammaLoopContextContainer {
+            model: &model,
+            state_map: &state_map,
+        };
+
+        let amplitude: AmplitudeGraph<UnInit> = bincode::decode_from_slice_with_context(
+            &encoded_amplitude,
+            bincode::config::standard(),
+            context,
+        )
+        .unwrap()
+        .0;
+    }
+}
