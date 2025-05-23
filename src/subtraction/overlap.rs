@@ -21,7 +21,7 @@ use linnet::half_edge::involution::EdgeIndex;
 use serde::Deserialize;
 use serde::Serialize;
 use serde_with::serde_as;
-use spenso::complex::Complex;
+use spenso::algebra::complex::Complex;
 
 use crate::signature::LoopExtSignature;
 

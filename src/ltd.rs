@@ -18,8 +18,9 @@ use log::debug;
 use nalgebra::DMatrix;
 use serde::{Deserialize, Serialize};
 use spenso::{
-    arithmetic::ScalarMul, complex::Complex, data::DataTensor, structure::ScalarTensor,
-    upgrading_arithmetic::FallibleAdd,
+    algebra::{complex::Complex, upgrading_arithmetic::FallibleAdd, ScalarMul},
+    structure::ScalarTensor,
+    tensors::data::DataTensor,
 };
 use symbolica::domains::float::{NumericalFloatLike, Real};
 
