@@ -1,6 +1,6 @@
 use itertools::Itertools;
 use momtrop::SampleGenerator;
-use spenso::complex::Complex;
+use spenso::algebra::complex::Complex;
 use symbolica::numerical_integration::{Grid, Sample};
 use typed_index_collections::TiVec;
 

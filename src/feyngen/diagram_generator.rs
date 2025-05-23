@@ -6,20 +6,23 @@ use linnet::permutation::Permutation;
 use rayon::iter::ParallelIterator;
 use rayon::prelude::*;
 use rayon::ThreadPoolBuilder;
-use spenso::complex::{Complex, RealOrComplexTensor};
+use spenso::algebra::complex::Complex;
 use spenso::contraction::Contract;
-use spenso::data::{DataTensor, StorageTensor};
 use spenso::iterators::IteratableTensor;
 use spenso::network::library::symbolic::ExplicitKey;
 use spenso::network::parsing::ShadowedStructure;
 use spenso::network::store::NetworkStore;
+use spenso::tensors::{
+    complex::RealOrComplexTensor,
+    data::{DataTensor, StorageTensor},
+};
 // use spenso::network::Network;
-use spenso::parametric::{MixedTensor, ParamOrConcrete, ParamTensor};
+use spenso::tensors::parametric::{MixedTensor, ParamOrConcrete, ParamTensor};
 
+use spenso::shadowing::symbolica_utils::{SerializableAtom, SerializableSymbol};
 use spenso::structure::representation::{ExtendibleReps, LibraryRep, RepName};
 use spenso::structure::slot::DualSlotTo;
 use spenso::structure::{HasStructure, SmartShadowStructure};
-use spenso::symbolica_utils::{SerializableAtom, SerializableSymbol};
 use std::collections::hash_map::Entry;
 use std::collections::HashSet;
 use std::ops::{Deref, RangeInclusive};

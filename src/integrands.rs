@@ -10,7 +10,7 @@ use enum_dispatch::enum_dispatch;
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
 use serde::{Deserialize, Serialize};
-use spenso::complex::Complex;
+use spenso::algebra::complex::Complex;
 use std::fmt::{Display, Formatter};
 use symbolica::domains::float::{NumericalFloatLike, Real};
 use symbolica::numerical_integration::{ContinuousGrid, Grid, Sample};

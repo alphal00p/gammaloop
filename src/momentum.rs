@@ -10,25 +10,34 @@ use momtrop::vector::Vector;
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use spenso::{
-    complex::RealOrComplexTensor,
-    contraction::{Contract, RefZero},
-    data::{
-        DataIterator, DataTensor, DenseTensor, HasTensorData, SetTensorData, SparseTensor,
-        StorageTensor,
+    algebra::{
+        algebraic_traits::RefZero,
+        complex::Complex,
+        upgrading_arithmetic::{
+            FallibleAdd, FallibleAddAssign, FallibleMul, FallibleSub, FallibleSubAssign,
+            TrySmallestUpgrade,
+        },
     },
+    contraction::Contract,
     iterators::IteratableTensor,
-    parametric::{
-        atomcore::TensorAtomOps, EvalTensor, FlatCoefficent, MixedTensor, ParamOrConcrete,
-    },
-    shadowing::Shadowable,
+    shadowing::{symbolica_utils::NoArgs, Shadowable},
     structure::{
         abstract_index::AbstractIndex,
         representation::{BaseRepName, Euclidean, LibraryRep, LibrarySlot, Minkowski, RepName},
         slot::{DualSlotTo, Slot},
-        CastStructure, IndexLess, NamedStructure, TensorStructure, ToSymbolic, VecStructure,
+        CastStructure, IndexLess, NamedStructure, OrderedStructure, TensorStructure, ToSymbolic,
     },
-    symbolica_utils::NoArgs,
-    upgrading_arithmetic::FallibleAdd,
+    tensors::{
+        complex::RealOrComplexTensor,
+        data::{
+            DataIterator, DataTensor, DenseTensor, HasTensorData, SetTensorData, SparseTensor,
+            StorageTensor,
+        },
+        parametric::{
+            atomcore::{TensorAtomMaps, TensorAtomOps},
+            EvalTensor, FlatCoefficent, MixedTensor, ParamOrConcrete,
+        },
+    },
 };
 use symbolica::{
     atom::{Atom, AtomCore, Symbol},
@@ -42,7 +51,6 @@ use symbolica::{
     poly::{polynomial::MultivariatePolynomial, Exponent},
 };
 
-use spenso::complex::Complex;
 use symbolica::{parse, symbol};
 use symbolica_community::physics::algebraic_simplification::representations::Bispinor;
 
@@ -497,19 +505,21 @@ impl<T> ThreeMomentum<T> {
         ThreeMomentum { px, py, pz }
     }
 
-    pub fn into_dense(self, index: AbstractIndex) -> DenseTensor<T, VecStructure>
+    pub fn into_dense(self, index: AbstractIndex) -> DenseTensor<T, OrderedStructure>
     where
         T: Clone,
     {
-        let structure = VecStructure::from_iter(vec![Euclidean {}.new_slot(3, index)]);
+        let structure =
+            OrderedStructure::from_iter(vec![Euclidean {}.new_slot(3, index)]).structure;
         DenseTensor::from_data(vec![self.px, self.py, self.pz], structure).unwrap()
     }
 
-    pub fn into_dense_param(self, index: AbstractIndex) -> DenseTensor<T, VecStructure>
+    pub fn into_dense_param(self, index: AbstractIndex) -> DenseTensor<T, OrderedStructure>
     where
         T: Clone,
     {
-        let structure = VecStructure::from_iter(vec![Euclidean {}.new_slot(3, index)]);
+        let structure =
+            OrderedStructure::from_iter(vec![Euclidean {}.new_slot(3, index)]).structure;
         DenseTensor::from_data(vec![self.px, self.py, self.pz], structure).unwrap()
     }
 }
@@ -1558,12 +1568,13 @@ impl<T> FourMomentum<T, T> {
         }
     }
 
-    pub fn into_dense(self, index: AbstractIndex) -> DenseTensor<T, VecStructure>
+    pub fn into_dense(self, index: AbstractIndex) -> DenseTensor<T, OrderedStructure>
     where
         T: Clone,
     {
         let structure =
-            VecStructure::from_iter([LibraryRep::new_slot(Minkowski {}.into(), 4, index)]);
+            OrderedStructure::from_iter([LibraryRep::new_slot(Minkowski {}.into(), 4, index)])
+                .structure;
         DenseTensor::from_data(
             vec![
                 self.temporal.value,
@@ -1586,7 +1597,8 @@ impl<T> FourMomentum<T, T> {
         T: Clone,
     {
         let structure =
-            VecStructure::from_iter([LibraryRep::new_slot(Minkowski {}.into(), 4, index)])
+            OrderedStructure::from_iter([LibraryRep::new_slot(Minkowski {}.into(), 4, index)])
+                .structure
                 .to_named(name, Some(num));
         DenseTensor::from_data(
             vec![
@@ -2433,12 +2445,13 @@ impl<T> FourMomentum<T, Atom> {
     pub fn into_dense_param(
         self,
         index: AbstractIndex,
-    ) -> DenseTensor<MultivariatePolynomial<RationalField, T>, VecStructure>
+    ) -> DenseTensor<MultivariatePolynomial<RationalField, T>, OrderedStructure>
     where
         T: Clone + Into<Coefficient> + Exponent,
     {
         let structure =
-            VecStructure::from_iter([LibraryRep::new_slot(Minkowski {}.into(), 4, index)]);
+            OrderedStructure::from_iter([LibraryRep::new_slot(Minkowski {}.into(), 4, index)])
+                .structure;
         let energy = self
             .temporal
             .value
@@ -2639,8 +2652,8 @@ impl From<RotationMethod> for Rotation {
 #[derive(Clone)]
 pub struct Rotation {
     pub method: RotationMethod,
-    pub lorentz_rotation: EvalTensor<ExpressionEvaluator<Complex<F<f64>>>, VecStructure>,
-    pub bispinor_rotation: EvalTensor<ExpressionEvaluator<Complex<F<f64>>>, VecStructure>,
+    pub lorentz_rotation: EvalTensor<ExpressionEvaluator<Complex<F<f64>>>, OrderedStructure>,
+    pub bispinor_rotation: EvalTensor<ExpressionEvaluator<Complex<F<f64>>>, OrderedStructure>,
     // phantom: PhantomData<T>,
 }
 
@@ -2665,9 +2678,10 @@ impl Rotation {
         let al = Minkowski::slot(4, 3);
         let mud = mu.dual();
 
-        let shadow: NamedStructure<String, ()> =
-            VecStructure::from_iter([mu.into()]).to_named("eps".to_string(), None);
-        let shadow_t: MixedTensor<_, VecStructure> =
+        let shadow: NamedStructure<String, ()> = OrderedStructure::from_iter([mu.into()])
+            .structure
+            .to_named("eps".to_string(), None);
+        let shadow_t: MixedTensor<_, OrderedStructure> =
             ParamOrConcrete::param(shadow.to_shell().expanded_shadow().unwrap().into())
                 .cast_structure();
 
@@ -2679,7 +2693,7 @@ impl Rotation {
 
         let fn_map = FunctionMap::new();
 
-        let lorentz_eval: EvalTensor<ExpressionEvaluator<Rational>, VecStructure> = shadow_t
+        let lorentz_eval: EvalTensor<ExpressionEvaluator<Rational>, OrderedStructure> = shadow_t
             .contract(&rotation)
             .unwrap()
             .try_into_parametric()
@@ -2696,8 +2710,10 @@ impl Rotation {
         let j = Bispinor {}.new_slot(4, 3);
 
         let shadow: NamedStructure<String, ()> =
-            VecStructure::from_iter([i.cast::<LibraryRep>()]).to_named("u".to_string(), None);
-        let shadow_t: MixedTensor<_, VecStructure> =
+            OrderedStructure::from_iter([i.cast::<LibraryRep>()])
+                .structure
+                .to_named("u".to_string(), None);
+        let shadow_t: MixedTensor<_, OrderedStructure> =
             ParamOrConcrete::param(shadow.to_shell().expanded_shadow().unwrap().into())
                 .cast_structure();
 
@@ -2714,7 +2730,7 @@ impl Rotation {
         let mut params = shadow_t.try_into_parametric().unwrap().tensor.data();
         params.push(Atom::new_var(Atom::I));
 
-        let spinor_eval: EvalTensor<ExpressionEvaluator<Rational>, VecStructure> = res
+        let spinor_eval: EvalTensor<ExpressionEvaluator<Rational>, OrderedStructure> = res
             .to_evaluation_tree(&fn_map, &params)
             .unwrap()
             .linearize(Some(1));
@@ -2728,11 +2744,16 @@ impl Rotation {
 }
 
 impl RotationMethod {
-    pub fn generator(&self, i: AbstractIndex, j: AbstractIndex) -> DataTensor<f64, VecStructure> {
-        let structure = VecStructure::from_iter([
+    pub fn generator(
+        &self,
+        i: AbstractIndex,
+        j: AbstractIndex,
+    ) -> DataTensor<f64, OrderedStructure> {
+        let structure = OrderedStructure::from_iter([
             LibraryRep::new_slot(Minkowski {}.into(), 4, i),
             LibraryRep::new_slot(Minkowski {}.into(), 4, j),
-        ]);
+        ])
+        .structure;
         let zero = 0.;
         match self {
             RotationMethod::Identity => {
@@ -2776,8 +2797,8 @@ impl RotationMethod {
         &self,
         i: Slot<Minkowski>,
         j: Slot<Minkowski>,
-    ) -> DataTensor<f64, VecStructure> {
-        let structure = VecStructure::from_iter([i.cast::<LibraryRep>(), j.cast()]);
+    ) -> DataTensor<f64, OrderedStructure> {
+        let structure = OrderedStructure::from_iter([i.cast::<LibraryRep>(), j.cast()]).structure;
 
         match self {
             RotationMethod::Identity => {
@@ -2893,8 +2914,8 @@ impl RotationMethod {
         &self,
         i: Slot<Bispinor>,
         j: Slot<Bispinor>,
-    ) -> DataTensor<Complex<f64>, VecStructure> {
-        let structure = VecStructure::from_iter([i.cast::<LibraryRep>(), j.cast()]);
+    ) -> DataTensor<Complex<f64>, OrderedStructure> {
+        let structure = OrderedStructure::from_iter([i.cast::<LibraryRep>(), j.cast()]).structure;
         let zero = 0.; // F::new_zero();
         let zeroc = Complex::new_re(zero);
 
@@ -3064,11 +3085,9 @@ mod tests {
 
     use eyre::Context;
     use spenso::{
-        arithmetic::ScalarMul,
         contraction::Contract,
         iterators::IteratableTensor,
         structure::{slot::DualSlotTo, TensorStructure},
-        upgrading_arithmetic::{FallibleAdd, FallibleSub},
     };
     use symbolica::parse;
 
@@ -3632,23 +3651,23 @@ mod tests {
     //             -theta_x.clone(),
     //             zero.clone(),
     //         ],
-    //         VecStructure::from_iter([mu, nu]),
+    //         OrderedStructure::from_iter([mu, nu]),
     //     )
     //     .unwrap();
 
     //     println!("{}", omega);
 
     //     let gammamujk: SparseTensor<Complex<f64>> =
-    //         ufo::gamma_data_weyl(VecStructure::from_iter([mud, j, k]));
+    //         ufo::gamma_data_weyl(OrderedStructure::from_iter([mud, j, k]));
 
     //     let gammamukj: SparseTensor<Complex<f64>> =
-    //         ufo::gamma_data_weyl(VecStructure::from_iter([mud, k, i]));
+    //         ufo::gamma_data_weyl(OrderedStructure::from_iter([mud, k, i]));
 
     //     let gammanuki: SparseTensor<Complex<f64>> =
-    //         ufo::gamma_data_weyl(VecStructure::from_iter([nud, k, i]));
+    //         ufo::gamma_data_weyl(OrderedStructure::from_iter([nud, k, i]));
 
     //     let gammanujk: SparseTensor<Complex<f64>> =
-    //         ufo::gamma_data_weyl(VecStructure::from_iter([nud, j, k]));
+    //         ufo::gamma_data_weyl(OrderedStructure::from_iter([nud, j, k]));
 
     //     let sigma = (gammamujk
     //         .contract(&gammanuki)

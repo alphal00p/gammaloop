@@ -48,7 +48,7 @@ use rand::distr::StandardUniform;
 // use rand::distributions::Standard;
 use rand::prelude::Distribution;
 use ref_ops::RefNeg;
-use spenso::data::GetTensorData;
+use spenso::tensors::data::GetTensorData;
 use symbolica::domains::rational::{Rational, Q};
 use symbolica::poly::Variable;
 //use libc::__c_anonymous_ptrace_syscall_info_exit;
@@ -59,7 +59,7 @@ use lorentz_vector::LorentzVector;
 use rayon::prelude::IndexedParallelIterator;
 use rayon::vec;
 use serde::{self, Deserialize, Serialize};
-use spenso::complex::{Complex, SymbolicaComplex};
+use spenso::algebra::complex::{Complex, SymbolicaComplex};
 
 use spenso::structure::{representation::Minkowski, representation::RepName, slot::IsAbstractSlot};
 use statrs::function::evaluate;

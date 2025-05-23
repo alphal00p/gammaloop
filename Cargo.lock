@@ -1647,8 +1647,9 @@ checksum = "f9fbbcab51052fe104eb5e5d351cf728d30a5be1fe14d9be8a3b097481fb97de"
 
 [[package]]
 name = "linnet"
-version = "0.5.2"
-source = "git+https://github.com/alphal00p/linnet#7390f2de480f1035bcc080d6918ba5f778964ae6"
+version = "0.6.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f986ac03f8a4c66edd68b71c8366178099fa41e457efc4c678ebe4e76bd821ef"
 dependencies = [
  "ahash",
  "argmin",
@@ -2947,7 +2948,7 @@ dependencies = [
 [[package]]
 name = "spenso"
 version = "0.4.1"
-source = "git+https://github.com/alphal00p/spenso?rev=c77bf47b8a8012d06c354f1755642f36127dcaeb#c77bf47b8a8012d06c354f1755642f36127dcaeb"
+source = "git+https://github.com/alphal00p/spenso?rev=d27b746e8168ab1380de0e10b483870b04bbf23d#d27b746e8168ab1380de0e10b483870b04bbf23d"
 dependencies = [
  "ahash",
  "anyhow",
@@ -2985,7 +2986,7 @@ dependencies = [
 [[package]]
 name = "spenso-macros"
 version = "0.1.0"
-source = "git+https://github.com/alphal00p/spenso?rev=c77bf47b8a8012d06c354f1755642f36127dcaeb#c77bf47b8a8012d06c354f1755642f36127dcaeb"
+source = "git+https://github.com/alphal00p/spenso?rev=d27b746e8168ab1380de0e10b483870b04bbf23d#d27b746e8168ab1380de0e10b483870b04bbf23d"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3095,7 +3096,7 @@ dependencies = [
 [[package]]
 name = "symbolica"
 version = "0.16.0"
-source = "git+https://github.com/alphal00p/symbolica?rev=8ec5f90129ef74809b48de85354f02347c522f5e#8ec5f90129ef74809b48de85354f02347c522f5e"
+source = "git+https://github.com/alphal00p/symbolica?rev=438f8bdbd49eda7fae58f079cdcbee316ad76ae7#438f8bdbd49eda7fae58f079cdcbee316ad76ae7"
 dependencies = [
  "ahash",
  "append-only-vec",
@@ -3124,12 +3125,13 @@ dependencies = [
 [[package]]
 name = "symbolica_community"
 version = "0.1.0"
-source = "git+https://github.com/alphal00p/symbolica-community?rev=50890cd87fa29a36ce8e69928ad1c914e0c8eb6e#50890cd87fa29a36ce8e69928ad1c914e0c8eb6e"
+source = "git+https://github.com/alphal00p/symbolica-community?rev=8166fb29e6599f301c58476d361a4052661a2033#8166fb29e6599f301c58476d361a4052661a2033"
 dependencies = [
  "anyhow",
  "auto_enums",
  "bincode",
  "bincode-trait-derive 0.1.0 (git+https://github.com/alphal00p/bincode-trait-derive.git?rev=c092cba7f80c867fd5646cf68312e1f4f9010658)",
+ "bitvec",
  "delegate 0.13.3",
  "env_logger",
  "itertools 0.13.0",

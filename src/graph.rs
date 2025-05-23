@@ -29,7 +29,6 @@ use crate::{
     utils::{self, sorted_vectorize, FloatLike, F, GS, W_},
     ProcessSettings, Settings, TropicalSubgraphTableSettings,
 };
-
 use linnet::half_edge::{
     involution::{HedgePair, Orientation},
     HedgeGraphError, NodeIndex,
@@ -41,6 +40,7 @@ use linnet::{
     },
     permutation::Permutation,
 };
+use spenso::network::library::TensorLibraryData;
 
 use crate::cff::expression::AmplitudeOrientationID;
 use ahash::{AHashMap, AHashSet, HashSet, RandomState};
@@ -57,18 +57,21 @@ use gat_lending_iterator::LendingIterator;
 #[allow(unused_imports)]
 use spenso::contraction::Contract;
 use spenso::{
-    arithmetic::ScalarMul,
-    complex::Complex,
-    contraction::{IsZero, RefZero},
-    data::{DataTensor, DenseTensor, GetTensorData, SetTensorData, SparseTensor, StorageTensor},
+    algebra::{
+        algebraic_traits::{IsZero, RefOne, RefZero},
+        complex::Complex,
+        ScalarMul,
+    },
     network::library::symbolic::ETS,
-    scalar::Scalar,
     shadowing::Shadowable,
     structure::{
         abstract_index::AbstractIndex,
         representation::{BaseRepName, Euclidean, Minkowski, RepName},
         slot::{DualSlotTo, IsAbstractSlot},
-        CastStructure, HasStructure, NamedStructure, ScalarTensor, ToSymbolic, VecStructure,
+        CastStructure, HasStructure, NamedStructure, OrderedStructure, ScalarTensor, ToSymbolic,
+    },
+    tensors::data::{
+        DataTensor, DenseTensor, GetTensorData, SetTensorData, SparseTensor, StorageTensor,
     },
 };
 use symbolica_community::physics::algebraic_simplification::representations::{
@@ -437,7 +440,7 @@ impl BareEdge {
                 let mut color_atom = Atom::new_num(1);
                 for (&cin, &cout) in in_slots.color.iter().zip(out_slots.color.iter()) {
                     let id: NamedStructure<String, ()> =
-                        NamedStructure::from_iter([cin, cout], "id".into(), None);
+                        NamedStructure::from_iter([cin, cout], "id".into(), None).structure;
                     color_atom = color_atom * &id.to_symbolic().unwrap();
                 }
 
@@ -782,18 +785,18 @@ impl HasVertexInfo for InteractionVertexInfo {
         let [i, j] = vertex_slots.coupling_indices.unwrap();
 
         let color_structure = DataTensor::Dense(
-            DenseTensor::from_data(color_structure, VecStructure::from(vec![i.cast()])).unwrap(),
+            DenseTensor::from_data(color_structure, OrderedStructure::from_iter([i]).structure)
+                .unwrap(),
         );
 
         let spin_structure = DataTensor::Dense(
-            DenseTensor::from_data(spin_structure, VecStructure::from(vec![j.cast()])).unwrap(),
+            DenseTensor::from_data(spin_structure, OrderedStructure::from_iter([j]).structure)
+                .unwrap(),
         );
 
-        let mut couplings: DataTensor<Atom> =
-            DataTensor::Sparse(SparseTensor::empty(VecStructure::from(vec![
-                i.cast(),
-                j.cast(),
-            ])));
+        let mut couplings: DataTensor<Atom> = DataTensor::Sparse(SparseTensor::empty(
+            OrderedStructure::from_iter([i, j]).structure,
+        ));
 
         for (i, row) in self.vertex_rule.0.couplings.iter().enumerate() {
             for (j, col) in row.iter().enumerate() {

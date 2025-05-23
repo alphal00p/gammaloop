@@ -30,15 +30,15 @@ use rand::{rngs::SmallRng, Rng, SeedableRng};
 use ref_ops::RefNeg;
 use serde::{Deserialize, Serialize};
 use spenso::{
-    data::StorageTensor,
-    parametric::{atomcore::PatternReplacement, ParamTensor},
+    network::parsing::ShadowedStructure,
+    shadowing::symbolica_utils::SerializableAtom,
     structure::{
         abstract_index::AbstractIndex,
         dimension::Dimension,
         representation::{Minkowski, RepName},
-        HasStructure, ToSymbolic, VecStructure,
+        HasStructure, NamedStructure, OrderedStructure, ToSymbolic,
     },
-    symbolica_utils::SerializableAtom,
+    tensors::parametric::{atomcore::PatternReplacement, ParamTensor},
 };
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol},
@@ -130,7 +130,9 @@ impl UVNode {
             UVNode {
                 dod: vertex.dod() as i32,
                 num: normalise_complex(&colorless).into(),
-                color: Some(ParamTensor::param(color.map_structure(VecStructure::from))),
+                color: Some(ParamTensor::param(
+                    color.map_structure(OrderedStructure::from),
+                )),
             }
         } else {
             UVNode {
@@ -165,11 +167,17 @@ impl AsRef<HedgeGraph<UVEdge, UVNode>> for UVGraph {
         &self.hedge_graph
     }
 }
+pub fn spenso_lor(
+    tag: i32,
+    ind: impl Into<AbstractIndex>,
+    dim: impl Into<Dimension>,
+) -> ShadowedStructure {
+    let mink = Minkowski {}.new_slot(dim, ind);
+    NamedStructure::from_iter([mink], GS.emr_mom, Some(vec![Atom::new_num(tag)])).structure
+}
 
 pub fn spenso_lor_atom(tag: i32, ind: impl Into<AbstractIndex>, dim: impl Into<Dimension>) -> Atom {
-    let mink = Minkowski {}.new_slot(dim, ind);
-    // spenso_lor(tag, ind, dim).to_symbolic().unwrap()
-    vec![mink].to_symbolic_with(GS.emr_mom, &[Atom::new_num(tag)])
+    spenso_lor(tag, ind, dim).to_symbolic().unwrap()
 }
 
 #[allow(dead_code)]
@@ -620,8 +628,10 @@ impl UltravioletGraph for UVGraph {
         let mut dod: i32 = 4 * self.n_loops(subgraph) as i32;
         // println!("nloops: {}", dod / 4);
 
-        for e in self.iter_internal_edge_data(subgraph) {
-            dod += e.data.dod;
+        for (pair, _eid, d) in self.iter_edges(subgraph) {
+            if matches!(pair, HedgePair::Paired { .. }) {
+                dod += d.data.dod;
+            }
         }
 
         for (_, _, n) in self.iter_node_data(subgraph) {
@@ -1189,9 +1199,11 @@ impl ApproxOp {
             let mut masses = AHashSet::new();
             masses.insert(Atom::new_var(GS.m_uv));
             // scale all masses, including UV masses from subgraphs
-            for e in graph.iter_internal_edge_data(subgraph) {
-                let e_mass = parse!(&e.data.particle.mass.name).unwrap();
-                masses.insert(e_mass);
+            for (pair, _eid, d) in graph.iter_edges(subgraph) {
+                if matches!(pair, HedgePair::Paired { .. }) {
+                    let e_mass = parse!(&d.data.particle.mass.name).unwrap();
+                    masses.insert(e_mass);
+                }
             }
 
             if !soft_ct {
@@ -1204,7 +1216,7 @@ impl ApproxOp {
                 atomarg = atomarg
                     .replace(parse!("den(n_,q_,mass_,prop_)").unwrap())
                     .with(
-                        parse!("den(n_,q_,mass_- mUV^2 + t^2*mUV^2, prop_- mUV^2 + t^2*mUV^2)")
+                        parse!("den(n_,q_,mass_ + mUV^2 - t^2*mUV^2, prop_- mUV^2 + t^2*mUV^2)")
                             .unwrap(),
                     );
             }
@@ -1240,7 +1252,7 @@ impl ApproxOp {
 
                         i = i
                             .replace(parse!("den(n_,q_,mass_,prop_)").unwrap())
-                            .with(parse!("den(n_,q_,mass_ - mUV^2,prop_-mUV^2)").unwrap());
+                            .with(parse!("den(n_,q_,mUV^2,prop_-mUV^2)").unwrap());
                     }
 
                     b += i;

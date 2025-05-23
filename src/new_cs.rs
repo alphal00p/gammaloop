@@ -15,9 +15,11 @@ use bitvec::vec::BitVec;
 use color_eyre::Result;
 use momtrop::SampleGenerator;
 use smartstring::{LazyCompact, SmartString};
-use spenso::contraction::IsZero;
+
 use statrs::statistics::Mode;
 use symbolica_community::physics::algebraic_simplification::metric::MS;
+
+use spenso::algebra::algebraic_traits::IsZero;
 
 use crate::{
     cff::{

@@ -2,17 +2,18 @@ use brotli::CompressorWriter;
 use insta::assert_snapshot;
 use linnet::half_edge::involution::Orientation;
 use spenso::{
-    complex::Complex,
-    data::{DenseTensor, SparseOrDense, StorageTensor},
+    algebra::{complex::Complex, upgrading_arithmetic::FallibleSub},
     iterators::IteratableTensor,
     network::library::symbolic::ETS,
-    parametric::{atomcore::TensorAtomMaps, ParamTensor},
     structure::{
         representation::{BaseRepName, Minkowski, RepName},
         slot::IsAbstractSlot,
         HasStructure,
     },
-    upgrading_arithmetic::FallibleSub,
+    tensors::{
+        data::{DenseTensor, SparseOrDense, StorageTensor},
+        parametric::{atomcore::TensorAtomMaps, ParamTensor},
+    },
 };
 use std::{
     fs::File,
