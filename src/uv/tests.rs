@@ -44,7 +44,7 @@ use crate::{
 fn double_triangle_LU() {
     let _ = env_logger::builder().is_test(true).try_init();
 
-    let with_log_uv = true;
+    let uv_dod = 1;
 
     // load the model and hack the masses, go through serializable model since arc is not mutable
     let model = load_generic_model("sm");
@@ -100,8 +100,12 @@ fn double_triangle_LU() {
             particle: hp.clone(),
             propagator: hprop.clone(),
             internal_index: vec![],
-            dod: -2,
-            num: Atom::one(),
+            dod: if uv_dod >= 1 { -1 } else { -2 },
+            num: if uv_dod >= 1 {
+                spenso_lor_atom(0, 2, GS.dim)
+            } else {
+                Atom::one()
+            },
         },
         false,
     );
@@ -130,8 +134,12 @@ fn double_triangle_LU() {
             particle: tp.clone(),
             propagator: tprop.clone(),
             internal_index: vec![],
-            dod: -2,
-            num: Atom::one(),
+            dod: if uv_dod >= 1 { -1 } else { -2 },
+            num: if uv_dod >= 1 {
+                spenso_lor_atom(2, 2, GS.dim)
+            } else {
+                Atom::one()
+            },
         },
         true,
     );
@@ -145,8 +153,8 @@ fn double_triangle_LU() {
             particle: tp.clone(),
             propagator: tprop.clone(),
             internal_index: vec![],
-            dod: if with_log_uv { -1 } else { -2 },
-            num: if with_log_uv {
+            dod: if uv_dod >= 0 { -1 } else { -2 },
+            num: if uv_dod >= 0 {
                 spenso_lor_atom(3, 1, GS.dim)
             } else {
                 Atom::one()
@@ -164,8 +172,8 @@ fn double_triangle_LU() {
             particle: tp.clone(),
             propagator: tprop.clone(),
             internal_index: vec![],
-            dod: if with_log_uv { -1 } else { -2 },
-            num: if with_log_uv {
+            dod: if uv_dod >= 0 { -1 } else { -2 },
+            num: if uv_dod >= 0 {
                 spenso_lor_atom(4, 1, GS.dim)
             } else {
                 Atom::one()
@@ -244,7 +252,7 @@ fn double_triangle_LU() {
     .unwrap();
 
     let super_uv_graph = UVGraph::from_underlying(&cs.graph.underlying);
-    let orientation_id = SuperGraphOrientationID(1);
+    let orientation_id = SuperGraphOrientationID(0); // 0 contains the UV amplitude
     let supergraph_orientation_data = &cs
         .derived_data
         .cff_expression
@@ -396,6 +404,43 @@ fn double_triangle_LU() {
                     );
             }
 
+            if super_uv_graph.dod(&c.right) >= 0 {
+                // only check when this graph is a UV subgraph
+                let t = symbol!("t");
+                let series = Atom::new_var(t).npow(3)
+                    * cut_res
+                        .expand()
+                        .replace(parse!("Q3(3,x_)").unwrap())
+                        .with(parse!("t*Q3(3,x_)").unwrap())
+                        .replace(parse!("Q3(2,x_)").unwrap())
+                        .with(parse!("t*Q3(3,x_)-Q3(1,x_)").unwrap())
+                        .replace(parse!("Q3(4,x_)").unwrap())
+                        .with(parse!("t*Q3(3,x_)-Q3(6,x_)").unwrap())
+                        .replace(parse!("symbolica_community::dot(t*x_,y_)").unwrap())
+                        .repeat()
+                        .with(parse!("t*symbolica_community::dot(x_,y_)").unwrap());
+
+                let s = series
+                    .replace(t)
+                    .with(Atom::new_var(t).npow(-1))
+                    .series(t, Atom::Zero, 0.into(), true)
+                    .unwrap();
+
+                let mut r = s
+                    .to_atom()
+                    .expand()
+                    .collect_symbol::<i8>(GS.emr_vec, None, None);
+                r = r
+                    .replace(Atom::new_var(W_.x_).sqrt())
+                    .with(Atom::new_var(W_.x_).npow((1, 2)))
+                    .replace((-Atom::new_var(W_.x_)).pow(Atom::new_num((-5, 2))))
+                    .with(Atom::new_var(W_.x_).pow(Atom::new_num((-5, 2))) * Atom::I)
+                    .replace((-Atom::new_var(W_.x_)).pow(Atom::new_num((-3, 2))))
+                    .with(-Atom::new_var(W_.x_).pow(Atom::new_num((-3, 2))) * Atom::I)
+                    .expand(); // help Symbolica with cancellations and avoid bad simplification of (-1)^(-5/2)
+                println!("Correct UV cancellation if 0: {:>}", r);
+            }
+
             cut_res = cut_res
                 .replace(function!(GS.emr_vec, function!(GS.emr_mom, W_.x_)))
                 .with(function!(GS.emr_vec, W_.x_));
@@ -419,44 +464,16 @@ fn double_triangle_LU() {
                 .with(Atom::new());
 
             let cut_res = cut_res.expand();
+
             println!("Cut {} result: {:>}", id, cut_res);
-
-            if super_uv_graph.dod(&c.right) == 0 {
-                // only check when this graph is a UV subgraph
-                let t = symbol!("t");
-                let series = Atom::new_var(t).npow(3)
-                    * cut_res
-                        .replace(parse!("Q3(3)").unwrap())
-                        .with(parse!("t*Q3(3)").unwrap())
-                        .replace(parse!("Q3(2)").unwrap())
-                        .with(parse!("t*Q3(3)-Q3(1)").unwrap())
-                        .replace(parse!("Q3(4)").unwrap())
-                        .with(parse!("t*Q3(3)-Q3(6)").unwrap())
-                        .replace(parse!("symbolica_community::dot(t*x_,y_)").unwrap())
-                        .repeat()
-                        .with(parse!("t*symbolica_community::dot(x_,y_)").unwrap());
-
-                let s = series
-                    .replace(t)
-                    .with(Atom::new_var(t).npow(-1))
-                    .series(t, Atom::Zero, 0.into(), true)
-                    .unwrap();
-
-                let mut r = s.to_atom().expand();
-                r = r
-                    .replace((-Atom::new_var(W_.x_)).pow(Atom::new_num((-5, 2))))
-                    .with(Atom::new_var(W_.x_).pow(Atom::new_num((-5, 2))) * Atom::I)
-                    .replace((-Atom::new_var(W_.x_)).pow(Atom::new_num((-3, 2))))
-                    .with(-Atom::new_var(W_.x_).pow(Atom::new_num((-3, 2))) * Atom::I)
-                    .expand(); // help Symbolica with cancellations and avoid bad simplification of (-1)^(-5/2)
-                println!("Correct UV cancellation if 0: {:>}", r);
-            }
 
             cut_atoms.push(cut_res);
         } else {
             cut_atoms.push(Atom::new());
         }
     }
+
+    println!("Done generation");
 
     cs.derived_data.bare_cff_evaluators = None;
     cs.build_cut_evaluators(&model, Some(cut_atoms));
