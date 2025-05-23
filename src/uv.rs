@@ -1216,7 +1216,7 @@ impl ApproxOp {
                 atomarg = atomarg
                     .replace(parse!("den(n_,q_,mass_,prop_)").unwrap())
                     .with(
-                        parse!("den(n_,q_,mass_- mUV^2 + t^2*mUV^2, prop_- mUV^2 + t^2*mUV^2)")
+                        parse!("den(n_,q_,mass_ + mUV^2 - t^2*mUV^2, prop_- mUV^2 + t^2*mUV^2)")
                             .unwrap(),
                     );
             }
@@ -1252,7 +1252,7 @@ impl ApproxOp {
 
                         i = i
                             .replace(parse!("den(n_,q_,mass_,prop_)").unwrap())
-                            .with(parse!("den(n_,q_,mass_ - mUV^2,prop_-mUV^2)").unwrap());
+                            .with(parse!("den(n_,q_,mUV^2,prop_-mUV^2)").unwrap());
                     }
 
                     b += i;
