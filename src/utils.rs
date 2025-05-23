@@ -16,19 +16,19 @@ use rug::float::{Constant, ParseFloatError};
 use rug::ops::{CompleteRound, Pow};
 use rug::Float;
 use serde::{Deserialize, Deserializer, Serialize};
-use spenso::arithmetic::ScalarMul;
-use spenso::complex::SymbolicaComplex;
+use spenso::algebra::algebraic_traits::RefOne;
+use spenso::algebra::algebraic_traits::RefZero;
+use spenso::algebra::complex::Complex;
+use spenso::algebra::complex::SymbolicaComplex;
+use spenso::algebra::complex::R;
+use spenso::algebra::upgrading_arithmetic::TrySmallestUpgrade;
 use spenso::network::library::symbolic::{ExplicitKey, TensorLibrary};
 use spenso::network::library::TensorLibraryData;
-use spenso::parametric::to_param::ToAtom;
-use spenso::parametric::{MixedTensor, ParamTensor};
 use spenso::structure::concrete_index::FlatIndex;
 use spenso::structure::TensorStructure;
-use spenso::{
-    complex::{Complex, R},
-    contraction::{RefOne, RefZero},
-    upgrading_arithmetic::TrySmallestUpgrade,
-};
+use spenso::tensors::parametric::to_param::ToAtom;
+use spenso::tensors::parametric::MixedTensor;
+
 use symbolica::atom::Symbol;
 use symbolica::coefficient::Coefficient;
 use symbolica::domains::float::{

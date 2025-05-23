@@ -12,7 +12,7 @@ use itertools::Itertools;
 use rayon::iter::repeatn;
 use serde::Deserialize;
 use serde::Serialize;
-use spenso::contraction::IsZero;
+use spenso::algebra::algebraic_traits::IsZero;
 use symbolica::domains::float::ConstructibleFloat;
 use symbolica::numerical_integration::{Grid, MonteCarloRng, Sample, StatisticsAccumulator};
 
@@ -33,7 +33,7 @@ use crate::{is_interrupted, set_interrupted};
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
 use rayon::prelude::*;
-use spenso::complex::Complex;
+use spenso::algebra::complex::Complex;
 use std::fs;
 use std::path::PathBuf;
 use std::time::Duration;

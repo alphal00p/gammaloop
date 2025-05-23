@@ -13,7 +13,7 @@ use colored::Colorize;
 use eyre::eyre;
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
-use spenso::complex::Complex;
+use spenso::algebra::complex::Complex;
 use std::env;
 use std::{fs, time::Instant};
 use std::{path::PathBuf, str::FromStr};

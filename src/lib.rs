@@ -69,7 +69,7 @@ use observables::ObservableSettings;
 use observables::PhaseSpaceSelectorSettings;
 
 use signature::ExternalSignature;
-use spenso::complex::Complex;
+use spenso::algebra::complex::Complex;
 use spenso::structure::abstract_index::AIND_SYMBOLS;
 use spenso::structure::representation::Euclidean;
 use spenso::structure::representation::Minkowski;

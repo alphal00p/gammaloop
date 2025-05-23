@@ -6,7 +6,7 @@ use crate::GammaLoopContext;
 use crate::HasModel;
 use bincode::{Decode, Encode};
 use linnet::half_edge::drawing::Decoration;
-
+use spenso::structure::PermutedStructure;
 use ahash::{AHashMap, HashSet, RandomState};
 use color_eyre::{Help, Report};
 use eyre::{eyre, Context};
@@ -16,22 +16,19 @@ use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use serde_yaml::Error;
 use smartstring::{LazyCompact, SmartString};
-use spenso::complex::Complex;
+use spenso::algebra::complex::Complex;
 use spenso::network::library::symbolic::ETS;
-use spenso::parametric::ExpandedCoefficent;
 use spenso::structure::representation::{LibraryRep, Minkowski};
 use spenso::structure::{
     abstract_index::AbstractIndex, concrete_index::CONCRETEIND, representation::Euclidean,
-    VecStructure,
 };
-use spenso::structure::{TensorStructure, ToSymbolic};
-use spenso::{
-    contraction::IsZero,
-    structure::{
-        representation::BaseRepName, representation::Lorentz, representation::RepName,
-        representation::Representation, slot::DualSlotTo, slot::IsAbstractSlot, slot::Slot,
-    },
+use spenso::algebra::algebraic_traits::IsZero;
+use spenso::structure::{
+    representation::BaseRepName, representation::Lorentz, representation::RepName,
+    representation::Representation, slot::DualSlotTo, slot::IsAbstractSlot, slot::Slot,
 };
+use spenso::structure::{OrderedStructure, TensorStructure, ToSymbolic};
+use spenso::tensors::parametric::ExpandedCoefficent;
 use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
 use std::fs;
@@ -897,17 +894,17 @@ pub struct EdgeSlots<LorRep: RepName> {
     pub color: Vec<Slot<LibraryRep>>,
 }
 
-impl From<EdgeSlots<Minkowski>> for VecStructure {
+impl From<EdgeSlots<Minkowski>> for OrderedStructure {
     fn from(value: EdgeSlots<Minkowski>) -> Self {
-        VecStructure {
-            structure: value
+        PermutedStructure::<OrderedStructure>::from(
+             value
                 .lorentz
                 .into_iter()
                 .map(|x| x.to_lib())
                 .chain(value.spin.into_iter().map(|x| x.to_lib()))
                 .chain(value.color)
-                .collect(),
-        }
+                .collect_vec(),
+        ).structure
     }
 }
 
@@ -929,17 +926,16 @@ impl<LorRep: BaseRepName> Display for EdgeSlots<LorRep> {
     }
 }
 
-impl From<EdgeSlots<Lorentz>> for VecStructure {
+impl From<EdgeSlots<Lorentz>> for OrderedStructure {
     fn from(value: EdgeSlots<Lorentz>) -> Self {
-        VecStructure {
-            structure: value
+        PermutedStructure::<OrderedStructure>::from(value
                 .lorentz
                 .into_iter()
                 .map(|x| x.to_lib())
                 .chain(value.spin.into_iter().map(|a| a.to_lib()))
                 .chain(value.color)
-                .collect_vec(),
-        }
+                .collect_vec()
+        ).structure
     }
 }
 
@@ -1215,7 +1211,7 @@ impl Particle {
         let mut colorless = edge_slots.clone();
         colorless.color = vec![];
         if let Some(name) = self.in_pol_symbol() {
-            VecStructure::from(colorless)
+            OrderedStructure::from(colorless)
                 .to_dense_labeled(|v, i| ExpandedCoefficent::<usize> {
                     index: v.co_expanded_index(i).unwrap(),
                     name: Some(name),
@@ -1237,7 +1233,7 @@ impl Particle {
         colorless.color = vec![];
 
         if let Some(name) = self.out_pol_symbol() {
-            VecStructure::from(colorless)
+            OrderedStructure::from(colorless)
                 .to_dense_labeled(|v, i| ExpandedCoefficent::<usize> {
                     index: v.co_expanded_index(i).unwrap(),
                     name: Some(name),

@@ -3,11 +3,32 @@ use crate::feyngen::FeynGenError;
 use linnet::half_edge::hedgevec::HedgeVec;
 use linnet::half_edge::involution::{EdgeIndex, Orientation};
 use log::warn;
-use spenso::complex::RealOrComplexTensor;
+use spenso::algebra::complex::Complex;
+use spenso::algebra::upgrading_arithmetic::{FallibleAdd, FallibleSub};
+use spenso::algebra::ScalarMul;
 use spenso::network::library::DummyLibrary;
 use spenso::network::parsing::ShadowedStructure;
 use spenso::network::store::{NetworkStore, TensorScalarStoreMapping};
 use spenso::network::{ExecutionResult, Sequential, SmallestDegree, TensorOrScalarOrKey};
+use spenso::shadowing::symbolica_utils::SerializableAtom;
+use spenso::shadowing::symbolica_utils::SerializableSymbol;
+use spenso::structure::OrderedStructure;
+use spenso::tensors::complex::RealOrComplexTensor;
+use spenso::tensors::data::DataTensor;
+use spenso::tensors::data::GetTensorData;
+use spenso::tensors::data::StorageTensor;
+use spenso::tensors::parametric::atomcore::PatternReplacement;
+use spenso::tensors::parametric::atomcore::TensorAtomMaps;
+use spenso::tensors::parametric::atomcore::TensorAtomOps;
+use spenso::tensors::parametric::EvalTensor;
+use spenso::tensors::parametric::EvalTensorSet;
+use spenso::tensors::parametric::LinearizedEvalTensorSet;
+use spenso::tensors::parametric::MixedTensor;
+use spenso::tensors::parametric::ParamOrConcrete;
+use spenso::tensors::parametric::ParamTensor;
+use spenso::tensors::parametric::ParamTensorSet;
+use spenso::tensors::parametric::SerializableCompiledEvaluator;
+use spenso::tensors::parametric::TensorSet;
 use std::fmt::Debug;
 use std::fs;
 use std::ops::Deref;
@@ -45,28 +66,19 @@ use ref_ops::RefNeg;
 use serde::de::DeserializeOwned;
 use serde::ser::SerializeStruct;
 use serde::{Deserialize, Serialize};
-use spenso::arithmetic::ScalarMul;
+
 use spenso::contraction::Contract;
-use spenso::data::{DataTensor, GetTensorData, StorageTensor};
 
 use spenso::iterators::IteratableTensor;
 use spenso::network::library::symbolic::{ExplicitKey, ETS};
-use spenso::parametric::atomcore::{PatternReplacement, TensorAtomMaps, TensorAtomOps};
-use spenso::parametric::{
-    EvalTensor, EvalTensorSet, LinearizedEvalTensorSet, MixedTensor, ParamOrConcrete,
-    ParamTensorSet, SerializableCompiledEvaluator, TensorSet,
-};
+
 use spenso::structure::abstract_index::DOWNIND;
 use spenso::structure::concrete_index::{ExpandedIndex, FlatIndex};
 
 use spenso::structure::representation::{BaseRepName, LibraryRep, Minkowski};
-use spenso::structure::{HasStructure, ScalarTensor, SmartShadowStructure, VecStructure};
-use spenso::symbolica_utils::SerializableAtom;
-use spenso::symbolica_utils::SerializableSymbol;
-use spenso::upgrading_arithmetic::FallibleSub;
+use spenso::structure::{HasStructure, ScalarTensor, SmartShadowStructure};
+
 use spenso::{
-    complex::Complex,
-    parametric::ParamTensor,
     shadowing::Shadowable,
     structure::{
         representation::{Lorentz, RepName},
@@ -1472,7 +1484,8 @@ impl PolySplit {
         for (i, e) in bare_graph.edges.iter().enumerate() {
             if let EdgeType::Virtual = e.edge_type {
                 let named_structure: NamedStructure<String> =
-                    NamedStructure::from_iter([Minkowski {}.new_slot(4, i)], "Q".into(), Some(i));
+                    NamedStructure::from_iter([Minkowski {}.new_slot(4, i)], "Q".into(), Some(i))
+                        .structure;
 
                 vars.push(
                     named_structure
@@ -1506,7 +1519,7 @@ impl PolySplit {
                     .result_tensor_smart()
                     .unwrap()
                     .tensor
-                    .map_structure(VecStructure::from)
+                    .map_structure(OrderedStructure::from)
             })
             .flatten(&Atom::new_num(0))
             .unwrap();
@@ -1540,7 +1553,7 @@ impl PolySplit {
                     .result_tensor_smart()
                     .unwrap()
                     .tensor
-                    .map_structure(VecStructure::from)
+                    .map_structure(OrderedStructure::from)
             })
             .flatten(&Atom::new_num(0))
             .unwrap()
@@ -2086,7 +2099,7 @@ impl Network {
                 // let tensor = self
                 //     .net
                 //     .result_tensor_smart()?
-                //     .map_structure(VecStructure::from);
+                //     .map_structure(OrderedStructure::from);
                 // // debug!("contracted tensor: {}", tensor);
                 // Ok(Contracted { tensor })
                 todo!()
@@ -2561,7 +2574,8 @@ impl Contracted {
 
         for i in 0..n_edges {
             let named_structure: NamedStructure<String> =
-                NamedStructure::from_iter([Lorentz {}.new_slot(4, i)], "Q".into(), Some(i));
+                NamedStructure::from_iter([Lorentz {}.new_slot(4, i)], "Q".into(), Some(i))
+                    .structure;
             params.extend(
                 named_structure
                     .to_shell()
@@ -2597,7 +2611,8 @@ impl Contracted {
 
         for (i, _) in graph.edges.iter().enumerate() {
             let named_structure: NamedStructure<String> =
-                NamedStructure::from_iter([Lorentz {}.new_slot(4, i)], "Q".into(), Some(i));
+                NamedStructure::from_iter([Lorentz {}.new_slot(4, i)], "Q".into(), Some(i))
+                    .structure;
             params.extend(
                 named_structure
                     .to_shell()
@@ -2989,9 +3004,9 @@ impl NumeratorCompileOptions {
 #[derive(Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
 #[trait_decode(trait = symbolica::state::HasStateMap)]
 pub struct EvaluatorOrientations {
-    pub eval_double: LinearizedEvalTensorSet<Complex<F<f64>>, VecStructure>,
-    pub eval_quad: LinearizedEvalTensorSet<Complex<F<f128>>, VecStructure>,
-    pub compiled: CompiledEvaluator<EvalTensorSet<SerializableCompiledEvaluator, VecStructure>>,
+    pub eval_double: LinearizedEvalTensorSet<Complex<F<f64>>, OrderedStructure>,
+    pub eval_quad: LinearizedEvalTensorSet<Complex<F<f128>>, OrderedStructure>,
+    pub compiled: CompiledEvaluator<EvalTensorSet<SerializableCompiledEvaluator, OrderedStructure>>,
     pub positions: Vec<usize>,
 }
 
@@ -3015,9 +3030,9 @@ impl Debug for EvaluatorOrientations {
 #[trait_decode(trait = symbolica::state::HasStateMap)]
 pub struct EvaluatorSingle {
     tensor: ParamTensor,
-    eval_double: EvalTensor<ExpressionEvaluator<Complex<F<f64>>>, VecStructure>,
-    eval_quad: EvalTensor<ExpressionEvaluator<Complex<F<f128>>>, VecStructure>,
-    compiled: CompiledEvaluator<EvalTensor<SerializableCompiledEvaluator, VecStructure>>,
+    eval_double: EvalTensor<ExpressionEvaluator<Complex<F<f64>>>, OrderedStructure>,
+    eval_quad: EvalTensor<ExpressionEvaluator<Complex<F<f128>>>, OrderedStructure>,
+    compiled: CompiledEvaluator<EvalTensor<SerializableCompiledEvaluator, OrderedStructure>>,
     param_len: usize, //to validate length of params at run time
 }
 
