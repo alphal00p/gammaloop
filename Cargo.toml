@@ -45,9 +45,10 @@ similar.opt-level = 3
 
 [dependencies]
 # These will be patched
-symbolica = { version = "0.16.0",features = ["serde","bincode"] }
-symbolica_community = {git = "https://github.com/alphal00p/symbolica-community",rev="8166fb29e6599f301c58476d361a4052661a2033",features=["bincode"]}
-
+symbolica = { version = "0.16.0", features = ["serde", "bincode"] }
+symbolica_community = { git = "https://github.com/alphal00p/symbolica-community", rev = "9332038264aace8e428ee6ee2cb7d84b09a764ae", features = [
+    "bincode",
+] }
 
 
 spenso = { version = "0.4.1", features = ["shadowing"] }
@@ -55,13 +56,13 @@ spenso = { version = "0.4.1", features = ["shadowing"] }
 #    # "symbolica",
 #    "drawing",
 #] }
-linnet = { version="0.6.2", features=["drawing","serde","bincode"]}
+linnet = { version = "0.7.1", features = ["drawing", "serde", "bincode"] }
 
 vakint = { git = "https://github.com/alphal00p/vakint", branch = "vk_for_sb_0_16_latest" }
-momtrop = { git = "https://github.com/alphal00p/momtrop", features = ["log",] }
+momtrop = { git = "https://github.com/alphal00p/momtrop", features = ["log"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "*"
-bincode = {version="2.0.0" ,features=["serde","derive"]}
+bincode = { version = "2.0.0", features = ["serde", "derive"] }
 clap = "2.34"
 color-eyre = { version = "^0.3", default-features = false }
 eyre = "^0.4"
@@ -75,7 +76,7 @@ rayon = "1.5"
 tabled = "0.7"
 indicatif = { version = "0.17.9", features = ["improved_unicode", "rayon"] }
 # bincode-trait-derive = {path="../bincode-trait-derive"}
-bincode-trait-derive = {git = "https://github.com/alphal00p/bincode-trait-derive.git"}
+bincode-trait-derive = { git = "https://github.com/alphal00p/bincode-trait-derive.git" }
 enum_dispatch = "*"
 git-version = "0.3"
 colored = "*"
@@ -165,10 +166,12 @@ no_python = []
 # symbolica = { path = "./python/gammaloop/dependencies/symbolica" }
 # symbolica = {git = "https://github.com/alphal00p/symbolica", branch = "main"}
 # symbolica={git="https://github.com/benruijl/symbolica",rev="a714571c8c8ee1a292237eb3ef1bc8123a4d7db4"}
-symbolica = { git = "https://github.com/alphal00p/symbolica", rev = "438f8bdbd49eda7fae58f079cdcbee316ad76ae7" }
+symbolica = { git = "https://github.com/alphal00p/symbolica", rev = "a23ebaa71b1bc715a129ac765764ece7273625dc" }
 # symbolica = {path="../symbolica"}
-spenso={git="https://github.com/alphal00p/spenso",rev="d27b746e8168ab1380de0e10b483870b04bbf23d"}
-spenso-macros = {git="https://github.com/alphal00p/spenso",rev="d27b746e8168ab1380de0e10b483870b04bbf23d",features=["shadowing"],optional=true}
+spenso = { git = "https://github.com/alphal00p/spenso", rev = "a1bb8daff522fc3f108a6f9db53cce6814df5d6a" }
+spenso-macros = { git = "https://github.com/alphal00p/spenso", rev = "a1bb8daff522fc3f108a6f9db53cce6814df5d6a", features = [
+    "shadowing",
+], optional = true }
 # spenso = { path = "../spenso/spenso" }
 # linnet = { path = "../linnet" }
 # linnet = {git ="https://github.com/alphal00p/linnet"}

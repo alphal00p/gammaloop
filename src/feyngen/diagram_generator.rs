@@ -210,7 +210,7 @@ impl NodeColorFunctions for NodeColorWithVertexRule {
         // );
         if let Some(amp_couplings) = amp_couplings {
             let mut coupling_orders = AHashMap::default();
-            for (_, _, s) in graph.iter_node_data(amplitude_subgraph) {
+            for (_, _, s) in graph.iter_nodes_of(amplitude_subgraph) {
                 // println!("node {}:{}", s.vertex_rule.name, s.get_external_tag());
                 if !s.is_external() {
                     for (k, v) in s.coupling_orders() {
@@ -1087,7 +1087,7 @@ impl FeynGen {
         let mut s_set = Vec::new();
         let mut t_set = Vec::new();
 
-        for (_, id, f) in he_graph.iter_nodes() {
+        for (id, _, f) in he_graph.iter_nodes() {
             match f.get_sign(n_particles) {
                 SignOrZero::Plus => {
                     s_set.push(id);
@@ -1142,7 +1142,7 @@ impl FeynGen {
             {
                 let externals: Vec<_> = he_graph
                     .iter_nodes()
-                    .filter_map(|(_, id, n)| if n.is_external() { Some(id) } else { None })
+                    .filter_map(|(id, _, n)| if n.is_external() { Some(id) } else { None })
                     .collect();
 
                 let connected_components_before = he_graph.tadpoles(&externals).len() + 1;

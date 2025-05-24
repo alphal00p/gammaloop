@@ -155,7 +155,7 @@ impl<N: Clone, E: Clone, S: NodeStorageOps<NodeData = N>> HedgeGraphExt<N, E>
             map.insert(NodeIndex(n), graph.add_node(node));
         }
 
-        for (i, _, d) in value.iter_all_edges() {
+        for (i, _, d) in value.iter_edges() {
             if let HedgePair::Paired { source, sink } = i {
                 let source = map[&value.node_id(source)];
                 let sink = map[&value.node_id(sink)];
@@ -1073,7 +1073,7 @@ impl SerializableGraph {
                 .collect(),
             loop_momentum_basis: graph
                 .loop_momentum_basis
-                .basis
+                .loop_edges
                 .iter()
                 .map(|&e| graph.edges[Into::<usize>::into(e)].name.clone())
                 .collect(),
@@ -1325,7 +1325,7 @@ impl BareGraph {
             .collect()
     }
     pub fn is_tree(&self) -> bool {
-        self.loop_momentum_basis.basis.is_empty()
+        self.loop_momentum_basis.loop_edges.is_empty()
     }
 
     pub fn external_in_or_out_signature(&self) -> ExternalSignature {
@@ -1454,7 +1454,8 @@ impl BareGraph {
             external_connections: vec![],
             loop_momentum_basis: LoopMomentumBasis {
                 tree: None,
-                basis: TiVec::new(),
+                loop_edges: TiVec::new(),
+                ext_edges: TiVec::new(),
                 edge_signatures: dummy_hedge_graph.new_hedgevec(|_, _, _| LoopExtSignature {
                     internal: SignatureLike::from_iter(std::iter::empty::<SignOrZero>()),
                     external: SignatureLike::from_iter(std::iter::empty::<SignOrZero>()),
@@ -1537,7 +1538,7 @@ impl BareGraph {
             })
             .collect();
 
-        g.loop_momentum_basis.basis = graph
+        g.loop_momentum_basis.loop_edges = graph
             .loop_momentum_basis
             .iter()
             .map(|e| EdgeIndex::from(g.get_edge_position(e).unwrap()))
@@ -1791,7 +1792,8 @@ impl BareGraph {
             external_connections: vec![],
             loop_momentum_basis: LoopMomentumBasis {
                 tree: None,
-                basis: TiVec::new(),
+                loop_edges: TiVec::new(),
+                ext_edges: TiVec::new(),
                 edge_signatures: dummy_hedge_graph.new_hedgevec(|_, _, _| LoopExtSignature {
                     internal: SignatureLike::from_iter(std::iter::empty::<SignOrZero>()),
                     external: SignatureLike::from_iter(std::iter::empty::<SignOrZero>()),
@@ -2020,12 +2022,12 @@ impl BareGraph {
             //     self.hedge_representation.dot(&spanning_tree_half_edge_node)
             // );
             self.hedge_representation
-                .iter_internal_edge_data(
+                .iter_edges_of(
                     &spanning_tree
                         .tree_subgraph
                         .complement(&self.hedge_representation),
                 )
-                .map(|e| EdgeIndex::from(*e.data))
+                .map(|(_, _, e)| EdgeIndex::from(*e.data))
                 .collect()
         };
 
@@ -2054,7 +2056,8 @@ impl BareGraph {
 
         let mut lmb: LoopMomentumBasis = LoopMomentumBasis {
             tree: None,
-            basis: lmb_basis,
+            loop_edges: lmb_basis,
+            ext_edges: vec![].into(),
             edge_signatures: temp_edge_signatures,
         };
 
@@ -2062,7 +2065,7 @@ impl BareGraph {
             .map_err(|e| {
                 FeynGenError::LoopMomentumBasisError(format!(
                     "{} | Error: {}",
-                    lmb.basis
+                    lmb.loop_edges
                         .iter()
                         .map(|i_e| format!("{}", self.edges[Into::<usize>::into(*i_e)].name))
                         .collect::<Vec<_>>()
@@ -2754,7 +2757,7 @@ impl BareGraph {
         settings: &TropicalSubgraphTableSettings,
     ) -> Result<SampleGenerator<3>> {
         let num_virtual_loop_edges = self.get_loop_edges_iterator().count();
-        let num_loops = self.loop_momentum_basis.basis.len();
+        let num_loops = self.loop_momentum_basis.loop_edges.len();
         let target_omega = settings.target_omega;
 
         let weight = (target_omega + (3 * num_loops) as f64 / 2.) / num_virtual_loop_edges as f64;
@@ -3467,7 +3470,7 @@ impl DerivedGraphData<Evaluators> {
         let one = sample.one();
         let zero = one.zero();
         let i = Complex::new(zero, one);
-        let loop_number = bare_graph.loop_momentum_basis.basis.len();
+        let loop_number = bare_graph.loop_momentum_basis.loop_edges.len();
         // Unexplained overall (-1)^(L+1) sign to match with cFF which we know is correct
         let prefactor = (Complex::new(-sample.one(), sample.zero())).pow((loop_number + 1) as u64)
             * i.pow(loop_number as u64);
@@ -3491,7 +3494,7 @@ impl DerivedGraphData<Evaluators> {
         let one = sample.one();
         let zero = one.zero();
         let i = Complex::new(zero, one);
-        let loop_number = bare_graph.loop_momentum_basis.basis.len();
+        let loop_number = bare_graph.loop_momentum_basis.loop_edges.len();
         // Unexplained overall (-1)^(L+1) sign to match with cFF which we know is correct
         let prefactor = (Complex::new(-sample.one(), sample.zero())).pow((loop_number + 1) as u64)
             * i.pow(loop_number as u64);
@@ -3517,7 +3520,7 @@ impl DerivedGraphData<Evaluators> {
         let zero = one.zero();
         let ni = Complex::new(zero.clone(), -one.clone());
 
-        let loop_number = graph.loop_momentum_basis.basis.len();
+        let loop_number = graph.loop_momentum_basis.loop_edges.len();
 
         let prefactor = ni.pow((loop_number) as u64); // (ni).pow(loop_number as u64) * (-(ni.ref_one())).pow(internal_vertex_number as u64 - 1);
 

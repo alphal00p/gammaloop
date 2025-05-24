@@ -664,7 +664,7 @@ pub fn generate_ltd_expression<S: NumeratorState>(graph: &mut Graph<S>) -> LTDEx
     // let cut_structure_generator = CutStructureGenerator::new(loop_line_signatures);
     let cut_structure_generator = CutStructureGenerator::new(todo!("support basic ltd"));
     let countour_closure =
-        vec![ContourClosure::Above; graph.bare_graph.loop_momentum_basis.basis.len()];
+        vec![ContourClosure::Above; graph.bare_graph.loop_momentum_basis.loop_edges.len()];
     let cut_structure = cut_structure_generator.generate_structure(&countour_closure, true);
 
     graph.generate_loop_momentum_bases_if_not_exists();
@@ -703,7 +703,7 @@ pub fn generate_ltd_expression<S: NumeratorState>(graph: &mut Graph<S>) -> LTDEx
             .iter()
         {
             if loop_momentum_basis
-                .basis
+                .loop_edges
                 .iter()
                 .zip(associated_lmb.iter())
                 .all(|(a, b)| (*a) == EdgeIndex::from(b.0))

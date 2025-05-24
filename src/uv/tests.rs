@@ -1,9 +1,13 @@
 use std::{sync::Arc, time::Instant};
 
 use ahash::HashMap;
+
 use linnet::half_edge::hedgevec::HedgeVec;
 use nalgebra::LU;
 use pathfinding::num_traits::real;
+
+use linnet::half_edge::{builder::HedgeGraphBuilder, involution::Flow};
+
 use smartstring::SmartString;
 use spenso::{
     algebra::complex::Complex,
@@ -17,15 +21,14 @@ use spenso::{
 };
 use symbolica::evaluate::{FunctionMap, OptimizationSettings};
 use symbolica_community::physics::algebraic_simplification::metric::MetricSimplifier;
-use typed_index_collections::TiVec;
 
 use crate::{
     cff::cut_expression::SuperGraphOrientationID,
     feyngen::{
-        diagram_generator::{EdgeColor, FeynGen, NodeColorWithVertexRule},
+        diagram_generator::{EdgeColor, NodeColorWithVertexRule},
         FeynGenFilters,
     },
-    graph::InteractionVertexInfo,
+    graph::{EdgeType, InteractionVertexInfo},
     integrands::Integrand,
     integrate::{havana_integrate, UserData},
     model::{ArcVertexRule, ColorStructure, Model, VertexRule},
@@ -216,7 +219,8 @@ fn double_triangle_LU() {
 
     let mut loop_momentum_basis = LoopMomentumBasis {
         tree: None,
-        basis: vec![EdgeIndex::from(0), EdgeIndex::from(4)].into(),
+        loop_edges: vec![EdgeIndex::from(0), EdgeIndex::from(4)].into(),
+        ext_edges: vec![EdgeIndex::from(5), EdgeIndex::from(6)].into(),
         edge_signatures: underlying
             .new_hedgevec(|_, _, _| LoopExtSignature::from((vec![], vec![]))),
     };
@@ -287,13 +291,13 @@ fn double_triangle_LU() {
 
             let mut left_wood = super_uv_graph.wood(&c.left);
 
-            let mut left_forest = left_wood.unfold(&super_uv_graph, &super_uv_graph.cut_edges);
+            let mut left_forest = left_wood.unfold(&super_uv_graph, &super_uv_graph.lmb);
             left_forest.compute(&super_uv_graph);
             left_forest.compute_cff(&super_uv_graph, left_orientation_data, &None);
 
             let mut right_forest = super_uv_graph
                 .wood(&c.right)
-                .unfold(&super_uv_graph, &super_uv_graph.cut_edges);
+                .unfold(&super_uv_graph, &super_uv_graph.lmb);
             right_forest.compute(&super_uv_graph);
             right_forest.compute_cff(&super_uv_graph, right_orientation_data, &None);
 
@@ -308,7 +312,7 @@ fn double_triangle_LU() {
             let mut cut_res = cs.add_additional_factors_to_cff_atom(&(left_expr * right_expr), id);
 
             // add Feynman rules of cut edges
-            for (_p, edge_index, d) in super_uv_graph.iter_edges(&c.cut.left) {
+            for (_p, edge_index, d) in super_uv_graph.iter_edges_of(&c.cut.left) {
                 let edge_id = usize::from(edge_index) as i64;
                 let orientation = supergraph_orientation_data.orientation.clone();
                 cut_res = (cut_res * &d.data.num)
@@ -324,7 +328,8 @@ fn double_triangle_LU() {
             }
 
             // add Feynman rules of external edges
-            for (_p, edge_index, d) in super_uv_graph.iter_edges(&super_uv_graph.external_filter())
+            for (_p, edge_index, d) in
+                super_uv_graph.iter_edges_of(&super_uv_graph.external_filter())
             {
                 let edge_id = usize::from(edge_index) as i64;
                 cut_res = (cut_res * &d.data.num)
@@ -390,7 +395,7 @@ fn double_triangle_LU() {
                 );
 
             // substitute all OSEs (add minus sign to cancel minus sign from 4d dot product)
-            for (_p, edge_id, d) in super_uv_graph.iter_edges(&c.cut.left) {
+            for (_p, edge_id, d) in super_uv_graph.iter_edges_of(&c.cut.left) {
                 let mass2 = Atom::new_var(symbol!(d.data.particle.mass.name.as_str())).npow(2);
                 cut_res = cut_res
                     .replace(function!(GS.ose, usize::from(edge_id) as i64))
@@ -576,7 +581,7 @@ fn nested_bubble_soft_ct() {
     //println!("{}", wood.dot(&uv_graph));
     //println!("{}", wood.show_graphs(&uv_graph));
 
-    let mut ufold = wood.unfold(&uv_graph, &uv_graph.cut_edges);
+    let mut ufold = wood.unfold(&uv_graph, &uv_graph.lmb);
     // assert_eq!(152, ufold.n_terms());
     ufold.compute(&uv_graph);
 
@@ -764,7 +769,7 @@ fn nested_bubble_scalar_quad() {
     // println!("{}", wood.dot(&uv_graph));
     // println!("{}", wood.show_graphs(&uv_graph));
 
-    let mut ufold = wood.unfold(&uv_graph, &uv_graph.cut_edges);
+    let mut ufold = wood.unfold(&uv_graph, &uv_graph.lmb);
     // assert_eq!(152, ufold.n_terms());
     ufold.compute(&uv_graph);
 
@@ -936,7 +941,7 @@ fn nested_bubble_scalar() {
     //println!("{}", wood.dot(&uv_graph));
     //println!("{}", wood.show_graphs(&uv_graph));
 
-    let mut ufold = wood.unfold(&uv_graph, &uv_graph.cut_edges);
+    let mut ufold = wood.unfold(&uv_graph, &uv_graph.lmb);
     // assert_eq!(152, ufold.n_terms());
     ufold.compute(&uv_graph);
 
@@ -1085,7 +1090,7 @@ fn disconnect_forest_scalar() {
     println!("{}", wood.dot(&uv_graph));
     println!("{}", wood.show_graphs(&uv_graph));
 
-    let mut ufold = wood.unfold(&uv_graph, &uv_graph.cut_edges);
+    let mut ufold = wood.unfold(&uv_graph, &uv_graph.lmb);
     // assert_eq!(152, ufold.n_terms());
     ufold.compute(&uv_graph);
 
@@ -1273,7 +1278,7 @@ fn easy() {
     println!("{}", wood.dot(&uv_graph));
     println!("{}", wood.show_graphs(&uv_graph));
 
-    let mut ufold = wood.unfold(&uv_graph, &uv_graph.cut_edges);
+    let mut ufold = wood.unfold(&uv_graph, &uv_graph.lmb);
     // assert_eq!(152, ufold.n_terms());
     ufold.compute(&uv_graph);
 
@@ -1311,7 +1316,7 @@ fn tbt() {
 
     println!("{}", wood.dot(&uv_graph));
 
-    let mut ufold = wood.unfold(&uv_graph, &uv_graph.cut_edges);
+    let mut ufold = wood.unfold(&uv_graph, &uv_graph.lmb);
     ufold.compute(&uv_graph);
 
     println!(
@@ -1383,7 +1388,7 @@ fn bugblatter_forest() {
     println!("{}", wood.dot(&uv_graph));
     println!("{}", wood.show_graphs(&uv_graph));
 
-    let mut ufold = wood.unfold(&uv_graph, &uv_graph.cut_edges);
+    let mut ufold = wood.unfold(&uv_graph, &uv_graph.lmb);
     assert_eq!(152, ufold.n_terms());
     ufold.compute(&uv_graph);
 
@@ -1445,7 +1450,7 @@ fn kaapo_triplering() {
     // println!("{}", wood.dot(&uv_graph));
     // println!("{}", wood.show_graphs(&uv_graph));
 
-    let mut ufold = wood.unfold(&uv_graph, &uv_graph.cut_edges);
+    let mut ufold = wood.unfold(&uv_graph, &uv_graph.lmb);
     ufold.compute(&uv_graph);
 
     println!(
@@ -1512,7 +1517,7 @@ fn kaapo_quintic_scalar() {
     // println!("{}", wood.dot(&uv_graph));
     // println!("{}", wood.show_graphs(&uv_graph));
 
-    let mut ufold = wood.unfold(&uv_graph, &uv_graph.cut_edges);
+    let mut ufold = wood.unfold(&uv_graph, &uv_graph.lmb);
     ufold.compute(&uv_graph);
 
     println!(
@@ -1561,7 +1566,7 @@ impl Ord for TestNode {
     }
 }
 
-const LU_TEST_SETTINGS: &'static str = " 
+const LU_TEST_SETTINGS: &'static str = "
 General:
   amplitude_prefactor:
     im: 1.0

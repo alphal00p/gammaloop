@@ -154,7 +154,7 @@ fn get_orientations<E, V>(graph: &HedgeGraph<E, V>) -> Vec<CFFGenerationGraph> {
             let mut orientation_of_virtuals = orientation_of_virtuals.into_iter();
 
             let global_orientation = graph
-                .new_hedgevec_from_iter(graph.iter_all_edges().map(|(hedge_pair, __, _)| {
+                .new_hedgevec_from_iter(graph.iter_edges().map(|(hedge_pair, __, _)| {
                     match hedge_pair {
                         HedgePair::Unpaired { .. } => Orientation::Default,
                         HedgePair::Paired { .. } => orientation_of_virtuals
@@ -188,10 +188,10 @@ fn get_orientations_from_subgraph<E, V, S: SubGraph>(
             let mut orientation_of_virtuals = orientation_of_virtuals.into_iter();
 
             let global_orientation = graph
-                .new_hedgevec_from_iter(graph.iter_all_edges().map(|(_, edge_index, _)| {
+                .new_hedgevec_from_iter(graph.iter_edges().map(|(_, edge_index, _)| {
                     // the pair must be with respect to the subgraph
                     if let Some((pair, _, _)) = graph
-                        .iter_edges(subgraph)
+                        .iter_edges_of(subgraph)
                         .find(|(_pair, id, _)| *id == edge_index)
                     {
                         match pair {
@@ -235,7 +235,7 @@ fn get_orientations_with_cut<E, V>(
             let mut orientation_of_virtuals = orientation_of_virtuals.into_iter();
 
             let global_orientation = graph
-                .new_hedgevec_from_iter(graph.iter_all_edges().map(|(hedge_pair, __, _)| {
+                .new_hedgevec_from_iter(graph.iter_edges().map(|(hedge_pair, __, _)| {
                     match hedge_pair {
                         HedgePair::Unpaired { .. } => Orientation::Default,
                         HedgePair::Paired { .. } => orientation_of_virtuals
@@ -255,7 +255,7 @@ fn get_orientations_with_cut<E, V>(
         })
         .filter(|global_orientation| {
             // filter out orientations that are not consistent with the cut
-            let edges_in_cut = graph.iter_edges(oriented_cut).map(|(_, id, _)| id);
+            let edges_in_cut = graph.iter_edges_of(oriented_cut).map(|(_, id, _)| id);
             let orientation_of_edges_in_cut = oriented_cut.iter_edges(graph).map(|(or, _)| or);
 
             edges_in_cut
@@ -285,7 +285,7 @@ fn get_possible_orientations_for_cut_list<E, V>(
         let mut orientation_of_virtuals = orientation_of_virtuals.into_iter();
 
         let global_orientation = graph
-            .new_hedgevec_from_iter(graph.iter_all_edges().map(|(hedge_pair, __, _)| {
+            .new_hedgevec_from_iter(graph.iter_edges().map(|(hedge_pair, __, _)| {
                 match hedge_pair {
                     HedgePair::Unpaired { .. } => Orientation::Default,
                     HedgePair::Paired { .. } => orientation_of_virtuals
@@ -317,7 +317,7 @@ fn get_possible_orientations_for_cut_list<E, V>(
             let cuts_consistent_with_orientation = cuts
                 .iter_enumerated()
                 .filter(|(_cut_id, cut)| {
-                    let edges_in_cut = graph.iter_edges(&cut.cut).map(|(_, id, _)| id);
+                    let edges_in_cut = graph.iter_edges_of(&cut.cut).map(|(_, id, _)| id);
                     let orientation_of_edges_in_cut = cut.cut.iter_edges(graph).map(|(or, _)| or);
 
                     edges_in_cut
@@ -458,7 +458,7 @@ pub fn generate_cff_with_cuts<E, V>(
     };
     let mut cut_expressions = TiVec::new();
     for cut in cuts.iter() {
-        let edges_in_cut = graph.iter_edges(&cut.cut).map(|(_, id, _)| id);
+        let edges_in_cut = graph.iter_edges_of(&cut.cut).map(|(_, id, _)| id);
         let orientation_of_edges_in_cut = cut.cut.iter_edges(graph).map(|(or, _)| or);
 
         let reversed_dangling = edges_in_cut
