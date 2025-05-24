@@ -4,10 +4,13 @@ use crate::momentum_sample::{
 };
 use crate::utils::{FloatLike, Length, F};
 use bincode::{BorrowDecode, Decode, Encode};
+use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use spenso::algebra::algebraic_traits::RefZero;
 use std::fmt::Display;
 use std::ops::{AddAssign, Index, IndexMut, Neg, SubAssign};
+use symbolica::atom::{Atom, AtomCore, AtomOrView, FunctionBuilder, Symbol};
+use symbolica::id::Pattern;
 use typed_index_collections::TiVec;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, PartialOrd, Eq, Ord, Hash)]
@@ -49,6 +52,32 @@ impl<Context, T: Decode<Context> + From<usize>> Decode<Context> for SignatureLik
 pub struct LoopExtSignature {
     pub internal: LoopSignature,
     pub external: ExternalSignature,
+}
+
+impl LoopExtSignature {
+    pub fn loop_atom<'a, I>(
+        &self,
+        mom_symbol: Symbol,
+        additional_args: &'a [I],
+        id_map: impl Fn(LoopIndex) -> Atom,
+    ) -> Atom
+    where
+        &'a I: Into<AtomOrView<'a>>,
+    {
+        self.internal.atom(mom_symbol, additional_args, id_map)
+    }
+
+    pub fn ext_atom<'a, I>(
+        &self,
+        mom_symbol: Symbol,
+        additional_args: &'a [I],
+        id_map: impl Fn(ExternalIndex) -> Atom,
+    ) -> Atom
+    where
+        &'a I: Into<AtomOrView<'a>>,
+    {
+        self.external.atom(mom_symbol, additional_args, id_map)
+    }
 }
 
 impl From<(Vec<isize>, Vec<isize>)> for LoopExtSignature {
@@ -172,11 +201,43 @@ where
     }
 }
 
+impl<T> AddAssign<()> for SignatureLike<T>
+where
+    T: From<usize> + Copy,
+    usize: From<T>,
+{
+    fn add_assign(&mut self, rhs: ()) {
+        self.0.push(SignOrZero::Plus);
+    }
+}
+
 impl<T> SignatureLike<T>
 where
     T: From<usize> + Copy,
     usize: From<T>,
 {
+    pub fn atom<'a, I>(
+        &self,
+        mom_symbol: Symbol,
+        additional_args: &'a [I],
+        id_map: impl Fn(T) -> Atom,
+    ) -> Atom
+    where
+        &'a I: Into<AtomOrView<'a>>,
+    {
+        let mut rep = Atom::Zero;
+        for (l, s) in self.iter_enumerated() {
+            let mom = FunctionBuilder::new(mom_symbol)
+                .add_arg(id_map(l))
+                .add_args(additional_args)
+                .finish();
+
+            rep += *s * mom;
+        }
+
+        rep
+    }
+
     pub fn iter_enumerated(&self) -> impl Iterator<Item = (T, &SignOrZero)> {
         self.0.iter_enumerated()
     }

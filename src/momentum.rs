@@ -2001,6 +2001,22 @@ pub enum SignOrZero {
     Minus = -1,
 }
 
+impl RefZero for SignOrZero {
+    fn ref_zero(&self) -> Self {
+        SignOrZero::Zero
+    }
+}
+
+impl From<linnet::half_edge::involution::SignOrZero> for SignOrZero {
+    fn from(value: linnet::half_edge::involution::SignOrZero) -> Self {
+        match value {
+            linnet::half_edge::involution::SignOrZero::Plus => SignOrZero::Plus,
+            linnet::half_edge::involution::SignOrZero::Minus => SignOrZero::Minus,
+            linnet::half_edge::involution::SignOrZero::Zero => SignOrZero::Zero,
+        }
+    }
+}
+
 impl_pow_for_sign!(SignOrZero, i32, SignOrZero::Plus);
 impl_pow_for_sign!(SignOrZero, u32, SignOrZero::Plus);
 impl_pow_for_sign!(SignOrZero, i64, SignOrZero::Plus);

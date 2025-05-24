@@ -451,7 +451,7 @@ fn get_loop_count<T: GraphIntegrand>(graph_integrand: &T) -> usize {
         .get_graph()
         .bare_graph
         .loop_momentum_basis
-        .basis
+        .loop_edges
         .len()
 }
 
