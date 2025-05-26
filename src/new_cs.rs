@@ -1274,6 +1274,21 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
 
         for (pair, edge_id, _) in self.graph.underlying.iter_edges() {
             match pair {
+                HedgePair::Unpaired { .. } => {
+                    let i64_id = Into::<usize>::into(edge_id) as i64;
+                    let external_spatial = [
+                        function!(GS.external_mom, i64_id, 1),
+                        function!(GS.external_mom, i64_id, 2),
+                        function!(GS.external_mom, i64_id, 3),
+                    ];
+                    params.extend(external_spatial);
+                }
+                _ => {}
+            }
+        }
+
+        for (pair, edge_id, _) in self.graph.underlying.iter_edges() {
+            match pair {
                 HedgePair::Paired { .. } => {
                     let i64_id = Into::<usize>::into(edge_id) as i64;
                     let emr_components = [
