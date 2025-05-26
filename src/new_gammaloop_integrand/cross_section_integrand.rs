@@ -243,6 +243,13 @@ impl CrossSectionGraphTerm {
                     .map(|x| x.temporal.value.clone())
                     .collect_vec();
 
+                params.extend(
+                    rescaled_sample
+                        .external_moms()
+                        .iter()
+                        .flat_map(|x| x.spatial.clone().into_iter()),
+                );
+
                 params.extend(self.graph.underlying.get_emr_vec_cache(
                     rescaled_sample.loop_moms(),
                     rescaled_sample.external_moms(),
