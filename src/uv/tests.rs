@@ -14,6 +14,7 @@ use spenso::{
     network::{library::TensorLibraryData, parsing::ShadowedStructure},
     structure::{
         abstract_index::AbstractIndex,
+        concrete_index::FlatIndex,
         dimension::Dimension,
         representation::{Minkowski, RepName},
         NamedStructure, ToSymbolic,
@@ -38,7 +39,7 @@ use crate::{
     numerator::UnInit,
     signature::LoopExtSignature,
     tests_from_pytest::{load_amplitude_output, load_generic_model},
-    utils::F,
+    utils::{external_energy_atom_from_index, F},
     uv::UVGraph,
     Settings,
 };
@@ -105,7 +106,7 @@ fn double_triangle_LU() {
             internal_index: vec![],
             dod: if uv_dod >= 1 { -1 } else { -2 },
             num: if uv_dod >= 1 {
-                spenso_lor_atom(0, 2, GS.dim)
+                spenso_lor_atom(0, 20, GS.dim)
             } else {
                 Atom::one()
             },
@@ -139,7 +140,7 @@ fn double_triangle_LU() {
             internal_index: vec![],
             dod: if uv_dod >= 1 { -1 } else { -2 },
             num: if uv_dod >= 1 {
-                spenso_lor_atom(2, 2, GS.dim)
+                spenso_lor_atom(2, 20, GS.dim)
             } else {
                 Atom::one()
             },
@@ -158,7 +159,7 @@ fn double_triangle_LU() {
             internal_index: vec![],
             dod: if uv_dod >= 0 { -1 } else { -2 },
             num: if uv_dod >= 0 {
-                spenso_lor_atom(3, 1, GS.dim)
+                spenso_lor_atom(3, 10, GS.dim)
             } else {
                 Atom::one()
             },
@@ -177,7 +178,7 @@ fn double_triangle_LU() {
             internal_index: vec![],
             dod: if uv_dod >= 0 { -1 } else { -2 },
             num: if uv_dod >= 0 {
-                spenso_lor_atom(4, 1, GS.dim)
+                spenso_lor_atom(4, 10, GS.dim)
             } else {
                 Atom::one()
             },
@@ -337,16 +338,17 @@ fn double_triangle_LU() {
                     .with_map(move |m| {
                         let index = m.get(W_.y_).unwrap().to_atom();
 
-                        function!(GS.ose, edge_id, index) // NOTE: not OSE for external edge, understood as taking 0th part
+                        function!(GS.ose, edge_id, index) // OSE will later be replaced
                                 + function!(GS.emr_vec, edge_id, index)
                     });
             }
+
+            let spenso_mink = symbol!("spenso::mink");
 
             // contract all dot products, set all cross terms ose.q3 to 0
             // MS.dot is a 4d dot product
             cut_res = cut_res
                 .expand()
-                // .to_dots()//need to allow x___
                 .replace(function!(GS.emr_vec, W_.x__, W_.y_).npow(2))
                 .with(function!(
                     MS.dot,
@@ -362,9 +364,12 @@ fn double_triangle_LU() {
                     function!(GS.emr_vec, W_.x__),
                     function!(GS.emr_vec, W_.y__)
                 ))
-                .replace(function!(GS.ose, W_.y__, W_.x_).npow(2))
+                .replace(function!(GS.ose, W_.y__, function!(spenso_mink, W_.z__)).npow(2))
                 .with(function!(GS.ose, W_.y__).npow(2))
-                .replace(function!(GS.ose, W_.x__, W_.x_) * function!(GS.ose, W_.y__, W_.x_))
+                .replace(
+                    function!(GS.ose, W_.x__, function!(spenso_mink, W_.z__))
+                        * function!(GS.ose, W_.y__, function!(spenso_mink, W_.z__)),
+                )
                 .repeat()
                 .with(function!(GS.ose, W_.x__) * function!(GS.ose, W_.y__))
                 .replace(function!(GS.emr_vec, W_.x__, W_.a_) * function!(GS.ose, W_.y__, W_.a_))
@@ -380,7 +385,13 @@ fn double_triangle_LU() {
                     function!(GS.ose, W_.x_),
                     function!(GS.ose, W_.y_)
                 ))
-                .with(function!(GS.ose, W_.x_) * function!(GS.ose, W_.y_));
+                .with(function!(GS.ose, W_.x_) * function!(GS.ose, W_.y_))
+                .replace(function!(
+                    MS.dot,
+                    function!(GS.emr_mom, W_.x__),
+                    function!(GS.emr_vec, W_.y__)
+                ))
+                .with(function!(GS.emr_vec, W_.x__) * function!(GS.emr_vec, W_.y__));
 
             // substitute all OSEs from subgraphs, they are in the form OSE(edge_id, momentum, mass)
             cut_res = cut_res
@@ -409,8 +420,19 @@ fn double_triangle_LU() {
                     );
             }
 
+            // set the external energies
+            for (_p, edge_index, _d) in
+                super_uv_graph.iter_edges_of(&super_uv_graph.external_filter())
+            {
+                let edge_id = usize::from(edge_index) as i64;
+                cut_res = cut_res
+                    .replace(function!(GS.ose, edge_id))
+                    .with(external_energy_atom_from_index(edge_index));
+            }
+
             if super_uv_graph.dod(&c.right) >= 0 {
                 // only check when this graph is a UV subgraph
+
                 let t = symbol!("t");
                 let series = Atom::var(t).npow(3)
                     * cut_res
@@ -431,17 +453,16 @@ fn double_triangle_LU() {
                     .series(t, Atom::Zero, 0.into(), true)
                     .unwrap();
 
-                let mut r = s
+                let r = s
                     .to_atom()
                     .expand()
-                    .collect_symbol::<i8>(GS.emr_vec, None, None);
-                r = r
                     .replace(Atom::var(W_.x_).sqrt())
                     .with(Atom::var(W_.x_).npow((1, 2)))
-                    .replace((-Atom::var(W_.x_)).pow(Atom::num((-5, 2))))
-                    .with(Atom::var(W_.x_).pow(Atom::num((-5, 2))) * Atom::i())
-                    .replace((-Atom::var(W_.x_)).pow(Atom::num((-3, 2))))
-                    .with(-Atom::var(W_.x_).pow(Atom::num((-3, 2))) * Atom::i())
+                    .replace((-Atom::var(W_.x_)).pow(Atom::var(W_.y_)))
+                    .with(
+                        Atom::num(-1).pow(Atom::var(W_.y_))
+                            * Atom::var(W_.x_).pow(Atom::var(W_.y_)),
+                    )
                     .expand(); // help Symbolica with cancellations and avoid bad simplification of (-1)^(-5/2)
                 println!("Correct UV cancellation if 0: {:>}", r);
             }
@@ -461,6 +482,24 @@ fn double_triangle_LU() {
                         + function!(GS.emr_vec, W_.x_, 2) * function!(GS.emr_vec, W_.y_, 2)
                         + function!(GS.emr_vec, W_.x_, 3) * function!(GS.emr_vec, W_.y_, 3)),
                 );
+
+            // set the external spatial parts
+            for (_p, edge_index, _d) in
+                super_uv_graph.iter_edges_of(&super_uv_graph.external_filter())
+            {
+                let edge_id = usize::from(edge_index) as i64;
+                cut_res = cut_res
+                    .replace(function!(GS.emr_vec, edge_id, W_.x_))
+                    .with_map(move |m| {
+                        function!(
+                            GS.external_mom,
+                            edge_id,
+                            Atom::from(FlatIndex::from(
+                                i64::try_from(m.get(W_.x_).unwrap().to_atom()).unwrap() as usize
+                            ))
+                        )
+                    });
+            }
 
             cut_res = cut_res
                 .replace(parse!("MT"))
