@@ -115,7 +115,7 @@ impl From<&HybridSurface> for Atom {
         match value {
             HybridSurface::Esurface(surface) => surface.to_atom(),
             HybridSurface::Hsurface(surface) => surface.to_atom(),
-            HybridSurface::Unit(_) => Atom::new_num(1),
+            HybridSurface::Unit(_) => Atom::num(1),
         }
     }
 }
@@ -132,7 +132,7 @@ impl From<HybridSurfaceRef<'_>> for Atom {
         match value {
             HybridSurfaceRef::Esurface(surface) => surface.to_atom(),
             HybridSurfaceRef::Hsurface(surface) => surface.to_atom(),
-            HybridSurfaceRef::Unit(_) => Atom::new_num(1),
+            HybridSurfaceRef::Unit(_) => Atom::num(1),
         }
     }
 }
@@ -152,7 +152,7 @@ impl From<HybridSurfaceID> for Atom {
         match id {
             HybridSurfaceID::Esurface(id) => Atom::from(id),
             HybridSurfaceID::Hsurface(id) => Atom::from(id),
-            HybridSurfaceID::Unit => Atom::new_num(1),
+            HybridSurfaceID::Unit => Atom::num(1),
         }
     }
 }

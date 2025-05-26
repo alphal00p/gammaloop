@@ -833,11 +833,9 @@ mod tests_cff {
                 .surfaces
                 .substitute_energies(&expression_atom_no_energy_sub);
 
-            let external_energies =
-                external_range.map(|i| parse!(&format!("P({}, cind(0))", i)).unwrap());
+            let external_energies = external_range.map(|i| parse!(&format!("P({}, cind(0))", i)));
 
-            let virtual_energies =
-                virtual_range.map(|i| parse!(&format!("Q({}, cind(0))", i)).unwrap());
+            let virtual_energies = virtual_range.map(|i| parse!(&format!("Q({}, cind(0))", i)));
 
             let params = external_energies.chain(virtual_energies).collect_vec();
 
@@ -850,7 +848,7 @@ mod tests_cff {
             tree.horner_scheme();
             tree.common_subexpression_elimination();
 
-            let tree_double = tree.map_coeff(&|c| c.into());
+            let tree_double = tree.map_coeff(&|c| (&c.re).into());
             tree_double.linearize(None)
         }
     }

@@ -46,22 +46,22 @@ use linnet::half_edge::{
     HedgeGraph,
 };
 use typed_index_collections::TiVec;
-use vakint::{EvaluationOrder, LoopNormalizationFactor, Vakint, VakintSettings};
+// use vakint::{EvaluationOrder, LoopNormalizationFactor, Vakint, VakintSettings};
 
 use crate::{
     graph::{BareEdge, BareGraph, BareVertex},
     model::normalise_complex,
 };
 
-pub static VAKINT: LazyLock<Vakint> = LazyLock::new(|| {
-    Vakint::new(Some(VakintSettings {
-        evaluation_order: EvaluationOrder::alphaloop_only(),
-        integral_normalization_factor: LoopNormalizationFactor::MSbar,
-        run_time_decimal_precision: 16,
-        ..VakintSettings::default()
-    }))
-    .unwrap()
-});
+// pub static VAKINT: LazyLock<Vakint> = LazyLock::new(|| {
+//     Vakint::new(Some(VakintSettings {
+//         evaluation_order: EvaluationOrder::alphaloop_only(),
+//         integral_normalization_factor: LoopNormalizationFactor::MSbar,
+//         run_time_decimal_precision: 16,
+//         ..VakintSettings::default()
+//     }))
+//     .unwrap()
+// });
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct UVEdge {
@@ -81,7 +81,7 @@ impl UVEdge {
             og_edge: id,
             dod: edge.dod() as i32,
             num: normalise_complex(&colorless).into(),
-            den: Atom::new_num(1).into(), // edge.full_den(bare_graph, index).into(),
+            den: Atom::num(1).into(), // edge.full_den(bare_graph, index).into(),
         }
     }
 
@@ -110,7 +110,7 @@ impl UVNode {
         } else {
             UVNode {
                 dod: vertex.dod() as i32,
-                num: Atom::new_num(1).into(),
+                num: Atom::num(1).into(),
                 color: None,
             }
         }
@@ -146,7 +146,7 @@ pub fn spenso_lor(
     dim: impl Into<Dimension>,
 ) -> ShadowedStructure {
     let mink = Minkowski {}.new_slot(dim, ind);
-    NamedStructure::from_iter([mink], GS.emr_mom, Some(vec![Atom::new_num(tag)])).structure
+    NamedStructure::from_iter([mink], GS.emr_mom, Some(vec![Atom::num(tag)])).structure
 }
 
 pub fn spenso_lor_atom(tag: i32, ind: impl Into<AbstractIndex>, dim: impl Into<Dimension>) -> Atom {
@@ -164,7 +164,7 @@ impl UVGraph {
             },
             |_, eid, _, n| {
                 n.map(|d| {
-                    let m2 = parse!(d.particle.mass.name).unwrap().npow(2);
+                    let m2 = parse!(d.particle.mass.name).npow(2);
                     UVEdge {
                         og_edge: 1,
                         dod: d.dod,
@@ -226,7 +226,7 @@ impl UVGraph {
     }
 
     fn numerator<S: SubGraph>(&self, subgraph: &S) -> Atom {
-        let mut num = Atom::new_num(1);
+        let mut num = Atom::num(1);
 
         for (_, _, n) in self.iter_nodes_of(subgraph) {
             num = num * &n.num;
@@ -246,7 +246,7 @@ impl UVGraph {
         subgraph: &S,
         // orientationdata: &OrientationData,
     ) -> Atom {
-        let mut num = Atom::new_num(1);
+        let mut num = Atom::num(1);
 
         for (_, _, n) in self.iter_nodes_of(subgraph) {
             num = num * &n.num;
@@ -262,11 +262,11 @@ impl UVGraph {
     }
 
     fn denominator<S: SubGraph>(&self, subgraph: &S) -> Atom {
-        let mut den = Atom::new_num(1);
+        let mut den = Atom::num(1);
 
         for (pair, eid, d) in self.iter_edges_of(subgraph) {
             if matches!(pair, HedgePair::Paired { .. }) {
-                let m2 = parse!(d.data.particle.mass.name).unwrap().npow(2);
+                let m2 = parse!(d.data.particle.mass.name).npow(2);
                 den = den
                     * function!(
                         GS.den,
@@ -297,11 +297,11 @@ impl UVGraph {
         if let Some(subgraph) = subgraph_iter.next() {
             let t = self.t_op(subgraph_iter);
             FunctionBuilder::new(symbol!("Top"))
-                .add_arg(&Atom::new_num(self.dod(&subgraph)))
+                .add_arg(&Atom::num(self.dod(&subgraph)))
                 .add_arg(&t)
                 .finish()
         } else {
-            Atom::new_num(1)
+            Atom::num(1)
         }
     }
 }
@@ -703,8 +703,8 @@ impl SimpleApprox {
     }
 
     pub fn expr(&self, bigger_graph: &BitVec) -> Atom {
-        let reduced = Atom::new_var(Self::subgraph_shadow(bigger_graph, &self.graph));
-        let mut mul = Atom::new_num(1);
+        let reduced = Atom::var(Self::subgraph_shadow(bigger_graph, &self.graph));
+        let mut mul = Atom::num(1);
         for i in &self.t_args {
             mul = mul * i
         }
@@ -771,7 +771,7 @@ pub struct Approximation {
 
 impl Approximation {
     pub fn simplify_notation(expr: &Atom) -> Atom {
-        let replacements = [(function!(GS.den, W_.a_, W_.x_), Atom::new_var(W_.x_))];
+        let replacements = [(function!(GS.den, W_.a_, W_.x_), Atom::var(W_.x_))];
 
         let reps: Vec<_> = replacements
             .into_iter()
@@ -849,12 +849,12 @@ impl Approximation {
             let soft_ct = graph.full_crown(&self.subgraph).count_ones() == 2 && self.dod > 0;
 
             let mut masses = AHashSet::new();
-            masses.insert(Atom::new_var(GS.m_uv));
+            masses.insert(Atom::var(GS.m_uv));
             // scale all masses, including UV masses from subgraphs
 
             for (p, _, e) in graph.iter_edges_of(&self.subgraph) {
                 if p.is_paired() {
-                    let e_mass = parse!(&e.data.particle.mass.name).unwrap();
+                    let e_mass = parse!(&e.data.particle.mass.name);
                     masses.insert(e_mass);
                 }
             }
@@ -867,11 +867,10 @@ impl Approximation {
 
                 // expand the propagator around a propagator with a UV mass
                 atomarg = atomarg
-                    .replace(parse!("den(n_,q_,mass_,prop_)").unwrap())
-                    .with(
-                        parse!("den(n_,q_,mass_ + mUV^2 - t^2*mUV^2, prop_- mUV^2 + t^2*mUV^2)")
-                            .unwrap(),
-                    );
+                    .replace(parse!("den(n_,q_,mass_,prop_)"))
+                    .with(parse!(
+                        "den(n_,q_,mass_ + mUV^2 - t^2*mUV^2, prop_- mUV^2 + t^2*mUV^2)"
+                    ));
             }
 
             atomarg = atomarg
@@ -886,15 +885,15 @@ impl Approximation {
                 .series(GS.rescale, Atom::Zero, self.dod.into(), true)
                 .unwrap()
                 .to_atom()
-                .replace(parse!("der(0,0,0,1, den(y__))").unwrap())
-                .with(Atom::new_num(1))
-                .replace(parse!("der(x__, den(y__))").unwrap())
-                .with(Atom::new_num(0));
+                .replace(parse!("der(0,0,0,1, den(y__))"))
+                .with(Atom::num(1))
+                .replace(parse!("der(x__, den(y__))"))
+                .with(Atom::num(0));
 
             if soft_ct {
-                let coeffs = a.coefficient_list::<u8>(&[Atom::new_var(GS.rescale)]);
+                let coeffs = a.coefficient_list::<u8>(&[Atom::var(GS.rescale)]);
                 let mut b = Atom::Zero;
-                let dod_pow = Atom::new_var(GS.rescale).npow(self.dod);
+                let dod_pow = Atom::var(GS.rescale).npow(self.dod);
                 for (pow, mut i) in coeffs {
                     if pow == dod_pow {
                         // set the masses in the t=dod term to 0
@@ -904,8 +903,8 @@ impl Approximation {
                         }
 
                         i = i
-                            .replace(parse!("den(n_,q_,mass_,prop_)").unwrap())
-                            .with(parse!("den(n_,q_,mUV^2,prop_-mUV^2)").unwrap());
+                            .replace(parse!("den(n_,q_,mass_,prop_)"))
+                            .with(parse!("den(n_,q_,mUV^2,prop_-mUV^2)"));
                     }
 
                     b += i;
@@ -913,7 +912,7 @@ impl Approximation {
 
                 a = b;
             } else {
-                a = a.replace(GS.rescale).with(Atom::new_num(1));
+                a = a.replace(GS.rescale).with(Atom::num(1));
             }
 
             // strip the momentum wrapper from the denominator
@@ -957,7 +956,7 @@ impl Approximation {
                 .repeat()
                 .with(parse!("vk::prop(x_,y___,p_-n_)").unwrap())
                 .replace(parse!("den(x___)").unwrap())
-                .with(Atom::new_num(1));
+                .with(Atom::num(1));
 
             let mut dummy_index = 1;
             while let Some(r) = integrand_vakint
@@ -1194,14 +1193,14 @@ impl ApproxOp {
         match self {
             ApproxOp::NotComputed => None,
             ApproxOp::Union { t_args, sign, .. } => {
-                let mut mul = Atom::new_num(1);
+                let mut mul = Atom::num(1);
                 for t in t_args {
                     mul = mul * &t.integrand;
                 }
                 Some((mul, *sign))
             }
             ApproxOp::Dependent { t_arg, sign, .. } => Some((t_arg.integrand.clone(), *sign)),
-            ApproxOp::Root => Some((Atom::new_num(1).into(), Sign::Positive)),
+            ApproxOp::Root => Some((Atom::num(1).into(), Sign::Positive)),
         }
     }
 
@@ -1388,7 +1387,7 @@ impl Forest {
 
     ///4d expr with unwrapped dens
     pub fn expr(&self, graph: &UVGraph, amplitude: &InternalSubGraph) -> Option<SerializableAtom> {
-        let mut sum = Atom::new_num(0).into();
+        let mut sum = Atom::num(0).into();
         for (_, n) in &self.dag.nodes {
             sum = sum + n.data.unwrapped_expr(graph, amplitude)?;
         }
@@ -1419,7 +1418,7 @@ impl Forest {
             let mut data = Vec::new();
             for m in t.pattern_match(
                 &function!(GS.den, W_.edgeid_, W_.mom_, W_.mass_, W_.x_)
-                    .pow(Atom::new_var(W_.c_))
+                    .pow(Atom::var(W_.c_))
                     .to_pattern(),
                 None,
                 None,
@@ -1431,7 +1430,7 @@ impl Forest {
 
                 expr = expr
                     .replace(function!(GS.den, eid, W_.y__))
-                    .with(Atom::new_num(1));
+                    .with(Atom::num(1));
 
                 data.push((eid, pow, mom, mass));
             }
@@ -1473,7 +1472,7 @@ impl Forest {
                         .with(function!(GS.ose, edge_id, W_.x___) * GS.rescale) // TODO: check if derivative is in the correct quantity
                         .derivative(GS.rescale)
                         .replace(GS.rescale)
-                        .with(Atom::new_num(1));
+                        .with(Atom::num(1));
                 }
 
                 expr = expr / Integer::factorial(pow as u32 - 1);
@@ -1496,7 +1495,7 @@ impl Forest {
         graph: &UVGraph,
         amplitude: &InternalSubGraph,
     ) -> Option<SerializableAtom> {
-        let mut sum = Atom::new_num(0).into();
+        let mut sum = Atom::num(0).into();
         for (_, n) in &self.dag.nodes {
             sum = sum + n.data.simple_expr(graph, amplitude)?;
         }

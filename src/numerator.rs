@@ -511,11 +511,20 @@ impl<S: NumeratorState> Numerator<S> {
     }
 
     fn add_consts_to_fn_map(fn_map: &mut FunctionMap) {
-        fn_map.add_constant(parse!("Nc").unwrap(), Rational::from_unchecked(3, 1));
+        fn_map.add_constant(
+            parse!("Nc"),
+            symbolica::domains::float::Complex::from(Rational::from_unchecked(3, 1)),
+        );
 
-        fn_map.add_constant(parse!("TR").unwrap(), Rational::from_unchecked(1, 2));
+        fn_map.add_constant(
+            parse!("TR"),
+            symbolica::domains::float::Complex::from(Rational::from_unchecked(1, 2)),
+        );
 
-        fn_map.add_constant(parse!("pi").unwrap(), std::f64::consts::PI.into());
+        fn_map.add_constant(
+            parse!("pi"),
+            symbolica::domains::float::Complex::from(Rational::from(std::f64::consts::PI)),
+        );
     }
 }
 
@@ -635,8 +644,8 @@ pub struct GlobalPrefactor {
 impl Default for GlobalPrefactor {
     fn default() -> Self {
         GlobalPrefactor {
-            color: Atom::new_num(1),
-            colorless: Atom::new_num(1),
+            color: Atom::num(1),
+            colorless: Atom::num(1),
         }
     }
 }
@@ -665,8 +674,8 @@ impl<'de> Deserialize<'de> for GlobalPrefactor {
         }
         let helper = GlobalPrefactorHelper::deserialize(deserializer)?;
         Ok(GlobalPrefactor {
-            color: parse!(&helper.color).unwrap(),
-            colorless: parse!(&helper.colorless).unwrap(),
+            color: parse!(&helper.color),
+            colorless: parse!(&helper.colorless),
         })
     }
 }
@@ -813,7 +822,7 @@ pub trait ExpressionState:
     fn new(expression: SerializableAtom) -> SymbolicExpression<Self> {
         SymbolicExpression {
             colorless: ParamTensor::composite(DataTensor::new_scalar(expression.0)),
-            color: ParamTensor::composite(DataTensor::new_scalar(Atom::new_num(1))),
+            color: ParamTensor::composite(DataTensor::new_scalar(Atom::num(1))),
             state: Self::default(),
         }
     }
@@ -821,7 +830,7 @@ pub trait ExpressionState:
     fn new_color(expression: SerializableAtom) -> SymbolicExpression<Self> {
         SymbolicExpression {
             color: ParamTensor::composite(DataTensor::new_scalar(expression.0)),
-            colorless: ParamTensor::composite(DataTensor::new_scalar(Atom::new_num(1))),
+            colorless: ParamTensor::composite(DataTensor::new_scalar(Atom::num(1))),
             state: Self::default(),
         }
     }
@@ -1071,28 +1080,20 @@ impl AppliedFeynmanRule {
     pub fn simplify_ids(&mut self) {
         let replacements: Vec<Replacement> = vec![
             Replacement::new(
-                parse!("f_(i_,aind(loru(a__)))*id(aind(lord(a__),loru(b__)))")
-                    .unwrap()
-                    .to_pattern(),
-                parse!("f_(i_,aind(loru(b__)))").unwrap().to_pattern(),
+                parse!("f_(i_,aind(loru(a__)))*id(aind(lord(a__),loru(b__)))").to_pattern(),
+                parse!("f_(i_,aind(loru(b__)))").to_pattern(),
             ),
             Replacement::new(
-                parse!("f_(i_,aind(lord(a__)))*id(aind(loru(a__),lord(b__)))")
-                    .unwrap()
-                    .to_pattern(),
-                parse!("f_(i_,aind(lord(b__)))").unwrap().to_pattern(),
+                parse!("f_(i_,aind(lord(a__)))*id(aind(loru(a__),lord(b__)))").to_pattern(),
+                parse!("f_(i_,aind(lord(b__)))").to_pattern(),
             ),
             Replacement::new(
-                parse!("f_(i_,aind(loru(a__)))*id(aind(loru(b__),lord(a__)))")
-                    .unwrap()
-                    .to_pattern(),
-                parse!("f_(i_,aind(loru(b__)))").unwrap().to_pattern(),
+                parse!("f_(i_,aind(loru(a__)))*id(aind(loru(b__),lord(a__)))").to_pattern(),
+                parse!("f_(i_,aind(loru(b__)))").to_pattern(),
             ),
             Replacement::new(
-                parse!("f_(i_,aind(lord(a__)))*id(aind(lord(b__),loru(a__)))")
-                    .unwrap()
-                    .to_pattern(),
-                parse!("f_(i_,aind(lord(b__)))").unwrap().to_pattern(),
+                parse!("f_(i_,aind(lord(a__)))*id(aind(lord(b__),loru(a__)))").to_pattern(),
+                parse!("f_(i_,aind(lord(b__)))").to_pattern(),
             ),
         ];
 
@@ -1120,7 +1121,7 @@ impl AppliedFeynmanRule {
             .collect();
 
         let mut eatoms: Vec<_> = vec![];
-        let i = Atom::new_var(Atom::I);
+        let i = Atom::i();
         for (j, e) in graph.edges.iter().enumerate() {
             let [n, c] = e.color_separated_numerator(graph, j);
             let n = if matches!(e.edge_type, EdgeType::Virtual) {
@@ -1132,9 +1133,9 @@ impl AppliedFeynmanRule {
             // shift += s;
             // graph.shifts.0 += shift;
         }
-        let mut colorless_builder = DataTensor::new_scalar(Atom::new_num(1));
+        let mut colorless_builder = DataTensor::new_scalar(Atom::num(1));
 
-        let mut colorful_builder = DataTensor::new_scalar(Atom::new_num(1));
+        let mut colorful_builder = DataTensor::new_scalar(Atom::num(1));
 
         for [colorless, color] in &vatoms {
             // println!("colorless vertex: {}", colorless);
@@ -1215,7 +1216,7 @@ impl<T: Copy + Default> Numerator<SymbolicExpression<T>> {
         let mut color = self.state.color.map_data_ref(|a| {
             SerializableAtom::from(
                 a.0.replace(&function!(symbol!(DOWNIND), GS.x__).to_pattern())
-                    .with(Atom::new_var(GS.x__).to_pattern()),
+                    .with(Atom::var(GS.x__).to_pattern()),
             )
         });
 
@@ -1521,7 +1522,7 @@ impl PolySplit {
                     .tensor
                     .map_structure(OrderedStructure::from)
             })
-            .flatten(&Atom::new_num(0))
+            .flatten(&Atom::num(0))
             .unwrap();
 
         colorless_parsed
@@ -1555,7 +1556,7 @@ impl PolySplit {
                     .tensor
                     .map_structure(OrderedStructure::from)
             })
-            .flatten(&Atom::new_num(0))
+            .flatten(&Atom::num(0))
             .unwrap()
             .map_data(|a| a.as_view().to_polynomial_in_vars::<u8>(&var_map));
 
@@ -1576,10 +1577,10 @@ impl PolySplit {
         reps: Arc<Mutex<Vec<Atom>>>,
     ) -> Atom {
         if poly.is_zero() {
-            return Atom::new_num(0);
+            return Atom::num(0);
         }
 
-        let mut add = Atom::new_num(0);
+        let mut add = Atom::num(0);
         let coef = symbol!("coef");
         let shift = reps.as_ref().lock().unwrap().len();
 
@@ -1589,7 +1590,7 @@ impl PolySplit {
         let mut pow_h = workspace.new_atom();
 
         for (i, monomial) in poly.into_iter().enumerate() {
-            mul_h = Atom::new_num(1);
+            mul_h = Atom::num(1);
             for (var_id, &pow) in poly.variables.iter().zip(monomial.exponents) {
                 if pow > 0 {
                     match var_id {
@@ -1619,7 +1620,7 @@ impl PolySplit {
                 .unwrap()
                 .push(monomial.coefficient.clone());
 
-            mul_h = mul_h * function!(coef, Atom::new_num((i + shift) as i64));
+            mul_h = mul_h * function!(coef, Atom::num((i + shift) as i64));
             add = add + mul_h.as_view();
         }
 
@@ -1741,7 +1742,7 @@ impl Numerator<PolyContracted> {
 
     pub fn to_contracted(self) -> Numerator<Contracted> {
         let coefs: Vec<_> = (0..self.state.coef_map.len())
-            .map(|i| function!(GS.coeff, Atom::new_num(i as i64)).to_pattern())
+            .map(|i| function!(GS.coeff, Atom::num(i as i64)).to_pattern())
             .collect();
 
         let coefs_reps: Vec<_> = self.state.coef_map.iter().map(|a| a.to_pattern()).collect();
@@ -1766,7 +1767,7 @@ impl Numerator<PolyContracted> {
             fn_map
                 .add_tagged_function(
                     GS.coeff,
-                    vec![Atom::new_num(v as i64)],
+                    vec![Atom::num(v as i64)],
                     format!("coef{v}"),
                     vec![],
                     k.clone(),
@@ -1913,21 +1914,21 @@ impl PolyContracted {
         let cpe_rounds = eval_options.options.cpe_rounds();
         let eval_double = eval_tree
             .map_coeff::<Complex<F<f64>>, _>(&|r| Complex {
-                re: F(r.into()),
-                im: F(0.),
+                re: F((&r.re).into()),
+                im: F((&r.im).into()),
             })
             .linearize(cpe_rounds);
         debug!("Linearize quad");
 
         let eval_quad = eval_tree
             .map_coeff::<Complex<F<f128>>, _>(&|r| Complex {
-                re: F(r.into()),
-                im: F(f128::new_zero()),
+                re: F((&r.re).into()),
+                im: F((&r.im).into()),
             })
             .linearize(cpe_rounds);
 
         let eval = eval_tree
-            .map_coeff::<F<f64>, _>(&|r| r.into())
+            .map_coeff::<F<f64>, _>(&|r| (&r.re).into())
             .linearize(cpe_rounds);
         let compiled = if eval_options.options.compile_options().compile() {
             debug!("Compiling iterative evaluator");
@@ -2222,16 +2223,16 @@ impl Numerator<Network> {
             b = b.expand();
             let mut re = Rational::zero();
             let mut im = Rational::zero();
-            for (var, coeff) in b.coefficient_list::<u8>(&[Atom::new_var(Atom::I)]).iter() {
+            for (var, coeff) in b.coefficient_list::<u8>(&[Atom::i()]).iter() {
                 let c = coeff.try_into().map_err(|e| {
                     FeynGenError::NumeratorEvaluationError(format!(
                         "Could not convert tensor coefficient to integer: error: {}, expresssion: {}",
                         e, coeff
                     ))
                 })?;
-                if *var == Atom::new_var(Atom::I) {
+                if *var == Atom::i() {
                     re = c;
-                } else if *var == Atom::new_num(1) {
+                } else if *var == Atom::num(1) {
                     im = c;
                 } else {
                     return Err(FeynGenError::NumeratorEvaluationError(format!(
@@ -2252,7 +2253,7 @@ impl Numerator<Network> {
                 .result_scalar()
                 .map_err(|e| FeynGenError::NumeratorEvaluationError(e.to_string()))?
             {
-                ExecutionResult::One => Atom::new_num(1),
+                ExecutionResult::One => Atom::num(1),
                 ExecutionResult::Zero => Atom::Zero,
                 ExecutionResult::Val(v) => v.into_owned(),
             };
@@ -2288,10 +2289,10 @@ impl Numerator<Network> {
                 .result_scalar()
                 .map_err(|e| FeynGenError::NumeratorEvaluationError(e.to_string()))?
             {
-                ExecutionResult::One => Atom::new_num(1),
+                ExecutionResult::One => Atom::num(1),
                 ExecutionResult::Zero => Atom::Zero,
                 ExecutionResult::Val(r) => {
-                    Atom::new_num(r.re.clone()) + Atom::new_num(r.im.clone()) * Atom::I
+                    Atom::num(r.re.clone()) + Atom::num(r.im.clone()) * Atom::i()
                 }
             };
 
@@ -2334,14 +2335,14 @@ impl Numerator<Network> {
     // pub fn random_concretize_reps(&mut self, seed: usize) -> Vec<Replacement> {
     //     let mut prime = PrimeIteratorU64::new(1)
     //         .skip(seed)
-    //         .map(|u| Atom::new_num(symbolica::domains::integer::Integer::new(u as i64)));
+    //         .map(|u| Atom::num(symbolica::domains::integer::Integer::new(u as i64)));
 
     //     let mut reps = vec![];
 
     //     let pat = function!(
     //         GS.f_,
-    //         Atom::new_var(GS.y___),
-    //         function!(symbol!("cind"), Atom::new_var(GS.x_))
+    //         Atom::var(GS.y___),
+    //         function!(symbol!("cind"), Atom::var(GS.x_))
     //     )
     //     .to_pattern();
 
@@ -2381,14 +2382,14 @@ impl Numerator<Network> {
         // };
 
         // let mut prime = prime_iterator
-        //     .map(|u| Atom::new_num(symbolica::domains::integer::Integer::new(u as i64)));
+        //     .map(|u| Atom::num(symbolica::domains::integer::Integer::new(u as i64)));
         // let mut reps = vec![];
 
         // if !fully_numerical_substitution {
         //     let variable = function!(
         //         GS.f_,
-        //         Atom::new_var(GS.y_),
-        //         function!(symbol!("cind"), Atom::new_var(GS.x_))
+        //         Atom::var(GS.y_),
+        //         function!(symbol!("cind"), Atom::var(GS.x_))
         //     );
         //     let pat = variable.to_pattern();
 
@@ -2414,7 +2415,7 @@ impl Numerator<Network> {
         //                     found_it = true;
         //                 }
         //                 if !found_it {
-        //                     reps.push(Atom::new_var(s));
+        //                     reps.push(Atom::var(s));
         //                 }
         //             }
         //         }
@@ -2492,21 +2493,21 @@ impl Contracted {
         let cpe_rounds = eval_options.options.cpe_rounds();
         let eval_double = eval_tree
             .map_coeff::<Complex<F<f64>>, _>(&|r| Complex {
-                re: F(r.into()),
-                im: F(0.),
+                re: F((&r.re).into()),
+                im: F((&r.im).into()),
             })
             .linearize(cpe_rounds);
         debug!("Linearize quad");
 
         let eval_quad = eval_tree
             .map_coeff::<Complex<F<f128>>, _>(&|r| Complex {
-                re: F(r.into()),
-                im: F(f128::new_zero()),
+                re: F((&r.re).into()),
+                im: F((&r.im).into()),
             })
             .linearize(cpe_rounds);
 
         let eval = eval_tree
-            .map_coeff::<F<f64>, _>(&|r| r.into())
+            .map_coeff::<F<f64>, _>(&|r| (&r.re).into())
             .linearize(cpe_rounds);
         let compiled = if eval_options.options.compile_options().compile() {
             debug!("compiling iterative evaluator");
@@ -2561,8 +2562,8 @@ impl Contracted {
             for index in 0..size {
                 let e = FunctionBuilder::new(symbol!(&name));
                 data.push(
-                    e.add_arg(Atom::new_num(num))
-                        .add_arg(parse!(&format!("cind({})", index)).unwrap())
+                    e.add_arg(Atom::num(num))
+                        .add_arg(parse!(&format!("cind({})", index)))
                         .finish(),
                 );
             }
@@ -2591,7 +2592,7 @@ impl Contracted {
         }
 
         params.extend(pols);
-        params.push(Atom::new_var(Atom::I));
+        params.push(Atom::i());
 
         params
     }
@@ -2640,7 +2641,7 @@ impl Contracted {
         params.extend(pols);
 
         param_values.push(Complex::new_i());
-        params.push(Atom::new_var(Atom::I));
+        params.push(Atom::i());
 
         let model_params_start = params.len();
         param_values.extend(model.generate_values());
@@ -3060,8 +3061,8 @@ impl EvaluatorSingle {
         let reps = (0..n_edges)
             .map(|i| {
                 (
-                    parse!(&format!("Q({},cind(0))", i)).unwrap(),
-                    parse!(&format!("-Q({},cind(0))", i)).unwrap(),
+                    parse!(&format!("Q({},cind(0))", i)),
+                    parse!(&format!("-Q({},cind(0))", i)),
                 )
             })
             .collect_vec();
@@ -3148,19 +3149,21 @@ impl EvaluatorSingle {
         let eval_double = linearized
             .clone()
             .map_coeff::<Complex<F<f64>>, _>(&|r| Complex {
-                re: F(r.into()),
-                im: F(0.),
+                re: F(r.re.to_f64()),
+                im: F(r.im.to_f64()),
             });
         debug!("Linearize quad");
 
         let eval_quad = linearized
             .clone()
             .map_coeff::<Complex<F<f128>>, _>(&|r| Complex {
-                re: F(r.into()),
-                im: F(f128::new_zero()),
+                re: F((&r.re).into()),
+                im: F((&r.im).into()),
             });
 
-        let eval = linearized.clone().map_coeff::<F<f64>, _>(&|r| r.into());
+        let eval = linearized
+            .clone()
+            .map_coeff::<F<f64>, _>(&|r| (&r.re).into());
 
         let compiled = if eval_options.options.compile_options().compile() {
             debug!("compiling iterative evaluator");
@@ -3250,8 +3253,8 @@ impl EvaluatorSingle {
         let reps = (0..n_edges)
             .map(|i| {
                 (
-                    parse!(&format!("Q({},cind(0))", i)).unwrap(),
-                    parse!(&format!("-Q({},cind(0))", i)).unwrap(),
+                    parse!(&format!("Q({},cind(0))", i)),
+                    parse!(&format!("-Q({},cind(0))", i)),
                 )
             })
             .collect_vec();
@@ -3318,21 +3321,21 @@ impl EvaluatorSingle {
         debug!("Linearize double");
         let eval_double = eval_tree
             .map_coeff::<Complex<F<f64>>, _>(&|r| Complex {
-                re: F(r.into()),
-                im: F(0.),
+                re: F((&r.re).into()),
+                im: F((&r.im).into()),
             })
             .linearize(cpe_rounds);
         debug!("Linearize quad");
 
         let eval_quad = eval_tree
             .map_coeff::<Complex<F<f128>>, _>(&|r| Complex {
-                re: F(r.into()),
-                im: F(f128::new_zero()),
+                re: F((&r.re).into()),
+                im: F((&r.im).into()),
             })
             .linearize(cpe_rounds);
 
         let eval = eval_tree
-            .map_coeff::<F<f64>, _>(&|r| r.into())
+            .map_coeff::<F<f64>, _>(&|r| (&r.re).into())
             .linearize(cpe_rounds);
 
         let compiled = if eval_options.options.compile_options().compile() {

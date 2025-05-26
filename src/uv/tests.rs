@@ -396,7 +396,7 @@ fn double_triangle_LU() {
 
             // substitute all OSEs (add minus sign to cancel minus sign from 4d dot product)
             for (_p, edge_id, d) in super_uv_graph.iter_edges_of(&c.cut.left) {
-                let mass2 = Atom::new_var(symbol!(d.data.particle.mass.name.as_str())).npow(2);
+                let mass2 = Atom::var(symbol!(d.data.particle.mass.name.as_str())).npow(2);
                 cut_res = cut_res
                     .replace(function!(GS.ose, usize::from(edge_id) as i64))
                     .with(
@@ -412,22 +412,22 @@ fn double_triangle_LU() {
             if super_uv_graph.dod(&c.right) >= 0 {
                 // only check when this graph is a UV subgraph
                 let t = symbol!("t");
-                let series = Atom::new_var(t).npow(3)
+                let series = Atom::var(t).npow(3)
                     * cut_res
                         .expand()
-                        .replace(parse!("Q3(3,x_)").unwrap())
-                        .with(parse!("t*Q3(3,x_)").unwrap())
-                        .replace(parse!("Q3(2,x_)").unwrap())
-                        .with(parse!("t*Q3(3,x_)-Q3(1,x_)").unwrap())
-                        .replace(parse!("Q3(4,x_)").unwrap())
-                        .with(parse!("t*Q3(3,x_)-Q3(6,x_)").unwrap())
-                        .replace(parse!("symbolica_community::dot(t*x_,y_)").unwrap())
+                        .replace(parse!("Q3(3,x_)"))
+                        .with(parse!("t*Q3(3,x_)"))
+                        .replace(parse!("Q3(2,x_)"))
+                        .with(parse!("t*Q3(3,x_)-Q3(1,x_)"))
+                        .replace(parse!("Q3(4,x_)"))
+                        .with(parse!("t*Q3(3,x_)-Q3(6,x_)"))
+                        .replace(parse!("symbolica_community::dot(t*x_,y_)"))
                         .repeat()
-                        .with(parse!("t*symbolica_community::dot(x_,y_)").unwrap());
+                        .with(parse!("t*symbolica_community::dot(x_,y_)"));
 
                 let s = series
                     .replace(t)
-                    .with(Atom::new_var(t).npow(-1))
+                    .with(Atom::var(t).npow(-1))
                     .series(t, Atom::Zero, 0.into(), true)
                     .unwrap();
 
@@ -436,12 +436,12 @@ fn double_triangle_LU() {
                     .expand()
                     .collect_symbol::<i8>(GS.emr_vec, None, None);
                 r = r
-                    .replace(Atom::new_var(W_.x_).sqrt())
-                    .with(Atom::new_var(W_.x_).npow((1, 2)))
-                    .replace((-Atom::new_var(W_.x_)).pow(Atom::new_num((-5, 2))))
-                    .with(Atom::new_var(W_.x_).pow(Atom::new_num((-5, 2))) * Atom::I)
-                    .replace((-Atom::new_var(W_.x_)).pow(Atom::new_num((-3, 2))))
-                    .with(-Atom::new_var(W_.x_).pow(Atom::new_num((-3, 2))) * Atom::I)
+                    .replace(Atom::var(W_.x_).sqrt())
+                    .with(Atom::var(W_.x_).npow((1, 2)))
+                    .replace((-Atom::var(W_.x_)).pow(Atom::num((-5, 2))))
+                    .with(Atom::var(W_.x_).pow(Atom::num((-5, 2))) * Atom::i())
+                    .replace((-Atom::var(W_.x_)).pow(Atom::num((-3, 2))))
+                    .with(-Atom::var(W_.x_).pow(Atom::num((-3, 2))) * Atom::i())
                     .expand(); // help Symbolica with cancellations and avoid bad simplification of (-1)^(-5/2)
                 println!("Correct UV cancellation if 0: {:>}", r);
             }
@@ -463,9 +463,9 @@ fn double_triangle_LU() {
                 );
 
             cut_res = cut_res
-                .replace(parse!("MT").unwrap())
+                .replace(parse!("MT"))
                 .with(Atom::new())
-                .replace(parse!("MH").unwrap())
+                .replace(parse!("MH"))
                 .with(Atom::new());
 
             let cut_res = cut_res.expand();
@@ -519,19 +519,19 @@ fn nested_bubble_soft_ct() {
 
     let scalar_node = UVNode {
         dod: 0,
-        num: Atom::new_num(1),
+        num: Atom::num(1),
         color: None,
     };
 
     fn scalar_edge(eid: i32) -> UVEdge {
         let model = load_generic_model("sm");
         let higgs = model.get_particle("H");
-        let m2 = parse!(higgs.mass.name).unwrap().npow(2);
+        let m2 = parse!(higgs.mass.name).npow(2);
         UVEdge {
             og_edge: 1, // not needed
             dod: -2,
             particle: higgs,
-            num: Atom::new_num(1),
+            num: Atom::num(1),
             den: spenso_lor_atom(eid, 1, GS.dim).npow(2).to_dots() - m2,
         }
     }
@@ -539,7 +539,7 @@ fn nested_bubble_soft_ct() {
     fn scalar_edge_with_p(eid: i32, ind: impl Into<AbstractIndex>) -> UVEdge {
         let model = load_generic_model("sm");
         let higgs = model.get_particle("H");
-        let m2 = parse!(higgs.mass.name).unwrap().npow(2);
+        let m2 = parse!(higgs.mass.name).npow(2);
         UVEdge {
             og_edge: 1, // not needed
             dod: -1,
@@ -598,60 +598,74 @@ fn nested_bubble_soft_ct() {
     println!("{:>}", result);
 
     let t = symbol!("t");
-    let series = Atom::new_var(t).npow(4)
+    let series = Atom::var(t).npow(4)
         * result
-            .replace(parse!("K(3)").unwrap())
-            .with(parse!("t*K(3)").unwrap())
-            .replace(parse!("symbolica_community::dot(t*K(x_),y_)").unwrap())
+            .replace(parse!("K(3)"))
+            .with(parse!("t*K(3)"))
+            .replace(parse!("symbolica_community::dot(t*K(x_),y_)"))
             .repeat()
-            .with(parse!("t*symbolica_community::dot(K(x_),y_)").unwrap());
+            .with(parse!("t*symbolica_community::dot(K(x_),y_)"));
 
     println!("SERIESINPUT:\n{:>}", series);
 
     let s = series
         .replace(t)
-        .with(Atom::new_var(t).npow(-1))
+        .with(Atom::var(t).npow(-1))
         .series(t, Atom::Zero, 0.into(), true)
         .unwrap();
     println!("Series: {:>}", s);
     println!("Correct UV cancellation if 0: {:>}", s.to_atom().expand());
 
     let exp = result
-        .replace(parse!("symbolica_community::dot(k_(x_),l_(y_))").unwrap())
-        .with(parse!("k(x_,0)*k(y_,0)-k(x_,1)*k(y_,1)-k(x_,2)*k(y_,2)-k(x_,3)*k(y_,3)").unwrap());
+        .replace(parse!("symbolica_community::dot(k_(x_),l_(y_))"))
+        .with(parse!(
+            "k(x_,0)*k(y_,0)-k(x_,1)*k(y_,1)-k(x_,2)*k(y_,2)-k(x_,3)*k(y_,3)"
+        ));
 
     let mut fnmap = FunctionMap::new();
 
-    fnmap.add_constant(Atom::new_var(symbol!("m")), (1.).into());
-    fnmap.add_constant(Atom::new_var(symbol!("MH")), (1.).into());
-    fnmap.add_constant(Atom::new_var(symbol!("mUV")), (10.).into());
-    fnmap.add_constant(Atom::new_var(symbol!("ZERO")), (0).into());
+    fnmap.add_constant(
+        Atom::var(symbol!("m")),
+        symbolica::domains::float::Complex::new((1.).into(), (0.).into()),
+    );
+    fnmap.add_constant(
+        Atom::var(symbol!("MH")),
+        symbolica::domains::float::Complex::new((1.).into(), (0.).into()),
+    );
+    fnmap.add_constant(
+        Atom::var(symbol!("mUV")),
+        symbolica::domains::float::Complex::new((10.).into(), (0.).into()),
+    );
+    fnmap.add_constant(
+        Atom::var(symbol!("ZERO")),
+        symbolica::domains::float::Complex::new((0.).into(), (0.).into()),
+    );
     let ev = exp
         .evaluator(
             &fnmap,
             &[
-                parse!("k(1, 0)").unwrap(),
-                parse!("k(1, 1)").unwrap(),
-                parse!("k(1, 2)").unwrap(),
-                parse!("k(1, 3)").unwrap(),
-                parse!("k(3, 0)").unwrap(),
-                parse!("k(3, 1)").unwrap(),
-                parse!("k(3, 2)").unwrap(),
-                parse!("k(3, 3)").unwrap(),
-                parse!("k(5, 0)").unwrap(),
-                parse!("k(5, 1)").unwrap(),
-                parse!("k(5, 2)").unwrap(),
-                parse!("k(5, 3)").unwrap(),
-                parse!("k(6, 0)").unwrap(),
-                parse!("k(6, 1)").unwrap(),
-                parse!("k(6, 2)").unwrap(),
-                parse!("k(6, 3)").unwrap(),
+                parse!("k(1, 0)"),
+                parse!("k(1, 1)"),
+                parse!("k(1, 2)"),
+                parse!("k(1, 3)"),
+                parse!("k(3, 0)"),
+                parse!("k(3, 1)"),
+                parse!("k(3, 2)"),
+                parse!("k(3, 3)"),
+                parse!("k(5, 0)"),
+                parse!("k(5, 1)"),
+                parse!("k(5, 2)"),
+                parse!("k(5, 3)"),
+                parse!("k(6, 0)"),
+                parse!("k(6, 1)"),
+                parse!("k(6, 2)"),
+                parse!("k(6, 3)"),
             ],
             OptimizationSettings::default(),
         )
         .unwrap();
 
-    let mut ev2 = ev.map_coeff(&|x| x.to_f64());
+    let mut ev2 = ev.map_coeff(&|x| x.re.to_f64());
 
     println!("Single limit:");
     for t in (0..100_000).step_by(5000) {
@@ -709,19 +723,19 @@ fn nested_bubble_scalar_quad() {
 
     let scalar_node = UVNode {
         dod: 0,
-        num: Atom::new_num(1),
+        num: Atom::num(1),
         color: None,
     };
 
     fn scalar_edge(eid: i32) -> UVEdge {
         let model = load_generic_model("sm");
         let higgs = model.get_particle("H");
-        let m2 = parse!(higgs.mass.name).unwrap().npow(2);
+        let m2 = parse!(higgs.mass.name).npow(2);
         UVEdge {
             og_edge: 1, // not needed
             dod: -2,
             particle: higgs,
-            num: Atom::new_num(1),
+            num: Atom::num(1),
             den: spenso_lor_atom(eid, 1, GS.dim).npow(2).to_dots() - m2,
         }
     }
@@ -729,7 +743,7 @@ fn nested_bubble_scalar_quad() {
     fn scalar_edge_with_p(eid: i32, ind: impl Into<AbstractIndex>) -> UVEdge {
         let model = load_generic_model("sm");
         let higgs = model.get_particle("H");
-        let m2 = parse!(higgs.mass.name).unwrap().npow(2);
+        let m2 = parse!(higgs.mass.name).npow(2);
         UVEdge {
             og_edge: 1, // not needed
             dod: -1,
@@ -788,19 +802,19 @@ fn nested_bubble_scalar_quad() {
     println!("{:>}", result);
 
     let t = symbol!("t");
-    let series = Atom::new_var(t).npow(4)
+    let series = Atom::var(t).npow(4)
         * result
-            .replace(parse!("K(3)").unwrap())
-            .with(parse!("t*K(3)").unwrap())
-            .replace(parse!("symbolica_community::dot(t*K(x_),y_)").unwrap())
+            .replace(parse!("K(3)"))
+            .with(parse!("t*K(3)"))
+            .replace(parse!("symbolica_community::dot(t*K(x_),y_)"))
             .repeat()
-            .with(parse!("t*symbolica_community::dot(K(x_),y_)").unwrap());
+            .with(parse!("t*symbolica_community::dot(K(x_),y_)"));
 
     println!("SERIESINPUT:\n{:>}", series);
 
     let s = series
         .replace(t)
-        .with(Atom::new_var(t).npow(-1))
+        .with(Atom::var(t).npow(-1))
         .series(t, Atom::Zero, 0.into(), true)
         .unwrap();
     println!("Series: {:>}", s);
@@ -812,36 +826,47 @@ fn nested_bubble_scalar_quad() {
     panic!("STOP");
 
     let exp = result
-        .replace(parse!("symbolica_community::dot(k_(x_),l_(y_))").unwrap())
-        .with(parse!("k(x_,0)*k(y_,0)-k(x_,1)*k(y_,1)-k(x_,2)*k(y_,2)-k(x_,3)*k(y_,3)").unwrap());
+        .replace(parse!("symbolica_community::dot(k_(x_),l_(y_))"))
+        .with(parse!(
+            "k(x_,0)*k(y_,0)-k(x_,1)*k(y_,1)-k(x_,2)*k(y_,2)-k(x_,3)*k(y_,3)"
+        ));
 
     let mut fnmap = FunctionMap::new();
 
-    fnmap.add_constant(Atom::new_var(symbol!("m")), (1.).into());
-    fnmap.add_constant(Atom::new_var(symbol!("MH")), (1.).into());
-    fnmap.add_constant(Atom::new_var(symbol!("mUV")), (10.).into());
+    fnmap.add_constant(
+        Atom::var(symbol!("m")),
+        symbolica::domains::float::Complex::new((1.).into(), (0.).into()),
+    );
+    fnmap.add_constant(
+        Atom::var(symbol!("MH")),
+        symbolica::domains::float::Complex::new((1.).into(), (0.).into()),
+    );
+    fnmap.add_constant(
+        Atom::var(symbol!("mUV")),
+        symbolica::domains::float::Complex::new((10.).into(), (0.).into()),
+    );
     let ev = exp
         .evaluator(
             &fnmap,
             &[
-                parse!("k(1, 0)").unwrap(),
-                parse!("k(1, 1)").unwrap(),
-                parse!("k(1, 2)").unwrap(),
-                parse!("k(1, 3)").unwrap(),
-                parse!("k(3, 0)").unwrap(),
-                parse!("k(3, 1)").unwrap(),
-                parse!("k(3, 2)").unwrap(),
-                parse!("k(3, 3)").unwrap(),
-                parse!("k(5, 0)").unwrap(),
-                parse!("k(5, 1)").unwrap(),
-                parse!("k(5, 2)").unwrap(),
-                parse!("k(5, 3)").unwrap(),
+                parse!("k(1, 0)"),
+                parse!("k(1, 1)"),
+                parse!("k(1, 2)"),
+                parse!("k(1, 3)"),
+                parse!("k(3, 0)"),
+                parse!("k(3, 1)"),
+                parse!("k(3, 2)"),
+                parse!("k(3, 3)"),
+                parse!("k(5, 0)"),
+                parse!("k(5, 1)"),
+                parse!("k(5, 2)"),
+                parse!("k(5, 3)"),
             ],
             OptimizationSettings::default(),
         )
         .unwrap();
 
-    let mut ev2 = ev.map_coeff(&|x| x.to_f64());
+    let mut ev2 = ev.map_coeff(&|x| x.re.to_f64());
 
     println!("Single limit:");
     for t in (0..100_000).step_by(5000) {
@@ -888,19 +913,19 @@ fn nested_bubble_scalar_quad() {
 fn nested_bubble_scalar() {
     let scalar_node = UVNode {
         dod: 0,
-        num: Atom::new_num(1),
+        num: Atom::num(1),
         color: None,
     };
 
     fn scalar_edge(eid: i32) -> UVEdge {
         let model = load_generic_model("sm");
         let higgs = model.get_particle("H");
-        let m2 = parse!(higgs.mass.name).unwrap().npow(2);
+        let m2 = parse!(higgs.mass.name).npow(2);
         UVEdge {
             og_edge: 1, // not needed
             dod: -2,
             particle: higgs,
-            num: Atom::new_num(1),
+            num: Atom::num(1),
             den: spenso_lor_atom(eid, 1, GS.dim).npow(2).to_dots() - m2,
         }
     }
@@ -961,53 +986,64 @@ fn nested_bubble_scalar() {
     println!("RESULT {:>}", result);
 
     let t = symbol!("t");
-    let series = Atom::new_var(t).npow(4)
+    let series = Atom::var(t).npow(4)
         * result
-            .replace(parse!("K(3)").unwrap())
-            .with(parse!("t*K(3)").unwrap())
-            .replace(parse!("symbolica_community::dot(t*K(x_),y_)").unwrap())
+            .replace(parse!("K(3)"))
+            .with(parse!("t*K(3)"))
+            .replace(parse!("symbolica_community::dot(t*K(x_),y_)"))
             .repeat()
-            .with(parse!("t*symbolica_community::dot(K(x_),y_)").unwrap());
+            .with(parse!("t*symbolica_community::dot(K(x_),y_)"));
 
     let s = series
         .replace(t)
-        .with(Atom::new_var(t).npow(-1))
+        .with(Atom::var(t).npow(-1))
         .series(t, Atom::Zero, 0.into(), true)
         .unwrap();
     println!("Series: {}", s);
     println!("Correct UV cancellation if 0: {:>}", s.to_atom().expand());
 
     let exp = result
-        .replace(parse!("symbolica_community::dot(k_(x_),l_(y_))").unwrap())
-        .with(parse!("k(x_,0)*k(y_,0)-k(x_,1)*k(y_,1)-k(x_,2)*k(y_,2)-k(x_,3)*k(y_,3)").unwrap());
+        .replace(parse!("symbolica_community::dot(k_(x_),l_(y_))"))
+        .with(parse!(
+            "k(x_,0)*k(y_,0)-k(x_,1)*k(y_,1)-k(x_,2)*k(y_,2)-k(x_,3)*k(y_,3)"
+        ));
 
     let mut fnmap = FunctionMap::new();
 
-    fnmap.add_constant(Atom::new_var(symbol!("m")), (1.).into());
-    fnmap.add_constant(Atom::new_var(symbol!("MH")), (1.).into());
-    fnmap.add_constant(Atom::new_var(symbol!("mUV")), (10.).into());
+    fnmap.add_constant(
+        Atom::var(symbol!("m")),
+        symbolica::domains::float::Complex::new((1.).into(), (0.).into()),
+    );
+    fnmap.add_constant(
+        Atom::var(symbol!("MH")),
+        symbolica::domains::float::Complex::new((1.).into(), (0.).into()),
+    );
+    fnmap.add_constant(
+        Atom::var(symbol!("mUV")),
+        symbolica::domains::float::Complex::new((10.).into(), (0.).into()),
+    );
     let ev = exp
         .evaluator(
             &fnmap,
             &[
-                parse!("k(1, 0)").unwrap(),
-                parse!("k(1, 1)").unwrap(),
-                parse!("k(1, 2)").unwrap(),
-                parse!("k(1, 3)").unwrap(),
-                parse!("k(3, 0)").unwrap(),
-                parse!("k(3, 1)").unwrap(),
-                parse!("k(3, 2)").unwrap(),
-                parse!("k(3, 3)").unwrap(),
-                parse!("k(5, 0)").unwrap(),
-                parse!("k(5, 1)").unwrap(),
-                parse!("k(5, 2)").unwrap(),
-                parse!("k(5, 3)").unwrap(),
+                parse!("k(1, 0)"),
+                parse!("k(1, 1)"),
+                parse!("k(1, 2)"),
+                parse!("k(1, 3)"),
+                parse!("k(3, 0)"),
+                parse!("k(3, 1)"),
+                parse!("k(3, 2)"),
+                parse!("k(3, 3)"),
+                parse!("k(5, 0)"),
+                parse!("k(5, 1)"),
+                parse!("k(5, 2)"),
+                parse!("k(5, 3)"),
             ],
             OptimizationSettings::default(),
         )
         .unwrap();
 
-    let mut ev2 = ev.map_coeff(&|x| x.to_f64());
+    let mut ev2 = ev.map_coeff(&|x| x.re.to_f64());
 
     for t in (0..100_000).step_by(5000) {
         let r = (t as f64).powf(4.)
@@ -1033,19 +1069,19 @@ fn nested_bubble_scalar() {
 fn disconnect_forest_scalar() {
     let scalar_node = UVNode {
         dod: 0,
-        num: Atom::new_num(1),
+        num: Atom::num(1),
         color: None,
     };
 
     fn scalar_edge(eid: i32) -> UVEdge {
         let model = load_generic_model("sm");
         let higgs = model.get_particle("H");
-        let m2 = parse!(higgs.mass.name).unwrap().npow(2);
+        let m2 = parse!(higgs.mass.name).npow(2);
         UVEdge {
             og_edge: 1, // not needed
             dod: -2,
             particle: higgs,
-            num: Atom::new_num(1),
+            num: Atom::num(1),
             den: spenso_lor_atom(eid, 1, GS.dim).npow(2).to_dots() - m2,
         }
     }
@@ -1111,38 +1147,43 @@ fn disconnect_forest_scalar() {
     println!("{:>}", result);
 
     let exp = result
-        .replace(parse!("symbolica_community::dot(k_(x_),l_(y_))").unwrap())
-        .with(parse!("k(x_,0)*k(y_,0)-k(x_,1)*k(y_,1)-k(x_,2)*k(y_,2)-k(x_,3)*k(y_,3)").unwrap());
+        .replace(parse!("symbolica_community::dot(k_(x_),l_(y_))"))
+        .with(parse!(
+            "k(x_,0)*k(y_,0)-k(x_,1)*k(y_,1)-k(x_,2)*k(y_,2)-k(x_,3)*k(y_,3)"
+        ));
 
     let mut fnmap = FunctionMap::new();
 
-    fnmap.add_constant(Atom::new_var(symbol!("m")), (1.).into());
+    fnmap.add_constant(
+        Atom::var(symbol!("m")),
+        symbolica::domains::float::Complex::new((1.).into(), (0.).into()),
+    );
     let ev = exp
         .evaluator(
             &fnmap,
             &[
-                parse!("k(2, 0)").unwrap(),
-                parse!("k(2, 1)").unwrap(),
-                parse!("k(2, 2)").unwrap(),
-                parse!("k(2, 3)").unwrap(),
-                parse!("k(4, 0)").unwrap(),
-                parse!("k(4, 1)").unwrap(),
-                parse!("k(4, 2)").unwrap(),
-                parse!("k(4, 3)").unwrap(),
-                parse!("k(5, 0)").unwrap(),
-                parse!("k(5, 1)").unwrap(),
-                parse!("k(5, 2)").unwrap(),
-                parse!("k(5, 3)").unwrap(),
-                parse!("k(7, 0)").unwrap(),
-                parse!("k(7, 1)").unwrap(),
-                parse!("k(7, 2)").unwrap(),
-                parse!("k(7, 3)").unwrap(),
+                parse!("k(2, 0)"),
+                parse!("k(2, 1)"),
+                parse!("k(2, 2)"),
+                parse!("k(2, 3)"),
+                parse!("k(4, 0)"),
+                parse!("k(4, 1)"),
+                parse!("k(4, 2)"),
+                parse!("k(4, 3)"),
+                parse!("k(5, 0)"),
+                parse!("k(5, 1)"),
+                parse!("k(5, 2)"),
+                parse!("k(5, 3)"),
+                parse!("k(7, 0)"),
+                parse!("k(7, 1)"),
+                parse!("k(7, 2)"),
+                parse!("k(7, 3)"),
             ],
             OptimizationSettings::default(),
         )
         .unwrap();
 
-    let mut ev2 = ev.map_coeff(&|x| x.to_f64());
+    let mut ev2 = ev.map_coeff(&|x| x.re.to_f64());
 
     println!("Single limit");
     for t in (0..100_000).step_by(5000) {
@@ -1263,7 +1304,7 @@ fn easy() {
         &model,
         "1l_prop".into(),
         &symbolica_graph,
-        Atom::new_num(1),
+        Atom::num(1),
         vec![((Some(1), Some(2)))],
         None,
     )
@@ -1372,7 +1413,7 @@ fn bugblatter_forest() {
         &model,
         "bugblatter".into(),
         &symbolica_graph,
-        Atom::new_num(1),
+        Atom::num(1),
         vec![],
         None,
     )
@@ -1434,7 +1475,7 @@ fn kaapo_triplering() {
         &model,
         "threeringscalar".into(),
         &symbolica_graph,
-        Atom::new_num(1),
+        Atom::num(1),
         vec![],
         None,
     )
@@ -1500,7 +1541,7 @@ fn kaapo_quintic_scalar() {
         &model,
         "threeringscalar".into(),
         &symbolica_graph,
-        Atom::new_num(1),
+        Atom::num(1),
         vec![],
         None,
     )

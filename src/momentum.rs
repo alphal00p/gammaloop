@@ -43,7 +43,7 @@ use symbolica::{
     atom::{Atom, AtomCore, Symbol},
     coefficient::Coefficient,
     domains::{
-        float::{NumericalFloatLike, Real, RealNumberLike, SingleFloat},
+        float::{Complex as SymComplex, NumericalFloatLike, Real, RealNumberLike, SingleFloat},
         integer::IntegerRing,
         rational::{Rational, RationalField},
     },
@@ -285,7 +285,7 @@ where
 
 impl Energy<Atom> {
     pub fn new_parametric(id: usize) -> Self {
-        let value = parse!(&format!("E_{}", id)).unwrap();
+        let value = parse!(&format!("E_{}", id));
         Energy { value }
     }
 }
@@ -2474,11 +2474,11 @@ impl<T> FourMomentum<T, Atom> {
             .to_polynomial(&RationalField::new(IntegerRing {}), None);
 
         let px: MultivariatePolynomial<RationalField, _> =
-            Atom::new_num(self.spatial.px).to_polynomial(&RationalField::new(IntegerRing {}), None);
+            Atom::num(self.spatial.px).to_polynomial(&RationalField::new(IntegerRing {}), None);
         let py =
-            Atom::new_num(self.spatial.py).to_polynomial(&RationalField::new(IntegerRing {}), None);
+            Atom::num(self.spatial.py).to_polynomial(&RationalField::new(IntegerRing {}), None);
         let pz =
-            Atom::new_num(self.spatial.pz).to_polynomial(&RationalField::new(IntegerRing {}), None);
+            Atom::num(self.spatial.pz).to_polynomial(&RationalField::new(IntegerRing {}), None);
 
         DenseTensor::from_data(vec![energy, px, py, pz], structure).unwrap()
     }
@@ -2709,17 +2709,18 @@ impl Rotation {
 
         let fn_map = FunctionMap::new();
 
-        let lorentz_eval: EvalTensor<ExpressionEvaluator<Rational>, OrderedStructure> = shadow_t
-            .contract(&rotation)
-            .unwrap()
-            .try_into_parametric()
-            .unwrap()
-            .to_evaluation_tree(
-                &fn_map,
-                &shadow_t.try_into_parametric().unwrap().tensor.data(),
-            )
-            .unwrap()
-            .linearize(Some(1));
+        let lorentz_eval: EvalTensor<ExpressionEvaluator<SymComplex<Rational>>, OrderedStructure> =
+            shadow_t
+                .contract(&rotation)
+                .unwrap()
+                .try_into_parametric()
+                .unwrap()
+                .to_evaluation_tree(
+                    &fn_map,
+                    &shadow_t.try_into_parametric().unwrap().tensor.data(),
+                )
+                .unwrap()
+                .linearize(Some(1));
 
         let i = Bispinor {}.new_slot(4, 1);
 
@@ -2744,17 +2745,21 @@ impl Rotation {
 
         let fn_map = FunctionMap::new();
         let mut params = shadow_t.try_into_parametric().unwrap().tensor.data();
-        params.push(Atom::new_var(Atom::I));
+        params.push(Atom::i());
 
-        let spinor_eval: EvalTensor<ExpressionEvaluator<Rational>, OrderedStructure> = res
-            .to_evaluation_tree(&fn_map, &params)
-            .unwrap()
-            .linearize(Some(1));
+        let spinor_eval: EvalTensor<ExpressionEvaluator<SymComplex<Rational>>, OrderedStructure> =
+            res.to_evaluation_tree(&fn_map, &params)
+                .unwrap()
+                .linearize(Some(1));
 
         Self {
             method,
-            lorentz_rotation: lorentz_eval.map_coeff(&|f| Complex::new_re(F::from_f64(f.into()))),
-            bispinor_rotation: spinor_eval.map_coeff(&|f| Complex::new_re(F::from_f64(f.into()))),
+            lorentz_rotation: lorentz_eval.map_coeff(&|f| {
+                Complex::new(F::from_f64(f.re.to_f64()), F::from_f64(f.im.to_f64()))
+            }),
+            bispinor_rotation: spinor_eval.map_coeff(&|f| {
+                Complex::new(F::from_f64(f.re.to_f64()), F::from_f64(f.im.to_f64()))
+            }),
         }
     }
 }
@@ -3640,7 +3645,7 @@ mod tests {
 
     //     let k = PhysReps::new_slot(Bispinor {}.into(), 4, 4);
 
-    //     let zero = Atom::new_num(0);
+    //     let zero = Atom::num(0);
     //     let theta_x = parse!("theta_x").unwrap();
     //     let theta_y = parse!("theta_y").unwrap();
     //     let theta_z = parse!("theta_z").unwrap();

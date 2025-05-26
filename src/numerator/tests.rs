@@ -76,7 +76,7 @@ fn hairy_glue_box() {
         println!("{i}:{}", s);
     }
 
-    let color = graph.derived_data.unwrap().numerator.from_graph(&graph.bare_graph,&GlobalPrefactor{color:parse!("f(aind(coad(8,1),coad(8,2),coad(8,3)))*f(aind(coad(8,4),coad(8,5),coad(8,6)))*id(aind(coad(8,7),coad(8,0)))").unwrap(),colorless:Atom::new_num(1)}).color_simplify().state.color.to_dense().map_data(|a|a.to_string());
+    let color = graph.derived_data.unwrap().numerator.from_graph(&graph.bare_graph,&GlobalPrefactor{color:parse!("f(aind(coad(8,1),coad(8,2),coad(8,3)))*f(aind(coad(8,4),coad(8,5),coad(8,6)))*id(aind(coad(8,7),coad(8,0)))"),colorless:Atom::num(1)}).color_simplify().state.color.to_dense().map_data(|a|a.to_string());
 
     // insta::assert_ron_snapshot!(color);
 }
@@ -150,8 +150,8 @@ fn trees() {
         println!("{i}:{}", s);
     }
     export_settings.numerator_settings.global_prefactor = GlobalPrefactor {
-        color: parse!("id(cof(3,2),dind(cof(3,0)))/Nc").unwrap(),
-        colorless: Atom::new_num(1),
+        color: parse!("id(cof(3,2),dind(cof(3,0)))/Nc"),
+        colorless: Atom::num(1),
     };
 
     graph.generate_cff();
@@ -228,10 +228,7 @@ fn compare_poly_to_direct(graph: &BareGraph, prefactor: &GlobalPrefactor) -> boo
         .state
         .tensor;
 
-    let zero = ParamTensor::from(DenseTensor::fill(
-        poly.structure().clone(),
-        Atom::new_num(0),
-    ));
+    let zero = ParamTensor::from(DenseTensor::fill(poly.structure().clone(), Atom::num(0)));
 
     zero == poly.sub_fallible(&direct).unwrap().expand()
 }
@@ -267,8 +264,8 @@ fn t_ta() {
     graph.bare_graph.verify_external_edge_order().unwrap();
 
     let global_prefactor = GlobalPrefactor {
-        color: parse!("id(dind(cof(3,0)),cof(3,1))/Nc").unwrap(),
-        colorless: Atom::new_num(1),
+        color: parse!("id(dind(cof(3,0)),cof(3,1))/Nc"),
+        colorless: Atom::num(1),
     };
     assert!(
         compare_poly_to_direct(&graph.bare_graph, &global_prefactor),
@@ -292,8 +289,8 @@ fn tree_ta_ta_1() {
     }
 
     let global_prefactor = GlobalPrefactor {
-        color: parse!("id(dind(cof(3,0)),cof(3,2))/Nc").unwrap(),
-        colorless: Atom::new_num(1),
+        color: parse!("id(dind(cof(3,0)),cof(3,2))/Nc"),
+        colorless: Atom::num(1),
     };
     assert!(
         compare_poly_to_direct(&graph.bare_graph, &global_prefactor),
@@ -518,8 +515,8 @@ fn tree_h_ttxaah_1() {
     // }
     let mut test_export_settings = test_export_settings();
     test_export_settings.numerator_settings.global_prefactor = GlobalPrefactor {
-        color: parse!("id(cof(3,1),dind(cof(3,2)))/Nc").unwrap(),
-        colorless: Atom::new_num(1),
+        color: parse!("id(cof(3,1),dind(cof(3,2)))/Nc"),
+        colorless: Atom::num(1),
     };
 
     let mut graph = graph.process_numerator(
@@ -570,8 +567,8 @@ fn tree_hh_ttxaa_1() {
     }
     let mut test_export_settings = test_export_settings();
     test_export_settings.numerator_settings.global_prefactor = GlobalPrefactor {
-        color: parse!("id(cof(3,2),dind(cof(3,3)))/Nc").unwrap(),
-        colorless: Atom::new_num(1),
+        color: parse!("id(cof(3,2),dind(cof(3,3)))/Nc"),
+        colorless: Atom::num(1),
     };
 
     let mut graph = graph.process_numerator(
@@ -744,11 +741,11 @@ fn tree_h_ttxaah_0() {
     let _ = env_logger::builder().is_test(true).try_init();
 
     let num = Numerator::default();
-    let expr = parse!("-8/3*𝑖*ee^2*vev*lam*yt*(MT*id(bis(4,3),bis(4,4))+Q(6,mink(4,5))*γ(mink(4,5),bis(4,3),bis(4,4)))*(MT*id(bis(4,5),bis(4,6))+Q(7,mink(4,11))*γ(mink(4,11),bis(4,5),bis(4,6)))*(ProjM(bis(4,7),bis(4,6))+ProjP(bis(4,7),bis(4,6)))*sqrt(2)^-1*id(dind(cof(3,5)),cof(3,6))*id(dind(cof(3,6)),cof(3,7))*id(dind(cof(3,7)),cof(3,8))*id(dind(cof(3,8)),cof(3,9))*id(dind(cof(3,9)),cof(3,10))*γ(mink(4,2),bis(4,3),bis(4,2))*γ(mink(4,3),bis(4,5),bis(4,4))*ubar(1,bis(4,2))*v(2,bis(4,7))*ϵbar(3,mink(4,2))*ϵbar(4,mink(4,3))").unwrap();
+    let expr = parse!("-8/3*𝑖*ee^2*vev*lam*yt*(MT*id(bis(4,3),bis(4,4))+Q(6,mink(4,5))*γ(mink(4,5),bis(4,3),bis(4,4)))*(MT*id(bis(4,5),bis(4,6))+Q(7,mink(4,11))*γ(mink(4,11),bis(4,5),bis(4,6)))*(ProjM(bis(4,7),bis(4,6))+ProjP(bis(4,7),bis(4,6)))*sqrt(2)^-1*id(dind(cof(3,5)),cof(3,6))*id(dind(cof(3,6)),cof(3,7))*id(dind(cof(3,7)),cof(3,8))*id(dind(cof(3,8)),cof(3,9))*id(dind(cof(3,9)),cof(3,10))*γ(mink(4,2),bis(4,3),bis(4,2))*γ(mink(4,3),bis(4,5),bis(4,4))*ubar(1,bis(4,2))*v(2,bis(4,7))*ϵbar(3,mink(4,2))*ϵbar(4,mink(4,3))");
 
     let prefactor = GlobalPrefactor {
-        color: parse!("id(cof(3,5),dind(cof(3,10)))").unwrap(),
-        colorless: Atom::new_num(1),
+        color: parse!("id(cof(3,5),dind(cof(3,10)))"),
+        colorless: Atom::num(1),
     };
 
     num.from_global(expr, &prefactor)
@@ -763,15 +760,15 @@ fn tree_h_ttxaah_0() {
 
 #[test]
 fn color() {
-    insta::assert_snapshot!("Single color string",Numerator::default().from_global(parse!("f(coad(8,1),coad(8,11),coad(8,21))*f(coad(8,21),coad(8,2),coad(8,12))*f(coad(8,3),coad(8,12),coad(8,22))*f(coad(8,22),coad(8,4),coad(8,13))*f(coad(8,5),coad(8,13),coad(8,23))*f(coad(8,23),coad(8,6),coad(8,14))*f(coad(8,7),coad(8,14),coad(8,24))*f(coad(8,24),coad(8,8),coad(8,11))*f(coad(8,1),coad(8,2),coad(8,3))*f(coad(8,4),coad(8,5),coad(8,6))*id(coad(8,7),coad(8,8))").unwrap(), &GlobalPrefactor::default()).color_simplify().export());
+    insta::assert_snapshot!("Single color string",Numerator::default().from_global(parse!("f(coad(8,1),coad(8,11),coad(8,21))*f(coad(8,21),coad(8,2),coad(8,12))*f(coad(8,3),coad(8,12),coad(8,22))*f(coad(8,22),coad(8,4),coad(8,13))*f(coad(8,5),coad(8,13),coad(8,23))*f(coad(8,23),coad(8,6),coad(8,14))*f(coad(8,7),coad(8,14),coad(8,24))*f(coad(8,24),coad(8,8),coad(8,11))*f(coad(8,1),coad(8,2),coad(8,3))*f(coad(8,4),coad(8,5),coad(8,6))*id(coad(8,7),coad(8,8))"), &GlobalPrefactor::default()).color_simplify().export());
 }
 
 #[test]
 fn prefactor() {
     let mut test_export_settings = test_export_settings();
     test_export_settings.numerator_settings.global_prefactor = GlobalPrefactor {
-        color: parse!("id(cof(3,2),dind(cof(3,3)))/Nc").unwrap(),
-        colorless: Atom::new_num(1),
+        color: parse!("id(cof(3,2),dind(cof(3,3)))/Nc"),
+        colorless: Atom::num(1),
     };
 
     println!(
@@ -867,8 +864,7 @@ fn gamma_simplify_one() {
         *Q(5,mink(4,28))
         *Q(6,mink(4,29))
         *Q(7,mink(4,30))"
-    )
-    .unwrap();
+    );
     test_and_assert(g);
 }
 
@@ -896,8 +892,7 @@ fn gamma_algebra() {
     *γ(mink(4,38),bis(4,6),bis(4,9))
     *Metric(mink(4,31),mink(4,32))
     *Metric(mink(4,33),mink(4,38))"
-    )
-    .unwrap();
+    );
 
     let g = g.simplify_gamma();
     println!(
@@ -941,7 +936,7 @@ fn one_loop_lbl() {
 #[test]
 
 fn bug_check() {
-    let a = parse!("-1/9*𝑖*ee^2*G^2*(-TR+TR*Nc^2)*(P(0,mink(4,25))+K(1,mink(4,25)))*Metric(mink(4,0),mink(4,1))*Metric(mink(4,2),mink(4,3))*id(mink(4,2),mink(4,4))*id(mink(4,3),mink(4,5))*γ(mink(4,0),bis(4,9),bis(4,6))*γ(mink(4,1),bis(4,8),bis(4,7))*γ(mink(4,4),bis(4,5),bis(4,4))*γ(mink(4,5),bis(4,3),bis(4,2))*γ(mink(4,25),bis(4,4),bis(4,3))*γ(mink(4,27),bis(4,7),bis(4,9))*γ(mink(4,28),bis(4,6),bis(4,5))*γ(mink(4,29),bis(4,2),bis(4,8))*K(0,mink(4,27))*K(1,mink(4,28))*K(1,mink(4,29))").unwrap();
+    let a = parse!("-1/9*𝑖*ee^2*G^2*(-TR+TR*Nc^2)*(P(0,mink(4,25))+K(1,mink(4,25)))*Metric(mink(4,0),mink(4,1))*Metric(mink(4,2),mink(4,3))*id(mink(4,2),mink(4,4))*id(mink(4,3),mink(4,5))*γ(mink(4,0),bis(4,9),bis(4,6))*γ(mink(4,1),bis(4,8),bis(4,7))*γ(mink(4,4),bis(4,5),bis(4,4))*γ(mink(4,5),bis(4,3),bis(4,2))*γ(mink(4,25),bis(4,4),bis(4,3))*γ(mink(4,27),bis(4,7),bis(4,9))*γ(mink(4,28),bis(4,6),bis(4,5))*γ(mink(4,29),bis(4,2),bis(4,8))*K(0,mink(4,27))*K(1,mink(4,28))*K(1,mink(4,29))");
     //let b = parse!("-1/9*𝑖*ee^2*G^2*(-TR+TR*Nc^2)*(P(0,mink(4,25))+K(1,mink(4,25)))*Metric(mink(4,0),mink(4,1))*Metric(mink(4,2),mink(4,3))*id(mink(4,2),mink(4,4))*id(mink(4,3),mink(4,5))*γ(mink(4,0),bis(4,9),bis(4,6))*γ(mink(4,1),bis(4,8),bis(4,7))*γ(mink(4,4),bis(4,5),bis(4,4))*γ(mink(4,5),bis(4,3),bis(4,2))*γ(mink(4,25),bis(4,4),bis(4,3))*γ(mink(4,27),bis(4,7),bis(4,9))*γ(mink(4,28),bis(4,6),bis(4,5))*γ(mink(4,29),bis(4,2),bis(4,8))*K(0,mink(4,27))*K(1,mink(4,28))*K(1,mink(4,29))").unwrap();
     let b = a.clone() * -1;
     println!("a/b={}  TT", a / b);
@@ -952,7 +947,7 @@ fn bug_check_b() {
     let a = parse!(
          "-4/9*ee^2*yt^2*G^4*(MT*id(bis(4,2),bis(4,5))+γ(mink(4,41),bis(4,2),bis(4,5))*K(0,mink(4,41)))*(MT*id(bis(4,3),bis(4,8))+γ(mink(4,43),bis(4,8),bis(4,3))*K(1,mink(4,43)))*(MT*id(bis(4,4),bis(4,7))-γ(mink(4,44),bis(4,4),bis(4,7))*K(1,mink(4,44)))*(MT*id(bis(4,6),bis(4,15))+γ(mink(4,46),bis(4,6),bis(4,15))*K(2,mink(4,46)))*(MT*id(bis(4,9),bis(4,12))-(K(2,mink(4,48))-K(3,mink(4,48)))*γ(mink(4,48),bis(4,12),bis(4,9)))*(MT*id(bis(4,10),bis(4,13))+(P(0,mink(4,50))+K(2,mink(4,50))-K(3,mink(4,50)))*γ(mink(4,50),bis(4,10),bis(4,13)))*(MT*id(bis(4,11),bis(4,14))-(P(0,mink(4,51))+K(2,mink(4,51)))*γ(mink(4,51),bis(4,14),bis(4,11)))*(ProjM(bis(4,3),bis(4,2))+ProjP(bis(4,3),bis(4,2)))*(ProjM(bis(4,5),bis(4,4))+ProjP(bis(4,5),bis(4,4)))*(-(-K(1,mink(4,6))-K(2,mink(4,6)))*Metric(mink(4,5),mink(4,7))+(-K(1,mink(4,7))-K(2,mink(4,7)))*Metric(mink(4,5),mink(4,6))+(K(1,mink(4,5))+K(2,mink(4,5))-K(3,mink(4,5)))*Metric(mink(4,6),mink(4,7))-(K(1,mink(4,7))+K(2,mink(4,7))-K(3,mink(4,7)))*Metric(mink(4,5),mink(4,6))+Metric(mink(4,5),mink(4,7))*K(3,mink(4,6))-Metric(mink(4,6),mink(4,7))*K(3,mink(4,5)))*sqrt(2)^-2*Metric(mink(4,0),mink(4,1))*Metric(mink(4,2),mink(4,5))*Metric(mink(4,3),mink(4,6))*Metric(mink(4,4),mink(4,7))*id(mink(4,0),mink(4,9))*id(mink(4,1),mink(4,8))*γ(mink(4,2),bis(4,7),bis(4,6))*γ(mink(4,3),bis(4,9),bis(4,8))*γ(mink(4,4),bis(4,11),bis(4,10))*γ(mink(4,8),bis(4,13),bis(4,12))*γ(mink(4,9),bis(4,15),bis(4,14))"
      )
-     .unwrap();
+     ;
     let indices = [
         ("mink(4,0)", "m"),
         ("mink(4,1)", "m"),
@@ -987,7 +982,7 @@ fn bug_check_b() {
         ("bis(4,15)", "b"),
     ]
     .iter()
-    .map(|(a, g)| (parse!(a).unwrap(), g))
+    .map(|(a, g)| (parse!(a), g))
     .collect::<Vec<_>>();
 
     println!("res={}", a.canonize_tensors(&indices).unwrap());
@@ -1002,12 +997,11 @@ fn bug_check_a() {
  -(K(1,mink(4,7))+K(2,mink(4,7))-K(3,mink(4,7)))*Metric(mink(4,5),mink(4,6))
  +Metric(mink(4,5),mink(4,7))*K(3,mink(4,6))
  -Metric(mink(4,6),mink(4,7))*K(3,mink(4,5))"
-    )
-    .unwrap();
+    );
     let indices: [(Atom, &str); 3] = [
-        (parse!("mink(4,5)").unwrap(), "m"),
-        (parse!("mink(4,6)").unwrap(), "m"),
-        (parse!("mink(4,7)").unwrap(), "m"),
+        (parse!("mink(4,5)"), "m"),
+        (parse!("mink(4,6)"), "m"),
+        (parse!("mink(4,7)"), "m"),
     ];
 
     println!("res={}", a.canonize_tensors(&indices).unwrap());
@@ -1076,7 +1070,7 @@ fn dumb_four_gluon() {
         &model,
         "gggg".into(),
         &four_gluon,
-        Atom::new_num(1),
+        Atom::num(1),
         vec![],
         None,
     )

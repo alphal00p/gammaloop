@@ -296,21 +296,21 @@ impl FeynGen {
             "NumeratorIndependentSymmetryGrouping",
         ] {
             res = res
-                .replace(function!(symbol!(header), Atom::new_var(symbol!("x_"))).to_pattern())
-                .with(Atom::new_var(symbol!("x_")).to_pattern());
+                .replace(function!(symbol!(header), Atom::var(symbol!("x_"))).to_pattern())
+                .with(Atom::var(symbol!("x_")).to_pattern());
         }
         res = res
             .replace(
                 function!(
                     symbol!("NumeratorDependentGrouping"),
-                    Atom::new_var(symbol!("GraphId_")),
-                    Atom::new_var(symbol!("ratio_")),
-                    Atom::new_var(symbol!("GraphSymmetryFactor_"))
+                    Atom::var(symbol!("GraphId_")),
+                    Atom::var(symbol!("ratio_")),
+                    Atom::var(symbol!("GraphSymmetryFactor_"))
                 )
                 .to_pattern(),
             )
             .with(
-                (Atom::new_var(symbol!("ratio_")) * Atom::new_var(symbol!("GraphSymmetryFactor_")))
+                (Atom::var(symbol!("ratio_")) * Atom::var(symbol!("GraphSymmetryFactor_")))
                     .to_pattern(),
             );
         res.expand()
@@ -1523,7 +1523,7 @@ impl FeynGen {
                         symmetry_factor
                             * function!(
                                 symbol!("NumeratorIndependentSymmetryGrouping"),
-                                Atom::new_num(*count as i64)
+                                Atom::num(*count as i64)
                             )
                     } else {
                         symmetry_factor.clone()
@@ -2794,8 +2794,7 @@ impl FeynGen {
             .map(|(g, symmetry_factor)| {
                 (
                     g.clone(),
-                    Atom::new_num(1)
-                        / function!(symbol!("AutG"), Atom::new_num(symmetry_factor.clone())),
+                    Atom::num(1) / function!(symbol!("AutG"), Atom::num(symmetry_factor.clone())),
                 )
             })
             .collect::<HashMap<_, _>>();
@@ -2828,7 +2827,7 @@ impl FeynGen {
             for (colored_g, multiplicity) in FeynGen::assign_node_colors(model, g, &node_colors)? {
                 processed_graphs.push((
                     colored_g.canonize().graph,
-                    (Atom::new_num(multiplicity as i64) * symmetry_factor),
+                    (Atom::num(multiplicity as i64) * symmetry_factor),
                 ));
             }
         }
@@ -2851,7 +2850,7 @@ impl FeynGen {
                                     if *multiplicity != 1 {
                                         function!(
                                             symbol!("CouplingsMultiplicity"),
-                                            Atom::new_num(*multiplicity as i64)
+                                            Atom::num(*multiplicity as i64)
                                         ) * symmetry_factor
                                     } else {
                                         symmetry_factor.clone()
@@ -3307,14 +3306,14 @@ impl FeynGen {
                         {
                             function!(
                                 symbol!("ExternalFermionOrderingSign"),
-                                Atom::new_num(if is_external_fermion_flow_sign_negative {
+                                Atom::num(if is_external_fermion_flow_sign_negative {
                                     -1
                                 } else {
                                     1
                                 })
                             )
                         } else {
-                            Atom::new_num(1)
+                            Atom::num(1)
                         }
                     } else {
                         self.cross_section_external_fermion_ordering_sign(
@@ -3338,7 +3337,7 @@ impl FeynGen {
         let mut combined_canonized_processed_graphs = HashMap::default();
         let numerator_independent_symmetry_pattern = function!(
             symbol!("NumeratorIndependentSymmetryGrouping"),
-            Atom::new_var(symbol!("x_"))
+            Atom::var(symbol!("x_"))
         )
         .to_pattern();
         for canonized_graph in canonized_processed_graphs {
@@ -3353,7 +3352,7 @@ impl FeynGen {
                         entry
                             .symmetry_factor
                             .replace(&numerator_independent_symmetry_pattern)
-                            .with(Atom::new_num(1).to_pattern())
+                            .with(Atom::num(1).to_pattern())
                             .as_view(),
                     ))
                     .expand();
@@ -3369,7 +3368,7 @@ impl FeynGen {
                             .with(
                                 function!(
                                     symbol!("NumeratorIndependentSymmetryGrouping"),
-                                    (Atom::new_var(symbol!("x_")) + ratio).expand()
+                                    (Atom::var(symbol!("x_")) + ratio).expand()
                                 )
                                 .to_pattern(),
                             );
@@ -3377,7 +3376,7 @@ impl FeynGen {
                         entry.symmetry_factor = &entry.symmetry_factor
                             * function!(
                                 symbol!("NumeratorIndependentSymmetryGrouping"),
-                                (Atom::new_num(1) + ratio).expand()
+                                (Atom::num(1) + ratio).expand()
                             );
                     }
                 })
@@ -3494,7 +3493,7 @@ impl FeynGen {
                     let pooled_graph = PooledGraphData {
                         graph_id: i_g,
                         numerator_data: None,
-                        ratio: Atom::new_num(1),
+                        ratio: Atom::num(1),
                         bare_graph: canonized_fermion_flow_bare_graph.clone(),
                     };
                     if matches!(
@@ -3529,7 +3528,7 @@ impl FeynGen {
                                     .iter()
                                     .zip(color_b.iter())
                                     .map(|(a, b)| a.dual().kroneker_atom(&b.dual()))
-                                    .fold(Atom::new_num(1), |acc, x| acc * x);
+                                    .fold(Atom::num(1), |acc, x| acc * x);
 
                                 numerator.state.color.map_data_mut(|a|{*a *=&color});
 
@@ -3628,7 +3627,7 @@ impl FeynGen {
                                             PooledGraphData {
                                                 graph_id: i_g,
                                                 numerator_data,
-                                                ratio: Atom::new_num(1),
+                                                ratio: Atom::num(1),
                                                 bare_graph: canonized_fermion_flow_bare_graph,
                                             }
                                             ]]);
@@ -3670,7 +3669,7 @@ impl FeynGen {
                                                 PooledGraphData {
                                                     graph_id: i_g,
                                                     numerator_data,
-                                                    ratio: Atom::new_num(1),
+                                                    ratio: Atom::num(1),
                                                     bare_graph: canonized_fermion_flow_bare_graph,
                                                 }
                                             ]);
@@ -3700,7 +3699,7 @@ impl FeynGen {
                     .sorted_by_key(|pooled_graph| pooled_graph.graph_id)
                     .collect::<Vec<_>>();
                 let new_reference_ratio = sorted_graphs_to_combine[0].ratio.clone();
-                let mut combined_overall_factor = Atom::new_num(0);
+                let mut combined_overall_factor = Atom::num(0);
                 let mut bare_graph_representative = sorted_graphs_to_combine[0].bare_graph.clone();
                 if sorted_graphs_to_combine.len() > 1 {
                     for graph_to_combine in sorted_graphs_to_combine {
@@ -3712,7 +3711,7 @@ impl FeynGen {
                         combined_overall_factor = combined_overall_factor
                             + function!(
                                 symbol!("NumeratorDependentGrouping"),
-                                Atom::new_num(graph_to_combine.graph_id as i64),
+                                Atom::num(graph_to_combine.graph_id as i64),
                                 (&graph_to_combine.ratio / &new_reference_ratio).expand(),
                                 graph_to_combine.bare_graph.overall_factor.clone()
                             );
@@ -3793,7 +3792,7 @@ impl FeynGen {
                 .collect::<Vec<_>>()
                 .join("\n"),
         );
-        let mut total_sym_factor = Atom::new_num(0);
+        let mut total_sym_factor = Atom::num(0);
         for (_i_g, g) in bare_graphs.iter() {
             total_sym_factor =
                 total_sym_factor + FeynGen::evaluate_overall_factor(g.overall_factor.as_view());
@@ -3838,10 +3837,10 @@ impl FeynGen {
 
         fn analyze_diff_and_sum(a: AtomView, b: AtomView) -> Option<Atom> {
             if (a - b).expand().is_zero() {
-                return Some(Atom::new_num(1));
+                return Some(Atom::num(1));
             }
             if (a + b).expand().is_zero() {
-                return Some(Atom::new_num(-1));
+                return Some(Atom::num(-1));
             }
             None
         }
@@ -3870,9 +3869,9 @@ impl FeynGen {
                     ) {
                         let mut ratios = HashSet::<Option<Atom>>::default();
                         let r = if canonized_num_a == canonized_num_b {
-                            Some(Atom::new_num(1))
-                        } else if *canonized_num_a == canonized_num_b * Atom::new_num(-1) {
-                            Some(Atom::new_num(-1))
+                            Some(Atom::num(1))
+                        } else if *canonized_num_a == canonized_num_b * Atom::num(-1) {
+                            Some(Atom::num(-1))
                         } else if canonized_num_b.is_zero() {
                             None
                         } else {
@@ -3954,9 +3953,9 @@ impl FeynGen {
                                 .zip(evaluations_b.iter())
                                 .map(|(a, b)| {
                                     if a == b {
-                                        Some(Atom::new_num(1))
-                                    } else if *a == b * Atom::new_num(-1) {
-                                        Some(Atom::new_num(-1))
+                                        Some(Atom::num(1))
+                                    } else if *a == b * Atom::num(-1) {
+                                        Some(Atom::num(-1))
                                     } else if b.is_zero() {
                                         None
                                     } else {
@@ -4129,10 +4128,10 @@ impl FeynGen {
 
     pub fn substitute_color_factors(expr: AtomView) -> Atom {
         let replacements = vec![
-            (parse!("Nc").unwrap(), Atom::new_num(3)),
-            (parse!("TR").unwrap(), parse!("1/2").unwrap()),
-            (parse!("CA").unwrap(), parse!("3").unwrap()),
-            (parse!("CF").unwrap(), parse!("4/3").unwrap()),
+            (parse!("Nc"), Atom::num(3)),
+            (parse!("TR"), parse!("1/2")),
+            (parse!("CA"), parse!("3")),
+            (parse!("CF"), parse!("4/3")),
         ];
         let mut res = expr.to_owned();
         for (src, trgt) in replacements {
@@ -4168,13 +4167,13 @@ impl FeynGen {
 
         function!(
             symbol!("ExternalFermionOrderingSign"),
-            Atom::new_num(match sign {
+            Atom::num(match sign {
                 Sign::Positive => 1,
                 Sign::Negative => -1,
             })
         ) * function!(
             symbol!("AntiFermionSpinSumSign"),
-            Atom::new_num(match antifermion_spinsum_sign {
+            Atom::num(match antifermion_spinsum_sign {
                 Sign::Positive => 1,
                 Sign::Negative => -1,
             })
@@ -4208,7 +4207,7 @@ impl ProcessedNumeratorForComparison {
         // println!(
         //     "Numerator input for diagram        #{}: {}",
         //     diagram_id,
-        //     numerator.get_single_atom().unwrap().0
+        //     numerator.get_single_atom().0
         // );
 
         let default_processed_data = ProcessedNumeratorForComparison {
@@ -4265,10 +4264,9 @@ impl ProcessedNumeratorForComparison {
                                 .1
                                 .replace(
                                     &parse!(&format!("P({},x__)", connected_external_id))
-                                        .unwrap()
                                         .to_pattern(),
                                 )
-                                .with(parse!(&format!("P({},x__)", i_ext)).unwrap().to_pattern());
+                                .with(parse!(&format!("P({},x__)", i_ext)).to_pattern());
                         }
                         let left_edge_pol = match left_edge.edge_type {
                             EdgeType::Incoming => left_edge.particle.0.in_pol_symbol(),
@@ -4287,9 +4285,8 @@ impl ProcessedNumeratorForComparison {
                                 parse!(&format!(
                                     "{}({},x__)",
                                     right_edge_pol, connected_external_id
-                                ))
-                                .unwrap(),
-                                parse!(&format!("{}({},x__)", left_edge_pol, i_ext)).unwrap(),
+                                )),
+                                parse!(&format!("{}({},x__)", left_edge_pol, i_ext)),
                             ));
                             // lmb_replacements.push((
                             //     parse!(&format!(
@@ -4487,16 +4484,16 @@ impl ProcessedNumeratorForComparison {
             &mut PrimeIteratorU64::new(1)
         };
 
-        let mut prime = prime_iterator
-            .map(|u| Atom::new_num(symbolica::domains::integer::Integer::new(u as i64)));
+        let mut prime =
+            prime_iterator.map(|u| Atom::num(symbolica::domains::integer::Integer::new(u as i64)));
 
         let mut reps = HashSet::<_>::default();
 
         if !fully_numerical_substitution {
             let variable = function!(
                 W_.f_,
-                Atom::new_var(W_.y_),
-                function!(symbol!("cind"), Atom::new_var(W_.x_))
+                Atom::var(W_.y_),
+                function!(symbol!("cind"), Atom::var(W_.x_))
             );
             let pat = variable.to_pattern();
 
@@ -4554,7 +4551,7 @@ impl ProcessedNumeratorForComparison {
                                 },
                             );
                             for m in res.pattern_match(
-                                &function!(symbol!("MARKER_TO_REPLACE"), Atom::new_var(W_.x_))
+                                &function!(symbol!("MARKER_TO_REPLACE"), Atom::var(W_.x_))
                                     .to_pattern(),
                                 None,
                                 None,
@@ -4611,10 +4608,9 @@ pub fn symbolica_symm_factors_bug() {
 
     graphs_a.retain(|g, _| g.num_loops() >= 5);
 
-    let mut tot_symm_fact_graphs_a = Atom::new_num(0);
+    let mut tot_symm_fact_graphs_a = Atom::num(0);
     for (_g, s) in graphs_a.iter() {
-        tot_symm_fact_graphs_a =
-            tot_symm_fact_graphs_a + Atom::new_num(1) / Atom::new_num(s.clone());
+        tot_symm_fact_graphs_a = tot_symm_fact_graphs_a + Atom::num(1) / Atom::num(s.clone());
     }
     println!("tot_symm_fact_graphs_A = {}", tot_symm_fact_graphs_a);
 
@@ -4635,10 +4631,9 @@ pub fn symbolica_symm_factors_bug() {
 
     graphs_b.retain(|g, _| g.num_loops() >= 5);
 
-    let mut tot_symm_fact_graphs_b = Atom::new_num(0);
+    let mut tot_symm_fact_graphs_b = Atom::num(0);
     for (_g, s) in graphs_b.iter() {
-        tot_symm_fact_graphs_b =
-            tot_symm_fact_graphs_b + Atom::new_num(1) / Atom::new_num(s.clone());
+        tot_symm_fact_graphs_b = tot_symm_fact_graphs_b + Atom::num(1) / Atom::num(s.clone());
     }
     println!("tot_symm_fact_graphs_B = {}", tot_symm_fact_graphs_b);
 

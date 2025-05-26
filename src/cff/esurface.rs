@@ -70,7 +70,7 @@ impl Esurface {
             .external_shift
             .iter()
             .fold(Atom::new(), |sum, (i, sign)| {
-                external_energy_atom_from_index(*i) * &Atom::new_num(*sign) + &sum
+                external_energy_atom_from_index(*i) * &Atom::num(*sign) + &sum
             });
 
         let builder_atom = Atom::new();
@@ -615,7 +615,7 @@ pub fn add_external_shifts(lhs: &ExternalShift, rhs: &ExternalShift) -> External
 
 impl From<EsurfaceID> for Atom {
     fn from(id: EsurfaceID) -> Self {
-        parse!(&format!("η({})", Into::<usize>::into(id.0))).unwrap()
+        parse!(&format!("η({})", Into::<usize>::into(id.0)))
     }
 }
 
@@ -695,7 +695,7 @@ mod tests {
         };
 
         let esurface_atom = esurface.to_atom();
-        let expected_atom = parse!("Q(2, cind(0)) + Q(3, cind(0)) - P(1, cind(0))").unwrap();
+        let expected_atom = parse!("Q(2, cind(0)) + Q(3, cind(0)) - P(1, cind(0))");
 
         let diff = esurface_atom - &expected_atom;
         let diff = diff.expand();
