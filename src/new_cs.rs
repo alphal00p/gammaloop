@@ -1270,8 +1270,10 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
     fn get_params(&self, model: &Model) -> Vec<Atom> {
         let mut params = vec![];
 
+        // all external energies
         params.extend(self.graph.underlying.get_external_energy_atoms());
 
+        // spatial components of external momenta
         for (pair, edge_id, _) in self.graph.underlying.iter_edges() {
             match pair {
                 HedgePair::Unpaired { .. } => {
@@ -1287,6 +1289,7 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
             }
         }
 
+        // spatial EMR
         for (pair, edge_id, _) in self.graph.underlying.iter_edges() {
             match pair {
                 HedgePair::Paired { .. } => {
@@ -1302,7 +1305,9 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
             }
         }
 
+        // add model parameters
         params.extend(model.generate_params());
+        // add additional parameters
         params.push(Atom::var(GS.m_uv));
         params.push(Atom::var(GS.rescale_star));
         params.push(Atom::var(GS.hfunction));
