@@ -2369,7 +2369,7 @@ mod tests {
     }
 
     #[test]
-    fn test_encode_decode_vertex_info() {
+    fn test_encode_decode_vertex_rule() {
         let model = load_generic_model("sm");
         let vertex = model.get_vertex_rule("V_141");
         let vertex_encoded = bincode::encode_to_vec(&vertex, bincode::config::standard()).unwrap();

@@ -232,6 +232,7 @@ fn construct_solver(
         &cones,
         settings,
     )
+    .unwrap()
 }
 
 pub fn find_center(
