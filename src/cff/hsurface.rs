@@ -75,7 +75,7 @@ impl Hsurface {
             .external_shift
             .iter()
             .fold(Atom::new(), |sum, (i, sign)| {
-                Atom::new_num(*sign) * external_energy_atom_from_index(*i) + &sum
+                Atom::num(*sign) * external_energy_atom_from_index(*i) + &sum
             });
 
         let symbolic_sum_positive_energies = symbolic_positive_energies
@@ -137,7 +137,7 @@ pub fn compute_hsurface_cache<T: FloatLike>(
 
 impl From<HsurfaceID> for Atom {
     fn from(value: HsurfaceID) -> Self {
-        parse!(&format!("H({})", Into::<usize>::into(value))).unwrap()
+        parse!(&format!("H({})", Into::<usize>::into(value)))
     }
 }
 
@@ -213,7 +213,7 @@ mod tests {
         };
 
         let h_surface_atom = h_surface.to_atom();
-        let expected_atom = parse!("Q(0, cind(0)) + Q(1, cind(0)) - Q(2, cind(0)) - Q(3, cind(0)) - P(4, cind(0)) + P(5, cind(0))").unwrap();
+        let expected_atom = parse!("Q(0, cind(0)) + Q(1, cind(0)) - Q(2, cind(0)) - Q(3, cind(0)) - P(4, cind(0)) + P(5, cind(0))");
         let diff = h_surface_atom - &expected_atom;
         let diff = diff.expand();
         assert_eq!(diff, Atom::new());
@@ -241,8 +241,7 @@ mod tests {
         println!("with {}", e_surface_atom);
 
         let rewritten = h_surface.to_atom_with_rewrite(&e_surface).unwrap();
-        let target =
-            parse!("Q(0, cind(0)) + Q(1, cind(0)) + Q(6, cind(0)) + P(5, cind(0))").unwrap();
+        let target = parse!("Q(0, cind(0)) + Q(1, cind(0)) + Q(6, cind(0)) + P(5, cind(0))");
         let diff = rewritten - &target;
         let diff = diff.expand();
 
@@ -255,8 +254,7 @@ mod tests {
         };
 
         let rewritten = h_surface_2.to_atom_with_rewrite(&e_surface).unwrap();
-        let target =
-            parse!("Q(1, cind(0)) + Q(7, cind(0)) + Q(2, cind(0)) + P(5, cind(0))").unwrap();
+        let target = parse!("Q(1, cind(0)) + Q(7, cind(0)) + Q(2, cind(0)) + P(5, cind(0))");
         let diff = rewritten - &target;
         let diff = diff.expand();
 

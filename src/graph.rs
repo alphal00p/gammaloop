@@ -286,21 +286,21 @@ impl BareEdge {
 
     pub fn denominator(&self, graph: &BareGraph) -> (Atom, Atom) {
         let num = *graph.edge_name_to_position.get(&self.name).unwrap();
-        let mom = parse!(&format!("Q{num}")).unwrap();
+        let mom = parse!(&format!("Q{num}"));
         let mass = self
             .particle
             .0
             .mass
             .expression
             .clone()
-            .unwrap_or(Atom::new_num(0));
+            .unwrap_or(Atom::num(0));
 
         (mom, mass)
     }
 
     pub fn substitute_lmb(&self, atom: Atom, graph: &BareGraph, lmb: &LoopMomentumBasis) -> Atom {
         let num = *graph.edge_name_to_position.get(&self.name).unwrap();
-        let mom = parse!(&format!("Q({num},x_)")).unwrap().to_pattern();
+        let mom = parse!(&format!("Q({num},x_)")).to_pattern();
         let mom_rep = lmb.pattern(num.into());
         atom.replace(&mom).with(&mom_rep)
     }
@@ -352,14 +352,13 @@ impl BareEdge {
             EdgeType::Virtual => {
                 let mut atom = self.propagator.numerator.clone();
 
-                let pfun = parse!("GL::P(x_)").unwrap().to_pattern();
+                let pfun = parse!("GL::P(x_)").to_pattern();
                 if self.particle.0.is_antiparticle() {
                     atom = atom.replace(&pfun).with(
                         parse!(&format!(
                             "-Q({},spenso::mink(4,indexid(x_)))",
                             Into::<usize>::into(num)
                         ))
-                        .unwrap()
                         .to_pattern(),
                     );
                 } else {
@@ -368,12 +367,11 @@ impl BareEdge {
                             "Q({},spenso::mink(4,indexid(x_)))",
                             Into::<usize>::into(num)
                         ))
-                        .unwrap()
                         .to_pattern(),
                     );
                 }
 
-                let pslashfun = parse!("GL::PSlash(i_,j_)").unwrap().to_pattern();
+                let pslashfun = parse!("GL::PSlash(i_,j_)").to_pattern();
                 let pindex_num: usize = self.internal_index[0].into();
                 if self.particle.0.is_antiparticle() {
                     atom = atom.replace(&pslashfun).with(
@@ -383,7 +381,6 @@ impl BareEdge {
                             pindex_num,
                             pindex_num
                         ))
-                        .unwrap()
                         .to_pattern(),
                     );
                 } else {
@@ -394,19 +391,19 @@ impl BareEdge {
                             pindex_num,
                             pindex_num
                         ))
-                        .unwrap()
                         .to_pattern(),
                     );
                 }
 
                 atom = preprocess_ufo_spin_wrapped(atom);
-                let indexidpat = parse!("indexid(x_)").unwrap().to_pattern();
+                let indexidpat = parse!("indexid(x_)").to_pattern();
 
                 let dummies: HashSet<_> = atom
                     .pattern_match(&indexidpat, None, None)
                     .filter_map(|a| {
                         if let AtomView::Num(n) = a[&W_.x_].as_view() {
-                            let e = if let CoefficientView::Natural(a, b) = n.get_coeff_view() {
+                            let e = if let CoefficientView::Natural(a, b, _, _) = n.get_coeff_view()
+                            {
                                 if b == 1 {
                                     a
                                 } else {
@@ -437,7 +434,7 @@ impl BareEdge {
                 //     parse!("x_").unwrap().to_pattern(),
                 // ));
 
-                let mut color_atom = Atom::new_num(1);
+                let mut color_atom = Atom::num(1);
                 for (&cin, &cout) in in_slots.color.iter().zip(out_slots.color.iter()) {
                     let id: NamedStructure<String, ()> =
                         NamedStructure::from_iter([cin, cout], "id".into(), None).structure;
@@ -458,10 +455,8 @@ impl BareEdge {
                     .sorted()
                     .map(|(i, d)| {
                         Replacement::new(
-                            parse!(&format!("indexid({})", d)).unwrap().to_pattern(),
-                            parse!(&format!("{}", self.internal_index[i + 1]))
-                                .unwrap()
-                                .to_pattern(),
+                            parse!(&format!("indexid({})", d)).to_pattern(),
+                            parse!(&format!("{}", self.internal_index[i + 1])).to_pattern(),
                         )
                     })
                     .collect();
@@ -470,11 +465,11 @@ impl BareEdge {
                 let color_atom = color_atom.replace_multiple(&indexid_reps);
 
                 [
-                    atom.replace(&parse!("indexid(x_)").unwrap().to_pattern())
-                        .with(Atom::new_var(W_.x_).to_pattern()),
+                    atom.replace(&parse!("indexid(x_)").to_pattern())
+                        .with(Atom::var(W_.x_).to_pattern()),
                     color_atom
-                        .replace(&parse!("indexid(x_)").unwrap().to_pattern())
-                        .with(Atom::new_var(W_.x_).to_pattern()),
+                        .replace(&parse!("indexid(x_)").to_pattern())
+                        .with(Atom::var(W_.x_).to_pattern()),
                 ]
             }
         }
@@ -669,13 +664,13 @@ impl HasVertexInfo for InteractionVertexInfo {
                 let mut atom = ls.structure.clone();
 
                 for (i, e) in edges.iter().enumerate() {
-                    let momentum_in_pattern = parse!(&format!("P(x_,{})", i + 1)).unwrap();
+                    let momentum_in_pattern = parse!(&format!("P(x_,{})", i + 1));
 
                     let momentum_out_pattern = if e < &0 {
-                        parse!(&format!("-Q({},mink(4,indexid(x_)))", -e)).unwrap()
+                        parse!(&format!("-Q({},mink(4,indexid(x_)))", -e))
                         //TODO flip based on flow
                     } else {
-                        parse!(&format!("Q({},mink(4,indexid(x_)))", e)).unwrap()
+                        parse!(&format!("Q({},mink(4,indexid(x_)))", e))
                         //TODO flip based on flow
                     };
 
@@ -694,12 +689,10 @@ impl HasVertexInfo for InteractionVertexInfo {
 
                 let n_dummies = ls.number_of_dummies();
                 for i in 0..n_dummies {
-                    let pat: Pattern = parse!(&format!("indexid({})", -1 - i as i64))
-                        .unwrap()
-                        .to_pattern();
+                    let pat: Pattern = parse!(&format!("indexid({})", -1 - i as i64)).to_pattern();
 
                     atom = atom.replace(&pat).with(
-                        Atom::new_num(
+                        Atom::num(
                             usize::from(vertex_slots.internal_dummy.lorentz_and_spin[i]) as i64
                         )
                         .to_pattern(),
@@ -729,10 +722,10 @@ impl HasVertexInfo for InteractionVertexInfo {
                     .collect();
 
                 for (i, s) in spins.iter().enumerate() {
-                    let id1 = function!(UFO.identity, Atom::new_num((i + 1) as i32), symbol!("x_"))
+                    let id1 = function!(UFO.identity, Atom::num((i + 1) as i32), symbol!("x_"))
                         .to_pattern();
-                    let id2 = function!(ETS.id, symbol!("x_"), Atom::new_num((i + 1) as i32))
-                        .to_pattern();
+                    let id2 =
+                        function!(ETS.id, symbol!("x_"), Atom::num((i + 1) as i32)).to_pattern();
 
                     let ind = match s {
                         1 => Euclidean {}.new_slot(1, i + 1).to_symbolic_wrapped(),
@@ -766,12 +759,10 @@ impl HasVertexInfo for InteractionVertexInfo {
                 }
 
                 for i in 0..n_dummies {
-                    let pat: Pattern = parse!(&format!("indexid({})", -1 - i as i64))
-                        .unwrap()
-                        .to_pattern();
+                    let pat: Pattern = parse!(&format!("indexid({})", -1 - i as i64)).to_pattern();
 
                     atom = atom.replace(&pat).with(
-                        Atom::new_num(usize::from(vertex_slots.internal_dummy.color[i]) as i64)
+                        Atom::num(usize::from(vertex_slots.internal_dummy.color[i]) as i64)
                             .to_pattern(),
                     );
                 }
@@ -1450,7 +1441,7 @@ impl BareGraph {
             vertices,
             edges: vec![],
             external_edges: vec![],
-            overall_factor: parse!(graph.overall_factor.clone()).unwrap(),
+            overall_factor: parse!(graph.overall_factor.clone()),
             external_connections: vec![],
             loop_momentum_basis: LoopMomentumBasis {
                 tree: None,
@@ -1569,7 +1560,7 @@ impl BareGraph {
                 .mass
                 .expression
                 .clone()
-                .unwrap_or(Atom::new_num(0));
+                .unwrap_or(Atom::num(0));
             self.loop_momentum_basis.edge_signatures[i].external = vec![mom, mass];
         }
     }
@@ -2421,8 +2412,7 @@ impl BareGraph {
             rule.push((
                 parse!(&q_format
                     .replace("<i>", &format!("{}", Into::<usize>::into(i)))
-                    .replace("<j>", &format!("{}", Into::<usize>::into(i))))
-                .unwrap(),
+                    .replace("<j>", &format!("{}", Into::<usize>::into(i)))),
                 self.replacement_rule_from_signature(i, signature, k_format, p_format),
             ));
         }
@@ -2437,13 +2427,12 @@ impl BareGraph {
         k_format: &str,
         p_format: &str,
     ) -> Atom {
-        let mut acc = Atom::new_num(0);
+        let mut acc = Atom::num(0);
         for (i_l, &sign) in signature.internal.iter().enumerate() {
             let k = sign
                 * parse!(&k_format
                     .replace("<i>", &format!("{}", i_l))
-                    .replace("<j>", &format!("{}", Into::<usize>::into(index))))
-                .unwrap();
+                    .replace("<j>", &format!("{}", Into::<usize>::into(index))));
             acc = &acc + &k;
         }
 
@@ -2451,8 +2440,7 @@ impl BareGraph {
             let p = sign
                 * parse!(&p_format
                     .replace("<i>", &format!("{}", i_e))
-                    .replace("<j>", &format!("{}", Into::<usize>::into(index))))
-                .unwrap();
+                    .replace("<j>", &format!("{}", Into::<usize>::into(index))));
             acc = &acc + &p;
         }
         acc
@@ -2577,8 +2565,8 @@ impl BareGraph {
             .iter()
             .enumerate()
             .map(|(id, edge)| match edge.edge_type {
-                EdgeType::Virtual => parse!(&format!("E{}", id)).unwrap(),
-                _ => parse!(&format!("p{}", id)).unwrap(),
+                EdgeType::Virtual => parse!(&format!("E{}", id)),
+                _ => parse!(&format!("p{}", id)),
             })
             .collect()
     }
@@ -3715,7 +3703,7 @@ impl DerivedGraphData<UnInit> {
         let color_simplified =
             if let Some(global) = &export_settings.numerator_settings.global_numerator {
                 debug!("Using global numerator: {}", global);
-                let global = parse!(global).unwrap();
+                let global = parse!(global);
                 self.map_numerator(|n| {
                     let n = n.from_global(
                         global,
@@ -3818,7 +3806,7 @@ impl DerivedGraphData<UnInit> {
         let color_simplified =
             if let Some(global) = &export_settings.numerator_settings.global_numerator {
                 debug!("Using global numerator: {}", global);
-                let global = parse!(global).unwrap();
+                let global = parse!(global);
                 self.map_numerator(|n| {
                     let n = n.from_global(
                         global,
@@ -4146,7 +4134,7 @@ impl<NumState: NumeratorState> DerivedGraphData<NumState> {
 //    pub fn pattern(&self, edge_id: usize) -> Pattern {
 //        let signature = self.edge_signatures[edge_id].clone();
 //
-//        let mut atom = Atom::new_num(0);
+//        let mut atom = Atom::num(0);
 //
 //        for (i, sign) in signature.internal.into_iter().enumerate() {
 //            let k = sign * parse!(&format!("K({},x_)", i)).unwrap();

@@ -101,14 +101,14 @@ where
 {
     fn to_atom_inv_impl(&self, cur_node: NodeId) -> Atom {
         let node = &self.nodes[cur_node];
-        let inv_data_esurface = Atom::new_num(1) / Atom::from(node.data);
+        let inv_data_esurface = Atom::num(1) / Atom::from(node.data);
 
         let child_sum = node
             .children
             .iter()
             .map(|&child| self.to_atom_inv_impl(child))
             .reduce(|acc, x| acc + x)
-            .unwrap_or(Atom::new_num(1));
+            .unwrap_or(Atom::num(1));
 
         inv_data_esurface * child_sum
     }

@@ -313,19 +313,9 @@ dependencies = [
 
 [[package]]
 name = "bincode-trait-derive"
-version = "0.1.0"
-source = "git+https://github.com/alphal00p/bincode-trait-derive.git?rev=c092cba7f80c867fd5646cf68312e1f4f9010658#c092cba7f80c867fd5646cf68312e1f4f9010658"
-dependencies = [
- "bincode",
- "proc-macro2",
- "quote",
- "syn 2.0.101",
-]
-
-[[package]]
-name = "bincode-trait-derive"
 version = "0.1.1"
-source = "git+https://github.com/alphal00p/bincode-trait-derive.git#b3874756e671785f69b5a6135c3f32399d13cc0a"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c1f425dc6064b77d777fdecf6d1b374ae29e0be056b5ba8308a798d381e82632"
 dependencies = [
  "bincode",
  "proc-macro2",
@@ -622,16 +612,6 @@ name = "colorchoice"
 version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5b63caa9aa9397e2d9480a9b13673856c78d8ac123288526c37d7839f2a86990"
-
-[[package]]
-name = "colored"
-version = "2.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "117725a109d387c937a1533ce01b450cbde6b88abceea8473c4d7a85853cda3c"
-dependencies = [
- "lazy_static",
- "windows-sys",
-]
 
 [[package]]
 name = "colored"
@@ -1162,14 +1142,14 @@ dependencies = [
  "ahash",
  "base62",
  "bincode",
- "bincode-trait-derive 0.1.1",
+ "bincode-trait-derive",
  "bitvec",
  "brotli",
  "chrono",
  "clap 2.34.0",
  "clarabel",
  "color-eyre",
- "colored 3.0.0",
+ "colored",
  "compensated-summation",
  "criterion",
  "ctrlc",
@@ -1219,7 +1199,6 @@ dependencies = [
  "trie-rs",
  "typed-index-collections",
  "uuid",
- "vakint",
  "vectorize",
 ]
 
@@ -1591,12 +1570,6 @@ dependencies = [
  "quote",
  "syn 2.0.101",
 ]
-
-[[package]]
-name = "joinery"
-version = "2.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "72167d68f5fce3b8655487b8038691a3c9984ee769590f93f2a631f4ad64e4f5"
 
 [[package]]
 name = "js-sys"
@@ -2130,48 +2103,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "phf"
-version = "0.11.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1fd6780a80ae0c52cc120a26a1a42c1ae51b247a253e4e06113d23d2c2edd078"
-dependencies = [
- "phf_macros",
- "phf_shared",
-]
-
-[[package]]
-name = "phf_generator"
-version = "0.11.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3c80231409c20246a13fddb31776fb942c38553c51e871f8cbd687a4cfb5843d"
-dependencies = [
- "phf_shared",
- "rand 0.8.5",
-]
-
-[[package]]
-name = "phf_macros"
-version = "0.11.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f84ac04429c13a7ff43785d75ad27569f2951ce0ffd30a3321230db2fc727216"
-dependencies = [
- "phf_generator",
- "phf_shared",
- "proc-macro2",
- "quote",
- "syn 2.0.101",
-]
-
-[[package]]
-name = "phf_shared"
-version = "0.11.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "67eabc2ef2a60eb7faa00097bd1ffdb5bd28e62bf39990626a582201b7a754e5"
-dependencies = [
- "siphasher",
-]
-
-[[package]]
 name = "piet"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2663,16 +2594,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rust_lisp"
-version = "0.18.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f5c5734eceb60a15465bc85cafe540f454b79e23732bf56f913d081d9ae008ee"
-dependencies = [
- "cfg-if",
- "libm",
-]
-
-[[package]]
 name = "rustc-demangle"
 version = "0.1.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2925,12 +2846,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "siphasher"
-version = "1.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "56199f7ddabf13fe5074ce809e7d3f42b42ae711800501b5b16ea82ad029c39d"
-
-[[package]]
 name = "slotmap"
 version = "1.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2964,14 +2879,14 @@ dependencies = [
 [[package]]
 name = "spenso"
 version = "0.4.1"
-source = "git+https://github.com/alphal00p/spenso?rev=a1bb8daff522fc3f108a6f9db53cce6814df5d6a#a1bb8daff522fc3f108a6f9db53cce6814df5d6a"
+source = "git+https://github.com/alphal00p/spenso?rev=dfef014e701403c3d6dd15e877c81a6b5f773ffe#dfef014e701403c3d6dd15e877c81a6b5f773ffe"
 dependencies = [
  "ahash",
  "anyhow",
  "append-only-vec",
  "approx 0.5.1",
  "bincode",
- "bincode-trait-derive 0.1.0",
+ "bincode-trait-derive",
  "bitvec",
  "constcat",
  "delegate 0.12.0",
@@ -3002,7 +2917,7 @@ dependencies = [
 [[package]]
 name = "spenso-macros"
 version = "0.1.0"
-source = "git+https://github.com/alphal00p/spenso?rev=a1bb8daff522fc3f108a6f9db53cce6814df5d6a#a1bb8daff522fc3f108a6f9db53cce6814df5d6a"
+source = "git+https://github.com/alphal00p/spenso?rev=dfef014e701403c3d6dd15e877c81a6b5f773ffe#dfef014e701403c3d6dd15e877c81a6b5f773ffe"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3043,22 +2958,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9091b6114800a5f2141aee1d1b9d6ca3592ac062dc5decb3764ec5895a47b4eb"
 
 [[package]]
-name = "string-template-plus"
-version = "0.4.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "05d12beb34a053c22eea5ebeaeb9a3cf8297044184f38194d4b2cdb057d1a6a2"
-dependencies = [
- "anyhow",
- "chrono",
- "colored 2.2.0",
- "lazy_static",
- "regex",
- "rust_lisp",
- "subprocess",
- "titlecase",
-]
-
-[[package]]
 name = "strsim"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3075,16 +2974,6 @@ name = "strsim"
 version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7da8b5736845d9f2fcb837ea5d9e2628564b3b043a70948a3f0b778838c5fb4f"
-
-[[package]]
-name = "subprocess"
-version = "0.2.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0c2e86926081dda636c546d8c5e641661049d7562a68f5488be4a1f7f66f6086"
-dependencies = [
- "libc",
- "winapi",
-]
 
 [[package]]
 name = "symbolic-common"
@@ -3112,16 +3001,16 @@ dependencies = [
 [[package]]
 name = "symbolica"
 version = "0.16.0"
-source = "git+https://github.com/alphal00p/symbolica?rev=a23ebaa71b1bc715a129ac765764ece7273625dc#a23ebaa71b1bc715a129ac765764ece7273625dc"
+source = "git+https://github.com/benruijl/symbolica?branch=complex_coeff#47cbaea32002e55292fd87876f6d2fed167ed0eb"
 dependencies = [
  "ahash",
  "append-only-vec",
  "bincode",
- "bincode-trait-derive 0.1.0",
+ "bincode-trait-derive",
  "brotli",
  "byteorder",
  "bytes",
- "colored 3.0.0",
+ "colored",
  "dyn-clone",
  "libloading",
  "once_cell",
@@ -3141,12 +3030,12 @@ dependencies = [
 [[package]]
 name = "symbolica_community"
 version = "0.1.0"
-source = "git+https://github.com/alphal00p/symbolica-community?rev=9332038264aace8e428ee6ee2cb7d84b09a764ae#9332038264aace8e428ee6ee2cb7d84b09a764ae"
+source = "git+https://github.com/alphal00p/symbolica-community?rev=5231643e98ebcb52faa44eba065d62fc2a09c0e6#5231643e98ebcb52faa44eba065d62fc2a09c0e6"
 dependencies = [
  "anyhow",
  "auto_enums",
  "bincode",
- "bincode-trait-derive 0.1.0",
+ "bincode-trait-derive",
  "bitvec",
  "delegate 0.13.3",
  "env_logger",
@@ -3329,17 +3218,6 @@ checksum = "be4d6b5f19ff7664e8c98d03e2139cb510db9b0a60b55f8e8709b689d939b6bc"
 dependencies = [
  "serde",
  "serde_json",
-]
-
-[[package]]
-name = "titlecase"
-version = "2.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "38397a8cdb017cfeb48bf6c154d6de975ac69ffeed35980fde199d2ee0842042"
-dependencies = [
- "joinery",
- "lazy_static",
- "regex",
 ]
 
 [[package]]
@@ -3532,25 +3410,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "vakint"
-version = "1.0.0"
-source = "git+https://github.com/alphal00p/vakint?branch=vk_for_sb_0_16_latest#da398e93b1c1dabee0d54401d4761652469eb00c"
-dependencies = [
- "ahash",
- "anyhow",
- "arrayvec",
- "colored 2.2.0",
- "log",
- "phf",
- "regex",
- "rug",
- "string-template-plus",
- "symbolica",
- "thiserror 1.0.69",
- "version-compare",
-]
-
-[[package]]
 name = "vec_map"
 version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3564,12 +3423,6 @@ checksum = "25e3bbfdfdcc4ea60ce183b1b45c936aacd69fe097ebf137984a32faf80e365b"
 dependencies = [
  "serde",
 ]
-
-[[package]]
-name = "version-compare"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "852e951cb7832cb45cb1169900d19760cfa39b82bc0ea9c0e5a14ae88411c98b"
 
 [[package]]
 name = "version_check"

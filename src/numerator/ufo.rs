@@ -45,11 +45,11 @@ pub static UFO: LazyLock<UFOSymbols> = LazyLock::new(|| UFOSymbols {
     projp: symbol!("ProjP"),
     sigma: symbol!("Sigma"),
     charge_conj: symbol!("C"),
-    metric: symbol!("Metric";Symmetric).unwrap(),
+    metric: symbol!("Metric";Symmetric),
     momentum: symbol!("P"),
     levicivita: symbol!("Epsilon"),
     t: symbol!("T"),
-    f: symbol!("f";Antisymmetric).unwrap(),
+    f: symbol!("f";Antisymmetric),
     d: symbol!("d"),
     antilevicivita: symbol!("EpsilonBar"),
     t6: symbol!("T6"),
@@ -157,10 +157,10 @@ pub fn preprocess_ufo_spin_wrapped(atom: Atom) -> Atom {
     // let b_ = symbol!("b_");
     // let c_ = symbol!("c_");
     // let d_ = symbol!("d_");
-    // let wa_ = function!(symbol!("indexid"), Atom::new_var(symbol!("a_")));
-    // let wb_ = function!(symbol!("indexid"), Atom::new_var(symbol!("b_")));
-    // let wc_ = function!(symbol!("indexid"), Atom::new_var(symbol!("c_")));
-    // let wd_ = function!(symbol!("indexid"), Atom::new_var(symbol!("d_")));
+    // let wa_ = function!(symbol!("indexid"), Atom::var(symbol!("a_")));
+    // let wb_ = function!(symbol!("indexid"), Atom::var(symbol!("b_")));
+    // let wc_ = function!(symbol!("indexid"), Atom::var(symbol!("c_")));
+    // let wd_ = function!(symbol!("indexid"), Atom::var(symbol!("d_")));
 
     // let bis = Bispinor {}.new_rep(4);
     // let mink = Minkowski {}.new_rep(4);

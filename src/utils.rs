@@ -863,6 +863,16 @@ pub trait FloatLike:
     Debug, Clone, PartialEq, PartialOrd, Copy, Default, Serialize, Deserialize, Encode, Decode, Hash,
 )]
 pub struct F<T: FloatLike>(pub T);
+use symbolica::evaluate::ExportNumber;
+impl<T: FloatLike + ExportNumber> ExportNumber for F<T> {
+    fn export(&self) -> String {
+        self.0.to_string()
+    }
+
+    fn is_real(&self) -> bool {
+        self.0.is_real()
+    }
+}
 
 impl<T: TensorLibraryData + FloatLike> TensorLibraryData for F<T> {
     fn one() -> Self {
@@ -888,7 +898,7 @@ impl<'a> From<&'a F<f64>> for Coefficient {
 
 impl ToAtom for F<f64> {
     fn to_atom(self) -> Atom {
-        Atom::new_num(self.0)
+        Atom::num(self.0)
     }
 }
 

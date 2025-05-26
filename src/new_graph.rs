@@ -331,21 +331,21 @@ impl FeynmanGraph for HedgeGraph<Edge, Vertex> {
     }
 
     fn denominator(&self, edge: EdgeIndex) -> (Atom, Atom) {
-        let mom = parse!(&format!("Q{}", Into::<usize>::into(edge))).unwrap();
+        let mom = parse!(&format!("Q{}", Into::<usize>::into(edge)));
         let mass = self[edge]
             .particle
             .0
             .mass
             .expression
             .clone()
-            .unwrap_or(Atom::new_num(0));
+            .unwrap_or(Atom::num(0));
 
         (mom, mass)
     }
 
     fn substitute_lmb(&self, edge: EdgeIndex, atom: Atom, lmb: &LoopMomentumBasis) -> Atom {
         let num = Into::<usize>::into(edge);
-        let mom = parse!(&format!("Q({num},x_)")).unwrap().to_pattern();
+        let mom = parse!(&format!("Q({num},x_)")).to_pattern();
         let mom_rep = lmb.pattern(edge);
         atom.replace(mom).with(mom_rep)
     }
@@ -745,14 +745,13 @@ impl Edge {
             EdgeType::Virtual => {
                 let mut atom = self.propagator.numerator.clone();
 
-                let pfun = parse!("P(x_)").unwrap().to_pattern();
+                let pfun = parse!("P(x_)").to_pattern();
                 if self.particle.0.is_antiparticle() {
                     atom = atom.replace(&pfun).with(
                         parse!(&format!(
                             "-Q({},mink(4,indexid(x_)))",
                             Into::<usize>::into(num)
                         ))
-                        .unwrap()
                         .to_pattern(),
                     );
                 } else {
@@ -761,12 +760,11 @@ impl Edge {
                             "Q({},mink(4,indexid(x_)))",
                             Into::<usize>::into(num)
                         ))
-                        .unwrap()
                         .to_pattern(),
                     );
                 }
 
-                let pslashfun = parse!("PSlash(i_,j_)").unwrap().to_pattern();
+                let pslashfun = parse!("PSlash(i_,j_)").to_pattern();
                 let pindex_num: usize = self.internal_index[0].into();
                 if self.particle.0.is_antiparticle() {
                     atom = atom.replace(&pslashfun).with(
@@ -776,7 +774,6 @@ impl Edge {
                             pindex_num,
                             pindex_num
                         ))
-                        .unwrap()
                         .to_pattern(),
                     );
                 } else {
@@ -787,19 +784,19 @@ impl Edge {
                             pindex_num,
                             pindex_num
                         ))
-                        .unwrap()
                         .to_pattern(),
                     );
                 }
 
                 atom = preprocess_ufo_spin_wrapped(atom);
-                let indexidpat = parse!("indexid(x_)").unwrap().to_pattern();
+                let indexidpat = parse!("indexid(x_)").to_pattern();
 
                 let dummies: HashSet<_> = atom
                     .pattern_match(&indexidpat, None, None)
                     .filter_map(|a| {
                         if let AtomView::Num(n) = a[&W_.x_].as_view() {
-                            let e = if let CoefficientView::Natural(a, b) = n.get_coeff_view() {
+                            let e = if let CoefficientView::Natural(a, b, _, _) = n.get_coeff_view()
+                            {
                                 if b == 1 {
                                     a
                                 } else {
@@ -830,7 +827,7 @@ impl Edge {
                 //     parse!("x_").unwrap().to_pattern(),
                 // ));
 
-                let mut color_atom = Atom::new_num(1);
+                let mut color_atom = Atom::num(1);
                 for (&cin, &cout) in in_slots.color.iter().zip(out_slots.color.iter()) {
                     let id: NamedStructure<String, ()> =
                         NamedStructure::from_iter([cin, cout], "id".into(), None).structure;
@@ -851,10 +848,8 @@ impl Edge {
                     .sorted()
                     .map(|(i, d)| {
                         Replacement::new(
-                            parse!(&format!("indexid({})", d)).unwrap().to_pattern(),
-                            parse!(&format!("{}", self.internal_index[i + 1]))
-                                .unwrap()
-                                .to_pattern(),
+                            parse!(&format!("indexid({})", d)).to_pattern(),
+                            parse!(&format!("{}", self.internal_index[i + 1])).to_pattern(),
                         )
                     })
                     .collect();
@@ -863,11 +858,11 @@ impl Edge {
                 let color_atom = color_atom.replace_multiple(&indexid_reps);
 
                 [
-                    atom.replace(&parse!("indexid(x_)").unwrap().to_pattern())
-                        .with(Atom::new_var(W_.x_).to_pattern()),
+                    atom.replace(&parse!("indexid(x_)").to_pattern())
+                        .with(Atom::var(W_.x_).to_pattern()),
                     color_atom
-                        .replace(&parse!("indexid(x_)").unwrap().to_pattern())
-                        .with(Atom::new_var(W_.x_).to_pattern()),
+                        .replace(&parse!("indexid(x_)").to_pattern())
+                        .with(Atom::var(W_.x_).to_pattern()),
                 ]
             }
         }
@@ -1368,7 +1363,7 @@ impl LoopMomentumBasis {
         &'a I: Into<AtomOrView<'a>>,
     {
         self.edge_signatures[edge_id].loop_atom(mom_symbol, additional_args, |l| {
-            Atom::new_num(if emr_id {
+            Atom::num(if emr_id {
                 usize::from(self.loop_edges[l])
             } else {
                 usize::from(l)
@@ -1387,7 +1382,7 @@ impl LoopMomentumBasis {
         &'a I: Into<AtomOrView<'a>>,
     {
         self.edge_signatures[edge_id].ext_atom(mom_symbol, additional_args, |l| {
-            Atom::new_num(if emr_id {
+            Atom::num(if emr_id {
                 usize::from(self.ext_edges[l])
             } else {
                 usize::from(l)
@@ -1411,7 +1406,7 @@ impl LoopMomentumBasis {
     pub(crate) fn pattern(&self, edge_id: EdgeIndex) -> Pattern {
         let signature = self.edge_signatures[edge_id].clone();
 
-        let mut atom = Atom::new_num(0);
+        let mut atom = Atom::num(0);
 
         for (i, sign) in signature.internal.into_iter().enumerate() {
             let k = sign
@@ -1887,15 +1882,13 @@ pub fn get_cff_inverse_energy_product_impl<E, V, S: SubGraph>(
     graph: &HedgeGraph<E, V>,
     subgraph: &S,
 ) -> Atom {
-    Atom::new_num(1)
+    Atom::num(1)
         / graph
             .iter_edges_of(subgraph)
             .filter_map(|(pair, edge_index, _)| match pair {
-                HedgePair::Paired { .. } => {
-                    Some(Atom::new_num(2) * ose_atom_from_index(edge_index))
-                }
+                HedgePair::Paired { .. } => Some(Atom::num(2) * ose_atom_from_index(edge_index)),
                 _ => None,
             })
             .reduce(|acc, x| acc * x)
-            .unwrap_or_else(|| Atom::new_num(1))
+            .unwrap_or_else(|| Atom::num(1))
 }

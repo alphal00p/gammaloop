@@ -528,7 +528,7 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
     fn get_function_map(&self) -> FunctionMap {
         let mut fn_map = FunctionMap::new();
         let pi_rational = Rational::from(std::f64::consts::PI);
-        fn_map.add_constant(parse!("π").unwrap(), pi_rational);
+        fn_map.add_constant(parse!("π"), pi_rational.into());
         fn_map
     }
 
@@ -537,8 +537,7 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
         let factors_of_pi = parse!(&format!(
             "(2*π)^{}",
             3 * self.graph.underlying.get_loop_number()
-        ))
-        .unwrap();
+        ));
 
         let result = cff_atom * inverse_energy_product * &self.graph.multiplicity / factors_of_pi;
         debug!("result: {}", result);
@@ -565,8 +564,8 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
         tree.horner_scheme();
         tree.common_subexpression_elimination();
 
-        let tree_double = tree.map_coeff::<F<f64>, _>(&|r| r.into());
-        let tree_quad = tree.map_coeff::<F<f128>, _>(&|r| r.into());
+        let tree_double = tree.map_coeff::<F<f64>, _>(&|r| F(r.re.to_f64()));
+        let tree_quad = tree.map_coeff::<F<f128>, _>(&|r| F((&r.re).into()));
 
         let evaluator = GenericEvaluator {
             f64_compiled: None,
@@ -705,8 +704,8 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
                 tree.horner_scheme();
                 tree.common_subexpression_elimination();
 
-                let tree_double = tree.map_coeff::<F<f64>, _>(&|r| r.into());
-                let tree_quad = tree.map_coeff::<F<f128>, _>(&|r| r.into());
+                let tree_double = tree.map_coeff::<F<f64>, _>(&|r| (&r.re).into());
+                let tree_quad = tree.map_coeff::<F<f128>, _>(&|r| (&r.re).into());
 
                 GenericEvaluator {
                     f64_compiled: None,
@@ -1241,20 +1240,20 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
 
     pub fn add_additional_factors_to_cff_atom(&self, cut_atom: &Atom, cut_id: CutId) -> Atom {
         let loop_3 = self.graph.underlying.get_loop_number() as i64 * 3;
-        let t_star_factor = Atom::new_var(GS.rescale_star).npow(loop_3);
+        let t_star_factor = Atom::var(GS.rescale_star).npow(loop_3);
 
-        let h_function = Atom::new_var(GS.hfunction);
-        let grad_eta = Atom::new_var(GS.deta);
+        let h_function = Atom::var(GS.hfunction);
+        let grad_eta = Atom::var(GS.deta);
 
-        let factors_of_pi = (Atom::new_num(2) * Atom::new_var(GS.pi)).npow(loop_3);
+        let factors_of_pi = (Atom::num(2) * Atom::var(GS.pi)).npow(loop_3);
 
-        let cut_inverse_energy_product = Atom::new_num(1)
+        let cut_inverse_energy_product = Atom::num(1)
             / self
                 .graph
                 .underlying
                 .iter_edges_of(&self.cuts[cut_id].cut)
-                .map(|(_, edge_id, _)| Atom::new_num(2) * ose_atom_from_index(edge_id))
-                .fold(Atom::new_num(1), |product, factor| product * factor);
+                .map(|(_, edge_id, _)| Atom::num(2) * ose_atom_from_index(edge_id))
+                .fold(Atom::num(1), |product, factor| product * factor);
 
         let result = cut_atom
             * cut_inverse_energy_product
@@ -1289,10 +1288,10 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
         }
 
         params.extend(model.generate_params());
-        params.push(Atom::new_var(GS.m_uv));
-        params.push(Atom::new_var(GS.rescale_star));
-        params.push(Atom::new_var(GS.hfunction));
-        params.push(Atom::new_var(GS.deta));
+        params.push(Atom::var(GS.m_uv));
+        params.push(Atom::var(GS.rescale_star));
+        params.push(Atom::var(GS.hfunction));
+        params.push(Atom::var(GS.deta));
 
         params
     }
@@ -1300,7 +1299,7 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
     fn get_function_map(&self) -> FunctionMap {
         let mut fn_map = FunctionMap::new();
         let pi_rational = Rational::from(std::f64::consts::PI);
-        fn_map.add_constant(parse!("π").unwrap(), pi_rational);
+        fn_map.add_constant(parse!("π"), pi_rational.into());
         fn_map
     }
 
@@ -1327,8 +1326,8 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
                 tree.horner_scheme();
                 tree.common_subexpression_elimination();
 
-                let tree_double = tree.map_coeff::<F<f64>, _>(&|r| r.into());
-                let tree_quad = tree.map_coeff::<F<f128>, _>(&|r| r.into());
+                let tree_double = tree.map_coeff::<F<f64>, _>(&|r| (&r.re).into());
+                let tree_quad = tree.map_coeff::<F<f128>, _>(&|r| (&r.re).into());
 
                 GenericEvaluator {
                     f64_compiled: None,
@@ -1374,8 +1373,8 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
                         tree.horner_scheme();
                         tree.common_subexpression_elimination();
 
-                        let tree_double = tree.map_coeff::<F<f64>, _>(&|r| r.into());
-                        let tree_quad = tree.map_coeff::<F<f128>, _>(&|r| r.into());
+                        let tree_double = tree.map_coeff::<F<f64>, _>(&|r| (&r.re).into());
+                        let tree_quad = tree.map_coeff::<F<f128>, _>(&|r| (&r.re).into());
 
                         GenericEvaluator {
                             f64_compiled: None,
