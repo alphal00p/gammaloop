@@ -1608,6 +1608,8 @@ mod tests {
     use linnet::half_edge::{
         builder::HedgeGraphBuilder,
         involution::{EdgeIndex, Flow},
+        nodestore::NodeStorageVec,
+        HedgeGraph,
     };
     use spenso::network::library::TensorLibraryData;
     use symbolica::{
@@ -1652,7 +1654,7 @@ mod tests {
 
         let n1 = underlying.add_node(Vertex {
             name: "n1".into(),
-            vertex_info: hhh,
+            vertex_info: hhh.clone(),
             dod: 0,
             num: Atom::one(),
         });
@@ -1843,9 +1845,6 @@ mod tests {
             )
             .unwrap();
 
-        let encoded_amplitude =
-            bincode::encode_to_vec(&amplitude, bincode::config::standard()).unwrap();
-
         let path = PathBuf::from("test.bin");
 
         let mut temp = OpenOptions::new()
@@ -1866,12 +1865,102 @@ mod tests {
             state_map: &state_map,
         };
 
-        let amplitude: AmplitudeGraph<UnInit> = bincode::decode_from_slice_with_context(
-            &encoded_amplitude,
+        println!("context created");
+
+        let edge = Edge {
+            name: "q2".into(),
+            edge_type: EdgeType::Outgoing,
+            particle: hp.clone(),
+            propagator: hprop.clone(),
+            internal_index: vec![],
+            dod: 0,
+            num: Atom::one(),
+        };
+
+        let encoded_edge = bincode::encode_to_vec(&edge, bincode::config::standard()).unwrap();
+
+        let decoded_edge: Edge = bincode::decode_from_slice_with_context(
+            &encoded_edge,
             bincode::config::standard(),
             context,
         )
         .unwrap()
         .0;
+
+        println!("edge decoded");
+
+        let encoded_hh = bincode::encode_to_vec(&hhh, bincode::config::standard()).unwrap();
+
+        let decoded_hh: VertexInfo = bincode::decode_from_slice_with_context(
+            &encoded_hh,
+            bincode::config::standard(),
+            context,
+        )
+        .unwrap()
+        .0;
+
+        println!("hhh decoded");
+
+        let vertex = Vertex {
+            name: "n2".into(),
+            vertex_info: hhh.clone(),
+            dod: 0,
+            num: Atom::one(),
+        };
+
+        let encoded_vertex = bincode::encode_to_vec(&vertex, bincode::config::standard()).unwrap();
+
+        let decoded_vertex: Vertex = bincode::decode_from_slice_with_context(
+            &encoded_vertex,
+            bincode::config::standard(),
+            context,
+        )
+        .unwrap()
+        .0;
+
+        println!("vertex decoded");
+
+        let encoded_underling_graph =
+            bincode::encode_to_vec(&amplitude.graph.underlying, bincode::config::standard())
+                .unwrap();
+
+        println!("underlying graph encoded");
+
+        let underlying_graph: HedgeGraph<Edge, Vertex, NodeStorageVec<Vertex>> =
+            bincode::decode_from_slice_with_context(
+                &encoded_underling_graph,
+                bincode::config::standard(),
+                context,
+            )
+            .expect("underlying graph decode failed")
+            .0;
+
+        println!("underlying graph passed");
+
+        let encoded_graph =
+            bincode::encode_to_vec(&amplitude.graph, bincode::config::standard()).unwrap();
+
+        let graph: Graph = bincode::decode_from_slice_with_context(
+            &encoded_graph,
+            bincode::config::standard(),
+            context,
+        )
+        .expect("graph decode failed")
+        .0;
+
+        println!("graph passed");
+
+        let encoded_amplitude =
+            bincode::encode_to_vec(&amplitude, bincode::config::standard()).unwrap();
+
+        let amplitude: AmplitudeGraph<UnInit> = bincode::decode_from_slice_with_context(
+            &encoded_amplitude,
+            bincode::config::standard(),
+            context,
+        )
+        .expect("amplitude decode failed")
+        .0;
+
+        println!("amplitude graph passed");
     }
 }
