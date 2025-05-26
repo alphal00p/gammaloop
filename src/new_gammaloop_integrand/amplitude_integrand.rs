@@ -148,7 +148,7 @@ impl GammaloopIntegrand for AmplitudeIntegrand {
     }
 
     fn get_model_parameter_cache<T: FloatLike>(&self) -> Vec<Complex<F<T>>> {
-        todo!()
+        vec![]
     }
 }
 

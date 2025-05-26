@@ -798,6 +798,8 @@ impl PythonWorker {
     }
 
     pub fn add_amplitude_from_yaml_str(&mut self, yaml_str: &str) -> PyResult<()> {
+        info!("calling add_amplitude_from_yaml_str");
+
         if self.model.is_empty() {
             return Err(exceptions::PyException::new_err(
                 "Model must be loaded before cross sections",
@@ -833,6 +835,8 @@ impl PythonWorker {
     }
 
     pub fn load_amplitudes(&mut self, file_path: &str) -> PyResult<()> {
+        info!("calling load_amplitudes");
+
         if self.model.is_empty() {
             return Err(exceptions::PyException::new_err(
                 "Model must be loaded before amplitudes",
@@ -1416,9 +1420,6 @@ impl PythonWorker {
     pub fn generate_integrands(&mut self, settings_yaml_str: &str) {
         let settings =
             serde_yaml::from_str::<Settings>(settings_yaml_str).expect("Could not parse settings");
-
-        println!("settings: {}", settings_yaml_str);
-        panic!();
 
         let integrands = self.process_list.generate_integrands(settings, &self.model);
 

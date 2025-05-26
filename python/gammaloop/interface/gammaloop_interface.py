@@ -63,7 +63,6 @@ AVAILABLE_COMMANDS = [
     'generate',
     'generate_amplitude',
     'display_debug_log',
-    'preprocess',
 ]
 
 
@@ -1381,14 +1380,6 @@ class GammaLoop(object):
     #
     # Run interface type of commands below (those bound to a particular output already generated)
     #
-
-    def do_preprocess(self, str_args: str) -> None:
-        for amplitude in self.amplitudes:
-            amplitude_yaml = amplitude.to_yaml_str()
-            self.rust_worker.add_amplitude_from_yaml_str(amplitude_yaml)
-
-        export_config = yaml.dump(self.config["export_settings"])
-        self.rust_worker.preprocess(export_config)
 
     # launch command
     launch_parser = ArgumentParser(prog='launch')

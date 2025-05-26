@@ -318,6 +318,7 @@ class AmplitudesExporter(GammaLoopExporter):
                             self).generic_export(export_root)
         output_data['output_type'] = 'amplitudes'
         output_data['contents'] = [amplitude.name for amplitude in amplitudes]
+        export_config = yaml.dump(self.gammaloop.config['export_settings'])
 
         with open(pjoin(export_root, 'output_metadata.yaml'), 'w', encoding='utf-8') as file:
             file.write(output_data.to_yaml_str())
@@ -344,6 +345,7 @@ class AmplitudesExporter(GammaLoopExporter):
                     amplitude_yaml)
         if not self.output_options.yaml_only:
             # Now address the rust export aspect
+            self.gammaloop.rust_worker.preprocess(export_config)
             self.gammaloop.rust_worker.export_amplitudes(
                 str(export_root), [amp.name for amp in amplitudes], yaml.dump(self.gammaloop.config['export_settings']), no_evaluators)
 
