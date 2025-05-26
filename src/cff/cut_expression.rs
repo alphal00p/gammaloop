@@ -254,7 +254,7 @@ mod tests {
 
         for cut in cuts.iter() {
             let edges_in_cut = hedge_graph
-                .iter_edges(&cut.cut)
+                .iter_edges_of(&cut.cut)
                 .map(|(_, id, _)| id)
                 .collect_vec();
 

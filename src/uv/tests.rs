@@ -1,9 +1,13 @@
 use std::{sync::Arc, time::Instant};
 
 use ahash::HashMap;
+
 use linnet::half_edge::hedgevec::HedgeVec;
 use nalgebra::LU;
 use pathfinding::num_traits::real;
+
+use linnet::half_edge::{builder::HedgeGraphBuilder, involution::Flow};
+
 use smartstring::SmartString;
 use spenso::{
     algebra::complex::Complex,
@@ -17,15 +21,14 @@ use spenso::{
 };
 use symbolica::evaluate::{FunctionMap, OptimizationSettings};
 use symbolica_community::physics::algebraic_simplification::metric::MetricSimplifier;
-use typed_index_collections::TiVec;
 
 use crate::{
     cff::cut_expression::SuperGraphOrientationID,
     feyngen::{
-        diagram_generator::{EdgeColor, FeynGen, NodeColorWithVertexRule},
+        diagram_generator::{EdgeColor, NodeColorWithVertexRule},
         FeynGenFilters,
     },
-    graph::InteractionVertexInfo,
+    graph::{EdgeType, InteractionVertexInfo},
     integrands::Integrand,
     integrate::{havana_integrate, UserData},
     model::{ArcVertexRule, ColorStructure, Model, VertexRule},
@@ -44,7 +47,7 @@ use crate::{
 fn double_triangle_LU() {
     let _ = env_logger::builder().is_test(true).try_init();
 
-    let with_log_uv = true;
+    let uv_dod = 1;
 
     // load the model and hack the masses, go through serializable model since arc is not mutable
     let model = load_generic_model("sm");
@@ -100,8 +103,12 @@ fn double_triangle_LU() {
             particle: hp.clone(),
             propagator: hprop.clone(),
             internal_index: vec![],
-            dod: -2,
-            num: Atom::one(),
+            dod: if uv_dod >= 1 { -1 } else { -2 },
+            num: if uv_dod >= 1 {
+                spenso_lor_atom(0, 2, GS.dim)
+            } else {
+                Atom::one()
+            },
         },
         false,
     );
@@ -130,8 +137,12 @@ fn double_triangle_LU() {
             particle: tp.clone(),
             propagator: tprop.clone(),
             internal_index: vec![],
-            dod: -2,
-            num: Atom::one(),
+            dod: if uv_dod >= 1 { -1 } else { -2 },
+            num: if uv_dod >= 1 {
+                spenso_lor_atom(2, 2, GS.dim)
+            } else {
+                Atom::one()
+            },
         },
         true,
     );
@@ -145,8 +156,8 @@ fn double_triangle_LU() {
             particle: tp.clone(),
             propagator: tprop.clone(),
             internal_index: vec![],
-            dod: if with_log_uv { -1 } else { -2 },
-            num: if with_log_uv {
+            dod: if uv_dod >= 0 { -1 } else { -2 },
+            num: if uv_dod >= 0 {
                 spenso_lor_atom(3, 1, GS.dim)
             } else {
                 Atom::one()
@@ -164,8 +175,8 @@ fn double_triangle_LU() {
             particle: tp.clone(),
             propagator: tprop.clone(),
             internal_index: vec![],
-            dod: if with_log_uv { -1 } else { -2 },
-            num: if with_log_uv {
+            dod: if uv_dod >= 0 { -1 } else { -2 },
+            num: if uv_dod >= 0 {
                 spenso_lor_atom(4, 1, GS.dim)
             } else {
                 Atom::one()
@@ -208,7 +219,8 @@ fn double_triangle_LU() {
 
     let mut loop_momentum_basis = LoopMomentumBasis {
         tree: None,
-        basis: vec![EdgeIndex::from(0), EdgeIndex::from(4)].into(),
+        loop_edges: vec![EdgeIndex::from(0), EdgeIndex::from(4)].into(),
+        ext_edges: vec![EdgeIndex::from(5), EdgeIndex::from(6)].into(),
         edge_signatures: underlying
             .new_hedgevec(|_, _, _| LoopExtSignature::from((vec![], vec![]))),
     };
@@ -244,7 +256,7 @@ fn double_triangle_LU() {
     .unwrap();
 
     let super_uv_graph = UVGraph::from_underlying(&cs.graph.underlying);
-    let orientation_id = SuperGraphOrientationID(1);
+    let orientation_id = SuperGraphOrientationID(0); // 0 contains the UV amplitude
     let supergraph_orientation_data = &cs
         .derived_data
         .cff_expression
@@ -279,13 +291,13 @@ fn double_triangle_LU() {
 
             let mut left_wood = super_uv_graph.wood(&c.left);
 
-            let mut left_forest = left_wood.unfold(&super_uv_graph, &super_uv_graph.cut_edges);
+            let mut left_forest = left_wood.unfold(&super_uv_graph, &super_uv_graph.lmb);
             left_forest.compute(&super_uv_graph);
             left_forest.compute_cff(&super_uv_graph, left_orientation_data, &None);
 
             let mut right_forest = super_uv_graph
                 .wood(&c.right)
-                .unfold(&super_uv_graph, &super_uv_graph.cut_edges);
+                .unfold(&super_uv_graph, &super_uv_graph.lmb);
             right_forest.compute(&super_uv_graph);
             right_forest.compute_cff(&super_uv_graph, right_orientation_data, &None);
 
@@ -300,7 +312,7 @@ fn double_triangle_LU() {
             let mut cut_res = cs.add_additional_factors_to_cff_atom(&(left_expr * right_expr), id);
 
             // add Feynman rules of cut edges
-            for (_p, edge_index, d) in super_uv_graph.iter_edges(&c.cut.left) {
+            for (_p, edge_index, d) in super_uv_graph.iter_edges_of(&c.cut.left) {
                 let edge_id = usize::from(edge_index) as i64;
                 let orientation = supergraph_orientation_data.orientation.clone();
                 cut_res = (cut_res * &d.data.num)
@@ -316,7 +328,8 @@ fn double_triangle_LU() {
             }
 
             // add Feynman rules of external edges
-            for (_p, edge_index, d) in super_uv_graph.iter_edges(&super_uv_graph.external_filter())
+            for (_p, edge_index, d) in
+                super_uv_graph.iter_edges_of(&super_uv_graph.external_filter())
             {
                 let edge_id = usize::from(edge_index) as i64;
                 cut_res = (cut_res * &d.data.num)
@@ -382,7 +395,7 @@ fn double_triangle_LU() {
                 );
 
             // substitute all OSEs (add minus sign to cancel minus sign from 4d dot product)
-            for (_p, edge_id, d) in super_uv_graph.iter_edges(&c.cut.left) {
+            for (_p, edge_id, d) in super_uv_graph.iter_edges_of(&c.cut.left) {
                 let mass2 = Atom::new_var(symbol!(d.data.particle.mass.name.as_str())).npow(2);
                 cut_res = cut_res
                     .replace(function!(GS.ose, usize::from(edge_id) as i64))
@@ -394,6 +407,43 @@ fn double_triangle_LU() {
                         ) + mass2)
                             .sqrt(),
                     );
+            }
+
+            if super_uv_graph.dod(&c.right) >= 0 {
+                // only check when this graph is a UV subgraph
+                let t = symbol!("t");
+                let series = Atom::new_var(t).npow(3)
+                    * cut_res
+                        .expand()
+                        .replace(parse!("Q3(3,x_)").unwrap())
+                        .with(parse!("t*Q3(3,x_)").unwrap())
+                        .replace(parse!("Q3(2,x_)").unwrap())
+                        .with(parse!("t*Q3(3,x_)-Q3(1,x_)").unwrap())
+                        .replace(parse!("Q3(4,x_)").unwrap())
+                        .with(parse!("t*Q3(3,x_)-Q3(6,x_)").unwrap())
+                        .replace(parse!("symbolica_community::dot(t*x_,y_)").unwrap())
+                        .repeat()
+                        .with(parse!("t*symbolica_community::dot(x_,y_)").unwrap());
+
+                let s = series
+                    .replace(t)
+                    .with(Atom::new_var(t).npow(-1))
+                    .series(t, Atom::Zero, 0.into(), true)
+                    .unwrap();
+
+                let mut r = s
+                    .to_atom()
+                    .expand()
+                    .collect_symbol::<i8>(GS.emr_vec, None, None);
+                r = r
+                    .replace(Atom::new_var(W_.x_).sqrt())
+                    .with(Atom::new_var(W_.x_).npow((1, 2)))
+                    .replace((-Atom::new_var(W_.x_)).pow(Atom::new_num((-5, 2))))
+                    .with(Atom::new_var(W_.x_).pow(Atom::new_num((-5, 2))) * Atom::I)
+                    .replace((-Atom::new_var(W_.x_)).pow(Atom::new_num((-3, 2))))
+                    .with(-Atom::new_var(W_.x_).pow(Atom::new_num((-3, 2))) * Atom::I)
+                    .expand(); // help Symbolica with cancellations and avoid bad simplification of (-1)^(-5/2)
+                println!("Correct UV cancellation if 0: {:>}", r);
             }
 
             cut_res = cut_res
@@ -419,44 +469,16 @@ fn double_triangle_LU() {
                 .with(Atom::new());
 
             let cut_res = cut_res.expand();
+
             println!("Cut {} result: {:>}", id, cut_res);
-
-            if super_uv_graph.dod(&c.right) == 0 {
-                // only check when this graph is a UV subgraph
-                let t = symbol!("t");
-                let series = Atom::new_var(t).npow(3)
-                    * cut_res
-                        .replace(parse!("Q3(3)").unwrap())
-                        .with(parse!("t*Q3(3)").unwrap())
-                        .replace(parse!("Q3(2)").unwrap())
-                        .with(parse!("t*Q3(3)-Q3(1)").unwrap())
-                        .replace(parse!("Q3(4)").unwrap())
-                        .with(parse!("t*Q3(3)-Q3(6)").unwrap())
-                        .replace(parse!("symbolica_community::dot(t*x_,y_)").unwrap())
-                        .repeat()
-                        .with(parse!("t*symbolica_community::dot(x_,y_)").unwrap());
-
-                let s = series
-                    .replace(t)
-                    .with(Atom::new_var(t).npow(-1))
-                    .series(t, Atom::Zero, 0.into(), true)
-                    .unwrap();
-
-                let mut r = s.to_atom().expand();
-                r = r
-                    .replace((-Atom::new_var(W_.x_)).pow(Atom::new_num((-5, 2))))
-                    .with(Atom::new_var(W_.x_).pow(Atom::new_num((-5, 2))) * Atom::I)
-                    .replace((-Atom::new_var(W_.x_)).pow(Atom::new_num((-3, 2))))
-                    .with(-Atom::new_var(W_.x_).pow(Atom::new_num((-3, 2))) * Atom::I)
-                    .expand(); // help Symbolica with cancellations and avoid bad simplification of (-1)^(-5/2)
-                println!("Correct UV cancellation if 0: {:>}", r);
-            }
 
             cut_atoms.push(cut_res);
         } else {
             cut_atoms.push(Atom::new());
         }
     }
+
+    println!("Done generation");
 
     cs.derived_data.bare_cff_evaluators = None;
     cs.build_cut_evaluators(&model, Some(cut_atoms));
@@ -559,7 +581,7 @@ fn nested_bubble_soft_ct() {
     //println!("{}", wood.dot(&uv_graph));
     //println!("{}", wood.show_graphs(&uv_graph));
 
-    let mut ufold = wood.unfold(&uv_graph, &uv_graph.cut_edges);
+    let mut ufold = wood.unfold(&uv_graph, &uv_graph.lmb);
     // assert_eq!(152, ufold.n_terms());
     ufold.compute(&uv_graph);
 
@@ -747,7 +769,7 @@ fn nested_bubble_scalar_quad() {
     // println!("{}", wood.dot(&uv_graph));
     // println!("{}", wood.show_graphs(&uv_graph));
 
-    let mut ufold = wood.unfold(&uv_graph, &uv_graph.cut_edges);
+    let mut ufold = wood.unfold(&uv_graph, &uv_graph.lmb);
     // assert_eq!(152, ufold.n_terms());
     ufold.compute(&uv_graph);
 
@@ -919,7 +941,7 @@ fn nested_bubble_scalar() {
     //println!("{}", wood.dot(&uv_graph));
     //println!("{}", wood.show_graphs(&uv_graph));
 
-    let mut ufold = wood.unfold(&uv_graph, &uv_graph.cut_edges);
+    let mut ufold = wood.unfold(&uv_graph, &uv_graph.lmb);
     // assert_eq!(152, ufold.n_terms());
     ufold.compute(&uv_graph);
 
@@ -1068,7 +1090,7 @@ fn disconnect_forest_scalar() {
     println!("{}", wood.dot(&uv_graph));
     println!("{}", wood.show_graphs(&uv_graph));
 
-    let mut ufold = wood.unfold(&uv_graph, &uv_graph.cut_edges);
+    let mut ufold = wood.unfold(&uv_graph, &uv_graph.lmb);
     // assert_eq!(152, ufold.n_terms());
     ufold.compute(&uv_graph);
 
@@ -1256,7 +1278,7 @@ fn easy() {
     println!("{}", wood.dot(&uv_graph));
     println!("{}", wood.show_graphs(&uv_graph));
 
-    let mut ufold = wood.unfold(&uv_graph, &uv_graph.cut_edges);
+    let mut ufold = wood.unfold(&uv_graph, &uv_graph.lmb);
     // assert_eq!(152, ufold.n_terms());
     ufold.compute(&uv_graph);
 
@@ -1294,7 +1316,7 @@ fn tbt() {
 
     println!("{}", wood.dot(&uv_graph));
 
-    let mut ufold = wood.unfold(&uv_graph, &uv_graph.cut_edges);
+    let mut ufold = wood.unfold(&uv_graph, &uv_graph.lmb);
     ufold.compute(&uv_graph);
 
     println!(
@@ -1366,7 +1388,7 @@ fn bugblatter_forest() {
     println!("{}", wood.dot(&uv_graph));
     println!("{}", wood.show_graphs(&uv_graph));
 
-    let mut ufold = wood.unfold(&uv_graph, &uv_graph.cut_edges);
+    let mut ufold = wood.unfold(&uv_graph, &uv_graph.lmb);
     assert_eq!(152, ufold.n_terms());
     ufold.compute(&uv_graph);
 
@@ -1428,7 +1450,7 @@ fn kaapo_triplering() {
     // println!("{}", wood.dot(&uv_graph));
     // println!("{}", wood.show_graphs(&uv_graph));
 
-    let mut ufold = wood.unfold(&uv_graph, &uv_graph.cut_edges);
+    let mut ufold = wood.unfold(&uv_graph, &uv_graph.lmb);
     ufold.compute(&uv_graph);
 
     println!(
@@ -1495,7 +1517,7 @@ fn kaapo_quintic_scalar() {
     // println!("{}", wood.dot(&uv_graph));
     // println!("{}", wood.show_graphs(&uv_graph));
 
-    let mut ufold = wood.unfold(&uv_graph, &uv_graph.cut_edges);
+    let mut ufold = wood.unfold(&uv_graph, &uv_graph.lmb);
     ufold.compute(&uv_graph);
 
     println!(
@@ -1544,7 +1566,7 @@ impl Ord for TestNode {
     }
 }
 
-const LU_TEST_SETTINGS: &'static str = " 
+const LU_TEST_SETTINGS: &'static str = "
 General:
   amplitude_prefactor:
     im: 1.0

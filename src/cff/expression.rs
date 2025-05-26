@@ -55,7 +55,7 @@ impl OrientationData {
             "  node [shape=circle,height=0.1,label=\"\"];  overlap=\"scale\"; layout=\"neato\";",
         ));
 
-        for (hedge_pair, id, _) in graph.iter_all_edges() {
+        for (hedge_pair, id, _) in graph.iter_edges() {
             let attr = GVEdgeAttrs {
                 color: None,
                 label: None,

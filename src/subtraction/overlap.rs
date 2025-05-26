@@ -76,7 +76,7 @@ fn construct_solver(
     external_momenta: &ExternalFourMomenta<F<f64>>,
     verbose: bool,
 ) -> DefaultSolver {
-    let num_loops = lmb.basis.len();
+    let num_loops = lmb.loop_edges.len();
     let num_loop_vars = 3 * num_loops;
     let num_edges = lmb.edge_signatures.len();
 
@@ -255,7 +255,7 @@ pub fn find_center(
 
     solver.solve();
 
-    let loop_number = lmb.basis.len();
+    let loop_number = lmb.loop_edges.len();
 
     if solver.solution.status == SolverStatus::Solved {
         let center = extract_center(loop_number, &solver.solution.x);
@@ -731,7 +731,8 @@ mod tests {
 
             let box_lmb = LoopMomentumBasis {
                 tree: None,
-                basis: box_basis,
+                ext_edges: vec![].into(),
+                loop_edges: box_basis,
                 edge_signatures: box_signatures,
             };
 
@@ -827,7 +828,8 @@ mod tests {
 
             let banana_lmb = LoopMomentumBasis {
                 tree: None,
-                basis: banana_basis,
+                loop_edges: banana_basis,
+                ext_edges: vec![].into(),
                 edge_signatures: banana_edge_sigs,
             };
 

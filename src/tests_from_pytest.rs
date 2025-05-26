@@ -144,7 +144,7 @@ where
 {
     let mut rng = SmallRng::seed_from_u64(seed);
 
-    let n_loops = bare_graph.loop_momentum_basis.basis.len();
+    let n_loops = bare_graph.loop_momentum_basis.loop_edges.len();
     let n_indep_externals = bare_graph.external_edges.len() - 1;
     let mut external_moms: Vec<ExternalMomenta<F<f64>>> = vec![];
     for _ in 0..n_indep_externals {
@@ -462,7 +462,7 @@ fn check_lmb_generation<N: NumeratorState>(
 
     for basis in lmb {
         let momenta_in_basis = basis
-            .basis
+            .loop_edges
             .iter()
             .map(|index| emr[Into::<usize>::into(*index)])
             .collect();
@@ -1627,7 +1627,7 @@ fn pytest_scalar_massless_3l_pentabox() {
         F(1.0),
     );
 
-    assert_eq!(graph.bare_graph.loop_momentum_basis.basis.len(), 3);
+    assert_eq!(graph.bare_graph.loop_momentum_basis.loop_edges.len(), 3);
     assert_eq!(existing_esurfaces.len(), 28);
 
     let now = std::time::Instant::now();
@@ -2123,7 +2123,7 @@ pub fn compare_numerator_evals(amp_name: &str) -> Result<()> {
     let mut graph = amplitude.amplitude_graphs[0].graph.clone();
 
     let externals = graph.bare_graph.external_edges.len() - 1;
-    let loops = graph.bare_graph.loop_momentum_basis.basis.len();
+    let loops = graph.bare_graph.loop_momentum_basis.loop_edges.len();
 
     let sample = kinematics_builder(externals, loops, &graph.bare_graph);
 

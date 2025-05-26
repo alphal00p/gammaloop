@@ -111,7 +111,7 @@ impl<E, V> FeynGenHedgeGraph<E, V> {
         }
         let mut excised: BitVec = self.graph.empty_subgraph();
 
-        for (n, _, d) in self.graph.iter_nodes() {
+        for (_, n, d) in self.graph.iter_nodes() {
             if !matches!(d, VertexType::Internal(_)) {
                 excised.union_with(&n.into())
             }
@@ -134,7 +134,7 @@ impl<V> FeynGenHedgeGraph<ArcParticle, V> {
     pub fn number_of_fermion_loops(&self) -> usize {
         let mut fermions: BitVec = self.graph.empty_subgraph();
 
-        for (p, _, d) in self.graph.iter_all_edges() {
+        for (p, _, d) in self.graph.iter_edges() {
             if d.data.edge_data().0.is_fermion() {
                 #[allow(clippy::single_match)]
                 match p {

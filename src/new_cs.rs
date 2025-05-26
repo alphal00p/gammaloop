@@ -588,7 +588,7 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
 
     fn build_tropical_sampler(&mut self, process_settings: &ProcessSettings) -> Result<()> {
         let num_virtual_loop_edges = self.graph.iter_loop_edges().count();
-        let num_loops = self.graph.loop_momentum_basis.basis.len();
+        let num_loops = self.graph.loop_momentum_basis.loop_edges.len();
         let target_omega = process_settings
             .tropical_subgraph_table_settings
             .target_omega;
@@ -948,7 +948,7 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
         let mut source_nodes = AHashSet::new();
         let mut target_nodes = AHashSet::new();
 
-        for (hedge_pair, _, _) in graph.underlying.iter_all_edges() {
+        for (hedge_pair, _, _) in graph.underlying.iter_edges() {
             match hedge_pair {
                 HedgePair::Unpaired { hedge, flow } => {
                     let node_id = graph.underlying.node_id(hedge);
@@ -1252,7 +1252,7 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
             / self
                 .graph
                 .underlying
-                .iter_edges(&self.cuts[cut_id].cut)
+                .iter_edges_of(&self.cuts[cut_id].cut)
                 .map(|(_, edge_id, _)| Atom::new_num(2) * ose_atom_from_index(edge_id))
                 .fold(Atom::new_num(1), |product, factor| product * factor);
 
@@ -1273,7 +1273,7 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
 
         params.extend(self.graph.underlying.get_external_energy_atoms());
 
-        for (pair, edge_id, _) in self.graph.underlying.iter_all_edges() {
+        for (pair, edge_id, _) in self.graph.underlying.iter_edges() {
             match pair {
                 HedgePair::Paired { .. } => {
                     let i64_id = Into::<usize>::into(edge_id) as i64;
@@ -1471,7 +1471,7 @@ impl CrossSectionCut {
         let nodes_of_left_cut: Vec<_> = cross_section_graph
             .graph
             .underlying
-            .iter_node_data(&self.left)
+            .iter_nodes_of(&self.left)
             .map(|(nid, _, _)| nid)
             .collect();
 
@@ -1788,7 +1788,8 @@ mod tests {
 
         let mut loop_momentum_basis = LoopMomentumBasis {
             tree: None,
-            basis: vec![EdgeIndex::from(0), EdgeIndex::from(4)].into(),
+            loop_edges: vec![EdgeIndex::from(0), EdgeIndex::from(4)].into(),
+            ext_edges: vec![EdgeIndex::from(5), EdgeIndex::from(6)].into(),
             edge_signatures: underlying
                 .new_hedgevec(|_, _, _| LoopExtSignature::from((vec![], vec![]))),
         };
