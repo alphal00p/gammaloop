@@ -3490,7 +3490,7 @@ pub static W_: LazyLock<WildCards> = LazyLock::new(|| WildCards {
 
 pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
     rescale: symbol!("t"),
-    rescale_star: symbol!("t*"),
+    rescale_star: symbol!("t⃰"),
     hfunction: symbol!("h"),
     deta: symbol!("∇η"),
     spensocind: symbol!("spenso::cind"),

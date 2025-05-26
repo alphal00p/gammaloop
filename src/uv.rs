@@ -172,7 +172,7 @@ impl UVGraph {
                         num: d.num.clone(),
                         den: spenso_lor_atom(usize::from(eid) as i32, 1, GS.dim)
                             .npow(2)
-                            .to_dots()
+                            //.to_dots()
                             - m2,
                     }
                 })
@@ -275,7 +275,7 @@ impl UVGraph {
                         m2,
                         spenso_lor_atom(usize::from(eid) as i32, 1, GS.dim)
                             .npow(2)
-                            .to_dots()
+                            //.to_dots()
                             - m2
                     );
             }
@@ -1445,18 +1445,12 @@ impl Forest {
                 let orientation = orientation.orientation.clone();
                 let new_mass_sqm = new_mass_sq.clone();
                 let momentumm = momentum.clone();
-                // TODO: do not store loop momentum in Q() anymore, it can always taken from the denominator?
                 expr = expr
-                    .replace(function!(GS.emr_mom, edge_id, W_.mom_, W_.a_))
+                    .replace(function!(GS.emr_mom, edge_id, W_.mom_, W_.x___))
                     .with_map(move |m| {
                         let momentum2 = m.get(W_.mom_).unwrap().to_atom();
-                        if momentumm != momentum2 {
-                            println!(
-                                "BUG: momentum mismatch for edge {}: {} vs {}",
-                                edge_id, momentumm, momentum2
-                            );
-                        }
-                        let index = m.get(W_.a_).unwrap().to_atom();
+                        assert_eq!(momentumm, momentum2);
+                        let index = m.get(W_.x___).unwrap().to_atom();
 
                         let sign = SignOrZero::from(
                             orientation[EdgeIndex::from(edge_id as usize)].clone(),
@@ -1466,7 +1460,7 @@ impl Forest {
                             + function!(GS.emr_vec, momentumm, index)
                     });
 
-                for _ in 2..pow {
+                for _ in 1..pow {
                     expr = expr
                         .replace(function!(GS.ose, edge_id, W_.x___))
                         .with(function!(GS.ose, edge_id, W_.x___) * GS.rescale) // TODO: check if derivative is in the correct quantity
@@ -1477,7 +1471,7 @@ impl Forest {
 
                 expr = expr / Integer::factorial(pow as u32 - 1);
 
-                // set OSE from  CFF with the proper momentum and mass
+                // set OSE from CFF with the proper momentum and mass
                 expr = expr.replace(function!(GS.ose, edge_id)).with(function!(
                     GS.ose,
                     edge_id,
