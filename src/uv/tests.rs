@@ -4,7 +4,7 @@ use ahash::HashMap;
 
 use linnet::half_edge::hedgevec::HedgeVec;
 use nalgebra::LU;
-use pathfinding::num_traits::real;
+use pathfinding::{matrix::directions::W, num_traits::real};
 
 use linnet::half_edge::{builder::HedgeGraphBuilder, involution::Flow};
 
@@ -47,7 +47,6 @@ use crate::{
 #[test]
 fn double_triangle_LU() {
     let _ = env_logger::builder().is_test(true).try_init();
-
     let uv_dod = 1;
 
     // load the model and hack the masses, go through serializable model since arc is not mutable
@@ -490,15 +489,7 @@ fn double_triangle_LU() {
                 let edge_id = usize::from(edge_index) as i64;
                 cut_res = cut_res
                     .replace(function!(GS.emr_vec, edge_id, W_.x_))
-                    .with_map(move |m| {
-                        function!(
-                            GS.external_mom,
-                            edge_id,
-                            Atom::from(FlatIndex::from(
-                                i64::try_from(m.get(W_.x_).unwrap().to_atom()).unwrap() as usize
-                            ))
-                        )
-                    });
+                    .with(function!(GS.external_mom, edge_id, W_.x_));
             }
 
             cut_res = cut_res
