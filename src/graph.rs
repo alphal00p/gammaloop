@@ -504,7 +504,7 @@ pub trait HasVertexInfo {
 }
 
 #[derive(Debug, Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
-#[trait_decode(trait = crate::GammaLoopContext)]
+#[trait_decode(trait = crate::HasModel)]
 pub enum VertexInfo {
     ExternalVertexInfo(ExternalVertexInfo),
     InteractonVertexInfo(InteractionVertexInfo),
@@ -579,7 +579,7 @@ pub struct SerializableExternalVertexInfo {
 }
 
 #[derive(Debug, Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
-#[trait_decode(trait = crate::GammaLoopContext)]
+#[trait_decode(trait = crate::HasModel)]
 pub struct ExternalVertexInfo {
     pub direction: EdgeType,
     pub particle: ArcParticle,
@@ -637,7 +637,7 @@ impl HasVertexInfo for ExternalVertexInfo {
 }
 
 #[derive(Debug, Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
-#[trait_decode(trait = crate::GammaLoopContext)]
+#[trait_decode(trait = crate::HasModel)]
 pub struct InteractionVertexInfo {
     #[allow(unused)]
     pub vertex_rule: ArcVertexRule,
