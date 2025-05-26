@@ -1,6 +1,7 @@
 use std::{
     borrow::Borrow,
     collections::VecDeque,
+    ops::Deref,
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -18,14 +19,16 @@ use linnet::half_edge::{
     hedgevec::HedgeVec,
     involution::{EdgeData, EdgeIndex, Flow, Hedge, HedgePair, Orientation},
     subgraph::{
-        self, cycle::SignedCycle, node, Inclusion, InternalSubGraph, OrientedCut, SubGraph,
-        SubGraphOps,
+        self, cycle::SignedCycle, node, Inclusion, InternalSubGraph, ModifySubgraph, OrientedCut,
+        SubGraph, SubGraphOps,
     },
+    tree::SimpleTraversalTree,
     HedgeGraph, NodeIndex,
 };
 use log::debug;
 use nalgebra::DMatrix;
-use spenso::algebra::algebraic_traits::IsZero;
+
+use spenso::{algebra::algebraic_traits::IsZero, tensors::parametric::to_param::ToAtom};
 // use petgraph::Direction::Outgoing;
 use serde::{de::value, Deserialize, Serialize};
 use smartstring::{LazyCompact, SmartString};
@@ -37,12 +40,14 @@ use spenso::{
     tensors::data::DataTensor,
 };
 use symbolica::{
-    atom::{representation::InlineNum, Atom, AtomCore, AtomView},
+    atom::{
+        representation::InlineNum, Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol,
+    },
     coefficient::CoefficientView,
     function,
     graph::Node,
     id::{Pattern, Replacement},
-    parse, with_default_namespace,
+    parse, symbol, with_default_namespace,
 };
 use symbolica_community::physics::algebraic_simplification::metric::MS;
 use typed_index_collections::TiVec;
@@ -57,14 +62,15 @@ use crate::{
         VertexInfo,
     },
     model::{self, ArcParticle, ArcPropagator, EdgeSlots, Model, Particle, VertexSlots},
-    momentum::{FourMomentum, SignOrZero, Signature, ThreeMomentum},
+    momentum::{FourMomentum, SignOrZero, ThreeMomentum},
     momentum_sample::{
         BareMomentumSample, ExternalFourMomenta, ExternalIndex, ExternalThreeMomenta, LoopIndex,
         LoopMomenta,
     },
     new_gammaloop_integrand::LmbMultiChannelingSetup,
     numerator::{ufo::preprocess_ufo_spin_wrapped, NumeratorState, PythonState, UnInit},
-    signature::{ExternalSignature, LoopExtSignature, LoopSignature, SignatureLike},
+    signature::{self, ExternalSignature, LoopExtSignature, LoopSignature, SignatureLike},
+    symbolica_ext::CallSymbol,
     utils::{external_energy_atom_from_index, ose_atom_from_index, FloatLike, F, GS, W_},
     GammaLoopContext, ProcessSettings, GAMMALOOP_NAMESPACE,
 };
@@ -79,6 +85,10 @@ pub struct Graph {
     pub vertex_slots: TiVec<NodeIndex, VertexSlots>,
     pub external_connections: Option<Vec<ExternalConnection>>,
 }
+
+// impl Deref for Graph {
+//     type Target = HedgeGraph<Edge, Vertex>;
+// }
 
 impl From<BareGraph> for Graph {
     fn from(value: BareGraph) -> Self {
@@ -371,7 +381,7 @@ impl FeynmanGraph for HedgeGraph<Edge, Vertex> {
     fn add_signs_to_edges(&self, node_id: NodeIndex) -> Vec<isize> {
         let node_hairs: BitVec = self.iter_crown(node_id).into();
 
-        self.iter_edges(&node_hairs)
+        self.iter_edges_of(&node_hairs)
             .map(|(_, edge_index, _)| {
                 if !self.is_incoming_to(edge_index, node_id) {
                     -(Into::<usize>::into(edge_index) as isize)
@@ -412,7 +422,7 @@ impl FeynmanGraph for HedgeGraph<Edge, Vertex> {
                 .borrow()
                 .into_iter()
                 .map(|(_, sig)| sig.compute_four_momentum_from_three(loop_moms, external_moms))
-                .zip(self.iter_all_edges())
+                .zip(self.iter_edges())
                 .map(|(emr_mom, (_, _, edge))| match edge.data.edge_type {
                     EdgeType::Virtual => {
                         emr_mom
@@ -440,7 +450,7 @@ impl FeynmanGraph for HedgeGraph<Edge, Vertex> {
         lmb.edge_signatures
             .borrow()
             .into_iter()
-            .zip(self.iter_all_edges())
+            .zip(self.iter_edges())
             .filter(|(_, (pair, _, _))| matches!(pair, HedgePair::Paired { .. }))
             .map(|((_, sig), _)| sig.compute_three_momentum_from_four(loop_moms, external_moms))
             .flat_map(|emr_vec| [emr_vec.px, emr_vec.py, emr_vec.pz])
@@ -449,7 +459,7 @@ impl FeynmanGraph for HedgeGraph<Edge, Vertex> {
 
     fn get_esurface_canonization(&self, lmb: &LoopMomentumBasis) -> Option<ShiftRewrite> {
         let external_edges: TiVec<ExternalIndex, _> = self
-            .iter_all_edges()
+            .iter_edges()
             .filter(|(pair, _, _)| matches!(pair, HedgePair::Unpaired { .. }))
             .collect();
 
@@ -479,7 +489,7 @@ impl FeynmanGraph for HedgeGraph<Edge, Vertex> {
     }
 
     fn external_in_or_out_signature(&self) -> ExternalSignature {
-        self.iter_all_edges()
+        self.iter_edges()
             .filter_map(|(pair, _, _)| match pair {
                 HedgePair::Unpaired { flow, .. } => match flow {
                     Flow::Sink => Some(1i8),
@@ -491,7 +501,7 @@ impl FeynmanGraph for HedgeGraph<Edge, Vertex> {
     }
 
     fn get_external_partcles(&self) -> Vec<ArcParticle> {
-        self.iter_all_edges()
+        self.iter_edges()
             .filter_map(|(pair, _, data)| match pair {
                 HedgePair::Unpaired { .. } => Some(data.data.particle.clone()),
                 _ => None,
@@ -500,7 +510,7 @@ impl FeynmanGraph for HedgeGraph<Edge, Vertex> {
     }
 
     fn get_external_signature(&self) -> SignatureLike<ExternalIndex> {
-        SignatureLike::from_iter(self.iter_all_edges().filter_map(|(pair, _, _)| match pair {
+        SignatureLike::from_iter(self.iter_edges().filter_map(|(pair, _, _)| match pair {
             HedgePair::Unpaired { flow, .. } => match flow {
                 Flow::Source => Some(SignOrZero::Minus),
                 Flow::Sink => Some(SignOrZero::Plus),
@@ -510,7 +520,7 @@ impl FeynmanGraph for HedgeGraph<Edge, Vertex> {
     }
 
     fn get_energy_atoms(&self) -> Vec<Atom> {
-        self.iter_all_edges()
+        self.iter_edges()
             .map(|(pair, edge_id, _)| match pair {
                 HedgePair::Paired { .. } => ose_atom_from_index(edge_id),
                 HedgePair::Unpaired { .. } => external_energy_atom_from_index(edge_id),
@@ -530,7 +540,7 @@ impl FeynmanGraph for HedgeGraph<Edge, Vertex> {
     }
 
     fn get_ose_replacements(&self) -> Vec<Replacement> {
-        self.iter_all_edges()
+        self.iter_edges()
             .filter(|(pair, _, _)| matches!(pair, HedgePair::Paired { .. }))
             .map(|(_, edge_id, _)| {
                 let ose_atom = ose_atom_from_index(edge_id);
@@ -541,7 +551,7 @@ impl FeynmanGraph for HedgeGraph<Edge, Vertex> {
     }
 
     fn get_external_energy_atoms(&self) -> Vec<Atom> {
-        self.iter_all_edges()
+        self.iter_edges()
             .filter_map(|(pair, edge_id, _)| match pair {
                 HedgePair::Unpaired { .. } => Some(external_energy_atom_from_index(edge_id)),
                 _ => None,
@@ -575,7 +585,7 @@ impl Graph {
         // Filter out channels that are non-singular, or have the same singularities as another channel already included
         for (lmb_index, lmb) in lmbs.iter_enumerated() {
             let massless_edges = lmb
-                .basis
+                .loop_edges
                 .iter()
                 .filter(|&edge_id| self.underlying[*edge_id].particle.0.is_massless())
                 .collect_vec();
@@ -585,7 +595,7 @@ impl Graph {
             }
 
             if channels.iter().any(|channel| {
-                let basis_of_included_channel = &lmbs[*channel].basis;
+                let basis_of_included_channel = &lmbs[*channel].loop_edges;
                 massless_edges
                     .iter()
                     .all(|edge_id| basis_of_included_channel.contains(edge_id))
@@ -601,7 +611,7 @@ impl Graph {
                 .unwrap_or(false)
                 && channels.iter().any(|channel| {
                     let massless_edges_of_included_channel = lmbs[*channel]
-                        .basis
+                        .loop_edges
                         .iter()
                         .filter(|&edge_id| self.underlying[*edge_id].particle.0.is_massless())
                         .collect_vec();
@@ -640,7 +650,7 @@ impl Graph {
         } else {
             let current_lmb_index = lmbs
                 .iter_enumerated()
-                .find(|(_lmb_index, lmb)| lmb.basis == self.loop_momentum_basis.basis)
+                .find(|(_lmb_index, lmb)| lmb.loop_edges == self.loop_momentum_basis.loop_edges)
                 .map(|(lmb_index, _)| lmb_index)
                 .unwrap();
 
@@ -657,27 +667,23 @@ impl Graph {
     }
 
     pub fn iter_loop_edges(&self) -> impl Iterator<Item = (HedgePair, EdgeIndex, EdgeData<&Edge>)> {
-        self.underlying
-            .iter_all_edges()
-            .filter(|(_, edge_index, _)| {
-                self.loop_momentum_basis.edge_signatures[*edge_index]
-                    .internal
-                    .iter()
-                    .any(|sign| sign.is_sign())
-            })
+        self.underlying.iter_edges().filter(|(_, edge_index, _)| {
+            self.loop_momentum_basis.edge_signatures[*edge_index]
+                .internal
+                .iter()
+                .any(|sign| sign.is_sign())
+        })
     }
 
     pub fn iter_non_loop_edges(
         &self,
     ) -> impl Iterator<Item = (HedgePair, EdgeIndex, EdgeData<&Edge>)> {
-        self.underlying
-            .iter_all_edges()
-            .filter(|(_, edge_index, _)| {
-                self.loop_momentum_basis.edge_signatures[*edge_index]
-                    .internal
-                    .iter()
-                    .all(|sign| sign.is_zero())
-            })
+        self.underlying.iter_edges().filter(|(_, edge_index, _)| {
+            self.loop_momentum_basis.edge_signatures[*edge_index]
+                .internal
+                .iter()
+                .all(|sign| sign.is_zero())
+        })
     }
 }
 
@@ -894,18 +900,448 @@ impl From<BareVertex> for Vertex {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
-
 pub struct LoopMomentumBasis {
-    #[bincode(with_serde)]
     pub tree: Option<()>,
-    #[bincode(with_serde)]
-    pub basis: TiVec<LoopIndex, EdgeIndex>,
-    #[bincode(with_serde)]
+    pub loop_edges: TiVec<LoopIndex, EdgeIndex>,
+    pub ext_edges: TiVec<ExternalIndex, EdgeIndex>,
     pub edge_signatures: HedgeVec<LoopExtSignature>,
 }
 
+pub trait LMBext {
+    fn generate_loop_momentum_bases<S: SubGraph>(
+        &self,
+        subgraph: &S,
+    ) -> TiVec<LmbIndex, LoopMomentumBasis>
+    where
+        S::Base: SubGraph<Base = S::Base>
+            + SubGraphOps
+            + Clone
+            + ModifySubgraph<HedgePair>
+            + ModifySubgraph<Hedge>;
+    fn uv_wrapped_replacement<'a, S: SubGraph, I>(
+        &self,
+        subgraph: &S,
+        lmb: &LoopMomentumBasis,
+        rep_args: &'a [I],
+    ) -> Vec<Replacement>
+    where
+        &'a I: Into<AtomOrView<'a>>,
+    {
+        self.replacement_impl(
+            |e, a, b| {
+                Replacement::new(
+                    GS.emr_mom
+                        .f(([usize::from(e) as i32], rep_args))
+                        .to_pattern(),
+                    (FunctionBuilder::new(GS.emr_mom)
+                        .add_arg(usize::from(e) as i32)
+                        .add_arg(a)
+                        .add_args(rep_args)
+                        .finish()
+                        + b)
+                        .to_pattern(),
+                )
+            },
+            subgraph,
+            lmb,
+            GS.emr_mom,
+            GS.emr_mom,
+            &[],
+            rep_args,
+            HedgePair::is_paired,
+            true,
+        )
+    }
+
+    fn normal_emr_replacement<'a, S: SubGraph, I>(
+        &self,
+        subgraph: &S,
+        lmb: &LoopMomentumBasis,
+        rep_args: &'a [I],
+        filter_pair: fn(&HedgePair) -> bool,
+    ) -> Vec<Replacement>
+    where
+        &'a I: Into<AtomOrView<'a>>,
+    {
+        self.replacement_impl(
+            |e, a, b| {
+                Replacement::new(
+                    GS.emr_mom
+                        .f(([usize::from(e) as i32], rep_args))
+                        .to_pattern(),
+                    (a + b).to_pattern(),
+                )
+            },
+            subgraph,
+            lmb,
+            GS.emr_mom,
+            GS.emr_mom,
+            rep_args,
+            rep_args,
+            filter_pair,
+            true,
+        )
+    }
+
+    fn replacement_impl<'a, S: SubGraph, I>(
+        &self,
+        rep: impl Fn(EdgeIndex, Atom, Atom) -> Replacement,
+        subgraph: &S,
+        lmb: &LoopMomentumBasis,
+        loop_symbol: Symbol,
+        ext_symbol: Symbol,
+        loop_args: &'a [I],
+        ext_args: &'a [I],
+        filter_pair: fn(&HedgePair) -> bool,
+        emr_id: bool,
+    ) -> Vec<Replacement>
+    where
+        &'a I: Into<AtomOrView<'a>>;
+
+    fn lmb_impl<S: SubGraph + SubGraphOps + ModifySubgraph<HedgePair> + ModifySubgraph<Hedge>>(
+        &self,
+        subgraph: &S,
+        tree: &S,
+        externals: &S,
+    ) -> LoopMomentumBasis;
+
+    fn lmb<S: SubGraph<Base = BitVec>>(&self, subgraph: &S) -> LoopMomentumBasis;
+
+    fn compatible_sub_lmb<S: SubGraph>(
+        &self,
+        subgraph: &S,
+        lmb: &LoopMomentumBasis,
+    ) -> LoopMomentumBasis
+    where
+        S::Base: SubGraph<Base = S::Base>
+            + SubGraphOps
+            + Clone
+            + ModifySubgraph<HedgePair>
+            + ModifySubgraph<Hedge>;
+
+    fn cotree_lmb<S: SubGraph + SubGraphOps + ModifySubgraph<HedgePair> + ModifySubgraph<Hedge>>(
+        &self,
+        subgraph: &S,
+        cotree: &S,
+        externals: &S,
+    ) -> LoopMomentumBasis {
+        let tree = subgraph.subtract(cotree);
+        self.lmb_impl(subgraph, &tree, externals)
+    }
+
+    fn empty_lmb(&self) -> LoopMomentumBasis;
+
+    fn dot_lmb<S: SubGraph>(&self, subgraph: &S, lmb: &LoopMomentumBasis) -> String;
+}
+
+pub fn no_filter(pair: &HedgePair) -> bool {
+    true
+}
+
+impl<E, V> LMBext for HedgeGraph<E, V> {
+    fn empty_lmb(&self) -> LoopMomentumBasis {
+        LoopMomentumBasis {
+            tree: None,
+            loop_edges: vec![].into(),
+            ext_edges: vec![].into(),
+            edge_signatures: self.new_hedgevec(|_, _, _| LoopExtSignature::from((vec![], vec![]))),
+        }
+    }
+
+    fn dot_lmb<S: SubGraph>(&self, subgraph: &S, lmb: &LoopMomentumBasis) -> String {
+        let reps = self.normal_emr_replacement::<_, Atom>(subgraph, lmb, &[], no_filter);
+        let emrgraph = self.map_data_ref(
+            |_, _, _| "",
+            |_, e, _, d| {
+                EdgeData::new(
+                    GS.emr_mom
+                        .f([usize::from(e) as i32])
+                        .replace_multiple(&reps),
+                    Orientation::Default,
+                )
+            },
+        );
+        emrgraph.dot_label(subgraph)
+    }
+
+    fn lmb<S: SubGraph<Base = BitVec>>(&self, subgraph: &S) -> LoopMomentumBasis {
+        if let Some(i) = subgraph.included_iter().next() {
+            let tree =
+                SimpleTraversalTree::depth_first_traverse(self, subgraph, &self.node_id(i), None)
+                    .unwrap();
+            let external = self.full_crown(subgraph);
+            // println!("lmb");
+            return self.lmb_impl(subgraph.included(), &tree.tree_subgraph, &external);
+        } else {
+            panic!("ata")
+        };
+    }
+
+    fn compatible_sub_lmb<S: SubGraph>(
+        &self,
+        subgraph: &S,
+        lmb: &LoopMomentumBasis,
+    ) -> LoopMomentumBasis
+    where
+        S::Base: SubGraph<Base = S::Base>
+            + SubGraphOps
+            + Clone
+            + ModifySubgraph<HedgePair>
+            + ModifySubgraph<Hedge>,
+    {
+        let n_loops = self.cyclotomatic_number(subgraph);
+        if n_loops == 0 {
+            return self.empty_lmb();
+        }
+
+        // the subgraph may have disconnected components in case the of disjoint graphs in a spinney
+        let components = self.count_connected_components(subgraph);
+
+        for v in lmb
+            .loop_edges
+            .iter()
+            .filter(|e| {
+                let (_, p) = &self[*e];
+                subgraph.includes(p)
+            })
+            .combinations(n_loops)
+        {
+            let mut cut_subgraph = subgraph.included().clone();
+
+            for eid in v {
+                let (_, p) = &self[eid];
+                cut_subgraph.sub(*p);
+            }
+
+            if self.count_connected_components(&cut_subgraph) == components {
+                let externals = self.full_crown(subgraph);
+                return self.lmb_impl(subgraph.included(), &cut_subgraph, &externals);
+            }
+        }
+
+        panic!("No lmb found for {} and lmb {:?}", self.dot(subgraph), lmb)
+    }
+
+    fn lmb_impl<S: SubGraph + SubGraphOps + ModifySubgraph<HedgePair> + ModifySubgraph<Hedge>>(
+        &self,
+        subgraph: &S,
+        tree: &S,
+        externals: &S,
+    ) -> LoopMomentumBasis {
+        let Some(h) = subgraph.included_iter().next() else {
+            return self.empty_lmb();
+        };
+
+        let dep_ext = externals.included_iter().next();
+
+        let root_node = self.node_id(dep_ext.unwrap_or(h));
+
+        let cotree = subgraph.subtract(&tree);
+        // println!("Tree:{}", self.dot(tree));
+        // println!("subgraph:{}", self.dot(subgraph));
+        // println!("Cotree:{}", self.dot(&cotree));
+        let tree = SimpleTraversalTree::depth_first_traverse(self, tree, &root_node, None).unwrap();
+
+        let mut loop_edges: TiVec<LoopIndex, EdgeIndex> = vec![].into();
+        let mut cycles = vec![];
+        for (p, e, _) in self.iter_edges_of(&cotree) {
+            if let HedgePair::Paired { source, .. } = p {
+                if let Some(c) = tree.get_cycle(source, self) {
+                    if let Some(signed) = SignedCycle::from_cycle(c, source, self) {
+                        cycles.push(signed);
+                        loop_edges.push(e);
+                    }
+                }
+            }
+        }
+
+        // for c in &cycles {
+        //     println!("Cycle:{}", self.dot(&c.filter));
+        // }
+
+        // println!("//Externals {}", self.dot(externals));
+
+        let mut external_flows: TiVec<ExternalIndex, _> = vec![].into();
+        let mut ext_edges: TiVec<ExternalIndex, EdgeIndex> = vec![].into();
+
+        for (p, e, d) in self.iter_edges_of(externals).skip(1) {
+            let mut path_to_dep: S = self.empty_subgraph();
+            path_to_dep.add(dep_ext.unwrap());
+
+            match p {
+                HedgePair::Split {
+                    source,
+                    sink,
+                    split,
+                } => {
+                    let ext_sign: SignOrZero = split.into();
+
+                    let ext = match split {
+                        Flow::Sink => tree.hedge_parent(sink, self.as_ref()).unwrap(),
+                        Flow::Source => tree.hedge_parent(source, self.as_ref()).unwrap(),
+                    };
+                    for h in tree.ancestor_iter_hedge(ext, self.as_ref()).step_by(2) {
+                        path_to_dep.add(h);
+                    }
+
+                    external_flows.push((ext_sign, path_to_dep));
+                    ext_edges.push(e);
+                }
+                HedgePair::Unpaired { hedge, flow } => {
+                    let ext_sign: SignOrZero = flow.into();
+
+                    let ext = tree.hedge_parent(hedge, self.as_ref()).unwrap();
+
+                    for h in tree.ancestor_iter_hedge(ext, self.as_ref()).step_by(2) {
+                        path_to_dep.add(h);
+                    }
+
+                    external_flows.push((ext_sign, path_to_dep));
+                    ext_edges.push(e);
+                }
+                _ => {}
+            }
+        }
+
+        // for (i, e) in external_flows.iter().enumerate() {
+        //     println!(
+        //         "//Ext flow {} for {}: \n{}",
+        //         e.0,
+        //         ext_edges[ExternalIndex(i)],
+        //         self.dot(&e.1)
+        //     );
+        // }
+
+        let signature = self.new_hedgevec(|d, eid, p| {
+            let mut internal = vec![];
+            let mut external = vec![];
+
+            match p {
+                HedgePair::Paired { source, sink } => {
+                    if subgraph.includes(p) {
+                        for l in &cycles {
+                            if l.filter.includes(source) {
+                                internal.push(SignOrZero::Plus);
+                            } else if l.filter.includes(sink) {
+                                internal.push(SignOrZero::Minus);
+                            } else {
+                                internal.push(SignOrZero::Zero);
+                            }
+                        }
+                    }
+                    if subgraph.intersects(p) {
+                        for (i, (s, e)) in external_flows.iter_enumerated() {
+                            if ext_edges[i] == eid {
+                                external.push(SignOrZero::Plus);
+                            } else {
+                                if e.includes(source) {
+                                    external.push(*s * SignOrZero::Minus);
+                                } else if e.includes(sink) {
+                                    external.push(*s * SignOrZero::Plus);
+                                } else {
+                                    external.push(*s * SignOrZero::Zero);
+                                }
+                            }
+                        }
+                    }
+                }
+                HedgePair::Unpaired { hedge, flow } => {
+                    if subgraph.includes(hedge) {
+                        for (i, (s, e)) in external_flows.iter_enumerated() {
+                            if ext_edges[i] == eid {
+                                external.push(SignOrZero::Plus);
+                            } else {
+                                if e.includes(hedge) {
+                                    match flow {
+                                        Flow::Source => external.push(*s * SignOrZero::Minus),
+                                        Flow::Sink => external.push(*s * SignOrZero::Plus),
+                                    }
+                                } else {
+                                    external.push(*s * SignOrZero::Zero);
+                                }
+                            }
+                        }
+                    }
+                }
+                _ => {
+                    panic!("Split edge on full graph")
+                }
+            }
+
+            LoopExtSignature {
+                internal: SignatureLike::from_iter(internal),
+                external: SignatureLike::from_iter(external),
+            }
+        });
+
+        LoopMomentumBasis {
+            tree: None,
+            edge_signatures: signature,
+            ext_edges,
+            loop_edges,
+        }
+    }
+
+    fn generate_loop_momentum_bases<S: SubGraph>(
+        &self,
+        subgraph: &S,
+    ) -> TiVec<LmbIndex, LoopMomentumBasis>
+    where
+        S::Base: SubGraph<Base = S::Base>
+            + SubGraphOps
+            + Clone
+            + ModifySubgraph<HedgePair>
+            + ModifySubgraph<Hedge>,
+    {
+        let Some(i) = subgraph.included_iter().next() else {
+            return vec![].into();
+        };
+
+        let mut lmbs: TiVec<LmbIndex, LoopMomentumBasis> = vec![].into();
+
+        let externals = self.full_crown(subgraph);
+
+        for s in self.all_spanning_trees(subgraph) {
+            lmbs.push(self.lmb_impl(subgraph.included(), &s, &externals));
+        }
+        lmbs
+    }
+
+    fn replacement_impl<'a, S: SubGraph, I>(
+        &self,
+        rep: impl Fn(EdgeIndex, Atom, Atom) -> Replacement,
+        subgraph: &S,
+        lmb: &LoopMomentumBasis,
+        loop_symbol: Symbol,
+        ext_symbol: Symbol,
+        loop_args: &'a [I],
+        ext_args: &'a [I],
+        filter_pair: fn(&HedgePair) -> bool,
+        emr_id: bool,
+    ) -> Vec<Replacement>
+    where
+        &'a I: Into<AtomOrView<'a>>,
+    {
+        let mut reps = vec![];
+        for (p, e, _) in self.iter_edges_of(subgraph) {
+            if filter_pair(&p) {
+                // println!("{e}");
+                let loop_expr = lmb.loop_atom(e, loop_symbol, loop_args, emr_id);
+                let external_expr = lmb.ext_atom(e, ext_symbol, ext_args, emr_id);
+
+                // println!("{loop_expr}");
+
+                // println!("{external_expr}");
+                reps.push(rep(e, loop_expr, external_expr))
+            }
+        }
+
+        reps
+    }
+}
+
 impl LoopMomentumBasis {
-    pub fn spatial_emr<T: FloatLike>(
+    pub(crate) fn spatial_emr<T: FloatLike>(
         &self,
         sample: &BareMomentumSample<T>,
     ) -> Vec<ThreeMomentum<F<T>>> {
@@ -921,6 +1357,44 @@ impl LoopMomentumBasis {
             .collect()
     }
 
+    pub fn loop_atom<'a, I>(
+        &self,
+        edge_id: EdgeIndex,
+        mom_symbol: Symbol,
+        additional_args: &'a [I],
+        emr_id: bool,
+    ) -> Atom
+    where
+        &'a I: Into<AtomOrView<'a>>,
+    {
+        self.edge_signatures[edge_id].loop_atom(mom_symbol, additional_args, |l| {
+            Atom::new_num(if emr_id {
+                usize::from(self.loop_edges[l])
+            } else {
+                usize::from(l)
+            } as i64)
+        })
+    }
+
+    pub fn ext_atom<'a, I>(
+        &self,
+        edge_id: EdgeIndex,
+        mom_symbol: Symbol,
+        additional_args: &'a [I],
+        emr_id: bool,
+    ) -> Atom
+    where
+        &'a I: Into<AtomOrView<'a>>,
+    {
+        self.edge_signatures[edge_id].ext_atom(mom_symbol, additional_args, |l| {
+            Atom::new_num(if emr_id {
+                usize::from(self.ext_edges[l])
+            } else {
+                usize::from(l)
+            } as i64)
+        })
+    }
+
     pub fn to_massless_emr<T: FloatLike>(
         &self,
         sample: &BareMomentumSample<T>,
@@ -934,7 +1408,7 @@ impl LoopMomentumBasis {
             .collect()
     }
 
-    pub fn pattern(&self, edge_id: EdgeIndex) -> Pattern {
+    pub(crate) fn pattern(&self, edge_id: EdgeIndex) -> Pattern {
         let signature = self.edge_signatures[edge_id].clone();
 
         let mut atom = Atom::new_num(0);
@@ -965,7 +1439,7 @@ impl LoopMomentumBasis {
 
     pub fn set_edge_signatures<E, V>(&mut self, graph: &HedgeGraph<E, V>) -> Result<(), Report> {
         self.edge_signatures = graph.new_hedgevec(|_, _edge_index, _| LoopExtSignature {
-            internal: LoopSignature::from_iter(vec![SignOrZero::Zero; self.basis.len()]),
+            internal: LoopSignature::from_iter(vec![SignOrZero::Zero; self.loop_edges.len()]),
             external: ExternalSignature::from_iter(vec![SignOrZero::Zero; graph.n_externals()]),
         });
 
@@ -982,8 +1456,8 @@ impl LoopMomentumBasis {
         // Build the adjacency list excluding vetoed edges, we include "fake nodes" on the externals such that we do
         // not need to port too much of the code.
         let mut adj_list: HashMap<NodeIndex, Vec<(NodeIndex, EdgeIndex, bool)>> = HashMap::new();
-        for (hedge_pair, edge_index, _edge_data) in graph.iter_all_edges() {
-            if self.basis.contains(&edge_index) {
+        for (hedge_pair, edge_index, _edge_data) in graph.iter_edges() {
+            if self.loop_edges.contains(&edge_index) {
                 continue;
             }
             // let (u, v) = (edge.vertices[0], edge.vertices[1]);
@@ -1038,7 +1512,7 @@ impl LoopMomentumBasis {
         }
 
         // Route internal LMB momenta
-        for (i_lmb, lmb_edge_id) in self.basis.iter_enumerated() {
+        for (i_lmb, lmb_edge_id) in self.loop_edges.iter_enumerated() {
             let (_, hedge_pair) = &graph[lmb_edge_id];
 
             let (u, v) = match hedge_pair {
@@ -1073,7 +1547,7 @@ impl LoopMomentumBasis {
                     "No path found between vertices {} and {} for LMB: {:?}",
                     u,
                     v,
-                    self.basis
+                    self.loop_edges
                 ));
             }
         }
@@ -1113,7 +1587,7 @@ impl LoopMomentumBasis {
                         "No path found between vertices {} and {} for LMB: {:?}",
                         u,
                         v,
-                        self.basis
+                        self.loop_edges
                     ));
                 }
                 if self.edge_signatures[external_edge_info.edge_index].external[external_index]
@@ -1182,8 +1656,8 @@ impl LoopMomentumBasis {
         &self,
         graph: &HedgeGraph<E, V>,
     ) -> TiVec<LmbIndex, LoopMomentumBasis> {
-        let loop_number = self.basis.len();
-        let num_edges = graph.iter_all_edges().count();
+        let loop_number = self.loop_edges.len();
+        let num_edges = graph.iter_edges().count();
         let external_signature_length = self.edge_signatures[EdgeIndex::from(0)].external.len();
 
         // the full virtual signature matrix in the form of a flattened vector
@@ -1214,7 +1688,7 @@ impl LoopMomentumBasis {
         );
 
         let possible_lmbs = graph
-            .iter_all_edges()
+            .iter_edges()
             .filter(|(pair, _, _)| matches!(pair, HedgePair::Paired { .. }))
             .map(|(_, edge_index, _)| edge_index)
             .combinations(loop_number);
@@ -1303,7 +1777,8 @@ impl LoopMomentumBasis {
 
                 LoopMomentumBasis {
                     tree: None,
-                    basis,
+                    ext_edges: vec![].into(),
+                    loop_edges: basis,
                     edge_signatures: new_signatures,
                 }
             })
@@ -1414,7 +1889,7 @@ pub fn get_cff_inverse_energy_product_impl<E, V, S: SubGraph>(
 ) -> Atom {
     Atom::new_num(1)
         / graph
-            .iter_edges(subgraph)
+            .iter_edges_of(subgraph)
             .filter_map(|(pair, edge_index, _)| match pair {
                 HedgePair::Paired { .. } => {
                     Some(Atom::new_num(2) * ose_atom_from_index(edge_index))

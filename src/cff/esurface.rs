@@ -291,13 +291,13 @@ impl Esurface {
 
     pub fn new_from_cut_left<E, V>(graph: &HedgeGraph<E, V>, cut: &CrossSectionCut) -> Self {
         let edges = graph
-            .iter_edges(&cut.cut)
+            .iter_edges_of(&cut.cut)
             .map(|(_, id, _)| id)
             .sorted()
             .collect();
 
         let external_shift = graph
-            .iter_edges(&cut.left)
+            .iter_edges_of(&cut.left)
             .filter_map(|(hedge_pair, edge_index, _)| match hedge_pair {
                 HedgePair::Unpaired { flow, .. } => match flow {
                     Flow::Sink => Some((edge_index, -1)),
@@ -357,7 +357,7 @@ pub fn get_existing_esurfaces<T: FloatLike>(
     debug: usize,
     e_cm: F<f64>,
 ) -> ExistingEsurfaces {
-    if lmb.basis.is_empty() {
+    if lmb.loop_edges.is_empty() {
         return ExistingEsurfaces::new();
     }
     if debug > 1 {
@@ -506,11 +506,15 @@ pub fn generate_esurface_data(
             let energies = &esurface.energies;
 
             if let Some((lmb_index, lmb)) = lmbs.iter_enumerated().find(|(_i, lmb)| {
-                lmb.basis.iter().filter(|&i| energies.contains(i)).count() == energies.len() - 1
+                lmb.loop_edges
+                    .iter()
+                    .filter(|&i| energies.contains(i))
+                    .count()
+                    == energies.len() - 1
             }) {
                 let energy_not_in_cmb = *energies
                     .iter()
-                    .find(|&i| !lmb.basis.contains(i))
+                    .find(|&i| !lmb.loop_edges.contains(i))
                     .ok_or_else(|| eyre!("No remaining edge in esurface"))?;
 
                 let shift_signature = lmb.edge_signatures[energy_not_in_cmb].external.clone();

@@ -1647,9 +1647,9 @@ checksum = "f9fbbcab51052fe104eb5e5d351cf728d30a5be1fe14d9be8a3b097481fb97de"
 
 [[package]]
 name = "linnet"
-version = "0.6.2"
+version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f986ac03f8a4c66edd68b71c8366178099fa41e457efc4c678ebe4e76bd821ef"
+checksum = "377eef645439729fae80208d97610bea51e460b23f3239b74c4d4b591233a07a"
 dependencies = [
  "ahash",
  "argmin",
@@ -2948,7 +2948,7 @@ dependencies = [
 [[package]]
 name = "spenso"
 version = "0.4.1"
-source = "git+https://github.com/alphal00p/spenso?rev=d27b746e8168ab1380de0e10b483870b04bbf23d#d27b746e8168ab1380de0e10b483870b04bbf23d"
+source = "git+https://github.com/alphal00p/spenso?rev=a1bb8daff522fc3f108a6f9db53cce6814df5d6a#a1bb8daff522fc3f108a6f9db53cce6814df5d6a"
 dependencies = [
  "ahash",
  "anyhow",
@@ -2986,7 +2986,7 @@ dependencies = [
 [[package]]
 name = "spenso-macros"
 version = "0.1.0"
-source = "git+https://github.com/alphal00p/spenso?rev=d27b746e8168ab1380de0e10b483870b04bbf23d#d27b746e8168ab1380de0e10b483870b04bbf23d"
+source = "git+https://github.com/alphal00p/spenso?rev=a1bb8daff522fc3f108a6f9db53cce6814df5d6a#a1bb8daff522fc3f108a6f9db53cce6814df5d6a"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3096,7 +3096,7 @@ dependencies = [
 [[package]]
 name = "symbolica"
 version = "0.16.0"
-source = "git+https://github.com/alphal00p/symbolica?rev=438f8bdbd49eda7fae58f079cdcbee316ad76ae7#438f8bdbd49eda7fae58f079cdcbee316ad76ae7"
+source = "git+https://github.com/alphal00p/symbolica?rev=a23ebaa71b1bc715a129ac765764ece7273625dc#a23ebaa71b1bc715a129ac765764ece7273625dc"
 dependencies = [
  "ahash",
  "append-only-vec",
@@ -3125,7 +3125,7 @@ dependencies = [
 [[package]]
 name = "symbolica_community"
 version = "0.1.0"
-source = "git+https://github.com/alphal00p/symbolica-community?rev=8166fb29e6599f301c58476d361a4052661a2033#8166fb29e6599f301c58476d361a4052661a2033"
+source = "git+https://github.com/alphal00p/symbolica-community?rev=9332038264aace8e428ee6ee2cb7d84b09a764ae#9332038264aace8e428ee6ee2cb7d84b09a764ae"
 dependencies = [
  "anyhow",
  "auto_enums",

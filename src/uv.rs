@@ -1,33 +1,21 @@
-use std::{
-    cmp::Ordering,
-    collections::{HashMap, VecDeque},
-    fmt::{self, Display, Formatter},
-    hash::Hash,
-    ops::{Deref, Index},
-    sync::LazyLock,
-};
+use std::{cmp::Ordering, collections::VecDeque, hash::Hash, ops::Deref, sync::LazyLock};
 
 use crate::{
     cff::{
-        expression::{AmplitudeOrientationID, OrientationData},
+        expression::OrientationData,
         generation::{generate_uv_cff, ShiftRewrite},
     },
     graph::VertexInfo,
-    model::{ArcParticle, ArcPropagator},
+    model::ArcParticle,
     momentum::Sign,
-    new_gammaloop_integrand::amplitude_integrand,
-    new_graph::{Edge, LoopMomentumBasis, Vertex},
+    new_graph::{no_filter, Edge, LMBext, LoopMomentumBasis, Vertex},
     utils::{GS, W_},
 };
-use ahash::{AHashMap, AHashSet};
+use ahash::AHashSet;
 use bitvec::vec::BitVec;
-use color_eyre::Report;
 use eyre::eyre;
-use indexmap::IndexMap;
 use itertools::Itertools;
 use pathfinding::prelude::BfsReachable;
-use rand::{rngs::SmallRng, Rng, SeedableRng};
-use ref_ops::RefNeg;
 use serde::{Deserialize, Serialize};
 use spenso::{
     network::parsing::ShadowedStructure,
@@ -41,46 +29,31 @@ use spenso::{
     tensors::parametric::{atomcore::PatternReplacement, ParamTensor},
 };
 use symbolica::{
-    atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol},
+    atom::{Atom, AtomCore, FunctionBuilder, Symbol},
     domains::integer::Integer,
     function,
-    id::{AtomMatchIterator, Pattern, Replacement},
+    id::Replacement,
     parse,
     printer::PrintOptions,
-    state::State,
     symbol,
 };
-use symbolica_community::physics::algebraic_simplification::{
-    gamma::GammaSimplifier,
-    metric::{MetricSimplifier, MS},
-};
-use trie_rs::{try_collect::TryFromIterator, Trie, TrieBuilder};
+use symbolica_community::physics::algebraic_simplification::metric::{MetricSimplifier, MS};
 
+use linnet::half_edge::subgraph::{InternalSubGraph, SubGraph, SubGraphOps};
 use linnet::half_edge::{
-    builder::HedgeGraphBuilder,
     involution::{EdgeIndex, Hedge, HedgePair, SignOrZero},
-    subgraph::{cycle::SignedCycle, Cycle, ModifySubgraph},
-    tree::SimpleTraversalTree,
-    EdgeAccessors, HedgeGraph, NodeIndex, PowersetIterator,
-};
-use linnet::half_edge::{
-    involution::Flow,
-    subgraph::{HedgeNode, InternalSubGraph, SubGraph, SubGraphOps},
+    subgraph::{Cycle, ModifySubgraph},
+    HedgeGraph,
 };
 use typed_index_collections::TiVec;
-use vakint::{
-    vakint_parse, vakint_symbol, EvaluationOrder, LoopNormalizationFactor,
-    NumericalEvaluationResult, Vakint, VakintExpression, VakintSettings,
-};
+use vakint::{EvaluationOrder, LoopNormalizationFactor, Vakint, VakintSettings};
 
 use crate::{
-    graph::{BareEdge, BareGraph, BareVertex, EdgeType},
+    graph::{BareEdge, BareGraph, BareVertex},
     model::normalise_complex,
 };
 
-use bitvec::prelude::*;
-
-static VAKINT: LazyLock<Vakint> = LazyLock::new(|| {
+pub static VAKINT: LazyLock<Vakint> = LazyLock::new(|| {
     Vakint::new(Some(VakintSettings {
         evaluation_order: EvaluationOrder::alphaloop_only(),
         integral_normalization_factor: LoopNormalizationFactor::MSbar,
@@ -151,7 +124,7 @@ impl UVNode {
 #[derive(Clone, Debug)]
 pub struct UVGraph {
     hedge_graph: HedgeGraph<UVEdge, UVNode>,
-    cut_edges: BitVec,
+    lmb: LoopMomentumBasis,
     lmb_replacement: Vec<Replacement>,
 }
 
@@ -208,35 +181,23 @@ impl UVGraph {
     }
 
     pub fn from_hedge(hedge_graph: HedgeGraph<UVEdge, UVNode>) -> Self {
-        let cut_edges = hedge_graph.cycle_basis().1.tree_subgraph;
+        let full = hedge_graph.full_filter();
 
-        let mut uv_graph = UVGraph {
+        let lmb = hedge_graph.lmb(&full);
+
+        // println!("//lmb{lmb:?} for \n{}", hedge_graph.dot_lmb(&full, &lmb));
+        let reps = hedge_graph.normal_emr_replacement(&full, &lmb, &[W_.x___], no_filter);
+        UVGraph {
             hedge_graph,
-            cut_edges,
-            lmb_replacement: vec![],
-        };
-
-        let reps = uv_graph
-            .lmb_reps_for_subgraph(&uv_graph.full_graph(), &uv_graph.cut_edges)
-            .0
-            .iter()
-            .map(|(edge, mom)| {
-                let r = Replacement::new(
-                    function!(GS.emr_mom, usize::from(*edge) as i64, W_.x___).to_pattern(),
-                    mom.to_pattern(),
-                );
-                r
-            })
-            .collect();
-
-        uv_graph.lmb_replacement = reps;
-        uv_graph
+            lmb,
+            lmb_replacement: reps,
+        }
     }
 
     pub fn from_graph(graph: &BareGraph) -> Self {
         let mut excised: BitVec = graph.hedge_representation.empty_subgraph();
 
-        for (n, _, d) in graph.hedge_representation.iter_nodes() {
+        for (_, n, d) in graph.hedge_representation.iter_nodes() {
             if matches!(
                 graph.vertices[*d].vertex_info,
                 VertexInfo::ExternalVertexInfo(_)
@@ -252,38 +213,7 @@ impl UVGraph {
             |_, _, _, e| e.map(|d| UVEdge::from_edge(&graph.edges[*d], *d, graph)),
         );
 
-        let cut_edges = SimpleTraversalTree::depth_first_traverse(
-            &excised,
-            &excised.full_filter(),
-            &NodeIndex(0),
-            None,
-        )
-        .unwrap()
-        .tree_subgraph;
-
-        let mut uv_graph = UVGraph {
-            hedge_graph: excised,
-            cut_edges,
-            lmb_replacement: vec![],
-        };
-
-        let reps = uv_graph
-            .lmb_reps_for_subgraph(&uv_graph.full_graph(), &uv_graph.cut_edges)
-            .0
-            .iter()
-            .map(|(edge, mom)| {
-                let r = Replacement::new(
-                    function!(GS.emr_mom, usize::from(*edge) as i64, W_.x___).to_pattern(),
-                    mom.to_pattern(),
-                );
-                // println!("Rep:{r}");
-                r
-            })
-            .collect();
-
-        uv_graph.lmb_replacement = reps;
-
-        uv_graph
+        UVGraph::from_hedge(excised)
     }
 
     fn n_loops<S: SubGraph>(&self, subgraph: &S) -> usize {
@@ -298,11 +228,11 @@ impl UVGraph {
     fn numerator<S: SubGraph>(&self, subgraph: &S) -> Atom {
         let mut num = Atom::new_num(1);
 
-        for (_, _, n) in self.iter_node_data(subgraph) {
+        for (_, _, n) in self.iter_nodes_of(subgraph) {
             num = num * &n.num;
         }
 
-        for (pair, _eid, d) in self.iter_edges(subgraph) {
+        for (pair, _eid, d) in self.iter_edges_of(subgraph) {
             if matches!(pair, HedgePair::Paired { .. }) {
                 num = num * &d.data.num;
             }
@@ -318,11 +248,11 @@ impl UVGraph {
     ) -> Atom {
         let mut num = Atom::new_num(1);
 
-        for (_, _, n) in self.iter_node_data(subgraph) {
+        for (_, _, n) in self.iter_nodes_of(subgraph) {
             num = num * &n.num;
         }
 
-        for (pair, _eid, d) in self.iter_edges(subgraph) {
+        for (pair, _eid, d) in self.iter_edges_of(subgraph) {
             if matches!(pair, HedgePair::Paired { .. }) {
                 num = num * &d.data.num;
             }
@@ -334,7 +264,7 @@ impl UVGraph {
     fn denominator<S: SubGraph>(&self, subgraph: &S) -> Atom {
         let mut den = Atom::new_num(1);
 
-        for (pair, eid, d) in self.iter_edges(subgraph) {
+        for (pair, eid, d) in self.iter_edges_of(subgraph) {
             if matches!(pair, HedgePair::Paired { .. }) {
                 let m2 = parse!(d.data.particle.mass.name).unwrap().npow(2);
                 den = den
@@ -401,7 +331,7 @@ impl IntegrandExpr {
 
 // pub fn limit(&)
 
-pub trait UltravioletGraph {
+pub trait UltravioletGraph: LMBext {
     fn all_cycle_unions<E, V, S: SubGraph<Base = BitVec>>(
         &self,
         subgraph: &S,
@@ -410,7 +340,7 @@ pub trait UltravioletGraph {
         Self: AsRef<HedgeGraph<E, V>>,
     {
         let ref_graph = self.as_ref();
-        let init_node = ref_graph.iter_node_data(subgraph).next().unwrap().0;
+        let init_node = ref_graph.iter_nodes_of(subgraph).next().unwrap().0;
         let all_subcycles: Vec<_> = Cycle::all_sum_powerset_filter_map(
             &ref_graph
                 .paton_cycle_basis(subgraph, &init_node, None)
@@ -422,7 +352,7 @@ pub trait UltravioletGraph {
         .unwrap();
 
         // println!("{}", self.base_dot());
-        let mut spinneys: AHashSet<_> = InternalSubGraph::all_unions_iterative(&all_subcycles);
+        let spinneys: AHashSet<_> = InternalSubGraph::all_unions_iterative(&all_subcycles);
 
         spinneys
     }
@@ -431,7 +361,7 @@ pub trait UltravioletGraph {
         Self: AsRef<HedgeGraph<E, V>>,
     {
         let mut expr = expr.clone();
-        for (p, eid, d) in self.as_ref().iter_edges(subgraph) {
+        for (p, eid, _) in self.as_ref().iter_edges_of(subgraph) {
             if matches!(p, HedgePair::Paired { .. }) {
                 expr = expr
                     .replace(function!(GS.emr_mom, usize::from(eid) as i32, W_.x___))
@@ -448,152 +378,14 @@ pub trait UltravioletGraph {
         Wood::from_spinneys(self.spinneys(subgraph), self)
     }
 
-    fn select_lmb<E, V>(&self, subgraph: &InternalSubGraph, cut_edges: &BitVec) -> Vec<EdgeIndex>
-    where
-        Self: AsRef<HedgeGraph<E, V>>,
-    {
-        let ref_graph = self.as_ref();
-        let n_loops = ref_graph.cyclotomatic_number(subgraph);
-
-        if n_loops == 0 {
-            return vec![];
-        }
-
-        // the subgraph may have disconnected components in case the of disjoint graphs in a spinney
-        let components = ref_graph.count_connected_components(subgraph);
-        let cut_edges_in_subgraph = subgraph.filter.intersection(cut_edges);
-
-        for v in ref_graph
-            .iter_edges(&cut_edges_in_subgraph)
-            .combinations(n_loops)
-        {
-            let mut cut_subgraph = subgraph.filter.clone();
-            let mut lmb = vec![];
-
-            for (p, e, _) in v {
-                cut_subgraph.sub(p);
-                lmb.push(e);
-            }
-
-            if ref_graph.count_connected_components(&cut_subgraph) == components {
-                return lmb;
-            }
-        }
-
-        panic!(
-            "No lmb found for {} and cut edges {}",
-            ref_graph.dot(subgraph),
-            ref_graph.dot(cut_edges)
-        )
-    }
-
     fn dod<S: SubGraph>(&self, subgraph: &S) -> i32;
-
-    fn lmb_reps_for_subgraph<E, V>(
-        &self,
-        subgraph: &InternalSubGraph,
-        cut_edges: &BitVec,
-        // lmb: &[EdgeIndex],
-    ) -> (HashMap<EdgeIndex, Atom>, Vec<EdgeIndex>, Vec<EdgeIndex>)
-    where
-        Self: AsRef<HedgeGraph<E, V>>,
-    {
-        let graph = self.as_ref();
-        let lmb = self.select_lmb(subgraph, cut_edges);
-        let mut edge_rep: HashMap<_, Atom> = HashMap::default();
-
-        let Some(i) = subgraph.filter.first_one() else {
-            return (edge_rep, vec![], lmb);
-        };
-
-        let mut tree: BitVec = graph.full_filter();
-
-        let externals = graph.nesting_node_from_subgraph(subgraph.clone()).hairs;
-
-        let root_node = graph.node_id(Hedge(externals.first_one().unwrap_or(i)));
-
-        for e in &lmb {
-            let (_, p) = graph[e];
-            tree.sub(p);
-        }
-
-        let trav_tree =
-            SimpleTraversalTree::depth_first_traverse(&graph, &tree, &root_node, None).unwrap();
-
-        for loop_edge in &lmb {
-            let (_, p) = graph[loop_edge];
-            let loop_id: usize = (*loop_edge).into();
-            let loop_mom = function!(GS.emr_mom, loop_id as i64);
-
-            if let Some(c) = trav_tree.get_cycle(p.any_hedge(), graph) {
-                if let HedgePair::Paired { source, .. } = p {
-                    if let Some(signed) = SignedCycle::from_cycle(c, source, graph) {
-                        for h in signed.filter.included_iter() {
-                            let eid = graph[&h];
-                            let flow = graph.flow(h);
-
-                            match flow {
-                                Flow::Source => {
-                                    *edge_rep.entry(eid).or_insert(Atom::Zero) += &loop_mom;
-                                    //Validated the sign on 13.05.2025
-                                }
-                                Flow::Sink => {
-                                    *edge_rep.entry(eid).or_insert(Atom::Zero) -= &loop_mom;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        for (k, v) in edge_rep.iter_mut() {
-            *v = function!(GS.emr_mom, usize::from(*k) as i64, *v, W_.x___);
-        }
-
-        let mut externals_ids = vec![];
-        for ext in externals.included_iter().skip(1) {
-            let ext_sign: SignOrZero = graph.flow(ext).into();
-            externals_ids.push(graph[&ext]);
-            let ext_id: usize = graph[&ext].into();
-            let ext_mom = match ext_sign {
-                SignOrZero::Plus => {
-                    function!(GS.emr_mom, ext_id as i64, W_.x___)
-                }
-                SignOrZero::Minus => -function!(GS.emr_mom, ext_id as i64, W_.x___),
-                SignOrZero::Zero => {
-                    panic!("Missing external momentum sign")
-                }
-            };
-
-            for h in trav_tree
-                .ancestor_iter_hedge(ext, graph.as_ref())
-                .step_by(2)
-            {
-                let eid = graph[&h];
-                let (_, p) = &graph[&eid];
-
-                if let HedgePair::Paired { source, sink } = p {
-                    if h == *source {
-                        *edge_rep.entry(eid).or_insert(Atom::Zero) -= &ext_mom;
-                    } else if h == *sink {
-                        *edge_rep.entry(eid).or_insert(Atom::Zero) += &ext_mom;
-                    } else {
-                        panic!("Should be in HedgePair");
-                    }
-                }
-            }
-        }
-
-        (edge_rep, externals_ids, lmb)
-    }
 
     fn spinneys<E, V, S: SubGraph<Base = BitVec>>(&self, subgraph: &S) -> AHashSet<InternalSubGraph>
     where
         Self: AsRef<HedgeGraph<E, V>>,
     {
         let ref_graph = self.as_ref();
-        let init_node = ref_graph.iter_node_data(subgraph).next().unwrap().0;
+        let init_node = ref_graph.iter_nodes_of(subgraph).next().unwrap().0;
         let all_subcycles: Vec<_> = Cycle::all_sum_powerset_filter_map(
             &ref_graph
                 .paton_cycle_basis(subgraph, &init_node, None)
@@ -623,18 +415,97 @@ pub trait UltravioletGraph {
     }
 }
 
+impl LMBext for UVGraph {
+    fn empty_lmb(&self) -> LoopMomentumBasis {
+        self.as_ref().empty_lmb()
+    }
+
+    fn dot_lmb<S: SubGraph>(&self, subgraph: &S, lmb: &LoopMomentumBasis) -> String {
+        self.as_ref().dot_lmb(subgraph, lmb)
+    }
+    fn lmb<S: SubGraph<Base = BitVec>>(&self, subgraph: &S) -> LoopMomentumBasis {
+        self.as_ref().lmb(subgraph)
+    }
+
+    fn lmb_impl<S: SubGraph + SubGraphOps + ModifySubgraph<HedgePair> + ModifySubgraph<Hedge>>(
+        &self,
+        subgraph: &S,
+        tree: &S,
+        externals: &S,
+    ) -> LoopMomentumBasis {
+        self.as_ref().lmb_impl(subgraph, tree, externals)
+    }
+
+    fn compatible_sub_lmb<S: SubGraph>(
+        &self,
+        subgraph: &S,
+        lmb: &LoopMomentumBasis,
+    ) -> LoopMomentumBasis
+    where
+        S::Base: SubGraph<Base = S::Base>
+            + SubGraphOps
+            + Clone
+            + ModifySubgraph<HedgePair>
+            + ModifySubgraph<Hedge>,
+    {
+        self.as_ref().compatible_sub_lmb(subgraph, lmb)
+    }
+
+    fn replacement_impl<'a, S: SubGraph, I>(
+        &self,
+        rep: impl Fn(EdgeIndex, Atom, Atom) -> Replacement,
+        subgraph: &S,
+        lmb: &LoopMomentumBasis,
+        loop_symbol: Symbol,
+        ext_symbol: Symbol,
+        loop_args: &'a [I],
+        ext_args: &'a [I],
+        filter_pair: fn(&HedgePair) -> bool,
+        emr_id: bool,
+    ) -> Vec<Replacement>
+    where
+        &'a I: Into<symbolica::atom::AtomOrView<'a>>,
+    {
+        self.as_ref().replacement_impl(
+            rep,
+            subgraph,
+            lmb,
+            loop_symbol,
+            ext_symbol,
+            loop_args,
+            ext_args,
+            filter_pair,
+            emr_id,
+        )
+    }
+
+    fn generate_loop_momentum_bases<S: SubGraph>(
+        &self,
+        subgraph: &S,
+    ) -> TiVec<crate::new_graph::LmbIndex, LoopMomentumBasis>
+    where
+        S::Base: SubGraph<Base = S::Base>
+            + SubGraphOps
+            + Clone
+            + ModifySubgraph<HedgePair>
+            + ModifySubgraph<Hedge>,
+    {
+        self.as_ref().generate_loop_momentum_bases(subgraph)
+    }
+}
+
 impl UltravioletGraph for UVGraph {
     fn dod<S: SubGraph>(&self, subgraph: &S) -> i32 {
         let mut dod: i32 = 4 * self.n_loops(subgraph) as i32;
         // println!("nloops: {}", dod / 4);
 
-        for (pair, _eid, d) in self.iter_edges(subgraph) {
-            if matches!(pair, HedgePair::Paired { .. }) {
-                dod += d.data.dod;
+        for (p, _, e) in self.iter_edges_of(subgraph) {
+            if p.is_paired() {
+                dod += e.data.dod;
             }
         }
 
-        for (_, _, n) in self.iter_node_data(subgraph) {
+        for (_, _, n) in self.iter_nodes_of(subgraph) {
             dod += n.dod;
         }
 
@@ -698,7 +569,7 @@ impl Wood {
     fn unfold_bfs<E, V, G>(
         &self,
         graph: &G,
-        cut_edges: &BitVec,
+        lmb: &LoopMomentumBasis,
         dag: &mut DAG<Approximation, DagNode, ()>,
         unions: &mut SecondaryMap<PosetNode, Option<Vec<(PosetNode, Option<DagNode>)>>>,
         root: PosetNode,
@@ -712,7 +583,7 @@ impl Wood {
         let tree_root = dag.add_node(Approximation::new(
             self.poset.data(root).clone(),
             graph,
-            cut_edges,
+            lmb,
         ));
         search_front.push_front((root, tree_root));
 
@@ -734,7 +605,7 @@ impl Wood {
                             let child = dag.add_node(Approximation::new(
                                 self.poset.data(*c).clone(),
                                 graph,
-                                cut_edges,
+                                lmb,
                             ));
                             for (_, d) in union {
                                 dag.add_edge(d.unwrap(), child);
@@ -745,11 +616,8 @@ impl Wood {
                         }
                     }
                 } else {
-                    let child = dag.add_node(Approximation::new(
-                        self.poset.data(*c).clone(),
-                        graph,
-                        cut_edges,
-                    ));
+                    let child =
+                        dag.add_node(Approximation::new(self.poset.data(*c).clone(), graph, lmb));
                     dag.add_edge(parent, child);
                     search_front.push_front((*c, child));
                 }
@@ -758,7 +626,7 @@ impl Wood {
         tree_root
     }
 
-    pub fn unfold<E, V, G>(&self, graph: &G, cut_edges: &BitVec) -> Forest
+    pub fn unfold<E, V, G>(&self, graph: &G, lmb: &LoopMomentumBasis) -> Forest
     where
         G: UltravioletGraph + AsRef<HedgeGraph<E, V>>,
     {
@@ -773,7 +641,7 @@ impl Wood {
             unions.insert(p, Some(union));
         }
 
-        let _ = self.unfold_bfs(graph, cut_edges, &mut dag, &mut unions, root);
+        let _ = self.unfold_bfs(graph, lmb, &mut dag, &mut unions, root);
 
         Forest { dag }
     }
@@ -895,13 +763,9 @@ pub struct Approximation {
     // The union of all spinneys, remaining graph is full graph minus subgraph
     subgraph: InternalSubGraph,
     dod: i32,
-    lmb: Vec<EdgeIndex>,
-    externals: Vec<EdgeIndex>,
+    lmb: LoopMomentumBasis,
     pub cff_expr: ApproxOp, //3d denoms
     pub t_op: ApproxOp,     //4d
-    // pub cff: TiVec<OrientationID, (Atom, OrientationData)>,
-    momentum_assignment: HashMap<EdgeIndex, Atom>,
-    pub mom_rep: Vec<Replacement>,
     pub simple_approx: Option<SimpleApprox>,
 }
 
@@ -917,35 +781,21 @@ impl Approximation {
         expr.replace_multiple_repeat(&reps)
     }
 
-    pub fn new<G, E, V>(spinney: InternalSubGraph, graph: &G, cut_edges: &BitVec) -> Approximation
+    pub fn new<G, E, V>(
+        spinney: InternalSubGraph,
+        graph: &G,
+        lmb: &LoopMomentumBasis,
+    ) -> Approximation
     where
         G: UltravioletGraph + AsRef<HedgeGraph<E, V>>,
     {
-        // let lmb = graph.select_lmb(&spinney);
-
-        let (momentum_assignment, externals, lmb) =
-            graph.lmb_reps_for_subgraph(&spinney, cut_edges);
-
+        let lmb = graph.compatible_sub_lmb(&spinney, lmb);
+        println!("//lmb for spinney \n{}", graph.dot_lmb(&spinney, &lmb));
         Approximation {
             dod: graph.dod(&spinney),
-
             subgraph: spinney,
             lmb,
-            mom_rep: momentum_assignment
-                .iter()
-                .map(|(edge, mom)| {
-                    let r = Replacement::new(
-                        function!(GS.emr_mom, usize::from(*edge) as i64, W_.x___).to_pattern(),
-                        mom.to_pattern(),
-                    );
-                    // println!("Rep:{r}");
-                    r
-                })
-                .collect(),
-            momentum_assignment,
-            externals,
             simple_approx: None,
-            // cff: vec![].into(),
             cff_expr: ApproxOp::NotComputed,
             t_op: ApproxOp::NotComputed,
         }
@@ -964,244 +814,47 @@ impl Approximation {
     }
 
     pub fn approximate(&self, dependent: &Self, graph: &UVGraph) -> ApproxOp {
-        ApproxOp::approximate(
-            dependent,
-            &self.subgraph,
-            &self.externals,
-            &self.mom_rep,
-            self.dod,
-            graph,
-        )
-    }
-
-    pub fn compute_cff(
-        &self,
-        dependent: &Self,
-        orientation: &OrientationData,
-        canonize_esurface: &Option<ShiftRewrite>,
-        graph: &UVGraph,
-    ) -> ApproxOp {
-        ApproxOp::cff_expr(
-            dependent,
-            &self.subgraph,
-            orientation,
-            canonize_esurface,
-            graph,
-        )
-    }
-
-    pub fn union(&self, dependents: &[&Self], _graph: &UVGraph) -> (ApproxOp, SimpleApprox) {
-        let simple_approx = SimpleApprox::union(
-            self.subgraph.clone(),
-            dependents.iter().map(|s| s.simple_approx.as_ref().unwrap()),
-        );
-        (ApproxOp::union(dependents).unwrap(), simple_approx)
-    }
-
-    /// Get final expression in the forest sum
-    pub fn unwrapped_expr(
-        &self,
-        graph: &UVGraph,
-        amplitude: &InternalSubGraph,
-    ) -> Option<SerializableAtom> {
-        let (t, s) = self.t_op.expr()?;
-
-        let contracted =
-            s * IntegrandExpr::from_subgraph(&amplitude.subtract(&self.subgraph), graph).integrand;
-
-        Some(
-            Self::simplify_notation(&(t * contracted))
-                .replace_multiple(&graph.lmb_replacement)
-                .into(),
-        )
-    }
-
-    pub fn final_expr<S: SubGraph<Base = BitVec>>(
-        &self,
-        graph: &UVGraph,
-        amplitude: &S,
-    ) -> Option<Atom> {
-        let (t, s) = self.t_op.expr()?;
-
-        let mut contracted = s * IntegrandExpr::from_subgraph(
-            &amplitude.included().subtract(&self.subgraph.included()),
-            graph,
-        )
-        .integrand;
-
-        // set the momenta flowing through the edge to the identity wrt the supergraph
-        contracted = contracted
-            .replace(function!(GS.emr_mom, W_.x_, W_.y_))
-            .with(function!(
-                GS.emr_mom,
-                W_.x_,
-                function!(GS.emr_mom, W_.x_),
-                W_.y_
-            ));
-
-        Some(t * contracted)
-    }
-
-    pub fn final_cff<S: SubGraph>(
-        &self,
-        graph: &UVGraph,
-        canonize_esurface: &Option<ShiftRewrite>,
-        amplitude: &S,
-        orientation: &OrientationData,
-    ) -> Option<Atom> {
-        let (t, s) = self.cff_expr.expr()?;
-
-        let contracted_edges = graph
-            .iter_edges(&self.subgraph)
-            .filter_map(|(p, e, _)| {
-                if matches!(p, HedgePair::Paired { .. }) {
-                    Some(e)
-                } else {
-                    None
-                }
-            })
-            .collect_vec();
-
-        let contracted = s * generate_uv_cff(
-            graph,
-            amplitude,
-            canonize_esurface,
-            &contracted_edges,
-            &orientation.orientation,
-        )
-        .unwrap();
-
-        Some(t * contracted)
-    }
-
-    pub fn simple_expr(
-        &self,
-        graph: &UVGraph,
-        amplitude: &InternalSubGraph,
-    ) -> Option<SerializableAtom> {
-        let simple_approx = self.simple_approx.as_ref()?;
-
-        Some((simple_approx.sign * simple_approx.expr(&amplitude.filter)).into())
-    }
-}
-
-impl ApproxOp {
-    pub fn sign(&self) -> Option<Sign> {
-        match self {
-            ApproxOp::NotComputed => None,
-            ApproxOp::Union { sign, .. } => Some(*sign),
-            ApproxOp::Dependent { sign, .. } => Some(*sign),
-            ApproxOp::Root => Some(Sign::Positive),
-        }
-    }
-
-    pub fn expr(&self) -> Option<(Atom, Sign)> {
-        match self {
-            ApproxOp::NotComputed => None,
-            ApproxOp::Union { t_args, sign, .. } => {
-                let mut mul = Atom::new_num(1);
-                for t in t_args {
-                    mul = mul * &t.integrand;
-                }
-                Some((mul, *sign))
-            }
-            ApproxOp::Dependent { t_arg, sign, .. } => Some((t_arg.integrand.clone(), *sign)),
-            ApproxOp::Root => Some((Atom::new_num(1).into(), Sign::Positive)),
-        }
-    }
-
-    pub fn cff_expr(
-        dependent: &Approximation,
-        subgraph: &InternalSubGraph,
-        orientation: &OrientationData,
-        canonize_esurface: &Option<ShiftRewrite>,
-        graph: &UVGraph,
-    ) -> Self {
-        let reduced = subgraph.subtract(&dependent.subgraph);
-
-        if let Some((inner_t, sign)) = dependent.cff_expr.expr() {
-            let contracted_edges = graph
-                .iter_edges(&dependent.subgraph)
-                .filter_map(|(p, e, _)| {
-                    if matches!(p, HedgePair::Paired { .. }) {
-                        Some(e)
-                    } else {
-                        None
-                    }
-                })
-                .collect_vec();
-
-            let cff = generate_uv_cff(
-                graph,
-                subgraph,
-                canonize_esurface,
-                &contracted_edges,
-                &orientation.orientation,
-            )
-            .unwrap()
-                * inner_t;
-
-            Self::Dependent {
-                t_arg: IntegrandExpr { integrand: cff },
-                sign: -sign,
-                subgraph: reduced,
-            }
-        } else {
-            Self::NotComputed
-        }
-    }
-
-    pub fn approximate(
-        dependent: &Approximation,   //is smaller than subgraph
-        subgraph: &InternalSubGraph, //is not necessarily full_graph
-        external_edges: &[EdgeIndex],
-        mom_reps: &[Replacement],
-        dod: i32,
-        graph: &UVGraph,
-    ) -> Self {
-        let reduced = subgraph.subtract(&dependent.subgraph);
+        let reduced = self.subgraph.subtract(&dependent.subgraph);
 
         if let Some((inner_t, sign)) = dependent.t_op.expr() {
             let t_arg = IntegrandExpr::from_subgraph(&reduced, graph);
 
             let mut atomarg = t_arg.integrand * inner_t;
 
+            let mom_reps = graph.uv_wrapped_replacement(&self.subgraph, &self.lmb, &[W_.x___]);
+
             println!("Reps:");
-            for r in mom_reps {
+            for r in &mom_reps {
                 println!("{r}");
             }
 
             println!(
                 "Expand-prerep {} with dod={} in {:?}",
-                atomarg, dod, external_edges
+                atomarg, self.dod, self.lmb.ext_edges
             );
 
             // rewrite the inner_t as well
-            atomarg = atomarg.replace_multiple(mom_reps);
+            atomarg = atomarg.replace_multiple(&mom_reps);
 
             println!(
                 "Expand {} with dod={} in {:?}",
-                atomarg, dod, external_edges
+                atomarg, self.dod, self.lmb.ext_edges
             );
-            for e in external_edges {
+            for e in &self.lmb.ext_edges {
                 atomarg = atomarg
                     .replace(function!(GS.emr_mom, usize::from(*e) as i64, W_.x___))
                     .with(function!(GS.emr_mom, usize::from(*e) as i64, W_.x___) * GS.rescale);
             }
 
-            let soft_ct = graph
-                .nesting_node_from_subgraph(subgraph.clone())
-                .hairs
-                .count_ones()
-                == 2
-                && dod > 0;
+            let soft_ct = graph.full_crown(&self.subgraph).count_ones() == 2 && self.dod > 0;
 
             let mut masses = AHashSet::new();
             masses.insert(Atom::new_var(GS.m_uv));
             // scale all masses, including UV masses from subgraphs
-            for (pair, _eid, d) in graph.iter_edges(subgraph) {
-                if matches!(pair, HedgePair::Paired { .. }) {
-                    let e_mass = parse!(&d.data.particle.mass.name).unwrap();
+
+            for (p, _, e) in graph.iter_edges_of(&self.subgraph) {
+                if p.is_paired() {
+                    let e_mass = parse!(&e.data.particle.mass.name).unwrap();
                     masses.insert(e_mass);
                 }
             }
@@ -1230,7 +883,7 @@ impl ApproxOp {
 
             // den(..) tags a propagator, its first derivative is 1 and the rest is 0
             let mut a = atomarg
-                .series(GS.rescale, Atom::Zero, dod.into(), true)
+                .series(GS.rescale, Atom::Zero, self.dod.into(), true)
                 .unwrap()
                 .to_atom()
                 .replace(parse!("der(0,0,0,1, den(y__))").unwrap())
@@ -1241,7 +894,7 @@ impl ApproxOp {
             if soft_ct {
                 let coeffs = a.coefficient_list::<u8>(&[Atom::new_var(GS.rescale)]);
                 let mut b = Atom::Zero;
-                let dod_pow = Atom::new_var(GS.rescale).npow(dod);
+                let dod_pow = Atom::new_var(GS.rescale).npow(self.dod);
                 for (pow, mut i) in coeffs {
                     if pow == dod_pow {
                         // set the masses in the t=dod term to 0
@@ -1277,7 +930,7 @@ impl ApproxOp {
 
             /*let mut integrand_vakint = a.expand();
             let mut propagator_id = 1;
-            for (pair, index, _data) in graph.iter_edges(&reduced) {
+            for (pair, index, _data) in graph.iter_edges_of(&reduced) {
                 // FIXME: not a good way to check for internal edges?
                 if let HedgePair::Paired { source, sink } = pair {
                     integrand_vakint *= vakint_parse!(format!(
@@ -1406,8 +1059,185 @@ impl ApproxOp {
                 );
             }*/
 
-            Self::Dependent {
+            ApproxOp::Dependent {
                 t_arg: IntegrandExpr { integrand: a },
+                sign: -sign,
+                subgraph: reduced,
+            }
+        } else {
+            ApproxOp::NotComputed
+        }
+    }
+
+    pub fn compute_cff(
+        &self,
+        dependent: &Self,
+        orientation: &OrientationData,
+        canonize_esurface: &Option<ShiftRewrite>,
+        graph: &UVGraph,
+    ) -> ApproxOp {
+        ApproxOp::cff_expr(
+            dependent,
+            &self.subgraph,
+            orientation,
+            canonize_esurface,
+            graph,
+        )
+    }
+
+    pub fn union(&self, dependents: &[&Self], _graph: &UVGraph) -> (ApproxOp, SimpleApprox) {
+        let simple_approx = SimpleApprox::union(
+            self.subgraph.clone(),
+            dependents.iter().map(|s| s.simple_approx.as_ref().unwrap()),
+        );
+        (ApproxOp::union(dependents).unwrap(), simple_approx)
+    }
+
+    /// Get final expression in the forest sum
+    pub fn unwrapped_expr(
+        &self,
+        graph: &UVGraph,
+        amplitude: &InternalSubGraph,
+    ) -> Option<SerializableAtom> {
+        let (t, s) = self.t_op.expr()?;
+
+        let contracted =
+            s * IntegrandExpr::from_subgraph(&amplitude.subtract(&self.subgraph), graph).integrand;
+
+        Some(
+            Self::simplify_notation(&(t * contracted))
+                .replace_multiple(&graph.lmb_replacement)
+                .into(),
+        )
+    }
+
+    pub fn final_expr<S: SubGraph<Base = BitVec>>(
+        &self,
+        graph: &UVGraph,
+        amplitude: &S,
+    ) -> Option<Atom> {
+        let (t, s) = self.t_op.expr()?;
+
+        let mut contracted = s * IntegrandExpr::from_subgraph(
+            &amplitude.included().subtract(&self.subgraph.included()),
+            graph,
+        )
+        .integrand;
+
+        // set the momenta flowing through the edge to the identity wrt the supergraph
+        contracted = contracted
+            .replace(function!(GS.emr_mom, W_.x_, W_.y_))
+            .with(function!(
+                GS.emr_mom,
+                W_.x_,
+                function!(GS.emr_mom, W_.x_),
+                W_.y_
+            ));
+
+        Some(t * contracted)
+    }
+
+    pub fn final_cff<S: SubGraph>(
+        &self,
+        graph: &UVGraph,
+        canonize_esurface: &Option<ShiftRewrite>,
+        amplitude: &S,
+        orientation: &OrientationData,
+    ) -> Option<Atom> {
+        let (t, s) = self.cff_expr.expr()?;
+
+        let contracted_edges = graph
+            .iter_edges_of(&self.subgraph)
+            .filter_map(|(p, e, _)| {
+                if matches!(p, HedgePair::Paired { .. }) {
+                    Some(e)
+                } else {
+                    None
+                }
+            })
+            .collect_vec();
+
+        let contracted = s * generate_uv_cff(
+            graph,
+            amplitude,
+            canonize_esurface,
+            &contracted_edges,
+            &orientation.orientation,
+        )
+        .unwrap();
+
+        Some(t * contracted)
+    }
+
+    pub fn simple_expr(
+        &self,
+        graph: &UVGraph,
+        amplitude: &InternalSubGraph,
+    ) -> Option<SerializableAtom> {
+        let simple_approx = self.simple_approx.as_ref()?;
+
+        Some((simple_approx.sign * simple_approx.expr(&amplitude.filter)).into())
+    }
+}
+
+impl ApproxOp {
+    pub fn sign(&self) -> Option<Sign> {
+        match self {
+            ApproxOp::NotComputed => None,
+            ApproxOp::Union { sign, .. } => Some(*sign),
+            ApproxOp::Dependent { sign, .. } => Some(*sign),
+            ApproxOp::Root => Some(Sign::Positive),
+        }
+    }
+
+    pub fn expr(&self) -> Option<(Atom, Sign)> {
+        match self {
+            ApproxOp::NotComputed => None,
+            ApproxOp::Union { t_args, sign, .. } => {
+                let mut mul = Atom::new_num(1);
+                for t in t_args {
+                    mul = mul * &t.integrand;
+                }
+                Some((mul, *sign))
+            }
+            ApproxOp::Dependent { t_arg, sign, .. } => Some((t_arg.integrand.clone(), *sign)),
+            ApproxOp::Root => Some((Atom::new_num(1).into(), Sign::Positive)),
+        }
+    }
+
+    pub fn cff_expr(
+        dependent: &Approximation,
+        subgraph: &InternalSubGraph,
+        orientation: &OrientationData,
+        canonize_esurface: &Option<ShiftRewrite>,
+        graph: &UVGraph,
+    ) -> Self {
+        let reduced = subgraph.subtract(&dependent.subgraph);
+
+        if let Some((inner_t, sign)) = dependent.cff_expr.expr() {
+            let contracted_edges = graph
+                .iter_edges_of(&dependent.subgraph)
+                .filter_map(|(p, e, _)| {
+                    if matches!(p, HedgePair::Paired { .. }) {
+                        Some(e)
+                    } else {
+                        None
+                    }
+                })
+                .collect_vec();
+
+            let cff = generate_uv_cff(
+                graph,
+                subgraph,
+                canonize_esurface,
+                &contracted_edges,
+                &orientation.orientation,
+            )
+            .unwrap()
+                * inner_t;
+
+            Self::Dependent {
+                t_arg: IntegrandExpr { integrand: cff },
                 sign: -sign,
                 subgraph: reduced,
             }

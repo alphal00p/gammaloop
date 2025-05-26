@@ -248,7 +248,7 @@ impl LmbMultiChannelingSetup {
     ) -> BareMomentumSample<T> {
         let channel_lmb = &all_bases[self.channels[channel_index]];
         let new_loop_moms: LoopMomenta<F<T>> = base_lmb
-            .basis
+            .loop_edges
             .iter()
             .map(|&edge_index| {
                 let signature_of_edge_channel_lmb = &channel_lmb.edge_signatures[edge_index];
@@ -355,7 +355,7 @@ impl LmbMultiChannelingSetup {
             .iter()
             .map(|&lmb_index| {
                 let channel_product = all_bases[lmb_index]
-                    .basis
+                    .loop_edges
                     .iter()
                     .map(|&edge_index| &all_energies[edge_index])
                     .fold(momentum_sample.one(), |product, energy| product * energy)
