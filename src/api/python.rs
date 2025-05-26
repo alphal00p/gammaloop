@@ -131,7 +131,7 @@ pub fn format_target(target: String, level: log::Level) -> ColoredString {
 #[pyfunction]
 #[pyo3(name = "evaluate_graph_overall_factor")]
 pub fn evaluate_graph_overall_factor(overall_factor: &str) -> PyResult<String> {
-    let overall_factor = parse!(overall_factor).map_err(exceptions::PyException::new_err)?;
+    let overall_factor = parse!(overall_factor);
     let overall_factor_evaluated = FeynGen::evaluate_overall_factor(overall_factor.as_view());
     Ok(overall_factor_evaluated.to_canonical_string())
 }
@@ -139,9 +139,7 @@ pub fn evaluate_graph_overall_factor(overall_factor: &str) -> PyResult<String> {
 #[pyfunction]
 #[pyo3(name = "atom_to_canonical_string")]
 pub fn atom_to_canonical_string(atom_str: &str) -> PyResult<String> {
-    parse!(atom_str)
-        .map(|a| a.to_canonical_string())
-        .map_err(|e| exceptions::PyException::new_err(e.to_string()))
+    Ok(parse!(atom_str).to_canonical_string())
 }
 
 #[pyfunction]
@@ -741,12 +739,10 @@ impl PythonWorker {
 
         let mut global_prefactor = GlobalPrefactor::default();
         if let Some(global_prefactor_color) = global_prefactor_color {
-            global_prefactor.color = parse!(&global_prefactor_color)
-                .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
+            global_prefactor.color = parse!(&global_prefactor_color);
         }
         if let Some(global_prefactor_colorless) = global_prefactor_colorless {
-            global_prefactor.colorless = parse!(&global_prefactor_colorless)
-                .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
+            global_prefactor.colorless = parse!(&global_prefactor_colorless);
         }
 
         let diagrams = diagram_generator
