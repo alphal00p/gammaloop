@@ -228,7 +228,7 @@ impl CrossSectionGraphTerm {
 
                 let h_function = utils::h(&newton_result.solution, None, None, h_function_settings);
 
-                if settings.general.debug > 0 {
+                if settings.general.debug > 1 {
                     println!("generated parameters for cut: {}", _cut_id);
                     println!("t_star: {:16e}", newton_result.solution);
                     println!("h_function: {:16e}", h_function);

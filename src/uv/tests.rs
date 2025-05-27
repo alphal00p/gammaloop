@@ -346,6 +346,11 @@ fn tri_box_tri_LU() {
         println!("cut: {}, edge_in_cut: {:?}", id, edges_in_cut);
     }
 
+    println!(
+        "the chosen orientation has the following cuts: {:?}",
+        supergraph_orientation_data.cuts
+    );
+
     for (id, c) in cs.cuts.iter_enumerated() {
         let esurface_id = cs.cut_esurface_id_map[id];
         let cff_cut_expr = &cs
@@ -747,16 +752,16 @@ fn tri_box_tri_LU() {
 
     crate::set_interrupt_handler();
 
-    //let result = match integrand {
-    //    Integrand::NewIntegrand(real_integrand) => havana_integrate(
-    //        &settings,
-    //        |set| real_integrand.user_data_generator(1, set),
-    //        None,
-    //        None,
-    //        None,
-    //    ),
-    //    _ => unimplemented!(),
-    //};
+    let result = match integrand {
+        Integrand::NewIntegrand(real_integrand) => havana_integrate(
+            &settings,
+            |set| real_integrand.user_data_generator(1, set),
+            None,
+            None,
+            None,
+        ),
+        _ => unimplemented!(),
+    };
 
     //println!("Final result: {:>}", sum.expand());
 }
@@ -2472,7 +2477,7 @@ Integrator:
   n_bins: 16
   n_increase: 0
   n_max: 100000000
-  n_start: 2000000
+  n_start: 2000
   seed: 2
   show_max_wgt_info: false
   train_on_avg: false
@@ -2494,7 +2499,7 @@ Stability:
   - escalate_for_large_weight_threshold: 0.9
     precision: Double
     required_precision_for_im: 1.0e-07
-    required_precision_for_re: 1.0e-07
+required_precision_for_re: 1.0e-07
   - escalate_for_large_weight_threshold: -1.0
     precision: Quad
     required_precision_for_im: 1.0e-10
