@@ -3001,7 +3001,7 @@ dependencies = [
 [[package]]
 name = "symbolica"
 version = "0.16.0"
-source = "git+https://github.com/benruijl/symbolica?branch=complex_coeff#897d0c0b62b406063b4d6a7ce35447eadcd593bf"
+source = "git+https://github.com/benruijl/symbolica?branch=complex_coeff#b8cb3a15b2cad3d5e34434a07273432c98226245"
 dependencies = [
  "ahash",
  "append-only-vec",

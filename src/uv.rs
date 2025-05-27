@@ -72,12 +72,12 @@ use crate::{
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct UVEdge {
-    og_edge: usize,
-    dod: i32,
-    particle: ArcParticle,
-    // prop:ArcPropagator.
-    num: Atom,
-    den: Atom,
+    pub og_edge: usize,
+    pub dod: i32,
+    pub particle: ArcParticle,
+    // pub prop:ArcPropagator.
+    pub num: Atom,
+    pub den: Atom,
 }
 
 impl UVEdge {
@@ -131,7 +131,7 @@ impl UVNode {
 #[derive(Clone, Debug)]
 pub struct UVGraph {
     hedge_graph: HedgeGraph<UVEdge, UVNode>,
-    lmb: LoopMomentumBasis,
+    pub lmb: LoopMomentumBasis,
     lmb_replacement: Vec<Replacement>,
 }
 

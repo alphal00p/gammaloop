@@ -51,7 +51,7 @@ use crate::{
 #[test]
 fn tri_box_tri_LU() {
     let _ = env_logger::builder().is_test(true).try_init();
-    let uv_dod = 0;
+    let uv_dod = 1;
 
     // load the model and hack the masses, go through serializable model since arc is not mutable
     let model = load_generic_model("sm");
@@ -524,7 +524,7 @@ fn tri_box_tri_LU() {
                     .with(external_energy_atom_from_index(edge_index));
             }
 
-            /*if super_uv_graph.dod(&c.right) >= 0 {
+            if super_uv_graph.dod(&c.right) >= 0 {
                 // only check when this graph is a UV subgraph
 
                 let t = symbol!("t");
@@ -533,10 +533,10 @@ fn tri_box_tri_LU() {
                         .expand()
                         .replace(parse!("Q3(Q(7))"))
                         .with(parse!("t*Q3(Q(7))"))
-                        .replace(parse!("Q3(Q(2))"))
-                        .with(parse!("t*Q3(Q(3))-Q3(Q(1))"))
-                        .replace(parse!("Q3(Q(4))"))
-                        .with(parse!("t*Q3(Q(3))-Q3(Q(6))"))
+                        .replace(parse!("Q3(Q(6))"))
+                        .with(parse!("t*Q3(Q(7))-Q3(Q(9))"))
+                        .replace(parse!("Q3(Q(5))"))
+                        .with(parse!("t*Q3(Q(7))-Q3(Q(4))"))
                         .replace(parse!("symbolica_community::dot(t*x_,y_)"))
                         .repeat()
                         .with(parse!("t*symbolica_community::dot(x_,y_)"));
@@ -557,9 +557,9 @@ fn tri_box_tri_LU() {
                         Atom::num(-1).pow(Atom::var(W_.y_))
                             * Atom::var(W_.x_).pow(Atom::var(W_.y_)),
                     )
-                    .expand(); // help Symbolica with cancellations and avoid bad simplification of (-1)^(-5/2)
+                    .expand(); // help Symbolica with cancellations
                 println!("Correct UV cancellation if 0: {:>}", r);
-            }*/
+            }
 
             // linearize Q3
             cut_res = cut_res
@@ -633,10 +633,10 @@ fn tri_box_tri_LU() {
                 );
 
                 let ev = cut_res
-                    .replace(parse!("Q3(2,x_)"))
-                    .with(parse!("Q3(3,x_)-Q3(1,x_)"))
-                    .replace(parse!("Q3(4,x_)"))
-                    .with(parse!("Q3(3,x_)-_gammaloop::P(6,x_)"))
+                    .replace(parse!("Q3(6,x_)"))
+                    .with(parse!("Q3(7,x_)-Q3(9,x_)"))
+                    .replace(parse!("Q3(5,x_)"))
+                    .with(parse!("Q3(7,x_)-Q3(4,x_)"))
                     .evaluator(
                         &fnmap,
                         &[
