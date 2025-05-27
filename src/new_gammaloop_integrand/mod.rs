@@ -723,6 +723,7 @@ fn evaluate_sample<I: GammaloopIntegrand>(
 
     for stability_level in stability_iterator.into_iter() {
         let before_parameterization = std::time::Instant::now();
+
         let ((results, ltd_evaluation_time), parameterization_time) =
             match stability_level.precision {
                 Precision::Double => {
@@ -772,6 +773,29 @@ fn evaluate_sample<I: GammaloopIntegrand>(
 
         if is_stable {
             break;
+        } else {
+            if integrand.get_settings().general.debug > 0 {
+                println!("unstable at level: {}", stability_level.precision);
+                if let Ok(gammaloop_sample) = parameterize::<f64, I>(sample, integrand) {
+                    let rotated_samples: Vec<_> = integrand
+                        .get_rotations()
+                        .map(|rotation| gammaloop_sample.get_rotated_sample(rotation))
+                        .collect();
+
+                    for (sample, result) in rotated_samples.iter().zip(&results) {
+                        let default_sample = sample.get_default_sample();
+                        println!(
+                            "loop_moms: {:?}, external_moms: {:?}",
+                            default_sample.loop_moms(),
+                            default_sample.external_moms()
+                        );
+
+                        println!("result: {}", result);
+                    }
+                } else {
+                    println!("parameterization failed");
+                }
+            }
         }
     }
 
