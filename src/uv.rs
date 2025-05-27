@@ -1,4 +1,10 @@
-use std::{cmp::Ordering, collections::VecDeque, hash::Hash, ops::Deref, sync::LazyLock};
+use std::{
+    cmp::Ordering,
+    collections::VecDeque,
+    hash::Hash,
+    ops::{Deref, Index},
+    sync::LazyLock,
+};
 
 use crate::{
     cff::{
@@ -823,6 +829,22 @@ impl Approximation {
 
             let mom_reps = graph.uv_wrapped_replacement(&self.subgraph, &self.lmb, &[W_.x___]);
 
+            // only apply replacements for edges in the reduced graph
+            let mom_reps: Vec<_> = mom_reps
+                .iter()
+                .enumerate()
+                .filter_map(|(i, r)| {
+                    if graph
+                        .edges(&reduced)
+                        .contains(graph.edges(&self.subgraph).index(i))
+                    {
+                        Some(r)
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+
             println!("Reps:");
             for r in &mom_reps {
                 println!("{r}");
@@ -1103,6 +1125,7 @@ impl Approximation {
         let contracted =
             s * IntegrandExpr::from_subgraph(&amplitude.subtract(&self.subgraph), graph).integrand;
 
+        // FIXME: we are likely mapping in too many momenta, only replace the contracted graph momenta
         Some(
             Self::simplify_notation(&(t * contracted))
                 .replace_multiple(&graph.lmb_replacement)
@@ -1117,23 +1140,28 @@ impl Approximation {
     ) -> Option<Atom> {
         let (t, s) = self.t_op.expr()?;
 
-        let mut contracted = s * IntegrandExpr::from_subgraph(
-            &amplitude.included().subtract(&self.subgraph.included()),
-            graph,
-        )
-        .integrand;
+        let reduced = amplitude.included().subtract(&self.subgraph.included());
 
-        // set the momenta flowing through the edge to the identity wrt the supergraph
-        contracted = contracted
-            .replace(function!(GS.emr_mom, W_.x_, W_.y_))
-            .with(function!(
-                GS.emr_mom,
-                W_.x_,
-                function!(GS.emr_mom, W_.x_),
-                W_.y_
-            ));
+        let contracted = s * IntegrandExpr::from_subgraph(&reduced, graph).integrand;
 
-        Some(t * contracted)
+        let mut res = t * contracted;
+
+        // set the momenta flowing through the reduced graph edges to the identity wrt the supergraph
+        for (e, ei, _) in graph.iter_edges_of(&reduced) {
+            let edge_id = usize::from(ei) as i64;
+            if let HedgePair::Paired { .. } = e {
+                res = res
+                    .replace(function!(GS.emr_mom, edge_id, W_.y_))
+                    .with(function!(
+                        GS.emr_mom,
+                        edge_id,
+                        function!(GS.emr_mom, edge_id),
+                        W_.y_
+                    ));
+            }
+        }
+
+        Some(res)
     }
 
     pub fn final_cff<S: SubGraph>(
@@ -1449,7 +1477,11 @@ impl Forest {
                     .replace(function!(GS.emr_mom, edge_id, W_.mom_, W_.x___))
                     .with_map(move |m| {
                         let momentum2 = m.get(W_.mom_).unwrap().to_atom();
-                        assert_eq!(momentumm, momentum2);
+                        assert_eq!(
+                            momentumm, momentum2,
+                            "{} vs {} for edge {}",
+                            momentumm, momentum2, edge_id
+                        );
                         let index = m.get(W_.x___).unwrap().to_atom();
 
                         let sign = SignOrZero::from(
