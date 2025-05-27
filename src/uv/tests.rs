@@ -48,6 +48,672 @@ use crate::{
 };
 
 #[test]
+fn tri_box_tri_LU() {
+    let _ = env_logger::builder().is_test(true).try_init();
+    let uv_dod = 1;
+
+    // load the model and hack the masses, go through serializable model since arc is not mutable
+    let model = load_generic_model("sm");
+
+    let mut underlying = HedgeGraphBuilder::new();
+
+    let hhh = VertexInfo::InteractonVertexInfo(InteractionVertexInfo {
+        vertex_rule: model.get_vertex_rule("V_9"),
+    });
+    let htt = VertexInfo::InteractonVertexInfo(InteractionVertexInfo {
+        vertex_rule: model.get_vertex_rule("V_141"),
+    });
+
+    let hprop = model.get_propagator("H_propFeynman");
+    let hp = model.get_particle("H");
+
+    let tprop = model.get_propagator("t_propFeynman");
+    let tp = model.get_particle("t");
+
+    let n1 = underlying.add_node(Vertex {
+        name: "n1".into(),
+        vertex_info: hhh.clone(),
+        dod: 0,
+        num: Atom::one(),
+    });
+    let n2 = underlying.add_node(Vertex {
+        name: "n2".into(),
+        vertex_info: hhh.clone(),
+        dod: 0,
+        num: Atom::one(),
+    });
+    let n3 = underlying.add_node(Vertex {
+        name: "n3".into(),
+        vertex_info: hhh.clone(),
+        dod: 0,
+        num: Atom::one(),
+    });
+    let n4 = underlying.add_node(Vertex {
+        name: "n4".into(),
+        vertex_info: htt.clone(),
+        dod: 0,
+
+        num: Atom::one(),
+    });
+    let n5 = underlying.add_node(Vertex {
+        name: "n5".into(),
+        vertex_info: htt.clone(),
+        dod: 0,
+        num: Atom::one(),
+    });
+    let n6 = underlying.add_node(Vertex {
+        name: "n6".into(),
+        vertex_info: htt.clone(),
+        dod: 0,
+        num: Atom::one(),
+    });
+
+    underlying.add_edge(
+        n1,
+        n2,
+        Edge {
+            name: "e0".into(),
+            edge_type: EdgeType::Virtual,
+            particle: hp.clone(),
+            propagator: hprop.clone(),
+            internal_index: vec![],
+            dod: -2,
+            num: Atom::one(),
+        },
+        false,
+    );
+
+    underlying.add_edge(
+        n1,
+        n3,
+        Edge {
+            name: "e1".into(),
+            edge_type: EdgeType::Virtual,
+            particle: hp.clone(),
+            propagator: hprop.clone(),
+            internal_index: vec![],
+            dod: -2,
+            num: Atom::one(),
+        },
+        false,
+    );
+
+    underlying.add_edge(
+        n2,
+        n3,
+        Edge {
+            name: "e2".into(),
+            edge_type: EdgeType::Virtual,
+            particle: tp.clone(),
+            propagator: tprop.clone(),
+            internal_index: vec![],
+            dod: -2,
+            num: Atom::one(),
+        },
+        true,
+    );
+
+    underlying.add_edge(
+        n2,
+        n4,
+        Edge {
+            name: "e3".into(),
+            edge_type: EdgeType::Virtual,
+            particle: tp.clone(),
+            propagator: tprop.clone(),
+            internal_index: vec![],
+            dod: if uv_dod >= 1 { -1 } else { -2 },
+            num: if uv_dod >= 1 {
+                spenso_lor_atom(3, 20, GS.dim)
+            } else {
+                Atom::one()
+            },
+        },
+        true,
+    );
+
+    underlying.add_edge(
+        n3,
+        n5,
+        Edge {
+            name: "e4".into(),
+            edge_type: EdgeType::Virtual,
+            particle: tp.clone(),
+            propagator: tprop.clone(),
+            internal_index: vec![],
+            dod: -2,
+            num: Atom::one(),
+        },
+        true,
+    );
+
+    underlying.add_edge(
+        n4,
+        n5,
+        Edge {
+            name: "e5".into(),
+            edge_type: EdgeType::Virtual,
+            particle: tp.clone(),
+            propagator: tprop.clone(),
+            internal_index: vec![],
+            dod: if uv_dod >= 1 { -1 } else { -2 },
+            num: if uv_dod >= 1 {
+                spenso_lor_atom(5, 20, GS.dim)
+            } else {
+                Atom::one()
+            },
+        },
+        true,
+    );
+
+    underlying.add_edge(
+        n4,
+        n6,
+        Edge {
+            name: "e6".into(),
+            edge_type: EdgeType::Virtual,
+            particle: tp.clone(),
+            propagator: tprop.clone(),
+            internal_index: vec![],
+            dod: if uv_dod >= 0 { -1 } else { -2 },
+            num: if uv_dod >= 0 {
+                spenso_lor_atom(6, 10, GS.dim)
+            } else {
+                Atom::one()
+            },
+        },
+        true,
+    );
+
+    underlying.add_edge(
+        n5,
+        n6,
+        Edge {
+            name: "e7".into(),
+            edge_type: EdgeType::Virtual,
+            particle: tp.clone(),
+            propagator: tprop.clone(),
+            internal_index: vec![],
+            dod: if uv_dod >= 0 { -1 } else { -2 },
+            num: if uv_dod >= 0 {
+                spenso_lor_atom(7, 10, GS.dim)
+            } else {
+                Atom::one()
+            },
+        },
+        true,
+    );
+
+    underlying.add_external_edge(
+        n1,
+        Edge {
+            name: "q1".into(),
+            edge_type: EdgeType::Incoming,
+            particle: hp.clone(),
+            propagator: hprop.clone(),
+            internal_index: vec![],
+            dod: 0,
+            num: Atom::one(),
+        },
+        false,
+        Flow::Sink,
+    );
+
+    underlying.add_external_edge(
+        n6,
+        Edge {
+            name: "q2".into(),
+            edge_type: EdgeType::Outgoing,
+            particle: hp.clone(),
+            propagator: hprop.clone(),
+            internal_index: vec![],
+            dod: 0,
+            num: Atom::one(),
+        },
+        false,
+        Flow::Source,
+    );
+
+    let underlying = underlying.build();
+
+    println!("{}", underlying.dot(&underlying.full_filter()));
+
+    let mut loop_momentum_basis = LoopMomentumBasis {
+        tree: None,
+        loop_edges: vec![EdgeIndex::from(1), EdgeIndex::from(4), EdgeIndex::from(7)].into(), // FIXME: LMB does not seem to be honoured in UV expansion!
+        ext_edges: vec![EdgeIndex::from(8), EdgeIndex::from(9)].into(),
+        edge_signatures: underlying
+            .new_hedgevec(|_, _, _| LoopExtSignature::from((vec![], vec![]))),
+    };
+
+    loop_momentum_basis
+        .set_edge_signatures(&underlying)
+        .unwrap();
+
+    let graph = Graph {
+        multiplicity: Atom::one(),
+        name: "TBT".into(),
+        underlying,
+        loop_momentum_basis,
+        vertex_slots: vec![].into(),
+        external_connections: None,
+    };
+
+    let mut cs: CrossSectionGraph<UnInit> = CrossSectionGraph::new(graph);
+
+    let hpdg = hp.pdg_code as i64;
+    let tpdg = tp.pdg_code as i64;
+    cs.preprocess(
+        &model,
+        &ProcessDefinition {
+            initial_pdgs: vec![hpdg],
+            final_pdgs_lists: vec![
+                vec![tpdg, -tpdg],
+                vec![tpdg, -tpdg, hpdg],
+                vec![hpdg, hpdg],
+                vec![hpdg, hpdg, hpdg],
+                vec![tpdg, -tpdg, hpdg, hpdg],
+            ],
+            n_unresolved: 0,
+            unresolved_cut_content: HashSet::new(),
+            amplitude_filters: FeynGenFilters(vec![]),
+            cross_section_filters: FeynGenFilters(vec![]),
+        },
+    )
+    .unwrap();
+
+    let super_uv_graph = UVGraph::from_underlying(&cs.graph.underlying);
+    let orientation_id = SuperGraphOrientationID(0); // TODO: find out which cut generates the amplitude
+    let supergraph_orientation_data = &cs
+        .derived_data
+        .cff_expression
+        .as_ref()
+        .unwrap()
+        .orientation_data[orientation_id];
+
+    let mut cut_atoms: TiVec<CutId, Atom> = TiVec::new();
+
+    for (id, c) in cs.cuts.iter_enumerated() {
+        let esurface_id = cs.cut_esurface_id_map[id];
+        let cff_cut_expr = &cs
+            .derived_data
+            .cff_expression
+            .as_ref()
+            .unwrap()
+            .cut_expressions[id];
+
+        if let Some((left_orientation, right_orientation)) =
+            cff_cut_expr.orientation_map.get_lr_or(orientation_id)
+        {
+            let left_orientation_data =
+                &cff_cut_expr.left_amplitude.orientations[left_orientation].data;
+            let right_orientation_data =
+                &cff_cut_expr.right_amplitude.orientations[right_orientation].data;
+
+            let cut_mom_basis_id = cs.derived_data.esurface_data.as_ref().unwrap()[esurface_id]
+                .as_ref()
+                .unwrap()
+                .cut_momentum_basis;
+            let cut_lmb = &cs.derived_data.lmbs.as_ref().unwrap()[cut_mom_basis_id];
+
+            let mut left_wood = super_uv_graph.wood(&c.left);
+
+            let mut left_forest = left_wood.unfold(&super_uv_graph, &super_uv_graph.lmb);
+            left_forest.compute(&super_uv_graph);
+            left_forest.compute_cff(&super_uv_graph, left_orientation_data, &None);
+
+            let mut right_forest = super_uv_graph
+                .wood(&c.right)
+                .unfold(&super_uv_graph, &super_uv_graph.lmb);
+            right_forest.compute(&super_uv_graph);
+            right_forest.compute_cff(&super_uv_graph, right_orientation_data, &None);
+
+            println!("//left: \n{}", super_uv_graph.dot(&c.left));
+
+            println!("//right: \n{}", super_uv_graph.dot(&c.right));
+            let left_expr =
+                left_forest.local_expr(&super_uv_graph, &c.left, &None, left_orientation_data);
+            let right_expr =
+                right_forest.local_expr(&super_uv_graph, &c.right, &None, right_orientation_data);
+
+            let mut cut_res = cs.add_additional_factors_to_cff_atom(&(left_expr * right_expr), id);
+
+            // add Feynman rules of cut edges
+            for (_p, edge_index, d) in super_uv_graph.iter_edges_of(&c.cut.left) {
+                let edge_id = usize::from(edge_index) as i64;
+                let orientation = supergraph_orientation_data.orientation.clone();
+                cut_res = (cut_res * &d.data.num)
+                    .replace(function!(GS.emr_mom, edge_id, W_.y_))
+                    .with_map(move |m| {
+                        let index = m.get(W_.y_).unwrap().to_atom();
+
+                        let sign = SignOrZero::from((&orientation[edge_index]).clone()) * 1;
+
+                        function!(GS.ose, edge_id, index) * sign
+                            + function!(GS.emr_vec, edge_id, index)
+                    });
+            }
+
+            // add Feynman rules of external edges
+            for (_p, edge_index, d) in
+                super_uv_graph.iter_edges_of(&super_uv_graph.external_filter())
+            {
+                let edge_id = usize::from(edge_index) as i64;
+                cut_res = (cut_res * &d.data.num)
+                    .replace(function!(GS.emr_mom, edge_id, W_.y_))
+                    .with_map(move |m| {
+                        let index = m.get(W_.y_).unwrap().to_atom();
+
+                        function!(GS.ose, edge_id, index) // OSE will later be replaced
+                                + function!(GS.emr_vec, edge_id, index)
+                    });
+            }
+
+            let spenso_mink = symbol!("spenso::mink");
+
+            // contract all dot products, set all cross terms ose.q3 to 0
+            // MS.dot is a 4d dot product
+            cut_res = cut_res
+                .expand()
+                .replace(function!(GS.emr_vec, W_.x__, W_.y_).npow(2))
+                .with(function!(
+                    MS.dot,
+                    function!(GS.emr_vec, W_.x__),
+                    function!(GS.emr_vec, W_.x__)
+                ))
+                .replace(
+                    function!(GS.emr_vec, W_.x__, W_.a_) * function!(GS.emr_vec, W_.y__, W_.a_),
+                )
+                .repeat()
+                .with(function!(
+                    MS.dot,
+                    function!(GS.emr_vec, W_.x__),
+                    function!(GS.emr_vec, W_.y__)
+                ))
+                .replace(function!(GS.ose, W_.y__, function!(spenso_mink, W_.z__)).npow(2))
+                .with(function!(GS.ose, W_.y__).npow(2))
+                .replace(
+                    function!(GS.ose, W_.x__, function!(spenso_mink, W_.z__))
+                        * function!(GS.ose, W_.y__, function!(spenso_mink, W_.z__)),
+                )
+                .repeat()
+                .with(function!(GS.ose, W_.x__) * function!(GS.ose, W_.y__))
+                .replace(function!(GS.emr_vec, W_.x__, W_.a_) * function!(GS.ose, W_.y__, W_.a_))
+                .with(Atom::Zero)
+                .replace(function!(
+                    MS.dot,
+                    function!(GS.emr_vec, W_.x_),
+                    function!(GS.ose, W_.y_)
+                ))
+                .with(Atom::Zero)
+                .replace(function!(
+                    MS.dot,
+                    function!(GS.ose, W_.x_),
+                    function!(GS.ose, W_.y_)
+                ))
+                .with(function!(GS.ose, W_.x_) * function!(GS.ose, W_.y_))
+                .replace(function!(
+                    MS.dot,
+                    function!(GS.emr_mom, W_.x__),
+                    function!(GS.emr_vec, W_.y__)
+                ))
+                .with(function!(GS.emr_vec, W_.x__) * function!(GS.emr_vec, W_.y__));
+
+            // substitute all OSEs from subgraphs, they are in the form OSE(edge_id, momentum, mass)
+            cut_res = cut_res
+                .replace(function!(GS.ose, W_.x_, W_.y_, W_.z_))
+                .with(
+                    (-function!(
+                        MS.dot,
+                        function!(GS.emr_vec, W_.y_),
+                        function!(GS.emr_vec, W_.y_)
+                    ) + W_.z_)
+                        .sqrt(),
+                );
+
+            // substitute all OSEs (add minus sign to cancel minus sign from 4d dot product)
+            for (_p, edge_id, d) in super_uv_graph.iter_edges_of(&c.cut.left) {
+                let mass2 = Atom::var(symbol!(d.data.particle.mass.name.as_str())).npow(2);
+                cut_res = cut_res
+                    .replace(function!(GS.ose, usize::from(edge_id) as i64))
+                    .with(
+                        (-function!(
+                            MS.dot,
+                            function!(GS.emr_vec, usize::from(edge_id) as i64),
+                            function!(GS.emr_vec, usize::from(edge_id) as i64)
+                        ) + mass2)
+                            .sqrt(),
+                    );
+            }
+
+            // set the external energies
+            for (_p, edge_index, _d) in
+                super_uv_graph.iter_edges_of(&super_uv_graph.external_filter())
+            {
+                let edge_id = usize::from(edge_index) as i64;
+                cut_res = cut_res
+                    .replace(function!(GS.ose, edge_id))
+                    .with(external_energy_atom_from_index(edge_index));
+            }
+
+            /*if super_uv_graph.dod(&c.right) >= 0 {
+                // only check when this graph is a UV subgraph
+
+                let t = symbol!("t");
+                let series = Atom::var(t).npow(3)
+                    * cut_res
+                        .expand()
+                        .replace(parse!("Q3(Q(7))"))
+                        .with(parse!("t*Q3(Q(7))"))
+                        .replace(parse!("Q3(Q(2))"))
+                        .with(parse!("t*Q3(Q(3))-Q3(Q(1))"))
+                        .replace(parse!("Q3(Q(4))"))
+                        .with(parse!("t*Q3(Q(3))-Q3(Q(6))"))
+                        .replace(parse!("symbolica_community::dot(t*x_,y_)"))
+                        .repeat()
+                        .with(parse!("t*symbolica_community::dot(x_,y_)"));
+
+                let s = series
+                    .replace(t)
+                    .with(Atom::var(t).npow(-1))
+                    .series(t, Atom::Zero, 0.into(), true)
+                    .unwrap();
+
+                let r = s
+                    .to_atom()
+                    .expand()
+                    .replace(Atom::var(W_.x_).sqrt())
+                    .with(Atom::var(W_.x_).npow((1, 2)))
+                    .replace((-Atom::var(W_.x_)).pow(Atom::var(W_.y_)))
+                    .with(
+                        Atom::num(-1).pow(Atom::var(W_.y_))
+                            * Atom::var(W_.x_).pow(Atom::var(W_.y_)),
+                    )
+                    .expand(); // help Symbolica with cancellations and avoid bad simplification of (-1)^(-5/2)
+                println!("Correct UV cancellation if 0: {:>}", r);
+            }*/
+
+            // linearize Q3
+            cut_res = cut_res
+                .replace(function!(GS.emr_vec, W_.x_ + W_.y__))
+                .repeat()
+                .with(function!(GS.emr_vec, W_.x_) + function!(GS.emr_vec, W_.y__));
+            cut_res = cut_res
+                .replace(function!(GS.emr_vec, -function!(GS.emr_mom, W_.x_)))
+                .with(-function!(GS.emr_vec, W_.x_));
+
+            cut_res = cut_res
+                .replace(function!(GS.emr_vec, function!(GS.emr_mom, W_.x_)))
+                .with(function!(GS.emr_vec, W_.x_));
+
+            cut_res = cut_res
+                .replace(function!(
+                    MS.dot,
+                    function!(GS.emr_vec, W_.x_),
+                    function!(GS.emr_vec, W_.y_)
+                ))
+                .with(
+                    -(function!(GS.emr_vec, W_.x_, 1) * function!(GS.emr_vec, W_.y_, 1)
+                        + function!(GS.emr_vec, W_.x_, 2) * function!(GS.emr_vec, W_.y_, 2)
+                        + function!(GS.emr_vec, W_.x_, 3) * function!(GS.emr_vec, W_.y_, 3)),
+                );
+
+            // set the external spatial parts
+            for (_p, edge_index, _d) in
+                super_uv_graph.iter_edges_of(&super_uv_graph.external_filter())
+            {
+                let edge_id = usize::from(edge_index) as i64;
+                cut_res = cut_res
+                    .replace(function!(GS.emr_vec, edge_id, W_.x_))
+                    .with(function!(GS.external_mom, edge_id, W_.x_));
+            }
+
+            /*if super_uv_graph.dod(&c.right) >= 0 {
+                let mut fnmap = FunctionMap::new();
+
+                fnmap.add_constant(
+                    Atom::var(symbol!("h")),
+                    symbolica::domains::float::Complex::new((1.).into(), (0.).into()),
+                );
+                fnmap.add_constant(
+                    Atom::var(symbol!("∇η")),
+                    symbolica::domains::float::Complex::new((1.).into(), (0.).into()),
+                );
+                fnmap.add_constant(
+                    Atom::var(symbol!("π")),
+                    symbolica::domains::float::Complex::new((3.14).into(), (0.).into()),
+                );
+                fnmap.add_constant(
+                    Atom::var(symbol!("t⃰")),
+                    symbolica::domains::float::Complex::new((1.).into(), (0.).into()),
+                );
+                fnmap.add_constant(
+                    Atom::var(symbol!("MH")),
+                    symbolica::domains::float::Complex::new((125.).into(), (0.).into()),
+                );
+                fnmap.add_constant(
+                    Atom::var(symbol!("MT")),
+                    symbolica::domains::float::Complex::new((173.).into(), (0.).into()),
+                );
+                fnmap.add_constant(
+                    Atom::var(symbol!("mUV")),
+                    symbolica::domains::float::Complex::new((10.).into(), (1000.).into()),
+                );
+                fnmap.add_constant(
+                    Atom::var(symbol!("ZERO")),
+                    symbolica::domains::float::Complex::new((0.).into(), (0.).into()),
+                );
+
+                let ev = cut_res
+                    .replace(parse!("Q3(2,x_)"))
+                    .with(parse!("Q3(3,x_)-Q3(1,x_)"))
+                    .replace(parse!("Q3(4,x_)"))
+                    .with(parse!("Q3(3,x_)-_gammaloop::P(6,x_)"))
+                    .evaluator(
+                        &fnmap,
+                        &[
+                            parse!("Q3(0, 1)"),
+                            parse!("Q3(0, 2)"),
+                            parse!("Q3(0, 3)"),
+                            parse!("Q3(1, 1)"),
+                            parse!("Q3(1, 2)"),
+                            parse!("Q3(1, 3)"),
+                            parse!("Q3(3, 1)"),
+                            parse!("Q3(3, 2)"),
+                            parse!("Q3(3, 3)"),
+                            parse!("Q3(5, 1)"),
+                            parse!("Q3(5, 2)"),
+                            parse!("Q3(5, 3)"),
+                            parse!("_gammaloop::P(6,spenso::find(0))"),
+                            parse!("_gammaloop::P(6,1)"),
+                            parse!("_gammaloop::P(6,2)"),
+                            parse!("_gammaloop::P(6,3)"),
+                        ],
+                        OptimizationSettings::default(),
+                    )
+                    .unwrap();
+
+                let mut ev2 = ev.map_coeff(&|x| x.re.to_f64());
+
+                println!("Single limit:");
+                for t in (0..100_000).step_by(5000) {
+                    let r = (t as f64).powf(3.)
+                        * ev2.evaluate_single(&[
+                            43.,
+                            5.,
+                            6.5,
+                            20.,
+                            5.,
+                            6.5,
+                            t as f64 + 1.,
+                            t as f64 * 2. + 2.,
+                            t as f64 + 3.,
+                            2.4,
+                            5.,
+                            2.3,
+                            800.,
+                            1.,
+                            2.,
+                            4.,
+                        ]);
+                    println!("{} {}", r, r.abs().log10());
+                }
+            }*/
+
+            cut_res = cut_res
+                .replace(parse!("MT"))
+                .with(Atom::new())
+                .replace(parse!("MH"))
+                .with(Atom::new());
+
+            let cut_res = cut_res.expand();
+
+            println!("Cut {} result: {:>}", id, cut_res);
+
+            cut_atoms.push(cut_res);
+        } else {
+            cut_atoms.push(Atom::new());
+        }
+    }
+
+    println!("Done generation");
+
+    cs.derived_data.bare_cff_evaluators = None;
+    cs.build_cut_evaluators(&model, Some(cut_atoms));
+
+    let external_connection = ExternalConnection {
+        incoming_index: ExternalIndex::from(0),
+        outgoing_index: ExternalIndex::from(1),
+    };
+
+    let cs_struct = CrossSection {
+        name: "LU_test".into(),
+        supergraphs: vec![cs],
+        external_connections: vec![external_connection],
+        external_particles: vec![hp.clone(), hp.clone()],
+        n_incmoming: 1,
+    };
+
+    let settings: Settings = serde_yaml::from_str(LU_TEST_SETTINGS).unwrap();
+    let integrand = cs_struct.generate_integrand(settings.clone(), &model);
+
+    crate::set_interrupt_handler();
+
+    let result = match integrand {
+        Integrand::NewIntegrand(real_integrand) => havana_integrate(
+            &settings,
+            |set| real_integrand.user_data_generator(1, set),
+            None,
+            None,
+            None,
+        ),
+        _ => unimplemented!(),
+    };
+
+    //println!("Final result: {:>}", sum.expand());
+}
+
+#[test]
 fn double_triangle_LU() {
     let _ = env_logger::builder().is_test(true).try_init();
     let uv_dod = 1;
