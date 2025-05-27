@@ -11,10 +11,11 @@ use crate::{
         expression::OrientationData,
         generation::{generate_uv_cff, ShiftRewrite},
     },
-    graph::VertexInfo,
+    cross_section::SuperGraph,
+    graph::{Graph, VertexInfo},
     model::ArcParticle,
     momentum::Sign,
-    new_graph::{no_filter, Edge, LMBext, LoopMomentumBasis, Vertex},
+    new_graph::{self, no_filter, Edge, LMBext, LoopMomentumBasis, Vertex},
     utils::{GS, W_},
 };
 use ahash::AHashSet;
@@ -161,6 +162,43 @@ pub fn spenso_lor_atom(tag: i32, ind: impl Into<AbstractIndex>, dim: impl Into<D
 
 #[allow(dead_code)]
 impl UVGraph {
+    pub fn from_supergraph(sg: &new_graph::Graph) -> Self {
+        let hedge_graph = sg.underlying.map_data_ref(
+            |_, _, n| UVNode {
+                dod: n.dod,
+                num: n.num.clone(),
+                color: None,
+            },
+            |_, eid, _, n| {
+                n.map(|d| {
+                    let m2 = parse!(d.particle.mass.name).npow(2);
+                    UVEdge {
+                        og_edge: 1,
+                        dod: d.dod,
+                        particle: d.particle.clone(),
+                        num: d.num.clone(),
+                        den: spenso_lor_atom(usize::from(eid) as i32, 1, GS.dim)
+                            .npow(2)
+                            //.to_dots()
+                            - m2,
+                    }
+                })
+            },
+        );
+
+        let reps = hedge_graph.normal_emr_replacement(
+            &hedge_graph.full_filter(),
+            &sg.loop_momentum_basis,
+            &[W_.x___],
+            no_filter,
+        );
+        UVGraph {
+            hedge_graph,
+            lmb: sg.loop_momentum_basis.clone(),
+            lmb_replacement: reps,
+        }
+    }
+
     pub fn from_underlying(hedge_graph: &HedgeGraph<Edge, Vertex>) -> Self {
         Self::from_hedge(hedge_graph.map_data_ref(
             |_, _, n| UVNode {
@@ -827,23 +865,8 @@ impl Approximation {
 
             let mut atomarg = t_arg.integrand * inner_t;
 
-            let mom_reps = graph.uv_wrapped_replacement(&self.subgraph, &self.lmb, &[W_.x___]);
-
             // only apply replacements for edges in the reduced graph
-            let mom_reps: Vec<_> = mom_reps
-                .iter()
-                .enumerate()
-                .filter_map(|(i, r)| {
-                    if graph
-                        .edges(&reduced)
-                        .contains(graph.edges(&self.subgraph).index(i))
-                    {
-                        Some(r)
-                    } else {
-                        None
-                    }
-                })
-                .collect();
+            let mom_reps = graph.uv_wrapped_replacement(&reduced, &self.lmb, &[W_.x___]);
 
             println!("Reps:");
             for r in &mom_reps {
@@ -1149,7 +1172,7 @@ impl Approximation {
         // set the momenta flowing through the reduced graph edges to the identity wrt the supergraph
         for (e, ei, _) in graph.iter_edges_of(&reduced) {
             let edge_id = usize::from(ei) as i64;
-            if let HedgePair::Paired { .. } = e {
+            if e.is_paired() {
                 res = res
                     .replace(function!(GS.emr_mom, edge_id, W_.y_))
                     .with(function!(
