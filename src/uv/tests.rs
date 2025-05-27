@@ -322,7 +322,7 @@ fn tri_box_tri_LU() {
     )
     .unwrap();
 
-    let super_uv_graph = UVGraph::from_underlying(&cs.graph.underlying);
+    let super_uv_graph = UVGraph::from_supergraph(&cs.graph);
     let orientation_id = SuperGraphOrientationID(0); // TODO: find out which cut generates the amplitude
     let supergraph_orientation_data = &cs
         .derived_data
