@@ -20,7 +20,10 @@ use spenso::{
         NamedStructure, ToSymbolic,
     },
 };
-use symbolica::evaluate::{FunctionMap, OptimizationSettings};
+use symbolica::{
+    evaluate::{FunctionMap, OptimizationSettings},
+    numerical_integration::Sample,
+};
 use symbolica_community::physics::algebraic_simplification::metric::MetricSimplifier;
 
 use crate::{
@@ -30,7 +33,7 @@ use crate::{
         FeynGenFilters,
     },
     graph::{EdgeType, InteractionVertexInfo},
-    integrands::Integrand,
+    integrands::{HasIntegrand, Integrand},
     integrate::{havana_integrate, UserData},
     model::{ArcVertexRule, ColorStructure, Model, VertexRule},
     momentum_sample::ExternalIndex,
@@ -436,12 +439,12 @@ fn double_triangle_LU() {
                 let series = Atom::var(t).npow(3)
                     * cut_res
                         .expand()
-                        .replace(parse!("Q3(3,x_)"))
-                        .with(parse!("t*Q3(3,x_)"))
-                        .replace(parse!("Q3(2,x_)"))
-                        .with(parse!("t*Q3(3,x_)-Q3(1,x_)"))
-                        .replace(parse!("Q3(4,x_)"))
-                        .with(parse!("t*Q3(3,x_)-Q3(6,x_)"))
+                        .replace(parse!("Q3(Q(3))"))
+                        .with(parse!("t*Q3(Q(3))"))
+                        .replace(parse!("Q3(Q(2))"))
+                        .with(parse!("t*Q3(Q(3))-Q3(Q(1))"))
+                        .replace(parse!("Q3(Q(4))"))
+                        .with(parse!("t*Q3(Q(3))-Q3(Q(6))"))
                         .replace(parse!("symbolica_community::dot(t*x_,y_)"))
                         .repeat()
                         .with(parse!("t*symbolica_community::dot(x_,y_)"));
@@ -492,6 +495,98 @@ fn double_triangle_LU() {
                     .with(function!(GS.external_mom, edge_id, W_.x_));
             }
 
+            if super_uv_graph.dod(&c.right) >= 0 {
+                let mut fnmap = FunctionMap::new();
+
+                fnmap.add_constant(
+                    Atom::var(symbol!("h")),
+                    symbolica::domains::float::Complex::new((1.).into(), (0.).into()),
+                );
+                fnmap.add_constant(
+                    Atom::var(symbol!("∇η")),
+                    symbolica::domains::float::Complex::new((1.).into(), (0.).into()),
+                );
+                fnmap.add_constant(
+                    Atom::var(symbol!("π")),
+                    symbolica::domains::float::Complex::new((3.14).into(), (0.).into()),
+                );
+                fnmap.add_constant(
+                    Atom::var(symbol!("t⃰")),
+                    symbolica::domains::float::Complex::new((1.).into(), (0.).into()),
+                );
+                fnmap.add_constant(
+                    Atom::var(symbol!("MH")),
+                    symbolica::domains::float::Complex::new((125.).into(), (0.).into()),
+                );
+                fnmap.add_constant(
+                    Atom::var(symbol!("MT")),
+                    symbolica::domains::float::Complex::new((173.).into(), (0.).into()),
+                );
+                fnmap.add_constant(
+                    Atom::var(symbol!("mUV")),
+                    symbolica::domains::float::Complex::new((10.).into(), (1000.).into()),
+                );
+                fnmap.add_constant(
+                    Atom::var(symbol!("ZERO")),
+                    symbolica::domains::float::Complex::new((0.).into(), (0.).into()),
+                );
+
+                let ev = cut_res
+                    .replace(parse!("Q3(2,x_)"))
+                    .with(parse!("Q3(3,x_)-Q3(1,x_)"))
+                    .replace(parse!("Q3(4,x_)"))
+                    .with(parse!("Q3(3,x_)-_gammaloop::P(6,x_)"))
+                    .evaluator(
+                        &fnmap,
+                        &[
+                            parse!("Q3(0, 1)"),
+                            parse!("Q3(0, 2)"),
+                            parse!("Q3(0, 3)"),
+                            parse!("Q3(1, 1)"),
+                            parse!("Q3(1, 2)"),
+                            parse!("Q3(1, 3)"),
+                            parse!("Q3(3, 1)"),
+                            parse!("Q3(3, 2)"),
+                            parse!("Q3(3, 3)"),
+                            parse!("Q3(5, 1)"),
+                            parse!("Q3(5, 2)"),
+                            parse!("Q3(5, 3)"),
+                            parse!("_gammaloop::P(6,spenso::find(0))"),
+                            parse!("_gammaloop::P(6,1)"),
+                            parse!("_gammaloop::P(6,2)"),
+                            parse!("_gammaloop::P(6,3)"),
+                        ],
+                        OptimizationSettings::default(),
+                    )
+                    .unwrap();
+
+                let mut ev2 = ev.map_coeff(&|x| x.re.to_f64());
+
+                println!("Single limit:");
+                for t in (0..100_000).step_by(5000) {
+                    let r = (t as f64).powf(3.)
+                        * ev2.evaluate_single(&[
+                            43.,
+                            5.,
+                            6.5,
+                            20.,
+                            5.,
+                            6.5,
+                            t as f64 + 1.,
+                            t as f64 * 2. + 2.,
+                            t as f64 + 3.,
+                            2.4,
+                            5.,
+                            2.3,
+                            800.,
+                            1.,
+                            2.,
+                            4.,
+                        ]);
+                    println!("{} {}", r, r.abs().log10());
+                }
+            }
+
             cut_res = cut_res
                 .replace(parse!("MT"))
                 .with(Atom::new())
@@ -528,6 +623,8 @@ fn double_triangle_LU() {
 
     let settings: Settings = serde_yaml::from_str(LU_TEST_SETTINGS).unwrap();
     let integrand = cs_struct.generate_integrand(settings.clone(), &model);
+
+    crate::set_interrupt_handler();
 
     let result = match integrand {
         Integrand::NewIntegrand(real_integrand) => havana_integrate(
