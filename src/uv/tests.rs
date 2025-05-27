@@ -51,7 +51,7 @@ use crate::{
 #[test]
 fn tri_box_tri_LU() {
     let _ = env_logger::builder().is_test(true).try_init();
-    let uv_dod = 1;
+    let uv_dod = 0;
 
     // load the model and hack the masses, go through serializable model since arc is not mutable
     let model = load_generic_model("sm");
@@ -145,13 +145,13 @@ fn tri_box_tri_LU() {
         Edge {
             name: "e2".into(),
             edge_type: EdgeType::Virtual,
-            particle: tp.clone(),
-            propagator: tprop.clone(),
+            particle: hp.clone(),
+            propagator: hprop.clone(),
             internal_index: vec![],
             dod: -2,
             num: Atom::one(),
         },
-        true,
+        false,
     );
 
     underlying.add_edge(
@@ -160,8 +160,8 @@ fn tri_box_tri_LU() {
         Edge {
             name: "e3".into(),
             edge_type: EdgeType::Virtual,
-            particle: tp.clone(),
-            propagator: tprop.clone(),
+            particle: hp.clone(),
+            propagator: hprop.clone(),
             internal_index: vec![],
             dod: if uv_dod >= 1 { -1 } else { -2 },
             num: if uv_dod >= 1 {
@@ -170,7 +170,7 @@ fn tri_box_tri_LU() {
                 Atom::one()
             },
         },
-        true,
+        false,
     );
 
     underlying.add_edge(
@@ -179,13 +179,13 @@ fn tri_box_tri_LU() {
         Edge {
             name: "e4".into(),
             edge_type: EdgeType::Virtual,
-            particle: tp.clone(),
-            propagator: tprop.clone(),
+            particle: hp.clone(),
+            propagator: hprop.clone(),
             internal_index: vec![],
             dod: -2,
             num: Atom::one(),
         },
-        true,
+        false,
     );
 
     underlying.add_edge(
@@ -208,8 +208,8 @@ fn tri_box_tri_LU() {
     );
 
     underlying.add_edge(
-        n4,
         n6,
+        n4,
         Edge {
             name: "e6".into(),
             edge_type: EdgeType::Virtual,
@@ -335,6 +335,18 @@ fn tri_box_tri_LU() {
     let mut cut_atoms: TiVec<CutId, Atom> = TiVec::new();
 
     for (id, c) in cs.cuts.iter_enumerated() {
+        let edges_in_cut = cs
+            .graph
+            .underlying
+            .iter_edges_of(&c.cut)
+            .map(|(_, _, edge)| edge.data.name.clone())
+            .collect_vec();
+
+        println!("----cut info----");
+        println!("cut: {}, edge_in_cut: {:?}", id, edges_in_cut);
+    }
+
+    for (id, c) in cs.cuts.iter_enumerated() {
         let esurface_id = cs.cut_esurface_id_map[id];
         let cff_cut_expr = &cs
             .derived_data
@@ -350,6 +362,16 @@ fn tri_box_tri_LU() {
                 &cff_cut_expr.left_amplitude.orientations[left_orientation].data;
             let right_orientation_data =
                 &cff_cut_expr.right_amplitude.orientations[right_orientation].data;
+
+            let edges_in_cut = cs
+                .graph
+                .underlying
+                .iter_edges_of(&c.cut)
+                .map(|(_, _, edge)| edge.data.name.clone())
+                .collect_vec();
+
+            println!("----cut info----");
+            println!("cut: {}, edge_in_cut: {:?}", id, edges_in_cut);
 
             let cut_mom_basis_id = cs.derived_data.esurface_data.as_ref().unwrap()[esurface_id]
                 .as_ref()
@@ -712,21 +734,29 @@ fn tri_box_tri_LU() {
     .map(|x| F(x))
     .to_vec();
 
-    let inspect = inspect(&settings, &mut integrand, pt, &[0usize], false, false, true);
+    let inspect = inspect(
+        &settings,
+        &mut integrand,
+        pt,
+        &[0usize],
+        false,
+        false,
+        false,
+    );
     println!("Inspect: {}", inspect);
 
     crate::set_interrupt_handler();
 
-    let result = match integrand {
-        Integrand::NewIntegrand(real_integrand) => havana_integrate(
-            &settings,
-            |set| real_integrand.user_data_generator(1, set),
-            None,
-            None,
-            None,
-        ),
-        _ => unimplemented!(),
-    };
+    //let result = match integrand {
+    //    Integrand::NewIntegrand(real_integrand) => havana_integrate(
+    //        &settings,
+    //        |set| real_integrand.user_data_generator(1, set),
+    //        None,
+    //        None,
+    //        None,
+    //    ),
+    //    _ => unimplemented!(),
+    //};
 
     //println!("Final result: {:>}", sum.expand());
 }
