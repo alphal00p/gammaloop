@@ -2499,7 +2499,7 @@ Stability:
   - escalate_for_large_weight_threshold: 0.9
     precision: Double
     required_precision_for_im: 1.0e-07
-required_precision_for_re: 1.0e-07
+    required_precision_for_re: 1.0e-07
   - escalate_for_large_weight_threshold: -1.0
     precision: Quad
     required_precision_for_im: 1.0e-10
