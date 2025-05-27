@@ -33,6 +33,7 @@ use crate::{
         FeynGenFilters,
     },
     graph::{EdgeType, InteractionVertexInfo},
+    inspect::inspect,
     integrands::{HasIntegrand, Integrand},
     integrate::{havana_integrate, UserData},
     model::{ArcVertexRule, ColorStructure, Model, VertexRule},
@@ -695,7 +696,24 @@ fn tri_box_tri_LU() {
     };
 
     let settings: Settings = serde_yaml::from_str(LU_TEST_SETTINGS).unwrap();
-    let integrand = cs_struct.generate_integrand(settings.clone(), &model);
+    let mut integrand = cs_struct.generate_integrand(settings.clone(), &model);
+
+    let pt = [
+        0.31004086041918333,
+        0.7815697277004788,
+        0.6202008544671024,
+        0.6190332727643015,
+        0.24184677738989202,
+        0.8744823147056069,
+        0.9999999782473179,
+        0.6856031377105378,
+        0.2575511966155076,
+    ]
+    .map(|x| F(x))
+    .to_vec();
+
+    let inspect = inspect(&settings, &mut integrand, pt, &[0usize], false, false, true);
+    println!("Inspect: {}", inspect);
 
     crate::set_interrupt_handler();
 
