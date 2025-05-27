@@ -2452,7 +2452,11 @@ Stability:
     required_precision_for_im: 1.0e-10
     required_precision_for_re: 1.0e-10
   rotate_numerator: false
-  rotation_axis: []
+  rotation_axis: 
+    - type: euler_angles
+      alpha: 0.2 
+      beta: 0.3
+      gamma: 0.4
 sampling:
   sample_orientations: false
   sampling_type:
