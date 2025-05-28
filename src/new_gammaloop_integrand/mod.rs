@@ -785,17 +785,31 @@ fn evaluate_sample<I: GammaloopIntegrand>(
                     for (sample, result) in rotated_samples.iter().zip(&results) {
                         let default_sample = sample.get_default_sample();
                         println!(
-                            "loop_moms: {:?}, external_moms: {:?}",
-                            default_sample.loop_moms(),
-                            default_sample.external_moms()
+                            "loop_moms: {}, external_moms: {}",
+                            format!("{}", default_sample.loop_moms()).blue(),
+                            format!("{:?}", default_sample.external_moms()).blue()
                         );
 
-                        println!("result: {}", result);
+                        println!(
+                            "result of current level: {}",
+                            format!("{:16e}", result).blue()
+                        );
                     }
                 } else {
                     println!("parameterization failed");
                 }
             }
+        }
+    }
+
+    if integrand.get_settings().general.debug > 0 {
+        println!("result at each level:");
+        for level_result in results_of_stability_levels.iter() {
+            println!(
+                "level: {}. result: {}",
+                format!("{}", level_result.stability_level_used).green(),
+                format!("{:16e}", level_result.result).blue()
+            );
         }
     }
 

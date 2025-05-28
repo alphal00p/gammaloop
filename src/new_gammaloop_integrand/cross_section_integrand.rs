@@ -1,4 +1,5 @@
 use bincode::Encode;
+use colored::Colorize;
 use itertools::Itertools;
 use serde::Serialize;
 use spenso::algebra::complex::Complex;
@@ -27,7 +28,7 @@ use super::{
 };
 
 const TOLERANCE: F<f64> = F(2.0);
-const HARD_CODED_M_UV: F<f64> = F(10000.0);
+const HARD_CODED_M_UV: F<f64> = F(1000.0);
 
 #[derive(Clone)]
 pub struct CrossSectionIntegrand {
@@ -229,10 +230,13 @@ impl CrossSectionGraphTerm {
                 let h_function = utils::h(&newton_result.solution, None, None, h_function_settings);
 
                 if settings.general.debug > 1 {
-                    println!("generated parameters for cut: {}", _cut_id);
-                    println!("t_star: {:16e}", newton_result.solution);
-                    println!("h_function: {:16e}", h_function);
-                    println!("derivative: {:16e}", newton_result.derivative_at_solution);
+                    println!(
+                        "generated parameters for cut: {}",
+                        format!("{}", _cut_id).green()
+                    );
+
+                    println!("solver: {:#?}", newton_result);
+                    println!("h_function: {}", format!("{:16e}", h_function).green());
                     println!("rescaled loop momenta: {:?}", rescaled_sample.loop_moms());
                 }
 
@@ -298,9 +302,11 @@ impl CrossSectionGraphTerm {
                     let cut_results =
                         <T as GenericEvaluatorFloat>::get_evaluator(evaluator)(&params);
                     if settings.general.debug > 0 {
-                        println!("------");
-                        println!("cut: {}, result: {:16e}", id, cut_results);
-                        println!("------");
+                        println!(
+                            "cut: {}, result: {}",
+                            format!("{}", id).green(),
+                            format!("{:16e}", cut_results).blue()
+                        );
                     }
                     cut_results
                 })
@@ -309,7 +315,10 @@ impl CrossSectionGraphTerm {
 
         let final_result = Complex::new_re(result);
         if settings.general.debug > 0 {
-            println!("final result: {:16e}", final_result);
+            println!(
+                "sum of all cuts: {}",
+                format!("{:16e}", final_result).blue()
+            );
         }
         final_result
     }
@@ -383,7 +392,7 @@ fn newton_iteration_and_derivative<T: FloatLike>(
     }
 }
 
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Clone, Debug)]
 struct NewtonIterationResult<T: FloatLike> {
     solution: F<T>,
     derivative_at_solution: F<T>,
