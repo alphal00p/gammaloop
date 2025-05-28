@@ -51,8 +51,8 @@ use crate::{
 #[test]
 fn tri_box_tri_LU() {
     let _ = env_logger::builder().is_test(true).try_init();
-    let uv_dod = -1;
-    let is_massless = true;
+    let uv_dod = 1;
+    let is_massless = false;
 
     // load the model and hack the masses, go through serializable model since arc is not mutable
     let model = if is_massless {
@@ -210,9 +210,9 @@ fn tri_box_tri_LU() {
             particle: tp.clone(),
             propagator: tprop.clone(),
             internal_index: vec![],
-            dod: if uv_dod >= 1 { -1 } else { -2 },
-            num: if uv_dod >= 1 {
-                spenso_lor_atom(5, 20, GS.dim)
+            dod: if uv_dod >= 0 { -1 } else { -2 },
+            num: if uv_dod >= 0 {
+                spenso_lor_atom(5, 10, GS.dim)
             } else {
                 Atom::one()
             },
@@ -229,9 +229,9 @@ fn tri_box_tri_LU() {
             particle: tp.clone(),
             propagator: tprop.clone(),
             internal_index: vec![],
-            dod: if uv_dod >= 0 { -1 } else { -2 },
-            num: if uv_dod >= 0 {
-                spenso_lor_atom(6, 10, GS.dim)
+            dod: if uv_dod >= 1 { -1 } else { -2 },
+            num: if uv_dod >= 1 {
+                spenso_lor_atom(6, 20, GS.dim)
             } else {
                 Atom::one()
             },
@@ -337,7 +337,7 @@ fn tri_box_tri_LU() {
     .unwrap();
 
     let super_uv_graph = UVGraph::from_supergraph(&cs.graph);
-    let orientation_id = SuperGraphOrientationID(80); // TODO: find out which cut generates the amplitude
+    let orientation_id = SuperGraphOrientationID(0); // TODO: find out which cut generates the amplitude
     let supergraph_orientation_data = &cs
         .derived_data
         .cff_expression
@@ -781,16 +781,16 @@ fn tri_box_tri_LU() {
 
     crate::set_interrupt_handler();
 
-    // let result = match integrand {
-    //     Integrand::NewIntegrand(real_integrand) => havana_integrate(
-    //         &settings,
-    //         |set| real_integrand.user_data_generator(1, set),
-    //         None,
-    //         None,
-    //         None,
-    //     ),
-    //     _ => unimplemented!(),
-    // };
+    let result = match integrand {
+        Integrand::NewIntegrand(real_integrand) => havana_integrate(
+            &settings,
+            |set| real_integrand.user_data_generator(1, set),
+            None,
+            None,
+            None,
+        ),
+        _ => unimplemented!(),
+    };
 
     //println!("Final result: {:>}", sum.expand());
 }
@@ -2487,7 +2487,7 @@ General:
   amplitude_prefactor:
     im: 1.0
     re: 0.0
-  debug: 2
+  debug: 0
   force_orientations: null
   joint_numerator_eval: true
   load_compiled_cff: true
@@ -2506,7 +2506,7 @@ Integrator:
   n_bins: 16
   n_increase: 0
   n_max: 100000000
-  n_start: 2000000
+  n_start: 2000
   seed: 2
   show_max_wgt_info: false
   train_on_avg: false
