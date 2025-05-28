@@ -10,7 +10,7 @@ use linnet::half_edge::{builder::HedgeGraphBuilder, involution::Flow};
 
 use smartstring::SmartString;
 use spenso::{
-    algebra::complex::Complex,
+    algebra::{algebraic_traits::IsZero, complex::Complex},
     network::{library::TensorLibraryData, parsing::ShadowedStructure},
     structure::{
         abstract_index::AbstractIndex,
@@ -51,10 +51,15 @@ use crate::{
 #[test]
 fn tri_box_tri_LU() {
     let _ = env_logger::builder().is_test(true).try_init();
-    let uv_dod = 1;
+    let uv_dod = -1;
+    let is_massless = true;
 
     // load the model and hack the masses, go through serializable model since arc is not mutable
-    let model = load_generic_model("sm");
+    let model = if is_massless {
+        load_generic_model("sm_massless")
+    } else {
+        load_generic_model("sm")
+    };
 
     let mut underlying = HedgeGraphBuilder::new();
 
@@ -68,8 +73,16 @@ fn tri_box_tri_LU() {
     let hprop = model.get_propagator("H_propFeynman");
     let hp = model.get_particle("H");
 
+    if is_massless {
+        assert!(hp.0.mass.value.unwrap().is_zero());
+    }
+
     let tprop = model.get_propagator("t_propFeynman");
     let tp = model.get_particle("t");
+
+    if is_massless {
+        assert!(tp.0.mass.value.unwrap().is_zero());
+    }
 
     let n1 = underlying.add_node(Vertex {
         name: "n1".into(),
@@ -324,13 +337,25 @@ fn tri_box_tri_LU() {
     .unwrap();
 
     let super_uv_graph = UVGraph::from_supergraph(&cs.graph);
-    let orientation_id = SuperGraphOrientationID(0); // TODO: find out which cut generates the amplitude
+    let orientation_id = SuperGraphOrientationID(80); // TODO: find out which cut generates the amplitude
     let supergraph_orientation_data = &cs
         .derived_data
         .cff_expression
         .as_ref()
         .unwrap()
         .orientation_data[orientation_id];
+
+    for (orientation_id, orientation_data) in cs
+        .derived_data
+        .cff_expression
+        .as_ref()
+        .unwrap()
+        .orientation_data
+        .iter_enumerated()
+    {
+        println!("orientation_id: {}", orientation_id.0);
+        println!("cuts: {:?}", orientation_data.cuts);
+    }
 
     let mut cut_atoms: TiVec<CutId, Atom> = TiVec::new();
 
@@ -688,11 +713,15 @@ fn tri_box_tri_LU() {
                 }
             }*/
 
-            cut_res = cut_res
-                .replace(parse!("MT"))
-                .with(Atom::new())
-                .replace(parse!("MH"))
-                .with(Atom::new());
+            cut_res = cut_res.expand();
+
+            if is_massless {
+                cut_res = cut_res
+                    .replace(parse!("MT"))
+                    .with(Atom::new())
+                    .replace(parse!("MH"))
+                    .with(Atom::new());
+            }
 
             let cut_res = cut_res.expand();
 
@@ -726,15 +755,15 @@ fn tri_box_tri_LU() {
     let mut integrand = cs_struct.generate_integrand(settings.clone(), &model);
 
     let pt = [
-        0.31004086041918333,
-        0.7815697277004788,
-        0.6202008544671024,
-        0.6190332727643015,
-        0.24184677738989202,
-        0.8744823147056069,
-        0.9999999782473179,
-        0.6856031377105378,
-        0.2575511966155076,
+        0.29524956611783904,
+        0.7817766395757219,
+        0.9871982777886554,
+        0.00000005657505108835892,
+        0.27340654746267856,
+        0.3496212940550564,
+        0.26907610629771705,
+        0.8470335349214098,
+        0.2978377809550732,
     ]
     .map(|x| F(x))
     .to_vec();
@@ -752,16 +781,16 @@ fn tri_box_tri_LU() {
 
     crate::set_interrupt_handler();
 
-    let result = match integrand {
-        Integrand::NewIntegrand(real_integrand) => havana_integrate(
-            &settings,
-            |set| real_integrand.user_data_generator(1, set),
-            None,
-            None,
-            None,
-        ),
-        _ => unimplemented!(),
-    };
+    // let result = match integrand {
+    //     Integrand::NewIntegrand(real_integrand) => havana_integrate(
+    //         &settings,
+    //         |set| real_integrand.user_data_generator(1, set),
+    //         None,
+    //         None,
+    //         None,
+    //     ),
+    //     _ => unimplemented!(),
+    // };
 
     //println!("Final result: {:>}", sum.expand());
 }
@@ -2458,7 +2487,7 @@ General:
   amplitude_prefactor:
     im: 1.0
     re: 0.0
-  debug: 0
+  debug: 2
   force_orientations: null
   joint_numerator_eval: true
   load_compiled_cff: true
@@ -2469,15 +2498,15 @@ Integrand:
   type: gamma_loop
 Integrator:
   bin_number_evolution: null
-  continuous_dim_learning_rate: 0.3
-  discrete_dim_learning_rate: 1.5
+  continuous_dim_learning_rate: 0.0
+  discrete_dim_learning_rate: 0.0
   integrated_phase: real
   max_prob_ratio: 1000.0
   min_samples_for_update: 100
   n_bins: 16
   n_increase: 0
   n_max: 100000000
-  n_start: 2000
+  n_start: 2000000
   seed: 2
   show_max_wgt_info: false
   train_on_avg: false
@@ -2506,10 +2535,10 @@ Stability:
     required_precision_for_re: 1.0e-10
   rotate_numerator: false
   rotation_axis: 
-    - type: euler_angles
-      alpha: 0.2 
-      beta: 0.3
-      gamma: 0.4
+  - type: euler_angles 
+    alpha: 0.1 
+    beta: 0.2 
+    gamma: 0.3
 sampling:
   sample_orientations: false
   sampling_type:
