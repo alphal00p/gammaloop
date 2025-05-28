@@ -187,9 +187,12 @@ pub trait GenericEvaluatorFloat<T: FloatLike = Self> {
 }
 
 impl GenericEvaluatorFloat for f64 {
+    #[inline(always)]
     fn get_evaluator(generic_evaluator: &GenericEvaluator) -> impl Fn(&[F<f64>]) -> F<f64> {
+        #[inline(always)]
         |params: &[F<f64>]| {
-            let mut out = vec![F(0.)];
+            let mut out = [F(0.)];
+
             if let Some(compiled) = &generic_evaluator.f64_compiled {
                 compiled.borrow_mut().evaluate(params, &mut out);
             } else {
@@ -205,16 +208,10 @@ impl GenericEvaluatorFloat for f64 {
 }
 
 impl GenericEvaluatorFloat for f128 {
+    #[inline(always)]
     fn get_evaluator(generic_evaluator: &GenericEvaluator) -> impl Fn(&[F<f128>]) -> F<f128> {
-        |params: &[F<f128>]| {
-            let mut out = vec![params[0].zero()];
-            generic_evaluator
-                .f128
-                .borrow_mut()
-                .evaluate(params, &mut out);
-
-            out[0].clone()
-        }
+        #[inline(always)]
+        |params: &[F<f128>]| generic_evaluator.f128.borrow_mut().evaluate_single(params)
     }
 }
 
