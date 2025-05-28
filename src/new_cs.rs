@@ -19,7 +19,9 @@ use smartstring::{LazyCompact, SmartString};
 use statrs::statistics::Mode;
 use symbolica_community::physics::algebraic_simplification::metric::MS;
 
-use spenso::algebra::algebraic_traits::IsZero;
+use spenso::{
+    algebra::algebraic_traits::IsZero, tensors::parametric::SerializableCompiledEvaluator,
+};
 
 use crate::{
     cff::{
@@ -51,7 +53,7 @@ use serde::{Deserialize, Serialize};
 use symbolica::{
     atom::{Atom, AtomCore},
     domains::rational::Rational,
-    evaluate::FunctionMap,
+    evaluate::{CompileOptions, FunctionMap},
     function, parse,
 };
 use typed_index_collections::TiVec;
@@ -1349,10 +1351,28 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
                 let tree_double = tree.map_coeff::<F<f64>, _>(&|r| (&r.re).into());
                 let tree_quad = tree.map_coeff::<F<f128>, _>(&|r| (&r.re).into());
 
+                let lin = tree_double.linearize(None);
+
+                let filename = format!("{}_cut_{}.cpp", self.graph.name, cut_id);
+                let function_name = format!("{}_cut_{}", self.graph.name, cut_id);
+                let lib_name = format!("{}_cut_{}.so", self.graph.name, cut_id);
+                let _exp = lin
+                    .export_cpp(
+                        &filename,
+                        &function_name,
+                        true,
+                        symbolica::evaluate::InlineASM::default(),
+                    )
+                    .unwrap()
+                    .compile(&lib_name, CompileOptions::default())
+                    .unwrap();
+
                 GenericEvaluator {
-                    f64_compiled: None,
-                    f64_eager: RefCell::new(tree_double.linearize(Some(1))),
-                    f128: RefCell::new(tree_quad.linearize(Some(1))),
+                    f64_compiled: Some(RefCell::new(
+                        SerializableCompiledEvaluator::load(&lib_name, &function_name).unwrap(),
+                    )),
+                    f64_eager: RefCell::new(lin.into()),
+                    f128: RefCell::new(tree_quad.linearize(None)),
                 }
             })
             .collect();
