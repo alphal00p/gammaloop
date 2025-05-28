@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::fmt::{Display, LowerExp};
 
 use crate::momentum::{FourMomentum, Polarization, Rotatable, Rotation, ThreeMomentum};
 use crate::utils::{FloatLike, Length, F};
@@ -81,6 +81,20 @@ impl<T> LoopMomenta<T> {
 
     pub fn first(&self) -> Option<&ThreeMomentum<T>> {
         self.0.first()
+    }
+}
+
+impl<T: Display> Display for LoopMomenta<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut str = String::from("[");
+
+        for mom in &self.0 {
+            str.push_str(&format!("{}, ", mom));
+        }
+
+        str.push(']');
+
+        write!(f, "{}", str)
     }
 }
 
