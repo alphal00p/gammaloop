@@ -886,7 +886,7 @@ impl<S: GetSingleAtom + NumeratorState> Amplitude<S> {
                     &export_settings.numerator_settings.global_prefactor,
                 )
                 .get_single_atom();
-
+            let overall_factor = amplitude_graph.graph.bare_graph.overall_factor.clone();
             let dens: Vec<(String, String)> = amplitude_graph
                 .graph
                 .bare_graph
@@ -900,6 +900,10 @@ impl<S: GetSingleAtom + NumeratorState> Amplitude<S> {
                 format!(
                     "{}",
                     AtomPrinter::new_with_options(num.as_ref().unwrap().0.as_view(), printer_ops)
+                ),
+                format!(
+                    "{}",
+                    AtomPrinter::new_with_options(overall_factor.as_view(), printer_ops)
                 ),
                 rep_rules,
                 dens,

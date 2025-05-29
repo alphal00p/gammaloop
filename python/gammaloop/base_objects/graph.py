@@ -681,32 +681,43 @@ class Graph(object):
                             graph_name=self.name,
                             overall_factor=self.overall_factor,
                             **graph_attributes)
-        for vertex in self.vertices:
-            graph.add_node(vertex.to_pydot())
 
         sorted_incoming_edges: list[tuple[Edge, dict[str, Any]]] = []
         sorted_outgoing_edges: list[tuple[Edge, dict[str, Any]]] = []
+        sorted_incoming_vertices: list[Vertex] = []
+        sorted_outgoing_vertices: list[Vertex] = []
         for i_ext, (u, v) in enumerate(self.external_connections):
             if u is not None:
                 for e in self.get_incoming_edges():
                     if e.vertices[0] == u:
                         sorted_incoming_edges.append(
                             (e, {"name": f"p{i_ext+1}_IN" if v is not None else f"p{i_ext+1}", "mom": f"p{i_ext+1}"}))
+                        sorted_incoming_vertices.append(e.vertices[0])
                         break
             if v is not None:
                 for e in self.get_outgoing_edges():
                     if e.vertices[1] == v:
                         sorted_outgoing_edges.append(
                             (e, {"name": f"p{i_ext+1}_OUT" if u is not None else f"p{i_ext+1}", "mom": f"p{i_ext+1}"}))
+                        sorted_outgoing_vertices.append(e.vertices[1])
                         break
         sorted_virtual_edges: list[tuple[Edge, dict[str, Any]]] = []
+        sorted_virtual_vertices: list[Vertex] = []
         for i_e_virt, e in enumerate([e for e in self.edges if e.edge_type == EdgeType.VIRTUAL]):
             edge_attrs: dict[str, Any] = {"name": f"q{i_e_virt+1}"}
             if self.loop_momentum_basis is not None and e in self.loop_momentum_basis:
                 edge_attrs["lmb_index"] = self.loop_momentum_basis.index(e)
             sorted_virtual_edges.append((e, edge_attrs))
+            for v in e.vertices:
+                if v not in sorted_virtual_vertices:
+                    sorted_virtual_vertices.append(v)
+
         sorted_virtual_edges = sorted(
             sorted_virtual_edges, key=lambda e: e[0].name)
+
+        for vertex in sorted_incoming_vertices+sorted_outgoing_vertices+sorted_virtual_vertices:
+            graph.add_node(vertex.to_pydot())
+
         for edge, edge_attr in sorted_incoming_edges + sorted_outgoing_edges + sorted_virtual_edges:
             graph.add_edge(edge.to_pydot(**edge_attr))
 
