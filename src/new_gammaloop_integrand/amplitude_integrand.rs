@@ -28,6 +28,7 @@ pub struct AmplitudeGraphTerm {
     pub multi_channeling_setup: LmbMultiChannelingSetup,
     pub lmbs: TiVec<LmbIndex, LoopMomentumBasis>,
     pub tropical_sampler: SampleGenerator<3>,
+    pub estimated_scale: F<f64>,
 }
 
 impl AmplitudeGraphTerm {

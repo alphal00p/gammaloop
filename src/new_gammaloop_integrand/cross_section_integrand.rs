@@ -91,6 +91,7 @@ pub struct CrossSectionGraphTerm {
     pub cut_esurface: TiVec<CutId, Esurface>,
     pub multi_channeling_setup: LmbMultiChannelingSetup,
     pub lmbs: TiVec<LmbIndex, LoopMomentumBasis>,
+    pub estimated_scale: F<f64>,
 }
 
 impl GraphTerm for CrossSectionGraphTerm {
@@ -229,7 +230,7 @@ impl CrossSectionGraphTerm {
 
                 let h_function = utils::h(&newton_result.solution, None, None, h_function_settings);
 
-                if settings.general.debug > 1 {
+                if settings.general.debug > 1 && _cut_id == CutId::from(2) {
                     println!(
                         "generated parameters for cut: {}",
                         format!("{}", _cut_id).green()
@@ -301,7 +302,7 @@ impl CrossSectionGraphTerm {
                 .map(|(id, (evaluator, params))| {
                     let cut_results =
                         <T as GenericEvaluatorFloat>::get_evaluator(evaluator)(&params);
-                    if settings.general.debug > 0 {
+                    if settings.general.debug > 0 && id == 2 {
                         println!(
                             "cut: {}, result: {}",
                             format!("{}", id).green(),
