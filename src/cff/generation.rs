@@ -400,7 +400,7 @@ pub fn generate_uv_cff<E, V, S: SubGraph>(
     let tree: Tree<HybridSurfaceID> = generate_tree_for_orientation.map(forget_graphs);
     let atom_tree = tree.to_atom_inv();
     let atom_tree_substituted = surface_cache.substitute_energies(&atom_tree);
-    let inverse_energies = get_cff_inverse_energy_product_impl(graph, subgraph);
+    let inverse_energies = get_cff_inverse_energy_product_impl(graph, subgraph, contract_edges);
 
     Ok(atom_tree_substituted * &inverse_energies)
 }
