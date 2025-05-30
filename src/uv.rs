@@ -317,7 +317,7 @@ impl UVGraph {
                         usize::from(eid) as i64,
                         function!(GS.emr_mom, usize::from(eid) as i64),
                         m2,
-                        spenso_lor_atom(usize::from(eid) as i32, 1, GS.dim)
+                        spenso_lor_atom(usize::from(eid) as i32, usize::from(eid), GS.dim)
                             .npow(2)
                             //.to_dots()
                             - m2
@@ -1194,7 +1194,7 @@ impl Approximation {
         amplitude: &S,
         orientation: &OrientationData,
     ) -> Option<Atom> {
-        let (t, s) = self.cff_expr.expr()?;
+        let (t, _) = self.cff_expr.expr()?;
 
         let contracted_edges = graph
             .iter_edges_of(&self.subgraph)
@@ -1207,7 +1207,7 @@ impl Approximation {
             })
             .collect_vec();
 
-        let contracted = s * generate_uv_cff(
+        let contracted = generate_uv_cff(
             graph,
             amplitude,
             canonize_esurface,
