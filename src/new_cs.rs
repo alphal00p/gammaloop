@@ -14,6 +14,7 @@ use bincode_trait_derive::{Decode, Encode};
 use bitvec::vec::BitVec;
 use color_eyre::Result;
 use momtrop::SampleGenerator;
+use serde_json::de;
 use smartstring::{LazyCompact, SmartString};
 
 use statrs::statistics::Mode;
@@ -46,7 +47,7 @@ use eyre::eyre;
 use itertools::Itertools;
 use linnet::half_edge::{
     involution::{Flow, HedgePair, Orientation},
-    subgraph::{HedgeNode, Inclusion, InternalSubGraph, OrientedCut},
+    subgraph::{HedgeNode, Inclusion, InternalSubGraph, OrientedCut, SubGraph},
 };
 use log::{debug, warn};
 use serde::{Deserialize, Serialize};
@@ -720,7 +721,12 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
         Ok(self.derived_data.bare_cff_orientation_evaluatos = Some(evaluators))
     }
 
-    fn generate_term_for_graph(&self, _settings: &Settings) -> AmplitudeGraphTerm {
+    fn generate_term_for_graph(&self, settings: &Settings) -> AmplitudeGraphTerm {
+        let estimated_scale = self
+            .graph
+            .underlying
+            .expected_scale(settings.kinematics.e_cm);
+
         AmplitudeGraphTerm {
             bare_cff_evaluator: self.derived_data.bare_cff_evaluator.clone().unwrap(),
             bare_cff_orientation_evaluators: self
@@ -732,6 +738,7 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
             graph: self.graph.clone(),
             multi_channeling_setup: self.derived_data.multi_channeling_setup.clone().unwrap(),
             lmbs: self.derived_data.lmbs.clone().unwrap(),
+            estimated_scale,
         }
     }
 }
@@ -1087,6 +1094,36 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
             .collect::<Result<_>>()?;
 
         cuts.sort_by(|a, b| a.cut.cmp(&b.cut));
+
+        for (id, cs_cut) in cuts.iter().enumerate() {
+            let edgess_in_cut = self
+                .graph
+                .underlying
+                .iter_edges_of(&cs_cut.cut)
+                .map(|(_, _, edge)| edge.data.name.clone())
+                .collect_vec();
+
+            if id == 3 {
+                println!("cut: 3");
+
+                println!("edges in cut: {:?}", edgess_in_cut);
+                let left_dot = self.graph.underlying.dot(&cs_cut.left);
+                let right_dot = self.graph.underlying.dot(&cs_cut.right);
+                println!("{}", left_dot);
+                println!("{}", right_dot);
+            }
+
+            if id == 8 {
+                println!("cut: 8");
+
+                println!("edges in cut: {:?}", edgess_in_cut);
+                let left_dot = self.graph.underlying.dot(&cs_cut.left);
+                let right_dot = self.graph.underlying.dot(&cs_cut.right);
+                println!("{}", left_dot);
+                println!("{}", right_dot);
+            }
+        }
+        panic!();
 
         self.cuts = cuts;
 
@@ -1451,7 +1488,12 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
         self.derived_data.multi_channeling_setup = Some(channels)
     }
 
-    fn generate_term_for_graph(&self, _settings: &Settings) -> CrossSectionGraphTerm {
+    fn generate_term_for_graph(&self, settings: &Settings) -> CrossSectionGraphTerm {
+        let estimated_scale = self
+            .graph
+            .underlying
+            .expected_scale(settings.kinematics.e_cm);
+
         CrossSectionGraphTerm {
             multi_channeling_setup: self.derived_data.multi_channeling_setup.clone().unwrap(),
             bare_cff_evaluators: self.derived_data.bare_cff_evaluators.clone().unwrap(),
@@ -1463,6 +1505,7 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
             graph: self.graph.clone(),
             cut_esurface: self.cut_esurface.clone(),
             lmbs: self.derived_data.lmbs.clone().unwrap(),
+            estimated_scale,
         }
     }
 }
