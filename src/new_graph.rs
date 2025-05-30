@@ -400,7 +400,7 @@ impl FeynmanGraph for HedgeGraph<Edge, Vertex> {
     /// This includes the factor 2 for each edge, inversion already performed
     fn get_cff_inverse_energy_product(&self) -> Atom {
         let full_subgraph = self.full_filter();
-        get_cff_inverse_energy_product_impl(self, &full_subgraph)
+        get_cff_inverse_energy_product_impl(self, &full_subgraph, &[])
     }
 
     fn get_loop_number(&self) -> usize {
@@ -1924,12 +1924,19 @@ pub struct ExternalConnection {
 pub fn get_cff_inverse_energy_product_impl<E, V, S: SubGraph>(
     graph: &HedgeGraph<E, V>,
     subgraph: &S,
+    contract_edges: &[EdgeIndex],
 ) -> Atom {
     Atom::num(1)
         / graph
             .iter_edges_of(subgraph)
             .filter_map(|(pair, edge_index, _)| match pair {
-                HedgePair::Paired { .. } => Some(Atom::num(2) * ose_atom_from_index(edge_index)),
+                HedgePair::Paired { .. } => {
+                    if contract_edges.contains(&edge_index) {
+                        None
+                    } else {
+                        Some(Atom::num(2) * ose_atom_from_index(edge_index))
+                    }
+                }
                 _ => None,
             })
             .reduce(|acc, x| acc * x)

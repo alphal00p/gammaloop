@@ -1095,36 +1095,6 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
 
         cuts.sort_by(|a, b| a.cut.cmp(&b.cut));
 
-        for (id, cs_cut) in cuts.iter().enumerate() {
-            let edgess_in_cut = self
-                .graph
-                .underlying
-                .iter_edges_of(&cs_cut.cut)
-                .map(|(_, _, edge)| edge.data.name.clone())
-                .collect_vec();
-
-            if id == 3 {
-                println!("cut: 3");
-
-                println!("edges in cut: {:?}", edgess_in_cut);
-                let left_dot = self.graph.underlying.dot(&cs_cut.left);
-                let right_dot = self.graph.underlying.dot(&cs_cut.right);
-                println!("{}", left_dot);
-                println!("{}", right_dot);
-            }
-
-            if id == 8 {
-                println!("cut: 8");
-
-                println!("edges in cut: {:?}", edgess_in_cut);
-                let left_dot = self.graph.underlying.dot(&cs_cut.left);
-                let right_dot = self.graph.underlying.dot(&cs_cut.right);
-                println!("{}", left_dot);
-                println!("{}", right_dot);
-            }
-        }
-        panic!();
-
         self.cuts = cuts;
 
         debug!(
@@ -1173,9 +1143,9 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
             .substitute_energies(&right_amplitude);
 
         let left_ose_product =
-            get_cff_inverse_energy_product_impl(&self.graph.underlying, &self.cuts[cut].left);
+            get_cff_inverse_energy_product_impl(&self.graph.underlying, &self.cuts[cut].left, &[]);
         let right_ose_product =
-            get_cff_inverse_energy_product_impl(&self.graph.underlying, &self.cuts[cut].right);
+            get_cff_inverse_energy_product_impl(&self.graph.underlying, &self.cuts[cut].right, &[]);
 
         (
             left_amplitude_energy_sub * left_ose_product,
@@ -1212,9 +1182,9 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
             .substitute_energies(&right_amplitude);
 
         let left_ose_product =
-            get_cff_inverse_energy_product_impl(&self.graph.underlying, &self.cuts[cut].left);
+            get_cff_inverse_energy_product_impl(&self.graph.underlying, &self.cuts[cut].left, &[]);
         let right_ose_product =
-            get_cff_inverse_energy_product_impl(&self.graph.underlying, &self.cuts[cut].right);
+            get_cff_inverse_energy_product_impl(&self.graph.underlying, &self.cuts[cut].right, &[]);
 
         (
             left_amplitude_energy_sub * left_ose_product,

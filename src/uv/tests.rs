@@ -2,6 +2,7 @@ use std::{sync::Arc, time::Instant};
 
 use ahash::HashMap;
 
+use colored::Colorize;
 use linnet::half_edge::hedgevec::HedgeVec;
 use nalgebra::LU;
 use pathfinding::{matrix::directions::W, num_traits::real};
@@ -432,7 +433,7 @@ fn tri_box_tri_LU() {
             let mut cut_res = cs.add_additional_factors_to_cff_atom(&(left_expr * right_expr), id);
 
             // add Feynman rules of cut edges
-            for (_p, edge_index, d) in super_uv_graph.iter_edges_of(&c.cut.left) {
+            for (_p, edge_index, d) in super_uv_graph.iter_edges_of(&c.cut) {
                 let edge_id = usize::from(edge_index) as i64;
                 let orientation = supergraph_orientation_data.orientation.clone();
                 cut_res = (cut_res * &d.data.num)
@@ -583,7 +584,14 @@ fn tri_box_tri_LU() {
                             * Atom::var(W_.x_).pow(Atom::var(W_.y_)),
                     )
                     .expand(); // help Symbolica with cancellations
-                println!("Correct UV cancellation if 0: {:>}", r);
+
+                let str = format!("correct UV cancellation if 0: {:>}", r);
+
+                if r == Atom::new() {
+                    println!("{}", str.green());
+                } else {
+                    println!("{}", str.red());
+                }
             }
 
             // linearize Q3
@@ -2506,7 +2514,7 @@ Integrator:
   n_bins: 16
   n_increase: 0
   n_max: 100000000
-  n_start: 2000
+  n_start: 2000000
   seed: 2
   show_max_wgt_info: false
   train_on_avg: false
@@ -2568,3 +2576,22 @@ subtraction:
     force_global_center: null
     try_origin: false
     try_origin_all_lmbs: false";
+
+#[test]
+fn quick_test() {
+    fn expose_mass_dimension(atom: &Atom) -> Atom {
+        atom.replace(function!(GS.ose, W_.x_, W_.y_, W_.z_))
+            .with(parse!("E"))
+            .replace(function!(GS.ose, W_.x_))
+            .with(parse!("E"))
+            .replace(function!(GS.dot, W_.x_, W_.y_))
+            .with(parse!("E^2"))
+            .expand()
+    }
+
+    let ORIG = parse!("-1/64*(OSE(0)+OSE(2,Q(2),MH^2)+OSE(3,Q(3),MH^2))^-1*(OSE(3,Q(3),MH^2)+OSE(5,Q(5),MT^2)+OSE(6,Q(6),MT^2))^-1*(OSE(0)+OSE(1)+OSE(3,Q(3),MH^2)+OSE(4,Q(4),MH^2))^-1*(OSE(0)+OSE(1)+OSE(3,Q(3),MH^2)+OSE(5,Q(5),MT^2)+OSE(7,Q(7),MT^2))^-1*OSE(2,Q(2),MH^2)^-1*OSE(3,Q(3),MH^2)^-1*OSE(4,Q(4),MH^2)^-1*OSE(6,Q(6),MT^2)^-1");
+    let UV = parse!("-1/512*(OSE(5,Q(7),mUV^2)+OSE(6,Q(7),mUV^2))^-1*(OSE(5,Q(7),mUV^2)+OSE(7,Q(7),mUV^2))^-1*(OSE(0)+OSE(2,Q(2),MH^2)+OSE(3,Q(3),MH^2))^-1*(OSE(0)+OSE(1)+OSE(3,Q(3),MH^2)+OSE(4,Q(4),MH^2))^-1*OSE(2,Q(2),MH^2)^-1*OSE(3,Q(3),MH^2)^-1*OSE(4,Q(4),MH^2)^-1*OSE(5,Q(7),mUV^2)^-2*OSE(6,Q(7),mUV^2)^-2*OSE(7,Q(7),mUV^2)^-2*dot(Q3(Q(7)),Q3(Q(7)))");
+
+    println!("UV: {}", expose_mass_dimension(&UV));
+    println!("UV_Q: {}", expose_mass_dimension(&ORIG));
+}
