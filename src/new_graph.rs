@@ -26,9 +26,13 @@ use linnet::half_edge::{
     HedgeGraph, NodeIndex,
 };
 use log::debug;
+use momtrop::float::MomTropFloat;
 use nalgebra::DMatrix;
 
-use spenso::{algebra::algebraic_traits::IsZero, tensors::parametric::to_param::ToAtom};
+use spenso::{
+    algebra::{algebraic_traits::IsZero, complex::Complex},
+    tensors::parametric::to_param::ToAtom,
+};
 // use petgraph::Direction::Outgoing;
 use serde::{de::value, Deserialize, Serialize};
 use smartstring::{LazyCompact, SmartString};
@@ -58,8 +62,8 @@ use crate::{
     feyngen::diagram_generator::FeynGen,
     gammaloop_integrand::BareSample,
     graph::{
-        BareEdge, BareGraph, BareVertex, DerivedGraphData, EdgeType, HasVertexInfo, Shifts,
-        VertexInfo,
+        BareEdge, BareGraph, BareVertex, DerivedGraphData, EdgeType, HasVertexInfo,
+        InteractionVertexInfo, Shifts, VertexInfo,
     },
     model::{self, ArcParticle, ArcPropagator, EdgeSlots, Model, Particle, VertexSlots},
     momentum::{FourMomentum, SignOrZero, ThreeMomentum},
@@ -177,6 +181,7 @@ pub trait FeynmanGraph {
     fn get_external_energy_atoms(&self) -> Vec<Atom>;
     fn explicit_ose_atom(&self, edge: EdgeIndex) -> Atom;
     fn get_ose_replacements(&self) -> Vec<Replacement>;
+    fn expected_scale(&self, e_cm: F<f64>) -> F<f64>;
 }
 
 impl FeynmanGraph for HedgeGraph<Edge, Vertex> {
@@ -557,6 +562,44 @@ impl FeynmanGraph for HedgeGraph<Edge, Vertex> {
                 _ => None,
             })
             .collect_vec()
+    }
+
+    fn expected_scale(&self, e_cm: F<f64>) -> F<f64> {
+        let mut scale = Complex::new_re(F(1.0));
+        for (_, _, vertex) in self.iter_nodes() {
+            // include the values of all couplings
+            let coupling_value = match &vertex.vertex_info {
+                VertexInfo::InteractonVertexInfo(int_vertex_info) => int_vertex_info
+                    .vertex_rule
+                    .couplings
+                    .iter()
+                    .flat_map(|couplings| {
+                        couplings.iter().map(|coupling| {
+                            coupling
+                                .as_ref()
+                                .map(|coupling| {
+                                    coupling
+                                        .value
+                                        .map(|x| Complex::new(F(x.re), F(x.im)))
+                                        .unwrap_or(Complex::new_re(F(1.0)))
+                                })
+                                .unwrap_or(Complex::new_re(F(1.0)))
+                        })
+                    })
+                    .fold(Complex::new_re(F(1.0)), |product, term| product * term),
+                _ => Complex::new_re(F(1.0)),
+            };
+
+            scale *= Complex::new_re(e_cm.powi(vertex.dod)) * coupling_value;
+        }
+
+        for (_, _, edge_data) in
+            self.iter_edges_of(&self.full_filter().subtract(&self.external_filter()))
+        {
+            scale *= Complex::new_re(e_cm.powi(edge_data.data.dod))
+        }
+
+        scale.norm_squared().sqrt()
     }
 }
 
