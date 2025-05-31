@@ -54,6 +54,7 @@ fn tri_box_tri_LU() {
     let _ = env_logger::builder().is_test(true).try_init();
     let uv_dod = 1;
     let is_massless = false;
+    let nested_uv = false; // when true, creates a 2-loop log UV
 
     // load the model and hack the masses, go through serializable model since arc is not mutable
     let model = if is_massless {
@@ -177,8 +178,8 @@ fn tri_box_tri_LU() {
             particle: hp.clone(),
             propagator: hprop.clone(),
             internal_index: vec![],
-            dod: if uv_dod >= 1 { -1 } else { -2 },
-            num: if uv_dod >= 1 {
+            dod: if nested_uv && uv_dod >= 1 { -1 } else { -2 },
+            num: if nested_uv && uv_dod >= 1 {
                 spenso_lor_atom(3, 20, GS.dim)
             } else {
                 Atom::one()
@@ -271,7 +272,7 @@ fn tri_box_tri_LU() {
             num: Atom::one(),
         },
         false,
-        Flow::Sink,
+        Flow::Source,
     );
 
     underlying.add_external_edge(
@@ -283,10 +284,14 @@ fn tri_box_tri_LU() {
             propagator: hprop.clone(),
             internal_index: vec![],
             dod: 0,
-            num: Atom::one(),
+            num: if !nested_uv && uv_dod >= 1 {
+                spenso_lor_atom(9, 20, GS.dim)
+            } else {
+                Atom::one()
+            },
         },
         false,
-        Flow::Source,
+        Flow::Sink,
     );
 
     let underlying = underlying.build();
@@ -295,7 +300,7 @@ fn tri_box_tri_LU() {
 
     let mut loop_momentum_basis = LoopMomentumBasis {
         tree: None,
-        loop_edges: vec![EdgeIndex::from(1), EdgeIndex::from(4), EdgeIndex::from(7)].into(), // FIXME: LMB does not seem to be honoured in UV expansion!
+        loop_edges: vec![EdgeIndex::from(1), EdgeIndex::from(4), EdgeIndex::from(7)].into(),
         ext_edges: vec![EdgeIndex::from(8), EdgeIndex::from(9)].into(),
         edge_signatures: underlying
             .new_hedgevec(|_, _, _| LoopExtSignature::from((vec![], vec![]))),
@@ -377,6 +382,7 @@ fn tri_box_tri_LU() {
         supergraph_orientation_data.cuts
     );
 
+    // FIXME: sometimes c.left and c.right are the other way around!
     for (id, c) in cs.cuts.iter_enumerated() {
         let esurface_id = cs.cut_esurface_id_map[id];
         let cff_cut_expr = &cs
