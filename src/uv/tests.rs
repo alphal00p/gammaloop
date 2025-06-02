@@ -933,9 +933,9 @@ fn double_triangle_LU() {
             particle: tp.clone(),
             propagator: tprop.clone(),
             internal_index: vec![],
-            dod: if uv_dod >= 1 { -1 } else { -2 },
-            num: if uv_dod >= 1 {
-                spenso_lor_atom(2, 20, GS.dim)
+            dod: if uv_dod >= 0 { -1 } else { -2 },
+            num: if uv_dod >= 0 {
+                spenso_lor_atom(2, 10, GS.dim)
             } else {
                 Atom::one()
             },
@@ -954,7 +954,7 @@ fn double_triangle_LU() {
             internal_index: vec![],
             dod: if uv_dod >= 0 { -1 } else { -2 },
             num: if uv_dod >= 0 {
-                spenso_lor_atom(3, 10, GS.dim)
+                spenso_lor_atom(3, 20, GS.dim)
             } else {
                 Atom::one()
             },
@@ -971,8 +971,8 @@ fn double_triangle_LU() {
             particle: tp.clone(),
             propagator: tprop.clone(),
             internal_index: vec![],
-            dod: if uv_dod >= 0 { -1 } else { -2 },
-            num: if uv_dod >= 0 {
+            dod: if uv_dod >= 1 { -1 } else { -2 },
+            num: if uv_dod >= 1 {
                 spenso_lor_atom(4, 10, GS.dim)
             } else {
                 Atom::one()
@@ -1061,6 +1061,23 @@ fn double_triangle_LU() {
         .orientation_data[orientation_id];
 
     let mut cut_atoms: TiVec<CutId, Atom> = TiVec::new();
+
+    for cut_id in supergraph_orientation_data.cuts.iter() {
+        let cut = &cs.cuts[*cut_id];
+        let edges_in_cut = cs
+            .graph
+            .underlying
+            .iter_edges_of(&cut.cut)
+            .map(|(_, _, edge)| edge.data.name.clone())
+            .collect_vec();
+
+        println!("edges in cut {}: {:?}", cut_id, edges_in_cut);
+    }
+
+    println!(
+        "The orientation is: {:?}",
+        supergraph_orientation_data.orientation
+    );
 
     for (id, c) in cs.cuts.iter_enumerated() {
         let esurface_id = cs.cut_esurface_id_map[id];
