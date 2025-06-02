@@ -50,6 +50,138 @@ use crate::{
 };
 
 #[test]
+fn tri_uv_AMP() {
+    let _ = env_logger::builder().is_test(true).try_init();
+    let model = load_generic_model(" sm");
+
+    let mut underlying = HedgeGraphBuilder::new();
+
+    let hhh = VertexInfo::InteractonVertexInfo(InteractionVertexInfo {
+        vertex_rule: model.get_vertex_rule("V_9"),
+    });
+
+    let n1 = underlying.add_node(Vertex {
+        name: "n1".into(),
+        vertex_info: hhh.clone(),
+        dod: 0,
+        num: Atom::one(),
+    });
+
+    let n2 = underlying.add_node(Vertex {
+        name: "n2".into(),
+        vertex_info: hhh.clone(),
+        dod: 0,
+        num: Atom::one(),
+    });
+
+    let n3 = underlying.add_node(Vertex {
+        name: "n3".into(),
+        vertex_info: hhh.clone(),
+        dod: 0,
+        num: Atom::one(),
+    });
+
+    let hprop = model.get_propagator("H_propFeynman");
+    let hp = model.get_particle("H");
+
+    underlying.add_edge(
+        n1,
+        n2,
+        Edge {
+            name: "e0".into(),
+            edge_type: EdgeType::Virtual,
+            particle: hp.clone(),
+            propagator: hprop.clone(),
+            internal_index: vec![],
+            dod: -1,
+            num: spenso_lor_atom(0, 10, GS.dim),
+        },
+        false,
+    );
+
+    underlying.add_edge(
+        n2,
+        n3,
+        Edge {
+            name: "e1".into(),
+            edge_type: EdgeType::Virtual,
+            particle: hp.clone(),
+            propagator: hprop.clone(),
+            internal_index: vec![],
+            dod: -1,
+            num: spenso_lor_atom(1, 10, GS.dim),
+        },
+        false,
+    );
+
+    underlying.add_edge(
+        n2,
+        n3,
+        Edge {
+            name: "e2".into(),
+            edge_type: EdgeType::Virtual,
+            particle: hp.clone(),
+            propagator: hprop.clone(),
+            internal_index: vec![],
+            dod: -1,
+            num: spenso_lor_atom(2, 20, GS.dim),
+        },
+        false,
+    );
+
+    underlying.add_external_edge(
+        n1,
+        Edge {
+            name: "q4".into(),
+            edge_type: EdgeType::Outgoing,
+            particle: hp.clone(),
+            propagator: hprop.clone(),
+            internal_index: vec![],
+            dod: 0,
+            num: spenso_lor_atom(4, 20, GS.dim),
+        },
+        false,
+        Flow::Sink,
+    );
+
+    underlying.add_external_edge(
+        n2,
+        Edge {
+            name: "q5".into(),
+            edge_type: EdgeType::Outgoing,
+            particle: hp.clone(),
+            propagator: hprop.clone(),
+            internal_index: vec![],
+            dod: 0,
+            num: Atom::one(),
+        },
+        false,
+        Flow::Sink,
+    );
+
+    underlying.add_external_edge(
+        n3,
+        Edge {
+            name: "q5".into(),
+            edge_type: EdgeType::Outgoing,
+            particle: hp.clone(),
+            propagator: hprop.clone(),
+            internal_index: vec![],
+            dod: 0,
+            num: Atom::one(),
+        },
+        false,
+        Flow::Sink,
+    );
+
+    let amp_hedge = underlying.build();
+
+    // is this correct?
+    let uv = UVGraph::from_underlying(&amp_hedge);
+    // build UV here
+}
+
+#[test]
 fn tri_box_tri_LU() {
     let _ = env_logger::builder().is_test(true).try_init();
     let uv_dod = 1;
