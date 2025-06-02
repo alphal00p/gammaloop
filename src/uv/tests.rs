@@ -52,7 +52,7 @@ use crate::{
 #[test]
 fn tri_uv_AMP() {
     let _ = env_logger::builder().is_test(true).try_init();
-    let model = load_generic_model(" sm");
+    let model = load_generic_model("sm");
 
     let mut underlying = HedgeGraphBuilder::new();
 
@@ -115,8 +115,8 @@ fn tri_uv_AMP() {
     );
 
     underlying.add_edge(
-        n2,
         n3,
+        n1,
         Edge {
             name: "e2".into(),
             edge_type: EdgeType::Virtual,
@@ -177,8 +177,19 @@ fn tri_uv_AMP() {
     let amp_hedge = underlying.build();
 
     // is this correct?
-    let uv = UVGraph::from_underlying(&amp_hedge);
+    let mut loop_momentum_basis = LoopMomentumBasis {
+        tree: None,
+        loop_edges: vec![EdgeIndex::from(0)].into(),
+        ext_edges: vec![EdgeIndex::from(3), EdgeIndex::from(4), EdgeIndex::from(5)].into(),
+        edge_signatures: amp_hedge.new_hedgevec(|_, _, _| LoopExtSignature::from((vec![], vec![]))),
+    };
+
+    loop_momentum_basis.set_edge_signatures(&amp_hedge).unwrap();
     // build UV here
+
+    let uv_graph = UVGraph::from_underlying(&amp_hedge);
+    let wood = uv_graph.wood(&amp_hedge.full_filter());
+    let mut forest = wood.unfold(&uv_graph, &loop_momentum_basis);
 }
 
 #[test]
