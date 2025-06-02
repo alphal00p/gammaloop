@@ -1456,10 +1456,15 @@ impl Forest {
         let mut sum = Atom::new();
 
         for (_, n) in &self.dag.nodes {
-            sum += n.data.final_expr(graph, amplitude).unwrap()
-                * n.data
-                    .final_cff(graph, canonize_esurface, amplitude, orientation)
-                    .unwrap();
+            let r = n.data.final_expr(graph, amplitude).unwrap();
+            let cff = n
+                .data
+                .final_cff(graph, canonize_esurface, amplitude, orientation)
+                .unwrap();
+            println!("Final expr: {:>}", r.expand());
+            println!("  CFF: {}", cff.expand());
+
+            sum += r * cff;
         }
 
         println!("SUM {:>}", sum.expand());
@@ -1517,11 +1522,28 @@ impl Forest {
 
                 for _ in 1..pow {
                     expr = expr
+                        //.replace(function!(GS.ose, edge_id))
+                        //.with(function!(GS.ose, edge_id, Atom::var(GS.rescale)))
+                        // .replace(function!(
+                        //     GS.ose,
+                        //     edge_id,
+                        //     W_.x___,
+                        //     function!(symbol!("spenso::mink"), GS.dim, edge_id)
+                        // ))
+                        // .with(function!(
+                        //     GS.ose,
+                        //     edge_id,
+                        //     W_.x___,
+                        //     function!(symbol!("spenso::mink"), GS.dim, edge_id),
+                        //     Atom::var(GS.rescale)
+                        // ))
                         .replace(function!(GS.ose, edge_id, W_.x___))
-                        .with(function!(GS.ose, edge_id, W_.x___) * GS.rescale) // TODO: check if derivative is in the correct quantity
+                        .with(function!(GS.ose, edge_id, W_.x___, Atom::var(GS.rescale)))
                         .derivative(GS.rescale)
-                        .replace(GS.rescale)
-                        .with(Atom::num(1));
+                        .replace(function!(Atom::DERIVATIVE, W_.x___, W_.x_))
+                        .with(Atom::var(W_.x_).npow(-1) / 2)
+                        .replace(function!(GS.ose, edge_id, W_.x___, Atom::var(GS.rescale)))
+                        .with(function!(GS.ose, edge_id, W_.x___));
                 }
 
                 expr = expr / Integer::factorial(pow as u32 - 1);

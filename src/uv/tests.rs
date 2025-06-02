@@ -498,7 +498,32 @@ fn tri_box_tri_LU() {
                 )
                 .repeat()
                 .with(function!(GS.ose, W_.x__) * function!(GS.ose, W_.y__))
-                .replace(function!(GS.emr_vec, W_.x__, W_.a_) * function!(GS.ose, W_.y__, W_.a_))
+                .replace(
+                    function!(GS.ose, W_.x__, function!(spenso_mink, W_.z__)).pow(Atom::var(W_.a_))
+                        * function!(GS.ose, W_.y__, function!(spenso_mink, W_.z__)),
+                )
+                .repeat()
+                .with(function!(GS.ose, W_.x__).pow(Atom::var(W_.a_)) * function!(GS.ose, W_.y__))
+                .replace(
+                    function!(GS.ose, W_.x__, function!(spenso_mink, W_.z__)).pow(Atom::var(W_.a_))
+                        * function!(GS.ose, W_.y__, function!(spenso_mink, W_.z__))
+                            .pow(Atom::var(W_.b_)),
+                )
+                .repeat()
+                .with(
+                    function!(GS.ose, W_.x__).pow(Atom::var(W_.a_))
+                        * function!(GS.ose, W_.y__).pow(Atom::var(W_.b_)),
+                )
+                .replace(
+                    function!(GS.emr_vec, W_.x__, function!(spenso_mink, W_.z__))
+                        * function!(GS.ose, W_.y__, function!(spenso_mink, W_.z__)),
+                )
+                .with(Atom::Zero)
+                .replace(
+                    function!(GS.emr_vec, W_.x__, function!(spenso_mink, W_.z__))
+                        * function!(GS.ose, W_.y__, function!(spenso_mink, W_.z__))
+                            .pow(Atom::var(W_.b_)),
+                )
                 .with(Atom::Zero)
                 .replace(function!(
                     MS.dot,
@@ -539,8 +564,14 @@ fn tri_box_tri_LU() {
                     .with(
                         (-function!(
                             MS.dot,
-                            function!(GS.emr_vec, usize::from(edge_id) as i64),
-                            function!(GS.emr_vec, usize::from(edge_id) as i64)
+                            function!(
+                                GS.emr_vec,
+                                function!(GS.emr_mom, usize::from(edge_id) as i64)
+                            ),
+                            function!(
+                                GS.emr_vec,
+                                function!(GS.emr_mom, usize::from(edge_id) as i64)
+                            )
                         ) + mass2)
                             .sqrt(),
                     );
@@ -566,7 +597,7 @@ fn tri_box_tri_LU() {
                         .replace(parse!("Q3(Q(7))"))
                         .with(parse!("t*Q3(Q(7))"))
                         .replace(parse!("Q3(Q(6))"))
-                        .with(parse!("t*Q3(Q(7))-Q3(Q(9))"))
+                        .with(parse!("t*Q3(Q(7))+Q3(9)")) // NOTE: Q3(9) instead of Q3(Q(9))"))
                         .replace(parse!("Q3(Q(5))"))
                         .with(parse!("t*Q3(Q(7))-Q3(Q(4))"))
                         .replace(parse!("symbolica_community::dot(t*x_,y_)"))
@@ -1136,7 +1167,32 @@ fn double_triangle_LU() {
                 )
                 .repeat()
                 .with(function!(GS.ose, W_.x__) * function!(GS.ose, W_.y__))
-                .replace(function!(GS.emr_vec, W_.x__, W_.a_) * function!(GS.ose, W_.y__, W_.a_))
+                .replace(
+                    function!(GS.ose, W_.x__, function!(spenso_mink, W_.z__)).pow(Atom::var(W_.a_))
+                        * function!(GS.ose, W_.y__, function!(spenso_mink, W_.z__)),
+                )
+                .repeat()
+                .with(function!(GS.ose, W_.x__).pow(Atom::var(W_.a_)) * function!(GS.ose, W_.y__))
+                .replace(
+                    function!(GS.ose, W_.x__, function!(spenso_mink, W_.z__)).pow(Atom::var(W_.a_))
+                        * function!(GS.ose, W_.y__, function!(spenso_mink, W_.z__))
+                            .pow(Atom::var(W_.b_)),
+                )
+                .repeat()
+                .with(
+                    function!(GS.ose, W_.x__).pow(Atom::var(W_.a_))
+                        * function!(GS.ose, W_.y__).pow(Atom::var(W_.b_)),
+                )
+                .replace(
+                    function!(GS.emr_vec, W_.x__, function!(spenso_mink, W_.z__))
+                        * function!(GS.ose, W_.y__, function!(spenso_mink, W_.z__)),
+                )
+                .with(Atom::Zero)
+                .replace(
+                    function!(GS.emr_vec, W_.x__, function!(spenso_mink, W_.z__))
+                        * function!(GS.ose, W_.y__, function!(spenso_mink, W_.z__))
+                            .pow(Atom::var(W_.b_)),
+                )
                 .with(Atom::Zero)
                 .replace(function!(
                     MS.dot,
