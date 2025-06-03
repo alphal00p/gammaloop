@@ -507,7 +507,7 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
             .set_edge_signatures(&self.graph.underlying)?;
 
         self.generate_cff()?;
-        self.build_evaluator();
+        self.build_evaluator(None);
         self.build_evaluator_for_orientations()?;
         self.build_tropical_sampler(settings)?;
         self.build_loop_momentum_bases();
@@ -548,17 +548,21 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
         result
     }
 
-    fn build_evaluator(&mut self) {
-        let atom_unsubstituted = self.derived_data.cff_expression.as_ref().unwrap().to_atom();
-        let atom = self
-            .derived_data
-            .cff_expression
-            .as_ref()
-            .unwrap()
-            .surfaces
-            .substitute_energies(&atom_unsubstituted);
+    pub fn build_evaluator(&mut self, overwrite_atom: Option<Atom>) {
+        let atom = if let Some(overwrite_atom) = overwrite_atom {
+            overwrite_atom
+        } else {
+            let atom_unsubstituted = self.derived_data.cff_expression.as_ref().unwrap().to_atom();
+            let atom = self
+                .derived_data
+                .cff_expression
+                .as_ref()
+                .unwrap()
+                .surfaces
+                .substitute_energies(&atom_unsubstituted);
 
-        let atom = self.add_additional_factors_to_cff_atom(&atom);
+            self.add_additional_factors_to_cff_atom(&atom)
+        };
 
         let params = self.get_params();
         let function_map = self.get_function_map();
