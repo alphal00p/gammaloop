@@ -1183,6 +1183,19 @@ pub struct ProcessSettings {
     pub tropical_subgraph_table_settings: TropicalSubgraphTableSettings,
 }
 
+impl Default for ProcessSettings {
+    fn default() -> Self {
+        Self {
+            compile_cff: true,
+            numerator_settings: NumeratorSettings::default(),
+            cpe_rounds_cff: Some(1),
+            compile_separate_orientations: true,
+            gammaloop_compile_options: GammaloopCompileOptions::default(),
+            tropical_subgraph_table_settings: TropicalSubgraphTableSettings::default(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GammaloopCompileOptions {
     pub inline_asm: bool,
@@ -1191,6 +1204,19 @@ pub struct GammaloopCompileOptions {
     pub unsafe_math: bool,
     pub compiler: String,
     pub custom: Vec<String>,
+}
+
+impl Default for GammaloopCompileOptions {
+    fn default() -> Self {
+        Self {
+            inline_asm: false,
+            optimization_level: 3,
+            fast_math: true,
+            unsafe_math: false,
+            compiler: "g++".to_owned(),
+            custom: vec![],
+        }
+    }
 }
 
 impl GammaloopCompileOptions {
@@ -1219,6 +1245,15 @@ impl GammaloopCompileOptions {
 pub struct TropicalSubgraphTableSettings {
     pub panic_on_fail: bool,
     pub target_omega: f64,
+}
+
+impl Default for TropicalSubgraphTableSettings {
+    fn default() -> Self {
+        Self {
+            panic_on_fail: false,
+            target_omega: 1.0,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
