@@ -54,7 +54,12 @@ use crate::{
 #[test]
 fn tri_uv_AMP() {
     let _ = env_logger::builder().is_test(true).try_init();
-    let model = load_generic_model("sm");
+    let is_massless = true;
+    let model = if is_massless {
+        load_generic_model("sm_massless")
+    } else {
+        load_generic_model("sm")
+    };
 
     let mut underlying = HedgeGraphBuilder::new();
 
@@ -197,14 +202,13 @@ fn tri_uv_AMP() {
         external_connections: None,
     };
 
-    let mut amplitude_graph = AmplitudeGraph::<UnInit>::new(graph);
+    let mut amplitude_graph = AmplitudeGraph::<UnInit>::new(graph.clone());
     amplitude_graph
         .preprocess(&model, &ProcessSettings::default())
         .unwrap();
 
     // build UV here
-    let mut uv_graph = UVGraph::from_underlying(&amp_hedge);
-    uv_graph.lmb = loop_momentum_basis.clone();
+    let uv_graph = UVGraph::from_supergraph(&graph);
 
     let wood = uv_graph.wood(&amp_hedge.full_filter());
     let mut forest = wood.unfold(&uv_graph, &loop_momentum_basis);
@@ -235,6 +239,125 @@ fn tri_uv_AMP() {
         );
 
         forest.compute_cff(&uv_graph, &orientation_data, &canonize_esurface);
+        let mut expr = forest.local_expr(
+            &uv_graph,
+            &uv_graph.full_filter(),
+            &canonize_esurface,
+            &orientation.data,
+        );
+
+        // add Feynman rules of external edges
+        for (_p, edge_index, d) in uv_graph.iter_edges_of(&uv_graph.external_filter()) {
+            let edge_id = usize::from(edge_index) as i64;
+            expr = (expr * &d.data.num)
+                .replace(function!(GS.emr_mom, edge_id, W_.y_))
+                .with_map(move |m| {
+                    let index = m.get(W_.y_).unwrap().to_atom();
+
+                    function!(GS.ose, edge_id, index) // OSE will later be replaced
+                                + function!(GS.emr_vec, edge_id, index)
+                });
+        }
+
+        let spenso_mink = symbol!("spenso::mink");
+
+        // contract all dot products, set all cross terms ose.q3 to 0
+        // MS.dot is a 4d dot product
+        expr = expr
+            .expand()
+            .replace(function!(GS.emr_vec, W_.x__, W_.y_).npow(2))
+            .with(function!(
+                MS.dot,
+                function!(GS.emr_vec, W_.x__),
+                function!(GS.emr_vec, W_.x__)
+            ))
+            .replace(function!(GS.emr_vec, W_.x__, W_.a_) * function!(GS.emr_vec, W_.y__, W_.a_))
+            .repeat()
+            .with(function!(
+                MS.dot,
+                function!(GS.emr_vec, W_.x__),
+                function!(GS.emr_vec, W_.y__)
+            ))
+            .replace(function!(GS.ose, W_.y__, function!(spenso_mink, W_.z__)).npow(2))
+            .with(function!(GS.ose, W_.y__).npow(2))
+            .replace(
+                function!(GS.ose, W_.x__, function!(spenso_mink, W_.z__))
+                    * function!(GS.ose, W_.y__, function!(spenso_mink, W_.z__)),
+            )
+            .repeat()
+            .with(function!(GS.ose, W_.x__) * function!(GS.ose, W_.y__))
+            .replace(
+                function!(GS.ose, W_.x__, function!(spenso_mink, W_.z__)).pow(Atom::var(W_.a_))
+                    * function!(GS.ose, W_.y__, function!(spenso_mink, W_.z__)),
+            )
+            .repeat()
+            .with(function!(GS.ose, W_.x__).pow(Atom::var(W_.a_)) * function!(GS.ose, W_.y__))
+            .replace(
+                function!(GS.ose, W_.x__, function!(spenso_mink, W_.z__)).pow(Atom::var(W_.a_))
+                    * function!(GS.ose, W_.y__, function!(spenso_mink, W_.z__))
+                        .pow(Atom::var(W_.b_)),
+            )
+            .repeat()
+            .with(
+                function!(GS.ose, W_.x__).pow(Atom::var(W_.a_))
+                    * function!(GS.ose, W_.y__).pow(Atom::var(W_.b_)),
+            )
+            .replace(
+                function!(GS.emr_vec, W_.x__, function!(spenso_mink, W_.z__))
+                    * function!(GS.ose, W_.y__, function!(spenso_mink, W_.z__)),
+            )
+            .with(Atom::Zero)
+            .replace(
+                function!(GS.emr_vec, W_.x__, function!(spenso_mink, W_.z__))
+                    * function!(GS.ose, W_.y__, function!(spenso_mink, W_.z__))
+                        .pow(Atom::var(W_.b_)),
+            )
+            .with(Atom::Zero)
+            .replace(function!(
+                MS.dot,
+                function!(GS.emr_vec, W_.x_),
+                function!(GS.ose, W_.y_)
+            ))
+            .with(Atom::Zero)
+            .replace(function!(
+                MS.dot,
+                function!(GS.ose, W_.x_),
+                function!(GS.ose, W_.y_)
+            ))
+            .with(function!(GS.ose, W_.x_) * function!(GS.ose, W_.y_))
+            .replace(function!(
+                MS.dot,
+                function!(GS.emr_mom, W_.x__),
+                function!(GS.emr_vec, W_.y__)
+            ))
+            .with(function!(GS.emr_vec, W_.x__) * function!(GS.emr_vec, W_.y__));
+
+        expr = expr.replace(function!(GS.ose, W_.x_, W_.y_, W_.z_)).with(
+            (-function!(
+                MS.dot,
+                function!(GS.emr_vec, W_.y_),
+                function!(GS.emr_vec, W_.y_)
+            ) + W_.z_)
+                .sqrt(),
+        );
+
+        // set the external energies
+        for (_p, edge_index, _d) in uv_graph.iter_edges_of(&uv_graph.external_filter()) {
+            let edge_id = usize::from(edge_index) as i64;
+            expr = expr
+                .replace(function!(GS.ose, edge_id))
+                .with(external_energy_atom_from_index(edge_index));
+        }
+
+        if is_massless {
+            expr = expr
+                .replace(parse!("MT"))
+                .with(Atom::new())
+                .replace(parse!("MH"))
+                .with(Atom::new());
+        }
+
+        println!("expression for orientation: {}", expr);
     }
 }
 
@@ -1088,12 +1211,8 @@ fn double_triangle_LU() {
             particle: hp.clone(),
             propagator: hprop.clone(),
             internal_index: vec![],
-            dod: if uv_dod >= 1 { -1 } else { -2 },
-            num: if uv_dod >= 1 {
-                spenso_lor_atom(0, 20, GS.dim)
-            } else {
-                Atom::one()
-            },
+            dod: -2,
+            num: Atom::one(),
         },
         false,
     );
@@ -1194,7 +1313,11 @@ fn double_triangle_LU() {
             propagator: hprop.clone(),
             internal_index: vec![],
             dod: 0,
-            num: Atom::one(),
+            num: if uv_dod >= 1 {
+                spenso_lor_atom(6, 20, GS.dim)
+            } else {
+                Atom::one()
+            },
         },
         false,
         Flow::Source,
@@ -1204,7 +1327,7 @@ fn double_triangle_LU() {
 
     let mut loop_momentum_basis = LoopMomentumBasis {
         tree: None,
-        loop_edges: vec![EdgeIndex::from(0), EdgeIndex::from(4)].into(),
+        loop_edges: vec![EdgeIndex::from(0), EdgeIndex::from(3)].into(),
         ext_edges: vec![EdgeIndex::from(5), EdgeIndex::from(6)].into(),
         edge_signatures: underlying
             .new_hedgevec(|_, _, _| LoopExtSignature::from((vec![], vec![]))),
@@ -1240,7 +1363,7 @@ fn double_triangle_LU() {
     )
     .unwrap();
 
-    let super_uv_graph = UVGraph::from_underlying(&cs.graph.underlying);
+    let super_uv_graph = UVGraph::from_supergraph(&cs.graph);
     let orientation_id = SuperGraphOrientationID(0); // 0 contains the UV amplitude
     let supergraph_orientation_data = &cs
         .derived_data
@@ -1439,8 +1562,14 @@ fn double_triangle_LU() {
                     .with(
                         (-function!(
                             MS.dot,
-                            function!(GS.emr_vec, usize::from(edge_id) as i64),
-                            function!(GS.emr_vec, usize::from(edge_id) as i64)
+                            function!(
+                                GS.emr_vec,
+                                function!(GS.emr_mom, usize::from(edge_id) as i64)
+                            ),
+                            function!(
+                                GS.emr_vec,
+                                function!(GS.emr_mom, usize::from(edge_id) as i64)
+                            )
                         ) + mass2)
                             .sqrt(),
                     );
@@ -1468,7 +1597,7 @@ fn double_triangle_LU() {
                         .replace(parse!("Q3(Q(2))"))
                         .with(parse!("t*Q3(Q(3))-Q3(Q(1))"))
                         .replace(parse!("Q3(Q(4))"))
-                        .with(parse!("t*Q3(Q(3))-Q3(Q(6))"))
+                        .with(parse!("t*Q3(Q(3))-Q3(6)")) // note Q3(6) instead of Q3(Q(6)) as it is external
                         .replace(parse!("symbolica_community::dot(t*x_,y_)"))
                         .repeat()
                         .with(parse!("t*symbolica_community::dot(x_,y_)"));
