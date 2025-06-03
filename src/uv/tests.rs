@@ -3,8 +3,8 @@ use std::{sync::Arc, time::Instant};
 use ahash::HashMap;
 
 use colored::Colorize;
-use linnet::half_edge::hedgevec::HedgeVec;
-use nalgebra::LU;
+use linnet::half_edge::{hedgevec::HedgeVec, involution::Orientation};
+use nalgebra::{uninit::Uninit, LU};
 use pathfinding::{matrix::directions::W, num_traits::real};
 
 use linnet::half_edge::{builder::HedgeGraphBuilder, involution::Flow};
@@ -28,7 +28,7 @@ use symbolica::{
 use symbolica_community::physics::algebraic_simplification::metric::MetricSimplifier;
 
 use crate::{
-    cff::cut_expression::SuperGraphOrientationID,
+    cff::{cut_expression::SuperGraphOrientationID, generation::generate_cff_expression},
     feyngen::{
         diagram_generator::{EdgeColor, NodeColorWithVertexRule},
         FeynGenFilters,
@@ -39,14 +39,16 @@ use crate::{
     integrate::{havana_integrate, UserData},
     model::{ArcVertexRule, ColorStructure, Model, VertexRule},
     momentum_sample::ExternalIndex,
-    new_cs::{CrossSection, CrossSectionGraph, CutId, ProcessDefinition},
-    new_graph::{get_cff_inverse_energy_product_impl, Edge, ExternalConnection, Graph, Vertex},
+    new_cs::{AmplitudeGraph, CrossSection, CrossSectionGraph, CutId, ProcessDefinition},
+    new_graph::{
+        get_cff_inverse_energy_product_impl, Edge, ExternalConnection, FeynmanGraph, Graph, Vertex,
+    },
     numerator::UnInit,
     signature::LoopExtSignature,
     tests_from_pytest::{load_amplitude_output, load_generic_model},
     utils::{external_energy_atom_from_index, F},
     uv::UVGraph,
-    Settings,
+    ProcessSettings, Settings,
 };
 
 #[test]
@@ -162,7 +164,7 @@ fn tri_uv_AMP() {
     underlying.add_external_edge(
         n3,
         Edge {
-            name: "q5".into(),
+            name: "q6".into(),
             edge_type: EdgeType::Outgoing,
             particle: hp.clone(),
             propagator: hprop.clone(),
@@ -171,12 +173,10 @@ fn tri_uv_AMP() {
             num: Atom::one(),
         },
         false,
-        Flow::Sink,
+        Flow::Source,
     );
 
     let amp_hedge = underlying.build();
-
-    // is this correct?
     let mut loop_momentum_basis = LoopMomentumBasis {
         tree: None,
         loop_edges: vec![EdgeIndex::from(0)].into(),
@@ -185,11 +185,57 @@ fn tri_uv_AMP() {
     };
 
     loop_momentum_basis.set_edge_signatures(&amp_hedge).unwrap();
-    // build UV here
 
-    let uv_graph = UVGraph::from_underlying(&amp_hedge);
+    let canonize_esurface = amp_hedge.get_esurface_canonization(&loop_momentum_basis);
+
+    let graph = Graph {
+        name: "tri_uv".into(),
+        loop_momentum_basis: loop_momentum_basis.clone(),
+        multiplicity: Atom::one(),
+        underlying: amp_hedge.clone(),
+        vertex_slots: vec![].into(),
+        external_connections: None,
+    };
+
+    let mut amplitude_graph = AmplitudeGraph::<UnInit>::new(graph);
+    amplitude_graph
+        .preprocess(&model, &ProcessSettings::default())
+        .unwrap();
+
+    // build UV here
+    let mut uv_graph = UVGraph::from_underlying(&amp_hedge);
+    uv_graph.lmb = loop_momentum_basis.clone();
+
     let wood = uv_graph.wood(&amp_hedge.full_filter());
     let mut forest = wood.unfold(&uv_graph, &loop_momentum_basis);
+    forest.compute(&uv_graph);
+
+    for orientation in amplitude_graph
+        .derived_data
+        .cff_expression
+        .as_ref()
+        .unwrap()
+        .orientations
+        .iter()
+    {
+        let orientation_data = &orientation.data;
+        let orientation_display = [EdgeIndex::from(0), EdgeIndex::from(1), EdgeIndex::from(2)]
+            .iter()
+            .map(|&e| match orientation_data.orientation[e] {
+                Orientation::Default => "+",
+                Orientation::Reversed => "-",
+                Orientation::Undirected => unreachable!(),
+            })
+            .collect::<Vec<_>>()
+            .join(", ");
+
+        println!(
+            "starting UV expansion for orientation: [{}]",
+            orientation_display
+        );
+
+        forest.compute_cff(&uv_graph, &orientation_data, &canonize_esurface);
+    }
 }
 
 #[test]

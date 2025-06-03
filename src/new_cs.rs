@@ -376,10 +376,10 @@ impl<S: NumeratorState> ProcessCollection<S> {
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct Amplitude<S: NumeratorState = PythonState> {
-    name: String,
-    graphs: Vec<AmplitudeGraph<S>>,
-    external_particles: Vec<ArcParticle>,
-    external_signature: SignatureLike<ExternalIndex>,
+    pub name: String,
+    pub graphs: Vec<AmplitudeGraph<S>>,
+    pub external_particles: Vec<ArcParticle>,
+    pub external_signature: SignatureLike<ExternalIndex>,
 }
 
 impl<S: NumeratorState> Amplitude<S> {
@@ -469,12 +469,12 @@ impl<S: NumeratorState> IsPolarizable for Amplitude<S> {
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait= GammaLoopContext)]
 pub struct AmplitudeGraph<S: NumeratorState> {
-    graph: Graph,
-    derived_data: AmplitudeDerivedData<S>,
+    pub graph: Graph,
+    pub derived_data: AmplitudeDerivedData<S>,
 }
 
 impl<S: NumeratorState> AmplitudeGraph<S> {
-    fn new(graph: Graph) -> Self {
+    pub fn new(graph: Graph) -> Self {
         AmplitudeGraph {
             graph,
             derived_data: AmplitudeDerivedData {
@@ -501,7 +501,7 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
         Ok(())
     }
 
-    fn preprocess(&mut self, _model: &Model, settings: &ProcessSettings) -> Result<()> {
+    pub fn preprocess(&mut self, _model: &Model, settings: &ProcessSettings) -> Result<()> {
         self.graph
             .loop_momentum_basis
             .set_edge_signatures(&self.graph.underlying)?;
@@ -745,13 +745,13 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
 
 #[derive(Clone, Encode, Decode)]
 pub struct AmplitudeDerivedData<S: NumeratorState> {
-    cff_expression: Option<CFFExpression<AmplitudeOrientationID>>,
-    bare_cff_evaluator: Option<GenericEvaluator>,
-    bare_cff_orientation_evaluatos: Option<TiVec<AmplitudeOrientationID, GenericEvaluator>>,
-    _temp_numerator: Option<PhantomData<S>>,
-    lmbs: Option<TiVec<LmbIndex, LoopMomentumBasis>>,
-    tropical_sampler: Option<SampleGenerator<3>>,
-    multi_channeling_setup: Option<LmbMultiChannelingSetup>,
+    pub cff_expression: Option<CFFExpression<AmplitudeOrientationID>>,
+    pub bare_cff_evaluator: Option<GenericEvaluator>,
+    pub bare_cff_orientation_evaluatos: Option<TiVec<AmplitudeOrientationID, GenericEvaluator>>,
+    pub _temp_numerator: Option<PhantomData<S>>,
+    pub lmbs: Option<TiVec<LmbIndex, LoopMomentumBasis>>,
+    pub tropical_sampler: Option<SampleGenerator<3>>,
+    pub multi_channeling_setup: Option<LmbMultiChannelingSetup>,
 }
 
 impl<S: NumeratorState> Amplitude<S> {
