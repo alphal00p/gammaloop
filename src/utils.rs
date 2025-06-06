@@ -3702,6 +3702,14 @@ pub fn ose_atom_from_index(index: EdgeIndex) -> Atom {
     )
 }
 
+pub fn cut_energy(index: EdgeIndex) -> Atom {
+    function!(
+        GS.energy,
+        usize::from(index) as i64,
+        Atom::from(FlatIndex::from(0))
+    )
+}
+
 pub fn external_energy_atom_from_index(index: EdgeIndex) -> Atom {
     function!(
         GS.external_mom,

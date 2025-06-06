@@ -24,6 +24,7 @@ use linnet::half_edge::{
     involution::{EdgeIndex, Orientation},
     subgraph::InternalSubGraph,
 };
+use momtrop::Edge;
 use symbolica::{
     atom::{Atom, AtomCore},
     id::{Pattern, Replacement},
@@ -375,6 +376,7 @@ pub fn generate_uv_cff<E, V, S: SubGraph>(
     canonize_esurface: &Option<ShiftRewrite>,
     contract_edges: &[EdgeIndex],
     orientation: &HedgeVec<Orientation>,
+    cut_edges: &[EdgeIndex],
 ) -> Result<Atom> {
     let mut generation_graph =
         CFFGenerationGraph::new_from_subgraph(graph, orientation.clone(), subgraph)?;
@@ -399,7 +401,7 @@ pub fn generate_uv_cff<E, V, S: SubGraph>(
 
     let tree: Tree<HybridSurfaceID> = generate_tree_for_orientation.map(forget_graphs);
     let atom_tree = tree.to_atom_inv();
-    let atom_tree_substituted = surface_cache.substitute_energies(&atom_tree);
+    let atom_tree_substituted = surface_cache.substitute_energies(&atom_tree, cut_edges);
     let inverse_energies = get_cff_inverse_energy_product_impl(graph, subgraph, contract_edges);
 
     Ok(atom_tree_substituted * &inverse_energies)
@@ -592,8 +594,8 @@ pub struct SurfaceCache {
 }
 
 impl SurfaceCache {
-    pub fn substitute_energies(&self, atom: &Atom) -> Atom {
-        let replacement_rules = self.get_all_replacements();
+    pub fn substitute_energies(&self, atom: &Atom, cut_edges: &[EdgeIndex]) -> Atom {
+        let replacement_rules = self.get_all_replacements(cut_edges);
         atom.replace_multiple(&replacement_rules)
     }
 
@@ -617,11 +619,11 @@ impl SurfaceCache {
         esurface_id_iter.chain(hsurface_id_iter)
     }
 
-    pub fn get_all_replacements(&self) -> Vec<Replacement> {
+    pub fn get_all_replacements(&self, cut_edges: &[EdgeIndex]) -> Vec<Replacement> {
         self.iter_all_surfaces()
             .map(|(id, surface)| {
                 let id_atom = Pattern::from(Atom::from(id));
-                let surface_atom = Pattern::from(Atom::from(surface));
+                let surface_atom = Pattern::from(surface.to_atom(cut_edges));
                 Replacement::new(id_atom, surface_atom)
             })
             .collect()
@@ -803,20 +805,21 @@ mod tests_cff {
     use std::{ops::Range, vec};
 
     use ahash::HashMap;
+    use chrono::format::parse;
     use linnet::half_edge::{
         builder::HedgeGraphBuilder, involution::Flow, nodestore::NodeStorageVec,
     };
     use symbolica::{
         domains::float::{NumericalFloatLike, Real},
         evaluate::{ExpressionEvaluator, FunctionMap},
-        parse,
+        function, parse, symbol,
     };
     use utils::FloatLike;
 
     use crate::{
         cff::cff_graph::CFFEdgeType,
         momentum::{FourMomentum, ThreeMomentum},
-        utils::{self, dummy_hedge_graph, RefDefault, F},
+        utils::{self, dummy_hedge_graph, RefDefault, F, GS, W_},
     };
 
     use super::*;
@@ -831,7 +834,7 @@ mod tests_cff {
             let expression_atom_no_energy_sub = self.to_atom();
             let expression_atom = self
                 .surfaces
-                .substitute_energies(&expression_atom_no_energy_sub);
+                .substitute_energies(&expression_atom_no_energy_sub, &[]);
 
             let external_energies = external_range.map(|i| parse!(&format!("P({}, cind(0))", i)));
 
@@ -1545,5 +1548,100 @@ mod tests_cff {
         }
         let finish = std::time::Instant::now();
         println!("time to evaluate cff: {:?}", (finish - start) / 100);
+    }
+
+    fn proper_atom(graph: &HedgeGraph<(), ()>) -> Atom {
+        let cff = generate_cff_expression(&graph, &None).unwrap();
+
+        let mut cff_atom = cff.to_atom();
+        cff_atom = cff.surfaces.substitute_energies(&cff_atom, &[]);
+        let inverse_energy_product =
+            get_cff_inverse_energy_product_impl(&graph, &graph.full_graph(), &[]);
+
+        cff_atom = cff_atom * inverse_energy_product;
+        cff_atom
+    }
+
+    #[test]
+    fn test_dot_trick_bubble() {
+        let mut dotted_topology_builder = HedgeGraphBuilder::new();
+        let dotted_nodes = (0..3)
+            .map(|_| dotted_topology_builder.add_node(()))
+            .collect_vec();
+
+        dotted_topology_builder.add_edge(dotted_nodes[0], dotted_nodes[1], (), false);
+        dotted_topology_builder.add_edge(dotted_nodes[1], dotted_nodes[2], (), false);
+        dotted_topology_builder.add_edge(dotted_nodes[2], dotted_nodes[0], (), false);
+        let dotted_topology = dotted_topology_builder.build();
+
+        let mut dotted_cff_atom = proper_atom(&dotted_topology);
+        dotted_cff_atom = dotted_cff_atom
+            .replace(parse!("OSE(2)"))
+            .with(parse!("OSE(1)"));
+
+        let mut topology_builder = HedgeGraphBuilder::new();
+        let nodes = (0..2).map(|_| topology_builder.add_node(())).collect_vec();
+
+        topology_builder.add_edge(nodes[0], nodes[1], (), false);
+        topology_builder.add_edge(nodes[0], nodes[1], (), false);
+        let toplogy = topology_builder.build();
+        let mut cff_atom = proper_atom(&toplogy);
+
+        cff_atom = cff_atom.replace(parse!("OSE(1)")).with(parse!("OSE1"));
+        cff_atom = cff_atom.derivative(symbol!("OSE1"));
+        cff_atom = cff_atom.replace(parse!("OSE1")).with(parse!("OSE(1)")) / parse!("2*OSE(1)");
+
+        let diff = (&cff_atom - &dotted_cff_atom).expand();
+
+        println!("cff_atom: {}", cff_atom.expand());
+        println!("dotted_cff_atom: {}", dotted_cff_atom.expand());
+
+        println!("diff: {}", diff);
+    }
+
+    #[test]
+    fn test_dot_trick_amg() {
+        let mut dotted_topology_builder = HedgeGraphBuilder::new();
+        let dotted_nodes = (0..5)
+            .map(|_| dotted_topology_builder.add_node(()))
+            .collect_vec();
+
+        dotted_topology_builder.add_edge(dotted_nodes[0], dotted_nodes[3], (), false);
+        dotted_topology_builder.add_edge(dotted_nodes[0], dotted_nodes[2], (), false);
+        dotted_topology_builder.add_edge(dotted_nodes[0], dotted_nodes[1], (), false);
+        dotted_topology_builder.add_edge(dotted_nodes[3], dotted_nodes[1], (), false);
+        dotted_topology_builder.add_edge(dotted_nodes[1], dotted_nodes[2], (), false);
+        dotted_topology_builder.add_edge(dotted_nodes[3], dotted_nodes[4], (), false);
+        dotted_topology_builder.add_edge(dotted_nodes[4], dotted_nodes[2], (), false);
+        let dotted_topology = dotted_topology_builder.build();
+
+        let mut dotted_cff_atom = proper_atom(&dotted_topology);
+
+        dotted_cff_atom = dotted_cff_atom
+            .replace(parse!("OSE(6)"))
+            .with(parse!("OSE(5)"));
+
+        let mut topology_builder = HedgeGraphBuilder::new();
+        let nodes = (0..4).map(|_| topology_builder.add_node(())).collect_vec();
+
+        topology_builder.add_edge(dotted_nodes[0], dotted_nodes[3], (), false);
+        topology_builder.add_edge(dotted_nodes[0], dotted_nodes[2], (), false);
+        topology_builder.add_edge(dotted_nodes[0], dotted_nodes[1], (), false);
+        topology_builder.add_edge(dotted_nodes[3], dotted_nodes[1], (), false);
+        topology_builder.add_edge(dotted_nodes[1], dotted_nodes[2], (), false);
+        topology_builder.add_edge(dotted_nodes[3], dotted_nodes[2], (), false);
+        let topology = topology_builder.build();
+
+        let mut cff_atom = proper_atom(&topology);
+        cff_atom = cff_atom.replace(parse!("OSE(5)")).with(parse!("OSE5"));
+        cff_atom = cff_atom.derivative(symbol!("OSE5"));
+        cff_atom = cff_atom.replace(parse!("OSE5")).with(parse!("OSE(5)")) / parse!("2*OSE(5)");
+
+        let diff = (cff_atom + dotted_cff_atom).expand();
+        //.replace(function!(GS.ose, W_.x_))
+        //.with(parse!("E"))
+        //.expand();
+
+        println!("diff: {}", diff);
     }
 }

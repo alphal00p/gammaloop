@@ -559,7 +559,7 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
                 .as_ref()
                 .unwrap()
                 .surfaces
-                .substitute_energies(&atom_unsubstituted);
+                .substitute_energies(&atom_unsubstituted, &[]);
 
             self.add_additional_factors_to_cff_atom(&atom)
         };
@@ -703,7 +703,7 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
                     .as_ref()
                     .unwrap()
                     .surfaces
-                    .substitute_energies(orientation_atom_unsubstituted);
+                    .substitute_energies(orientation_atom_unsubstituted, &[]);
 
                 let atom = self.add_additional_factors_to_cff_atom(&atom_no_prefactor);
 
@@ -1130,13 +1130,20 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
             .unwrap()
             .to_atom_for_cut(cut);
 
+        let cut_edges = self
+            .graph
+            .underlying
+            .iter_edges_of(&self.cuts[cut].cut)
+            .map(|(_, id, _)| id)
+            .collect_vec();
+
         let left_amplitude_energy_sub = self
             .derived_data
             .cff_expression
             .as_ref()
             .unwrap()
             .surfaces
-            .substitute_energies(&left_amplitude);
+            .substitute_energies(&left_amplitude, &cut_edges);
 
         let right_amplitude_energy_sub = self
             .derived_data
@@ -1144,7 +1151,7 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
             .as_ref()
             .unwrap()
             .surfaces
-            .substitute_energies(&right_amplitude);
+            .substitute_energies(&right_amplitude, &cut_edges);
 
         let left_ose_product =
             get_cff_inverse_energy_product_impl(&self.graph.underlying, &self.cuts[cut].left, &[]);
@@ -1169,13 +1176,20 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
             .unwrap()
             .get_atom_for_orientation_and_cut(orientation, cut);
 
+        let cut_edges = self
+            .graph
+            .underlying
+            .iter_edges_of(&self.cuts[cut].cut)
+            .map(|(_, id, _)| id)
+            .collect_vec();
+
         let left_amplitude_energy_sub = self
             .derived_data
             .cff_expression
             .as_ref()
             .unwrap()
             .surfaces
-            .substitute_energies(&left_amplitude);
+            .substitute_energies(&left_amplitude, &cut_edges);
 
         let right_amplitude_energy_sub = self
             .derived_data
@@ -1183,7 +1197,7 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
             .as_ref()
             .unwrap()
             .surfaces
-            .substitute_energies(&right_amplitude);
+            .substitute_energies(&right_amplitude, &cut_edges);
 
         let left_ose_product =
             get_cff_inverse_energy_product_impl(&self.graph.underlying, &self.cuts[cut].left, &[]);

@@ -1,6 +1,8 @@
 use crate::cff::esurface::add_external_shifts;
 use crate::cff::surface::Surface;
-use crate::utils::{external_energy_atom_from_index, ose_atom_from_index, FloatLike, F};
+use crate::utils::{
+    cut_energy, external_energy_atom_from_index, ose_atom_from_index, FloatLike, F,
+};
 use bincode_trait_derive::{Decode, Encode};
 use derive_more::{From, Into};
 use itertools::Itertools;
@@ -58,14 +60,20 @@ impl Hsurface {
         surface::compute_shift_part(self, energy_cache)
     }
 
-    pub fn to_atom(&self) -> Atom {
+    pub fn to_atom(&self, cut_edges: &[EdgeIndex]) -> Atom {
         let (symbolic_positive_energies, symbolic_negative_energies) =
             [&self.positive_energies, &self.negative_energies]
                 .iter()
                 .map(|energies| {
                     energies
                         .iter()
-                        .map(|i| ose_atom_from_index(*i))
+                        .map(|i| {
+                            if cut_edges.contains(i) {
+                                cut_energy(*i)
+                            } else {
+                                ose_atom_from_index(*i)
+                            }
+                        })
                         .collect_vec()
                 })
                 .collect_tuple()
@@ -120,7 +128,7 @@ impl Hsurface {
             external_shift,
         };
 
-        Some(dummy_esurface.to_atom())
+        Some(dummy_esurface.to_atom(&[]))
     }
 }
 
@@ -212,7 +220,7 @@ mod tests {
             external_shift,
         };
 
-        let h_surface_atom = h_surface.to_atom();
+        let h_surface_atom = h_surface.to_atom(&[]);
         let expected_atom = parse!("Q(0, cind(0)) + Q(1, cind(0)) - Q(2, cind(0)) - Q(3, cind(0)) - P(4, cind(0)) + P(5, cind(0))");
         let diff = h_surface_atom - &expected_atom;
         let diff = diff.expand();
@@ -234,8 +242,8 @@ mod tests {
             external_shift: vec![(EdgeIndex::from(4), 1)],
         };
 
-        let h_surface_atom = h_surface.to_atom().expand();
-        let e_surface_atom = e_surface.to_atom();
+        let h_surface_atom = h_surface.to_atom(&[]).expand();
+        let e_surface_atom = e_surface.to_atom(&[]);
 
         println!("rewriting {}", h_surface_atom);
         println!("with {}", e_surface_atom);
