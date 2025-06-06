@@ -2,6 +2,7 @@ use std::{sync::Arc, time::Instant};
 
 use ahash::HashMap;
 
+use chrono::format::parse;
 use colored::Colorize;
 use linnet::half_edge::{hedgevec::HedgeVec, involution::Orientation};
 use nalgebra::{uninit::Uninit, LU};
@@ -238,12 +239,13 @@ fn tri_uv_AMP() {
             orientation_display
         );
 
-        forest.compute_cff(&uv_graph, &orientation_data, &canonize_esurface);
+        forest.compute_cff(&uv_graph, &orientation_data, &canonize_esurface, &[]);
         let mut expr = forest.local_expr(
             &uv_graph,
             &uv_graph.full_filter(),
             &canonize_esurface,
             &orientation.data,
+            &[],
         );
 
         // add Feynman rules of external edges
@@ -719,6 +721,13 @@ fn tri_box_tri_LU() {
                 .map(|(_, _, edge)| edge.data.name.clone())
                 .collect_vec();
 
+            let cut_edges = cs
+                .graph
+                .underlying
+                .iter_edges_of(&c.cut)
+                .map(|(_, edge_index, _)| edge_index)
+                .collect_vec();
+
             println!("----cut info----");
             println!("cut: {}, edge_in_cut: {:?}", id, edges_in_cut);
 
@@ -732,21 +741,31 @@ fn tri_box_tri_LU() {
 
             let mut left_forest = left_wood.unfold(&super_uv_graph, &super_uv_graph.lmb);
             left_forest.compute(&super_uv_graph);
-            left_forest.compute_cff(&super_uv_graph, left_orientation_data, &None);
+            left_forest.compute_cff(&super_uv_graph, left_orientation_data, &None, &cut_edges);
 
             let mut right_forest = super_uv_graph
                 .wood(&c.right)
                 .unfold(&super_uv_graph, &super_uv_graph.lmb);
             right_forest.compute(&super_uv_graph);
-            right_forest.compute_cff(&super_uv_graph, right_orientation_data, &None);
+            right_forest.compute_cff(&super_uv_graph, right_orientation_data, &None, &cut_edges);
 
             println!("//left: \n{}", super_uv_graph.dot(&c.left));
 
             println!("//right: \n{}", super_uv_graph.dot(&c.right));
-            let left_expr =
-                left_forest.local_expr(&super_uv_graph, &c.left, &None, left_orientation_data);
-            let right_expr =
-                right_forest.local_expr(&super_uv_graph, &c.right, &None, right_orientation_data);
+            let left_expr = left_forest.local_expr(
+                &super_uv_graph,
+                &c.left,
+                &None,
+                left_orientation_data,
+                &cut_edges,
+            );
+            let right_expr = right_forest.local_expr(
+                &super_uv_graph,
+                &c.right,
+                &None,
+                right_orientation_data,
+                &cut_edges,
+            );
 
             let mut cut_res = cs.add_additional_factors_to_cff_atom(&(left_expr * right_expr), id);
 
@@ -1414,25 +1433,42 @@ fn double_triangle_LU() {
                 .cut_momentum_basis;
             let cut_lmb = &cs.derived_data.lmbs.as_ref().unwrap()[cut_mom_basis_id];
 
+            let cut_edges = cs
+                .graph
+                .underlying
+                .iter_edges_of(&c.cut)
+                .map(|(_, edge_index, _)| edge_index)
+                .collect_vec();
+
             let mut left_wood = super_uv_graph.wood(&c.left);
 
             let mut left_forest = left_wood.unfold(&super_uv_graph, &super_uv_graph.lmb);
             left_forest.compute(&super_uv_graph);
-            left_forest.compute_cff(&super_uv_graph, left_orientation_data, &None);
+            left_forest.compute_cff(&super_uv_graph, left_orientation_data, &None, &cut_edges);
 
             let mut right_forest = super_uv_graph
                 .wood(&c.right)
                 .unfold(&super_uv_graph, &super_uv_graph.lmb);
             right_forest.compute(&super_uv_graph);
-            right_forest.compute_cff(&super_uv_graph, right_orientation_data, &None);
+            right_forest.compute_cff(&super_uv_graph, right_orientation_data, &None, &cut_edges);
 
             println!("//left: \n{}", super_uv_graph.dot(&c.left));
 
             println!("//right: \n{}", super_uv_graph.dot(&c.right));
-            let left_expr =
-                left_forest.local_expr(&super_uv_graph, &c.left, &None, left_orientation_data);
-            let right_expr =
-                right_forest.local_expr(&super_uv_graph, &c.right, &None, right_orientation_data);
+            let left_expr = left_forest.local_expr(
+                &super_uv_graph,
+                &c.left,
+                &None,
+                left_orientation_data,
+                &cut_edges,
+            );
+            let right_expr = right_forest.local_expr(
+                &super_uv_graph,
+                &c.right,
+                &None,
+                right_orientation_data,
+                &cut_edges,
+            );
 
             let mut cut_res = cs.add_additional_factors_to_cff_atom(&(left_expr * right_expr), id);
 
@@ -2977,18 +3013,75 @@ subtraction:
 #[test]
 fn quick_test() {
     fn expose_mass_dimension(atom: &Atom) -> Atom {
-        atom.replace(function!(GS.ose, W_.x_, W_.y_, W_.z_))
-            .with(parse!("E"))
-            .replace(function!(GS.ose, W_.x_))
+        atom.replace(function!(GS.ose, W_.x___))
             .with(parse!("E"))
             .replace(function!(GS.dot, W_.x_, W_.y_))
-            .with(parse!("E^2"))
+            .with(parse!("-E^2"))
             .expand()
     }
 
-    let ORIG = parse!("-1/64*(OSE(0)+OSE(2,Q(2),MH^2)+OSE(3,Q(3),MH^2))^-1*(OSE(3,Q(3),MH^2)+OSE(5,Q(5),MT^2)+OSE(6,Q(6),MT^2))^-1*(OSE(0)+OSE(1)+OSE(3,Q(3),MH^2)+OSE(4,Q(4),MH^2))^-1*(OSE(0)+OSE(1)+OSE(3,Q(3),MH^2)+OSE(5,Q(5),MT^2)+OSE(7,Q(7),MT^2))^-1*OSE(2,Q(2),MH^2)^-1*OSE(3,Q(3),MH^2)^-1*OSE(4,Q(4),MH^2)^-1*OSE(6,Q(6),MT^2)^-1");
-    let UV = parse!("-1/512*(OSE(5,Q(7),mUV^2)+OSE(6,Q(7),mUV^2))^-1*(OSE(5,Q(7),mUV^2)+OSE(7,Q(7),mUV^2))^-1*(OSE(0)+OSE(2,Q(2),MH^2)+OSE(3,Q(3),MH^2))^-1*(OSE(0)+OSE(1)+OSE(3,Q(3),MH^2)+OSE(4,Q(4),MH^2))^-1*OSE(2,Q(2),MH^2)^-1*OSE(3,Q(3),MH^2)^-1*OSE(4,Q(4),MH^2)^-1*OSE(5,Q(7),mUV^2)^-2*OSE(6,Q(7),mUV^2)^-2*OSE(7,Q(7),mUV^2)^-2*dot(Q3(Q(7)),Q3(Q(7)))");
+    let edge_id = 4;
 
-    println!("UV: {}", expose_mass_dimension(&UV));
-    println!("UV_Q: {}", expose_mass_dimension(&ORIG));
+    let cff = parse!(
+        "
+        1 / 8 * (OSE(2) + OSE(3))
+            ^ -1 * (OSE(2) + OSE(4))
+            ^ -1 * OSE(2)
+            ^ -1 * OSE(3)
+            ^ -1 * OSE(4)
+            ^ -1"
+    );
+
+    let num_2 = parse!("(-OSE(2) * OSE(4) + dot(Q3(3), Q3(3))) * OSE(3)^2");
+
+    let mut expr = &num_2 * &cff;
+
+    expr = expr
+        .replace(function!(GS.ose, edge_id, W_.x___))
+        .with(function!(GS.ose, edge_id, W_.x___, Atom::var(GS.rescale)))
+        .derivative(GS.rescale)
+        .replace(function!(Atom::DERIVATIVE, W_.x___, W_.x_))
+        .with(Atom::var(W_.x_).npow(-1) / 2)
+        .replace(function!(GS.ose, edge_id, W_.x___, Atom::var(GS.rescale)))
+        .with(function!(GS.ose, edge_id, W_.x___));
+
+    expr = expr.replace(function!(GS.ose, W_.x___)).with(parse!("E"));
+
+    println!("expr: {}", expr.expand());
+    expr = expose_mass_dimension(&expr);
+    println!("expr: {}", expr);
+
+    let new_expr = num_2 * cff;
+    let mut alt_der = new_expr
+        .replace(function!(GS.ose, edge_id))
+        .with(parse!("OSE4"))
+        .derivative(symbol!("OSE4"))
+        / parse!("2*OSE4");
+
+    alt_der = alt_der
+        .replace(symbol!("OSE4"))
+        .with(function!(GS.ose, edge_id));
+
+    alt_der = alt_der
+        .replace(function!(GS.ose, W_.x___))
+        .with(parse!("E"));
+
+    println!("alt_der: {}", alt_der.expand());
+    alt_der = expose_mass_dimension(&alt_der);
+    println!("alt_der: {}", alt_der);
+
+    let test_expr = (parse!("1/(8*(OSE3+ OSE4))").derivative(symbol!("OSE4")) / parse!("2*OSE4"))
+        .replace(parse!("OSE4"))
+        .with(parse!("OSE3"))
+        .expand();
+
+    println!("test_expr: {}", test_expr);
+
+    let test_expr_2 = (parse!("OSE4/(8*OSE4*(OSE3+ OSE4))").derivative(symbol!("OSE4"))
+        / parse!("2*OSE4"))
+    .replace(parse!("OSE4"))
+    .with(parse!("OSE3"))
+    .expand();
+
+    println!("test_expr: {}", test_expr_2);
 }

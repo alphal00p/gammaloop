@@ -268,9 +268,18 @@ mod tests {
 
         let cut_expression =
             cff::generation::generate_cff_with_cuts(&hedge_graph, &None, &cuts).unwrap();
-        let (left, right) = cut_expression.to_atom_for_cut(CutId::from(2));
+        let cut = CutId::from(2);
+        let (left, right) = cut_expression.to_atom_for_cut(cut);
+
+        let edges_in_cut = hedge_graph
+            .iter_edges_of(&cuts[cut].cut)
+            .map(|(_, id, _)| id)
+            .collect_vec();
+
         let atom_cut_1 = left * right;
-        let atom_with_energies = cut_expression.surfaces.substitute_energies(&atom_cut_1);
+        let atom_with_energies = cut_expression
+            .surfaces
+            .substitute_energies(&atom_cut_1, &edges_in_cut);
 
         println!("{}", atom_cut_1);
         println!("{}", atom_with_energies);

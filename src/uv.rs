@@ -1119,6 +1119,7 @@ impl Approximation {
         orientation: &OrientationData,
         canonize_esurface: &Option<ShiftRewrite>,
         graph: &UVGraph,
+        cut_edges: &[EdgeIndex],
     ) -> ApproxOp {
         ApproxOp::cff_expr(
             dependent,
@@ -1126,6 +1127,7 @@ impl Approximation {
             orientation,
             canonize_esurface,
             graph,
+            cut_edges,
         )
     }
 
@@ -1193,6 +1195,7 @@ impl Approximation {
         canonize_esurface: &Option<ShiftRewrite>,
         amplitude: &S,
         orientation: &OrientationData,
+        cut_edges: &[EdgeIndex],
     ) -> Option<Atom> {
         let (t, _) = self.cff_expr.expr()?;
 
@@ -1213,6 +1216,7 @@ impl Approximation {
             canonize_esurface,
             &contracted_edges,
             &orientation.orientation,
+            cut_edges,
         )
         .unwrap();
 
@@ -1261,6 +1265,7 @@ impl ApproxOp {
         orientation: &OrientationData,
         canonize_esurface: &Option<ShiftRewrite>,
         graph: &UVGraph,
+        cut_edges: &[EdgeIndex],
     ) -> Self {
         let reduced = subgraph.subtract(&dependent.subgraph);
 
@@ -1282,6 +1287,7 @@ impl ApproxOp {
                 canonize_esurface,
                 &contracted_edges,
                 &orientation.orientation,
+                cut_edges,
             )
             .unwrap()
                 * inner_t;
@@ -1408,6 +1414,7 @@ impl Forest {
         graph: &UVGraph,
         orientation: &OrientationData,
         canonize_esurface: &Option<ShiftRewrite>,
+        cut_edges: &[EdgeIndex],
     ) {
         let order = self.dag.compute_topological_order();
 
@@ -1424,6 +1431,7 @@ impl Forest {
                     orientation,
                     canonize_esurface,
                     graph,
+                    cut_edges,
                 )
             } else {
                 let mut dependents = vec![];
@@ -1452,6 +1460,7 @@ impl Forest {
         amplitude: &S,
         canonize_esurface: &Option<ShiftRewrite>,
         orientation: &OrientationData,
+        cut_edges: &[EdgeIndex],
     ) -> Atom {
         let mut sum = Atom::new();
 
@@ -1459,7 +1468,7 @@ impl Forest {
             let r = n.data.final_expr(graph, amplitude).unwrap();
             let cff = n
                 .data
-                .final_cff(graph, canonize_esurface, amplitude, orientation)
+                .final_cff(graph, canonize_esurface, amplitude, orientation, cut_edges)
                 .unwrap();
             println!("Final expr: {:>}", r.expand());
             println!("  CFF: {}", cff.expand());

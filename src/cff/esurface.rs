@@ -59,11 +59,17 @@ impl PartialEq for Esurface {
 impl Eq for Esurface {}
 
 impl Esurface {
-    pub fn to_atom(&self) -> Atom {
+    pub fn to_atom(&self, cut_edges: &[EdgeIndex]) -> Atom {
         let symbolic_energies = self
             .energies
             .iter()
-            .map(|i| ose_atom_from_index(*i))
+            .map(|i| {
+                if cut_edges.contains(i) {
+                    external_energy_atom_from_index(*i)
+                } else {
+                    ose_atom_from_index(*i)
+                }
+            })
             .collect_vec();
 
         let symbolic_shift = self
@@ -694,7 +700,7 @@ mod tests {
             external_shift,
         };
 
-        let esurface_atom = esurface.to_atom();
+        let esurface_atom = esurface.to_atom(&[]);
         let expected_atom = parse!("Q(2, cind(0)) + Q(3, cind(0)) - P(1, cind(0))");
 
         let diff = esurface_atom - &expected_atom;
