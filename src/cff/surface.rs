@@ -110,11 +110,11 @@ pub enum HybridSurface {
     Unit(UnitSurface),
 }
 
-impl From<&HybridSurface> for Atom {
-    fn from(value: &HybridSurface) -> Self {
-        match value {
-            HybridSurface::Esurface(surface) => surface.to_atom(),
-            HybridSurface::Hsurface(surface) => surface.to_atom(),
+impl HybridSurface {
+    pub fn to_atom(&self, cut_edges: &[EdgeIndex]) -> Atom {
+        match self {
+            HybridSurface::Esurface(surface) => surface.to_atom(cut_edges),
+            HybridSurface::Hsurface(surface) => surface.to_atom(cut_edges),
             HybridSurface::Unit(_) => Atom::num(1),
         }
     }
@@ -127,11 +127,11 @@ pub enum HybridSurfaceRef<'a> {
     Unit(UnitSurface),
 }
 
-impl From<HybridSurfaceRef<'_>> for Atom {
-    fn from(value: HybridSurfaceRef) -> Self {
-        match value {
-            HybridSurfaceRef::Esurface(surface) => surface.to_atom(),
-            HybridSurfaceRef::Hsurface(surface) => surface.to_atom(),
+impl HybridSurfaceRef<'_> {
+    pub fn to_atom(&self, cut_edges: &[EdgeIndex]) -> Atom {
+        match self {
+            HybridSurfaceRef::Esurface(surface) => surface.to_atom(cut_edges),
+            HybridSurfaceRef::Hsurface(surface) => surface.to_atom(cut_edges),
             HybridSurfaceRef::Unit(_) => Atom::num(1),
         }
     }
