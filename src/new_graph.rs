@@ -1934,7 +1934,7 @@ pub fn get_cff_inverse_energy_product_impl<E, V, S: SubGraph>(
                     if contract_edges.contains(&edge_index) {
                         None
                     } else {
-                        Some(Atom::num(2) * ose_atom_from_index(edge_index))
+                        Some(-Atom::num(2) * ose_atom_from_index(edge_index))
                     }
                 }
                 _ => None,
