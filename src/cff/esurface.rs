@@ -26,7 +26,7 @@ use crate::new_cs::CrossSectionCut;
 use crate::new_graph::{self, LmbIndex, LoopMomentumBasis};
 use crate::signature::ExternalSignature;
 use crate::utils::{
-    compute_loop_part, compute_shift_part, compute_t_part_of_shift_part,
+    compute_loop_part, compute_shift_part, compute_t_part_of_shift_part, cut_energy,
     external_energy_atom_from_index, ose_atom_from_index, FloatLike, F,
 };
 
@@ -65,7 +65,7 @@ impl Esurface {
             .iter()
             .map(|i| {
                 if cut_edges.contains(i) {
-                    external_energy_atom_from_index(*i)
+                    cut_energy(*i)
                 } else {
                     ose_atom_from_index(*i)
                 }
