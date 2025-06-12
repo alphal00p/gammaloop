@@ -1015,8 +1015,8 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
         self.generate_cff()?;
         self.update_surface_cache();
 
-        self.build_cut_evaluators(model, None);
-        self.build_orientation_evaluators(model);
+        // self.build_cut_evaluators(model, None);
+        // self.build_orientation_evaluators(model);
         self.build_lmbs();
         self.build_esurface_derived_data()?;
         Ok(self.build_multi_channeling_channels())
