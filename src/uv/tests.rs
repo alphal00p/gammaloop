@@ -586,7 +586,7 @@ fn tri_box_tri_LU() {
             num: Atom::one(),
         },
         false,
-        Flow::Source,
+        Flow::Sink,
     );
 
     underlying.add_external_edge(
@@ -605,7 +605,7 @@ fn tri_box_tri_LU() {
             },
         },
         false,
-        Flow::Sink,
+        Flow::Source,
     );
 
     let underlying = underlying.build();
@@ -696,6 +696,8 @@ fn tri_box_tri_LU() {
         supergraph_orientation_data.cuts
     );
 
+    println!("orientation: {:?}", supergraph_orientation_data.orientation);
+
     // FIXME: sometimes c.left and c.right are the other way around!
     for (id, c) in cs.cuts.iter_enumerated() {
         let esurface_id = cs.cut_esurface_id_map[id];
@@ -767,22 +769,40 @@ fn tri_box_tri_LU() {
                 &cut_edges,
             );
 
+            //let mut cut_res = left_expr * right_expr;
             let mut cut_res = cs.add_additional_factors_to_cff_atom(&(left_expr * right_expr), id);
 
             // add Feynman rules of cut edges
-            for (_p, edge_index, d) in super_uv_graph.iter_edges_of(&c.cut) {
+            for (_p, edge_index, d) in super_uv_graph.iter_edges_of(&c.cut.left) {
                 let edge_id = usize::from(edge_index) as i64;
                 let orientation = supergraph_orientation_data.orientation.clone();
-                cut_res = (cut_res * &d.data.num)
+
+                // do not set the cut momenta generated in the amplitude to their OSE values
+                // yet in order to do 4d scaling tests
+                cut_res = cut_res
                     .replace(function!(GS.emr_mom, edge_id, W_.y_))
                     .with_map(move |m| {
                         let index = m.get(W_.y_).unwrap().to_atom();
 
                         let sign = SignOrZero::from((&orientation[edge_index]).clone()) * 1;
 
-                        function!(GS.ose, edge_id, index) * sign
+                        function!(GS.energy, edge_id, sign, index)
                             + function!(GS.emr_vec, edge_id, index)
                     });
+
+                let orientation = supergraph_orientation_data.orientation.clone();
+                cut_res = cut_res
+                    * d.data
+                        .num
+                        .replace(function!(GS.emr_mom, edge_id, W_.y_))
+                        .with_map(move |m| {
+                            let index = m.get(W_.y_).unwrap().to_atom();
+
+                            let sign = SignOrZero::from((&orientation[edge_index]).clone()) * 1;
+
+                            function!(GS.ose, edge_id, index) * sign
+                                + function!(GS.emr_vec, edge_id, index)
+                        });
             }
 
             // add Feynman rules of external edges
@@ -795,8 +815,7 @@ fn tri_box_tri_LU() {
                     .with_map(move |m| {
                         let index = m.get(W_.y_).unwrap().to_atom();
 
-                        function!(GS.ose, edge_id, index) // OSE will later be replaced
-                                + function!(GS.emr_vec, edge_id, index)
+                        function!(GS.energy, edge_id, index) + function!(GS.emr_vec, edge_id, index)
                     });
             }
 
@@ -823,6 +842,8 @@ fn tri_box_tri_LU() {
                 ))
                 .replace(function!(GS.ose, W_.y__, function!(spenso_mink, W_.z__)).npow(2))
                 .with(function!(GS.ose, W_.y__).npow(2))
+                .replace(function!(GS.energy, W_.y__, function!(spenso_mink, W_.z__)).npow(2))
+                .with(function!(GS.energy, W_.y__).npow(2))
                 .replace(
                     function!(GS.ose, W_.x__, function!(spenso_mink, W_.z__))
                         * function!(GS.ose, W_.y__, function!(spenso_mink, W_.z__)),
@@ -830,11 +851,25 @@ fn tri_box_tri_LU() {
                 .repeat()
                 .with(function!(GS.ose, W_.x__) * function!(GS.ose, W_.y__))
                 .replace(
+                    function!(GS.energy, W_.x__, function!(spenso_mink, W_.z__))
+                        * function!(GS.ose, W_.y__, function!(spenso_mink, W_.z__)),
+                )
+                .repeat()
+                .with(function!(GS.energy, W_.x__) * function!(GS.ose, W_.y__))
+                .replace(
                     function!(GS.ose, W_.x__, function!(spenso_mink, W_.z__)).pow(Atom::var(W_.a_))
                         * function!(GS.ose, W_.y__, function!(spenso_mink, W_.z__)),
                 )
                 .repeat()
                 .with(function!(GS.ose, W_.x__).pow(Atom::var(W_.a_)) * function!(GS.ose, W_.y__))
+                .replace(
+                    function!(GS.ose, W_.x__, function!(spenso_mink, W_.z__)).pow(Atom::var(W_.a_))
+                        * function!(GS.energy, W_.y__, function!(spenso_mink, W_.z__)),
+                )
+                .repeat()
+                .with(
+                    function!(GS.ose, W_.x__).pow(Atom::var(W_.a_)) * function!(GS.energy, W_.y__),
+                )
                 .replace(
                     function!(GS.ose, W_.x__, function!(spenso_mink, W_.z__)).pow(Atom::var(W_.a_))
                         * function!(GS.ose, W_.y__, function!(spenso_mink, W_.z__))
@@ -852,6 +887,11 @@ fn tri_box_tri_LU() {
                 .with(Atom::Zero)
                 .replace(
                     function!(GS.emr_vec, W_.x__, function!(spenso_mink, W_.z__))
+                        * function!(GS.energy, W_.y__, function!(spenso_mink, W_.z__)),
+                )
+                .with(Atom::Zero)
+                .replace(
+                    function!(GS.emr_vec, W_.x__, function!(spenso_mink, W_.z__))
                         * function!(GS.ose, W_.y__, function!(spenso_mink, W_.z__))
                             .pow(Atom::var(W_.b_)),
                 )
@@ -864,10 +904,16 @@ fn tri_box_tri_LU() {
                 .with(Atom::Zero)
                 .replace(function!(
                     MS.dot,
-                    function!(GS.ose, W_.x_),
-                    function!(GS.ose, W_.y_)
+                    function!(GS.emr_vec, W_.x_),
+                    function!(GS.energy, W_.y_)
                 ))
-                .with(function!(GS.ose, W_.x_) * function!(GS.ose, W_.y_))
+                .with(Atom::Zero)
+                .replace(function!(
+                    MS.dot,
+                    function!(GS.ose, W_.x__),
+                    function!(GS.ose, W_.y__)
+                ))
+                .with(function!(GS.ose, W_.x__) * function!(GS.ose, W_.y__))
                 .replace(function!(
                     MS.dot,
                     function!(GS.emr_mom, W_.x__),
@@ -887,26 +933,120 @@ fn tri_box_tri_LU() {
                         .sqrt(),
                 );
 
-            // substitute all OSEs (add minus sign to cancel minus sign from 4d dot product)
-            for (_p, edge_id, d) in super_uv_graph.iter_edges_of(&c.cut.left) {
-                let mass2 = Atom::var(symbol!(d.data.particle.mass.name.as_str())).npow(2);
-                cut_res = cut_res
-                    .replace(function!(GS.ose, usize::from(edge_id) as i64))
-                    .with(
-                        (-function!(
-                            MS.dot,
-                            function!(
-                                GS.emr_vec,
-                                function!(GS.emr_mom, usize::from(edge_id) as i64)
-                            ),
-                            function!(
-                                GS.emr_vec,
-                                function!(GS.emr_mom, usize::from(edge_id) as i64)
-                            )
-                        ) + mass2)
-                            .sqrt(),
-                    );
-            }
+            cut_res = cut_res
+                .replace(function!(GS.external_mom, W_.x_, W_.y_))
+                .with(function!(GS.energy, W_.x_));
+
+            let t = symbol!("t");
+            let series = if edges_in_cut == ["e3", "e4"] {
+                Atom::var(t).npow(3)
+                    * cut_res
+                        .expand()
+                        //.replace(function!(MS.dot, W_.x___))
+                        //.with(-function!(MS.dot, W_.x___)) // make three-dot positive
+                        .replace(parse!("Q3(Q(7))"))
+                        .with(parse!("t*Q3(Q(7))"))
+                        .replace(parse!("Q3(Q(6))"))
+                        .with(parse!("t*Q3(Q(7))-Q3(Q(9))"))
+                        .replace(parse!("Q3(Q(5))"))
+                        .with(parse!("t*Q3(Q(7))-Q3(Q(4))"))
+                        .replace(parse!("E(x_,y___)"))
+                        .with(parse!("E(x_)"))
+                        .replace(parse!("Q3(4)"))
+                        .with(parse!("Q3(Q(4))"))
+                        .replace(parse!("Q3(9)"))
+                        .with(parse!("Q3(Q(9))"))
+                        .replace(parse!("Q3(3)"))
+                        .with(parse!("Q3(Q(3))"))
+                        // set momentum conservation
+                        .replace(parse!("Q3(Q(4))"))
+                        .with(parse!("Q3(Q(9))-Q3(Q(3))"))
+                        .replace(parse!("E(4)"))
+                        .with(parse!("E(9)-E(3)"))
+                        .replace(parse!("symbolica_community::dot(t*x_,y_)"))
+                        .repeat()
+                        .with(parse!("t*symbolica_community::dot(x_,y_)"))
+            } else if edges_in_cut == ["e1", "e2", "e3"] {
+                Atom::var(t).npow(3)
+                    * cut_res
+                        .expand()
+                        //.replace(function!(MS.dot, W_.x___))
+                        //.with(-function!(MS.dot, W_.x___)) // make three-dot positive
+                        .replace(parse!("Q3(Q(7))"))
+                        .with(parse!("t*Q3(Q(7))"))
+                        .replace(parse!("Q3(Q(6))"))
+                        .with(parse!("t*Q3(Q(7))-Q3(Q(9))"))
+                        .replace(parse!("Q3(Q(5))"))
+                        .with(parse!("t*Q3(Q(7))-Q3(Q(4))"))
+                        .replace(parse!("E(x_,y___)"))
+                        .with(parse!("E(x_)"))
+                        .replace(parse!("Q3(4)"))
+                        .with(parse!("Q3(Q(4))"))
+                        .replace(parse!("Q3(9)"))
+                        .with(parse!("Q3(Q(9))"))
+                        .replace(parse!("Q3(3)"))
+                        .with(parse!("Q3(Q(3))"))
+                        // set momentum conservation
+                        .replace(parse!("Q3(Q(3))"))
+                        .with(parse!("Q3(Q(9))-Q3(Q(2))-Q(Q(1))"))
+                        .replace(parse!("E(3)"))
+                        .with(parse!("E(9)-E(2)-E(1)"))
+                        .replace(parse!("symbolica_community::dot(t*x_,y_)"))
+                        .repeat()
+                        .with(parse!("t*symbolica_community::dot(x_,y_)"))
+            } else if edges_in_cut == ["e0", "e1"] {
+                Atom::var(t).npow(3)
+                    * cut_res
+                        .expand()
+                        //.replace(function!(MS.dot, W_.x___))
+                        //.with(-function!(MS.dot, W_.x___)) // make three-dot positive
+                        .replace(parse!("Q3(Q(7))"))
+                        .with(parse!("t*Q3(Q(7))"))
+                        .replace(parse!("Q3(Q(6))"))
+                        .with(parse!("t*Q3(Q(7))+Q3(9)")) // NOTE: Q3(9) instead of Q3(Q(9))
+                        .replace(parse!("Q3(Q(5))"))
+                        .with(parse!("t*Q3(Q(7))-Q3(Q(4))"))
+                        // set momentum conservation
+                        .replace(parse!("E(0,x___)"))
+                        .with(parse!("E(9)-E(1)"))
+                        .replace(parse!("E(x_,y___)"))
+                        .with(parse!("E(x_)"))
+                        // no longer needed after CFF fix
+                        .replace(parse!("OSE(0)"))
+                        .with(parse!("E(9) - E(1)"))
+                        .replace(parse!("OSE(1)"))
+                        .with(parse!("E(1)"))
+                        .replace(parse!("symbolica_community::dot(t*x_,y_)"))
+                        .repeat()
+                        .with(parse!("t*symbolica_community::dot(x_,y_)"))
+            } else {
+                cut_res.expand()
+            };
+
+            let s = series
+                .replace(t)
+                .with(Atom::var(t).npow(-1))
+                .series(t, Atom::Zero, 0.into(), true)
+                .unwrap();
+
+            let r = s
+                .to_atom()
+                .expand()
+                .replace(Atom::var(W_.x_).sqrt())
+                .with(Atom::var(W_.x_).npow((1, 2)))
+                .replace((-Atom::var(W_.x_)).pow(Atom::var(W_.y_)))
+                .with(Atom::num(-1).pow(Atom::var(W_.y_)) * Atom::var(W_.x_).pow(Atom::var(W_.y_)))
+                .expand(); // help Symbolica with cancellations
+
+            println!("correct UV cancellation if 0: {:>}", r);
+
+            /*let str = format!("correct UV cancellation if 0: {:>}", r);
+
+            if r == Atom::new() {
+                println!("{}", str.green());
+            } else {
+                println!("{}", str.red());
+            }*/
 
             // set the external energies
             for (_p, edge_index, _d) in
@@ -914,53 +1054,41 @@ fn tri_box_tri_LU() {
             {
                 let edge_id = usize::from(edge_index) as i64;
                 cut_res = cut_res
-                    .replace(function!(GS.ose, edge_id))
+                    .replace(function!(GS.energy, edge_id))
                     .with(external_energy_atom_from_index(edge_index));
             }
 
-            if super_uv_graph.dod(&c.right) >= 0 {
-                // only check when this graph is a UV subgraph
+            // substitute all OSEs (add minus sign to cancel minus sign from 4d dot product)
+            // from this point no UV tests can be done anymore without t-scaling
+            for (_p, edge_id, d) in super_uv_graph.iter_edges_of(&c.cut.left) {
+                let e = usize::from(edge_id) as i64;
+                let mass2 = Atom::var(symbol!(d.data.particle.mass.name.as_str())).npow(2);
 
-                let t = symbol!("t");
-                let series = Atom::var(t).npow(3)
-                    * cut_res
-                        .expand()
-                        .replace(parse!("Q3(Q(7))"))
-                        .with(parse!("t*Q3(Q(7))"))
-                        .replace(parse!("Q3(Q(6))"))
-                        .with(parse!("t*Q3(Q(7))+Q3(9)")) // NOTE: Q3(9) instead of Q3(Q(9))"))
-                        .replace(parse!("Q3(Q(5))"))
-                        .with(parse!("t*Q3(Q(7))-Q3(Q(4))"))
-                        .replace(parse!("symbolica_community::dot(t*x_,y_)"))
-                        .repeat()
-                        .with(parse!("t*symbolica_community::dot(x_,y_)"));
+                cut_res = cut_res
+                    .replace(function!(GS.energy, e))
+                    .with(function!(GS.ose, e))
+                    .replace(function!(GS.energy, e, W_.x_))
+                    .with(function!(GS.ose, e) * W_.x_);
 
-                let s = series
-                    .replace(t)
-                    .with(Atom::var(t).npow(-1))
-                    .series(t, Atom::Zero, 0.into(), true)
-                    .unwrap();
-
-                let r = s
-                    .to_atom()
-                    .expand()
-                    .replace(Atom::var(W_.x_).sqrt())
-                    .with(Atom::var(W_.x_).npow((1, 2)))
-                    .replace((-Atom::var(W_.x_)).pow(Atom::var(W_.y_)))
-                    .with(
-                        Atom::num(-1).pow(Atom::var(W_.y_))
-                            * Atom::var(W_.x_).pow(Atom::var(W_.y_)),
-                    )
-                    .expand(); // help Symbolica with cancellations
-
-                let str = format!("correct UV cancellation if 0: {:>}", r);
-
-                if r == Atom::new() {
-                    println!("{}", str.green());
-                } else {
-                    println!("{}", str.red());
-                }
+                cut_res = cut_res.replace(function!(GS.ose, e)).with(
+                    (-function!(
+                        MS.dot,
+                        function!(GS.emr_vec, function!(GS.emr_mom, e)),
+                        function!(GS.emr_vec, function!(GS.emr_mom, e))
+                    ) + mass2)
+                        .sqrt(),
+                );
             }
+
+            if is_massless {
+                cut_res = cut_res
+                    .replace(parse!("MT"))
+                    .with(Atom::new())
+                    .replace(parse!("MH"))
+                    .with(Atom::new());
+            }
+
+            println!("Cut {} result: {:>}", id, cut_res);
 
             // linearize Q3
             cut_res = cut_res
@@ -1090,14 +1218,6 @@ fn tri_box_tri_LU() {
             }*/
 
             cut_res = cut_res.expand();
-
-            if is_massless {
-                cut_res = cut_res
-                    .replace(parse!("MT"))
-                    .with(Atom::new())
-                    .replace(parse!("MH"))
-                    .with(Atom::new());
-            }
 
             let cut_res = cut_res.expand();
 
@@ -1470,22 +1590,40 @@ fn double_triangle_LU() {
                 &cut_edges,
             );
 
+            //let mut cut_res = left_expr * right_expr;
             let mut cut_res = cs.add_additional_factors_to_cff_atom(&(left_expr * right_expr), id);
 
             // add Feynman rules of cut edges
             for (_p, edge_index, d) in super_uv_graph.iter_edges_of(&c.cut.left) {
                 let edge_id = usize::from(edge_index) as i64;
                 let orientation = supergraph_orientation_data.orientation.clone();
-                cut_res = (cut_res * &d.data.num)
+
+                // do not set the cut momenta generated in the amplitude to their OSE values
+                // yet in order to do 4d scaling tests
+                cut_res = cut_res
                     .replace(function!(GS.emr_mom, edge_id, W_.y_))
                     .with_map(move |m| {
                         let index = m.get(W_.y_).unwrap().to_atom();
 
                         let sign = SignOrZero::from((&orientation[edge_index]).clone()) * 1;
 
-                        function!(GS.ose, edge_id, index) * sign
+                        function!(GS.energy, edge_id, sign, index)
                             + function!(GS.emr_vec, edge_id, index)
                     });
+
+                let orientation = supergraph_orientation_data.orientation.clone();
+                cut_res = cut_res
+                    * d.data
+                        .num
+                        .replace(function!(GS.emr_mom, edge_id, W_.y_))
+                        .with_map(move |m| {
+                            let index = m.get(W_.y_).unwrap().to_atom();
+
+                            let sign = SignOrZero::from((&orientation[edge_index]).clone()) * 1;
+
+                            function!(GS.ose, edge_id, index) * sign
+                                + function!(GS.emr_vec, edge_id, index)
+                        });
             }
 
             // add Feynman rules of external edges
@@ -1493,6 +1631,7 @@ fn double_triangle_LU() {
                 super_uv_graph.iter_edges_of(&super_uv_graph.external_filter())
             {
                 let edge_id = usize::from(edge_index) as i64;
+
                 cut_res = (cut_res * &d.data.num)
                     .replace(function!(GS.emr_mom, edge_id, W_.y_))
                     .with_map(move |m| {
@@ -1526,6 +1665,8 @@ fn double_triangle_LU() {
                 ))
                 .replace(function!(GS.ose, W_.y__, function!(spenso_mink, W_.z__)).npow(2))
                 .with(function!(GS.ose, W_.y__).npow(2))
+                .replace(function!(GS.energy, W_.y__, function!(spenso_mink, W_.z__)).npow(2))
+                .with(function!(GS.energy, W_.y__).npow(2))
                 .replace(
                     function!(GS.ose, W_.x__, function!(spenso_mink, W_.z__))
                         * function!(GS.ose, W_.y__, function!(spenso_mink, W_.z__)),
@@ -1533,11 +1674,25 @@ fn double_triangle_LU() {
                 .repeat()
                 .with(function!(GS.ose, W_.x__) * function!(GS.ose, W_.y__))
                 .replace(
+                    function!(GS.energy, W_.x__, function!(spenso_mink, W_.z__))
+                        * function!(GS.ose, W_.y__, function!(spenso_mink, W_.z__)),
+                )
+                .repeat()
+                .with(function!(GS.energy, W_.x__) * function!(GS.ose, W_.y__))
+                .replace(
                     function!(GS.ose, W_.x__, function!(spenso_mink, W_.z__)).pow(Atom::var(W_.a_))
                         * function!(GS.ose, W_.y__, function!(spenso_mink, W_.z__)),
                 )
                 .repeat()
                 .with(function!(GS.ose, W_.x__).pow(Atom::var(W_.a_)) * function!(GS.ose, W_.y__))
+                .replace(
+                    function!(GS.ose, W_.x__, function!(spenso_mink, W_.z__)).pow(Atom::var(W_.a_))
+                        * function!(GS.energy, W_.y__, function!(spenso_mink, W_.z__)),
+                )
+                .repeat()
+                .with(
+                    function!(GS.ose, W_.x__).pow(Atom::var(W_.a_)) * function!(GS.energy, W_.y__),
+                )
                 .replace(
                     function!(GS.ose, W_.x__, function!(spenso_mink, W_.z__)).pow(Atom::var(W_.a_))
                         * function!(GS.ose, W_.y__, function!(spenso_mink, W_.z__))
@@ -1555,6 +1710,11 @@ fn double_triangle_LU() {
                 .with(Atom::Zero)
                 .replace(
                     function!(GS.emr_vec, W_.x__, function!(spenso_mink, W_.z__))
+                        * function!(GS.energy, W_.y__, function!(spenso_mink, W_.z__)),
+                )
+                .with(Atom::Zero)
+                .replace(
+                    function!(GS.emr_vec, W_.x__, function!(spenso_mink, W_.z__))
                         * function!(GS.ose, W_.y__, function!(spenso_mink, W_.z__))
                             .pow(Atom::var(W_.b_)),
                 )
@@ -1567,10 +1727,16 @@ fn double_triangle_LU() {
                 .with(Atom::Zero)
                 .replace(function!(
                     MS.dot,
-                    function!(GS.ose, W_.x_),
-                    function!(GS.ose, W_.y_)
+                    function!(GS.emr_vec, W_.x_),
+                    function!(GS.energy, W_.y_)
                 ))
-                .with(function!(GS.ose, W_.x_) * function!(GS.ose, W_.y_))
+                .with(Atom::Zero)
+                .replace(function!(
+                    MS.dot,
+                    function!(GS.ose, W_.x__),
+                    function!(GS.ose, W_.y__)
+                ))
+                .with(function!(GS.ose, W_.x__) * function!(GS.ose, W_.y__))
                 .replace(function!(
                     MS.dot,
                     function!(GS.emr_mom, W_.x__),
@@ -1590,37 +1756,6 @@ fn double_triangle_LU() {
                         .sqrt(),
                 );
 
-            // substitute all OSEs (add minus sign to cancel minus sign from 4d dot product)
-            for (_p, edge_id, d) in super_uv_graph.iter_edges_of(&c.cut.left) {
-                let mass2 = Atom::var(symbol!(d.data.particle.mass.name.as_str())).npow(2);
-                cut_res = cut_res
-                    .replace(function!(GS.ose, usize::from(edge_id) as i64))
-                    .with(
-                        (-function!(
-                            MS.dot,
-                            function!(
-                                GS.emr_vec,
-                                function!(GS.emr_mom, usize::from(edge_id) as i64)
-                            ),
-                            function!(
-                                GS.emr_vec,
-                                function!(GS.emr_mom, usize::from(edge_id) as i64)
-                            )
-                        ) + mass2)
-                            .sqrt(),
-                    );
-            }
-
-            // set the external energies
-            for (_p, edge_index, _d) in
-                super_uv_graph.iter_edges_of(&super_uv_graph.external_filter())
-            {
-                let edge_id = usize::from(edge_index) as i64;
-                cut_res = cut_res
-                    .replace(function!(GS.ose, edge_id))
-                    .with(external_energy_atom_from_index(edge_index));
-            }
-
             if super_uv_graph.dod(&c.right) >= 0 {
                 // only check when this graph is a UV subgraph
 
@@ -1631,9 +1766,20 @@ fn double_triangle_LU() {
                         .replace(parse!("Q3(Q(3))"))
                         .with(parse!("t*Q3(Q(3))"))
                         .replace(parse!("Q3(Q(2))"))
-                        .with(parse!("t*Q3(Q(3))-Q3(Q(1))"))
+                        .with(parse!("t*Q3(Q(3))-Q3(1)"))
                         .replace(parse!("Q3(Q(4))"))
                         .with(parse!("t*Q3(Q(3))-Q3(6)")) // note Q3(6) instead of Q3(Q(6)) as it is external
+                        .replace(parse!("Q3(Q(0))"))
+                        .with(parse!("Q3(6)-Q3(1)"))
+                        .replace(parse!("E(0,x_)")) // drop signs
+                        .with(parse!("E(6)-E(1)"))
+                        .replace(parse!("E(x_,y_)"))
+                        .with(parse!("E(x_)"))
+                        // should no be needed in the near future, when CFF is updated
+                        .replace(parse!("OSE(0)"))
+                        .with(parse!("E(6)-E(1)"))
+                        .replace(parse!("OSE(x_)"))
+                        .with(parse!("E(x_)"))
                         .replace(parse!("symbolica_community::dot(t*x_,y_)"))
                         .repeat()
                         .with(parse!("t*symbolica_community::dot(x_,y_)"));
@@ -1656,6 +1802,38 @@ fn double_triangle_LU() {
                     )
                     .expand(); // help Symbolica with cancellations and avoid bad simplification of (-1)^(-5/2)
                 println!("Correct UV cancellation if 0: {:>}", r);
+            }
+
+            // set the external energies
+            for (_p, edge_index, _d) in
+                super_uv_graph.iter_edges_of(&super_uv_graph.external_filter())
+            {
+                let edge_id = usize::from(edge_index) as i64;
+                cut_res = cut_res
+                    .replace(function!(GS.energy, edge_id))
+                    .with(external_energy_atom_from_index(edge_index));
+            }
+
+            // substitute all OSEs (add minus sign to cancel minus sign from 4d dot product)
+            // from this point no UV tests can be done anymore without t-scaling
+            for (_p, edge_id, d) in super_uv_graph.iter_edges_of(&c.cut.left) {
+                let e = usize::from(edge_id) as i64;
+                let mass2 = Atom::var(symbol!(d.data.particle.mass.name.as_str())).npow(2);
+
+                cut_res = cut_res
+                    .replace(function!(GS.energy, e))
+                    .with(function!(GS.ose, e))
+                    .replace(function!(GS.energy, e, W_.x_))
+                    .with(function!(GS.ose, e) * W_.x_);
+
+                cut_res = cut_res.replace(function!(GS.ose, e)).with(
+                    (-function!(
+                        MS.dot,
+                        function!(GS.emr_vec, function!(GS.emr_mom, e)),
+                        function!(GS.emr_vec, function!(GS.emr_mom, e))
+                    ) + mass2)
+                        .sqrt(),
+                );
             }
 
             cut_res = cut_res
