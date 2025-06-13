@@ -1489,7 +1489,7 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
                 .derived_data
                 .bare_cff_orientation_evaluators
                 .clone()
-                .unwrap(),
+                .unwrap_or_else(|| vec![].into()),
             graph: self.graph.clone(),
             cut_esurface: self.cut_esurface.clone(),
             lmbs: self.derived_data.lmbs.clone().unwrap(),

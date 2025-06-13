@@ -937,6 +937,8 @@ fn tri_box_tri_LU() {
                 .replace(function!(GS.external_mom, W_.x_, W_.y_))
                 .with(function!(GS.energy, W_.x_));
 
+            println!("Cut input: {:>}", cut_res.expand());
+
             let t = symbol!("t");
             let series = if edges_in_cut == ["e3", "e4"] {
                 Atom::var(t).npow(3)
@@ -1003,7 +1005,7 @@ fn tri_box_tri_LU() {
                         .replace(parse!("Q3(Q(7))"))
                         .with(parse!("t*Q3(Q(7))"))
                         .replace(parse!("Q3(Q(6))"))
-                        .with(parse!("t*Q3(Q(7))+Q3(9)")) // NOTE: Q3(9) instead of Q3(Q(9))
+                        .with(parse!("t*Q3(Q(7))-Q3(9)")) // NOTE: Q3(9) instead of Q3(Q(9))
                         .replace(parse!("Q3(Q(5))"))
                         .with(parse!("t*Q3(Q(7))-Q3(Q(4))"))
                         // set momentum conservation
@@ -1223,7 +1225,12 @@ fn tri_box_tri_LU() {
 
             println!("Cut {} result: {:>}", id, cut_res);
 
-            cut_atoms.push(cut_res);
+            // ONLY TEST THIS CUT
+            if edges_in_cut == ["e1", "e2", "e3"] {
+                cut_atoms.push(cut_res);
+            } else {
+                cut_atoms.push(Atom::new());
+            }
         } else {
             cut_atoms.push(Atom::new());
         }
@@ -1254,17 +1261,17 @@ fn tri_box_tri_LU() {
         0.29524956611783904,
         0.7817766395757219,
         0.9871982777886554,
-        0.00000005657505108835892,
+        0.5657505108835892,
         0.27340654746267856,
         0.3496212940550564,
-        0.26907610629771705,
+        0.99907610629771705,
         0.8470335349214098,
         0.2978377809550732,
     ]
     .map(|x| F(x))
     .to_vec();
 
-    let inspect = inspect(
+    let inspect1 = inspect(
         &settings,
         &mut integrand,
         pt,
@@ -1273,7 +1280,34 @@ fn tri_box_tri_LU() {
         false,
         false,
     );
-    println!("Inspect: {}", inspect);
+    println!("Inspect: {}", inspect1);
+
+    let pt = [
+        0.29524956611783904,
+        0.7817766395757219,
+        0.9871982777886554,
+        0.5657505108835892,
+        0.27340654746267856,
+        0.3496212940550564,
+        0.999907610629771705,
+        0.8470335349214098,
+        0.2978377809550732,
+    ]
+    .map(|x| F(x))
+    .to_vec();
+
+    let inspect2 = inspect(
+        &settings,
+        &mut integrand,
+        pt,
+        &[0usize],
+        false,
+        false,
+        false,
+    );
+    println!("Inspect: {}", inspect2);
+
+    return;
 
     crate::set_interrupt_handler();
 
