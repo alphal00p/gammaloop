@@ -543,6 +543,7 @@ impl UltravioletGraph for UVGraph {
         let mut dod: i32 = 4 * self.n_loops(subgraph) as i32;
         // println!("nloops: {}", dod / 4);
 
+        // FIXME: does not work if subgraph has external edges that contain both nodes!
         for (p, _, e) in self.iter_edges_of(subgraph) {
             if p.is_paired() {
                 dod += e.data.dod;
