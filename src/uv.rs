@@ -371,6 +371,12 @@ impl IntegrandExpr {
             integrand: num / den,
         }
     }
+
+    pub fn numerator_only_subgraph<S: SubGraph>(subgraph: &S, graph: &UVGraph) -> Self {
+        let num = graph.numerator(subgraph);
+
+        IntegrandExpr { integrand: num }
+    }
 }
 
 // pub fn limit(&)
@@ -1122,14 +1128,208 @@ impl Approximation {
         graph: &UVGraph,
         cut_edges: &[EdgeIndex],
     ) -> ApproxOp {
-        ApproxOp::cff_expr(
-            dependent,
-            &self.subgraph,
-            orientation,
-            canonize_esurface,
-            graph,
-            cut_edges,
-        )
+        let reduced = self.subgraph.subtract(&dependent.subgraph);
+
+        if let Some((inner_t, sign)) = dependent.cff_expr.expr() {
+            let contracted_edges = graph
+                .iter_edges_of(&dependent.subgraph)
+                .filter_map(|(p, e, _)| {
+                    if matches!(p, HedgePair::Paired { .. }) {
+                        Some(e)
+                    } else {
+                        None
+                    }
+                })
+                .collect_vec();
+
+            let mut cff = generate_uv_cff(
+                graph,
+                &self.subgraph,
+                canonize_esurface,
+                &contracted_edges,
+                &orientation.orientation,
+                cut_edges,
+            )
+            .unwrap();
+
+            // add data for OSE computation and add an explicit sqrt
+            for (p, eid, e) in graph.iter_edges_of(&self.subgraph) {
+                let eid = usize::from(eid) as i64;
+                if p.is_paired() {
+                    let e_mass = parse!(&e.data.particle.mass.name);
+                    cff = cff.replace(function!(GS.ose, eid)).with(
+                        function!(
+                            GS.ose,
+                            eid,
+                            function!(GS.emr_vec, eid),
+                            &e_mass * &e_mass,
+                            -function!(
+                                MS.dot,
+                                function!(GS.emr_vec, eid),
+                                function!(GS.emr_vec, eid)
+                            ) + &e_mass * &e_mass
+                        )
+                        .npow((1, 2)),
+                    );
+                }
+            }
+
+            let mut atomarg =
+                cff * inner_t * IntegrandExpr::numerator_only_subgraph(&reduced, graph).integrand;
+
+            // split numerator momenta into OSEs and spatial parts
+            for (p, eid, e) in graph.iter_edges_of(&self.subgraph) {
+                let eidc = usize::from(eid) as i64;
+                if p.is_paired() {
+                    let e_mass = parse!(&e.data.particle.mass.name);
+                    let orientation = orientation.orientation.clone();
+                    atomarg = atomarg
+                        .replace(function!(GS.emr_mom, eidc, W_.x___))
+                        .with_map(move |m| {
+                            let index = m.get(W_.x___).unwrap().to_atom();
+
+                            let sign = SignOrZero::from(orientation[eid].clone()) * 1;
+
+                            function!(
+                                GS.ose,
+                                eidc,
+                                function!(GS.emr_vec, eidc),
+                                &e_mass * &e_mass,
+                                -function!(
+                                    MS.dot,
+                                    function!(GS.emr_vec, eidc),
+                                    function!(GS.emr_vec, eidc)
+                                ) + &e_mass * &e_mass,
+                                index
+                            )
+                            .npow((1, 2))
+                                * sign
+                                + function!(GS.emr_vec, eidc, index)
+                        });
+                }
+            }
+
+            // only apply replacements for edges in the reduced graph
+            let mom_reps = graph.uv_wrapped_replacement(&reduced, &self.lmb, &[W_.x___]);
+
+            println!("Reps:");
+            for r in &mom_reps {
+                println!("{r}");
+            }
+
+            println!(
+                "Expand-prerep {} with dod={} in {:?}",
+                atomarg, self.dod, self.lmb.ext_edges
+            );
+
+            // rewrite the inner_t as well
+            atomarg = atomarg.replace_multiple(&mom_reps);
+
+            println!(
+                "Expand {} with dod={} in {:?}",
+                atomarg, self.dod, self.lmb.ext_edges
+            );
+            for e in &self.lmb.ext_edges {
+                atomarg = atomarg
+                    .replace(function!(GS.emr_vec, usize::from(*e) as i64, W_.x___))
+                    .with(function!(GS.emr_vec, usize::from(*e) as i64, W_.x___) * GS.rescale);
+            }
+
+            let soft_ct = graph.full_crown(&self.subgraph).count_ones() == 2 && self.dod > 0;
+
+            let mut masses = AHashSet::new();
+            masses.insert(Atom::var(GS.m_uv));
+            // scale all masses, including UV masses from subgraphs
+
+            for (p, _, e) in graph.iter_edges_of(&self.subgraph) {
+                if p.is_paired() {
+                    let e_mass = parse!(&e.data.particle.mass.name);
+                    masses.insert(e_mass);
+                }
+            }
+
+            if !soft_ct {
+                for m in &masses {
+                    let rescaled = m.clone() * GS.rescale;
+                    atomarg = atomarg.replace(m.clone()).with(rescaled);
+                }
+
+                // expand the OSEs around an OSE with a UV mass
+                atomarg = atomarg
+                    .replace(parse!("OSE(n_,q_,mass_,prop_,index___)"))
+                    .with(parse!(
+                        "OSE(n_,q_,mass_ + mUV^2 - t^2*mUV^2, prop_ + mUV^2 - t^2*mUV^2, index___)"
+                    ));
+            }
+
+            atomarg = atomarg
+                .replace(function!(MS.dot, GS.rescale * W_.x_, W_.y_))
+                .repeat()
+                .with(function!(MS.dot, W_.x_, W_.y_) * GS.rescale);
+
+            println!("atomarg:{}", atomarg);
+
+            // den(..) tags a propagator, its first derivative is 1 and the rest is 0
+            let mut a = atomarg
+                .series(GS.rescale, Atom::Zero, self.dod.into(), true)
+                .unwrap()
+                .to_atom()
+                .replace(parse!("der(0,0,0,1, OSE(y__))"))
+                .with(Atom::num(1))
+                .replace(parse!("der(0,0,0,1,0, OSE(y__))"))
+                .with(Atom::num(1))
+                .replace(parse!("der(x__, OSE(y__))"))
+                .with(Atom::num(0))
+                .replace(parse!("der(0, 1, Q3(x_, y_))"))
+                .with(Atom::num(1))
+                .replace(parse!("der(x__, Q3(y__))"))
+                .with(Atom::num(0));
+
+            if soft_ct {
+                let coeffs = a.coefficient_list::<u8>(&[Atom::var(GS.rescale)]);
+                let mut b = Atom::Zero;
+                let dod_pow = Atom::var(GS.rescale).npow(self.dod);
+                for (pow, mut i) in coeffs {
+                    if pow == dod_pow {
+                        // set the masses in the t=dod term to 0
+                        // UV rearrange the denominators
+                        for m in &masses {
+                            i = i.replace(m.clone()).with(Atom::Zero);
+                        }
+
+                        i = i
+                            .replace(parse!("OSE(n_,q_,mass_,prop_, x___)"))
+                            .with(parse!("OSE(n_,q_,mUV^2,prop_+mUV^2,x___)"));
+                    }
+
+                    b += i;
+                }
+
+                a = b;
+            } else {
+                a = a.replace(GS.rescale).with(Atom::num(1));
+            }
+
+            // strip the momentum wrapper from the denominator
+            a = a
+                .replace(function!(
+                    GS.den,
+                    W_.prop_,
+                    function!(GS.emr_mom, W_.prop_, W_.mom_),
+                    W_.x__
+                ))
+                .with(function!(GS.den, W_.prop_, W_.mom_, W_.x__));
+
+            println!("Expanded: {:>}", a.expand());
+
+            ApproxOp::Dependent {
+                t_arg: IntegrandExpr { integrand: a },
+                sign: -sign,
+                subgraph: reduced,
+            }
+        } else {
+            ApproxOp::NotComputed
+        }
     }
 
     pub fn union(&self, dependents: &[&Self], _graph: &UVGraph) -> (ApproxOp, SimpleApprox) {
@@ -1190,7 +1390,7 @@ impl Approximation {
         Some(res)
     }
 
-    pub fn final_cff<S: SubGraph>(
+    pub fn final_cff<S: SubGraph<Base = BitVec>>(
         &self,
         graph: &UVGraph,
         canonize_esurface: &Option<ShiftRewrite>,
@@ -1198,7 +1398,8 @@ impl Approximation {
         orientation: &OrientationData,
         cut_edges: &[EdgeIndex],
     ) -> Option<Atom> {
-        let (t, _) = self.cff_expr.expr()?;
+        let (t, s) = self.cff_expr.expr()?;
+        let reduced = amplitude.included().subtract(&self.subgraph.included());
 
         let contracted_edges = graph
             .iter_edges_of(&self.subgraph)
@@ -1211,7 +1412,7 @@ impl Approximation {
             })
             .collect_vec();
 
-        let contracted = generate_uv_cff(
+        let mut cff = generate_uv_cff(
             graph,
             amplitude,
             canonize_esurface,
@@ -1221,7 +1422,63 @@ impl Approximation {
         )
         .unwrap();
 
-        Some(t * contracted)
+        for (p, eid, e) in graph.iter_edges_of(&reduced) {
+            let eid = usize::from(eid) as i64;
+            if p.is_paired() {
+                let e_mass = parse!(&e.data.particle.mass.name);
+                cff = cff.replace(function!(GS.ose, eid)).with(
+                    function!(
+                        GS.ose,
+                        eid,
+                        function!(GS.emr_vec, eid),
+                        &e_mass * &e_mass,
+                        -function!(
+                            MS.dot,
+                            function!(GS.emr_vec, eid),
+                            function!(GS.emr_vec, eid)
+                        ) + &e_mass * &e_mass
+                    )
+                    .npow((1, 2)),
+                );
+            }
+        }
+
+        let mut res =
+            s * t * cff * IntegrandExpr::numerator_only_subgraph(&reduced, graph).integrand;
+
+        // set the momenta flowing through the reduced graph edges to the identity wrt the supergraph
+        for (p, eid, e) in graph.iter_edges_of(&reduced) {
+            let eidc = usize::from(eid) as i64;
+            if p.is_paired() {
+                let e_mass = parse!(&e.data.particle.mass.name);
+                let orientation = orientation.orientation.clone();
+                res = res
+                    .replace(function!(GS.emr_mom, eidc, W_.x___))
+                    .with_map(move |m| {
+                        let index = m.get(W_.x___).unwrap().to_atom();
+
+                        let sign = SignOrZero::from(orientation[eid].clone()) * 1;
+
+                        function!(
+                            GS.ose,
+                            eidc,
+                            function!(GS.emr_vec, eidc),
+                            &e_mass * &e_mass,
+                            -function!(
+                                MS.dot,
+                                function!(GS.emr_vec, eidc),
+                                function!(GS.emr_vec, eidc)
+                            ) + &e_mass * &e_mass,
+                            index
+                        )
+                        .npow((1, 2))
+                            * sign
+                            + function!(GS.emr_vec, eidc, index)
+                    });
+            }
+        }
+
+        Some(res)
     }
 
     pub fn simple_expr(
@@ -1257,49 +1514,6 @@ impl ApproxOp {
             }
             ApproxOp::Dependent { t_arg, sign, .. } => Some((t_arg.integrand.clone(), *sign)),
             ApproxOp::Root => Some((Atom::num(1).into(), Sign::Positive)),
-        }
-    }
-
-    pub fn cff_expr(
-        dependent: &Approximation,
-        subgraph: &InternalSubGraph,
-        orientation: &OrientationData,
-        canonize_esurface: &Option<ShiftRewrite>,
-        graph: &UVGraph,
-        cut_edges: &[EdgeIndex],
-    ) -> Self {
-        let reduced = subgraph.subtract(&dependent.subgraph);
-
-        if let Some((inner_t, sign)) = dependent.cff_expr.expr() {
-            let contracted_edges = graph
-                .iter_edges_of(&dependent.subgraph)
-                .filter_map(|(p, e, _)| {
-                    if matches!(p, HedgePair::Paired { .. }) {
-                        Some(e)
-                    } else {
-                        None
-                    }
-                })
-                .collect_vec();
-
-            let cff = generate_uv_cff(
-                graph,
-                subgraph,
-                canonize_esurface,
-                &contracted_edges,
-                &orientation.orientation,
-                cut_edges,
-            )
-            .unwrap()
-                * inner_t;
-
-            Self::Dependent {
-                t_arg: IntegrandExpr { integrand: cff },
-                sign: -sign,
-                subgraph: reduced,
-            }
-        } else {
-            Self::NotComputed
         }
     }
 
@@ -1466,20 +1680,22 @@ impl Forest {
         let mut sum = Atom::new();
 
         for (_, n) in &self.dag.nodes {
-            let r = n.data.final_expr(graph, amplitude).unwrap();
+            //let r = n.data.final_expr(graph, amplitude).unwrap();
             let cff = n
                 .data
                 .final_cff(graph, canonize_esurface, amplitude, orientation, cut_edges)
                 .unwrap();
-            println!("Final expr: {:>}", r.expand());
+            //println!("Final expr: {:>}", r.expand());
             println!("  CFF: {}", cff.expand());
 
-            sum += r * cff;
+            sum += cff; // r * cff;
         }
 
-        println!("SUM {:>}", sum.expand());
+        //println!("SUM {:>}", sum.expand());
 
-        sum.expand().map_terms_single_core(|t| {
+        sum.expand()
+
+        /*sum.expand().map_terms_single_core(|t| {
             let mut expr = t.to_owned();
             let mut data = Vec::new();
             for m in t.pattern_match(
@@ -1532,21 +1748,6 @@ impl Forest {
 
                 for _ in 1..pow {
                     expr = expr
-                        //.replace(function!(GS.ose, edge_id))
-                        //.with(function!(GS.ose, edge_id, Atom::var(GS.rescale)))
-                        // .replace(function!(
-                        //     GS.ose,
-                        //     edge_id,
-                        //     W_.x___,
-                        //     function!(symbol!("spenso::mink"), GS.dim, edge_id)
-                        // ))
-                        // .with(function!(
-                        //     GS.ose,
-                        //     edge_id,
-                        //     W_.x___,
-                        //     function!(symbol!("spenso::mink"), GS.dim, edge_id),
-                        //     Atom::var(GS.rescale)
-                        // ))
                         .replace(function!(GS.ose, edge_id, W_.x___))
                         .with(function!(GS.ose, edge_id, W_.x___, Atom::var(GS.rescale)))
                         .derivative(GS.rescale)
@@ -1568,7 +1769,7 @@ impl Forest {
             }
 
             expr
-        })
+        })*/
     }
 
     pub fn simple_expr(
