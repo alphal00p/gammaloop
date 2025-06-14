@@ -1433,8 +1433,8 @@ fn double_triangle_LU() {
             particle: tp.clone(),
             propagator: tprop.clone(),
             internal_index: vec![],
-            dod: if uv_dod >= 0 { -1 } else { -2 },
-            num: if uv_dod >= 0 {
+            dod: if uv_dod >= 1 { -1 } else { -2 },
+            num: if uv_dod >= 1 {
                 spenso_lor_atom(3, 20, GS.dim)
             } else {
                 Atom::one()
@@ -1452,8 +1452,8 @@ fn double_triangle_LU() {
             particle: tp.clone(),
             propagator: tprop.clone(),
             internal_index: vec![],
-            dod: if uv_dod >= 1 { -1 } else { -2 },
-            num: if uv_dod >= 1 {
+            dod: if uv_dod >= 0 { -1 } else { -2 },
+            num: if uv_dod >= 0 {
                 spenso_lor_atom(4, 10, GS.dim)
             } else {
                 Atom::one()
@@ -1665,14 +1665,12 @@ fn double_triangle_LU() {
                 super_uv_graph.iter_edges_of(&super_uv_graph.external_filter())
             {
                 let edge_id = usize::from(edge_index) as i64;
-
                 cut_res = (cut_res * &d.data.num)
                     .replace(function!(GS.emr_mom, edge_id, W_.y_))
                     .with_map(move |m| {
                         let index = m.get(W_.y_).unwrap().to_atom();
 
-                        function!(GS.ose, edge_id, index) // OSE will later be replaced
-                                + function!(GS.emr_vec, edge_id, index)
+                        function!(GS.energy, edge_id, index) + function!(GS.emr_vec, edge_id, index)
                     });
             }
 
@@ -1719,6 +1717,16 @@ fn double_triangle_LU() {
                 )
                 .repeat()
                 .with(function!(GS.ose, W_.x__).pow(Atom::var(W_.a_)) * function!(GS.ose, W_.y__))
+                .replace(
+                    function!(GS.ose, W_.x__, function!(spenso_mink, W_.z__)).pow(Atom::var(W_.a_))
+                        * function!(GS.ose, W_.y__, function!(spenso_mink, W_.z__))
+                            .pow(Atom::var(W_.b_)),
+                )
+                .repeat()
+                .with(
+                    function!(GS.ose, W_.x__).pow(Atom::var(W_.a_))
+                        * function!(GS.ose, W_.y__).pow(Atom::var(W_.b_)),
+                )
                 .replace(
                     function!(GS.ose, W_.x__, function!(spenso_mink, W_.z__)).pow(Atom::var(W_.a_))
                         * function!(GS.energy, W_.y__, function!(spenso_mink, W_.z__)),
@@ -1778,17 +1786,13 @@ fn double_triangle_LU() {
                 ))
                 .with(function!(GS.emr_vec, W_.x__) * function!(GS.emr_vec, W_.y__));
 
-            // substitute all OSEs from subgraphs, they are in the form OSE(edge_id, momentum, mass)
+            // substitute all OSEs from subgraphs, they are in the form OSE(edge_id, momentum, mass^2, mom.mom + mass^2)
+            // the sqrt has already been applied
             cut_res = cut_res
-                .replace(function!(GS.ose, W_.x_, W_.y_, W_.z_))
-                .with(
-                    (-function!(
-                        MS.dot,
-                        function!(GS.emr_vec, W_.y_),
-                        function!(GS.emr_vec, W_.y_)
-                    ) + W_.z_)
-                        .sqrt(),
-                );
+                .replace(function!(GS.ose, W_.x_, W_.y_, W_.z_, W_.prop_))
+                .with(W_.prop_);
+
+            println!("CUTRES {:>}", cut_res);
 
             if super_uv_graph.dod(&c.right) >= 0 {
                 // only check when this graph is a UV subgraph
@@ -1797,18 +1801,18 @@ fn double_triangle_LU() {
                 let series = Atom::var(t).npow(3)
                     * cut_res
                         .expand()
-                        .replace(parse!("Q3(Q(3))"))
-                        .with(parse!("t*Q3(Q(3))"))
-                        .replace(parse!("Q3(Q(2))"))
-                        .with(parse!("t*Q3(Q(3))-Q3(1)"))
-                        .replace(parse!("Q3(Q(4))"))
-                        .with(parse!("t*Q3(Q(3))-Q3(6)")) // note Q3(6) instead of Q3(Q(6)) as it is external
-                        .replace(parse!("Q3(Q(0))"))
+                        .replace(parse!("Q3(3)"))
+                        .with(parse!("t*Q3(3)"))
+                        .replace(parse!("Q3(2)"))
+                        .with(parse!("t*Q3(3)-Q3(1)"))
+                        .replace(parse!("Q3(4)"))
+                        .with(parse!("t*Q3(3)-Q3(6)"))
+                        .replace(parse!("Q3(0)"))
                         .with(parse!("Q3(6)-Q3(1)"))
-                        .replace(parse!("E(0,x_)")) // drop signs
-                        .with(parse!("E(6)-E(1)"))
                         .replace(parse!("E(x_,y_)"))
                         .with(parse!("E(x_)"))
+                        .replace(parse!("E(0)")) // drop signs
+                        .with(parse!("E(6)-E(1)"))
                         // should no be needed in the near future, when CFF is updated
                         .replace(parse!("OSE(0)"))
                         .with(parse!("E(6)-E(1)"))
