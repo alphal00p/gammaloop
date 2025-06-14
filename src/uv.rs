@@ -1210,7 +1210,7 @@ impl Approximation {
             }
 
             // only apply replacements for edges in the reduced graph
-            let mom_reps = graph.uv_wrapped_replacement(&reduced, &self.lmb, &[W_.x___]);
+            let mom_reps = graph.uv_spatial_wrapped_replacement(&reduced, &self.lmb, &[W_.x___]);
 
             println!("Reps:");
             for r in &mom_reps {
@@ -1686,7 +1686,7 @@ impl Forest {
                 .final_cff(graph, canonize_esurface, amplitude, orientation, cut_edges)
                 .unwrap();
             //println!("Final expr: {:>}", r.expand());
-            println!("  CFF: {}", cff.expand());
+            println!("CFF: {:>}", cff.expand());
 
             sum += cff; // r * cff;
         }

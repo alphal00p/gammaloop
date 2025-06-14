@@ -991,6 +991,44 @@ pub trait LMBext {
         )
     }
 
+    fn uv_spatial_wrapped_replacement<'a, S: SubGraph, I>(
+        &self,
+        subgraph: &S,
+        lmb: &LoopMomentumBasis,
+        rep_args: &'a [I],
+    ) -> Vec<Replacement>
+    where
+        &'a I: Into<AtomOrView<'a>>,
+    {
+        self.replacement_impl(
+            |e, a, b| {
+                Replacement::new(
+                    GS.emr_vec
+                        .f(([usize::from(e) as i32], rep_args))
+                        .to_pattern(),
+                    (a.replace(function!(GS.emr_vec, W_.x_))
+                        .allow_new_wildcards_on_rhs(true)
+                        .with(
+                            FunctionBuilder::new(GS.emr_vec)
+                                .add_arg(W_.x_)
+                                .add_args(&rep_args)
+                                .finish(),
+                        )
+                        + b)
+                        .to_pattern(),
+                )
+            },
+            subgraph,
+            lmb,
+            GS.emr_vec,
+            GS.emr_vec,
+            &[],
+            rep_args,
+            HedgePair::is_paired,
+            true,
+        )
+    }
+
     fn normal_emr_replacement<'a, S: SubGraph, I>(
         &self,
         subgraph: &S,
