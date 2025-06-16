@@ -1142,20 +1142,28 @@ impl Approximation {
                 })
                 .collect_vec();
 
+            let subgraph_with_external = graph.full_crown(&self.subgraph) | &self.subgraph.filter;
+
             let mut cff = generate_uv_cff(
                 graph,
-                &self.subgraph,
+                &subgraph_with_external,
                 canonize_esurface,
                 &contracted_edges,
                 &orientation.orientation,
                 cut_edges,
             )
-            .unwrap();
+            .unwrap()
+                * inner_t;
 
             // add data for OSE computation and add an explicit sqrt
             for (p, eid, e) in graph.iter_edges_of(&self.subgraph) {
                 let eid = usize::from(eid) as i64;
                 if p.is_paired() {
+                    // set energies from inner_t on-shell
+                    cff = cff
+                        .replace(function!(GS.energy, eid))
+                        .with(function!(GS.ose, eid));
+
                     let e_mass = parse!(&e.data.particle.mass.name);
                     cff = cff.replace(function!(GS.ose, eid)).with(
                         function!(
@@ -1175,7 +1183,12 @@ impl Approximation {
             }
 
             let mut atomarg =
-                cff * inner_t * IntegrandExpr::numerator_only_subgraph(&reduced, graph).integrand;
+                cff * IntegrandExpr::numerator_only_subgraph(&reduced, graph).integrand;
+
+            println!(
+                "Expand-prerep {} with dod={} in {:?}",
+                atomarg, self.dod, self.lmb.ext_edges
+            );
 
             // split numerator momenta into OSEs and spatial parts
             for (p, eid, e) in graph.iter_edges_of(&self.subgraph) {
@@ -1217,13 +1230,7 @@ impl Approximation {
                 println!("{r}");
             }
 
-            println!(
-                "Expand-prerep {} with dod={} in {:?}",
-                atomarg, self.dod, self.lmb.ext_edges
-            );
-
-            // rewrite the inner_t as well
-            atomarg = atomarg.replace_multiple(&mom_reps);
+            atomarg = atomarg.replace_multiple(&mom_reps); // replace
 
             println!(
                 "Expand {} with dod={} in {:?}",
@@ -1232,7 +1239,9 @@ impl Approximation {
             for e in &self.lmb.ext_edges {
                 atomarg = atomarg
                     .replace(function!(GS.emr_vec, usize::from(*e) as i64, W_.x___))
-                    .with(function!(GS.emr_vec, usize::from(*e) as i64, W_.x___) * GS.rescale);
+                    .with(function!(GS.emr_vec, usize::from(*e) as i64, W_.x___) * GS.rescale)
+                    .replace(function!(GS.energy, usize::from(*e) as i64, W_.x___))
+                    .with(function!(GS.energy, usize::from(*e) as i64, W_.x___) * GS.rescale);
             }
 
             let soft_ct = graph.full_crown(&self.subgraph).count_ones() == 2 && self.dod > 0;
@@ -1279,10 +1288,6 @@ impl Approximation {
                 .replace(parse!("der(0,0,0,1,0, OSE(y__))"))
                 .with(Atom::num(1))
                 .replace(parse!("der(x__, OSE(y__))"))
-                .with(Atom::num(0))
-                .replace(parse!("der(0, 1, Q3(x_, y_))"))
-                .with(Atom::num(1))
-                .replace(parse!("der(x__, Q3(y__))"))
                 .with(Atom::num(0));
 
             if soft_ct {
@@ -1420,11 +1425,16 @@ impl Approximation {
             &orientation.orientation,
             cut_edges,
         )
-        .unwrap();
+        .unwrap()
+            * t;
 
         for (p, eid, e) in graph.iter_edges_of(&reduced) {
             let eid = usize::from(eid) as i64;
             if p.is_paired() {
+                cff = cff
+                    .replace(function!(GS.energy, eid))
+                    .with(function!(GS.ose, eid));
+
                 let e_mass = parse!(&e.data.particle.mass.name);
                 cff = cff.replace(function!(GS.ose, eid)).with(
                     function!(
@@ -1443,8 +1453,7 @@ impl Approximation {
             }
         }
 
-        let mut res =
-            s * t * cff * IntegrandExpr::numerator_only_subgraph(&reduced, graph).integrand;
+        let mut res = s * cff * IntegrandExpr::numerator_only_subgraph(&reduced, graph).integrand;
 
         // set the momenta flowing through the reduced graph edges to the identity wrt the supergraph
         for (p, eid, e) in graph.iter_edges_of(&reduced) {
