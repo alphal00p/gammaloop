@@ -13,6 +13,7 @@ use linnet::half_edge::drawing::Decoration;
 use spenso::structure::PermutedStructure;
 
 // use log::{info, trace};
+use idenso::representations::{Bispinor, ColorAdjoint, ColorFundamental, ColorSextet};
 use serde::{Deserialize, Serialize};
 use serde_yaml::Error;
 use smartstring::{LazyCompact, SmartString};
@@ -34,9 +35,6 @@ use std::fmt::{Display, Formatter};
 use std::fs;
 use symbolica::coefficient::CoefficientView;
 use symbolica::evaluate::FunctionMap;
-use symbolica_community::physics::algebraic_simplification::representations::{
-    Bispinor, ColorAdjoint, ColorFundamental, ColorSextet,
-};
 
 use eyre::Result;
 use std::ops::{Deref, Index};

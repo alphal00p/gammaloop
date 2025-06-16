@@ -15,12 +15,14 @@ use crate::{
     graph::{Graph, VertexInfo},
     model::ArcParticle,
     momentum::Sign,
+    momentum_sample::LoopIndex,
     new_graph::{self, no_filter, Edge, LMBext, LoopMomentumBasis, Vertex},
     utils::{GS, W_},
 };
 use ahash::AHashSet;
 use bitvec::vec::BitVec;
 use eyre::eyre;
+use idenso::metric::{MetricSimplifier, MS};
 use itertools::Itertools;
 use pathfinding::prelude::BfsReachable;
 use serde::{Deserialize, Serialize};
@@ -44,12 +46,12 @@ use symbolica::{
     printer::PrintOptions,
     symbol,
 };
-use symbolica_community::physics::algebraic_simplification::metric::{MetricSimplifier, MS};
 
 use linnet::half_edge::{
     hedgevec::HedgeVec,
     involution::Orientation,
     subgraph::{InternalSubGraph, SubGraph, SubGraphOps},
+    PowersetIterator,
 };
 use linnet::half_edge::{
     involution::{EdgeIndex, Hedge, HedgePair, SignOrZero},
@@ -161,7 +163,7 @@ pub fn spenso_lor(
 }
 
 pub fn spenso_lor_atom(tag: i32, ind: impl Into<AbstractIndex>, dim: impl Into<Dimension>) -> Atom {
-    spenso_lor(tag, ind, dim).to_symbolic().unwrap()
+    spenso_lor(tag, ind, dim).to_symbolic(None).unwrap()
 }
 
 #[allow(dead_code)]
@@ -410,19 +412,62 @@ pub trait UltravioletGraph: LMBext {
 
         spinneys
     }
-    fn limit<E, V, S: SubGraph>(&self, subgraph: &S, expr: &Atom, expansion: Symbol) -> Atom
+    fn all_limits<E, V, S: SubGraph>(
+        &self,
+        subgraph: &S,
+        expr: &Atom,
+        expansion: Symbol,
+        lmb: &LoopMomentumBasis,
+    ) -> Vec<Atom>
     where
         Self: AsRef<HedgeGraph<E, V>>,
     {
-        let mut expr = expr.clone();
-        for (p, eid, _) in self.as_ref().iter_edges_of(subgraph) {
-            if matches!(p, HedgePair::Paired { .. }) {
+        let mom_reps = self.uv_spatial_wrapped_replacement(subgraph, lmb, &[W_.x___]);
+        let mut limits = Vec::new();
+
+        let expr = expr.replace_multiple(&mom_reps);
+
+        let loops = PowersetIterator::new(lmb.loop_edges.len() as u8);
+        for ls in loops {
+            let mut expr = expr.clone();
+            for l in ls.iter_ones() {
+                let e = usize::from(lmb.loop_edges[LoopIndex(l)]) as i64;
                 expr = expr
-                    .replace(function!(GS.emr_mom, usize::from(eid) as i32, W_.x___))
-                    .with(function!(GS.emr_mom, usize::from(eid) as i32, W_.x___) * expansion);
+                    .replace(function!(GS.emr_vec, e, W_.x___))
+                    .with(function!(GS.emr_vec, e, W_.x___) / expansion)
+                    .replace(function!(GS.energy, e, W_.x___))
+                    .with(function!(GS.energy, e, W_.x___) / expansion);
             }
+
+            expr = expr
+                .replace(function!(MS.dot, W_.x_ / expansion, W_.y_))
+                .repeat()
+                .with(function!(MS.dot, W_.x_, W_.y_) / expansion);
+            expr = expr
+                .series(expansion, Atom::Zero, 2.into(), true)
+                .unwrap()
+                .to_atom()
+                .replace(parse!("der(0,0,0,1, OSE(y__))"))
+                .with(Atom::num(1))
+                .replace(parse!("der(0,0,0,1,0, OSE(y__))"))
+                .with(Atom::num(1))
+                .replace(parse!("der(x__, OSE(y__))"))
+                .with(Atom::num(0));
+
+            // expr = expr.replace(expansion).with(Atom::num(1));
+
+            // strip the momentum wrapper from the denominator
+            expr = expr
+                .replace(function!(
+                    GS.den,
+                    W_.prop_,
+                    function!(GS.emr_mom, W_.prop_, W_.mom_),
+                    W_.x__
+                ))
+                .with(function!(GS.den, W_.prop_, W_.mom_, W_.x__));
+            limits.push(expr);
         }
-        expr
+        limits
     }
 
     fn wood<E, V, S: SubGraph<Base = BitVec>>(&self, subgraph: &S) -> Wood

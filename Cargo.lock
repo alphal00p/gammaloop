@@ -241,18 +241,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "auto_enums"
-version = "0.8.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9c170965892137a3a9aeb000b4524aa3cc022a310e709d848b6e1cdce4ab4781"
-dependencies = [
- "derive_utils",
- "proc-macro2",
- "quote",
- "syn 2.0.101",
-]
-
-[[package]]
 name = "autocfg"
 version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -389,7 +377,18 @@ checksum = "cc97b8f16f944bba54f0433f07e30be199b6dc2bd25937444bbad560bcea29bd"
 dependencies = [
  "alloc-no-stdlib",
  "alloc-stdlib",
- "brotli-decompressor",
+ "brotli-decompressor 4.0.3",
+]
+
+[[package]]
+name = "brotli"
+version = "8.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9991eea70ea4f293524138648e41ee89b0b2b12ddef3b255effa43c8056e0e0d"
+dependencies = [
+ "alloc-no-stdlib",
+ "alloc-stdlib",
+ "brotli-decompressor 5.0.0",
 ]
 
 [[package]]
@@ -397,6 +396,16 @@ name = "brotli-decompressor"
 version = "4.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a334ef7c9e23abf0ce748e8cd309037da93e606ad52eb372e4ce327a0dcfbdfd"
+dependencies = [
+ "alloc-no-stdlib",
+ "alloc-stdlib",
+]
+
+[[package]]
+name = "brotli-decompressor"
+version = "5.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "874bb8112abecc98cbd6d81ea4fa7e94fb9449648c93cc89aa40c81c24d7de03"
 dependencies = [
  "alloc-no-stdlib",
  "alloc-stdlib",
@@ -858,17 +867,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "delegate"
-version = "0.13.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b9b6483c2bbed26f97861cf57651d4f2b731964a28cd2257f934a4b452480d21"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.101",
-]
-
-[[package]]
 name = "deprecate-until"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -931,17 +929,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "rustc_version",
- "syn 2.0.101",
-]
-
-[[package]]
-name = "derive_utils"
-version = "0.15.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ccfae181bab5ab6c5478b2ccb69e4c68a02f8c3ec72f6616bfec9dbc599d2ee0"
-dependencies = [
- "proc-macro2",
- "quote",
  "syn 2.0.101",
 ]
 
@@ -1144,7 +1131,7 @@ dependencies = [
  "bincode",
  "bincode-trait-derive",
  "bitvec",
- "brotli",
+ "brotli 7.0.0",
  "chrono",
  "clap 2.34.0",
  "clarabel",
@@ -1153,7 +1140,7 @@ dependencies = [
  "compensated-summation",
  "criterion",
  "ctrlc",
- "delegate 0.12.0",
+ "delegate",
  "derive_more",
  "enum_dispatch",
  "env_logger",
@@ -1162,6 +1149,7 @@ dependencies = [
  "gat-lending-iterator",
  "git-version",
  "hyperdual",
+ "idenso",
  "indexmap 2.9.0",
  "indicatif",
  "insta",
@@ -1191,9 +1179,9 @@ dependencies = [
  "smallvec",
  "smartstring",
  "spenso",
+ "spenso-hep-lib",
  "statrs",
  "symbolica",
- "symbolica_community",
  "tabled",
  "thiserror 1.0.69",
  "trie-rs",
@@ -1366,6 +1354,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "idenso"
+version = "0.0.0"
+source = "git+https://github.com/alphal00p/spenso?rev=a5caa15fcebf3454f43f611bf379573abb5e463e#a5caa15fcebf3454f43f611bf379573abb5e463e"
+dependencies = [
+ "bincode",
+ "bincode-trait-derive",
+ "itertools 0.14.0",
+ "linnet",
+ "spenso",
+ "spenso-macros",
+ "symbolica",
+]
+
+[[package]]
 name = "ident_case"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1525,15 +1527,6 @@ dependencies = [
 
 [[package]]
 name = "itertools"
-version = "0.13.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "413ee7dfc52ee1a4949ceeb7dbc8a33f2d6c088194d9f922fb8318faf1f01186"
-dependencies = [
- "either",
-]
-
-[[package]]
-name = "itertools"
 version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2b192c782037fadd9cfa75548310488aabdbf3d2da73885b31bd0abd03351285"
@@ -1622,8 +1615,7 @@ checksum = "f9fbbcab51052fe104eb5e5d351cf728d30a5be1fe14d9be8a3b097481fb97de"
 [[package]]
 name = "linnet"
 version = "0.7.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "377eef645439729fae80208d97610bea51e460b23f3239b74c4d4b591233a07a"
+source = "git+https://github.com/alphal00p/linnet?rev=50d4d036fd2cfdf75c79a3c168c7d8357ec16831#50d4d036fd2cfdf75c79a3c168c7d8357ec16831"
 dependencies = [
  "ahash",
  "argmin",
@@ -2879,7 +2871,7 @@ dependencies = [
 [[package]]
 name = "spenso"
 version = "0.4.1"
-source = "git+https://github.com/alphal00p/spenso?rev=dfef014e701403c3d6dd15e877c81a6b5f773ffe#dfef014e701403c3d6dd15e877c81a6b5f773ffe"
+source = "git+https://github.com/alphal00p/spenso?rev=a5caa15fcebf3454f43f611bf379573abb5e463e#a5caa15fcebf3454f43f611bf379573abb5e463e"
 dependencies = [
  "ahash",
  "anyhow",
@@ -2889,7 +2881,7 @@ dependencies = [
  "bincode-trait-derive",
  "bitvec",
  "constcat",
- "delegate 0.12.0",
+ "delegate",
  "derive_more",
  "duplicate 1.0.0",
  "dyn-clone",
@@ -2915,9 +2907,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "spenso-hep-lib"
+version = "0.0.0"
+source = "git+https://github.com/alphal00p/spenso?rev=a5caa15fcebf3454f43f611bf379573abb5e463e#a5caa15fcebf3454f43f611bf379573abb5e463e"
+dependencies = [
+ "idenso",
+ "spenso",
+ "spenso-macros",
+ "symbolica",
+]
+
+[[package]]
 name = "spenso-macros"
 version = "0.1.0"
-source = "git+https://github.com/alphal00p/spenso?rev=dfef014e701403c3d6dd15e877c81a6b5f773ffe#dfef014e701403c3d6dd15e877c81a6b5f773ffe"
+source = "git+https://github.com/alphal00p/spenso?rev=a5caa15fcebf3454f43f611bf379573abb5e463e#a5caa15fcebf3454f43f611bf379573abb5e463e"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3000,14 +3003,15 @@ dependencies = [
 
 [[package]]
 name = "symbolica"
-version = "0.16.0"
-source = "git+https://github.com/benruijl/symbolica?branch=complex_coeff#b8cb3a15b2cad3d5e34434a07273432c98226245"
+version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bda144440566e5fd07e45ab88ff77723e49f5a840dfcb4c346b4446db6a95600"
 dependencies = [
  "ahash",
  "append-only-vec",
  "bincode",
  "bincode-trait-derive",
- "brotli",
+ "brotli 8.0.1",
  "byteorder",
  "bytes",
  "colored",
@@ -3025,26 +3029,6 @@ dependencies = [
  "tinyjson",
  "tracing",
  "wide",
-]
-
-[[package]]
-name = "symbolica_community"
-version = "0.1.0"
-source = "git+https://github.com/alphal00p/symbolica-community?rev=5231643e98ebcb52faa44eba065d62fc2a09c0e6#5231643e98ebcb52faa44eba065d62fc2a09c0e6"
-dependencies = [
- "anyhow",
- "auto_enums",
- "bincode",
- "bincode-trait-derive",
- "bitvec",
- "delegate 0.13.3",
- "env_logger",
- "itertools 0.13.0",
- "linnet",
- "spenso",
- "spenso-macros",
- "symbolica",
- "thiserror 1.0.69",
 ]
 
 [[package]]

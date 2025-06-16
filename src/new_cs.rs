@@ -17,8 +17,7 @@ use momtrop::SampleGenerator;
 use serde_json::de;
 use smartstring::{LazyCompact, SmartString};
 
-use statrs::statistics::Mode;
-use symbolica_community::physics::algebraic_simplification::metric::MS;
+use idenso::metric::MS;
 
 use spenso::{
     algebra::algebraic_traits::IsZero, tensors::parametric::SerializableCompiledEvaluator,

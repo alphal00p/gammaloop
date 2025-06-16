@@ -54,6 +54,7 @@ use momtrop::SampleGenerator;
 use nalgebra::DMatrix;
 
 use gat_lending_iterator::LendingIterator;
+use idenso::representations::{ColorAdjoint, ColorFundamental, ColorSextet};
 #[allow(unused_imports)]
 use spenso::contraction::Contract;
 use spenso::{
@@ -73,9 +74,6 @@ use spenso::{
     tensors::data::{
         DataTensor, DenseTensor, GetTensorData, SetTensorData, SparseTensor, StorageTensor,
     },
-};
-use symbolica_community::physics::algebraic_simplification::representations::{
-    ColorAdjoint, ColorFundamental, ColorSextet,
 };
 use typed_index_collections::TiVec;
 use uuid::Uuid;
@@ -438,7 +436,7 @@ impl BareEdge {
                 for (&cin, &cout) in in_slots.color.iter().zip(out_slots.color.iter()) {
                     let id: NamedStructure<String, ()> =
                         NamedStructure::from_iter([cin, cout], "id".into(), None).structure;
-                    color_atom = color_atom * &id.to_symbolic().unwrap();
+                    color_atom = color_atom * &id.to_symbolic(None).unwrap();
                 }
 
                 let reps: Vec<Replacement> = replacements_in

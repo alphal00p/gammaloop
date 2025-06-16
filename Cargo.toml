@@ -45,12 +45,15 @@ similar.opt-level = 3
 
 [dependencies]
 # These will be patched
-symbolica = { version = "0.16.0", features = ["serde", "bincode"] }
-symbolica_community = { git = "https://github.com/alphal00p/symbolica-community", rev = "5231643e98ebcb52faa44eba065d62fc2a09c0e6", features = [
+symbolica = { version = "0.17.0", features = ["serde", "bincode"] }
+# symbolica_community = { git = "https://github.com/alphal00p/symbolica-community", rev = "5231643e98ebcb52faa44eba065d62fc2a09c0e6", features = [
+#     "bincode",
+# ] }
+
+idenso = { git = "https://github.com/alphal00p/spenso", rev = "a5caa15fcebf3454f43f611bf379573abb5e463e", features = [
     "bincode",
 ] }
-
-
+spenso-hep-lib = { git = "https://github.com/alphal00p/spenso", rev = "a5caa15fcebf3454f43f611bf379573abb5e463e" }
 spenso = { version = "0.4.1", features = ["shadowing"] }
 #linnet = { version = "0.2.0", features = [
 #    # "symbolica",
@@ -163,13 +166,14 @@ no_python = []
 # insta.opt-level = 3
 
 [patch.crates-io]
-symbolica = { git = "https://github.com/benruijl/symbolica", branch = "complex_coeff" } # symbolica = { path = "./python/gammaloop/dependencies/symbolica" }
+# symbolica = { git = "https://github.com/benruijl/symbolica", branch = "complex_coeff" } # symbolica = { path = "./python/gammaloop/dependencies/symbolica" }
 # symbolica={git="https://github.com/benruijl/symbolica",rev="a714571c8c8ee1a292237eb3ef1bc8123a4d7db4"}
 # symbolica = { git = "https://github.com/alphal00p/symbolica", rev = "a23ebaa71b1bc715a129ac765764ece7273625dc" }
 # symbolica = {path="../symbolica"}
-spenso-macros = { git = "https://github.com/alphal00p/spenso", rev = "dfef014e701403c3d6dd15e877c81a6b5f773ffe" }
-spenso = { git = "https://github.com/alphal00p/spenso", rev = "dfef014e701403c3d6dd15e877c81a6b5f773ffe" }
+spenso-macros = { git = "https://github.com/alphal00p/spenso", rev = "a5caa15fcebf3454f43f611bf379573abb5e463e" }
+spenso = { git = "https://github.com/alphal00p/spenso", rev = "a5caa15fcebf3454f43f611bf379573abb5e463e" }
 # spenso = { path = "../spenso/spenso" }
 # linnet = { path = "../linnet" }
 # linnet = {git ="https://github.com/alphal00p/linnet"}
 # symbolica-community={path="../symbolica-community"}
+linnet = { git = "https://github.com/alphal00p/linnet", rev = "50d4d036fd2cfdf75c79a3c168c7d8357ec16831" }

@@ -28,7 +28,7 @@ use spenso::structure::concrete_index::FlatIndex;
 use spenso::structure::TensorStructure;
 use spenso::tensors::parametric::to_param::ToAtom;
 use spenso::tensors::parametric::MixedTensor;
-
+use spenso_hep_lib::weyl;
 use symbolica::atom::Symbol;
 use symbolica::coefficient::Coefficient;
 use symbolica::domains::float::{
@@ -47,11 +47,11 @@ use std::sync::LazyLock;
 use std::time::Duration;
 use symbolica::domains::float::Real;
 use symbolica::domains::rational::Rational;
-use symbolica_community::physics::tensors::library::{
-    gamma5_weyl_data, gamma_data_weyl, proj_m_data_weyl, proj_p_data_weyl, SpensorLibrary,
-    TensorNamespace,
-};
-use symbolica_community::physics::tensors::structure::SpensoStucture;
+// use symbolica_community::physics::tensors::library::{
+//     gamma5_weyl_data, gamma_data_weyl, proj_m_data_weyl, proj_p_data_weyl, SpensorLibrary,
+//     TensorNamespace,
+// };
+// use symbolica_community::physics::tensors::structure::SpensoStucture;
 // use symbolica::domains::Field;
 use symbolica::numerical_integration::Sample;
 use typed_index_collections::{TiSlice, TiVec};
@@ -3385,24 +3385,7 @@ pub struct GammaloopSymbols {
 }
 
 pub static TENSORLIB: LazyLock<TensorLibrary<MixedTensor<F<f64>, ExplicitKey>>> =
-    LazyLock::new(|| {
-        let mut weyl = TensorLibrary::new();
-
-        weyl.update_ids();
-        let gamma_key = SpensoStucture::gamma4D_impl(TensorNamespace::Weyl).structure;
-        weyl.insert_explicit(gamma_data_weyl(gamma_key, F(1.), F(0.)).into());
-
-        let gamma5_key = SpensoStucture::gamma5_impl(TensorNamespace::Weyl).structure;
-        weyl.insert_explicit(gamma5_weyl_data(gamma5_key, F(1.), F(0.)).into());
-
-        let projm_key = SpensoStucture::projm_impl(TensorNamespace::Weyl).structure;
-        weyl.insert_explicit(proj_m_data_weyl(projm_key, F(1.), F(0.)).into());
-
-        let projp_key = SpensoStucture::projp_impl(TensorNamespace::Weyl).structure;
-        weyl.insert_explicit(proj_p_data_weyl(projp_key, F(1.), F(0.)).into());
-
-        weyl
-    });
+    LazyLock::new(|| weyl(F(1.), F(0.)));
 
 pub static W_: LazyLock<WildCards> = LazyLock::new(|| WildCards {
     edgeid_: symbol!("eid_"),

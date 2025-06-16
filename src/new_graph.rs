@@ -34,6 +34,7 @@ use spenso::{
     tensors::parametric::to_param::ToAtom,
 };
 // use petgraph::Direction::Outgoing;
+use idenso::metric::MS;
 use serde::{de::value, Deserialize, Serialize};
 use smartstring::{LazyCompact, SmartString};
 use spenso::{
@@ -53,7 +54,6 @@ use symbolica::{
     id::{Pattern, Replacement},
     parse, symbol, with_default_namespace,
 };
-use symbolica_community::physics::algebraic_simplification::metric::MS;
 use typed_index_collections::TiVec;
 
 use crate::{
@@ -874,7 +874,7 @@ impl Edge {
                 for (&cin, &cout) in in_slots.color.iter().zip(out_slots.color.iter()) {
                     let id: NamedStructure<String, ()> =
                         NamedStructure::from_iter([cin, cout], "id".into(), None).structure;
-                    color_atom = color_atom * &id.to_symbolic().unwrap();
+                    color_atom = color_atom * &id.to_symbolic(None).unwrap();
                 }
 
                 let reps: Vec<Replacement> = replacements_in

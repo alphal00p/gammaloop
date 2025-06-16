@@ -10,6 +10,7 @@ use pathfinding::{matrix::directions::W, num_traits::real};
 
 use linnet::half_edge::{builder::HedgeGraphBuilder, involution::Flow};
 
+use idenso::metric::MetricSimplifier;
 use smartstring::SmartString;
 use spenso::{
     algebra::{algebraic_traits::IsZero, complex::Complex},
@@ -26,7 +27,6 @@ use symbolica::{
     evaluate::{FunctionMap, OptimizationSettings},
     numerical_integration::Sample,
 };
-use symbolica_community::physics::algebraic_simplification::metric::MetricSimplifier;
 
 use crate::{
     cff::{cut_expression::SuperGraphOrientationID, generation::generate_cff_expression},
@@ -3187,10 +3187,10 @@ Stability:
     required_precision_for_im: 1.0e-10
     required_precision_for_re: 1.0e-10
   rotate_numerator: false
-  rotation_axis: 
-  - type: euler_angles 
-    alpha: 0.1 
-    beta: 0.2 
+  rotation_axis:
+  - type: euler_angles
+    alpha: 0.1
+    beta: 0.2
     gamma: 0.3
 sampling:
   sample_orientations: false
