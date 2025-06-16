@@ -17,6 +17,7 @@ use crate::{
     momentum::Sign,
     momentum_sample::LoopIndex,
     new_graph::{self, no_filter, Edge, LMBext, LoopMomentumBasis, Vertex},
+    symbolica_ext::CallSymbol,
     utils::{GS, W_},
 };
 use ahash::AHashSet;
@@ -387,6 +388,10 @@ impl IntegrandExpr {
 
 // pub fn limit(&)
 
+pub fn is_not_paired(pair: &HedgePair) -> bool {
+    !pair.is_paired()
+}
+
 pub trait UltravioletGraph: LMBext {
     fn all_cycle_unions<E, V, S: SubGraph<Base = BitVec>>(
         &self,
@@ -423,10 +428,28 @@ pub trait UltravioletGraph: LMBext {
         Self: AsRef<HedgeGraph<E, V>>,
     {
         let mom_reps = self.uv_spatial_wrapped_replacement(subgraph, lmb, &[W_.x___]);
+
         let mut limits = Vec::new();
 
-        let expr = expr.replace_multiple(&mom_reps);
+        let mut expr = expr.replace_multiple(&mom_reps);
 
+        let energy_reps = self.replacement_impl::<_, Atom>(
+            |e, a, b| {
+                Replacement::new(
+                    GS.energy.f([usize::from(e) as i32]).to_pattern(),
+                    b.to_pattern(),
+                )
+            },
+            subgraph,
+            lmb,
+            GS.energy,
+            GS.energy,
+            &[],
+            &[],
+            is_not_paired,
+            true,
+        );
+        expr = expr.replace_multiple(&energy_reps);
         let loops = PowersetIterator::new(lmb.loop_edges.len() as u8);
         for ls in loops {
             let mut expr = expr.clone();
@@ -434,9 +457,9 @@ pub trait UltravioletGraph: LMBext {
                 let e = usize::from(lmb.loop_edges[LoopIndex(l)]) as i64;
                 expr = expr
                     .replace(function!(GS.emr_vec, e, W_.x___))
-                    .with(function!(GS.emr_vec, e, W_.x___) / expansion)
-                    .replace(function!(GS.energy, e, W_.x___))
-                    .with(function!(GS.energy, e, W_.x___) / expansion);
+                    .with(function!(GS.emr_vec, e, W_.x___) / expansion);
+
+                expr /= (expansion * expansion * expansion);
             }
 
             expr = expr
@@ -444,7 +467,7 @@ pub trait UltravioletGraph: LMBext {
                 .repeat()
                 .with(function!(MS.dot, W_.x_, W_.y_) / expansion);
             expr = expr
-                .series(expansion, Atom::Zero, 2.into(), true)
+                .series(expansion, Atom::Zero, 0.into(), true)
                 .unwrap()
                 .to_atom()
                 .replace(parse!("der(0,0,0,1, OSE(y__))"))
