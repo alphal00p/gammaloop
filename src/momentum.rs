@@ -51,8 +51,8 @@ use symbolica::{
     poly::{polynomial::MultivariatePolynomial, Exponent},
 };
 
+use idenso::representations::Bispinor;
 use symbolica::{parse, symbol};
-use symbolica_community::physics::algebraic_simplification::representations::Bispinor;
 
 use crate::{
     utils::{ApproxEq, FloatLike, RefDefault, F},

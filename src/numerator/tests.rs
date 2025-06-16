@@ -1,4 +1,5 @@
 use brotli::CompressorWriter;
+use idenso::{gamma::GammaSimplifier, representations::Bispinor};
 use insta::assert_snapshot;
 use linnet::half_edge::involution::Orientation;
 use spenso::{
@@ -24,9 +25,6 @@ use symbolica::{
     atom::{Atom, AtomCore},
     domains::rational::Rational,
     function, parse,
-};
-use symbolica_community::physics::algebraic_simplification::{
-    gamma::GammaSimplifier, representations::Bispinor,
 };
 
 use crate::{

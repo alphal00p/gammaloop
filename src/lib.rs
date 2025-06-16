@@ -69,6 +69,12 @@ use observables::ObservableSettings;
 
 use observables::PhaseSpaceSelectorSettings;
 
+use idenso::representations::Bispinor;
+use idenso::representations::ColorAdjoint;
+use idenso::representations::ColorFundamental;
+use idenso::representations::ColorSextet;
+use idenso::representations::Lorentz;
+use idenso::representations::SpinFundamental;
 use signature::ExternalSignature;
 use spenso::algebra::complex::Complex;
 use spenso::structure::abstract_index::AIND_SYMBOLS;
@@ -83,12 +89,6 @@ use symbolica::evaluate::CompileOptions;
 use symbolica::evaluate::InlineASM;
 use symbolica::state::HasStateMap;
 use symbolica::state::StateMap;
-use symbolica_community::physics::algebraic_simplification::representations::Bispinor;
-use symbolica_community::physics::algebraic_simplification::representations::ColorAdjoint;
-use symbolica_community::physics::algebraic_simplification::representations::ColorFundamental;
-use symbolica_community::physics::algebraic_simplification::representations::ColorSextet;
-use symbolica_community::physics::algebraic_simplification::representations::Lorentz;
-use symbolica_community::physics::algebraic_simplification::representations::SpinFundamental;
 use utils::FloatLike;
 use utils::F;
 

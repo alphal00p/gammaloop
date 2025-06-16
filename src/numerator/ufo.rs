@@ -1,5 +1,6 @@
 use std::sync::LazyLock;
 
+use idenso::representations::Bispinor;
 use spenso::structure::representation::{BaseRepName, Minkowski};
 use symbolica::atom::AtomCore;
 use symbolica::atom::FunctionAttribute;
@@ -10,7 +11,6 @@ use symbolica::{
     function,
     id::Replacement,
 };
-use symbolica_community::physics::algebraic_simplification::representations::Bispinor;
 
 #[allow(dead_code)]
 pub struct UFOSymbols {

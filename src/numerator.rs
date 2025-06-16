@@ -1,5 +1,8 @@
 use crate::debug_info::DEBUG_LOGGER;
 use crate::feyngen::FeynGenError;
+use idenso::color::{ColorError, ColorSimplifier};
+use idenso::gamma::GammaSimplifier;
+use idenso::representations::Bispinor;
 use linnet::half_edge::hedgevec::HedgeVec;
 use linnet::half_edge::involution::{EdgeIndex, Orientation};
 use log::warn;
@@ -35,9 +38,6 @@ use std::ops::Deref;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
-use symbolica_community::physics::algebraic_simplification::color::{ColorError, ColorSimplifier};
-use symbolica_community::physics::algebraic_simplification::gamma::GammaSimplifier;
-use symbolica_community::physics::algebraic_simplification::representations::Bispinor;
 // use crate::feyngen::dis::{DisEdge, DisVertex};
 use crate::graph::{BareGraph, VertexInfo};
 use crate::model::normalise_complex;
