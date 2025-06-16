@@ -429,10 +429,20 @@ pub trait UltravioletGraph: LMBext {
     {
         let mom_reps = self.uv_spatial_wrapped_replacement(subgraph, lmb, &[W_.x___]);
 
+        for x in &mom_reps {
+            println!("Energy replacement: {x}");
+        }
+
         let mut limits = Vec::new();
 
-        let mut expr = expr.replace_multiple(&mom_reps);
+        let mut expr = expr
+            .replace_multiple(&mom_reps)
+            .replace(function!(GS.emr_vec, 5, W_.x___))
+            .with(function!(GS.emr_vec, 6, W_.x___))
+            .replace(function!(GS.energy, 5, W_.x___))
+            .with(function!(GS.energy, 6, W_.x___));
 
+        // TODO: also replace Q3
         let energy_reps = self.replacement_impl::<_, Atom>(
             |e, a, b| {
                 Replacement::new(
@@ -449,7 +459,33 @@ pub trait UltravioletGraph: LMBext {
             is_not_paired,
             true,
         );
-        expr = expr.replace_multiple(&energy_reps);
+
+        for e in &energy_reps {
+            println!("Energy replacement: {e}");
+        }
+
+        let q3_reps = self.replacement_impl::<_, Atom>(
+            |e, a, b| {
+                Replacement::new(
+                    GS.emr_vec.f([usize::from(e) as i32]).to_pattern(),
+                    b.to_pattern(),
+                )
+            },
+            subgraph,
+            lmb,
+            GS.emr_vec,
+            GS.emr_vec,
+            &[],
+            &[],
+            is_not_paired,
+            true,
+        );
+
+        for e in &q3_reps {
+            println!("Q3 replacement: {e}");
+        }
+
+        //expr = expr.replace_multiple(&energy_reps).replace_multiple(&q3_reps);
         let loops = PowersetIterator::new(lmb.loop_edges.len() as u8);
         for ls in loops {
             let mut expr = expr.clone();
@@ -459,35 +495,24 @@ pub trait UltravioletGraph: LMBext {
                     .replace(function!(GS.emr_vec, e, W_.x___))
                     .with(function!(GS.emr_vec, e, W_.x___) / expansion);
 
-                expr /= (expansion * expansion * expansion);
+                expr /= Atom::var(expansion).npow(3);
             }
 
             expr = expr
                 .replace(function!(MS.dot, W_.x_ / expansion, W_.y_))
                 .repeat()
                 .with(function!(MS.dot, W_.x_, W_.y_) / expansion);
+
             expr = expr
                 .series(expansion, Atom::Zero, 0.into(), true)
                 .unwrap()
                 .to_atom()
-                .replace(parse!("der(0,0,0,1, OSE(y__))"))
-                .with(Atom::num(1))
-                .replace(parse!("der(0,0,0,1,0, OSE(y__))"))
-                .with(Atom::num(1))
-                .replace(parse!("der(x__, OSE(y__))"))
-                .with(Atom::num(0));
+                .replace((-Atom::var(W_.x_)).pow(Atom::var(W_.y_)))
+                .with(Atom::num(-1).pow(Atom::var(W_.y_)) * Atom::var(W_.x_).pow(Atom::var(W_.y_)))
+                .expand();
 
-            // expr = expr.replace(expansion).with(Atom::num(1));
+            println!("LIMIT {:?}: {:>}", ls.iter_ones().collect::<Vec<_>>(), expr);
 
-            // strip the momentum wrapper from the denominator
-            expr = expr
-                .replace(function!(
-                    GS.den,
-                    W_.prop_,
-                    function!(GS.emr_mom, W_.prop_, W_.mom_),
-                    W_.x__
-                ))
-                .with(function!(GS.den, W_.prop_, W_.mom_, W_.x__));
             limits.push(expr);
         }
         limits
