@@ -239,14 +239,14 @@ fn tri_uv_AMP() {
             orientation_display
         );
 
-        forest.compute_cff(&uv_graph, &orientation_data, &canonize_esurface, &[]);
-        let mut expr = forest.local_expr(
+        forest.compute_cff(
             &uv_graph,
             &uv_graph.full_filter(),
+            &orientation_data,
             &canonize_esurface,
-            &orientation.data,
             &[],
         );
+        let mut expr = forest.local_expr(&uv_graph, &uv_graph.full_filter(), &orientation.data);
 
         // add Feynman rules of external edges
         for (_p, edge_index, d) in uv_graph.iter_edges_of(&uv_graph.external_filter()) {
@@ -743,31 +743,32 @@ fn tri_box_tri_LU() {
 
             let mut left_forest = left_wood.unfold(&super_uv_graph, &super_uv_graph.lmb);
             left_forest.compute(&super_uv_graph);
-            left_forest.compute_cff(&super_uv_graph, left_orientation_data, &None, &cut_edges);
+            left_forest.compute_cff(
+                &super_uv_graph,
+                &c.left,
+                left_orientation_data,
+                &None,
+                &cut_edges,
+            );
 
             let mut right_forest = super_uv_graph
                 .wood(&c.right)
                 .unfold(&super_uv_graph, &super_uv_graph.lmb);
             right_forest.compute(&super_uv_graph);
-            right_forest.compute_cff(&super_uv_graph, right_orientation_data, &None, &cut_edges);
+            right_forest.compute_cff(
+                &super_uv_graph,
+                &c.right,
+                right_orientation_data,
+                &None,
+                &cut_edges,
+            );
 
             println!("//left: \n{}", super_uv_graph.dot(&c.left));
 
             println!("//right: \n{}", super_uv_graph.dot(&c.right));
-            let left_expr = left_forest.local_expr(
-                &super_uv_graph,
-                &c.left,
-                &None,
-                left_orientation_data,
-                &cut_edges,
-            );
-            let right_expr = right_forest.local_expr(
-                &super_uv_graph,
-                &c.right,
-                &None,
-                right_orientation_data,
-                &cut_edges,
-            );
+            let left_expr = left_forest.local_expr(&super_uv_graph, &c.left, left_orientation_data);
+            let right_expr =
+                right_forest.local_expr(&super_uv_graph, &c.right, right_orientation_data);
 
             //let mut cut_res = left_expr * right_expr;
             let mut cut_res = cs.add_additional_factors_to_cff_atom(&(left_expr * right_expr), id);
@@ -864,6 +865,16 @@ fn tri_box_tri_LU() {
                 .with(function!(GS.ose, W_.x__).pow(Atom::var(W_.a_)) * function!(GS.ose, W_.y__))
                 .replace(
                     function!(GS.ose, W_.x__, function!(spenso_mink, W_.z__)).pow(Atom::var(W_.a_))
+                        * function!(GS.ose, W_.y__, function!(spenso_mink, W_.z__))
+                            .pow(Atom::var(W_.b_)),
+                )
+                .repeat()
+                .with(
+                    function!(GS.ose, W_.x__).pow(Atom::var(W_.a_))
+                        * function!(GS.ose, W_.y__).pow(Atom::var(W_.b_)),
+                )
+                .replace(
+                    function!(GS.ose, W_.x__, function!(spenso_mink, W_.z__)).pow(Atom::var(W_.a_))
                         * function!(GS.energy, W_.y__, function!(spenso_mink, W_.z__)),
                 )
                 .repeat()
@@ -921,17 +932,13 @@ fn tri_box_tri_LU() {
                 ))
                 .with(function!(GS.emr_vec, W_.x__) * function!(GS.emr_vec, W_.y__));
 
-            // substitute all OSEs from subgraphs, they are in the form OSE(edge_id, momentum, mass)
+            // substitute all OSEs from subgraphs, they are in the form OSE(edge_id, momentum, mass^2, mom.mom + mass^2)
+            // the sqrt has already been applied
             cut_res = cut_res
-                .replace(function!(GS.ose, W_.x_, W_.y_, W_.z_))
-                .with(
-                    (-function!(
-                        MS.dot,
-                        function!(GS.emr_vec, W_.y_),
-                        function!(GS.emr_vec, W_.y_)
-                    ) + W_.z_)
-                        .sqrt(),
-                );
+                .replace(function!(GS.ose, W_.x_, W_.y_, W_.z_, W_.prop_))
+                .with(function!(GS.ose, 100, W_.prop_)) // do in two steps to get slightly nicer output
+                .replace(function!(GS.ose, 100, W_.prop_))
+                .with(W_.prop_);
 
             cut_res = cut_res
                 .replace(function!(GS.external_mom, W_.x_, W_.y_))
@@ -946,23 +953,17 @@ fn tri_box_tri_LU() {
                         .expand()
                         //.replace(function!(MS.dot, W_.x___))
                         //.with(-function!(MS.dot, W_.x___)) // make three-dot positive
-                        .replace(parse!("Q3(Q(7))"))
-                        .with(parse!("t*Q3(Q(7))"))
-                        .replace(parse!("Q3(Q(6))"))
-                        .with(parse!("t*Q3(Q(7))-Q3(Q(9))"))
-                        .replace(parse!("Q3(Q(5))"))
-                        .with(parse!("t*Q3(Q(7))-Q3(Q(4))"))
+                        .replace(parse!("Q3(7)"))
+                        .with(parse!("t*Q3(7)"))
+                        .replace(parse!("Q3(6)"))
+                        .with(parse!("t*Q3(7)-Q3(9)"))
+                        .replace(parse!("Q3(5)"))
+                        .with(parse!("t*Q3(7)-Q3(4)"))
                         .replace(parse!("E(x_,y___)"))
                         .with(parse!("E(x_)"))
-                        .replace(parse!("Q3(4)"))
-                        .with(parse!("Q3(Q(4))"))
-                        .replace(parse!("Q3(9)"))
-                        .with(parse!("Q3(Q(9))"))
-                        .replace(parse!("Q3(3)"))
-                        .with(parse!("Q3(Q(3))"))
                         // set momentum conservation
-                        .replace(parse!("Q3(Q(4))"))
-                        .with(parse!("Q3(Q(9))-Q3(Q(3))"))
+                        .replace(parse!("Q3(4)"))
+                        .with(parse!("Q3(9)-Q3(3)"))
                         .replace(parse!("E(4)"))
                         .with(parse!("E(9)-E(3)"))
                         .replace(parse!("symbolica_community::dot(t*x_,y_)"))
@@ -974,23 +975,17 @@ fn tri_box_tri_LU() {
                         .expand()
                         //.replace(function!(MS.dot, W_.x___))
                         //.with(-function!(MS.dot, W_.x___)) // make three-dot positive
-                        .replace(parse!("Q3(Q(7))"))
-                        .with(parse!("t*Q3(Q(7))"))
-                        .replace(parse!("Q3(Q(6))"))
-                        .with(parse!("t*Q3(Q(7))-Q3(Q(9))"))
-                        .replace(parse!("Q3(Q(5))"))
-                        .with(parse!("t*Q3(Q(7))-Q3(Q(4))"))
+                        .replace(parse!("Q3(7)"))
+                        .with(parse!("t*Q3(7)"))
+                        .replace(parse!("Q3(6)"))
+                        .with(parse!("t*Q3(7)-Q3(9)"))
+                        .replace(parse!("Q3(5)"))
+                        .with(parse!("t*Q3(7)-Q3(4)"))
                         .replace(parse!("E(x_,y___)"))
                         .with(parse!("E(x_)"))
-                        .replace(parse!("Q3(4)"))
-                        .with(parse!("Q3(Q(4))"))
-                        .replace(parse!("Q3(9)"))
-                        .with(parse!("Q3(Q(9))"))
-                        .replace(parse!("Q3(3)"))
-                        .with(parse!("Q3(Q(3))"))
                         // set momentum conservation
-                        .replace(parse!("Q3(Q(3))"))
-                        .with(parse!("Q3(Q(9))-Q3(Q(2))-Q(Q(1))"))
+                        .replace(parse!("Q3(3)"))
+                        .with(parse!("Q3(9)-Q3(2)-Q(1)"))
                         .replace(parse!("E(3)"))
                         .with(parse!("E(9)-E(2)-E(1)"))
                         .replace(parse!("symbolica_community::dot(t*x_,y_)"))
@@ -1002,22 +997,17 @@ fn tri_box_tri_LU() {
                         .expand()
                         //.replace(function!(MS.dot, W_.x___))
                         //.with(-function!(MS.dot, W_.x___)) // make three-dot positive
-                        .replace(parse!("Q3(Q(7))"))
-                        .with(parse!("t*Q3(Q(7))"))
-                        .replace(parse!("Q3(Q(6))"))
-                        .with(parse!("t*Q3(Q(7))-Q3(9)")) // NOTE: Q3(9) instead of Q3(Q(9))
-                        .replace(parse!("Q3(Q(5))"))
-                        .with(parse!("t*Q3(Q(7))-Q3(Q(4))"))
+                        .replace(parse!("Q3(7)"))
+                        .with(parse!("t*Q3(7)"))
+                        .replace(parse!("Q3(6)"))
+                        .with(parse!("t*Q3(7)-Q3(9)"))
+                        .replace(parse!("Q3(5)"))
+                        .with(parse!("t*Q3(7)-Q3(4)"))
                         // set momentum conservation
                         .replace(parse!("E(0,x___)"))
                         .with(parse!("E(9)-E(1)"))
                         .replace(parse!("E(x_,y___)"))
                         .with(parse!("E(x_)"))
-                        // no longer needed after CFF fix
-                        .replace(parse!("OSE(0)"))
-                        .with(parse!("E(9) - E(1)"))
-                        .replace(parse!("OSE(1)"))
-                        .with(parse!("E(1)"))
                         .replace(parse!("symbolica_community::dot(t*x_,y_)"))
                         .repeat()
                         .with(parse!("t*symbolica_community::dot(x_,y_)"))
@@ -1226,11 +1216,11 @@ fn tri_box_tri_LU() {
             println!("Cut {} result: {:>}", id, cut_res);
 
             // ONLY TEST THIS CUT
-            if edges_in_cut == ["e1", "e2", "e3"] {
-                cut_atoms.push(cut_res);
-            } else {
-                cut_atoms.push(Atom::new());
-            }
+            //if edges_in_cut == ["e1", "e2", "e3"] {
+            cut_atoms.push(cut_res);
+            // } else {
+            //     cut_atoms.push(Atom::new());
+            //}
         } else {
             cut_atoms.push(Atom::new());
         }
@@ -1598,31 +1588,32 @@ fn double_triangle_LU() {
 
             let mut left_forest = left_wood.unfold(&super_uv_graph, &super_uv_graph.lmb);
             left_forest.compute(&super_uv_graph);
-            left_forest.compute_cff(&super_uv_graph, left_orientation_data, &None, &cut_edges);
+            left_forest.compute_cff(
+                &super_uv_graph,
+                &c.left,
+                left_orientation_data,
+                &None,
+                &cut_edges,
+            );
 
             let mut right_forest = super_uv_graph
                 .wood(&c.right)
                 .unfold(&super_uv_graph, &super_uv_graph.lmb);
             right_forest.compute(&super_uv_graph);
-            right_forest.compute_cff(&super_uv_graph, right_orientation_data, &None, &cut_edges);
+            right_forest.compute_cff(
+                &super_uv_graph,
+                &c.right,
+                right_orientation_data,
+                &None,
+                &cut_edges,
+            );
 
             println!("//left: \n{}", super_uv_graph.dot(&c.left));
 
             println!("//right: \n{}", super_uv_graph.dot(&c.right));
-            let left_expr = left_forest.local_expr(
-                &super_uv_graph,
-                &c.left,
-                &None,
-                left_orientation_data,
-                &cut_edges,
-            );
-            let right_expr = right_forest.local_expr(
-                &super_uv_graph,
-                &c.right,
-                &None,
-                right_orientation_data,
-                &cut_edges,
-            );
+            let left_expr = left_forest.local_expr(&super_uv_graph, &c.left, left_orientation_data);
+            let right_expr =
+                right_forest.local_expr(&super_uv_graph, &c.right, right_orientation_data);
 
             //let mut cut_res = left_expr * right_expr;
             let mut cut_res = cs.add_additional_factors_to_cff_atom(&(left_expr * right_expr), id);
@@ -1794,7 +1785,14 @@ fn double_triangle_LU() {
                 .replace(function!(GS.ose, 100, W_.prop_))
                 .with(W_.prop_);
 
-            println!("CUTRES {:>}", cut_res);
+            let mut cr = Atom::Zero;
+            let mut counter = 0;
+            for x in cut_res.expand().terms() {
+                cr += function!(GS.dim, counter) * x;
+                counter += 1;
+            }
+
+            println!("CUTRES {:>}", cr);
 
             if super_uv_graph.dod(&c.right) >= 0 {
                 // only check when this graph is a UV subgraph
@@ -3161,7 +3159,7 @@ Integrator:
   n_bins: 16
   n_increase: 0
   n_max: 100000000
-  n_start: 2000000
+  n_start: 20000
   seed: 2
   show_max_wgt_info: false
   train_on_avg: false

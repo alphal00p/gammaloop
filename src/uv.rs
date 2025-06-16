@@ -46,7 +46,11 @@ use symbolica::{
 };
 use symbolica_community::physics::algebraic_simplification::metric::{MetricSimplifier, MS};
 
-use linnet::half_edge::subgraph::{InternalSubGraph, SubGraph, SubGraphOps};
+use linnet::half_edge::{
+    hedgevec::HedgeVec,
+    involution::Orientation,
+    subgraph::{InternalSubGraph, SubGraph, SubGraphOps},
+};
 use linnet::half_edge::{
     involution::{EdgeIndex, Hedge, HedgePair, SignOrZero},
     subgraph::{Cycle, ModifySubgraph},
@@ -738,6 +742,7 @@ pub enum ApproxOp {
     Root,
 }
 
+#[derive(Clone)]
 pub struct SimpleApprox {
     t_args: Vec<Atom>,
     pub sign: Sign,
@@ -809,6 +814,8 @@ impl SimpleApprox {
         }
     }
 }
+
+#[derive(Clone)]
 
 pub struct Approximation {
     // The union of all spinneys, remaining graph is full graph minus subgraph
@@ -1124,36 +1131,14 @@ impl Approximation {
         &self,
         dependent: &Self,
         orientation: &OrientationData,
-        canonize_esurface: &Option<ShiftRewrite>,
         graph: &UVGraph,
-        cut_edges: &[EdgeIndex],
     ) -> ApproxOp {
         let reduced = self.subgraph.subtract(&dependent.subgraph);
 
         if let Some((inner_t, sign)) = dependent.cff_expr.expr() {
-            let contracted_edges = graph
-                .iter_edges_of(&dependent.subgraph)
-                .filter_map(|(p, e, _)| {
-                    if matches!(p, HedgePair::Paired { .. }) {
-                        Some(e)
-                    } else {
-                        None
-                    }
-                })
-                .collect_vec();
+            let mut cff = inner_t;
 
-            let subgraph_with_external = graph.full_crown(&self.subgraph) | &self.subgraph.filter;
-
-            let mut cff = generate_uv_cff(
-                graph,
-                &subgraph_with_external,
-                canonize_esurface,
-                &contracted_edges,
-                &orientation.orientation,
-                cut_edges,
-            )
-            .unwrap()
-                * inner_t;
+            println!("CFF: {}", cff);
 
             // add data for OSE computation and add an explicit sqrt
             for (p, eid, e) in graph.iter_edges_of(&self.subgraph) {
@@ -1278,6 +1263,15 @@ impl Approximation {
 
             println!("atomarg:{}", atomarg);
 
+            println!(
+                "RR {:>}",
+                atomarg
+                    .series(GS.rescale, Atom::Zero, self.dod.into(), true)
+                    .unwrap()
+                    .to_atom()
+                    .expand()
+            );
+
             // den(..) tags a propagator, its first derivative is 1 and the rest is 0
             let mut a = atomarg
                 .series(GS.rescale, Atom::Zero, self.dod.into(), true)
@@ -1398,35 +1392,13 @@ impl Approximation {
     pub fn final_cff<S: SubGraph<Base = BitVec>>(
         &self,
         graph: &UVGraph,
-        canonize_esurface: &Option<ShiftRewrite>,
         amplitude: &S,
         orientation: &OrientationData,
-        cut_edges: &[EdgeIndex],
     ) -> Option<Atom> {
         let (t, s) = self.cff_expr.expr()?;
         let reduced = amplitude.included().subtract(&self.subgraph.included());
 
-        let contracted_edges = graph
-            .iter_edges_of(&self.subgraph)
-            .filter_map(|(p, e, _)| {
-                if matches!(p, HedgePair::Paired { .. }) {
-                    Some(e)
-                } else {
-                    None
-                }
-            })
-            .collect_vec();
-
-        let mut cff = generate_uv_cff(
-            graph,
-            amplitude,
-            canonize_esurface,
-            &contracted_edges,
-            &orientation.orientation,
-            cut_edges,
-        )
-        .unwrap()
-            * t;
+        let mut cff = t;
 
         for (p, eid, e) in graph.iter_edges_of(&reduced) {
             let eid = usize::from(eid) as i64;
@@ -1515,6 +1487,7 @@ impl ApproxOp {
         match self {
             ApproxOp::NotComputed => None,
             ApproxOp::Union { t_args, sign, .. } => {
+                //Never gets hit now
                 let mut mul = Atom::num(1);
                 for t in t_args {
                     mul = mul * &t.integrand;
@@ -1522,7 +1495,7 @@ impl ApproxOp {
                 Some((mul, *sign))
             }
             ApproxOp::Dependent { t_arg, sign, .. } => Some((t_arg.integrand.clone(), *sign)),
-            ApproxOp::Root => Some((Atom::num(1).into(), Sign::Positive)),
+            ApproxOp::Root => Some((Atom::num(1), Sign::Positive)), //Also never gets hit
         }
     }
 
@@ -1633,9 +1606,11 @@ impl Forest {
         }
     }
 
-    pub fn compute_cff(
+    pub fn compute_cff<S: SubGraph>(
         &mut self,
         graph: &UVGraph,
+        amplitude_subgraph: &S,
+
         orientation: &OrientationData,
         canonize_esurface: &Option<ShiftRewrite>,
         cut_edges: &[EdgeIndex],
@@ -1648,21 +1623,37 @@ impl Forest {
             let parents = current.parents.clone();
 
             let approx = if parents.is_empty() {
-                ApproxOp::Root
-            } else if parents.len() == 1 {
-                current.data.compute_cff(
-                    &self.dag.nodes[parents[0]].data,
-                    orientation,
-                    canonize_esurface,
-                    graph,
-                    cut_edges,
-                )
-            } else {
-                let mut dependents = vec![];
-                for p in parents {
-                    dependents.push(&self.dag.nodes[p].data);
+                ApproxOp::Dependent {
+                    sign: Sign::Positive,
+                    t_arg: IntegrandExpr {
+                        integrand: generate_uv_cff(
+                            graph,
+                            amplitude_subgraph,
+                            canonize_esurface,
+                            &[],
+                            &orientation.orientation,
+                            cut_edges,
+                        )
+                        .unwrap(),
+                    },
+                    subgraph: graph.empty_subgraph(),
                 }
-                ApproxOp::cff_union(&dependents).unwrap()
+            } else if parents.len() == 1 {
+                current
+                    .data
+                    .compute_cff(&self.dag.nodes[parents[0]].data, orientation, graph)
+            } else {
+                let mut iterative_approx = self.dag.nodes[parents[0]].data.clone();
+
+                for p in parents {
+                    let approx = current
+                        .data
+                        .compute_cff(&iterative_approx, orientation, graph);
+
+                    iterative_approx = self.dag.nodes[p].data.clone();
+                    iterative_approx.cff_expr = approx;
+                }
+                iterative_approx.cff_expr
             };
             self.dag.nodes[n].data.cff_expr = approx;
         }
@@ -1682,103 +1673,30 @@ impl Forest {
         &self,
         graph: &UVGraph,
         amplitude: &S,
-        canonize_esurface: &Option<ShiftRewrite>,
         orientation: &OrientationData,
-        cut_edges: &[EdgeIndex],
     ) -> Atom {
         let mut sum = Atom::new();
 
+        let mut counter = 0;
         for (_, n) in &self.dag.nodes {
             //let r = n.data.final_expr(graph, amplitude).unwrap();
-            let cff = n
-                .data
-                .final_cff(graph, canonize_esurface, amplitude, orientation, cut_edges)
-                .unwrap();
+            let cff = n.data.final_cff(graph, amplitude, orientation).unwrap();
             //println!("Final expr: {:>}", r.expand());
             println!("CFF: {:>}", cff.expand());
 
-            sum += cff; // r * cff;
+            let mut cf2 = Atom::Zero;
+            for x in cff.expand().terms() {
+                println!("CFF term: {}", x);
+                cf2 += function!(GS.dim, counter) * x;
+                counter += 1;
+            }
+
+            sum += cff; // cf2; // r * cff;
         }
 
-        //println!("SUM {:>}", sum.expand());
+        println!("Sum: {:>}", sum.expand());
 
         sum.expand()
-
-        /*sum.expand().map_terms_single_core(|t| {
-            let mut expr = t.to_owned();
-            let mut data = Vec::new();
-            for m in t.pattern_match(
-                &function!(GS.den, W_.edgeid_, W_.mom_, W_.mass_, W_.x_)
-                    .pow(Atom::var(W_.c_))
-                    .to_pattern(),
-                None,
-                None,
-            ) {
-                let eid: i64 = m.get(&W_.edgeid_).unwrap().try_into().unwrap();
-                let pow = -i64::try_from(m.get(&W_.c_).unwrap()).unwrap();
-                let mom = m.get(&W_.mom_).unwrap().clone();
-                let mass = m.get(&W_.mass_).unwrap().clone();
-
-                expr = expr
-                    .replace(function!(GS.den, eid, W_.y__))
-                    .with(Atom::num(1));
-
-                data.push((eid, pow, mom, mass));
-            }
-
-            let orientation = orientation.clone();
-
-            // split momenta into energies and spatial part
-            // modified OSE represented as OSE(edge_id, momentum, mass_sq, index)
-            // in the next step, a mass will be added
-            // take derivative of raised propagators
-            for (edge_id, pow, momentum, new_mass_sq) in data {
-                let orientation = orientation.orientation.clone();
-                let new_mass_sqm = new_mass_sq.clone();
-                let momentumm = momentum.clone();
-                expr = expr
-                    .replace(function!(GS.emr_mom, edge_id, W_.mom_, W_.x___))
-                    .with_map(move |m| {
-                        let momentum2 = m.get(W_.mom_).unwrap().to_atom();
-                        assert_eq!(
-                            momentumm, momentum2,
-                            "{} vs {} for edge {}",
-                            momentumm, momentum2, edge_id
-                        );
-                        let index = m.get(W_.x___).unwrap().to_atom();
-
-                        let sign = SignOrZero::from(
-                            orientation[EdgeIndex::from(edge_id as usize)].clone(),
-                        ) * 1;
-
-                        function!(GS.ose, edge_id, momentumm, new_mass_sqm, index) * sign
-                            + function!(GS.emr_vec, momentumm, index)
-                    });
-
-                for _ in 1..pow {
-                    expr = expr
-                        .replace(function!(GS.ose, edge_id, W_.x___))
-                        .with(function!(GS.ose, edge_id, W_.x___, Atom::var(GS.rescale)))
-                        .derivative(GS.rescale)
-                        .replace(function!(Atom::DERIVATIVE, W_.x___, W_.x_))
-                        .with(Atom::var(W_.x_).npow(-1) / 2)
-                        .replace(function!(GS.ose, edge_id, W_.x___, Atom::var(GS.rescale)))
-                        .with(function!(GS.ose, edge_id, W_.x___));
-                }
-
-                expr = expr / Integer::factorial(pow as u32 - 1);
-
-                // set OSE from CFF with the proper momentum and mass
-                expr = expr.replace(function!(GS.ose, edge_id)).with(function!(
-                    GS.ose,
-                    edge_id,
-                    momentum,
-                    new_mass_sq
-                ));
-            }
-
-            expr
-        })*/
     }
 
     pub fn simple_expr(
