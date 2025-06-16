@@ -1795,47 +1795,18 @@ fn double_triangle_LU() {
             println!("CUTRES {:>}", cr);
 
             if super_uv_graph.dod(&c.right) >= 0 {
-                // only check when this graph is a UV subgraph
+                let limits = super_uv_graph.all_limits(
+                    &c.right,
+                    &cut_res,
+                    symbol!("t"),
+                    &super_uv_graph.lmb,
+                );
 
-                let t = symbol!("t");
-                let series = Atom::var(t).npow(3)
-                    * cut_res
-                        .expand()
-                        .replace(parse!("Q3(3)"))
-                        .with(parse!("t*Q3(3)"))
-                        .replace(parse!("Q3(2)"))
-                        .with(parse!("t*Q3(3)-Q3(1)"))
-                        .replace(parse!("Q3(4)"))
-                        .with(parse!("t*Q3(3)-Q3(6)"))
-                        // momentum conservation
-                        .replace(parse!("Q3(0)"))
-                        .with(parse!("Q3(6)-Q3(1)"))
-                        .replace(parse!("E(x_,y_)")) // drop signs
-                        .with(parse!("E(x_)"))
-                        .replace(parse!("E(0)"))
-                        .with(parse!("E(6)-E(1)"))
-                        .replace(parse!("symbolica_community::dot(t*x_,y_)"))
-                        .repeat()
-                        .with(parse!("t*symbolica_community::dot(x_,y_)"));
+                for limit in limits {
+                    println!("Limit: {:>}", limit);
+                }
 
-                let s = series
-                    .replace(t)
-                    .with(Atom::var(t).npow(-1))
-                    .series(t, Atom::Zero, 0.into(), true)
-                    .unwrap();
-
-                let r = s
-                    .to_atom()
-                    .expand()
-                    .replace(Atom::var(W_.x_).sqrt())
-                    .with(Atom::var(W_.x_).npow((1, 2)))
-                    .replace((-Atom::var(W_.x_)).pow(Atom::var(W_.y_)))
-                    .with(
-                        Atom::num(-1).pow(Atom::var(W_.y_))
-                            * Atom::var(W_.x_).pow(Atom::var(W_.y_)),
-                    )
-                    .expand(); // help Symbolica with cancellations and avoid bad simplification of (-1)^(-5/2)
-                println!("Correct UV cancellation if 0: {:>}", r);
+                // println!("Correct UV cancellation if 0: {:>}", r);
             }
 
             // set the external energies
