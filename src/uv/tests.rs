@@ -1790,6 +1790,8 @@ fn double_triangle_LU() {
             // the sqrt has already been applied
             cut_res = cut_res
                 .replace(function!(GS.ose, W_.x_, W_.y_, W_.z_, W_.prop_))
+                .with(function!(GS.ose, 100, W_.prop_)) // do in two steps to get slightly nicer output
+                .replace(function!(GS.ose, 100, W_.prop_))
                 .with(W_.prop_);
 
             println!("CUTRES {:>}", cut_res);
@@ -1807,17 +1809,13 @@ fn double_triangle_LU() {
                         .with(parse!("t*Q3(3)-Q3(1)"))
                         .replace(parse!("Q3(4)"))
                         .with(parse!("t*Q3(3)-Q3(6)"))
+                        // momentum conservation
                         .replace(parse!("Q3(0)"))
                         .with(parse!("Q3(6)-Q3(1)"))
-                        .replace(parse!("E(x_,y_)"))
+                        .replace(parse!("E(x_,y_)")) // drop signs
                         .with(parse!("E(x_)"))
-                        .replace(parse!("E(0)")) // drop signs
+                        .replace(parse!("E(0)"))
                         .with(parse!("E(6)-E(1)"))
-                        // should no be needed in the near future, when CFF is updated
-                        .replace(parse!("OSE(0)"))
-                        .with(parse!("E(6)-E(1)"))
-                        .replace(parse!("OSE(x_)"))
-                        .with(parse!("E(x_)"))
                         .replace(parse!("symbolica_community::dot(t*x_,y_)"))
                         .repeat()
                         .with(parse!("t*symbolica_community::dot(x_,y_)"));
