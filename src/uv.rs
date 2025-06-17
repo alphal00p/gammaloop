@@ -430,24 +430,15 @@ pub trait UltravioletGraph: LMBext {
         let mom_reps = self.uv_spatial_wrapped_replacement(subgraph, lmb, &[W_.x___]);
 
         for x in &mom_reps {
-            println!("Energy replacement: {x}");
+            println!("LMB replacement: {x}");
         }
-
-        let mut limits = Vec::new();
-
-        let mut expr = expr
-            .replace_multiple(&mom_reps)
-            .replace(function!(GS.emr_vec, 5, W_.x___))
-            .with(function!(GS.emr_vec, 6, W_.x___))
-            .replace(function!(GS.energy, 5, W_.x___))
-            .with(function!(GS.energy, 6, W_.x___));
 
         // TODO: also replace Q3
         let energy_reps = self.replacement_impl::<_, Atom>(
             |e, a, b| {
                 Replacement::new(
                     GS.energy.f([usize::from(e) as i32]).to_pattern(),
-                    b.to_pattern(),
+                    (a + b).to_pattern(),
                 )
             },
             subgraph,
@@ -468,7 +459,7 @@ pub trait UltravioletGraph: LMBext {
             |e, a, b| {
                 Replacement::new(
                     GS.emr_vec.f([usize::from(e) as i32]).to_pattern(),
-                    b.to_pattern(),
+                    (a + b).to_pattern(),
                 )
             },
             subgraph,
@@ -485,8 +476,14 @@ pub trait UltravioletGraph: LMBext {
             println!("Q3 replacement: {e}");
         }
 
-        //expr = expr.replace_multiple(&energy_reps).replace_multiple(&q3_reps);
+        let expr = expr
+            .replace_multiple(&mom_reps)
+            .replace_multiple(&energy_reps)
+            .replace_multiple(&q3_reps);
         let loops = PowersetIterator::new(lmb.loop_edges.len() as u8);
+
+        let mut limits = Vec::new();
+
         for ls in loops {
             let mut expr = expr.clone();
             for l in ls.iter_ones() {
