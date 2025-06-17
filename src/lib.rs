@@ -23,6 +23,7 @@ pub mod initialisation;
 pub mod inspect;
 pub mod integrands;
 pub mod integrate;
+pub mod ir_test;
 pub mod ltd;
 pub mod model;
 pub mod momentum;
