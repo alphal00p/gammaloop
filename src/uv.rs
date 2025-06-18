@@ -51,7 +51,7 @@ use symbolica::{
 use linnet::half_edge::{
     hedgevec::HedgeVec,
     involution::Orientation,
-    subgraph::{InternalSubGraph, SubGraph, SubGraphOps},
+    subgraph::{self, InternalSubGraph, SubGraph, SubGraphOps},
     PowersetIterator,
 };
 use linnet::half_edge::{
@@ -433,7 +433,6 @@ pub trait UltravioletGraph: LMBext {
             println!("LMB replacement: {x}");
         }
 
-        // TODO: also replace Q3
         let energy_reps = self.replacement_impl::<_, Atom>(
             |e, a, b| {
                 Replacement::new(
@@ -485,6 +484,11 @@ pub trait UltravioletGraph: LMBext {
         let mut limits = Vec::new();
 
         for ls in loops {
+            let r = ls.iter_ones().collect::<Vec<_>>();
+            if r != [1] {
+                continue;
+            }
+
             let mut expr = expr.clone();
             for l in ls.iter_ones() {
                 let e = usize::from(lmb.loop_edges[LoopIndex(l)]) as i64;
@@ -509,6 +513,7 @@ pub trait UltravioletGraph: LMBext {
                 .expand();
 
             println!("LIMIT {:?}: {:>}", ls.iter_ones().collect::<Vec<_>>(), expr);
+            panic!("DONE");
 
             limits.push(expr);
         }
@@ -1305,45 +1310,50 @@ impl Approximation {
                 println!("{r}");
             }
 
-            atomarg = atomarg.replace_multiple(&mom_reps); // replace
+            atomarg = atomarg.replace_multiple(&mom_reps);
+
+            // rescale the loop momenta in the whole subgraph, including previously expanded cycles
+            for e in &self.lmb.loop_edges {
+                println!("Rescale {}", e);
+                atomarg = atomarg
+                    .replace(function!(GS.emr_vec, usize::from(*e) as i64, W_.x___))
+                    .with(function!(GS.emr_vec, usize::from(*e) as i64, W_.x___) * GS.rescale);
+            }
 
             println!(
                 "Expand {} with dod={} in {:?}",
                 atomarg, self.dod, self.lmb.ext_edges
             );
-            for e in &self.lmb.ext_edges {
-                atomarg = atomarg
-                    .replace(function!(GS.emr_vec, usize::from(*e) as i64, W_.x___))
-                    .with(function!(GS.emr_vec, usize::from(*e) as i64, W_.x___) * GS.rescale)
-                    .replace(function!(GS.energy, usize::from(*e) as i64, W_.x___))
-                    .with(function!(GS.energy, usize::from(*e) as i64, W_.x___) * GS.rescale);
-            }
 
             let soft_ct = graph.full_crown(&self.subgraph).count_ones() == 2 && self.dod > 0;
 
-            let mut masses = AHashSet::new();
-            masses.insert(Atom::var(GS.m_uv));
-            // scale all masses, including UV masses from subgraphs
-
-            for (p, _, e) in graph.iter_edges_of(&self.subgraph) {
-                if p.is_paired() {
-                    let e_mass = parse!(&e.data.particle.mass.name);
-                    masses.insert(e_mass);
+            // (re-)expand OSEs from the subgraph only
+            for (_, eid, _) in graph.iter_edges_of(&self.subgraph) {
+                let eid = usize::from(eid) as i64;
+                if soft_ct {
+                    // TODO: rescale the masses in OSEs
+                    // TODO: also scale masses in the numerator _only_ for the subgraph
+                    // expand the OSEs around an OSE with a UV mass
+                    todo!()
+                } else {
+                    // rescale the whole OSE so that the function itself has no poles during the expansion
+                    atomarg = atomarg
+                        .replace(function!(GS.ose, eid, W_.mom_, W_.mass_, W_.prop_, W_.a___))
+                        .with(
+                            function!(
+                                GS.ose,
+                                eid,
+                                W_.mom_ / GS.rescale,
+                                GS.m_uv * GS.m_uv,
+                                (GS.m_uv * GS.m_uv * GS.rescale * GS.rescale + W_.prop_
+                                    - GS.m_uv * GS.m_uv)
+                                    / GS.rescale
+                                    / GS.rescale,
+                                W_.a___
+                            ) * GS.rescale
+                                * GS.rescale,
+                        );
                 }
-            }
-
-            if !soft_ct {
-                for m in &masses {
-                    let rescaled = m.clone() * GS.rescale;
-                    atomarg = atomarg.replace(m.clone()).with(rescaled);
-                }
-
-                // expand the OSEs around an OSE with a UV mass
-                atomarg = atomarg
-                    .replace(parse!("OSE(n_,q_,mass_,prop_,index___)"))
-                    .with(parse!(
-                        "OSE(n_,q_,mass_ + mUV^2 - t^2*mUV^2, prop_ + mUV^2 - t^2*mUV^2, index___)"
-                    ));
             }
 
             atomarg = atomarg
@@ -1352,6 +1362,11 @@ impl Approximation {
                 .with(function!(MS.dot, W_.x_, W_.y_) * GS.rescale);
 
             println!("atomarg:{}", atomarg);
+
+            atomarg = (atomarg
+                * Atom::var(GS.rescale).npow(3 * graph.n_loops(&self.subgraph) as i64))
+            .replace(GS.rescale)
+            .with(Atom::num(1) / GS.rescale);
 
             println!(
                 "RR {:>}",
@@ -1362,7 +1377,6 @@ impl Approximation {
                     .expand()
             );
 
-            // den(..) tags a propagator, its first derivative is 1 and the rest is 0
             let mut a = atomarg
                 .series(GS.rescale, Atom::Zero, self.dod.into(), true)
                 .unwrap()
@@ -1380,11 +1394,13 @@ impl Approximation {
                 let dod_pow = Atom::var(GS.rescale).npow(self.dod);
                 for (pow, mut i) in coeffs {
                     if pow == dod_pow {
+                        // FIXME: how to do this _only_ for the subgraph masses? the numerator is still
+                        // only that of the subgraph
                         // set the masses in the t=dod term to 0
                         // UV rearrange the denominators
-                        for m in &masses {
+                        /*for m in &masses {
                             i = i.replace(m.clone()).with(Atom::Zero);
-                        }
+                        }*/
 
                         i = i
                             .replace(parse!("OSE(n_,q_,mass_,prop_, x___)"))
@@ -1398,16 +1414,6 @@ impl Approximation {
             } else {
                 a = a.replace(GS.rescale).with(Atom::num(1));
             }
-
-            // strip the momentum wrapper from the denominator
-            a = a
-                .replace(function!(
-                    GS.den,
-                    W_.prop_,
-                    function!(GS.emr_mom, W_.prop_, W_.mom_),
-                    W_.x__
-                ))
-                .with(function!(GS.den, W_.prop_, W_.mom_, W_.x__));
 
             println!("Expanded: {:>}", a.expand());
 
