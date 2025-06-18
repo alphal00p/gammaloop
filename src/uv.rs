@@ -40,7 +40,7 @@ use spenso::{
 };
 use symbolica::{
     atom::{Atom, AtomCore, FunctionBuilder, Symbol},
-    domains::integer::Integer,
+    domains::{float::Complex, integer::Integer, rational::Rational},
     function,
     id::Replacement,
     parse,
@@ -484,11 +484,6 @@ pub trait UltravioletGraph: LMBext {
         let mut limits = Vec::new();
 
         for ls in loops {
-            let r = ls.iter_ones().collect::<Vec<_>>();
-            if r != [1] {
-                continue;
-            }
-
             let mut expr = expr.clone();
             for l in ls.iter_ones() {
                 let e = usize::from(lmb.loop_edges[LoopIndex(l)]) as i64;
@@ -508,12 +503,11 @@ pub trait UltravioletGraph: LMBext {
                 .series(expansion, Atom::Zero, 0.into(), true)
                 .unwrap()
                 .to_atom()
-                .replace((-Atom::var(W_.x_)).pow(Atom::var(W_.y_)))
-                .with(Atom::num(-1).pow(Atom::var(W_.y_)) * Atom::var(W_.x_).pow(Atom::var(W_.y_)))
+                .replace(function!(MS.dot, W_.x___))
+                .with(-function!(MS.dot, W_.x___)) // make dot products positive
                 .expand();
 
             println!("LIMIT {:?}: {:>}", ls.iter_ones().collect::<Vec<_>>(), expr);
-            panic!("DONE");
 
             limits.push(expr);
         }

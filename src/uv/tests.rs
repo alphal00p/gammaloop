@@ -368,7 +368,7 @@ fn tri_box_tri_LU() {
     let _ = env_logger::builder().is_test(true).try_init();
     let uv_dod = 1;
     let is_massless = false;
-    let nested_uv = false; // when true, creates a 2-loop log UV
+    let nested_uv = true; // when true, creates a 2-loop log UV
 
     // load the model and hack the masses, go through serializable model since arc is not mutable
     let model = if is_massless {
@@ -951,8 +951,6 @@ fn tri_box_tri_LU() {
                 Atom::var(t).npow(3)
                     * cut_res
                         .expand()
-                        //.replace(function!(MS.dot, W_.x___))
-                        //.with(-function!(MS.dot, W_.x___)) // make three-dot positive
                         .replace(parse!("Q3(7)"))
                         .with(parse!("t*Q3(7)"))
                         .replace(parse!("Q3(6)"))
@@ -966,15 +964,13 @@ fn tri_box_tri_LU() {
                         .with(parse!("Q3(9)-Q3(3)"))
                         .replace(parse!("E(4)"))
                         .with(parse!("E(9)-E(3)"))
-                        .replace(parse!("symbolica_community::dot(t*x_,y_)"))
+                        .replace(parse!("spenso::dot(t*x_,y_)"))
                         .repeat()
-                        .with(parse!("t*symbolica_community::dot(x_,y_)"))
+                        .with(parse!("t*spenso::dot(x_,y_)"))
             } else if edges_in_cut == ["e1", "e2", "e3"] {
                 Atom::var(t).npow(3)
                     * cut_res
                         .expand()
-                        //.replace(function!(MS.dot, W_.x___))
-                        //.with(-function!(MS.dot, W_.x___)) // make three-dot positive
                         .replace(parse!("Q3(7)"))
                         .with(parse!("t*Q3(7)"))
                         .replace(parse!("Q3(6)"))
@@ -988,15 +984,13 @@ fn tri_box_tri_LU() {
                         .with(parse!("Q3(9)-Q3(2)-Q(1)"))
                         .replace(parse!("E(3)"))
                         .with(parse!("E(9)-E(2)-E(1)"))
-                        .replace(parse!("symbolica_community::dot(t*x_,y_)"))
+                        .replace(parse!("spenso::dot(t*x_,y_)"))
                         .repeat()
-                        .with(parse!("t*symbolica_community::dot(x_,y_)"))
+                        .with(parse!("t*spenso::dot(x_,y_)"))
             } else if edges_in_cut == ["e0", "e1"] {
                 Atom::var(t).npow(3)
                     * cut_res
                         .expand()
-                        //.replace(function!(MS.dot, W_.x___))
-                        //.with(-function!(MS.dot, W_.x___)) // make three-dot positive
                         .replace(parse!("Q3(7)"))
                         .with(parse!("t*Q3(7)"))
                         .replace(parse!("Q3(6)"))
@@ -1008,11 +1002,11 @@ fn tri_box_tri_LU() {
                         .with(parse!("E(9)-E(1)"))
                         .replace(parse!("E(x_,y___)"))
                         .with(parse!("E(x_)"))
-                        .replace(parse!("symbolica_community::dot(t*x_,y_)"))
+                        .replace(parse!("spenso::dot(t*x_,y_)"))
                         .repeat()
-                        .with(parse!("t*symbolica_community::dot(x_,y_)"))
+                        .with(parse!("t*spenso::dot(x_,y_)"))
             } else {
-                cut_res.expand()
+                Atom::Zero
             };
 
             let s = series
@@ -1026,8 +1020,8 @@ fn tri_box_tri_LU() {
                 .expand()
                 .replace(Atom::var(W_.x_).sqrt())
                 .with(Atom::var(W_.x_).npow((1, 2)))
-                .replace((-Atom::var(W_.x_)).pow(Atom::var(W_.y_)))
-                .with(Atom::num(-1).pow(Atom::var(W_.y_)) * Atom::var(W_.x_).pow(Atom::var(W_.y_)))
+                .replace(function!(MS.dot, W_.x___))
+                .with(-function!(MS.dot, W_.x___)) // make dot products positive
                 .expand(); // help Symbolica with cancellations
 
             println!("correct UV cancellation if 0: {:>}", r);
@@ -2101,9 +2095,9 @@ fn nested_bubble_soft_ct() {
         * result
             .replace(parse!("K(3)"))
             .with(parse!("t*K(3)"))
-            .replace(parse!("symbolica_community::dot(t*K(x_),y_)"))
+            .replace(parse!("spenso::dot(t*K(x_),y_)"))
             .repeat()
-            .with(parse!("t*symbolica_community::dot(K(x_),y_)"));
+            .with(parse!("t*spenso::dot(K(x_),y_)"));
 
     println!("SERIESINPUT:\n{:>}", series);
 
@@ -2116,7 +2110,7 @@ fn nested_bubble_soft_ct() {
     println!("Correct UV cancellation if 0: {:>}", s.to_atom().expand());
 
     let exp = result
-        .replace(parse!("symbolica_community::dot(k_(x_),l_(y_))"))
+        .replace(parse!("spenso::dot(k_(x_),l_(y_))"))
         .with(parse!(
             "k(x_,0)*k(y_,0)-k(x_,1)*k(y_,1)-k(x_,2)*k(y_,2)-k(x_,3)*k(y_,3)"
         ));
@@ -2305,9 +2299,9 @@ fn nested_bubble_scalar_quad() {
         * result
             .replace(parse!("K(3)"))
             .with(parse!("t*K(3)"))
-            .replace(parse!("symbolica_community::dot(t*K(x_),y_)"))
+            .replace(parse!("spenso::dot(t*K(x_),y_)"))
             .repeat()
-            .with(parse!("t*symbolica_community::dot(K(x_),y_)"));
+            .with(parse!("t*spenso::dot(K(x_),y_)"));
 
     println!("SERIESINPUT:\n{:>}", series);
 
@@ -2325,7 +2319,7 @@ fn nested_bubble_scalar_quad() {
     panic!("STOP");
 
     let exp = result
-        .replace(parse!("symbolica_community::dot(k_(x_),l_(y_))"))
+        .replace(parse!("spenso::dot(k_(x_),l_(y_))"))
         .with(parse!(
             "k(x_,0)*k(y_,0)-k(x_,1)*k(y_,1)-k(x_,2)*k(y_,2)-k(x_,3)*k(y_,3)"
         ));
@@ -2489,9 +2483,9 @@ fn nested_bubble_scalar() {
         * result
             .replace(parse!("K(3)"))
             .with(parse!("t*K(3)"))
-            .replace(parse!("symbolica_community::dot(t*K(x_),y_)"))
+            .replace(parse!("spenso::dot(t*K(x_),y_)"))
             .repeat()
-            .with(parse!("t*symbolica_community::dot(K(x_),y_)"));
+            .with(parse!("t*spenso::dot(K(x_),y_)"));
 
     let s = series
         .replace(t)
@@ -2502,7 +2496,7 @@ fn nested_bubble_scalar() {
     println!("Correct UV cancellation if 0: {:>}", s.to_atom().expand());
 
     let exp = result
-        .replace(parse!("symbolica_community::dot(k_(x_),l_(y_))"))
+        .replace(parse!("spenso::dot(k_(x_),l_(y_))"))
         .with(parse!(
             "k(x_,0)*k(y_,0)-k(x_,1)*k(y_,1)-k(x_,2)*k(y_,2)-k(x_,3)*k(y_,3)"
         ));
@@ -2646,7 +2640,7 @@ fn disconnect_forest_scalar() {
     println!("{:>}", result);
 
     let exp = result
-        .replace(parse!("symbolica_community::dot(k_(x_),l_(y_))"))
+        .replace(parse!("spenso::dot(k_(x_),l_(y_))"))
         .with(parse!(
             "k(x_,0)*k(y_,0)-k(x_,1)*k(y_,1)-k(x_,2)*k(y_,2)-k(x_,3)*k(y_,3)"
         ));
