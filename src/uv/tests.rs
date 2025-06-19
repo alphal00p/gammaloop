@@ -367,8 +367,8 @@ fn tri_uv_AMP() {
 fn tri_box_tri_LU() {
     let _ = env_logger::builder().is_test(true).try_init();
     let uv_dod = 1;
+    let box_uv_dod = 1; // can be -1, 0, 1, 2
     let is_massless = false;
-    let nested_uv = true; // when true, creates a 2-loop log UV
 
     // load the model and hack the masses, go through serializable model since arc is not mutable
     let model = if is_massless {
@@ -477,8 +477,12 @@ fn tri_box_tri_LU() {
             particle: hp.clone(),
             propagator: hprop.clone(),
             internal_index: vec![],
-            dod: -2,
-            num: Atom::one(),
+            dod: if box_uv_dod >= 1 { -1 } else { -2 },
+            num: if box_uv_dod >= 1 {
+                spenso_lor_atom(2, 30, GS.dim)
+            } else {
+                Atom::one()
+            },
         },
         false,
     );
@@ -492,8 +496,12 @@ fn tri_box_tri_LU() {
             particle: hp.clone(),
             propagator: hprop.clone(),
             internal_index: vec![],
-            dod: if nested_uv && uv_dod >= 1 { -1 } else { -2 },
-            num: if nested_uv && uv_dod >= 1 {
+            dod: if box_uv_dod >= 0 && uv_dod >= 1 {
+                -1
+            } else {
+                -2
+            },
+            num: if box_uv_dod >= 0 && uv_dod >= 1 {
                 spenso_lor_atom(3, 20, GS.dim)
             } else {
                 Atom::one()
@@ -511,8 +519,12 @@ fn tri_box_tri_LU() {
             particle: hp.clone(),
             propagator: hprop.clone(),
             internal_index: vec![],
-            dod: -2,
-            num: Atom::one(),
+            dod: if box_uv_dod == 2 { -1 } else { -2 },
+            num: if box_uv_dod == 2 {
+                spenso_lor_atom(4, 30, GS.dim)
+            } else {
+                Atom::one()
+            },
         },
         false,
     );
@@ -583,7 +595,11 @@ fn tri_box_tri_LU() {
             propagator: hprop.clone(),
             internal_index: vec![],
             dod: 0,
-            num: Atom::one(),
+            num: if box_uv_dod == 1 {
+                spenso_lor_atom(8, 30, GS.dim)
+            } else {
+                Atom::one()
+            },
         },
         false,
         Flow::Sink,
@@ -598,7 +614,7 @@ fn tri_box_tri_LU() {
             propagator: hprop.clone(),
             internal_index: vec![],
             dod: 0,
-            num: if !nested_uv && uv_dod >= 1 {
+            num: if box_uv_dod == -1 && uv_dod >= 1 {
                 spenso_lor_atom(9, 20, GS.dim)
             } else {
                 Atom::one()
@@ -766,7 +782,10 @@ fn tri_box_tri_LU() {
             println!("//left: \n{}", super_uv_graph.dot(&c.left));
 
             println!("//right: \n{}", super_uv_graph.dot(&c.right));
+            println!("Computing left amplitude");
             let left_expr = left_forest.local_expr(&super_uv_graph, &c.left, left_orientation_data);
+
+            println!("Computing right amplitude");
             let right_expr =
                 right_forest.local_expr(&super_uv_graph, &c.right, right_orientation_data);
 
@@ -820,12 +839,42 @@ fn tri_box_tri_LU() {
                     });
             }
 
+            println!("Dot rewrite");
+
             let spenso_mink = symbol!("spenso::mink");
 
             // contract all dot products, set all cross terms ose.q3 to 0
             // MS.dot is a 4d dot product
             cut_res = cut_res
                 .expand()
+                .replace(
+                    function!(GS.emr_vec, W_.x__, function!(spenso_mink, W_.z__))
+                        * function!(GS.ose, W_.y__, function!(spenso_mink, W_.z__)),
+                )
+                .with(Atom::Zero)
+                .replace(
+                    function!(GS.emr_vec, W_.x__, function!(spenso_mink, W_.z__))
+                        * function!(GS.energy, W_.y__, function!(spenso_mink, W_.z__)),
+                )
+                .with(Atom::Zero)
+                .replace(
+                    function!(GS.emr_vec, W_.x__, function!(spenso_mink, W_.z__))
+                        * function!(GS.ose, W_.y__, function!(spenso_mink, W_.z__))
+                            .pow(Atom::var(W_.b_)),
+                )
+                .with(Atom::Zero)
+                .replace(function!(
+                    MS.dot,
+                    function!(GS.emr_vec, W_.x_),
+                    function!(GS.ose, W_.y_)
+                ))
+                .with(Atom::Zero)
+                .replace(function!(
+                    MS.dot,
+                    function!(GS.emr_vec, W_.x_),
+                    function!(GS.energy, W_.y_)
+                ))
+                .with(Atom::Zero)
                 .replace(function!(GS.emr_vec, W_.x__, W_.y_).npow(2))
                 .with(function!(
                     MS.dot,
@@ -891,34 +940,6 @@ fn tri_box_tri_LU() {
                     function!(GS.ose, W_.x__).pow(Atom::var(W_.a_))
                         * function!(GS.ose, W_.y__).pow(Atom::var(W_.b_)),
                 )
-                .replace(
-                    function!(GS.emr_vec, W_.x__, function!(spenso_mink, W_.z__))
-                        * function!(GS.ose, W_.y__, function!(spenso_mink, W_.z__)),
-                )
-                .with(Atom::Zero)
-                .replace(
-                    function!(GS.emr_vec, W_.x__, function!(spenso_mink, W_.z__))
-                        * function!(GS.energy, W_.y__, function!(spenso_mink, W_.z__)),
-                )
-                .with(Atom::Zero)
-                .replace(
-                    function!(GS.emr_vec, W_.x__, function!(spenso_mink, W_.z__))
-                        * function!(GS.ose, W_.y__, function!(spenso_mink, W_.z__))
-                            .pow(Atom::var(W_.b_)),
-                )
-                .with(Atom::Zero)
-                .replace(function!(
-                    MS.dot,
-                    function!(GS.emr_vec, W_.x_),
-                    function!(GS.ose, W_.y_)
-                ))
-                .with(Atom::Zero)
-                .replace(function!(
-                    MS.dot,
-                    function!(GS.emr_vec, W_.x_),
-                    function!(GS.energy, W_.y_)
-                ))
-                .with(Atom::Zero)
                 .replace(function!(
                     MS.dot,
                     function!(GS.ose, W_.x__),
@@ -944,7 +965,9 @@ fn tri_box_tri_LU() {
                 .replace(function!(GS.external_mom, W_.x_, W_.y_))
                 .with(function!(GS.energy, W_.x_));
 
-            println!("Cut input: {:>}", cut_res.expand());
+            //println!("Cut input: {:>}", cut_res.expand());
+
+            println!("UV test start");
 
             let t = symbol!("t");
             let series = if edges_in_cut == ["e3", "e4"] {
@@ -960,6 +983,10 @@ fn tri_box_tri_LU() {
                         .replace(parse!("E(x_,y___)"))
                         .with(parse!("E(x_)"))
                         // set momentum conservation
+                        .replace(parse!("E(8)"))
+                        .with(parse!("E(9)"))
+                        .replace(parse!("Q3(8)"))
+                        .with(parse!("Q3(9)"))
                         .replace(parse!("Q3(4)"))
                         .with(parse!("Q3(9)-Q3(3)"))
                         .replace(parse!("E(4)"))
@@ -980,6 +1007,10 @@ fn tri_box_tri_LU() {
                         .replace(parse!("E(x_,y___)"))
                         .with(parse!("E(x_)"))
                         // set momentum conservation
+                        .replace(parse!("E(8)"))
+                        .with(parse!("E(9)"))
+                        .replace(parse!("Q3(8)"))
+                        .with(parse!("Q3(9)"))
                         .replace(parse!("Q3(3)"))
                         .with(parse!("Q3(9)-Q3(2)-Q(1)"))
                         .replace(parse!("E(3)"))
@@ -998,6 +1029,10 @@ fn tri_box_tri_LU() {
                         .replace(parse!("Q3(5)"))
                         .with(parse!("t*Q3(7)-Q3(4)"))
                         // set momentum conservation
+                        .replace(parse!("E(8)"))
+                        .with(parse!("E(9)"))
+                        .replace(parse!("Q3(8)"))
+                        .with(parse!("Q3(9)"))
                         .replace(parse!("E(0,x___)"))
                         .with(parse!("E(9)-E(1)"))
                         .replace(parse!("E(x_,y___)"))
@@ -1024,7 +1059,64 @@ fn tri_box_tri_LU() {
                 .with(-function!(MS.dot, W_.x___)) // make dot products positive
                 .expand(); // help Symbolica with cancellations
 
-            println!("correct UV cancellation if 0: {:>}", r);
+            let mut r2 = Atom::new();
+            for x in r.terms() {
+                r2 += x.factor();
+            }
+
+            println!("correct UV cancellation if 0: {:>}", r2);
+
+            if edges_in_cut == ["e0", "e1"] {
+                let series = Atom::var(t).npow(6)
+                    * cut_res
+                        .expand()
+                        .replace(parse!("Q3(2)"))
+                        .with(parse!("Q3(4)-Q3(1)"))
+                        .replace(parse!("Q3(3)"))
+                        .with(parse!("-Q3(4)+Q3(9)"))
+                        .replace(parse!("Q3(5)"))
+                        .with(parse!("Q3(7)-Q3(4)"))
+                        .replace(parse!("Q3(6)"))
+                        .with(parse!("Q3(7)-Q3(9)"))
+                        .replace(parse!("Q3(4)"))
+                        .with(parse!("t*Q3(4)"))
+                        .replace(parse!("Q3(7)"))
+                        .with(parse!("t*Q3(7)"))
+                        // set momentum conservation
+                        .replace(parse!("E(8)"))
+                        .with(parse!("E(9)"))
+                        .replace(parse!("Q3(8)"))
+                        .with(parse!("Q3(9)"))
+                        .replace(parse!("E(0,x___)"))
+                        .with(parse!("E(9)-E(1)"))
+                        .replace(parse!("E(x_,y___)"))
+                        .with(parse!("E(x_)"))
+                        .replace(parse!("spenso::dot(t*x_,y_)"))
+                        .repeat()
+                        .with(parse!("t*spenso::dot(x_,y_)"));
+
+                let s = series
+                    .replace(t)
+                    .with(Atom::var(t).npow(-1))
+                    .series(t, Atom::Zero, 0.into(), true)
+                    .unwrap();
+
+                let r = s
+                    .to_atom()
+                    .expand()
+                    .replace(Atom::var(W_.x_).sqrt())
+                    .with(Atom::var(W_.x_).npow((1, 2)))
+                    .replace(function!(MS.dot, W_.x___))
+                    .with(-function!(MS.dot, W_.x___)) // make dot products positive
+                    .expand(); // help Symbolica with cancellations
+
+                let mut r2 = Atom::new();
+                for x in r.terms() {
+                    r2 += x.factor();
+                }
+
+                println!("correct double limit UV cancellation if 0: {:>}", r2);
+            }
 
             /*let str = format!("correct UV cancellation if 0: {:>}", r);
 
@@ -1074,7 +1166,7 @@ fn tri_box_tri_LU() {
                     .with(Atom::new());
             }
 
-            println!("Cut {} result: {:>}", id, cut_res);
+            //println!("Cut {} result: {:>}", id, cut_res);
 
             // linearize Q3
             cut_res = cut_res
@@ -1207,7 +1299,7 @@ fn tri_box_tri_LU() {
 
             let cut_res = cut_res.expand();
 
-            println!("Cut {} result: {:>}", id, cut_res);
+            //println!("Cut {} result: {:>}", id, cut_res);
 
             // ONLY TEST THIS CUT
             //if edges_in_cut == ["e1", "e2", "e3"] {
@@ -1291,7 +1383,7 @@ fn tri_box_tri_LU() {
     );
     println!("Inspect: {}", inspect2);
 
-    return;
+    //return;
 
     crate::set_interrupt_handler();
 
@@ -1771,6 +1863,8 @@ fn double_triangle_LU() {
                 ))
                 .with(function!(GS.emr_vec, W_.x__) * function!(GS.emr_vec, W_.y__));
 
+            println!("CUTRES {:>}", cut_res);
+
             // substitute all OSEs from subgraphs, they are in the form OSE(edge_id, momentum, mass^2, mom.mom + mass^2)
             // the sqrt has already been applied
             cut_res = cut_res
@@ -1801,6 +1895,26 @@ fn double_triangle_LU() {
                 }
 
                 // println!("Correct UV cancellation if 0: {:>}", r);
+                /*println!("Series: {:>}", series);
+
+                let s = series
+                    .replace(t)
+                    .with(Atom::var(t).npow(-1))
+                    .series(t, Atom::Zero, 0.into(), true)
+                    .unwrap();
+
+                let r = s
+                    .to_atom()
+                    .expand()
+                    .replace(Atom::var(W_.x_).sqrt())
+                    .with(Atom::var(W_.x_).npow((1, 2)))
+                    .replace((-Atom::var(W_.x_)).pow(Atom::var(W_.y_)))
+                    .with(
+                        Atom::num(-1).pow(Atom::var(W_.y_))
+                            * Atom::var(W_.x_).pow(Atom::var(W_.y_)),
+                    )
+                    .expand(); // help Symbolica with cancellations and avoid bad simplification of (-1)^(-5/2)
+                println!("Correct UV cancellation if 0: {:>}", r);*/
             }
 
             // set the external energies
@@ -1970,6 +2084,7 @@ fn double_triangle_LU() {
     }
 
     println!("Done generation");
+    return;
 
     cs.derived_data.bare_cff_evaluators = None;
     cs.build_cut_evaluators(&model, Some(cut_atoms));
