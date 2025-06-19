@@ -1381,6 +1381,8 @@ impl Approximation {
 
             //println!("atomarg:{}", atomarg);
 
+            println!("Series expanding");
+
             let mut a = atomarg
                 .series(GS.rescale, Atom::Zero, self.dod.into(), true)
                 .unwrap()
@@ -1781,7 +1783,7 @@ impl Forest {
             sum += n.data.final_cff(graph, amplitude, orientation).unwrap();
         }
 
-        sum.expand()
+        sum
     }
 
     pub fn simple_expr(

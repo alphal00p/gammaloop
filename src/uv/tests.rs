@@ -789,8 +789,7 @@ fn tri_box_tri_LU() {
             let right_expr =
                 right_forest.local_expr(&super_uv_graph, &c.right, right_orientation_data);
 
-            //let mut cut_res = left_expr * right_expr;
-            let mut cut_res = cs.add_additional_factors_to_cff_atom(&(left_expr * right_expr), id);
+            let mut cut_res = left_expr * right_expr;
 
             // add Feynman rules of cut edges
             for (_p, edge_index, d) in super_uv_graph.iter_edges_of(&c.cut.left) {
@@ -843,10 +842,33 @@ fn tri_box_tri_LU() {
 
             let spenso_mink = symbol!("spenso::mink");
 
+            // substitute all OSEs from subgraphs, they are in the form OSE(edge_id, momentum, mass^2, mom.mom + mass^2)
+            // the sqrt has already been applied
+            // should simplify the expression
+            cut_res = cut_res
+                .replace(function!(GS.ose, W_.x_, W_.y_, W_.z_, W_.prop_, W_.a___))
+                .with(function!(GS.ose, 100, W_.prop_, W_.a___));
+
             // contract all dot products, set all cross terms ose.q3 to 0
             // MS.dot is a 4d dot product
             cut_res = cut_res
-                .expand()
+                .replace(
+                    function!(GS.emr_vec, W_.x__, function!(spenso_mink, W_.z__))
+                        * function!(GS.ose, W_.y__, function!(spenso_mink, W_.z__)),
+                )
+                .with(Atom::Zero)
+                .replace(
+                    function!(GS.emr_vec, W_.x__, function!(spenso_mink, W_.z__))
+                        * function!(GS.energy, W_.y__, function!(spenso_mink, W_.z__)),
+                )
+                .with(Atom::Zero)
+                .replace(
+                    function!(GS.emr_vec, W_.x__, function!(spenso_mink, W_.z__))
+                        * function!(GS.ose, W_.y__, function!(spenso_mink, W_.z__))
+                            .pow(Atom::var(W_.b_)),
+                )
+                .with(Atom::Zero)
+                .expand() // TODO: prevent expansion
                 .replace(
                     function!(GS.emr_vec, W_.x__, function!(spenso_mink, W_.z__))
                         * function!(GS.ose, W_.y__, function!(spenso_mink, W_.z__)),
@@ -959,13 +981,13 @@ fn tri_box_tri_LU() {
                 .replace(function!(GS.ose, W_.x_, W_.y_, W_.z_, W_.prop_))
                 .with(function!(GS.ose, 100, W_.prop_)) // do in two steps to get slightly nicer output
                 .replace(function!(GS.ose, 100, W_.prop_))
-                .with(W_.prop_);
+                .with(W_.prop_)
+                .replace(function!(GS.ose, 100, W_.prop_, W_.x_))
+                .with(W_.prop_); // it could be that GS.ose(mu)^1/2 fused into GS.ose(mu)^1 which leaves a fake dummy index
 
             cut_res = cut_res
                 .replace(function!(GS.external_mom, W_.x_, W_.y_))
                 .with(function!(GS.energy, W_.x_));
-
-            //println!("Cut input: {:>}", cut_res.expand());
 
             println!("UV test start");
 
@@ -1118,13 +1140,7 @@ fn tri_box_tri_LU() {
                 println!("correct double limit UV cancellation if 0: {:>}", r2);
             }
 
-            /*let str = format!("correct UV cancellation if 0: {:>}", r);
-
-            if r == Atom::new() {
-                println!("{}", str.green());
-            } else {
-                println!("{}", str.red());
-            }*/
+            cut_res = cs.add_additional_factors_to_cff_atom(&cut_res, id);
 
             // set the external energies
             for (_p, edge_index, _d) in
@@ -1203,110 +1219,7 @@ fn tri_box_tri_LU() {
                     .with(function!(GS.external_mom, edge_id, W_.x_));
             }
 
-            /*if super_uv_graph.dod(&c.right) >= 0 {
-                let mut fnmap = FunctionMap::new();
-
-                fnmap.add_constant(
-                    Atom::var(symbol!("h")),
-                    symbolica::domains::float::Complex::new((1.).into(), (0.).into()),
-                );
-                fnmap.add_constant(
-                    Atom::var(symbol!("∇η")),
-                    symbolica::domains::float::Complex::new((1.).into(), (0.).into()),
-                );
-                fnmap.add_constant(
-                    Atom::var(symbol!("π")),
-                    symbolica::domains::float::Complex::new((3.14).into(), (0.).into()),
-                );
-                fnmap.add_constant(
-                    Atom::var(symbol!("t⃰")),
-                    symbolica::domains::float::Complex::new((1.).into(), (0.).into()),
-                );
-                fnmap.add_constant(
-                    Atom::var(symbol!("MH")),
-                    symbolica::domains::float::Complex::new((125.).into(), (0.).into()),
-                );
-                fnmap.add_constant(
-                    Atom::var(symbol!("MT")),
-                    symbolica::domains::float::Complex::new((173.).into(), (0.).into()),
-                );
-                fnmap.add_constant(
-                    Atom::var(symbol!("mUV")),
-                    symbolica::domains::float::Complex::new((10.).into(), (1000.).into()),
-                );
-                fnmap.add_constant(
-                    Atom::var(symbol!("ZERO")),
-                    symbolica::domains::float::Complex::new((0.).into(), (0.).into()),
-                );
-
-                let ev = cut_res
-                    .replace(parse!("Q3(6,x_)"))
-                    .with(parse!("Q3(7,x_)-Q3(9,x_)"))
-                    .replace(parse!("Q3(5,x_)"))
-                    .with(parse!("Q3(7,x_)-Q3(4,x_)"))
-                    .evaluator(
-                        &fnmap,
-                        &[
-                            parse!("Q3(0, 1)"),
-                            parse!("Q3(0, 2)"),
-                            parse!("Q3(0, 3)"),
-                            parse!("Q3(1, 1)"),
-                            parse!("Q3(1, 2)"),
-                            parse!("Q3(1, 3)"),
-                            parse!("Q3(3, 1)"),
-                            parse!("Q3(3, 2)"),
-                            parse!("Q3(3, 3)"),
-                            parse!("Q3(5, 1)"),
-                            parse!("Q3(5, 2)"),
-                            parse!("Q3(5, 3)"),
-                            parse!("_gammaloop::P(6,spenso::find(0))"),
-                            parse!("_gammaloop::P(6,1)"),
-                            parse!("_gammaloop::P(6,2)"),
-                            parse!("_gammaloop::P(6,3)"),
-                        ],
-                        OptimizationSettings::default(),
-                    )
-                    .unwrap();
-
-                let mut ev2 = ev.map_coeff(&|x| x.re.to_f64());
-
-                println!("Single limit:");
-                for t in (0..100_000).step_by(5000) {
-                    let r = (t as f64).powf(3.)
-                        * ev2.evaluate_single(&[
-                            43.,
-                            5.,
-                            6.5,
-                            20.,
-                            5.,
-                            6.5,
-                            t as f64 + 1.,
-                            t as f64 * 2. + 2.,
-                            t as f64 + 3.,
-                            2.4,
-                            5.,
-                            2.3,
-                            800.,
-                            1.,
-                            2.,
-                            4.,
-                        ]);
-                    println!("{} {}", r, r.abs().log10());
-                }
-            }*/
-
-            cut_res = cut_res.expand();
-
-            let cut_res = cut_res.expand();
-
-            //println!("Cut {} result: {:>}", id, cut_res);
-
-            // ONLY TEST THIS CUT
-            //if edges_in_cut == ["e1", "e2", "e3"] {
             cut_atoms.push(cut_res);
-            // } else {
-            //     cut_atoms.push(Atom::new());
-            //}
         } else {
             cut_atoms.push(Atom::new());
         }
