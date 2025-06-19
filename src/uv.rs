@@ -1227,7 +1227,7 @@ impl Approximation {
         if let Some((inner_t, sign)) = dependent.cff_expr.expr() {
             let mut cff = inner_t;
 
-            println!("CFF: {}", cff);
+            //println!("CFF: {}", cff);
 
             // add data for OSE computation and add an explicit sqrt
             for (p, eid, e) in graph.iter_edges_of(&self.subgraph) {
@@ -1259,10 +1259,10 @@ impl Approximation {
             let mut atomarg =
                 cff * IntegrandExpr::numerator_only_subgraph(&reduced, graph).integrand;
 
-            println!(
-                "Expand-prerep {} with dod={} in {:?}",
-                atomarg, self.dod, self.lmb.ext_edges
-            );
+            // println!(
+            //     "Expand-prerep {} with dod={} in {:?}",
+            //     atomarg, self.dod, self.lmb.ext_edges
+            // );
 
             // split numerator momenta into OSEs and spatial parts
             for (p, eid, e) in graph.iter_edges_of(&self.subgraph) {
@@ -1314,10 +1314,10 @@ impl Approximation {
                     .with(function!(GS.emr_vec, usize::from(*e) as i64, W_.x___) * GS.rescale);
             }
 
-            println!(
-                "Expand {} with dod={} in {:?}",
-                atomarg, self.dod, self.lmb.ext_edges
-            );
+            // println!(
+            //     "Expand {} with dod={} in {:?}",
+            //     atomarg, self.dod, self.lmb.ext_edges
+            // );
 
             let soft_ct = graph.full_crown(&self.subgraph).count_ones() == 2 && self.dod > 0;
 
@@ -1337,7 +1337,7 @@ impl Approximation {
                             function!(
                                 GS.ose,
                                 eid,
-                                W_.mom_ / GS.rescale,
+                                W_.mom_,
                                 GS.m_uv * GS.m_uv,
                                 (GS.m_uv * GS.m_uv * GS.rescale * GS.rescale + W_.prop_
                                     - GS.m_uv * GS.m_uv)
@@ -1346,7 +1346,26 @@ impl Approximation {
                                 W_.a___
                             ) * GS.rescale
                                 * GS.rescale,
-                        );
+                        )
+                        .replace(function!(GS.ose, eid, W_.mom_, W_.a___))
+                        .with_map(move |m| {
+                            let mut f = FunctionBuilder::new(GS.ose);
+                            f = f.add_arg(eid);
+                            f = f.add_arg(
+                                (m.get(W_.mom_)
+                                    .unwrap()
+                                    .to_atom()
+                                    .replace(GS.rescale)
+                                    .with(Atom::num(1) / GS.rescale)
+                                    * GS.rescale)
+                                    .expand()
+                                    .replace(GS.rescale)
+                                    .with(Atom::Zero),
+                            );
+                            f = f.add_arg(m.get(W_.a___).unwrap().to_atom());
+
+                            f.finish()
+                        });
                 }
             }
 
@@ -1355,21 +1374,12 @@ impl Approximation {
                 .repeat()
                 .with(function!(MS.dot, W_.x_, W_.y_) * GS.rescale);
 
-            println!("atomarg:{}", atomarg);
-
             atomarg = (atomarg
                 * Atom::var(GS.rescale).npow(3 * graph.n_loops(&self.subgraph) as i64))
             .replace(GS.rescale)
             .with(Atom::num(1) / GS.rescale);
 
-            println!(
-                "RR {:>}",
-                atomarg
-                    .series(GS.rescale, Atom::Zero, self.dod.into(), true)
-                    .unwrap()
-                    .to_atom()
-                    .expand()
-            );
+            //println!("atomarg:{}", atomarg);
 
             let mut a = atomarg
                 .series(GS.rescale, Atom::Zero, self.dod.into(), true)
@@ -1409,7 +1419,7 @@ impl Approximation {
                 a = a.replace(GS.rescale).with(Atom::num(1));
             }
 
-            println!("Expanded: {:>}", a.expand());
+            //println!("Expanded: {:>}", a.expand());
 
             ApproxOp::Dependent {
                 t_arg: IntegrandExpr { integrand: a },
@@ -1767,24 +1777,9 @@ impl Forest {
     ) -> Atom {
         let mut sum = Atom::new();
 
-        let mut counter = 0;
         for (_, n) in &self.dag.nodes {
-            //let r = n.data.final_expr(graph, amplitude).unwrap();
-            let cff = n.data.final_cff(graph, amplitude, orientation).unwrap();
-            //println!("Final expr: {:>}", r.expand());
-            println!("CFF: {:>}", cff.expand());
-
-            let mut cf2 = Atom::Zero;
-            for x in cff.expand().terms() {
-                println!("CFF term: {}", x);
-                cf2 += function!(GS.dim, counter) * x;
-                counter += 1;
-            }
-
-            sum += cff; // cf2; // r * cff;
+            sum += n.data.final_cff(graph, amplitude, orientation).unwrap();
         }
-
-        println!("Sum: {:>}", sum.expand());
 
         sum.expand()
     }
