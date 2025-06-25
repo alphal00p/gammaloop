@@ -1872,16 +1872,17 @@ impl Model {
         reps
     }
 
-    pub fn generate_values(&self) -> Vec<Complex<F<f64>>> {
+    pub fn generate_values<T: FloatLike>(&self) -> Vec<Complex<F<T>>> {
         let mut values = vec![];
 
         for cpl in self.couplings.iter().filter(|c| c.value.is_some()) {
             if let Some(value) = cpl.value {
-                values.push(value.map(F));
+                values.push(value.map(F::from_f64));
             }
         }
         for param in self.parameters.iter().filter(|p| p.value.is_some()) {
             if let Some(value) = param.value {
+                let value = Complex::new(F::<T>::from_ff64(value.re), F::<T>::from_ff64(value.im));
                 match param.parameter_type {
                     ParameterType::Imaginary => {
                         values.push(value);

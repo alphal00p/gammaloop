@@ -588,9 +588,9 @@ fn generate_cff_from_orientations<O: OrientationID>(
 #[derive(Clone, Debug, Serialize, Deserialize, Encode, Decode)]
 pub struct SurfaceCache {
     #[bincode(with_serde)]
-    pub esurface_cache: EsurfaceCollection,
+    pub esurface_cache: EsurfaceCollection, // Esurfaces of the supergraph
     #[bincode(with_serde)]
-    pub hsurface_cache: HsurfaceCollection,
+    pub hsurface_cache: HsurfaceCollection, // Anything else.
 }
 
 impl SurfaceCache {
