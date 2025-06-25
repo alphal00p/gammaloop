@@ -7,7 +7,7 @@ use bincode::{Decode, Encode};
 use derive_more::{From, Into};
 use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
-use std::ops::Index;
+use std::ops::{Index, IndexMut};
 use symbolica::domains::float::NumericalFloatLike;
 use typed_index_collections::TiVec;
 use uuid::Uuid;
@@ -118,6 +118,12 @@ impl<T> Index<LoopIndex> for LoopMomenta<T> {
 
     fn index(&self, index: LoopIndex) -> &Self::Output {
         &self.0[index.0]
+    }
+}
+
+impl<T> IndexMut<LoopIndex> for LoopMomenta<T> {
+    fn index_mut(&mut self, index: LoopIndex) -> &mut Self::Output {
+        &mut self.0[index.0]
     }
 }
 

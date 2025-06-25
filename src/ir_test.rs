@@ -1,25 +1,35 @@
 use std::fmt::Display;
 
-use bincode::enc::write;
 use color_eyre::Result;
 use eyre::eyre;
 use itertools::Itertools;
-use linnet::half_edge::involution::EdgeIndex;
+use linnet::half_edge::involution::{EdgeIndex, Orientation};
+use linreg::linear_regression;
 use rand::Rng;
-use symbolica::{domains::float::NumericalFloatLike, numerical_integration::MonteCarloRng};
+use symbolica::{
+    domains::float::NumericalFloatLike, domains::float::Real, numerical_integration::MonteCarloRng,
+};
 
 use crate::{
     cff::surface::Surface,
+    model::Model,
     momentum::ThreeMomentum,
-    momentum_sample::LoopIndex,
-    new_gammaloop_integrand::cross_section_integrand::CrossSectionGraphTerm,
+    momentum_sample::{LoopIndex, LoopMomenta, MomentumSample},
+    new_gammaloop_integrand::{cross_section_integrand::CrossSectionGraphTerm, GraphTerm},
     new_graph::FeynmanGraph,
     utils::{box_muller, f128, FloatLike, F},
-    Settings,
+    DependentMomentaConstructor, Settings,
 };
 
+/// The range is from 10^start to 10^end.
+pub struct ApproachSettings {
+    pub lambda_exp_start: F<f64>,
+    pub lambda_exp_end: F<f64>,
+    pub steps: usize,
+}
+
 impl CrossSectionGraphTerm {
-    pub fn test_ir(&self, settings: &Settings) -> Result<()> {
+    pub fn test_ir(&self, settings: &Settings, approach_settings: &ApproachSettings) -> Result<()> {
         let mut rng = MonteCarloRng::new(settings.integrator.seed, 0);
 
         for (cut_id, esurface) in self.cut_esurface.iter_enumerated() {
@@ -63,10 +73,168 @@ impl CrossSectionGraphTerm {
                             .unwrap_or_else(|| unreachable!("corrupted lmb and cut")),
                     )
                 });
+
+                // enumeration of all ir limits
+                todo!()
             }
         }
 
         Ok(())
+    }
+
+    pub fn test_single_ir_limit(
+        &self,
+        limit: &str,
+        rng: &mut MonteCarloRng,
+        settings: &Settings,
+        approach_settings: &ApproachSettings,
+        model: &Model,
+    ) -> Result<()> {
+        let ir_limit = IrLimit::parse_limit(limit)?;
+        self.test_single_ir_limit_impl(&ir_limit, rng, settings, approach_settings, model)
+    }
+
+    fn test_single_ir_limit_impl(
+        &self,
+        ir_limit: &IrLimit,
+        rng: &mut MonteCarloRng,
+        settings: &Settings,
+        approach_settings: &ApproachSettings,
+        model: &Model,
+    ) -> Result<()> {
+        let edges_in_limit = ir_limit.get_all_edges()?;
+
+        // find cut that for that as all edges of the limit
+        let (cut_id, _esurface) = self
+            .cut_esurface
+            .iter_enumerated()
+            .find(|(_cut_id, esurface)| {
+                edges_in_limit
+                    .iter()
+                    .all(|edge| esurface.energies.contains(edge))
+            })
+            .ok_or(eyre!(
+                "could not find cut with all edges of the limit: {}",
+                ir_limit
+            ))?;
+
+        let cs_cut = &self.cuts[cut_id];
+
+        let edges_to_flip = cs_cut
+            .cut
+            .iter_edges(&self.graph.underlying)
+            .map(|(or, _)| or)
+            .zip(
+                self.graph
+                    .underlying
+                    .iter_edges_of(&cs_cut.cut)
+                    .map(|x| x.1),
+            )
+            .filter_map(|(orientation, edge_id)| {
+                if edges_in_limit.contains(&edge_id) && matches!(orientation, Orientation::Reversed)
+                {
+                    Some(edge_id)
+                } else {
+                    None
+                }
+            })
+            .collect_vec();
+
+        // find lmb
+        let (_, lmb) = self
+            .lmbs
+            .iter_enumerated()
+            .find(|(_, lmb)| {
+                edges_in_limit
+                    .iter()
+                    .all(|edge| lmb.loop_edges.contains(edge))
+            })
+            .ok_or(eyre!(
+                "could not find lmb to approach limit in: {}",
+                ir_limit
+            ))?;
+
+        let model_parameter_cache = model.generate_values();
+
+        let momenta = ir_limit.get_momenta(rng, settings, approach_settings);
+        let non_limit_loops = lmb
+            .loop_edges
+            .iter_enumerated()
+            .filter_map(|(loop_id, edge_id)| {
+                if !edges_in_limit.contains(edge_id) {
+                    Some(loop_id)
+                } else {
+                    None
+                }
+            })
+            .collect_vec();
+
+        let non_limit_momenta = non_limit_loops
+            .iter()
+            .map(|loop_id| (*loop_id, sample_random_unit_vector(rng)))
+            .collect_vec();
+
+        let dependent_momenta_constructor = DependentMomentaConstructor::CrossSection {
+            external_connections: self.graph.external_connections.as_ref().unwrap(),
+        };
+
+        let loop_number = lmb.loop_edges.len();
+        let external_particles = self.graph.underlying.get_external_partcles();
+        let polarizations = settings
+            .kinematics
+            .externals
+            .generate_polarizations(&external_particles, dependent_momenta_constructor);
+
+        let limit_data = LimitData {
+            data: momenta
+                .into_iter()
+                .map(|lambda_point| {
+                    let mut loop_moms: LoopMomenta<F<_>> = (0..loop_number)
+                        .map(|_| {
+                            ThreeMomentum::new(F::from_f64(0.0), F::from_f64(0.0), F::from_f64(0.0))
+                        })
+                        .collect();
+
+                    for (loop_id, momentum) in non_limit_momenta.iter() {
+                        loop_moms[*loop_id] = momentum.clone();
+                    }
+
+                    for tagged_momenta in &lambda_point.momenta {
+                        let edge_id = tagged_momenta.tag;
+                        let loop_id = lmb
+                            .loop_edges
+                            .iter()
+                            .position(|loop_edge| loop_edge == &edge_id)
+                            .unwrap_or_else(|| {
+                                unreachable!("corrupted lmb and ir limit: {}", ir_limit);
+                            });
+
+                        loop_moms[LoopIndex(loop_id)] = tagged_momenta.momentum.clone();
+                    }
+
+                    let sample = MomentumSample::new(
+                        loop_moms,
+                        &settings.kinematics.externals,
+                        F::from_f64(1.0),
+                        &polarizations,
+                        dependent_momenta_constructor,
+                        None,
+                    );
+
+                    LambdaPointEval {
+                        lambda_point,
+                        value: self
+                            .evaluate(&sample, settings, &model_parameter_cache)
+                            .norm_squared()
+                            .sqrt(),
+                    }
+                })
+                .collect(),
+        };
+
+        let slope = limit_data.extract_power();
+
+        Ok(println!("slope: {}", slope))
     }
 }
 
@@ -134,15 +302,27 @@ impl Display for HardOrSoft {
 }
 
 impl IrLimit {
-    fn is_valid(&self, loop_number: usize) -> Result<()> {
-        if !self
-            .colinear
+    fn check_min_colinear_size(&self) -> bool {
+        self.colinear
             .iter()
             .all(|colinear_set| colinear_set.len() >= 2)
-        {
+    }
+
+    fn is_valid(&self, loop_number: usize) -> Result<()> {
+        if !self.check_min_colinear_size() {
             return Err(eyre!("colinear sets must have at least two edges"));
         }
 
+        let all_edges = self.get_all_edges()?;
+
+        if all_edges.len() > loop_number {
+            return Err(eyre!("not enough degrees of freedom to setup IR limit"));
+        }
+
+        Ok(())
+    }
+
+    fn get_all_edges(&self) -> Result<Vec<EdgeIndex>> {
         let colinear_edges = self
             .colinear
             .iter()
@@ -165,11 +345,7 @@ impl IrLimit {
             return Err(eyre!("Edges specified in ir limit must be unique")); // duplicates found
         }
 
-        if all_edges.len() > loop_number {
-            return Err(eyre!("not enough degrees of freedom to setup IR limit"));
-        }
-
-        Ok(())
+        Ok(all_edges)
     }
 
     fn parse_limit(limit: &str) -> Result<IrLimit> {
@@ -314,10 +490,12 @@ impl IrLimit {
             }
         }
 
-        Ok(IrLimit {
+        let ir_limit = IrLimit {
             colinear: colinear_sets,
             soft: soft_edges,
-        })
+        };
+
+        Ok(ir_limit)
     }
 
     fn parse_edge(edge: &str) -> Result<EdgeIndex> {
@@ -339,7 +517,7 @@ impl IrLimit {
         Ok(EdgeIndex::from(edge_id))
     }
 
-    fn get_momentum_builders(&self, rng: &mut MonteCarloRng) {
+    fn get_momentum_builders(&self, rng: &mut MonteCarloRng) -> Vec<MomentumBuilder<f128>> {
         let mut momentum_builder = Vec::new();
 
         for colinear_set in &self.colinear {
@@ -379,6 +557,70 @@ impl IrLimit {
                 direction,
             });
         }
+
+        momentum_builder
+    }
+
+    fn get_momenta(
+        &self,
+        rng: &mut MonteCarloRng,
+        settings: &Settings,
+        approach_settings: &ApproachSettings,
+    ) -> Vec<LambdaPoint<f128>> {
+        let momentum_builders = self.get_momentum_builders(rng);
+
+        let lambda_exp_delta = (approach_settings.lambda_exp_start
+            - approach_settings.lambda_exp_end)
+            / F(approach_settings.steps as f64);
+
+        let lambda_values: Vec<F<f128>> =
+            (0..=approach_settings.steps)
+                .map(|i| {
+                    F::from_f64(10.0f64.powf(
+                        approach_settings.lambda_exp_start.0 - &lambda_exp_delta.0 * (i as f64),
+                    ))
+                })
+                .collect();
+
+        lambda_values
+            .into_iter()
+            .map(|lambda| LambdaPoint {
+                momenta: momentum_builders
+                    .iter()
+                    .map(|builder| match builder {
+                        MomentumBuilder::Colinear {
+                            edge_id,
+                            x,
+                            colinear_direction,
+                            perpendicular_direction,
+                            is_soft,
+                        } => {
+                            let momentum = if *is_soft {
+                                (colinear_direction * x + perpendicular_direction * &lambda)
+                                    * F::from_ff64(settings.kinematics.e_cm)
+                                    * &lambda
+                            } else {
+                                (colinear_direction * x + perpendicular_direction * &lambda)
+                                    * F::from_ff64(settings.kinematics.e_cm)
+                            };
+                            TaggedMomenta {
+                                momentum,
+                                tag: *edge_id,
+                            }
+                        }
+                        MomentumBuilder::Soft { edge_id, direction } => {
+                            let momentum =
+                                direction * &lambda * F::from_ff64(settings.kinematics.e_cm);
+                            TaggedMomenta {
+                                momentum,
+                                tag: *edge_id,
+                            }
+                        }
+                    })
+                    .collect(),
+                lambda,
+            })
+            .collect()
     }
 }
 
@@ -394,6 +636,44 @@ fn sample_random_unit_vector<T: FloatLike>(rng: &mut MonteCarloRng) -> ThreeMome
     let unnormalized_momentum = ThreeMomentum::new(k_x, k_y, k_z);
     let norm = unnormalized_momentum.norm();
     unnormalized_momentum * norm.inv()
+}
+
+struct TaggedMomenta<T> {
+    momentum: ThreeMomentum<T>,
+    tag: EdgeIndex,
+}
+
+struct LambdaPoint<T: FloatLike> {
+    lambda: F<T>,
+    momenta: Vec<TaggedMomenta<F<T>>>,
+}
+
+struct LambdaPointEval<T: FloatLike> {
+    lambda_point: LambdaPoint<T>,
+    value: F<T>,
+}
+
+struct LimitData<T: FloatLike> {
+    data: Vec<LambdaPointEval<T>>,
+}
+
+impl<T: FloatLike> LimitData<T> {
+    fn extract_power(&self) -> f64 {
+        let log_lambda = self
+            .data
+            .iter()
+            .map(|eval| eval.lambda_point.lambda.0.to_f64().ln())
+            .collect_vec();
+
+        let log_res = self
+            .data
+            .iter()
+            .map(|eval| eval.value.0.to_f64().ln())
+            .collect_vec();
+
+        let (slope, _): (f64, _) = linear_regression(&log_lambda, &log_res).unwrap();
+        slope
+    }
 }
 
 #[cfg(test)]

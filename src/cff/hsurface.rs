@@ -22,6 +22,7 @@ pub type HsurfaceCollection = TiVec<HsurfaceID, Hsurface>;
 pub type HsurfaceCache<T> = TiVec<HsurfaceID, T>;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+/// H-surface of the supergraph, is most likely E-surface of the amplitude, kind of badly named.
 pub struct Hsurface {
     pub positive_energies: Vec<EdgeIndex>,
     pub negative_energies: Vec<EdgeIndex>,

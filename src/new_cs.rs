@@ -1490,6 +1490,7 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
                 .clone()
                 .unwrap_or_else(|| vec![].into()),
             graph: self.graph.clone(),
+            cuts: self.cuts.clone(),
             cut_esurface: self.cut_esurface.clone(),
             lmbs: self.derived_data.lmbs.clone().unwrap(),
             estimated_scale,

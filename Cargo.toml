@@ -134,7 +134,7 @@ pyo3-pylogger = { version = "0.3.0", optional = true }
 fern = "0.7.1"
 # humantime = "2.1.0"
 chrono = "0.4.39"
-
+linreg = "0.2.0"
 
 [dependencies.pyo3]
 features = ["abi3", "abi3-py37"]
