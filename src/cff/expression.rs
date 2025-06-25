@@ -1,11 +1,12 @@
-use std::borrow::Borrow;
+use std::{borrow::Borrow, sync::Arc};
 
-use crate::utils::ose_atom_from_index;
+use crate::utils::{ose_atom_from_index, W_};
 use bincode_trait_derive::{Decode, Encode};
 use derive_more::{From, Into};
+use itertools::{Either, EitherOrBoth, Itertools};
 use linnet::half_edge::{
     hedgevec::HedgeVec,
-    involution::Orientation,
+    involution::{EdgeIndex, Orientation},
     nodestore::{NodeStorage, NodeStorageOps},
     GVEdgeAttrs, HedgeGraph,
 };
@@ -13,10 +14,10 @@ use serde::{Deserialize, Serialize};
 use spenso::structure::concrete_index::FlatIndex;
 use std::fmt::Write;
 use symbolica::{
-    atom::Atom,
+    atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol},
     function,
     id::{Pattern, Replacement},
-    parse,
+    parse, symbol,
 };
 use typed_index_collections::TiVec;
 
@@ -24,6 +25,8 @@ use super::{
     cut_expression::SuperGraphOrientationID, generation::SurfaceCache, surface::HybridSurfaceID,
     tree::Tree,
 };
+
+use crate::utils::GS;
 
 #[derive(
     Debug, Clone, Serialize, Deserialize, From, Into, Hash, PartialEq, Eq, Copy, Encode, Decode,
@@ -35,15 +38,127 @@ pub struct AmplitudeOrientationID(pub usize);
 )]
 pub struct SubgraphOrientationID(pub usize);
 
-pub trait OrientationID: From<usize> + Into<usize> {}
+impl GraphOrientation for HedgeVec<Orientation> {
+    fn orientation(&self) -> &HedgeVec<Orientation> {
+        self
+    }
+}
 
-impl OrientationID for AmplitudeOrientationID {}
-impl OrientationID for SubgraphOrientationID {}
-impl OrientationID for SuperGraphOrientationID {}
+pub trait GraphOrientation {
+    fn orientation(&self) -> &HedgeVec<Orientation>;
+
+    fn orientation_delta(&self) -> Atom {
+        let mut fnbld = FunctionBuilder::new(GS.sign_delta);
+
+        for (_, h) in self.orientation() {
+            match h {
+                Orientation::Default => fnbld = fnbld.add_arg(1),
+                Orientation::Reversed => fnbld = fnbld.add_arg(-1),
+                Orientation::Undirected => fnbld = fnbld.add_arg(0),
+            }
+        }
+        fnbld.finish()
+    }
+    fn select<'a>(&self, atom: impl Into<AtomOrView<'a>>) -> Atom {
+        let orientation = self.orientation();
+        atom.into().as_view().replace_map(|term, _ctx, out| {
+            if let AtomView::Fun(f) = term {
+                if f.get_symbol() == GS.sign_delta {
+                    if f.iter()
+                        .zip_longest(orientation.into_iter())
+                        .all(|either| match either {
+                            EitherOrBoth::Both(a, (_, o)) => {
+                                if let Ok(a) = i64::try_from(a) {
+                                    match o {
+                                        Orientation::Default => a >= 0,
+                                        Orientation::Reversed => a <= 0,
+                                        Orientation::Undirected => true,
+                                    }
+                                } else {
+                                    false
+                                }
+                            }
+                            EitherOrBoth::Left(_) | EitherOrBoth::Right(_) => false,
+                        })
+                    {
+                        *out = Atom::num(1);
+                    } else {
+                        *out = Atom::Zero;
+                    }
+                    return true;
+                }
+
+                if f.get_symbol() == GS.sign {
+                    if f.get_nargs() == 1 {
+                        let arg = f.iter().next().unwrap();
+                        if let Ok(a) = i64::try_from(arg) {
+                            if let Ok(a) = usize::try_from(a) {
+                                match orientation[EdgeIndex::from(a)] {
+                                    Orientation::Default => {
+                                        *out = Atom::num(1);
+                                        return true;
+                                    }
+                                    Orientation::Reversed => {
+                                        *out = Atom::num(-1);
+                                        return true;
+                                    }
+                                    Orientation::Undirected => {}
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            false
+        })
+    }
+}
+
+pub trait OrientationID: From<usize> + Into<usize> {
+    fn symbol() -> Symbol;
+
+    fn atom(self) -> Atom {
+        let id: usize = self.into();
+        function!(Self::symbol(), id as i64)
+    }
+
+    fn select<'a>(self, atom: impl Into<AtomOrView<'a>>) -> Atom {
+        atom.into()
+            .as_view()
+            .replace(self.atom())
+            .with(Atom::num(1))
+            .replace(function!(Self::symbol(), W_.x_))
+            .with(Atom::Zero)
+    }
+}
+
+impl OrientationID for AmplitudeOrientationID {
+    fn symbol() -> Symbol {
+        symbol!("amp_sigma")
+    }
+}
+
+impl OrientationID for SubgraphOrientationID {
+    fn symbol() -> Symbol {
+        symbol!("subg_sigma")
+    }
+}
+
+impl OrientationID for SuperGraphOrientationID {
+    fn symbol() -> Symbol {
+        symbol!("superg_sigma")
+    }
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize, Encode, Decode)]
 pub struct OrientationData {
     pub orientation: HedgeVec<Orientation>,
+}
+
+impl GraphOrientation for OrientationData {
+    fn orientation(&self) -> &HedgeVec<Orientation> {
+        &self.orientation
+    }
 }
 
 impl OrientationData {
@@ -102,6 +217,12 @@ pub struct OrientationExpression {
 pub struct CFFExpression<O: OrientationID> {
     pub orientations: TiVec<O, OrientationExpression>,
     pub surfaces: SurfaceCache,
+}
+
+impl GraphOrientation for OrientationExpression {
+    fn orientation(&self) -> &HedgeVec<Orientation> {
+        &self.data.orientation
+    }
 }
 
 impl<O: OrientationID> CFFExpression<O>

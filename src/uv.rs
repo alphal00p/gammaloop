@@ -8,7 +8,11 @@ use std::{
 
 use crate::{
     cff::{
-        expression::OrientationData,
+        cut_expression::{CutOrientationData, SuperGraphOrientationID},
+        expression::{
+            AmplitudeOrientationID, CFFExpression, GraphOrientation, OrientationData,
+            OrientationExpression, OrientationID,
+        },
         generation::{generate_uv_cff, ShiftRewrite},
     },
     cross_section::SuperGraph,
@@ -18,7 +22,7 @@ use crate::{
     momentum_sample::LoopIndex,
     new_graph::{self, no_filter, Edge, LMBext, LoopMomentumBasis, Vertex},
     symbolica_ext::CallSymbol,
-    utils::{GS, W_},
+    utils::{sign_atom, GS, W_},
 };
 use ahash::AHashSet;
 use bitvec::vec::BitVec;
@@ -77,6 +81,10 @@ use crate::{
 //     .unwrap()
 // });
 
+pub trait UVE {
+    fn mass_atom(&self) -> Atom;
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct UVEdge {
     pub og_edge: usize,
@@ -85,6 +93,12 @@ pub struct UVEdge {
     // pub prop:ArcPropagator.
     pub num: Atom,
     pub den: Atom,
+}
+
+impl UVE for UVEdge {
+    fn mass_atom(&self) -> Atom {
+        parse!(&self.particle.mass.name)
+    }
 }
 
 impl UVEdge {
@@ -393,6 +407,14 @@ pub fn is_not_paired(pair: &HedgePair) -> bool {
 }
 
 pub trait UltravioletGraph: LMBext {
+    fn n_loops<S: SubGraph, E, V>(&self, subgraph: &S) -> usize
+    where
+        Self: AsRef<HedgeGraph<E, V>>,
+    {
+        self.as_ref().cyclotomatic_number(subgraph)
+    }
+    fn numerator<S: SubGraph>(&self, subgraph: &S) -> Atom;
+    fn denominator<S: SubGraph>(&self, subgraph: &S) -> Atom;
     fn all_cycle_unions<E, V, S: SubGraph<Base = BitVec>>(
         &self,
         subgraph: &S,
@@ -638,6 +660,44 @@ impl LMBext for UVGraph {
 }
 
 impl UltravioletGraph for UVGraph {
+    fn denominator<S: SubGraph>(&self, subgraph: &S) -> Atom {
+        let mut den = Atom::num(1);
+
+        for (pair, eid, d) in self.iter_edges_of(subgraph) {
+            if matches!(pair, HedgePair::Paired { .. }) {
+                let m2 = parse!(d.data.particle.mass.name).npow(2);
+                den = den
+                    * function!(
+                        GS.den,
+                        usize::from(eid) as i64,
+                        function!(GS.emr_mom, usize::from(eid) as i64),
+                        m2,
+                        spenso_lor_atom(usize::from(eid) as i32, usize::from(eid), GS.dim)
+                            .npow(2)
+                            //.to_dots()
+                            - m2
+                    );
+            }
+        }
+
+        den.into()
+    }
+    fn numerator<S: SubGraph>(&self, subgraph: &S) -> Atom {
+        let mut num = Atom::num(1);
+
+        for (_, _, n) in self.iter_nodes_of(subgraph) {
+            num = num * &n.num;
+        }
+
+        for (pair, _eid, d) in self.iter_edges_of(subgraph) {
+            if matches!(pair, HedgePair::Paired { .. }) {
+                num = num * &d.data.num;
+            }
+        }
+
+        num.into()
+    }
+
     fn dod<S: SubGraph>(&self, subgraph: &S) -> i32 {
         let mut dod: i32 = 4 * self.n_loops(subgraph) as i32;
         // println!("nloops: {}", dod / 4);
@@ -912,36 +972,93 @@ pub struct Approximation {
     dod: i32,
     lmb: LoopMomentumBasis,
     pub local_4d: ApproxOp,
-    pub local_3d: ApproxOp,      //3d denoms
+    pub local_3d: CFFapprox,     //3d denoms
     pub integrated_4d: ApproxOp, //4d
     pub simple_approx: Option<SimpleApprox>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum CFFapprox {
+    NotComputed,
+    Dependent { sign: Sign, t_arg: IntegrandExpr },
+}
+
+impl CFFapprox {
+    pub fn expr(&self) -> Option<(Atom, Sign)> {
+        match self {
+            CFFapprox::NotComputed => None,
+            CFFapprox::Dependent { sign, t_arg } => Some((t_arg.integrand.clone(), *sign)),
+        }
+    }
+    pub fn dependent<E, V, S: SubGraph, SS: SubGraph, OID: OrientationID, O: GraphOrientation>(
+        graph: &HedgeGraph<E, V>,
+        to_contract: &SS,
+        amplitude_subgraph: &S,
+        canonize_esurface: &Option<ShiftRewrite>,
+        orientations: &TiVec<OID, O>,
+        cut_edges: &[EdgeIndex],
+    ) -> CFFapprox {
+        let mut cff_sum = Atom::Zero;
+
+        let mut contract_edges = Vec::new();
+
+        for (e, eid, _) in graph.iter_edges_of(to_contract) {
+            if e.is_paired() {
+                contract_edges.push(eid);
+            }
+        }
+
+        for (oid, o) in orientations.iter_enumerated() {
+            cff_sum += o.orientation_delta()
+                * generate_uv_cff(
+                    graph,
+                    amplitude_subgraph,
+                    canonize_esurface,
+                    &contract_edges,
+                    o.orientation(),
+                    cut_edges,
+                )
+                .unwrap()
+        }
+        CFFapprox::Dependent {
+            sign: Sign::Positive,
+            t_arg: IntegrandExpr { integrand: cff_sum },
+        }
+    }
+    pub fn root<E, V, S: SubGraph, OID: OrientationID, O: GraphOrientation>(
+        graph: &HedgeGraph<E, V>,
+        amplitude_subgraph: &S,
+        canonize_esurface: &Option<ShiftRewrite>,
+        orientations: &TiVec<OID, O>,
+        cut_edges: &[EdgeIndex],
+    ) -> CFFapprox {
+        Self::dependent(
+            graph,
+            &graph.empty_subgraph::<BitVec>(),
+            amplitude_subgraph,
+            canonize_esurface,
+            orientations,
+            cut_edges,
+        )
+    }
+}
 impl Approximation {
-    pub fn root<E, V, S: SubGraph>(
+    pub fn root<E, V, S: SubGraph, OID: OrientationID, O: GraphOrientation>(
         &mut self,
         graph: &HedgeGraph<E, V>,
         amplitude_subgraph: &S,
         canonize_esurface: &Option<ShiftRewrite>,
-        orientation: &OrientationData,
+        orientations: &TiVec<OID, O>,
         cut_edges: &[EdgeIndex],
     ) {
         self.local_4d = ApproxOp::Root;
-        self.local_3d = ApproxOp::Dependent {
-            sign: Sign::Positive,
-            t_arg: IntegrandExpr {
-                integrand: generate_uv_cff(
-                    graph,
-                    amplitude_subgraph,
-                    canonize_esurface,
-                    &[],
-                    &orientation.orientation,
-                    cut_edges,
-                )
-                .unwrap(),
-            },
-            subgraph: graph.empty_subgraph(),
-        };
+        self.local_3d = CFFapprox::root(
+            graph,
+            amplitude_subgraph,
+            canonize_esurface,
+            orientations,
+            cut_edges,
+        );
         self.integrated_4d = ApproxOp::Root;
     }
     pub fn simplify_notation(expr: &Atom) -> Atom {
@@ -970,7 +1087,7 @@ impl Approximation {
             subgraph: spinney,
             lmb,
             simple_approx: None,
-            local_3d: ApproxOp::NotComputed,
+            local_3d: CFFapprox::NotComputed,
             local_4d: ApproxOp::NotComputed,
             integrated_4d: ApproxOp::NotComputed,
         }
@@ -988,15 +1105,21 @@ impl Approximation {
             .dependent(self.subgraph.clone())
     }
 
-    pub fn local_4d(&self, dependent: &Self, graph: &UVGraph) -> ApproxOp {
+    pub fn local_4d<E: UVE, V, G: UltravioletGraph + AsRef<HedgeGraph<E, V>>, S: SubGraph>(
+        &self,
+        dependent: &Self,
+        uv_graph: &G,
+        amplitude_subgraph: &S,
+    ) -> ApproxOp {
+        let graph = uv_graph.as_ref();
         let reduced = self.subgraph.subtract(&dependent.subgraph);
 
         let Some((inner_t, sign)) = dependent.local_4d.expr() else {
             return ApproxOp::NotComputed;
         };
-        let t_arg = IntegrandExpr::from_subgraph(&reduced, graph);
+        let t_arg = uv_graph.numerator(&reduced) / uv_graph.denominator(&reduced);
 
-        let mut atomarg = t_arg.integrand * inner_t;
+        let mut atomarg = t_arg * inner_t;
 
         // only apply replacements for edges in the reduced graph
         let mom_reps = graph.uv_wrapped_replacement(&reduced, &self.lmb, &[W_.x___]);
@@ -1032,7 +1155,7 @@ impl Approximation {
 
         for (p, _, e) in graph.iter_edges_of(&self.subgraph) {
             if p.is_paired() {
-                let e_mass = parse!(&e.data.particle.mass.name);
+                let e_mass = e.data.mass_atom();
                 masses.insert(e_mass);
             }
         }
@@ -1243,28 +1366,83 @@ impl Approximation {
         }
     }
 
-    pub fn compute(&mut self, dependent: &Self, orientation: &OrientationData, graph: &UVGraph) {
-        self.local_3d = self.local_3d(dependent, orientation, graph);
-        self.local_4d = self.local_4d(dependent, graph);
-        self.integrated_4d = self.integrated_4d(graph);
+    pub fn compute<E: UVE, V, G: UltravioletGraph + AsRef<HedgeGraph<E, V>>, S: SubGraph>(
+        &mut self,
+        graph: &G,
+        amplitude_subgraph: &S,
+        dependent: &Self,
+    ) {
+        self.local_4d = self.local_4d(dependent, graph, amplitude_subgraph);
+        self.integrated_4d = self.integrated_4d(dependent, graph, amplitude_subgraph);
     }
 
-    pub fn integrated_4d(&self, graph: &UVGraph) -> ApproxOp {
-        ApproxOp::NotComputed
+    pub fn compute_3d<
+        E: UVE,
+        V,
+        G: UltravioletGraph + AsRef<HedgeGraph<E, V>>,
+        S: SubGraph,
+        OID: OrientationID,
+        O: GraphOrientation,
+    >(
+        &mut self,
+        graph: &G,
+        amplitude_subgraph: &S,
+        canonize_esurface: &Option<ShiftRewrite>,
+        orientations: &TiVec<OID, O>,
+        cut_edges: &[EdgeIndex],
+        dependent: &Self,
+    ) {
+        let Some((cff, sign)) = dependent.local_3d.expr() else {
+            return;
+        };
+        let Some((t4, _)) = dependent.integrated_4d.expr() else {
+            return;
+        };
+        let CFFapprox::Dependent { t_arg, .. } = CFFapprox::dependent(
+            graph.as_ref(),
+            &dependent.subgraph,
+            amplitude_subgraph,
+            canonize_esurface,
+            orientations,
+            cut_edges,
+        ) else {
+            return;
+        };
+
+        let mut sum_3d = Atom::Zero;
+
+        sum_3d += self.local_3d(dependent, graph, cff);
+        sum_3d += self.local_3d(dependent, graph, t4 * t_arg.integrand);
+
+        self.local_3d = CFFapprox::Dependent {
+            sign: -sign,
+            t_arg: IntegrandExpr { integrand: sum_3d },
+        }
     }
 
-    pub fn local_3d(
+    pub fn integrated_4d<E: UVE, V, G: UltravioletGraph + AsRef<HedgeGraph<E, V>>, S: SubGraph>(
         &self,
         dependent: &Self,
-        orientation: &OrientationData,
-        graph: &UVGraph,
+        graph: &G,
+        amplitude_subgraph: &S,
     ) -> ApproxOp {
-        let reduced = self.subgraph.subtract(&dependent.subgraph);
+        ApproxOp::Dependent {
+            sign: Sign::Positive,
+            t_arg: IntegrandExpr {
+                integrand: Atom::Zero,
+            },
+            subgraph: graph.as_ref().empty_subgraph(),
+        }
+    }
 
-        let Some((inner_t, sign)) = dependent.local_3d.expr() else {
-            return ApproxOp::NotComputed;
-        };
-        let mut cff = inner_t;
+    pub fn local_3d<E: UVE, V, G: UltravioletGraph + AsRef<HedgeGraph<E, V>>>(
+        &self,
+        dependent: &Self,
+        uv_graph: &G,
+        mut cff: Atom,
+    ) -> Atom {
+        let graph = uv_graph.as_ref();
+        let reduced = self.subgraph.subtract(&dependent.subgraph);
 
         //println!("CFF: {}", cff);
 
@@ -1277,7 +1455,7 @@ impl Approximation {
                     .replace(function!(GS.energy, eid))
                     .with(function!(GS.ose, eid));
 
-                let e_mass = parse!(&e.data.particle.mass.name);
+                let e_mass = e.data.mass_atom();
                 cff = cff.replace(function!(GS.ose, eid)).with(
                     function!(
                         GS.ose,
@@ -1295,7 +1473,7 @@ impl Approximation {
             }
         }
 
-        let mut atomarg = cff * IntegrandExpr::numerator_only_subgraph(&reduced, graph).integrand;
+        let mut atomarg = cff * uv_graph.numerator(&reduced);
 
         // println!(
         //     "Expand-prerep {} with dod={} in {:?}",
@@ -1306,14 +1484,14 @@ impl Approximation {
         for (p, eid, e) in graph.iter_edges_of(&self.subgraph) {
             let eidc = usize::from(eid) as i64;
             if p.is_paired() {
-                let e_mass = parse!(&e.data.particle.mass.name);
-                let orientation = orientation.orientation.clone();
+                let e_mass = e.data.mass_atom();
+
                 atomarg = atomarg
                     .replace(function!(GS.emr_mom, eidc, W_.x___))
                     .with_map(move |m| {
                         let index = m.get(W_.x___).unwrap().to_atom();
 
-                        let sign = SignOrZero::from(orientation[eid].clone()) * 1;
+                        let sign = sign_atom(eid);
 
                         function!(
                             GS.ose,
@@ -1412,9 +1590,10 @@ impl Approximation {
             .repeat()
             .with(function!(MS.dot, W_.x_, W_.y_) * GS.rescale);
 
-        atomarg = (atomarg * Atom::var(GS.rescale).npow(3 * graph.n_loops(&self.subgraph) as i64))
-            .replace(GS.rescale)
-            .with(Atom::num(1) / GS.rescale);
+        atomarg = (atomarg
+            * Atom::var(GS.rescale).npow(3 * uv_graph.n_loops(&self.subgraph) as i64))
+        .replace(GS.rescale)
+        .with(Atom::num(1) / GS.rescale);
 
         //println!("atomarg:{}", atomarg);
 
@@ -1460,11 +1639,7 @@ impl Approximation {
 
         //println!("Expanded: {:>}", a.expand());
 
-        ApproxOp::Dependent {
-            t_arg: IntegrandExpr { integrand: a },
-            sign: -sign,
-            subgraph: reduced,
-        }
+        a
     }
 
     /// Get final expression in the forest sum
@@ -1524,9 +1699,10 @@ impl Approximation {
         orientation: &OrientationData,
     ) -> Option<Atom> {
         let (t, s) = self.local_3d.expr()?;
+
         let reduced = amplitude.included().subtract(&self.subgraph.included());
 
-        let mut cff = t;
+        let mut cff = orientation.select(t);
 
         for (p, eid, e) in graph.iter_edges_of(&reduced) {
             let eid = usize::from(eid) as i64;
@@ -1654,33 +1830,6 @@ impl ApproxOp {
         })
     }
 
-    pub fn cff_union(dependent: &[&Approximation]) -> Option<Self> {
-        let mut t_args = vec![];
-        let mut subgraphs = vec![];
-
-        let mut final_sign = Sign::Positive;
-        for d in dependent {
-            match &d.local_3d {
-                ApproxOp::Dependent {
-                    t_arg,
-                    sign,
-                    subgraph,
-                } => {
-                    t_args.push(t_arg.clone());
-                    final_sign = final_sign * *sign;
-                    subgraphs.push(subgraph.clone())
-                }
-                _ => return None,
-            }
-        }
-
-        Some(Self::Union {
-            t_args,
-            sign: final_sign,
-            subgraphs,
-        })
-    }
-
     pub fn is_computed(&self) -> bool {
         match self {
             ApproxOp::NotComputed => false,
@@ -1698,12 +1847,18 @@ impl Forest {
         self.dag.nodes.len()
     }
 
-    pub fn compute<S: SubGraph>(
+    pub fn compute<
+        E: UVE,
+        V,
+        G: UltravioletGraph + AsRef<HedgeGraph<E, V>>,
+        S: SubGraph,
+        OID: OrientationID,
+        O: GraphOrientation,
+    >(
         &mut self,
-        graph: &UVGraph,
+        graph: &G,
         amplitude_subgraph: &S,
-
-        orientation: &OrientationData,
+        orientations: &TiVec<OID, O>,
         canonize_esurface: &Option<ShiftRewrite>,
         cut_edges: &[EdgeIndex],
     ) {
@@ -1713,10 +1868,10 @@ impl Forest {
             match self.dag.nodes[n].parents.len() {
                 0 => {
                     self.dag.nodes[n].data.root(
-                        graph,
+                        graph.as_ref(),
                         amplitude_subgraph,
                         canonize_esurface,
-                        orientation,
+                        orientations,
                         cut_edges,
                     );
                 }
@@ -1726,7 +1881,17 @@ impl Forest {
                         .nodes
                         .get_disjoint_mut([n, self.dag.nodes[n].parents[0]])
                         .unwrap();
-                    current.data.compute(&parent.data, orientation, graph);
+                    current
+                        .data
+                        .compute(graph, amplitude_subgraph, &parent.data);
+                    current.data.compute_3d(
+                        graph,
+                        amplitude_subgraph,
+                        canonize_esurface,
+                        orientations,
+                        cut_edges,
+                        &parent.data,
+                    );
                 }
                 _ => {
                     let (local_4d, simple, local_3d) = {
@@ -1737,15 +1902,17 @@ impl Forest {
                         let mut dep_vec: Vec<&Approximation> = Vec::new();
                         dep_vec.push(dependents.next().unwrap());
 
+                        let Some((mut approx, _)) = dep_vec[0].local_3d.expr() else {
+                            panic!("local 3d not computed for parents")
+                        };
+
                         let mut iterative_approx = dep_vec[0].clone();
 
                         for p in dependents {
                             dep_vec.push(p);
-                            let approx =
-                                current.data.local_3d(&iterative_approx, orientation, graph);
+                            approx = current.data.local_3d(&iterative_approx, graph, approx);
 
                             iterative_approx = p.clone();
-                            iterative_approx.local_3d = approx;
                         }
                         (
                             ApproxOp::union(&dep_vec).unwrap(),
