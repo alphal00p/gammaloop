@@ -3,6 +3,7 @@ use crate::momentum_sample::{ExternalFourMomenta, ExternalIndex, LoopMomenta};
 use crate::new_gammaloop_integrand::GenericEvaluatorFloat;
 use crate::numerator::NumeratorEvaluateFloat;
 use crate::signature::{ExternalSignature, LoopSignature};
+use crate::symbolica_ext::CallSymbol;
 use crate::SamplingSettings;
 use crate::{ParameterizationMapping, ParameterizationMode, MAX_LOOP};
 use crate::{ParameterizationSettings, GAMMALOOP_NAMESPACE};
@@ -29,7 +30,7 @@ use spenso::structure::TensorStructure;
 use spenso::tensors::parametric::to_param::ToAtom;
 use spenso::tensors::parametric::MixedTensor;
 use spenso_hep_lib::weyl;
-use symbolica::atom::Symbol;
+use symbolica::atom::{FunctionBuilder, Symbol};
 use symbolica::coefficient::Coefficient;
 use symbolica::domains::float::{
     ConstructibleFloat, NumericalFloatLike, RealNumberLike, SingleFloat,
@@ -3373,6 +3374,8 @@ pub struct GammaloopSymbols {
     pub rescale_star: Symbol,
     pub pi: Symbol,
     pub m_uv: Symbol,
+    pub sign: Symbol,
+    pub sign_delta: Symbol,
     pub emr_mom: Symbol,
     pub emr_vec: Symbol,
     pub dot: Symbol,
@@ -3477,6 +3480,8 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
     rescale_star: symbol!("t⃰"),
     hfunction: symbol!("h"),
     deta: symbol!("∇η"),
+    sign: symbol!("σ"),
+    sign_delta: symbol!("delta_σ"),
     spensocind: symbol!("spenso::cind"),
     m_uv: symbol!("mUV"),
     top: symbol!("Top"),
@@ -3500,6 +3505,12 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
     epsilonbar: symbol!("ϵbar"),
     coeff: symbol!("coef"),
 });
+
+pub fn sign_atom(eid: EdgeIndex) -> Atom {
+    FunctionBuilder::new(symbol!("σ"))
+        .add_arg(usize::from(eid) as i64)
+        .finish()
+}
 
 /// Checks if two lists are permutations of eachother, and establish a map between indices
 pub fn is_permutation<T: PartialEq>(left: &[T], right: &[T]) -> Option<PermutationMap> {

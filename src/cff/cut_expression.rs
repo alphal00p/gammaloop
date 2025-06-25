@@ -10,7 +10,7 @@ use typed_index_collections::TiVec;
 use crate::new_cs::CutId;
 
 use super::{
-    expression::{AmplitudeOrientationID, CFFExpression},
+    expression::{AmplitudeOrientationID, CFFExpression, GraphOrientation},
     generation::SurfaceCache,
     surface::HybridSurfaceID,
     tree::Tree,
@@ -25,6 +25,12 @@ pub struct SuperGraphOrientationID(pub usize);
 pub struct CutOrientationData {
     pub orientation: HedgeVec<Orientation>,
     pub cuts: Vec<CutId>,
+}
+
+impl GraphOrientation for CutOrientationData {
+    fn orientation(&self) -> &HedgeVec<Orientation> {
+        &self.orientation
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode)]
