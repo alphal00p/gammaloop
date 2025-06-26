@@ -690,18 +690,6 @@ fn tri_box_tri_LU() {
         .unwrap()
         .orientation_data[orientation_id];
 
-    for (orientation_id, orientation_data) in cs
-        .derived_data
-        .cff_expression
-        .as_ref()
-        .unwrap()
-        .orientation_data
-        .iter_enumerated()
-    {
-        println!("orientation_id: {}", orientation_id.0);
-        println!("cuts: {:?}", orientation_data.cuts);
-    }
-
     let mut cut_atoms: TiVec<CutId, Atom> = TiVec::new();
 
     for (id, c) in cs.cuts.iter_enumerated() {
@@ -759,7 +747,6 @@ fn tri_box_tri_LU() {
         let mut left_wood = super_uv_graph.wood(&c.left);
 
         let mut left_forest = left_wood.unfold(&super_uv_graph, &super_uv_graph.lmb);
-        // left_forest.compute(&super_uv_graph);
         left_forest.compute(
             &super_uv_graph,
             &c.left,
@@ -771,7 +758,6 @@ fn tri_box_tri_LU() {
         let mut right_forest = super_uv_graph
             .wood(&c.right)
             .unfold(&super_uv_graph, &super_uv_graph.lmb);
-        // right_forest.compute(&super_uv_graph);
         right_forest.compute(
             &super_uv_graph,
             &c.right,
@@ -784,11 +770,14 @@ fn tri_box_tri_LU() {
 
         println!("//right: \n{}", super_uv_graph.dot(&c.right));
         println!("Computing left amplitude");
+
         let Some((left_orientation, right_orientation)) =
             cff_cut_expr.orientation_map.get_lr_or(orientation_id)
         else {
-            panic!("Orientation not found");
+            cut_atoms.push(Atom::Zero);
+            continue;
         };
+
         let left_orientation_data =
             &cff_cut_expr.left_amplitude.orientations[left_orientation].data;
         let right_orientation_data =
@@ -984,9 +973,15 @@ fn tri_box_tri_LU() {
             .replace(function!(GS.ose, W_.x_, W_.y_, W_.z_, W_.prop_))
             .with(function!(GS.ose, 100, W_.prop_)) // do in two steps to get slightly nicer output
             .replace(function!(GS.ose, 100, W_.prop_))
-            .with(W_.prop_)
+            .with(Atom::var(W_.prop_).sqrt().npow(2))
             .replace(function!(GS.ose, 100, W_.prop_, W_.x_))
-            .with(W_.prop_); // it could be that GS.ose(mu)^1/2 fused into GS.ose(mu)^1 which leaves a fake dummy index
+            .with(Atom::var(W_.prop_).sqrt().npow(2)); // it could be that GS.ose(mu)^1/2 fused into GS.ose(mu)^1 which leaves a fake dummy index
+
+        // simplify nested exponents
+        cut_res = cut_res
+            .replace(Atom::var(W_.x_).pow(Atom::var(W_.a_)).pow(Atom::var(W_.b_)))
+            .repeat()
+            .with(Atom::var(W_.x_).pow(Atom::var(W_.a_) * Atom::var(W_.b_)));
 
         cut_res = cut_res
             .replace(function!(GS.external_mom, W_.x_, W_.y_))
@@ -994,11 +989,18 @@ fn tri_box_tri_LU() {
 
         println!("UV test start");
 
+        // let lmbs = super_uv_graph.generate_loop_momentum_bases(&c.right);
+
+        // for l in lmbs {
+        //     let _limits = super_uv_graph.all_limits(&c.right, &cut_res, symbol!("t"), &l);
+        // }
+
         let t = symbol!("t");
         let series = if edges_in_cut == ["e3", "e4"] {
             Atom::var(t).npow(3)
                 * cut_res
-                    .expand()
+                    .replace(function!(MS.dot, W_.x___))
+                    .with(-function!(MS.dot, W_.x___)) // make dot products positive
                     .replace(parse!("Q3(7)"))
                     .with(parse!("t*Q3(7)"))
                     .replace(parse!("Q3(6)"))
@@ -1022,7 +1024,8 @@ fn tri_box_tri_LU() {
         } else if edges_in_cut == ["e1", "e2", "e3"] {
             Atom::var(t).npow(3)
                 * cut_res
-                    .expand()
+                    .replace(function!(MS.dot, W_.x___))
+                    .with(-function!(MS.dot, W_.x___)) // make dot products positive
                     .replace(parse!("Q3(7)"))
                     .with(parse!("t*Q3(7)"))
                     .replace(parse!("Q3(6)"))
@@ -1046,7 +1049,8 @@ fn tri_box_tri_LU() {
         } else if edges_in_cut == ["e0", "e1"] {
             Atom::var(t).npow(3)
                 * cut_res
-                    .expand()
+                    .replace(function!(MS.dot, W_.x___))
+                    .with(-function!(MS.dot, W_.x___)) // make dot products positive
                     .replace(parse!("Q3(7)"))
                     .with(parse!("t*Q3(7)"))
                     .replace(parse!("Q3(6)"))
@@ -1075,14 +1079,7 @@ fn tri_box_tri_LU() {
             .series(t, Atom::Zero, 0.into(), true)
             .unwrap();
 
-        let r = s
-            .to_atom()
-            .expand()
-            .replace(Atom::var(W_.x_).sqrt())
-            .with(Atom::var(W_.x_).npow((1, 2)))
-            .replace(function!(MS.dot, W_.x___))
-            .with(-function!(MS.dot, W_.x___)) // make dot products positive
-            .expand(); // help Symbolica with cancellations
+        let r = s.to_atom().expand(); // help Symbolica with cancellations
 
         let mut r2 = Atom::new();
         for x in r.terms() {
@@ -1094,7 +1091,8 @@ fn tri_box_tri_LU() {
         if edges_in_cut == ["e0", "e1"] {
             let series = Atom::var(t).npow(6)
                 * cut_res
-                    .expand()
+                    .replace(function!(MS.dot, W_.x___))
+                    .with(-function!(MS.dot, W_.x___)) // make dot products positive
                     .replace(parse!("Q3(2)"))
                     .with(parse!("Q3(4)-Q3(1)"))
                     .replace(parse!("Q3(3)"))
@@ -1126,14 +1124,7 @@ fn tri_box_tri_LU() {
                 .series(t, Atom::Zero, 0.into(), true)
                 .unwrap();
 
-            let r = s
-                .to_atom()
-                .expand()
-                .replace(Atom::var(W_.x_).sqrt())
-                .with(Atom::var(W_.x_).npow((1, 2)))
-                .replace(function!(MS.dot, W_.x___))
-                .with(-function!(MS.dot, W_.x___)) // make dot products positive
-                .expand(); // help Symbolica with cancellations
+            let r = s.to_atom().expand(); // help Symbolica with cancellations
 
             let mut r2 = Atom::new();
             for x in r.terms() {
@@ -1220,10 +1211,13 @@ fn tri_box_tri_LU() {
                 .with(function!(GS.external_mom, edge_id, W_.x_));
         }
 
+        //println!("CR {:>}", cut_res);
+
         cut_atoms.push(cut_res);
     }
 
     println!("Done generation");
+    return;
 
     cs.derived_data.bare_cff_evaluators = None;
     cs.build_cut_evaluators(&model, Some(cut_atoms));
@@ -1783,25 +1777,11 @@ fn double_triangle_LU() {
                 .replace(function!(GS.ose, 100, W_.prop_))
                 .with(W_.prop_);
 
-            let mut cr = Atom::Zero;
-            let mut counter = 0;
-            for x in cut_res.expand().terms() {
-                cr += function!(GS.dim, counter) * x;
-                counter += 1;
-            }
-
-            println!("CUTRES {:>}", cr);
-
             if super_uv_graph.dod(&c.right) >= 0 {
-                let limits = super_uv_graph.all_limits(
-                    &c.right,
-                    &cut_res,
-                    symbol!("t"),
-                    &super_uv_graph.lmb,
-                );
+                let lmbs = super_uv_graph.generate_loop_momentum_bases(&c.right);
 
-                for limit in limits {
-                    println!("Limit: {:>}", limit);
+                for l in lmbs {
+                    let _limits = super_uv_graph.all_limits(&c.right, &cut_res, symbol!("t"), &l);
                 }
 
                 // println!("Correct UV cancellation if 0: {:>}", r);
@@ -1983,16 +1963,14 @@ fn double_triangle_LU() {
                 .replace(parse!("MH"))
                 .with(Atom::new());
 
-            let cut_res = cut_res.expand();
-
-            println!("Cut {} result: {:>}", id, cut_res);
+            //println!("Cut {} result: {:>}", id, cut_res);
 
             cut_atoms.push(cut_res);
-            return;
         } else {
             cut_atoms.push(Atom::new());
         }
     }
+    return;
 
     println!("Done generation");
     cs.derived_data.bare_cff_evaluators = None;
@@ -2029,6 +2007,8 @@ fn double_triangle_LU() {
 
     //println!("Final result: {:>}", sum.expand());
 }
+
+/*
 
 #[test]
 fn nested_bubble_soft_ct() {
@@ -2776,6 +2756,8 @@ fn disconnect_forest_scalar() {
         println!("{} {}", r, r.abs().log10());
     }
 }
+
+    */
 
 #[test]
 #[allow(unused)]

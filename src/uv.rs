@@ -15,7 +15,7 @@ use crate::{
         },
         generation::{generate_uv_cff, ShiftRewrite},
     },
-    cross_section::SuperGraph,
+    cross_section::{SerializableCrossSection, SuperGraph},
     graph::{Graph, VertexInfo},
     model::ArcParticle,
     momentum::Sign,
@@ -24,7 +24,7 @@ use crate::{
     symbolica_ext::CallSymbol,
     utils::{sign_atom, GS, W_},
 };
-use ahash::AHashSet;
+use ahash::{AHashSet, HashMap};
 use bitvec::vec::BitVec;
 use eyre::eyre;
 use idenso::metric::{MetricSimplifier, MS};
@@ -44,7 +44,7 @@ use spenso::{
 };
 use symbolica::{
     atom::{Atom, AtomCore, FunctionBuilder, Symbol},
-    domains::{float::Complex, integer::Integer, rational::Rational},
+    domains::{atom, float::Complex, integer::Integer, rational::Rational},
     function,
     id::Replacement,
     parse,
@@ -64,6 +64,10 @@ use linnet::half_edge::{
     HedgeGraph,
 };
 use typed_index_collections::TiVec;
+use vakint::{
+    vakint_parse, vakint_symbol, EvaluationOrder, LoopNormalizationFactor, Vakint,
+    VakintExpression, VakintSettings,
+};
 // use vakint::{EvaluationOrder, LoopNormalizationFactor, Vakint, VakintSettings};
 
 use crate::{
@@ -451,9 +455,9 @@ pub trait UltravioletGraph: LMBext {
     {
         let mom_reps = self.uv_spatial_wrapped_replacement(subgraph, lmb, &[W_.x___]);
 
-        for x in &mom_reps {
-            println!("LMB replacement: {x}");
-        }
+        // for x in &mom_reps {
+        //     println!("LMB replacement: {x}");
+        // }
 
         let energy_reps = self.replacement_impl::<_, Atom>(
             |e, a, b| {
@@ -472,9 +476,9 @@ pub trait UltravioletGraph: LMBext {
             true,
         );
 
-        for e in &energy_reps {
-            println!("Energy replacement: {e}");
-        }
+        // for e in &energy_reps {
+        //     println!("Energy replacement: {e}");
+        // }
 
         let q3_reps = self.replacement_impl::<_, Atom>(
             |e, a, b| {
@@ -493,17 +497,19 @@ pub trait UltravioletGraph: LMBext {
             true,
         );
 
-        for e in &q3_reps {
-            println!("Q3 replacement: {e}");
-        }
+        // for e in &q3_reps {
+        //     println!("Q3 replacement: {e}");
+        // }
 
         let expr = expr
             .replace_multiple(&mom_reps)
             .replace_multiple(&energy_reps)
             .replace_multiple(&q3_reps);
-        let loops = PowersetIterator::new(lmb.loop_edges.len() as u8);
+        let mut loops = PowersetIterator::new(lmb.loop_edges.len() as u8).into_iter();
 
         let mut limits = Vec::new();
+
+        loops.next();
 
         for ls in loops {
             let mut expr = expr.clone();
@@ -517,19 +523,30 @@ pub trait UltravioletGraph: LMBext {
             }
 
             expr = expr
+                .replace(function!(MS.dot, W_.x___))
+                .with(-function!(MS.dot, W_.x___)) // make dot products positive
                 .replace(function!(MS.dot, W_.x_ / expansion, W_.y_))
                 .repeat()
                 .with(function!(MS.dot, W_.x_, W_.y_) / expansion);
 
-            expr = expr
-                .series(expansion, Atom::Zero, 0.into(), true)
-                .unwrap()
-                .to_atom()
-                .replace(function!(MS.dot, W_.x___))
-                .with(-function!(MS.dot, W_.x___)) // make dot products positive
-                .expand();
+            let series = expr.series(expansion, Atom::Zero, 0.into(), true).unwrap();
 
-            println!("LIMIT {:?}: {:>}", ls.iter_ones().collect::<Vec<_>>(), expr);
+            expr = series.to_atom().expand();
+
+            let l = expr.coefficient_list::<i8>(&[Atom::var(expansion)]);
+
+            println!(
+                "LIMIT {:?}:",
+                ls.iter_ones()
+                    .map(|l| usize::from(lmb.loop_edges[LoopIndex(l)]) as i64)
+                    .collect::<Vec<_>>(),
+            );
+            if l.is_empty() {
+                println!("\tFull cancellation to order 1");
+            }
+            for (t, a) in l {
+                println!("\t{}: {}", t, a);
+            }
 
             limits.push(expr);
         }
@@ -971,7 +988,6 @@ pub struct Approximation {
     subgraph: InternalSubGraph,
     dod: i32,
     lmb: LoopMomentumBasis,
-    pub local_4d: ApproxOp,
     pub local_3d: CFFapprox,     //3d denoms
     pub integrated_4d: ApproxOp, //4d
     pub simple_approx: Option<SimpleApprox>,
@@ -1007,6 +1023,8 @@ impl CFFapprox {
                 contract_edges.push(eid);
             }
         }
+
+        println!("{:?}", contract_edges);
 
         for (oid, o) in orientations.iter_enumerated() {
             cff_sum += o.orientation_delta()
@@ -1051,7 +1069,6 @@ impl Approximation {
         orientations: &TiVec<OID, O>,
         cut_edges: &[EdgeIndex],
     ) {
-        self.local_4d = ApproxOp::Root;
         self.local_3d = CFFapprox::root(
             graph,
             amplitude_subgraph,
@@ -1088,7 +1105,6 @@ impl Approximation {
             lmb,
             simple_approx: None,
             local_3d: CFFapprox::NotComputed,
-            local_4d: ApproxOp::NotComputed,
             integrated_4d: ApproxOp::NotComputed,
         }
     }
@@ -1105,7 +1121,7 @@ impl Approximation {
             .dependent(self.subgraph.clone())
     }
 
-    pub fn local_4d<E: UVE, V, G: UltravioletGraph + AsRef<HedgeGraph<E, V>>, S: SubGraph>(
+    pub fn integrated_4d<E: UVE, V, G: UltravioletGraph + AsRef<HedgeGraph<E, V>>, S: SubGraph>(
         &self,
         dependent: &Self,
         uv_graph: &G,
@@ -1114,7 +1130,7 @@ impl Approximation {
         let graph = uv_graph.as_ref();
         let reduced = self.subgraph.subtract(&dependent.subgraph);
 
-        let Some((inner_t, sign)) = dependent.local_4d.expr() else {
+        let Some((inner_t, sign)) = dependent.integrated_4d.expr() else {
             return ApproxOp::NotComputed;
         };
         let t_arg = uv_graph.numerator(&reduced) / uv_graph.denominator(&reduced);
@@ -1228,136 +1244,182 @@ impl Approximation {
 
         println!("Expanded: {:>}", a.expand());
 
-        /*let mut integrand_vakint = a.expand();
+        let mut integrand_vakint = a.expand();
         let mut propagator_id = 1;
+
+        let vk_prop = vakint_symbol!("prop");
+        let vk_edge = vakint_symbol!("edge");
+        let vk_mom = vakint_symbol!("k");
+        let vk_topo = vakint_symbol!("topo");
+
         for (pair, index, _data) in graph.iter_edges_of(&reduced) {
-            // FIXME: not a good way to check for internal edges?
             if let HedgePair::Paired { source, sink } = pair {
-                integrand_vakint *= vakint_parse!(format!(
-                    "prop({},edge({},{}),{},mUV,0)",
-                    propagator_id,
-                    usize::from(graph.node_id(source)),
-                    usize::from(graph.node_id(sink)),
-                    function!(GS.emr_mom, usize::from(index) as i64)
-                        .replace_multiple(mom_reps)
-                        .to_plain_string()
-                ))
-                .unwrap();
+                integrand_vakint = integrand_vakint
+                    .replace(function!(
+                        GS.den,
+                        usize::from(index) as i64,
+                        W_.mom_,
+                        W_.x___
+                    ))
+                    .with(function!(
+                        vk_prop,
+                        propagator_id,
+                        function!(
+                            vk_edge,
+                            usize::from(graph.node_id(source)) as i64,
+                            usize::from(graph.node_id(sink)) as i64
+                        ),
+                        W_.mom_,
+                        GS.m_uv,
+                        1
+                    ))
+                    .replace(function!(vk_prop, W_.x___, 1).pow(Atom::var(W_.e_)))
+                    .with(function!(vk_prop, W_.x___, -Atom::var(W_.e_)));
                 propagator_id += 1;
             }
         }
 
+        // shrink vertices of the subgraph
+        for (pair, _index, _data) in graph.iter_edges_of(&dependent.subgraph) {
+            if let HedgePair::Paired { source, sink } = pair {
+                integrand_vakint = integrand_vakint
+                    .replace(function!(
+                        vk_prop,
+                        W_.x_,
+                        function!(vk_edge, usize::from(graph.node_id(source)) as i64, W_.y_),
+                        W_.x___
+                    ))
+                    .with(function!(
+                        vk_prop,
+                        W_.x_,
+                        function!(vk_edge, usize::from(graph.node_id(sink)) as i64, W_.y_),
+                        W_.x___
+                    ))
+                    .replace(function!(
+                        vk_prop,
+                        W_.x_,
+                        function!(vk_edge, W_.y_, usize::from(graph.node_id(source)) as i64),
+                        W_.x___
+                    ))
+                    .with(function!(
+                        vk_prop,
+                        W_.x_,
+                        function!(vk_edge, W_.y_, usize::from(graph.node_id(sink)) as i64),
+                        W_.x___
+                    ));
+            }
+        }
+
+        // flip edges to positive momentum
+        // FIXME: how will this work for sums of momenta?
         integrand_vakint = integrand_vakint
-            .replace(function!(GS.emr_mom, GS.x__))
-            .with(function!(vakint_symbol!("k"), GS.x__))
-            .replace(function!(GS.loop_mom, GS.x__))
-            .with(function!(vakint_symbol!("k"), GS.x__))
-            .expand()
-            .replace(parse!("vk::prop(x_,y___,p_)*den(x_,z___)^n_").unwrap())
+            .replace(function!(
+                vk_prop,
+                W_.x_,
+                function!(vk_edge, W_.a_, W_.b_),
+                -Atom::var(W_.y_),
+                W_.e___
+            ))
             .repeat()
-            .with(parse!("vk::prop(x_,y___,p_-n_)").unwrap())
-            .replace(parse!("den(x___)").unwrap())
-            .with(Atom::num(1));
+            .with(function!(
+                vk_prop,
+                W_.x_,
+                function!(vk_edge, W_.b_, W_.a_),
+                W_.y_,
+                W_.e___
+            ));
 
-        let mut dummy_index = 1;
-        while let Some(r) = integrand_vakint
-            .replace(parse!("symbolica_community::dot(vk::k(x_),vk::k(y_))").unwrap())
-            .iter(parse!(format!("vk::k(x_,{0})*vk::k(x_,{0})", dummy_index)).unwrap())
-            .next()
-        {
-            integrand_vakint = r;
-            dummy_index += 1;
-        }
-
+        // fuse raised edges
+        // FIXME: leaves holes in propagator ids
         integrand_vakint = integrand_vakint
-            .replace(parse!("vk::prop(x__)").unwrap())
-            .with(parse!("vk::topo(vk::prop(x__))").unwrap())
-            .replace(parse!("vk::topo(x_)*vk::topo(y_)").unwrap())
-            .with(parse!("vk::topo(x_ * y_)").unwrap());
+            .replace(
+                function!(
+                    vk_prop,
+                    W_.x_,
+                    function!(vk_edge, W_.a_, W_.b_),
+                    W_.x___,
+                    W_.e_
+                ) * function!(
+                    vk_prop,
+                    W_.y_,
+                    function!(vk_edge, W_.b_, W_.c_),
+                    W_.x___,
+                    W_.f_
+                ),
+            )
+            .repeat()
+            .with(function!(
+                vk_prop,
+                W_.y_,
+                function!(vk_edge, W_.a_, W_.c_),
+                W_.x___,
+                W_.e_ + W_.f_
+            ));
 
-        // map loop momenta and external momenta
-        for (ei, e) in external_edges.iter().enumerate() {
+        // rewrite numerator
+        // linearize the numerator first
+        integrand_vakint = integrand_vakint
+            .replace(function!(GS.emr_mom, W_.prop_, W_.mom_, W_.x_))
+            .with(function!(MS.dot, W_.mom_, W_.x_))
+            .replace(function!(MS.dot, W_.mom_, W_.x_))
+            .with(function!(GS.emr_mom, W_.mom_, W_.x_));
+
+        for (i, l) in self.lmb.loop_edges.iter().enumerate() {
             integrand_vakint = integrand_vakint
-                .replace(parse!(format!("vk::k({},x__)", usize::from(*e))).unwrap())
-                .with(parse!(format!("vk::p({},x__)", ei)).unwrap());
+                .replace(function!(GS.emr_mom, usize::from(*l) as i64))
+                .with(function!(vk_mom, i as i64 + 1))
+                .replace(function!(
+                    GS.emr_mom,
+                    function!(vk_mom, i as i64 + 1),
+                    W_.x___
+                ))
+                .with(function!(vk_mom, i as i64 + 1, W_.x___));
         }
-        for (ei, e) in lmb.iter().enumerate() {
-            // TODO: check if e is in the reduced graph
-            // we need to rewrite loop momentum combinations to a new loop momentum
-            integrand_vakint = integrand_vakint
-                .replace(parse!(format!("vk::k({},x__)", usize::from(*e))).unwrap())
-                .with(parse!(format!("vk::k({},x__)", ei)).unwrap());
-        }
+
+        // collect the topology
+        integrand_vakint = integrand_vakint
+            .replace(function!(vk_prop, W_.x__))
+            .with(function!(vk_topo, function!(vk_prop, W_.x__)))
+            .replace(function!(vk_topo, W_.x_) * function!(vk_topo, W_.y_))
+            .repeat()
+            .with(function!(vk_topo, W_.x_ * W_.y_));
 
         println!("Integrand vakint: {}", integrand_vakint);
 
         let mut vakint_expr = VakintExpression::try_from(integrand_vakint.clone()).unwrap();
-        println!("\nVakint expression:\n{}", vakint_expr);*/
+        println!("\nVakint expression:\n{}", vakint_expr);
 
-        //vakint_expr.evaluate_integral(&VAKINT).unwrap();
+        let vakint = Vakint::new(Some(VakintSettings {
+            allow_unknown_integrals: false,
+            evaluation_order: EvaluationOrder::alphaloop_only(),
+            integral_normalization_factor: LoopNormalizationFactor::MSbar,
+            run_time_decimal_precision: 32,
+            ..VakintSettings::default()
+        }))
+        .unwrap();
+
+        //let test = vakint
+        //   .to_canonical(vakint_parse!("topo(prop(4,edge(3,4),-k(1)+k(2),mUV,1))*topo(prop(3,edge(3,4),k(1),mUV,3)*prop(5,edge(4,3),k(2),mUV,2))").unwrap().as_view(), true).unwrap();
+
+        let mut integral = vakint
+            .to_canonical(integrand_vakint.as_view(), true)
+            .unwrap();
+        integral = vakint.tensor_reduce(integral.as_view()).unwrap();
+        vakint_expr.evaluate_integral(&vakint).unwrap();
 
         // Convert the numerator of the first integral to a dot notation
-        /*vakint_expr.0[0].numerator =
+        vakint_expr.0[0].numerator =
             Vakint::convert_to_dot_notation(vakint_expr.0[0].numerator.as_view());
         println!("\nInput integral in dot notation:\n{}\n", vakint_expr);
 
-        //let integral = VAKINT.evaluate(integral.as_view()).unwrap();
-        //println!("Evaluated integral:\n{}\n", integral.clone());
-
-        // Set some value for the mass parameters
-        let params = VAKINT.params_from_f64(
-            &[("muvsq".into(), 3.0), ("mursq".into(), 5.0)]
-                .iter()
-                .cloned()
-                .collect(),
+        let numerical_partial_eval = Vakint::partial_numerical_evaluation(
+            &vakint.settings,
+            integral.as_view(),
+            &HashMap::default(),
+            &HashMap::default(),
+            None,
         );
-
-        // And for the external momenta part of the numerator
-        let externals = VAKINT.externals_from_f64(
-            &(1..=2)
-                .map(|i| {
-                    (
-                        i,
-                        (
-                            0.17 * ((i + 1) as f64),
-                            0.4 * ((i + 2) as f64),
-                            0.3 * ((i + 3) as f64),
-                            0.12 * ((i + 4) as f64),
-                        ),
-                    )
-                })
-                .collect(),
-        );
-
-        let (eval, error) = VAKINT
-            .numerical_evaluation(integral.as_view(), &params, Some(&externals))
-            .unwrap();
-        println!("Numerical evaluation:\n{}\n", eval);
-        let eval_atom = eval.to_atom(vakint_symbol!(VAKINT.settings.epsilon_symbol.clone()));
-        println!("Numerical evaluation as atom:\n{}\n", eval_atom);
-        #[rustfmt::skip]
-        let target_eval =  NumericalEvaluationResult::from_vec(
-        vec![
-                (-3, ( "0.0".into(),  "-10202.59860843888064555902993586".into()),),
-                (-2, ( "0.0".into(),  "62122.38565651740465978420334366".into()),),
-                (-1, ( "0.0".into(),  "-188670.2193437045050954664088623".into()),),
-                ( 0, ( "0.0".into(),  "148095.4883501202267659938351786".into()),),
-            ],
-            &VAKINT.settings);
-        let (matches, match_msg) = target_eval.does_approx_match(
-            &eval,
-            error.as_ref(),
-            10.0_f64.powi(-((VAKINT.settings.run_time_decimal_precision - 4) as i32)),
-            1.0,
-        );
-        if matches {
-            println!("Numerical evaluation matches target result.");
-        } else {
-            println!(
-                "Numerical evaluation does not match target result:\n{}",
-                match_msg
-            );
-        }*/
+        println!("Partial eval:\n{}\n", numerical_partial_eval);
 
         ApproxOp::Dependent {
             t_arg: IntegrandExpr { integrand: a },
@@ -1372,7 +1434,6 @@ impl Approximation {
         amplitude_subgraph: &S,
         dependent: &Self,
     ) {
-        self.local_4d = self.local_4d(dependent, graph, amplitude_subgraph);
         self.integrated_4d = self.integrated_4d(dependent, graph, amplitude_subgraph);
     }
 
@@ -1393,45 +1454,34 @@ impl Approximation {
         dependent: &Self,
     ) {
         let Some((cff, sign)) = dependent.local_3d.expr() else {
-            return;
+            panic!("Should have computed the dependent cff");
         };
         let Some((t4, _)) = dependent.integrated_4d.expr() else {
-            return;
+            panic!("Should have computed the dependent integrated 4d");
         };
-        let CFFapprox::Dependent { t_arg, .. } = CFFapprox::dependent(
-            graph.as_ref(),
-            &dependent.subgraph,
-            amplitude_subgraph,
-            canonize_esurface,
-            orientations,
-            cut_edges,
-        ) else {
-            return;
-        };
+        //println!("{}", graph.as_ref().dot(&dependent.subgraph));
+        //println!("{}", graph.as_ref().dot(amplitude_subgraph));
+        // let CFFapprox::Dependent { t_arg, .. } = CFFapprox::dependent(
+        //     graph.as_ref(),
+        //     &dependent.subgraph,
+        //     amplitude_subgraph,
+        //     canonize_esurface,
+        //     orientations,
+        //     cut_edges,
+        // ) else {
+        //     unreachable!()
+        // };
 
         let mut sum_3d = Atom::Zero;
 
+        println!("Integrated:{}", t4);
+
         sum_3d += self.local_3d(dependent, graph, cff);
-        sum_3d += self.local_3d(dependent, graph, t4 * t_arg.integrand);
+        //sum_3d += self.local_3d(dependent, graph, t4 * t_arg.integrand); // TODO: take finite part of t4
 
         self.local_3d = CFFapprox::Dependent {
             sign: -sign,
             t_arg: IntegrandExpr { integrand: sum_3d },
-        }
-    }
-
-    pub fn integrated_4d<E: UVE, V, G: UltravioletGraph + AsRef<HedgeGraph<E, V>>, S: SubGraph>(
-        &self,
-        dependent: &Self,
-        graph: &G,
-        amplitude_subgraph: &S,
-    ) -> ApproxOp {
-        ApproxOp::Dependent {
-            sign: Sign::Positive,
-            t_arg: IntegrandExpr {
-                integrand: Atom::Zero,
-            },
-            subgraph: graph.as_ref().empty_subgraph(),
         }
     }
 
@@ -1642,56 +1692,6 @@ impl Approximation {
         a
     }
 
-    /// Get final expression in the forest sum
-    pub fn unwrapped_expr(
-        &self,
-        graph: &UVGraph,
-        amplitude: &InternalSubGraph,
-    ) -> Option<SerializableAtom> {
-        let (t, s) = self.local_4d.expr()?;
-
-        let contracted =
-            s * IntegrandExpr::from_subgraph(&amplitude.subtract(&self.subgraph), graph).integrand;
-
-        // FIXME: we are likely mapping in too many momenta, only replace the contracted graph momenta
-        Some(
-            Self::simplify_notation(&(t * contracted))
-                .replace_multiple(&graph.lmb_replacement)
-                .into(),
-        )
-    }
-
-    pub fn final_expr<S: SubGraph<Base = BitVec>>(
-        &self,
-        graph: &UVGraph,
-        amplitude: &S,
-    ) -> Option<Atom> {
-        let (t, s) = self.local_4d.expr()?;
-
-        let reduced = amplitude.included().subtract(&self.subgraph.included());
-
-        let contracted = s * IntegrandExpr::from_subgraph(&reduced, graph).integrand;
-
-        let mut res = t * contracted;
-
-        // set the momenta flowing through the reduced graph edges to the identity wrt the supergraph
-        for (e, ei, _) in graph.iter_edges_of(&reduced) {
-            let edge_id = usize::from(ei) as i64;
-            if e.is_paired() {
-                res = res
-                    .replace(function!(GS.emr_mom, edge_id, W_.y_))
-                    .with(function!(
-                        GS.emr_mom,
-                        edge_id,
-                        function!(GS.emr_mom, edge_id),
-                        W_.y_
-                    ));
-            }
-        }
-
-        Some(res)
-    }
-
     pub fn final_cff<S: SubGraph<Base = BitVec>>(
         &self,
         graph: &UVGraph,
@@ -1809,7 +1809,7 @@ impl ApproxOp {
 
         let mut final_sign = Sign::Positive;
         for d in dependent {
-            match &d.local_4d {
+            match &d.integrated_4d {
                 ApproxOp::Dependent {
                     t_arg,
                     sign,
@@ -1881,6 +1881,8 @@ impl Forest {
                         .nodes
                         .get_disjoint_mut([n, self.dag.nodes[n].parents[0]])
                         .unwrap();
+
+                    assert!(matches!(parent.data.local_3d, CFFapprox::Dependent { .. }));
                     current
                         .data
                         .compute(graph, amplitude_subgraph, &parent.data);
@@ -1894,52 +1896,44 @@ impl Forest {
                     );
                 }
                 _ => {
-                    let (local_4d, simple, local_3d) = {
-                        let current = &self.dag.nodes[n];
-                        let mut dependents =
-                            current.parents.iter().map(|p| &self.dag.nodes[*p].data);
+                    unimplemented!("Union not implemented");
+                    // let (local_4d, simple, local_3d) = {
+                    //     let current = &self.dag.nodes[n];
+                    //     let mut dependents =
+                    //         current.parents.iter().map(|p| &self.dag.nodes[*p].data);
 
-                        let mut dep_vec: Vec<&Approximation> = Vec::new();
-                        dep_vec.push(dependents.next().unwrap());
+                    //     let mut dep_vec: Vec<&Approximation> = Vec::new();
+                    //     dep_vec.push(dependents.next().unwrap());
 
-                        let Some((mut approx, _)) = dep_vec[0].local_3d.expr() else {
-                            panic!("local 3d not computed for parents")
-                        };
+                    //     let Some((mut approx, _)) = dep_vec[0].local_3d.expr() else {
+                    //         panic!("local 3d not computed for parents")
+                    //     };
 
-                        let mut iterative_approx = dep_vec[0].clone();
+                    //     let mut iterative_approx = dep_vec[0].clone();
 
-                        for p in dependents {
-                            dep_vec.push(p);
-                            approx = current.data.local_3d(&iterative_approx, graph, approx);
+                    //     for p in dependents {
+                    //         dep_vec.push(p);
 
-                            iterative_approx = p.clone();
-                        }
-                        (
-                            ApproxOp::union(&dep_vec).unwrap(),
-                            SimpleApprox::union(
-                                self.dag.nodes[n].data.subgraph.clone(),
-                                dep_vec.iter().map(|s| s.simple_approx.as_ref().unwrap()),
-                            ),
-                            iterative_approx.local_3d,
-                        )
-                    };
+                    //         approx = p.local_3d(&iterative_approx, graph, approx);
 
-                    self.dag.nodes[n].data.local_4d = local_4d;
-                    self.dag.nodes[n].data.simple_approx = Some(simple);
-                    self.dag.nodes[n].data.local_3d = local_3d;
+                    //         iterative_approx = p.clone();
+                    //     }
+                    //     (
+                    //         ApproxOp::union(&dep_vec).unwrap(),
+                    //         SimpleApprox::union(
+                    //             self.dag.nodes[n].data.subgraph.clone(),
+                    //             dep_vec.iter().map(|s| s.simple_approx.as_ref().unwrap()),
+                    //         ),
+                    //         iterative_approx.local_3d,
+                    //     )
+                    // };
+
+                    // self.dag.nodes[n].data.local_4d = local_4d;
+                    // self.dag.nodes[n].data.simple_approx = Some(simple);
+                    // self.dag.nodes[n].data.local_3d = local_3d;
                 }
             }
         }
-    }
-
-    ///4d expr with unwrapped dens
-    pub fn expr(&self, graph: &UVGraph, amplitude: &InternalSubGraph) -> Option<SerializableAtom> {
-        let mut sum = Atom::num(0).into();
-        for (_, n) in &self.dag.nodes {
-            sum = sum + n.data.unwrapped_expr(graph, amplitude)?;
-        }
-
-        Some(sum)
     }
 
     pub fn local_expr<S: SubGraph<Base = BitVec>>(
@@ -1948,7 +1942,7 @@ impl Forest {
         amplitude: &S,
         orientation: &OrientationData,
     ) -> Atom {
-        let mut sum = Atom::new();
+        let mut sum = Atom::Zero;
 
         for (_, n) in &self.dag.nodes {
             sum += n.data.final_cff(graph, amplitude, orientation).unwrap();
@@ -1968,19 +1962,6 @@ impl Forest {
         }
 
         Some(sum)
-    }
-
-    pub fn structure_and_res(&self, graph: &UVGraph, amplitude: &InternalSubGraph) -> String {
-        let mut out = String::new();
-
-        for (_, n) in &self.dag.nodes {
-            out.push_str(&format!(
-                "{}:{}\n",
-                n.data.simple_expr(graph, amplitude).unwrap(),
-                n.data.final_expr(graph, amplitude).unwrap()
-            ));
-        }
-        out
     }
 
     pub fn graphs(&self) -> String {
