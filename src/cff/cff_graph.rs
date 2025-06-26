@@ -136,6 +136,16 @@ impl CFFVertex {
             .chain(self.outgoing_edges.iter_mut())
     }
 
+    fn has_impossible_edge(&self) -> bool {
+        let mut dedup_outgoing = self.outgoing_edges.clone();
+        dedup_outgoing.dedup();
+        let mut dedup_incoming = self.incoming_edges.clone();
+        dedup_incoming.dedup();
+
+        dedup_incoming.len() != self.incoming_edges.len()
+            || dedup_outgoing.len() != self.outgoing_edges.len()
+    }
+
     fn has_edge(&self, edge_id: EdgeIndex) -> bool {
         self.iter_all_edges().any(|edge| edge.edge_id == edge_id)
     }
@@ -214,6 +224,12 @@ impl Hash for CFFGenerationGraph {
 }
 
 impl CFFGenerationGraph {
+    fn has_impossible_edge(&self) -> bool {
+        self.vertices
+            .iter()
+            .any(|vertex| vertex.has_impossible_edge())
+    }
+
     fn get_vertex(&self, vertex_set: &VertexSet) -> &CFFVertex {
         self.vertices
             .iter()
@@ -350,6 +366,14 @@ impl CFFGenerationGraph {
     }
 
     pub fn remove_self_edges(&mut self) {
+        let self_edges = self.get_self_edges();
+
+        for self_edge in self_edges.iter() {
+            self.remove_edge(*self_edge);
+        }
+    }
+
+    pub fn get_self_edges(&self) -> Vec<EdgeIndex> {
         let mut self_edges = vec![];
 
         for vertex in self.vertices.iter() {
@@ -360,9 +384,7 @@ impl CFFGenerationGraph {
             }
         }
 
-        for self_edge in self_edges.iter() {
-            self.remove_edge(*self_edge);
-        }
+        self_edges
     }
 
     fn depth_first_search(
@@ -495,6 +517,13 @@ impl CFFGenerationGraph {
         let (source, sink) = self.get_source_sink_of_edge(edge_id);
         let vertex_1 = &source.vertex_set;
         let vertex_2 = &sink.vertex_set;
+
+        // self edges need a special treatment
+        if vertex_1 == vertex_2 {
+            let mut new_graph = self.clone();
+            new_graph.remove_edge(edge_id);
+            return new_graph;
+        }
 
         self.contract_vertices_impl(vertex_1, vertex_2, Some(edge_id))
     }
@@ -1537,6 +1566,59 @@ mod test {
                 }
             ]
         );
+
+        let mut tri_box_builder = HedgeGraphBuilder::new();
+
+        let nodes = (0..5).map(|_| tri_box_builder.add_node(())).collect_vec();
+
+        tri_box_builder.add_edge(nodes[0], nodes[1], (), Orientation::Undirected);
+        tri_box_builder.add_edge(nodes[1], nodes[2], (), Orientation::Undirected);
+        tri_box_builder.add_edge(nodes[0], nodes[2], (), Orientation::Undirected);
+
+        tri_box_builder.add_edge(nodes[1], nodes[3], (), Orientation::Undirected);
+        tri_box_builder.add_edge(nodes[2], nodes[4], (), Orientation::Undirected);
+        tri_box_builder.add_edge(nodes[3], nodes[4], (), Orientation::Undirected);
+
+        tri_box_builder.add_external_edge(nodes[0], (), Orientation::Undirected, Flow::Sink);
+        tri_box_builder.add_external_edge(nodes[3], (), Orientation::Undirected, Flow::Source);
+        tri_box_builder.add_external_edge(nodes[4], (), Orientation::Undirected, Flow::Source);
+
+        let tri_box = tri_box_builder.build::<NodeStorageVec<_>>();
+        let global_orientation = tri_box.new_hedgevec(|_, _, _| Orientation::Default);
+        let mut tri_box_cff_graph = CFFGenerationGraph::new(&tri_box, global_orientation);
+
+        assert!(!tri_box_cff_graph.has_impossible_edge());
+        tri_box_cff_graph = tri_box_cff_graph.contract_edge(EdgeIndex::from(0));
+        assert!(!tri_box_cff_graph.has_impossible_edge());
+        tri_box_cff_graph = tri_box_cff_graph.contract_edge(EdgeIndex::from(1));
+        assert!(!tri_box_cff_graph.has_impossible_edge());
+        tri_box_cff_graph = tri_box_cff_graph.contract_edge(EdgeIndex::from(2));
+        assert!(!tri_box_cff_graph.has_impossible_edge());
+
+        tri_box_cff_graph.remove_self_edges();
+        assert!(!tri_box_cff_graph.has_impossible_edge());
+
+        for vertex in tri_box_cff_graph.vertices.iter() {
+            let all_edges = vertex.iter_all_edges().collect_vec();
+            assert_eq!(all_edges.len(), 3);
+            let num_external = all_edges
+                .iter()
+                .filter(|edge| edge.edge_type == CFFEdgeType::External)
+                .count();
+            assert_eq!(num_external, 1);
+
+            let num_virtual = all_edges
+                .iter()
+                .filter(|edge| edge.edge_type == CFFEdgeType::Virtual)
+                .count();
+            assert_eq!(num_virtual, 2);
+
+            let num_virtual_external = all_edges
+                .iter()
+                .filter(|edge| edge.edge_type == CFFEdgeType::VirtualExternal)
+                .count();
+            assert_eq!(num_virtual_external, 0);
+        }
     }
 
     #[test]
