@@ -255,7 +255,14 @@ fn tri_uv_AMP() {
             orientation_display
         );
 
-        let mut expr = forest.local_expr(&uv_graph, &uv_graph.full_filter(), &orientation.data);
+        let mut expr = forest.local_expr(
+            &uv_graph,
+            &uv_graph.full_filter(),
+            &orientation.data,
+            &canonize_esurface,
+            &orientations,
+            &[],
+        );
 
         // add Feynman rules of external edges
         for (_p, edge_index, d) in uv_graph.iter_edges_of(&uv_graph.external_filter()) {
@@ -782,10 +789,24 @@ fn tri_box_tri_LU() {
             &cff_cut_expr.left_amplitude.orientations[left_orientation].data;
         let right_orientation_data =
             &cff_cut_expr.right_amplitude.orientations[right_orientation].data;
-        let left_expr = left_forest.local_expr(&super_uv_graph, &c.left, left_orientation_data);
+        let left_expr = left_forest.local_expr(
+            &super_uv_graph,
+            &c.left,
+            left_orientation_data,
+            &None,
+            &cff_cut_expr.left_amplitude.orientations,
+            &cut_edges,
+        );
 
         println!("Computing right amplitude");
-        let right_expr = right_forest.local_expr(&super_uv_graph, &c.right, right_orientation_data);
+        let right_expr = right_forest.local_expr(
+            &super_uv_graph,
+            &c.right,
+            right_orientation_data,
+            &None,
+            &cff_cut_expr.right_amplitude.orientations,
+            &cut_edges,
+        );
 
         let mut cut_res = left_expr * right_expr;
 
@@ -1584,9 +1605,22 @@ fn double_triangle_LU() {
                 &cff_cut_expr.left_amplitude.orientations[left_orientation].data;
             let right_orientation_data =
                 &cff_cut_expr.right_amplitude.orientations[right_orientation].data;
-            let left_expr = left_forest.local_expr(&super_uv_graph, &c.left, left_orientation_data);
-            let right_expr =
-                right_forest.local_expr(&super_uv_graph, &c.right, right_orientation_data);
+            let left_expr = left_forest.local_expr(
+                &super_uv_graph,
+                &c.left,
+                left_orientation_data,
+                &None,
+                &cff_cut_expr.left_amplitude.orientations,
+                &cut_edges,
+            );
+            let right_expr = right_forest.local_expr(
+                &super_uv_graph,
+                &c.right,
+                right_orientation_data,
+                &None,
+                &cff_cut_expr.right_amplitude.orientations,
+                &cut_edges,
+            );
 
             //let mut cut_res = left_expr * right_expr;
             let mut cut_res = cs.add_additional_factors_to_cff_atom(&(left_expr * right_expr), id);
