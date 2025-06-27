@@ -376,7 +376,7 @@ fn tri_uv_AMP() {
 fn tri_box_tri_LU() {
     let _ = env_logger::builder().is_test(true).try_init();
     let uv_dod = 1;
-    let box_uv_dod = 1; // can be -1, 0, 1, 2
+    let box_uv_dod = -1; // can be -1, 0, 1, 2
     let is_massless = false;
 
     // load the model and hack the masses, go through serializable model since arc is not mutable
@@ -1217,7 +1217,6 @@ fn tri_box_tri_LU() {
     }
 
     println!("Done generation");
-    return;
 
     cs.derived_data.bare_cff_evaluators = None;
     cs.build_cut_evaluators(&model, Some(cut_atoms));
@@ -1252,15 +1251,7 @@ fn tri_box_tri_LU() {
     .map(|x| F(x))
     .to_vec();
 
-    let inspect1 = inspect(
-        &settings,
-        &mut integrand,
-        pt,
-        &[0usize],
-        false,
-        false,
-        false,
-    );
+    let inspect1 = inspect(&settings, &mut integrand, pt, &[0usize], false, false, true);
     println!("Inspect: {}", inspect1);
 
     let pt = [
@@ -1277,18 +1268,10 @@ fn tri_box_tri_LU() {
     .map(|x| F(x))
     .to_vec();
 
-    let inspect2 = inspect(
-        &settings,
-        &mut integrand,
-        pt,
-        &[0usize],
-        false,
-        false,
-        false,
-    );
+    let inspect2 = inspect(&settings, &mut integrand, pt, &[0usize], false, false, true);
     println!("Inspect: {}", inspect2);
 
-    //return;
+    return;
 
     crate::set_interrupt_handler();
 
@@ -1905,7 +1888,7 @@ fn double_triangle_LU() {
                     .replace(parse!("Q3(2,x_)"))
                     .with(parse!("Q3(3,x_)-Q3(1,x_)"))
                     .replace(parse!("Q3(4,x_)"))
-                    .with(parse!("Q3(3,x_)-_gammaloop::P(6,x_)"))
+                    .with(parse!("Q3(3,x_)-P(6,x_)"))
                     .evaluator(
                         &fnmap,
                         &[
@@ -1921,10 +1904,10 @@ fn double_triangle_LU() {
                             parse!("Q3(5, 1)"),
                             parse!("Q3(5, 2)"),
                             parse!("Q3(5, 3)"),
-                            parse!("_gammaloop::P(6,spenso::find(0))"),
-                            parse!("_gammaloop::P(6,1)"),
-                            parse!("_gammaloop::P(6,2)"),
-                            parse!("_gammaloop::P(6,3)"),
+                            parse!("P(6,spenso::find(0))"),
+                            parse!("P(6,1)"),
+                            parse!("P(6,2)"),
+                            parse!("P(6,3)"),
                         ],
                         OptimizationSettings::default(),
                     )
