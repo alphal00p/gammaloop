@@ -1364,7 +1364,7 @@ class GammaLoop(object):
         if len(self.cross_sections) > 0:
             cross_section_exporter = CrossSectionsExporter(self, args)
             cross_section_exporter.export(
-                args.output_path, self.cross_sections)
+                args.output_path, self.cross_sections, args.no_evaluators)
             logger.info("Cross-sections exported to '%s'.", args.output_path)
 
         if len(self.amplitudes) > 0:

@@ -660,14 +660,18 @@ impl PythonWorker {
             return Err(exceptions::PyException::new_err(
                 "Model must be loaded before cross sections",
             ));
+        } else {
+            warn!("adding cross section from yaml string not supported yet, most likely inserted already at generation time");
+            Ok(())
         }
-        match CrossSection::from_yaml_str(&self.model, String::from(yaml_str)) {
-            Ok(cs) => {
-                self.cross_sections.add_cross_section(cs);
-                Ok(())
-            }
-            Err(e) => Err(exceptions::PyException::new_err(e.to_string())),
-        }
+
+        //match CrossSection::from_yaml_str(&self.model, String::from(yaml_str)) {
+        //  Ok(cs) => {
+        // self.cross_sections.add_cross_section(cs);
+        // Ok(())
+        //}
+        //Err(e) => Err(exceptions::PyException::new_err(e.to_string())),
+        //}
     }
 
     pub fn load_cross_sections(&mut self, file_path: &str) -> PyResult<()> {
@@ -960,22 +964,38 @@ impl PythonWorker {
         &mut self,
         export_root: &str,
         cross_section_names: Vec<String>,
+        export_yaml_str: &str,
+        no_evaluators: bool,
     ) -> PyResult<String> {
-        let mut n_exported: usize = 0;
-        for cross_section in &self.cross_sections.container {
-            if cross_section_names.contains(&cross_section.name.to_string()) {
-                n_exported += 1;
-                let res = cross_section.export(export_root, &self.model);
-                if let Err(err) = res {
-                    return Err(exceptions::PyException::new_err(err.to_string()));
+        let export_settings = ExportSettings {
+            root_folder: PathBuf::from_str(export_root)?,
+        };
+
+        let mut state_file = fs::File::create(
+            PathBuf::from(export_root)
+                .join("sources")
+                .join("symbolica_state.bin"),
+        )?;
+
+        State::export(&mut state_file)?;
+
+        match self
+            .process_list
+            .export_cross_sections(&cross_section_names, &export_settings)
+        {
+            Ok(n_exported) => {
+                if n_exported < cross_section_names.len() {
+                    return Err(exceptions::PyException::new_err(format!(
+                        "Could not find all cross sections to export: {:?}\n {} cross sections exported",
+                        cross_section_names, n_exported
+                    )));
+                } else if n_exported > cross_section_names.len() {
+                    warn!("duplicate cross sections in memory");
                 }
             }
-        }
-        if n_exported != cross_section_names.len() {
-            return Err(exceptions::PyException::new_err(format!(
-                "Could not find all cross sections to export: {:#?}",
-                cross_section_names
-            )));
+            Err(err) => {
+                return Err(exceptions::PyException::new_err(err.to_string()));
+            }
         }
         Ok("Successful export".to_string())
     }

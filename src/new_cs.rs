@@ -20,7 +20,8 @@ use smartstring::{LazyCompact, SmartString};
 use idenso::metric::MS;
 
 use spenso::{
-    algebra::algebraic_traits::IsZero, tensors::parametric::SerializableCompiledEvaluator,
+    algebra::algebraic_traits::IsZero,
+    tensors::{data::DataIterator, parametric::SerializableCompiledEvaluator},
 };
 
 use crate::{
@@ -260,11 +261,30 @@ impl ProcessList {
         Ok(n_exported)
     }
 
-    pub fn export_cross_sections(&self, settings: &ExportSettings) -> Result<()> {
+    pub fn export_cross_sections(
+        &self,
+        cross_section_names: &[String],
+        settings: &ExportSettings,
+    ) -> Result<usize> {
+        let mut n_exported = 0;
+
         for process in self.processes.iter() {
-            process.collection.export_cross_sections(settings)?;
+            let process_definition_data =
+                bincode::encode_to_vec(&process.definition, bincode::config::standard())?;
+
+            let path = settings
+                .root_folder
+                .join("sources")
+                .join("process_definition.bin");
+
+            std::fs::write(path, &process_definition_data)?;
+
+            n_exported += process
+                .collection
+                .export_cross_sections(cross_section_names, settings)?;
         }
-        Ok(())
+
+        Ok(n_exported)
     }
 }
 
@@ -359,16 +379,24 @@ impl<S: NumeratorState> ProcessCollection<S> {
         Ok(n_exported)
     }
 
-    fn export_cross_sections(&self, settings: &ExportSettings) -> Result<()> {
+    fn export_cross_sections(
+        &self,
+        cross_section_names: &[String],
+        settings: &ExportSettings,
+    ) -> Result<usize> {
+        let mut n_exported = 0;
         match self {
             Self::CrossSections(cross_sections) => {
                 for cross_section in cross_sections {
-                    cross_section.export(settings)?;
+                    if cross_section_names.contains(&cross_section.name.to_string()) {
+                        cross_section.export(settings)?;
+                        n_exported += 1;
+                    }
                 }
             }
             _ => {}
         }
-        Ok(())
+        Ok(n_exported)
     }
 }
 
@@ -791,7 +819,7 @@ impl<S: NumeratorState> Amplitude<S> {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Encode)]
 pub struct CrossSection<S: NumeratorState> {
     pub name: String,
     pub supergraphs: Vec<CrossSectionGraph<S>>,
@@ -908,16 +936,12 @@ impl<S: NumeratorState> CrossSection<S> {
             .join("cross_sections")
             .join(self.name.as_str());
 
-        for supergraph in self.supergraphs.iter() {
-            let file_name = path
-                .clone()
-                .join(format!("cross_section_graph_{}.bin", supergraph.graph.name));
-
-            todo!("implement export of cross section graph")
-
-            //            let data = bincode::encode_to_vec(supergraph, bincode::config::standard())?;
-            //      std::fs::write(file_name, &data)?;
-        }
+        let data = bincode::encode_to_vec(self, bincode::config::standard())?;
+        std::fs::write(
+            path.clone()
+                .join(&format!("cross_section_{}.bin", self.name)),
+            &data,
+        )?;
 
         Ok(())
     }
@@ -943,7 +967,7 @@ impl Display for CutId {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Encode)]
 pub struct CrossSectionGraph<S: NumeratorState = PythonState> {
     pub graph: Graph,
     pub source_nodes: HedgeNode,
@@ -1526,10 +1550,12 @@ impl<S: NumeratorState> CrossSectionDerivedData<S> {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, bincode::Encode)]
 pub struct CrossSectionCut {
     pub cut: OrientedCut,
+    #[bincode(with_serde)]
     pub left: BitVec,
+    #[bincode(with_serde)]
     pub right: BitVec,
 }
 

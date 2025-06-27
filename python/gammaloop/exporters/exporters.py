@@ -356,13 +356,14 @@ class CrossSectionsExporter(GammaLoopExporter):
         GammaLoopExporter.__init__(self, gammaloop_interface, args)
         # Further processing here for additional info if need be
 
-    def export(self, export_root: Path, cross_sections: CrossSectionList):
+    def export(self, export_root: Path, cross_sections: CrossSectionList, no_evaluators: bool):
 
         output_data = super(CrossSectionsExporter,
                             self).generic_export(export_root)
         output_data['output_type'] = 'cross_sections'
         output_data['contents'] = [
             cross_section.name for cross_section in cross_sections]
+        export_config = yaml.dump(self.gammaloop.config['export_settings'])
 
         with open(pjoin(export_root, 'output_metadata.yaml'), 'w', encoding='utf-8') as file:
             file.write(output_data.to_yaml_str())
@@ -389,5 +390,6 @@ class CrossSectionsExporter(GammaLoopExporter):
 
         if not self.output_options.yaml_only:
             # Now address the rust export aspect
+            self.gammaloop.rust_worker.preprocess(export_config)
             self.gammaloop.rust_worker.export_cross_sections(
-                str(export_root), [cs.name for cs in cross_sections])
+                str(export_root), [cs.name for cs in cross_sections], export_config, no_evaluators)

@@ -34,7 +34,7 @@ use super::generation::ShiftRewrite;
 use super::surface::{self, Surface};
 
 /// Core esurface struct
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Encode)]
 pub struct Esurface {
     pub energies: Vec<EdgeIndex>,
     pub external_shift: ExternalShift,
