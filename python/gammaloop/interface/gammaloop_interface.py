@@ -1444,15 +1444,16 @@ class GammaLoop(object):
             #    pjoin(args.path_to_launch, 'cards', 'run_card.yaml'))
 
         if output_metadata['output_type'] == 'cross_sections':
-            self.cross_sections = cross_section.CrossSectionList()
-            self.rust_worker.reset_cross_sections()
-            for cross_section_name in output_metadata['contents']:
-                with open(pjoin(args.path_to_launch, 'sources', 'cross_sections', f'{cross_section_name}', 'cross_section.yaml'), 'r', encoding='utf-8') as file:
-                    cross_section_yaml = file.read()
-                    self.cross_sections.add_cross_section(
-                        cross_section.CrossSection.from_yaml_str(self.model, cross_section_yaml))
-                    self.rust_worker.add_cross_section_from_yaml_str(
-                        cross_section_yaml)
+            self.rust_worker.load_cross_sections(args.path_to_launch)
+            # self.cross_sections = cross_section.CrossSectionList()
+            # self.rust_worker.reset_cross_sections()
+            # for cross_section_name in output_metadata['contents']:
+            #    with open(pjoin(args.path_to_launch, 'sources', 'cross_sections', f'{cross_section_name}', 'cross_section.yaml'), 'r', encoding='utf-8') as file:
+            #        cross_section_yaml = file.read()
+            #        self.cross_sections.add_cross_section(
+            #            cross_section.CrossSection.from_yaml_str(self.model, cross_section_yaml))
+            #        self.rust_worker.add_cross_section_from_yaml_str(
+            #            cross_section_yaml)
 
         self.launched_output = Path(os.path.abspath(args.path_to_launch))
 
