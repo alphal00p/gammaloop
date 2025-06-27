@@ -21,7 +21,7 @@ use super::{
 )]
 pub struct SuperGraphOrientationID(pub usize);
 
-#[derive(Debug, Clone, Serialize, Deserialize, Encode)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct CutOrientationData {
     pub orientation: HedgeVec<Orientation>,
     pub cuts: Vec<CutId>,
@@ -47,7 +47,7 @@ impl From<&SingleCutOrientationExpression> for Atom {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Encode)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct OrientationMap {
     map: HashMap<SuperGraphOrientationID, (AmplitudeOrientationID, AmplitudeOrientationID)>,
     revesed_map: HashMap<(AmplitudeOrientationID, AmplitudeOrientationID), SuperGraphOrientationID>,
@@ -89,14 +89,14 @@ impl OrientationMap {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Encode)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct SingleCutExpression {
     pub left_amplitude: CFFExpression<AmplitudeOrientationID>,
     pub right_amplitude: CFFExpression<AmplitudeOrientationID>,
     pub orientation_map: OrientationMap,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Encode)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct CFFCutsExpression {
     pub cut_expressions: TiVec<CutId, SingleCutExpression>,
     pub surfaces: SurfaceCache,

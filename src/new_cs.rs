@@ -310,7 +310,7 @@ impl<S: NumeratorState> ProcessCollection<S> {
         }
     }
 
-    fn add_cross_section(&mut self, cross_section: CrossSection<S>) {
+    pub fn add_cross_section(&mut self, cross_section: CrossSection<S>) {
         match self {
             Self::CrossSections(cross_sections) => cross_sections.push(cross_section),
             _ => panic!("Cannot add cross section to an amplitude collection"),
@@ -819,7 +819,8 @@ impl<S: NumeratorState> Amplitude<S> {
     }
 }
 
-#[derive(Clone, Encode)]
+#[derive(Clone, Encode, Decode)]
+#[trait_decode(trait = GammaLoopContext)]
 pub struct CrossSection<S: NumeratorState> {
     pub name: String,
     pub supergraphs: Vec<CrossSectionGraph<S>>,
@@ -945,6 +946,22 @@ impl<S: NumeratorState> CrossSection<S> {
 
         Ok(())
     }
+
+    pub fn load_from_file(
+        name: &str,
+        root_folder: &str,
+        context: GammaLoopContextContainer,
+    ) -> Result<Self> {
+        let path = Path::new(root_folder)
+            .join("sources")
+            .join("cross_sections")
+            .join(name);
+
+        let data = std::fs::read(path.join(format!("cross_section_{}.bin", name)))?;
+        let (cross_section, _): (Self, _) =
+            bincode::decode_from_slice_with_context(&data, bincode::config::standard(), context)?;
+        Ok(cross_section)
+    }
 }
 
 impl<S: NumeratorState> IsPolarizable for CrossSection<S> {
@@ -958,7 +975,9 @@ impl<S: NumeratorState> IsPolarizable for CrossSection<S> {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, From, Into, Hash, PartialEq, Copy, Eq, Encode)]
+#[derive(
+    Debug, Clone, Serialize, Decode, Deserialize, From, Into, Hash, PartialEq, Copy, Eq, Encode,
+)]
 pub struct CutId(usize);
 
 impl Display for CutId {
@@ -967,7 +986,8 @@ impl Display for CutId {
     }
 }
 
-#[derive(Clone, Encode)]
+#[derive(Clone, Encode, Decode)]
+#[trait_decode(trait = GammaLoopContext)]
 pub struct CrossSectionGraph<S: NumeratorState = PythonState> {
     pub graph: Graph,
     pub source_nodes: HedgeNode,
@@ -1522,7 +1542,7 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
     }
 }
 
-#[derive(Clone, Encode)]
+#[derive(Clone, Encode, Decode)]
 pub struct CrossSectionDerivedData<S: NumeratorState> {
     pub orientations: Option<TiVec<SuperGraphOrientationID, CutOrientationData>>,
     pub bare_cff_evaluators: Option<TiVec<CutId, GenericEvaluator>>,
@@ -1550,7 +1570,7 @@ impl<S: NumeratorState> CrossSectionDerivedData<S> {
     }
 }
 
-#[derive(Clone, bincode::Encode)]
+#[derive(Clone, bincode::Encode, bincode::Decode)]
 pub struct CrossSectionCut {
     pub cut: OrientedCut,
     #[bincode(with_serde)]

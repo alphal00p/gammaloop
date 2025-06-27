@@ -674,17 +674,6 @@ impl PythonWorker {
         //}
     }
 
-    pub fn load_cross_sections(&mut self, file_path: &str) -> PyResult<()> {
-        if self.model.is_empty() {
-            return Err(exceptions::PyException::new_err(
-                "Model must be loaded before cross sections",
-            ));
-        }
-        CrossSectionList::from_file(&self.model, String::from(file_path))
-            .map_err(|e| exceptions::PyException::new_err(e.to_string()))
-            .map(|cs| self.cross_sections = cs)
-    }
-
     pub fn load_cross_sections_from_yaml_str(&mut self, yaml_str: &str) -> PyResult<()> {
         if self.model.is_empty() {
             return Err(exceptions::PyException::new_err(
@@ -832,6 +821,76 @@ impl PythonWorker {
             }
             Err(e) => Err(exceptions::PyException::new_err(e.to_string())),
         }
+    }
+
+    pub fn load_cross_sections(&mut self, file_path: &str) -> PyResult<()> {
+        info!("calling load_cross_sections");
+
+        if self.model.is_empty() {
+            return Err(exceptions::PyException::new_err(
+                "Model must be loaded before cross sections",
+            ));
+        }
+        let root_path = PathBuf::from(file_path);
+
+        let output_medadata_str = fs::read_to_string(root_path.join("output_metadata.yaml"))?;
+        let output_metadata: OutputMetadata = serde_yaml::from_str(&output_medadata_str)
+            .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
+
+        if self.model.name != output_metadata.model_name {
+            return Err(exceptions::PyException::new_err(format!(
+                "Model name mismatch: {} != {}",
+                self.model.name, output_metadata.model_name
+            )));
+        }
+
+        if output_metadata.output_type != "cross_sections" {
+            return Err(exceptions::PyException::new_err(format!(
+                "Output type mismatch: {} != {}",
+                output_metadata.output_type, "cross_sections"
+            )));
+        }
+
+        let mut state_map_file =
+            fs::File::open(root_path.join("sources").join("symbolica_state.bin"))?;
+
+        let state_map = State::import(&mut state_map_file, None)?;
+
+        let context = GammaLoopContextContainer {
+            state_map: &state_map,
+            model: &self.model,
+        };
+
+        let process_definition_data =
+            fs::read(root_path.join("sources").join("process_definition.bin"))?;
+
+        let (process_definition, _) = bincode::decode_from_slice_with_context(
+            &process_definition_data,
+            bincode::config::standard(),
+            context,
+        )
+        .unwrap();
+
+        let mut process = Process {
+            definition: process_definition,
+            collection: ProcessCollection::CrossSections(vec![]),
+        };
+
+        for cross_section_name in output_metadata.contents {
+            let cross_section =
+                new_cs::CrossSection::load_from_file(&cross_section_name, file_path, context)
+                    .map_err(|e| {
+                        exceptions::PyException::new_err(format!(
+                            "Error loading cross section {}: {}",
+                            cross_section_name, e
+                        ))
+                    })?;
+
+            process.collection.add_cross_section(cross_section);
+        }
+
+        self.process_list.add_process(process);
+        Ok(())
     }
 
     pub fn load_amplitudes(&mut self, file_path: &str) -> PyResult<()> {
