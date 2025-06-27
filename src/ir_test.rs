@@ -4,7 +4,7 @@ use color_eyre::Result;
 use eyre::eyre;
 use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeIndex, Orientation};
-use linreg::linear_regression;
+use linreg::{linear_regression, linear_regression_of};
 use rand::Rng;
 use symbolica::{
     domains::float::NumericalFloatLike, domains::float::Real, numerical_integration::MonteCarloRng,
@@ -20,6 +20,8 @@ use crate::{
     utils::{box_muller, f128, FloatLike, F},
     DependentMomentaConstructor, Settings,
 };
+
+const SLOPE_STABILITY_points: usize = 50;
 
 /// The range is from 10^start to 10^end.
 pub struct ApproachSettings {
@@ -662,17 +664,38 @@ impl<T: FloatLike> LimitData<T> {
         let log_lambda = self
             .data
             .iter()
-            .map(|eval| eval.lambda_point.lambda.0.to_f64().ln())
-            .collect_vec();
+            .map(|eval| eval.lambda_point.lambda.0.to_f64().ln());
 
-        let log_res = self
-            .data
-            .iter()
-            .map(|eval| eval.value.0.to_f64().ln())
-            .collect_vec();
+        let log_res = self.data.iter().map(|eval| eval.value.0.to_f64().ln());
 
-        let (slope, _): (f64, _) = linear_regression(&log_lambda, &log_res).unwrap();
-        slope
+        let log_data = log_lambda.zip(log_res).collect_vec();
+
+        let mut stable_slope = false;
+        let mut current_slope = 0.0;
+        let mut previous_slope: f64 = linear_regression_of(&log_data).unwrap().0;
+        let mut current_index_start = SLOPE_STABILITY_points;
+
+        while !stable_slope {
+            current_slope = linear_regression_of(&log_data[current_index_start..])
+                .unwrap()
+                .0;
+
+            if (current_slope - previous_slope).abs()
+                / ((current_slope + previous_slope) / 2.0).abs()
+                < 0.01
+            {
+                stable_slope = true;
+            } else {
+                previous_slope = current_slope;
+                current_index_start += SLOPE_STABILITY_points;
+            }
+        }
+
+        if !stable_slope {
+            println!("Warning: accuracy of xi not guaranteed")
+        }
+
+        current_slope
     }
 }
 
