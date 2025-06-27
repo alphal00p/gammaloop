@@ -1135,7 +1135,25 @@ impl Approximation {
         };
         let t_arg = uv_graph.numerator(&reduced) / uv_graph.denominator(&reduced);
 
-        let mut atomarg = t_arg * inner_t;
+        let ep = vakint_symbol!("ε");
+
+        // strip the pole part of inner_t as this is removed by MS bar
+        let mut pole_stripped = inner_t
+            .series(
+                ep,
+                Atom::Zero,
+                (uv_graph.n_loops(amplitude_subgraph) as i64 + 1).into(),
+                true,
+            )
+            .unwrap()
+            .to_atom();
+        for i in -(uv_graph.n_loops(&dependent.subgraph) as i64)..0 {
+            pole_stripped = pole_stripped
+                .replace(Atom::var(ep).npow(i))
+                .with(Atom::Zero);
+        }
+
+        let mut atomarg = t_arg * pole_stripped;
 
         // only apply replacements for edges in the reduced graph
         let mom_reps = graph.uv_wrapped_replacement(&reduced, &self.lmb, &[W_.x___]);
@@ -1400,17 +1418,33 @@ impl Approximation {
         let vakint_expr = VakintExpression::try_from(integrand_vakint.clone()).unwrap();
         println!("\nVakint expression:\n{:#}", vakint_expr);
 
-        let a = vakint.evaluate(integrand_vakint.as_view()).unwrap();
+        let mut res = vakint.evaluate(integrand_vakint.as_view()).unwrap();
 
         // apply metric
-        let a = a
+        res = res
             .replace(function!(vk_metric, W_.x_, W_.y_) * function!(GS.emr_mom, W_.x___, W_.x_))
             .with(function!(GS.emr_mom, W_.x___, W_.y_));
 
-        println!("\nIntegrated CT:\n{}\n", a);
+        // multiply the results with a vacuum triangle that integrates to 1
+        // 1/(k^2 - m_UV^2)^3 = -i / (4 pi)^2 * 1/2 * 1/mUV^2
+        // name the mUV mass mUVi as this one should not be expanded
+        for l in &self.lmb.loop_edges {
+            res /= parse!("(-1i / (4 𝜋)^2 * 1/2 * 1/mUVI^2)");
+
+            // multiply CFF triangle
+            res *= Atom::num((3, 16))
+                / ((-function!(
+                    MS.dot,
+                    function!(GS.emr_vec, usize::from(*l) as i64),
+                    function!(GS.emr_vec, usize::from(*l) as i64)
+                ) + GS.m_uv_int * GS.m_uv_int)
+                    .npow((5, 2)));
+        }
+
+        println!("\nIntegrated CT:\n{}\n", res);
 
         ApproxOp::Dependent {
-            t_arg: IntegrandExpr { integrand: a },
+            t_arg: IntegrandExpr { integrand: res },
             sign: -sign,
             subgraph: reduced,
         }
@@ -1447,8 +1481,7 @@ impl Approximation {
         let Some((t4, _)) = dependent.integrated_4d.expr() else {
             panic!("Should have computed the dependent integrated 4d");
         };
-        //println!("{}", graph.as_ref().dot(&dependent.subgraph));
-        //println!("{}", graph.as_ref().dot(amplitude_subgraph));
+
         let CFFapprox::Dependent { t_arg, .. } = CFFapprox::dependent(
             graph.as_ref(),
             &dependent.subgraph,
@@ -1462,10 +1495,21 @@ impl Approximation {
 
         let mut sum_3d = Atom::Zero;
 
-        println!("Integrated:{}", t4);
-
         sum_3d += self.local_3d(dependent, graph, cff);
-        //sum_3d += self.local_3d(dependent, graph, t4 * t_arg.integrand); // TODO: take finite part of t4
+
+        let finite = t4
+            .series(vakint_symbol!("ε"), Atom::Zero, 0.into(), true)
+            .unwrap()
+            .coefficient((0, 1).into())
+            .replace(GS.m_uv_int)
+            .with(GS.m_uv);
+
+        println!("Integrated 4d finite part: {}", finite);
+
+        // TODO: multiply by the number of orientations or only apply the counterterm to
+        // one orientation
+        // subtract integrated CT
+        sum_3d -= self.local_3d(dependent, graph, finite * t_arg.integrand);
 
         self.local_3d = CFFapprox::Dependent {
             sign: -sign,
@@ -1680,17 +1724,41 @@ impl Approximation {
         a
     }
 
-    pub fn final_cff<S: SubGraph<Base = BitVec>>(
+    pub fn final_cff<S: SubGraph<Base = BitVec>, OID: OrientationID, O: GraphOrientation>(
         &self,
         graph: &UVGraph,
         amplitude: &S,
         orientation: &OrientationData,
+        canonize_esurface: &Option<ShiftRewrite>,
+        orientations: &TiVec<OID, O>,
+        cut_edges: &[EdgeIndex],
     ) -> Option<Atom> {
         let (t, s) = self.local_3d.expr()?;
+        let (t_int, _) = self.integrated_4d.expr()?;
+
+        let CFFapprox::Dependent { t_arg, .. } = CFFapprox::dependent(
+            graph.as_ref(),
+            &self.subgraph,
+            amplitude,
+            canonize_esurface,
+            orientations,
+            cut_edges,
+        ) else {
+            unreachable!()
+        };
+
+        let finite = t_int
+            .series(vakint_symbol!("ε"), Atom::Zero, 0.into(), true)
+            .unwrap()
+            .coefficient((0, 1).into())
+            .replace(GS.m_uv_int)
+            .with(GS.m_uv);
+
+        println!("Integrated 4d finite part: {}", finite);
 
         let reduced = amplitude.included().subtract(&self.subgraph.included());
 
-        let mut cff = orientation.select(t);
+        let mut cff = s * orientation.select(t) - s * finite * orientation.select(t_arg.integrand);
 
         for (p, eid, e) in graph.iter_edges_of(&reduced) {
             let eid = usize::from(eid) as i64;
@@ -1717,7 +1785,7 @@ impl Approximation {
             }
         }
 
-        let mut res = s * cff * IntegrandExpr::numerator_only_subgraph(&reduced, graph).integrand;
+        let mut res = cff * IntegrandExpr::numerator_only_subgraph(&reduced, graph).integrand;
 
         // set the momenta flowing through the reduced graph edges to the identity wrt the supergraph
         for (p, eid, e) in graph.iter_edges_of(&reduced) {
@@ -1924,16 +1992,29 @@ impl Forest {
         }
     }
 
-    pub fn local_expr<S: SubGraph<Base = BitVec>>(
+    pub fn local_expr<S: SubGraph<Base = BitVec>, OID: OrientationID, O: GraphOrientation>(
         &self,
         graph: &UVGraph,
         amplitude: &S,
         orientation: &OrientationData,
+        canonize_esurface: &Option<ShiftRewrite>,
+        orientations: &TiVec<OID, O>,
+        cut_edges: &[EdgeIndex],
     ) -> Atom {
         let mut sum = Atom::Zero;
 
         for (_, n) in &self.dag.nodes {
-            sum += n.data.final_cff(graph, amplitude, orientation).unwrap();
+            sum += n
+                .data
+                .final_cff(
+                    graph,
+                    amplitude,
+                    orientation,
+                    canonize_esurface,
+                    orientations,
+                    cut_edges,
+                )
+                .unwrap();
         }
 
         sum
