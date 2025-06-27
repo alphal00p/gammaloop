@@ -1247,10 +1247,22 @@ impl Approximation {
         let mut integrand_vakint = a.expand();
         let mut propagator_id = 1;
 
+        let vakint = Vakint::new(Some(VakintSettings {
+            allow_unknown_integrals: false,
+            evaluation_order: EvaluationOrder::alphaloop_only(),
+            integral_normalization_factor: LoopNormalizationFactor::MSbar,
+            run_time_decimal_precision: 32,
+            number_of_terms_in_epsilon_expansion: uv_graph.n_loops(amplitude_subgraph) as i64 + 1,
+            temporary_directory: Some("./form".into()),
+            ..VakintSettings::default()
+        }))
+        .unwrap();
+
         let vk_prop = vakint_symbol!("prop");
         let vk_edge = vakint_symbol!("edge");
         let vk_mom = vakint_symbol!("k");
         let vk_topo = vakint_symbol!("topo");
+        let vk_metric = vakint_symbol!("g");
 
         for (pair, index, _data) in graph.iter_edges_of(&reduced) {
             if let HedgePair::Paired { source, sink } = pair {
@@ -1330,7 +1342,6 @@ impl Approximation {
             ));
 
         // fuse raised edges
-        // FIXME: leaves holes in propagator ids
         integrand_vakint = integrand_vakint
             .replace(
                 function!(
@@ -1386,40 +1397,17 @@ impl Approximation {
 
         println!("Integrand vakint: {}", integrand_vakint);
 
-        let mut vakint_expr = VakintExpression::try_from(integrand_vakint.clone()).unwrap();
-        println!("\nVakint expression:\n{}", vakint_expr);
+        let vakint_expr = VakintExpression::try_from(integrand_vakint.clone()).unwrap();
+        println!("\nVakint expression:\n{:#}", vakint_expr);
 
-        let vakint = Vakint::new(Some(VakintSettings {
-            allow_unknown_integrals: false,
-            evaluation_order: EvaluationOrder::alphaloop_only(),
-            integral_normalization_factor: LoopNormalizationFactor::MSbar,
-            run_time_decimal_precision: 32,
-            ..VakintSettings::default()
-        }))
-        .unwrap();
+        let a = vakint.evaluate(integrand_vakint.as_view()).unwrap();
 
-        //let test = vakint
-        //   .to_canonical(vakint_parse!("topo(prop(4,edge(3,4),-k(1)+k(2),mUV,1))*topo(prop(3,edge(3,4),k(1),mUV,3)*prop(5,edge(4,3),k(2),mUV,2))").unwrap().as_view(), true).unwrap();
+        // apply metric
+        let a = a
+            .replace(function!(vk_metric, W_.x_, W_.y_) * function!(GS.emr_mom, W_.x___, W_.x_))
+            .with(function!(GS.emr_mom, W_.x___, W_.y_));
 
-        let mut integral = vakint
-            .to_canonical(integrand_vakint.as_view(), true)
-            .unwrap();
-        integral = vakint.tensor_reduce(integral.as_view()).unwrap();
-        vakint_expr.evaluate_integral(&vakint).unwrap();
-
-        // Convert the numerator of the first integral to a dot notation
-        vakint_expr.0[0].numerator =
-            Vakint::convert_to_dot_notation(vakint_expr.0[0].numerator.as_view());
-        println!("\nInput integral in dot notation:\n{}\n", vakint_expr);
-
-        let numerical_partial_eval = Vakint::partial_numerical_evaluation(
-            &vakint.settings,
-            integral.as_view(),
-            &HashMap::default(),
-            &HashMap::default(),
-            None,
-        );
-        println!("Partial eval:\n{}\n", numerical_partial_eval);
+        println!("\nIntegrated CT:\n{}\n", a);
 
         ApproxOp::Dependent {
             t_arg: IntegrandExpr { integrand: a },
@@ -1461,16 +1449,16 @@ impl Approximation {
         };
         //println!("{}", graph.as_ref().dot(&dependent.subgraph));
         //println!("{}", graph.as_ref().dot(amplitude_subgraph));
-        // let CFFapprox::Dependent { t_arg, .. } = CFFapprox::dependent(
-        //     graph.as_ref(),
-        //     &dependent.subgraph,
-        //     amplitude_subgraph,
-        //     canonize_esurface,
-        //     orientations,
-        //     cut_edges,
-        // ) else {
-        //     unreachable!()
-        // };
+        let CFFapprox::Dependent { t_arg, .. } = CFFapprox::dependent(
+            graph.as_ref(),
+            &dependent.subgraph,
+            amplitude_subgraph,
+            canonize_esurface,
+            orientations,
+            cut_edges,
+        ) else {
+            unreachable!()
+        };
 
         let mut sum_3d = Atom::Zero;
 

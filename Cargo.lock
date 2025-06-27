@@ -1171,7 +1171,7 @@ dependencies = [
  "git-version",
  "hyperdual",
  "idenso",
- "indexmap 2.9.0",
+ "indexmap 2.10.0",
  "indicatif",
  "insta",
  "itertools 0.8.2",
@@ -1415,9 +1415,9 @@ dependencies = [
 
 [[package]]
 name = "indexmap"
-version = "2.9.0"
+version = "2.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cea70ddb795996207ad57735b50c5982d8844f38ba9ee5f1aedcfb708a2aa11e"
+checksum = "fe4cd85333e22411419a0bcae1297d25e58c9443848b11dc6a86fefe8c78a661"
 dependencies = [
  "equivalent",
  "hashbrown 0.15.4",
@@ -1452,7 +1452,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "232929e1d75fe899576a3d5c7416ad0d88dbfbb3c3d6aa00873a7408a50ddb88"
 dependencies = [
  "ahash",
- "indexmap 2.9.0",
+ "indexmap 2.10.0",
  "is-terminal",
  "itoa",
  "log",
@@ -1655,7 +1655,7 @@ dependencies = [
  "derive_more",
  "dot-parser",
  "duplicate 2.0.0",
- "indexmap 2.9.0",
+ "indexmap 2.10.0",
  "insta",
  "itertools 0.14.0",
  "kurbo",
@@ -2081,7 +2081,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "59ac35caa284c08f3721fb33c2741b5f763decaf42d080c8a6a722154347017e"
 dependencies = [
  "deprecate-until",
- "indexmap 2.9.0",
+ "indexmap 2.10.0",
  "integer-sqrt",
  "num-traits",
  "rustc-hash",
@@ -2864,7 +2864,7 @@ dependencies = [
  "chrono",
  "hex",
  "indexmap 1.9.3",
- "indexmap 2.9.0",
+ "indexmap 2.10.0",
  "schemars",
  "serde",
  "serde_derive",
@@ -2891,7 +2891,7 @@ version = "0.9.34+deprecated"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6a8b1a1a2ebf674015cc02edccce75287f1a0130d394307b36743c2f5d504b47"
 dependencies = [
- "indexmap 2.9.0",
+ "indexmap 2.10.0",
  "itoa",
  "ryu",
  "serde",
@@ -3019,7 +3019,7 @@ dependencies = [
  "env_logger",
  "features",
  "gat-lending-iterator",
- "indexmap 2.9.0",
+ "indexmap 2.10.0",
  "linnet",
  "log",
  "num 0.4.3",
@@ -3563,7 +3563,7 @@ dependencies = [
 [[package]]
 name = "vakint"
 version = "1.0.0"
-source = "git+https://github.com/alphal00p/vakint?branch=main#5bc29f5f7656f3435e25f33c781f6f9b40c4f6e0"
+source = "git+https://github.com/alphal00p/vakint?branch=main#5d3fda899e1304f5ada04b24aa6d7b0a5632bca8"
 dependencies = [
  "ahash",
  "anyhow",

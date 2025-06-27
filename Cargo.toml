@@ -166,7 +166,7 @@ no_python = []
 # insta.opt-level = 3
 
 [patch.crates-io]
-#symbolica = { git = "https://github.com/benruijl/symbolica", branch = "optim" }
+# symbolica = { git = "https://github.com/benruijl/symbolica", branch = "optim" }
 # symbolica = { path = "./python/gammaloop/dependencies/symbolica" }
 # symbolica={git="https://github.com/benruijl/symbolica",rev="a714571c8c8ee1a292237eb3ef1bc8123a4d7db4"}
 # symbolica = { git = "https://github.com/alphal00p/symbolica", rev = "a23ebaa71b1bc715a129ac765764ece7273625dc" }
