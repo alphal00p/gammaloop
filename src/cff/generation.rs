@@ -387,6 +387,10 @@ pub fn generate_uv_cff<E, V, S: SubGraph>(
 
     generation_graph.remove_self_edges();
 
+    if generation_graph.has_directed_cycle_initial() {
+        return Ok(Atom::new());
+    }
+
     let mut surface_cache = SurfaceCache {
         esurface_cache: EsurfaceCollection::from_iter(std::iter::empty()),
         hsurface_cache: HsurfaceCollection::from_iter(std::iter::empty()),
