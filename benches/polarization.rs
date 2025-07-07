@@ -1,13 +1,12 @@
 use std::{env, path::PathBuf, time::Duration};
 
 use _gammaloop::{
-    gammaloop_integrand::DefaultSample,
     graph::Graph,
-    momentum::{Dep, ExternalMomenta, Helicity, Rotatable, Rotation, ThreeMomentum},
+    momentum::{Dep, ExternalMomenta, Helicity, ThreeMomentum},
     numerator::ContractionSettings,
     tests_from_pytest::load_amplitude_output,
     utils::F,
-    Externals, GammaloopCompileOptions, Polarizations, ProcessSettings, RotationSetting,
+    Externals, GammaloopCompileOptions, ProcessSettings,
     TropicalSubgraphTableSettings,
 };
 use criterion::{criterion_group, criterion_main, Criterion};
@@ -102,62 +101,62 @@ fn criterion_benchmark(c: &mut Criterion) {
 
     let external_signature = graph.bare_graph.external_in_or_out_signature();
 
-    let polarizations = externals
-        .generate_polarizations(&graph.bare_graph.external_particles(), &external_signature);
+    // let polarizations = externals
+    //     .generate_polarizations(&graph.bare_graph.external_particles(), &external_signature);
 
     println!("starting benchmark");
-    group.bench_function("polarization generation", |b| {
-        b.iter(|| {
-            let _polarizations = externals.generate_polarizations(
-                &graph.bare_graph.external_particles(),
-                &external_signature,
-            );
-        })
-    });
-    group.bench_function("sample generation", |b| {
-        b.iter(|| {
-            DefaultSample::<f64>::new(
-                loop_moms.clone(),
-                &externals,
-                jacobian,
-                &polarizations,
-                &external_signature,
-            )
-        })
-    });
+    // group.bench_function("polarization generation", |b| {
+    //     b.iter(|| {
+    //         let _polarizations = externals.generate_polarizations(
+    //             &graph.bare_graph.external_particles(),
+    //             &external_signature,
+    //         );
+    //     })
+    // });
+    // group.bench_function("sample generation", |b| {
+    //     b.iter(|| {
+    //         DefaultSample::<f64>::new(
+    //             loop_moms.clone(),
+    //             &externals,
+    //             jacobian,
+    //             &polarizations,
+    //             &external_signature,
+    //         )
+    //     })
+    // });
 
-    let sample = DefaultSample::<f64>::new(
-        loop_moms.clone(),
-        &externals,
-        jacobian,
-        &polarizations,
-        &external_signature,
-    );
-    let rotation_method: Rotation = RotationSetting::Pi2X.rotation_method().into();
+    // let sample = DefaultSample::<f64>::new(
+    //     loop_moms.clone(),
+    //     &externals,
+    //     jacobian,
+    //     &polarizations,
+    //     &external_signature,
+    // );
+    // let rotation_method: Rotation = RotationSetting::Pi2X.rotation_method().into();
 
-    group.bench_function("polarization rotation", |b| {
-        b.iter(|| polarizations.rotate(&rotation_method))
-    });
+    // group.bench_function("polarization rotation", |b| {
+    //     b.iter(|| polarizations.rotate(&rotation_method))
+    // });
 
-    group.bench_function("external rotation", |b| {
-        b.iter(|| externals.rotate(&rotation_method))
-    });
+    // group.bench_function("external rotation", |b| {
+    //     b.iter(|| externals.rotate(&rotation_method))
+    // });
 
-    let rotating_pol = match polarizations.rotate(&rotation_method) {
-        Polarizations::Constant { polarizations } => polarizations,
-        Polarizations::None => vec![],
-    };
+    // let rotating_pol = match polarizations.rotate(&rotation_method) {
+    //     Polarizations::Constant { polarizations } => polarizations,
+    //     Polarizations::None => vec![],
+    // };
 
-    let rotated_externals = externals.rotate(&rotation_method).get_indep_externals();
-    group.bench_function("sample rotation", |b| {
-        b.iter(|| {
-            sample.get_rotated_sample_cached(
-                &rotation_method,
-                rotated_externals.clone(),
-                rotating_pol.clone(),
-            )
-        })
-    });
+    // let rotated_externals = externals.rotate(&rotation_method).get_indep_externals();
+    // group.bench_function("sample rotation", |b| {
+    //     b.iter(|| {
+    //         sample.get_rotated_sample_cached(
+    //             &rotation_method,
+    //             rotated_externals.clone(),
+    //             rotating_pol.clone(),
+    //         )
+    //     })
+    // });
 }
 
 criterion_group! {

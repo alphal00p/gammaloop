@@ -1,9 +1,8 @@
 use ahash::HashMap;
 use bincode_trait_derive::{Decode, Encode};
 use derive_more::{From, Into};
-use linnet::half_edge::{hedgevec::HedgeVec, involution::Orientation};
+use linnet::half_edge::{hedgevec::EdgeVec, involution::Orientation};
 use serde::{Deserialize, Serialize};
-use std::ops::Index;
 use symbolica::atom::Atom;
 use typed_index_collections::TiVec;
 
@@ -23,12 +22,12 @@ pub struct SuperGraphOrientationID(pub usize);
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct CutOrientationData {
-    pub orientation: HedgeVec<Orientation>,
+    pub orientation: EdgeVec<Orientation>,
     pub cuts: Vec<CutId>,
 }
 
 impl GraphOrientation for CutOrientationData {
-    fn orientation(&self) -> &HedgeVec<Orientation> {
+    fn orientation(&self) -> &EdgeVec<Orientation> {
         &self.orientation
     }
 }
@@ -182,9 +181,9 @@ impl CFFCutsExpression {
 
 // merge orientations, return None if there is a conflict
 pub fn amplitude_orientations_to_sg_orientaion(
-    left: &HedgeVec<Orientation>,
-    right: &HedgeVec<Orientation>,
-) -> Option<HedgeVec<Orientation>> {
+    left: &EdgeVec<Orientation>,
+    right: &EdgeVec<Orientation>,
+) -> Option<EdgeVec<Orientation>> {
     let mut result = Vec::with_capacity(left.len());
 
     for ((_, left_entry), (_, right_entry)) in left.into_iter().zip(right.into_iter()) {
@@ -213,7 +212,7 @@ pub fn amplitude_orientations_to_sg_orientaion(
         }
     }
 
-    Some(HedgeVec::from_raw(result))
+    Some(EdgeVec::from_raw(result))
 }
 
 #[cfg(test)]
@@ -223,6 +222,7 @@ mod tests {
         builder::HedgeGraphBuilder,
         involution::{Flow, Orientation},
         nodestore::NodeStorageVec,
+        HedgeGraph,
     };
     use typed_index_collections::TiVec;
 
@@ -248,7 +248,7 @@ mod tests {
         hedge_graph_builder.add_external_edge(nodes[0], (), Orientation::Undirected, Flow::Sink);
         hedge_graph_builder.add_external_edge(nodes[3], (), Orientation::Undirected, Flow::Source);
 
-        let hedge_graph = hedge_graph_builder.build::<NodeStorageVec<_>>();
+        let hedge_graph: HedgeGraph<(), (), ()> = hedge_graph_builder.build::<NodeStorageVec<_>>();
         let node_0 = hedge_graph.iter_crown(nodes[0]).into();
         let node_3 = hedge_graph.iter_crown(nodes[3]).into();
 

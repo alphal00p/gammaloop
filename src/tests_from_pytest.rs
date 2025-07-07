@@ -636,7 +636,7 @@ fn check_esurface_existance<N: NumeratorState>(
     let dummy_hedge_graph = utils::dummy_hedge_graph(graph.bare_graph.edges.len());
 
     let edge_masses = dummy_hedge_graph
-        .new_hedgevec_from_iter(edge_masses)
+        .new_edgevec_from_iter(edge_masses)
         .unwrap();
 
     let settings = Settings::default();
@@ -1231,7 +1231,7 @@ fn pytest_scalar_hexagon() {
         .collect_vec();
 
     let edge_masses = utils::dummy_hedge_graph(edge_masses.len())
-        .new_hedgevec_from_iter(edge_masses)
+        .new_edgevec_from_iter(edge_masses)
         .unwrap();
 
     let now = std::time::Instant::now();
@@ -1381,7 +1381,7 @@ fn pytest_scalar_ltd_topology_c() {
         .collect_vec();
 
     let _edge_masses = utils::dummy_hedge_graph(_edge_masses.len())
-        .new_hedgevec_from_iter(_edge_masses)
+        .new_edgevec_from_iter(_edge_masses)
         .unwrap();
 
     let existing_esurfaces = get_existing_esurfaces(
@@ -1479,7 +1479,7 @@ fn pytest_scalar_massless_pentabox() {
         .collect_vec();
 
     let edge_masses = utils::dummy_hedge_graph(edge_masses.len())
-        .new_hedgevec_from_iter(edge_masses)
+        .new_edgevec_from_iter(edge_masses)
         .unwrap();
 
     let existing_esurfaces = get_existing_esurfaces(
@@ -1601,7 +1601,7 @@ fn pytest_scalar_massless_3l_pentabox() {
         .collect_vec();
 
     let edge_masses = utils::dummy_hedge_graph(edge_masses.len())
-        .new_hedgevec_from_iter(edge_masses)
+        .new_edgevec_from_iter(edge_masses)
         .unwrap();
 
     let existing_esurfaces = get_existing_esurfaces(

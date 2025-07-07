@@ -15,7 +15,7 @@ use color_eyre::Report;
 use color_eyre::Result;
 use itertools::Itertools;
 use linnet::half_edge::{
-    hedgevec::HedgeVec,
+    hedgevec::EdgeVec,
     involution::HedgePair,
     subgraph::{OrientedCut, SubGraph},
     HedgeGraph,
@@ -24,12 +24,11 @@ use linnet::half_edge::{
     involution::{EdgeIndex, Orientation},
     subgraph::InternalSubGraph,
 };
-use momtrop::Edge;
 use symbolica::{
     atom::{Atom, AtomCore},
     id::{Pattern, Replacement},
 };
-use typed_index_collections::{ti_vec, TiVec};
+use typed_index_collections::TiVec;
 
 use serde::{Deserialize, Serialize};
 
@@ -38,7 +37,7 @@ use log::debug;
 use super::{
     cff_graph::CFFGenerationGraph,
     cut_expression::{
-        self, amplitude_orientations_to_sg_orientaion, CutOrientationData, OrientationMap,
+        amplitude_orientations_to_sg_orientaion, CutOrientationData, OrientationMap,
         SingleCutExpression, SingleCutOrientationExpression, SuperGraphOrientationID,
     },
     esurface::{Esurface, EsurfaceCollection, EsurfaceID, ExternalShift},
@@ -145,7 +144,7 @@ fn iterate_possible_orientations(num_edges: usize) -> impl Iterator<Item = Orien
     })
 }
 
-fn get_orientations<E, V>(graph: &HedgeGraph<E, V>) -> Vec<CFFGenerationGraph> {
+fn get_orientations<E, V, H>(graph: &HedgeGraph<E, V, H>) -> Vec<CFFGenerationGraph> {
     let internal_subgraph = InternalSubGraph::cleaned_filter_pessimist(graph.full_filter(), graph);
     let num_virtual_edges = graph.count_internal_edges(&internal_subgraph);
     let virtual_possible_orientations = iterate_possible_orientations(num_virtual_edges);
@@ -155,7 +154,7 @@ fn get_orientations<E, V>(graph: &HedgeGraph<E, V>) -> Vec<CFFGenerationGraph> {
             let mut orientation_of_virtuals = orientation_of_virtuals.into_iter();
 
             let global_orientation = graph
-                .new_hedgevec_from_iter(graph.iter_edges().map(|(hedge_pair, __, _)| {
+                .new_edgevec_from_iter(graph.iter_edges().map(|(hedge_pair, __, _)| {
                     match hedge_pair {
                         HedgePair::Unpaired { .. } => Orientation::Default,
                         HedgePair::Paired { .. } => orientation_of_virtuals
@@ -176,8 +175,8 @@ fn get_orientations<E, V>(graph: &HedgeGraph<E, V>) -> Vec<CFFGenerationGraph> {
         .collect_vec()
 }
 
-fn get_orientations_from_subgraph<E, V, S: SubGraph>(
-    graph: &HedgeGraph<E, V>,
+fn get_orientations_from_subgraph<E, V, H, S: SubGraph>(
+    graph: &HedgeGraph<E, V, H>,
     subgraph: &S,
     reversed_dangling: &[EdgeIndex],
 ) -> Vec<CFFGenerationGraph> {
@@ -189,7 +188,7 @@ fn get_orientations_from_subgraph<E, V, S: SubGraph>(
             let mut orientation_of_virtuals = orientation_of_virtuals.into_iter();
 
             let global_orientation = graph
-                .new_hedgevec_from_iter(graph.iter_edges().map(|(_, edge_index, _)| {
+                .new_edgevec_from_iter(graph.iter_edges().map(|(_, edge_index, _)| {
                     // the pair must be with respect to the subgraph
                     if let Some((pair, _, _)) = graph
                         .iter_edges_of(subgraph)
@@ -221,10 +220,10 @@ fn get_orientations_from_subgraph<E, V, S: SubGraph>(
 }
 
 #[allow(unused)]
-fn get_orientations_with_cut<E, V>(
-    graph: &HedgeGraph<E, V>,
+fn get_orientations_with_cut<E, V, H>(
+    graph: &HedgeGraph<E, V, H>,
     oriented_cut: &OrientedCut,
-) -> Vec<HedgeVec<Orientation>> {
+) -> Vec<EdgeVec<Orientation>> {
     let internal_subgraph = InternalSubGraph::cleaned_filter_pessimist(graph.full_filter(), graph);
     let num_virtual_edges = graph.count_internal_edges(&internal_subgraph);
 
@@ -236,7 +235,7 @@ fn get_orientations_with_cut<E, V>(
             let mut orientation_of_virtuals = orientation_of_virtuals.into_iter();
 
             let global_orientation = graph
-                .new_hedgevec_from_iter(graph.iter_edges().map(|(hedge_pair, __, _)| {
+                .new_edgevec_from_iter(graph.iter_edges().map(|(hedge_pair, __, _)| {
                     match hedge_pair {
                         HedgePair::Unpaired { .. } => Orientation::Default,
                         HedgePair::Paired { .. } => orientation_of_virtuals
@@ -272,8 +271,8 @@ fn get_orientations_with_cut<E, V>(
     orientations_consistent_with_cut.collect_vec()
 }
 
-fn get_possible_orientations_for_cut_list<E, V>(
-    graph: &HedgeGraph<E, V>,
+fn get_possible_orientations_for_cut_list<E, V, H>(
+    graph: &HedgeGraph<E, V, H>,
     cuts: &TiVec<CutId, CrossSectionCut>,
 ) -> TiVec<SuperGraphOrientationID, CutOrientationData> {
     let internal_subgraph = InternalSubGraph::cleaned_filter_pessimist(graph.full_filter(), graph);
@@ -286,7 +285,7 @@ fn get_possible_orientations_for_cut_list<E, V>(
         let mut orientation_of_virtuals = orientation_of_virtuals.into_iter();
 
         let global_orientation = graph
-            .new_hedgevec_from_iter(graph.iter_edges().map(|(hedge_pair, __, _)| {
+            .new_edgevec_from_iter(graph.iter_edges().map(|(hedge_pair, __, _)| {
                 match hedge_pair {
                     HedgePair::Unpaired { .. } => Orientation::Default,
                     HedgePair::Paired { .. } => orientation_of_virtuals
@@ -342,8 +341,8 @@ fn get_possible_orientations_for_cut_list<E, V>(
     orientations
 }
 
-pub fn generate_cff_expression<E, V>(
-    graph: &HedgeGraph<E, V>,
+pub fn generate_cff_expression<E, V, H>(
+    graph: &HedgeGraph<E, V, H>,
     canonize_esurface: &Option<ShiftRewrite>,
 ) -> Result<CFFExpression<AmplitudeOrientationID>> {
     let graphs = get_orientations(graph);
@@ -358,8 +357,8 @@ pub fn generate_cff_expression<E, V>(
     Ok(graph_cff)
 }
 
-pub fn generate_cff_expression_from_subgraph<E, V, S: SubGraph>(
-    graph: &HedgeGraph<E, V>,
+pub fn generate_cff_expression_from_subgraph<E, V, H, S: SubGraph>(
+    graph: &HedgeGraph<E, V, H>,
     subgraph: &S,
     canonize_esurface: &Option<ShiftRewrite>,
     reversed_dangling: &[EdgeIndex],
@@ -370,12 +369,12 @@ pub fn generate_cff_expression_from_subgraph<E, V, S: SubGraph>(
     Ok(cff)
 }
 
-pub fn generate_uv_cff<E, V, S: SubGraph>(
-    graph: &HedgeGraph<E, V>,
+pub fn generate_uv_cff<E, V, H, S: SubGraph>(
+    graph: &HedgeGraph<E, V, H>,
     subgraph: &S,
     canonize_esurface: &Option<ShiftRewrite>,
     contract_edges: &[EdgeIndex],
-    orientation: &HedgeVec<Orientation>,
+    orientation: &EdgeVec<Orientation>,
     cut_edges: &[EdgeIndex],
 ) -> Result<Atom> {
     let mut generation_graph =
@@ -411,8 +410,8 @@ pub fn generate_uv_cff<E, V, S: SubGraph>(
     Ok(atom_tree_substituted * &inverse_energies)
 }
 
-fn generate_cff_for_orientation<E, V>(
-    graph: &HedgeGraph<E, V>,
+fn generate_cff_for_orientation<E, V, H>(
+    graph: &HedgeGraph<E, V, H>,
     canonize_esurface: &Option<ShiftRewrite>,
     cache: &mut SurfaceCache,
     cuts: &TiVec<CutId, CrossSectionCut>,
@@ -452,8 +451,8 @@ fn generate_cff_for_orientation<E, V>(
         .collect()
 }
 
-pub fn generate_cff_with_cuts<E, V>(
-    graph: &HedgeGraph<E, V>,
+pub fn generate_cff_with_cuts<E, V, H>(
+    graph: &HedgeGraph<E, V, H>,
     canonize_esurface: &Option<ShiftRewrite>,
     cuts: &TiVec<CutId, CrossSectionCut>,
 ) -> Result<CFFCutsExpression> {
@@ -809,21 +808,20 @@ mod tests_cff {
     use std::{ops::Range, vec};
 
     use ahash::HashMap;
-    use chrono::format::parse;
+    
     use linnet::half_edge::{
         builder::HedgeGraphBuilder, involution::Flow, nodestore::NodeStorageVec,
     };
     use symbolica::{
         domains::float::{NumericalFloatLike, Real},
-        evaluate::{ExpressionEvaluator, FunctionMap},
-        function, parse, symbol,
+        evaluate::{ExpressionEvaluator, FunctionMap}, parse, symbol,
     };
     use utils::FloatLike;
 
     use crate::{
         cff::cff_graph::CFFEdgeType,
         momentum::{FourMomentum, ThreeMomentum},
-        utils::{self, dummy_hedge_graph, RefDefault, F, GS, W_},
+        utils::{self, dummy_hedge_graph, RefDefault, F},
     };
 
     use super::*;
@@ -1045,7 +1043,7 @@ mod tests_cff {
         energy_cache.extend(virtual_energy_cache);
 
         let energy_cache = dummy_hedge_graph(6)
-            .new_hedgevec_from_iter(energy_cache)
+            .new_edgevec_from_iter(energy_cache)
             .unwrap();
 
         let energy_prefactor = virtual_energy_cache
@@ -1092,7 +1090,8 @@ mod tests_cff {
         triangle_hedge_graph_builder.add_edge(nodes[0], nodes[1], (), Orientation::Undirected);
         triangle_hedge_graph_builder.add_edge(nodes[1], nodes[2], (), Orientation::Undirected);
 
-        let triangle_hedge_graph = triangle_hedge_graph_builder.build::<NodeStorageVec<()>>();
+        let triangle_hedge_graph: HedgeGraph<(), (), ()> =
+            triangle_hedge_graph_builder.build::<NodeStorageVec<()>>();
 
         let cff_hedge = generate_cff_expression(&triangle_hedge_graph, &shift_rewrite).unwrap();
         let mut cff_hedge_evaluator = cff_hedge.quick_symbolica_evaluator(0..3, 3..6);
@@ -1158,7 +1157,7 @@ mod tests_cff {
         energy_cache.extend(virtual_energy_cache);
 
         let energy_cache = dummy_hedge_graph(energy_cache.len())
-            .new_hedgevec_from_iter(energy_cache)
+            .new_edgevec_from_iter(energy_cache)
             .unwrap();
 
         let energy_prefactor = virtual_energy_cache
@@ -1207,7 +1206,8 @@ mod tests_cff {
         hedge_double_triangle_builder.add_edge(nodes[1], nodes[3], (), Orientation::Undirected);
         hedge_double_triangle_builder.add_edge(nodes[2], nodes[3], (), Orientation::Undirected);
 
-        let hedge_double_traingle = hedge_double_triangle_builder.build::<NodeStorageVec<()>>();
+        let hedge_double_traingle: HedgeGraph<(), (), ()> =
+            hedge_double_triangle_builder.build::<NodeStorageVec<()>>();
         let cff_hedge = generate_cff_expression(&hedge_double_traingle, &shift_rewrite).unwrap();
         let mut cff_hedge_evaluator = cff_hedge.quick_symbolica_evaluator(0..2, 2..7);
         let cff_res =
@@ -1307,7 +1307,7 @@ mod tests_cff {
             .unwrap();
 
         let energies_cache = dummy_hedge_graph(energies_cache.len())
-            .new_hedgevec_from_iter(energies_cache)
+            .new_edgevec_from_iter(energies_cache)
             .unwrap();
 
         let mut evaluator = cff.quick_symbolica_evaluator(0..2, 2..10);
@@ -1336,7 +1336,7 @@ mod tests_cff {
         tbt_hedge_builder.add_edge(nodes[3], nodes[5], (), Orientation::Undirected);
         tbt_hedge_builder.add_edge(nodes[5], nodes[4], (), Orientation::Undirected);
 
-        let tbt_hedge = tbt_hedge_builder.build::<NodeStorageVec<()>>();
+        let tbt_hedge: HedgeGraph<(), (), ()> = tbt_hedge_builder.build::<NodeStorageVec<()>>();
         let cff_hedge = generate_cff_expression(&tbt_hedge, &shift_rewrite).unwrap();
 
         let mut cff_hedge_evaluator = cff_hedge.quick_symbolica_evaluator(0..2, 2..10);

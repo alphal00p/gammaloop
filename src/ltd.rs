@@ -1,7 +1,6 @@
 use core::panic;
 
 use crate::{
-    gammaloop_integrand::DefaultSample,
     graph::{BareGraph, EdgeType, Graph},
     momentum::{Energy, FourMomentum, Polarization, Signature, ThreeMomentum},
     momentum_sample::MomentumSample,
@@ -18,8 +17,7 @@ use log::debug;
 use nalgebra::DMatrix;
 use serde::{Deserialize, Serialize};
 use spenso::{
-    algebra::{complex::Complex, upgrading_arithmetic::FallibleAdd, ScalarMul},
-    structure::ScalarTensor,
+    algebra::{complex::Complex, ScalarMul},
     tensors::data::DataTensor,
 };
 use symbolica::domains::float::{NumericalFloatLike, Real};

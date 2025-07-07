@@ -4,13 +4,11 @@ use crate::momentum_sample::{
 };
 use crate::utils::{FloatLike, Length, F};
 use bincode::{BorrowDecode, Decode, Encode};
-use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use spenso::algebra::algebraic_traits::RefZero;
 use std::fmt::Display;
 use std::ops::{AddAssign, Index, IndexMut, Neg, SubAssign};
 use symbolica::atom::{Atom, AtomCore, AtomOrView, FunctionBuilder, Symbol};
-use symbolica::id::Pattern;
 use typed_index_collections::TiVec;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, PartialOrd, Eq, Ord, Hash)]
@@ -55,6 +53,16 @@ pub struct LoopExtSignature {
 }
 
 impl LoopExtSignature {
+    pub fn swap_loops(&mut self, i: LoopIndex, j: LoopIndex) {
+        // println!("i{i},j{j}");÷
+        if self.internal.len() > 0 {
+            self.internal.0.swap(i, j);
+        }
+    }
+    pub fn swap_external(&mut self, i: ExternalIndex, j: ExternalIndex) {
+        self.external.0.swap(i, j);
+    }
+
     pub fn loop_atom<'a, I>(
         &self,
         mom_symbol: Symbol,

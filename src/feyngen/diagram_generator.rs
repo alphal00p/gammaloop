@@ -6,23 +6,14 @@ use linnet::permutation::Permutation;
 use rayon::iter::ParallelIterator;
 use rayon::prelude::*;
 use rayon::ThreadPoolBuilder;
-use spenso::algebra::complex::Complex;
 use spenso::contraction::Contract;
 use spenso::iterators::IteratableTensor;
-use spenso::network::library::symbolic::ExplicitKey;
-use spenso::network::parsing::ShadowedStructure;
-use spenso::network::store::NetworkStore;
-use spenso::tensors::{
-    complex::RealOrComplexTensor,
-    data::{DataTensor, StorageTensor},
-};
+use spenso::tensors::data::{DataTensor, StorageTensor};
 // use spenso::network::Network;
-use spenso::tensors::parametric::{MixedTensor, ParamOrConcrete, ParamTensor};
 
-use spenso::shadowing::symbolica_utils::{SerializableAtom, SerializableSymbol};
-use spenso::structure::representation::{ExtendibleReps, LibraryRep, RepName};
+use spenso::structure::representation::{Euclidean, LibraryRep, RepName};
 use spenso::structure::slot::{DualSlotTo, IsAbstractSlot};
-use spenso::structure::{HasStructure, SmartShadowStructure};
+use spenso::structure::{HasStructure, OrderedStructure};
 use std::collections::hash_map::Entry;
 use std::collections::HashSet;
 use std::ops::{Deref, RangeInclusive};
@@ -30,10 +21,9 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use symbolica::atom::AtomView;
 use symbolica::domains::finite_field::PrimeIteratorU64;
-use symbolica::domains::rational::Rational;
 use symbolica::function;
 use symbolica::graph::GenerationSettings;
-use symbolica::id::{Context, Replacement};
+use symbolica::id::Context;
 
 use ahash::AHashMap;
 use ahash::AHashSet;
@@ -57,11 +47,12 @@ use crate::model::ArcVertexRule;
 use crate::model::VertexRule;
 use crate::model::{ArcParticle, ColorStructure};
 use crate::momentum::{Pow, Sign, SignOrZero};
+use crate::numerator::aind::Aind;
 use crate::numerator::SymbolicExpression;
-use crate::numerator::{AtomStructure, Network};
+use crate::numerator::Network;
 use crate::numerator::{ExpressionState, GlobalPrefactor};
 use crate::numerator::{Numerator, StandardTensorNet};
-use crate::utils::{self, GS, TENSORLIB, W_};
+use crate::utils::{self, TENSORLIB, W_};
 use crate::{
     feyngen::{FeynGenFilter, GenerationType},
     graph::BareGraph,
@@ -1073,8 +1064,8 @@ impl FeynGen {
 
         let mut he_graph = HedgeGraph::<EdgeColor, NodeColor>::from_sym(graph.clone()).map(
             |_, _, node_color| node_color,
-            |_, _, _, d| d.map(|d| model.get_particle_from_pdg(d.pdg)),
-            |_| (),
+            |_, _, _, _, d| d.map(|d| model.get_particle_from_pdg(d.pdg)),
+            |_, _| (),
         );
         // info!(
         //     "Looking at\n{}",
@@ -4475,7 +4466,7 @@ impl ProcessedNumeratorForComparison {
 
     #[allow(clippy::type_complexity)]
     fn random_concretize_reps(
-        decomposed_net: &DataTensor<Numerator<Network>>,
+        decomposed_net: &DataTensor<Numerator<Network>, OrderedStructure<Euclidean, Aind>>,
         sample_iterator: Option<&mut PrimeIteratorU64>,
         fully_numerical_substitution: bool,
     ) -> Vec<(Atom, Atom)> {

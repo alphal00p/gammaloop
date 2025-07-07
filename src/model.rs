@@ -1,8 +1,7 @@
 use crate::graph::Shifts;
 use crate::momentum::{FourMomentum, Helicity, Polarization};
-use crate::numerator::ufo::UFO;
+use crate::numerator::aind::Aind;
 use crate::utils::{self, FloatLike, F, W_};
-use crate::GammaLoopContext;
 use crate::HasModel;
 use ahash::{AHashMap, HashSet, RandomState};
 use bincode::{Decode, Encode};
@@ -10,7 +9,8 @@ use color_eyre::{Help, Report};
 use eyre::{eyre, Context};
 use itertools::Itertools;
 use linnet::half_edge::drawing::Decoration;
-use spenso::structure::PermutedStructure;
+use linnet::half_edge::involution::Flow;
+use spenso::structure::{IndexLess, PermutedStructure};
 
 // use log::{info, trace};
 use idenso::representations::{Bispinor, ColorAdjoint, ColorFundamental, ColorSextet};
@@ -29,7 +29,8 @@ use spenso::structure::{
     representation::Representation, slot::DualSlotTo, slot::IsAbstractSlot, slot::Slot,
 };
 use spenso::structure::{OrderedStructure, TensorStructure, ToSymbolic};
-use spenso::tensors::parametric::ExpandedCoefficent;
+use spenso::tensors::data::{DataTensor, DenseTensor, SetTensorData, SparseTensor};
+use spenso::tensors::parametric::{ExpandedCoefficent, ParamTensor};
 use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
 use std::fs;
@@ -316,6 +317,49 @@ impl std::hash::Hash for VertexRule {
 }
 
 impl VertexRule {
+    pub fn tensors(&self, i: Aind, j: Aind) -> [ParamTensor<OrderedStructure<Euclidean, Aind>>; 3] {
+        let spin_structure = self
+            .lorentz_structures
+            .iter()
+            .map(|ls| ls.structure.clone())
+            .collect_vec();
+
+        let color_structure: Vec<Atom> = self.color_structures.color_structure.clone();
+
+        let i = Euclidean {}.new_slot(color_structure.len(), i);
+        let j = Euclidean {}.new_slot(spin_structure.len(), j);
+
+        let color_structure: ParamTensor<OrderedStructure<Euclidean, Aind>> =
+            ParamTensor::composite(DataTensor::Dense(
+                DenseTensor::from_data(
+                    color_structure,
+                    PermutedStructure::from_iter([i]).structure,
+                )
+                .unwrap(),
+            ));
+
+        let spin_structure: ParamTensor<OrderedStructure<Euclidean, Aind>> =
+            ParamTensor::composite(DataTensor::Dense(
+                DenseTensor::from_data(spin_structure, PermutedStructure::from_iter([j]).structure)
+                    .unwrap(),
+            ));
+
+        let mut couplings: ParamTensor<OrderedStructure<Euclidean, Aind>> =
+            ParamTensor::composite(DataTensor::Sparse(SparseTensor::empty(
+                PermutedStructure::from_iter([i, j]).structure,
+            )));
+
+        for (i, row) in self.couplings.iter().enumerate() {
+            for (j, col) in row.iter().enumerate() {
+                if let Some(atom) = col {
+                    couplings.set(&[i, j], atom.expression.clone()).unwrap();
+                }
+            }
+        }
+
+        [color_structure, couplings, spin_structure]
+    }
+
     #[allow(clippy::complexity)]
     pub fn get_coupling_orders(
         &self,
@@ -1003,7 +1047,7 @@ impl<LorRep: BaseRepName> EdgeSlots<LorRep> {
     pub fn replacements(&self, id: usize) -> Vec<Replacement> {
         let rhs_lor = <Atom as AtomCore>::to_pattern(&LorRep::slot(4, id).to_symbolic_wrapped());
 
-        let rhs_spin = Bispinor {}.new_slot(4, id);
+        let rhs_spin = Bispinor {}.new_slot::<Aind, _, _>(4, id);
 
         let rhs_spin = <Atom as AtomCore>::to_pattern(&rhs_spin.to_symbolic_wrapped());
 
@@ -1091,6 +1135,15 @@ impl Particle {
         }
     }
 
+    pub fn spin_reps(&self) -> IndexLess {
+        PermutedStructure::<IndexLess>::from_iter(match self.spin {
+            3 => vec![Minkowski {}.new_rep(4).cast()],
+            2 => vec![Bispinor {}.new_rep(4).cast()],
+            _ => vec![],
+        })
+        .structure
+    }
+
     fn spin_slots(&self, shift: usize) -> (Vec<Slot<Bispinor>>, usize) {
         let fourd_bis: Representation<_> = Bispinor {}.new_rep(4);
 
@@ -1106,6 +1159,29 @@ impl Particle {
         } else {
             true
         }
+    }
+
+    pub fn color_reps(&self, flow: Flow) -> IndexLess {
+        let reps = match flow {
+            Flow::Sink => match self.color {
+                3 => vec![ColorFundamental {}.new_rep(3).cast()],
+
+                -3 => vec![ColorFundamental {}.dual().new_rep(3).cast()],
+                6 => vec![ColorSextet {}.new_rep(6).cast()],
+                -6 => vec![ColorSextet {}.dual().new_rep(6).cast()],
+                8 => vec![ColorAdjoint {}.new_rep(8).cast()],
+                _ => vec![],
+            },
+            Flow::Source => match self.color {
+                -3 => vec![ColorFundamental {}.new_rep(3).cast()],
+                3 => vec![ColorFundamental {}.dual().new_rep(3).cast()],
+                -6 => vec![ColorSextet {}.new_rep(6).cast()],
+                6 => vec![ColorSextet {}.dual().new_rep(6).cast()],
+                8 => vec![ColorAdjoint {}.new_rep(8).cast()],
+                _ => vec![],
+            },
+        };
+        PermutedStructure::<IndexLess>::from_iter(reps).structure
     }
 
     fn color_slots(&self, shift: usize) -> (Vec<Slot<LibraryRep>>, usize) {

@@ -1,4 +1,4 @@
-use std::fmt::{Display, LowerExp};
+use std::fmt::Display;
 
 use crate::momentum::{FourMomentum, Polarization, Rotatable, Rotation, ThreeMomentum};
 use crate::utils::{FloatLike, Length, F};

@@ -16,7 +16,7 @@ use clarabel::algebra::*;
 use clarabel::solver::*;
 use core::panic;
 use itertools::Itertools;
-use linnet::half_edge::hedgevec::HedgeVec;
+use linnet::half_edge::hedgevec::EdgeVec;
 use linnet::half_edge::involution::EdgeIndex;
 use serde::Deserialize;
 use serde::Serialize;
@@ -72,7 +72,7 @@ fn construct_solver(
     esurfaces_to_consider: &[ExistingEsurfaceId],
     existing_esurfaces: &ExistingEsurfaces,
     esurfaces: &EsurfaceCollection,
-    edge_masses: &HedgeVec<Option<Complex<F<f64>>>>,
+    edge_masses: &EdgeVec<Option<Complex<F<f64>>>>,
     external_momenta: &ExternalFourMomenta<F<f64>>,
     verbose: bool,
 ) -> DefaultSolver {
@@ -240,7 +240,7 @@ pub fn find_center(
     esurfaces_to_consider: &[ExistingEsurfaceId],
     existing_esurfaces: &ExistingEsurfaces,
     esurfaces: &EsurfaceCollection,
-    edge_masses: &HedgeVec<Option<Complex<F<f64>>>>,
+    edge_masses: &EdgeVec<Option<Complex<F<f64>>>>,
     external_momenta: &ExternalFourMomenta<F<f64>>,
     verbose: bool,
 ) -> Option<LoopMomenta<F<f64>>> {
@@ -297,7 +297,7 @@ pub fn find_maximal_overlap(
     lmb: &LoopMomentumBasis,
     existing_esurfaces: &ExistingEsurfaces,
     esurfaces: &EsurfaceCollection,
-    edge_masses: &HedgeVec<Option<Complex<F<f64>>>>,
+    edge_masses: &EdgeVec<Option<Complex<F<f64>>>>,
     external_momenta: &ExternalFourMomenta<F<f64>>,
     settings: &Settings,
 ) -> OverlapStructure {
@@ -541,7 +541,7 @@ impl EsurfacePairs {
         lmb: &LoopMomentumBasis,
         existing_esurfaces: &ExistingEsurfaces,
         esurfaces: &EsurfaceCollection,
-        edge_masses: &HedgeVec<Option<Complex<F<f64>>>>,
+        edge_masses: &EdgeVec<Option<Complex<F<f64>>>>,
         external_momenta: &ExternalFourMomenta<F<f64>>,
     ) -> Self {
         let mut res = Self::new_empty(existing_esurfaces.len());
@@ -666,7 +666,7 @@ impl EsurfacePairs {
     }
 }
 
-fn to_real_mass_vector(edge_masses: &HedgeVec<Option<Complex<F<f64>>>>) -> HedgeVec<F<f64>> {
+fn to_real_mass_vector(edge_masses: &EdgeVec<Option<Complex<F<f64>>>>) -> EdgeVec<F<f64>> {
     edge_masses.map_ref(&|mass| match mass {
         Some(m) => m.re,
         None => F::from_f64(0.0),
@@ -695,7 +695,7 @@ mod tests {
         lmb: LoopMomentumBasis,
         esurfaces: EsurfaceCollection,
         existing_esurfaces: ExistingEsurfaces,
-        edge_masses: HedgeVec<Option<Complex<F<f64>>>>,
+        edge_masses: EdgeVec<Option<Complex<F<f64>>>>,
     }
 
     struct HelperBananaStructure {
@@ -703,7 +703,7 @@ mod tests {
         lmb: LoopMomentumBasis,
         esurfaces: EsurfaceCollection,
         existing_esurfaces: ExistingEsurfaces,
-        edge_masses: HedgeVec<Option<Complex<F<f64>>>>,
+        edge_masses: EdgeVec<Option<Complex<F<f64>>>>,
     }
 
     impl HelperBoxStructure {
@@ -718,7 +718,7 @@ mod tests {
 
             let box_basis = ti_vec![EdgeIndex::from(4)];
             let box_signatures = dummy_hedge_graph
-                .new_hedgevec_from_iter(vec![
+                .new_edgevec_from_iter(vec![
                     (vec![0], vec![1, 0, 0]).into(),
                     (vec![0], vec![0, 1, 0]).into(),
                     (vec![0], vec![0, 0, 1]).into(),
@@ -784,7 +784,7 @@ mod tests {
                 existing_esurfaces,
                 esurfaces,
                 edge_masses: dummy_hedge_graph
-                    .new_hedgevec_from_iter(edge_masses)
+                    .new_edgevec_from_iter(edge_masses)
                     .unwrap(),
             }
         }
@@ -803,7 +803,7 @@ mod tests {
             let dummy_hedge_graph = dummy_hedge_graph(5);
 
             let banana_edge_sigs = dummy_hedge_graph
-                .new_hedgevec_from_iter(vec![
+                .new_edgevec_from_iter(vec![
                     LoopExtSignature {
                         internal: vec![0, 0].into(),
                         external: vec![1].into(),
@@ -843,7 +843,7 @@ mod tests {
 
             let existing_esurfaces = vec![Into::<EsurfaceID>::into(0)].into();
             let edge_masses = dummy_hedge_graph
-                .new_hedgevec_from_iter(vec![None; 5])
+                .new_edgevec_from_iter(vec![None; 5])
                 .unwrap();
 
             Self {

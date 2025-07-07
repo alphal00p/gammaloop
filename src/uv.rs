@@ -1,41 +1,31 @@
-use std::{
-    cmp::Ordering,
-    collections::VecDeque,
-    hash::Hash,
-    ops::{Deref, Index},
-    sync::LazyLock,
-};
+use std::{cmp::Ordering, collections::VecDeque, hash::Hash, ops::Deref};
 
 use crate::{
     cff::{
-        cut_expression::{CutOrientationData, SuperGraphOrientationID},
-        expression::{
-            AmplitudeOrientationID, CFFExpression, GraphOrientation, OrientationData,
-            OrientationExpression, OrientationID,
-        },
+        expression::{GraphOrientation, OrientationData, OrientationID},
         generation::{generate_uv_cff, ShiftRewrite},
     },
-    cross_section::{SerializableCrossSection, SuperGraph},
-    graph::{Graph, VertexInfo},
+    graph::VertexInfo,
     model::ArcParticle,
     momentum::Sign,
     momentum_sample::LoopIndex,
-    new_graph::{self, no_filter, Edge, LMBext, LoopMomentumBasis, Vertex},
+    new_graph::lmb::no_filter,
+    new_graph::{self, Edge, LMBext, LoopMomentumBasis, NumHedgeData, Vertex},
+    numerator::aind::Aind,
     symbolica_ext::CallSymbol,
     utils::{sign_atom, GS, W_},
 };
-use ahash::{AHashSet, HashMap};
+use ahash::AHashSet;
 use bitvec::vec::BitVec;
 use eyre::eyre;
-use idenso::metric::{MetricSimplifier, MS};
-use itertools::Itertools;
+use idenso::metric::MS;
 use pathfinding::prelude::BfsReachable;
 use serde::{Deserialize, Serialize};
 use spenso::{
+    contraction::Contract,
     network::parsing::ShadowedStructure,
     shadowing::symbolica_utils::SerializableAtom,
     structure::{
-        abstract_index::AbstractIndex,
         dimension::Dimension,
         representation::{Minkowski, RepName},
         HasStructure, NamedStructure, OrderedStructure, ToSymbolic,
@@ -44,7 +34,6 @@ use spenso::{
 };
 use symbolica::{
     atom::{Atom, AtomCore, FunctionBuilder, Symbol},
-    domains::{atom, float::Complex, integer::Integer, rational::Rational},
     function,
     id::Replacement,
     parse,
@@ -65,8 +54,8 @@ use linnet::half_edge::{
 };
 use typed_index_collections::TiVec;
 use vakint::{
-    vakint_parse, vakint_symbol, EvaluationOrder, LoopNormalizationFactor, Vakint,
-    VakintExpression, VakintSettings,
+    vakint_symbol, EvaluationOrder, LoopNormalizationFactor, Vakint, VakintExpression,
+    VakintSettings,
 };
 // use vakint::{EvaluationOrder, LoopNormalizationFactor, Vakint, VakintSettings};
 
@@ -174,14 +163,14 @@ impl AsRef<HedgeGraph<UVEdge, UVNode>> for UVGraph {
 }
 pub fn spenso_lor(
     tag: i32,
-    ind: impl Into<AbstractIndex>,
+    ind: impl Into<Aind>,
     dim: impl Into<Dimension>,
-) -> ShadowedStructure {
+) -> ShadowedStructure<Aind> {
     let mink = Minkowski {}.new_slot(dim, ind);
     NamedStructure::from_iter([mink], GS.emr_mom, Some(vec![Atom::num(tag)])).structure
 }
 
-pub fn spenso_lor_atom(tag: i32, ind: impl Into<AbstractIndex>, dim: impl Into<Dimension>) -> Atom {
+pub fn spenso_lor_atom(tag: i32, ind: impl Into<Aind>, dim: impl Into<Dimension>) -> Atom {
     spenso_lor(tag, ind, dim).to_symbolic(None).unwrap()
 }
 
@@ -191,7 +180,7 @@ impl UVGraph {
         let hedge_graph = sg.underlying.map_data_ref(
             |_, _, n| UVNode {
                 dod: n.dod,
-                num: n.num.clone(),
+                num: n.num_spin.contract(&n.num_color).unwrap().scalar().unwrap(),
                 color: None,
             },
             |_, eid, _, n| {
@@ -201,7 +190,7 @@ impl UVGraph {
                         og_edge: 1,
                         dod: d.dod,
                         particle: d.particle.clone(),
-                        num: d.num.clone(),
+                        num: d.spin_num.clone(),
                         den: spenso_lor_atom(usize::from(eid) as i32, 1, GS.dim)
                             .npow(2)
                             //.to_dots()
@@ -225,11 +214,11 @@ impl UVGraph {
         }
     }
 
-    pub fn from_underlying(hedge_graph: &HedgeGraph<Edge, Vertex>) -> Self {
+    pub fn from_underlying(hedge_graph: &HedgeGraph<Edge, Vertex, NumHedgeData>) -> Self {
         Self::from_hedge(hedge_graph.map_data_ref(
             |_, _, n| UVNode {
                 dod: n.dod,
-                num: n.num.clone(),
+                num: n.num_spin.contract(&n.num_color).unwrap().scalar().unwrap(),
                 color: None,
             },
             |_, eid, _, n| {
@@ -239,7 +228,7 @@ impl UVGraph {
                         og_edge: 1,
                         dod: d.dod,
                         particle: d.particle.clone(),
-                        num: d.num.clone(),
+                        num: d.spin_num.clone(),
                         den: spenso_lor_atom(usize::from(eid) as i32, 1, GS.dim)
                             .npow(2)
                             //.to_dots()
@@ -281,8 +270,8 @@ impl UVGraph {
 
         let excised = graph.hedge_representation.concretize(&excised).map(
             |_, _, d| UVNode::from_vertex(&graph.vertices[*d], graph),
-            |_, _, _, e| e.map(|d| UVEdge::from_edge(&graph.edges[*d], *d, graph)),
-            |h| (),
+            |_, _, _, _, e| e.map(|d| UVEdge::from_edge(&graph.edges[*d], *d, graph)),
+            |_, h| (),
         );
 
         UVGraph::from_hedge(excised)
@@ -414,20 +403,20 @@ pub fn is_not_paired(pair: &HedgePair) -> bool {
 }
 
 pub trait UltravioletGraph: LMBext {
-    fn n_loops<S: SubGraph, E, V>(&self, subgraph: &S) -> usize
+    fn n_loops<S: SubGraph, E, V, H>(&self, subgraph: &S) -> usize
     where
-        Self: AsRef<HedgeGraph<E, V>>,
+        Self: AsRef<HedgeGraph<E, V, H>>,
     {
         self.as_ref().cyclotomatic_number(subgraph)
     }
     fn numerator<S: SubGraph>(&self, subgraph: &S) -> Atom;
     fn denominator<S: SubGraph>(&self, subgraph: &S) -> Atom;
-    fn all_cycle_unions<E, V, S: SubGraph<Base = BitVec>>(
+    fn all_cycle_unions<E, V, H, S: SubGraph<Base = BitVec>>(
         &self,
         subgraph: &S,
     ) -> AHashSet<InternalSubGraph>
     where
-        Self: AsRef<HedgeGraph<E, V>>,
+        Self: AsRef<HedgeGraph<E, V, H>>,
     {
         let ref_graph = self.as_ref();
         let init_node = ref_graph.iter_nodes_of(subgraph).next().unwrap().0;
@@ -446,7 +435,7 @@ pub trait UltravioletGraph: LMBext {
 
         spinneys
     }
-    fn all_limits<E, V, S: SubGraph>(
+    fn all_limits<E, V, H, S: SubGraph>(
         &self,
         subgraph: &S,
         expr: &Atom,
@@ -454,7 +443,7 @@ pub trait UltravioletGraph: LMBext {
         lmb: &LoopMomentumBasis,
     ) -> Vec<Atom>
     where
-        Self: AsRef<HedgeGraph<E, V>>,
+        Self: AsRef<HedgeGraph<E, V, H>>,
     {
         let mom_reps = self.uv_spatial_wrapped_replacement(subgraph, lmb, &[W_.x___]);
 
@@ -556,18 +545,21 @@ pub trait UltravioletGraph: LMBext {
         limits
     }
 
-    fn wood<E, V, S: SubGraph<Base = BitVec>>(&self, subgraph: &S) -> Wood
+    fn wood<E, V, H, S: SubGraph<Base = BitVec>>(&self, subgraph: &S) -> Wood
     where
-        Self: AsRef<HedgeGraph<E, V>>,
+        Self: AsRef<HedgeGraph<E, V, H>>,
     {
         Wood::from_spinneys(self.spinneys(subgraph), self)
     }
 
     fn dod<S: SubGraph>(&self, subgraph: &S) -> i32;
 
-    fn spinneys<E, V, S: SubGraph<Base = BitVec>>(&self, subgraph: &S) -> AHashSet<InternalSubGraph>
+    fn spinneys<E, V, H, S: SubGraph<Base = BitVec>>(
+        &self,
+        subgraph: &S,
+    ) -> AHashSet<InternalSubGraph>
     where
-        Self: AsRef<HedgeGraph<E, V>>,
+        Self: AsRef<HedgeGraph<E, V, H>>,
     {
         let ref_graph = self.as_ref();
         let init_node = ref_graph.iter_nodes_of(subgraph).next().unwrap().0;
@@ -616,7 +608,7 @@ impl LMBext for UVGraph {
         &self,
         subgraph: &S,
         tree: &S,
-        externals: &S,
+        externals: S,
     ) -> LoopMomentumBasis {
         self.as_ref().lmb_impl(subgraph, tree, externals)
     }
@@ -742,9 +734,9 @@ impl Wood {
         self.poset.n_nodes()
     }
 
-    pub fn from_spinneys<E, V, I: IntoIterator<Item = InternalSubGraph>>(
+    pub fn from_spinneys<E, V, H, I: IntoIterator<Item = InternalSubGraph>>(
         s: I,
-        graph: impl AsRef<HedgeGraph<E, V>>,
+        graph: impl AsRef<HedgeGraph<E, V, H>>,
     ) -> Self {
         let mut poset = Poset::from_iter(s.into_iter().map(|s| (s, ())));
         let ref_graph = graph.as_ref();
@@ -790,7 +782,7 @@ impl Wood {
         }
     }
 
-    fn unfold_bfs<E, V, G>(
+    fn unfold_bfs<E, V, H, G>(
         &self,
         graph: &G,
         lmb: &LoopMomentumBasis,
@@ -799,7 +791,7 @@ impl Wood {
         root: PosetNode,
     ) -> DagNode
     where
-        G: UltravioletGraph + AsRef<HedgeGraph<E, V>>,
+        G: UltravioletGraph + AsRef<HedgeGraph<E, V, H>>,
     {
         // let graph = graph.as_ref();
         let mut search_front = VecDeque::new();
@@ -850,9 +842,9 @@ impl Wood {
         tree_root
     }
 
-    pub fn unfold<E, V, G>(&self, graph: &G, lmb: &LoopMomentumBasis) -> Forest
+    pub fn unfold<E, V, H, G>(&self, graph: &G, lmb: &LoopMomentumBasis) -> Forest
     where
-        G: UltravioletGraph + AsRef<HedgeGraph<E, V>>,
+        G: UltravioletGraph + AsRef<HedgeGraph<E, V, H>>,
     {
         let mut dag: DAG<Approximation, DagNode, ()> = DAG::new();
 
@@ -1009,8 +1001,16 @@ impl CFFapprox {
             CFFapprox::Dependent { sign, t_arg } => Some((t_arg.integrand.clone(), *sign)),
         }
     }
-    pub fn dependent<E, V, S: SubGraph, SS: SubGraph, OID: OrientationID, O: GraphOrientation>(
-        graph: &HedgeGraph<E, V>,
+    pub fn dependent<
+        E,
+        V,
+        H,
+        S: SubGraph,
+        SS: SubGraph,
+        OID: OrientationID,
+        O: GraphOrientation,
+    >(
+        graph: &HedgeGraph<E, V, H>,
         to_contract: &SS,
         amplitude_subgraph: &S,
         canonize_esurface: &Option<ShiftRewrite>,
@@ -1046,8 +1046,8 @@ impl CFFapprox {
             t_arg: IntegrandExpr { integrand: cff_sum },
         }
     }
-    pub fn root<E, V, S: SubGraph, OID: OrientationID, O: GraphOrientation>(
-        graph: &HedgeGraph<E, V>,
+    pub fn root<E, V, H, S: SubGraph, OID: OrientationID, O: GraphOrientation>(
+        graph: &HedgeGraph<E, V, H>,
         amplitude_subgraph: &S,
         canonize_esurface: &Option<ShiftRewrite>,
         orientations: &TiVec<OID, O>,
@@ -1064,9 +1064,9 @@ impl CFFapprox {
     }
 }
 impl Approximation {
-    pub fn root<E, V, S: SubGraph, OID: OrientationID, O: GraphOrientation>(
+    pub fn root<E, V, H, S: SubGraph, OID: OrientationID, O: GraphOrientation>(
         &mut self,
-        graph: &HedgeGraph<E, V>,
+        graph: &HedgeGraph<E, V, H>,
         amplitude_subgraph: &S,
         canonize_esurface: &Option<ShiftRewrite>,
         orientations: &TiVec<OID, O>,
@@ -1092,13 +1092,13 @@ impl Approximation {
         expr.replace_multiple_repeat(&reps)
     }
 
-    pub fn new<G, E, V>(
+    pub fn new<G, E, V, H>(
         spinney: InternalSubGraph,
         graph: &G,
         lmb: &LoopMomentumBasis,
     ) -> Approximation
     where
-        G: UltravioletGraph + AsRef<HedgeGraph<E, V>>,
+        G: UltravioletGraph + AsRef<HedgeGraph<E, V, H>>,
     {
         let lmb = graph.compatible_sub_lmb(&spinney, lmb);
         // println!("//lmb for spinney \n{}", graph.dot_lmb(&spinney, &lmb));
@@ -1124,7 +1124,13 @@ impl Approximation {
             .dependent(self.subgraph.clone())
     }
 
-    pub fn integrated_4d<E: UVE, V, G: UltravioletGraph + AsRef<HedgeGraph<E, V>>, S: SubGraph>(
+    pub fn integrated_4d<
+        E: UVE,
+        V,
+        H,
+        G: UltravioletGraph + AsRef<HedgeGraph<E, V, H>>,
+        S: SubGraph,
+    >(
         &self,
         dependent: &Self,
         uv_graph: &G,
@@ -1460,7 +1466,7 @@ impl Approximation {
         }
     }
 
-    pub fn compute<E: UVE, V, G: UltravioletGraph + AsRef<HedgeGraph<E, V>>, S: SubGraph>(
+    pub fn compute<E: UVE, V, H, G: UltravioletGraph + AsRef<HedgeGraph<E, V, H>>, S: SubGraph>(
         &mut self,
         graph: &G,
         amplitude_subgraph: &S,
@@ -1472,7 +1478,8 @@ impl Approximation {
     pub fn compute_3d<
         E: UVE,
         V,
-        G: UltravioletGraph + AsRef<HedgeGraph<E, V>>,
+        H,
+        G: UltravioletGraph + AsRef<HedgeGraph<E, V, H>>,
         S: SubGraph,
         OID: OrientationID,
         O: GraphOrientation,
@@ -1533,7 +1540,7 @@ impl Approximation {
         }
     }
 
-    pub fn local_3d<E: UVE, V, G: UltravioletGraph + AsRef<HedgeGraph<E, V>>>(
+    pub fn local_3d<E: UVE, V, H, G: UltravioletGraph + AsRef<HedgeGraph<E, V, H>>>(
         &self,
         dependent: &Self,
         uv_graph: &G,
@@ -1926,7 +1933,8 @@ impl Forest {
     pub fn compute<
         E: UVE,
         V,
-        G: UltravioletGraph + AsRef<HedgeGraph<E, V>>,
+        H,
+        G: UltravioletGraph + AsRef<HedgeGraph<E, V, H>>,
         S: SubGraph,
         OID: OrientationID,
         O: GraphOrientation,

@@ -11,7 +11,7 @@ use crate::{
     gammaloop_integrand::DefaultSample,
     ltd::{generate_ltd_expression, LTDExpression},
     model::{
-        self, ArcParticle, ArcVertexRule, ColorStructure, EdgeSlots, Model, Particle, VertexSlots,
+        self, ArcParticle, ArcVertexRule, ColorStructure, EdgeSlots, Model, VertexSlots,
     },
     momentum::{FourMomentum, Polarization, Rotation, SignOrZero, ThreeMomentum},
     momentum_sample::{
@@ -19,6 +19,7 @@ use crate::{
     },
     new_graph::LoopMomentumBasis,
     numerator::{
+        aind::Aind,
         ufo::{preprocess_ufo_color_wrapped, preprocess_ufo_spin_wrapped, UFO},
         AppliedFeynmanRule, ContractionSettings, Evaluate, Evaluators, ExtraInfo, GammaAlgebraMode,
         Numerator, NumeratorParseMode, NumeratorState, NumeratorStateError, PythonState,
@@ -26,7 +27,7 @@ use crate::{
     },
     signature::{ExternalSignature, LoopExtSignature, SignatureLike},
     subtraction::overlap::OverlapStructure,
-    utils::{self, sorted_vectorize, FloatLike, F, GS, W_},
+    utils::{self, sorted_vectorize, FloatLike, F, W_},
     ProcessSettings, Settings, TropicalSubgraphTableSettings,
 };
 use linnet::half_edge::{
@@ -40,7 +41,7 @@ use linnet::{
     },
     permutation::Permutation,
 };
-use spenso::network::library::TensorLibraryData;
+use spenso::{network::library::TensorLibraryData, structure::PermutedStructure};
 
 use crate::cff::expression::AmplitudeOrientationID;
 use ahash::{AHashMap, AHashSet, HashSet, RandomState};
@@ -51,7 +52,6 @@ use eyre::eyre;
 use itertools::Itertools;
 use log::{debug, warn};
 use momtrop::SampleGenerator;
-use nalgebra::DMatrix;
 
 use gat_lending_iterator::LendingIterator;
 use idenso::representations::{ColorAdjoint, ColorFundamental, ColorSextet};
@@ -59,7 +59,7 @@ use idenso::representations::{ColorAdjoint, ColorFundamental, ColorSextet};
 use spenso::contraction::Contract;
 use spenso::{
     algebra::{
-        algebraic_traits::{IsZero, RefOne, RefZero},
+        algebraic_traits::IsZero,
         complex::Complex,
         ScalarMul,
     },
@@ -69,7 +69,7 @@ use spenso::{
         abstract_index::AbstractIndex,
         representation::{BaseRepName, Euclidean, Minkowski, RepName},
         slot::{DualSlotTo, IsAbstractSlot},
-        CastStructure, HasStructure, NamedStructure, OrderedStructure, ScalarTensor, ToSymbolic,
+        CastStructure, HasStructure, NamedStructure, ScalarTensor, ToSymbolic,
     },
     tensors::data::{
         DataTensor, DenseTensor, GetTensorData, SetTensorData, SparseTensor, StorageTensor,
@@ -87,7 +87,6 @@ use std::{
     collections::{HashMap, VecDeque},
     fmt::{Display, Formatter},
     fs,
-    ops::{AddAssign, Neg, Not},
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -726,18 +725,26 @@ impl HasVertexInfo for InteractionVertexInfo {
                         .to_pattern();
 
                     let ind = match s {
-                        1 => Euclidean {}.new_slot(1, i + 1).to_symbolic_wrapped(),
-                        3 => ColorFundamental {}.new_slot(3, i + 1).to_symbolic_wrapped(),
+                        1 => Euclidean {}
+                            .new_slot::<Aind, _, _>(1, i + 1)
+                            .to_symbolic_wrapped(),
+                        3 => ColorFundamental {}
+                            .new_slot::<Aind, _, _>(3, i + 1)
+                            .to_symbolic_wrapped(),
                         -3 => ColorFundamental {}
-                            .new_slot(3, i + 1)
+                            .new_slot::<Aind, _, _>(3, i + 1)
                             .dual()
                             .to_symbolic_wrapped(),
-                        6 => ColorSextet {}.new_slot(6, i + 1).to_symbolic_wrapped(),
+                        6 => ColorSextet {}
+                            .new_slot::<Aind, _, _>(6, i + 1)
+                            .to_symbolic_wrapped(),
                         -6 => ColorSextet {}
-                            .new_slot(6, i + 1)
+                            .new_slot::<Aind, _, _>(6, i + 1)
                             .dual()
                             .to_symbolic_wrapped(),
-                        8 => ColorAdjoint {}.new_slot(8, i + 1).to_symbolic_wrapped(),
+                        8 => ColorAdjoint {}
+                            .new_slot::<Aind, _, _>(8, i + 1)
+                            .to_symbolic_wrapped(),
                         i => panic!("Color {i} not supported "),
                     };
 
@@ -774,17 +781,17 @@ impl HasVertexInfo for InteractionVertexInfo {
         let [i, j] = vertex_slots.coupling_indices.unwrap();
 
         let color_structure = DataTensor::Dense(
-            DenseTensor::from_data(color_structure, OrderedStructure::from_iter([i]).structure)
+            DenseTensor::from_data(color_structure, PermutedStructure::from_iter([i]).structure)
                 .unwrap(),
         );
 
         let spin_structure = DataTensor::Dense(
-            DenseTensor::from_data(spin_structure, OrderedStructure::from_iter([j]).structure)
+            DenseTensor::from_data(spin_structure, PermutedStructure::from_iter([j]).structure)
                 .unwrap(),
         );
 
         let mut couplings: DataTensor<Atom> = DataTensor::Sparse(SparseTensor::empty(
-            OrderedStructure::from_iter([i, j]).structure,
+            PermutedStructure::from_iter([i, j]).structure,
         ));
 
         for (i, row) in self.vertex_rule.0.couplings.iter().enumerate() {
@@ -1445,7 +1452,7 @@ impl BareGraph {
                 tree: None,
                 loop_edges: TiVec::new(),
                 ext_edges: TiVec::new(),
-                edge_signatures: dummy_hedge_graph.new_hedgevec(|_, _, _| LoopExtSignature {
+                edge_signatures: dummy_hedge_graph.new_edgevec(|_, _, _| LoopExtSignature {
                     internal: SignatureLike::from_iter(std::iter::empty::<SignOrZero>()),
                     external: SignatureLike::from_iter(std::iter::empty::<SignOrZero>()),
                 }),
@@ -1500,7 +1507,7 @@ impl BareGraph {
         }
 
         g.loop_momentum_basis.edge_signatures = dummy_hedge_graph
-            .new_hedgevec_from_iter(edge_signatures.into_iter().map(
+            .new_edgevec_from_iter(edge_signatures.into_iter().map(
                 |(loop_sig_raw, external_sig_raw)| LoopExtSignature {
                     internal: SignatureLike::from_iter(loop_sig_raw),
                     external: SignatureLike::from_iter(external_sig_raw),
@@ -1783,7 +1790,7 @@ impl BareGraph {
                 tree: None,
                 loop_edges: TiVec::new(),
                 ext_edges: TiVec::new(),
-                edge_signatures: dummy_hedge_graph.new_hedgevec(|_, _, _| LoopExtSignature {
+                edge_signatures: dummy_hedge_graph.new_edgevec(|_, _, _| LoopExtSignature {
                     internal: SignatureLike::from_iter(std::iter::empty::<SignOrZero>()),
                     external: SignatureLike::from_iter(std::iter::empty::<SignOrZero>()),
                 }),
@@ -2038,7 +2045,7 @@ impl BareGraph {
 
         let temp_edge_signatures =
             self.hedge_representation
-                .new_hedgevec(|_, _, _| LoopExtSignature {
+                .new_edgevec(|_, _, _| LoopExtSignature {
                     internal: SignatureLike::from_iter(std::iter::empty::<SignOrZero>()),
                     external: SignatureLike::from_iter(std::iter::empty::<SignOrZero>()),
                 });
@@ -3334,7 +3341,7 @@ pub struct DerivedGraphData<NumState> {
 impl DerivedGraphData<PythonState> {
     pub fn load_python_from_path<S: NumeratorState>(path: &Path) -> Result<Self, Report> {
         let mut source = std::fs::File::open(path)?;
-        let mut statemap = State::import(&mut source, None)?;
+        let statemap = State::import(&mut source, None)?;
         match std::fs::read(path) {
             Ok(derived_data_bytes) => {
                 // let derived_data: DerivedGraphData<S> = bincode::decode_from_slice_with_context(
@@ -3973,7 +3980,7 @@ impl<NumState: NumeratorState> DerivedGraphData<NumState> {
 
     pub fn load_from_path(derived_data_path: &Path, state_path: &Path) -> Result<Self, Report> {
         let mut source = std::fs::File::open(state_path)?;
-        let mut statemap = State::import(&mut source, None)?;
+        let statemap = State::import(&mut source, None)?;
         match std::fs::read(derived_data_path) {
             Ok(derived_data_bytes) => {
                 // let derived_data: Self = bincode::decode_from_slice_with_context(

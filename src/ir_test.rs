@@ -4,7 +4,7 @@ use color_eyre::Result;
 use eyre::eyre;
 use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeIndex, Orientation};
-use linreg::{linear_regression, linear_regression_of};
+use linreg::linear_regression_of;
 use rand::Rng;
 use symbolica::{
     domains::float::NumericalFloatLike, domains::float::Real, numerical_integration::MonteCarloRng,
@@ -32,7 +32,7 @@ pub struct ApproachSettings {
 
 impl CrossSectionGraphTerm {
     pub fn test_ir(&self, settings: &Settings, approach_settings: &ApproachSettings) -> Result<()> {
-        let mut rng = MonteCarloRng::new(settings.integrator.seed, 0);
+        let rng = MonteCarloRng::new(settings.integrator.seed, 0);
 
         for (cut_id, esurface) in self.cut_esurface.iter_enumerated() {
             let supergraph_loop_count = self.graph.underlying.get_loop_number();

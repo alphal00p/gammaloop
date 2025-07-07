@@ -1,23 +1,21 @@
-use std::{borrow::Borrow, sync::Arc};
+use std::borrow::Borrow;
 
 use crate::utils::{ose_atom_from_index, W_};
 use bincode_trait_derive::{Decode, Encode};
 use derive_more::{From, Into};
-use itertools::{Either, EitherOrBoth, Itertools};
+use itertools::{EitherOrBoth, Itertools};
 use linnet::half_edge::{
-    hedgevec::HedgeVec,
+    hedgevec::EdgeVec,
     involution::{EdgeIndex, Orientation},
-    nodestore::{NodeStorage, NodeStorageOps},
+    nodestore::NodeStorageOps,
     GVEdgeAttrs, HedgeGraph,
 };
 use serde::{Deserialize, Serialize};
-use spenso::structure::concrete_index::FlatIndex;
 use std::fmt::Write;
 use symbolica::{
     atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol},
     function,
-    id::{Pattern, Replacement},
-    parse, symbol,
+    id::{Pattern, Replacement}, symbol,
 };
 use typed_index_collections::TiVec;
 
@@ -38,14 +36,14 @@ pub struct AmplitudeOrientationID(pub usize);
 )]
 pub struct SubgraphOrientationID(pub usize);
 
-impl GraphOrientation for HedgeVec<Orientation> {
-    fn orientation(&self) -> &HedgeVec<Orientation> {
+impl GraphOrientation for EdgeVec<Orientation> {
+    fn orientation(&self) -> &EdgeVec<Orientation> {
         self
     }
 }
 
 pub trait GraphOrientation {
-    fn orientation(&self) -> &HedgeVec<Orientation>;
+    fn orientation(&self) -> &EdgeVec<Orientation>;
 
     fn orientation_delta(&self) -> Atom {
         let mut fnbld = FunctionBuilder::new(GS.sign_delta);
@@ -152,11 +150,11 @@ impl OrientationID for SuperGraphOrientationID {
 
 #[derive(Clone, Debug, Serialize, Deserialize, Encode, Decode)]
 pub struct OrientationData {
-    pub orientation: HedgeVec<Orientation>,
+    pub orientation: EdgeVec<Orientation>,
 }
 
 impl GraphOrientation for OrientationData {
-    fn orientation(&self) -> &HedgeVec<Orientation> {
+    fn orientation(&self) -> &EdgeVec<Orientation> {
         &self.orientation
     }
 }
@@ -220,7 +218,7 @@ pub struct CFFExpression<O: OrientationID> {
 }
 
 impl GraphOrientation for OrientationExpression {
-    fn orientation(&self) -> &HedgeVec<Orientation> {
+    fn orientation(&self) -> &EdgeVec<Orientation> {
         &self.data.orientation
     }
 }
