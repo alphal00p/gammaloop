@@ -4,8 +4,13 @@ use ahash::HashMap;
 
 use chrono::format::parse;
 use colored::Colorize;
-use linnet::half_edge::{hedgevec::HedgeVec, involution::Orientation};
+use linnet::{
+    dot,
+    dot_parser::DotGraph,
+    half_edge::{hedgevec::EdgeVec, involution::Orientation},
+};
 use nalgebra::{uninit::Uninit, LU};
+use new_graph::parse::{ParseEdge, ParseGraph, ParseHedge, ParseVertex};
 use pathfinding::{matrix::directions::W, num_traits::real};
 
 use linnet::half_edge::{builder::HedgeGraphBuilder, involution::Flow};
@@ -62,146 +67,38 @@ fn tri_uv_AMP() {
         load_generic_model("sm")
     };
 
-    let mut underlying = HedgeGraphBuilder::new();
+    let graph: DotGraph = dot!(
+        digraph G{
+            e1      [flow=sink]
+            e2      [flow=sink]
+            e3      [flow=source]
+            e1 -> A  [particle=h]
+            e2 -> B [particle=h]
+            e3 -> C    [particle=h]
+            A -> B    [particle=h]
+            B -> C    [particle=h]
+            C -> D    [particle=h]
+        }
+    )
+    .unwrap();
 
-    let hhh = VertexInfo::InteractonVertexInfo(InteractionVertexInfo {
-        vertex_rule: model.get_vertex_rule("V_9"),
-    });
-
-    let n1 = underlying.add_node(Vertex {
-        name: "n1".into(),
-        vertex_info: hhh.clone(),
-        dod: 0,
-        num: Atom::one(),
-    });
-
-    let n2 = underlying.add_node(Vertex {
-        name: "n2".into(),
-        vertex_info: hhh.clone(),
-        dod: 0,
-        num: Atom::one(),
-    });
-
-    let n3 = underlying.add_node(Vertex {
-        name: "n3".into(),
-        vertex_info: hhh.clone(),
-        dod: 0,
-        num: Atom::one(),
-    });
-
-    let hprop = model.get_propagator("H_propFeynman");
-    let hp = model.get_particle("H");
-
-    underlying.add_edge(
-        n1,
-        n2,
-        Edge {
-            name: "e0".into(),
-            edge_type: EdgeType::Virtual,
-            particle: hp.clone(),
-            propagator: hprop.clone(),
-            internal_index: vec![],
-            dod: -1,
-            num: spenso_lor_atom(0, 10, GS.dim),
-        },
-        false,
-    );
-
-    underlying.add_edge(
-        n2,
-        n3,
-        Edge {
-            name: "e1".into(),
-            edge_type: EdgeType::Virtual,
-            particle: hp.clone(),
-            propagator: hprop.clone(),
-            internal_index: vec![],
-            dod: -1,
-            num: spenso_lor_atom(1, 10, GS.dim),
-        },
-        false,
-    );
-
-    underlying.add_edge(
-        n3,
-        n1,
-        Edge {
-            name: "e2".into(),
-            edge_type: EdgeType::Virtual,
-            particle: hp.clone(),
-            propagator: hprop.clone(),
-            internal_index: vec![],
-            dod: -1,
-            num: spenso_lor_atom(2, 20, GS.dim),
-        },
-        false,
-    );
-
-    underlying.add_external_edge(
-        n1,
-        Edge {
-            name: "q4".into(),
-            edge_type: EdgeType::Outgoing,
-            particle: hp.clone(),
-            propagator: hprop.clone(),
-            internal_index: vec![],
-            dod: 0,
-            num: spenso_lor_atom(4, 20, GS.dim),
-        },
-        false,
-        Flow::Sink,
-    );
-
-    underlying.add_external_edge(
-        n2,
-        Edge {
-            name: "q5".into(),
-            edge_type: EdgeType::Outgoing,
-            particle: hp.clone(),
-            propagator: hprop.clone(),
-            internal_index: vec![],
-            dod: 0,
-            num: Atom::one(),
-        },
-        false,
-        Flow::Sink,
-    );
-
-    underlying.add_external_edge(
-        n3,
-        Edge {
-            name: "q6".into(),
-            edge_type: EdgeType::Outgoing,
-            particle: hp.clone(),
-            propagator: hprop.clone(),
-            internal_index: vec![],
-            dod: 0,
-            num: Atom::one(),
-        },
-        false,
-        Flow::Source,
-    );
-
-    let amp_hedge = underlying.build();
+    let mut graph = Graph::from_dot(graph, true, &model).unwrap();
     let mut loop_momentum_basis = LoopMomentumBasis {
         tree: None,
         loop_edges: vec![EdgeIndex::from(0)].into(),
         ext_edges: vec![EdgeIndex::from(3), EdgeIndex::from(4), EdgeIndex::from(5)].into(),
-        edge_signatures: amp_hedge.new_hedgevec(|_, _, _| LoopExtSignature::from((vec![], vec![]))),
+        edge_signatures: graph
+            .underlying
+            .new_edgevec(|_, _, _| LoopExtSignature::from((vec![], vec![]))),
     };
 
-    loop_momentum_basis.set_edge_signatures(&amp_hedge).unwrap();
+    loop_momentum_basis
+        .set_edge_signatures(&graph.underlying)
+        .unwrap();
 
-    let canonize_esurface = amp_hedge.get_esurface_canonization(&loop_momentum_basis);
-
-    let graph = Graph {
-        name: "tri_uv".into(),
-        loop_momentum_basis: loop_momentum_basis.clone(),
-        multiplicity: Atom::one(),
-        underlying: amp_hedge.clone(),
-        vertex_slots: vec![].into(),
-        external_connections: None,
-    };
+    let canonize_esurface = graph
+        .underlying
+        .get_esurface_canonization(&loop_momentum_basis);
 
     let mut amplitude_graph = AmplitudeGraph::<UnInit>::new(graph.clone());
     amplitude_graph
@@ -209,10 +106,11 @@ fn tri_uv_AMP() {
         .unwrap();
 
     // build UV here
+    graph.loop_momentum_basis = loop_momentum_basis;
     let uv_graph = UVGraph::from_supergraph(&graph);
 
-    let wood = uv_graph.wood(&amp_hedge.full_filter());
-    let mut forest = wood.unfold(&uv_graph, &loop_momentum_basis);
+    let wood = uv_graph.wood(&graph.underlying.full_filter());
+    let mut forest = wood.unfold(&uv_graph, &graph.loop_momentum_basis);
     // forest.compute(&uv_graph);
 
     let orientations: TiVec<AmplitudeOrientationID, OrientationData> = amplitude_graph
@@ -395,12 +293,8 @@ fn tri_box_tri_LU() {
 
     let mut underlying = HedgeGraphBuilder::new();
 
-    let hhh = VertexInfo::InteractonVertexInfo(InteractionVertexInfo {
-        vertex_rule: model.get_vertex_rule("V_9"),
-    });
-    let htt = VertexInfo::InteractonVertexInfo(InteractionVertexInfo {
-        vertex_rule: model.get_vertex_rule("V_141"),
-    });
+    let hhh = model.get_vertex_rule("V_9");
+    let htt = model.get_vertex_rule("V_141");
 
     let hprop = model.get_propagator("H_propFeynman");
     let hp = model.get_particle("H");
@@ -416,231 +310,196 @@ fn tri_box_tri_LU() {
         assert!(tp.0.mass.value.unwrap().is_zero());
     }
 
-    let n1 = underlying.add_node(Vertex {
-        name: "n1".into(),
-        vertex_info: hhh.clone(),
-        dod: 0,
-        num: Atom::one(),
-    });
-    let n2 = underlying.add_node(Vertex {
-        name: "n2".into(),
-        vertex_info: hhh.clone(),
-        dod: 0,
-        num: Atom::one(),
-    });
-    let n3 = underlying.add_node(Vertex {
-        name: "n3".into(),
-        vertex_info: hhh.clone(),
-        dod: 0,
-        num: Atom::one(),
-    });
-    let n4 = underlying.add_node(Vertex {
-        name: "n4".into(),
-        vertex_info: htt.clone(),
-        dod: 0,
-
-        num: Atom::one(),
-    });
-    let n5 = underlying.add_node(Vertex {
-        name: "n5".into(),
-        vertex_info: htt.clone(),
-        dod: 0,
-        num: Atom::one(),
-    });
-    let n6 = underlying.add_node(Vertex {
-        name: "n6".into(),
-        vertex_info: htt.clone(),
-        dod: 0,
-        num: Atom::one(),
-    });
+    let n1 = underlying.add_node(ParseVertex::from(hhh.clone()));
+    let n2 = underlying.add_node(hhh.clone().into());
+    let n3 = underlying.add_node(hhh.clone().into());
+    let n4 = underlying.add_node(htt.clone().into());
+    let n5 = underlying.add_node(htt.clone().into());
+    let n6 = underlying.add_node(htt.clone().into());
 
     underlying.add_edge(
-        n1,
-        n2,
-        Edge {
-            name: "e0".into(),
-            edge_type: EdgeType::Virtual,
+        n1.add_data(ParseHedge::default()),
+        n2.add_data(ParseHedge::default()),
+        ParseEdge {
+            label: None,
             particle: hp.clone(),
-            propagator: hprop.clone(),
-            internal_index: vec![],
-            dod: -2,
-            num: Atom::one(),
+            num: Some(Atom::one()),
         },
         false,
     );
 
     underlying.add_edge(
-        n1,
-        n3,
-        Edge {
-            name: "e1".into(),
-            edge_type: EdgeType::Virtual,
+        n1.add_data(ParseHedge::default()),
+        n3.add_data(ParseHedge::default()),
+        ParseEdge {
+            label: None,
             particle: hp.clone(),
-            propagator: hprop.clone(),
-            internal_index: vec![],
-            dod: -2,
-            num: Atom::one(),
+            num: Some(Atom::one()),
         },
         false,
     );
 
     underlying.add_edge(
-        n2,
-        n3,
-        Edge {
-            name: "e2".into(),
-            edge_type: EdgeType::Virtual,
+        n2.add_data(ParseHedge::default()),
+        n3.add_data(ParseHedge::default()),
+        ParseEdge {
+            label: None,
             particle: hp.clone(),
-            propagator: hprop.clone(),
-            internal_index: vec![],
-            dod: if box_uv_dod >= 1 { -1 } else { -2 },
-            num: if box_uv_dod >= 1 {
+            num: Some(if box_uv_dod >= 1 {
                 spenso_lor_atom(2, 30, GS.dim)
             } else {
                 Atom::one()
-            },
+            }),
         },
+        // Edge {
+        //     name: "e2".into(),
+
+        //     particle: hp.clone(),
+        //     propagator: hprop.clone(),
+
+        //     dod: if box_uv_dod >= 1 { -1 } else { -2 },
+        //     num: if box_uv_dod >= 1 {
+        //         spenso_lor_atom(2, 30, GS.dim)
+        //     } else {
+        //         Atom::one()
+        //     },
+        // },
         false,
     );
 
     underlying.add_edge(
-        n2,
-        n4,
-        Edge {
-            name: "e3".into(),
-            edge_type: EdgeType::Virtual,
+        n2.add_data(ParseHedge::default()),
+        n4.add_data(ParseHedge::default()),
+        ParseEdge {
+            label: None,
+
             particle: hp.clone(),
-            propagator: hprop.clone(),
-            internal_index: vec![],
-            dod: if box_uv_dod >= 0 && uv_dod >= 1 {
-                -1
-            } else {
-                -2
-            },
-            num: if box_uv_dod >= 0 && uv_dod >= 1 {
+
+            // dod: if box_uv_dod >= 0 && uv_dod >= 1 {
+            //     -1
+            // } else {
+            //     -2
+            // },
+            num: Some(if box_uv_dod >= 0 && uv_dod >= 1 {
                 spenso_lor_atom(3, 20, GS.dim)
             } else {
                 Atom::one()
-            },
+            }),
         },
         false,
     );
 
     underlying.add_edge(
-        n3,
-        n5,
-        Edge {
-            name: "e4".into(),
-            edge_type: EdgeType::Virtual,
+        n3.add_data(ParseHedge::default()),
+        n5.add_data(ParseHedge::default()),
+        ParseEdge {
+            label: None,
+
             particle: hp.clone(),
-            propagator: hprop.clone(),
-            internal_index: vec![],
-            dod: if box_uv_dod == 2 { -1 } else { -2 },
-            num: if box_uv_dod == 2 {
+            // propagator: hprop.clone(),
+
+            // dod: if box_uv_dod == 2 { -1 } else { -2 },
+            num: Some(if box_uv_dod == 2 {
                 spenso_lor_atom(4, 30, GS.dim)
             } else {
                 Atom::one()
-            },
+            }),
         },
         false,
     );
 
     underlying.add_edge(
-        n4,
-        n5,
-        Edge {
-            name: "e5".into(),
-            edge_type: EdgeType::Virtual,
+        n4.add_data(ParseHedge::default()),
+        n5.add_data(ParseHedge::default()),
+        ParseEdge {
+            label: None,
+
             particle: tp.clone(),
-            propagator: tprop.clone(),
-            internal_index: vec![],
-            dod: if uv_dod >= 0 { -1 } else { -2 },
-            num: if uv_dod >= 0 {
+
+            // dod: if uv_dod >= 0 { -1 } else { -2 },
+            num: Some(if uv_dod >= 0 {
                 spenso_lor_atom(5, 10, GS.dim)
             } else {
                 Atom::one()
-            },
+            }),
         },
         true,
     );
 
     underlying.add_edge(
-        n6,
-        n4,
-        Edge {
-            name: "e6".into(),
-            edge_type: EdgeType::Virtual,
+        n6.add_data(ParseHedge::default()),
+        n4.add_data(ParseHedge::default()),
+        ParseEdge {
+            label: None,
+
             particle: tp.clone(),
-            propagator: tprop.clone(),
-            internal_index: vec![],
-            dod: if uv_dod >= 1 { -1 } else { -2 },
-            num: if uv_dod >= 1 {
+
+            // dod: if uv_dod >= 1 { -1 } else { -2 },
+            num: Some(if uv_dod >= 1 {
                 spenso_lor_atom(6, 20, GS.dim)
             } else {
                 Atom::one()
-            },
+            }),
         },
         true,
     );
 
     underlying.add_edge(
-        n5,
-        n6,
-        Edge {
-            name: "e7".into(),
-            edge_type: EdgeType::Virtual,
+        n5.add_data(ParseHedge::default()),
+        n6.add_data(ParseHedge::default()),
+        ParseEdge {
+            label: None,
+
             particle: tp.clone(),
-            propagator: tprop.clone(),
-            internal_index: vec![],
-            dod: if uv_dod >= 0 { -1 } else { -2 },
-            num: if uv_dod >= 0 {
+
+            // dod: if uv_dod >= 0 { -1 } else { -2 },
+            num: Some(if uv_dod >= 0 {
                 spenso_lor_atom(7, 10, GS.dim)
             } else {
                 Atom::one()
-            },
+            }),
         },
         true,
     );
 
     underlying.add_external_edge(
-        n1,
-        Edge {
-            name: "q1".into(),
-            edge_type: EdgeType::Incoming,
+        n1.add_data(ParseHedge::default()),
+        ParseEdge {
+            label: None,
+
             particle: hp.clone(),
-            propagator: hprop.clone(),
-            internal_index: vec![],
-            dod: 0,
-            num: if box_uv_dod == 1 {
+
+            num: Some(if box_uv_dod == 1 {
                 spenso_lor_atom(8, 30, GS.dim)
             } else {
                 Atom::one()
-            },
+            }),
         },
         false,
         Flow::Sink,
     );
 
     underlying.add_external_edge(
-        n6,
-        Edge {
-            name: "q2".into(),
-            edge_type: EdgeType::Outgoing,
+        n6.add_data(ParseHedge::default()),
+        ParseEdge {
+            label: None,
+
             particle: hp.clone(),
-            propagator: hprop.clone(),
-            internal_index: vec![],
-            dod: 0,
-            num: if box_uv_dod == -1 && uv_dod >= 1 {
+            // : hprop.clone(),
+            // dod: 0,
+            num: Some(if box_uv_dod == -1 && uv_dod >= 1 {
                 spenso_lor_atom(9, 20, GS.dim)
             } else {
                 Atom::one()
-            },
+            }),
         },
         false,
         Flow::Source,
     );
 
-    let underlying = underlying.build();
+    let underlying = ParseGraph {
+        graph: underlying.build(),
+    };
 
     println!("{}", underlying.dot(&underlying.full_filter()));
 
@@ -648,22 +507,14 @@ fn tri_box_tri_LU() {
         tree: None,
         loop_edges: vec![EdgeIndex::from(1), EdgeIndex::from(4), EdgeIndex::from(7)].into(),
         ext_edges: vec![EdgeIndex::from(8), EdgeIndex::from(9)].into(),
-        edge_signatures: underlying
-            .new_hedgevec(|_, _, _| LoopExtSignature::from((vec![], vec![]))),
+        edge_signatures: underlying.new_edgevec(|_, _, _| LoopExtSignature::from((vec![], vec![]))),
     };
 
     loop_momentum_basis
         .set_edge_signatures(&underlying)
         .unwrap();
 
-    let graph = Graph {
-        multiplicity: Atom::one(),
-        name: "TBT".into(),
-        underlying,
-        loop_momentum_basis,
-        vertex_slots: vec![].into(),
-        external_connections: None,
-    };
+    let graph = Graph::from_parsed(underlying, &model).unwrap();
 
     let mut cs: CrossSectionGraph<UnInit> = CrossSectionGraph::new(graph);
 
@@ -1320,12 +1171,8 @@ fn double_triangle_LU() {
 
     let mut underlying = HedgeGraphBuilder::new();
 
-    let hhh = VertexInfo::InteractonVertexInfo(InteractionVertexInfo {
-        vertex_rule: model.get_vertex_rule("V_9"),
-    });
-    let htt = VertexInfo::InteractonVertexInfo(InteractionVertexInfo {
-        vertex_rule: model.get_vertex_rule("V_141"),
-    });
+    let hhh = model.get_vertex_rule("V_9");
+    let htt = model.get_vertex_rule("V_141");
 
     let hprop = model.get_propagator("H_propFeynman");
     let hp = model.get_particle("H");
@@ -1333,176 +1180,144 @@ fn double_triangle_LU() {
     let tprop = model.get_propagator("t_propFeynman");
     let tp = model.get_particle("t");
 
-    let n1 = underlying.add_node(Vertex {
-        name: "n1".into(),
-        vertex_info: hhh,
-        dod: 0,
-        num: Atom::one(),
-    });
-    let n2 = underlying.add_node(Vertex {
-        name: "n2".into(),
-        vertex_info: htt.clone(),
-        dod: 0,
-
-        num: Atom::one(),
-    });
-    let n3 = underlying.add_node(Vertex {
-        name: "n3".into(),
-        vertex_info: htt.clone(),
-        dod: 0,
-        num: Atom::one(),
-    });
-    let n4 = underlying.add_node(Vertex {
-        name: "n4".into(),
-        vertex_info: htt.clone(),
-        dod: 0,
-
-        num: Atom::one(),
-    });
+    let n1 = underlying.add_node(hhh.clone().into());
+    let n2 = underlying.add_node(htt.clone().into());
+    let n3 = underlying.add_node(htt.clone().into());
+    let n4 = underlying.add_node(htt.clone().into());
 
     underlying.add_edge(
-        n1,
-        n2,
-        Edge {
-            name: "e0".into(),
-            edge_type: EdgeType::Virtual,
+        n1.add_data(ParseHedge::default()),
+        n2.add_data(ParseHedge::default()),
+        ParseEdge {
+            label: None,
+
             particle: hp.clone(),
-            propagator: hprop.clone(),
-            internal_index: vec![],
-            dod: -2,
-            num: Atom::one(),
+
+            num: Some(Atom::one()),
         },
         false,
     );
 
     underlying.add_edge(
-        n1,
-        n3,
-        Edge {
-            name: "e1".into(),
-            edge_type: EdgeType::Virtual,
+        n1.add_data(ParseHedge::default()),
+        n3.add_data(ParseHedge::default()),
+        ParseEdge {
+            label: None,
+
             particle: hp.clone(),
-            propagator: hprop.clone(),
-            internal_index: vec![],
-            dod: -2,
-            num: Atom::one(),
+
+            num: Some(Atom::one()),
         },
         false,
     );
 
     underlying.add_edge(
-        n2,
-        n3,
-        Edge {
-            name: "e2".into(),
-            edge_type: EdgeType::Virtual,
+        n2.add_data(ParseHedge::default()),
+        n3.add_data(ParseHedge::default()),
+        ParseEdge {
+            label: None,
+
             particle: tp.clone(),
-            propagator: tprop.clone(),
-            internal_index: vec![],
-            dod: if uv_dod >= 0 { -1 } else { -2 },
-            num: if uv_dod >= 0 {
+            // propagator: tprop.clone(),
+
+            // dod: if uv_dod >= 0 { -1 } else { -2 },
+            num: Some(if uv_dod >= 0 {
                 spenso_lor_atom(2, 10, GS.dim)
             } else {
                 Atom::one()
-            },
+            }),
         },
         true,
     );
 
     underlying.add_edge(
-        n3,
-        n4,
-        Edge {
-            name: "e3".into(),
-            edge_type: EdgeType::Virtual,
+        n3.add_data(ParseHedge::default()),
+        n4.add_data(ParseHedge::default()),
+        ParseEdge {
+            label: None,
+
             particle: tp.clone(),
-            propagator: tprop.clone(),
-            internal_index: vec![],
-            dod: if uv_dod >= 1 { -1 } else { -2 },
-            num: if uv_dod >= 1 {
+            // propagator: tprop.clone(),
+
+            // dod: if uv_dod >= 1 { -1 } else { -2 },
+            num: Some(if uv_dod >= 1 {
                 spenso_lor_atom(3, 20, GS.dim)
             } else {
                 Atom::one()
-            },
+            }),
         },
         true,
     );
 
     underlying.add_edge(
-        n4,
-        n2,
-        Edge {
-            name: "e4".into(),
-            edge_type: EdgeType::Virtual,
+        n4.add_data(ParseHedge::default()),
+        n2.add_data(ParseHedge::default()),
+        ParseEdge {
+            label: None,
+
             particle: tp.clone(),
-            propagator: tprop.clone(),
-            internal_index: vec![],
-            dod: if uv_dod >= 0 { -1 } else { -2 },
-            num: if uv_dod >= 0 {
+            // propagator: tprop.clone(),
+
+            // dod: if uv_dod >= 0 { -1 } else { -2 },
+            num: Some(if uv_dod >= 0 {
                 spenso_lor_atom(4, 10, GS.dim)
             } else {
                 Atom::one()
-            },
+            }),
         },
         true,
     );
 
     underlying.add_external_edge(
-        n1,
-        Edge {
-            name: "q1".into(),
-            edge_type: EdgeType::Incoming,
+        n1.add_data(ParseHedge::default()),
+        ParseEdge {
+            label: None,
+
             particle: hp.clone(),
-            propagator: hprop.clone(),
-            internal_index: vec![],
-            dod: 0,
-            num: Atom::one(),
+            // propagator: hprop.clone(),
+
+            // dod: 0,
+            num: Some(Atom::one()),
         },
         false,
         Flow::Sink,
     );
 
     underlying.add_external_edge(
-        n4,
-        Edge {
-            name: "q2".into(),
-            edge_type: EdgeType::Outgoing,
+        n4.add_data(ParseHedge::default()),
+        ParseEdge {
+            label: None,
+
             particle: hp.clone(),
-            propagator: hprop.clone(),
-            internal_index: vec![],
-            dod: 0,
-            num: if uv_dod >= 1 {
+            // propagator: hprop.clone(),
+
+            // dod: 0,
+            num: Some(if uv_dod >= 1 {
                 spenso_lor_atom(6, 20, GS.dim)
             } else {
                 Atom::one()
-            },
+            }),
         },
         false,
         Flow::Source,
     );
 
-    let underlying = underlying.build();
+    let underlying = ParseGraph {
+        graph: underlying.build(),
+    };
 
     let mut loop_momentum_basis = LoopMomentumBasis {
         tree: None,
         loop_edges: vec![EdgeIndex::from(0), EdgeIndex::from(3)].into(),
         ext_edges: vec![EdgeIndex::from(5), EdgeIndex::from(6)].into(),
-        edge_signatures: underlying
-            .new_hedgevec(|_, _, _| LoopExtSignature::from((vec![], vec![]))),
+        edge_signatures: underlying.new_edgevec(|_, _, _| LoopExtSignature::from((vec![], vec![]))),
     };
 
     loop_momentum_basis
         .set_edge_signatures(&underlying)
         .unwrap();
 
-    let graph = Graph {
-        multiplicity: Atom::one(),
-        name: "DT".into(),
-        underlying,
-        loop_momentum_basis,
-        vertex_slots: vec![].into(),
-        external_connections: None,
-    };
+    let graph = Graph::from_parsed(underlying, &model).unwrap();
 
     let mut cs: CrossSectionGraph<UnInit> = CrossSectionGraph::new(graph);
 

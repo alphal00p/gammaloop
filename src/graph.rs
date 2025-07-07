@@ -19,6 +19,7 @@ use crate::{
     },
     new_graph::LoopMomentumBasis,
     numerator::{
+        aind::Aind,
         ufo::{preprocess_ufo_color_wrapped, preprocess_ufo_spin_wrapped, UFO},
         AppliedFeynmanRule, ContractionSettings, Evaluate, Evaluators, ExtraInfo, GammaAlgebraMode,
         Numerator, NumeratorParseMode, NumeratorState, NumeratorStateError, PythonState,
@@ -726,18 +727,26 @@ impl HasVertexInfo for InteractionVertexInfo {
                         .to_pattern();
 
                     let ind = match s {
-                        1 => Euclidean {}.new_slot(1, i + 1).to_symbolic_wrapped(),
-                        3 => ColorFundamental {}.new_slot(3, i + 1).to_symbolic_wrapped(),
+                        1 => Euclidean {}
+                            .new_slot::<Aind, _, _>(1, i + 1)
+                            .to_symbolic_wrapped(),
+                        3 => ColorFundamental {}
+                            .new_slot::<Aind, _, _>(3, i + 1)
+                            .to_symbolic_wrapped(),
                         -3 => ColorFundamental {}
-                            .new_slot(3, i + 1)
+                            .new_slot::<Aind, _, _>(3, i + 1)
                             .dual()
                             .to_symbolic_wrapped(),
-                        6 => ColorSextet {}.new_slot(6, i + 1).to_symbolic_wrapped(),
+                        6 => ColorSextet {}
+                            .new_slot::<Aind, _, _>(6, i + 1)
+                            .to_symbolic_wrapped(),
                         -6 => ColorSextet {}
-                            .new_slot(6, i + 1)
+                            .new_slot::<Aind, _, _>(6, i + 1)
                             .dual()
                             .to_symbolic_wrapped(),
-                        8 => ColorAdjoint {}.new_slot(8, i + 1).to_symbolic_wrapped(),
+                        8 => ColorAdjoint {}
+                            .new_slot::<Aind, _, _>(8, i + 1)
+                            .to_symbolic_wrapped(),
                         i => panic!("Color {i} not supported "),
                     };
 
@@ -1445,7 +1454,7 @@ impl BareGraph {
                 tree: None,
                 loop_edges: TiVec::new(),
                 ext_edges: TiVec::new(),
-                edge_signatures: dummy_hedge_graph.new_hedgevec(|_, _, _| LoopExtSignature {
+                edge_signatures: dummy_hedge_graph.new_edgevec(|_, _, _| LoopExtSignature {
                     internal: SignatureLike::from_iter(std::iter::empty::<SignOrZero>()),
                     external: SignatureLike::from_iter(std::iter::empty::<SignOrZero>()),
                 }),
@@ -1500,7 +1509,7 @@ impl BareGraph {
         }
 
         g.loop_momentum_basis.edge_signatures = dummy_hedge_graph
-            .new_hedgevec_from_iter(edge_signatures.into_iter().map(
+            .new_edgevec_from_iter(edge_signatures.into_iter().map(
                 |(loop_sig_raw, external_sig_raw)| LoopExtSignature {
                     internal: SignatureLike::from_iter(loop_sig_raw),
                     external: SignatureLike::from_iter(external_sig_raw),
@@ -1783,7 +1792,7 @@ impl BareGraph {
                 tree: None,
                 loop_edges: TiVec::new(),
                 ext_edges: TiVec::new(),
-                edge_signatures: dummy_hedge_graph.new_hedgevec(|_, _, _| LoopExtSignature {
+                edge_signatures: dummy_hedge_graph.new_edgevec(|_, _, _| LoopExtSignature {
                     internal: SignatureLike::from_iter(std::iter::empty::<SignOrZero>()),
                     external: SignatureLike::from_iter(std::iter::empty::<SignOrZero>()),
                 }),
@@ -2038,7 +2047,7 @@ impl BareGraph {
 
         let temp_edge_signatures =
             self.hedge_representation
-                .new_hedgevec(|_, _, _| LoopExtSignature {
+                .new_edgevec(|_, _, _| LoopExtSignature {
                     internal: SignatureLike::from_iter(std::iter::empty::<SignOrZero>()),
                     external: SignatureLike::from_iter(std::iter::empty::<SignOrZero>()),
                 });

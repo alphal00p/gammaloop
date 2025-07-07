@@ -20,9 +20,9 @@ use spenso::tensors::{
 use spenso::tensors::parametric::{MixedTensor, ParamOrConcrete, ParamTensor};
 
 use spenso::shadowing::symbolica_utils::{SerializableAtom, SerializableSymbol};
-use spenso::structure::representation::{ExtendibleReps, LibraryRep, RepName};
+use spenso::structure::representation::{Euclidean, ExtendibleReps, LibraryRep, RepName};
 use spenso::structure::slot::{DualSlotTo, IsAbstractSlot};
-use spenso::structure::{HasStructure, SmartShadowStructure};
+use spenso::structure::{HasStructure, OrderedStructure, SmartShadowStructure};
 use std::collections::hash_map::Entry;
 use std::collections::HashSet;
 use std::ops::{Deref, RangeInclusive};
@@ -57,6 +57,7 @@ use crate::model::ArcVertexRule;
 use crate::model::VertexRule;
 use crate::model::{ArcParticle, ColorStructure};
 use crate::momentum::{Pow, Sign, SignOrZero};
+use crate::numerator::aind::Aind;
 use crate::numerator::SymbolicExpression;
 use crate::numerator::{AtomStructure, Network};
 use crate::numerator::{ExpressionState, GlobalPrefactor};
@@ -1073,8 +1074,8 @@ impl FeynGen {
 
         let mut he_graph = HedgeGraph::<EdgeColor, NodeColor>::from_sym(graph.clone()).map(
             |_, _, node_color| node_color,
-            |_, _, _, d| d.map(|d| model.get_particle_from_pdg(d.pdg)),
-            |_| (),
+            |_, _, _, _, d| d.map(|d| model.get_particle_from_pdg(d.pdg)),
+            |_, _| (),
         );
         // info!(
         //     "Looking at\n{}",
@@ -4475,7 +4476,7 @@ impl ProcessedNumeratorForComparison {
 
     #[allow(clippy::type_complexity)]
     fn random_concretize_reps(
-        decomposed_net: &DataTensor<Numerator<Network>>,
+        decomposed_net: &DataTensor<Numerator<Network>, OrderedStructure<Euclidean, Aind>>,
         sample_iterator: Option<&mut PrimeIteratorU64>,
         fully_numerical_substitution: bool,
     ) -> Vec<(Atom, Atom)> {

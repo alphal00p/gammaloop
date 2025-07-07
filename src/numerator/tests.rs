@@ -36,7 +36,7 @@ use crate::{
     model::Model,
     momentum::{Dep, ExternalMomenta, Helicity},
     momentum_sample::{LoopMomenta, MomentumSample},
-    numerator::{ufo::UFO, ContractionSettings, ExtraInfo, GlobalPrefactor, Network},
+    numerator::{aind::Aind, ufo::UFO, ContractionSettings, ExtraInfo, GlobalPrefactor, Network},
     tests_from_pytest::{
         load_amplitude_output, load_generic_model, sample_generator, test_export_settings,
     },
@@ -452,7 +452,7 @@ pub fn validate_gamma(g: Graph<UnInit>, model: &Model, path: PathBuf) {
             &ExtraInfo {
                 path,
                 orientations: vec![utils::dummy_hedge_graph(g.bare_graph.edges.len())
-                    .new_hedgevec(|_, _, _| Orientation::Default)],
+                    .new_edgevec(|_, _, _| Orientation::Default)],
             },
             &export_settings,
         );
@@ -469,7 +469,7 @@ pub fn validate_gamma(g: Graph<UnInit>, model: &Model, path: PathBuf) {
             &ExtraInfo {
                 path: path_gamma,
                 orientations: vec![utils::dummy_hedge_graph(g.bare_graph.edges.len())
-                    .new_hedgevec(|_, _, _| Orientation::Default)],
+                    .new_edgevec(|_, _, _| Orientation::Default)],
             },
             &export_settings,
         );
@@ -794,7 +794,11 @@ fn gamma_simplify_one() {
     fn metric(mu: usize, nu: usize) -> Atom {
         let mink = Minkowski {}.new_rep(4);
 
-        function!(ETS.metric, mink.slot(mu).to_atom(), mink.slot(nu).to_atom())
+        function!(
+            ETS.metric,
+            mink.slot::<Aind, _>(mu).to_atom(),
+            mink.slot::<Aind, _>(nu).to_atom()
+        )
     }
 
     fn test_and_assert(atom: Atom) {
