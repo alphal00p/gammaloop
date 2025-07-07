@@ -119,10 +119,11 @@ impl<E, V> FeynGenHedgeGraph<E, V> {
 
         excised = excised.complement(&self.graph);
 
-        let mut excised = self
-            .graph
-            .concretize(&excised)
-            .map(|_, _, d| d.clone(), |_, _, _, e| e.map(|d| d.clone()));
+        let mut excised = self.graph.concretize(&excised).map(
+            |_, _, d| d.clone(),
+            |_, _, _, e| e.map(|d| d.clone()),
+            |h| (),
+        );
 
         excised.align_underlying_to_superficial();
         self.graph = excised;
@@ -207,6 +208,7 @@ impl<V> FeynGenHedgeGraph<ArcParticle, V> {
                 let id = inv[pair.any_hedge()];
                 EdgeData::new(PossiblyCutEdge::uncut(particle, id), o)
             },
+            |_| (),
         );
 
         graph = graph.map(
@@ -241,6 +243,7 @@ impl<V> FeynGenHedgeGraph<ArcParticle, V> {
                 };
                 e
             },
+            |_| (),
         );
         Self {
             graph,

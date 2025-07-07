@@ -155,25 +155,6 @@
 
         LD_LIBRARY_PATH = "${pkgs.stdenv.cc.cc.lib}/lib";
 
-        shellHook =
-          if pkgs.stdenv.isDarwin
-          then ''
-            export CC=gcc
-            export CXX=g++
-            export RUSTFLAGS="$RUSTFLAGS -Clink-arg=${pkgs.gcc.cc.lib}/lib/libgcc_s.1.1.dylib"
-
-            # Point the history file to your home directory’s bash history
-            export HISTFILE=~/.bash_history
-
-            # Ensure the history is appended rather than overwritten
-            shopt -s histappend
-
-            # Append each command to the history file immediately
-            export PROMPT_COMMAND="history -a; $PROMPT_COMMAND"
-          ''
-          else ''
-          '';
-
         # Extra inputs can be added here; cargo and rustc are provided by default.
         packages = with pkgs; [
           tdf
@@ -183,9 +164,9 @@
           cargo-insta
           openssl
           pyright
-          gnum4
           gmp.dev
           mpfr.dev
+          gnum4
           gcc_debug.out
           stdenv.cc.cc.lib
           pkg-config
@@ -205,5 +186,4 @@
         ];
       };
     });
-
 }

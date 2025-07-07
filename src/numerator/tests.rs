@@ -32,6 +32,7 @@ use crate::{
     feyngen::diagram_generator::{EdgeColor, NodeColorWithVertexRule},
     gammaloop_integrand::DefaultSample,
     graph::{BareGraph, Graph},
+    initialize_reps,
     model::Model,
     momentum::{Dep, ExternalMomenta, Helicity},
     momentum_sample::{LoopMomenta, MomentumSample},
@@ -868,7 +869,7 @@ fn gamma_simplify_one() {
 
 #[test]
 fn gamma_algebra() {
-    let _ = ETS.id;
+    initialize_reps();
     // let _ = UFO.t;
     let g = parse!(
         "(Metric(mink(4,2),mink(4,3)))
