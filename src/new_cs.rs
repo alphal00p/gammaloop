@@ -1,11 +1,10 @@
 use std::{
     cell::RefCell,
     collections::HashSet,
-    fmt::{format, Display, Formatter},
+    fmt::{Display, Formatter},
     iter,
     marker::PhantomData,
     path::{Path, PathBuf},
-    sync::Arc,
 };
 
 use ahash::{AHashSet, HashMap};
@@ -14,8 +13,6 @@ use bincode_trait_derive::{Decode, Encode};
 use bitvec::vec::BitVec;
 use color_eyre::Result;
 use momtrop::SampleGenerator;
-use serde_json::de;
-use smartstring::{LazyCompact, SmartString};
 
 use idenso::metric::MS;
 
@@ -31,16 +28,16 @@ use crate::{
         expression::{AmplitudeOrientationID, CFFExpression},
         generation::generate_cff_expression,
     },
-    model::{self, ArcParticle},
+    model::ArcParticle,
     momentum_sample::ExternalIndex,
     new_gammaloop_integrand::{
         amplitude_integrand::{AmplitudeGraphTerm, AmplitudeIntegrand},
         cross_section_integrand::OrientationEvaluator,
         GenericEvaluator, LmbMultiChannelingSetup,
     },
-    new_graph::{get_cff_inverse_energy_product_impl, LmbIndex, LoopMomentumBasis},
+    new_graph::{get_cff_inverse_energy_product_impl, LMBext, LmbIndex, LoopMomentumBasis},
     signature::SignatureLike,
-    utils::{f128, ose_atom_from_index, GS, LEFT, W_},
+    utils::{f128, ose_atom_from_index, GS, W_},
     GammaLoopContext, GammaLoopContextContainer,
 };
 use eyre::eyre;
@@ -1054,10 +1051,6 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
         model: &Model,
         process_definition: &ProcessDefinition,
     ) -> Result<()> {
-        // not sure why I need to call this again, but it seems like I do?
-        self.graph
-            .loop_momentum_basis
-            .set_edge_signatures(&self.graph.underlying)?;
         self.generate_cuts(model, process_definition)?;
         self.generate_esurface_cuts();
         self.generate_cff()?;
@@ -1523,8 +1516,8 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
     fn build_lmbs(&mut self) {
         let lmbs = self
             .graph
-            .loop_momentum_basis
-            .generate_loop_momentum_bases(&self.graph.underlying);
+            .underlying
+            .generate_loop_momentum_bases(&self.graph.underlying.full_filter());
 
         self.derived_data.lmbs = Some(lmbs)
     }
@@ -1733,28 +1726,18 @@ impl CrossSectionCut {
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        fs::{self, OpenOptions},
-        path::PathBuf,
-    };
+    use std::fs::OpenOptions;
 
-    use ahash::HashSet;
-    use linnet::half_edge::{
-        builder::HedgeGraphBuilder,
-        involution::{EdgeIndex, Flow},
-        nodestore::NodeStorageVec,
-        HedgeGraph,
+    use linnet::{
+        dot,
+        dot_parser::DotGraph,
+        half_edge::{involution::EdgeIndex, HedgeGraph},
     };
     use spenso::network::library::TensorLibraryData;
-    use symbolica::{
-        atom::Atom,
-        state::{HasStateMap, State, StateMap},
-    };
+    use symbolica::{atom::Atom, state::State};
 
     use crate::{
-        feyngen::FeynGenFilters,
-        graph::{EdgeType, InteractionVertexInfo, VertexInfo},
-        new_graph::{Edge, Graph, LoopMomentumBasis, Vertex},
+        new_graph::{Graph, LoopMomentumBasis},
         numerator::{
             EvaluatorOptions, GammaAlgebraMode, GlobalPrefactor, NumeratorEvaluatorOptions,
             NumeratorParseMode, NumeratorSettings, UnInit,
@@ -1764,182 +1747,43 @@ mod tests {
         GammaLoopContextContainer, GammaloopCompileOptions, TropicalSubgraphTableSettings,
     };
 
-    use super::{Amplitude, AmplitudeGraph, CrossSectionGraph, ProcessDefinition};
+    use super::AmplitudeGraph;
 
     #[test]
     fn test_encode_decode_amplitude_graph() {
         // load the model and hack the masses, go through serializable model since arc is not mutable
         let model = load_generic_model("sm");
 
-        let mut underlying = HedgeGraphBuilder::new();
-
-        let hhh = VertexInfo::InteractonVertexInfo(InteractionVertexInfo {
-            vertex_rule: model.get_vertex_rule("V_9"),
-        });
-        let htt = VertexInfo::InteractonVertexInfo(InteractionVertexInfo {
-            vertex_rule: model.get_vertex_rule("V_141"),
-        });
-
-        let hprop = model.get_propagator("H_propFeynman");
-        let hp = model.get_particle("H");
-
-        let tprop = model.get_propagator("t_propFeynman");
-        let tp = model.get_particle("t");
-
-        let n1 = underlying.add_node(Vertex {
-            name: "n1".into(),
-            vertex_info: hhh.clone(),
-            dod: 0,
-            num: Atom::one(),
-        });
-        let n2 = underlying.add_node(Vertex {
-            name: "n2".into(),
-            vertex_info: htt.clone(),
-            dod: 0,
-
-            num: Atom::one(),
-        });
-        let n3 = underlying.add_node(Vertex {
-            name: "n3".into(),
-            vertex_info: htt.clone(),
-            dod: 0,
-            num: Atom::one(),
-        });
-        let n4 = underlying.add_node(Vertex {
-            name: "n4".into(),
-            vertex_info: htt.clone(),
-            dod: 0,
-
-            num: Atom::one(),
-        });
-
-        underlying.add_edge(
-            n1,
-            n2,
-            Edge {
-                name: "e0".into(),
-                edge_type: EdgeType::Virtual,
-                particle: hp.clone(),
-                propagator: hprop.clone(),
-                internal_index: vec![],
-                dod: -2,
-                num: Atom::one(),
-            },
-            false,
-        );
-
-        underlying.add_edge(
-            n1,
-            n3,
-            Edge {
-                name: "e1".into(),
-                edge_type: EdgeType::Virtual,
-                particle: hp.clone(),
-                propagator: hprop.clone(),
-                internal_index: vec![],
-                dod: -2,
-                num: Atom::one(),
-            },
-            false,
-        );
-
-        underlying.add_edge(
-            n2,
-            n3,
-            Edge {
-                name: "e2".into(),
-                edge_type: EdgeType::Virtual,
-                particle: tp.clone(),
-                propagator: tprop.clone(),
-                internal_index: vec![],
-                dod: -2,
-                num: Atom::one(),
-            },
-            true,
-        );
-
-        underlying.add_edge(
-            n3,
-            n4,
-            Edge {
-                name: "e3".into(),
-                edge_type: EdgeType::Virtual,
-                particle: tp.clone(),
-                propagator: tprop.clone(),
-                internal_index: vec![],
-                dod: -2,
-                num: Atom::one(),
-            },
-            true,
-        );
-
-        underlying.add_edge(
-            n4,
-            n2,
-            Edge {
-                name: "e4".into(),
-                edge_type: EdgeType::Virtual,
-                particle: tp.clone(),
-                propagator: tprop.clone(),
-                internal_index: vec![],
-                dod: -2,
-                num: Atom::one(),
-            },
-            true,
-        );
-
-        underlying.add_external_edge(
-            n1,
-            Edge {
-                name: "q1".into(),
-                edge_type: EdgeType::Incoming,
-                particle: hp.clone(),
-                propagator: hprop.clone(),
-                internal_index: vec![],
-                dod: 0,
-                num: Atom::one(),
-            },
-            false,
-            Flow::Sink,
-        );
-
-        underlying.add_external_edge(
-            n4,
-            Edge {
-                name: "q2".into(),
-                edge_type: EdgeType::Outgoing,
-                particle: hp.clone(),
-                propagator: hprop.clone(),
-                internal_index: vec![],
-                dod: 0,
-                num: Atom::one(),
-            },
-            false,
-            Flow::Source,
-        );
-
-        let underlying = underlying.build();
-
+        let graph: DotGraph = dot!(
+            digraph G{
+                e1      [flow=sink]
+                e2      [flow=source]
+                e3      [flow=source]
+                e1 -> n1  [particle=h]
+                e2 -> n4    [particle=h]
+                n1 -> n2    [particle=h]
+                n1 -> n3    [particle=h]
+                n2 -> n3    [particle=t]
+                n3 -> n4    [particle=t]
+                n4 -> n2    [particle=t]
+            }
+        )
+        .unwrap();
+        let mut graph = Graph::from_dot(graph, true, &model).unwrap();
         let mut loop_momentum_basis = LoopMomentumBasis {
             tree: None,
             loop_edges: vec![EdgeIndex::from(0), EdgeIndex::from(4)].into(),
             ext_edges: vec![EdgeIndex::from(5), EdgeIndex::from(6)].into(),
-            edge_signatures: underlying
-                .new_hedgevec(|_, _, _| LoopExtSignature::from((vec![], vec![]))),
+            edge_signatures: graph
+                .underlying
+                .new_edgevec(|_, _, _| LoopExtSignature::from((vec![], vec![]))),
         };
 
         loop_momentum_basis
-            .set_edge_signatures(&underlying)
+            .set_edge_signatures(&graph.underlying)
             .unwrap();
 
-        let graph = Graph {
-            multiplicity: Atom::one(),
-            name: "DT".into(),
-            underlying,
-            loop_momentum_basis,
-            vertex_slots: vec![].into(),
-            external_connections: None,
-        };
+        graph.loop_momentum_basis = loop_momentum_basis;
 
         let mut amplitude: AmplitudeGraph<UnInit> = AmplitudeGraph::new(graph);
 

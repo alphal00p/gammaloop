@@ -121,8 +121,8 @@ impl<E, V> FeynGenHedgeGraph<E, V> {
 
         let mut excised = self.graph.concretize(&excised).map(
             |_, _, d| d.clone(),
-            |_, _, _, e| e.map(|d| d.clone()),
-            |h| (),
+            |_, _, _, _, e| e.map(|d| d.clone()),
+            |_, h| (),
         );
 
         excised.align_underlying_to_superficial();
@@ -196,7 +196,7 @@ impl<V> FeynGenHedgeGraph<ArcParticle, V> {
                     VertexType::Internal(vertex)
                 }
             },
-            |inv, _, pair, d| {
+            |inv, _, pair, _, d| {
                 let mut particle = model.get_particle_from_pdg(d.data.pdg);
                 let mut o = d.orientation;
                 if !particle.0.is_fermion() {
@@ -208,12 +208,12 @@ impl<V> FeynGenHedgeGraph<ArcParticle, V> {
                 let id = inv[pair.any_hedge()];
                 EdgeData::new(PossiblyCutEdge::uncut(particle, id), o)
             },
-            |_| (),
+            |_, _| (),
         );
 
         graph = graph.map(
             |_, _, v| v,
-            |_, node_data, pair, mut e| {
+            |_, node_data, pair, _, mut e| {
                 if let HedgePair::Paired { source, sink } = pair {
                     let src = node_data.node_id_ref(source);
                     let sk = node_data.node_id_ref(sink);
@@ -243,7 +243,7 @@ impl<V> FeynGenHedgeGraph<ArcParticle, V> {
                 };
                 e
             },
-            |_| (),
+            |_, _| (),
         );
         Self {
             graph,

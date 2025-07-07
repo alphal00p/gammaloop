@@ -1,14 +1,16 @@
 use crate::momentum::{FourMomentum, ThreeMomentum};
 use crate::momentum_sample::{ExternalFourMomenta, ExternalIndex, LoopMomenta};
 use crate::new_gammaloop_integrand::GenericEvaluatorFloat;
+use crate::numerator::aind::Aind;
+use crate::numerator::ufo::UFO;
 use crate::numerator::NumeratorEvaluateFloat;
 use crate::signature::{ExternalSignature, LoopSignature};
-use crate::symbolica_ext::CallSymbol;
+use crate::ParameterizationSettings;
 use crate::SamplingSettings;
 use crate::{ParameterizationMapping, ParameterizationMode, MAX_LOOP};
-use crate::{ParameterizationSettings, GAMMALOOP_NAMESPACE};
 use bincode::{Decode, Encode};
 use colored::Colorize;
+use idenso::representations::initialize;
 use itertools::{izip, Itertools};
 use linnet::half_edge::involution::EdgeIndex;
 use rand::Rng;
@@ -26,18 +28,17 @@ use spenso::algebra::upgrading_arithmetic::TrySmallestUpgrade;
 use spenso::network::library::symbolic::{ExplicitKey, TensorLibrary};
 use spenso::network::library::TensorLibraryData;
 use spenso::structure::concrete_index::FlatIndex;
-use spenso::structure::TensorStructure;
 use spenso::tensors::parametric::to_param::ToAtom;
 use spenso::tensors::parametric::MixedTensor;
 use spenso_hep_lib::hep_lib;
-use symbolica::atom::{FunctionBuilder, Symbol};
+use symbolica::atom::{AtomOrView, FunctionBuilder, Symbol};
 use symbolica::coefficient::Coefficient;
 use symbolica::domains::float::{
     ConstructibleFloat, NumericalFloatLike, RealNumberLike, SingleFloat,
 };
 use symbolica::domains::integer::Integer;
 use symbolica::evaluate::CompiledEvaluatorFloat;
-use symbolica::{function, symbol, with_default_namespace};
+use symbolica::{function, parse, symbol};
 
 use statrs::function::gamma::{gamma, gamma_lr, gamma_ur};
 use std::cmp::{Ord, Ordering};
@@ -1587,23 +1588,15 @@ where
 }
 
 pub fn parse_python_expression(expression: &str) -> Atom {
+    initialize();
+    let _ = UFO.metric;
     let processed_string = String::from(expression)
         .replace("**", "^")
         .replace("cmath.sqrt", "sqrt")
         .replace("cmath.pi", "pi")
         .replace("math.sqrt", "sqrt")
         .replace("math.pi", "pi");
-    Atom::parse(with_default_namespace!(
-        processed_string.as_str(),
-        GAMMALOOP_NAMESPACE
-    ))
-    .map_err(|e| {
-        format!(
-            "Failed to parse expression : '{}'\nError: {}",
-            processed_string, e
-        )
-    })
-    .unwrap()
+    parse!(processed_string)
 }
 
 pub fn to_str_expression(expression: &Atom) -> String {
@@ -3363,6 +3356,10 @@ pub struct WildCards {
 pub struct GammaloopSymbols {
     pub spensocind: Symbol,
     pub loop_mom: Symbol,
+    pub edgeid: Symbol,
+    pub vertexid: Symbol,
+    pub source_id: Symbol,
+    pub sink_id: Symbol,
     pub ubar: Symbol,
     pub hfunction: Symbol,
     pub deta: Symbol,
@@ -3393,7 +3390,7 @@ pub struct GammaloopSymbols {
     pub den: Symbol,
 }
 
-pub static TENSORLIB: LazyLock<TensorLibrary<MixedTensor<F<f64>, ExplicitKey>>> =
+pub static TENSORLIB: LazyLock<TensorLibrary<MixedTensor<F<f64>, ExplicitKey<Aind>>, Aind>> =
     LazyLock::new(|| hep_lib(F(1.), F(0.)));
 
 pub static W_: LazyLock<WildCards> = LazyLock::new(|| WildCards {
@@ -3486,6 +3483,10 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
     rescale_star: symbol!("t⃰"),
     hfunction: symbol!("h"),
     deta: symbol!("∇η"),
+    edgeid: symbol!("eid"),
+    vertexid: symbol!("vid"),
+    source_id: symbol!("source"),
+    sink_id: symbol!("sink"),
     sign: symbol!("σ"),
     sign_delta: symbol!("delta_σ"),
     spensocind: symbol!("spenso::cind"),
@@ -3513,6 +3514,13 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
     epsilonbar: symbol!("ϵbar"),
     coeff: symbol!("coef"),
 });
+
+impl GammaloopSymbols {
+    pub fn emr_mom<'a>(&self, e: EdgeIndex, arg: impl Into<AtomOrView<'a>>) -> Atom {
+        let a = arg.into();
+        function!(self.emr_mom, usize::from(e) as i64, a.as_view())
+    }
+}
 
 pub fn sign_atom(eid: EdgeIndex) -> Atom {
     FunctionBuilder::new(symbol!("σ"))

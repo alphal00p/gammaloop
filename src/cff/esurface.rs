@@ -6,7 +6,7 @@ use colored::Colorize;
 use derive_more::{From, Into};
 use eyre::eyre;
 use itertools::Itertools;
-use linnet::half_edge::hedgevec::HedgeVec;
+use linnet::half_edge::hedgevec::EdgeVec;
 use linnet::half_edge::involution::{EdgeIndex, Flow, HedgePair};
 use linnet::half_edge::HedgeGraph;
 use lorentz_vector::LorentzVector;
@@ -90,13 +90,13 @@ impl Esurface {
     /// Compute the value of the esurface from an energy cache that can be computed from the underlying graph
     /// This is the fastest way to compute the value of all esurfaces in a full evaluation
     #[inline]
-    pub fn compute_value<T: FloatLike>(&self, energy_cache: &HedgeVec<F<T>>) -> F<T> {
+    pub fn compute_value<T: FloatLike>(&self, energy_cache: &EdgeVec<F<T>>) -> F<T> {
         surface::compute_value(self, energy_cache)
     }
 
     /// Only compute the shift part, useful for existence checks
     #[inline]
-    pub fn compute_shift_part<T: FloatLike>(&self, energy_cache: &HedgeVec<F<T>>) -> F<T> {
+    pub fn compute_shift_part<T: FloatLike>(&self, energy_cache: &EdgeVec<F<T>>) -> F<T> {
         surface::compute_shift_part(self, energy_cache)
     }
 
@@ -106,7 +106,7 @@ impl Esurface {
     pub fn compute_from_momenta<T: FloatLike>(
         &self,
         lmb: &LoopMomentumBasis,
-        real_mass_vector: &HedgeVec<F<T>>,
+        real_mass_vector: &EdgeVec<F<T>>,
         loop_moms: &LoopMomenta<F<T>>,
         external_moms: &ExternalFourMomenta<F<T>>,
     ) -> F<T> {
@@ -157,7 +157,7 @@ impl Esurface {
         center: &LoopMomenta<F<T>>,
         external_moms: &ExternalFourMomenta<F<T>>,
         lmb: &LoopMomentumBasis,
-        real_mass_vector: &HedgeVec<F<T>>,
+        real_mass_vector: &EdgeVec<F<T>>,
     ) -> (F<T>, F<T>) {
         let spatial_part_of_externals: ExternalThreeMomenta<F<T>> = external_moms
             .iter()
@@ -295,7 +295,7 @@ impl Esurface {
         }
     }
 
-    pub fn new_from_cut_left<E, V>(graph: &HedgeGraph<E, V>, cut: &CrossSectionCut) -> Self {
+    pub fn new_from_cut_left<E, V, H>(graph: &HedgeGraph<E, V, H>, cut: &CrossSectionCut) -> Self {
         let edges = graph
             .iter_edges_of(&cut.cut)
             .map(|(_, id, _)| id)
@@ -325,7 +325,7 @@ pub type EsurfaceCollection = TiVec<EsurfaceID, Esurface>;
 
 pub fn compute_esurface_cache<T: FloatLike>(
     esurfaces: &EsurfaceCollection,
-    energy_cache: &HedgeVec<F<T>>,
+    energy_cache: &EdgeVec<F<T>>,
 ) -> EsurfaceCache<F<T>> {
     esurfaces
         .iter()
@@ -452,7 +452,7 @@ struct ExistenceCheckDebug {
     threshold: F<f64>,
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug, Encode, Decode)]
+#[derive(Clone, Serialize, Deserialize, Debug, Encode, bincode_trait_derive::Decode)]
 pub struct EsurfaceDerivedData {
     esurface_data: Vec<Option<EsurfaceData>>,
     orientation_pairs: Vec<(EsurfaceID, EsurfaceID)>,
@@ -466,7 +466,7 @@ impl Index<EsurfaceID> for EsurfaceDerivedData {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug, Encode, Decode)]
+#[derive(Clone, Serialize, Deserialize, Debug, Encode, bincode_trait_derive::Decode)]
 pub struct EsurfaceData {
     pub cut_momentum_basis: LmbIndex,
     pub mass_sum_squared: F<f64>,
@@ -503,7 +503,7 @@ pub fn generate_esurface_data(
 ) -> Result<EsurfaceDerivedData, Report> {
     let edge_masses = graph
         .underlying
-        .new_hedgevec(|edge, _, _| edge.particle.0.mass.value);
+        .new_edgevec(|edge, _, _| edge.particle.0.mass.value);
 
     let data = esurfaces
         .iter()
@@ -631,6 +631,7 @@ mod tests {
     use linnet::half_edge::builder::HedgeGraphBuilder;
     use linnet::half_edge::involution::{EdgeIndex, Flow, Orientation};
     use linnet::half_edge::nodestore::NodeStorageVec;
+    use linnet::half_edge::HedgeGraph;
     use symbolica::atom::{Atom, AtomCore};
     use symbolica::parse;
 
@@ -647,7 +648,7 @@ mod tests {
         let dummy_graph = dummy_hedge_graph(5);
 
         let energies_cache = dummy_graph
-            .new_hedgevec_from_iter([F(1.), F(2.), F(3.), F(4.), F(5.)])
+            .new_edgevec_from_iter([F(1.), F(2.), F(3.), F(4.), F(5.)])
             .unwrap();
 
         let energies = vec![EdgeIndex::from(0), EdgeIndex::from(1), EdgeIndex::from(2)];
@@ -773,7 +774,8 @@ mod tests {
         hedge_graph_builder.add_external_edge(nodes[0], (), Orientation::Undirected, Flow::Sink);
         hedge_graph_builder.add_external_edge(nodes[3], (), Orientation::Undirected, Flow::Source);
 
-        let double_triangle = hedge_graph_builder.build::<NodeStorageVec<()>>();
+        let double_triangle: HedgeGraph<(), (), ()> =
+            hedge_graph_builder.build::<NodeStorageVec<()>>();
         let node_0 = double_triangle.iter_crown(nodes[0]).into();
         let node_3 = double_triangle.iter_crown(nodes[3]).into();
 
@@ -830,7 +832,7 @@ mod tests {
         hedge_graph_builder.add_external_edge(nodes[2], (), Orientation::Undirected, Flow::Source);
         hedge_graph_builder.add_external_edge(nodes[3], (), Orientation::Undirected, Flow::Sink);
 
-        let box_graph = hedge_graph_builder.build::<NodeStorageVec<()>>();
+        let box_graph: HedgeGraph<(), (), ()> = hedge_graph_builder.build::<NodeStorageVec<()>>();
 
         let node_0 = box_graph.iter_crown(nodes[0]).into();
         let node_2 = box_graph.iter_crown(nodes[2]).into();

@@ -57,7 +57,7 @@
           ++ lib.optionals pkgs.stdenv.isDarwin [
             # Additional darwin specific inputs can be set here
             pkgs.libiconv
-            pkgs.gcc.cc.lib
+            # pkgs.gcc.cc.lib
           ];
 
         # Additional environment variables can be set directly
@@ -153,7 +153,7 @@
         # MY_CUSTOM_DEVELOPMENT_VAR = "something else";
         RUST_SRC_PATH = "${pkgs.rustPlatform.rustLibSrc}";
 
-        LD_LIBRARY_PATH = "${pkgs.stdenv.cc.cc.lib}/lib";
+        # LD_LIBRARY_PATH = "${pkgs.stdenv.cc.cc.lib}/lib";
 
         # Extra inputs can be added here; cargo and rustc are provided by default.
         packages = with pkgs; [
@@ -164,11 +164,11 @@
           cargo-insta
           openssl
           pyright
-          gmp.dev
-          mpfr.dev
+          gmp
+          mpfr
           gnum4
-          gcc_debug.out
-          stdenv.cc.cc.lib
+          # gcc_debug.out
+          # stdenv.cc.cc.lib
           pkg-config
           cargo-deny
           cargo-edit

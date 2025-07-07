@@ -1406,8 +1406,9 @@ dependencies = [
 
 [[package]]
 name = "idenso"
-version = "0.0.0"
-source = "git+https://github.com/alphal00p/spenso?rev=d29ca0aa40f11fa1d9d000cc8e4ccf8e89c7b7f1#d29ca0aa40f11fa1d9d000cc8e4ccf8e89c7b7f1"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e3cc249cb5ed166c51f9ebbff0b70cc73c1fb8d2cd070236366456a0b748d964"
 dependencies = [
  "bincode",
  "bincode-trait-derive",
@@ -1671,8 +1672,9 @@ checksum = "f9fbbcab51052fe104eb5e5d351cf728d30a5be1fe14d9be8a3b097481fb97de"
 
 [[package]]
 name = "linnet"
-version = "0.7.1"
-source = "git+https://github.com/alphal00p/linnet?rev=d72588ecbea39c6df3fdde9ffa4e4f3575f93542#d72588ecbea39c6df3fdde9ffa4e4f3575f93542"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "20332ced2c1c16949ca5fac81350884bfab14634e502a0214885b14a057deb50"
 dependencies = [
  "ahash",
  "argmin",
@@ -3071,8 +3073,9 @@ dependencies = [
 
 [[package]]
 name = "spenso"
-version = "0.4.1"
-source = "git+https://github.com/alphal00p/spenso?rev=d29ca0aa40f11fa1d9d000cc8e4ccf8e89c7b7f1#d29ca0aa40f11fa1d9d000cc8e4ccf8e89c7b7f1"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "92649bcb3fc5000673a8d6486242fc129a3fa7e5d500d7a05837cbacf4c2b6c3"
 dependencies = [
  "ahash",
  "anyhow",
@@ -3111,8 +3114,9 @@ dependencies = [
 
 [[package]]
 name = "spenso-hep-lib"
-version = "0.0.0"
-source = "git+https://github.com/alphal00p/spenso?rev=d29ca0aa40f11fa1d9d000cc8e4ccf8e89c7b7f1#d29ca0aa40f11fa1d9d000cc8e4ccf8e89c7b7f1"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "611a1fa6c445e7b8fe29fce2d05f814c14e941ccefdb8490e785e1ba986ec4bb"
 dependencies = [
  "ahash",
  "idenso",
@@ -3124,8 +3128,9 @@ dependencies = [
 
 [[package]]
 name = "spenso-macros"
-version = "0.1.0"
-source = "git+https://github.com/alphal00p/spenso?rev=d29ca0aa40f11fa1d9d000cc8e4ccf8e89c7b7f1#d29ca0aa40f11fa1d9d000cc8e4ccf8e89c7b7f1"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e32a2605f26cb6ce44b5e33fbf1678fd96dd7dbe8be96734ad4c229fe08bc7c7"
 dependencies = [
  "proc-macro2",
  "quote",

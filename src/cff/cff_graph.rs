@@ -1,11 +1,10 @@
 use crate::cff::hsurface::Hsurface;
 use ahash::{HashMap, HashSet, HashSetExt};
-use bitvec::vec::BitVec;
 use color_eyre::Result;
 use eyre::eyre;
 use itertools::Itertools;
 use linnet::half_edge::{
-    hedgevec::HedgeVec,
+    hedgevec::EdgeVec,
     involution::{EdgeIndex, Flow, HedgePair, Orientation},
     subgraph::SubGraph,
     HedgeGraph,
@@ -206,7 +205,7 @@ enum VertexType {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CFFGenerationGraph {
     vertices: Vec<CFFVertex>,
-    pub global_orientation: HedgeVec<Orientation>,
+    pub global_orientation: EdgeVec<Orientation>,
 }
 
 impl PartialEq for CFFGenerationGraph {
@@ -259,7 +258,7 @@ impl CFFGenerationGraph {
     pub fn from_vec(
         edges: Vec<(usize, usize)>,
         incoming_vertices: Vec<(usize, CFFEdgeType)>,
-        orientation: Option<HedgeVec<Orientation>>,
+        orientation: Option<EdgeVec<Orientation>>,
     ) -> Self {
         use crate::utils;
 
@@ -319,7 +318,7 @@ impl CFFGenerationGraph {
         let global_orientation = match orientation {
             Some(orientation) => orientation,
             None => utils::dummy_hedge_graph(total_num_edges)
-                .new_hedgevec_from_iter(vec![Orientation::Default; total_num_edges])
+                .new_edgevec_from_iter(vec![Orientation::Default; total_num_edges])
                 .unwrap(),
         };
 
@@ -786,7 +785,10 @@ impl CFFGenerationGraph {
     }
 
     /// for now only non-cut graphs are supported
-    pub fn new<E, V>(graph: &HedgeGraph<E, V>, global_orientation: HedgeVec<Orientation>) -> Self {
+    pub fn new<E, V, H>(
+        graph: &HedgeGraph<E, V, H>,
+        global_orientation: EdgeVec<Orientation>,
+    ) -> Self {
         let mut vertices = (0..graph.n_nodes()).map(CFFVertex::new).collect_vec();
 
         for (hedge_pair, edge_id, _) in graph.iter_edges() {
@@ -834,9 +836,9 @@ impl CFFGenerationGraph {
         }
     }
 
-    pub fn new_from_subgraph<E, V, S: SubGraph>(
-        graph: &HedgeGraph<E, V>,
-        global_orientation: HedgeVec<Orientation>,
+    pub fn new_from_subgraph<E, V, H, S: SubGraph>(
+        graph: &HedgeGraph<E, V, H>,
+        global_orientation: EdgeVec<Orientation>,
         subgraph: &S,
     ) -> Result<Self> {
         let mut vertices = HashMap::default();
@@ -1060,6 +1062,7 @@ mod test {
         involution::{EdgeIndex, Flow, Orientation},
         nodestore::NodeStorageVec,
         subgraph::SubGraphOps,
+        HedgeGraph,
     };
 
     #[test]
@@ -1519,8 +1522,8 @@ mod test {
         hedge_graph_builder.add_external_edge(nodes[0], (), Orientation::Undirected, Flow::Sink);
         hedge_graph_builder.add_external_edge(nodes[1], (), Orientation::Undirected, Flow::Source);
 
-        let hedge_graph = hedge_graph_builder.build::<NodeStorageVec<_>>();
-        let global_orientation = hedge_graph.new_hedgevec(|_, _, _| Orientation::Default);
+        let hedge_graph: HedgeGraph<_, _, ()> = hedge_graph_builder.build::<NodeStorageVec<_>>();
+        let global_orientation = hedge_graph.new_edgevec(|_, _, _| Orientation::Default);
 
         let cff_graph = CFFGenerationGraph::new(&hedge_graph, global_orientation);
         let contracted = cff_graph.contract_edge(EdgeIndex::from(0));
@@ -1586,8 +1589,8 @@ mod test {
         tri_box_builder.add_external_edge(nodes[3], (), Orientation::Undirected, Flow::Source);
         tri_box_builder.add_external_edge(nodes[4], (), Orientation::Undirected, Flow::Source);
 
-        let tri_box = tri_box_builder.build::<NodeStorageVec<_>>();
-        let global_orientation = tri_box.new_hedgevec(|_, _, _| Orientation::Default);
+        let tri_box: HedgeGraph<(), (), ()> = tri_box_builder.build::<NodeStorageVec<_>>();
+        let global_orientation = tri_box.new_edgevec(|_, _, _| Orientation::Default);
         let mut tri_box_cff_graph = CFFGenerationGraph::new(&tri_box, global_orientation);
 
         assert!(!tri_box_cff_graph.has_impossible_edge());
@@ -1641,14 +1644,14 @@ mod test {
         hedge_graph_builder.add_external_edge(nodes[0], (), Orientation::Undirected, Flow::Sink);
         hedge_graph_builder.add_external_edge(nodes[3], (), Orientation::Undirected, Flow::Source);
 
-        let hedge_graph = hedge_graph_builder.build::<NodeStorageVec<_>>();
+        let hedge_graph: HedgeGraph<(), (), ()> = hedge_graph_builder.build::<NodeStorageVec<_>>();
         let node_0: BitVec = hedge_graph.iter_crown(nodes[0]).into();
         let node_1: BitVec = hedge_graph.iter_crown(nodes[1]).into();
         let node_2: BitVec = hedge_graph.iter_crown(nodes[2]).into();
 
         let left_triangle = node_0.union(&node_1).union(&node_2);
 
-        let global_orientation = hedge_graph.new_hedgevec(|_, _, _| Orientation::Default);
+        let global_orientation = hedge_graph.new_edgevec(|_, _, _| Orientation::Default);
 
         let cff_graph =
             CFFGenerationGraph::new_from_subgraph(&hedge_graph, global_orientation, &left_triangle)

@@ -1,6 +1,6 @@
 use crate::gammaloop_integrand::GammaLoopIntegrand;
 use crate::graph::{BareGraph, Graph, SerializableGraph};
-use crate::model::{ArcParticle, Model, Particle};
+use crate::model::{ArcParticle, Model};
 use crate::numerator::{
     AppliedFeynmanRule, ContractionSettings, Evaluators, GetSingleAtom, Numerator, NumeratorState,
     PythonState, TypedNumeratorState, UnInit,
@@ -21,7 +21,6 @@ use smartstring::{LazyCompact, SmartString};
 use std::fs;
 use std::fs::File;
 use std::path::Path;
-use std::sync::Arc;
 use symbolica::printer::{AtomPrinter, PrintOptions};
 use symbolica::state::State;
 

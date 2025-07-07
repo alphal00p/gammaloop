@@ -8,33 +8,30 @@ use std::time::{Duration, Instant};
 use crate::cross_section::{Amplitude, AmplitudeGraph, CrossSection, IsPolarizable, SuperGraph};
 use crate::debug_info::{EvalState, DEBUG_LOGGER};
 use crate::evaluation_result::{EvaluationMetaData, EvaluationResult};
-use crate::graph::{EdgeType, Graph, LoopMomentumBasisSpecification, SerializableGraph};
+use crate::graph::Graph;
 use crate::integrands::{HasIntegrand, Integrand};
 use crate::integrate::UserData;
 use crate::momentum::{
-    FourMomentum, Polarization, Rotatable, Rotation, RotationMethod, Signature, ThreeMomentum,
+    FourMomentum, Polarization, Rotatable, Rotation, Signature, ThreeMomentum,
 };
 use crate::numerator::Evaluators;
 //use crate::subtraction::static_counterterm::CounterTerm;
 use crate::disable;
 use crate::utils::{
-    self, format_for_compare_digits, get_n_dim_for_n_loop_momenta, global_parameterize, FloatLike,
+    format_for_compare_digits, FloatLike,
     PrecisionUpgradable, F,
 };
 use crate::{
-    DiscreteGraphSamplingSettings, Externals, IntegratedPhase, Polarizations, SamplingSettings,
+    Externals, IntegratedPhase, Polarizations, SamplingSettings,
     Settings,
 };
 use crate::{Precision, StabilityLevelSetting};
-use bincode::Encode;
 use colored::Colorize;
 use itertools::Itertools;
-use momtrop::vector::Vector;
-use serde::{Deserialize, Serialize};
 use spenso::algebra::algebraic_traits::IsZero;
 use spenso::algebra::complex::Complex;
-use symbolica::domains::float::{NumericalFloatLike, Real};
-use symbolica::numerical_integration::{ContinuousGrid, DiscreteGrid, Grid, Sample};
+use symbolica::domains::float::NumericalFloatLike;
+use symbolica::numerical_integration::{DiscreteGrid, Grid, Sample};
 /// Trait to capture the common behaviour of amplitudes and cross sections
 /// Mainly used to expose the properties of the underlying graph in both amplitudes and cross sections
 trait GraphIntegrand {
@@ -1168,7 +1165,7 @@ impl GammaLoopIntegrand {
     }
 
     pub fn amplitude_integrand_constructor(
-        mut amplitude: Amplitude<Evaluators>,
+        amplitude: Amplitude<Evaluators>,
         settings: Settings,
     ) -> Self {
         // let pols = None;

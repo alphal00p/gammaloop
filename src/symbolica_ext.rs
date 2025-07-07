@@ -12,6 +12,14 @@ where
         FunctionBuilder::new(*self).add_args(args).finish()
     }
 }
+impl<'a, I, const N: usize> CallSymbol<&'a [I; N]> for Symbol
+where
+    &'a I: Into<AtomOrView<'a>>,
+{
+    fn f(&self, args: &'a [I; N]) -> Atom {
+        FunctionBuilder::new(*self).add_args(args).finish()
+    }
+}
 
 impl<'a, 'b, I, J> CallSymbol<(&'a [I], &'b [J])> for Symbol
 where
@@ -35,6 +43,34 @@ where
         FunctionBuilder::new(*self)
             .add_args(args.0.as_slice())
             .add_args(args.1)
+            .finish()
+    }
+}
+
+impl<'a, 'b, I, J, const N: usize, const M: usize> CallSymbol<(&'a [I; N], &'b [J; M])> for Symbol
+where
+    &'a I: Into<AtomOrView<'a>>,
+    &'b J: Into<AtomOrView<'b>>,
+{
+    fn f(&self, args: (&'a [I; N], &'b [J; M])) -> Atom {
+        FunctionBuilder::new(*self)
+            .add_args(args.0.as_slice())
+            .add_args(args.1)
+            .finish()
+    }
+}
+impl<'a, 'b, 'c, I, J, K, const N: usize, const M: usize, const O: usize>
+    CallSymbol<(&'a [I; N], &'b [J; M], &'c [K; O])> for Symbol
+where
+    &'a I: Into<AtomOrView<'a>>,
+    &'b J: Into<AtomOrView<'b>>,
+    &'c K: Into<AtomOrView<'c>>,
+{
+    fn f(&self, args: (&'a [I; N], &'b [J; M], &'c [K; O])) -> Atom {
+        FunctionBuilder::new(*self)
+            .add_args(args.0.as_slice())
+            .add_args(args.1)
+            .add_args(args.2)
             .finish()
     }
 }

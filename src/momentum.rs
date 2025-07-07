@@ -13,19 +13,17 @@ use spenso::{
     algebra::{
         algebraic_traits::RefZero,
         complex::Complex,
-        upgrading_arithmetic::{
-            FallibleAdd, FallibleAddAssign, FallibleMul, FallibleSub, FallibleSubAssign,
-            TrySmallestUpgrade,
-        },
+        upgrading_arithmetic::FallibleAdd,
     },
     contraction::Contract,
     iterators::IteratableTensor,
     shadowing::{symbolica_utils::NoArgs, Shadowable},
     structure::{
         abstract_index::AbstractIndex,
-        representation::{BaseRepName, Euclidean, LibraryRep, LibrarySlot, Minkowski, RepName},
+        representation::{BaseRepName, Euclidean, LibraryRep, Minkowski, RepName},
         slot::{DualSlotTo, Slot},
-        CastStructure, IndexLess, NamedStructure, OrderedStructure, TensorStructure, ToSymbolic,
+        CastStructure, IndexLess, NamedStructure, OrderedStructure, PermutedStructure,
+        TensorStructure, ToSymbolic,
     },
     tensors::{
         complex::RealOrComplexTensor,
@@ -510,7 +508,7 @@ impl<T> ThreeMomentum<T> {
         T: Clone,
     {
         let structure =
-            OrderedStructure::from_iter(vec![Euclidean {}.new_slot(3, index)]).structure;
+            PermutedStructure::from_iter(vec![Euclidean {}.new_slot(3, index)]).structure;
         DenseTensor::from_data(vec![self.px, self.py, self.pz], structure).unwrap()
     }
 
@@ -519,7 +517,7 @@ impl<T> ThreeMomentum<T> {
         T: Clone,
     {
         let structure =
-            OrderedStructure::from_iter(vec![Euclidean {}.new_slot(3, index)]).structure;
+            PermutedStructure::from_iter(vec![Euclidean {}.new_slot(3, index)]).structure;
         DenseTensor::from_data(vec![self.px, self.py, self.pz], structure).unwrap()
     }
 }
@@ -1573,7 +1571,7 @@ impl<T> FourMomentum<T, T> {
         T: Clone,
     {
         let structure =
-            OrderedStructure::from_iter([LibraryRep::new_slot(Minkowski {}.into(), 4, index)])
+            PermutedStructure::from_iter([LibraryRep::new_slot(Minkowski {}.into(), 4, index)])
                 .structure;
         DenseTensor::from_data(
             vec![
@@ -1596,10 +1594,13 @@ impl<T> FourMomentum<T, T> {
     where
         T: Clone,
     {
-        let structure =
-            OrderedStructure::from_iter([LibraryRep::new_slot(Minkowski {}.into(), 4, index)])
-                .structure
-                .to_named(name, Some(num));
+        let structure = PermutedStructure::<OrderedStructure>::from_iter([LibraryRep::new_slot(
+            Minkowski {}.into(),
+            4,
+            index,
+        )])
+        .structure
+        .to_named(name, Some(num));
         DenseTensor::from_data(
             vec![
                 self.temporal.value,
@@ -2466,7 +2467,7 @@ impl<T> FourMomentum<T, Atom> {
         T: Clone + Into<Coefficient> + Exponent,
     {
         let structure =
-            OrderedStructure::from_iter([LibraryRep::new_slot(Minkowski {}.into(), 4, index)])
+            PermutedStructure::from_iter([LibraryRep::new_slot(Minkowski {}.into(), 4, index)])
                 .structure;
         let energy = self
             .temporal
@@ -2694,9 +2695,10 @@ impl Rotation {
         let al = Minkowski::slot(4, 3);
         let mud = mu.dual();
 
-        let shadow: NamedStructure<String, ()> = OrderedStructure::from_iter([mu.into()])
-            .structure
-            .to_named("eps".to_string(), None);
+        let shadow: NamedStructure<String, ()> =
+            PermutedStructure::<OrderedStructure>::from_iter([mu.into()])
+                .structure
+                .to_named("eps".to_string(), None);
         let shadow_t: MixedTensor<_, OrderedStructure> =
             ParamOrConcrete::param(shadow.to_shell().expanded_shadow().unwrap().into())
                 .cast_structure();
@@ -2727,7 +2729,7 @@ impl Rotation {
         let j = Bispinor {}.new_slot(4, 3);
 
         let shadow: NamedStructure<String, ()> =
-            OrderedStructure::from_iter([i.cast::<LibraryRep>()])
+            PermutedStructure::from_iter([i.cast::<LibraryRep>()])
                 .structure
                 .to_named("u".to_string(), None);
         let shadow_t: MixedTensor<_, OrderedStructure> =
@@ -2770,7 +2772,7 @@ impl RotationMethod {
         i: AbstractIndex,
         j: AbstractIndex,
     ) -> DataTensor<f64, OrderedStructure> {
-        let structure = OrderedStructure::from_iter([
+        let structure = PermutedStructure::from_iter([
             LibraryRep::new_slot(Minkowski {}.into(), 4, i),
             LibraryRep::new_slot(Minkowski {}.into(), 4, j),
         ])
@@ -2819,7 +2821,7 @@ impl RotationMethod {
         i: Slot<Minkowski>,
         j: Slot<Minkowski>,
     ) -> DataTensor<f64, OrderedStructure> {
-        let structure = OrderedStructure::from_iter([i.cast::<LibraryRep>(), j.cast()]).structure;
+        let structure = PermutedStructure::from_iter([i.cast::<LibraryRep>(), j.cast()]).structure;
 
         match self {
             RotationMethod::Identity => {
@@ -2936,7 +2938,7 @@ impl RotationMethod {
         i: Slot<Bispinor>,
         j: Slot<Bispinor>,
     ) -> DataTensor<Complex<f64>, OrderedStructure> {
-        let structure = OrderedStructure::from_iter([i.cast::<LibraryRep>(), j.cast()]).structure;
+        let structure = PermutedStructure::from_iter([i.cast::<LibraryRep>(), j.cast()]).structure;
         let zero = 0.; // F::new_zero();
         let zeroc = Complex::new_re(zero);
 
@@ -3106,11 +3108,10 @@ mod tests {
 
     use eyre::Context;
     use spenso::{
-        contraction::Contract,
         iterators::IteratableTensor,
-        structure::{slot::DualSlotTo, TensorStructure},
+        structure::TensorStructure,
     };
-    use symbolica::parse;
+    
 
     use crate::utils::F;
 

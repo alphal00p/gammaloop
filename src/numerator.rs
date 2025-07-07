@@ -1,18 +1,20 @@
 use crate::debug_info::DEBUG_LOGGER;
 use crate::feyngen::FeynGenError;
+use aind::Aind;
 use idenso::color::{ColorError, ColorSimplifier};
 use idenso::gamma::GammaSimplifier;
 use idenso::representations::Bispinor;
-use linnet::half_edge::hedgevec::HedgeVec;
+use linnet::half_edge::hedgevec::EdgeVec;
 use linnet::half_edge::involution::{EdgeIndex, Orientation};
+use linnet::half_edge::nodestore::NodeStorageOps;
+use linnet::half_edge::subgraph::SubGraph;
 use log::warn;
 use spenso::algebra::complex::Complex;
-use spenso::algebra::upgrading_arithmetic::{FallibleAdd, FallibleSub};
-use spenso::algebra::ScalarMul;
+use spenso::algebra::upgrading_arithmetic::FallibleSub;
 use spenso::network::library::DummyLibrary;
 use spenso::network::parsing::ShadowedStructure;
 use spenso::network::store::{NetworkStore, TensorScalarStoreMapping};
-use spenso::network::{ExecutionResult, Sequential, SmallestDegree, TensorOrScalarOrKey};
+use spenso::network::{ExecutionResult, Sequential, SmallestDegree};
 use spenso::shadowing::symbolica_utils::SerializableAtom;
 use spenso::shadowing::symbolica_utils::SerializableSymbol;
 use spenso::structure::OrderedStructure;
@@ -40,7 +42,6 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 // use crate::feyngen::dis::{DisEdge, DisVertex};
 use crate::graph::{BareGraph, VertexInfo};
-use crate::model::normalise_complex;
 use crate::momentum::Polarization;
 use crate::utils::{f128, GS, TENSORLIB, W_};
 use crate::{
@@ -51,7 +52,7 @@ use crate::{
 };
 
 use crate::{disable, GammaLoopContextContainer, ProcessSettings, Settings};
-use ahash::{AHashMap, HashSet};
+use ahash::AHashMap;
 use bincode::{Decode, Encode};
 use color_eyre::{Report, Result};
 use eyre::eyre;
@@ -62,7 +63,6 @@ use itertools::Itertools;
 
 use log::{debug, trace};
 
-use ref_ops::RefNeg;
 use serde::de::DeserializeOwned;
 use serde::ser::SerializeStruct;
 use serde::{Deserialize, Serialize};
@@ -72,10 +72,9 @@ use spenso::contraction::Contract;
 use spenso::iterators::IteratableTensor;
 use spenso::network::library::symbolic::{ExplicitKey, ETS};
 
-use spenso::structure::abstract_index::DOWNIND;
 use spenso::structure::concrete_index::{ExpandedIndex, FlatIndex};
 
-use spenso::structure::representation::{BaseRepName, LibraryRep, Minkowski};
+use spenso::structure::representation::{Euclidean, LibraryRep, Minkowski};
 use spenso::structure::{HasStructure, ScalarTensor, SmartShadowStructure};
 
 use spenso::{
@@ -92,15 +91,15 @@ use symbolica::printer::{AtomPrinter, PrintOptions};
 use symbolica::state::Workspace;
 
 use crate::numerator::ufo::UFO;
-use symbolica::atom::{AtomCore, AtomView, Symbol};
+use symbolica::atom::{AtomCore, AtomView};
 use symbolica::evaluate::{CompileOptions, ExpressionEvaluator, InlineASM};
-use symbolica::id::{Context, Match, MatchSettings};
+use symbolica::id::{Context, MatchSettings};
 use symbolica::{
     atom::{Atom, FunctionBuilder},
     function, parse, symbol,
 };
 use symbolica::{domains::float::NumericalFloatLike, evaluate::FunctionMap, id::Replacement};
-
+pub mod aind;
 pub mod ufo;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 /// Settings for the numerator
@@ -157,7 +156,7 @@ pub enum GammaAlgebraMode {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExtraInfo {
     pub path: PathBuf,
-    pub orientations: Vec<HedgeVec<Orientation>>,
+    pub orientations: Vec<EdgeVec<Orientation>>,
 }
 
 pub type AtomStructure = SmartShadowStructure<SerializableSymbol, Vec<SerializableAtom>>;
@@ -680,60 +679,10 @@ impl<'de> Deserialize<'de> for GlobalPrefactor {
     }
 }
 
-impl Numerator<UnInit> {
-    pub fn from_graph(
-        self,
-        graph: &BareGraph,
-        prefactor: &GlobalPrefactor,
-    ) -> Numerator<AppliedFeynmanRule> {
-        debug!("Applying feynman rules");
-        let state = AppliedFeynmanRule::from_graph(graph, prefactor);
-        debug!(
-            "Applied feynman rules:\n\tcolor:{}\n\tcolorless:{}",
-            state.color, state.colorless
-        );
-        Numerator { state }
-    }
+pub trait NumeratorNode {}
 
-    pub fn from_global(
-        self,
-        global: Atom,
-        // _graph: &BareGraph,
-        prefactor: &GlobalPrefactor,
-    ) -> Numerator<Global> {
-        debug!("Setting global numerator");
-        let state = {
-            let mut global = global;
-            global = global * &prefactor.color * &prefactor.colorless;
-            Global::new(global.into())
-        };
-        debug!(
-            "Global numerator:\n\tcolor:{}\n\tcolorless:{}",
-            state.color, state.colorless
-        );
-        Numerator { state }
-    }
-
-    pub fn from_global_color(
-        self,
-        global: Atom,
-        // _graph: &BareGraph,
-        prefactor: &GlobalPrefactor,
-    ) -> Numerator<Global> {
-        debug!("Setting global numerator");
-        let state = {
-            let mut global = global;
-            global = global * &prefactor.color * &prefactor.colorless;
-            Global::new_color(global.into())
-        };
-        debug!(
-            "Global numerator:\n\tcolor:{}\n\tcolorless:{}",
-            state.color, state.colorless
-        );
-        Numerator { state }
-    }
-}
-
+pub mod graph;
+pub mod uninit;
 #[allow(clippy::default_constructed_unit_structs)]
 impl Default for Numerator<UnInit> {
     fn default() -> Self {
@@ -746,8 +695,8 @@ impl Default for Numerator<UnInit> {
 #[derive(Debug, Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
 #[trait_decode(trait = symbolica::state::HasStateMap)]
 pub struct SymbolicExpression<State> {
-    pub colorless: ParamTensor,
-    pub color: ParamTensor,
+    pub colorless: ParamTensor<OrderedStructure<Euclidean, Aind>>,
+    pub color: ParamTensor<OrderedStructure<Euclidean, Aind>>,
     pub state: State,
 }
 
@@ -1114,59 +1063,63 @@ impl AppliedFeynmanRule {
         debug!("Generating numerator for graph: {}", graph.name);
         // debug!("momentum: {}", graph.dot_lmb());
 
-        let vatoms: Vec<_> = graph
-            .vertices
-            .iter()
-            .flat_map(|v| v.colorless_vertex_rule(graph))
-            .collect();
+        // let vatoms: Vec<_> = graph
+        //     .vertices
+        //     .iter()
+        //     .flat_map(|v| v.colorless_vertex_rule(graph))
+        //     .collect();
 
-        let mut eatoms: Vec<_> = vec![];
-        let i = Atom::i();
-        for (j, e) in graph.edges.iter().enumerate() {
-            let [n, c] = e.color_separated_numerator(graph, j);
-            let n = if matches!(e.edge_type, EdgeType::Virtual) {
-                &n * &i
-            } else {
-                n
-            };
-            eatoms.push([n, c]);
-            // shift += s;
-            // graph.shifts.0 += shift;
-        }
-        let mut colorless_builder = DataTensor::new_scalar(Atom::num(1));
+        // let mut eatoms: Vec<_> = vec![];
+        // let i = Atom::i();
+        // for (j, e) in graph.edges.iter().enumerate() {
+        //     let [n, c] = e.color_separated_numerator(graph, j);
+        //     let n = if matches!(e.edge_type, EdgeType::Virtual) {
+        //         &n * &i
+        //     } else {
+        //         n
+        //     };
+        //     eatoms.push([n, c]);
+        //     // shift += s;
+        //     // graph.shifts.0 += shift;
+        // }
+        // let mut colorless_builder: DataTensor<Atom, OrderedStructure<LibraryRep, Aind>> =
+        //     DataTensor::new_scalar(Atom::num(1));
 
-        let mut colorful_builder = DataTensor::new_scalar(Atom::num(1));
+        // let mut colorful_builder: DataTensor<Atom, OrderedStructure<LibraryRep, Aind>> =
+        //     DataTensor::new_scalar(Atom::num(1));
 
-        for [colorless, color] in &vatoms {
-            // println!("colorless vertex: {}", colorless);
-            // println!("colorful vertex: {}", color);
-            colorless_builder = colorless_builder.contract(colorless).unwrap();
-            colorful_builder = colorful_builder.contract(color).unwrap();
-            // println!("vertex: {v}");
-            // builder = builder * v;
-        }
+        // for [colorless, color] in &vatoms {
+        //     // println!("colorless vertex: {}", colorless);
+        //     // println!("colorful vertex: {}", color);
+        //     colorless_builder = colorless_builder.contract(colorless).unwrap();
+        //     colorful_builder = colorful_builder.contract(color).unwrap();
+        //     // println!("vertex: {v}");
+        //     // builder = builder * v;
+        // }
 
-        for [n, c] in &eatoms {
-            // println!("colorless edge {n}");
-            // println!("colorfull edge {c}");
-            colorless_builder = colorless_builder.scalar_mul(n).unwrap();
-            colorful_builder = colorful_builder.scalar_mul(c).unwrap();
-        }
+        // for [n, c] in &eatoms {
+        //     // println!("colorless edge {n}");
+        //     // println!("colorfull edge {c}");
+        //     colorless_builder = colorless_builder.scalar_mul(n).unwrap();
+        //     colorful_builder = colorful_builder.scalar_mul(c).unwrap();
+        // }
 
-        colorless_builder = colorless_builder.scalar_mul(&prefactor.colorless).unwrap();
-        colorful_builder = colorful_builder.scalar_mul(&prefactor.color).unwrap();
+        // colorless_builder = colorless_builder.scalar_mul(&prefactor.colorless).unwrap();
+        // colorful_builder = colorful_builder.scalar_mul(&prefactor.color).unwrap();
 
-        let mut num = AppliedFeynmanRule {
-            colorless: ParamTensor::composite(
-                colorless_builder.map_data(|a| normalise_complex(&a)),
-            ),
-            color: ParamTensor::composite(
-                colorful_builder.map_data(|a| normalise_complex(&a).into()),
-            ),
-            state: Default::default(),
-        };
-        num.simplify_ids();
-        num
+        // let mut num = AppliedFeynmanRule {
+        //     colorless: ParamTensor::composite(
+        //         colorless_builder.map_data(|a| normalise_complex(&a)),
+        //     ),
+        //     color: ParamTensor::composite(
+        //         colorful_builder.map_data(|a| normalise_complex(&a).into()),
+        //     ),
+        //     state: Default::default(),
+        // };
+        // num.simplify_ids();
+        // num
+        //
+        todo!()
     }
 }
 
@@ -2048,8 +2001,9 @@ impl Numerator<GammaSimplified> {
 pub struct Network {
     // #[bincode(with_serde
     pub net: spenso::network::Network<
-        NetworkStore<MixedTensor<F<f64>, ShadowedStructure>, Atom>,
-        ExplicitKey,
+        NetworkStore<MixedTensor<F<f64>, ShadowedStructure<Aind>>, Atom>,
+        ExplicitKey<Aind>,
+        Aind,
     >,
 }
 
@@ -2075,8 +2029,9 @@ pub enum ContractionSettings<R = Rational> {
 }
 
 pub type StandardTensorNet = spenso::network::Network<
-    NetworkStore<MixedTensor<F<f64>, ShadowedStructure>, Atom>,
-    ExplicitKey,
+    NetworkStore<MixedTensor<F<f64>, ShadowedStructure<Aind>>, Atom>,
+    ExplicitKey<Aind>,
+    Aind,
 >;
 
 impl Network {
@@ -2088,7 +2043,7 @@ impl Network {
         Network { net }
     }
 
-    pub fn contract<R>(mut self, settings: ContractionSettings<R>) -> Result<Contracted> {
+    pub fn contract<R>(self, settings: ContractionSettings<R>) -> Result<Contracted> {
         match settings {
             ContractionSettings::Levelled((_depth, _fn_map)) => {
                 // let levels: Levels<_, _> = self.net.into();
@@ -3472,7 +3427,6 @@ impl<E> CompiledEvaluator<E> {
         matches!(self.state, CompiledState::Enabled)
     }
 }
-use symbolica::state::StateMap;
 
 #[derive(Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
 #[trait_decode(trait = symbolica::state::HasStateMap)]
@@ -3480,7 +3434,7 @@ pub struct Evaluators {
     orientated: Option<EvaluatorOrientations>,
     pub single: EvaluatorSingle,
     choice: SingleOrCombined,
-    orientations: Vec<HedgeVec<Orientation>>,
+    orientations: Vec<EdgeVec<Orientation>>,
     pub double_param_values: Vec<Complex<F<f64>>>,
     quad_param_values: Vec<Complex<F<f128>>>,
     model_params_start: usize,

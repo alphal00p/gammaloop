@@ -6,7 +6,7 @@ use crate::utils::{FloatLike, F};
 use bincode_trait_derive::{Decode, Encode};
 use derive_more::From;
 use itertools::Itertools;
-use linnet::half_edge::{hedgevec::HedgeVec, involution::EdgeIndex};
+use linnet::half_edge::{hedgevec::EdgeVec, involution::EdgeIndex};
 use serde::{Deserialize, Serialize};
 use symbolica::{atom::Atom, domains::float::NumericalFloatLike};
 use typed_index_collections::TiVec;
@@ -35,7 +35,7 @@ impl Surface for UnitSurface {
 }
 
 #[inline]
-pub fn compute_value<T: FloatLike, S: Surface>(surface: &S, energy_cache: &HedgeVec<F<T>>) -> F<T> {
+pub fn compute_value<T: FloatLike, S: Surface>(surface: &S, energy_cache: &EdgeVec<F<T>>) -> F<T> {
     let positive_energies = surface.get_positive_energies();
     let negative_energies = surface.get_negative_energies();
 
@@ -59,7 +59,7 @@ pub fn compute_value<T: FloatLike, S: Surface>(surface: &S, energy_cache: &Hedge
 #[inline]
 pub fn compute_shift_part<T: FloatLike, S: Surface>(
     surface: &S,
-    energy_cache: &HedgeVec<F<T>>,
+    energy_cache: &EdgeVec<F<T>>,
 ) -> F<T> {
     surface
         .get_external_shift()

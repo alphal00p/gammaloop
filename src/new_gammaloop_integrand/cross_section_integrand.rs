@@ -14,7 +14,6 @@ use crate::{
     },
     evaluation_result::EvaluationResult,
     integrands::HasIntegrand,
-    model,
     momentum::{Rotation, ThreeMomentum},
     momentum_sample::{LoopMomenta, MomentumSample},
     new_cs::{CrossSectionCut, CutId},
