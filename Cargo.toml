@@ -174,7 +174,7 @@ no_python = []
 spenso-macros = { git = "https://github.com/alphal00p/spenso", rev = "d29ca0aa40f11fa1d9d000cc8e4ccf8e89c7b7f1" }
 spenso = { git = "https://github.com/alphal00p/spenso", rev = "d29ca0aa40f11fa1d9d000cc8e4ccf8e89c7b7f1" }
 # spenso = { path = "../spenso/spenso" }
-linnet = { path = "../linnet" }
+# linnet = { path = "../linnet" }
 # linnet = {git ="https://github.com/alphal00p/linnet"}
 # symbolica-community={path="../symbolica-community"}
-# linnet = { git = "https://github.com/alphal00p/linnet", rev = "a8b32180a4e8981a99c27afeffb921fde3c62c32" }
+linnet = { git = "https://github.com/alphal00p/linnet", rev = "d72588ecbea39c6df3fdde9ffa4e4f3575f93542" }
