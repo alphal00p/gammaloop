@@ -209,6 +209,7 @@ impl UVGraph {
                     }
                 })
             },
+            |_, h| (),
         );
 
         let reps = hedge_graph.normal_emr_replacement(
@@ -246,6 +247,7 @@ impl UVGraph {
                     }
                 })
             },
+            |_, h| (),
         ))
     }
 
@@ -280,6 +282,7 @@ impl UVGraph {
         let excised = graph.hedge_representation.concretize(&excised).map(
             |_, _, d| UVNode::from_vertex(&graph.vertices[*d], graph),
             |_, _, _, e| e.map(|d| UVEdge::from_edge(&graph.edges[*d], *d, graph)),
+            |h| (),
         );
 
         UVGraph::from_hedge(excised)

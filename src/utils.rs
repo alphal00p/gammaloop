@@ -29,7 +29,7 @@ use spenso::structure::concrete_index::FlatIndex;
 use spenso::structure::TensorStructure;
 use spenso::tensors::parametric::to_param::ToAtom;
 use spenso::tensors::parametric::MixedTensor;
-use spenso_hep_lib::weyl;
+use spenso_hep_lib::hep_lib;
 use symbolica::atom::{FunctionBuilder, Symbol};
 use symbolica::coefficient::Coefficient;
 use symbolica::domains::float::{
@@ -878,6 +878,10 @@ impl<T: FloatLike + ExportNumber> ExportNumber for F<T> {
 impl<T: TensorLibraryData + FloatLike> TensorLibraryData for F<T> {
     fn one() -> Self {
         F(<T as TensorLibraryData>::one())
+    }
+
+    fn minus_one() -> Self {
+        F(<T as TensorLibraryData>::minus_one())
     }
 
     fn zero() -> Self {
@@ -3389,7 +3393,7 @@ pub struct GammaloopSymbols {
 }
 
 pub static TENSORLIB: LazyLock<TensorLibrary<MixedTensor<F<f64>, ExplicitKey>>> =
-    LazyLock::new(|| weyl(F(1.), F(0.)));
+    LazyLock::new(|| hep_lib(F(1.), F(0.)));
 
 pub static W_: LazyLock<WildCards> = LazyLock::new(|| WildCards {
     edgeid_: symbol!("eid_"),

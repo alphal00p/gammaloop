@@ -1136,6 +1136,7 @@ impl<E, V> LMBext for HedgeGraph<E, V> {
                     Orientation::Default,
                 )
             },
+            |_, h| (),
         );
         emrgraph.dot_label(subgraph)
     }

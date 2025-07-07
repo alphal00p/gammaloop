@@ -1977,17 +1977,16 @@ impl PolyContracted {
 
 impl GammaSimplified {
     pub fn parse(self) -> Network {
-        let net = StandardTensorNet::try_from_view(
-            self.get_single_atom().unwrap().as_view(),
-            &DummyLibrary::default(),
-        )
-        .unwrap();
+        let lib = DummyLibrary::<(), _>::new();
+        let net = StandardTensorNet::try_from_view(self.get_single_atom().unwrap().as_view(), &lib)
+            .unwrap();
 
         // println!("net scalar{}", net.scalar.as_ref().unwrap());
         Network { net }
     }
 
     pub fn parse_only_colorless(self) -> Network {
+        let lib = DummyLibrary::<(), _>::new();
         let net = StandardTensorNet::try_from_view(
             self.colorless
                 .clone()
@@ -1995,7 +1994,7 @@ impl GammaSimplified {
                 .ok_or(NumeratorStateError::Any(eyre!("not a scalar")))
                 .unwrap()
                 .as_view(),
-            &DummyLibrary::default(),
+            &lib,
         )
         .unwrap();
 
@@ -2082,7 +2081,8 @@ pub type StandardTensorNet = spenso::network::Network<
 
 impl Network {
     pub fn parse_impl(expr: AtomView) -> Self {
-        let net = StandardTensorNet::try_from_view(expr, &DummyLibrary::default()).unwrap();
+        let lib = DummyLibrary::<(), _>::new();
+        let net = StandardTensorNet::try_from_view(expr, &lib).unwrap();
 
         // println!("net scalar{}", net.scalar.as_ref().unwrap());
         Network { net }
@@ -2247,7 +2247,7 @@ impl Numerator<Network> {
         if !fully_numerical_substitutions {
             let mut t = self.apply_reps(replacements).state.net;
 
-            t.execute::<Sequential, SmallestDegree, _>(TENSORLIB.deref());
+            t.execute::<Sequential, SmallestDegree, _, _>(TENSORLIB.deref());
 
             let r = match t
                 .result_scalar()
@@ -2283,7 +2283,7 @@ impl Numerator<Network> {
                 )
                 .unwrap();
 
-            g.execute::<Sequential, SmallestDegree, _>(&DummyLibrary::default());
+            g.execute::<Sequential, SmallestDegree, _, _>(&DummyLibrary::default());
 
             let r = match g
                 .result_scalar()

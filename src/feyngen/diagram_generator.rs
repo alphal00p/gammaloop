@@ -21,7 +21,7 @@ use spenso::tensors::parametric::{MixedTensor, ParamOrConcrete, ParamTensor};
 
 use spenso::shadowing::symbolica_utils::{SerializableAtom, SerializableSymbol};
 use spenso::structure::representation::{ExtendibleReps, LibraryRep, RepName};
-use spenso::structure::slot::DualSlotTo;
+use spenso::structure::slot::{DualSlotTo, IsAbstractSlot};
 use spenso::structure::{HasStructure, SmartShadowStructure};
 use std::collections::hash_map::Entry;
 use std::collections::HashSet;
@@ -1074,6 +1074,7 @@ impl FeynGen {
         let mut he_graph = HedgeGraph::<EdgeColor, NodeColor>::from_sym(graph.clone()).map(
             |_, _, node_color| node_color,
             |_, _, _, d| d.map(|d| model.get_particle_from_pdg(d.pdg)),
+            |_| (),
         );
         // info!(
         //     "Looking at\n{}",
@@ -3527,7 +3528,7 @@ impl FeynGen {
                                 let color = color_a
                                     .iter()
                                     .zip(color_b.iter())
-                                    .map(|(a, b)| a.dual().kroneker_atom(&b.dual()))
+                                    .map(|(a, b)| a.dual().rep().id(Atom::from(a.aind), Atom::from(b.aind)))
                                     .fold(Atom::num(1), |acc, x| acc * x);
 
                                 numerator.state.color.map_data_mut(|a|{*a *=&color});

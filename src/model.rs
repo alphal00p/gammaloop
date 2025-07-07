@@ -946,19 +946,19 @@ impl<LorRep: BaseRepName> EdgeSlots<LorRep> {
             .lorentz
             .iter()
             .zip(other.lorentz.iter())
-            .map(|(a, b)| a.kroneker_atom(b))
+            .map(|(a, b)| a.rep().id(Atom::from(a.aind), Atom::from(b.aind)))
             .fold(parse!("1"), |acc, x| acc * x);
         let spin = self
             .spin
             .iter()
             .zip(other.spin.iter())
-            .map(|(a, b)| a.kroneker_atom(b))
+            .map(|(a, b)| a.rep().id(Atom::from(a.aind), Atom::from(b.aind)))
             .fold(parse!("1"), |acc, x| acc * x);
         let color = self
             .color
             .iter()
             .zip(other.color.iter())
-            .map(|(a, b)| a.kroneker_atom(b))
+            .map(|(a, b)| a.rep().id(Atom::from(a.aind), Atom::from(b.aind)))
             .fold(parse!("1"), |acc, x| acc * x);
 
         [lorentz, spin, color]

@@ -116,7 +116,7 @@ pub trait HedgeGraphExt<N, E> {
 }
 
 impl<N: Clone, E: Clone, S: NodeStorageOps<NodeData = N>> HedgeGraphExt<N, E>
-    for HedgeGraph<E, N, S>
+    for HedgeGraph<E, N, (), S>
 {
     fn from_sym(graph: SymbolicaGraph<N, E>) -> Self {
         let mut builder = HedgeGraphBuilder::new();
@@ -145,7 +145,7 @@ impl<N: Clone, E: Clone, S: NodeStorageOps<NodeData = N>> HedgeGraphExt<N, E>
 
     type Error = HedgeGraphError;
 
-    fn to_sym(value: &HedgeGraph<E, N, S>) -> Result<SymbolicaGraph<&N, &E>, Self::Error> {
+    fn to_sym(value: &HedgeGraph<E, N, (), S>) -> Result<SymbolicaGraph<&N, &E>, Self::Error> {
         let mut graph = SymbolicaGraph::new();
         let mut map = AHashMap::new();
 
@@ -722,8 +722,8 @@ impl HasVertexInfo for InteractionVertexInfo {
                 for (i, s) in spins.iter().enumerate() {
                     let id1 = function!(UFO.identity, Atom::num((i + 1) as i32), symbol!("x_"))
                         .to_pattern();
-                    let id2 =
-                        function!(ETS.id, symbol!("x_"), Atom::num((i + 1) as i32)).to_pattern();
+                    let id2 = function!(ETS.metric, symbol!("x_"), Atom::num((i + 1) as i32))
+                        .to_pattern();
 
                     let ind = match s {
                         1 => Euclidean {}.new_slot(1, i + 1).to_symbolic_wrapped(),
@@ -743,11 +743,11 @@ impl HasVertexInfo for InteractionVertexInfo {
 
                     atom = atom
                         .replace(&id1)
-                        .with(function!(ETS.id, ind, symbol!("x_")).to_pattern());
+                        .with(function!(ETS.metric, ind, symbol!("x_")).to_pattern());
 
                     atom = atom
                         .replace(&id2)
-                        .with(function!(ETS.id, symbol!("x_"), ind).to_pattern());
+                        .with(function!(ETS.metric, symbol!("x_"), ind).to_pattern());
                 }
 
                 for (i, _) in edges.iter().enumerate() {

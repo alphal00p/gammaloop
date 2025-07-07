@@ -47,6 +47,7 @@ use color_eyre::{Help, Report, Result};
 use colored::Colorize;
 use cross_section::Amplitude;
 use eyre::WrapErr;
+use idenso::representations::initialize;
 use integrands::*;
 use itertools::Itertools;
 use log::debug;
@@ -70,22 +71,11 @@ use observables::ObservableSettings;
 
 use observables::PhaseSpaceSelectorSettings;
 
-use idenso::representations::Bispinor;
-use idenso::representations::ColorAdjoint;
-use idenso::representations::ColorFundamental;
-use idenso::representations::ColorSextet;
-use idenso::representations::Lorentz;
-use idenso::representations::SpinFundamental;
 use signature::ExternalSignature;
 use spenso::algebra::complex::Complex;
-use spenso::structure::abstract_index::AIND_SYMBOLS;
-use spenso::structure::representation::Euclidean;
-use spenso::structure::representation::Minkowski;
-use spenso::structure::representation::RepName;
 use std::fmt::Display;
 use std::fs::File;
 use std::sync::atomic::AtomicBool;
-use symbolica::atom::Atom;
 use symbolica::evaluate::CompileOptions;
 use symbolica::evaluate::InlineASM;
 use symbolica::state::HasStateMap;
@@ -101,15 +91,7 @@ pub const GAMMALOOP_NAMESPACE: &str = "GL";
 pub const MAX_CORES: usize = 1000;
 
 pub fn initialize_reps() {
-    let _ = AIND_SYMBOLS.dind;
-    let _ = Minkowski {}.to_symbolic([Atom::Zero]);
-    let _ = Euclidean {}.to_symbolic([Atom::Zero]);
-    let _ = Lorentz {}.to_symbolic([Atom::Zero]);
-    let _ = SpinFundamental {}.to_symbolic([Atom::Zero]);
-    let _ = Bispinor {}.to_symbolic([Atom::Zero]);
-    let _ = ColorAdjoint {}.to_symbolic([Atom::Zero]);
-    let _ = ColorFundamental {}.to_symbolic([Atom::Zero]);
-    let _ = ColorSextet {}.to_symbolic([Atom::Zero]);
+    initialize();
 }
 
 pub trait GammaLoopContext: HasStateMap + HasModel {}

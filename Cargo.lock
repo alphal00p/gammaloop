@@ -187,6 +187,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "approx-derive"
+version = "0.2.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0fe983a589f7658d803c7f4ec0458fce2fe22d93808a366acc54c3f14812928f"
+dependencies = [
+ "proc-macro-crate",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.104",
+]
+
+[[package]]
+name = "approxim"
+version = "0.6.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5bd37130ed2dff8ae28af3a80524def9005bd5d7b4d39695949e761bc0229c85"
+dependencies = [
+ "approx-derive",
+ "num-traits",
+]
+
+[[package]]
 name = "arc-swap"
 version = "1.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -433,6 +455,12 @@ name = "by_address"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "64fa3c856b712db6612c019f14756e64e4bcea13337a6b33b696333a9eaa2d06"
+
+[[package]]
+name = "bytecount"
+version = "0.6.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "175812e0be2bccb6abe50bb8d566126198344f707e304f45c648fd8f2cc0365e"
 
 [[package]]
 name = "bytemuck"
@@ -1204,7 +1232,7 @@ dependencies = [
  "spenso-hep-lib",
  "statrs",
  "symbolica",
- "tabled",
+ "tabled 0.7.0",
  "thiserror 1.0.69",
  "trie-rs",
  "typed-index-collections",
@@ -1379,7 +1407,7 @@ dependencies = [
 [[package]]
 name = "idenso"
 version = "0.0.0"
-source = "git+https://github.com/alphal00p/spenso?rev=a5caa15fcebf3454f43f611bf379573abb5e463e#a5caa15fcebf3454f43f611bf379573abb5e463e"
+source = "git+https://github.com/alphal00p/spenso?rev=d29ca0aa40f11fa1d9d000cc8e4ccf8e89c7b7f1#d29ca0aa40f11fa1d9d000cc8e4ccf8e89c7b7f1"
 dependencies = [
  "bincode",
  "bincode-trait-derive",
@@ -1644,11 +1672,11 @@ checksum = "f9fbbcab51052fe104eb5e5d351cf728d30a5be1fe14d9be8a3b097481fb97de"
 [[package]]
 name = "linnet"
 version = "0.7.1"
-source = "git+https://github.com/alphal00p/linnet?rev=50d4d036fd2cfdf75c79a3c168c7d8357ec16831#50d4d036fd2cfdf75c79a3c168c7d8357ec16831"
 dependencies = [
  "ahash",
  "argmin",
  "bincode",
+ "bincode-trait-derive",
  "bitvec",
  "by_address",
  "cgmath",
@@ -2046,6 +2074,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "papergrid"
+version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6978128c8b51d8f4080631ceb2302ab51e32cc6e8615f735ee2f83fd269ae3f1"
+dependencies = [
+ "bytecount",
+ "fnv",
+ "unicode-width 0.2.1",
+]
+
+[[package]]
 name = "parking_lot"
 version = "0.12.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2272,6 +2311,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "proc-macro-crate"
+version = "3.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "edce586971a4dfaa28950c6f18ed55e0406c1ab88bbce2c6f6293a7aaba73d35"
+dependencies = [
+ "toml_edit",
+]
+
+[[package]]
 name = "proc-macro-error"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2293,6 +2341,28 @@ dependencies = [
  "proc-macro2",
  "quote",
  "version_check",
+]
+
+[[package]]
+name = "proc-macro-error-attr2"
+version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "96de42df36bb9bba5542fe9f1a054b8cc87e172759a1868aa05c1f3acc89dfc5"
+dependencies = [
+ "proc-macro2",
+ "quote",
+]
+
+[[package]]
+name = "proc-macro-error2"
+version = "2.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "11ec05c52be0a07b08061f7dd003e7d7092e0472bc731b4af7bb1ef876109802"
+dependencies = [
+ "proc-macro-error-attr2",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.104",
 ]
 
 [[package]]
@@ -3001,12 +3071,13 @@ dependencies = [
 [[package]]
 name = "spenso"
 version = "0.4.1"
-source = "git+https://github.com/alphal00p/spenso?rev=a5caa15fcebf3454f43f611bf379573abb5e463e#a5caa15fcebf3454f43f611bf379573abb5e463e"
+source = "git+https://github.com/alphal00p/spenso?rev=d29ca0aa40f11fa1d9d000cc8e4ccf8e89c7b7f1#d29ca0aa40f11fa1d9d000cc8e4ccf8e89c7b7f1"
 dependencies = [
  "ahash",
  "anyhow",
  "append-only-vec",
- "approx 0.5.1",
+ "approx-derive",
+ "approxim",
  "bincode",
  "bincode-trait-derive",
  "bitvec",
@@ -3033,24 +3104,27 @@ dependencies = [
  "slotmap",
  "spenso-macros",
  "symbolica",
+ "tabled 0.20.0",
  "thiserror 1.0.69",
 ]
 
 [[package]]
 name = "spenso-hep-lib"
 version = "0.0.0"
-source = "git+https://github.com/alphal00p/spenso?rev=a5caa15fcebf3454f43f611bf379573abb5e463e#a5caa15fcebf3454f43f611bf379573abb5e463e"
+source = "git+https://github.com/alphal00p/spenso?rev=d29ca0aa40f11fa1d9d000cc8e4ccf8e89c7b7f1#d29ca0aa40f11fa1d9d000cc8e4ccf8e89c7b7f1"
 dependencies = [
+ "ahash",
  "idenso",
  "spenso",
  "spenso-macros",
  "symbolica",
+ "xpct",
 ]
 
 [[package]]
 name = "spenso-macros"
 version = "0.1.0"
-source = "git+https://github.com/alphal00p/spenso?rev=a5caa15fcebf3454f43f611bf379573abb5e463e#a5caa15fcebf3454f43f611bf379573abb5e463e"
+source = "git+https://github.com/alphal00p/spenso?rev=d29ca0aa40f11fa1d9d000cc8e4ccf8e89c7b7f1#d29ca0aa40f11fa1d9d000cc8e4ccf8e89c7b7f1"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3215,8 +3289,19 @@ version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2407502760ccfd538f2fb1f843dd87b6daf1a17848d57bc5a25617e408ef4c7a"
 dependencies = [
- "papergrid",
- "tabled_derive",
+ "papergrid 0.4.0",
+ "tabled_derive 0.3.0",
+]
+
+[[package]]
+name = "tabled"
+version = "0.20.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e39a2ee1fbcd360805a771e1b300f78cc88fec7b8d3e2f71cd37bbf23e725c7d"
+dependencies = [
+ "papergrid 0.17.0",
+ "tabled_derive 0.11.0",
+ "testing_table",
 ]
 
 [[package]]
@@ -3228,6 +3313,19 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 1.0.109",
+]
+
+[[package]]
+name = "tabled_derive"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0ea5d1b13ca6cff1f9231ffd62f15eefd72543dab5e468735f1a456728a02846"
+dependencies = [
+ "heck 0.5.0",
+ "proc-macro-error2",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.104",
 ]
 
 [[package]]
@@ -3262,6 +3360,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "06794f8f6c5c898b3275aebefa6b8a1cb24cd2c6c79397ab15774837a0bc5755"
 dependencies = [
  "winapi-util",
+]
+
+[[package]]
+name = "testing_table"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0f8daae29995a24f65619e19d8d31dea5b389f3d853d8bf297bbf607cd0014cc"
+dependencies = [
+ "unicode-width 0.2.1",
 ]
 
 [[package]]
@@ -3378,6 +3485,23 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f4f7f0dd8d50a853a531c426359045b1998f04219d88799810762cd4ad314234"
 dependencies = [
  "serde",
+]
+
+[[package]]
+name = "toml_datetime"
+version = "0.6.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "22cddaf88f4fbc13c51aebbf5f8eceb5c7c5a9da2ac40a13519eb5b0a0e8f11c"
+
+[[package]]
+name = "toml_edit"
+version = "0.22.27"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "41fe8c660ae4257887cf66394862d21dbca4a6ddd26f04a3560410406a2f819a"
+dependencies = [
+ "indexmap 2.10.0",
+ "toml_datetime",
+ "winnow",
 ]
 
 [[package]]
@@ -3981,6 +4105,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "271414315aff87387382ec3d271b52d7ae78726f5d44ac98b4f4030c91880486"
 
 [[package]]
+name = "winnow"
+version = "0.7.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "74c7b26e3480b707944fc872477815d29a8e429d2f93a1ce000f5fa84a15cbcd"
+dependencies = [
+ "memchr",
+]
+
+[[package]]
 name = "wit-bindgen-rt"
 version = "0.39.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3996,6 +4129,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "05f360fc0b24296329c78fda852a1e9ae82de9cf7b27dae4b7f62f118f77b9ed"
 dependencies = [
  "tap",
+]
+
+[[package]]
+name = "xpct"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "37ff6bf9dc61882c07a7b9f9b86a410b1c38a21abd25d715523547d164408797"
+dependencies = [
+ "anyhow",
+ "bitflags 2.9.1",
+ "colored 2.2.0",
 ]
 
 [[package]]
