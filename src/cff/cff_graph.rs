@@ -959,7 +959,10 @@ impl CFFGenerationGraph {
             }
         }
 
-        let vertices = vertices.into_values().collect_vec();
+        let vertices = vertices
+            .into_values()
+            .sorted_by(|a, b| a.vertex_set.vertex_set.cmp(&b.vertex_set.vertex_set))
+            .collect_vec();
 
         let res = Self {
             vertices,
