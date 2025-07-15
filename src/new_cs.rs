@@ -1436,7 +1436,7 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
                         &filename,
                         &function_name,
                         true,
-                        symbolica::evaluate::InlineASM::default(),
+                        symbolica::evaluate::InlineASM::None,
                     )
                     .unwrap()
                     .compile(&lib_name, CompileOptions::default())

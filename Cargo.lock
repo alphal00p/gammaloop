@@ -1198,7 +1198,7 @@ dependencies = [
  "gat-lending-iterator",
  "git-version",
  "hyperdual",
- "idenso",
+ "idenso 0.2.0",
  "indexmap 2.10.0",
  "indicatif",
  "insta",
@@ -1410,6 +1410,20 @@ version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e3cc249cb5ed166c51f9ebbff0b70cc73c1fb8d2cd070236366456a0b748d964"
 dependencies = [
+ "itertools 0.14.0",
+ "linnet",
+ "spenso",
+ "spenso-macros",
+ "symbolica",
+]
+
+[[package]]
+name = "idenso"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "267de25a6a29f65e96dd604d566e9f42213316128e9740634715e29dfd28c424"
+dependencies = [
+ "anyhow",
  "bincode",
  "bincode-trait-derive",
  "itertools 0.14.0",
@@ -3073,9 +3087,9 @@ dependencies = [
 
 [[package]]
 name = "spenso"
-version = "0.5.0"
+version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "92649bcb3fc5000673a8d6486242fc129a3fa7e5d500d7a05837cbacf4c2b6c3"
+checksum = "086fef34d698b27acc5c16dd5228db54ed929fc22cde3276d762e454325c3344"
 dependencies = [
  "ahash",
  "anyhow",
@@ -3114,12 +3128,12 @@ dependencies = [
 
 [[package]]
 name = "spenso-hep-lib"
-version = "0.1.0"
+version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "611a1fa6c445e7b8fe29fce2d05f814c14e941ccefdb8490e785e1ba986ec4bb"
+checksum = "b81db383b7127ea4b4a72e6b51d77fc2a7912771ccc9672ce453c085533c3852"
 dependencies = [
  "ahash",
- "idenso",
+ "idenso 0.1.0",
  "spenso",
  "spenso-macros",
  "symbolica",
