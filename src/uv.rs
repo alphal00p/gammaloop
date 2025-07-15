@@ -55,7 +55,7 @@ use symbolica::{
 use linnet::half_edge::{
     hedgevec::HedgeVec,
     involution::Orientation,
-    subgraph::{self, InternalSubGraph, SubGraph, SubGraphOps},
+    subgraph::{self, Inclusion, InternalSubGraph, SubGraph, SubGraphOps},
     PowersetIterator,
 };
 use linnet::half_edge::{
@@ -1275,6 +1275,7 @@ impl Approximation {
             run_time_decimal_precision: 32,
             number_of_terms_in_epsilon_expansion: uv_graph.n_loops(amplitude_subgraph) as i64 + 1,
             temporary_directory: Some("./form".into()),
+            mu_r_sq_symbol: GS.mu_r_sq.get_name().to_string(),
             ..VakintSettings::default()
         }))
         .unwrap();
@@ -1428,10 +1429,16 @@ impl Approximation {
             .replace(function!(vk_metric, W_.x_, W_.y_) * function!(GS.emr_mom, W_.x___, W_.x_))
             .with(function!(GS.emr_mom, W_.x___, W_.y_));
 
+        res = res.replace(vakint::symbols::S.cmplx_i).with(Atom::i());
+
         // multiply the results with a vacuum triangle that integrates to 1
         // 1/(k^2 - m_UV^2)^3 = -i / (4 pi)^2 * 1/2 * 1/mUV^2
         // name the mUV mass mUVi as this one should not be expanded
         for l in &self.lmb.loop_edges {
+            if !reduced.includes(&graph[l].1) {
+                continue;
+            }
+
             res /= parse!("(-1i / (4 𝜋)^2 * 1/2 * 1/mUVI^2)");
 
             // multiply CFF triangle
@@ -1737,7 +1744,11 @@ impl Approximation {
         cut_edges: &[EdgeIndex],
     ) -> Option<Atom> {
         let (t, s) = self.local_3d.expr()?;
-        let (t_int, _) = self.integrated_4d.expr()?;
+        let (t_int, _) = if let ApproxOp::Root = self.integrated_4d {
+            (Atom::num(0), Sign::Positive)
+        } else {
+            self.integrated_4d.expr()?
+        };
 
         let CFFapprox::Dependent { t_arg, .. } = CFFapprox::dependent(
             graph.as_ref(),
@@ -1858,7 +1869,7 @@ impl ApproxOp {
                 Some((mul, *sign))
             }
             ApproxOp::Dependent { t_arg, sign, .. } => Some((t_arg.integrand.clone(), *sign)),
-            ApproxOp::Root => Some((Atom::num(1), Sign::Positive)), //Also never gets hit
+            ApproxOp::Root => Some((Atom::num(1), Sign::Positive)),
         }
     }
 
