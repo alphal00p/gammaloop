@@ -178,40 +178,53 @@ fn stability_check(
 #[derive(Clone, Encode, Decode)]
 pub struct GenericEvaluator {
     pub f64_compiled: Option<RefCell<SerializableCompiledEvaluator>>,
-    pub f64_eager: RefCell<ExpressionEvaluator<F<f64>>>,
-    pub f128: RefCell<ExpressionEvaluator<F<f128>>>,
+    pub f64_eager: RefCell<ExpressionEvaluator<Complex<F<f64>>>>,
+    pub f128: RefCell<ExpressionEvaluator<Complex<F<f128>>>>,
 }
 
 pub trait GenericEvaluatorFloat<T: FloatLike = Self> {
-    fn get_evaluator(generic_evaluator: &GenericEvaluator) -> impl Fn(&[F<T>]) -> F<T>;
+    fn get_evaluator(
+        generic_evaluator: &GenericEvaluator,
+    ) -> impl Fn(&[Complex<F<T>>]) -> Complex<F<T>>;
 }
 
 impl GenericEvaluatorFloat for f64 {
     #[inline(always)]
-    fn get_evaluator(generic_evaluator: &GenericEvaluator) -> impl Fn(&[F<f64>]) -> F<f64> {
+    fn get_evaluator(
+        generic_evaluator: &GenericEvaluator,
+    ) -> impl Fn(&[Complex<F<f64>>]) -> Complex<F<f64>> {
         #[inline(always)]
-        |params: &[F<f64>]| {
-            let mut out = [F(0.)];
-
+        |params: &[Complex<F<f64>>]| {
             if let Some(compiled) = &generic_evaluator.f64_compiled {
-                compiled.borrow_mut().evaluate(params, &mut out);
+                let mut out = [symbolica::domains::float::Complex::new_zero()];
+                let symbolica_params = params
+                    .iter()
+                    .map(|c| symbolica::domains::float::Complex::new(c.re.0, c.im.0))
+                    .collect_vec();
+                compiled
+                    .borrow_mut()
+                    .evaluate_complex(&symbolica_params, &mut out);
+
+                Complex::new(F(out[0].re), F(out[0].im))
             } else {
+                let mut out = [Complex::new_zero()];
                 generic_evaluator
                     .f64_eager
                     .borrow_mut()
                     .evaluate(params, &mut out);
+                out[0]
             }
-
-            out[0]
         }
     }
 }
 
 impl GenericEvaluatorFloat for f128 {
     #[inline(always)]
-    fn get_evaluator(generic_evaluator: &GenericEvaluator) -> impl Fn(&[F<f128>]) -> F<f128> {
+    fn get_evaluator(
+        generic_evaluator: &GenericEvaluator,
+    ) -> impl Fn(&[Complex<F<f128>>]) -> Complex<F<f128>> {
         #[inline(always)]
-        |params: &[F<f128>]| generic_evaluator.f128.borrow_mut().evaluate_single(params)
+        |params: &[Complex<F<f128>>]| generic_evaluator.f128.borrow_mut().evaluate_single(params)
     }
 }
 

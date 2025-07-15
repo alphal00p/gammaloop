@@ -20,7 +20,7 @@ use smartstring::{LazyCompact, SmartString};
 use idenso::metric::MS;
 
 use spenso::{
-    algebra::algebraic_traits::IsZero,
+    algebra::{algebraic_traits::IsZero, complex::Complex},
     tensors::{data::DataIterator, parametric::SerializableCompiledEvaluator},
 };
 
@@ -596,8 +596,11 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
         tree.horner_scheme();
         tree.common_subexpression_elimination();
 
-        let tree_double = tree.map_coeff::<F<f64>, _>(&|r| F(r.re.to_f64()));
-        let tree_quad = tree.map_coeff::<F<f128>, _>(&|r| F((&r.re).into()));
+        let tree_double = tree
+            .map_coeff::<Complex<F<f64>>, _>(&|r| Complex::new(F(r.re.to_f64()), F(r.im.to_f64())));
+        let tree_quad = tree.map_coeff::<Complex<F<f128>>, _>(&|r| {
+            Complex::new(F((&r.re).into()), F((&r.im).into()))
+        });
 
         let evaluator = GenericEvaluator {
             f64_compiled: None,
@@ -736,8 +739,12 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
                 tree.horner_scheme();
                 tree.common_subexpression_elimination();
 
-                let tree_double = tree.map_coeff::<F<f64>, _>(&|r| (&r.re).into());
-                let tree_quad = tree.map_coeff::<F<f128>, _>(&|r| (&r.re).into());
+                let tree_double = tree.map_coeff::<Complex<F<f64>>, _>(&|r| {
+                    Complex::new(F(r.re.to_f64()), F(r.im.to_f64()))
+                });
+                let tree_quad = tree.map_coeff::<Complex<F<f128>>, _>(&|r| {
+                    Complex::new(F((&r.re).into()), F((&r.im).into()))
+                });
 
                 GenericEvaluator {
                     f64_compiled: None,
@@ -1418,7 +1425,15 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
                 let tree_double = tree.map_coeff::<F<f64>, _>(&|r| (&r.re).into());
                 let tree_quad = tree.map_coeff::<F<f128>, _>(&|r| (&r.re).into());
 
+                let tree_complex_double = tree.map_coeff::<Complex<F<f64>>, _>(&|r| {
+                    Complex::new(F(r.re.to_f64()), F(r.im.to_f64()))
+                });
+                let tree_complex_quad = tree.map_coeff::<Complex<F<f128>>, _>(&|r| {
+                    Complex::new(F((&r.re).into()), F((&r.im).into()))
+                });
+
                 let lin = tree_double.linearize(None);
+                let lin_complex = tree_complex_double.linearize(None);
 
                 let filename = format!("{}_cut_{}.cpp", self.graph.name, cut_id);
                 let function_name = format!("{}_cut_{}", self.graph.name, cut_id);
@@ -1438,8 +1453,8 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
                     f64_compiled: Some(RefCell::new(
                         SerializableCompiledEvaluator::load(&lib_name, &function_name).unwrap(),
                     )),
-                    f64_eager: RefCell::new(lin.into()),
-                    f128: RefCell::new(tree_quad.linearize(None)),
+                    f64_eager: RefCell::new(lin_complex.into()),
+                    f128: RefCell::new(tree_complex_quad.linearize(None)),
                 }
             })
             .collect();
@@ -1480,8 +1495,12 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
                         tree.horner_scheme();
                         tree.common_subexpression_elimination();
 
-                        let tree_double = tree.map_coeff::<F<f64>, _>(&|r| (&r.re).into());
-                        let tree_quad = tree.map_coeff::<F<f128>, _>(&|r| (&r.re).into());
+                        let tree_double = tree.map_coeff::<Complex<F<f64>>, _>(&|r| {
+                            Complex::new(F(r.re.to_f64()), F(r.im.to_f64()))
+                        });
+                        let tree_quad = tree.map_coeff::<Complex<F<f128>>, _>(&|r| {
+                            Complex::new(F((&r.re).into()), F((&r.im).into()))
+                        });
 
                         GenericEvaluator {
                             f64_compiled: None,
