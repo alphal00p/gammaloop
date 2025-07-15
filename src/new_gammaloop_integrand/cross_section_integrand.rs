@@ -248,39 +248,39 @@ impl CrossSectionGraphTerm {
                 let mut params = rescaled_sample
                     .external_moms()
                     .iter()
-                    .map(|x| x.temporal.value.clone())
+                    .map(|x| Complex::new_re(x.temporal.value.clone()))
                     .collect_vec();
 
                 params.extend(
                     rescaled_sample
                         .external_moms()
                         .iter()
-                        .flat_map(|x| x.spatial.clone().into_iter()),
+                        .flat_map(|x| x.spatial.clone().into_iter().map(|c| Complex::new_re(c))),
                 );
 
-                params.extend(self.graph.underlying.get_emr_vec_cache(
-                    rescaled_sample.loop_moms(),
-                    rescaled_sample.external_moms(),
-                    &self.graph.loop_momentum_basis,
-                ));
+                params.extend(
+                    self.graph
+                        .underlying
+                        .get_emr_vec_cache(
+                            rescaled_sample.loop_moms(),
+                            rescaled_sample.external_moms(),
+                            &self.graph.loop_momentum_basis,
+                        )
+                        .into_iter()
+                        .map(|q| Complex::new_re(q)),
+                );
 
-                // todo, make evaluator complex
-                let real_parameter_cache = model_parameter_cache
-                    .iter()
-                    .map(|x| x.re.clone())
-                    .collect_vec();
-
-                params.extend(real_parameter_cache);
+                params.extend(model_parameter_cache.into_iter().cloned());
 
                 let m_uv = F::from_ff64(HARD_CODED_M_UV);
-                params.push(m_uv);
+                params.push(Complex::new_re(m_uv));
 
                 let m_r_sq = F::from_ff64(HARD_CODED_M_R_SQ);
-                params.push(m_r_sq);
+                params.push(Complex::new_re(m_r_sq));
 
-                params.push(newton_result.solution);
-                params.push(h_function);
-                params.push(newton_result.derivative_at_solution);
+                params.push(Complex::new_re(newton_result.solution));
+                params.push(Complex::new_re(h_function));
+                params.push(Complex::new_re(newton_result.derivative_at_solution));
 
                 params
             });
@@ -298,7 +298,10 @@ impl CrossSectionGraphTerm {
                             <T as GenericEvaluatorFloat>::get_evaluator(evaluator)(&params);
                         cut_results
                     })
-                    .fold(momentum_sample.zero(), |sum, cut_result| sum + cut_result)
+                    .fold(
+                        Complex::new_re(momentum_sample.zero()),
+                        |sum, cut_result| sum + cut_result,
+                    )
             }
             None => self
                 .bare_cff_evaluators
@@ -317,10 +320,13 @@ impl CrossSectionGraphTerm {
                     }
                     cut_results
                 })
-                .fold(momentum_sample.zero(), |sum, cut_result| sum + cut_result),
+                .fold(
+                    Complex::new_re(momentum_sample.zero()),
+                    |sum, cut_result| sum + cut_result,
+                ),
         };
 
-        let final_result = Complex::new_re(result);
+        let final_result = result;
         if settings.general.debug > 0 {
             println!(
                 "sum of all cuts: {}",

@@ -62,7 +62,7 @@ impl AmplitudeGraphTerm {
                 &self.graph.loop_momentum_basis,
             )
             .into_iter()
-            .map(|x| x.1)
+            .map(|x| Complex::new_re(x.1))
             .collect_vec();
 
         let result = match momentum_sample.sample.orientation {
@@ -77,7 +77,7 @@ impl AmplitudeGraphTerm {
             }
         };
 
-        Complex::new_re(result)
+        result
     }
 }
 
