@@ -80,10 +80,9 @@ fn tri_uv_AMP() {
 
     // build UV here
     graph.loop_momentum_basis = loop_momentum_basis;
-    let uv_graph = UVGraph::from_supergraph(&graph);
 
-    let wood = uv_graph.wood(&graph.underlying.full_filter());
-    let mut forest = wood.unfold(&uv_graph, &graph.loop_momentum_basis);
+    let wood = graph.wood(&graph.underlying.full_filter());
+    let mut forest = wood.unfold(&graph, &graph.loop_momentum_basis);
     // forest.compute(&uv_graph);
 
     let orientations: TiVec<AmplitudeOrientationID, OrientationData> = amplitude_graph
@@ -96,8 +95,8 @@ fn tri_uv_AMP() {
         .map(|a| a.data.clone())
         .collect();
     forest.compute(
-        &uv_graph,
-        &uv_graph.full_filter(),
+        &graph,
+        &graph.as_ref().full_filter(),
         &orientations,
         &canonize_esurface,
         &[],
@@ -127,8 +126,8 @@ fn tri_uv_AMP() {
         );
 
         let mut expr = forest.local_expr(
-            &uv_graph,
-            &uv_graph.full_filter(),
+            &graph,
+            &graph.as_ref().full_filter(),
             &orientation.data,
             &canonize_esurface,
             &orientations,
@@ -136,9 +135,12 @@ fn tri_uv_AMP() {
         );
 
         // add Feynman rules of external edges
-        for (_p, edge_index, d) in uv_graph.iter_edges_of(&uv_graph.external_filter()) {
+        for (_p, edge_index, d) in graph
+            .as_ref()
+            .iter_edges_of(&graph.as_ref().external_filter())
+        {
             let edge_id = usize::from(edge_index) as i64;
-            expr = (expr * &d.data.num)
+            expr = (expr * &d.data.spin_num)
                 .replace(function!(GS.emr_mom, edge_id, W_.y_))
                 .with_map(move |m| {
                     let index = m.get(W_.y_).unwrap().to_atom();
@@ -231,7 +233,10 @@ fn tri_uv_AMP() {
         );
 
         // set the external energies
-        for (_p, edge_index, _d) in uv_graph.iter_edges_of(&uv_graph.external_filter()) {
+        for (_p, edge_index, _d) in graph
+            .as_ref()
+            .iter_edges_of(&graph.as_ref().external_filter())
+        {
             let edge_id = usize::from(edge_index) as i64;
             expr = expr
                 .replace(function!(GS.ose, edge_id))
@@ -480,7 +485,7 @@ fn tri_box_tri_LU() {
     )
     .unwrap();
 
-    let super_uv_graph = UVGraph::from_supergraph(&cs.graph);
+    let super_uv_graph = cs.graph.as_ref();
     let orientation_id = SuperGraphOrientationID(0); // TODO: find out which cut generates the amplitude
     let supergraph_orientation_data = &cs
         .derived_data
@@ -550,22 +555,23 @@ fn tri_box_tri_LU() {
             .cut_momentum_basis;
         let cut_lmb = &cs.derived_data.lmbs.as_ref().unwrap()[cut_mom_basis_id];
 
-        let left_wood = super_uv_graph.wood(&c.left);
+        let left_wood = cs.graph.wood(&c.left);
 
-        let mut left_forest = left_wood.unfold(&super_uv_graph, &super_uv_graph.lmb);
+        let mut left_forest = left_wood.unfold(&cs.graph, &cs.graph.loop_momentum_basis);
         left_forest.compute(
-            &super_uv_graph,
+            &cs.graph,
             &c.left,
             &cff_cut_expr.left_amplitude.orientations,
             &None,
             &cut_edges,
         );
 
-        let mut right_forest = super_uv_graph
+        let mut right_forest = cs
+            .graph
             .wood(&c.right)
-            .unfold(&super_uv_graph, &super_uv_graph.lmb);
+            .unfold(&cs.graph, &cs.graph.loop_momentum_basis);
         right_forest.compute(
-            &super_uv_graph,
+            &cs.graph,
             &c.right,
             &cff_cut_expr.right_amplitude.orientations,
             &None,
@@ -589,7 +595,7 @@ fn tri_box_tri_LU() {
         let right_orientation_data =
             &cff_cut_expr.right_amplitude.orientations[right_orientation].data;
         let left_expr = left_forest.local_expr(
-            &super_uv_graph,
+            &cs.graph,
             &c.left,
             left_orientation_data,
             &None,
@@ -599,7 +605,7 @@ fn tri_box_tri_LU() {
 
         println!("Computing right amplitude");
         let right_expr = right_forest.local_expr(
-            &super_uv_graph,
+            &cs.graph,
             &c.right,
             right_orientation_data,
             &None,
@@ -630,7 +636,7 @@ fn tri_box_tri_LU() {
             let orientation = supergraph_orientation_data.orientation.clone();
             cut_res = cut_res
                 * d.data
-                    .num
+                    .spin_num
                     .replace(function!(GS.emr_mom, edge_id, W_.y_))
                     .with_map(move |m| {
                         let index = m.get(W_.y_).unwrap().to_atom();
@@ -645,7 +651,7 @@ fn tri_box_tri_LU() {
         // add Feynman rules of external edges
         for (_p, edge_index, d) in super_uv_graph.iter_edges_of(&super_uv_graph.external_filter()) {
             let edge_id = usize::from(edge_index) as i64;
-            cut_res = (cut_res * &d.data.num)
+            cut_res = (cut_res * &d.data.spin_num)
                 .replace(function!(GS.emr_mom, edge_id, W_.y_))
                 .with_map(move |m| {
                     let index = m.get(W_.y_).unwrap().to_atom();
@@ -1238,7 +1244,7 @@ fn double_triangle_LU() {
     )
     .unwrap();
 
-    let super_uv_graph = UVGraph::from_supergraph(&cs.graph);
+    let super_uv_graph = cs.graph.as_ref();
     let orientation_id = SuperGraphOrientationID(0); // 0 contains the UV amplitude
     let supergraph_orientation_data = &cs
         .derived_data
@@ -1288,24 +1294,25 @@ fn double_triangle_LU() {
             .map(|(_, edge_index, _)| edge_index)
             .collect_vec();
 
-        let left_wood = super_uv_graph.wood(&c.left);
+        let left_wood = cs.graph.wood(&c.left);
 
-        let mut left_forest = left_wood.unfold(&super_uv_graph, &super_uv_graph.lmb);
+        let mut left_forest = left_wood.unfold(&cs.graph, &cs.graph.loop_momentum_basis);
         // left_forest.compute(&super_uv_graph);
         left_forest.compute(
-            &super_uv_graph,
+            &cs.graph,
             &c.left,
             &cff_cut_expr.left_amplitude.orientations,
             &None,
             &cut_edges,
         );
 
-        let mut right_forest = super_uv_graph
+        let mut right_forest = cs
+            .graph
             .wood(&c.right)
-            .unfold(&super_uv_graph, &super_uv_graph.lmb);
+            .unfold(&cs.graph, &cs.graph.loop_momentum_basis);
         // right_forest.compute(&super_uv_graph);
         right_forest.compute(
-            &super_uv_graph,
+            &cs.graph,
             &c.right,
             &cff_cut_expr.right_amplitude.orientations,
             &None,
@@ -1323,7 +1330,7 @@ fn double_triangle_LU() {
             let right_orientation_data =
                 &cff_cut_expr.right_amplitude.orientations[right_orientation].data;
             let left_expr = left_forest.local_expr(
-                &super_uv_graph,
+                &cs.graph,
                 &c.left,
                 left_orientation_data,
                 &None,
@@ -1331,7 +1338,7 @@ fn double_triangle_LU() {
                 &cut_edges,
             );
             let right_expr = right_forest.local_expr(
-                &super_uv_graph,
+                &cs.graph,
                 &c.right,
                 right_orientation_data,
                 &None,
@@ -1363,7 +1370,7 @@ fn double_triangle_LU() {
                 let orientation = supergraph_orientation_data.orientation.clone();
                 cut_res = cut_res
                     * d.data
-                        .num
+                        .spin_num
                         .replace(function!(GS.emr_mom, edge_id, W_.y_))
                         .with_map(move |m| {
                             let index = m.get(W_.y_).unwrap().to_atom();
@@ -1380,7 +1387,7 @@ fn double_triangle_LU() {
                 super_uv_graph.iter_edges_of(&super_uv_graph.external_filter())
             {
                 let edge_id = usize::from(edge_index) as i64;
-                cut_res = (cut_res * &d.data.num)
+                cut_res = (cut_res * &d.data.spin_num)
                     .replace(function!(GS.emr_mom, edge_id, W_.y_))
                     .with_map(move |m| {
                         let index = m.get(W_.y_).unwrap().to_atom();
@@ -1511,11 +1518,11 @@ fn double_triangle_LU() {
                 .replace(function!(GS.ose, 100, W_.prop_))
                 .with(W_.prop_);
 
-            if super_uv_graph.dod(&c.right) >= 0 {
+            if cs.graph.dod(&c.right) >= 0 {
                 let lmbs = super_uv_graph.generate_loop_momentum_bases(&c.right);
 
                 for l in lmbs {
-                    let _limits = super_uv_graph.all_limits(&c.right, &cut_res, symbol!("t"), &l);
+                    let _limits = cs.graph.all_limits(&c.right, &cut_res, symbol!("t"), &l);
                 }
 
                 // println!("Correct UV cancellation if 0: {:>}", r);
@@ -1599,7 +1606,7 @@ fn double_triangle_LU() {
                     .with(function!(GS.external_mom, edge_id, W_.x_));
             }
 
-            if super_uv_graph.dod(&c.right) >= 0 {
+            if cs.graph.dod(&c.right) >= 0 {
                 let mut fnmap = FunctionMap::new();
 
                 fnmap.add_constant(
@@ -2493,317 +2500,317 @@ fn disconnect_forest_scalar() {
 
     */
 
-#[test]
-#[allow(unused)]
-fn easy() {
-    let model = load_generic_model("sm");
-    let mut symbolica_graph = symbolica::graph::Graph::new();
-
-    let dummy_external_vertex_rule = ArcVertexRule(Arc::new(VertexRule {
-        name: "external".into(),
-        couplings: vec![],
-        lorentz_structures: vec![],
-        particles: vec![],
-        color_structures: ColorStructure::new(vec![]),
-    }));
-
-    let incoming = symbolica_graph.add_node(NodeColorWithVertexRule {
-        external_tag: 1,
-        vertex_rule: dummy_external_vertex_rule.clone(),
-    });
-
-    let outgoing = symbolica_graph.add_node(NodeColorWithVertexRule {
-        external_tag: 2,
-        vertex_rule: dummy_external_vertex_rule.clone(),
-    });
-
-    let tth = NodeColorWithVertexRule {
-        external_tag: 0,
-        vertex_rule: model.get_vertex_rule("V_141"),
-    };
-
-    let t = EdgeColor::from_particle(model.get_particle("t"));
-    let h = EdgeColor::from_particle(model.get_particle("H"));
-
-    let l1 = symbolica_graph.add_node(tth.clone());
-    let l2 = symbolica_graph.add_node(tth.clone());
-
-    let e1 = symbolica_graph.add_edge(incoming, l1, false, h).unwrap();
-    let e2 = symbolica_graph.add_edge(l2, outgoing, false, h).unwrap();
-    symbolica_graph.add_edge(l1, l2, true, t);
-    symbolica_graph.add_edge(l2, l1, true, t);
-
-    let bare_graph = BareGraph::from_symbolica_graph(
-        &model,
-        "1l_prop".into(),
-        &symbolica_graph,
-        Atom::num(1),
-        vec![((Some(1), Some(2)))],
-        None,
-    )
-    .unwrap();
-
-    let uv_graph = UVGraph::from_graph(&bare_graph);
-
-    println!("{}", uv_graph.base_dot());
-
-    let wood = uv_graph.wood(&uv_graph.full_graph());
-
-    println!("{}", wood.dot(&uv_graph));
-    println!("{}", wood.show_graphs(&uv_graph));
-
-    let mut ufold = wood.unfold(&uv_graph, &uv_graph.lmb);
-    // assert_eq!(152, ufold.n_terms());
-    // ufold.compute(&uv_graph);
-
-    println!(
-        "unfolded : {}",
-        ufold
-            .show_structure(&uv_graph, &uv_graph.full_graph())
-            .unwrap()
-    );
-    println!("graph: {}", ufold.graphs());
-
-    // let structure = wood.unfold(&uv_graph,&uv_graph.cut_edges);
-
-    // println!("{}", structure.show_structure(&wood, &uv_graph));
-    // println!("{}", structure.n_elements());
-}
-
-#[test]
-#[allow(unused)]
-fn tbt() {
-    let (model, amplitude, _) =
-        load_amplitude_output("TEST_AMPLITUDE_triangle_box_triangle_phys/GL_OUTPUT", true);
-
-    let mut graph = amplitude.amplitude_graphs[0].graph.clone();
-
-    // graph.generate_uv();
-
-    graph.generate_loop_momentum_bases();
-
-    let uv_graph = UVGraph::from_graph(&graph.bare_graph);
-
-    println!("tbt_dot{}", uv_graph.base_dot());
-
-    let wood = uv_graph.wood(&uv_graph.full_graph());
-
-    println!("{}", wood.dot(&uv_graph));
-
-    let mut ufold = wood.unfold(&uv_graph, &uv_graph.lmb);
-    // ufold.compute(&uv_graph);
-
-    println!(
-        "unfolded : {}",
-        ufold
-            .show_structure(&uv_graph, &uv_graph.full_graph())
-            .unwrap()
-    );
-    println!("graph: {}", ufold.graphs());
-
-    // let structure = wood.unfold(&uv_graph,&uv_graph.cut_edges);
-
-    // println!("{}", structure.show_structure(&wood, &uv_graph));
-    // println!("{}", structure.n_elements());
-}
-
-#[test]
-#[allow(unused)]
-fn bugblatter_forest() {
-    // println!("{}", env!("CARGO_CRATE_NAME"));
-    let model = load_generic_model("sm");
-    println!("{}", model.vertex_rules[0].0.name);
-    let mut symbolica_graph = symbolica::graph::Graph::new();
-
-    let ttg = NodeColorWithVertexRule {
-        external_tag: 0,
-        vertex_rule: model.get_vertex_rule("V_137"),
-    };
-
-    let t = EdgeColor::from_particle(model.get_particle("t"));
-    let g = EdgeColor::from_particle(model.get_particle("g"));
-
-    let l1 = symbolica_graph.add_node(ttg.clone());
-    let l2 = symbolica_graph.add_node(ttg.clone());
-    let l3 = symbolica_graph.add_node(ttg.clone());
-    let l4 = symbolica_graph.add_node(ttg.clone());
-    let l5 = symbolica_graph.add_node(ttg.clone());
-    let l6 = symbolica_graph.add_node(ttg.clone());
-
-    symbolica_graph.add_edge(l1, l2, true, t);
-    symbolica_graph.add_edge(l2, l3, true, t);
-    symbolica_graph.add_edge(l3, l1, true, t);
-
-    symbolica_graph.add_edge(l4, l5, true, t);
-    symbolica_graph.add_edge(l5, l6, true, t);
-    symbolica_graph.add_edge(l6, l4, true, t);
-
-    symbolica_graph.add_edge(l1, l4, true, g);
-    symbolica_graph.add_edge(l2, l5, true, g);
-    symbolica_graph.add_edge(l3, l6, true, g);
-
-    let bare_graph = BareGraph::from_symbolica_graph(
-        &model,
-        "bugblatter".into(),
-        &symbolica_graph,
-        Atom::num(1),
-        vec![],
-        None,
-    )
-    .unwrap();
-
-    let uv_graph = UVGraph::from_graph(&bare_graph);
-
-    println!("{}", uv_graph.base_dot());
-
-    let wood = uv_graph.wood(&uv_graph.full_graph());
-
-    assert_eq!(20, wood.n_spinneys());
-    println!("{}", wood.dot(&uv_graph));
-    println!("{}", wood.show_graphs(&uv_graph));
-
-    let mut ufold = wood.unfold(&uv_graph, &uv_graph.lmb);
-    assert_eq!(152, ufold.n_terms());
-    // ufold.compute(&uv_graph);
-
-    println!(
-        "unfolded : {}",
-        ufold
-            .show_structure(&uv_graph, &uv_graph.full_graph())
-            .unwrap()
-    );
-    println!("graph: {}", ufold.graphs());
-
-    // let structure = wood.unfold(&uv_graph,&uv_graph.cut_edges);
-
-    // println!("{}", structure.show_structure(&wood, &uv_graph));
-    // println!("{}", structure.n_elements());
-}
-
-#[test]
-#[allow(unused)]
-fn kaapo_triplering() {
-    let model = load_generic_model("scalars");
-    let mut symbolica_graph = symbolica::graph::Graph::new();
-
-    let four_scalar = NodeColorWithVertexRule {
-        external_tag: 0,
-        vertex_rule: model.get_vertex_rule("V_4_SCALAR_0000"),
-    };
-
-    let scalar = EdgeColor::from_particle(model.get_particle("scalar_0"));
-
-    let l1 = symbolica_graph.add_node(four_scalar.clone());
-    let l2 = symbolica_graph.add_node(four_scalar.clone());
-    let l3 = symbolica_graph.add_node(four_scalar.clone());
-
-    symbolica_graph.add_edge(l1, l2, true, scalar.clone());
-    symbolica_graph.add_edge(l2, l3, true, scalar.clone());
-    symbolica_graph.add_edge(l3, l1, true, scalar.clone());
-    symbolica_graph.add_edge(l1, l2, true, scalar.clone());
-    symbolica_graph.add_edge(l2, l3, true, scalar.clone());
-    symbolica_graph.add_edge(l3, l1, true, scalar.clone());
-
-    let bare_graph = BareGraph::from_symbolica_graph(
-        &model,
-        "threeringscalar".into(),
-        &symbolica_graph,
-        Atom::num(1),
-        vec![],
-        None,
-    )
-    .unwrap();
-
-    let uv_graph = UVGraph::from_graph(&bare_graph);
-
-    // println!("{}", uv_graph.base_dot());
-
-    let wood = uv_graph.wood(&uv_graph.full_graph());
-    assert_eq!(26, wood.n_spinneys());
-
-    // println!("{}", wood.dot(&uv_graph));
-    // println!("{}", wood.show_graphs(&uv_graph));
-
-    let mut ufold = wood.unfold(&uv_graph, &uv_graph.lmb);
-    // ufold.compute(&uv_graph);
-
-    println!(
-        "unfolded : {}",
-        ufold
-            .show_structure(&uv_graph, &uv_graph.full_graph())
-            .unwrap()
-    );
-    println!("graph: {}", ufold.graphs());
-
-    assert_eq!(242, ufold.n_terms());
-}
-
-#[test]
-#[allow(unused)]
-fn kaapo_quintic_scalar() {
-    let model = load_generic_model("scalars");
-    let mut symbolica_graph = symbolica::graph::Graph::new();
-
-    let three = NodeColorWithVertexRule {
-        external_tag: 0,
-        vertex_rule: model.get_vertex_rule("V_3_SCALAR_000"),
-    };
-    let four = NodeColorWithVertexRule {
-        external_tag: 0,
-        vertex_rule: model.get_vertex_rule("V_4_SCALAR_0000"),
-    };
-    let five = NodeColorWithVertexRule {
-        external_tag: 0,
-        vertex_rule: model.get_vertex_rule("V_5_SCALAR_00000"),
-    };
-
-    let scalar = EdgeColor::from_particle(model.get_particle("scalar_0"));
-
-    let l1 = symbolica_graph.add_node(three);
-    let l2 = symbolica_graph.add_node(four);
-    let l3 = symbolica_graph.add_node(five);
-
-    symbolica_graph.add_edge(l1, l2, true, scalar.clone());
-    symbolica_graph.add_edge(l2, l3, true, scalar.clone());
-    symbolica_graph.add_edge(l3, l1, true, scalar.clone());
-    symbolica_graph.add_edge(l3, l2, true, scalar.clone());
-    symbolica_graph.add_edge(l2, l3, true, scalar.clone());
-    symbolica_graph.add_edge(l3, l1, true, scalar.clone());
-
-    let bare_graph = BareGraph::from_symbolica_graph(
-        &model,
-        "threeringscalar".into(),
-        &symbolica_graph,
-        Atom::num(1),
-        vec![],
-        None,
-    )
-    .unwrap();
-
-    let uv_graph = UVGraph::from_graph(&bare_graph);
-
-    println!("{}", uv_graph.base_dot());
-
-    let wood = uv_graph.wood(&uv_graph.full_graph());
-
-    assert_eq!(25, wood.n_spinneys());
-
-    // println!("{}", wood.dot(&uv_graph));
-    // println!("{}", wood.show_graphs(&uv_graph));
-
-    let mut ufold = wood.unfold(&uv_graph, &uv_graph.lmb);
-    // ufold.compute(&uv_graph);
-
-    println!(
-        "unfolded : {}",
-        ufold
-            .show_structure(&uv_graph, &uv_graph.full_graph())
-            .unwrap()
-    );
-    println!("graph: {}", ufold.graphs());
-
-    assert_eq!(248, ufold.n_terms());
-}
+// #[test]
+// #[allow(unused)]
+// fn easy() {
+//     let model = load_generic_model("sm");
+//     let mut symbolica_graph = symbolica::graph::Graph::new();
+
+//     let dummy_external_vertex_rule = ArcVertexRule(Arc::new(VertexRule {
+//         name: "external".into(),
+//         couplings: vec![],
+//         lorentz_structures: vec![],
+//         particles: vec![],
+//         color_structures: ColorStructure::new(vec![]),
+//     }));
+
+//     let incoming = symbolica_graph.add_node(NodeColorWithVertexRule {
+//         external_tag: 1,
+//         vertex_rule: dummy_external_vertex_rule.clone(),
+//     });
+
+//     let outgoing = symbolica_graph.add_node(NodeColorWithVertexRule {
+//         external_tag: 2,
+//         vertex_rule: dummy_external_vertex_rule.clone(),
+//     });
+
+//     let tth = NodeColorWithVertexRule {
+//         external_tag: 0,
+//         vertex_rule: model.get_vertex_rule("V_141"),
+//     };
+
+//     let t = EdgeColor::from_particle(model.get_particle("t"));
+//     let h = EdgeColor::from_particle(model.get_particle("H"));
+
+//     let l1 = symbolica_graph.add_node(tth.clone());
+//     let l2 = symbolica_graph.add_node(tth.clone());
+
+//     let e1 = symbolica_graph.add_edge(incoming, l1, false, h).unwrap();
+//     let e2 = symbolica_graph.add_edge(l2, outgoing, false, h).unwrap();
+//     symbolica_graph.add_edge(l1, l2, true, t);
+//     symbolica_graph.add_edge(l2, l1, true, t);
+
+//     let bare_graph = BareGraph::from_symbolica_graph(
+//         &model,
+//         "1l_prop".into(),
+//         &symbolica_graph,
+//         Atom::num(1),
+//         vec![((Some(1), Some(2)))],
+//         None,
+//     )
+//     .unwrap();
+
+//     let uv_graph = UVGraph::from_graph(&bare_graph);
+
+//     println!("{}", uv_graph.base_dot());
+
+//     let wood = uv_graph.wood(&uv_graph.full_graph());
+
+//     println!("{}", wood.dot(&uv_graph));
+//     println!("{}", wood.show_graphs(&uv_graph));
+
+//     let mut ufold = wood.unfold(&uv_graph, &uv_graph.lmb);
+//     // assert_eq!(152, ufold.n_terms());
+//     // ufold.compute(&uv_graph);
+
+//     println!(
+//         "unfolded : {}",
+//         ufold
+//             .show_structure(&uv_graph, &uv_graph.full_graph())
+//             .unwrap()
+//     );
+//     println!("graph: {}", ufold.graphs());
+
+//     // let structure = wood.unfold(&uv_graph,&uv_graph.cut_edges);
+
+//     // println!("{}", structure.show_structure(&wood, &uv_graph));
+//     // println!("{}", structure.n_elements());
+// }
+
+// #[test]
+// #[allow(unused)]
+// fn tbt() {
+//     let (model, amplitude, _) =
+//         load_amplitude_output("TEST_AMPLITUDE_triangle_box_triangle_phys/GL_OUTPUT", true);
+
+//     let mut graph = amplitude.amplitude_graphs[0].graph.clone();
+
+//     // graph.generate_uv();
+
+//     graph.generate_loop_momentum_bases();
+
+//     let uv_graph = UVGraph::from_graph(&graph.bare_graph);
+
+//     println!("tbt_dot{}", uv_graph.base_dot());
+
+//     let wood = uv_graph.wood(&uv_graph.full_graph());
+
+//     println!("{}", wood.dot(&uv_graph));
+
+//     let mut ufold = wood.unfold(&uv_graph, &uv_graph.lmb);
+//     // ufold.compute(&uv_graph);
+
+//     println!(
+//         "unfolded : {}",
+//         ufold
+//             .show_structure(&uv_graph, &uv_graph.full_graph())
+//             .unwrap()
+//     );
+//     println!("graph: {}", ufold.graphs());
+
+//     // let structure = wood.unfold(&uv_graph,&uv_graph.cut_edges);
+
+//     // println!("{}", structure.show_structure(&wood, &uv_graph));
+//     // println!("{}", structure.n_elements());
+// }
+
+// #[test]
+// #[allow(unused)]
+// fn bugblatter_forest() {
+//     // println!("{}", env!("CARGO_CRATE_NAME"));
+//     let model = load_generic_model("sm");
+//     println!("{}", model.vertex_rules[0].0.name);
+//     let mut symbolica_graph = symbolica::graph::Graph::new();
+
+//     let ttg = NodeColorWithVertexRule {
+//         external_tag: 0,
+//         vertex_rule: model.get_vertex_rule("V_137"),
+//     };
+
+//     let t = EdgeColor::from_particle(model.get_particle("t"));
+//     let g = EdgeColor::from_particle(model.get_particle("g"));
+
+//     let l1 = symbolica_graph.add_node(ttg.clone());
+//     let l2 = symbolica_graph.add_node(ttg.clone());
+//     let l3 = symbolica_graph.add_node(ttg.clone());
+//     let l4 = symbolica_graph.add_node(ttg.clone());
+//     let l5 = symbolica_graph.add_node(ttg.clone());
+//     let l6 = symbolica_graph.add_node(ttg.clone());
+
+//     symbolica_graph.add_edge(l1, l2, true, t);
+//     symbolica_graph.add_edge(l2, l3, true, t);
+//     symbolica_graph.add_edge(l3, l1, true, t);
+
+//     symbolica_graph.add_edge(l4, l5, true, t);
+//     symbolica_graph.add_edge(l5, l6, true, t);
+//     symbolica_graph.add_edge(l6, l4, true, t);
+
+//     symbolica_graph.add_edge(l1, l4, true, g);
+//     symbolica_graph.add_edge(l2, l5, true, g);
+//     symbolica_graph.add_edge(l3, l6, true, g);
+
+//     let bare_graph = BareGraph::from_symbolica_graph(
+//         &model,
+//         "bugblatter".into(),
+//         &symbolica_graph,
+//         Atom::num(1),
+//         vec![],
+//         None,
+//     )
+//     .unwrap();
+
+//     let uv_graph = UVGraph::from_graph(&bare_graph);
+
+//     println!("{}", uv_graph.base_dot());
+
+//     let wood = uv_graph.wood(&uv_graph.full_graph());
+
+//     assert_eq!(20, wood.n_spinneys());
+//     println!("{}", wood.dot(&uv_graph));
+//     println!("{}", wood.show_graphs(&uv_graph));
+
+//     let mut ufold = wood.unfold(&uv_graph, &uv_graph.lmb);
+//     assert_eq!(152, ufold.n_terms());
+//     // ufold.compute(&uv_graph);
+
+//     println!(
+//         "unfolded : {}",
+//         ufold
+//             .show_structure(&uv_graph, &uv_graph.full_graph())
+//             .unwrap()
+//     );
+//     println!("graph: {}", ufold.graphs());
+
+//     // let structure = wood.unfold(&uv_graph,&uv_graph.cut_edges);
+
+//     // println!("{}", structure.show_structure(&wood, &uv_graph));
+//     // println!("{}", structure.n_elements());
+// }
+
+// #[test]
+// #[allow(unused)]
+// fn kaapo_triplering() {
+//     let model = load_generic_model("scalars");
+//     let mut symbolica_graph = symbolica::graph::Graph::new();
+
+//     let four_scalar = NodeColorWithVertexRule {
+//         external_tag: 0,
+//         vertex_rule: model.get_vertex_rule("V_4_SCALAR_0000"),
+//     };
+
+//     let scalar = EdgeColor::from_particle(model.get_particle("scalar_0"));
+
+//     let l1 = symbolica_graph.add_node(four_scalar.clone());
+//     let l2 = symbolica_graph.add_node(four_scalar.clone());
+//     let l3 = symbolica_graph.add_node(four_scalar.clone());
+
+//     symbolica_graph.add_edge(l1, l2, true, scalar.clone());
+//     symbolica_graph.add_edge(l2, l3, true, scalar.clone());
+//     symbolica_graph.add_edge(l3, l1, true, scalar.clone());
+//     symbolica_graph.add_edge(l1, l2, true, scalar.clone());
+//     symbolica_graph.add_edge(l2, l3, true, scalar.clone());
+//     symbolica_graph.add_edge(l3, l1, true, scalar.clone());
+
+//     let bare_graph = BareGraph::from_symbolica_graph(
+//         &model,
+//         "threeringscalar".into(),
+//         &symbolica_graph,
+//         Atom::num(1),
+//         vec![],
+//         None,
+//     )
+//     .unwrap();
+
+//     let uv_graph = UVGraph::from_graph(&bare_graph);
+
+//     // println!("{}", uv_graph.base_dot());
+
+//     let wood = uv_graph.wood(&uv_graph.full_graph());
+//     assert_eq!(26, wood.n_spinneys());
+
+//     // println!("{}", wood.dot(&uv_graph));
+//     // println!("{}", wood.show_graphs(&uv_graph));
+
+//     let mut ufold = wood.unfold(&uv_graph, &uv_graph.lmb);
+//     // ufold.compute(&uv_graph);
+
+//     println!(
+//         "unfolded : {}",
+//         ufold
+//             .show_structure(&uv_graph, &uv_graph.full_graph())
+//             .unwrap()
+//     );
+//     println!("graph: {}", ufold.graphs());
+
+//     assert_eq!(242, ufold.n_terms());
+// }
+
+// #[test]
+// #[allow(unused)]
+// fn kaapo_quintic_scalar() {
+//     let model = load_generic_model("scalars");
+//     let mut symbolica_graph = symbolica::graph::Graph::new();
+
+//     let three = NodeColorWithVertexRule {
+//         external_tag: 0,
+//         vertex_rule: model.get_vertex_rule("V_3_SCALAR_000"),
+//     };
+//     let four = NodeColorWithVertexRule {
+//         external_tag: 0,
+//         vertex_rule: model.get_vertex_rule("V_4_SCALAR_0000"),
+//     };
+//     let five = NodeColorWithVertexRule {
+//         external_tag: 0,
+//         vertex_rule: model.get_vertex_rule("V_5_SCALAR_00000"),
+//     };
+
+//     let scalar = EdgeColor::from_particle(model.get_particle("scalar_0"));
+
+//     let l1 = symbolica_graph.add_node(three);
+//     let l2 = symbolica_graph.add_node(four);
+//     let l3 = symbolica_graph.add_node(five);
+
+//     symbolica_graph.add_edge(l1, l2, true, scalar.clone());
+//     symbolica_graph.add_edge(l2, l3, true, scalar.clone());
+//     symbolica_graph.add_edge(l3, l1, true, scalar.clone());
+//     symbolica_graph.add_edge(l3, l2, true, scalar.clone());
+//     symbolica_graph.add_edge(l2, l3, true, scalar.clone());
+//     symbolica_graph.add_edge(l3, l1, true, scalar.clone());
+
+//     let bare_graph = BareGraph::from_symbolica_graph(
+//         &model,
+//         "threeringscalar".into(),
+//         &symbolica_graph,
+//         Atom::num(1),
+//         vec![],
+//         None,
+//     )
+//     .unwrap();
+
+//     let uv_graph = UVGraph::from_graph(&bare_graph);
+
+//     println!("{}", uv_graph.base_dot());
+
+//     let wood = uv_graph.wood(&uv_graph.full_graph());
+
+//     assert_eq!(25, wood.n_spinneys());
+
+//     // println!("{}", wood.dot(&uv_graph));
+//     // println!("{}", wood.show_graphs(&uv_graph));
+
+//     let mut ufold = wood.unfold(&uv_graph, &uv_graph.lmb);
+//     // ufold.compute(&uv_graph);
+
+//     println!(
+//         "unfolded : {}",
+//         ufold
+//             .show_structure(&uv_graph, &uv_graph.full_graph())
+//             .unwrap()
+//     );
+//     println!("graph: {}", ufold.graphs());
+
+//     assert_eq!(248, ufold.n_terms());
+// }
 
 use super::*;
 

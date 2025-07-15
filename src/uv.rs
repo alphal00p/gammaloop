@@ -73,6 +73,12 @@ pub trait UVE {
     fn mass_atom(&self) -> Atom;
 }
 
+impl UVE for Edge {
+    fn mass_atom(&self) -> Atom {
+        parse!(&self.particle.mass.name)
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct UVEdge {
     pub og_edge: usize,
@@ -169,199 +175,6 @@ pub fn spenso_lor_atom(tag: i32, ind: impl Into<Aind>, dim: impl Into<Dimension>
     spenso_lor(tag, ind, dim).to_symbolic(None).unwrap()
 }
 
-#[allow(dead_code)]
-impl UVGraph {
-    pub fn from_supergraph(sg: &new_graph::Graph) -> Self {
-        let hedge_graph = sg.underlying.map_data_ref(
-            |_, _, n| UVNode {
-                dod: n.dod,
-                num: n.num_spin.contract(&n.num_color).unwrap().scalar().unwrap(),
-                color: None,
-            },
-            |_, eid, _, n| {
-                n.map(|d| {
-                    let m2 = parse!(d.particle.mass.name).npow(2);
-                    UVEdge {
-                        og_edge: 1,
-                        dod: d.dod,
-                        particle: d.particle.clone(),
-                        num: d.spin_num.clone(),
-                        den: spenso_lor_atom(usize::from(eid) as i32, 1, GS.dim)
-                            .npow(2)
-                            //.to_dots()
-                            - m2,
-                    }
-                })
-            },
-            |_, h| (),
-        );
-
-        let reps = hedge_graph.normal_emr_replacement(
-            &hedge_graph.full_filter(),
-            &sg.loop_momentum_basis,
-            &[W_.x___],
-            no_filter,
-        );
-        UVGraph {
-            hedge_graph,
-            lmb: sg.loop_momentum_basis.clone(),
-            lmb_replacement: reps,
-        }
-    }
-
-    pub fn from_underlying(hedge_graph: &HedgeGraph<Edge, Vertex, NumHedgeData>) -> Self {
-        Self::from_hedge(hedge_graph.map_data_ref(
-            |_, _, n| UVNode {
-                dod: n.dod,
-                num: n.num_spin.contract(&n.num_color).unwrap().scalar().unwrap(),
-                color: None,
-            },
-            |_, eid, _, n| {
-                n.map(|d| {
-                    let m2 = parse!(d.particle.mass.name).npow(2);
-                    UVEdge {
-                        og_edge: 1,
-                        dod: d.dod,
-                        particle: d.particle.clone(),
-                        num: d.spin_num.clone(),
-                        den: spenso_lor_atom(usize::from(eid) as i32, 1, GS.dim)
-                            .npow(2)
-                            //.to_dots()
-                            - m2,
-                    }
-                })
-            },
-            |_, h| (),
-        ))
-    }
-
-    pub fn from_hedge(hedge_graph: HedgeGraph<UVEdge, UVNode>) -> Self {
-        let full = hedge_graph.full_filter();
-
-        let lmb = hedge_graph.lmb(&full);
-
-        // println!("//lmb{lmb:?} for \n{}", hedge_graph.dot_lmb(&full, &lmb));
-        let reps = hedge_graph.normal_emr_replacement(&full, &lmb, &[W_.x___], no_filter);
-        UVGraph {
-            hedge_graph,
-            lmb,
-            lmb_replacement: reps,
-        }
-    }
-
-    pub fn from_graph(graph: &BareGraph) -> Self {
-        let mut excised: BitVec = graph.hedge_representation.empty_subgraph();
-
-        for (_, n, d) in graph.hedge_representation.iter_nodes() {
-            if matches!(
-                graph.vertices[*d].vertex_info,
-                VertexInfo::ExternalVertexInfo(_)
-            ) {
-                excised.union_with(&n.into())
-            }
-        }
-
-        excised = excised.complement(&graph.hedge_representation);
-
-        let excised = graph.hedge_representation.concretize(&excised).map(
-            |_, _, d| UVNode::from_vertex(&graph.vertices[*d], graph),
-            |_, _, _, _, e| e.map(|d| UVEdge::from_edge(&graph.edges[*d], *d, graph)),
-            |_, h| (),
-        );
-
-        UVGraph::from_hedge(excised)
-    }
-
-    fn n_loops<S: SubGraph>(&self, subgraph: &S) -> usize {
-        // if let Some(loop_count) = subgraph.loopcount {
-        //     // println!("found loop_count nloops: {}", loop_count);
-        //     loop_count
-        // } else {
-        self.cyclotomatic_number(subgraph)
-        // }
-    }
-
-    fn numerator<S: SubGraph>(&self, subgraph: &S) -> Atom {
-        let mut num = Atom::num(1);
-
-        for (_, _, n) in self.iter_nodes_of(subgraph) {
-            num = num * &n.num;
-        }
-
-        for (pair, _eid, d) in self.iter_edges_of(subgraph) {
-            if matches!(pair, HedgePair::Paired { .. }) {
-                num = num * &d.data.num;
-            }
-        }
-
-        num.into()
-    }
-
-    fn oriented_numerator<S: SubGraph>(
-        &self,
-        subgraph: &S,
-        // orientationdata: &OrientationData,
-    ) -> Atom {
-        let mut num = Atom::num(1);
-
-        for (_, _, n) in self.iter_nodes_of(subgraph) {
-            num = num * &n.num;
-        }
-
-        for (pair, _eid, d) in self.iter_edges_of(subgraph) {
-            if matches!(pair, HedgePair::Paired { .. }) {
-                num = num * &d.data.num;
-            }
-        }
-
-        num
-    }
-
-    fn denominator<S: SubGraph>(&self, subgraph: &S) -> Atom {
-        let mut den = Atom::num(1);
-
-        for (pair, eid, d) in self.iter_edges_of(subgraph) {
-            if matches!(pair, HedgePair::Paired { .. }) {
-                let m2 = parse!(d.data.particle.mass.name).npow(2);
-                den = den
-                    * function!(
-                        GS.den,
-                        usize::from(eid) as i64,
-                        function!(GS.emr_mom, usize::from(eid) as i64),
-                        m2,
-                        spenso_lor_atom(usize::from(eid) as i32, usize::from(eid), GS.dim)
-                            .npow(2)
-                            //.to_dots()
-                            - m2
-                    );
-            }
-        }
-
-        den.into()
-    }
-
-    fn dot<S: SubGraph>(&self, subgraph: &S) -> String {
-        self.dot_impl(
-            subgraph,
-            format!("dod_of_subgraph={}", self.dod(subgraph)),
-            &|e| Some(format!("label=\"{}\"", e.dod)),
-            &|n| Some(format!("label=\"{}\"", n.dod)),
-        )
-    }
-
-    fn t_op<I: Iterator<Item = InternalSubGraph>>(&self, mut subgraph_iter: I) -> Atom {
-        if let Some(subgraph) = subgraph_iter.next() {
-            let t = self.t_op(subgraph_iter);
-            FunctionBuilder::new(symbol!("Top"))
-                .add_arg(&Atom::num(self.dod(&subgraph)))
-                .add_arg(&t)
-                .finish()
-        } else {
-            Atom::num(1)
-        }
-    }
-}
-
 pub struct Wood {
     poset: Poset<InternalSubGraph, ()>,
     additional_unions: SecondaryMap<PosetNode, Vec<PosetNode>>,
@@ -374,21 +187,21 @@ pub struct IntegrandExpr {
 }
 
 impl IntegrandExpr {
-    pub fn from_subgraph<S: SubGraph>(subgraph: &S, graph: &UVGraph) -> Self {
-        let num = graph.numerator(subgraph);
+    // pub(crate) fn from_subgraph<S: SubGraph>(subgraph: &S, graph: &UVGraph) -> Self {
+    //     let num = graph.numerator(subgraph);
 
-        let den = graph.denominator(subgraph);
+    //     let den = graph.denominator(subgraph);
 
-        IntegrandExpr {
-            integrand: num / den,
-        }
-    }
+    //     IntegrandExpr {
+    //         integrand: num / den,
+    //     }
+    // }
 
-    pub fn numerator_only_subgraph<S: SubGraph>(subgraph: &S, graph: &UVGraph) -> Self {
-        let num = graph.numerator(subgraph);
+    // pub fn numerator_only_subgraph<S: SubGraph>(subgraph: &S, graph: &UVGraph) -> Self {
+    //     let num = graph.numerator(subgraph);
 
-        IntegrandExpr { integrand: num }
-    }
+    //     IntegrandExpr { integrand: num }
+    // }
 }
 
 // pub fn limit(&)
@@ -397,332 +210,8 @@ pub fn is_not_paired(pair: &HedgePair) -> bool {
     !pair.is_paired()
 }
 
-pub trait UltravioletGraph: LMBext {
-    fn n_loops<S: SubGraph, E, V, H>(&self, subgraph: &S) -> usize
-    where
-        Self: AsRef<HedgeGraph<E, V, H>>,
-    {
-        self.as_ref().cyclotomatic_number(subgraph)
-    }
-    fn numerator<S: SubGraph>(&self, subgraph: &S) -> Atom;
-    fn denominator<S: SubGraph>(&self, subgraph: &S) -> Atom;
-    fn all_cycle_unions<E, V, H, S: SubGraph<Base = BitVec>>(
-        &self,
-        subgraph: &S,
-    ) -> AHashSet<InternalSubGraph>
-    where
-        Self: AsRef<HedgeGraph<E, V, H>>,
-    {
-        let ref_graph = self.as_ref();
-        let init_node = ref_graph.iter_nodes_of(subgraph).next().unwrap().0;
-        let all_subcycles: Vec<_> = Cycle::all_sum_powerset_filter_map(
-            &ref_graph
-                .paton_cycle_basis(subgraph, &init_node, None)
-                .unwrap()
-                .0,
-            &Some,
-        )
-        .map(|a| a.into_iter().map(|c| c.internal_graph(ref_graph)).collect())
-        .unwrap();
-
-        // println!("{}", self.base_dot());
-        let spinneys: AHashSet<_> = InternalSubGraph::all_unions_iterative(&all_subcycles);
-
-        spinneys
-    }
-    fn all_limits<E, V, H, S: SubGraph>(
-        &self,
-        subgraph: &S,
-        expr: &Atom,
-        expansion: Symbol,
-        lmb: &LoopMomentumBasis,
-    ) -> Vec<Atom>
-    where
-        Self: AsRef<HedgeGraph<E, V, H>>,
-    {
-        let mom_reps = self.uv_spatial_wrapped_replacement(subgraph, lmb, &[W_.x___]);
-
-        // for x in &mom_reps {
-        //     println!("LMB replacement: {x}");
-        // }
-
-        let energy_reps = self.replacement_impl::<_, Atom>(
-            |e, a, b| {
-                Replacement::new(
-                    GS.energy.f([usize::from(e) as i32]).to_pattern(),
-                    (a + b).to_pattern(),
-                )
-            },
-            subgraph,
-            lmb,
-            GS.energy,
-            GS.energy,
-            &[],
-            &[],
-            is_not_paired,
-            true,
-        );
-
-        // for e in &energy_reps {
-        //     println!("Energy replacement: {e}");
-        // }
-
-        let q3_reps = self.replacement_impl::<_, Atom>(
-            |e, a, b| {
-                Replacement::new(
-                    GS.emr_vec.f([usize::from(e) as i32]).to_pattern(),
-                    (a + b).to_pattern(),
-                )
-            },
-            subgraph,
-            lmb,
-            GS.emr_vec,
-            GS.emr_vec,
-            &[],
-            &[],
-            is_not_paired,
-            true,
-        );
-
-        // for e in &q3_reps {
-        //     println!("Q3 replacement: {e}");
-        // }
-
-        let expr = expr
-            .replace_multiple(&mom_reps)
-            .replace_multiple(&energy_reps)
-            .replace_multiple(&q3_reps);
-        let mut loops = PowersetIterator::new(lmb.loop_edges.len() as u8).into_iter();
-
-        let mut limits = Vec::new();
-
-        loops.next();
-
-        for ls in loops {
-            let mut expr = expr.clone();
-            for l in ls.iter_ones() {
-                let e = usize::from(lmb.loop_edges[LoopIndex(l)]) as i64;
-                expr = expr
-                    .replace(function!(GS.emr_vec, e, W_.x___))
-                    .with(function!(GS.emr_vec, e, W_.x___) / expansion);
-
-                expr /= Atom::var(expansion).npow(3);
-            }
-
-            expr = expr
-                .replace(function!(MS.dot, W_.x___))
-                .with(-function!(MS.dot, W_.x___)) // make dot products positive
-                .replace(function!(MS.dot, W_.x_ / expansion, W_.y_))
-                .repeat()
-                .with(function!(MS.dot, W_.x_, W_.y_) / expansion);
-
-            let series = expr.series(expansion, Atom::Zero, 0.into(), true).unwrap();
-
-            expr = series.to_atom().expand();
-
-            let l = expr.coefficient_list::<i8>(&[Atom::var(expansion)]);
-
-            println!(
-                "LIMIT {:?}:",
-                ls.iter_ones()
-                    .map(|l| usize::from(lmb.loop_edges[LoopIndex(l)]) as i64)
-                    .collect::<Vec<_>>(),
-            );
-            if l.is_empty() {
-                println!("\tFull cancellation to order 1");
-            }
-            for (t, a) in l {
-                println!("\t{}: {}", t, a);
-            }
-
-            limits.push(expr);
-        }
-        limits
-    }
-
-    fn wood<E, V, H, S: SubGraph<Base = BitVec>>(&self, subgraph: &S) -> Wood
-    where
-        Self: AsRef<HedgeGraph<E, V, H>>,
-    {
-        Wood::from_spinneys(self.spinneys(subgraph), self)
-    }
-
-    fn dod<S: SubGraph>(&self, subgraph: &S) -> i32;
-
-    fn spinneys<E, V, H, S: SubGraph<Base = BitVec>>(
-        &self,
-        subgraph: &S,
-    ) -> AHashSet<InternalSubGraph>
-    where
-        Self: AsRef<HedgeGraph<E, V, H>>,
-    {
-        let ref_graph = self.as_ref();
-        let init_node = ref_graph.iter_nodes_of(subgraph).next().unwrap().0;
-        let all_subcycles: Vec<_> = Cycle::all_sum_powerset_filter_map(
-            &ref_graph
-                .paton_cycle_basis(subgraph, &init_node, None)
-                .unwrap()
-                .0,
-            &Some,
-        )
-        .map(|a| a.into_iter().map(|c| c.internal_graph(ref_graph)).collect())
-        .unwrap();
-
-        // println!("{}", self.base_dot());
-        let mut spinneys: AHashSet<_> = InternalSubGraph::all_ops_iterative_filter_map(
-            &all_subcycles,
-            &|a, b| a.union(b),
-            &|union| {
-                if self.dod(&union) >= 0 {
-                    Some(union)
-                } else {
-                    None
-                }
-            },
-        );
-
-        spinneys.insert(ref_graph.empty_subgraph());
-
-        spinneys
-    }
-}
-
-impl LMBext for UVGraph {
-    fn empty_lmb(&self) -> LoopMomentumBasis {
-        self.as_ref().empty_lmb()
-    }
-
-    fn dot_lmb<S: SubGraph>(&self, subgraph: &S, lmb: &LoopMomentumBasis) -> String {
-        self.as_ref().dot_lmb(subgraph, lmb)
-    }
-    fn lmb<S: SubGraph<Base = BitVec>>(&self, subgraph: &S) -> LoopMomentumBasis {
-        self.as_ref().lmb(subgraph)
-    }
-
-    fn lmb_impl<S: SubGraph + SubGraphOps + ModifySubgraph<HedgePair> + ModifySubgraph<Hedge>>(
-        &self,
-        subgraph: &S,
-        tree: &S,
-        externals: S,
-    ) -> LoopMomentumBasis {
-        self.as_ref().lmb_impl(subgraph, tree, externals)
-    }
-
-    fn compatible_sub_lmb<S: SubGraph>(
-        &self,
-        subgraph: &S,
-        lmb: &LoopMomentumBasis,
-    ) -> LoopMomentumBasis
-    where
-        S::Base: SubGraph<Base = S::Base>
-            + SubGraphOps
-            + Clone
-            + ModifySubgraph<HedgePair>
-            + ModifySubgraph<Hedge>,
-    {
-        self.as_ref().compatible_sub_lmb(subgraph, lmb)
-    }
-
-    fn replacement_impl<'a, S: SubGraph, I>(
-        &self,
-        rep: impl Fn(EdgeIndex, Atom, Atom) -> Replacement,
-        subgraph: &S,
-        lmb: &LoopMomentumBasis,
-        loop_symbol: Symbol,
-        ext_symbol: Symbol,
-        loop_args: &'a [I],
-        ext_args: &'a [I],
-        filter_pair: fn(&HedgePair) -> bool,
-        emr_id: bool,
-    ) -> Vec<Replacement>
-    where
-        &'a I: Into<symbolica::atom::AtomOrView<'a>>,
-    {
-        self.as_ref().replacement_impl(
-            rep,
-            subgraph,
-            lmb,
-            loop_symbol,
-            ext_symbol,
-            loop_args,
-            ext_args,
-            filter_pair,
-            emr_id,
-        )
-    }
-
-    fn generate_loop_momentum_bases<S: SubGraph>(
-        &self,
-        subgraph: &S,
-    ) -> TiVec<crate::new_graph::LmbIndex, LoopMomentumBasis>
-    where
-        S::Base: SubGraph<Base = S::Base>
-            + SubGraphOps
-            + Clone
-            + ModifySubgraph<HedgePair>
-            + ModifySubgraph<Hedge>,
-    {
-        self.as_ref().generate_loop_momentum_bases(subgraph)
-    }
-}
-
-impl UltravioletGraph for UVGraph {
-    fn denominator<S: SubGraph>(&self, subgraph: &S) -> Atom {
-        let mut den = Atom::num(1);
-
-        for (pair, eid, d) in self.iter_edges_of(subgraph) {
-            if matches!(pair, HedgePair::Paired { .. }) {
-                let m2 = parse!(d.data.particle.mass.name).npow(2);
-                den = den
-                    * function!(
-                        GS.den,
-                        usize::from(eid) as i64,
-                        function!(GS.emr_mom, usize::from(eid) as i64),
-                        m2,
-                        spenso_lor_atom(usize::from(eid) as i32, usize::from(eid), GS.dim)
-                            .npow(2)
-                            //.to_dots()
-                            - m2
-                    );
-            }
-        }
-
-        den.into()
-    }
-    fn numerator<S: SubGraph>(&self, subgraph: &S) -> Atom {
-        let mut num = Atom::num(1);
-
-        for (_, _, n) in self.iter_nodes_of(subgraph) {
-            num = num * &n.num;
-        }
-
-        for (pair, _eid, d) in self.iter_edges_of(subgraph) {
-            if matches!(pair, HedgePair::Paired { .. }) {
-                num = num * &d.data.num;
-            }
-        }
-
-        num.into()
-    }
-
-    fn dod<S: SubGraph>(&self, subgraph: &S) -> i32 {
-        let mut dod: i32 = 4 * self.n_loops(subgraph) as i32;
-        // println!("nloops: {}", dod / 4);
-
-        // FIXME: does not work if subgraph has external edges that contain both nodes!
-        for (p, _, e) in self.iter_edges_of(subgraph) {
-            if p.is_paired() {
-                dod += e.data.dod;
-            }
-        }
-
-        for (_, _, n) in self.iter_nodes_of(subgraph) {
-            dod += n.dod;
-        }
-
-        dod
-    }
-}
+pub mod uv_graph;
+pub use uv_graph::UltravioletGraph;
 
 impl Wood {
     pub fn n_spinneys(&self) -> usize {
@@ -857,26 +346,29 @@ impl Wood {
         Forest { dag }
     }
 
-    pub fn dot(&self, graph: &UVGraph) -> String {
+    pub fn dot(&self, graph: &impl UltravioletGraph) -> String {
         let shift = self.poset.shift();
         self.poset.to_dot_impl(&|n| {
             format!(
-                "label={}, dod={}, n_edges = {},topo_order = {}",
+                "label={}, dod={},topo_order = {}",
                 n.dot_id(shift),
                 graph.dod(&n.data),
-                graph.count_internal_edges(&n.data),
+                // graph.as_ref().count_internal_edges(&n.data),
                 n.order.unwrap()
             )
         })
     }
 
-    pub fn dot_spinneys(&self, graph: &UVGraph) {
+    pub fn dot_spinneys<E, V, H, G>(&self, graph: &G)
+    where
+        G: UltravioletGraph + AsRef<HedgeGraph<E, V, H>>,
+    {
         for s in self.poset.node_values() {
             println!(
                 "found {} loop spinney with dod {}:{} ",
                 graph.n_loops(s),
                 graph.dod(s),
-                graph.dot(&s.to_hairy_subgraph(&graph))
+                graph.as_ref().dot(s)
             );
         }
     }
@@ -1742,15 +1234,18 @@ impl Approximation {
         a
     }
 
-    pub fn final_cff<S: SubGraph<Base = BitVec>, OID: OrientationID, O: GraphOrientation>(
+    pub fn final_cff<G, H, S: SubGraph<Base = BitVec>, OID: OrientationID, O: GraphOrientation>(
         &self,
-        graph: &UVGraph,
+        graph: &G,
         amplitude: &S,
         orientation: &OrientationData,
         canonize_esurface: &Option<ShiftRewrite>,
         orientations: &TiVec<OID, O>,
         cut_edges: &[EdgeIndex],
-    ) -> Option<Atom> {
+    ) -> Option<Atom>
+    where
+        G: UltravioletGraph + AsRef<HedgeGraph<Edge, Vertex, H>>,
+    {
         let (t, s) = self.local_3d.expr()?;
         let (t_int, _) = if let ApproxOp::Root = self.integrated_4d {
             (Atom::num(0), Sign::Positive)
@@ -1782,7 +1277,7 @@ impl Approximation {
 
         let mut cff = s * orientation.select(t) - s * finite * orientation.select(t_arg.integrand);
 
-        for (p, eid, e) in graph.iter_edges_of(&reduced) {
+        for (p, eid, e) in graph.as_ref().iter_edges_of(&reduced) {
             let eid = usize::from(eid) as i64;
             if p.is_paired() {
                 cff = cff
@@ -1807,10 +1302,10 @@ impl Approximation {
             }
         }
 
-        let mut res = cff * IntegrandExpr::numerator_only_subgraph(&reduced, graph).integrand;
+        let mut res = cff * graph.numerator(&reduced);
 
         // set the momenta flowing through the reduced graph edges to the identity wrt the supergraph
-        for (p, eid, e) in graph.iter_edges_of(&reduced) {
+        for (p, eid, e) in graph.as_ref().iter_edges_of(&reduced) {
             let eidc = usize::from(eid) as i64;
             if p.is_paired() {
                 let e_mass = parse!(&e.data.particle.mass.name);
@@ -2015,15 +1510,18 @@ impl Forest {
         }
     }
 
-    pub fn local_expr<S: SubGraph<Base = BitVec>, OID: OrientationID, O: GraphOrientation>(
+    pub fn local_expr<G, H, S: SubGraph<Base = BitVec>, OID: OrientationID, O: GraphOrientation>(
         &self,
-        graph: &UVGraph,
+        graph: &G,
         amplitude: &S,
         orientation: &OrientationData,
         canonize_esurface: &Option<ShiftRewrite>,
         orientations: &TiVec<OID, O>,
         cut_edges: &[EdgeIndex],
-    ) -> Atom {
+    ) -> Atom
+    where
+        G: UltravioletGraph + AsRef<HedgeGraph<Edge, Vertex, H>>,
+    {
         let mut sum = Atom::Zero;
 
         for (_, n) in &self.dag.nodes {
@@ -2079,15 +1577,18 @@ impl Forest {
 }
 
 impl Wood {
-    pub fn show_graphs(&self, graph: &UVGraph) -> String {
+    pub fn show_graphs<H, G>(&self, graph: &G) -> String
+    where
+        G: UltravioletGraph + AsRef<HedgeGraph<Edge, Vertex, H>>,
+    {
         let mut out = String::new();
         out.push_str("Poset structure:\n");
         out.push_str(&self.poset.dot_structure());
 
         out.push_str("Graphs:\n");
         for (k, n) in self.poset.nodes.iter() {
-            out.push_str(&graph.dot_impl(
-                &n.data.to_hairy_subgraph(&graph),
+            out.push_str(&graph.as_ref().dot_impl(
+                &n.data,
                 format!(
                     "dod={};nodeid ={};\n",
                     graph.dod(&n.data),
