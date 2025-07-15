@@ -285,12 +285,36 @@ fn tri_box_tri_LU() {
         assert!(tp.0.mass.value.unwrap().is_zero());
     }
 
-    let n1 = underlying.add_node(ParseVertex::from(hhh.clone()));
-    let n2 = underlying.add_node(hhh.clone().into());
-    let n3 = underlying.add_node(hhh.clone().into());
-    let n4 = underlying.add_node(htt.clone().into());
-    let n5 = underlying.add_node(htt.clone().into());
-    let n6 = underlying.add_node(htt.clone().into());
+    let n1 = underlying.add_node(
+        ParseVertex::from(hhh.clone())
+            .with_spin_num(Atom::num(1))
+            .with_color_num(Atom::num(1)),
+    );
+    let n2 = underlying.add_node(
+        ParseVertex::from(hhh.clone())
+            .with_spin_num(Atom::num(1))
+            .with_color_num(Atom::num(1)),
+    );
+    let n3 = underlying.add_node(
+        ParseVertex::from(hhh.clone())
+            .with_spin_num(Atom::num(1))
+            .with_color_num(Atom::num(1)),
+    );
+    let n4 = underlying.add_node(
+        ParseVertex::from(htt.clone())
+            .with_spin_num(Atom::num(1))
+            .with_color_num(Atom::num(1)),
+    );
+    let n5 = underlying.add_node(
+        ParseVertex::from(htt.clone())
+            .with_spin_num(Atom::num(1))
+            .with_color_num(Atom::num(1)),
+    );
+    let n6 = underlying.add_node(
+        ParseVertex::from(htt.clone())
+            .with_spin_num(Atom::num(1))
+            .with_color_num(Atom::num(1)),
+    );
 
     underlying.add_edge(
         n1.add_data(ParseHedge::default()),

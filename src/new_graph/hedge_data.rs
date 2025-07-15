@@ -1,11 +1,13 @@
+use itertools::Itertools;
 use linnet::half_edge::{
     involution::{Hedge, Orientation},
     EdgeAccessors,
 };
 use spenso::structure::{
-        representation::LibraryRep, OrderedStructure,
-        PermutedStructure, TensorStructure,
-    };
+    representation::LibraryRep, slot::IsAbstractSlot, OrderedStructure, PermutedStructure,
+    TensorStructure,
+};
+use symbolica::atom::Atom;
 
 use crate::numerator::aind::Aind;
 
@@ -101,4 +103,31 @@ impl NumIndices {
 pub struct NumHedgeData {
     pub num_indices: NumIndices,
     pub node_order: u8,
+}
+
+impl NumHedgeData {
+    pub fn color_kronekers(&self, other: &Self) -> Atom {
+        let mut color = Atom::num(1);
+        for (i, j) in self
+            .num_indices
+            .color_indices
+            .edge_indices
+            .external_structure_iter()
+            .zip_eq(
+                other
+                    .num_indices
+                    .color_indices
+                    .edge_indices
+                    .external_structure_iter(),
+            )
+        {
+            if i.rep().matches(&j.rep()) {
+                color *= j.rep().id(i.aind, j.aind);
+            } else {
+                panic!("Should be the same rep found:{} and {}", i, j)
+            }
+        }
+
+        return color;
+    }
 }

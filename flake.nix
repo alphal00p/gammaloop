@@ -166,6 +166,7 @@
           pyright
           gmp
           mpfr
+          form
           gnum4
           # gcc_debug.out
           # stdenv.cc.cc.lib

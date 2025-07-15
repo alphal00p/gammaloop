@@ -42,16 +42,11 @@ use symbolica::{
 };
 
 use linnet::half_edge::{
-    hedgevec::HedgeVec,
-    involution::Orientation,
-    subgraph::{self, Inclusion, InternalSubGraph, SubGraph, SubGraphOps},
-    PowersetIterator,
-};
-use linnet::half_edge::{
     involution::{EdgeIndex, Hedge, HedgePair, SignOrZero},
-    subgraph::{Cycle, ModifySubgraph},
-    HedgeGraph,
+    subgraph::{Cycle, Inclusion, InternalSubGraph, ModifySubgraph, SubGraph, SubGraphOps},
+    HedgeGraph, PowersetIterator,
 };
+
 use typed_index_collections::TiVec;
 use vakint::{
     vakint_symbol, EvaluationOrder, LoopNormalizationFactor, Vakint, VakintExpression,
