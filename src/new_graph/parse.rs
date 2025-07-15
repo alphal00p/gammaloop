@@ -415,7 +415,7 @@ impl ParseGraph {
             for h in neighs {
                 let eid = self[&h];
 
-                let particle = Some(match self.orientation(h).relative_to(self.flow(h)) {
+                let particle = Some(match self.orientation(h).relative_to(-self.flow(h)) {
                     Orientation::Reversed => self[eid].particle.get_anti_particle(model),
                     _ => self[eid].particle.clone(),
                 });
@@ -724,7 +724,7 @@ pub mod test {
         network::{
             library::DummyLibrary, parsing::ShadowedStructure, store::NetworkStore, Network,
         },
-        structure::{HasName, HasStructure, PermutedStructure},
+        structure::{concrete_index::FlatIndex, HasName, HasStructure, PermutedStructure},
         tensors::{data::GetTensorData, symbolic::SymbolicTensor},
     };
     use symbolica::atom::{Atom, FunctionBuilder};
@@ -744,16 +744,13 @@ pub mod test {
         let graph: Result<DotGraph, _> = dot!(
             digraph G{
                 e1      [flow=sink]
-                e2      [flow=sink]
-                e3      [flow=source]
                 e4      [flow=source]
-                e1 -> A  [particle=a]
-                e2 -> "C"  [particle="b"]
-                "C" -> A    [particle="b"]
+                e1 -> A   [particle=a]
+                C -> A    [particle="b"]
                 A -> D    [particle="b"]
                 D -> B    [particle="b"]
-                B -> e3   [particle="b"]
-                "C" -> D    [particle="g"]
+                B -> C    [particle="b"]
+                C -> D    [particle="g"]
                 B -> e4   [particle=a]
             }
         );
@@ -923,7 +920,14 @@ pub mod test {
                         println!("{}", num.state.color);
                         let num = num.gamma_simplify();
 
-                        println!("{}", num.state.colorless.scalar().unwrap().to_dots());
+                        println!(
+                            "{}",
+                            num.state
+                                .colorless
+                                .get_owned_linear(FlatIndex::from(0))
+                                .unwrap()
+                                .to_dots()
+                        );
                     }
                     Err(e) => {
                         println!("Error parsing graph: {}", e);
