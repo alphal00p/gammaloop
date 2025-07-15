@@ -939,6 +939,12 @@ fn tri_box_tri_LU() {
             .with(function!(GS.ose, W_.x__) * function!(GS.ose, W_.y__))
             .replace(
                 function!(GS.energy, W_.x__, function!(spenso_mink, W_.z__))
+                    * function!(GS.energy, W_.y__, function!(spenso_mink, W_.z__)),
+            )
+            .repeat()
+            .with(function!(GS.energy, W_.x__) * function!(GS.energy, W_.y__))
+            .replace(
+                function!(GS.energy, W_.x__, function!(spenso_mink, W_.z__))
                     * function!(GS.ose, W_.y__, function!(spenso_mink, W_.z__)),
             )
             .repeat()
@@ -1196,7 +1202,7 @@ fn tri_box_tri_LU() {
                 .with(Atom::new());
         }
 
-        //println!("Cut {} result: {:>}", id, cut_res);
+        println!("Cut {} result: {:>}", id, cut_res);
 
         // linearize Q3
         cut_res = cut_res
@@ -1894,7 +1900,7 @@ fn double_triangle_LU() {
                     symbolica::domains::float::Complex::new((1.).into(), (0.).into()),
                 );
                 fnmap.add_constant(
-                    Atom::var(symbol!("π")),
+                    Atom::var(Atom::PI),
                     symbolica::domains::float::Complex::new((3.14).into(), (0.).into()),
                 );
                 fnmap.add_constant(
@@ -1980,7 +1986,7 @@ fn double_triangle_LU() {
                 .replace(parse!("MH"))
                 .with(Atom::new());
 
-            //println!("Cut {} result: {:>}", id, cut_res);
+            println!("Cut {} result: {:>}", id, cut_res);
 
             cut_atoms.push(cut_res);
         } else {

@@ -558,16 +558,14 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
     fn get_function_map(&self) -> FunctionMap {
         let mut fn_map = FunctionMap::new();
         let pi_rational = Rational::from(std::f64::consts::PI);
-        fn_map.add_constant(parse!("π"), pi_rational.into());
+        fn_map.add_constant(Atom::PI.into(), pi_rational.into());
         fn_map
     }
 
     fn add_additional_factors_to_cff_atom(&self, cff_atom: &Atom) -> Atom {
         let inverse_energy_product = self.graph.underlying.get_cff_inverse_energy_product();
-        let factors_of_pi = parse!(&format!(
-            "(2*π)^{}",
-            3 * self.graph.underlying.get_loop_number()
-        ));
+        let factors_of_pi =
+            (Atom::var(Atom::PI) * 2).npow(3 * self.graph.underlying.get_loop_number() as i64);
 
         let result = cff_atom * inverse_energy_product * &self.graph.multiplicity / factors_of_pi;
         debug!("result: {}", result);
@@ -1379,6 +1377,7 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
         params.extend(model.generate_params());
         // add additional parameters
         params.push(Atom::var(GS.m_uv));
+        params.push(Atom::var(GS.mu_r_sq));
         params.push(Atom::var(GS.rescale_star));
         params.push(Atom::var(GS.hfunction));
         params.push(Atom::var(GS.deta));
@@ -1389,7 +1388,7 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
     fn get_function_map(&self) -> FunctionMap {
         let mut fn_map = FunctionMap::new();
         let pi_rational = Rational::from(std::f64::consts::PI);
-        fn_map.add_constant(parse!("π"), pi_rational.into());
+        fn_map.add_constant(Atom::PI.into(), pi_rational.into());
         fn_map
     }
 
