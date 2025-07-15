@@ -34,6 +34,8 @@ use crate::{
     GAMMALOOP_NAMESPACE,
 };
 
+use super::Graph;
+
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct LoopMomentumBasis {
     pub tree: Option<()>,
@@ -549,6 +551,85 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
         }
 
         reps
+    }
+}
+
+impl LMBext for Graph {
+    fn dot_lmb<S: SubGraph>(&self, subgraph: &S, lmb: &LoopMomentumBasis) -> String {
+        self.underlying.dot_lmb(subgraph, lmb)
+    }
+
+    fn empty_lmb(&self) -> LoopMomentumBasis {
+        self.underlying.empty_lmb()
+    }
+    fn generate_loop_momentum_bases<S: SubGraph>(
+        &self,
+        subgraph: &S,
+    ) -> TiVec<LmbIndex, LoopMomentumBasis>
+    where
+        S::Base: SubGraph<Base = S::Base>
+            + SubGraphOps
+            + Clone
+            + ModifySubgraph<HedgePair>
+            + ModifySubgraph<Hedge>,
+    {
+        self.underlying.generate_loop_momentum_bases(subgraph)
+    }
+
+    fn replacement_impl<'a, S: SubGraph, I>(
+        &self,
+        rep: impl Fn(EdgeIndex, Atom, Atom) -> Replacement,
+        subgraph: &S,
+        lmb: &LoopMomentumBasis,
+        loop_symbol: Symbol,
+        ext_symbol: Symbol,
+        loop_args: &'a [I],
+        ext_args: &'a [I],
+        filter_pair: fn(&HedgePair) -> bool,
+        emr_id: bool,
+    ) -> Vec<Replacement>
+    where
+        &'a I: Into<AtomOrView<'a>>,
+    {
+        self.underlying.replacement_impl(
+            rep,
+            subgraph,
+            lmb,
+            loop_symbol,
+            ext_symbol,
+            loop_args,
+            ext_args,
+            filter_pair,
+            emr_id,
+        )
+    }
+
+    fn lmb_impl<S: SubGraph + SubGraphOps + ModifySubgraph<HedgePair> + ModifySubgraph<Hedge>>(
+        &self,
+        subgraph: &S,
+        tree: &S,
+        externals: S,
+    ) -> LoopMomentumBasis {
+        self.underlying.lmb_impl(subgraph, tree, externals)
+    }
+
+    fn lmb<S: SubGraph<Base = BitVec>>(&self, subgraph: &S) -> LoopMomentumBasis {
+        self.underlying.lmb(subgraph)
+    }
+
+    fn compatible_sub_lmb<S: SubGraph>(
+        &self,
+        subgraph: &S,
+        lmb: &LoopMomentumBasis,
+    ) -> LoopMomentumBasis
+    where
+        S::Base: SubGraph<Base = S::Base>
+            + SubGraphOps
+            + Clone
+            + ModifySubgraph<HedgePair>
+            + ModifySubgraph<Hedge>,
+    {
+        self.underlying.compatible_sub_lmb(subgraph, lmb)
     }
 }
 
