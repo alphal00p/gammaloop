@@ -983,7 +983,7 @@ impl<S: NumeratorState> IsPolarizable for CrossSection<S> {
 #[derive(
     Debug, Clone, Serialize, Decode, Deserialize, From, Into, Hash, PartialEq, Copy, Eq, Encode,
 )]
-pub struct CutId(usize);
+pub struct CutId(pub usize);
 
 impl Display for CutId {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
