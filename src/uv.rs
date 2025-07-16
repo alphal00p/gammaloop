@@ -1488,8 +1488,14 @@ impl Approximation {
         let Some((cff, sign)) = dependent.local_3d.expr() else {
             panic!("Should have computed the dependent cff");
         };
-        let Some((t4, _)) = dependent.integrated_4d.expr() else {
-            panic!("Should have computed the dependent integrated 4d");
+
+        let (t4, _) = if let ApproxOp::Root = dependent.integrated_4d {
+            (Atom::num(0), Sign::Positive)
+        } else {
+            dependent
+                .integrated_4d
+                .expr()
+                .expect("Should have computed the dependent integrated 4d")
         };
 
         let CFFapprox::Dependent { t_arg, .. } = CFFapprox::dependent(
