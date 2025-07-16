@@ -385,6 +385,8 @@ fn tri_box_tri_LU() {
     let uv_dod = 1;
     let box_uv_dod = -1; // can be -1, 0, 1, 2
     let is_massless = false;
+    let force_cut: Option<CutId> = None;
+    //let force_cut: Option<CutId> = Some(CutId(3));
 
     // load the model and hack the masses, go through serializable model since arc is not mutable
     let model = if is_massless {
@@ -720,6 +722,13 @@ fn tri_box_tri_LU() {
 
     // FIXME: sometimes c.left and c.right are the other way around!
     for (id, c) in cs.cuts.iter_enumerated() {
+        if let Some(force_cut_id) = force_cut {
+            if force_cut_id != id {
+                cut_atoms.push(Atom::Zero);
+                continue;
+            }
+        }
+
         let esurface_id = cs.cut_esurface_id_map[id];
         let cff_cut_expr = &cs
             .derived_data
@@ -1202,7 +1211,7 @@ fn tri_box_tri_LU() {
                 .with(Atom::new());
         }
 
-        println!("Cut {} result: {:>}", id, cut_res);
+        println!("Cut {} result: {:>}", id, cut_res.expand());
 
         // linearize Q3
         cut_res = cut_res
