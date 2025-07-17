@@ -3,6 +3,7 @@ Gammaloop Python API.
 """
 
 
+from pathlib import Path
 from typing import Optional
 
 
@@ -179,6 +180,9 @@ class Worker:
 
     def get_amplitudes(self) -> str:
         """ Returns the yaml string representation of the list of all amplitudes currently loaded in the worker. """
+
+    def import_amplitude(self, file_path: Path) -> None:
+        """ Imports an amplitude from a dot file located at the path given in argument. """
 
     def reset_amplitudes(self) -> None:
         """ Resets the internal list of amplitudes of the worker. """

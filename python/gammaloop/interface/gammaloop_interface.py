@@ -43,6 +43,7 @@ yaml.add_representer(TaggedScalar, tagged_scalar_representer)
 
 AVAILABLE_COMMANDS = [
     'import_model',
+    'import_amplitude_from_dot',
     'export_model',
     'import_graphs',
     'export_graphs',
@@ -1037,6 +1038,22 @@ class GammaLoop(object):
         logger.info("A total of %s Graphs successfully exported to file '%s'.",
                     len(graphs), args.output_path)
 
+
+
+    import_amplitude_from_dot_parser = ArgumentParser(prog='import_amplitude_from_dot')
+    import_amplitude_from_dot_parser.add_argument('file_path', metavar='file_path', type=str, help='Path to the qgraph python output to load')
+    def do_import_amplitude_from_dot(self, str_args: str) -> None:
+        if str_args == 'help':
+            self.import_graphs_parser.print_help()
+            return
+        args = self.import_graphs_parser.parse_args(split_str_args(str_args))
+        if not os.path.isfile(args.file_path):
+            raise GammaLoopError(f"File '{args.file_path}' does not exist")
+
+        file_path = Path(os.path.abspath(args.file_path))
+        self.rust_worker.import_amplitude(file_path)
+
+
     # import_graphs command
     import_graphs_parser = ArgumentParser(prog='import_graphs')
     import_graphs_parser.add_argument('file_path', metavar='file_path', type=str,
@@ -1359,25 +1376,25 @@ class GammaLoop(object):
             logger.info(
                 "Model replacement rules exported to model directory.")
 
-        if len(self.cross_sections) == 0 and len(self.amplitudes) == 0:
-            raise GammaLoopError("No process generated yet.")
+        # if len(self.cross_sections) == 0 and len(self.amplitudes) == 0:
+        #     raise GammaLoopError("No process generated yet.")
 
-        if len(self.cross_sections) > 0:
-            cross_section_exporter = CrossSectionsExporter(self, args)
-            cross_section_exporter.export(
-                args.output_path, self.cross_sections, args.no_evaluators)
-            logger.info("Cross-sections exported to '%s'.", args.output_path)
+        # if len(self.cross_sections) > 0:
+        cross_section_exporter = CrossSectionsExporter(self, args)
+        cross_section_exporter.export(
+            args.output_path, self.cross_sections, args.no_evaluators)
+        logger.info("Cross-sections exported to '%s'.", args.output_path)
 
-        if len(self.amplitudes) > 0:
-            amplitude_exporter = AmplitudesExporter(self, args)
+        # if len(self.amplitudes) > 0:
+        amplitude_exporter = AmplitudesExporter(self, args)
 
-            if args.expression:
-                amplitude_exporter.export_expression(
-                    args.output_path, self.amplitudes, args.expression_format)
-            amplitude_exporter.export(
-                args.output_path, self.amplitudes, args.no_evaluators)
+        if args.expression:
+            amplitude_exporter.export_expression(
+                args.output_path, self.amplitudes, args.expression_format)
+        amplitude_exporter.export(
+            args.output_path, self.amplitudes, args.no_evaluators)
 
-            logger.info("Amplitudes exported to '%s'.", args.output_path)
+        logger.info("Amplitudes exported to '%s'.", args.output_path)
     #
     # Run interface type of commands below (those bound to a particular output already generated)
     #
