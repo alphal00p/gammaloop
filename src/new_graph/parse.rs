@@ -1,6 +1,7 @@
 use std::{
     collections::{BTreeMap, HashMap},
     ops::Deref,
+    path::Path,
 };
 
 use crate::{
@@ -18,11 +19,11 @@ use color_eyre::Result;
 use eyre::eyre;
 use itertools::Itertools;
 use linnet::{
-    dot_parser::{DotEdgeData, DotGraph, DotHedgeData, DotVertexData},
+    dot_parser::{DotEdgeData, DotGraph, DotHedgeData, DotVertexData, HedgeGraphSet},
     half_edge::{
         hedgevec::EdgeVec,
         involution::{EdgeData, EdgeIndex, Flow, HedgePair, Orientation},
-        nodestore::BitVecNeighborIter,
+        nodestore::{BitVecNeighborIter, NodeStorageVec},
         subgraph::{ModifySubgraph, SubGraph},
         tree::SimpleTraversalTree,
         EdgeAccessors, HedgeGraph,
@@ -388,8 +389,26 @@ impl ParseHedge {
     }
 }
 
+#[derive(Clone, Debug)]
 pub struct ParseGraph {
+    pub global_data: ParseData,
     pub graph: HedgeGraph<ParseEdge, ParseVertex, ParseHedge>,
+}
+
+#[derive(Clone, Default, Debug)]
+pub struct ParseData {
+    pub global_data: Vec<String>,
+}
+
+impl<'a> TryFrom<&'a Vec<dot_parser::canonical::AttrStmt<(String, String)>>> for ParseData {
+    type Error = ();
+    fn try_from(
+        value: &'a Vec<dot_parser::canonical::AttrStmt<(String, String)>>,
+    ) -> std::result::Result<Self, Self::Error> {
+        Ok(ParseData {
+            global_data: vec![],
+        })
+    }
 }
 
 impl Deref for ParseGraph {
@@ -447,6 +466,7 @@ impl ParseGraph {
         graph: DotGraph,
         auto_detect_vertex_rule: bool,
         model: &Model,
+        global_data: ParseData,
     ) -> Result<Self> {
         let graph = graph
             .map_data_ref_result(
@@ -460,7 +480,7 @@ impl ParseGraph {
                 |h| Ok(h.clone()),
             )?;
 
-        Ok(Self { graph })
+        Ok(Self { graph, global_data })
     }
 }
 
@@ -708,18 +728,84 @@ impl Graph {
         // Ok(NumGraph { graph })
     }
 
-    pub fn from_dot(graph: DotGraph, auto_detect_vertex_rule: bool, model: &Model) -> Result<Self> {
+    pub fn from_dot(
+        graph: DotGraph,
+        auto_detect_vertex_rule: bool,
+        model: &Model,
+        global_data: ParseData,
+    ) -> Result<Self> {
         Self::from_parsed(
-            ParseGraph::from_parsed(graph, auto_detect_vertex_rule, model)?,
+            ParseGraph::from_parsed(graph, auto_detect_vertex_rule, model, global_data)?,
             model,
         )
     }
+    pub fn from_file<'a, P>(p: P, model: &Model) -> Result<Vec<Self>>
+    where
+        P: AsRef<Path>,
+    {
+        let hedge_graph_set: HedgeGraphSet<
+            DotEdgeData,
+            DotVertexData,
+            DotHedgeData,
+            ParseData,
+            NodeStorageVec<DotVertexData>,
+        > = HedgeGraphSet::from_file(p).unwrap();
+
+        Self::from_hedge_graph_set(hedge_graph_set, model)
+    }
+
+    pub fn from_string<Str: AsRef<str>>(s: Str, model: &Model) -> Result<Vec<Self>> {
+        let hedge_graph_set: HedgeGraphSet<
+            DotEdgeData,
+            DotVertexData,
+            DotHedgeData,
+            ParseData,
+            NodeStorageVec<DotVertexData>,
+        > = HedgeGraphSet::from_string(s).unwrap();
+
+        Self::from_hedge_graph_set(hedge_graph_set, model)
+    }
+
+    fn from_hedge_graph_set(
+        set: HedgeGraphSet<
+            DotEdgeData,
+            DotVertexData,
+            DotHedgeData,
+            ParseData,
+            NodeStorageVec<DotVertexData>,
+        >,
+        model: &Model,
+    ) -> Result<Vec<Self>> {
+        let mut graphs = Vec::new();
+
+        for (graph, data) in set.set.into_iter().zip(set.global_data.into_iter()) {
+            graphs.push(Graph::from_parsed(
+                ParseGraph::from_parsed(graph, true, model, data).unwrap(),
+                model,
+            )?);
+        }
+        Ok(graphs)
+    }
+}
+
+#[macro_export]
+macro_rules! dot {
+    ($($code:tt)+) => {
+        Graph::from_string(stringify!($($code)+), &load_generic_model("sm"))
+    };
+    ($($code:tt)+, $model:expr) => {
+        Graph::from_string(stringify!($($code)+), $model)
+    };
+    ($($code:tt)+, $model:literal) => {
+        let model = load_generic_model($model);
+        Graph::from_string(stringify!($($code)+), &model)
+    };
 }
 
 #[cfg(test)]
 pub mod test {
     use idenso::metric::MetricSimplifier;
-    use linnet::{dot, dot_parser::DotGraph, half_edge::HedgeGraph};
+    use linnet::{dot_parser::DotGraph, half_edge::HedgeGraph};
     use spenso::{
         network::{
             library::DummyLibrary, parsing::ShadowedStructure, store::NetworkStore, Network,
@@ -739,9 +825,7 @@ pub mod test {
 
     #[test]
     fn parse() {
-        let model = load_generic_model("sm");
-
-        let graph: Result<DotGraph, _> = dot!(
+        let graphs = dot!(
             digraph G{
                 e1      [flow=sink]
                 e4      [flow=source]
@@ -753,89 +837,67 @@ pub mod test {
                 C -> D    [particle="g"]
                 B -> e4   [particle=a]
             }
+        )
+        .unwrap();
+
+        let g = &graphs[0];
+
+        println!(
+            "{}",
+            g.underlying
+                .dot_lmb(&g.underlying.full(), &g.loop_momentum_basis)
         );
 
-        match graph {
-            Ok(graph) => {
-                println!("{}", graph.dot_display(&graph.full()));
-                let g = Graph::from_dot(graph, true, &model);
-                match g {
-                    Ok(g) => {
-                        println!(
-                            "{}",
-                            g.underlying
-                                .dot_lmb(&g.underlying.full(), &g.loop_momentum_basis)
-                        );
+        let num = Numerator::<UnInit>::default().from_new_graph(
+            &g,
+            &g.underlying.full_filter(),
+            &GlobalPrefactor::default(),
+        );
 
-                        let num = Numerator::<UnInit>::default().from_new_graph(
-                            &g,
-                            &g.underlying.full_filter(),
-                            &GlobalPrefactor::default(),
-                        );
+        let expr = num.state.colorless.get_ref_linear(0.into()).unwrap();
 
-                        let expr = num.state.colorless.get_ref_linear(0.into()).unwrap();
+        let lib: DummyLibrary<SymbolicTensor<Aind>> = DummyLibrary::<_>::new();
+        let net =
+            Network::<NetworkStore<SymbolicTensor<Aind>, Atom>, _, Aind>::try_from_view(expr, &lib)
+                .unwrap();
 
-                        let lib: DummyLibrary<SymbolicTensor<Aind>> = DummyLibrary::<_>::new();
-                        let net =
-                            Network::<NetworkStore<SymbolicTensor<Aind>, Atom>, _, Aind>::try_from_view(
-                                expr, &lib,
-                            )
-                            .unwrap();
-
-                        println!("{}", expr);
-                        println!(
-                            "{}",
-                            net.dot_display_impl(
-                                |a| a.to_string(),
-                                |_| None,
-                                |a| {
-                                    if let Ok(a) =
-                                        PermutedStructure::<ShadowedStructure<Aind>>::try_from(
-                                            a.expression.as_view(),
-                                        )
-                                    {
-                                        a.structure
-                                            .name()
-                                            .map(|s| {
-                                                if let Some(a) = a.structure.args() {
-                                                    FunctionBuilder::new(s)
-                                                        .add_args(&a)
-                                                        .finish()
-                                                        .to_string()
-                                                } else {
-                                                    s.to_string()
-                                                }
-                                            })
-                                            .unwrap_or("".to_string())
-                                    } else {
-                                        "".to_string()
-                                    }
+        println!("{}", expr);
+        println!(
+            "{}",
+            net.dot_display_impl(
+                |a| a.to_string(),
+                |_| None,
+                |a| {
+                    if let Ok(a) = PermutedStructure::<ShadowedStructure<Aind>>::try_from(
+                        a.expression.as_view(),
+                    ) {
+                        a.structure
+                            .name()
+                            .map(|s| {
+                                if let Some(a) = a.structure.args() {
+                                    FunctionBuilder::new(s).add_args(&a).finish().to_string()
+                                } else {
+                                    s.to_string()
                                 }
-                            )
-                        );
-
-                        let num = num.color_simplify();
-
-                        println!("{}", num.state.color);
-                        let num = num.gamma_simplify();
-
-                        println!("{}", num.state.colorless);
-                    }
-                    Err(e) => {
-                        println!("Error parsing graph: {}", e);
+                            })
+                            .unwrap_or("".to_string())
+                    } else {
+                        "".to_string()
                     }
                 }
-            }
-            Err(e) => {
-                println!("Error parsing graph: {:?}", e);
-            }
-        }
+            )
+        );
+
+        let num = num.color_simplify();
+
+        println!("{}", num.state.color);
+        let num = num.gamma_simplify();
+
+        println!("{}", num.state.colorless);
     }
     #[test]
     fn parse_local() {
-        let model = load_generic_model("scalars");
-
-        let graph: Result<DotGraph, _> = dot!(
+        let graphs= dot!(
             digraph G{
                 e1      [flow=sink]
                 e2      [flow=sink]
@@ -853,97 +915,74 @@ pub mod test {
                 B -> e3   [pdg=1000]
                 C -> D    [pdg=1000, num="1"]
                 B -> e4   [pdg=1000]
-            }
+            },"scalars"
+        ).unwrap();
+
+        let g = &graphs[0];
+        println!(
+            "{}",
+            g.underlying
+                .dot_lmb(&g.underlying.full(), &g.loop_momentum_basis)
         );
 
-        match graph {
-            Ok(graph) => {
-                println!("{}", graph.dot_display(&graph.full()));
-                let g = Graph::from_dot(graph, true, &model);
-                match g {
-                    Ok(g) => {
-                        println!(
-                            "{}",
-                            g.underlying
-                                .dot_lmb(&g.underlying.full(), &g.loop_momentum_basis)
-                        );
+        let num = Numerator::<UnInit>::default().from_new_graph(
+            &g,
+            &g.underlying.full_filter(),
+            &GlobalPrefactor::default(),
+        );
 
-                        let num = Numerator::<UnInit>::default().from_new_graph(
-                            &g,
-                            &g.underlying.full_filter(),
-                            &GlobalPrefactor::default(),
-                        );
+        let expr = num.state.colorless.get_ref_linear(0.into()).unwrap();
 
-                        let expr = num.state.colorless.get_ref_linear(0.into()).unwrap();
+        let lib: DummyLibrary<SymbolicTensor<Aind>> = DummyLibrary::<_>::new();
+        let net =
+            Network::<NetworkStore<SymbolicTensor<Aind>, Atom>, _, Aind>::try_from_view(expr, &lib)
+                .unwrap();
 
-                        let lib: DummyLibrary<SymbolicTensor<Aind>> = DummyLibrary::<_>::new();
-                        let net =
-                            Network::<NetworkStore<SymbolicTensor<Aind>, Atom>, _, Aind>::try_from_view(
-                                expr, &lib,
-                            )
-                            .unwrap();
-
-                        println!("{}", expr);
-                        println!(
-                            "{}",
-                            net.dot_display_impl(
-                                |a| a.to_string(),
-                                |_| None,
-                                |a| {
-                                    if let Ok(a) =
-                                        PermutedStructure::<ShadowedStructure<Aind>>::try_from(
-                                            a.expression.as_view(),
-                                        )
-                                    {
-                                        a.structure
-                                            .name()
-                                            .map(|s| {
-                                                if let Some(a) = a.structure.args() {
-                                                    FunctionBuilder::new(s)
-                                                        .add_args(&a)
-                                                        .finish()
-                                                        .to_string()
-                                                } else {
-                                                    s.to_string()
-                                                }
-                                            })
-                                            .unwrap_or("".to_string())
-                                    } else {
-                                        "".to_string()
-                                    }
+        println!("{}", expr);
+        println!(
+            "{}",
+            net.dot_display_impl(
+                |a| a.to_string(),
+                |_| None,
+                |a| {
+                    if let Ok(a) = PermutedStructure::<ShadowedStructure<Aind>>::try_from(
+                        a.expression.as_view(),
+                    ) {
+                        a.structure
+                            .name()
+                            .map(|s| {
+                                if let Some(a) = a.structure.args() {
+                                    FunctionBuilder::new(s).add_args(&a).finish().to_string()
+                                } else {
+                                    s.to_string()
                                 }
-                            )
-                        );
-
-                        let num = num.color_simplify();
-
-                        println!("{}", num.state.color);
-                        let num = num.gamma_simplify();
-
-                        println!(
-                            "{}",
-                            num.state
-                                .colorless
-                                .get_owned_linear(FlatIndex::from(0))
-                                .unwrap()
-                                .to_dots()
-                        );
-                    }
-                    Err(e) => {
-                        println!("Error parsing graph: {}", e);
+                            })
+                            .unwrap_or("".to_string())
+                    } else {
+                        "".to_string()
                     }
                 }
-            }
-            Err(e) => {
-                println!("Error parsing graph: {:?}", e);
-            }
-        }
+            )
+        );
+
+        let num = num.color_simplify();
+
+        println!("{}", num.state.color);
+        let num = num.gamma_simplify();
+
+        println!(
+            "{}",
+            num.state
+                .colorless
+                .get_owned_linear(FlatIndex::from(0))
+                .unwrap()
+                .to_dots()
+        );
     }
+
     #[test]
     fn parse_lmbsetting() {
-        let model = load_generic_model("scalars");
-
-        let graph: Result<DotGraph, _> = dot!(
+        let graphs = dot!(
             digraph G{
                 e1      [flow=sink]
                 e2      [flow=sink]
@@ -965,83 +1004,62 @@ pub mod test {
                 E -> C   [pdg=1000]
                 C -> D    [pdg=1000, num="1"]
                 B -> e4   [pdg=1000]
-            }
+            },"scalars"
+        )
+        .unwrap();
+
+        let g = &graphs[0];
+        println!(
+            "{}",
+            g.underlying
+                .dot_lmb(&g.underlying.full(), &g.loop_momentum_basis)
         );
 
-        match graph {
-            Ok(graph) => {
-                println!("{}", graph.dot_display(&graph.full()));
-                let g = Graph::from_dot(graph, true, &model);
-                match g {
-                    Ok(g) => {
-                        println!(
-                            "{}",
-                            g.underlying
-                                .dot_lmb(&g.underlying.full(), &g.loop_momentum_basis)
-                        );
+        let num = Numerator::<UnInit>::default().from_new_graph(
+            &g,
+            &g.underlying.full_filter(),
+            &GlobalPrefactor::default(),
+        );
 
-                        let num = Numerator::<UnInit>::default().from_new_graph(
-                            &g,
-                            &g.underlying.full_filter(),
-                            &GlobalPrefactor::default(),
-                        );
+        let expr = num.state.colorless.get_ref_linear(0.into()).unwrap();
 
-                        let expr = num.state.colorless.get_ref_linear(0.into()).unwrap();
+        let lib: DummyLibrary<SymbolicTensor<Aind>> = DummyLibrary::<_>::new();
+        let net =
+            Network::<NetworkStore<SymbolicTensor<Aind>, Atom>, _, Aind>::try_from_view(expr, &lib)
+                .unwrap();
 
-                        let lib: DummyLibrary<SymbolicTensor<Aind>> = DummyLibrary::<_>::new();
-                        let net =
-                            Network::<NetworkStore<SymbolicTensor<Aind>, Atom>, _, Aind>::try_from_view(
-                                expr, &lib,
-                            )
-                            .unwrap();
-
-                        println!("{}", expr);
-                        println!(
-                            "{}",
-                            net.dot_display_impl(
-                                |a| a.to_string(),
-                                |_| None,
-                                |a| {
-                                    if let Ok(a) =
-                                        PermutedStructure::<ShadowedStructure<Aind>>::try_from(
-                                            a.expression.as_view(),
-                                        )
-                                    {
-                                        a.structure
-                                            .name()
-                                            .map(|s| {
-                                                if let Some(a) = a.structure.args() {
-                                                    FunctionBuilder::new(s)
-                                                        .add_args(&a)
-                                                        .finish()
-                                                        .to_string()
-                                                } else {
-                                                    s.to_string()
-                                                }
-                                            })
-                                            .unwrap_or("".to_string())
-                                    } else {
-                                        "".to_string()
-                                    }
+        println!("{}", expr);
+        println!(
+            "{}",
+            net.dot_display_impl(
+                |a| a.to_string(),
+                |_| None,
+                |a| {
+                    if let Ok(a) = PermutedStructure::<ShadowedStructure<Aind>>::try_from(
+                        a.expression.as_view(),
+                    ) {
+                        a.structure
+                            .name()
+                            .map(|s| {
+                                if let Some(a) = a.structure.args() {
+                                    FunctionBuilder::new(s).add_args(&a).finish().to_string()
+                                } else {
+                                    s.to_string()
                                 }
-                            )
-                        );
-
-                        let num = num.color_simplify();
-
-                        println!("{}", num.state.color);
-                        let num = num.gamma_simplify();
-
-                        println!("{}", num.state.colorless);
-                    }
-                    Err(e) => {
-                        println!("Error parsing graph: {}", e);
+                            })
+                            .unwrap_or("".to_string())
+                    } else {
+                        "".to_string()
                     }
                 }
-            }
-            Err(e) => {
-                println!("Error parsing graph: {:?}", e);
-            }
-        }
+            )
+        );
+
+        let num = num.color_simplify();
+
+        println!("{}", num.state.color);
+        let num = num.gamma_simplify();
+
+        println!("{}", num.state.colorless);
     }
 }

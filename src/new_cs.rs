@@ -35,16 +35,24 @@ use crate::{
         cross_section_integrand::OrientationEvaluator,
         GenericEvaluator, LmbMultiChannelingSetup,
     },
-    new_graph::{get_cff_inverse_energy_product_impl, LMBext, LmbIndex, LoopMomentumBasis},
+    new_graph::{
+        get_cff_inverse_energy_product_impl,
+        parse::{ParseData, ParseGraph},
+        LMBext, LmbIndex, LoopMomentumBasis,
+    },
     signature::SignatureLike,
     utils::{f128, ose_atom_from_index, GS, W_},
     GammaLoopContext, GammaLoopContextContainer,
 };
 use eyre::eyre;
 use itertools::Itertools;
-use linnet::half_edge::{
-    involution::{Flow, HedgePair, Orientation},
-    subgraph::{HedgeNode, Inclusion, InternalSubGraph, OrientedCut, SubGraph},
+use linnet::{
+    dot_parser::{DotEdgeData, DotHedgeData, DotVertexData, HedgeGraphSet},
+    half_edge::{
+        involution::{Flow, HedgePair, Orientation},
+        nodestore::NodeStorageVec,
+        subgraph::{HedgeNode, Inclusion, InternalSubGraph, OrientedCut, SubGraph},
+    },
 };
 use log::{debug, warn};
 use serde::{Deserialize, Serialize};
@@ -788,6 +796,29 @@ pub struct AmplitudeDerivedData<S: NumeratorState> {
 }
 
 impl<S: NumeratorState> Amplitude<S> {
+    pub fn from_dot_string<Str: AsRef<str>>(s: Str, name: String, model: &Model) -> Result<Self> {
+        let graphs = Graph::from_string(s, model)?;
+
+        let mut amp = Amplitude::new(name);
+        for g in graphs {
+            amp.add_graph(g)?;
+        }
+        Ok(amp)
+    }
+
+    pub fn from_dot_file<'a, P>(p: P, name: String, model: &Model) -> Result<Self>
+    where
+        P: AsRef<Path>,
+    {
+        let graphs = Graph::from_file(p, model)?;
+
+        let mut amp = Amplitude::new(name);
+        for g in graphs {
+            amp.add_graph(g)?;
+        }
+        Ok(amp)
+    }
+
     pub fn new(name: String) -> Self {
         Self {
             name,
@@ -1729,7 +1760,6 @@ mod tests {
     use std::fs::OpenOptions;
 
     use linnet::{
-        dot,
         dot_parser::DotGraph,
         half_edge::{involution::EdgeIndex, HedgeGraph},
     };
@@ -1737,6 +1767,7 @@ mod tests {
     use symbolica::{atom::Atom, state::State};
 
     use crate::{
+        dot,
         new_graph::{Graph, LoopMomentumBasis},
         numerator::{
             EvaluatorOptions, GammaAlgebraMode, GlobalPrefactor, NumeratorEvaluatorOptions,
@@ -1754,7 +1785,7 @@ mod tests {
         // load the model and hack the masses, go through serializable model since arc is not mutable
         let model = load_generic_model("sm");
 
-        let graph: DotGraph = dot!(
+        let mut graphs = dot!(
             digraph G{
                 e1      [flow=sink]
                 e2      [flow=source]
@@ -1769,7 +1800,7 @@ mod tests {
             }
         )
         .unwrap();
-        let mut graph = Graph::from_dot(graph, true, &model).unwrap();
+        let graph = &mut graphs[0];
         let mut loop_momentum_basis = LoopMomentumBasis {
             tree: None,
             loop_edges: vec![EdgeIndex::from(0), EdgeIndex::from(4)].into(),
@@ -1785,7 +1816,7 @@ mod tests {
 
         graph.loop_momentum_basis = loop_momentum_basis;
 
-        let mut amplitude: AmplitudeGraph<UnInit> = AmplitudeGraph::new(graph);
+        let mut amplitude: AmplitudeGraph<UnInit> = AmplitudeGraph::new(graph.clone());
 
         amplitude
             .preprocess(
