@@ -129,7 +129,7 @@ fern = "0.7.1"
 # humantime = "2.1.0"
 chrono = "0.4.39"
 linreg = "0.2.0"
-
+dot-parser = "0.4.2"
 [dependencies.pyo3]
 features = ["abi3", "abi3-py37"]
 optional = true
@@ -170,7 +170,7 @@ no_python = []
 # spenso-macros = { git = "https://github.com/alphal00p/spenso", rev = "2e7ad444b557aa5a589443cca63eb2057040aced" }
 # spenso = { path = "../spenso/spenso" }
 
-# linnet = { path = "../linnet" }
+linnet = { path = "../linnet" }
 # linnet = { git = "https://github.com/alphal00p/linnet", rev = "13b0b37e23bd2a203d559fe3bce771c12ade172c" }
 
 # symbolica-community={path="../symbolica-community"}

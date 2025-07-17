@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use itertools::Itertools;
-use linnet::{dot, dot_parser::DotGraph, half_edge::involution::Orientation};
-use new_graph::parse::{ParseEdge, ParseGraph, ParseHedge, ParseVertex};
+use linnet::{dot_parser::DotGraph, half_edge::involution::Orientation};
+use new_graph::parse::{ParseData, ParseEdge, ParseGraph, ParseHedge, ParseVertex};
 
 use linnet::half_edge::{builder::HedgeGraphBuilder, involution::Flow};
 
@@ -11,6 +11,7 @@ use symbolica::evaluate::{FunctionMap, OptimizationSettings};
 
 use crate::{
     cff::{cut_expression::SuperGraphOrientationID, expression::AmplitudeOrientationID},
+    dot,
     feyngen::{
         diagram_generator::{EdgeColor, NodeColorWithVertexRule},
         FeynGenFilters,
@@ -40,7 +41,7 @@ fn tri_uv_AMP() {
         load_generic_model("sm")
     };
 
-    let graph: DotGraph = dot!(
+    let graphs = dot!(
         digraph G{
             e1        [flow=sink]
             e2        [flow=sink]
@@ -51,11 +52,11 @@ fn tri_uv_AMP() {
             A -> B    [particle=h]
             B -> C    [particle=h]
             C -> D    [particle=h]
-        }
+        },&model
     )
     .unwrap();
 
-    let mut graph = Graph::from_dot(graph, true, &model).unwrap();
+    let mut graph = graphs[0].clone();
     let mut loop_momentum_basis = LoopMomentumBasis {
         tree: None,
         loop_edges: vec![EdgeIndex::from(0)].into(),
@@ -438,6 +439,7 @@ fn tri_box_tri_LU() {
 
     let underlying = ParseGraph {
         graph: underlying.build(),
+        global_data: ParseData::default(),
     };
 
     println!("{}", underlying.dot(&underlying.full_filter()));
@@ -1212,6 +1214,7 @@ fn double_triangle_LU() {
 
     let underlying = ParseGraph {
         graph: underlying.build(),
+        global_data: ParseData::default(),
     };
 
     let mut loop_momentum_basis = LoopMomentumBasis {

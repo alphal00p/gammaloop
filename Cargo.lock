@@ -1191,6 +1191,7 @@ dependencies = [
  "ctrlc",
  "delegate",
  "derive_more",
+ "dot-parser",
  "enum_dispatch",
  "env_logger",
  "eyre",
@@ -1687,8 +1688,6 @@ checksum = "f9fbbcab51052fe104eb5e5d351cf728d30a5be1fe14d9be8a3b097481fb97de"
 [[package]]
 name = "linnet"
 version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "20332ced2c1c16949ca5fac81350884bfab14634e502a0214885b14a057deb50"
 dependencies = [
  "ahash",
  "argmin",
