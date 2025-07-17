@@ -629,7 +629,13 @@ impl Approximation {
         let Some((inner_t, sign)) = dependent.integrated_4d.expr() else {
             return ApproxOp::NotComputed;
         };
-        let t_arg = uv_graph.numerator(&reduced) / uv_graph.denominator(&reduced);
+        let t_arg = uv_graph
+            .numerator(&reduced)
+            .color_simplify()
+            .gamma_simplify()
+            .get_single_atom()
+            .unwrap()
+            / uv_graph.denominator(&reduced);
 
         let ep = vakint_symbol!("ε");
 
@@ -1065,7 +1071,13 @@ impl Approximation {
             }
         }
 
-        let mut atomarg = cff * uv_graph.numerator(&reduced);
+        let mut atomarg = cff
+            * uv_graph
+                .numerator(&reduced)
+                .color_simplify()
+                .gamma_simplify()
+                .get_single_atom()
+                .unwrap();
 
         // println!(
         //     "Expand-prerep {} with dod={} in {:?}",
@@ -1302,7 +1314,13 @@ impl Approximation {
             }
         }
 
-        let mut res = cff * graph.numerator(&reduced);
+        let mut res = cff
+            * graph
+                .numerator(&reduced)
+                .color_simplify()
+                .gamma_simplify()
+                .get_single_atom()
+                .unwrap();
 
         // set the momenta flowing through the reduced graph edges to the identity wrt the supergraph
         for (p, eid, e) in graph.as_ref().iter_edges_of(&reduced) {

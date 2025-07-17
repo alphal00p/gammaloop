@@ -33,6 +33,7 @@ use crate::{
     momentum::SignOrZero,
     momentum_sample::{ExternalFourMomenta, ExternalIndex, LoopMomenta},
     new_gammaloop_integrand::LmbMultiChannelingSetup,
+    numerator::GlobalPrefactor,
     signature::{ExternalSignature, SignatureLike},
     utils::{external_energy_atom_from_index, ose_atom_from_index, FloatLike, F, GS},
 };
@@ -47,6 +48,7 @@ pub struct Graph {
     pub name: String,
     pub underlying: HedgeGraph<Edge, Vertex, NumHedgeData>,
     pub loop_momentum_basis: LoopMomentumBasis,
+    pub global_prefactor: GlobalPrefactor,
     pub vertex_slots: TiVec<NodeIndex, VertexSlots>,
     pub external_connections: Option<Vec<ExternalConnection>>,
 }
@@ -57,51 +59,6 @@ pub struct Graph {
 
 impl From<BareGraph> for Graph {
     fn from(value: BareGraph) -> Self {
-        // let loop_momentum_basis = value.loop_momentum_basis.clone();
-        // let vertex_slots = value.vertex_slots.clone().into();
-        // let multiplicity = FeynGen::evaluate_overall_factor(value.overall_factor.as_view());
-        // let name = value.name.clone();
-
-        // // convert old external connections to new format
-        // let external_connections = value
-        //     .external_connections
-        //     .iter()
-        //     .map(|(incoming_node, outgoing_node)| {
-        //         let incoming_index = incoming_node.map(|node_id| {
-        //             let edge_id = value.vertices[node_id].edges[0];
-        //             let external_index = value.get_external_index(edge_id).unwrap();
-        //             external_index
-        //         });
-
-        //         let outgoing_index = outgoing_node.map(|node_id| {
-        //             let edge_id = value.vertices[node_id].edges[0];
-        //             let external_index = value.get_external_index(edge_id).unwrap();
-        //             external_index
-        //         });
-
-        //         if let (Some(incoming_index), Some(outgoing_index)) =
-        //             (incoming_index, outgoing_index)
-        //         {
-        //             Some(ExternalConnection {
-        //                 incoming_index,
-        //                 outgoing_index,
-        //             })
-        //         } else {
-        //             None
-        //         }
-        //     })
-        //     .collect::<Option<Vec<ExternalConnection>>>();
-
-        // let underlying = value.into();
-        // Self {
-        //     name: name.to_string(),
-        //     external_connections,
-        //     multiplicity,
-        //     vertex_slots,
-        //     loop_momentum_basis,
-        //     underlying,
-        // }
-        //
         todo!()
     }
 }
@@ -445,6 +402,7 @@ impl Graph {
             multiplicity,
             loop_momentum_basis: underlying.lmb(&underlying.full_filter()),
             underlying,
+            global_prefactor: GlobalPrefactor::default(),
             external_connections: None,
             vertex_slots: TiVec::new(),
         })

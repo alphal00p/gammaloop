@@ -41,7 +41,6 @@ criterion = { version = "0.5", features = ["html_reports"] }
 
 [profile.dev.package]
 insta.opt-level = 3
-similar.opt-level = 3
 
 [dependencies]
 # These will be patched
@@ -78,6 +77,8 @@ hyperdual = { git = "https://gitlab.com/benruijl/hyperdual.git" }
 rand = { version = "0.9", features = ["small_rng"] }
 rayon = "1.5"
 tabled = "0.7"
+dirs = "5"
+clap-repl = "0.3.2"
 indicatif = { version = "0.17.9", features = ["improved_unicode", "rayon"] }
 # bincode-trait-derive = {path="../bincode-trait-derive"}
 bincode-trait-derive = { version = "0.1.1" }
@@ -137,6 +138,7 @@ fern = "0.7.1"
 chrono = "0.4.39"
 linreg = "0.2.0"
 dot-parser = "0.4.2"
+console = "0.16.0"
 [dependencies.pyo3]
 features = ["abi3", "abi3-py37"]
 optional = true

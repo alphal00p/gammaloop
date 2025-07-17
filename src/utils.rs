@@ -3131,7 +3131,7 @@ pub fn inv_3x3_sig_matrix(mat: [[isize; 3]; 3]) -> [[isize; 3]; 3] {
 }
 
 pub fn print_banner() {
-    info!(
+    println!(
         "\n{}{}\n",
         r"                                        _
                                        | |

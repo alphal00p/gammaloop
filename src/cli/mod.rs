@@ -14,11 +14,11 @@ use eyre::eyre;
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
 use spenso::algebra::complex::Complex;
-use std::env;
 use std::path::PathBuf;
+use std::{env, ops::ControlFlow};
 use std::{fs, time::Instant};
 use symbolica::numerical_integration::Sample;
-// pub mod repl;
+pub mod repl;
 /// Top‑level CLI definition using **clap**'s `derive` API (requires `features = ["derive"]`).
 #[derive(Parser, Debug)]
 #[command(
@@ -66,7 +66,43 @@ pub struct Cli {
 }
 
 impl Cli {
-    pub fn run(self) -> Result<(), Report> {
+    pub fn run_with_settings(
+        self,
+        settings: &mut Settings,
+        count: &mut usize,
+    ) -> Result<ControlFlow<()>, Report> {
+        if let Some(c) = self.command {
+            c.run(settings, count)
+        } else {
+            let target = self.target.as_ref().map(|v| {
+                assert_eq!(v.len(), 2, "--target expects exactly two numbers");
+                Complex::new(F(v[0]), F(v[1]))
+            });
+            let user_data_generator = |settings: &Settings| UserData {
+                integrand: (0..self.cores)
+                    .map(|_| integrand_factory(settings))
+                    .collect(),
+            };
+            let result = havana_integrate(&settings, user_data_generator, target, None, None);
+
+            info!("");
+            info!(
+                "{}",
+                format!(
+                    "Havana integration completed after {} sample evaluations.",
+                    format!("{:.2}M", (result.neval as f64) / 1_000_000.)
+                        .bold()
+                        .blue()
+                )
+                .bold()
+                .green()
+            );
+            info!("");
+            Ok(ControlFlow::Continue(()))
+        }
+    }
+
+    pub fn get_settings(&self) -> Result<Settings, Report> {
         crate::set_interrupt_handler();
 
         // Load settings from YAML first so CLI flags can override.
@@ -86,6 +122,18 @@ impl Cli {
             settings.integrator.n_increase = n;
         }
 
+        // Ensure SYMBOLICA licence variable is set before we do anything heavy.
+        if env::var("SYMBOLICA_LICENSE").is_err() {
+            env::set_var("SYMBOLICA_LICENSE", "GAMMALOOP_USER");
+        }
+
+        print_banner();
+        Ok(settings)
+    }
+    pub fn run(self) -> Result<Settings, Report> {
+        // Load settings from YAML first so CLI flags can override.
+        let mut settings: Settings = self.get_settings()?;
+
         // ---------------------------------------------------------------------
         // RAYON THREAD‑POOL SET‑UP -------------------------------------------
         // ---------------------------------------------------------------------
@@ -102,12 +150,6 @@ impl Cli {
             Complex::new(F(v[0]), F(v[1]))
         });
 
-        // Ensure SYMBOLICA licence variable is set before we do anything heavy.
-        if env::var("SYMBOLICA_LICENSE").is_err() {
-            env::set_var("SYMBOLICA_LICENSE", "GAMMALOOP_USER");
-        }
-
-        print_banner();
         if settings.general.debug > 0 {
             info!(
                 "{}",
@@ -115,112 +157,45 @@ impl Cli {
             );
             info!("");
         }
+        let mut count = 0;
+        if let Some(c) = self.command {
+            c.run(&mut settings, &mut count)?;
+            Ok(settings)
+        } else {
+            let user_data_generator = |settings: &Settings| UserData {
+                integrand: (0..num_integrands)
+                    .map(|_| integrand_factory(settings))
+                    .collect(),
+            };
+            let result = havana_integrate(&settings, user_data_generator, target, None, None);
+
+            info!("");
+            info!(
+                "{}",
+                format!(
+                    "Havana integration completed after {} sample evaluations.",
+                    format!("{:.2}M", (result.neval as f64) / 1_000_000.)
+                        .bold()
+                        .blue()
+                )
+                .bold()
+                .green()
+            );
+            info!("");
+            Ok(settings)
+        }
 
         // =====================================================================
         // DISPATCH TO SUB‑COMMANDS OR DEFAULT INTEGRATION PATH  ===============
         // =====================================================================
-
-        match self.command {
-            Some(Commands::Batch {
-                process_file,
-                batch_input_file,
-                name,
-                output_name,
-            }) => {
-                return batch_branch(process_file, batch_input_file, &name, &output_name);
-            }
-
-            Some(Commands::Inspect {
-                point,
-                use_f128,
-                force_radius,
-                momentum_space,
-                debug,
-                term,
-            }) => {
-                if let Some(level) = debug {
-                    settings.general.debug = level;
-                }
-
-                let mut integrand = integrand_factory(&settings);
-
-                let pt = point.into_iter().map(F).collect::<Vec<_>>();
-
-                let _ = inspect(
-                    &settings,
-                    &mut integrand,
-                    pt,
-                    &term,
-                    force_radius,
-                    momentum_space,
-                    use_f128,
-                );
-                Ok(())
-            }
-
-            Some(Commands::Bench { samples }) => {
-                info!(
-                    "\nBenchmarking runtime of integrand '{}' over {} samples...\n",
-                    format!("{}", settings.hard_coded_integrand).green(),
-                    format!("{}", samples).blue()
-                );
-                let mut integrand = integrand_factory(&settings);
-                let now = Instant::now();
-                for _ in 0..samples {
-                    integrand.evaluate_sample(
-                        &Sample::Continuous(
-                            F(1.),
-                            (0..integrand.get_n_dim())
-                                .map(|_| F(rand::random::<f64>()))
-                                .collect(),
-                        ),
-                        F(1.),
-                        1,
-                        false,
-                        Complex::new_zero(),
-                    );
-                }
-                let total_time = now.elapsed().as_secs_f64();
-                info!(
-                    "\n> Total time: {} s for {} samples, {} ms per sample\n",
-                    format!("{:.1}", total_time).blue(),
-                    format!("{}", samples).blue(),
-                    format!("{:.5}", total_time * 1000. / (samples as f64)).green(),
-                );
-                Ok(())
-            }
-
-            None | _ => {
-                let user_data_generator = |settings: &Settings| UserData {
-                    integrand: (0..num_integrands)
-                        .map(|_| integrand_factory(settings))
-                        .collect(),
-                };
-                let result = havana_integrate(&settings, user_data_generator, target, None, None);
-
-                info!("");
-                info!(
-                    "{}",
-                    format!(
-                        "Havana integration completed after {} sample evaluations.",
-                        format!("{:.2}M", (result.neval as f64) / 1_000_000.)
-                            .bold()
-                            .blue()
-                    )
-                    .bold()
-                    .green()
-                );
-                info!("");
-                Ok(())
-            }
-        }
     }
 }
 
 #[derive(Subcommand, Debug)]
 pub enum Commands {
     Repl,
-
+    Increment,
+    Quit,
     /// Inspect a single phase‑space point / momentum configuration
     Inspect {
         /// The point to inspect (x y) or (p0 px ...)
@@ -267,6 +242,97 @@ pub enum Commands {
         #[arg(value_name = "NAME")]
         output_name: String,
     },
+}
+
+impl Commands {
+    pub fn run(
+        self,
+        settings: &mut Settings,
+        count: &mut usize,
+    ) -> Result<ControlFlow<()>, Report> {
+        match self {
+            Commands::Quit => {
+                return Ok(ControlFlow::Break(()));
+            }
+            Commands::Increment => {
+                *count += 1;
+                println!("count{count}");
+            }
+            Commands::Batch {
+                process_file,
+                batch_input_file,
+                name,
+                output_name,
+            } => {
+                return Ok(ControlFlow::Continue(batch_branch(
+                    process_file,
+                    batch_input_file,
+                    &name,
+                    &output_name,
+                )?));
+            }
+
+            Commands::Inspect {
+                point,
+                use_f128,
+                force_radius,
+                momentum_space,
+                debug,
+                term,
+            } => {
+                if let Some(level) = debug {
+                    settings.general.debug = level;
+                }
+
+                let mut integrand = integrand_factory(&settings);
+
+                let pt = point.into_iter().map(F).collect::<Vec<_>>();
+
+                let _ = inspect(
+                    &settings,
+                    &mut integrand,
+                    pt,
+                    &term,
+                    force_radius,
+                    momentum_space,
+                    use_f128,
+                );
+            }
+
+            Commands::Bench { samples } => {
+                info!(
+                    "\nBenchmarking runtime of integrand '{}' over {} samples...\n",
+                    format!("{}", settings.hard_coded_integrand).green(),
+                    format!("{}", samples).blue()
+                );
+                let mut integrand = integrand_factory(&settings);
+                let now = Instant::now();
+                for _ in 0..samples {
+                    integrand.evaluate_sample(
+                        &Sample::Continuous(
+                            F(1.),
+                            (0..integrand.get_n_dim())
+                                .map(|_| F(rand::random::<f64>()))
+                                .collect(),
+                        ),
+                        F(1.),
+                        1,
+                        false,
+                        Complex::new_zero(),
+                    );
+                }
+                let total_time = now.elapsed().as_secs_f64();
+                info!(
+                    "\n> Total time: {} s for {} samples, {} ms per sample\n",
+                    format!("{:.1}", total_time).blue(),
+                    format!("{}", samples).blue(),
+                    format!("{:.5}", total_time * 1000. / (samples as f64)).green(),
+                );
+            }
+            _ => {}
+        }
+        Ok(ControlFlow::Continue(()))
+    }
 }
 
 fn batch_branch(

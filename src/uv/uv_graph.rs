@@ -16,7 +16,7 @@ use symbolica::{
 use crate::{
     momentum_sample::LoopIndex,
     new_graph::{Edge, Graph, LMBext, LoopMomentumBasis, NumHedgeData, Vertex},
-    numerator::{GlobalPrefactor, Numerator},
+    numerator::{AppliedFeynmanRule, GlobalPrefactor, Numerator},
     symbolica_ext::CallSymbol,
     utils::{GS, W_},
 };
@@ -30,7 +30,7 @@ pub trait UltravioletGraph: LMBext {
     {
         self.as_ref().cyclotomatic_number(subgraph)
     }
-    fn numerator<S: SubGraph>(&self, subgraph: &S) -> Atom;
+    fn numerator<S: SubGraph>(&self, subgraph: &S) -> Numerator<AppliedFeynmanRule>;
     fn denominator<S: SubGraph>(&self, subgraph: &S) -> Atom;
     fn all_cycle_unions<E, V, H, S: SubGraph<Base = BitVec>>(
         &self,
@@ -242,12 +242,10 @@ impl UltravioletGraph for Graph {
 
         den.into()
     }
-    fn numerator<S: SubGraph>(&self, subgraph: &S) -> Atom {
+    fn numerator<S: SubGraph>(&self, subgraph: &S) -> Numerator<AppliedFeynmanRule> {
         let num = Numerator::default();
 
-        num.from_new_graph(self, subgraph, &GlobalPrefactor::default())
-            .get_single_atom()
-            .unwrap()
+        num.from_new_graph(self, subgraph)
     }
 
     fn dod<S: SubGraph>(&self, subgraph: &S) -> i32 {

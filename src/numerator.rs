@@ -634,7 +634,8 @@ impl TypedNumeratorState for UnInit {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
+#[trait_decode(trait = crate::GammaLoopContext)]
 pub struct GlobalPrefactor {
     pub color: Atom,
     pub colorless: Atom,

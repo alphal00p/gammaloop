@@ -42,6 +42,7 @@ pub mod utils;
 pub mod uv;
 
 use crate::utils::f128;
+use clap::Args;
 use color_eyre::{Help, Report, Result};
 #[allow(unused)]
 use colored::Colorize;
@@ -82,6 +83,7 @@ use symbolica::evaluate::CompileOptions;
 use symbolica::evaluate::InlineASM;
 use symbolica::state::HasStateMap;
 use symbolica::state::StateMap;
+use tabled::Tabled;
 use utils::FloatLike;
 use utils::F;
 

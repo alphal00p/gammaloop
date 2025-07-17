@@ -101,13 +101,17 @@ fn cli_wrapper(py: Python) -> PyResult<()> {
     Ok(())
     */
     crate::set_interrupt_handler();
-    Cli::parse_from(
+
+    match Cli::parse_from(
         &py.import_bound("sys")?
             .getattr("argv")?
             .extract::<Vec<String>>()?,
     )
     .run()
-    .map_err(|e| exceptions::PyException::new_err(e.to_string()))
+    {
+        Err(e) => Err(exceptions::PyException::new_err(e.to_string())),
+        Ok(_) => Ok(()),
+    }
 }
 
 pub fn format_level(level: log::Level) -> ColoredString {
