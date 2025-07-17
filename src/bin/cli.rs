@@ -1,16 +1,33 @@
-use _gammaloop::cli_functions::cli;
+use _gammaloop::cli::{Cli, Commands};
+use clap::Parser;
 use color_eyre::Report;
 
-use std::env;
-
 fn main() -> Result<(), Report> {
-    let log_builder = &mut env_logger::builder();
-    if env::var("RUST_LOG").is_err() {
-        log_builder.filter_level(log::LevelFilter::Info);
+    // --- logging boilerplate (unchanged) ---
+    {
+        let mut log_builder = env_logger::builder();
+        if std::env::var("RUST_LOG").is_err() {
+            log_builder.filter_level(log::LevelFilter::Info);
+        }
+        log_builder
+            .format_target(true)
+            .format_timestamp(Some(env_logger::TimestampPrecision::Millis))
+            .init();
     }
-    log_builder
-        .format_target(true)
-        .format_timestamp(Some(env_logger::TimestampPrecision::Millis))
-        .init();
-    cli(&env::args().collect::<Vec<_>>())
+
+    // Parse once with clap‑derive
+    let cli = Cli::parse();
+
+    match &cli.command {
+        Some(Commands::Repl) => {
+            // Re‑enter interactive mode. Forward any global flags if you like.
+            // _gammaloop::cli::repl::start("gammaLoop", &[])?;
+        }
+        _ => {
+            // Single‑shot execution path (old behaviour)
+            cli.run()?;
+        }
+    }
+
+    Ok(())
 }

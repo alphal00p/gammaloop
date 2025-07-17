@@ -1,5 +1,5 @@
 use crate::{
-    cli_functions::cli,
+    cli::Cli,
     cross_section::{Amplitude, AmplitudeList, CrossSection, CrossSectionList},
     feyngen::{
         self, diagram_generator::FeynGen, FeynGenError, FeynGenFilters, FeynGenOptions,
@@ -21,6 +21,7 @@ use crate::{
 };
 use ahash::HashMap;
 use chrono::{Datelike, Local, Timelike};
+use clap::Parser;
 use colored::{ColoredString, Colorize};
 use feyngen::{
     FeynGenFilter, GenerationType, SelfEnergyFilterOptions, SnailFilterOptions,
@@ -100,10 +101,12 @@ fn cli_wrapper(py: Python) -> PyResult<()> {
     Ok(())
     */
     crate::set_interrupt_handler();
-    cli(&py
-        .import_bound("sys")?
-        .getattr("argv")?
-        .extract::<Vec<String>>()?)
+    Cli::parse_from(
+        &py.import_bound("sys")?
+            .getattr("argv")?
+            .extract::<Vec<String>>()?,
+    )
+    .run()
     .map_err(|e| exceptions::PyException::new_err(e.to_string()))
 }
 

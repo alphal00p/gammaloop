@@ -55,10 +55,10 @@ def check_gammaloop_dependencies(clean_dependencies=False, build_dependencies=Fa
                   (CLIColour.GREEN, CLIColour.END))
             sys.exit(0)
 
-    if not os.path.isfile(os.path.join(gammaloop_root_path, 'dependencies', 'INSTALLED')):
-        print("\nGammaloop dependencies are %snot installed%s. Run '%sgammaloop --build_dependencies%s' to install them first. Exiting.\n" % (
-            CLIColour.RED, CLIColour.END, CLIColour.GREEN, CLIColour.END))
-        sys.exit(1)
+    # if not os.path.isfile(os.path.join(gammaloop_root_path, 'dependencies', 'INSTALLED')):
+    #     print("\nGammaloop dependencies are %snot installed%s. Run '%sgammaloop --build_dependencies%s' to install them first. Exiting.\n" % (
+    #         CLIColour.RED, CLIColour.END, CLIColour.GREEN, CLIColour.END))
+    #     sys.exit(1)
 
     venv_path = os.path.abspath(os.path.join(
         gammaloop_root_path, 'dependencies', 'venv'))

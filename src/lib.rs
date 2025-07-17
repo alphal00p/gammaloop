@@ -11,7 +11,7 @@
 pub mod api;
 
 pub mod cff;
-pub mod cli_functions;
+pub mod cli;
 pub mod cross_section;
 pub mod debug_info;
 pub mod evaluation_result;
@@ -75,6 +75,8 @@ use signature::ExternalSignature;
 use spenso::algebra::complex::Complex;
 use std::fmt::Display;
 use std::fs::File;
+use std::path::Path;
+use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use symbolica::evaluate::CompileOptions;
 use symbolica::evaluate::InlineASM;
@@ -381,9 +383,10 @@ impl Settings {
         Ok(())
     }
 
-    pub fn from_file(filename: &str) -> Result<Settings, Report> {
+    pub fn from_file(filename: impl AsRef<Path>) -> Result<Settings, Report> {
+        let filename = filename.as_ref();
         let f = File::open(filename)
-            .wrap_err_with(|| format!("Could not open settings file {}", filename))
+            .wrap_err_with(|| format!("Could not open settings file {}", filename.display()))
             .suggestion("Does the path exist?")?;
         serde_yaml::from_reader(f)
             .wrap_err("Could not parse settings file")
