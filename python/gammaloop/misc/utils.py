@@ -201,7 +201,7 @@ def expression_to_string_safe(expr: sb.Expression, canonical=False) -> str:
             multiplication_operator='*',
             square_brackets_for_function=False,
             num_exp_as_superscript=False,
-            latex=False)
+        )
         if canonical:
             return gl_rust.atom_to_canonical_string(expr_str)
         else:
