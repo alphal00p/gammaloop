@@ -16,8 +16,8 @@ Kinematics:
   externals:
     type: constant
     data:
-      momenta: null # Will be set automatically
-      helicities: null
+      momenta: [] # Will be set automatically
+      helicities: []
 Parameterization:
   mode: spherical
   mapping: linear
@@ -52,9 +52,10 @@ Stability:
       required_precision_for_im: 1.0e-10
       escalate_for_large_weight_threshold: -1.0
 sampling:
-  type: discrete_graph_sampling
-  subtype: tropical
-  upcast_on_failure: false
+  type: default
+  mode: spherical
+  mapping: linear
+  b: 1.0
 subtraction:
   local_ct_settings:
     uv_localisation:

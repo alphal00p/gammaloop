@@ -10,12 +10,14 @@ use crate::{
     numerator::{
         aind::{Aind, NewAind},
         ufo::UFO,
+        GlobalPrefactor,
     },
     symbolica_ext::CallSymbol,
     utils::{GS, W_},
 };
 use bitvec::vec::BitVec;
 use color_eyre::Result;
+use dot_parser::canonical::AttrStmt;
 use eyre::eyre;
 use itertools::Itertools;
 use linnet::{
@@ -33,7 +35,7 @@ use linnet::{
 use spenso::{
     contraction::Contract,
     iterators::IteratableTensor,
-    network::library::LibraryTensor,
+    network::library::{LibraryTensor, TensorLibraryData},
     structure::{
         representation::{Euclidean, RepName},
         slot::IsAbstractSlot,
@@ -95,6 +97,17 @@ pub trait StripParse {
 }
 
 impl StripParse for String {
+    fn strip_parse(&self) -> Atom {
+        let a = self
+            .as_str()
+            .strip_prefix('"')
+            .unwrap_or(&self)
+            .strip_suffix('"')
+            .unwrap_or(&self);
+        parse!(a)
+    }
+}
+impl StripParse for &String {
     fn strip_parse(&self) -> Atom {
         let a = self
             .as_str()
@@ -395,9 +408,61 @@ pub struct ParseGraph {
     pub graph: HedgeGraph<ParseEdge, ParseVertex, ParseHedge>,
 }
 
-#[derive(Clone, Default, Debug)]
+#[derive(Clone, Debug)]
 pub struct ParseData {
-    pub global_data: Vec<String>,
+    pub overall_factor: Atom,
+    pub multiplicity_factor: Atom,
+    pub color: Atom,
+    pub colorless: Atom,
+}
+
+impl Default for ParseData {
+    fn default() -> Self {
+        ParseData {
+            overall_factor: Atom::one(),
+            multiplicity_factor: Atom::one(),
+            color: Atom::one(),
+            colorless: Atom::one(),
+        }
+    }
+}
+
+impl ParseData {
+    pub fn with_overall_factor(self, overall_factor: Atom) -> Self {
+        ParseData {
+            overall_factor,
+            multiplicity_factor: self.multiplicity_factor,
+            color: self.color,
+            colorless: self.colorless,
+        }
+    }
+
+    pub fn with_multiplicity_factor(self, multiplicity_factor: Atom) -> Self {
+        ParseData {
+            overall_factor: self.overall_factor,
+            multiplicity_factor,
+            color: self.color,
+            colorless: self.colorless,
+        }
+    }
+
+    pub fn with_color(self, color: Atom) -> Self {
+        ParseData {
+            overall_factor: self.overall_factor,
+            multiplicity_factor: self.multiplicity_factor,
+            color,
+            colorless: self.colorless,
+        }
+    }
+
+    pub fn with_colorless(self, colorless: Atom) -> Self {
+        ParseData {
+            overall_factor: self.overall_factor,
+            multiplicity_factor: self.multiplicity_factor,
+            color: self.color,
+            colorless,
+        }
+    }
 }
 
 impl<'a> TryFrom<&'a Vec<dot_parser::canonical::AttrStmt<(String, String)>>> for ParseData {
@@ -405,9 +470,29 @@ impl<'a> TryFrom<&'a Vec<dot_parser::canonical::AttrStmt<(String, String)>>> for
     fn try_from(
         value: &'a Vec<dot_parser::canonical::AttrStmt<(String, String)>>,
     ) -> std::result::Result<Self, Self::Error> {
-        Ok(ParseData {
-            global_data: vec![],
-        })
+        let mut parse_data = ParseData::default();
+        for v in value {
+            if let AttrStmt::Graph((a, b)) = v {
+                // println!("Graph Attr:{a}={b}");
+                match a.as_str() {
+                    "overall_factor" => {
+                        parse_data = parse_data.with_overall_factor(b.strip_parse());
+                    }
+                    "multiplicity_factor" => {
+                        parse_data = parse_data.with_multiplicity_factor(b.strip_parse());
+                    }
+                    "color" => {
+                        parse_data = parse_data.with_color(b.strip_parse());
+                    }
+                    "colorless" => {
+                        parse_data = parse_data.with_colorless(b.strip_parse());
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        Ok(parse_data)
     }
 }
 
@@ -516,7 +601,13 @@ impl DOD for AtomView<'_> {
 impl Graph {
     pub fn from_parsed(graph: ParseGraph, model: &Model) -> Result<Self> {
         let hedge_order = graph.hedge_order(model)?;
-        let graph = graph.map_data_ref(
+        let multiplicity = graph.global_data.multiplicity_factor.clone();
+        let overall_factor = &graph.global_data.overall_factor;
+        let global_prefactor = GlobalPrefactor {
+            color: graph.global_data.color.clone(),
+            colorless: &graph.global_data.colorless * overall_factor,
+        };
+        let graph = graph.graph.map_data_ref(
             |_, _, v| v.clone(),
             |_, _, _, e| e.map(|e| e.clone()),
             NumIndices::parse(&graph),
@@ -717,7 +808,8 @@ impl Graph {
         }
         // loop_momentum_basis.loop_edges.iter_enumerated().sorted_by_key(|(i,v)|);
         Ok(Graph {
-            multiplicity: Atom::num(1),
+            multiplicity,
+            global_prefactor,
             name: "".to_string(),
             loop_momentum_basis,
             underlying,
@@ -874,11 +966,7 @@ pub mod test {
                 .dot_lmb(&g.underlying.full(), &g.loop_momentum_basis)
         );
 
-        let num = Numerator::<UnInit>::default().from_new_graph(
-            &g,
-            &g.underlying.full_filter(),
-            &GlobalPrefactor::default(),
-        );
+        let num = Numerator::<UnInit>::default().from_new_graph(&g, &g.underlying.full_filter());
 
         let expr = num.state.colorless.get_ref_linear(0.into()).unwrap();
 
@@ -973,11 +1061,7 @@ pub mod test {
                 .dot_lmb(&g.underlying.full(), &g.loop_momentum_basis)
         );
 
-        let num = Numerator::<UnInit>::default().from_new_graph(
-            &g,
-            &g.underlying.full_filter(),
-            &GlobalPrefactor::default(),
-        );
+        let num = Numerator::<UnInit>::default().from_new_graph(&g, &g.underlying.full_filter());
 
         let expr = num.state.colorless.get_ref_linear(0.into()).unwrap();
 
@@ -1032,11 +1116,17 @@ pub mod test {
     fn parse_lmbsetting() {
         let graphs = dot!(
             digraph G{
+                graph [
+                    multiplicity_factor = "1/2"
+                    overall_factor = "2*x"
+                    color = "spenso::t"
+                    colorless = "spenso::gamma"
+                ]
                 e1      [flow=sink]
                 e2      [flow=sink]
                 e3      [flow=source]
                 e4      [flow=source]
-                A [num="1"]
+                A [num="1" color_num="a"]
                 B [num="1"]
                 C [num="1"]
                 D [num="1"]
@@ -1063,11 +1153,7 @@ pub mod test {
                 .dot_lmb(&g.underlying.full(), &g.loop_momentum_basis)
         );
 
-        let num = Numerator::<UnInit>::default().from_new_graph(
-            &g,
-            &g.underlying.full_filter(),
-            &GlobalPrefactor::default(),
-        );
+        let num = Numerator::<UnInit>::default().from_new_graph(&g, &g.underlying.full_filter());
 
         let expr = num.state.colorless.get_ref_linear(0.into()).unwrap();
 

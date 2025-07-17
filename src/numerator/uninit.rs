@@ -3,14 +3,8 @@ use linnet::half_edge::subgraph::SubGraph;
 use log::debug;
 use spenso::{
     contraction::Contract,
-    structure::{
-        representation::Euclidean,
-        OrderedStructure, ScalarTensor,
-    },
-    tensors::{
-        data::StorageTensor,
-        parametric::ParamTensor,
-    },
+    structure::{representation::Euclidean, OrderedStructure, ScalarTensor},
+    tensors::{data::StorageTensor, parametric::ParamTensor},
 };
 use symbolica::atom::Atom;
 
@@ -39,12 +33,11 @@ impl Numerator<UnInit> {
         self,
         graph: &Graph,
         subgraph: &S,
-        prefactor: &GlobalPrefactor,
     ) -> Numerator<AppliedFeynmanRule> {
         debug!("Generating numerator for graph: {}", graph.name);
-        let mut colorless_builder = prefactor.colorless.clone();
+        let mut colorless_builder = graph.global_prefactor.colorless.clone() * &graph.multiplicity;
 
-        let mut colorful_builder = prefactor.color.clone();
+        let mut colorful_builder = graph.global_prefactor.color.clone();
 
         for (p, _, e) in graph.underlying.iter_edges_of(subgraph) {
             if p.is_paired() {

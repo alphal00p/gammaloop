@@ -3,9 +3,6 @@
 // For a full list of overridable settings, and general information on folder-specific settings,
 // see the documentation: https://zed.dev/docs/configuring-zed#folder-specific-settings
 {
-  "shell": {
-    "program": "bash"
-  },
   "inlay_hints": {
     "enabled": true,
     "show_type_hints": true,

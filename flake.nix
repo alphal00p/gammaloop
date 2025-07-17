@@ -49,7 +49,7 @@
 
         buildInputs =
           [
-            pkgs.mold
+            # pkgs.mold
             pkgs.gcc
             pkgs.clang
             # Add additional build inputs here
