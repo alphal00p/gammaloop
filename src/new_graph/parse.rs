@@ -790,15 +790,38 @@ impl Graph {
 
 #[macro_export]
 macro_rules! dot {
-    ($($code:tt)+) => {
-        Graph::from_string(stringify!($($code)+), &load_generic_model("sm"))
+    // ------------------ Internal Rules (Do not call directly) ------------------
+
+    (@internal [$($code:tt)*], $model:literal) => {
+
+        Graph::from_string(stringify!($($code)*), &load_generic_model($model))
     };
-    ($($code:tt)+, $model:expr) => {
-        Graph::from_string(stringify!($($code)+), $model)
+
+    // Internal rule: End of parsing, with an optional argument.
+    // This is matched when the accumulator has collected the code block and we hit a comma.
+    (@internal [$($code:tt)*], $model:expr) => {
+        Graph::from_string(stringify!($($code)*), $model)
     };
-    ($($code:tt)+, $model:literal) => {
-        let model = load_generic_model($model);
-        Graph::from_string(stringify!($($code)+), &model)
+
+    // Internal rule: End of parsing, no optional argument.
+    // This is matched when the accumulator has run out of tokens to process.
+    (@internal [$($code:tt)*]) => {
+        Graph::from_string(stringify!($($code)*), &load_generic_model("sm"))
+    };
+
+    // Internal rule: The "accumulator".
+    // It takes the next token ($next), adds it to the $code accumulator,
+    // and recursively calls the macro with the rest of the tokens ($($rest)*).
+    (@internal [$($code:tt)*] $next:tt $($rest:tt)*) => {
+        dot!(@internal [$($code)* $next] $($rest)*)
+    };
+
+    // ------------------ Public Entry Point ------------------
+
+    // This is the only rule users should call. It kicks off the process by
+    // invoking the internal rules with an empty accumulator `[]`.
+    ($($all_tokens:tt)+) => {
+        dot!(@internal [] $($all_tokens)+)
     };
 }
 
@@ -813,7 +836,10 @@ pub mod test {
         structure::{concrete_index::FlatIndex, HasName, HasStructure, PermutedStructure},
         tensors::{data::GetTensorData, symbolic::SymbolicTensor},
     };
-    use symbolica::atom::{Atom, FunctionBuilder};
+    use symbolica::{
+        atom::{Atom, FunctionBuilder},
+        parse_lit,
+    };
 
     use crate::{
         new_graph::LMBext,
@@ -915,10 +941,32 @@ pub mod test {
                 B -> e3   [pdg=1000]
                 C -> D    [pdg=1000, num="1"]
                 B -> e4   [pdg=1000]
-            },"scalars"
+            }
+
+            digraph G2{
+                e1      [flow=sink]
+                e2      [flow=sink]
+                e3      [flow=source]
+                e4      [flow=source]
+                A [num="1"]
+                B [num="1"]
+                C [num="1"]
+                D [num="1"]
+                e1 -> A  [pdg=1000]
+                e2 -> C  [pdg=1000]
+                C -> A    [pdg=1000, num="P(eid,spenso::mink(4,eid(0)))*Q(eid,spenso::mink(4,eid(0)))"]
+                A -> D    [pdg=1000, num="K(eid,spenso::mink(4,0))"]
+                D -> B    [pdg=1000, num="1"]
+                B -> e3   [pdg=1000]
+                C -> D    [pdg=1000, num="1"]
+                B -> e4   [pdg=1000]
+            }
+            ,
+            "scalars"
         ).unwrap();
 
-        let g = &graphs[0];
+        let g = &graphs[1];
+
         println!(
             "{}",
             g.underlying

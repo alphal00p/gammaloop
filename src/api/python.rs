@@ -620,6 +620,24 @@ impl PythonWorker {
         })
     }
 
+    #[pyo3(signature = (path,name=None))]
+    pub fn import_amplitude(&mut self, path: PathBuf, name: Option<String>) -> PyResult<()> {
+        let graphs = Graph::from_file(&path, &self.model)
+            .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
+        let name = name.unwrap_or_else(|| path.file_name().unwrap().to_string_lossy().into_owned());
+        let process = Process::from_graph_list(
+            name,
+            graphs,
+            GenerationType::Amplitude,
+            ProcessDefinition::new_empty(),
+            None,
+        )
+        .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
+
+        self.process_list.add_process(process);
+        Ok(())
+    }
+
     pub fn load_model(&mut self, file_path: &str) -> PyResult<()> {
         Model::from_file(String::from(file_path))
             .map_err(|e| exceptions::PyException::new_err(e.to_string()))
