@@ -1054,6 +1054,7 @@ class GammaLoop(object):
             return
         args = self.import_graphs_parser.parse_args(split_str_args(str_args))
 
+
         if self.model.is_empty():
             raise GammaLoopError(
                 "No model loaded. Please load a model first with 'import_model' command.")

@@ -127,15 +127,13 @@ impl<S: NumeratorState> Process<S> {
 }
 
 impl Process {
-    pub fn from_bare_graph_list(
+    pub fn from_graph_list(
         name: String,
-        bare_graphs: Vec<BareGraph>,
+        graphs: Vec<Graph>,
         generation_type: GenerationType,
         definition: ProcessDefinition,
         sub_classes: Option<Vec<Vec<String>>>,
     ) -> Result<Self> {
-        let graphs = bare_graphs.into_iter().map(Graph::from).collect_vec();
-
         match generation_type {
             GenerationType::Amplitude => {
                 let mut collection: ProcessCollection<PythonState> =
@@ -178,6 +176,17 @@ impl Process {
                 }
             }
         }
+    }
+
+    pub fn from_bare_graph_list(
+        name: String,
+        bare_graphs: Vec<BareGraph>,
+        generation_type: GenerationType,
+        definition: ProcessDefinition,
+        sub_classes: Option<Vec<Vec<String>>>,
+    ) -> Result<Self> {
+        let graphs = bare_graphs.into_iter().map(Graph::from).collect_vec();
+        Self::from_graph_list(name, graphs, generation_type, definition, sub_classes)
     }
 
     fn generate_integrands(&self, settings: Settings, model: &Model) -> HashMap<String, Integrand> {
