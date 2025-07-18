@@ -548,7 +548,7 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
             .set_edge_signatures(&self.graph.underlying)?;
 
         self.generate_cff()?;
-        self.build_evaluator(model, None);
+        self.build_evaluator(model);
         self.build_evaluator_for_orientations(model)?;
         self.build_tropical_sampler(settings)?;
         self.build_loop_momentum_bases();
@@ -629,21 +629,17 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
         result
     }
 
-    pub fn build_evaluator(&mut self, model: &Model, overwrite_atom: Option<Atom>) {
-        let ose_atom = if let Some(overwrite_atom) = overwrite_atom {
-            overwrite_atom
-        } else {
-            let atom_unsubstituted = self.derived_data.cff_expression.as_ref().unwrap().to_atom();
-            let atom = self
-                .derived_data
-                .cff_expression
-                .as_ref()
-                .unwrap()
-                .surfaces
-                .substitute_energies(&atom_unsubstituted, &[]);
+    pub fn build_evaluator(&mut self, model: &Model) {
+        let atom_unsubstituted = self.derived_data.cff_expression.as_ref().unwrap().to_atom();
+        let atom = self
+            .derived_data
+            .cff_expression
+            .as_ref()
+            .unwrap()
+            .surfaces
+            .substitute_energies(&atom_unsubstituted, &[]);
 
-            self.add_additional_factors_to_cff_atom(&atom)
-        };
+        let ose_atom = self.add_additional_factors_to_cff_atom(&atom);
 
         let replacements = self.graph.underlying.get_ose_replacements();
         let replaced_atom = ose_atom.replace_multiple(&replacements);
