@@ -542,14 +542,14 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
         Ok(())
     }
 
-    pub fn preprocess(&mut self, _model: &Model, settings: &ProcessSettings) -> Result<()> {
+    pub fn preprocess(&mut self, model: &Model, settings: &ProcessSettings) -> Result<()> {
         self.graph
             .loop_momentum_basis
             .set_edge_signatures(&self.graph.underlying)?;
 
         self.generate_cff()?;
-        self.build_evaluator(None);
-        self.build_evaluator_for_orientations()?;
+        self.build_evaluator(model, None);
+        self.build_evaluator_for_orientations(model)?;
         self.build_tropical_sampler(settings)?;
         self.build_loop_momentum_bases();
         self.build_multi_channeling_channels();
@@ -565,8 +565,50 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
         self.derived_data.multi_channeling_setup = Some(channels)
     }
 
-    fn get_params(&self) -> Vec<Atom> {
-        self.graph.underlying.get_energy_atoms()
+    fn get_params(&self, model: &Model) -> Vec<Atom> {
+        let mut params = vec![];
+
+        // all external energies
+        params.extend(self.graph.underlying.get_external_energy_atoms());
+
+        // spatial components of external momenta
+        for (pair, edge_id, _) in self.graph.underlying.iter_edges() {
+            match pair {
+                HedgePair::Unpaired { .. } => {
+                    let i64_id = Into::<usize>::into(edge_id) as i64;
+                    let external_spatial = [
+                        function!(GS.external_mom, i64_id, 1),
+                        function!(GS.external_mom, i64_id, 2),
+                        function!(GS.external_mom, i64_id, 3),
+                    ];
+                    params.extend(external_spatial);
+                }
+                _ => {}
+            }
+        }
+
+        // spatial EMR
+        for (pair, edge_id, _) in self.graph.underlying.iter_edges() {
+            match pair {
+                HedgePair::Paired { .. } => {
+                    let i64_id = Into::<usize>::into(edge_id) as i64;
+                    let emr_components = [
+                        function!(GS.emr_vec, i64_id, 1),
+                        function!(GS.emr_vec, i64_id, 2),
+                        function!(GS.emr_vec, i64_id, 3),
+                    ];
+                    params.extend(emr_components)
+                }
+                _ => {}
+            }
+        }
+
+        // add model parameters
+        params.extend(model.generate_params());
+        // add additional parameters
+        params.push(Atom::var(GS.m_uv));
+        params.push(Atom::var(GS.mu_r_sq));
+        params
     }
 
     fn get_function_map(&self) -> FunctionMap {
@@ -587,8 +629,8 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
         result
     }
 
-    pub fn build_evaluator(&mut self, overwrite_atom: Option<Atom>) {
-        let atom = if let Some(overwrite_atom) = overwrite_atom {
+    pub fn build_evaluator(&mut self, model: &Model, overwrite_atom: Option<Atom>) {
+        let ose_atom = if let Some(overwrite_atom) = overwrite_atom {
             overwrite_atom
         } else {
             let atom_unsubstituted = self.derived_data.cff_expression.as_ref().unwrap().to_atom();
@@ -603,10 +645,27 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
             self.add_additional_factors_to_cff_atom(&atom)
         };
 
-        let params = self.get_params();
+        let replacements = self.graph.underlying.get_ose_replacements();
+        let replaced_atom = ose_atom.replace_multiple(&replacements);
+        let replace_dots = replaced_atom
+            .replace(function!(
+                MS.dot,
+                function!(GS.emr_vec, W_.x_),
+                function!(GS.emr_vec, W_.y_)
+            ))
+            .with(
+                -(function!(GS.emr_vec, W_.x_, 1) * function!(GS.emr_vec, W_.y_, 1)
+                    + function!(GS.emr_vec, W_.x_, 2) * function!(GS.emr_vec, W_.y_, 2)
+                    + function!(GS.emr_vec, W_.x_, 3) * function!(GS.emr_vec, W_.y_, 3)),
+            );
+
+        let params = self.get_params(model);
+
         let function_map = self.get_function_map();
 
-        let mut tree = atom.to_evaluation_tree(&function_map, &params).unwrap();
+        let mut tree = replace_dots
+            .to_evaluation_tree(&function_map, &params)
+            .unwrap();
         tree.horner_scheme();
         tree.common_subexpression_elimination();
 
@@ -727,8 +786,8 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
         Ok(self.derived_data.tropical_sampler = Some(sampler))
     }
 
-    fn build_evaluator_for_orientations(&mut self) -> Result<()> {
-        let params = self.get_params();
+    fn build_evaluator_for_orientations(&mut self, model: &Model) -> Result<()> {
+        let params = self.get_params(model);
         let function_map = self.get_function_map();
 
         let evaluators = self
@@ -748,8 +807,23 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
                     .substitute_energies(orientation_atom_unsubstituted, &[]);
 
                 let atom = self.add_additional_factors_to_cff_atom(&atom_no_prefactor);
+                let replacements = self.graph.underlying.get_ose_replacements();
+                let replaced_atom = atom.replace_multiple(&replacements);
+                let replace_dots = replaced_atom
+                    .replace(function!(
+                        MS.dot,
+                        function!(GS.emr_vec, W_.x_),
+                        function!(GS.emr_vec, W_.y_)
+                    ))
+                    .with(
+                        -(function!(GS.emr_vec, W_.x_, 1) * function!(GS.emr_vec, W_.y_, 1)
+                            + function!(GS.emr_vec, W_.x_, 2) * function!(GS.emr_vec, W_.y_, 2)
+                            + function!(GS.emr_vec, W_.x_, 3) * function!(GS.emr_vec, W_.y_, 3)),
+                    );
 
-                let mut tree = atom.to_evaluation_tree(&function_map, &params).unwrap();
+                let mut tree = replace_dots
+                    .to_evaluation_tree(&function_map, &params)
+                    .unwrap();
                 tree.horner_scheme();
                 tree.common_subexpression_elimination();
 

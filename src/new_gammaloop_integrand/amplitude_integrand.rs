@@ -20,6 +20,9 @@ use super::{
     GraphTerm, LmbMultiChannelingSetup,
 };
 
+const HARD_CODED_M_UV: F<f64> = F(1000.0);
+const HARD_CODED_M_R_SQ: F<f64> = F(1000.0);
+
 #[derive(Clone)]
 pub struct AmplitudeGraphTerm {
     pub bare_cff_evaluator: GenericEvaluator,
@@ -36,6 +39,7 @@ impl AmplitudeGraphTerm {
         &self,
         momentum_sample: &MomentumSample<T>,
         settings: &Settings,
+        model_parameter_cache: &[Complex<F<T>>],
     ) -> Complex<F<T>> {
         if let Some(forced_orientations) = &settings.general.force_orientations {
             if momentum_sample.sample.orientation.is_none() {
@@ -44,7 +48,7 @@ impl AmplitudeGraphTerm {
                     .map(|orientation_usize| {
                         let mut new_sample = momentum_sample.clone();
                         new_sample.sample.orientation = Some(*orientation_usize);
-                        self.evaluate(&new_sample, settings)
+                        self.evaluate(&new_sample, settings, model_parameter_cache)
                     })
                     .fold(
                         Complex::new_re(momentum_sample.zero()),
@@ -53,17 +57,38 @@ impl AmplitudeGraphTerm {
             }
         }
 
-        let params = self
-            .graph
-            .underlying
-            .get_energy_cache(
-                momentum_sample.loop_moms(),
-                momentum_sample.external_moms(),
-                &self.graph.loop_momentum_basis,
-            )
-            .into_iter()
-            .map(|x| Complex::new_re(x.1))
+        let mut params = momentum_sample
+            .external_moms()
+            .iter()
+            .map(|x| Complex::new_re(x.temporal.value.clone()))
             .collect_vec();
+
+        params.extend(
+            momentum_sample
+                .external_moms()
+                .iter()
+                .flat_map(|x| x.spatial.clone().into_iter().map(|c| Complex::new_re(c))),
+        );
+
+        params.extend(
+            self.graph
+                .underlying
+                .get_emr_vec_cache(
+                    momentum_sample.loop_moms(),
+                    momentum_sample.external_moms(),
+                    &self.graph.loop_momentum_basis,
+                )
+                .into_iter()
+                .map(|q| Complex::new_re(q)),
+        );
+
+        params.extend(model_parameter_cache.into_iter().cloned());
+
+        let m_uv = F::from_ff64(HARD_CODED_M_UV);
+        params.push(Complex::new_re(m_uv));
+
+        let m_r_sq = F::from_ff64(HARD_CODED_M_R_SQ);
+        params.push(Complex::new_re(m_r_sq));
 
         let result = match momentum_sample.sample.orientation {
             Some(orientation_id) => {
@@ -100,7 +125,7 @@ impl GraphTerm for AmplitudeGraphTerm {
         settings: &Settings,
         model_parameter_cache: &[Complex<F<T>>],
     ) -> Complex<F<T>> {
-        self.evaluate(momentum_sample, settings)
+        self.evaluate(momentum_sample, settings, model_parameter_cache)
     }
 
     fn get_num_orientations(&self) -> usize {
