@@ -663,24 +663,7 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
 
         let function_map = self.get_function_map();
 
-        let mut tree = replace_dots
-            .to_evaluation_tree(&function_map, &params)
-            .unwrap();
-        tree.horner_scheme();
-        tree.common_subexpression_elimination();
-
-        let tree_double = tree
-            .map_coeff::<Complex<F<f64>>, _>(&|r| Complex::new(F(r.re.to_f64()), F(r.im.to_f64())));
-        let tree_quad = tree.map_coeff::<Complex<F<f128>>, _>(&|r| {
-            Complex::new(F((&r.re).into()), F((&r.im).into()))
-        });
-
-        let evaluator = GenericEvaluator {
-            f64_compiled: None,
-            f64_eager: RefCell::new(tree_double.linearize(Some(1))),
-            f128: RefCell::new(tree_quad.linearize(Some(1))),
-        };
-
+        let evaluator = GenericEvaluator::new(&replace_dots, &function_map, &params, Some(1));
         self.derived_data.bare_cff_evaluator = Some(evaluator)
     }
 
@@ -821,24 +804,7 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
                             + function!(GS.emr_vec, W_.x_, 3) * function!(GS.emr_vec, W_.y_, 3)),
                     );
 
-                let mut tree = replace_dots
-                    .to_evaluation_tree(&function_map, &params)
-                    .unwrap();
-                tree.horner_scheme();
-                tree.common_subexpression_elimination();
-
-                let tree_double = tree.map_coeff::<Complex<F<f64>>, _>(&|r| {
-                    Complex::new(F(r.re.to_f64()), F(r.im.to_f64()))
-                });
-                let tree_quad = tree.map_coeff::<Complex<F<f128>>, _>(&|r| {
-                    Complex::new(F((&r.re).into()), F((&r.im).into()))
-                });
-
-                GenericEvaluator {
-                    f64_compiled: None,
-                    f64_eager: RefCell::new(tree_double.linearize(Some(1))),
-                    f128: RefCell::new(tree_quad.linearize(Some(1))),
-                }
+                GenericEvaluator::new(&replace_dots, &function_map, &params, Some(1))
             })
             .collect();
 

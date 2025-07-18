@@ -20,7 +20,8 @@ use spenso::algebra::algebraic_traits::IsZero;
 use spenso::algebra::complex::Complex;
 use spenso::tensors::parametric::SerializableCompiledEvaluator;
 use std::time::Duration;
-use symbolica::evaluate::ExpressionEvaluator;
+use symbolica::atom::{Atom, AtomCore};
+use symbolica::evaluate::{ExpressionEvaluator, FunctionMap};
 use symbolica::numerical_integration::{ContinuousGrid, DiscreteGrid, Grid, Sample};
 use typed_index_collections::TiVec;
 pub mod amplitude_integrand;
@@ -180,6 +181,33 @@ pub struct GenericEvaluator {
     pub f64_compiled: Option<RefCell<SerializableCompiledEvaluator>>,
     pub f64_eager: RefCell<ExpressionEvaluator<Complex<F<f64>>>>,
     pub f128: RefCell<ExpressionEvaluator<Complex<F<f128>>>>,
+}
+
+impl GenericEvaluator {
+    pub fn new(
+        atom: &Atom,
+        fn_map: &FunctionMap,
+        params: &[Atom],
+        cpe_rounds: Option<usize>,
+    ) -> Self {
+        let mut tree = atom.to_evaluation_tree(&fn_map, &params).unwrap();
+        tree.horner_scheme();
+        tree.common_subexpression_elimination();
+
+        let tree_double = tree
+            .map_coeff::<Complex<F<f64>>, _>(&|r| Complex::new(F(r.re.to_f64()), F(r.im.to_f64())));
+        let tree_quad = tree.map_coeff::<Complex<F<f128>>, _>(&|r| {
+            Complex::new(F((&r.re).into()), F((&r.im).into()))
+        });
+
+        let evaluator = GenericEvaluator {
+            f64_compiled: None,
+            f64_eager: RefCell::new(tree_double.linearize(cpe_rounds)),
+            f128: RefCell::new(tree_quad.linearize(cpe_rounds)),
+        };
+
+        evaluator
+    }
 }
 
 pub trait GenericEvaluatorFloat<T: FloatLike = Self> {
