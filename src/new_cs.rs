@@ -359,7 +359,7 @@ impl<S: NumeratorState> ProcessCollection<S> {
             Self::Amplitudes(amplitudes) => {
                 let name = "default".to_owned();
                 for amplitude in amplitudes {
-                    let integrand = amplitude.generate_integrand(settings.clone());
+                    let integrand = amplitude.generate_integrand(settings.clone(), model);
                     result.insert(name.clone(), integrand);
                 }
             }
@@ -432,7 +432,7 @@ impl<S: NumeratorState> Amplitude<S> {
         Ok(())
     }
 
-    pub fn generate_integrand(&self, settings: Settings) -> Integrand {
+    pub fn generate_integrand(&self, settings: Settings, model: &Model) -> Integrand {
         let terms = self
             .graphs
             .iter()
@@ -463,6 +463,7 @@ impl<S: NumeratorState> Amplitude<S> {
             polarizations,
             graph_terms: terms,
             external_signature: self.external_signature.clone(),
+            model_parameter_cache: model.generate_values(),
         };
 
         Integrand::NewIntegrand(NewIntegrand::Amplitude(amplitude_integrand))
@@ -609,6 +610,7 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
         // add additional parameters
         params.push(Atom::var(GS.m_uv));
         params.push(Atom::var(GS.mu_r_sq));
+
         params
     }
 
@@ -895,7 +897,9 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
                 -(function!(GS.emr_vec, W_.x_, 1) * function!(GS.emr_vec, W_.y_, 1)
                     + function!(GS.emr_vec, W_.x_, 2) * function!(GS.emr_vec, W_.y_, 2)
                     + function!(GS.emr_vec, W_.x_, 3) * function!(GS.emr_vec, W_.y_, 3)),
-            );
+            )
+            .replace(parse!("ZERO"))
+            .with(Atom::new());
 
         replace_dots
     }
