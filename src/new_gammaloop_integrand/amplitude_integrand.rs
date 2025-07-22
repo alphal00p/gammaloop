@@ -144,6 +144,7 @@ pub struct AmplitudeIntegrand {
     pub polarizations: Vec<Polarizations>,
     pub graph_terms: Vec<AmplitudeGraphTerm>,
     pub external_signature: SignatureLike<ExternalIndex>,
+    pub model_parameter_cache: Vec<Complex<F<f64>>>,
 }
 
 impl GammaloopIntegrand for AmplitudeIntegrand {
@@ -174,7 +175,10 @@ impl GammaloopIntegrand for AmplitudeIntegrand {
     }
 
     fn get_model_parameter_cache<T: FloatLike>(&self) -> Vec<Complex<F<T>>> {
-        vec![]
+        self.model_parameter_cache
+            .iter()
+            .map(|x| Complex::new(F::from_ff64(x.re), F::from_ff64(x.im)))
+            .collect()
     }
 }
 
