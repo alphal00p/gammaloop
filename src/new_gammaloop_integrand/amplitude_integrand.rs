@@ -57,6 +57,11 @@ impl AmplitudeGraphTerm {
             }
         }
 
+        if settings.general.debug > 0 {
+            println!("loop_momenta: {:?}", momentum_sample.loop_moms());
+            println!("external_momenta: {:?}", momentum_sample.external_moms());
+        }
+
         let mut params = momentum_sample
             .external_moms()
             .iter()
@@ -101,6 +106,10 @@ impl AmplitudeGraphTerm {
                 <T as GenericEvaluatorFloat>::get_evaluator(evaluator)(&params)
             }
         };
+
+        if settings.general.debug > 0 {
+            println!("result of graph {}: {:16e}", self.graph.name, result);
+        }
 
         result
     }

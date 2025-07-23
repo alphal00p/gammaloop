@@ -28,6 +28,7 @@ use crate::{
         expression::{AmplitudeOrientationID, CFFExpression, OrientationData},
         generation::generate_cff_expression,
     },
+    cli::repl,
     model::ArcParticle,
     momentum_sample::ExternalIndex,
     new_gammaloop_integrand::{
@@ -37,12 +38,12 @@ use crate::{
     },
     new_graph::{
         get_cff_inverse_energy_product_impl,
-        parse::{ParseData, ParseGraph},
+        parse::{self, ParseData, ParseGraph},
         LMBext, LmbIndex, LoopMomentumBasis,
     },
     signature::SignatureLike,
     utils::{external_energy_atom_from_index, f128, ose_atom_from_index, GS, W_},
-    uv::UltravioletGraph,
+    uv::{spenso_lor_atom, UltravioletGraph},
     GammaLoopContext, GammaLoopContextContainer,
 };
 use eyre::eyre;
@@ -50,7 +51,7 @@ use itertools::Itertools;
 use linnet::{
     dot_parser::{DotEdgeData, DotHedgeData, DotVertexData, HedgeGraphSet},
     half_edge::{
-        involution::{Flow, HedgePair, Orientation},
+        involution::{EdgeIndex, Flow, HedgePair, Orientation},
         nodestore::NodeStorageVec,
         subgraph::{HedgeNode, Inclusion, InternalSubGraph, OrientedCut, SubGraph},
     },
@@ -673,7 +674,7 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
             for (_p, edge_index, d) in self
                 .graph
                 .underlying
-                .iter_edges_of(&!self.graph.underlying.external_filter())
+                .iter_edges_of(&self.graph.underlying.external_filter())
             {
                 let edge_id = usize::from(edge_index) as i64;
                 orientation_expr = (orientation_expr * &d.data.spin_num)
@@ -870,24 +871,17 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
                 .replace(function!(GS.emr_vec, function!(GS.emr_mom, W_.x_)))
                 .with(function!(GS.emr_vec, W_.x_));
 
-            // set the external spatial parts
-            for (_p, edge_index, _d) in self
-                .graph
-                .underlying
-                .iter_edges_of(&self.graph.underlying.external_filter())
-            {
-                let edge_id = usize::from(edge_index) as i64;
-                orientation_expr = orientation_expr
-                    .replace(function!(GS.emr_vec, edge_id, W_.x_))
-                    .with(function!(GS.external_mom, edge_id, W_.x_));
-            }
+            orientation_expr = orientation_expr.replace(parse!("ZERO")).with(Atom::new());
 
+            println!("orientation: {:?}", orientation_data.orientation);
+            println!("orientation_expr: {}", orientation_expr);
+            //panic!("atom test: {}", spenso_lor_atom(3, 20, GS.dim));
             ose_atom += orientation_expr;
         }
 
         let replacements = self.graph.underlying.get_ose_replacements();
         let replaced_atom = ose_atom.replace_multiple(&replacements);
-        let replace_dots = replaced_atom
+        let mut replace_dots = replaced_atom
             .replace(function!(
                 MS.dot,
                 function!(GS.emr_vec, W_.x_),
@@ -900,6 +894,19 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
             )
             .replace(parse!("ZERO"))
             .with(Atom::new());
+
+        // set the external spatial parts
+        for (_p, edge_index, _d) in self
+            .graph
+            .underlying
+            .iter_edges_of(&self.graph.underlying.external_filter())
+        {
+            let edge_id = usize::from(edge_index) as i64;
+
+            replace_dots = replace_dots
+                .replace(function!(GS.emr_vec, edge_id, W_.x_))
+                .with(function!(GS.external_mom, edge_id, W_.x_));
+        }
 
         replace_dots
     }

@@ -1222,8 +1222,9 @@ impl PythonWorker {
                 Ok((res.re.0, res.im.0))
             }
             None => Err(exceptions::PyException::new_err(format!(
-                "Could not find integrand {}",
-                integrand
+                "Could not find integrand {} available integrands: {:?}",
+                integrand,
+                self.integrands.keys().collect::<Vec<&String>>()
             ))),
         }
     }
@@ -1520,6 +1521,7 @@ impl PythonWorker {
     pub fn generate_integrands(&mut self, settings_yaml_str: &str) {
         let settings =
             serde_yaml::from_str::<Settings>(settings_yaml_str).expect("Could not parse settings");
+        println!("calling generate_integrands");
 
         let integrands = self.process_list.generate_integrands(settings, &self.model);
 

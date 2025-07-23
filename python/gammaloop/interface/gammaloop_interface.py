@@ -1038,10 +1038,11 @@ class GammaLoop(object):
         logger.info("A total of %s Graphs successfully exported to file '%s'.",
                     len(graphs), args.output_path)
 
+    import_amplitude_from_dot_parser = ArgumentParser(
+        prog='import_amplitude_from_dot')
+    import_amplitude_from_dot_parser.add_argument(
+        'file_path', metavar='file_path', type=str, help='Path to the qgraph python output to load')
 
-
-    import_amplitude_from_dot_parser = ArgumentParser(prog='import_amplitude_from_dot')
-    import_amplitude_from_dot_parser.add_argument('file_path', metavar='file_path', type=str, help='Path to the qgraph python output to load')
     def do_import_amplitude_from_dot(self, str_args: str) -> None:
         if str_args == 'help':
             self.import_graphs_parser.print_help()
@@ -1052,7 +1053,6 @@ class GammaLoop(object):
 
         file_path = Path(os.path.abspath(args.file_path))
         self.rust_worker.import_amplitude(file_path)
-
 
     # import_graphs command
     import_graphs_parser = ArgumentParser(prog='import_graphs')
@@ -1070,7 +1070,6 @@ class GammaLoop(object):
             self.import_graphs_parser.print_help()
             return
         args = self.import_graphs_parser.parse_args(split_str_args(str_args))
-
 
         if self.model.is_empty():
             raise GammaLoopError(
@@ -1584,19 +1583,20 @@ class GammaLoop(object):
                                 default=False, help='Inspect the max weight point of the previous run')
 
     def do_inspect(self, str_args: str) -> Dict[str, Any]:
+        settings = yaml.dump(self.config["run_settings"])
+        self.rust_worker.generate_integrands(settings)
+
         if str_args == 'help':
             self.inspect_parser.print_help()
             return {}
 
-        settings = yaml.dump(self.config["run_settings"])
-        self.rust_worker.generate_integrands(settings)
         args = self.inspect_parser.parse_args(split_str_args(str_args))
 
         # if self.launched_output is None:
         #    raise GammaLoopError(
         #        "No output launched. Please launch an output first with 'launch' command.")
 
-        self.sync_worker_with_output(args.no_sync)
+        # self.sync_worker_with_output(args.no_sync)
 
         log_res: dict[str, Any] = {}
         if args.last_max_weight:
