@@ -34,7 +34,7 @@ use crate::{
     new_gammaloop_integrand::{
         amplitude_integrand::{AmplitudeGraphTerm, AmplitudeIntegrand},
         cross_section_integrand::OrientationEvaluator,
-        GenericEvaluator, LmbMultiChannelingSetup,
+        GenericEvaluator, LmbMultiChannelingSetup, ParamBuilder,
     },
     new_graph::{
         get_cff_inverse_energy_product_impl,
@@ -569,50 +569,58 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
     }
 
     fn get_params(&self, model: &Model) -> Vec<Atom> {
-        let mut params = vec![];
+        // the float type does not matter here
+        let mut param_builder = ParamBuilder::<f64>::new();
 
-        // all external energies
-        params.extend(self.graph.underlying.get_external_energy_atoms());
+        // this is wrong if we allow for vacuum graphs
+        param_builder.external_energies_atom(self.graph.underlying.get_external_energy_atoms());
 
         // spatial components of external momenta
-        for (pair, edge_id, _) in self.graph.underlying.iter_edges() {
-            match pair {
-                HedgePair::Unpaired { .. } => {
-                    let i64_id = Into::<usize>::into(edge_id) as i64;
-                    let external_spatial = [
-                        function!(GS.external_mom, i64_id, 1),
-                        function!(GS.external_mom, i64_id, 2),
-                        function!(GS.external_mom, i64_id, 3),
-                    ];
-                    params.extend(external_spatial);
-                }
-                _ => {}
-            }
-        }
+        param_builder.external_spatial_atom(
+            self.graph
+                .underlying
+                .iter_edges()
+                .flat_map(|(pair, edge_id, _)| {
+                    if let HedgePair::Unpaired { .. } = pair {
+                        let i64_id = Into::<usize>::into(edge_id) as i64;
+                        vec![
+                            function!(GS.external_mom, i64_id, 1),
+                            function!(GS.external_mom, i64_id, 2),
+                            function!(GS.external_mom, i64_id, 3),
+                        ]
+                    } else {
+                        vec![]
+                    }
+                })
+                .collect(),
+        );
 
         // spatial EMR
-        for (pair, edge_id, _) in self.graph.underlying.iter_edges() {
-            match pair {
-                HedgePair::Paired { .. } => {
-                    let i64_id = Into::<usize>::into(edge_id) as i64;
-                    let emr_components = [
-                        function!(GS.emr_vec, i64_id, 1),
-                        function!(GS.emr_vec, i64_id, 2),
-                        function!(GS.emr_vec, i64_id, 3),
-                    ];
-                    params.extend(emr_components)
-                }
-                _ => {}
-            }
-        }
+        param_builder.emr_spatial_atom(
+            self.graph
+                .underlying
+                .iter_edges()
+                .flat_map(|(pair, edge_id, _)| {
+                    if let HedgePair::Paired { .. } = pair {
+                        let i64_id = Into::<usize>::into(edge_id) as i64;
+                        vec![
+                            function!(GS.emr_vec, i64_id, 1),
+                            function!(GS.emr_vec, i64_id, 2),
+                            function!(GS.emr_vec, i64_id, 3),
+                        ]
+                    } else {
+                        vec![]
+                    }
+                })
+                .collect(),
+        );
 
-        // add model parameters
-        params.extend(model.generate_params());
-        // add additional parameters
-        params.push(Atom::var(GS.m_uv));
-        params.push(Atom::var(GS.mu_r_sq));
+        param_builder.model_parameters_atom(model.generate_params());
 
-        params
+        param_builder.m_uv_atom(Atom::var(GS.m_uv));
+
+        param_builder.mu_r_sq_atom(Atom::var(GS.mu_r_sq));
+        param_builder.build_params_amplitude().unwrap()
     }
 
     fn get_function_map(&self) -> FunctionMap {
