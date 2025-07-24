@@ -156,7 +156,7 @@ impl CrossSectionGraphTerm {
                 ir_limit
             ))?;
 
-        let model_parameter_cache = model.generate_values();
+        let model_parameter_cache = model.generate_values::<f128>();
 
         let momenta = ir_limit.get_momenta(rng, settings, approach_settings);
         let non_limit_loops = lmb
@@ -226,7 +226,7 @@ impl CrossSectionGraphTerm {
                     LambdaPointEval {
                         lambda_point,
                         value: self
-                            .evaluate(&sample, settings, &model_parameter_cache)
+                            .evaluate(&sample, settings, todo!())
                             .norm_squared()
                             .sqrt(),
                     }

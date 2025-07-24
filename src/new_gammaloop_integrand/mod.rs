@@ -3,7 +3,7 @@ use std::cell::RefCell;
 use crate::evaluation_result::{EvaluationMetaData, EvaluationResult};
 use crate::integrands::{HasIntegrand, Integrand};
 use crate::integrate::UserData;
-use crate::momentum::Rotation;
+use crate::momentum::{self, Rotation};
 use crate::momentum_sample::{BareMomentumSample, LoopMomenta, MomentumSample};
 use crate::new_graph::{FeynmanGraph, Graph, LmbIndex, LoopMomentumBasis};
 use crate::utils::{format_for_compare_digits, get_n_dim_for_n_loop_momenta, FloatLike, F};
@@ -34,6 +34,10 @@ use crate::{
     IntegratorSettings, Polarizations, Precision, SamplingSettings, Settings,
     StabilityLevelSetting, StabilitySettings,
 };
+use eyre::Result;
+
+const HARD_CODED_M_UV: F<f64> = F(1000.0);
+const HARD_CODED_M_R_SQ: F<f64> = F(1000.0);
 
 #[derive(Clone)]
 #[enum_dispatch(HasIntegrand)]
@@ -447,7 +451,7 @@ pub trait GraphTerm {
         &self,
         sample: &MomentumSample<T>,
         settings: &Settings,
-        model_parameter_cache: &[Complex<F<T>>],
+        param_builder: ParamBuilder<T>,
     ) -> Complex<F<T>>;
 
     fn get_multi_channeling_setup(&self) -> &LmbMultiChannelingSetup;
@@ -460,6 +464,7 @@ pub trait GraphTerm {
 fn evaluate_all_rotations<T: FloatLike, I: GammaloopIntegrand>(
     integrand: &I,
     gammaloop_sample: &GammaLoopSample<T>,
+    param_builder: ParamBuilder<T>,
 ) -> (Vec<Complex<F<f64>>>, Duration) {
     // rotate the momenta for the stability tests.
     let gammaloop_samples: Vec<_> = integrand
@@ -470,7 +475,9 @@ fn evaluate_all_rotations<T: FloatLike, I: GammaloopIntegrand>(
     let start_time = std::time::Instant::now();
     let evaluation_results = gammaloop_samples
         .iter()
-        .map(|gammaloop_sample| evaluate_single_rotation(integrand, gammaloop_sample))
+        .map(|gammaloop_sample| {
+            evaluate_single_rotation(integrand, gammaloop_sample, param_builder.clone())
+        })
         .collect_vec();
     let duration = start_time.elapsed() / gammaloop_samples.len() as u32;
 
@@ -480,16 +487,17 @@ fn evaluate_all_rotations<T: FloatLike, I: GammaloopIntegrand>(
 fn evaluate_single_rotation<T: FloatLike, I: GammaloopIntegrand>(
     integrand: &I,
     gammaloop_sample: &GammaLoopSample<T>,
+    mut param_builder: ParamBuilder<T>,
 ) -> Complex<F<f64>> {
+    // this is the earliest point where we can set the external momenta
+    param_builder.external_energies_value(&gammaloop_sample.get_default_sample());
+    param_builder.external_spatial_value(&gammaloop_sample.get_default_sample());
+
     let result = match &gammaloop_sample {
         GammaLoopSample::Default(sample) => integrand
             .get_terms()
             .map(|term: &I::G| {
-                term.evaluate(
-                    sample,
-                    integrand.get_settings(),
-                    &integrand.get_model_parameter_cache(),
-                )
+                term.evaluate(sample, integrand.get_settings(), param_builder.clone())
             })
             .fold(
                 Complex::new_re(gammaloop_sample.get_default_sample().zero()),
@@ -514,7 +522,7 @@ fn evaluate_single_rotation<T: FloatLike, I: GammaloopIntegrand>(
                             * term.evaluate(
                                 &reparameterized_sample,
                                 integrand.get_settings(),
-                                &integrand.get_model_parameter_cache(),
+                                param_builder.clone(),
                             )
                     })
                     .fold(
@@ -529,11 +537,9 @@ fn evaluate_single_rotation<T: FloatLike, I: GammaloopIntegrand>(
         GammaLoopSample::DiscreteGraph { graph_id, sample } => {
             let graph_term = integrand.get_graph(*graph_id);
             match sample {
-                DiscreteGraphSample::Default(sample) => graph_term.evaluate(
-                    sample,
-                    integrand.get_settings(),
-                    &integrand.get_model_parameter_cache(),
-                ),
+                DiscreteGraphSample::Default(sample) => {
+                    graph_term.evaluate(sample, integrand.get_settings(), param_builder)
+                }
                 DiscreteGraphSample::DiscreteMultiChanneling {
                     alpha,
                     channel_id,
@@ -553,7 +559,7 @@ fn evaluate_single_rotation<T: FloatLike, I: GammaloopIntegrand>(
                         * graph_term.evaluate(
                             &reparameterized_sample,
                             integrand.get_settings(),
-                            &integrand.get_model_parameter_cache(),
+                            param_builder,
                         )
                 }
                 DiscreteGraphSample::MultiChanneling { alpha, sample } => {
@@ -573,7 +579,7 @@ fn evaluate_single_rotation<T: FloatLike, I: GammaloopIntegrand>(
                                 * graph_term.evaluate(
                                     &reparameterized_sample,
                                     integrand.get_settings(),
-                                    &integrand.get_model_parameter_cache(),
+                                    param_builder.clone(),
                                 )
                         })
                         .fold(
@@ -600,11 +606,7 @@ fn evaluate_single_rotation<T: FloatLike, I: GammaloopIntegrand>(
                         });
 
                     Complex::new_re(prefactor)
-                        * graph_term.evaluate(
-                            sample,
-                            integrand.get_settings(),
-                            &integrand.get_model_parameter_cache(),
-                        )
+                        * graph_term.evaluate(sample, integrand.get_settings(), param_builder)
                 }
             }
         }
@@ -762,34 +764,47 @@ fn evaluate_sample<I: GammaloopIntegrand>(
     for stability_level in stability_iterator.into_iter() {
         let before_parameterization = std::time::Instant::now();
 
-        let ((results, ltd_evaluation_time), parameterization_time) =
-            match stability_level.precision {
-                Precision::Double => {
-                    if let Ok(gammaloop_sample) = parameterize::<f64, I>(sample, integrand) {
-                        let parameterization_time = before_parameterization.elapsed();
-                        (
-                            evaluate_all_rotations(integrand, &gammaloop_sample),
-                            parameterization_time,
-                        )
-                    } else {
-                        continue;
-                    }
+        let ((results, ltd_evaluation_time), parameterization_time) = match stability_level
+            .precision
+        {
+            Precision::Double => {
+                let mut param_builder = ParamBuilder::<f64>::new();
+
+                param_builder.m_uv_value(Complex::new_re(HARD_CODED_M_UV));
+                param_builder.mu_r_sq_value(Complex::new_re(HARD_CODED_M_R_SQ));
+                param_builder.model_parameters_value(integrand.get_model_parameter_cache::<f64>());
+
+                if let Ok(gammaloop_sample) = parameterize::<f64, I>(sample, integrand) {
+                    let parameterization_time = before_parameterization.elapsed();
+                    (
+                        evaluate_all_rotations(integrand, &gammaloop_sample, param_builder),
+                        parameterization_time,
+                    )
+                } else {
+                    continue;
                 }
-                Precision::Quad => {
-                    if let Ok(gammaloop_sample) = parameterize::<f128, I>(sample, integrand) {
-                        let parameterization_time = before_parameterization.elapsed();
-                        (
-                            evaluate_all_rotations(integrand, &gammaloop_sample),
-                            parameterization_time,
-                        )
-                    } else {
-                        continue;
-                    }
+            }
+            Precision::Quad => {
+                let mut param_builder = ParamBuilder::<f128>::new();
+
+                param_builder.m_uv_value(Complex::new_re(F::from_ff64(HARD_CODED_M_UV)));
+                param_builder.mu_r_sq_value(Complex::new_re(F::from_ff64(HARD_CODED_M_R_SQ)));
+                param_builder.model_parameters_value(integrand.get_model_parameter_cache::<f128>());
+
+                if let Ok(gammaloop_sample) = parameterize::<f128, I>(sample, integrand) {
+                    let parameterization_time = before_parameterization.elapsed();
+                    (
+                        evaluate_all_rotations(integrand, &gammaloop_sample, param_builder),
+                        parameterization_time,
+                    )
+                } else {
+                    continue;
                 }
-                Precision::Arb => {
-                    todo!()
-                }
-            };
+            }
+            Precision::Arb => {
+                todo!()
+            }
+        };
 
         let (average_result, is_stable) = stability_check(
             integrand.get_settings(),
@@ -899,5 +914,191 @@ fn evaluate_sample<I: GammaloopIntegrand>(
                 highest_precision: crate::Precision::Double,
             },
         }
+    }
+}
+
+#[derive(Clone)]
+pub struct ParamBuilder<T: FloatLike> {
+    m_uv: (Option<Vec<Atom>>, Option<Vec<Complex<F<T>>>>),
+    mu_r_sq: (Option<Vec<Atom>>, Option<Vec<Complex<F<T>>>>),
+    model_parameters: (Option<Vec<Atom>>, Option<Vec<Complex<F<T>>>>),
+    external_energies: (Option<Vec<Atom>>, Option<Vec<Complex<F<T>>>>),
+    external_spatial: (Option<Vec<Atom>>, Option<Vec<Complex<F<T>>>>),
+    emr_spatial: (Option<Vec<Atom>>, Option<Vec<Complex<F<T>>>>),
+    tstar: (Option<Vec<Atom>>, Option<Vec<Complex<F<T>>>>),
+    h_function: (Option<Vec<Atom>>, Option<Vec<Complex<F<T>>>>),
+    derivative_at_tstar: (Option<Vec<Atom>>, Option<Vec<Complex<F<T>>>>),
+}
+
+impl<T: FloatLike> ParamBuilder<T> {
+    fn into_iter_amplitude(
+        self,
+    ) -> impl Iterator<Item = (Option<Vec<Atom>>, Option<Vec<Complex<F<T>>>>)> {
+        [
+            self.m_uv,
+            self.mu_r_sq,
+            self.model_parameters,
+            self.external_energies,
+            self.external_spatial,
+            self.emr_spatial,
+        ]
+        .into_iter()
+    }
+
+    fn into_iter_cs(self) -> impl Iterator<Item = (Option<Vec<Atom>>, Option<Vec<Complex<F<T>>>>)> {
+        [
+            self.m_uv,
+            self.mu_r_sq,
+            self.model_parameters,
+            self.external_energies,
+            self.external_spatial,
+            self.emr_spatial,
+            self.tstar,
+            self.h_function,
+            self.derivative_at_tstar,
+        ]
+        .into_iter()
+    }
+
+    pub fn build_params_amplitude(self) -> Result<Vec<Atom>> {
+        let mut params = Vec::with_capacity(100);
+        for (atom, _) in self.into_iter_amplitude() {
+            if let Some(atoms) = atom {
+                params.extend(atoms);
+            } else {
+                return Err(eyre::eyre!("Missing required parameter atoms"));
+            }
+        }
+        Ok(params)
+    }
+
+    pub fn build_values_amplitude(self) -> Result<Vec<Complex<F<T>>>> {
+        let mut values = Vec::with_capacity(100);
+        for (_, value) in self.into_iter_amplitude() {
+            if let Some(value_vec) = value {
+                values.extend(value_vec);
+            } else {
+                return Err(eyre::eyre!("Missing required parameter values"));
+            }
+        }
+        Ok(values)
+    }
+
+    pub fn build_params_cs(self) -> Result<Vec<Atom>> {
+        let mut params = Vec::with_capacity(100);
+        for (atom, _) in self.into_iter_cs() {
+            if let Some(atoms) = atom {
+                params.extend(atoms);
+            } else {
+                return Err(eyre::eyre!("Missing required parameter atoms"));
+            }
+        }
+        Ok(params)
+    }
+
+    pub fn build_values_cs(self) -> Result<Vec<Complex<F<T>>>> {
+        let mut values = Vec::with_capacity(100);
+        for (_, value) in self.into_iter_cs() {
+            if let Some(value_vec) = value {
+                values.extend(value_vec);
+            } else {
+                return Err(eyre::eyre!("Missing required parameter values"));
+            }
+        }
+        Ok(values)
+    }
+
+    pub fn new() -> Self {
+        Self {
+            m_uv: (None, None),
+            mu_r_sq: (None, None),
+            model_parameters: (None, None),
+            external_energies: (None, None),
+            external_spatial: (None, None),
+            emr_spatial: (None, None),
+            tstar: (None, None),
+            h_function: (None, None),
+            derivative_at_tstar: (None, None),
+        }
+    }
+
+    pub fn m_uv_atom(&mut self, m_uv: Atom) {
+        self.m_uv.0 = Some(vec![m_uv]);
+    }
+
+    pub fn m_uv_value(&mut self, m_uv: Complex<F<T>>) {
+        self.m_uv.1 = Some(vec![m_uv]);
+    }
+
+    pub fn mu_r_sq_atom(&mut self, mu_r_sq: Atom) {
+        self.mu_r_sq.0 = Some(vec![mu_r_sq]);
+    }
+
+    pub fn mu_r_sq_value(&mut self, mu_r_sq: Complex<F<T>>) {
+        self.mu_r_sq.1.get_or_insert_with(Vec::new).push(mu_r_sq);
+    }
+
+    pub fn model_parameters_atom(&mut self, model_parameters: Vec<Atom>) {
+        self.model_parameters.0 = Some(model_parameters);
+    }
+
+    pub fn model_parameters_value(&mut self, model_parameters: Vec<Complex<F<T>>>) {
+        self.model_parameters.1 = Some(model_parameters);
+    }
+
+    pub fn external_energies_atom(&mut self, external_energies: Vec<Atom>) {
+        self.external_energies.0 = Some(external_energies);
+    }
+
+    pub fn external_energies_value(&mut self, momentum_sample: &MomentumSample<T>) {
+        self.external_energies.1 = Some(
+            momentum_sample
+                .external_moms()
+                .iter()
+                .map(|x| Complex::new_re(x.temporal.value.clone()))
+                .collect_vec(),
+        );
+    }
+
+    pub fn external_spatial_atom(&mut self, external_spatial: Vec<Atom>) {
+        self.external_spatial.0 = Some(external_spatial);
+    }
+
+    pub fn external_spatial_value(&mut self, momentum_sample: &MomentumSample<T>) {
+        self.external_spatial.1 = Some(
+            momentum_sample
+                .external_moms()
+                .iter()
+                .flat_map(|x| x.spatial.clone().into_iter().map(|c| Complex::new_re(c)))
+                .collect_vec(),
+        );
+    }
+
+    pub fn emr_spatial_atom(&mut self, emr_spatial: Vec<Atom>) {
+        self.emr_spatial.0 = Some(emr_spatial);
+    }
+
+    pub fn emr_spatial_value(&mut self, emr_spatial: Vec<Complex<F<T>>>) {
+        self.emr_spatial.1 = Some(emr_spatial);
+    }
+
+    pub fn tstar_atom(&mut self, tstar: Atom) {
+        self.tstar.0 = Some(vec![tstar]);
+    }
+
+    pub fn tstar_value(&mut self, tstar: Complex<F<T>>) {
+        self.tstar.1 = Some(vec![tstar]);
+    }
+    pub fn h_function_atom(&mut self, h_function: Atom) {
+        self.h_function.0 = Some(vec![h_function]);
+    }
+    pub fn h_function_value(&mut self, h_function: Complex<F<T>>) {
+        self.h_function.1 = Some(vec![h_function]);
+    }
+    pub fn derivative_at_tstar_atom(&mut self, derivative_at_tstar: Atom) {
+        self.derivative_at_tstar.0 = Some(vec![derivative_at_tstar]);
+    }
+    pub fn derivative_at_tstar_value(&mut self, derivative_at_tstar: Complex<F<T>>) {
+        self.derivative_at_tstar.1 = Some(vec![derivative_at_tstar]);
     }
 }

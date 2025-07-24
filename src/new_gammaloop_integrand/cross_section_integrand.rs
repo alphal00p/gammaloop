@@ -1,10 +1,14 @@
 use bincode::Encode;
 use bincode_trait_derive::Decode;
 use colored::Colorize;
+use eyre::Result;
 use itertools::Itertools;
 use serde::Serialize;
 use spenso::algebra::complex::Complex;
-use symbolica::numerical_integration::{Grid, Sample};
+use symbolica::{
+    atom::Atom,
+    numerical_integration::{Grid, Sample},
+};
 use typed_index_collections::TiVec;
 
 use crate::{
@@ -17,6 +21,7 @@ use crate::{
     momentum::{Rotation, ThreeMomentum},
     momentum_sample::{LoopMomenta, MomentumSample},
     new_cs::{CrossSectionCut, CutId},
+    new_gammaloop_integrand::ParamBuilder,
     new_graph::{ExternalConnection, FeynmanGraph, Graph, LmbIndex, LoopMomentumBasis},
     utils::{self, FloatLike, F},
     DependentMomentaConstructor, IntegratedCounterTermRange, Polarizations, Settings,
@@ -101,9 +106,9 @@ impl GraphTerm for CrossSectionGraphTerm {
         &self,
         momentum_sample: &MomentumSample<T>,
         settings: &Settings,
-        model_parameter_cache: &[Complex<F<T>>],
+        param_builder: ParamBuilder<T>,
     ) -> Complex<F<T>> {
-        self.evaluate(momentum_sample, settings, model_parameter_cache)
+        self.evaluate(momentum_sample, settings, param_builder)
     }
 
     fn get_multi_channeling_setup(&self) -> &LmbMultiChannelingSetup {
@@ -150,7 +155,7 @@ impl CrossSectionGraphTerm {
         &self,
         momentum_sample: &MomentumSample<T>,
         settings: &Settings,
-        model_parameter_cache: &[Complex<F<T>>],
+        param_builder: ParamBuilder<T>,
     ) -> Complex<F<T>> {
         // implementation of forced orientations, only works with sample orientation disabled
         if let Some(forced_orientations) = &settings.general.force_orientations {
@@ -160,7 +165,7 @@ impl CrossSectionGraphTerm {
                     .map(|orientation_usize| {
                         let mut new_sample = momentum_sample.clone();
                         new_sample.sample.orientation = Some(*orientation_usize);
-                        self.evaluate(&new_sample, settings, model_parameter_cache)
+                        self.evaluate(&new_sample, settings, param_builder.clone())
                     })
                     .fold(
                         Complex::new_re(momentum_sample.zero()),
@@ -243,21 +248,9 @@ impl CrossSectionGraphTerm {
                     println!("rescaled loop momenta: {:?}", rescaled_sample.loop_moms());
                 }
 
-                // todo, with_capacity
-                let mut params = rescaled_sample
-                    .external_moms()
-                    .iter()
-                    .map(|x| Complex::new_re(x.temporal.value.clone()))
-                    .collect_vec();
+                let mut cut_param_builder = param_builder.clone();
 
-                params.extend(
-                    rescaled_sample
-                        .external_moms()
-                        .iter()
-                        .flat_map(|x| x.spatial.clone().into_iter().map(|c| Complex::new_re(c))),
-                );
-
-                params.extend(
+                cut_param_builder.emr_spatial_value(
                     self.graph
                         .underlying
                         .get_emr_vec_cache(
@@ -266,21 +259,17 @@ impl CrossSectionGraphTerm {
                             &self.graph.loop_momentum_basis,
                         )
                         .into_iter()
-                        .map(|q| Complex::new_re(q)),
+                        .map(|q| Complex::new_re(q))
+                        .collect(),
                 );
 
-                params.extend(model_parameter_cache.into_iter().cloned());
+                cut_param_builder.tstar_value(Complex::new_re(newton_result.solution));
+                cut_param_builder.h_function_value(Complex::new_re(h_function));
+                cut_param_builder.derivative_at_tstar_value(Complex::new_re(
+                    newton_result.derivative_at_solution,
+                ));
 
-                let m_uv = F::from_ff64(HARD_CODED_M_UV);
-                params.push(Complex::new_re(m_uv));
-
-                let m_r_sq = F::from_ff64(HARD_CODED_M_R_SQ);
-                params.push(Complex::new_re(m_r_sq));
-
-                params.push(Complex::new_re(newton_result.solution));
-                params.push(Complex::new_re(h_function));
-                params.push(Complex::new_re(newton_result.derivative_at_solution));
-
+                let params = cut_param_builder.build_values_cs().unwrap();
                 params
             });
 
