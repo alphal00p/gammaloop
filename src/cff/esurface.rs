@@ -1,6 +1,6 @@
 use std::ops::Index;
 
-use bincode::{Decode, Encode};
+use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Report;
 use colored::Colorize;
 use derive_more::{From, Into};
@@ -17,6 +17,7 @@ use symbolica::domains::float::{NumericalFloatLike, Real};
 use symbolica::parse;
 use typed_index_collections::TiVec;
 
+use crate::cff::cff_graph::VertexSet;
 use crate::debug_info::DEBUG_LOGGER;
 use crate::momentum::FourMomentum;
 use crate::momentum_sample::{
@@ -38,6 +39,7 @@ use super::surface::{self, Surface};
 pub struct Esurface {
     pub energies: Vec<EdgeIndex>,
     pub external_shift: ExternalShift,
+    pub vertex_set: VertexSet,
 }
 
 impl Surface for Esurface {
@@ -314,9 +316,16 @@ impl Esurface {
             .sorted_by(|a, b| a.0.cmp(&b.0))
             .collect();
 
+        let vertex_set = graph
+            .iter_nodes_of(&cut.left)
+            .map(|(node_id, _, _)| VertexSet::from_usize(node_id.into()))
+            .reduce(|acc, v| acc.join(&v))
+            .unwrap();
+
         Self {
             energies: edges,
             external_shift,
+            vertex_set,
         }
     }
 }
@@ -635,6 +644,7 @@ mod tests {
     use symbolica::atom::{Atom, AtomCore};
     use symbolica::parse;
 
+    use crate::cff::cff_graph::VertexSet;
     use crate::new_cs::CrossSectionCut;
     use crate::{
         cff::{esurface::Esurface, generation::ShiftRewrite},
@@ -658,6 +668,7 @@ mod tests {
         let mut esurface = Esurface {
             energies,
             external_shift,
+            vertex_set: VertexSet::dummy(),
         };
 
         let res = esurface.compute_value(&energies_cache);
@@ -686,6 +697,7 @@ mod tests {
         let esurface = Esurface {
             energies,
             external_shift,
+            vertex_set: VertexSet::dummy(),
         };
 
         let res = esurface.compute_value(&energies_cache);
@@ -699,6 +711,7 @@ mod tests {
         let esurface = Esurface {
             energies: vec![EdgeIndex::from(2), EdgeIndex::from(3)],
             external_shift,
+            vertex_set: VertexSet::dummy(),
         };
 
         let esurface_atom = esurface.to_atom(&[]);
@@ -748,11 +761,13 @@ mod tests {
         let esurface_1 = Esurface {
             energies: vec![EdgeIndex::from(3), EdgeIndex::from(5)],
             external_shift: vec![(EdgeIndex::from(0), 1), (EdgeIndex::from(1), 1)],
+            vertex_set: VertexSet::dummy(),
         };
 
         let esurface_2 = Esurface {
             energies: vec![EdgeIndex::from(3), EdgeIndex::from(5)],
             external_shift: vec![(EdgeIndex::from(0), 1), (EdgeIndex::from(1), 1)],
+            vertex_set: VertexSet::dummy(),
         };
 
         assert_eq!(esurface_1, esurface_2);
@@ -795,18 +810,22 @@ mod tests {
             Esurface {
                 energies: vec![EdgeIndex::from(0), EdgeIndex::from(1)],
                 external_shift: vec![(EdgeIndex::from(5), -1)],
+                vertex_set: VertexSet::dummy(),
             },
             Esurface {
                 energies: vec![EdgeIndex::from(0), EdgeIndex::from(2), EdgeIndex::from(4)],
                 external_shift: vec![(EdgeIndex::from(5), -1)],
+                vertex_set: VertexSet::dummy(),
             },
             Esurface {
                 energies: vec![EdgeIndex::from(3), EdgeIndex::from(4)],
                 external_shift: vec![(EdgeIndex::from(5), -1)],
+                vertex_set: VertexSet::dummy(),
             },
             Esurface {
                 energies: vec![EdgeIndex::from(1), EdgeIndex::from(2), EdgeIndex::from(3)],
                 external_shift: vec![(EdgeIndex::from(5), -1)],
+                vertex_set: VertexSet::dummy(),
             },
         ];
 
@@ -854,14 +873,17 @@ mod tests {
             Esurface {
                 energies: vec![EdgeIndex::from(0), EdgeIndex::from(3)],
                 external_shift: vec![(EdgeIndex::from(4), -1)],
+                vertex_set: VertexSet::dummy(),
             },
             Esurface {
                 energies: vec![EdgeIndex::from(0), EdgeIndex::from(2)],
                 external_shift: vec![(EdgeIndex::from(4), -1), (EdgeIndex::from(7), -1)],
+                vertex_set: VertexSet::dummy(),
             },
             Esurface {
                 energies: vec![EdgeIndex::from(1), EdgeIndex::from(3)],
                 external_shift: vec![(EdgeIndex::from(4), -1), (EdgeIndex::from(5), 1)],
+                vertex_set: VertexSet::dummy(),
             },
             Esurface {
                 energies: vec![EdgeIndex::from(1), EdgeIndex::from(2)],
@@ -870,6 +892,7 @@ mod tests {
                     (EdgeIndex::from(5), 1),
                     (EdgeIndex::from(7), -1),
                 ],
+                vertex_set: VertexSet::dummy(),
             },
         ];
 

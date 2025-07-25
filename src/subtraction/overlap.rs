@@ -682,7 +682,10 @@ mod tests {
     use typed_index_collections::ti_vec;
 
     use crate::{
-        cff::esurface::{Esurface, EsurfaceID},
+        cff::{
+            cff_graph::VertexSet,
+            esurface::{Esurface, EsurfaceID},
+        },
         momentum::FourMomentum,
         new_graph::LoopMomentumBasis,
         signature::LoopExtSignature,
@@ -741,14 +744,17 @@ mod tests {
                 Esurface {
                     energies: vec![EdgeIndex::from(5), EdgeIndex::from(6)],
                     external_shift: vec![(EdgeIndex::from(1), 1)],
+                    vertex_set: VertexSet::dummy(),
                 },
                 Esurface {
                     energies: vec![EdgeIndex::from(5), EdgeIndex::from(7)],
                     external_shift: vec![(EdgeIndex::from(1), 1), (EdgeIndex::from(2), 1)],
+                    vertex_set: VertexSet::dummy(),
                 },
                 Esurface {
                     energies: vec![EdgeIndex::from(4), EdgeIndex::from(6)],
                     external_shift: vec![(EdgeIndex::from(0), 1), (EdgeIndex::from(1), 1)],
+                    vertex_set: VertexSet::dummy(),
                 },
                 Esurface {
                     energies: vec![EdgeIndex::from(4), EdgeIndex::from(7)],
@@ -757,6 +763,7 @@ mod tests {
                         (EdgeIndex::from(1), 1),
                         (EdgeIndex::from(2), 1),
                     ],
+                    vertex_set: VertexSet::dummy(),
                 },
             ];
 
@@ -837,6 +844,7 @@ mod tests {
             let only_esurface = Esurface {
                 energies: vec![EdgeIndex::from(2), EdgeIndex::from(3), EdgeIndex::from(4)],
                 external_shift: vec![(EdgeIndex::from(0), -1)],
+                vertex_set: VertexSet::dummy(),
             };
 
             let esurfaces = vec![only_esurface].into();

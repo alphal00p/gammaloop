@@ -1,3 +1,4 @@
+use crate::cff::cff_graph::VertexSet;
 use crate::cff::esurface::add_external_shifts;
 use crate::cff::surface::Surface;
 use crate::utils::{
@@ -127,6 +128,7 @@ impl Hsurface {
         let dummy_esurface = Esurface {
             energies,
             external_shift,
+            vertex_set: VertexSet::dummy(),
         };
 
         Some(dummy_esurface.to_atom(&[]))
@@ -161,7 +163,10 @@ mod tests {
 
     use symbolica::parse;
 
-    use crate::{cff::esurface::Esurface, utils::F};
+    use crate::{
+        cff::{cff_graph::VertexSet, esurface::Esurface},
+        utils::F,
+    };
 
     use super::Hsurface;
 
@@ -241,6 +246,7 @@ mod tests {
         let e_surface = Esurface {
             energies: vec![EdgeIndex::from(2), EdgeIndex::from(3), EdgeIndex::from(6)],
             external_shift: vec![(EdgeIndex::from(4), 1)],
+            vertex_set: VertexSet::dummy(),
         };
 
         let h_surface_atom = h_surface.to_atom(&[]).expand();
