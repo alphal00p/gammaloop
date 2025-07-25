@@ -175,7 +175,7 @@ fn get_orientations<E, V, H>(graph: &HedgeGraph<E, V, H>) -> Vec<CFFGenerationGr
         .collect_vec()
 }
 
-fn get_orientations_from_subgraph<E, V, H, S: SubGraph>(
+pub fn get_orientations_from_subgraph<E, V, H, S: SubGraph>(
     graph: &HedgeGraph<E, V, H>,
     subgraph: &S,
     reversed_dangling: &[EdgeIndex],
@@ -808,13 +808,14 @@ mod tests_cff {
     use std::{ops::Range, vec};
 
     use ahash::HashMap;
-    
+
     use linnet::half_edge::{
         builder::HedgeGraphBuilder, involution::Flow, nodestore::NodeStorageVec,
     };
     use symbolica::{
         domains::float::{NumericalFloatLike, Real},
-        evaluate::{ExpressionEvaluator, FunctionMap}, parse, symbol,
+        evaluate::{ExpressionEvaluator, FunctionMap},
+        parse, symbol,
     };
     use utils::FloatLike;
 
