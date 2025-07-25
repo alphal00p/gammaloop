@@ -1,6 +1,7 @@
 use std::ops::Index;
 
 use bincode_trait_derive::{Decode, Encode};
+use bitvec::vec::BitVec;
 use color_eyre::Report;
 use colored::Colorize;
 use derive_more::{From, Into};
@@ -8,6 +9,7 @@ use eyre::eyre;
 use itertools::Itertools;
 use linnet::half_edge::hedgevec::EdgeVec;
 use linnet::half_edge::involution::{EdgeIndex, Flow, HedgePair};
+use linnet::half_edge::subgraph::SubGraphOps;
 use linnet::half_edge::HedgeGraph;
 use lorentz_vector::LorentzVector;
 use ref_ops::RefNeg;
@@ -197,6 +199,12 @@ impl Esurface {
             );
 
         (energy_sum + shift, derivative)
+    }
+
+    pub fn get_subgraph_components<E, V>(&self, graph: &HedgeGraph<E, V>) -> [BitVec; 2] {
+        let vertex_subgraph = self.vertex_set.subgraph(graph);
+        let complement = vertex_subgraph.complement(graph);
+        [vertex_subgraph, complement]
     }
 
     #[inline]

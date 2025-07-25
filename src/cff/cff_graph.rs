@@ -2,14 +2,15 @@ use crate::cff::hsurface::Hsurface;
 use ahash::{HashMap, HashSet, HashSetExt};
 use bincode::Encode;
 use bincode_trait_derive::Decode;
+use bitvec::vec::BitVec;
 use color_eyre::Result;
 use eyre::eyre;
 use itertools::Itertools;
 use linnet::half_edge::{
     hedgevec::EdgeVec,
     involution::{EdgeIndex, Flow, HedgePair, Orientation},
-    subgraph::SubGraph,
-    HedgeGraph,
+    subgraph::{ModifySubgraph, SubGraph},
+    HedgeGraph, NodeIndex,
 };
 use serde::{Deserialize, Serialize};
 use std::hash::Hash;
@@ -177,6 +178,25 @@ impl VertexSet {
             .filter(|id| self.vertex_set & (1 << id) != 0)
             .map(VertexSet::from_usize)
             .collect()
+    }
+
+    fn get_nodes(&self) -> Vec<NodeIndex> {
+        (0..MAX_VERTEX_COUNT)
+            .filter(|id| self.vertex_set & (1 << id) != 0)
+            .map(NodeIndex::from)
+            .collect()
+    }
+
+    pub fn subgraph<E, V>(&self, graph: &HedgeGraph<E, V>) -> BitVec {
+        let mut result: BitVec = graph.empty_subgraph();
+        for hedge in self
+            .get_nodes()
+            .iter()
+            .flat_map(|node_id| graph.iter_crown(*node_id))
+        {
+            result.add(hedge);
+        }
+        result
     }
 
     pub fn dummy() -> Self {
