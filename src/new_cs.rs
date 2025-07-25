@@ -24,7 +24,7 @@ use spenso::{
 use crate::{
     cff::{
         cut_expression::SuperGraphOrientationID,
-        esurface::{generate_esurface_data, EsurfaceDerivedData},
+        esurface::{self, generate_esurface_data, EsurfaceDerivedData},
         expression::{AmplitudeOrientationID, CFFExpression, OrientationData},
         generation::generate_cff_expression,
     },
@@ -530,6 +530,8 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
                 lmbs: None,
                 tropical_sampler: None,
                 multi_channeling_setup: None,
+                threshold_counterterms: None,
+                esurface_data: None,
             },
         }
     }
@@ -557,8 +559,24 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
         self.build_tropical_sampler(settings)?;
         self.build_loop_momentum_bases();
         self.build_multi_channeling_channels();
+        self.build_esurface_derived_data()?;
+        self.build_threshold_counterterms(model);
 
         Ok(())
+    }
+
+    pub fn build_esurface_derived_data(&mut self) -> Result<()> {
+        let lmbs = self.derived_data.lmbs.as_ref().unwrap();
+        let esurfaces = &self
+            .derived_data
+            .cff_expression
+            .as_ref()
+            .unwrap()
+            .surfaces
+            .esurface_cache;
+
+        let esurface_data = generate_esurface_data(&self.graph, lmbs, esurfaces)?;
+        Ok(self.derived_data.esurface_data = Some(esurface_data))
     }
 
     fn build_multi_channeling_channels(&mut self) {
@@ -690,6 +708,105 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
         }
 
         result
+    }
+
+    fn build_threshold_counterterms(&mut self, model: &Model) {
+        let mut counterterms: TiVec<EsurfaceID, Atom> = TiVec::new();
+
+        for (esurface_id, esurface) in self
+            .derived_data
+            .cff_expression
+            .as_ref()
+            .unwrap()
+            .surfaces
+            .esurface_cache
+            .iter_enumerated()
+        {
+            if esurface.external_shift.is_empty() {
+                // these will never satsify the threshold condition
+                // so we can skip them
+                counterterms.push(Atom::new());
+                continue;
+            }
+
+            let (circled, complement) = esurface.get_subgraph_components(&self.graph.underlying);
+            let orientations = self
+                .derived_data
+                .cff_expression
+                .as_ref()
+                .unwrap()
+                .get_orientations_with_esurface(esurface_id);
+
+            let first_orientation = &self
+                .derived_data
+                .cff_expression
+                .as_ref()
+                .unwrap()
+                .orientations[orientations[0]]
+                .data
+                .orientation;
+
+            let orientation_of_edges_in_esurface = esurface
+                .energies
+                .iter()
+                .map(|e| first_orientation[*e])
+                .collect_vec();
+
+            assert!(orientations.iter().all(|o| {
+                let or = &self
+                    .derived_data
+                    .cff_expression
+                    .as_ref()
+                    .unwrap()
+                    .orientations[*o]
+                    .data
+                    .orientation;
+
+                let orientation_of_esurface_in_this_orientation =
+                    esurface.energies.iter().map(|e| or[*e]).collect_vec();
+
+                if orientation_of_edges_in_esurface != orientation_of_esurface_in_this_orientation {
+                    println!("{:?}", orientation_of_edges_in_esurface);
+                    println!("{:?}", orientation_of_esurface_in_this_orientation);
+                    println!("esurface shift: {:?}", esurface.external_shift);
+                    false
+                } else {
+                    true
+                }
+            }));
+
+            let cut_momentum_basis = self.derived_data.esurface_data.as_ref().unwrap()[esurface_id]
+                .as_ref()
+                .unwrap()
+                .cut_momentum_basis;
+
+            let circled_wood = self.graph.wood(&circled);
+            let complement_wood = self.graph.wood(&complement);
+
+            let mut circled_forest =
+                circled_wood.unfold(&self.graph, &self.graph.loop_momentum_basis);
+
+            let mut complement_forest =
+                complement_wood.unfold(&self.graph, &self.graph.loop_momentum_basis);
+
+            let reverse_dangling = esurface
+                .energies
+                .iter()
+                .zip(orientation_of_edges_in_esurface)
+                .filter_map(|(e, o)| {
+                    if o == Orientation::Reversed {
+                        Some(*e)
+                    } else {
+                        None
+                    }
+                })
+                .collect_vec();
+
+            let mut counterterm = Atom::new();
+            for orientation in orientations {}
+
+            counterterms.push(counterterm);
+        }
     }
 
     pub fn build_evaluator(&mut self, model: &Model) {
@@ -873,9 +990,11 @@ pub struct AmplitudeDerivedData<S: NumeratorState> {
     pub cff_expression: Option<CFFExpression<AmplitudeOrientationID>>,
     pub bare_cff_evaluator: Option<GenericEvaluator>,
     pub bare_cff_orientation_evaluatos: Option<TiVec<AmplitudeOrientationID, GenericEvaluator>>,
+    pub threshold_counterterms: Option<TiVec<EsurfaceID, GenericEvaluator>>,
     pub _temp_numerator: Option<PhantomData<S>>,
     pub lmbs: Option<TiVec<LmbIndex, LoopMomentumBasis>>,
     pub tropical_sampler: Option<SampleGenerator<3>>,
+    pub esurface_data: Option<EsurfaceDerivedData>,
     pub multi_channeling_setup: Option<LmbMultiChannelingSetup>,
 }
 

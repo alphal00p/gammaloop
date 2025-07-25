@@ -187,7 +187,7 @@ impl VertexSet {
             .collect()
     }
 
-    pub fn subgraph<E, V>(&self, graph: &HedgeGraph<E, V>) -> BitVec {
+    pub fn subgraph<E, V, H>(&self, graph: &HedgeGraph<E, V, H>) -> BitVec {
         let mut result: BitVec = graph.empty_subgraph();
         for hedge in self
             .get_nodes()

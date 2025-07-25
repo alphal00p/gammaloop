@@ -201,10 +201,13 @@ impl Esurface {
         (energy_sum + shift, derivative)
     }
 
-    pub fn get_subgraph_components<E, V>(&self, graph: &HedgeGraph<E, V>) -> [BitVec; 2] {
+    pub fn get_subgraph_components<E, V, H>(
+        &self,
+        graph: &HedgeGraph<E, V, H>,
+    ) -> (BitVec, BitVec) {
         let vertex_subgraph = self.vertex_set.subgraph(graph);
         let complement = vertex_subgraph.complement(graph);
-        [vertex_subgraph, complement]
+        (vertex_subgraph, complement)
     }
 
     #[inline]
@@ -471,7 +474,7 @@ struct ExistenceCheckDebug {
 
 #[derive(Clone, Serialize, Deserialize, Debug, Encode, bincode_trait_derive::Decode)]
 pub struct EsurfaceDerivedData {
-    esurface_data: Vec<Option<EsurfaceData>>,
+    esurface_data: TiVec<EsurfaceID, Option<EsurfaceData>>,
     orientation_pairs: Vec<(EsurfaceID, EsurfaceID)>,
 }
 
@@ -479,7 +482,7 @@ impl Index<EsurfaceID> for EsurfaceDerivedData {
     type Output = Option<EsurfaceData>;
 
     fn index(&self, index: EsurfaceID) -> &Self::Output {
-        &self.esurface_data[index.0]
+        &self.esurface_data[index]
     }
 }
 
@@ -567,7 +570,7 @@ pub fn generate_esurface_data(
                 }
             }
         })
-        .collect::<Result<Vec<_>, Report>>()?;
+        .collect::<Result<TiVec<EsurfaceID, _>, Report>>()?;
 
     let mut esurface_ids = (0..esurfaces.len())
         .map(Into::<EsurfaceID>::into)

@@ -1,6 +1,9 @@
 use std::borrow::Borrow;
 
-use crate::utils::{ose_atom_from_index, W_};
+use crate::{
+    cff::esurface::{Esurface, EsurfaceID},
+    utils::{ose_atom_from_index, W_},
+};
 use bincode_trait_derive::{Decode, Encode};
 use derive_more::{From, Into};
 use itertools::{EitherOrBoth, Itertools};
@@ -15,7 +18,8 @@ use std::fmt::Write;
 use symbolica::{
     atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol},
     function,
-    id::{Pattern, Replacement}, symbol,
+    id::{Pattern, Replacement},
+    symbol,
 };
 use typed_index_collections::TiVec;
 
@@ -274,6 +278,23 @@ where
             .iter()
             .map(|o| o.expression.get_bottom_layer().len())
             .sum()
+    }
+
+    pub fn get_orientations_with_esurface(&self, esurface_id: EsurfaceID) -> Vec<O> {
+        self.orientations
+            .iter_enumerated()
+            .filter_map(|(id, orientation)| {
+                if orientation
+                    .expression
+                    .iter_nodes()
+                    .any(|node| node.data == HybridSurfaceID::Esurface(esurface_id))
+                {
+                    Some(id)
+                } else {
+                    None
+                }
+            })
+            .collect()
     }
 }
 

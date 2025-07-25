@@ -92,6 +92,10 @@ impl<T> Tree<T> {
     pub fn get_num_nodes(&self) -> usize {
         self.nodes.len()
     }
+
+    pub fn iter_nodes(&self) -> impl Iterator<Item = &TreeNode<T>> {
+        self.nodes.iter()
+    }
 }
 
 impl<T> Tree<T>
