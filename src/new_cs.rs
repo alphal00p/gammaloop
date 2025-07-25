@@ -1143,12 +1143,15 @@ impl<S: NumeratorState> Amplitude<S> {
         let new_external_particels = graph.underlying.get_external_partcles();
         let new_external_signature = graph.underlying.get_external_signature();
 
+        // we skip the sanity check for vacuum graphs
+        let is_vacuum = new_external_particels.is_empty();
+
         if !self.graphs.is_empty() {
-            if self.external_particles != new_external_particels {
+            if self.external_particles != new_external_particels && !is_vacuum {
                 return Err(eyre!("amplitude graph has different number of externals"));
             }
 
-            if self.external_signature != new_external_signature {
+            if self.external_signature != new_external_signature && !is_vacuum {
                 return Err(eyre!("wrong external signature"));
             }
         } else {

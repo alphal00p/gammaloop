@@ -1,5 +1,7 @@
 use crate::cff::hsurface::Hsurface;
 use ahash::{HashMap, HashSet, HashSetExt};
+use bincode::Encode;
+use bincode_trait_derive::Decode;
 use color_eyre::Result;
 use eyre::eyre;
 use itertools::Itertools;
@@ -150,7 +152,7 @@ impl CFFVertex {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Encode, Decode)]
 pub struct VertexSet {
     vertex_set: u64,
 }
@@ -164,7 +166,7 @@ impl VertexSet {
         }
     }
 
-    fn join(&self, other: &VertexSet) -> VertexSet {
+    pub fn join(&self, other: &VertexSet) -> VertexSet {
         VertexSet {
             vertex_set: self.vertex_set | other.vertex_set,
         }
@@ -710,6 +712,7 @@ impl CFFGenerationGraph {
             let esurface = Esurface {
                 energies: positive_energies,
                 external_shift,
+                vertex_set: vertex.vertex_set,
             };
 
             HybridSurface::Esurface(esurface)
