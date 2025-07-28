@@ -1089,23 +1089,6 @@ impl<S: NumeratorState> CrossSection<S> {
             ));
         }
 
-        if self.external_connections.is_empty() {
-            self.external_connections = supergraph
-                .external_connections
-                .as_ref()
-                .expect("the definition of a cross section requires external connections")
-                .clone();
-        } else if &self.external_connections
-            != supergraph
-                .external_connections
-                .as_ref()
-                .expect("the definition of a cross section required external connections")
-        {
-            return Err(eyre!(
-                "attempt to add supergraph with different external connections"
-            ));
-        }
-
         let cross_section_graph = CrossSectionGraph::new(supergraph);
         self.supergraphs.push(cross_section_graph);
 

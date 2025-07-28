@@ -7,7 +7,7 @@ use spenso::{
     iterators::IteratableTensor,
     network::library::symbolic::ETS,
     structure::{
-        representation::{BaseRepName, Minkowski, RepName},
+        representation::{Minkowski, RepName},
         slot::IsAbstractSlot,
         HasStructure,
     },
@@ -44,8 +44,8 @@ use crate::{
 };
 
 use super::{
-    Evaluate, EvaluatorOptions, Numerator, NumeratorCompileOptions,
-    NumeratorEvaluatorOptions, UnInit,
+    Evaluate, EvaluatorOptions, Numerator, NumeratorCompileOptions, NumeratorEvaluatorOptions,
+    UnInit,
 };
 
 #[ignore]
@@ -74,7 +74,7 @@ fn hairy_glue_box() {
         println!("{i}:{}", s);
     }
 
-    let color = graph.derived_data.unwrap().numerator.from_graph(&graph.bare_graph,&GlobalPrefactor{color:parse!("f(aind(coad(8,1),coad(8,2),coad(8,3)))*f(aind(coad(8,4),coad(8,5),coad(8,6)))*id(aind(coad(8,7),coad(8,0)))"),colorless:Atom::num(1)}).color_simplify().state.color.to_dense().map_data(|a|a.to_string());
+    let _color = graph.derived_data.unwrap().numerator.from_graph(&graph.bare_graph,&GlobalPrefactor{color:parse!("f(aind(coad(8,1),coad(8,2),coad(8,3)))*f(aind(coad(8,4),coad(8,5),coad(8,6)))*id(aind(coad(8,7),coad(8,0)))"),colorless:Atom::num(1)}).color_simplify().state.color.to_dense().map_data(|a|a.to_string());
 
     // insta::assert_ron_snapshot!(color);
 }

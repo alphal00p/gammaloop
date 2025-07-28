@@ -625,7 +625,7 @@ impl Approximation {
             return ApproxOp::NotComputed;
         };
         let t_arg = uv_graph
-            .numerator(&reduced)
+            .numerator(&reduced, false)
             .color_simplify()
             .gamma_simplify()
             .get_single_atom()
@@ -1068,7 +1068,7 @@ impl Approximation {
 
         let mut atomarg = cff
             * uv_graph
-                .numerator(&reduced)
+                .numerator(&reduced, false)
                 .color_simplify()
                 .gamma_simplify()
                 .get_single_atom()
@@ -1311,7 +1311,7 @@ impl Approximation {
 
         let mut res = cff
             * graph
-                .numerator(&reduced)
+                .numerator(&reduced, true)
                 .color_simplify()
                 .gamma_simplify()
                 .get_single_atom()

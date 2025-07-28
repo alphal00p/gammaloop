@@ -1,7 +1,10 @@
 use itertools::Itertools;
-use linnet::half_edge::{
-    involution::{Hedge, Orientation},
-    EdgeAccessors,
+use linnet::{
+    half_edge::{
+        involution::{Hedge, Orientation},
+        EdgeAccessors,
+    },
+    parser::DotHedgeData,
 };
 use spenso::structure::{
     representation::LibraryRep, slot::IsAbstractSlot, OrderedStructure, PermutedStructure,
@@ -11,7 +14,9 @@ use symbolica::atom::Atom;
 
 use crate::numerator::aind::Aind;
 
-use super::parse::{ParseGraph, ParseHedge};
+use super::parse::ParseGraph;
+
+use color_eyre::Result;
 
 #[derive(Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
 #[trait_decode(trait = symbolica::state::HasStateMap)]
@@ -129,5 +134,30 @@ impl NumHedgeData {
         }
 
         return color;
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct ParseHedge {
+    hedge_id: Option<usize>,
+}
+
+impl ParseHedge {
+    pub fn parse<'a>() -> impl FnMut((Hedge, &'a DotHedgeData)) -> Result<Self> {
+        |(i, h)| {
+            let hedge_id = h
+                .statement
+                .as_ref()
+                .map(|s| s.parse::<usize>().ok())
+                .flatten();
+            Ok(ParseHedge { hedge_id })
+        }
+    }
+}
+
+impl From<&NumHedgeData> for DotHedgeData {
+    fn from(value: &NumHedgeData) -> Self {
+        let h = DotHedgeData::from(Some(value.node_order.to_string()));
+        h
     }
 }

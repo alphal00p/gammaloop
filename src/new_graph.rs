@@ -37,6 +37,8 @@ use crate::{
     utils::{external_energy_atom_from_index, ose_atom_from_index, FloatLike, F, GS},
 };
 
+pub mod global;
+
 #[derive(Clone, Copy, bincode_trait_derive::Encode, bincode_trait_derive::Decode, Default)]
 pub struct VertexOrder(pub u8);
 
@@ -48,8 +50,6 @@ pub struct Graph {
     pub underlying: HedgeGraph<Edge, Vertex, NumHedgeData>,
     pub loop_momentum_basis: LoopMomentumBasis,
     pub global_prefactor: GlobalPrefactor,
-    pub vertex_slots: TiVec<NodeIndex, VertexSlots>,
-    pub external_connections: Option<Vec<ExternalConnection>>,
 }
 
 // impl Deref for Graph {
@@ -402,8 +402,6 @@ impl Graph {
             loop_momentum_basis: underlying.lmb(&underlying.full_filter()),
             underlying,
             global_prefactor: GlobalPrefactor::default(),
-            external_connections: None,
-            vertex_slots: TiVec::new(),
         })
     }
 
@@ -435,29 +433,15 @@ impl Graph {
             }
 
             // only for 1 to n for now, assuming center of mass
-            if self
-                .external_connections
-                .as_ref()
-                .map(|external_connections| external_connections.len() == 1)
-                .unwrap_or(false)
-                && channels.iter().any(|channel| {
-                    let massless_edges_of_included_channel = lmbs[*channel]
-                        .loop_edges
-                        .iter()
-                        .filter(|&edge_id| self.underlying[*edge_id].particle.0.is_massless())
-                        .collect_vec();
+            if channels.iter().any(|channel| {
+                let massless_edges_of_included_channel = lmbs[*channel]
+                    .loop_edges
+                    .iter()
+                    .filter(|&edge_id| self.underlying[*edge_id].particle.0.is_massless())
+                    .collect_vec();
 
-                    let loop_signatures_of_massless_edges_of_included_channel =
-                        massless_edges_of_included_channel
-                            .iter()
-                            .map(|edge_index| {
-                                self.loop_momentum_basis.edge_signatures[**edge_index]
-                                    .internal
-                                    .first_abs()
-                            })
-                            .collect::<HashSet<_>>();
-
-                    let loop_signatures_of_massless_edges_of_potential_channel = massless_edges
+                let loop_signatures_of_massless_edges_of_included_channel =
+                    massless_edges_of_included_channel
                         .iter()
                         .map(|edge_index| {
                             self.loop_momentum_basis.edge_signatures[**edge_index]
@@ -466,10 +450,18 @@ impl Graph {
                         })
                         .collect::<HashSet<_>>();
 
-                    loop_signatures_of_massless_edges_of_included_channel
-                        == loop_signatures_of_massless_edges_of_potential_channel
-                })
-            {
+                let loop_signatures_of_massless_edges_of_potential_channel = massless_edges
+                    .iter()
+                    .map(|edge_index| {
+                        self.loop_momentum_basis.edge_signatures[**edge_index]
+                            .internal
+                            .first_abs()
+                    })
+                    .collect::<HashSet<_>>();
+
+                loop_signatures_of_massless_edges_of_included_channel
+                    == loop_signatures_of_massless_edges_of_potential_channel
+            }) {
                 continue;
             }
 

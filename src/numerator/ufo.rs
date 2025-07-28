@@ -7,11 +7,11 @@ use idenso::representations::{
 };
 use linnet::half_edge::involution::EdgeIndex;
 use spenso::network::library::symbolic::ETS;
-use spenso::structure::representation::{BaseRepName, LibraryRep, Minkowski, RepName};
+use spenso::structure::representation::{LibraryRep, Minkowski, RepName};
 use spenso::structure::slot::{IsAbstractSlot, Slot};
 use spenso::structure::{OrderedStructure, TensorStructure};
-use symbolica::atom::{AtomCore, AtomView};
 use symbolica::atom::FunctionBuilder;
+use symbolica::atom::{AtomCore, AtomView};
 use symbolica::domains::float::NumericalFloatLike;
 use symbolica::domains::rational::Rational;
 use symbolica::symbol;
@@ -254,7 +254,7 @@ impl UFOSymbols {
 
         let mut max_dummy = 0;
 
-        atom = atom.replace_map(|term, ctx, out| {
+        atom = atom.replace_map(|term, _, out| {
             if let AtomView::Fun(f) = term {
                 let name = f.get_symbol();
                 if name == self.gamma {
@@ -427,7 +427,7 @@ impl UFOSymbols {
 
         atom = atom.replace_multiple(&reps);
 
-        atom = atom.replace_map(|term, ctx, out| {
+        atom = atom.replace_map(|term, _, out| {
             if let AtomView::Fun(f) = term {
                 if f.get_symbol() == self.pslash {
                     let mut gamma = FunctionBuilder::new(AGS.gamma);
@@ -610,7 +610,7 @@ impl UFOSymbols {
             let mut max_dummy = 0;
 
             if let AtomView::Fun(r) = rep.to_symbolic::<Atom>([]).as_view() {
-                atom = atom.replace_map(|term, ctx, out| {
+                atom = atom.replace_map(|term, _, out| {
                     if let AtomView::Fun(f) = term {
                         let name = f.get_symbol();
                         if name == r.get_symbol() {
@@ -690,7 +690,7 @@ impl UFOSymbols {
     }
 }
 
-pub fn preprocess_ufo_color_wrapped(atom: Atom) -> Atom {
+pub(crate) fn preprocess_ufo_color_wrapped(atom: Atom) -> Atom {
     let a_ = symbol!("a_");
     let b_ = symbol!("b_");
     let c_ = symbol!("c_");

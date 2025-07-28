@@ -1,4 +1,8 @@
-use crate::new_graph::parse::{ParseData, ParseEdge, ParseGraph, ParseHedge, ParseVertex};
+use crate::new_graph::edge::ParseEdge;
+use crate::new_graph::global::ParseData;
+use crate::new_graph::hedge_data::ParseHedge;
+use crate::new_graph::parse::ParseGraph;
+use crate::new_graph::vertex::ParseVertex;
 use itertools::Itertools;
 use linnet::half_edge::involution::Orientation;
 

@@ -47,53 +47,24 @@ use symbolica::{
     parse,
 };
 
-use super::{hedge_data::NumIndices, Edge, Graph, LMBext, NumHedgeData, Vertex};
+use super::{
+    edge::ParseEdge,
+    global::ParseData,
+    hedge_data::{NumIndices, ParseHedge},
+    vertex::ParseVertex,
+    Edge, Graph, LMBext, NumHedgeData, Vertex,
+};
 
-#[derive(Debug, Clone)]
-pub struct ParseEdge {
-    pub label: Option<String>,
-    pub particle: ArcParticle,
-    pub dod: Option<i32>,
-    pub lmb_id: Option<LoopIndex>,
-    pub spin_num: Option<Atom>,
-    pub color_num: Option<Atom>,
+pub trait ToQuoted {
+    fn to_quoted(&self) -> String;
 }
 
-impl ParseEdge {
-    pub fn new(particle: ArcParticle) -> Self {
-        ParseEdge {
-            label: None,
-            particle,
-            dod: None,
-            lmb_id: None,
-            spin_num: None,
-            color_num: None,
-        }
-    }
-
-    pub fn with_label(mut self, label: String) -> Self {
-        self.label = Some(label);
-        self
-    }
-
-    pub fn with_dod(mut self, dod: i32) -> Self {
-        self.dod = Some(dod);
-        self
-    }
-
-    pub fn with_lmb_id(mut self, lmb_id: LoopIndex) -> Self {
-        self.lmb_id = Some(lmb_id);
-        self
-    }
-
-    pub fn with_spin_num(mut self, spin_num: Atom) -> Self {
-        self.spin_num = Some(spin_num);
-        self
-    }
-
-    pub fn with_color_num(mut self, color_num: Atom) -> Self {
-        self.color_num = Some(color_num);
-        self
+impl<A> ToQuoted for A
+where
+    A: AtomCore,
+{
+    fn to_quoted(&self) -> String {
+        format!("\"{}\"", self.to_canonical_string())
     }
 }
 
@@ -124,386 +95,10 @@ impl StripParse for &String {
     }
 }
 
-impl ParseEdge {
-    pub fn localize_ainds(atom: impl AtomCore, eid: EdgeIndex, hedge_pair: HedgePair) -> Atom {
-        let a = atom
-            .replace(GS.edgeid)
-            .with(Atom::num(usize::from(eid) as i64))
-            .replace_map(|term, ctx, out| {
-                if let AtomView::Fun(f) = term {
-                    if f.get_symbol() == GS.edgeid {
-                        if f.get_nargs() == 1 {
-                            if let Ok(i) = i64::try_from(f.iter().next().unwrap()) {
-                                if let Ok(u) = u16::try_from(i) {
-                                    *out = eid.aind(u).into();
-                                    return true;
-                                }
-                            }
-                        }
-                    }
-                }
-                false
-            });
-
-        match hedge_pair {
-            HedgePair::Paired { source, sink } | HedgePair::Split { source, sink, .. } => a
-                .replace(GS.sink_id)
-                .with(Atom::num(sink.0 as i64))
-                .replace_map(|term, ctx, out| {
-                    if let AtomView::Fun(f) = term {
-                        if f.get_symbol() == GS.sink_id {
-                            if f.get_nargs() == 1 {
-                                if let Ok(i) = i64::try_from(f.iter().next().unwrap()) {
-                                    if let Ok(u) = u16::try_from(i) {
-                                        *out = sink.aind(u).into();
-                                        return true;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    false
-                })
-                .replace(GS.source_id)
-                .with(Atom::num(source.0 as i64))
-                .replace_map(|term, ctx, out| {
-                    if let AtomView::Fun(f) = term {
-                        if f.get_symbol() == GS.source_id {
-                            if f.get_nargs() == 1 {
-                                if let Ok(i) = i64::try_from(f.iter().next().unwrap()) {
-                                    if let Ok(u) = u16::try_from(i) {
-                                        *out = source.aind(u).into();
-                                        return true;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    false
-                }),
-            HedgePair::Unpaired { hedge, flow } => match flow {
-                Flow::Source => a
-                    .replace(GS.source_id)
-                    .with(Atom::num(hedge.0 as i64))
-                    .replace_map(|term, ctx, out| {
-                        if let AtomView::Fun(f) = term {
-                            if f.get_symbol() == GS.source_id {
-                                if f.get_nargs() == 1 {
-                                    if let Ok(i) = i64::try_from(f.iter().next().unwrap()) {
-                                        if let Ok(u) = u16::try_from(i) {
-                                            *out = hedge.aind(u).into();
-                                            return true;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        false
-                    }),
-                Flow::Sink => a
-                    .replace(GS.sink_id)
-                    .with(Atom::num(hedge.0 as i64))
-                    .replace_map(|term, ctx, out| {
-                        if let AtomView::Fun(f) = term {
-                            if f.get_symbol() == GS.sink_id {
-                                if f.get_nargs() == 1 {
-                                    if let Ok(i) = i64::try_from(f.iter().next().unwrap()) {
-                                        if let Ok(u) = u16::try_from(i) {
-                                            *out = hedge.aind(u).into();
-                                            return true;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        false
-                    }),
-            },
-        }
-    }
-    pub fn parse<'a>(
-        model: &'a Model,
-    ) -> impl FnMut(
-        &'a HedgeGraph<DotEdgeData, DotVertexData, DotHedgeData>,
-        EdgeIndex,
-        HedgePair,
-        EdgeData<&'a DotEdgeData>,
-    ) -> Result<EdgeData<Self>> {
-        |graph: &'a HedgeGraph<DotEdgeData, DotVertexData, DotHedgeData>,
-         eid: EdgeIndex,
-         p: HedgePair,
-         e_data: EdgeData<&'a DotEdgeData>| {
-            e_data.map_result(|e| {
-                let label = e.get::<_, String>("label").transpose()?;
-
-                let lmb_id: Option<LoopIndex> = e
-                    .get::<_, usize>("lmb_id")
-                    .transpose()?
-                    .map(LoopIndex::from);
-
-                let dod = e.get::<_, i32>("dod").transpose()?;
-
-                let spin_num = e
-                    .get::<_, String>("num")
-                    .transpose()?
-                    .map(|a| Self::localize_ainds(a.strip_parse(), eid, p));
-                let color_num = e
-                    .get::<_, String>("color_num")
-                    .transpose()?
-                    .map(|a| Self::localize_ainds(a.strip_parse(), eid, p));
-
-                let particle = if let Some(v) = e.get::<_, isize>("pdg") {
-                    model.get_particle_from_pdg(v?)
-                } else if let Some(v) = e.get::<_, String>("particle") {
-                    let pname = v?;
-                    let pname = pname
-                        .as_str()
-                        .strip_prefix('"')
-                        .unwrap_or(&pname)
-                        .strip_suffix('"')
-                        .unwrap_or(&pname);
-                    model.get_particle(pname)
-                } else {
-                    return Err(eyre!("no pdg or name found for edge"));
-                };
-
-                Ok(ParseEdge {
-                    dod,
-                    lmb_id,
-                    particle,
-                    spin_num,
-                    color_num,
-                    label,
-                })
-            })
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct ParseVertex {
-    pub label: Option<String>,
-    pub vertex_rule: ArcVertexRule,
-    pub spin_num: Option<Atom>,
-    pub dod: Option<i32>,
-    pub color_num: Option<Atom>,
-}
-
-impl ParseVertex {
-    pub fn with_spin_num(mut self, spin_num: Atom) -> Self {
-        self.spin_num = Some(spin_num);
-        self
-    }
-
-    pub fn with_color_num(mut self, color_num: Atom) -> Self {
-        self.color_num = Some(color_num);
-        self
-    }
-
-    pub fn with_label(mut self, label: String) -> Self {
-        self.label = Some(label);
-        self
-    }
-}
-
-impl From<ArcVertexRule> for ParseVertex {
-    fn from(vertex_rule: ArcVertexRule) -> Self {
-        ParseVertex {
-            label: None,
-            vertex_rule,
-            dod: None,
-            spin_num: None,
-            color_num: None,
-        }
-    }
-}
-
-impl ParseVertex {
-    pub fn parse<'a>(
-        model: &'a Model,
-        auto_detect_vertex_rule: bool,
-    ) -> impl FnMut(
-        &'a HedgeGraph<ParseEdge, &'a DotVertexData, ParseHedge>,
-        BitVecNeighborIter<'a>,
-        &'a &'a DotVertexData,
-    ) -> Result<Self> {
-        move |g, n, v| {
-            let label = v.name().map(|id| id.to_string());
-
-            let dod = v.get::<_, i32>("dod").transpose()?;
-
-            let spin_num = v.get::<_, String>("num").transpose()?.map(|a| {
-                let a = a
-                    .as_str()
-                    .strip_prefix('"')
-                    .unwrap_or(&a)
-                    .strip_suffix('"')
-                    .unwrap_or(&a);
-                parse!(a)
-            });
-            let color_num = v.get::<_, String>("color_num").transpose()?.map(|a| {
-                let a = a
-                    .as_str()
-                    .strip_prefix('"')
-                    .unwrap_or(&a)
-                    .strip_suffix('"')
-                    .unwrap_or(&a);
-                parse!(a)
-            });
-
-            if let Some(n) = v.get::<_, String>("int_id") {
-                let vertex_rule = model.get_vertex_rule(n.unwrap());
-
-                Ok(ParseVertex {
-                    dod,
-                    label,
-                    vertex_rule,
-                    spin_num,
-                    color_num,
-                })
-            } else if auto_detect_vertex_rule {
-                let mut particles: Vec<ArcParticle> = n
-                    .map(|h| {
-                        let eid = g[&h];
-                        let particle = match g.orientation(h).relative_to(g.flow(h)) {
-                            Orientation::Reversed => g[eid].particle.get_anti_particle(model),
-                            _ => g[eid].particle.clone(),
-                        };
-                        particle
-                    })
-                    .collect();
-                particles.sort();
-
-                let res = model.particle_set_to_vertex_rules_map.get(&particles);
-                if let Some(res) = res {
-                    if res.len() == 1 {
-                        Ok(ParseVertex {
-                            dod,
-                            label,
-                            vertex_rule: res[0].clone(),
-                            spin_num,
-                            color_num,
-                        })
-                    } else {
-                        Err(eyre!("Multiple vertex rules for {:?}", particles))
-                    }
-                } else {
-                    let particles = particles.iter().map(|p| p.name.as_str()).collect_vec();
-                    Err(eyre!(
-                        "Failed to find vertex rule for particles: {:?}",
-                        particles
-                    ))
-                }
-            } else {
-                Err(eyre!("Vertex rule not supplied"))
-            }
-        }
-    }
-}
-
-#[derive(Debug, Clone, Default)]
-pub struct ParseHedge {
-    hedge_id: Option<usize>,
-}
-
-impl ParseHedge {
-    pub fn parse<'a>() -> impl FnMut((Hedge, &'a DotHedgeData)) -> Result<Self> {
-        |(i, h)| {
-            let hedge_id = h
-                .statement
-                .as_ref()
-                .map(|s| s.parse::<usize>().ok())
-                .flatten();
-            Ok(ParseHedge { hedge_id })
-        }
-    }
-}
-
 #[derive(Clone, Debug)]
 pub struct ParseGraph {
     pub global_data: ParseData,
     pub graph: HedgeGraph<ParseEdge, ParseVertex, ParseHedge>,
-}
-
-#[derive(Clone, Debug)]
-pub struct ParseData {
-    pub overall_factor: Atom,
-    pub multiplicity_factor: Atom,
-    pub color: Atom,
-    pub colorless: Atom,
-}
-
-impl Default for ParseData {
-    fn default() -> Self {
-        ParseData {
-            overall_factor: Atom::one(),
-            multiplicity_factor: Atom::one(),
-            color: Atom::one(),
-            colorless: Atom::one(),
-        }
-    }
-}
-
-impl ParseData {
-    pub fn with_overall_factor(self, overall_factor: Atom) -> Self {
-        ParseData {
-            overall_factor,
-            multiplicity_factor: self.multiplicity_factor,
-            color: self.color,
-            colorless: self.colorless,
-        }
-    }
-
-    pub fn with_multiplicity_factor(self, multiplicity_factor: Atom) -> Self {
-        ParseData {
-            overall_factor: self.overall_factor,
-            multiplicity_factor,
-            color: self.color,
-            colorless: self.colorless,
-        }
-    }
-
-    pub fn with_color(self, color: Atom) -> Self {
-        ParseData {
-            overall_factor: self.overall_factor,
-            multiplicity_factor: self.multiplicity_factor,
-            color,
-            colorless: self.colorless,
-        }
-    }
-
-    pub fn with_colorless(self, colorless: Atom) -> Self {
-        ParseData {
-            overall_factor: self.overall_factor,
-            multiplicity_factor: self.multiplicity_factor,
-            color: self.color,
-            colorless,
-        }
-    }
-}
-
-impl From<linnet::parser::GlobalData> for ParseData {
-    fn from(value: linnet::parser::GlobalData) -> Self {
-        let mut parse_data = ParseData::default();
-
-        if let Some(factor) = value.statements.get("overall_factor") {
-            parse_data = parse_data.with_overall_factor(factor.strip_parse());
-        }
-
-        if let Some(factor) = value.statements.get("multiplicity_factor") {
-            parse_data = parse_data.with_multiplicity_factor(factor.strip_parse());
-        }
-
-        if let Some(color) = value.statements.get("color") {
-            parse_data = parse_data.with_color(color.strip_parse());
-        }
-
-        if let Some(colorless) = value.statements.get("colorless") {
-            parse_data = parse_data.with_colorless(colorless.strip_parse());
-        }
-
-        parse_data
-    }
 }
 
 impl Deref for ParseGraph {
@@ -610,6 +205,25 @@ impl DOD for AtomView<'_> {
 }
 
 impl Graph {
+    pub fn dot_serialize(&self) -> String {
+        let mut out = String::new();
+        self.dot_serialize_fmt(&mut out).unwrap();
+        out
+    }
+
+    pub fn dot_serialize_io(&self, writer: &mut impl std::io::Write) -> Result<(), std::io::Error> {
+        let g = DotGraph::from(self);
+        g.write_io(writer)
+    }
+
+    pub fn dot_serialize_fmt(
+        &self,
+        writer: &mut impl std::fmt::Write,
+    ) -> Result<(), std::fmt::Error> {
+        let g = DotGraph::from(self);
+        g.write_fmt(writer)
+    }
+
     pub fn from_parsed(graph: ParseGraph, model: &Model) -> Result<Self> {
         let hedge_order = graph.hedge_order(model)?;
         let multiplicity = graph.global_data.multiplicity_factor.clone();
@@ -773,6 +387,7 @@ impl Graph {
                     };
 
                     Edge {
+                        is_dummy: e.is_dummy,
                         name: e.label.unwrap_or(eid.to_string()),
                         propagator: ArcPropagator(
                             model.get_propagator_for_particle(&e.particle.name),
@@ -796,7 +411,13 @@ impl Graph {
             )
             .unwrap();
 
-            let full = underlying.full_filter();
+            let mut full = underlying.full_filter();
+
+            for (p, _, i) in underlying.iter_edges() {
+                if i.data.is_dummy {
+                    full.sub(p);
+                }
+            }
             let covers = tree.covers(&full);
             assert_eq!(
                 full,
@@ -834,8 +455,6 @@ impl Graph {
             name: "".to_string(),
             loop_momentum_basis,
             underlying,
-            vertex_slots: Vec::new().into(),
-            external_connections: None,
         })
 
         // Ok(NumGraph { graph })
@@ -894,6 +513,24 @@ impl Graph {
             )?);
         }
         Ok(graphs)
+    }
+}
+
+impl From<&Graph> for DotGraph {
+    fn from(value: &Graph) -> Self {
+        let global_data = value.global_data();
+        let mut graph: HedgeGraph<DotEdgeData, DotVertexData, DotHedgeData> =
+            value.underlying.map_data_ref(
+                |_, _, v| v.into(),
+                |_, _, _, e| e.map(|e| e.into()),
+                |_, d| d.into(),
+            );
+
+        for (l, i) in value.loop_momentum_basis.loop_edges.iter_enumerated() {
+            graph[i].0.add_statement("lmb_id", l);
+        }
+
+        DotGraph { global_data, graph }
     }
 }
 
@@ -978,48 +615,52 @@ pub mod test {
                 .dot_lmb(&g.underlying.full(), &g.loop_momentum_basis)
         );
 
-        let num = Numerator::<UnInit>::default().from_new_graph(&g, &g.underlying.full_filter());
+        println!("{}", g.dot_serialize());
 
-        let expr = num.state.colorless.get_ref_linear(0.into()).unwrap();
+        // let num =
+        //     Numerator::<UnInit>::default().from_new_graph(&g, &g.underlying.full_filter(), true);
 
-        let lib: DummyLibrary<SymbolicTensor<Aind>> = DummyLibrary::<_>::new();
-        let net =
-            Network::<NetworkStore<SymbolicTensor<Aind>, Atom>, _, Aind>::try_from_view(expr, &lib)
-                .unwrap();
+        // let expr = num.state.colorless.get_ref_linear(0.into()).unwrap();
 
-        println!("{}", expr);
-        println!(
-            "{}",
-            net.dot_display_impl(
-                |a| a.to_string(),
-                |_| None,
-                |a| {
-                    if let Ok(a) = PermutedStructure::<ShadowedStructure<Aind>>::try_from(
-                        a.expression.as_view(),
-                    ) {
-                        a.structure
-                            .name()
-                            .map(|s| {
-                                if let Some(a) = a.structure.args() {
-                                    FunctionBuilder::new(s).add_args(&a).finish().to_string()
-                                } else {
-                                    s.to_string()
-                                }
-                            })
-                            .unwrap_or("".to_string())
-                    } else {
-                        "".to_string()
-                    }
-                }
-            )
-        );
+        // let lib: DummyLibrary<SymbolicTensor<Aind>> = DummyLibrary::<_>::new();
+        // let net =
+        //     Network::<NetworkStore<SymbolicTensor<Aind>, Atom>, _, Aind>::try_from_view(expr, &lib)
+        //         .unwrap();
 
-        let num = num.color_simplify();
+        // println!("{}", expr);
+        // println!(
+        //     "{}",
+        //     net.dot_display_impl(
+        //         |a| a.to_string(),
+        //         |_| None,
+        //         |a| {
+        //             if let Ok(a) = PermutedStructure::<ShadowedStructure<Aind>>::try_from(
+        //                 a.expression.as_view(),
+        //             ) {
+        //                 a.structure
+        //                     .name()
+        //                     .map(|s| {
+        //                         if let Some(a) = a.structure.args() {
+        //                             FunctionBuilder::new(s).add_args(&a).finish().to_string()
+        //                         } else {
+        //                             s.to_string()
+        //                         }
+        //                     })
+        //                     .unwrap_or("".to_string())
+        //             } else {
+        //                 "".to_string()
+        //             }
+        //         }
+        //     )
+        // );
 
-        println!("{}", num.state.color);
-        let num = num.gamma_simplify();
+        // let num = num.color_simplify();
 
-        println!("{}", num.state.colorless);
+        // println!("{}", num.state.color);
+        // println!("{}", num.state.colorless);
+        // let num = num.gamma_simplify();
+
+        // println!("{}", num.state.colorless);
     }
     #[test]
     fn parse_local() {
@@ -1069,7 +710,8 @@ pub mod test {
                 .dot_lmb(&g.underlying.full(), &g.loop_momentum_basis)
         );
 
-        let num = Numerator::<UnInit>::default().from_new_graph(&g, &g.underlying.full_filter());
+        let num =
+            Numerator::<UnInit>::default().from_new_graph(&g, &g.underlying.full_filter(), true);
 
         let expr = num.state.colorless.get_ref_linear(0.into()).unwrap();
 
@@ -1107,17 +749,18 @@ pub mod test {
 
         let num = num.color_simplify();
 
-        println!("{}", num.state.color);
-        let num = num.gamma_simplify();
+        println!("Hi{}", num.state.color);
+        println!("{}", num.state.colorless);
+        // let num = num.gamma_simplify();
 
-        println!(
-            "{}",
-            num.state
-                .colorless
-                .get_owned_linear(FlatIndex::from(0))
-                .unwrap()
-                .to_dots()
-        );
+        // println!(
+        //     "{}",
+        //     num.state
+        //         .colorless
+        //         .get_owned_linear(FlatIndex::from(0))
+        //         .unwrap()
+        //         .to_dots()
+        // );
     }
 
     #[test]
@@ -1158,7 +801,8 @@ pub mod test {
                 .dot_lmb(&g.underlying.full(), &g.loop_momentum_basis)
         );
 
-        let num = Numerator::<UnInit>::default().from_new_graph(&g, &g.underlying.full_filter());
+        let num =
+            Numerator::<UnInit>::default().from_new_graph(&g, &g.underlying.full_filter(), true);
 
         let expr = num.state.colorless.get_ref_linear(0.into()).unwrap();
 

@@ -177,7 +177,7 @@ impl CrossSectionGraphTerm {
             .collect_vec();
 
         let dependent_momenta_constructor = DependentMomentaConstructor::CrossSection {
-            external_connections: self.graph.external_connections.as_ref().unwrap(),
+            external_connections: todo!(), //;self.graph.external_connections.as_ref().unwrap(),
         };
 
         let loop_number = lmb.loop_edges.len();

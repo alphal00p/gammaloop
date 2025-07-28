@@ -1,10 +1,25 @@
+use linnet::{
+    half_edge::{
+        involution::{EdgeData, EdgeIndex, Flow, HedgePair},
+        HedgeGraph,
+    },
+    parser::{DotEdgeData, DotHedgeData, DotVertexData},
+};
 use spenso::network::library::TensorLibraryData;
-use symbolica::atom::Atom;
+use symbolica::atom::{Atom, AtomCore, AtomView};
 
 use crate::{
     graph::BareEdge,
-    model::{ArcParticle, ArcPropagator},
+    model::{ArcParticle, ArcPropagator, Model},
+    momentum_sample::LoopIndex,
+    numerator::aind::NewAind,
+    utils::GS,
 };
+
+use color_eyre::Result;
+use eyre::eyre;
+
+use super::parse::{StripParse, ToQuoted};
 
 #[derive(Debug, Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
 #[trait_decode(trait = crate::GammaLoopContext)]
@@ -17,8 +32,8 @@ pub struct Edge {
     pub color_num: Atom,
     pub spin_num: Atom,
     pub dod: i32,
-    // #[bincode(with_serde)]
-    // pub internal_index: Vec<AbstractIndex>,
+    pub is_dummy: bool, // #[bincode(with_serde)]
+                        // pub internal_index: Vec<AbstractIndex>,
 }
 
 impl Edge {
@@ -36,6 +51,233 @@ impl From<BareEdge> for Edge {
             color_num: Atom::one(),
             spin_num: Atom::one(),
             dod: -2,
+            is_dummy: false,
+        }
+    }
+}
+
+impl From<&Edge> for DotEdgeData {
+    fn from(value: &Edge) -> Self {
+        let mut e = DotEdgeData::empty();
+        e.add_statement("name", value.name.clone());
+        e.add_statement("particle", &value.particle.name);
+        e.add_statement("dod", value.dod);
+        e.add_statement("num", value.spin_num.to_quoted());
+        e.add_statement("color_num", value.color_num.to_quoted());
+        e.add_statement("is_dummy", value.is_dummy);
+        e
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ParseEdge {
+    pub label: Option<String>,
+    pub particle: ArcParticle,
+    pub dod: Option<i32>,
+    pub is_dummy: bool,
+    pub lmb_id: Option<LoopIndex>,
+    pub spin_num: Option<Atom>,
+    pub color_num: Option<Atom>,
+}
+
+impl ParseEdge {
+    pub fn new(particle: ArcParticle) -> Self {
+        ParseEdge {
+            is_dummy: false,
+            label: None,
+            particle,
+            dod: None,
+            lmb_id: None,
+            spin_num: None,
+            color_num: None,
+        }
+    }
+
+    pub fn is_dummy(mut self) -> Self {
+        self.is_dummy = true;
+        self
+    }
+
+    pub fn with_label(mut self, label: String) -> Self {
+        self.label = Some(label);
+        self
+    }
+
+    pub fn with_dod(mut self, dod: i32) -> Self {
+        self.dod = Some(dod);
+        self
+    }
+
+    pub fn with_lmb_id(mut self, lmb_id: LoopIndex) -> Self {
+        self.lmb_id = Some(lmb_id);
+        self
+    }
+
+    pub fn with_spin_num(mut self, spin_num: Atom) -> Self {
+        self.spin_num = Some(spin_num);
+        self
+    }
+
+    pub fn with_color_num(mut self, color_num: Atom) -> Self {
+        self.color_num = Some(color_num);
+        self
+    }
+}
+
+impl ParseEdge {
+    pub fn localize_ainds(atom: impl AtomCore, eid: EdgeIndex, hedge_pair: HedgePair) -> Atom {
+        let a = atom
+            .replace(GS.edgeid)
+            .with(Atom::num(usize::from(eid) as i64))
+            .replace_map(|term, ctx, out| {
+                if let AtomView::Fun(f) = term {
+                    if f.get_symbol() == GS.edgeid {
+                        if f.get_nargs() == 1 {
+                            if let Ok(i) = i64::try_from(f.iter().next().unwrap()) {
+                                if let Ok(u) = u16::try_from(i) {
+                                    *out = eid.aind(u).into();
+                                    return true;
+                                }
+                            }
+                        }
+                    }
+                }
+                false
+            });
+
+        match hedge_pair {
+            HedgePair::Paired { source, sink } | HedgePair::Split { source, sink, .. } => a
+                .replace(GS.sink_id)
+                .with(Atom::num(sink.0 as i64))
+                .replace_map(|term, ctx, out| {
+                    if let AtomView::Fun(f) = term {
+                        if f.get_symbol() == GS.sink_id {
+                            if f.get_nargs() == 1 {
+                                if let Ok(i) = i64::try_from(f.iter().next().unwrap()) {
+                                    if let Ok(u) = u16::try_from(i) {
+                                        *out = sink.aind(u).into();
+                                        return true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    false
+                })
+                .replace(GS.source_id)
+                .with(Atom::num(source.0 as i64))
+                .replace_map(|term, ctx, out| {
+                    if let AtomView::Fun(f) = term {
+                        if f.get_symbol() == GS.source_id {
+                            if f.get_nargs() == 1 {
+                                if let Ok(i) = i64::try_from(f.iter().next().unwrap()) {
+                                    if let Ok(u) = u16::try_from(i) {
+                                        *out = source.aind(u).into();
+                                        return true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    false
+                }),
+            HedgePair::Unpaired { hedge, flow } => match flow {
+                Flow::Source => a
+                    .replace(GS.source_id)
+                    .with(Atom::num(hedge.0 as i64))
+                    .replace_map(|term, ctx, out| {
+                        if let AtomView::Fun(f) = term {
+                            if f.get_symbol() == GS.source_id {
+                                if f.get_nargs() == 1 {
+                                    if let Ok(i) = i64::try_from(f.iter().next().unwrap()) {
+                                        if let Ok(u) = u16::try_from(i) {
+                                            *out = hedge.aind(u).into();
+                                            return true;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        false
+                    }),
+                Flow::Sink => a
+                    .replace(GS.sink_id)
+                    .with(Atom::num(hedge.0 as i64))
+                    .replace_map(|term, ctx, out| {
+                        if let AtomView::Fun(f) = term {
+                            if f.get_symbol() == GS.sink_id {
+                                if f.get_nargs() == 1 {
+                                    if let Ok(i) = i64::try_from(f.iter().next().unwrap()) {
+                                        if let Ok(u) = u16::try_from(i) {
+                                            *out = hedge.aind(u).into();
+                                            return true;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        false
+                    }),
+            },
+        }
+    }
+    pub fn parse<'a>(
+        model: &'a Model,
+    ) -> impl FnMut(
+        &'a HedgeGraph<DotEdgeData, DotVertexData, DotHedgeData>,
+        EdgeIndex,
+        HedgePair,
+        EdgeData<&'a DotEdgeData>,
+    ) -> Result<EdgeData<Self>> {
+        |graph: &'a HedgeGraph<DotEdgeData, DotVertexData, DotHedgeData>,
+         eid: EdgeIndex,
+         p: HedgePair,
+         e_data: EdgeData<&'a DotEdgeData>| {
+            e_data.map_result(|e| {
+                let label = e.get::<_, String>("label").transpose()?;
+
+                let lmb_id: Option<LoopIndex> = e
+                    .get::<_, usize>("lmb_id")
+                    .transpose()?
+                    .map(LoopIndex::from);
+
+                let dod = e.get::<_, i32>("dod").transpose()?;
+                let is_dummy = e.get::<_, bool>("is_dummy").transpose()?.unwrap_or(false);
+
+                let spin_num = e
+                    .get::<_, String>("num")
+                    .transpose()?
+                    .map(|a| Self::localize_ainds(a.strip_parse(), eid, p));
+                let color_num = e
+                    .get::<_, String>("color_num")
+                    .transpose()?
+                    .map(|a| Self::localize_ainds(a.strip_parse(), eid, p));
+
+                let particle = if let Some(v) = e.get::<_, isize>("pdg") {
+                    model.get_particle_from_pdg(v?)
+                } else if let Some(v) = e.get::<_, String>("particle") {
+                    let pname = v?;
+                    let pname = pname
+                        .as_str()
+                        .strip_prefix('"')
+                        .unwrap_or(&pname)
+                        .strip_suffix('"')
+                        .unwrap_or(&pname);
+                    model.get_particle(pname)
+                } else {
+                    return Err(eyre!("no pdg or name found for edge"));
+                };
+
+                Ok(ParseEdge {
+                    is_dummy,
+                    dod,
+                    lmb_id,
+                    particle,
+                    spin_num,
+                    color_num,
+                    label,
+                })
+            })
         }
     }
 }
