@@ -130,7 +130,7 @@ impl UFOSymbols {
         //     println!("{}", s);
         // }
         // println!("in:{atom}");
-        //
+        // //
         atom = self.normalize_complex(atom);
         for (i, s) in slots.iter().enumerate() {
             let i = (i + 1) as i64;
@@ -491,7 +491,9 @@ impl UFOSymbols {
         let antifund = ColorAntiFundamental {};
         let sext = ColorSextet {};
         let antisext = ColorAntiSextet {};
-
+        // for s in slots {
+        //     println!("{}", s);
+        // }
         // Fill in representations
         let reps: Vec<_> = [
             (
@@ -563,11 +565,11 @@ impl UFOSymbols {
         .map(|(pat, rep)| Replacement::new(pat.to_pattern(), rep))
         .collect();
 
+        // println!("preid:{atom}");
         atom = atom.replace_multiple(&reps);
 
         // Now identify the kroneker reps:
 
-        // println!("preid:{atom}");
         atom = atom
             .replace(
                 function!(self.identity, W_.a_, W_.b_)
@@ -586,9 +588,10 @@ impl UFOSymbols {
             for r in s.external_structure_iter() {
                 let rep = r.rep_name();
 
-                // println!("{r}");
+                // println!("{}", rep.to_symbolic([i]));
                 atom = atom
                     .replace(rep.to_symbolic([i]))
+                    .level_range((1, Some(1)))
                     .with(r.to_atom())
                     .replace(self.identity.f((&[i], &[W_.i_])))
                     .with(self.identity.f((&[r.to_atom()], &[W_.i_])))

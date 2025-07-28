@@ -1163,7 +1163,7 @@ impl Particle {
 
     pub fn color_reps(&self, flow: Flow) -> IndexLess {
         let reps = match flow {
-            Flow::Sink => match self.color {
+            Flow::Source => match self.color {
                 3 => vec![ColorFundamental {}.new_rep(3).cast()],
 
                 -3 => vec![ColorFundamental {}.dual().new_rep(3).cast()],
@@ -1172,7 +1172,7 @@ impl Particle {
                 8 => vec![ColorAdjoint {}.new_rep(8).cast()],
                 _ => vec![],
             },
-            Flow::Source => match self.color {
+            Flow::Sink => match self.color {
                 -3 => vec![ColorFundamental {}.new_rep(3).cast()],
                 3 => vec![ColorFundamental {}.dual().new_rep(3).cast()],
                 -6 => vec![ColorSextet {}.new_rep(6).cast()],

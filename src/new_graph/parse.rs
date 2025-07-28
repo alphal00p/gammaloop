@@ -1,12 +1,7 @@
-use std::{
-    collections::{BTreeMap, HashMap},
-    ops::Deref,
-    path::Path,
-};
+use std::{collections::BTreeMap, ops::Deref, path::Path};
 
 use crate::{
-    gammaloop_integrand::GlobalData,
-    model::{ArcParticle, ArcPropagator, ArcVertexRule, Model},
+    model::{ArcPropagator, Model},
     momentum_sample::LoopIndex,
     numerator::{
         aind::{Aind, NewAind},
@@ -18,13 +13,12 @@ use crate::{
 };
 use bitvec::vec::BitVec;
 use color_eyre::Result;
-use dot_parser::canonical::AttrStmt;
 use eyre::eyre;
 use itertools::Itertools;
 use linnet::{
     half_edge::{
-        involution::{EdgeData, EdgeIndex, EdgeVec, Flow, Hedge, HedgePair, Orientation},
-        nodestore::{BitVecNeighborIter, NodeStorageVec},
+        involution::{EdgeVec, HedgePair, Orientation},
+        nodestore::NodeStorageVec,
         subgraph::{ModifySubgraph, SubGraph},
         tree::SimpleTraversalTree,
         EdgeAccessors, HedgeGraph,
@@ -35,7 +29,7 @@ use linnet::{
 use spenso::{
     contraction::Contract,
     iterators::IteratableTensor,
-    network::library::{LibraryTensor, TensorLibraryData},
+    network::library::LibraryTensor,
     structure::{
         representation::{Euclidean, RepName},
         OrderedStructure, PermutedStructure,
@@ -168,7 +162,7 @@ impl ParseGraph {
             .map_data_ref_result(
                 ParseVertex::parse(model, auto_detect_vertex_rule),
                 |_, _, _, e| Ok(e.map(Clone::clone)),
-                |(i, h)| Ok(h.clone()),
+                |(_, h)| Ok(h.clone()),
             )?;
 
         Ok(Self { graph, global_data })
@@ -617,50 +611,50 @@ pub mod test {
 
         println!("{}", g.dot_serialize());
 
-        // let num =
-        //     Numerator::<UnInit>::default().from_new_graph(&g, &g.underlying.full_filter(), true);
+        let num =
+            Numerator::<UnInit>::default().from_new_graph(&g, &g.underlying.full_filter(), true);
 
-        // let expr = num.state.colorless.get_ref_linear(0.into()).unwrap();
+        let expr = num.state.colorless.get_ref_linear(0.into()).unwrap();
 
-        // let lib: DummyLibrary<SymbolicTensor<Aind>> = DummyLibrary::<_>::new();
-        // let net =
-        //     Network::<NetworkStore<SymbolicTensor<Aind>, Atom>, _, Aind>::try_from_view(expr, &lib)
-        //         .unwrap();
+        let lib: DummyLibrary<SymbolicTensor<Aind>> = DummyLibrary::<_>::new();
+        let net =
+            Network::<NetworkStore<SymbolicTensor<Aind>, Atom>, _, Aind>::try_from_view(expr, &lib)
+                .unwrap();
 
-        // println!("{}", expr);
-        // println!(
-        //     "{}",
-        //     net.dot_display_impl(
-        //         |a| a.to_string(),
-        //         |_| None,
-        //         |a| {
-        //             if let Ok(a) = PermutedStructure::<ShadowedStructure<Aind>>::try_from(
-        //                 a.expression.as_view(),
-        //             ) {
-        //                 a.structure
-        //                     .name()
-        //                     .map(|s| {
-        //                         if let Some(a) = a.structure.args() {
-        //                             FunctionBuilder::new(s).add_args(&a).finish().to_string()
-        //                         } else {
-        //                             s.to_string()
-        //                         }
-        //                     })
-        //                     .unwrap_or("".to_string())
-        //             } else {
-        //                 "".to_string()
-        //             }
-        //         }
-        //     )
-        // );
+        println!("{}", expr);
+        println!(
+            "{}",
+            net.dot_display_impl(
+                |a| a.to_string(),
+                |_| None,
+                |a| {
+                    if let Ok(a) = PermutedStructure::<ShadowedStructure<Aind>>::try_from(
+                        a.expression.as_view(),
+                    ) {
+                        a.structure
+                            .name()
+                            .map(|s| {
+                                if let Some(a) = a.structure.args() {
+                                    FunctionBuilder::new(s).add_args(&a).finish().to_string()
+                                } else {
+                                    s.to_string()
+                                }
+                            })
+                            .unwrap_or("".to_string())
+                    } else {
+                        "".to_string()
+                    }
+                }
+            )
+        );
 
-        // let num = num.color_simplify();
+        let num = num.color_simplify();
 
-        // println!("{}", num.state.color);
-        // println!("{}", num.state.colorless);
-        // let num = num.gamma_simplify();
+        println!("{}", num.state.color);
+        println!("{}", num.state.colorless);
+        let num = num.gamma_simplify();
 
-        // println!("{}", num.state.colorless);
+        println!("{}", num.state.colorless);
     }
     #[test]
     fn parse_local() {
