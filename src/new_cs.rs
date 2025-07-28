@@ -18,7 +18,7 @@ use idenso::metric::MS;
 
 use spenso::{
     algebra::{algebraic_traits::IsZero, complex::Complex},
-    tensors::{data::DataIterator, parametric::SerializableCompiledEvaluator},
+    tensors::parametric::SerializableCompiledEvaluator,
 };
 
 use crate::{
@@ -28,7 +28,6 @@ use crate::{
         expression::{AmplitudeOrientationID, CFFExpression, OrientationData},
         generation::generate_cff_expression,
     },
-    cli::repl,
     model::ArcParticle,
     momentum_sample::ExternalIndex,
     new_gammaloop_integrand::{
@@ -37,25 +36,20 @@ use crate::{
         GenericEvaluator, LmbMultiChannelingSetup, ParamBuilder,
     },
     new_graph::{
-        get_cff_inverse_energy_product_impl,
-        parse::{self, ParseData, ParseGraph},
-        Edge, LMBext, LmbIndex, LoopMomentumBasis, NumHedgeData, Vertex,
+        get_cff_inverse_energy_product_impl, Edge, LMBext, LmbIndex, LoopMomentumBasis,
+        NumHedgeData, Vertex,
     },
     signature::SignatureLike,
     utils::{external_energy_atom_from_index, f128, ose_atom_from_index, GS, W_},
-    uv::{spenso_lor_atom, UltravioletGraph},
+    uv::UltravioletGraph,
     GammaLoopContext, GammaLoopContextContainer,
 };
 use eyre::eyre;
 use itertools::Itertools;
-use linnet::{
-    dot_parser::{DotEdgeData, DotHedgeData, DotVertexData, HedgeGraphSet},
-    half_edge::{
-        involution::{EdgeIndex, Flow, HedgePair, Orientation},
-        nodestore::NodeStorageVec,
-        subgraph::{HedgeNode, Inclusion, InternalSubGraph, OrientedCut, SubGraph},
-        HedgeGraph,
-    },
+use linnet::half_edge::{
+    involution::{Flow, HedgePair, Orientation},
+    subgraph::{HedgeNode, Inclusion, InternalSubGraph, OrientedCut, SubGraph},
+    HedgeGraph,
 };
 use log::{debug, warn};
 use serde::{Deserialize, Serialize};
@@ -2183,10 +2177,7 @@ fn do_replacement_rules(
 mod tests {
     use std::fs::OpenOptions;
 
-    use linnet::{
-        dot_parser::DotGraph,
-        half_edge::{involution::EdgeIndex, HedgeGraph},
-    };
+    use linnet::half_edge::involution::EdgeIndex;
     use spenso::network::library::TensorLibraryData;
     use symbolica::{atom::Atom, state::State};
 

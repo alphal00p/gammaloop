@@ -1099,6 +1099,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "dot-parser"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6cce83b336cd8d9b2718f4e8228a185de6e7a1cfe34f237e8c4acaf1c4141630"
+dependencies = [
+ "either",
+ "pest",
+ "pest_derive",
+]
+
+[[package]]
 name = "duplicate"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1337,7 +1348,7 @@ dependencies = [
  "delegate",
  "derive_more",
  "dirs",
- "dot-parser",
+ "dot-parser 0.4.2",
  "enum_dispatch",
  "env_logger",
  "eyre",
@@ -1565,8 +1576,7 @@ dependencies = [
 [[package]]
 name = "idenso"
 version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3ce05b7a74aff5fe2d87498875564f0b14770fff39643211c71a79d05cdc896d"
+source = "git+https://github.com/alphal00p/spenso?rev=493066a5ec8647727d8d825b17b8743bd1d5c1fa#493066a5ec8647727d8d825b17b8743bd1d5c1fa"
 dependencies = [
  "anyhow",
  "bincode",
@@ -1851,8 +1861,9 @@ dependencies = [
 
 [[package]]
 name = "linnet"
-version = "0.8.0"
-source = "git+https://github.com/alphal00p/linnet?rev=956b2521df4904a524b14e593c89e2e125ca8daf#956b2521df4904a524b14e593c89e2e125ca8daf"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c0d310628beb141abbfd48a5124fe8a99623725291d1281cf300b5d3d98e2535"
 dependencies = [
  "ahash",
  "argmin",
@@ -1862,12 +1873,14 @@ dependencies = [
  "by_address",
  "cgmath",
  "derive_more",
- "dot-parser",
+ "dot-parser 0.5.1",
  "duplicate 2.0.0",
+ "indenter",
  "indexmap 2.10.0",
  "insta",
  "itertools 0.14.0",
  "kurbo",
+ "paste",
  "piet",
  "proptest",
  "rand 0.8.5",
@@ -3426,8 +3439,7 @@ dependencies = [
 [[package]]
 name = "spenso"
 version = "0.5.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5a27b8399c9896e7b371c91145f360f2fcc0c13c01b6ed4a85750335de87d5a9"
+source = "git+https://github.com/alphal00p/spenso?rev=493066a5ec8647727d8d825b17b8743bd1d5c1fa#493066a5ec8647727d8d825b17b8743bd1d5c1fa"
 dependencies = [
  "ahash",
  "anyhow",
@@ -3481,8 +3493,7 @@ dependencies = [
 [[package]]
 name = "spenso-macros"
 version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e32a2605f26cb6ce44b5e33fbf1678fd96dd7dbe8be96734ad4c229fe08bc7c7"
+source = "git+https://github.com/alphal00p/spenso?rev=493066a5ec8647727d8d825b17b8743bd1d5c1fa#493066a5ec8647727d8d825b17b8743bd1d5c1fa"
 dependencies = [
  "proc-macro2",
  "quote",

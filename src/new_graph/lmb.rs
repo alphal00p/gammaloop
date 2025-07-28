@@ -5,11 +5,10 @@ use bincode_trait_derive::{Decode, Encode};
 use bitvec::vec::BitVec;
 use itertools::Itertools;
 use linnet::half_edge::{
-    hedgevec::EdgeVec,
-    involution::{EdgeData, EdgeIndex, Flow, Hedge, HedgePair, Orientation},
+    involution::{EdgeData, EdgeIndex, EdgeVec, Flow, Hedge, HedgePair, Orientation},
     subgraph::{cycle::SignedCycle, Inclusion, ModifySubgraph, SubGraph, SubGraphOps},
     tree::SimpleTraversalTree,
-    HedgeGraph, NodeIndex,
+    HedgeGraph, NoData, NodeIndex,
 };
 
 use color_eyre::Result;
@@ -47,19 +46,27 @@ pub struct LoopMomentumBasis {
 impl LoopMomentumBasis {
     pub fn swap_loops(&mut self, i: LoopIndex, j: LoopIndex) {
         self.loop_edges.swap(i, j);
-        self.edge_signatures = self.edge_signatures.map_ref(&|a| {
-            let mut a = a.clone();
-            a.swap_loops(i, j);
-            a
-        });
+        self.edge_signatures = self
+            .edge_signatures
+            .iter()
+            .map(|(eid, a)| {
+                let mut a = a.clone();
+                a.swap_loops(i, j);
+                (eid, a)
+            })
+            .collect();
     }
     pub fn swap_external(&mut self, i: ExternalIndex, j: ExternalIndex) {
         self.ext_edges.swap(i, j);
-        self.edge_signatures = self.edge_signatures.map_ref(&|a| {
-            let mut a = a.clone();
-            a.swap_external(i, j);
-            a
-        });
+        self.edge_signatures = self
+            .edge_signatures
+            .iter()
+            .map(|(eid, a)| {
+                let mut a = a.clone();
+                a.swap_external(i, j);
+                (eid, a)
+            })
+            .collect();
     }
 }
 
@@ -254,7 +261,7 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
                     Orientation::Default,
                 )
             },
-            |_, h| (),
+            |_, h| NoData {},
         );
         emrgraph.dot_label(subgraph)
     }

@@ -5,6 +5,7 @@ use std::{
 };
 
 use crate::{
+    gammaloop_integrand::GlobalData,
     model::{ArcParticle, ArcPropagator, ArcVertexRule, Model},
     momentum_sample::LoopIndex,
     numerator::{
@@ -21,15 +22,14 @@ use dot_parser::canonical::AttrStmt;
 use eyre::eyre;
 use itertools::Itertools;
 use linnet::{
-    dot_parser::{DotEdgeData, DotGraph, DotHedgeData, DotVertexData, HedgeGraphSet},
     half_edge::{
-        hedgevec::EdgeVec,
-        involution::{EdgeData, EdgeIndex, Flow, HedgePair, Orientation},
+        involution::{EdgeData, EdgeIndex, EdgeVec, Flow, Hedge, HedgePair, Orientation},
         nodestore::{BitVecNeighborIter, NodeStorageVec},
         subgraph::{ModifySubgraph, SubGraph},
         tree::SimpleTraversalTree,
         EdgeAccessors, HedgeGraph,
     },
+    parser::{DotEdgeData, DotGraph, DotHedgeData, DotVertexData, GraphSet},
     permutation::Permutation,
 };
 use spenso::{
@@ -38,14 +38,12 @@ use spenso::{
     network::library::{LibraryTensor, TensorLibraryData},
     structure::{
         representation::{Euclidean, RepName},
-        slot::IsAbstractSlot,
-        OrderedStructure, PermutedStructure, ScalarTensor, TensorStructure,
+        OrderedStructure, PermutedStructure,
     },
     tensors::{data::StorageTensor, parametric::ParamTensor},
 };
 use symbolica::{
     atom::{Atom, AtomCore, AtomView},
-    domains::{atom::AtomField, integer::Integer},
     parse,
 };
 
@@ -55,6 +53,7 @@ use super::{hedge_data::NumIndices, Edge, Graph, LMBext, NumHedgeData, Vertex};
 pub struct ParseEdge {
     pub label: Option<String>,
     pub particle: ArcParticle,
+    pub dod: Option<i32>,
     pub lmb_id: Option<LoopIndex>,
     pub spin_num: Option<Atom>,
     pub color_num: Option<Atom>,
@@ -65,6 +64,7 @@ impl ParseEdge {
         ParseEdge {
             label: None,
             particle,
+            dod: None,
             lmb_id: None,
             spin_num: None,
             color_num: None,
@@ -73,6 +73,11 @@ impl ParseEdge {
 
     pub fn with_label(mut self, label: String) -> Self {
         self.label = Some(label);
+        self
+    }
+
+    pub fn with_dod(mut self, dod: i32) -> Self {
+        self.dod = Some(dod);
         self
     }
 
@@ -219,12 +224,15 @@ impl ParseEdge {
     pub fn parse<'a>(
         model: &'a Model,
     ) -> impl FnMut(
-        &'a DotGraph,
+        &'a HedgeGraph<DotEdgeData, DotVertexData, DotHedgeData>,
         EdgeIndex,
         HedgePair,
         EdgeData<&'a DotEdgeData>,
     ) -> Result<EdgeData<Self>> {
-        |graph: &'a DotGraph, eid: EdgeIndex, p: HedgePair, e_data: EdgeData<&'a DotEdgeData>| {
+        |graph: &'a HedgeGraph<DotEdgeData, DotVertexData, DotHedgeData>,
+         eid: EdgeIndex,
+         p: HedgePair,
+         e_data: EdgeData<&'a DotEdgeData>| {
             e_data.map_result(|e| {
                 let label = e.get::<_, String>("label").transpose()?;
 
@@ -232,6 +240,8 @@ impl ParseEdge {
                     .get::<_, usize>("lmb_id")
                     .transpose()?
                     .map(LoopIndex::from);
+
+                let dod = e.get::<_, i32>("dod").transpose()?;
 
                 let spin_num = e
                     .get::<_, String>("num")
@@ -258,6 +268,7 @@ impl ParseEdge {
                 };
 
                 Ok(ParseEdge {
+                    dod,
                     lmb_id,
                     particle,
                     spin_num,
@@ -274,6 +285,7 @@ pub struct ParseVertex {
     pub label: Option<String>,
     pub vertex_rule: ArcVertexRule,
     pub spin_num: Option<Atom>,
+    pub dod: Option<i32>,
     pub color_num: Option<Atom>,
 }
 
@@ -299,6 +311,7 @@ impl From<ArcVertexRule> for ParseVertex {
         ParseVertex {
             label: None,
             vertex_rule,
+            dod: None,
             spin_num: None,
             color_num: None,
         }
@@ -315,7 +328,9 @@ impl ParseVertex {
         &'a &'a DotVertexData,
     ) -> Result<Self> {
         move |g, n, v| {
-            let label = v.id().map(|id| id.to_string());
+            let label = v.name().map(|id| id.to_string());
+
+            let dod = v.get::<_, i32>("dod").transpose()?;
 
             let spin_num = v.get::<_, String>("num").transpose()?.map(|a| {
                 let a = a
@@ -340,6 +355,7 @@ impl ParseVertex {
                 let vertex_rule = model.get_vertex_rule(n.unwrap());
 
                 Ok(ParseVertex {
+                    dod,
                     label,
                     vertex_rule,
                     spin_num,
@@ -362,6 +378,7 @@ impl ParseVertex {
                 if let Some(res) = res {
                     if res.len() == 1 {
                         Ok(ParseVertex {
+                            dod,
                             label,
                             vertex_rule: res[0].clone(),
                             spin_num,
@@ -390,8 +407,8 @@ pub struct ParseHedge {
 }
 
 impl ParseHedge {
-    pub fn parse<'a>() -> impl FnMut(&'a DotHedgeData) -> Result<Self> {
-        |h| {
+    pub fn parse<'a>() -> impl FnMut((Hedge, &'a DotHedgeData)) -> Result<Self> {
+        |(i, h)| {
             let hedge_id = h
                 .statement
                 .as_ref()
@@ -465,34 +482,27 @@ impl ParseData {
     }
 }
 
-impl<'a> TryFrom<&'a Vec<dot_parser::canonical::AttrStmt<(String, String)>>> for ParseData {
-    type Error = ();
-    fn try_from(
-        value: &'a Vec<dot_parser::canonical::AttrStmt<(String, String)>>,
-    ) -> std::result::Result<Self, Self::Error> {
+impl From<linnet::parser::GlobalData> for ParseData {
+    fn from(value: linnet::parser::GlobalData) -> Self {
         let mut parse_data = ParseData::default();
-        for v in value {
-            if let AttrStmt::Graph((a, b)) = v {
-                // println!("Graph Attr:{a}={b}");
-                match a.as_str() {
-                    "overall_factor" => {
-                        parse_data = parse_data.with_overall_factor(b.strip_parse());
-                    }
-                    "multiplicity_factor" => {
-                        parse_data = parse_data.with_multiplicity_factor(b.strip_parse());
-                    }
-                    "color" => {
-                        parse_data = parse_data.with_color(b.strip_parse());
-                    }
-                    "colorless" => {
-                        parse_data = parse_data.with_colorless(b.strip_parse());
-                    }
-                    _ => {}
-                }
-            }
+
+        if let Some(factor) = value.statements.get("overall_factor") {
+            parse_data = parse_data.with_overall_factor(factor.strip_parse());
         }
 
-        Ok(parse_data)
+        if let Some(factor) = value.statements.get("multiplicity_factor") {
+            parse_data = parse_data.with_multiplicity_factor(factor.strip_parse());
+        }
+
+        if let Some(color) = value.statements.get("color") {
+            parse_data = parse_data.with_color(color.strip_parse());
+        }
+
+        if let Some(colorless) = value.statements.get("colorless") {
+            parse_data = parse_data.with_colorless(colorless.strip_parse());
+        }
+
+        parse_data
     }
 }
 
@@ -551,9 +561,10 @@ impl ParseGraph {
         graph: DotGraph,
         auto_detect_vertex_rule: bool,
         model: &Model,
-        global_data: ParseData,
     ) -> Result<Self> {
+        let global_data = graph.global_data.into();
         let graph = graph
+            .graph
             .map_data_ref_result(
                 |_, _, v| Ok(v),
                 ParseEdge::parse(model),
@@ -562,7 +573,7 @@ impl ParseGraph {
             .map_data_ref_result(
                 ParseVertex::parse(model, auto_detect_vertex_rule),
                 |_, _, _, e| Ok(e.map(Clone::clone)),
-                |h| Ok(h.clone()),
+                |(i, h)| Ok(h.clone()),
             )?;
 
         Ok(Self { graph, global_data })
@@ -727,7 +738,11 @@ impl Graph {
                     v_color_num[i.0].take().unwrap()
                 };
 
-                let dod = num_spin.iter_flat().map(|(i, v)| v.dod()).max().unwrap();
+                let dod = if let Some(d) = v.dod {
+                    d
+                } else {
+                    num_spin.iter_flat().map(|(i, v)| v.dod()).max().unwrap()
+                };
 
                 Vertex {
                     label: v.label.unwrap_or(i.to_string()),
@@ -751,6 +766,12 @@ impl Graph {
                         spin_num_e[eid].clone()
                     };
 
+                    let dod = if let Some(d) = e.dod {
+                        d
+                    } else {
+                        spin_num.dod() - 2
+                    };
+
                     Edge {
                         name: e.label.unwrap_or(eid.to_string()),
                         propagator: ArcPropagator(
@@ -758,7 +779,7 @@ impl Graph {
                         ),
                         particle: e.particle,
                         color_num,
-                        dod: spin_num.dod() - 2,
+                        dod,
                         spin_num,
                     }
                 })
@@ -820,14 +841,9 @@ impl Graph {
         // Ok(NumGraph { graph })
     }
 
-    pub fn from_dot(
-        graph: DotGraph,
-        auto_detect_vertex_rule: bool,
-        model: &Model,
-        global_data: ParseData,
-    ) -> Result<Self> {
+    pub fn from_dot(graph: DotGraph, auto_detect_vertex_rule: bool, model: &Model) -> Result<Self> {
         Self::from_parsed(
-            ParseGraph::from_parsed(graph, auto_detect_vertex_rule, model, global_data)?,
+            ParseGraph::from_parsed(graph, auto_detect_vertex_rule, model)?,
             model,
         )
     }
@@ -835,44 +851,45 @@ impl Graph {
     where
         P: AsRef<Path>,
     {
-        let hedge_graph_set: HedgeGraphSet<
+        let hedge_graph_set: GraphSet<
             DotEdgeData,
             DotVertexData,
             DotHedgeData,
-            ParseData,
+            linnet::parser::GlobalData,
             NodeStorageVec<DotVertexData>,
-        > = HedgeGraphSet::from_file(p).unwrap();
+        > = GraphSet::from_file(p).unwrap();
 
         Self::from_hedge_graph_set(hedge_graph_set, model)
     }
 
     pub fn from_string<Str: AsRef<str>>(s: Str, model: &Model) -> Result<Vec<Self>> {
-        let hedge_graph_set: HedgeGraphSet<
+        let hedge_graph_set: GraphSet<
             DotEdgeData,
             DotVertexData,
             DotHedgeData,
-            ParseData,
+            linnet::parser::GlobalData,
             NodeStorageVec<DotVertexData>,
-        > = HedgeGraphSet::from_string(s).unwrap();
+        > = GraphSet::from_string(s).unwrap();
 
+        // println!("HOO");
         Self::from_hedge_graph_set(hedge_graph_set, model)
     }
 
     fn from_hedge_graph_set(
-        set: HedgeGraphSet<
+        set: GraphSet<
             DotEdgeData,
             DotVertexData,
             DotHedgeData,
-            ParseData,
+            linnet::parser::GlobalData,
             NodeStorageVec<DotVertexData>,
         >,
         model: &Model,
     ) -> Result<Vec<Self>> {
         let mut graphs = Vec::new();
 
-        for (graph, data) in set.set.into_iter().zip(set.global_data.into_iter()) {
+        for (graph, global_data) in set.set.into_iter().zip(set.global_data.into_iter()) {
             graphs.push(Graph::from_parsed(
-                ParseGraph::from_parsed(graph, true, model, data).unwrap(),
+                ParseGraph::from_parsed(DotGraph { global_data, graph }, true, model).unwrap(),
                 model,
             )?);
         }
@@ -920,7 +937,6 @@ macro_rules! dot {
 #[cfg(test)]
 pub mod test {
     use idenso::metric::MetricSimplifier;
-    use linnet::{dot_parser::DotGraph, half_edge::HedgeGraph};
     use spenso::{
         network::{
             library::DummyLibrary, parsing::ShadowedStructure, store::NetworkStore, Network,
@@ -928,14 +944,11 @@ pub mod test {
         structure::{concrete_index::FlatIndex, HasName, HasStructure, PermutedStructure},
         tensors::{data::GetTensorData, symbolic::SymbolicTensor},
     };
-    use symbolica::{
-        atom::{Atom, FunctionBuilder},
-        parse_lit,
-    };
+    use symbolica::atom::{Atom, FunctionBuilder};
 
     use crate::{
         new_graph::LMBext,
-        numerator::{aind::Aind, GlobalPrefactor, Numerator, UnInit},
+        numerator::{aind::Aind, Numerator, UnInit},
         tests_from_pytest::load_generic_model,
     };
 
@@ -945,15 +958,14 @@ pub mod test {
     fn parse() {
         let graphs = dot!(
             digraph G{
-                e1      [flow=sink]
-                e4      [flow=source]
-                e1 -> A   [particle=a]
+                ext    [style=invis]
+                ext -> A   [particle=a]
                 C -> A    [particle="b"]
                 A -> D    [particle="b"]
                 D -> B    [particle="b"]
                 B -> C    [particle="b"]
                 C -> D    [particle="g"]
-                B -> e4   [particle=a]
+                B -> ext   [particle=a]
             }
         )
         .unwrap();
@@ -1013,41 +1025,37 @@ pub mod test {
     fn parse_local() {
         let graphs= dot!(
             digraph G{
-                e1      [flow=sink]
-                e2      [flow=sink]
-                e3      [flow=source]
-                e4      [flow=source]
-                A [num="1"]
-                B [num="1"]
-                C [num="1"]
-                D [num="1"]
-                e1 -> A  [pdg=1000]
-                e2 -> C  [pdg=1000]
-                C -> A    [pdg=1000, num="P(eid,spenso::mink(4,eid(0)))*Q(eid,spenso::mink(4,eid(0)))"]
-                A -> D    [pdg=1000, num="P(eid,spenso::mink(4,0))"]
-                D -> B    [pdg=1000, num="1"]
-                B -> e3   [pdg=1000]
-                C -> D    [pdg=1000, num="1"]
-                B -> e4   [pdg=1000]
+                edge [num="1" dod=-1000 pdg=1000]
+                node [num="1" dod=-1000]
+                ext     [style=invis]
+                A [id=1]
+                B [id=0]
+                C
+                D [id=2]
+                ext -> A  [id=1]
+                ext -> C
+                C -> A    [num="P(eid,spenso::mink(4,eid(0)))*Q(eid,spenso::mink(4,eid(0)))"]
+                A -> D    [num="P(eid,spenso::mink(4,0))"]
+                D:1 -> B:2    [id=2]
+                B -> ext
+                C -> D
+                B -> ext
             }
 
             digraph G2{
-                e1      [flow=sink]
-                e2      [flow=sink]
-                e3      [flow=source]
-                e4      [flow=source]
+                ext [style=invis]
                 A [num="1"]
                 B [num="1"]
                 C [num="1"]
                 D [num="1"]
-                e1 -> A  [pdg=1000]
-                e2 -> C  [pdg=1000]
+                ext -> A  [pdg=1000]
+                ext -> C  [pdg=1000]
                 C -> A    [pdg=1000, num="P(eid,spenso::mink(4,eid(0)))*Q(eid,spenso::mink(4,eid(0)))"]
                 A -> D    [pdg=1000, num="K(eid,spenso::mink(4,0))"]
                 D -> B    [pdg=1000, num="1"]
-                B -> e3   [pdg=1000]
+                B -> ext   [pdg=1000]
                 C -> D    [pdg=1000, num="1"]
-                B -> e4   [pdg=1000]
+                B -> ext   [pdg=1000]
             }
             ,
             "scalars"
@@ -1122,26 +1130,23 @@ pub mod test {
                     color = "spenso::t"
                     colorless = "spenso::gamma"
                 ]
-                e1      [flow=sink]
-                e2      [flow=sink]
-                e3      [flow=source]
-                e4      [flow=source]
+                ext [style=invis]
                 A [num="1" color_num="a"]
                 B [num="1"]
                 C [num="1"]
                 D [num="1"]
                 E [num="1"]
-                e1 -> A  [pdg=1000]
-                e2 -> C  [pdg=1000]
+                ext -> A  [pdg=1000]
+                ext -> C  [pdg=1000]
                 C -> A    [pdg=1000, num="P(eid,spenso::mink(4,0))"]
                 A -> D    [pdg=1000, num="P(eid,spenso::mink(4,0))"]
                 D -> B    [pdg=1000, num="1"]
-                B -> e3   [pdg=1000]
+                B -> ext   [pdg=1000]
                 E -> B    [pdg=1000,lmb_id=0]
                 E -> A    [pdg=1000,lmb_id=1]
                 E -> C   [pdg=1000]
                 C -> D    [pdg=1000, num="1"]
-                B -> e4   [pdg=1000]
+                B -> ext   [pdg=1000]
             },"scalars"
         )
         .unwrap();

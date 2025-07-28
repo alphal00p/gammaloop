@@ -6,7 +6,7 @@ use crate::utils::{FloatLike, F};
 use bincode_trait_derive::{Decode, Encode};
 use derive_more::From;
 use itertools::Itertools;
-use linnet::half_edge::{hedgevec::EdgeVec, involution::EdgeIndex};
+use linnet::half_edge::involution::{EdgeIndex, EdgeVec};
 use serde::{Deserialize, Serialize};
 use symbolica::{atom::Atom, domains::float::NumericalFloatLike};
 use typed_index_collections::TiVec;

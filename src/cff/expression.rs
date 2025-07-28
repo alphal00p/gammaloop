@@ -1,20 +1,18 @@
 use std::borrow::Borrow;
 
 use crate::{
-    cff::esurface::{Esurface, EsurfaceID},
+    cff::esurface::EsurfaceID,
     utils::{ose_atom_from_index, W_},
 };
 use bincode_trait_derive::{Decode, Encode};
 use derive_more::{From, Into};
 use itertools::{EitherOrBoth, Itertools};
 use linnet::half_edge::{
-    hedgevec::EdgeVec,
-    involution::{EdgeIndex, Orientation},
+    involution::{EdgeIndex, EdgeVec, Orientation},
     nodestore::NodeStorageOps,
     GVEdgeAttrs, HedgeGraph,
 };
 use serde::{Deserialize, Serialize};
-use std::fmt::Write;
 use symbolica::{
     atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol},
     function,
@@ -182,7 +180,8 @@ impl OrientationData {
 
             let attr = hedge_pair.fill_color(attr);
             hedge_pair
-                .dot_fmt(&mut writer, graph, self.orientation[id], attr)
+                .add_data(graph)
+                .dot_fmt(&mut writer, graph, id, |_| None, self.orientation[id], attr)
                 .unwrap();
         }
         writer.push_str("}}");

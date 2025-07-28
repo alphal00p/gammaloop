@@ -16,8 +16,9 @@ use clarabel::algebra::*;
 use clarabel::solver::*;
 use core::panic;
 use itertools::Itertools;
-use linnet::half_edge::hedgevec::EdgeVec;
 use linnet::half_edge::involution::EdgeIndex;
+use linnet::half_edge::involution::EdgeVec;
+use linnet::half_edge::swap::Swap;
 use serde::Deserialize;
 use serde::Serialize;
 use serde_with::serde_as;
@@ -78,10 +79,10 @@ fn construct_solver(
 ) -> DefaultSolver {
     let num_loops = lmb.loop_edges.len();
     let num_loop_vars = 3 * num_loops;
-    let num_edges = lmb.edge_signatures.len();
+    let num_edges: EdgeIndex = lmb.edge_signatures.len();
 
     // first we study the structure of the problem
-    let mut propagator_constraints: Vec<PropagatorConstraint> = Vec::with_capacity(num_edges);
+    let mut propagator_constraints: Vec<PropagatorConstraint> = Vec::with_capacity(num_edges.0);
 
     let mut inequivalent_masses: Vec<Complex<F<f64>>> = vec![];
 
@@ -311,10 +312,18 @@ pub fn find_maximal_overlap(
         .collect_vec();
 
     if let Some(global_center) = &settings.subtraction.overlap_settings.force_global_center {
-        let real_mass_vector = edge_masses.map_ref(&|option_mass| match option_mass {
-            Some(complex_mass) => complex_mass.re,
-            None => F::from_f64(0.0),
-        });
+        let real_mass_vector = edge_masses
+            .iter()
+            .map(|(eid, option_mass)| {
+                (
+                    eid,
+                    match option_mass {
+                        Some(complex_mass) => complex_mass.re,
+                        None => F::from_f64(0.0),
+                    },
+                )
+            })
+            .collect::<EdgeVec<_>>();
 
         let global_center_f = global_center
             .iter()
@@ -667,10 +676,18 @@ impl EsurfacePairs {
 }
 
 fn to_real_mass_vector(edge_masses: &EdgeVec<Option<Complex<F<f64>>>>) -> EdgeVec<F<f64>> {
-    edge_masses.map_ref(&|mass| match mass {
-        Some(m) => m.re,
-        None => F::from_f64(0.0),
-    })
+    edge_masses
+        .iter()
+        .map(|(eid, mass)| {
+            (
+                eid,
+                match mass {
+                    Some(m) => m.re,
+                    None => F::from_f64(0.0),
+                },
+            )
+        })
+        .collect()
 }
 
 #[cfg(test)]

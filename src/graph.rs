@@ -10,9 +10,7 @@ use crate::{
     },
     gammaloop_integrand::DefaultSample,
     ltd::{generate_ltd_expression, LTDExpression},
-    model::{
-        self, ArcParticle, ArcVertexRule, ColorStructure, EdgeSlots, Model, VertexSlots,
-    },
+    model::{self, ArcParticle, ArcVertexRule, ColorStructure, EdgeSlots, Model, VertexSlots},
     momentum::{FourMomentum, Polarization, Rotation, SignOrZero, ThreeMomentum},
     momentum_sample::{
         BareMomentumSample, ExternalFourMomenta, ExternalIndex, LoopMomenta, MomentumSample,
@@ -32,7 +30,7 @@ use crate::{
 };
 use linnet::half_edge::{
     involution::{HedgePair, Orientation},
-    HedgeGraphError, NodeIndex,
+    HedgeGraphError, NoData, NodeIndex,
 };
 use linnet::{
     half_edge::{
@@ -58,11 +56,7 @@ use idenso::representations::{ColorAdjoint, ColorFundamental, ColorSextet};
 #[allow(unused_imports)]
 use spenso::contraction::Contract;
 use spenso::{
-    algebra::{
-        algebraic_traits::IsZero,
-        complex::Complex,
-        ScalarMul,
-    },
+    algebra::{algebraic_traits::IsZero, complex::Complex, ScalarMul},
     network::library::symbolic::ETS,
     shadowing::Shadowable,
     structure::{
@@ -115,7 +109,7 @@ pub trait HedgeGraphExt<N, E> {
 }
 
 impl<N: Clone, E: Clone, S: NodeStorageOps<NodeData = N>> HedgeGraphExt<N, E>
-    for HedgeGraph<E, N, (), S>
+    for HedgeGraph<E, N, NoData, S>
 {
     fn from_sym(graph: SymbolicaGraph<N, E>) -> Self {
         let mut builder = HedgeGraphBuilder::new();
@@ -144,7 +138,7 @@ impl<N: Clone, E: Clone, S: NodeStorageOps<NodeData = N>> HedgeGraphExt<N, E>
 
     type Error = HedgeGraphError;
 
-    fn to_sym(value: &HedgeGraph<E, N, (), S>) -> Result<SymbolicaGraph<&N, &E>, Self::Error> {
+    fn to_sym(value: &HedgeGraph<E, N, NoData, S>) -> Result<SymbolicaGraph<&N, &E>, Self::Error> {
         let mut graph = SymbolicaGraph::new();
         let mut map = AHashMap::new();
 

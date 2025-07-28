@@ -1,8 +1,6 @@
-use std::sync::Arc;
-
+use crate::new_graph::parse::{ParseData, ParseEdge, ParseGraph, ParseHedge, ParseVertex};
 use itertools::Itertools;
-use linnet::{dot_parser::DotGraph, half_edge::involution::Orientation};
-use new_graph::parse::{ParseData, ParseEdge, ParseGraph, ParseHedge, ParseVertex};
+use linnet::half_edge::involution::Orientation;
 
 use linnet::half_edge::{builder::HedgeGraphBuilder, involution::Flow};
 
@@ -12,22 +10,17 @@ use symbolica::evaluate::{FunctionMap, OptimizationSettings};
 use crate::{
     cff::{cut_expression::SuperGraphOrientationID, expression::AmplitudeOrientationID},
     dot,
-    feyngen::{
-        diagram_generator::{EdgeColor, NodeColorWithVertexRule},
-        FeynGenFilters,
-    },
+    feyngen::FeynGenFilters,
     inspect::inspect,
     integrands::Integrand,
     integrate::havana_integrate,
-    model::{ArcVertexRule, ColorStructure, VertexRule},
     momentum_sample::ExternalIndex,
     new_cs::{AmplitudeGraph, CrossSection, CrossSectionGraph, CutId, ProcessDefinition},
     new_graph::{ExternalConnection, FeynmanGraph, Graph},
     numerator::UnInit,
     signature::LoopExtSignature,
-    tests_from_pytest::{load_amplitude_output, load_generic_model},
+    tests_from_pytest::load_generic_model,
     utils::{external_energy_atom_from_index, F},
-    uv::UVGraph,
     ProcessSettings, Settings,
 };
 

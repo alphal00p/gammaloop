@@ -48,8 +48,8 @@ use crate::model::VertexRule;
 use crate::model::{ArcParticle, ColorStructure};
 use crate::momentum::{Pow, Sign, SignOrZero};
 use crate::numerator::aind::Aind;
-use crate::numerator::SymbolicExpression;
 use crate::numerator::Network;
+use crate::numerator::SymbolicExpression;
 use crate::numerator::{ExpressionState, GlobalPrefactor};
 use crate::numerator::{Numerator, StandardTensorNet};
 use crate::utils::{self, TENSORLIB, W_};
@@ -1065,7 +1065,7 @@ impl FeynGen {
         let mut he_graph = HedgeGraph::<EdgeColor, NodeColor>::from_sym(graph.clone()).map(
             |_, _, node_color| node_color,
             |_, _, _, _, d| d.map(|d| model.get_particle_from_pdg(d.pdg)),
-            |_, _| (),
+            |_, n| n,
         );
         // info!(
         //     "Looking at\n{}",

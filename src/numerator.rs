@@ -4,10 +4,8 @@ use aind::Aind;
 use idenso::color::{ColorError, ColorSimplifier};
 use idenso::gamma::GammaSimplifier;
 use idenso::representations::Bispinor;
-use linnet::half_edge::hedgevec::EdgeVec;
-use linnet::half_edge::involution::{EdgeIndex, Orientation};
+use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation};
 use linnet::half_edge::nodestore::NodeStorageOps;
-use linnet::half_edge::subgraph::SubGraph;
 use log::warn;
 use spenso::algebra::complex::Complex;
 use spenso::algebra::upgrading_arithmetic::FallibleSub;
@@ -902,23 +900,11 @@ impl Numerator<Global> {
         let colorless = self
             .state
             .colorless
-            .map_data_ref_mut_self(|a| match a.simplify_color() {
-                Ok(expression) => expression,
-                Err(ColorError::NotFully(expression)) => {
-                    fully_simplified = false;
-                    expression
-                }
-            });
+            .map_data_ref_mut_self(|a| a.simplify_color());
         let color = self
             .state
             .color
-            .map_data_ref_mut_self(|a| match a.simplify_color() {
-                Ok(expression) => expression,
-                Err(ColorError::NotFully(expression)) => {
-                    fully_simplified = false;
-                    expression
-                }
-            });
+            .map_data_ref_mut_self(|a| a.simplify_color());
         let state = ColorSimplified {
             colorless,
             color,
@@ -1264,16 +1250,10 @@ impl Numerator<AppliedFeynmanRule> {
 impl ColorSimplified {
     pub fn color_simplify<T: ExpressionState>(mut expr: SymbolicExpression<T>) -> ColorSimplified {
         let colorless = expr.colorless;
-        let mut fully_simplified = true;
+        let fully_simplified = true;
 
         expr.color.map_data_mut(|a| {
-            *a = match a.simplify_color() {
-                Ok(expression) => expression,
-                Err(ColorError::NotFully(expression)) => {
-                    fully_simplified = false;
-                    expression
-                }
-            }
+            *a = a.simplify_color();
         });
 
         ColorSimplified {

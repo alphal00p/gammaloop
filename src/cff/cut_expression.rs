@@ -1,7 +1,10 @@
 use ahash::HashMap;
 use bincode_trait_derive::{Decode, Encode};
 use derive_more::{From, Into};
-use linnet::half_edge::{hedgevec::EdgeVec, involution::Orientation};
+use linnet::half_edge::{
+    involution::{EdgeVec, Orientation},
+    swap::Swap,
+};
 use serde::{Deserialize, Serialize};
 use symbolica::atom::Atom;
 use typed_index_collections::TiVec;
@@ -184,7 +187,7 @@ pub fn amplitude_orientations_to_sg_orientaion(
     left: &EdgeVec<Orientation>,
     right: &EdgeVec<Orientation>,
 ) -> Option<EdgeVec<Orientation>> {
-    let mut result = Vec::with_capacity(left.len());
+    let mut result = EdgeVec::with_capacity(left.len().0);
 
     for ((_, left_entry), (_, right_entry)) in left.into_iter().zip(right.into_iter()) {
         match (left_entry, right_entry) {
@@ -212,7 +215,7 @@ pub fn amplitude_orientations_to_sg_orientaion(
         }
     }
 
-    Some(EdgeVec::from_raw(result))
+    Some(result)
 }
 
 #[cfg(test)]

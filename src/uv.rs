@@ -5,14 +5,10 @@ use crate::{
         expression::{GraphOrientation, OrientationData, OrientationID},
         generation::{generate_uv_cff, ShiftRewrite},
     },
-    graph::VertexInfo,
     model::ArcParticle,
     momentum::Sign,
-    momentum_sample::LoopIndex,
-    new_graph::lmb::no_filter,
-    new_graph::{self, Edge, LMBext, LoopMomentumBasis, NumHedgeData, Vertex},
+    new_graph::{Edge, LMBext, LoopMomentumBasis, Vertex},
     numerator::aind::Aind,
-    symbolica_ext::CallSymbol,
     utils::{sign_atom, GS, W_},
 };
 use ahash::AHashSet;
@@ -22,7 +18,6 @@ use idenso::metric::MS;
 use pathfinding::prelude::BfsReachable;
 use serde::{Deserialize, Serialize};
 use spenso::{
-    contraction::Contract,
     network::parsing::ShadowedStructure,
     shadowing::symbolica_utils::SerializableAtom,
     structure::{
@@ -42,9 +37,9 @@ use symbolica::{
 };
 
 use linnet::half_edge::{
-    involution::{EdgeIndex, Hedge, HedgePair, SignOrZero},
-    subgraph::{Cycle, Inclusion, InternalSubGraph, ModifySubgraph, SubGraph, SubGraphOps},
-    HedgeGraph, PowersetIterator,
+    involution::{EdgeIndex, HedgePair, SignOrZero},
+    subgraph::{Inclusion, InternalSubGraph, SubGraph, SubGraphOps},
+    HedgeGraph,
 };
 
 use typed_index_collections::TiVec;
@@ -1612,6 +1607,7 @@ impl Wood {
                     graph.dod(&n.data),
                     self.poset.dot_id(k)
                 ),
+                &|_h| None,
                 &|e| Some(format!("dod={}", e.dod)),
                 &|n| Some(format!("dod={}", n.dod)),
             ));

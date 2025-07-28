@@ -15,14 +15,13 @@ use color_eyre::Report;
 use color_eyre::Result;
 use itertools::Itertools;
 use linnet::half_edge::{
-    hedgevec::EdgeVec,
-    involution::HedgePair,
-    subgraph::{OrientedCut, SubGraph},
-    HedgeGraph,
-};
-use linnet::half_edge::{
     involution::{EdgeIndex, Orientation},
     subgraph::InternalSubGraph,
+};
+use linnet::half_edge::{
+    involution::{EdgeVec, HedgePair},
+    subgraph::{OrientedCut, SubGraph},
+    HedgeGraph,
 };
 use symbolica::{
     atom::{Atom, AtomCore},
@@ -1056,7 +1055,7 @@ mod tests_cff {
         let mut evaluator = cff.quick_symbolica_evaluator(0..3, 3..6);
 
         let cff_res: F<f64> = energy_prefactor
-            * evaluator.evaluate_single(&energy_cache.clone().get_raw())
+            * evaluator.evaluate_single(energy_cache.clone().as_ref())
             * F((2. * std::f64::consts::PI).powi(-3));
 
         let target_res = F(6.333_549_225_536_17e-9_f64);
@@ -1098,7 +1097,7 @@ mod tests_cff {
         let mut cff_hedge_evaluator = cff_hedge.quick_symbolica_evaluator(0..3, 3..6);
 
         let cff_res: F<f64> = energy_prefactor
-            * cff_hedge_evaluator.evaluate_single(&energy_cache.get_raw())
+            * cff_hedge_evaluator.evaluate_single(&energy_cache.as_ref())
             * F((2. * std::f64::consts::PI).powi(-3));
 
         let target_res = F(6.333_549_225_536_17e-9_f64);
@@ -1169,7 +1168,7 @@ mod tests_cff {
 
         let mut evaluator = cff.quick_symbolica_evaluator(0..2, 2..7);
 
-        let cff_res = energy_prefactor * evaluator.evaluate_single(&energy_cache.clone().get_raw());
+        let cff_res = energy_prefactor * evaluator.evaluate_single(&energy_cache.clone().as_ref());
 
         let target = F(1.0794792137096797e-13);
         let absolute_error = cff_res - target;
@@ -1212,7 +1211,7 @@ mod tests_cff {
         let cff_hedge = generate_cff_expression(&hedge_double_traingle, &shift_rewrite).unwrap();
         let mut cff_hedge_evaluator = cff_hedge.quick_symbolica_evaluator(0..2, 2..7);
         let cff_res =
-            energy_prefactor * cff_hedge_evaluator.evaluate_single(&energy_cache.get_raw());
+            energy_prefactor * cff_hedge_evaluator.evaluate_single(&energy_cache.as_ref());
 
         let target = F(1.0794792137096797e-13);
         let absolute_error = cff_res - target;
@@ -1313,7 +1312,7 @@ mod tests_cff {
 
         let mut evaluator = cff.quick_symbolica_evaluator(0..2, 2..10);
 
-        let res = evaluator.evaluate_single(&energies_cache.clone().get_raw()) * energy_prefactor;
+        let res = evaluator.evaluate_single(&energies_cache.clone().as_ref()) * energy_prefactor;
 
         let absolute_error = res - F(1.2625322619777278e-21);
         let relative_error = absolute_error / res;
@@ -1341,7 +1340,7 @@ mod tests_cff {
         let cff_hedge = generate_cff_expression(&tbt_hedge, &shift_rewrite).unwrap();
 
         let mut cff_hedge_evaluator = cff_hedge.quick_symbolica_evaluator(0..2, 2..10);
-        let res = cff_hedge_evaluator.evaluate_single(&energies_cache.get_raw()) * energy_prefactor;
+        let res = cff_hedge_evaluator.evaluate_single(&energies_cache.as_ref()) * energy_prefactor;
 
         let absolute_error = res - F(1.2625322619777278e-21);
         let relative_error = absolute_error / res;

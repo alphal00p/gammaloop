@@ -7,8 +7,7 @@ use color_eyre::Result;
 use eyre::eyre;
 use itertools::Itertools;
 use linnet::half_edge::{
-    hedgevec::EdgeVec,
-    involution::{EdgeIndex, Flow, HedgePair, Orientation},
+    involution::{EdgeIndex, EdgeVec, Flow, HedgePair, Orientation},
     subgraph::{ModifySubgraph, SubGraph},
     HedgeGraph, NodeIndex,
 };

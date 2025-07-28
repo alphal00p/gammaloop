@@ -7,8 +7,7 @@ use crate::utils::{
 use bincode_trait_derive::{Decode, Encode};
 use derive_more::{From, Into};
 use itertools::Itertools;
-use linnet::half_edge::hedgevec::EdgeVec;
-use linnet::half_edge::involution::EdgeIndex;
+use linnet::half_edge::involution::{EdgeIndex, EdgeVec};
 use serde::{Deserialize, Serialize};
 use symbolica::atom::Atom;
 use symbolica::parse;

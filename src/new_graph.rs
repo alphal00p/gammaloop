@@ -1,12 +1,11 @@
 use std::borrow::Borrow;
 
-use ahash::{HashMapExt, HashSet};
+use ahash::HashSet;
 use bitvec::vec::BitVec;
 use color_eyre::Result;
 use itertools::Itertools;
 use linnet::half_edge::{
-    hedgevec::EdgeVec,
-    involution::{EdgeData, EdgeIndex, Flow, HedgePair},
+    involution::{EdgeData, EdgeIndex, EdgeVec, Flow, HedgePair},
     subgraph::{InternalSubGraph, SubGraph, SubGraphOps},
     HedgeGraph, NodeIndex,
 };
