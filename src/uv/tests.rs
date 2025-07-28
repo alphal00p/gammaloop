@@ -1,3 +1,4 @@
+use crate::momentum_sample::LoopIndex;
 use crate::new_graph::edge::ParseEdge;
 use crate::new_graph::global::ParseData;
 use crate::new_graph::hedge_data::ParseHedge;
@@ -40,44 +41,27 @@ fn tri_uv_AMP() {
 
     let graphs = dot!(
         digraph G{
-            e1        [flow=sink]
-            e2        [flow=sink]
-            e3        [flow=source]
-            e1 -> A   [particle=h]
-            e2 -> B   [particle=h]
-            e3 -> C   [particle=h]
-            A -> B    [particle=h]
+            e        [style=invis]
+            e -> A   [particle=h id=0]
+            e -> B   [particle=h id=1]
+            e -> C   [particle=h id=2]
+            A -> B    [particle=h lmb_index=0]
             B -> C    [particle=h]
             C -> D    [particle=h]
         },&model
     )
     .unwrap();
 
-    let mut graph = graphs[0].clone();
-    let mut loop_momentum_basis = LoopMomentumBasis {
-        tree: None,
-        loop_edges: vec![EdgeIndex::from(0)].into(),
-        ext_edges: vec![EdgeIndex::from(3), EdgeIndex::from(4), EdgeIndex::from(5)].into(),
-        edge_signatures: graph
-            .underlying
-            .new_edgevec(|_, _, _| LoopExtSignature::from((vec![], vec![]))),
-    };
-
-    loop_momentum_basis
-        .set_edge_signatures(&graph.underlying)
-        .unwrap();
+    let graph = graphs[0].clone();
 
     let canonize_esurface = graph
         .underlying
-        .get_esurface_canonization(&loop_momentum_basis);
+        .get_esurface_canonization(&graph.loop_momentum_basis);
 
     let mut amplitude_graph = AmplitudeGraph::<UnInit>::new(graph.clone());
     amplitude_graph
         .preprocess(&model, &ProcessSettings::default())
         .unwrap();
-
-    // build UV here
-    graph.loop_momentum_basis = loop_momentum_basis;
 
     let wood = graph.wood(&graph.underlying.full_filter());
     let mut forest = wood.unfold(&graph, &graph.loop_momentum_basis);
@@ -322,7 +306,9 @@ fn tri_box_tri_LU() {
     underlying.add_edge(
         n1.add_data(ParseHedge::default()),
         n2.add_data(ParseHedge::default()),
-        ParseEdge::new(hp.clone()).with_spin_num(Atom::one()),
+        ParseEdge::new(hp.clone())
+            .with_spin_num(Atom::one())
+            .with_lmb_id(LoopIndex(0)),
         false,
     );
 
@@ -371,11 +357,13 @@ fn tri_box_tri_LU() {
     underlying.add_edge(
         n3.add_data(ParseHedge::default()),
         n5.add_data(ParseHedge::default()),
-        ParseEdge::new(hp.clone()).with_spin_num(if box_uv_dod == 2 {
-            spenso_lor_atom(4, 30, GS.dim)
-        } else {
-            Atom::one()
-        }),
+        ParseEdge::new(hp.clone())
+            .with_spin_num(if box_uv_dod == 2 {
+                spenso_lor_atom(4, 30, GS.dim)
+            } else {
+                Atom::one()
+            })
+            .with_lmb_id(LoopIndex(1)),
         false,
     );
 
@@ -404,11 +392,13 @@ fn tri_box_tri_LU() {
     underlying.add_edge(
         n5.add_data(ParseHedge::default()),
         n6.add_data(ParseHedge::default()),
-        ParseEdge::new(tp.clone()).with_spin_num(if uv_dod >= 0 {
-            spenso_lor_atom(7, 10, GS.dim)
-        } else {
-            Atom::one()
-        }),
+        ParseEdge::new(tp.clone())
+            .with_spin_num(if uv_dod >= 0 {
+                spenso_lor_atom(7, 10, GS.dim)
+            } else {
+                Atom::one()
+            })
+            .with_lmb_id(LoopIndex(2)),
         true,
     );
 
@@ -441,24 +431,13 @@ fn tri_box_tri_LU() {
 
     println!("{}", underlying.dot(&underlying.full_filter()));
 
-    let mut loop_momentum_basis = LoopMomentumBasis {
-        tree: None,
-        loop_edges: vec![EdgeIndex::from(1), EdgeIndex::from(4), EdgeIndex::from(7)].into(),
-        ext_edges: vec![EdgeIndex::from(8), EdgeIndex::from(9)].into(),
-        edge_signatures: underlying.new_edgevec(|_, _, _| LoopExtSignature::from((vec![], vec![]))),
-    };
-
-    loop_momentum_basis
-        .set_edge_signatures(&underlying)
-        .unwrap();
-
     let graph = Graph::from_parsed(underlying, &model).unwrap();
 
     println!(
         "dot lmb:{}",
         graph
             .underlying
-            .dot_lmb(&graph.underlying.full_filter(), &loop_momentum_basis)
+            .dot_lmb(&graph.underlying.full_filter(), &graph.loop_momentum_basis)
     );
 
     let mut cs: CrossSectionGraph<UnInit> = CrossSectionGraph::new(graph);
@@ -1220,10 +1199,6 @@ fn double_triangle_LU() {
         ext_edges: vec![EdgeIndex::from(5), EdgeIndex::from(6)].into(),
         edge_signatures: underlying.new_edgevec(|_, _, _| LoopExtSignature::from((vec![], vec![]))),
     };
-
-    loop_momentum_basis
-        .set_edge_signatures(&underlying)
-        .unwrap();
 
     let graph = Graph::from_parsed(underlying, &model).unwrap();
 

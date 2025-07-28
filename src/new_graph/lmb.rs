@@ -39,7 +39,7 @@ use super::Graph;
 pub struct LoopMomentumBasis {
     pub tree: Option<()>,
     pub loop_edges: TiVec<LoopIndex, EdgeIndex>,
-    pub ext_edges: TiVec<ExternalIndex, EdgeIndex>,
+    pub ext_edges: TiVec<ExternalIndex, EdgeIndex>, //It should have length = to number of externals (not number of independent externals)
     pub edge_signatures: EdgeVec<LoopExtSignature>,
 }
 
@@ -251,6 +251,10 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
 
     fn dot_lmb<S: SubGraph>(&self, subgraph: &S, lmb: &LoopMomentumBasis) -> String {
         let reps = self.normal_emr_replacement::<_, Atom>(subgraph, lmb, &[], no_filter);
+
+        // for rep in &reps {
+        //     println!("{rep}");
+        // }
         let emrgraph = self.map_data_ref(
             |_, _, _| "",
             |_, e, _, d| {
@@ -362,14 +366,16 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
         //     println!("Cycle:{}", self.dot(&c.filter));
         // }
 
+        let mut ext_edges: TiVec<ExternalIndex, EdgeIndex> = vec![].into();
+        let mut external_flows: TiVec<ExternalIndex, _> = vec![].into();
+
         if let Some(ext) = dep_ext {
+            ext_edges.push(self[&ext]);
             // print!("{ext}");
             externals.sub(ext);
+            external_flows.push((SignOrZero::Zero, self.empty_subgraph()));
         };
         // println!("//Externals {}", self.dot(&externals));
-
-        let mut external_flows: TiVec<ExternalIndex, _> = vec![].into();
-        let mut ext_edges: TiVec<ExternalIndex, EdgeIndex> = vec![].into();
 
         for (p, e, d) in self.iter_edges_of(&externals) {
             let mut path_to_dep: S = self.empty_subgraph();
@@ -425,7 +431,7 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
 
         let signature = self.new_edgevec(|d, eid, p| {
             let mut internal = vec![];
-            let mut external = vec![];
+            let mut external = vec![SignOrZero::Zero];
 
             let empty_internal = vec![SignOrZero::Zero; cycles.len()];
             let empty_external = vec![SignOrZero::Zero; external_flows.len()];
@@ -446,7 +452,7 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
                         internal = empty_internal;
                     }
                     if subgraph.intersects(p) {
-                        for (i, (s, e)) in external_flows.iter_enumerated() {
+                        for (i, (s, e)) in external_flows.iter_enumerated().skip(1) {
                             if ext_edges[i] == eid {
                                 external.push(SignOrZero::Plus);
                             } else {
@@ -465,7 +471,7 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
                 }
                 HedgePair::Unpaired { hedge, flow } => {
                     if subgraph.includes(hedge) {
-                        for (i, (s, e)) in external_flows.iter_enumerated() {
+                        for (i, (s, e)) in external_flows.iter_enumerated().skip(1) {
                             if ext_edges[i] == eid {
                                 external.push(SignOrZero::Plus);
                             } else {
@@ -735,359 +741,6 @@ impl LoopMomentumBasis {
         }
 
         atom.to_pattern()
-    }
-
-    pub fn set_edge_signatures<E, V, H>(
-        &mut self,
-        graph: &HedgeGraph<E, V, H>,
-    ) -> Result<(), color_eyre::Report> {
-        self.edge_signatures = graph.new_edgevec(|_, _edge_index, _| LoopExtSignature {
-            internal: LoopSignature::from_iter(vec![SignOrZero::Zero; self.loop_edges.len()]),
-            external: ExternalSignature::from_iter(vec![SignOrZero::Zero; graph.n_externals()]),
-        });
-
-        struct ExternalEdgeInfo {
-            edge_index: EdgeIndex,
-            fake_node: NodeIndex, // fake node is a hack to reuse the code from BareGraph
-            real_node: NodeIndex,
-            flow: Flow,
-        }
-
-        let mut current_extra_node = graph.n_nodes();
-        let mut external_edge_info = TiVec::<ExternalIndex, ExternalEdgeInfo>::new();
-
-        // Build the adjacency list excluding vetoed edges, we include "fake nodes" on the externals such that we do
-        // not need to port too much of the code.
-        let mut adj_list: HashMap<NodeIndex, Vec<(NodeIndex, EdgeIndex, bool)>> = HashMap::new();
-        for (hedge_pair, edge_index, _edge_data) in graph.iter_edges() {
-            if self.loop_edges.contains(&edge_index) {
-                continue;
-            }
-            // let (u, v) = (edge.vertices[0], edge.vertices[1]);
-
-            match hedge_pair {
-                HedgePair::Unpaired { hedge, flow } => {
-                    let real_node = graph.node_id(hedge);
-                    let extra_node = NodeIndex::from(current_extra_node);
-                    external_edge_info.push(ExternalEdgeInfo {
-                        edge_index,
-                        fake_node: extra_node,
-                        real_node,
-                        flow,
-                    });
-                    match flow {
-                        Flow::Sink => {
-                            adj_list
-                                .entry(extra_node)
-                                .or_default()
-                                .push((real_node, edge_index, false));
-                            adj_list
-                                .entry(real_node)
-                                .or_default()
-                                .push((extra_node, edge_index, true));
-                        }
-                        Flow::Source => {
-                            adj_list
-                                .entry(real_node)
-                                .or_default()
-                                .push((extra_node, edge_index, false));
-                            adj_list
-                                .entry(extra_node)
-                                .or_default()
-                                .push((real_node, edge_index, true));
-                        }
-                    }
-                    current_extra_node += 1;
-                }
-                HedgePair::Paired { source, sink } => {
-                    let u = graph.node_id(source);
-                    let v = graph.node_id(sink);
-
-                    // Original orientation
-                    adj_list.entry(u).or_default().push((v, edge_index, false));
-                    // Flipped orientation
-                    adj_list.entry(v).or_default().push((u, edge_index, true));
-                }
-                HedgePair::Split { .. } => {
-                    panic!("Can not set edge signatures for split edges yet")
-                }
-            }
-        }
-
-        // Route internal LMB momenta
-        for (i_lmb, lmb_edge_id) in self.loop_edges.iter_enumerated() {
-            let (_, hedge_pair) = &graph[lmb_edge_id];
-
-            let (u, v) = match hedge_pair {
-                HedgePair::Paired { source, sink } => {
-                    (graph.node_id(*source), graph.node_id(*sink))
-                }
-                _ => {
-                    return Err(eyre!(
-                        "Loop_momentum {} is an external edge. Edge: {:?}",
-                        i_lmb,
-                        lmb_edge_id
-                    ))
-                }
-            };
-
-            self.edge_signatures[*lmb_edge_id].internal[i_lmb] = SignOrZero::Plus;
-            if let Some(path) = self.find_shortest_path(&adj_list, v, u) {
-                for (edge_index, is_flipped) in path {
-                    if self.edge_signatures[edge_index].internal[i_lmb] != SignOrZero::Zero {
-                        return Err(eyre!(
-                            "Inconsitency in edge momentum lmb signature assignment."
-                        ));
-                    }
-                    self.edge_signatures[edge_index].internal[i_lmb] = if is_flipped {
-                        SignOrZero::Minus
-                    } else {
-                        SignOrZero::Plus
-                    };
-                }
-            } else {
-                return Err(eyre!(
-                    "No path found between vertices {} and {} for LMB: {:?}",
-                    u,
-                    v,
-                    self.loop_edges
-                ));
-            }
-        }
-
-        // sink node is the last external node
-        let sink_node = external_edge_info
-            .pop()
-            .map(|edge_info| edge_info.fake_node)
-            .unwrap_or(NodeIndex::from(0));
-
-        // Route external momenta
-        if graph.n_externals() >= 2 {
-            for (external_index, external_edge_info) in external_edge_info.into_iter_enumerated() {
-                let (u, v) = match external_edge_info.flow {
-                    Flow::Source => (sink_node, external_edge_info.fake_node),
-                    Flow::Sink => (external_edge_info.fake_node, sink_node),
-                };
-
-                if let Some(path) = self.find_shortest_path(&adj_list, u, v) {
-                    //println!("External path from {}->{}: {} {:?}", u, v, i_ext, path);
-                    for (edge_index, is_flipped) in path {
-                        if self.edge_signatures[edge_index].external[external_index]
-                            != SignOrZero::Zero
-                        {
-                            return Err(eyre!(
-                                "Inconsitency in edge momentum signature assignment."
-                            ));
-                        }
-                        self.edge_signatures[edge_index].external[external_index] = if is_flipped {
-                            SignOrZero::Minus
-                        } else {
-                            SignOrZero::Plus
-                        };
-                    }
-                } else {
-                    return Err(eyre!(
-                        "No path found between vertices {} and {} for LMB: {:?}",
-                        u,
-                        v,
-                        self.loop_edges
-                    ));
-                }
-                if self.edge_signatures[external_edge_info.edge_index].external[external_index]
-                    != SignOrZero::Plus
-                {
-                    return Err(eyre!(
-                        "Inconsitency in edge momentum external signature assignment."
-                    ));
-                }
-            }
-        }
-        Ok(())
-    }
-
-    fn find_shortest_path(
-        &self,
-        adjacency_list: &HashMap<NodeIndex, Vec<(NodeIndex, EdgeIndex, bool)>>,
-        start: NodeIndex,
-        end: NodeIndex,
-    ) -> Option<Vec<(EdgeIndex, bool)>> {
-        if start == end {
-            return Some(vec![]);
-        }
-
-        // Initialize BFS
-        let mut queue = VecDeque::new();
-        let mut visited: HashMap<NodeIndex, Option<(NodeIndex, EdgeIndex, bool)>> = HashMap::new();
-
-        queue.push_back(start);
-        visited.insert(start, None);
-
-        // Perform BFS
-        while let Some(u) = queue.pop_front() {
-            if u == end {
-                break;
-            }
-            if let Some(neighbors) = adjacency_list.get(&u) {
-                for &(v, edge_index, is_flipped) in neighbors {
-                    #[allow(clippy::map_entry)]
-                    if !visited.contains_key(&v) {
-                        visited.insert(v, Some((u, edge_index, is_flipped)));
-                        queue.push_back(v);
-                    }
-                }
-            }
-        }
-
-        // Reconstruct the path if end is reached
-        if !visited.contains_key(&end) {
-            return None;
-        }
-
-        let mut path = Vec::new();
-        let mut current = end;
-
-        while let Some(Some((prev, edge_index, is_flipped))) = visited.get(&current) {
-            path.push((*edge_index, *is_flipped));
-            current = *prev;
-        }
-
-        path.reverse();
-        Some(path)
-    }
-
-    pub fn generate_loop_momentum_bases<E, V, H>(
-        &self,
-        graph: &HedgeGraph<E, V, H>,
-    ) -> TiVec<LmbIndex, LoopMomentumBasis> {
-        let loop_number = self.loop_edges.len();
-        let num_edges = graph.iter_edges().count();
-        let external_signature_length = self.edge_signatures[EdgeIndex::from(0)].external.len();
-
-        // the full virtual signature matrix in the form of a flattened vector
-        let signature_matrix_flattened = self
-            .edge_signatures
-            .borrow()
-            .into_iter()
-            .flat_map(|(_, sig)| sig.internal.iter().map(|s| (*s as i8) as f64).collect_vec())
-            .collect_vec();
-
-        // convert to dmatrix
-        let signature_matrix =
-            DMatrix::from_row_slice(num_edges, loop_number, &signature_matrix_flattened);
-
-        // the full external signature matrix in the form of a flattened vector
-        let external_signature_matrix_flattened = self
-            .edge_signatures
-            .borrow()
-            .into_iter()
-            .flat_map(|(_, sig)| sig.external.iter().map(|&s| (s as i8) as f64).collect_vec())
-            .collect_vec();
-
-        // convert to dmatrix
-        let external_signature_matrix = DMatrix::from_row_slice(
-            num_edges,
-            external_signature_length,
-            &external_signature_matrix_flattened,
-        );
-
-        let possible_lmbs = graph
-            .iter_edges()
-            .filter(|(pair, _, _)| matches!(pair, HedgePair::Paired { .. }))
-            .map(|(_, edge_index, _)| edge_index)
-            .combinations(loop_number);
-
-        let valid_lmbs = possible_lmbs
-            .map(|basis| {
-                let reduced_signature_matrix_flattened = basis
-                    .iter()
-                    .flat_map(|e| {
-                        self.edge_signatures[*e]
-                            .internal
-                            .iter()
-                            .map(|s| (*s as i8) as f64)
-                    })
-                    .collect_vec();
-
-                (
-                    basis,
-                    DMatrix::from_row_slice(
-                        loop_number,
-                        loop_number,
-                        &reduced_signature_matrix_flattened,
-                    ),
-                )
-            })
-            .filter(|(_basis, reduced_signature_matrix)| {
-                reduced_signature_matrix.determinant() != 0. // nonzero determinant means valid lmb
-            })
-            .map(|(basis, reduced_signature_matrix)| {
-                let mut sorted_basis = basis;
-                sorted_basis.sort();
-                (
-                    Into::<TiVec<LoopIndex, EdgeIndex>>::into(sorted_basis),
-                    reduced_signature_matrix,
-                )
-            });
-
-        let lmbs = valid_lmbs
-            .map(|(basis, reduced_signature_matrix)| {
-                // construct the signatures
-
-                // for this we need the reduced external signatures
-                let reduced_external_signatures_vec = basis
-                    .iter()
-                    .flat_map(|&e| {
-                        self.edge_signatures[e]
-                            .external
-                            .iter()
-                            .map(|s| (*s as i8) as f64)
-                    })
-                    .collect_vec();
-
-                let reduced_external_signatures = DMatrix::from_row_slice(
-                    loop_number,
-                    external_signature_length,
-                    &reduced_external_signatures_vec,
-                );
-
-                let reduced_signature_matrix_inverse =
-                    reduced_signature_matrix.clone().try_inverse().unwrap();
-
-                let new_virtual_signatures =
-                    signature_matrix.clone() * reduced_signature_matrix_inverse.clone();
-                let new_external_signatures = external_signature_matrix.clone()
-                    - signature_matrix.clone()
-                        * reduced_signature_matrix_inverse.clone()
-                        * reduced_external_signatures;
-
-                let new_signatures = graph.new_edgevec(|_, edge_id, _| {
-                    let new_virtual_signature = new_virtual_signatures
-                        .row(edge_id.into())
-                        .iter()
-                        .map(|s| s.round() as i8)
-                        .collect();
-                    let new_external_signature = new_external_signatures
-                        .row(edge_id.into())
-                        .iter()
-                        .map(|s| s.round() as i8)
-                        .collect();
-
-                    LoopExtSignature {
-                        internal: new_virtual_signature,
-                        external: new_external_signature,
-                    }
-                });
-
-                LoopMomentumBasis {
-                    tree: None,
-                    ext_edges: vec![].into(),
-                    loop_edges: basis,
-                    edge_signatures: new_signatures,
-                }
-            })
-            .collect();
-
-        lmbs
     }
 }
 

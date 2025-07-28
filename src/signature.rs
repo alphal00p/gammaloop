@@ -239,9 +239,12 @@ where
                 .add_arg(id_map(l))
                 .add_args(additional_args)
                 .finish();
+            // println!("mom: {mom} {s}");
 
             rep += *s * mom;
         }
+
+        // println!("rep{rep}");
 
         rep
     }

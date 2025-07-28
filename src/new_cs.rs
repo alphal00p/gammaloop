@@ -545,9 +545,9 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
     }
 
     pub fn preprocess(&mut self, model: &Model, settings: &ProcessSettings) -> Result<()> {
-        self.graph
-            .loop_momentum_basis
-            .set_edge_signatures(&self.graph.underlying)?;
+        // self.graph
+        //     .loop_momentum_basis
+        //     .set_edge_signatures(&self.graph.underlying)?;
 
         self.generate_cff()?;
         self.build_evaluator(model);
@@ -883,8 +883,7 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
     fn build_loop_momentum_bases(&mut self) {
         let lmbs = self
             .graph
-            .loop_momentum_basis
-            .generate_loop_momentum_bases(&self.graph.underlying);
+            .generate_loop_momentum_bases(&self.graph.underlying.full_filter());
 
         self.derived_data.lmbs = Some(lmbs)
     }
@@ -2275,9 +2274,9 @@ mod tests {
                 .new_edgevec(|_, _, _| LoopExtSignature::from((vec![], vec![]))),
         };
 
-        loop_momentum_basis
-            .set_edge_signatures(&graph.underlying)
-            .unwrap();
+        // loop_momentum_basis
+        //     .set_edge_signatures(&graph.underlying)
+        //     .unwrap();
 
         graph.loop_momentum_basis = loop_momentum_basis;
 

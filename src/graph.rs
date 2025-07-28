@@ -2051,18 +2051,18 @@ impl BareGraph {
             edge_signatures: temp_edge_signatures,
         };
 
-        lmb.set_edge_signatures(&self.hedge_representation)
-            .map_err(|e| {
-                FeynGenError::LoopMomentumBasisError(format!(
-                    "{} | Error: {}",
-                    lmb.loop_edges
-                        .iter()
-                        .map(|i_e| format!("{}", self.edges[Into::<usize>::into(*i_e)].name))
-                        .collect::<Vec<_>>()
-                        .join(", "),
-                    e
-                ))
-            })?;
+        // lmb.set_edge_signatures(&self.hedge_representation)
+        //     .map_err(|e| {
+        //         FeynGenError::LoopMomentumBasisError(format!(
+        //             "{} | Error: {}",
+        //             lmb.loop_edges
+        //                 .iter()
+        //                 .map(|i_e| format!("{}", self.edges[Into::<usize>::into(*i_e)].name))
+        //                 .collect::<Vec<_>>()
+        //                 .join(", "),
+        //             e
+        //         ))
+        //     })?;
         self.loop_momentum_basis = lmb;
         Ok(())
     }

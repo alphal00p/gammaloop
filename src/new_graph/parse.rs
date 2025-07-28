@@ -586,6 +586,36 @@ pub mod test {
     use super::Graph;
 
     #[test]
+    fn test_loop_momentum_basis() {
+        let graphs = dot!(
+            digraph triangle {
+            graph [
+            overall_factor = 1;
+            multiplicity_factor = 1;
+            ]
+            edge [
+            pdg=1000
+            ]
+            ext [style=invis]
+            ext -> v4 [id=0]
+            ext -> v5 [id=1]
+            v6 -> ext [id=2]
+            v5 -> v4 [lmb_index=0];
+            v6 -> v5;
+            v4 -> v6 ;
+            },"scalars"
+        )
+        .unwrap();
+
+        let g = &graphs[0];
+
+        println!(
+            "{}",
+            g.dot_lmb(&g.underlying.full(), &g.loop_momentum_basis)
+        );
+    }
+
+    #[test]
     fn parse() {
         let graphs = dot!(
             digraph G{
@@ -602,6 +632,8 @@ pub mod test {
         .unwrap();
 
         let g = &graphs[0];
+
+        println!("{:#?}", g.loop_momentum_basis);
 
         println!(
             "{}",
