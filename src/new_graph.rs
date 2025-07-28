@@ -6,7 +6,7 @@ use color_eyre::Result;
 use itertools::Itertools;
 use linnet::half_edge::{
     involution::{EdgeData, EdgeIndex, EdgeVec, Flow, HedgePair},
-    subgraph::{InternalSubGraph, SubGraph, SubGraphOps},
+    subgraph::{InternalSubGraph, ModifySubgraph, SubGraph, SubGraphOps},
     HedgeGraph, NodeIndex,
 };
 use log::debug;
@@ -101,6 +101,8 @@ pub trait FeynmanGraph {
     fn explicit_ose_atom(&self, edge: EdgeIndex) -> Atom;
     fn get_ose_replacements(&self) -> Vec<Replacement>;
     fn expected_scale(&self, e_cm: F<f64>) -> F<f64>;
+    fn dummy_list(&self) -> Vec<EdgeIndex>;
+    fn no_dummy(&self) -> BitVec;
 }
 
 impl FeynmanGraph for HedgeGraph<Edge, Vertex, NumHedgeData> {
@@ -387,6 +389,28 @@ impl FeynmanGraph for HedgeGraph<Edge, Vertex, NumHedgeData> {
         }
 
         scale.norm_squared().sqrt()
+    }
+
+    fn no_dummy(&self) -> BitVec {
+        let mut subgraph = self.full_filter();
+        for (hedge_pair, _, edge) in self.iter_edges() {
+            if edge.data.is_dummy {
+                subgraph.sub(hedge_pair)
+            }
+        }
+        subgraph
+    }
+
+    fn dummy_list(&self) -> Vec<EdgeIndex> {
+        self.iter_edges()
+            .filter_map(|(hedge_pair, edge_index, edge_data)| {
+                if edge_data.data.is_dummy {
+                    Some(edge_index)
+                } else {
+                    None
+                }
+            })
+            .collect()
     }
 }
 

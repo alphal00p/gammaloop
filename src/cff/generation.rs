@@ -143,7 +143,10 @@ fn iterate_possible_orientations(num_edges: usize) -> impl Iterator<Item = Orien
     })
 }
 
-fn get_orientations<E, V, H>(graph: &HedgeGraph<E, V, H>) -> Vec<CFFGenerationGraph> {
+fn get_orientations<E, V, H>(
+    graph: &HedgeGraph<E, V, H>,
+    dummy_edges: &[EdgeIndex],
+) -> Vec<CFFGenerationGraph> {
     let internal_subgraph = InternalSubGraph::cleaned_filter_pessimist(graph.full_filter(), graph);
     let num_virtual_edges = graph.count_internal_edges(&internal_subgraph);
     let virtual_possible_orientations = iterate_possible_orientations(num_virtual_edges);
@@ -169,7 +172,7 @@ fn get_orientations<E, V, H>(graph: &HedgeGraph<E, V, H>) -> Vec<CFFGenerationGr
                 "did not saturate virtual orientations when constructing global orientation"
             );
 
-            CFFGenerationGraph::new(graph, global_orientation)
+            CFFGenerationGraph::new(graph, global_orientation, dummy_edges)
         })
         .collect_vec()
 }
@@ -263,7 +266,7 @@ fn get_orientations_with_cut<E, V, H>(
         })
         .filter(|global_orientation| {
             // filter out orientations that have a directed cycle
-            let graph = CFFGenerationGraph::new(graph, global_orientation.clone());
+            let graph = CFFGenerationGraph::new(graph, global_orientation.clone(), &[]);
             !graph.has_directed_cycle_initial()
         });
 
@@ -305,7 +308,7 @@ fn get_possible_orientations_for_cut_list<E, V, H>(
 
     // filter out orientations that are not dags
     let filter_non_dag = global_orientations.filter(|global_orientation| {
-        let graph = CFFGenerationGraph::new(graph, global_orientation.clone());
+        let graph = CFFGenerationGraph::new(graph, global_orientation.clone(), &[]);
         !graph.has_directed_cycle_initial()
     });
 
@@ -343,8 +346,9 @@ fn get_possible_orientations_for_cut_list<E, V, H>(
 pub fn generate_cff_expression<E, V, H>(
     graph: &HedgeGraph<E, V, H>,
     canonize_esurface: &Option<ShiftRewrite>,
+    dummy_edges: &[EdgeIndex],
 ) -> Result<CFFExpression<AmplitudeOrientationID>> {
-    let graphs = get_orientations(graph);
+    let graphs = get_orientations(graph, dummy_edges);
     debug!("number of orientations: {}", graphs.len());
     let mut surface_cache = SurfaceCache {
         esurface_cache: EsurfaceCollection::from_iter(std::iter::empty()),
@@ -1093,7 +1097,8 @@ mod tests_cff {
         let triangle_hedge_graph: HedgeGraph<(), (), ()> =
             triangle_hedge_graph_builder.build::<NodeStorageVec<()>>();
 
-        let cff_hedge = generate_cff_expression(&triangle_hedge_graph, &shift_rewrite).unwrap();
+        let cff_hedge =
+            generate_cff_expression(&triangle_hedge_graph, &shift_rewrite, &[]).unwrap();
         let mut cff_hedge_evaluator = cff_hedge.quick_symbolica_evaluator(0..3, 3..6);
 
         let cff_res: F<f64> = energy_prefactor
@@ -1208,7 +1213,8 @@ mod tests_cff {
 
         let hedge_double_traingle: HedgeGraph<(), (), ()> =
             hedge_double_triangle_builder.build::<NodeStorageVec<()>>();
-        let cff_hedge = generate_cff_expression(&hedge_double_traingle, &shift_rewrite).unwrap();
+        let cff_hedge =
+            generate_cff_expression(&hedge_double_traingle, &shift_rewrite, &[]).unwrap();
         let mut cff_hedge_evaluator = cff_hedge.quick_symbolica_evaluator(0..2, 2..7);
         let cff_res =
             energy_prefactor * cff_hedge_evaluator.evaluate_single(&energy_cache.as_ref());
@@ -1337,7 +1343,7 @@ mod tests_cff {
         tbt_hedge_builder.add_edge(nodes[5], nodes[4], (), Orientation::Undirected);
 
         let tbt_hedge: HedgeGraph<(), (), ()> = tbt_hedge_builder.build::<NodeStorageVec<()>>();
-        let cff_hedge = generate_cff_expression(&tbt_hedge, &shift_rewrite).unwrap();
+        let cff_hedge = generate_cff_expression(&tbt_hedge, &shift_rewrite, &[]).unwrap();
 
         let mut cff_hedge_evaluator = cff_hedge.quick_symbolica_evaluator(0..2, 2..10);
         let res = cff_hedge_evaluator.evaluate_single(&energies_cache.as_ref()) * energy_prefactor;
@@ -1555,7 +1561,7 @@ mod tests_cff {
     }
 
     fn proper_atom(graph: &HedgeGraph<(), ()>) -> Atom {
-        let cff = generate_cff_expression(&graph, &None).unwrap();
+        let cff = generate_cff_expression(&graph, &None, &[]).unwrap();
 
         let mut cff_atom = cff.to_atom();
         cff_atom = cff.surfaces.substitute_energies(&cff_atom, &[]);

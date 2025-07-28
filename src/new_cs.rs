@@ -34,6 +34,7 @@ use crate::{
         generation::{generate_cff_expression, get_orientations_from_subgraph},
     },
     model::ArcParticle,
+    momentum::SignOrZero,
     momentum_sample::ExternalIndex,
     new_gammaloop_integrand::{
         amplitude_integrand::{AmplitudeGraphTerm, AmplitudeIntegrand},
@@ -558,17 +559,17 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
             .underlying
             .get_esurface_canonization(&self.graph.loop_momentum_basis);
 
-        let cff_expression = generate_cff_expression(&self.graph.underlying, &shift_rewrite)?;
+        let cff_expression = generate_cff_expression(
+            &self.graph.underlying,
+            &shift_rewrite,
+            &self.graph.underlying.dummy_list(),
+        )?;
         self.derived_data.cff_expression = Some(cff_expression);
 
         Ok(())
     }
 
     pub fn preprocess(&mut self, model: &Model, settings: &ProcessSettings) -> Result<()> {
-        // self.graph
-        //     .loop_momentum_basis
-        //     .set_edge_signatures(&self.graph.underlying)?;
-
         self.generate_cff()?;
         self.build_evaluator(model);
         self.build_evaluator_for_orientations(model)?;
@@ -576,7 +577,7 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
         self.build_loop_momentum_bases();
         self.build_multi_channeling_channels();
         self.build_esurface_derived_data()?;
-        self.build_threshold_counterterms(model);
+        //self.build_threshold_counterterms(model);
 
         Ok(())
     }
@@ -676,7 +677,7 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
     }
 
     pub fn build_all_orientations_integrand_atom(&self) -> Atom {
-        let wood = self.graph.wood(&self.graph.underlying.full_filter());
+        let wood = self.graph.wood(&self.graph.underlying.no_dummy());
         let mut forest = wood.unfold(&self.graph, &self.graph.loop_momentum_basis);
 
         let canonize_esurface = self
@@ -696,7 +697,7 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
 
         forest.compute(
             &self.graph,
-            &self.graph.underlying.full_filter(),
+            &self.graph.underlying.no_dummy(),
             &orientations,
             &canonize_esurface,
             &[],
@@ -707,7 +708,7 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
         for (_orientation_id, orientation_data) in orientations.iter_enumerated() {
             let mut orientation_expr = forest.local_expr(
                 &self.graph,
-                &self.graph.underlying.full_filter(),
+                &self.graph.underlying.no_dummy(),
                 orientation_data,
                 &canonize_esurface,
                 &orientations,
@@ -903,7 +904,7 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
     fn build_loop_momentum_bases(&mut self) {
         let lmbs = self
             .graph
-            .generate_loop_momentum_bases(&self.graph.underlying.full_filter());
+            .generate_loop_momentum_bases(&self.graph.underlying.no_dummy());
 
         self.derived_data.lmbs = Some(lmbs)
     }
@@ -1115,15 +1116,12 @@ impl<S: NumeratorState> Amplitude<S> {
         let new_external_particels = graph.underlying.get_external_partcles();
         let new_external_signature = graph.underlying.get_external_signature();
 
-        // we skip the sanity check for vacuum graphs
-        let is_vacuum = new_external_particels.is_empty();
-
         if !self.graphs.is_empty() {
-            if self.external_particles != new_external_particels && !is_vacuum {
+            if self.external_particles != new_external_particels {
                 return Err(eyre!("amplitude graph has different number of externals"));
             }
 
-            if self.external_signature != new_external_signature && !is_vacuum {
+            if self.external_signature != new_external_signature {
                 return Err(eyre!("wrong external signature"));
             }
         } else {

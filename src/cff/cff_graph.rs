@@ -810,10 +810,15 @@ impl CFFGenerationGraph {
     pub fn new<E, V, H>(
         graph: &HedgeGraph<E, V, H>,
         global_orientation: EdgeVec<Orientation>,
+        dummy_edges: &[EdgeIndex],
     ) -> Self {
         let mut vertices = (0..graph.n_nodes()).map(CFFVertex::new).collect_vec();
 
         for (hedge_pair, edge_id, _) in graph.iter_edges() {
+            if dummy_edges.contains(&edge_id) {
+                continue; // skip dummy edges
+            }
+
             match hedge_pair {
                 HedgePair::Unpaired { hedge, flow } => {
                     let vertex = Into::<usize>::into(graph.node_id(hedge));
@@ -1547,7 +1552,7 @@ mod test {
         let hedge_graph: HedgeGraph<_, _, ()> = hedge_graph_builder.build::<NodeStorageVec<_>>();
         let global_orientation = hedge_graph.new_edgevec(|_, _, _| Orientation::Default);
 
-        let cff_graph = CFFGenerationGraph::new(&hedge_graph, global_orientation);
+        let cff_graph = CFFGenerationGraph::new(&hedge_graph, global_orientation, &[]);
         let contracted = cff_graph.contract_edge(EdgeIndex::from(0));
 
         assert!(!contracted.has_edge(EdgeIndex::from(0)));
@@ -1613,7 +1618,7 @@ mod test {
 
         let tri_box: HedgeGraph<(), (), ()> = tri_box_builder.build::<NodeStorageVec<_>>();
         let global_orientation = tri_box.new_edgevec(|_, _, _| Orientation::Default);
-        let mut tri_box_cff_graph = CFFGenerationGraph::new(&tri_box, global_orientation);
+        let mut tri_box_cff_graph = CFFGenerationGraph::new(&tri_box, global_orientation, &[]);
 
         assert!(!tri_box_cff_graph.has_impossible_edge());
         tri_box_cff_graph = tri_box_cff_graph.contract_edge(EdgeIndex::from(0));
