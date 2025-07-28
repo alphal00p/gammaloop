@@ -25,8 +25,10 @@ use crate::{
     cff::{
         cut_expression::SuperGraphOrientationID,
         esurface::{self, generate_esurface_data, EsurfaceDerivedData},
-        expression::{AmplitudeOrientationID, CFFExpression, OrientationData},
-        generation::generate_cff_expression,
+        expression::{
+            AmplitudeOrientationID, CFFExpression, OrientationData, SubgraphOrientationID,
+        },
+        generation::{generate_cff_expression, get_orientations_from_subgraph},
     },
     model::ArcParticle,
     momentum_sample::ExternalIndex,
@@ -706,6 +708,20 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
 
     fn build_threshold_counterterms(&mut self, model: &Model) {
         let mut counterterms: TiVec<EsurfaceID, Atom> = TiVec::new();
+        let canonize_esurface = self
+            .graph
+            .underlying
+            .get_esurface_canonization(&self.graph.loop_momentum_basis);
+
+        let full_orientation_list = self
+            .derived_data
+            .cff_expression
+            .as_ref()
+            .unwrap()
+            .orientations
+            .iter()
+            .map(|o| o.data.clone())
+            .collect::<TiVec<AmplitudeOrientationID, _>>();
 
         for (esurface_id, esurface) in self
             .derived_data
@@ -796,8 +812,59 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
                 })
                 .collect_vec();
 
+            let circled_orientations =
+                get_orientations_from_subgraph(&self.graph.underlying, &circled, &reverse_dangling)
+                    .into_iter()
+                    .map(|cff_graph| cff_graph.global_orientation)
+                    .collect::<TiVec<SubgraphOrientationID, _>>();
+
+            let complement_orientations = get_orientations_from_subgraph(
+                &self.graph.underlying,
+                &complement,
+                &reverse_dangling,
+            )
+            .into_iter()
+            .map(|cff_graph| cff_graph.global_orientation)
+            .collect::<TiVec<SubgraphOrientationID, _>>();
+
+            circled_forest.compute(
+                &self.graph,
+                &circled,
+                &circled_orientations,
+                &canonize_esurface,
+                &esurface.energies,
+            );
+
+            complement_forest.compute(
+                &self.graph,
+                &complement,
+                &complement_orientations,
+                &canonize_esurface,
+                &esurface.energies,
+            );
+
             let mut counterterm = Atom::new();
-            for orientation in orientations {}
+            for orientation in orientations {
+                let circled_expr = circled_forest.local_expr(
+                    &self.graph,
+                    &circled,
+                    &full_orientation_list[orientation],
+                    &canonize_esurface,
+                    &circled_orientations,
+                    &esurface.energies,
+                );
+
+                let complement_expr = complement_forest.local_expr(
+                    &self.graph,
+                    &complement,
+                    &full_orientation_list[orientation],
+                    &canonize_esurface,
+                    &complement_orientations,
+                    &esurface.energies,
+                );
+
+                let mut orientation_result = circled_expr * complement_expr;
+            }
 
             counterterms.push(counterterm);
         }
