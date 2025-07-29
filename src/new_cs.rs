@@ -2,6 +2,8 @@ use std::{
     cell::RefCell,
     collections::HashSet,
     fmt::{Display, Formatter},
+    fs::File,
+    io::Write,
     iter,
     marker::PhantomData,
     path::{Path, PathBuf},
@@ -18,6 +20,7 @@ use idenso::metric::MS;
 
 use spenso::{
     algebra::{algebraic_traits::IsZero, complex::Complex},
+    iterators::Fiber,
     tensors::parametric::SerializableCompiledEvaluator,
 };
 
@@ -478,6 +481,16 @@ impl<S: NumeratorState> Amplitude<S> {
             path.clone().join(&format!("amplitude_{}.bin", self.name)),
             &data,
         )?;
+
+        let mut dot = File::create_new(path.clone().join(&format!("amplitude_{}.dot", self.name)))?;
+        self.write_dot(&mut dot)?;
+        Ok(())
+    }
+
+    pub fn write_dot<W: std::io::Write>(&self, writer: &mut W) -> Result<(), std::io::Error> {
+        for graph in &self.graphs {
+            graph.write_dot(writer)?;
+        }
         Ok(())
     }
 
@@ -515,6 +528,13 @@ pub struct AmplitudeGraph<S: NumeratorState> {
 }
 
 impl<S: NumeratorState> AmplitudeGraph<S> {
+    pub(crate) fn write_dot<W: std::io::Write>(
+        &self,
+        writer: &mut W,
+    ) -> Result<(), std::io::Error> {
+        self.graph.dot_serialize_io(writer)
+    }
+
     pub fn new(graph: Graph) -> Self {
         AmplitudeGraph {
             graph,

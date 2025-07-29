@@ -49,10 +49,10 @@ symbolica = { version = "0.17.0", features = ["serde", "bincode"] }
 #     "bincode",
 # ] }
 
-idenso = { version = "0.2.0", features = ["bincode"] }
+idenso = { version = "0.2.1", features = ["bincode"] }
 spenso-hep-lib = { version = "0.1.1" }
 spenso = { version = "0.5.2", features = ["shadowing"] }
-linnet = { version = "0.9.1", features = ["drawing", "serde", "bincode"] }
+linnet = { version = "0.10.0", features = ["drawing", "serde", "bincode"] }
 
 vakint = { git = "https://github.com/alphal00p/vakint", branch = "main" }
 momtrop = { git = "https://github.com/alphal00p/momtrop", features = ["log"] }
@@ -175,11 +175,12 @@ no_python = []
 # symbolica = { git = "https://github.com/alphal00p/symbolica", rev = "a23ebaa71b1bc715a129ac765764ece7273625dc" }
 # symbolica = {path="../symbolica"}
 # spenso-macros = { path = "../spenso/spenso-macros" }
-spenso = { git = "https://github.com/alphal00p/spenso", rev = "493066a5ec8647727d8d825b17b8743bd1d5c1fa" }
-idenso = { git = "https://github.com/alphal00p/spenso", rev = "493066a5ec8647727d8d825b17b8743bd1d5c1fa" }
-spenso-macros = { git = "https://github.com/alphal00p/spenso", rev = "493066a5ec8647727d8d825b17b8743bd1d5c1fa" }
+spenso = { git = "https://github.com/alphal00p/spenso", rev = "06901090a827e744874ddbe88d03a9330388e078" }
+spenso-hep-lib = { git = "https://github.com/alphal00p/spenso", rev = "06901090a827e744874ddbe88d03a9330388e078" }
+idenso = { git = "https://github.com/alphal00p/spenso", rev = "06901090a827e744874ddbe88d03a9330388e078" }
+spenso-macros = { git = "https://github.com/alphal00p/spenso", rev = "06901090a827e744874ddbe88d03a9330388e078" }
 # spenso = { path = "../spenso/spenso" }
-
+# linnet = "0.10.0"
 # linnet = { path = "../linnet" }
 # linnet = { git = "https://github.com/alphal00p/linnet", rev = "956b2521df4904a524b14e593c89e2e125ca8daf" }
 
