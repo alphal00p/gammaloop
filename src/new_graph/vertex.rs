@@ -71,7 +71,7 @@ impl From<&Vertex> for DotVertexData {
                     .to_quoted(),
             );
             v.add_statement(
-                "num",
+                "color_num",
                 value
                     .num_color
                     .get_owned_linear(FlatIndex::from(0))
