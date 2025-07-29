@@ -113,6 +113,29 @@ impl ProcessDefinition {
             cross_section_filters: FeynGenFilters(vec![]),
         }
     }
+
+    pub fn folder_name(&self, model: &Model) -> String {
+        let mut filename = String::new();
+        filename.push_str(&model.name);
+        filename.push('_');
+        for p in self.initial_pdgs.iter() {
+            filename.push_str(&model.get_particle_from_pdg(*p as isize).name);
+            filename.push('_');
+        }
+        filename.push_str("_to_");
+        let n = self.final_pdgs_lists.len();
+
+        for (i, list) in self.final_pdgs_lists.iter().enumerate() {
+            for p in list {
+                filename.push_str(&model.get_particle_from_pdg(*p as isize).name);
+                filename.push('_');
+            }
+            if i < n - 1 {
+                filename.push_str("_or_");
+            }
+        }
+        filename
+    }
 }
 
 #[derive(Clone, Encode, Decode)]
@@ -131,6 +154,22 @@ impl<S: NumeratorState> Process<S> {
 }
 
 impl Process {
+    pub fn export_dot(&self, settings: &ExportSettings, model: &Model) -> Result<()> {
+        let path = Path::new(&settings.root_folder).join(self.definition.folder_name(model));
+
+        match &self.collection {
+            ProcessCollection::Amplitudes(a) => {
+                let p = path.join("amplitudes");
+                for amp in a {
+                    let mut dot = File::create_new(p.join(&format!("{}.dot", amp.name)))?;
+                    amp.write_dot(&mut dot)?;
+                }
+            }
+            ProcessCollection::CrossSections(a) => {}
+        }
+        Ok(())
+    }
+
     pub fn from_graph_list(
         name: String,
         graphs: Vec<Graph>,

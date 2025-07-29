@@ -42,12 +42,12 @@ fn tri_uv_AMP() {
     let graphs = dot!(
         digraph G{
             e        [style=invis]
-            e -> A   [particle=h id=0]
-            e -> B   [particle=h id=1]
-            e -> C   [particle=h id=2]
-            A -> B    [particle=h lmb_index=0]
-            B -> C    [particle=h]
-            C -> D    [particle=h]
+            e -> A   [particle=H id=0]
+            e -> B   [particle=H id=1]
+            e -> C   [particle=H id=2]
+            A -> B    [particle=H lmb_index=0]
+            B -> C    [particle=H]
+            C -> D    [particle=H]
         },&model
     )
     .unwrap();

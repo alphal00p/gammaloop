@@ -689,7 +689,14 @@ pub mod test {
         let num = num.color_simplify();
 
         println!("{}", num.state.color);
-        println!("{}", num.state.colorless);
+        println!(
+            "{}",
+            num.state
+                .colorless
+                .get_owned_linear(FlatIndex::from(0))
+                .unwrap()
+                .to_dots()
+        );
         let num = num.gamma_simplify();
 
         println!("{}", num.state.colorless);
