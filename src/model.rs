@@ -199,7 +199,7 @@ impl SerializableVertexRule {
             color_structures: vertex_rule
                 .color_structures
                 .iter()
-                .map(utils::to_str_expression)
+                .map(|a| a.to_canonical_string())
                 .map(SmartString::from)
                 .collect(),
             lorentz_structures: vertex_rule
@@ -655,8 +655,8 @@ impl SerializablePropagator {
         SerializablePropagator {
             name: propagator.name.clone(),
             particle: propagator.particle.0.name.clone(),
-            numerator: utils::to_str_expression(&propagator.numerator).into(),
-            denominator: utils::to_str_expression(&propagator.denominator).into(),
+            numerator: propagator.numerator.to_canonical_string().into(),
+            denominator: propagator.denominator.to_canonical_string().into(),
         }
     }
 }
@@ -697,7 +697,7 @@ impl SerializableCoupling {
     pub fn from_coupling(coupling: &Coupling) -> SerializableCoupling {
         SerializableCoupling {
             name: coupling.name.clone(),
-            expression: utils::to_str_expression(&coupling.expression).into(),
+            expression: coupling.expression.to_canonical_string().into(),
             orders: coupling.orders.clone(),
             value: coupling.value.map(|value| (value.re, value.im)),
         }
@@ -1562,7 +1562,7 @@ impl SerializableLorentzStructure {
         SerializableLorentzStructure {
             name: ls.name.clone(),
             spins: ls.spins.clone(),
-            structure: utils::to_str_expression(&ls.structure).into(),
+            structure: ls.structure.to_canonical_string().into(),
         }
     }
 }
@@ -1613,7 +1613,7 @@ impl SerializableParameter {
             expression: param
                 .expression
                 .as_ref()
-                .map(utils::to_str_expression)
+                .map(|a| a.to_canonical_string())
                 .map(SmartString::from),
         }
     }

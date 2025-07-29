@@ -151,59 +151,17 @@ class Worker:
                           ) -> list[str]:
         """ Generates diagrams according to the options given in argument and returns their yaml string representation. """
 
-    def add_cross_section_from_yaml_str(self, yaml_str: str) -> None:
-        """ Adds a cross section to the internal list of the worker given its yaml string representation. """
-
-    def load_cross_sections(self, file_path: str) -> None:
-        """ Loads a list of cross sections from a yaml file specifying them located at the path given in argument. """
-
-    def load_cross_sections_from_yaml_str(self, yaml_str: str) -> None:
-        """ Loads a list of cross sections from a yaml string representation of that list. """
-
-    def get_cross_sections(self) -> str:
-        """ Returns the yaml string representation of the list of all cross sections currently loaded in the worker. """
-
-    def reset_cross_sections(self) -> None:
-        """ Resets the internal list of cross sections of the worker. """
-
-    def add_amplitude_from_yaml_str(self, yaml_str: str) -> None:
-        """ Adds an amplitude to the internal list of the worker given its yaml string representation. """
-
-    def load_amplitudes(self, file_path: str) -> None:
-        """ Loads a list of amplitudes from a yaml file specifying them located at the path given in argument. """
-
-    def load_amplitudes_from_yaml_str(self, yaml_str: str) -> None:
-        """ Loads a list of amplitudes from a yaml string representation of that list. """
-
-    def load_amplitudes_derived_data(self, file_path: str) -> None:
-        """ Loads the derived data associated to the amplitudes. """
-
-    def get_amplitudes(self) -> str:
-        """ Returns the yaml string representation of the list of all amplitudes currently loaded in the worker. """
-
     def import_amplitude(self, file_path: Path) -> None:
         """ Imports an amplitude from a dot file located at the path given in argument. """
 
-    def reset_amplitudes(self) -> None:
-        """ Resets the internal list of amplitudes of the worker. """
-
     def preprocess(self, export_yaml_str: str) -> None:
         """ Preprocesses the cross sections or amplitudes. """
-
-    def export_cross_sections(self, export_root: str, cross_section_names: list[str], export_yaml_str, no_evaluators: bool) -> None:
-        """ Exports the cross sections given in argument to the export root given in argument. """
-
-    def export_amplitudes(self, export_root: str, amplitude_names: list[str], export_yaml_str: str, no_evaluators: bool) -> None:
-        """ Exports the amplitudes given in argument to the export root given in argument, parse export settings as yaml str"""
 
     def export_expressions(self, export_root: str, amplitude_list: list[str], format: str, export_yaml_str: str) -> None:
         """Exports the numerator and denominator to the export root given in argument in the format which can be 'default' or 'mathematica' or 'latex'."""
 
     def export_coupling_replacement_rules(self, export_root: str, format: str) -> None:
         """Exports the coupling replacement rules to the export root given in argument. The format can be 'default' or 'mathematica' or 'latex'."""
-
-    def load_amplitude_integrands(self, path_to_settings: str) -> None:
-        """ Loads the gammalooop integrand objects"""
 
     def write_default_settings(self, export_root: str) -> None:
         """ Writes the default settings to the export root given in argument. """
@@ -232,11 +190,14 @@ class Worker:
     def update_iter(self) -> None:
         """finish the iteration"""
 
-    def sync(self) -> None:
-        """sync the worker"""
-
     def evaluate_overall_factor(self, overall_factor: str) -> str:
         """Call the feyngen evaluate overall factor"""
 
     def generate_integrands(self, settings_yaml_str: str) -> None:
         """Generates integrands from the settings given in argument. """
+
+    def export(self, export_root: str) -> None:
+        """Exports the generated processes to the export root given in argument."""
+
+    def load(self, import_root: str) -> None:
+        """Imports the processes from the import root given in argument."""

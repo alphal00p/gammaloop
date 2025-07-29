@@ -575,11 +575,11 @@ class GammaLoop(object):
         str_setting = pformat(config_value)
         logger.info("Setting '%s%s%s' to:%s%s%s%s", Colour.GREEN,
                     full_path, Colour.END, Colour.BLUE, '\n' if len(str_setting) > 80 else ' ', str_setting, Colour.END)
-        if not args.no_update_run_card and self.launched_output is not None:
-            # Update the run card in the output with the current configuration
-            update_run_card_in_output(self.launched_output, self.config)
+        # if not args.no_update_run_card and self.launched_output is not None:
+        # Update the run card in the output with the current configuration
+        # update_run_card_in_output(self.launched_output, self.config)
 
-    # show_settings command
+        # show_settings command
     set_model_param_settings = ArgumentParser(prog='set_model_param')
     set_model_param_settings.add_argument('param', metavar='param', type=str,
                                           help='Model external parameter name to modify')
@@ -1375,25 +1375,10 @@ class GammaLoop(object):
             logger.info(
                 "Model replacement rules exported to model directory.")
 
-        # if len(self.cross_sections) == 0 and len(self.amplitudes) == 0:
-        #     raise GammaLoopError("No process generated yet.")
+        export_config = yaml.dump(self.config['export_settings'])
+        self.rust_worker.preprocess(export_config)
+        self.rust_worker.export(args.output_path)
 
-        # if len(self.cross_sections) > 0:
-        cross_section_exporter = CrossSectionsExporter(self, args)
-        cross_section_exporter.export(
-            args.output_path, self.cross_sections, args.no_evaluators)
-        logger.info("Cross-sections exported to '%s'.", args.output_path)
-
-        # if len(self.amplitudes) > 0:
-        amplitude_exporter = AmplitudesExporter(self, args)
-
-        if args.expression:
-            amplitude_exporter.export_expression(
-                args.output_path, self.amplitudes, args.expression_format)
-        amplitude_exporter.export(
-            args.output_path, self.amplitudes, args.no_evaluators)
-
-        logger.info("Amplitudes exported to '%s'.", args.output_path)
     #
     # Run interface type of commands below (those bound to a particular output already generated)
     #
@@ -1413,64 +1398,7 @@ class GammaLoop(object):
             return
         args = self.launch_parser.parse_args(split_str_args(str_args))
 
-        if not Path(pjoin(args.path_to_launch, 'output_metadata.yaml')).exists():
-            raise GammaLoopError(
-                f"Cross-section or amplitude path '{args.path_to_launch}' does not appear valid.")
-
-        with open(pjoin(args.path_to_launch, 'output_metadata.yaml'), 'r', encoding='utf-8') as file:
-            output_metadata = OutputMetaData.from_yaml_str(file.read())
-
-        # Sync the model with the one used in the output
-        with open(pjoin(args.path_to_launch, 'sources', 'model', f"{output_metadata['model_name']}.yaml"), 'r', encoding='utf-8') as file:
-            self.model = Model.from_yaml(file.read())
-        self.model.apply_input_param_card(InputParamCard.from_param_card(
-            ParamCard(pjoin(args.path_to_launch, 'cards', 'param_card.dat')), self.model), simplify=False)
-        processed_yaml_model = self.model.to_yaml()
-        if not args.no_overwrite_model:
-            with open(pjoin(args.path_to_launch, 'sources', 'model', f"{output_metadata['model_name']}.yaml"), 'w', encoding='utf-8') as file:
-                file.write(processed_yaml_model)
-        self.rust_worker.load_model_from_yaml_str(processed_yaml_model)
-
-        # Sync the run_settings from the interface to the output or vice-versa
-        if args.load_run_settings:
-            run_settings = load_configuration(
-                pjoin(args.path_to_launch, 'cards', 'run_card.yaml'), True)
-            # Do not overwrite the external momenta setting in gammaLoop if they are set constant in the process dir
-            if run_settings['Kinematics']['externals']['type'] == 'constant':
-                del run_settings['Kinematics']
-            self.config.update({'run_settings': run_settings})
-        else:
-            update_run_card_in_output(args.path_to_launch, self.config)
-
-        # Depending on the type of output, sync cross-section or amplitude
-        if output_metadata['output_type'] == 'amplitudes':
-            self.rust_worker.load_amplitudes(args.path_to_launch)
-            # self.amplitudes = cross_section.AmplitudeList()
-            # self.rust_worker.reset_amplitudes()
-            # for amplitude_name in output_metadata['contents']:
-            #    with open(pjoin(args.path_to_launch, 'sources', 'amplitudes', f'{amplitude_name}', 'amplitude.yaml'), 'r', encoding='utf-8') as file:
-            #        amplitude_yaml = file.read()
-            #        self.amplitudes.add_amplitude(
-            #            cross_section.Amplitude.from_yaml_str(self.model, amplitude_yaml))
-            #        self.rust_worker.add_amplitude_from_yaml_str(
-            #            amplitude_yaml)
-            # self.rust_worker.load_amplitudes_derived_data(
-            #    args.path_to_launch)
-
-            # self.rust_worker.load_amplitude_integrands(
-            #    pjoin(args.path_to_launch, 'cards', 'run_card.yaml'))
-
-        if output_metadata['output_type'] == 'cross_sections':
-            self.rust_worker.load_cross_sections(args.path_to_launch)
-            # self.cross_sections = cross_section.CrossSectionList()
-            # self.rust_worker.reset_cross_sections()
-            # for cross_section_name in output_metadata['contents']:
-            #    with open(pjoin(args.path_to_launch, 'sources', 'cross_sections', f'{cross_section_name}', 'cross_section.yaml'), 'r', encoding='utf-8') as file:
-            #        cross_section_yaml = file.read()
-            #        self.cross_sections.add_cross_section(
-            #            cross_section.CrossSection.from_yaml_str(self.model, cross_section_yaml))
-            #        self.rust_worker.add_cross_section_from_yaml_str(
-            #            cross_section_yaml)
+        self.rust_worker.load(args.path_to_launch)
 
         self.launched_output = Path(os.path.abspath(args.path_to_launch))
 

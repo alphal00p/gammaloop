@@ -1596,35 +1596,8 @@ pub fn parse_python_expression(expression: &str) -> Atom {
         .replace("cmath.pi", "pi")
         .replace("math.sqrt", "sqrt")
         .replace("math.pi", "pi");
-    parse!(processed_string)
-}
 
-pub fn to_str_expression(expression: &Atom) -> String {
-    format!(
-        "{}",
-        AtomPrinter::new_with_options(
-            expression.as_view(),
-            PrintOptions {
-                pretty_matrix: true,
-                terms_on_new_line: false,
-                color_top_level_sum: false,
-                color_builtin_symbols: false,
-                print_finite_field: false,
-                explicit_rational_polynomial: false,
-                symmetric_representation_for_finite_field: false,
-                number_thousands_separator: None,
-                multiplication_operator: '*',
-                square_brackets_for_function: false,
-                num_exp_as_superscript: false,
-                double_star_for_exponentiation: false,
-                precision: None,
-                color_namespace: true,
-                hide_all_namespaces: false,
-                hide_namespace: None,
-                ..Default::default()
-            },
-        )
-    )
+    parse!(processed_string)
 }
 
 /// Format a mean ± sdev as mean(sdev) with the correct number of digits.

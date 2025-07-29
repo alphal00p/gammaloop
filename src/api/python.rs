@@ -30,7 +30,7 @@ use feyngen::{
 use git_version::git_version;
 use itertools::{self, Itertools};
 use log::{debug, info, warn, LevelFilter};
-use pyo3::types::PyDict;
+use pyo3::{import_exception, types::PyDict};
 use spenso::algebra::complex::Complex;
 use std::cmp::Ordering;
 use std::{
@@ -268,9 +268,7 @@ pub struct OutputOptions {}
 #[pyclass(name = "Worker", unsendable)]
 pub struct PythonWorker {
     pub model: Model,
-    pub cross_sections: CrossSectionList,
     pub process_list: ProcessList,
-    pub amplitudes: AmplitudeList<PythonState>,
     pub integrands: HashMap<String, Integrand>,
     pub master_node: Option<MasterNode>,
 }
@@ -279,9 +277,7 @@ impl Clone for PythonWorker {
     fn clone(&self) -> PythonWorker {
         PythonWorker {
             model: self.model.clone(),
-            cross_sections: self.cross_sections.clone(),
             process_list: self.process_list.clone(),
-            amplitudes: self.amplitudes.clone(),
             integrands: self.integrands.clone(),
             master_node: self.master_node.clone(),
         }
@@ -619,9 +615,7 @@ impl PythonWorker {
         crate::set_interrupt_handler();
         Ok(PythonWorker {
             model: Model::default(),
-            cross_sections: CrossSectionList::default(),
             process_list: ProcessList::new(),
-            amplitudes: AmplitudeList::default(),
             integrands: HashMap::default(),
             master_node: None,
         })
@@ -678,50 +672,6 @@ impl PythonWorker {
         self.process_list
             .preprocess(&self.model, process_settings)
             .map_err(|e| exceptions::PyException::new_err(e.to_string()))
-    }
-
-    pub fn add_cross_section_from_yaml_str(&mut self, yaml_str: &str) -> PyResult<()> {
-        if self.model.is_empty() {
-            return Err(exceptions::PyException::new_err(
-                "Model must be loaded before cross sections",
-            ));
-        } else {
-            warn!("adding cross section from yaml string not supported yet, most likely inserted already at generation time");
-            Ok(())
-        }
-
-        //match CrossSection::from_yaml_str(&self.model, String::from(yaml_str)) {
-        //  Ok(cs) => {
-        // self.cross_sections.add_cross_section(cs);
-        // Ok(())
-        //}
-        //Err(e) => Err(exceptions::PyException::new_err(e.to_string())),
-        //}
-    }
-
-    pub fn load_cross_sections_from_yaml_str(&mut self, yaml_str: &str) -> PyResult<()> {
-        if self.model.is_empty() {
-            return Err(exceptions::PyException::new_err(
-                "Model must be loaded before cross sections",
-            ));
-        }
-        CrossSectionList::from_yaml_str(&self.model, String::from(yaml_str))
-            .map_err(|e| exceptions::PyException::new_err(e.to_string()))
-            .map(|cs| self.cross_sections = cs)
-    }
-
-    // Note: one could consider returning a PyCrossSectionList class containing the serialisable model as well,
-    // but since python already has its native class for this, it is better for now to pass a yaml representation
-    // which will be deserialize in said native class.
-    pub fn get_cross_sections(&self) -> PyResult<String> {
-        self.cross_sections
-            .to_yaml()
-            .map_err(|e| exceptions::PyException::new_err(e.to_string()))
-    }
-
-    pub fn reset_cross_sections(&mut self) -> PyResult<()> {
-        self.cross_sections = CrossSectionList::default();
-        Ok(())
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -809,345 +759,6 @@ impl PythonWorker {
         self.process_list.add_process(process);
 
         res
-    }
-
-    pub fn add_amplitude_from_yaml_str(&mut self, yaml_str: &str) -> PyResult<()> {
-        info!("calling add_amplitude_from_yaml_str");
-
-        if self.model.is_empty() {
-            return Err(exceptions::PyException::new_err(
-                "Model must be loaded before cross sections",
-            ));
-        }
-
-        match Amplitude::from_yaml_str(&self.model, String::from(yaml_str)) {
-            Ok(amp) => {
-                let name = amp.name;
-                let amplitude_bare_graphs = amp
-                    .amplitude_graphs
-                    .into_iter()
-                    .map(|amplitude_graph| amplitude_graph.graph.bare_graph)
-                    .collect_vec();
-
-                let process = Process::from_bare_graph_list(
-                    String::from(name),
-                    amplitude_bare_graphs,
-                    GenerationType::Amplitude,
-                    ProcessDefinition::new_empty(),
-                    None,
-                )
-                .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
-
-                self.process_list.add_process(process);
-
-                //self.amplitudes
-                //   .add_amplitude(amp.map(|a| a.map(|ag| ag.forget_type())));
-                Ok(())
-            }
-            Err(e) => Err(exceptions::PyException::new_err(e.to_string())),
-        }
-    }
-
-    pub fn load_cross_sections(&mut self, file_path: &str) -> PyResult<()> {
-        info!("calling load_cross_sections");
-
-        if self.model.is_empty() {
-            return Err(exceptions::PyException::new_err(
-                "Model must be loaded before cross sections",
-            ));
-        }
-        let root_path = PathBuf::from(file_path);
-
-        let output_medadata_str = fs::read_to_string(root_path.join("output_metadata.yaml"))?;
-        let output_metadata: OutputMetadata = serde_yaml::from_str(&output_medadata_str)
-            .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
-
-        if self.model.name != output_metadata.model_name {
-            return Err(exceptions::PyException::new_err(format!(
-                "Model name mismatch: {} != {}",
-                self.model.name, output_metadata.model_name
-            )));
-        }
-
-        if output_metadata.output_type != "cross_sections" {
-            return Err(exceptions::PyException::new_err(format!(
-                "Output type mismatch: {} != {}",
-                output_metadata.output_type, "cross_sections"
-            )));
-        }
-
-        let mut state_map_file =
-            fs::File::open(root_path.join("sources").join("symbolica_state.bin"))?;
-
-        let state_map = State::import(&mut state_map_file, None)?;
-
-        let context = GammaLoopContextContainer {
-            state_map: &state_map,
-            model: &self.model,
-        };
-
-        let process_definition_data =
-            fs::read(root_path.join("sources").join("process_definition.bin"))?;
-
-        let (process_definition, _) = bincode::decode_from_slice_with_context(
-            &process_definition_data,
-            bincode::config::standard(),
-            context,
-        )
-        .unwrap();
-
-        let mut process = Process {
-            definition: process_definition,
-            collection: ProcessCollection::CrossSections(vec![]),
-        };
-
-        for cross_section_name in output_metadata.contents {
-            let cross_section =
-                new_cs::CrossSection::load_from_file(&cross_section_name, file_path, context)
-                    .map_err(|e| {
-                        exceptions::PyException::new_err(format!(
-                            "Error loading cross section {}: {}",
-                            cross_section_name, e
-                        ))
-                    })?;
-
-            process.collection.add_cross_section(cross_section);
-        }
-
-        self.process_list.add_process(process);
-        Ok(())
-    }
-
-    pub fn load_amplitudes(&mut self, file_path: &str) -> PyResult<()> {
-        info!("calling load_amplitudes");
-
-        if self.model.is_empty() {
-            return Err(exceptions::PyException::new_err(
-                "Model must be loaded before amplitudes",
-            ));
-        }
-
-        let root_path = PathBuf::from(file_path);
-
-        let output_medadata_str = fs::read_to_string(root_path.join("output_metadata.yaml"))?;
-        let output_metadata: OutputMetadata = serde_yaml::from_str(&output_medadata_str)
-            .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
-
-        if self.model.name != output_metadata.model_name {
-            return Err(exceptions::PyException::new_err(format!(
-                "Model name mismatch: {} != {}",
-                self.model.name, output_metadata.model_name
-            )));
-        }
-
-        if output_metadata.output_type != "amplitudes" {
-            return Err(exceptions::PyException::new_err(format!(
-                "Output type mismatch: {} != {}",
-                output_metadata.output_type, "amplitudes"
-            )));
-        }
-
-        let mut state_map_file =
-            fs::File::open(root_path.join("sources").join("symbolica_state.bin"))?;
-
-        let state_map = State::import(&mut state_map_file, None)?;
-
-        let context = GammaLoopContextContainer {
-            state_map: &state_map,
-            model: &self.model,
-        };
-
-        let process_definition_data =
-            fs::read(root_path.join("sources").join("process_definition.bin"))?;
-
-        let (process_definition, _) = bincode::decode_from_slice_with_context(
-            &process_definition_data,
-            bincode::config::standard(),
-            context,
-        )
-        .unwrap();
-
-        let mut process = Process {
-            definition: process_definition,
-            collection: ProcessCollection::Amplitudes(vec![]),
-        };
-
-        for amplitude_name in output_metadata.contents {
-            let amplitude = new_cs::Amplitude::load_from_file(&amplitude_name, file_path, context)
-                .map_err(|e| {
-                    exceptions::PyException::new_err(format!(
-                        "Error loading amplitude {}: {}",
-                        amplitude_name, e
-                    ))
-                })?;
-
-            process.collection.add_amplitude(amplitude);
-        }
-
-        self.process_list.add_process(process);
-        Ok(())
-    }
-
-    pub fn load_amplitudes_from_yaml_str(&mut self, yaml_str: &str) -> PyResult<()> {
-        if self.model.is_empty() {
-            return Err(exceptions::PyException::new_err(
-                "Model must be loaded before amplitudes",
-            ));
-        }
-        AmplitudeList::from_yaml_str(&self.model, String::from(yaml_str))
-            .map_err(|e| exceptions::PyException::new_err(e.to_string()))
-            .map(|a| self.amplitudes = a.map(|a| a.map(|ag| ag.map(|g| g.forget_type()))))
-    }
-
-    pub fn load_amplitudes_derived_data(&mut self, path: &str) -> PyResult<()> {
-        let path = PathBuf::from(path);
-
-        let path_to_amplitudes = path.join("sources").join("amplitudes");
-        let path_to_settings = path.join("cards").join("run_card.yaml");
-        let settings_str = std::fs::read_to_string(path_to_settings)
-            .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
-        let settings: Settings = serde_yaml::from_str(&settings_str)
-            .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
-
-        self.amplitudes
-            .load_derived_data_mut(&self.model, &path_to_amplitudes, &settings)
-            .map_err(|e| exceptions::PyException::new_err(e.to_string()))
-    }
-
-    pub fn apply_feynman_rules(&mut self, export_yaml_str: &str) {
-        let export_settings: ProcessSettings = serde_yaml::from_str(export_yaml_str)
-            .map_err(|e| exceptions::PyException::new_err(e.to_string()))
-            .unwrap();
-        self.amplitudes.map_mut_graphs(|g| {
-            let a = Numerator::default()
-                .from_graph(
-                    &g.bare_graph,
-                    &export_settings.numerator_settings.global_prefactor,
-                )
-                .forget_type();
-
-            g.derived_data.as_mut().unwrap().numerator = a;
-        });
-    }
-
-    // Note: one could consider returning a PyAmpltiudeList class containing the serialisable model as well,
-    // but since python already has its native class for this, it is better for now to pass a yaml representation
-    // which will be deserialize in said native class.
-    pub fn get_amplitudes(&self) -> PyResult<String> {
-        self.amplitudes
-            .to_yaml()
-            .map_err(|e| exceptions::PyException::new_err(e.to_string()))
-    }
-
-    pub fn reset_amplitudes(&mut self) -> PyResult<()> {
-        self.amplitudes = AmplitudeList::default();
-        Ok(())
-    }
-
-    pub fn export_cross_sections(
-        &mut self,
-        export_root: &str,
-        cross_section_names: Vec<String>,
-        export_yaml_str: &str,
-        no_evaluators: bool,
-    ) -> PyResult<String> {
-        let export_settings = ExportSettings {
-            root_folder: PathBuf::from_str(export_root)?,
-        };
-
-        let mut state_file = fs::File::create(
-            PathBuf::from(export_root)
-                .join("sources")
-                .join("symbolica_state.bin"),
-        )?;
-
-        State::export(&mut state_file)?;
-
-        match self
-            .process_list
-            .export_cross_sections(&cross_section_names, &export_settings)
-        {
-            Ok(n_exported) => {
-                if n_exported < cross_section_names.len() {
-                    return Err(exceptions::PyException::new_err(format!(
-                        "Could not find all cross sections to export: {:?}\n {} cross sections exported",
-                        cross_section_names, n_exported
-                    )));
-                } else if n_exported > cross_section_names.len() {
-                    warn!("duplicate cross sections in memory");
-                }
-            }
-            Err(err) => {
-                return Err(exceptions::PyException::new_err(err.to_string()));
-            }
-        }
-        Ok("Successful export".to_string())
-    }
-
-    pub fn export_amplitudes(
-        &mut self,
-        export_root: &str,
-        amplitude_names: Vec<String>,
-        export_yaml_str: &str,
-        no_evaluators: bool,
-    ) -> PyResult<String> {
-        let export_settings = ExportSettings {
-            root_folder: PathBuf::from_str(export_root)?,
-        };
-
-        let mut state_file = fs::File::create(
-            PathBuf::from(export_root)
-                .join("sources")
-                .join("symbolica_state.bin"),
-        )?;
-
-        State::export(&mut state_file)?;
-
-        match self
-            .process_list
-            .export_amplitudes(&amplitude_names, &export_settings)
-        {
-            Ok(n_exported) => {
-                if n_exported < amplitude_names.len() {
-                    return Err(exceptions::PyException::new_err(format!(
-                        "Could not find all amplitudes to export: {:?}\n {} amplitudes exported",
-                        amplitude_names, n_exported
-                    )));
-                } else if n_exported > amplitude_names.len() {
-                    warn!("duplicate amplitudes in memory");
-                }
-            }
-            Err(err) => {
-                return Err(exceptions::PyException::new_err(err.to_string()));
-            }
-        }
-
-        Ok("Successful export".to_string())
-    }
-
-    pub fn load_amplitude_integrands(&mut self, path_to_settings: &str) -> PyResult<String> {
-        self.integrands.clear();
-
-        let mut integrand_counter = 0;
-        for amplitude in &self.amplitudes.container {
-            let integrand = match amplitude.generate_integrand(Path::new(path_to_settings)) {
-                Ok(integrand) => integrand,
-                Err(err) => return Err(exceptions::PyException::new_err(err.to_string())),
-            };
-            self.integrands.insert(
-                amplitude.name.to_string(),
-                Integrand::GammaLoopIntegrand(integrand),
-            );
-            integrand_counter += 1;
-        }
-
-        log::info!("Loaded integrands {:?}", self.integrands.keys());
-
-        Ok(format!(
-            "Loaded {} integrands from {} amplitudes",
-            integrand_counter,
-            self.amplitudes.container.len()
-        ))
     }
 
     pub fn export_expressions(
@@ -1513,11 +1124,6 @@ impl PythonWorker {
         }
     }
 
-    pub fn sync(&mut self) {
-        self.amplitudes.sync(&self.model);
-        self.cross_sections.sync(&self.model);
-    }
-
     pub fn generate_integrands(&mut self, settings_yaml_str: &str) {
         let settings =
             serde_yaml::from_str::<Settings>(settings_yaml_str).expect("Could not parse settings");
@@ -1526,6 +1132,81 @@ impl PythonWorker {
         let integrands = self.process_list.generate_integrands(settings, &self.model);
 
         self.integrands = integrands;
+    }
+
+    pub fn export(&mut self, export_root: &str) -> PyResult<()> {
+        let export_settings = ExportSettings {
+            root_folder: PathBuf::from_str(export_root)?,
+        };
+
+        // check if the export root exists, if not create it, if it does return error
+        if !export_settings.root_folder.exists() {
+            fs::create_dir_all(&export_settings.root_folder)
+                .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
+        } else {
+            return Err(exceptions::PyException::new_err(
+            "Export root already exists, please choose a different path or remove the existing directory".to_string(),
+            ));
+        }
+
+        let mut state_file =
+            fs::File::create(PathBuf::from(export_root).join("symbolica_state.bin"))?;
+
+        State::export(&mut state_file)?;
+
+        let binary = bincode::encode_to_vec(&self.process_list, bincode::config::standard())
+            .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
+
+        fs::write(PathBuf::from(export_root).join("process_list.bin"), binary)
+            .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
+
+        let model_yaml = serde_yaml::to_string(&self.model.to_serializable())
+            .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
+
+        fs::write(PathBuf::from(export_root).join("model.yaml"), model_yaml)
+            .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
+
+        Ok(())
+    }
+
+    pub fn load(&mut self, import_root: &str) -> PyResult<()> {
+        let import_root = PathBuf::from(import_root);
+
+        let model_dir = import_root.join("model.yaml");
+        self.load_model(model_dir.to_str().unwrap())
+            .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
+
+        let state = State::import(
+            &mut fs::File::open(import_root.join("symbolica_state.bin"))
+                .map_err(|e| exceptions::PyException::new_err(e.to_string()))?,
+            None,
+        )
+        .map_err(|e| {
+            exceptions::PyException::new_err(format!(
+                "Could not load state from {}: {}",
+                import_root.join("symbolica_state.bin").display(),
+                e
+            ))
+        })?;
+
+        let context = GammaLoopContextContainer {
+            state_map: &state,
+            model: &self.model,
+        };
+
+        let process_list_data = fs::read(import_root.join("process_list.bin"))
+            .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
+
+        let (process_list, _) = bincode::decode_from_slice_with_context(
+            &process_list_data,
+            bincode::config::standard(),
+            context,
+        )
+        .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
+
+        self.process_list = process_list;
+
+        Ok(())
     }
 }
 
