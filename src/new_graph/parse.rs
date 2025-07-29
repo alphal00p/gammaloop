@@ -412,6 +412,8 @@ impl Graph {
                     full.sub(p);
                 }
             }
+
+            println!("{}", underlying.dot(&full));
             let covers = tree.covers(&full);
             assert_eq!(
                 full,
@@ -419,7 +421,7 @@ impl Graph {
                 "Tree does not cover all: {}, lmb specification must be wrong",
                 underlying.dot(&covers)
             );
-            let external = underlying.full_crown(&full);
+            let external = underlying.internal_crown(&full);
             underlying.lmb_impl(&full, &tree.tree_subgraph, external)
         } else {
             panic!("ata")
@@ -597,9 +599,9 @@ pub mod test {
             pdg=1000
             ]
             ext [style=invis]
-            ext -> v4 [id=0]
-            ext -> v5 [id=1]
-            v6 -> ext [id=2]
+            ext -> v4:0 [id=1 is_dummy=true]
+            ext -> v5:1 [id=0]
+            v6:2 -> ext [id=2]
             v5 -> v4 [lmb_index=0];
             v6 -> v5;
             v4 -> v6 ;
@@ -608,6 +610,10 @@ pub mod test {
         .unwrap();
 
         let g = &graphs[0];
+
+        // println!("{}", g.loop_momentum_basis);
+
+        insta::assert_ron_snapshot!(g.loop_momentum_basis);
 
         println!(
             "{}",

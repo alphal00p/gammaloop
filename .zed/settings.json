@@ -25,7 +25,7 @@
           }
         },
         "cargo": {
-          "features": ["python_api"],
+          "features": [],
           "allTargets": true
         },
         "diagnostics": {
@@ -37,7 +37,7 @@
 
         "check": {
           "onSave": true,
-          "features": ["python_api"],
+          "features": [],
           "command": "check"
         }
       }

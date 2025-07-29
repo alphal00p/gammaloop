@@ -58,9 +58,9 @@ pub struct IntegralResult {
     #[tabled(rename = "sqrt(σ)")]
     variance: String,
     err: String,
-    #[tabled(err = "err[%]")]
+    #[tabled(rename = "err[%]")]
     err_perc: String,
-    #[tabled(err = "PDF")]
+    #[tabled(rename = "PDF")]
     pdf: String,
 }
 

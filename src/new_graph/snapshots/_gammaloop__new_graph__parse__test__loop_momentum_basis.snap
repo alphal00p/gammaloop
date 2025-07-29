@@ -1,0 +1,70 @@
+---
+source: src/new_graph/parse.rs
+expression: g.loop_momentum_basis
+---
+LoopMomentumBasis(
+  tree: None,
+  loop_edges: [
+    EdgeIndex(3),
+  ],
+  ext_edges: [
+    EdgeIndex(0),
+    EdgeIndex(2),
+  ],
+  edge_signatures: EdgeVec([
+    LoopExtSignature(
+      internal: SignatureLike([
+        0,
+      ]),
+      external: SignatureLike([
+        0,
+        1,
+      ]),
+    ),
+    LoopExtSignature(
+      internal: SignatureLike([
+        0,
+      ]),
+      external: SignatureLike([
+        0,
+        0,
+      ]),
+    ),
+    LoopExtSignature(
+      internal: SignatureLike([
+        0,
+      ]),
+      external: SignatureLike([
+        0,
+        1,
+      ]),
+    ),
+    LoopExtSignature(
+      internal: SignatureLike([
+        1,
+      ]),
+      external: SignatureLike([
+        0,
+        0,
+      ]),
+    ),
+    LoopExtSignature(
+      internal: SignatureLike([
+        1,
+      ]),
+      external: SignatureLike([
+        0,
+        0,
+      ]),
+    ),
+    LoopExtSignature(
+      internal: SignatureLike([
+        1,
+      ]),
+      external: SignatureLike([
+        0,
+        -1,
+      ]),
+    ),
+  ]),
+)

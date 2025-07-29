@@ -1,4 +1,4 @@
-use std::{borrow::Borrow, collections::VecDeque};
+use std::{borrow::Borrow, collections::VecDeque, fmt::Display};
 
 use ahash::{HashMap, HashMapExt};
 use bincode_trait_derive::{Decode, Encode};
@@ -22,6 +22,7 @@ use symbolica::{
     id::{Pattern, Replacement},
     with_default_namespace,
 };
+use tabled::{builder::Builder, settings::Style};
 use typed_index_collections::TiVec;
 
 use crate::{
@@ -41,6 +42,46 @@ pub struct LoopMomentumBasis {
     pub loop_edges: TiVec<LoopIndex, EdgeIndex>,
     pub ext_edges: TiVec<ExternalIndex, EdgeIndex>, //It should have length = to number of externals (not number of independent externals)
     pub edge_signatures: EdgeVec<LoopExtSignature>,
+}
+
+impl Display for LoopMomentumBasis {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut signature = Builder::new();
+        let mut title = vec!["edge".to_string()];
+        let mut table = Builder::new();
+
+        table.push_column(["Loop id", "edge id"]);
+        for (i, item) in self.loop_edges.iter_enumerated() {
+            title.push(format!("L{i} {item}"));
+            table.push_column(&[i.to_string(), item.to_string()]);
+        }
+        table.build().with(Style::rounded()).fmt(f)?;
+        writeln!(f)?;
+        let mut table = Builder::new();
+
+        table.push_column(["External id", "edge id"]);
+        for (i, item) in self.ext_edges.iter_enumerated() {
+            title.push(format!("Ext{i} {item}"));
+            table.push_column(&[i.to_string(), item.to_string()]);
+        }
+        table.build().with(Style::rounded()).fmt(f)?;
+        writeln!(f)?;
+        signature.push_record(&title);
+        for (i, s) in &self.edge_signatures {
+            let mut signs = s
+                .internal
+                .iter()
+                .chain(s.external.iter())
+                .map(|s| s.to_string())
+                .collect_vec();
+            signs.insert(0, i.to_string());
+            signature.push_record(signs);
+        }
+        signature.build().with(Style::rounded()).fmt(f)?;
+        writeln!(f)?;
+
+        Ok(())
+    }
 }
 
 impl LoopMomentumBasis {
@@ -431,7 +472,10 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
 
         let signature = self.new_edgevec(|d, eid, p| {
             let mut internal = vec![];
-            let mut external = vec![SignOrZero::Zero];
+            let mut external = vec![];
+            if dep_ext.is_some() {
+                external.push(SignOrZero::Zero);
+            }
 
             let empty_internal = vec![SignOrZero::Zero; cycles.len()];
             let empty_external = vec![SignOrZero::Zero; external_flows.len()];

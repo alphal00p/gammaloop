@@ -1392,7 +1392,7 @@ dependencies = [
  "spenso-hep-lib",
  "statrs",
  "symbolica",
- "tabled 0.7.0",
+ "tabled",
  "thiserror 1.0.69",
  "trie-rs",
  "typed-index-collections",
@@ -2299,15 +2299,6 @@ name = "option-ext"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "04744f49eae99ab78e0d5c0b603ab218f515ea8cfe5a456d7629ad883a3b6e7d"
-
-[[package]]
-name = "papergrid"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "608b6444acf7f5ea39e8bd06dd6037e34a4b5ddfb29ae840edad49ea798e9e79"
-dependencies = [
- "unicode-width 0.1.14",
-]
 
 [[package]]
 name = "papergrid"
@@ -3472,7 +3463,7 @@ dependencies = [
  "slotmap",
  "spenso-macros",
  "symbolica",
- "tabled 0.20.0",
+ "tabled",
  "thiserror 1.0.69",
 ]
 
@@ -3681,34 +3672,13 @@ dependencies = [
 
 [[package]]
 name = "tabled"
-version = "0.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2407502760ccfd538f2fb1f843dd87b6daf1a17848d57bc5a25617e408ef4c7a"
-dependencies = [
- "papergrid 0.4.0",
- "tabled_derive 0.3.0",
-]
-
-[[package]]
-name = "tabled"
 version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e39a2ee1fbcd360805a771e1b300f78cc88fec7b8d3e2f71cd37bbf23e725c7d"
 dependencies = [
- "papergrid 0.17.0",
- "tabled_derive 0.11.0",
+ "papergrid",
+ "tabled_derive",
  "testing_table",
-]
-
-[[package]]
-name = "tabled_derive"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "278ea3921cee8c5a69e0542998a089f7a14fa43c9c4e4f9951295da89bd0c943"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 1.0.109",
 ]
 
 [[package]]
