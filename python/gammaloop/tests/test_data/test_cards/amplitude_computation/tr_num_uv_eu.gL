@@ -1,0 +1,23 @@
+import_model scalars
+import_amplitude_from_dot ./python/gammaloop/tests/test_data/graph_inputs/amplitude_calculation/tr_num_uv.dot
+set target_omega 1.0
+!rm -rf test_output
+output test_output
+launch test_output
+import_model scalars
+set externals.data.momenta [[0.,0.6970921746799343,0.,-0.1185854122563142],[0.,-0.6970921746799343,0.,-0.5138701197773616],"dependent"]
+set max_prob_ratio 1000.0
+set train_on_avg False
+set discrete_dim_learning_rate 0.0
+set continuous_dim_learning_rate 0.0
+#set_model_param mass_scalar_1 1.0
+set rotation_axis [{'type':'euler_angles','alpha': 0.1,'beta':0.45,'gamma':0.88}]
+set n_start 1000000
+set n_max 100000000
+set sampling {'type':'default','mode':'spherical','b':1.0,'mapping':'linear'}
+set externals.data.helicities [1,1,1,1]
+#set debug 1
+#inspect default --is-momentum-space -p 0.2 0.3 0.6
+integrate default -c 1 -t (0.005479183643270566,0.)
+
+#target = (pi^2 / (2 pi)^4)*(0.865238)
