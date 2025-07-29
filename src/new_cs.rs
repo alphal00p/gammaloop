@@ -54,7 +54,7 @@ use eyre::eyre;
 use itertools::Itertools;
 use linnet::half_edge::{
     involution::{Flow, HedgePair, Orientation},
-    subgraph::{HedgeNode, Inclusion, InternalSubGraph, OrientedCut, SubGraph},
+    subgraph::{HedgeNode, Inclusion, InternalSubGraph, OrientedCut},
     HedgeGraph,
 };
 use log::{debug, warn};
@@ -115,7 +115,8 @@ impl ProcessDefinition {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Encode, Decode)]
+#[trait_decode(trait = GammaLoopContext)]
 pub struct Process<S: NumeratorState = PythonState> {
     pub definition: ProcessDefinition,
     pub collection: ProcessCollection<S>,
@@ -197,7 +198,8 @@ impl Process {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Encode, Decode)]
+#[trait_decode(trait = GammaLoopContext)]
 pub struct ProcessList<S: NumeratorState = PythonState> {
     pub processes: Vec<Process<S>>,
 }
@@ -305,7 +307,8 @@ impl ProcessList {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Encode, Decode)]
+#[trait_decode(trait = GammaLoopContext)]
 pub enum ProcessCollection<S: NumeratorState = PythonState> {
     Amplitudes(Vec<Amplitude<S>>),
     CrossSections(Vec<CrossSection<S>>),
