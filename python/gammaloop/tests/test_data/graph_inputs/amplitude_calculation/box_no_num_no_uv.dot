@@ -1,0 +1,57 @@
+digraph box {
+    graph [
+        overall_factor = 1;
+        multiplicity_factor = 1;
+    ]
+    edge [
+        pdg=1000
+        dod=-100
+    ]
+    ext [style=invis]
+    ext -> v1 
+    ext -> v2 
+    ext -> v3
+    ext -> v4 
+    v1 -> v2 
+    v2 -> v3
+    v3 -> v4 
+    v4 -> v1 [lmb_index=0]
+}
+
+digraph t1 {
+    graph [
+        multiplicity_factor = -1;
+        overall_factor = "-1𝑖*Q(0,spenso::mink(4,0))*Q(1,spenso::mink(4,0))/(2*Q(0,spenso::mink(4,1))*Q(1,spenso::mink(4,1))*Q(0,spenso::mink(4,2))*Q(3,spenso::mink(4,2))+Q(0,spenso::mink(4,3))*Q(3,spenso::mink(4,3))*Q(1,spenso::mink(4,4))*Q(1,spenso::mink(4,4))+Q(0,spenso::mink(4,5))*Q(1,spenso::mink(4,5))*Q(3,spenso::mink(4,6))*Q(3,spenso::mink(4,6)))"
+    ]
+    edge [
+        pdg=1000
+        dod=-100
+    ]
+    ext [style=invis]
+    ext -> v1 
+    ext -> v2 
+    ext -> v3
+    ext -> v3
+    v1 -> v2 
+    v2 -> v3
+    v3 -> v1 [lmb_index=0]
+}
+
+digraph t2 {
+    graph [
+        multiplicity_factor = -1;
+        overall_factor = "-1𝑖*Q(0,spenso::mink(4,0))*Q(3,spenso::mink(4,0))/(2*Q(0,spenso::mink(4,1))*Q(1,spenso::mink(4,1))*Q(0,spenso::mink(4,2))*Q(3,spenso::mink(4,2))+Q(0,spenso::mink(4,3))*Q(3,spenso::mink(4,3))*Q(1,spenso::mink(4,4))*Q(1,spenso::mink(4,4))+Q(0,spenso::mink(4,5))*Q(1,spenso::mink(4,5))*Q(3,spenso::mink(4,6))*Q(3,spenso::mink(4,6)))"
+    ]
+    edge [
+        pdg=1000
+        dod=-100
+    ]
+    ext [style=invis]
+    ext -> v1 
+    ext -> v2 
+    ext -> v2
+    ext -> v3
+    v1 -> v2 
+    v2 -> v3
+    v3 -> v1 [lmb_index=0]
+}
