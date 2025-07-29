@@ -10,17 +10,24 @@ use crate::{
     utils::{print_banner, F, VERSION},
     Integrand, Settings,
 };
-use clap::{Args, Parser, Subcommand};
+use chrono::{Datelike, Local, Timelike};
+use clap::{Args, Parser, Subcommand, ValueEnum};
 use color_eyre::Report;
-use colored::Colorize;
+use color_eyre::Result;
+use colored::{ColoredString, Colorize};
 use eyre::eyre;
 use libc::stat;
+use log::LevelFilter;
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
 use spenso::algebra::complex::Complex;
-use std::path::PathBuf;
-use std::{env, ops::ControlFlow};
+use std::{
+    env,
+    ops::ControlFlow,
+    sync::{LazyLock, Mutex},
+};
 use std::{fs, time::Instant};
+use std::{path::PathBuf, str::FromStr};
 use symbolica::numerical_integration::Sample;
 pub mod repl;
 /// Top‑level CLI definition using **clap**'s `derive` API (requires `features = ["derive"]`).
@@ -220,13 +227,27 @@ pub enum Export {
 
 #[derive(Subcommand, Debug)]
 pub enum Set {
-    BaseDir { path: PathBuf },
+    BaseDir {
+        path: PathBuf,
+    },
+    Log {
+        #[arg(short = 'l')]
+        level: Option<LevelFilter>,
+        // #[clap(subcommand)]
+        #[arg(short, long, value_enum, default_value_t = LogFormat::Long)]
+        format: LogFormat,
+    },
+}
+
+pub enum Log {
+    Level(LevelFilter),
+    Format(LogFormat),
 }
 
 #[derive(Subcommand, Debug)]
 pub enum Commands {
     Repl,
-    #[clap(subcommand)]
+    #[clap(flatten)]
     Set(Set),
     #[clap(subcommand)]
     Import(Import),
@@ -288,13 +309,37 @@ pub struct State {
     pub settings: Settings,
 }
 
+#[repr(usize)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Hash, ValueEnum)]
+pub enum LogFormat {
+    Long,
+    Short,
+    Min,
+    None,
+}
+
+// impl FromStr for LogFormat {
+//     type Err = Report;
+//     fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+//         Ok(match s {
+//             "long" => LogFormat::Long,
+//             "short" => LogFormat::Short,
+//             "min" => LogFormat::Min,
+//             "none" => LogFormat::None,
+//             _ => Err(eyre!("Invalid log format"))?,
+//         })
+//     }
+// }
+
 impl Default for State {
     fn default() -> Self {
-        Self {
+        let a = Self {
             model: Model::default(),
             process_list: ProcessList::default(),
             settings: Settings::default(),
-        }
+        };
+        a.setup_log().unwrap();
+        a
     }
 }
 
@@ -382,7 +427,7 @@ impl Commands {
             Self::Import(s) => match s {
                 Import::Amplitude { path } => {
                     let graphs = Graph::from_file(&path, &state.model)?;
-                    let name = path.file_name().unwrap().to_string_lossy().into_owned();
+                    let name = path.file_stem().unwrap().to_string_lossy().into_owned();
                     let process = Process::from_graph_list(
                         name,
                         graphs,
@@ -403,6 +448,16 @@ impl Commands {
                     state.process_list.export_dot(&exp_set, &state.model)?
                 }
                 Export::Bin => {}
+            },
+            Self::Set(s) => match s {
+                Set::Log { level, format } => {
+                    if let Some(level) = level {
+                        *LOG_LEVEL.lock().unwrap() = level;
+                    }
+
+                    *LOG_FORMAT.lock().unwrap() = format;
+                }
+                _ => {}
             },
             _ => {}
         }
@@ -484,4 +539,78 @@ fn batch_branch(
     fs::write(output_name, batch_result_bytes)?;
 
     Ok(())
+}
+
+pub static LOG_LEVEL: LazyLock<Mutex<LevelFilter>> = LazyLock::new(|| Mutex::new(LevelFilter::Off));
+pub static LOG_FORMAT: LazyLock<Mutex<LogFormat>> = LazyLock::new(|| Mutex::new(LogFormat::Long));
+
+impl State {
+    pub fn setup_log(&self) -> Result<()> {
+        fern::Dispatch::new()
+            .filter(|metadata| metadata.level() <= (*LOG_LEVEL.lock().unwrap()))
+            // Perform allocation-free log formatting
+            .format(|out, message, record| {
+                let now = Local::now();
+                match *LOG_FORMAT.lock().unwrap() {
+                    LogFormat::Long => out.finish(format_args!(
+                        "[{}] @{} {}: {}",
+                        format!(
+                            "{:04}-{:02}-{:02} {:02}:{:02}:{:02}.{:03}",
+                            now.year(),
+                            now.month(),
+                            now.day(),
+                            now.hour(),
+                            now.minute(),
+                            now.second(),
+                            now.timestamp_subsec_millis()
+                        )
+                        .bright_green(),
+                        format_target(record.target().into(), record.level()),
+                        format_level(record.level()),
+                        message
+                    )),
+                    LogFormat::Short => out.finish(format_args!(
+                        "[{}] {}: {}",
+                        format!("{:02}:{:02}:{:02}", now.hour(), now.minute(), now.second())
+                            .bright_green(),
+                        format_level(record.level()),
+                        message
+                    )),
+                    LogFormat::Min => out.finish(format_args!(
+                        "{}: {}",
+                        format_level(record.level()),
+                        message
+                    )),
+                    LogFormat::None => out.finish(format_args!("{}", message)),
+                }
+            })
+            // Output to stdout, files, and other Dispatch configurations
+            .chain(std::io::stdout())
+            .chain(fern::log_file("gammaloop_rust_output.log")?)
+            // Apply globally
+            .apply()?;
+
+        Ok(())
+    }
+}
+
+pub fn format_level(level: log::Level) -> ColoredString {
+    match level {
+        log::Level::Error => format!("{:<8}", "ERROR").red(),
+        log::Level::Warn => format!("{:<8}", "WARNING").yellow(),
+        log::Level::Info => format!("{:<8}", "INFO").into(),
+        log::Level::Debug => format!("{:<8}", "DEBUG").bright_black(),
+        log::Level::Trace => format!("{:<8}", "TRACE").into(),
+    }
+}
+
+pub fn format_target(target: String, level: log::Level) -> ColoredString {
+    let split_targets = target.split("::").collect::<Vec<_>>();
+    //[-2..].iter().join("::");
+    let start = split_targets.len().saturating_sub(2);
+    let mut shortened_path = split_targets[start..].join("::");
+    if level < log::Level::Debug && shortened_path.len() > 20 {
+        shortened_path = format!("{}...", shortened_path.chars().take(17).collect::<String>());
+    }
+    format!("{:<20}", shortened_path).bright_blue()
 }

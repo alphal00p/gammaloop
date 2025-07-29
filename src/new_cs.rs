@@ -598,7 +598,7 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
         let factors_of_pi =
             (Atom::var(Atom::PI) * 2).npow(3 * self.graph.underlying.get_loop_number() as i64);
 
-        let result = cff_atom * &self.graph.multiplicity / factors_of_pi;
+        let result = cff_atom / factors_of_pi;
         debug!("result: {}", result);
         result
     }
@@ -1516,11 +1516,7 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
                 .map(|(_, edge_id, _)| Atom::num(2) * ose_atom_from_index(edge_id))
                 .fold(Atom::num(1), |product, factor| product * factor);
 
-        let result = cut_atom
-            * cut_inverse_energy_product
-            * t_star_factor
-            * h_function
-            * &self.graph.multiplicity
+        let result = cut_atom * cut_inverse_energy_product * t_star_factor * h_function
             / grad_eta
             / factors_of_pi;
 

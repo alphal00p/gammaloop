@@ -1150,9 +1150,8 @@ impl PythonWorker {
             ));
         }
 
-        info!("Hi");
-
         let mut state_file =
+        // info!("Hi");
             fs::File::create(PathBuf::from(export_root).join("symbolica_state.bin"))?;
 
         State::export(&mut state_file)?;

@@ -168,6 +168,8 @@
           mpfr
           form
           gnum4
+          nickel
+          nls
           # gcc_debug.out
           # stdenv.cc.cc.lib
           pkg-config

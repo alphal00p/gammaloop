@@ -42,6 +42,7 @@ use clap_repl::{
 use color_eyre::Report;
 use console::style;
 use dirs::home_dir;
+use log::warn;
 
 use super::State;
 
@@ -56,6 +57,7 @@ pub fn start(mut settings: Settings) -> Result<(), Report> {
         ..DefaultPrompt::default()
     };
     let mut state = State::default();
+    warn!("Starting REPL");
 
     // 2. Build the REPL – clap‑repl takes ownership and configures rustyline.
     let mut repl = ClapEditor::<Cli>::builder().with_prompt(Box::new(prompt));

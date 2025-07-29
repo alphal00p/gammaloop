@@ -11,6 +11,13 @@
   },
   "load_direnv": "direct",
   "lsp": {
+    "nls": {
+      "enable_lsp_tasks": true,
+      "binary": {
+        "path": "nls"
+        // "args": ["--arg1", "--arg2"]
+      }
+    },
     "rust-analyzer": {
       "initialization_options": {
         "inlayHints": {

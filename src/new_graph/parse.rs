@@ -227,6 +227,8 @@ impl Graph {
             color: graph.global_data.color.clone(),
             colorless: &graph.global_data.colorless * overall_factor,
         };
+
+        let name = graph.global_data.name.clone();
         let graph = graph.graph.map_data_ref(
             |_, _, v| v.clone(),
             |_, _, _, e| e.map(|e| e.clone()),
@@ -449,7 +451,7 @@ impl Graph {
         Ok(Graph {
             multiplicity,
             global_prefactor,
-            name: "".to_string(),
+            name,
             loop_momentum_basis,
             underlying,
         })
@@ -572,6 +574,7 @@ macro_rules! dot {
 #[cfg(test)]
 pub mod test {
     use idenso::metric::MetricSimplifier;
+    use log::info;
     use spenso::{
         network::{
             library::DummyLibrary, parsing::ShadowedStructure, store::NetworkStore, Network,
@@ -582,6 +585,7 @@ pub mod test {
     use symbolica::atom::{Atom, FunctionBuilder};
 
     use crate::{
+        cli::State,
         new_graph::LMBext,
         numerator::{aind::Aind, Numerator, UnInit},
         tests_from_pytest::load_generic_model,
@@ -591,6 +595,8 @@ pub mod test {
 
     #[test]
     fn test_load() {
+        State::default();
+        info!("Loading graph");
         let graph = dot!(digraph triangle {
             graph [
                 overall_factor = 1;
