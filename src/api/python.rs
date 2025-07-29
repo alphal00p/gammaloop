@@ -623,6 +623,7 @@ impl PythonWorker {
 
     #[pyo3(signature = (path,name=None))]
     pub fn import_amplitude(&mut self, path: PathBuf, name: Option<String>) -> PyResult<()> {
+        // println!("")
         let graphs = Graph::from_file(&path, &self.model)
             .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
         let name = name.unwrap_or_else(|| path.file_name().unwrap().to_string_lossy().into_owned());
@@ -1149,10 +1150,16 @@ impl PythonWorker {
             ));
         }
 
+        info!("Hi");
+
         let mut state_file =
             fs::File::create(PathBuf::from(export_root).join("symbolica_state.bin"))?;
 
         State::export(&mut state_file)?;
+
+        self.process_list
+            .export_dot(&export_settings, &self.model)
+            .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
 
         let binary = bincode::encode_to_vec(&self.process_list, bincode::config::standard())
             .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;

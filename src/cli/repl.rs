@@ -43,6 +43,8 @@ use color_eyre::Report;
 use console::style;
 use dirs::home_dir;
 
+use super::State;
+
 /// Launch the REPL.
 /// * `prompt`   – prompt prefix (e.g. "gammaLoop").
 /// * `pre_args` – global flags to prepend to every command (may be empty).
@@ -53,7 +55,7 @@ pub fn start(mut settings: Settings) -> Result<(), Report> {
         left_prompt: DefaultPromptSegment::Basic("γloop".to_owned()),
         ..DefaultPrompt::default()
     };
-    let mut count = 0;
+    let mut state = State::default();
 
     // 2. Build the REPL – clap‑repl takes ownership and configures rustyline.
     let mut repl = ClapEditor::<Cli>::builder().with_prompt(Box::new(prompt));
@@ -70,7 +72,7 @@ pub fn start(mut settings: Settings) -> Result<(), Report> {
 
     loop {
         match r.read_command() {
-            ReadCommandOutput::Command(c) => match c.run_with_settings(&mut settings, &mut count) {
+            ReadCommandOutput::Command(c) => match c.run_with_settings(&mut settings, &mut state) {
                 Err(e) => eprintln!("{e}"),
                 Ok(ControlFlow::Break(())) => {
                     break;

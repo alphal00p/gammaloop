@@ -26,6 +26,7 @@ use linnet::{
     parser::{DotEdgeData, DotGraph, DotHedgeData, DotVertexData, GraphSet},
     permutation::Permutation,
 };
+use log::{debug, info};
 use spenso::{
     contraction::Contract,
     iterators::IteratableTensor,
@@ -413,7 +414,7 @@ impl Graph {
                 }
             }
 
-            println!("{}", underlying.dot(&full));
+            // println!("{}", underlying.dot(&full));
             let covers = tree.covers(&full);
             assert_eq!(
                 full,
@@ -486,7 +487,6 @@ impl Graph {
             NodeStorageVec<DotVertexData>,
         > = GraphSet::from_string(s).unwrap();
 
-        // println!("HOO");
         Self::from_hedge_graph_set(hedge_graph_set, model)
     }
 
@@ -503,8 +503,10 @@ impl Graph {
         let mut graphs = Vec::new();
 
         for (graph, global_data) in set.set.into_iter().zip(set.global_data.into_iter()) {
+            let graph = DotGraph { global_data, graph };
+            debug!("Parsing: \n{}", graph.debug_dot());
             graphs.push(Graph::from_parsed(
-                ParseGraph::from_parsed(DotGraph { global_data, graph }, true, model).unwrap(),
+                ParseGraph::from_parsed(graph, true, model).unwrap(),
                 model,
             )?);
         }
@@ -586,6 +588,27 @@ pub mod test {
     };
 
     use super::Graph;
+
+    #[test]
+    fn test_load() {
+        let graph = dot!(digraph triangle {
+            graph [
+                overall_factor = 1;
+                multiplicity_factor = 1;
+            ]
+            edge [
+                pdg=1000
+            ]
+            ext [style=invis]
+            ext -> v4 [id=0]
+            ext -> v5 [id=1]
+            v6 -> ext [id=2]
+            v5 -> v4 [lmb_index=0];
+            v6 -> v5;
+            v4 -> v6 ;
+        },"scalars")
+        .unwrap();
+    }
 
     #[test]
     fn test_loop_momentum_basis() {

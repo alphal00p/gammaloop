@@ -1,16 +1,20 @@
 use crate::{
     cross_section::Amplitude,
+    feyngen::GenerationType,
     inspect::inspect,
     integrands::{integrand_factory, HasIntegrand},
     integrate::{self, havana_integrate, SerializableBatchIntegrateInput, UserData},
     model::Model,
+    new_cs::{ExportSettings, Process, ProcessDefinition, ProcessList},
+    new_graph::Graph,
     utils::{print_banner, F, VERSION},
     Integrand, Settings,
 };
-use clap::{Parser, Subcommand};
+use clap::{Args, Parser, Subcommand};
 use color_eyre::Report;
 use colored::Colorize;
 use eyre::eyre;
+use libc::stat;
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
 use spenso::algebra::complex::Complex;
@@ -69,10 +73,10 @@ impl Cli {
     pub fn run_with_settings(
         self,
         settings: &mut Settings,
-        count: &mut usize,
+        state: &mut State,
     ) -> Result<ControlFlow<()>, Report> {
         if let Some(c) = self.command {
-            c.run(settings, count)
+            c.run(settings, state)
         } else {
             let target = self.target.as_ref().map(|v| {
                 assert_eq!(v.len(), 2, "--target expects exactly two numbers");
@@ -157,9 +161,9 @@ impl Cli {
             );
             info!("");
         }
-        let mut count = 0;
+        let mut state = State::default();
         if let Some(c) = self.command {
-            c.run(&mut settings, &mut count)?;
+            c.run(&mut settings, &mut state)?;
             Ok(settings)
         } else {
             let user_data_generator = |settings: &Settings| UserData {
@@ -192,8 +196,42 @@ impl Cli {
 }
 
 #[derive(Subcommand, Debug)]
+pub enum Import {
+    Model {
+        #[arg(short = 'p')]
+        path: PathBuf,
+        // format: String,
+    },
+    Amplitude {
+        #[arg(short = 'p')]
+        path: PathBuf,
+        // format: String,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum Export {
+    Dot {
+        #[arg(short = 'p')]
+        path: PathBuf,
+    },
+    Bin,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum Set {
+    BaseDir { path: PathBuf },
+}
+
+#[derive(Subcommand, Debug)]
 pub enum Commands {
     Repl,
+    #[clap(subcommand)]
+    Set(Set),
+    #[clap(subcommand)]
+    Import(Import),
+    #[clap(subcommand)]
+    Export(Export),
     Increment,
     Quit,
     /// Inspect a single phase‑space point / momentum configuration
@@ -244,19 +282,31 @@ pub enum Commands {
     },
 }
 
+pub struct State {
+    pub model: Model,
+    pub process_list: ProcessList,
+    pub settings: Settings,
+}
+
+impl Default for State {
+    fn default() -> Self {
+        Self {
+            model: Model::default(),
+            process_list: ProcessList::default(),
+            settings: Settings::default(),
+        }
+    }
+}
+
 impl Commands {
     pub fn run(
         self,
         settings: &mut Settings,
-        count: &mut usize,
+        state: &mut State,
     ) -> Result<ControlFlow<()>, Report> {
         match self {
             Commands::Quit => {
                 return Ok(ControlFlow::Break(()));
-            }
-            Commands::Increment => {
-                *count += 1;
-                println!("count{count}");
             }
             Commands::Batch {
                 process_file,
@@ -329,6 +379,31 @@ impl Commands {
                     format!("{:.5}", total_time * 1000. / (samples as f64)).green(),
                 );
             }
+            Self::Import(s) => match s {
+                Import::Amplitude { path } => {
+                    let graphs = Graph::from_file(&path, &state.model)?;
+                    let name = path.file_name().unwrap().to_string_lossy().into_owned();
+                    let process = Process::from_graph_list(
+                        name,
+                        graphs,
+                        GenerationType::Amplitude,
+                        ProcessDefinition::new_empty(),
+                        None,
+                    )?;
+
+                    state.process_list.add_process(process);
+                }
+                Import::Model { path } => {
+                    state.model = Model::from_file(path.to_string_lossy().to_string())?;
+                }
+            },
+            Self::Export(s) => match s {
+                Export::Dot { path } => {
+                    let exp_set = ExportSettings { root_folder: path };
+                    state.process_list.export_dot(&exp_set, &state.model)?
+                }
+                Export::Bin => {}
+            },
             _ => {}
         }
         Ok(ControlFlow::Continue(()))

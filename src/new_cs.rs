@@ -2,7 +2,7 @@ use std::{
     cell::RefCell,
     collections::HashSet,
     fmt::{Display, Formatter},
-    fs::File,
+    fs::{self, File},
     io::Write,
     iter,
     marker::PhantomData,
@@ -154,12 +154,13 @@ impl<S: NumeratorState> Process<S> {
 }
 
 impl Process {
-    pub fn export_dot(&self, settings: &ExportSettings, model: &Model) -> Result<()> {
+    pub(crate) fn export_dot(&self, settings: &ExportSettings, model: &Model) -> Result<()> {
         let path = Path::new(&settings.root_folder).join(self.definition.folder_name(model));
 
         match &self.collection {
             ProcessCollection::Amplitudes(a) => {
                 let p = path.join("amplitudes");
+                fs::create_dir_all(&p)?;
                 for amp in a {
                     let mut dot = File::create_new(p.join(&format!("{}.dot", amp.name)))?;
                     amp.write_dot(&mut dot)?;
@@ -261,6 +262,13 @@ impl ProcessList {
         ProcessList { processes: vec![] }
     }
 
+    pub fn export_dot(&self, settings: &ExportSettings, model: &Model) -> Result<()> {
+        for p in &self.processes {
+            p.export_dot(settings, model)?;
+        }
+        Ok(())
+    }
+
     pub fn add_process(&mut self, process: Process) {
         self.processes.push(process);
     }
@@ -292,57 +300,6 @@ impl ProcessList {
         }
 
         result
-    }
-
-    /// exports a process list to a folder
-    pub fn export_amplitudes(
-        &self,
-        amplitude_names: &[String],
-        settings: &ExportSettings,
-    ) -> Result<usize> {
-        let mut n_exported = 0;
-        for process in self.processes.iter() {
-            let process_definition_data =
-                bincode::encode_to_vec(&process.definition, bincode::config::standard())?;
-
-            let path = settings
-                .root_folder
-                .join("sources")
-                .join("process_definition.bin");
-
-            std::fs::write(path, &process_definition_data)?;
-
-            n_exported += process
-                .collection
-                .export_amplitudes(amplitude_names, settings)?;
-        }
-        Ok(n_exported)
-    }
-
-    pub fn export_cross_sections(
-        &self,
-        cross_section_names: &[String],
-        settings: &ExportSettings,
-    ) -> Result<usize> {
-        let mut n_exported = 0;
-
-        for process in self.processes.iter() {
-            let process_definition_data =
-                bincode::encode_to_vec(&process.definition, bincode::config::standard())?;
-
-            let path = settings
-                .root_folder
-                .join("sources")
-                .join("process_definition.bin");
-
-            std::fs::write(path, &process_definition_data)?;
-
-            n_exported += process
-                .collection
-                .export_cross_sections(cross_section_names, settings)?;
-        }
-
-        Ok(n_exported)
     }
 }
 
@@ -417,46 +374,6 @@ impl<S: NumeratorState> ProcessCollection<S> {
         }
         result
     }
-
-    fn export_amplitudes(
-        &self,
-        amplitude_names: &[String],
-        settings: &ExportSettings,
-    ) -> Result<usize> {
-        let mut n_exported = 0;
-        match self {
-            Self::Amplitudes(amplitudes) => {
-                for amplitude in amplitudes {
-                    if amplitude_names.contains(&amplitude.name.to_string()) {
-                        amplitude.export(settings)?;
-                        n_exported += 1;
-                    }
-                }
-            }
-            _ => {}
-        }
-        Ok(n_exported)
-    }
-
-    fn export_cross_sections(
-        &self,
-        cross_section_names: &[String],
-        settings: &ExportSettings,
-    ) -> Result<usize> {
-        let mut n_exported = 0;
-        match self {
-            Self::CrossSections(cross_sections) => {
-                for cross_section in cross_sections {
-                    if cross_section_names.contains(&cross_section.name.to_string()) {
-                        cross_section.export(settings)?;
-                        n_exported += 1;
-                    }
-                }
-            }
-            _ => {}
-        }
-        Ok(n_exported)
-    }
 }
 
 #[derive(Clone, Encode, Decode)]
@@ -513,44 +430,12 @@ impl<S: NumeratorState> Amplitude<S> {
         Integrand::NewIntegrand(NewIntegrand::Amplitude(amplitude_integrand))
     }
 
-    pub fn export(&self, settings: &ExportSettings) -> Result<()> {
-        let path = Path::new(&settings.root_folder)
-            .join("sources")
-            .join("amplitudes")
-            .join(self.name.as_str());
-
-        let data = bincode::encode_to_vec(self, bincode::config::standard())?;
-        std::fs::write(
-            path.clone().join(&format!("amplitude_{}.bin", self.name)),
-            &data,
-        )?;
-
-        let mut dot = File::create_new(path.clone().join(&format!("amplitude_{}.dot", self.name)))?;
-        self.write_dot(&mut dot)?;
-        Ok(())
-    }
-
     pub fn write_dot<W: std::io::Write>(&self, writer: &mut W) -> Result<(), std::io::Error> {
         for graph in &self.graphs {
             graph.write_dot(writer)?;
+            writeln!(writer)?;
         }
         Ok(())
-    }
-
-    pub fn load_from_file(
-        name: &str,
-        root_folder: &str,
-        context: GammaLoopContextContainer,
-    ) -> Result<Self> {
-        let path = Path::new(root_folder)
-            .join("sources")
-            .join("amplitudes")
-            .join(name);
-
-        let data = std::fs::read(path.join(format!("amplitude_{}.bin", name)))?;
-        let (amplitude, _): (Self, _) =
-            bincode::decode_from_slice_with_context(&data, bincode::config::standard(), context)?;
-        Ok(amplitude)
     }
 }
 
@@ -1271,38 +1156,6 @@ impl<S: NumeratorState> CrossSection<S> {
         };
 
         Integrand::NewIntegrand(NewIntegrand::CrossSection(cross_section_integrand))
-    }
-
-    fn export(&self, settings: &ExportSettings) -> Result<()> {
-        let path = Path::new(&settings.root_folder)
-            .join("sources")
-            .join("cross_sections")
-            .join(self.name.as_str());
-
-        let data = bincode::encode_to_vec(self, bincode::config::standard())?;
-        std::fs::write(
-            path.clone()
-                .join(&format!("cross_section_{}.bin", self.name)),
-            &data,
-        )?;
-
-        Ok(())
-    }
-
-    pub fn load_from_file(
-        name: &str,
-        root_folder: &str,
-        context: GammaLoopContextContainer,
-    ) -> Result<Self> {
-        let path = Path::new(root_folder)
-            .join("sources")
-            .join("cross_sections")
-            .join(name);
-
-        let data = std::fs::read(path.join(format!("cross_section_{}.bin", name)))?;
-        let (cross_section, _): (Self, _) =
-            bincode::decode_from_slice_with_context(&data, bincode::config::standard(), context)?;
-        Ok(cross_section)
     }
 }
 
