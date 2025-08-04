@@ -155,17 +155,13 @@ fn get_orientations<E, V, H>(
         .map(|orientation_of_virtuals| {
             let mut orientation_of_virtuals = orientation_of_virtuals.into_iter();
 
-            let global_orientation = graph
-                .new_edgevec_from_iter(graph.iter_edges().map(|(hedge_pair, __, _)| {
-                    match hedge_pair {
-                        HedgePair::Unpaired { .. } => Orientation::Default,
-                        HedgePair::Paired { .. } => orientation_of_virtuals
-                            .next()
-                            .expect(" unable to reconstruct orientation"),
-                        HedgePair::Split { .. } => todo!(),
-                    }
-                }))
-                .expect("unable to construct global orientation");
+            let global_orientation = graph.new_edgevec(|_, __, hedge_pair| match hedge_pair {
+                HedgePair::Unpaired { .. } => Orientation::Default,
+                HedgePair::Paired { .. } => orientation_of_virtuals
+                    .next()
+                    .expect(" unable to reconstruct orientation"),
+                HedgePair::Split { .. } => todo!(),
+            });
 
             assert!(
                 orientation_of_virtuals.next().is_none(),
@@ -189,31 +185,28 @@ pub fn get_orientations_from_subgraph<E, V, H, S: SubGraph>(
         .map(|orientation_of_virtuals| {
             let mut orientation_of_virtuals = orientation_of_virtuals.into_iter();
 
-            let global_orientation = graph
-                .new_edgevec_from_iter(graph.iter_edges().map(|(_, edge_index, _)| {
-                    // the pair must be with respect to the subgraph
-                    if let Some((pair, _, _)) = graph
-                        .iter_edges_of(subgraph)
-                        .find(|(_pair, id, _)| *id == edge_index)
-                    {
-                        match pair {
-                            HedgePair::Paired { .. } => orientation_of_virtuals
-                                .next()
-                                .expect("orientation generation corrupted, not enough edges"),
-                            HedgePair::Unpaired { .. } => Orientation::Default,
-                            HedgePair::Split { .. } => {
-                                if reversed_dangling.contains(&edge_index) {
-                                    Orientation::Reversed
-                                } else {
-                                    Orientation::Default
-                                }
+            let global_orientation = graph.new_edgevec(|_, edge_id, _| {
+                if let Some((pair, _, _)) = graph
+                    .iter_edges_of(subgraph)
+                    .find(|(_pair, id, _)| *id == edge_id)
+                {
+                    match pair {
+                        HedgePair::Paired { .. } => orientation_of_virtuals
+                            .next()
+                            .expect("orientation generation corrupted, not enough edges"),
+                        HedgePair::Unpaired { .. } => Orientation::Default,
+                        HedgePair::Split { .. } => {
+                            if reversed_dangling.contains(&edge_id) {
+                                Orientation::Reversed
+                            } else {
+                                Orientation::Default
                             }
                         }
-                    } else {
-                        Orientation::Undirected
                     }
-                }))
-                .expect("unable to construct global orientation");
+                } else {
+                    Orientation::Undirected
+                }
+            });
 
             CFFGenerationGraph::new_from_subgraph(graph, global_orientation, subgraph).unwrap()
         })
