@@ -245,8 +245,7 @@ impl FeynmanGraph for HedgeGraph<Edge, Vertex, NumHedgeData> {
         lmb: &LoopMomentumBasis,
     ) -> Vec<F<T>> {
         lmb.edge_signatures
-            .borrow()
-            .into_iter()
+            .iter()
             .zip(self.iter_edges())
             .filter(|(_, (pair, _, _))| matches!(pair, HedgePair::Paired { .. }))
             .map(|((_, sig), _)| sig.compute_three_momentum_from_four(loop_moms, external_moms))

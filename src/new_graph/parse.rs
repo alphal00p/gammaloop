@@ -607,14 +607,47 @@ pub mod test {
                 pdg=1000
             ]
             ext [style=invis]
-            ext -> v4 [id=0]
-            ext -> v5 [id=1]
-            v6 -> ext [id=2]
+            ext -> v4
+            ext -> v5
+            v6 -> ext
             v5 -> v4 [lmb_index=0];
             v6 -> v5;
             v4 -> v6 ;
-        },"scalars")
+        }
+
+        digraph triangle2 {
+            graph [
+                overall_factor = 1;
+                multiplicity_factor = 1;
+            ]
+            edge [
+                pdg=1000
+            ]
+            ext [style=invis]
+            ext -> v4
+            ext -> v5
+            v6 -> ext [id = 2]
+            v5 -> v4 [lmb_index=0];
+            v6 -> v5;
+            v4 -> v6 ;
+        }
+        ,"scalars")
         .unwrap();
+
+        println!("{}", graph[0].dot_serialize());
+
+        println!(
+            "{}",
+            graph[0].dot_lmb(&graph[0].underlying.full(), &graph[0].loop_momentum_basis)
+        );
+
+        println!("{}", graph[0].loop_momentum_basis);
+
+        println!(
+            "{}",
+            graph[1].dot_lmb(&graph[1].underlying.full(), &graph[1].loop_momentum_basis)
+        );
+        println!("{}", graph[1].loop_momentum_basis);
     }
 
     #[test]
@@ -984,28 +1017,9 @@ pub mod test {
         println!("Graph 1 Test: {:?}", graph_1_test);
         println!("Graph 2 Test: {:?}", graph_2_test);
 
-        let mut graph_1_iter = test_data.clone().into_iter();
-        let mut graph_2_iter = test_data.clone().into_iter();
+        let graph_1_test_2 = graph_1.new_edgevec(|_, _, p| p.is_paired());
 
-        let graph_1_test_2 = graph_1
-            .new_edgevec_from_iter(graph_1.iter_edges().map(|(pair, _, _)| {
-                if matches!(pair, HedgePair::Paired { .. }) {
-                    graph_1_iter.next().unwrap()
-                } else {
-                    false
-                }
-            }))
-            .unwrap();
-
-        let graph_2_test_2 = graph_2
-            .new_edgevec_from_iter(graph_2.iter_edges().map(|(pair, _, _)| {
-                if matches!(pair, HedgePair::Paired { .. }) {
-                    graph_2_iter.next().unwrap()
-                } else {
-                    false
-                }
-            }))
-            .unwrap();
+        let graph_2_test_2 = graph_1.new_edgevec(|_, _, p| p.is_paired());
         println!("Graph 1 Test 2: {:?}", graph_1_test_2);
         println!("Graph 2 Test 2: {:?}", graph_2_test_2);
 

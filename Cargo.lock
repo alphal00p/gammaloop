@@ -1862,8 +1862,7 @@ dependencies = [
 [[package]]
 name = "linnet"
 version = "0.11.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "96371e18d882a024b4c7a6a113cccb5387c31d312e55e5a5c7b1d0ed3f21f052"
+source = "git+https://github.com/alphal00p/linnet?rev=2e7f1c3466acb701a1c9f6c4e870206625ff2954#2e7f1c3466acb701a1c9f6c4e870206625ff2954"
 dependencies = [
  "ahash",
  "argmin",

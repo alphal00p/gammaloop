@@ -293,9 +293,6 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
     fn dot_lmb<S: SubGraph>(&self, subgraph: &S, lmb: &LoopMomentumBasis) -> String {
         let reps = self.normal_emr_replacement::<_, Atom>(subgraph, lmb, &[], no_filter);
 
-        // for rep in &reps {
-        //     println!("{rep}");
-        // }
         let emrgraph = self.map_data_ref(
             |_, _, _| "",
             |_, e, _, d| {

@@ -27,14 +27,13 @@ use spenso::{
 use crate::{
     cff::{
         cut_expression::SuperGraphOrientationID,
-        esurface::{self, generate_esurface_data, EsurfaceDerivedData},
+        esurface::{generate_esurface_data, EsurfaceDerivedData},
         expression::{
             AmplitudeOrientationID, CFFExpression, OrientationData, SubgraphOrientationID,
         },
         generation::{generate_cff_expression, get_orientations_from_subgraph},
     },
     model::ArcParticle,
-    momentum::SignOrZero,
     momentum_sample::ExternalIndex,
     new_gammaloop_integrand::{
         amplitude_integrand::{AmplitudeGraphTerm, AmplitudeIntegrand},
