@@ -574,6 +574,7 @@ macro_rules! dot {
 #[cfg(test)]
 pub mod test {
     use idenso::metric::MetricSimplifier;
+    use linnet::half_edge::involution::{EdgeIndex, HedgePair};
     use log::info;
     use spenso::{
         network::{
@@ -912,5 +913,110 @@ pub mod test {
         let num = num.gamma_simplify();
 
         println!("{}", num.state.colorless);
+    }
+
+    #[test]
+    fn parse_and_build_edgevec() {
+        let graph_1 = dot!(
+                    digraph triangle {
+            graph [
+                overall_factor = 1;
+                multiplicity_factor = 1;
+            ]
+            edge [
+                pdg=1000
+            ]
+            ext [style=invis]
+            ext -> v4 [id=0]
+            ext -> v5 [id=1]
+            v6 -> ext
+            v5 -> v4 [lmb_index=0];
+            v6 -> v5;
+            v4 -> v6 ;
+        }, "scalars"
+        )
+        .unwrap();
+
+        let graph_2 = dot! (
+                    digraph triangle {
+            graph [
+                overall_factor = 1;
+                multiplicity_factor = 1;
+            ]
+            edge [
+                pdg=1000
+            ]
+            ext [style=invis]
+            ext -> v4 [id=0]
+            ext -> v5 [id=1]
+            v6 -> ext [id=2]
+            v5 -> v4 [lmb_index=0];
+            v6 -> v5;
+            v4 -> v6 ;
+        }, "scalars"
+        )
+        .unwrap();
+
+        let graph_1 = &graph_1[0].underlying;
+        let graph_2 = &graph_2[0].underlying;
+
+        let test_data = vec![true, true, true];
+
+        let mut graph_1_iter = test_data.clone().into_iter();
+        let mut graph_2_iter = test_data.clone().into_iter();
+
+        let graph_1_test = graph_1.new_edgevec(|_, e_id, _| {
+            if matches!(graph_1[&e_id].1, HedgePair::Paired { .. }) {
+                graph_1_iter.next().unwrap()
+            } else {
+                false
+            }
+        });
+
+        let graph_2_test = graph_2.new_edgevec(|_, e_id, _| {
+            if matches!(graph_2[&e_id].1, HedgePair::Paired { .. }) {
+                graph_2_iter.next().unwrap()
+            } else {
+                false
+            }
+        });
+
+        println!("Graph 1 Test: {:?}", graph_1_test);
+        println!("Graph 2 Test: {:?}", graph_2_test);
+
+        let mut graph_1_iter = test_data.clone().into_iter();
+        let mut graph_2_iter = test_data.clone().into_iter();
+
+        let graph_1_test_2 = graph_1
+            .new_edgevec_from_iter(graph_1.iter_edges().map(|(pair, _, _)| {
+                if matches!(pair, HedgePair::Paired { .. }) {
+                    graph_1_iter.next().unwrap()
+                } else {
+                    false
+                }
+            }))
+            .unwrap();
+
+        let graph_2_test_2 = graph_2
+            .new_edgevec_from_iter(graph_2.iter_edges().map(|(pair, _, _)| {
+                if matches!(pair, HedgePair::Paired { .. }) {
+                    graph_2_iter.next().unwrap()
+                } else {
+                    false
+                }
+            }))
+            .unwrap();
+        println!("Graph 1 Test 2: {:?}", graph_1_test_2);
+        println!("Graph 2 Test 2: {:?}", graph_2_test_2);
+
+        println!("edges in graph 1");
+        for (_, id, _) in graph_1.iter_edges() {
+            println!("Edge ID: {}", id);
+        }
+
+        println!("edges in graph 2");
+        for (_, id, _) in graph_2.iter_edges() {
+            println!("Edge ID: {}", id);
+        }
     }
 }
