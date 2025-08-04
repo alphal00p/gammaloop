@@ -229,17 +229,13 @@ fn get_orientations_with_cut<E, V, H>(
             // pad a virtual orientation with orientations of externals.
             let mut orientation_of_virtuals = orientation_of_virtuals.into_iter();
 
-            let global_orientation = graph
-                .new_edgevec_from_iter(graph.iter_edges().map(|(hedge_pair, __, _)| {
-                    match hedge_pair {
-                        HedgePair::Unpaired { .. } => Orientation::Default,
-                        HedgePair::Paired { .. } => orientation_of_virtuals
-                            .next()
-                            .expect(" unable to reconstruct orientation"),
-                        HedgePair::Split { .. } => todo!(),
-                    }
-                }))
-                .expect("unable to construct global orientation");
+            let global_orientation = graph.new_edgevec(|_, __, hedge_pair| match hedge_pair {
+                HedgePair::Unpaired { .. } => Orientation::Default,
+                HedgePair::Paired { .. } => orientation_of_virtuals
+                    .next()
+                    .expect(" unable to reconstruct orientation"),
+                HedgePair::Split { .. } => todo!(),
+            });
 
             assert!(
                 orientation_of_virtuals.next().is_none(),
@@ -280,7 +276,7 @@ fn get_possible_orientations_for_cut_list<E, V, H>(
         let mut orientation_of_virtuals = orientation_of_virtuals.into_iter();
 
         let global_orientation = graph
-            .new_edgevec_from_iter(graph.iter_edges().map(|(hedge_pair, __, _)| {
+            .new_edgevec(|_, __, hedge_pair| {
                 match hedge_pair {
                     HedgePair::Unpaired { .. } => Orientation::Default,
                     HedgePair::Paired { .. } => orientation_of_virtuals
