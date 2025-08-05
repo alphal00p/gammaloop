@@ -690,6 +690,8 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
             }
 
             let (circled, complement) = esurface.get_subgraph_components(&self.graph.underlying);
+            let edges_in_cut = esurface.bitvec(&self.graph.underlying);
+
             let orientations = self
                 .derived_data
                 .cff_expression
@@ -813,7 +815,13 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
                     &esurface.energies,
                 );
 
-                let mut orientation_result = circled_expr * complement_expr;
+                let product = circled_expr * complement_expr;
+                let orientation_result = do_replacement_rules(
+                    product,
+                    &self.graph.underlying,
+                    &full_orientation_list[orientation].orientation,
+                    Some(&edges_in_cut),
+                );
             }
 
             counterterms.push(counterterm);
@@ -1501,6 +1509,7 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
         replace_dots
     }
 
+    // do not use this function together with do_replacement_rules
     pub fn add_additional_factors_to_cff_atom(&self, cut_atom: &Atom, cut_id: CutId) -> Atom {
         let loop_3 = self.graph.underlying.get_loop_number() as i64 * 3;
         let t_star_factor = Atom::var(GS.rescale_star).npow(loop_3);
@@ -2119,6 +2128,16 @@ fn do_replacement_rules(
     orientation_expr = orientation_expr
         .replace(function!(GS.external_mom, W_.x_, W_.y_))
         .with(function!(GS.energy, W_.x_));
+
+    if let Some(cut) = cut_edges {
+        let inverse_energy_product = Atom::num(1)
+            / graph
+                .iter_edges_of(cut)
+                .map(|(_, edge_id, _)| Atom::num(2) * ose_atom_from_index(edge_id))
+                .fold(Atom::num(1), |product, factor| product * factor);
+
+        orientation_expr = orientation_expr * inverse_energy_product;
+    }
 
     // set the external energies
     for (_p, edge_index, _d) in graph.iter_edges_of(&graph.external_filter()) {
