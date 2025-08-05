@@ -8,11 +8,12 @@ use derive_more::{From, Into};
 use eyre::eyre;
 use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Flow, HedgePair};
-use linnet::half_edge::subgraph::SubGraphOps;
+use linnet::half_edge::subgraph::{ModifySubgraph, SubGraphOps};
 use linnet::half_edge::HedgeGraph;
 use lorentz_vector::LorentzVector;
 use ref_ops::RefNeg;
 use serde::{Deserialize, Serialize};
+use spenso::network::graph;
 use symbolica::atom::Atom;
 use symbolica::domains::float::{NumericalFloatLike, Real};
 use symbolica::parse;
@@ -207,6 +208,16 @@ impl Esurface {
         let vertex_subgraph = self.vertex_set.subgraph(graph);
         let complement = vertex_subgraph.complement(graph);
         (vertex_subgraph, complement)
+    }
+
+    pub fn bitvec<E, V, H>(&self, graph: &HedgeGraph<E, V, H>) -> BitVec {
+        let mut result: BitVec = graph.empty_subgraph();
+        for edge_id in self.energies.iter() {
+            let (_, pair) = graph[edge_id];
+            result.add(pair);
+        }
+
+        result
     }
 
     #[inline]
