@@ -34,6 +34,7 @@ use crate::{
         generation::{generate_cff_expression, get_orientations_from_subgraph},
     },
     model::ArcParticle,
+    momentum::SignOrZero,
     momentum_sample::ExternalIndex,
     new_gammaloop_integrand::{
         amplitude_integrand::{AmplitudeGraphTerm, AmplitudeIntegrand},
@@ -52,7 +53,7 @@ use crate::{
 use eyre::eyre;
 use itertools::Itertools;
 use linnet::half_edge::{
-    involution::{Flow, HedgePair, Orientation},
+    involution::{EdgeVec, Flow, HedgePair, Orientation},
     subgraph::{HedgeNode, Inclusion, InternalSubGraph, OrientedCut},
     HedgeGraph,
 };
@@ -503,7 +504,7 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
         self.build_loop_momentum_bases();
         self.build_multi_channeling_channels();
         self.build_esurface_derived_data()?;
-        //self.build_threshold_counterterms(model);
+        self.build_threshold_counterterms(model);
 
         Ok(())
     }
@@ -641,12 +642,14 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
                 &[],
             );
 
-            orientation_expr = do_replacement_rules(orientation_expr, &self.graph.underlying);
+            orientation_expr = do_replacement_rules(
+                orientation_expr,
+                &self.graph.underlying,
+                &orientation_data.orientation,
+                None,
+            );
             orientation_expr = self.add_additional_factors_to_cff_atom(&orientation_expr);
 
-            println!("orientation: {:?}", orientation_data.orientation);
-            println!("orientation_expr: {}", orientation_expr);
-            //panic!("atom test: {}", spenso_lor_atom(3, 20, GS.dim));
             result += orientation_expr;
         }
 
@@ -1915,7 +1918,45 @@ impl CrossSectionCut {
 fn do_replacement_rules(
     mut orientation_expr: Atom,
     graph: &HedgeGraph<Edge, Vertex, NumHedgeData>,
+    orientation: &EdgeVec<Orientation>,
+    cut_edges: Option<&BitVec>,
 ) -> Atom {
+    if let Some(cut) = cut_edges {
+        // add Feynman rules of cut edges
+        for (_p, edge_index, d) in graph.iter_edges_of(cut) {
+            let edge_id = usize::from(edge_index) as i64;
+
+            // do not set the cut momenta generated in the amplitude to their OSE values
+            // yet in order to do 4d scaling tests
+            let temp_orientation = orientation.clone();
+
+            orientation_expr = orientation_expr
+                .replace(function!(GS.emr_mom, edge_id, W_.y_))
+                .with_map(move |m| {
+                    let index = m.get(W_.y_).unwrap().to_atom();
+
+                    let sign = SignOrZero::from((&temp_orientation[edge_index]).clone()) * 1;
+
+                    function!(GS.energy, edge_id, sign, index)
+                        + function!(GS.emr_vec, edge_id, index)
+                });
+
+            let temp_orientation = orientation.clone();
+            orientation_expr = orientation_expr
+                * d.data
+                    .spin_num
+                    .replace(function!(GS.emr_mom, edge_id, W_.y_))
+                    .with_map(move |m| {
+                        let index = m.get(W_.y_).unwrap().to_atom();
+
+                        let sign = SignOrZero::from((&temp_orientation[edge_index]).clone()) * 1;
+
+                        function!(GS.ose, edge_id, index) * sign
+                            + function!(GS.emr_vec, edge_id, index)
+                    });
+        }
+    }
+
     // add Feynman rules of external edges
     for (_p, edge_index, d) in graph.iter_edges_of(&graph.external_filter()) {
         let edge_id = usize::from(edge_index) as i64;
@@ -2085,6 +2126,28 @@ fn do_replacement_rules(
         orientation_expr = orientation_expr
             .replace(function!(GS.energy, edge_id))
             .with(external_energy_atom_from_index(edge_index));
+    }
+
+    if let Some(cut) = cut_edges {
+        for (_p, edge_id, d) in graph.iter_edges_of(cut) {
+            let e = usize::from(edge_id) as i64;
+            let mass2 = Atom::var(symbol!(d.data.particle.mass.name.as_str())).npow(2);
+
+            orientation_expr = orientation_expr
+                .replace(function!(GS.energy, e))
+                .with(function!(GS.ose, e))
+                .replace(function!(GS.energy, e, W_.x_))
+                .with(function!(GS.ose, e) * W_.x_);
+
+            orientation_expr = orientation_expr.replace(function!(GS.ose, e)).with(
+                (-function!(
+                    MS.dot,
+                    function!(GS.emr_vec, function!(GS.emr_mom, e)),
+                    function!(GS.emr_vec, function!(GS.emr_mom, e))
+                ) + mass2)
+                    .sqrt(),
+            );
+        }
     }
 
     orientation_expr = orientation_expr
