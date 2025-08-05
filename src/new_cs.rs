@@ -822,8 +822,26 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
                     &full_orientation_list[orientation].orientation,
                     Some(&edges_in_cut),
                 );
+
+                counterterm += orientation_result;
             }
 
+            let loop_3 = self.graph.underlying.get_loop_number() as i64 * 3;
+
+            let grad_eta = Atom::var(GS.deta);
+            let factors_of_pi = (Atom::num(2) * Atom::var(GS.pi)).npow(loop_3);
+
+            let radius = Atom::var(GS.radius);
+            let radius_star = Atom::var(GS.radius_star);
+            let uv_damp = Atom::var(GS.uv_damp);
+
+            let delta_r = &radius - &radius_star;
+
+            let jacobian_ratio = (&radius_star / &radius).npow(loop_3 - 1);
+
+            let prefactor = jacobian_ratio / factors_of_pi / grad_eta / delta_r * uv_damp;
+
+            counterterm *= prefactor * &counterterm;
             counterterms.push(counterterm);
         }
     }
