@@ -928,6 +928,9 @@ pub struct ParamBuilder<T: FloatLike> {
     tstar: (Option<Vec<Atom>>, Option<Vec<Complex<F<T>>>>),
     h_function: (Option<Vec<Atom>>, Option<Vec<Complex<F<T>>>>),
     derivative_at_tstar: (Option<Vec<Atom>>, Option<Vec<Complex<F<T>>>>),
+    uv_damp: (Option<Vec<Atom>>, Option<Vec<Complex<F<T>>>>),
+    radius: (Option<Vec<Atom>>, Option<Vec<Complex<F<T>>>>),
+    radius_star: (Option<Vec<Atom>>, Option<Vec<Complex<F<T>>>>),
 }
 
 impl<T: FloatLike> ParamBuilder<T> {
@@ -960,6 +963,25 @@ impl<T: FloatLike> ParamBuilder<T> {
         .into_iter()
     }
 
+    fn into_iter_threshold_ct(
+        self,
+    ) -> impl Iterator<Item = (Option<Vec<Atom>>, Option<Vec<Complex<F<T>>>>)> {
+        [
+            self.m_uv,
+            self.mu_r_sq,
+            self.model_parameters,
+            self.external_energies,
+            self.external_spatial,
+            self.emr_spatial,
+            self.h_function,
+            self.derivative_at_tstar,
+            self.uv_damp,
+            self.radius,
+            self.radius_star,
+        ]
+        .into_iter()
+    }
+
     pub fn build_params_amplitude(self) -> Result<Vec<Atom>> {
         let mut params = Vec::with_capacity(100);
         for (atom, _) in self.into_iter_amplitude() {
@@ -982,6 +1004,18 @@ impl<T: FloatLike> ParamBuilder<T> {
             }
         }
         Ok(values)
+    }
+
+    pub fn build_params_threshold_ct(self) -> Result<Vec<Atom>> {
+        let mut params = Vec::with_capacity(100);
+        for (atom, _) in self.into_iter_threshold_ct() {
+            if let Some(atoms) = atom {
+                params.extend(atoms);
+            } else {
+                return Err(eyre::eyre!("Missing required parameter atoms"));
+            }
+        }
+        Ok(params)
     }
 
     pub fn build_params_cs(self) -> Result<Vec<Atom>> {
@@ -1008,6 +1042,18 @@ impl<T: FloatLike> ParamBuilder<T> {
         Ok(values)
     }
 
+    pub fn build_values_threshold_ct(self) -> Result<Vec<Complex<F<T>>>> {
+        let mut values = Vec::with_capacity(100);
+        for (_, value) in self.into_iter_threshold_ct() {
+            if let Some(value_vec) = value {
+                values.extend(value_vec);
+            } else {
+                return Err(eyre::eyre!("Missing required parameter values"));
+            }
+        }
+        Ok(values)
+    }
+
     pub fn new() -> Self {
         Self {
             m_uv: (None, None),
@@ -1019,6 +1065,9 @@ impl<T: FloatLike> ParamBuilder<T> {
             tstar: (None, None),
             h_function: (None, None),
             derivative_at_tstar: (None, None),
+            uv_damp: (None, None),
+            radius: (None, None),
+            radius_star: (None, None),
         }
     }
 
