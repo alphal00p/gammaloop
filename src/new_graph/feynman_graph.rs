@@ -44,15 +44,15 @@ pub trait FeynmanGraph {
 
     fn num_virtual_edges(&self, subgraph: BitVec) -> usize;
     fn is_incoming_to(&self, edge: EdgeIndex, vertex: NodeIndex) -> bool;
-    fn denominator(&self, edge: EdgeIndex) -> (Atom, Atom);
+    // fn denominator(&self, edge: EdgeIndex) -> (Atom, Atom);
     fn substitute_lmb(&self, edge: EdgeIndex, atom: Atom, lmb: &LoopMomentumBasis) -> Atom;
 
-    fn get_local_edge_position(
-        &self,
-        node_id: NodeIndex,
-        edge_id: EdgeIndex,
-        skip_one: bool,
-    ) -> usize;
+    // fn get_local_edge_position(
+    //     &self,
+    //     node_id: NodeIndex,
+    //     edge_id: EdgeIndex,
+    //     skip_one: bool,
+    // ) -> usize;
     fn add_signs_to_edges(&self, node_id: NodeIndex) -> Vec<isize>;
     fn get_cff_inverse_energy_product(&self) -> Atom;
     fn get_loop_number(&self) -> usize;
@@ -85,6 +85,109 @@ impl Deref for Graph {
     }
 }
 
+impl FeynmanGraph for Graph {
+    fn add_signs_to_edges(&self, node_id: NodeIndex) -> Vec<isize> {
+        self.underlying.add_signs_to_edges(node_id)
+    }
+
+    fn dummy_list(&self) -> Vec<EdgeIndex> {
+        self.underlying.dummy_list()
+    }
+
+    fn expected_scale(&self, e_cm: F<f64>) -> F<f64> {
+        self.underlying.expected_scale(e_cm)
+    }
+
+    fn explicit_ose_atom(&self, edge: EdgeIndex) -> Atom {
+        self.underlying.explicit_ose_atom(edge)
+    }
+
+    fn external_in_or_out_signature(&self) -> ExternalSignature {
+        self.underlying.external_in_or_out_signature()
+    }
+
+    fn get_cff_inverse_energy_product(&self) -> Atom {
+        self.underlying.get_cff_inverse_energy_product()
+    }
+
+    fn get_emr_vec_cache<T: FloatLike>(
+        &self,
+        loop_moms: &LoopMomenta<F<T>>,
+        external_moms: &ExternalFourMomenta<F<T>>,
+        lmb: &LoopMomentumBasis,
+    ) -> Vec<F<T>> {
+        self.underlying
+            .get_emr_vec_cache(loop_moms, external_moms, lmb)
+    }
+
+    fn get_energy_atoms(&self) -> Vec<Atom> {
+        self.underlying.get_energy_atoms()
+    }
+
+    fn get_energy_cache<T: FloatLike>(
+        &self,
+        loop_moms: &LoopMomenta<F<T>>,
+        external_moms: &ExternalFourMomenta<F<T>>,
+        lmb: &LoopMomentumBasis,
+    ) -> EdgeVec<F<T>> {
+        self.underlying
+            .get_energy_cache(loop_moms, external_moms, lmb)
+    }
+
+    fn get_esurface_canonization(&self, lmb: &LoopMomentumBasis) -> Option<ShiftRewrite> {
+        self.underlying.get_esurface_canonization(lmb)
+    }
+
+    fn get_external_energy_atoms(&self) -> Vec<Atom> {
+        self.underlying.get_external_energy_atoms()
+    }
+
+    fn get_external_partcles(&self) -> Vec<ArcParticle> {
+        self.underlying.get_external_partcles()
+    }
+
+    fn get_external_signature(&self) -> SignatureLike<ExternalIndex> {
+        self.underlying.get_external_signature()
+    }
+
+    // fn get_local_edge_position(
+    //     &self,
+    //     node_id: NodeIndex,
+    //     edge_id: EdgeIndex,
+    //     skip_one: bool,
+    // ) -> usize {
+    //     self.underlying
+    //         .get_local_edge_position(node_id, edge_id, skip_one)
+    // }
+
+    fn get_loop_number(&self) -> usize {
+        self.underlying.get_loop_number()
+    }
+
+    fn get_ose_replacements(&self) -> Vec<Replacement> {
+        self.underlying.get_ose_replacements()
+    }
+
+    fn get_real_mass_vector<T: FloatLike>(&self) -> EdgeVec<F<T>> {
+        self.underlying.get_real_mass_vector()
+    }
+    fn is_incoming_to(&self, edge: EdgeIndex, vertex: NodeIndex) -> bool {
+        self.underlying.is_incoming_to(edge, vertex)
+    }
+
+    fn no_dummy(&self) -> BitVec {
+        self.underlying.no_dummy()
+    }
+
+    fn num_virtual_edges(&self, subgraph: BitVec) -> usize {
+        self.underlying.num_virtual_edges(subgraph)
+    }
+
+    fn substitute_lmb(&self, edge: EdgeIndex, atom: Atom, lmb: &LoopMomentumBasis) -> Atom {
+        self.underlying.substitute_lmb(edge, atom, lmb)
+    }
+}
+
 impl FeynmanGraph for HedgeGraph<Edge, Vertex, NumHedgeData> {
     fn num_virtual_edges(&self, subgraph: BitVec) -> usize {
         let internal_subgraph = InternalSubGraph::cleaned_filter_pessimist(subgraph, self);
@@ -106,18 +209,18 @@ impl FeynmanGraph for HedgeGraph<Edge, Vertex, NumHedgeData> {
         }
     }
 
-    fn denominator(&self, edge: EdgeIndex) -> (Atom, Atom) {
-        let mom = parse!(&format!("Q{}", Into::<usize>::into(edge)));
-        let mass = self[edge]
-            .particle
-            .0
-            .mass
-            .expression
-            .clone()
-            .unwrap_or(Atom::num(0));
+    // fn denominator(&self, edge: EdgeIndex) -> (Atom, Atom) {
+    //     let mom = parse!(&format!("Q{}", Into::<usize>::into(edge)));
+    //     let mass = self[edge]
+    //         .particle
+    //         .0
+    //         .mass
+    //         .expression
+    //         .clone()
+    //         .unwrap_or(Atom::num(0));
 
-        (mom, mass)
-    }
+    //     (mom, mass)
+    // }
 
     fn substitute_lmb(&self, edge: EdgeIndex, atom: Atom, lmb: &LoopMomentumBasis) -> Atom {
         let num = Into::<usize>::into(edge);
@@ -126,14 +229,14 @@ impl FeynmanGraph for HedgeGraph<Edge, Vertex, NumHedgeData> {
         atom.replace(mom).with(mom_rep)
     }
 
-    fn get_local_edge_position(
-        &self,
-        node_id: NodeIndex,
-        edge_id: EdgeIndex,
-        skip_one: bool,
-    ) -> usize {
-        unimplemented!()
-    }
+    // fn get_local_edge_position(
+    //     &self,
+    //     node_id: NodeIndex,
+    //     edge_id: EdgeIndex,
+    //     skip_one: bool,
+    // ) -> usize {
+    //     unimplemented!()
+    // }
 
     fn add_signs_to_edges(&self, node_id: NodeIndex) -> Vec<isize> {
         let node_hairs: BitVec = self.iter_crown(node_id).into();

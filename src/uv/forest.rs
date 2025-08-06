@@ -3,11 +3,16 @@ use crate::{
         expression::{GraphOrientation, OrientationData, OrientationID},
         generation::ShiftRewrite,
     },
-    new_graph::{Edge, Vertex},
+    momentum::SignOrZero,
+    new_graph::{Edge, Graph, Vertex},
+    utils::{GS, W_},
     uv::approx::CFFapprox,
 };
 use bitvec::vec::BitVec;
-use symbolica::atom::Atom;
+use symbolica::{
+    atom::{Atom, AtomCore},
+    function,
+};
 
 use linnet::half_edge::{involution::EdgeIndex, subgraph::SubGraph, HedgeGraph};
 
@@ -30,11 +35,9 @@ impl Forest {
     }
 
     pub fn compute<
-        E: UVE,
-        V,
         H,
-        G: UltravioletGraph + AsRef<HedgeGraph<E, V, H>>,
-        S: SubGraph,
+        G: UltravioletGraph + AsRef<HedgeGraph<Edge, Vertex, H>>,
+        S: SubGraph<Base = BitVec>,
         OID: OrientationID,
         O: GraphOrientation,
     >(
@@ -51,7 +54,7 @@ impl Forest {
             match self.dag.nodes[n].parents.len() {
                 0 => {
                     self.dag.nodes[n].data.root(
-                        graph.as_ref(),
+                        graph,
                         amplitude_subgraph,
                         canonize_esurface,
                         orientations,
@@ -119,34 +122,57 @@ impl Forest {
         }
     }
 
-    pub fn local_expr<G, H, S: SubGraph<Base = BitVec>, OID: OrientationID, O: GraphOrientation>(
+    pub fn local_expr(
         &self,
-        graph: &G,
-        amplitude: &S,
         orientation: &OrientationData,
-        canonize_esurface: &Option<ShiftRewrite>,
-        orientations: &TiVec<OID, O>,
-        cut_edges: &[EdgeIndex],
-    ) -> Atom
-    where
-        G: UltravioletGraph + AsRef<HedgeGraph<Edge, Vertex, H>>,
-    {
+        cut_edges: Option<&BitVec>,
+        graph: &Graph,
+    ) -> Atom {
         let mut sum = Atom::Zero;
 
         for (_, n) in &self.dag.nodes {
-            sum += n
-                .data
-                .final_cff(
-                    graph,
-                    amplitude,
-                    orientation,
-                    canonize_esurface,
-                    orientations,
-                    cut_edges,
-                )
-                .unwrap();
+            sum += orientation.select(n.data.final_integrand.as_ref().unwrap());
         }
 
+        if let Some(cut) = cut_edges {
+            // add Feynman rules of cut edges
+            for (_p, edge_index, d) in graph.iter_edges_of(cut) {
+                let edge_id = usize::from(edge_index) as i64;
+
+                // do not set the cut momenta generated in the amplitude to their OSE values
+                // yet in order to do 4d scaling tests
+                let temp_orientation = orientation.clone();
+
+                sum = sum
+                    .replace(function!(GS.emr_mom, edge_id, W_.y_))
+                    .with_map(move |m| {
+                        let index = m.get(W_.y_).unwrap().to_atom();
+
+                        let sign =
+                            SignOrZero::from((&temp_orientation.orientation[edge_index]).clone())
+                                * 1;
+
+                        function!(GS.energy, edge_id, sign, index)
+                            + function!(GS.emr_vec, edge_id, index)
+                    });
+
+                let temp_orientation = orientation.clone();
+                sum = sum
+                    * d.data
+                        .num
+                        .replace(function!(GS.emr_mom, edge_id, W_.y_))
+                        .with_map(move |m| {
+                            let index = m.get(W_.y_).unwrap().to_atom();
+
+                            let sign = SignOrZero::from(
+                                (&temp_orientation.orientation[edge_index]).clone(),
+                            ) * 1;
+
+                            function!(GS.ose, edge_id, index) * sign
+                                + function!(GS.emr_vec, edge_id, index)
+                        });
+            }
+        }
         sum
     }
 

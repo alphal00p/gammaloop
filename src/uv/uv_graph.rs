@@ -15,7 +15,7 @@ use symbolica::{
 
 use crate::{
     momentum_sample::LoopIndex,
-    new_graph::{Edge, Graph, LMBext, LoopMomentumBasis, NumHedgeData, Vertex},
+    new_graph::{Edge, FeynmanGraph, Graph, LMBext, LoopMomentumBasis, NumHedgeData, Vertex},
     numerator::{AppliedFeynmanRule, Numerator},
     symbolica_ext::CallSymbol,
     utils::{GS, W_},
@@ -23,7 +23,7 @@ use crate::{
 
 use super::{is_not_paired, spenso_lor_atom, Wood};
 
-pub trait UltravioletGraph: LMBext {
+pub trait UltravioletGraph: LMBext + FeynmanGraph {
     fn n_loops<S: SubGraph, E, V, H>(&self, subgraph: &S) -> usize
     where
         Self: AsRef<HedgeGraph<E, V, H>>,
