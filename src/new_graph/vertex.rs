@@ -2,6 +2,7 @@ use itertools::Itertools;
 use linnet::{
     half_edge::{
         involution::Orientation, nodestore::BitVecNeighborIter, EdgeAccessors, HedgeGraph,
+        NodeIndex,
     },
     parser::DotVertexData,
 };
@@ -28,6 +29,7 @@ use eyre::eyre;
 
 use super::{
     edge::ParseEdge,
+    global::ParseData,
     hedge_data::ParseHedge,
     parse::{StripParse, ToQuoted},
 };
@@ -38,9 +40,16 @@ pub struct Vertex {
     // #[bincode(with_serde)]
     pub label: String,
     pub vertex_rule: ArcVertexRule,
-    pub num_spin: ParamTensor<OrderedStructure<Euclidean, Aind>>,
-    pub num_color: ParamTensor<OrderedStructure<Euclidean, Aind>>,
+    pub num: Atom,
+    // pub num_spin: ParamTensor<OrderedStructure<Euclidean, Aind>>,
+    // pub num_color: ParamTensor<OrderedStructure<Euclidean, Aind>>,
     pub dod: i32,
+}
+
+impl Vertex {
+    pub fn get_num(&self) -> Atom {
+        self.num.clone()
+    }
 }
 
 impl From<&Vertex> for DotVertexData {
@@ -49,37 +58,7 @@ impl From<&Vertex> for DotVertexData {
         v.add_statement("label", value.label.clone());
         v.add_statement("int_id", value.vertex_rule.name.as_str());
         v.add_statement("dod", value.dod);
-
-        if value.num_color.size().unwrap() > 1 {
-            v.add_statement(
-                "num",
-                value
-                    .num_color
-                    .contract(&value.num_spin)
-                    .unwrap()
-                    .scalar()
-                    .unwrap()
-                    .to_quoted(),
-            );
-        } else {
-            v.add_statement(
-                "num",
-                value
-                    .num_spin
-                    .get_owned_linear(FlatIndex::from(0))
-                    .unwrap()
-                    .to_quoted(),
-            );
-            v.add_statement(
-                "color_num",
-                value
-                    .num_color
-                    .get_owned_linear(FlatIndex::from(0))
-                    .unwrap()
-                    .to_quoted(),
-            );
-        }
-
+        v.add_statement("num", value.num.to_quoted());
         v
     }
 }
@@ -89,19 +68,13 @@ impl Vertex {}
 pub struct ParseVertex {
     pub label: Option<String>,
     pub vertex_rule: ArcVertexRule,
-    pub spin_num: Option<Atom>,
+    pub num: Option<Atom>,
     pub dod: Option<i32>,
-    pub color_num: Option<Atom>,
 }
 
 impl ParseVertex {
-    pub fn with_spin_num(mut self, spin_num: Atom) -> Self {
-        self.spin_num = Some(spin_num);
-        self
-    }
-
-    pub fn with_color_num(mut self, color_num: Atom) -> Self {
-        self.color_num = Some(color_num);
+    pub fn with_num(mut self, num: Atom) -> Self {
+        self.num = Some(num);
         self
     }
 
@@ -117,8 +90,7 @@ impl From<ArcVertexRule> for ParseVertex {
             label: None,
             vertex_rule,
             dod: None,
-            spin_num: None,
-            color_num: None,
+            num: None,
         }
     }
 }
@@ -126,7 +98,7 @@ impl From<ArcVertexRule> for ParseVertex {
 impl ParseVertex {
     pub fn parse<'a>(
         model: &'a Model,
-        auto_detect_vertex_rule: bool,
+        parse_data: &'a ParseData,
     ) -> impl FnMut(
         &'a HedgeGraph<ParseEdge, &'a DotVertexData, ParseHedge>,
         BitVecNeighborIter<'a>,
@@ -137,12 +109,8 @@ impl ParseVertex {
 
             let dod = v.get::<_, i32>("dod").transpose()?;
 
-            let spin_num = v
+            let num = v
                 .get::<_, String>("num")
-                .transpose()?
-                .map(|a| a.strip_parse());
-            let color_num = v
-                .get::<_, String>("color_num")
                 .transpose()?
                 .map(|a| a.strip_parse());
 
@@ -153,13 +121,21 @@ impl ParseVertex {
                     dod,
                     label,
                     vertex_rule,
-                    spin_num,
-                    color_num,
+                    num,
                 })
-            } else if auto_detect_vertex_rule {
+            } else {
+                let mut node_id = NodeIndex(0);
                 let mut particles: Vec<ArcParticle> = n
                     .map(|h| {
+                        node_id = g.node_id(h);
                         let eid = g[&h];
+                        // println!(
+                        //     "{:?}{:?}{:?}{}",
+                        //     g.flow(h),
+                        //     g.orientation(h),
+                        //     g.orientation(h).reverse().relative_to(g.flow(h)),
+                        //     g[eid].particle.name
+                        // );
                         let particle = match g.orientation(h).relative_to(g.flow(h)) {
                             Orientation::Reversed => g[eid].particle.get_anti_particle(model),
                             _ => g[eid].particle.clone(),
@@ -176,8 +152,7 @@ impl ParseVertex {
                             dod,
                             label,
                             vertex_rule: res[0].clone(),
-                            spin_num,
-                            color_num,
+                            num,
                         })
                     } else {
                         Err(eyre!("Multiple vertex rules for {:?}", particles))
@@ -185,12 +160,10 @@ impl ParseVertex {
                 } else {
                     let particles = particles.iter().map(|p| p.name.as_str()).collect_vec();
                     Err(eyre!(
-                        "Failed to find vertex rule for particles: {:?}",
-                        particles
+                        "Failed to find vertex rule for particles: {:?} for node {node_id} in graph {}",
+                        particles,parse_data.name,
                     ))
                 }
-            } else {
-                Err(eyre!("Vertex rule not supplied"))
             }
         }
     }

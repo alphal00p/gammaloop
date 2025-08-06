@@ -274,3 +274,13 @@ impl UltravioletGraph for Graph {
         dod
     }
 }
+
+pub trait UVE {
+    fn mass_atom(&self) -> Atom;
+}
+
+impl UVE for Edge {
+    fn mass_atom(&self) -> Atom {
+        parse!(&self.particle.mass.name)
+    }
+}

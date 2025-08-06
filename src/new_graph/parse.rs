@@ -3,10 +3,11 @@ use std::{collections::BTreeMap, ops::Deref, path::Path};
 use crate::{
     model::{ArcPropagator, Model},
     momentum_sample::LoopIndex,
+    new_cs::Amplitude,
     numerator::{
         aind::{Aind, NewAind},
         ufo::UFO,
-        GlobalPrefactor,
+        GlobalPrefactor, NumeratorState,
     },
     symbolica_ext::CallSymbol,
     utils::{GS, W_},
@@ -27,13 +28,14 @@ use linnet::{
     permutation::Permutation,
 };
 use log::{debug, info};
+use smartstring::{LazyCompact, SmartString};
 use spenso::{
     contraction::Contract,
     iterators::IteratableTensor,
-    network::library::LibraryTensor,
+    network::library::{LibraryTensor, TensorLibraryData},
     structure::{
         representation::{Euclidean, RepName},
-        OrderedStructure, PermutedStructure,
+        HasStructure, OrderedStructure, PermutedStructure,
     },
     tensors::{data::StorageTensor, parametric::ParamTensor},
 };
@@ -54,6 +56,12 @@ pub trait ToQuoted {
     fn to_quoted(&self) -> String;
 }
 
+// impl ToQuoted for SmartString<LazyCompact> {
+//     fn to_quoted(&self) -> String {
+//         format!("\"{}\"", self)
+//     }
+// }
+
 impl<A> ToQuoted for A
 where
     A: AtomCore,
@@ -63,11 +71,11 @@ where
     }
 }
 
-pub trait StripParse {
-    fn strip_parse(&self) -> Atom;
+pub trait StripParse<T> {
+    fn strip_parse(&self) -> T;
 }
 
-impl StripParse for String {
+impl StripParse<Atom> for String {
     fn strip_parse(&self) -> Atom {
         let a = self
             .as_str()
@@ -78,7 +86,7 @@ impl StripParse for String {
         parse!(a)
     }
 }
-impl StripParse for &String {
+impl StripParse<Atom> for &String {
     fn strip_parse(&self) -> Atom {
         let a = self
             .as_str()
@@ -87,6 +95,29 @@ impl StripParse for &String {
             .strip_suffix('"')
             .unwrap_or(&self);
         parse!(a)
+    }
+}
+
+impl StripParse<bool> for String {
+    fn strip_parse(&self) -> bool {
+        let a = self
+            .as_str()
+            .strip_prefix('"')
+            .unwrap_or(&self)
+            .strip_suffix('"')
+            .unwrap_or(&self);
+        a.parse().unwrap()
+    }
+}
+impl StripParse<bool> for &String {
+    fn strip_parse(&self) -> bool {
+        let a = self
+            .as_str()
+            .strip_prefix('"')
+            .unwrap_or(&self)
+            .strip_suffix('"')
+            .unwrap_or(&self);
+        a.parse().unwrap()
     }
 }
 
@@ -127,7 +158,11 @@ impl ParseGraph {
                     *i = None;
                     hedges[h.0] = Some(pos as u8);
                 } else {
-                    return Err(eyre!("Particle not in vertex rule:{:?}", particle));
+                    return Err(eyre!(
+                        "Particle {} not in vertex rule {}",
+                        particle.map(|a| a.name.clone()).unwrap_or("None".into()),
+                        v.vertex_rule.name
+                    ));
                 }
             }
 
@@ -147,11 +182,7 @@ impl ParseGraph {
         }
     }
 
-    pub fn from_parsed(
-        graph: DotGraph,
-        auto_detect_vertex_rule: bool,
-        model: &Model,
-    ) -> Result<Self> {
+    pub fn from_parsed(graph: DotGraph, model: &Model) -> Result<Self> {
         let global_data = graph.global_data.into();
         let graph = graph
             .graph
@@ -161,7 +192,7 @@ impl ParseGraph {
                 ParseHedge::parse(),
             )?
             .map_data_ref_result(
-                ParseVertex::parse(model, auto_detect_vertex_rule),
+                ParseVertex::parse(model, &global_data),
                 |_, _, _, e| Ok(e.map(Clone::clone)),
                 |(_, h)| Ok(h.clone()),
             )?;
@@ -221,11 +252,12 @@ impl Graph {
 
     pub fn from_parsed(graph: ParseGraph, model: &Model) -> Result<Self> {
         let hedge_order = graph.hedge_order(model)?;
-        let multiplicity = graph.global_data.multiplicity_factor.clone();
-        let overall_factor = &graph.global_data.overall_factor;
+        let overall_factor = graph.global_data.overall_factor.clone();
+        let add_polarizations = graph.global_data.projectors.is_none();
+        let projector = graph.global_data.projectors.clone().unwrap_or(Atom::one());
         let global_prefactor = GlobalPrefactor {
-            color: graph.global_data.color.clone(),
-            colorless: &graph.global_data.colorless * overall_factor,
+            num: graph.global_data.num.clone(),
+            projector,
         };
 
         let name = graph.global_data.name.clone();
@@ -328,59 +360,33 @@ impl Graph {
 
         let underlying = graph.map(
             |_, i, v| {
-                let summed_slot = Euclidean {}.new_slot(1, i.aind(1));
-                let num_spin = if let Some(s) = v.spin_num {
-                    ParamTensor::from_dense(
-                        PermutedStructure::from_iter([summed_slot]).structure,
-                        vec![s],
-                    )
-                    .unwrap()
-                } else {
-                    v_spin_num[i.0].take().unwrap()
-                };
+                let num = v.num.unwrap_or(
+                    v_spin_num[i.0]
+                        .take()
+                        .unwrap()
+                        .contract(&v_color_num[i.0].take().unwrap())
+                        .unwrap()
+                        .scalar()
+                        .unwrap(),
+                );
 
-                let num_color = if let Some(c) = v.color_num {
-                    ParamTensor::from_dense(
-                        PermutedStructure::from_iter([summed_slot]).structure,
-                        vec![c],
-                    )
-                    .unwrap()
-                } else {
-                    v_color_num[i.0].take().unwrap()
-                };
-
-                let dod = if let Some(d) = v.dod {
-                    d
-                } else {
-                    num_spin.iter_flat().map(|(i, v)| v.dod()).max().unwrap()
-                };
+                let dod = if let Some(d) = v.dod { d } else { num.dod() };
 
                 Vertex {
                     label: v.label.unwrap_or(i.to_string()),
-                    num_color,
+                    num,
                     dod,
-                    num_spin,
                     vertex_rule: v.vertex_rule,
                 }
             },
             |_, _, _, eid, e| {
                 e.map(|e| {
-                    let color_num = if let Some(c) = e.color_num {
-                        c
-                    } else {
-                        color_num_e[eid].clone()
-                    };
-
-                    let spin_num = if let Some(s) = e.spin_num {
-                        s
-                    } else {
-                        spin_num_e[eid].clone()
-                    };
+                    let num = e.num.unwrap_or(&color_num_e[eid] * &spin_num_e[eid]);
 
                     let dod = if let Some(d) = e.dod {
                         d
                     } else {
-                        spin_num.dod() - 2
+                        num.dod() - 2
                     };
 
                     Edge {
@@ -390,9 +396,8 @@ impl Graph {
                             model.get_propagator_for_particle(&e.particle.name),
                         ),
                         particle: e.particle,
-                        color_num,
+                        num,
                         dod,
-                        spin_num,
                     }
                 })
             },
@@ -447,23 +452,27 @@ impl Graph {
             }
             i += 1;
         }
-        // loop_momentum_basis.loop_edges.iter_enumerated().sorted_by_key(|(i,v)|);
-        Ok(Graph {
-            multiplicity,
+
+        let mut graph = Graph {
+            overall_factor,
             global_prefactor,
             name,
             loop_momentum_basis,
             underlying,
-        })
+        };
+
+        if add_polarizations {
+            let pols = graph.polarizations();
+            graph.global_prefactor.projector *= pols;
+        }
+        // loop_momentum_basis.loop_edges.iter_enumerated().sorted_by_key(|(i,v)|);
+        Ok(graph)
 
         // Ok(NumGraph { graph })
     }
 
-    pub fn from_dot(graph: DotGraph, auto_detect_vertex_rule: bool, model: &Model) -> Result<Self> {
-        Self::from_parsed(
-            ParseGraph::from_parsed(graph, auto_detect_vertex_rule, model)?,
-            model,
-        )
+    pub fn from_dot(graph: DotGraph, model: &Model) -> Result<Self> {
+        Self::from_parsed(ParseGraph::from_parsed(graph, model)?, model)
     }
     pub fn from_file<'a, P>(p: P, model: &Model) -> Result<Vec<Self>>
     where
@@ -508,11 +517,59 @@ impl Graph {
             let graph = DotGraph { global_data, graph };
             debug!("Parsing: \n{}", graph.debug_dot());
             graphs.push(Graph::from_parsed(
-                ParseGraph::from_parsed(graph, true, model).unwrap(),
+                ParseGraph::from_parsed(graph, model)?,
                 model,
             )?);
         }
         Ok(graphs)
+    }
+}
+
+pub trait IntoGraph<T> {
+    fn into_graph(self, model: &Model) -> Result<T>;
+}
+
+impl IntoGraph<Vec<Graph>> for String {
+    fn into_graph(self, model: &Model) -> Result<Vec<Graph>> {
+        let hedge_graph_set: GraphSet<
+            DotEdgeData,
+            DotVertexData,
+            DotHedgeData,
+            linnet::parser::GlobalData,
+            NodeStorageVec<DotVertexData>,
+        > = GraphSet::from_string(self).unwrap();
+
+        Graph::from_hedge_graph_set(hedge_graph_set, model)
+    }
+}
+
+impl IntoGraph<Graph> for String {
+    fn into_graph(self, model: &Model) -> Result<Graph> {
+        let graph: DotGraph<NodeStorageVec<DotVertexData>> = DotGraph::from_string(self).unwrap();
+
+        Graph::from_parsed(ParseGraph::from_parsed(graph, model)?, model)
+    }
+}
+
+impl IntoGraph<Vec<Graph>> for &str {
+    fn into_graph(self, model: &Model) -> Result<Vec<Graph>> {
+        let hedge_graph_set: GraphSet<
+            DotEdgeData,
+            DotVertexData,
+            DotHedgeData,
+            linnet::parser::GlobalData,
+            NodeStorageVec<DotVertexData>,
+        > = GraphSet::from_string(self).unwrap();
+
+        Graph::from_hedge_graph_set(hedge_graph_set, model)
+    }
+}
+
+impl IntoGraph<Graph> for &str {
+    fn into_graph(self, model: &Model) -> Result<Graph> {
+        let graph: DotGraph<NodeStorageVec<DotVertexData>> = DotGraph::from_string(self).unwrap();
+
+        Graph::from_parsed(ParseGraph::from_parsed(graph, model)?, model)
     }
 }
 
@@ -540,19 +597,19 @@ macro_rules! dot {
 
     (@internal [$($code:tt)*], $model:literal) => {
 
-        Graph::from_string(stringify!($($code)*), &load_generic_model($model))
+        stringify!($($code)*).into_graph(&crate::tests_from_pytest::load_generic_model($model))
     };
 
     // Internal rule: End of parsing, with an optional argument.
     // This is matched when the accumulator has collected the code block and we hit a comma.
     (@internal [$($code:tt)*], $model:expr) => {
-        Graph::from_string(stringify!($($code)*), $model)
+       stringify!($($code)*).into_graph($model)
     };
 
     // Internal rule: End of parsing, no optional argument.
     // This is matched when the accumulator has run out of tokens to process.
     (@internal [$($code:tt)*]) => {
-        Graph::from_string(stringify!($($code)*), &load_generic_model("sm"))
+        stringify!($($code)*).into_graph( &crate::tests_from_pytest::load_generic_model("sm"))
     };
 
     // Internal rule: The "accumulator".
@@ -587,6 +644,7 @@ pub mod test {
 
     use crate::{
         cli::State,
+        new_graph::parse::IntoGraph,
         new_graph::LMBext,
         numerator::{aind::Aind, Numerator, UnInit},
         tests_from_pytest::load_generic_model,
@@ -598,7 +656,7 @@ pub mod test {
     fn test_load() {
         State::default();
         info!("Loading graph");
-        let graph = dot!(digraph triangle {
+        let graph: Vec<Graph> = dot!(digraph triangle {
             graph [
                 overall_factor = 1;
                 multiplicity_factor = 1;
@@ -652,7 +710,7 @@ pub mod test {
 
     #[test]
     fn test_loop_momentum_basis() {
-        let graphs = dot!(
+        let g: Graph = dot!(
             digraph triangle {
             graph [
             overall_factor = 1;
@@ -671,9 +729,6 @@ pub mod test {
             },"scalars"
         )
         .unwrap();
-
-        let g = &graphs[0];
-
         // println!("{}", g.loop_momentum_basis);
 
         insta::assert_ron_snapshot!(g.loop_momentum_basis);
@@ -686,7 +741,7 @@ pub mod test {
 
     #[test]
     fn parse() {
-        let graphs = dot!(
+        let g: Graph = dot!(
             digraph G{
                 ext    [style=invis]
                 ext -> A   [particle=a]
@@ -700,8 +755,6 @@ pub mod test {
         )
         .unwrap();
 
-        let g = &graphs[0];
-
         println!("{:#?}", g.loop_momentum_basis);
 
         println!(
@@ -711,11 +764,11 @@ pub mod test {
         );
 
         println!("{}", g.dot_serialize());
-
+        return;
         let num =
             Numerator::<UnInit>::default().from_new_graph(&g, &g.underlying.full_filter(), true);
 
-        let expr = num.state.colorless.get_ref_linear(0.into()).unwrap();
+        let expr = num.state.expr.as_view();
 
         let lib: DummyLibrary<SymbolicTensor<Aind>> = DummyLibrary::<_>::new();
         let net =
@@ -751,22 +804,15 @@ pub mod test {
 
         let num = num.color_simplify();
 
-        println!("{}", num.state.color);
-        println!(
-            "{}",
-            num.state
-                .colorless
-                .get_owned_linear(FlatIndex::from(0))
-                .unwrap()
-                .to_dots()
-        );
+        println!("{}", num.state.expr);
+        println!("{}", num.state.expr.to_dots());
         let num = num.gamma_simplify();
 
-        println!("{}", num.state.colorless);
+        println!("{}", num.state.expr);
     }
     #[test]
     fn parse_local() {
-        let graphs= dot!(
+        let graphs:Vec<Graph>= dot!(
             digraph G{
                 edge [num="1" dod=-1000 pdg=1000]
                 node [num="1" dod=-1000]
@@ -815,7 +861,7 @@ pub mod test {
         let num =
             Numerator::<UnInit>::default().from_new_graph(&g, &g.underlying.full_filter(), true);
 
-        let expr = num.state.colorless.get_ref_linear(0.into()).unwrap();
+        let expr = num.state.expr.as_view();
 
         let lib: DummyLibrary<SymbolicTensor<Aind>> = DummyLibrary::<_>::new();
         let net =
@@ -851,8 +897,7 @@ pub mod test {
 
         let num = num.color_simplify();
 
-        println!("Hi{}", num.state.color);
-        println!("{}", num.state.colorless);
+        println!("{}", num.state.expr);
         // let num = num.gamma_simplify();
 
         // println!(
@@ -867,7 +912,7 @@ pub mod test {
 
     #[test]
     fn parse_lmbsetting() {
-        let graphs = dot!(
+        let g: Graph = dot!(
             digraph G{
                 graph [
                     multiplicity_factor = "1/2"
@@ -896,7 +941,6 @@ pub mod test {
         )
         .unwrap();
 
-        let g = &graphs[0];
         println!(
             "{}",
             g.underlying
@@ -906,7 +950,7 @@ pub mod test {
         let num =
             Numerator::<UnInit>::default().from_new_graph(&g, &g.underlying.full_filter(), true);
 
-        let expr = num.state.colorless.get_ref_linear(0.into()).unwrap();
+        let expr = num.state.expr.as_view();
 
         let lib: DummyLibrary<SymbolicTensor<Aind>> = DummyLibrary::<_>::new();
         let net =
@@ -942,15 +986,15 @@ pub mod test {
 
         let num = num.color_simplify();
 
-        println!("{}", num.state.color);
+        println!("{}", num.state.expr);
         let num = num.gamma_simplify();
 
-        println!("{}", num.state.colorless);
+        println!("{}", num.state.expr);
     }
 
     #[test]
     fn parse_and_build_edgevec() {
-        let graph_1 = dot!(
+        let graph_1: Graph = dot!(
                     digraph triangle {
             graph [
                 overall_factor = 1;
@@ -970,7 +1014,7 @@ pub mod test {
         )
         .unwrap();
 
-        let graph_2 = dot! (
+        let graph_2: Graph = dot! (
                     digraph triangle {
             graph [
                 overall_factor = 1;
@@ -990,8 +1034,8 @@ pub mod test {
         )
         .unwrap();
 
-        let graph_1 = &graph_1[0].underlying;
-        let graph_2 = &graph_2[0].underlying;
+        let graph_1 = &graph_1.underlying;
+        let graph_2 = &graph_2.underlying;
 
         let test_data = vec![true, true, true];
 

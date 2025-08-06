@@ -21,7 +21,7 @@ use crate::{
     integrate::havana_integrate,
     momentum_sample::ExternalIndex,
     new_cs::{AmplitudeGraph, CrossSection, CrossSectionGraph, CutId, ProcessDefinition},
-    new_graph::{ExternalConnection, FeynmanGraph, Graph},
+    new_graph::{parse::IntoGraph, ExternalConnection, FeynmanGraph, Graph},
     numerator::UnInit,
     signature::LoopExtSignature,
     tests_from_pytest::load_generic_model,
@@ -39,7 +39,7 @@ fn tri_uv_AMP() {
         load_generic_model("sm")
     };
 
-    let graphs = dot!(
+    let graph: Graph = dot!(
         digraph G{
             e        [style=invis]
             e -> A   [particle=H id=0]
@@ -51,8 +51,6 @@ fn tri_uv_AMP() {
         },&model
     )
     .unwrap();
-
-    let graph = graphs[0].clone();
 
     let canonize_esurface = graph
         .underlying
@@ -122,7 +120,7 @@ fn tri_uv_AMP() {
             .iter_edges_of(&graph.as_ref().external_filter())
         {
             let edge_id = usize::from(edge_index) as i64;
-            expr = (expr * &d.data.spin_num)
+            expr = (expr * &d.data.num)
                 .replace(function!(GS.emr_mom, edge_id, W_.y_))
                 .with_map(move |m| {
                     let index = m.get(W_.y_).unwrap().to_atom();
@@ -272,42 +270,18 @@ fn tri_box_tri_LU() {
         assert!(tp.0.mass.value.unwrap().is_zero());
     }
 
-    let n1 = underlying.add_node(
-        ParseVertex::from(hhh.clone())
-            .with_spin_num(Atom::num(1))
-            .with_color_num(Atom::num(1)),
-    );
-    let n2 = underlying.add_node(
-        ParseVertex::from(hhh.clone())
-            .with_spin_num(Atom::num(1))
-            .with_color_num(Atom::num(1)),
-    );
-    let n3 = underlying.add_node(
-        ParseVertex::from(hhh.clone())
-            .with_spin_num(Atom::num(1))
-            .with_color_num(Atom::num(1)),
-    );
-    let n4 = underlying.add_node(
-        ParseVertex::from(htt.clone())
-            .with_spin_num(Atom::num(1))
-            .with_color_num(Atom::num(1)),
-    );
-    let n5 = underlying.add_node(
-        ParseVertex::from(htt.clone())
-            .with_spin_num(Atom::num(1))
-            .with_color_num(Atom::num(1)),
-    );
-    let n6 = underlying.add_node(
-        ParseVertex::from(htt.clone())
-            .with_spin_num(Atom::num(1))
-            .with_color_num(Atom::num(1)),
-    );
+    let n1 = underlying.add_node(ParseVertex::from(hhh.clone()).with_num(Atom::num(1)));
+    let n2 = underlying.add_node(ParseVertex::from(hhh.clone()).with_num(Atom::num(1)));
+    let n3 = underlying.add_node(ParseVertex::from(hhh.clone()).with_num(Atom::num(1)));
+    let n4 = underlying.add_node(ParseVertex::from(htt.clone()).with_num(Atom::num(1)));
+    let n5 = underlying.add_node(ParseVertex::from(htt.clone()).with_num(Atom::num(1)));
+    let n6 = underlying.add_node(ParseVertex::from(htt.clone()).with_num(Atom::num(1)));
 
     underlying.add_edge(
         n1.add_data(ParseHedge::default()),
         n2.add_data(ParseHedge::default()),
         ParseEdge::new(hp.clone())
-            .with_spin_num(Atom::one())
+            .with_num(Atom::one())
             .with_lmb_id(LoopIndex(0)),
         false,
     );
@@ -315,14 +289,14 @@ fn tri_box_tri_LU() {
     underlying.add_edge(
         n1.add_data(ParseHedge::default()),
         n3.add_data(ParseHedge::default()),
-        ParseEdge::new(hp.clone()).with_spin_num(Atom::one()),
+        ParseEdge::new(hp.clone()).with_num(Atom::one()),
         false,
     );
 
     underlying.add_edge(
         n2.add_data(ParseHedge::default()),
         n3.add_data(ParseHedge::default()),
-        ParseEdge::new(hp.clone()).with_spin_num(if box_uv_dod >= 1 {
+        ParseEdge::new(hp.clone()).with_num(if box_uv_dod >= 1 {
             spenso_lor_atom(2, 30, GS.dim)
         } else {
             Atom::one()
@@ -346,7 +320,7 @@ fn tri_box_tri_LU() {
     underlying.add_edge(
         n2.add_data(ParseHedge::default()),
         n4.add_data(ParseHedge::default()),
-        ParseEdge::new(hp.clone()).with_spin_num(if box_uv_dod >= 0 && uv_dod >= 1 {
+        ParseEdge::new(hp.clone()).with_num(if box_uv_dod >= 0 && uv_dod >= 1 {
             spenso_lor_atom(3, 20, GS.dim)
         } else {
             Atom::one()
@@ -358,7 +332,7 @@ fn tri_box_tri_LU() {
         n3.add_data(ParseHedge::default()),
         n5.add_data(ParseHedge::default()),
         ParseEdge::new(hp.clone())
-            .with_spin_num(if box_uv_dod == 2 {
+            .with_num(if box_uv_dod == 2 {
                 spenso_lor_atom(4, 30, GS.dim)
             } else {
                 Atom::one()
@@ -370,7 +344,7 @@ fn tri_box_tri_LU() {
     underlying.add_edge(
         n4.add_data(ParseHedge::default()),
         n5.add_data(ParseHedge::default()),
-        ParseEdge::new(tp.clone()).with_spin_num(if uv_dod >= 0 {
+        ParseEdge::new(tp.clone()).with_num(if uv_dod >= 0 {
             spenso_lor_atom(5, 10, GS.dim)
         } else {
             Atom::one()
@@ -381,7 +355,7 @@ fn tri_box_tri_LU() {
     underlying.add_edge(
         n6.add_data(ParseHedge::default()),
         n4.add_data(ParseHedge::default()),
-        ParseEdge::new(tp.clone()).with_spin_num(if uv_dod >= 1 {
+        ParseEdge::new(tp.clone()).with_num(if uv_dod >= 1 {
             spenso_lor_atom(6, 20, GS.dim)
         } else {
             Atom::one()
@@ -393,7 +367,7 @@ fn tri_box_tri_LU() {
         n5.add_data(ParseHedge::default()),
         n6.add_data(ParseHedge::default()),
         ParseEdge::new(tp.clone())
-            .with_spin_num(if uv_dod >= 0 {
+            .with_num(if uv_dod >= 0 {
                 spenso_lor_atom(7, 10, GS.dim)
             } else {
                 Atom::one()
@@ -404,7 +378,7 @@ fn tri_box_tri_LU() {
 
     underlying.add_external_edge(
         n1.add_data(ParseHedge::default()),
-        ParseEdge::new(hp.clone()).with_spin_num(if box_uv_dod == 1 {
+        ParseEdge::new(hp.clone()).with_num(if box_uv_dod == 1 {
             spenso_lor_atom(8, 30, GS.dim)
         } else {
             Atom::one()
@@ -415,7 +389,7 @@ fn tri_box_tri_LU() {
 
     underlying.add_external_edge(
         n6.add_data(ParseHedge::default()),
-        ParseEdge::new(hp.clone()).with_spin_num(if box_uv_dod == -1 && uv_dod >= 1 {
+        ParseEdge::new(hp.clone()).with_num(if box_uv_dod == -1 && uv_dod >= 1 {
             spenso_lor_atom(9, 20, GS.dim)
         } else {
             Atom::one()
@@ -614,7 +588,7 @@ fn tri_box_tri_LU() {
             let orientation = supergraph_orientation_data.orientation.clone();
             cut_res = cut_res
                 * d.data
-                    .spin_num
+                    .num
                     .replace(function!(GS.emr_mom, edge_id, W_.y_))
                     .with_map(move |m| {
                         let index = m.get(W_.y_).unwrap().to_atom();
@@ -629,7 +603,7 @@ fn tri_box_tri_LU() {
         // add Feynman rules of external edges
         for (_p, edge_index, d) in super_uv_graph.iter_edges_of(&super_uv_graph.external_filter()) {
             let edge_id = usize::from(edge_index) as i64;
-            cut_res = (cut_res * &d.data.spin_num)
+            cut_res = (cut_res * &d.data.num)
                 .replace(function!(GS.emr_mom, edge_id, W_.y_))
                 .with_map(move |m| {
                     let index = m.get(W_.y_).unwrap().to_atom();
@@ -1140,7 +1114,7 @@ fn double_triangle_LU() {
     underlying.add_edge(
         n2.add_data(ParseHedge::default()),
         n3.add_data(ParseHedge::default()),
-        ParseEdge::new(tp.clone()).with_spin_num(if uv_dod >= 0 {
+        ParseEdge::new(tp.clone()).with_num(if uv_dod >= 0 {
             spenso_lor_atom(2, 10, GS.dim)
         } else {
             Atom::one()
@@ -1151,7 +1125,7 @@ fn double_triangle_LU() {
     underlying.add_edge(
         n3.add_data(ParseHedge::default()),
         n4.add_data(ParseHedge::default()),
-        ParseEdge::new(tp.clone()).with_spin_num(if uv_dod >= 1 {
+        ParseEdge::new(tp.clone()).with_num(if uv_dod >= 1 {
             spenso_lor_atom(3, 20, GS.dim)
         } else {
             Atom::one()
@@ -1162,7 +1136,7 @@ fn double_triangle_LU() {
     underlying.add_edge(
         n4.add_data(ParseHedge::default()),
         n2.add_data(ParseHedge::default()),
-        ParseEdge::new(tp.clone()).with_spin_num(if uv_dod >= 0 {
+        ParseEdge::new(tp.clone()).with_num(if uv_dod >= 0 {
             spenso_lor_atom(4, 10, GS.dim)
         } else {
             Atom::one()
@@ -1179,7 +1153,7 @@ fn double_triangle_LU() {
 
     underlying.add_external_edge(
         n4.add_data(ParseHedge::default()),
-        ParseEdge::new(hp.clone()).with_spin_num(if uv_dod >= 1 {
+        ParseEdge::new(hp.clone()).with_num(if uv_dod >= 1 {
             spenso_lor_atom(6, 20, GS.dim)
         } else {
             Atom::one()
@@ -1345,7 +1319,7 @@ fn double_triangle_LU() {
                 let orientation = supergraph_orientation_data.orientation.clone();
                 cut_res = cut_res
                     * d.data
-                        .spin_num
+                        .num
                         .replace(function!(GS.emr_mom, edge_id, W_.y_))
                         .with_map(move |m| {
                             let index = m.get(W_.y_).unwrap().to_atom();
@@ -1362,7 +1336,7 @@ fn double_triangle_LU() {
                 super_uv_graph.iter_edges_of(&super_uv_graph.external_filter())
             {
                 let edge_id = usize::from(edge_index) as i64;
-                cut_res = (cut_res * &d.data.spin_num)
+                cut_res = (cut_res * &d.data.num)
                     .replace(function!(GS.emr_mom, edge_id, W_.y_))
                     .with_map(move |m| {
                         let index = m.get(W_.y_).unwrap().to_atom();
@@ -2790,6 +2764,7 @@ fn disconnect_forest_scalar() {
 use super::*;
 
 use std::cmp::Ordering;
+use std::collections::HashSet;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct TestNode(&'static str);

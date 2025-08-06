@@ -814,24 +814,13 @@ impl Amplitude<PythonState> {
 
                 if no_evaluators {
                     g.forgetfull_apply::<_, UnInit>(|d, b| {
-                        d.process_numerator_no_eval(
-                            b,
-                            ContractionSettings::Normal,
-                            path.clone(),
-                            export_settings,
-                        )
-                        .unwrap()
+                        d.process_numerator_no_eval(b, ().into(), path.clone(), export_settings)
+                            .unwrap()
                     })
                 } else {
                     g.statefull_apply::<_, UnInit, Evaluators>(|d, b| {
-                        d.process_numerator(
-                            b,
-                            model,
-                            ContractionSettings::Normal,
-                            path.clone(),
-                            export_settings,
-                        )
-                        .unwrap()
+                        d.process_numerator(b, model, ().into(), path.clone(), export_settings)
+                            .unwrap()
                     })
                 }
                 .unwrap();
@@ -877,45 +866,46 @@ impl<S: GetSingleAtom + NumeratorState> Amplitude<S> {
         printer_ops: PrintOptions,
         export_settings: &ProcessSettings,
     ) -> Result<(), Report> {
-        let path = Path::new(export_root)
-            .join("sources")
-            .join("amplitudes")
-            .join(self.name.as_str())
-            .join("expressions");
-        std::fs::create_dir_all(&path)?;
-        for amplitude_graph in self.amplitude_graphs.iter() {
-            let num = Numerator::default()
-                .from_graph(
-                    &amplitude_graph.graph.bare_graph,
-                    &export_settings.numerator_settings.global_prefactor,
-                )
-                .get_single_atom();
+        todo!()
+        // let path = Path::new(export_root)
+        //     .join("sources")
+        //     .join("amplitudes")
+        //     .join(self.name.as_str())
+        //     .join("expressions");
+        // std::fs::create_dir_all(&path)?;
+        // for amplitude_graph in self.amplitude_graphs.iter() {
+        //     let num = Numerator::default()
+        //         .from_graph(
+        //             &amplitude_graph.graph.bare_graph,
+        //             &export_settings.numerator_settings.global_prefactor,
+        //         )
+        //         .get_single_atom();
 
-            let dens: Vec<(String, String)> = amplitude_graph
-                .graph
-                .bare_graph
-                .denominator_print(printer_ops);
-            let rep_rules: Vec<(String, String)> = amplitude_graph
-                .graph
-                .bare_graph
-                .rep_rules_print(printer_ops);
+        //     let dens: Vec<(String, String)> = amplitude_graph
+        //         .graph
+        //         .bare_graph
+        //         .denominator_print(printer_ops);
+        //     let rep_rules: Vec<(String, String)> = amplitude_graph
+        //         .graph
+        //         .bare_graph
+        //         .rep_rules_print(printer_ops);
 
-            let a = num.as_ref().map(|a| a.as_view()).unwrap();
-            let out = (
-                format!("{}", AtomPrinter::new_with_options(a, printer_ops)),
-                rep_rules,
-                dens,
-            );
+        //     let a = num.as_ref().map(|a| a.as_view()).unwrap();
+        //     let out = (
+        //         format!("{}", AtomPrinter::new_with_options(a, printer_ops)),
+        //         rep_rules,
+        //         dens,
+        //     );
 
-            fs::write(
-                path.join(format!(
-                    "{}_exp.json",
-                    amplitude_graph.graph.bare_graph.name
-                )),
-                serde_json::to_string_pretty(&out).unwrap(),
-            )?;
-        }
-        Ok(())
+        //     fs::write(
+        //         path.join(format!(
+        //             "{}_exp.json",
+        //             amplitude_graph.graph.bare_graph.name
+        //         )),
+        //         serde_json::to_string_pretty(&out).unwrap(),
+        //     )?;
+        // }
+        // Ok(())
     }
 }
 impl<S: NumeratorState> Amplitude<S> {

@@ -6,7 +6,7 @@ use linnet::{
     parser::{DotEdgeData, DotHedgeData, DotVertexData},
 };
 use spenso::network::library::TensorLibraryData;
-use symbolica::atom::{Atom, AtomCore, AtomView};
+use symbolica::atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder};
 
 use crate::{
     graph::BareEdge,
@@ -19,7 +19,10 @@ use crate::{
 use color_eyre::Result;
 use eyre::eyre;
 
-use super::parse::{StripParse, ToQuoted};
+use super::{
+    parse::{StripParse, ToQuoted},
+    NumHedgeData,
+};
 
 #[derive(Debug, Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
 #[trait_decode(trait = crate::GammaLoopContext)]
@@ -29,8 +32,8 @@ pub struct Edge {
     // pub edge_type: EdgeType,
     pub propagator: ArcPropagator,
     pub particle: ArcParticle,
-    pub color_num: Atom,
-    pub spin_num: Atom,
+    pub num: Atom,
+    // pub spin_num: Atom,
     pub dod: i32,
     pub is_dummy: bool, // #[bincode(with_serde)]
                         // pub internal_index: Vec<AbstractIndex>,
@@ -48,8 +51,8 @@ impl From<BareEdge> for Edge {
             name: value.name.into(),
             propagator: ArcPropagator(value.propagator),
             particle: value.particle,
-            color_num: Atom::one(),
-            spin_num: Atom::one(),
+            // color_num: Atom::one(),
+            num: Atom::one(),
             dod: -2,
             is_dummy: false,
         }
@@ -60,10 +63,10 @@ impl From<&Edge> for DotEdgeData {
     fn from(value: &Edge) -> Self {
         let mut e = DotEdgeData::empty();
         e.add_statement("name", value.name.clone());
-        e.add_statement("particle", &value.particle.name);
+        e.add_statement("particle", format!("\"{}\"", value.particle.name));
         e.add_statement("dod", value.dod);
-        e.add_statement("num", value.spin_num.to_quoted());
-        e.add_statement("color_num", value.color_num.to_quoted());
+        e.add_statement("num", value.num.to_quoted());
+        // e.add_statement("color_num", value.color_num.to_quoted());
         e.add_statement("is_dummy", value.is_dummy);
         e
     }
@@ -76,8 +79,8 @@ pub struct ParseEdge {
     pub dod: Option<i32>,
     pub is_dummy: bool,
     pub lmb_id: Option<LoopIndex>,
-    pub spin_num: Option<Atom>,
-    pub color_num: Option<Atom>,
+    pub num: Option<Atom>,
+    // pub color_num: Option<sAtom>,
 }
 
 impl ParseEdge {
@@ -88,8 +91,7 @@ impl ParseEdge {
             particle,
             dod: None,
             lmb_id: None,
-            spin_num: None,
-            color_num: None,
+            num: None,
         }
     }
 
@@ -113,13 +115,8 @@ impl ParseEdge {
         self
     }
 
-    pub fn with_spin_num(mut self, spin_num: Atom) -> Self {
-        self.spin_num = Some(spin_num);
-        self
-    }
-
-    pub fn with_color_num(mut self, color_num: Atom) -> Self {
-        self.color_num = Some(color_num);
+    pub fn with_num(mut self, num: Atom) -> Self {
+        self.num = Some(num);
         self
     }
 }
@@ -244,14 +241,9 @@ impl ParseEdge {
                 let dod = e.get::<_, i32>("dod").transpose()?;
                 let is_dummy = e.get::<_, bool>("is_dummy").transpose()?.unwrap_or(false);
 
-                let spin_num = e
-                    .get::<_, String>("num")
-                    .transpose()?
-                    .map(|a| Self::localize_ainds(a.strip_parse(), eid, p));
-                let color_num = e
-                    .get::<_, String>("color_num")
-                    .transpose()?
-                    .map(|a| Self::localize_ainds(a.strip_parse(), eid, p));
+                let num = e.get::<_, String>("num").transpose()?.map(|a| {
+                    Self::localize_ainds(<String as StripParse<Atom>>::strip_parse(&a), eid, p)
+                });
 
                 let particle = if let Some(v) = e.get::<_, isize>("pdg") {
                     model.get_particle_from_pdg(v?)
@@ -273,8 +265,7 @@ impl ParseEdge {
                     dod,
                     lmb_id,
                     particle,
-                    spin_num,
-                    color_num,
+                    num,
                     label,
                 })
             })

@@ -1,5 +1,5 @@
 import_model sm-full
-import_graphs python/gammaloop/tests/test_data/graph_inputs/physical_1L_6photons.dot
+import_amplitude_from_dot python/gammaloop/tests/test_data/graph_inputs/physical_1L_6photons.dot
 #set numerator_settings {'eval_settings':{'type':'Joint','cpe_rounds':1,'compile_options':{'subtype':'Compiled'}},'global_numerator':None,'gamma_algebra':'Concrete'}
 #set eval_settings.compile_options.subtype "Compiled"
 #set eval_settings.type "Joint"
@@ -47,7 +47,7 @@ set externals.data.helicities [-1,-1,-1,-1,-1,-1]
 #3*MP_AMPL(*,          20 )= (-4.33681673828354573E-014,-5.91469876522058322E-012)
 set sampling {'type':'discrete_graph_sampling','subtype':'tropical'}
 #set sampling {'type':'default'}
-set n_start 1000000
+set n_start 10000
 set n_max 1000000000000
 set continuous_dim_learning_rate 0.0
 set seed 1

@@ -5,7 +5,7 @@ use crate::{
     momentum::{Energy, FourMomentum, Polarization, Signature, ThreeMomentum},
     momentum_sample::MomentumSample,
     new_graph::LoopMomentumBasis,
-    numerator::{Evaluate, Evaluators, Numerator, NumeratorState},
+    numerator::{aind::Aind, Evaluate, Evaluators, Numerator, NumeratorState},
     signature::LoopExtSignature,
     utils::{FloatLike, F},
     Settings,
@@ -18,6 +18,7 @@ use nalgebra::DMatrix;
 use serde::{Deserialize, Serialize};
 use spenso::{
     algebra::{complex::Complex, ScalarMul},
+    network::parsing::ShadowedStructure,
     tensors::data::DataTensor,
 };
 use symbolica::domains::float::{NumericalFloatLike, Real};
@@ -437,7 +438,7 @@ impl LTDTerm {
         graph: &BareGraph,
         num: &mut Numerator<Evaluators>,
         setting: &Settings,
-    ) -> DataTensor<Complex<F<T>>> {
+    ) -> DataTensor<Complex<F<T>>, ShadowedStructure<Aind>> {
         // compute on shell energies of the momenta in associated_lmb
 
         let zero = emr.0.iter().next().unwrap().px.zero();

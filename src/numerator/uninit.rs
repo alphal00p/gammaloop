@@ -23,10 +23,7 @@ impl Numerator<UnInit> {
     ) -> Numerator<AppliedFeynmanRule> {
         debug!("Applying feynman rules");
         let state = AppliedFeynmanRule::from_graph(graph, prefactor);
-        debug!(
-            "Applied feynman rules:\n\tcolor:{}\n\tcolorless:{}",
-            state.color, state.colorless
-        );
+        debug!("Applied feynman rules:\n\t{:>}", state.expr);
         Numerator { state }
     }
 
@@ -37,40 +34,25 @@ impl Numerator<UnInit> {
         multiply_prefactor: bool,
     ) -> Numerator<AppliedFeynmanRule> {
         debug!("Generating numerator for graph: {}", graph.name);
-        let mut colorless_builder = if multiply_prefactor {
-            graph.global_prefactor.colorless.clone() * &graph.multiplicity
-        } else {
-            Atom::one()
-        };
-
-        let mut colorful_builder = if multiply_prefactor {
-            graph.global_prefactor.color.clone()
+        let mut num = if multiply_prefactor {
+            graph.global_prefactor.num.clone()
+                * &graph.overall_factor
+                * &graph.global_prefactor.projector
         } else {
             Atom::one()
         };
 
         for (p, _, e) in graph.underlying.iter_edges_of(subgraph) {
             if p.is_paired() {
-                colorful_builder = colorful_builder * e.data.color_num.clone();
-                colorless_builder = colorless_builder * e.data.spin_num.clone();
+                num *= &e.data.num;
             }
         }
-
-        let mut colorless_builder: ParamTensor<OrderedStructure<Euclidean, Aind>> =
-            ParamTensor::new_scalar(colorless_builder);
-        let mut colorful_builder: ParamTensor<OrderedStructure<Euclidean, Aind>> =
-            ParamTensor::new_scalar(colorful_builder);
-
         for (_, _, v) in graph.underlying.iter_nodes_of(subgraph) {
-            colorless_builder = colorless_builder.contract(&v.num_spin).unwrap();
-            colorful_builder = colorful_builder.contract(&v.num_color).unwrap();
+            num *= v.get_num();
         }
         Numerator {
             state: AppliedFeynmanRule {
-                colorless: colorless_builder.map_data_self(|a| a.simplify_metrics()),
-
-                color: colorful_builder.map_data_self(|a| a.simplify_metrics()),
-
+                expr: num,
                 state: Default::default(),
             },
         }
@@ -85,13 +67,10 @@ impl Numerator<UnInit> {
         debug!("Setting global numerator");
         let state = {
             let mut global = global;
-            global = global * &prefactor.color * &prefactor.colorless;
+            global = global * &prefactor.num * &prefactor.projector;
             Global::new(global.into())
         };
-        debug!(
-            "Global numerator:\n\tcolor:{}\n\tcolorless:{}",
-            state.color, state.colorless
-        );
+        debug!("Global numerator:\n\t{}", state.expr);
         Numerator { state }
     }
 
@@ -104,13 +83,10 @@ impl Numerator<UnInit> {
         debug!("Setting global numerator");
         let state = {
             let mut global = global;
-            global = global * &prefactor.color * &prefactor.colorless;
+            global = global * &prefactor.num * &prefactor.projector;
             Global::new_color(global.into())
         };
-        debug!(
-            "Global numerator:\n\tcolor:{}\n\tcolorless:{}",
-            state.color, state.colorless
-        );
+        debug!("Global numerator:\n\t{}", state.expr);
         Numerator { state }
     }
 }

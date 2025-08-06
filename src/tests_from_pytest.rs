@@ -106,8 +106,8 @@ pub fn test_export_settings() -> ProcessSettings {
                 compile_options: NumeratorCompileOptions::Compiled,
             }),
             dump_expression: None,
-            global_numerator: None,
-            global_prefactor: Default::default(),
+            // global_numerator: None,
+            // global_prefactor: Default::default(),
             parse_mode: NumeratorParseMode::Polynomial,
             gamma_algebra: GammaAlgebraMode::Concrete,
         },
@@ -707,8 +707,8 @@ fn check_amplitude(amp_check: AmplitudeCheck) {
             .numerator
             .export()
     );
-    let mut graph =
-        graph.process_numerator(&model, ContractionSettings::Normal, path, &export_settings);
+    let mut graph: Graph = todo!();
+    // graph.process_numerator(&model, ContractionSettings::Normal, path, &export_settings);
 
     let f64_check_1 = compare_cff_to_ltd(&sample, &mut graph, &amp_check)
         .wrap_err("combined num f64 cff and ltd failed");
@@ -1926,8 +1926,8 @@ fn top_bubble_CP() {
     let mut export_settings = test_export_settings();
     export_settings.numerator_settings.gamma_algebra = GammaAlgebraMode::Concrete;
 
-    let mut graph =
-        graph.process_numerator(&model, ContractionSettings::Normal, path, &export_settings);
+    let mut graph: Graph = todo!();
+    // graph.process_numerator(&model, ContractionSettings::Normal, path, &export_settings);
 
     let sample: MomentumSample<f64> =
         sample_generator(3, &graph.bare_graph, Some(vec![Helicity::Plus; 6]));
@@ -1985,22 +1985,25 @@ fn top_bubble_gamma() {
     let mut export_settings = test_export_settings();
     export_settings.numerator_settings.gamma_algebra = GammaAlgebraMode::Concrete;
 
-    let mut graph_no_gamma = graph.clone().process_numerator(
-        &model,
-        ContractionSettings::Normal,
-        path.clone(),
-        &export_settings,
-    );
+    let mut graph_no_gamma: Graph = todo!();
+
+    //     graph.clone().process_numerator(
+    //     &model,
+    //     ContractionSettings::Normal,
+    //     path.clone(),
+    //     &export_settings,
+    // );
 
     export_settings.numerator_settings.gamma_algebra = GammaAlgebraMode::Symbolic;
 
     let _ = fs::create_dir(path.join("sym"));
-    let mut graph = graph.process_numerator(
-        &model,
-        ContractionSettings::Normal,
-        path.join("sym"),
-        &export_settings,
-    );
+    let mut graph: Graph = todo!();
+    //     graph.process_numerator(
+    //     &model,
+    //     ContractionSettings::Normal,
+    //     path.join("sym"),
+    //     &export_settings,
+    // );
 
     for seed in 0..10 {
         let sample = sample_generator(
@@ -2045,12 +2048,13 @@ fn scalar_box_to_triangle() {
     let mut export_settings = test_export_settings();
 
     graph.generate_cff();
-    export_settings.numerator_settings.global_numerator= Some("Q(4,cind(0))*(Q(7,cind(0))+Q(0,cind(0)))-Q(4,cind(1))*Q(4,cind(1))-Q(4,cind(2))*Q(4,cind(2))-Q(4,cind(3))*Q(4,cind(3))".into());
+    // export_settings.numerator_settings.global_numerator= Some("Q(4,cind(0))*(Q(7,cind(0))+Q(0,cind(0)))-Q(4,cind(1))*Q(4,cind(1))-Q(4,cind(2))*Q(4,cind(2))-Q(4,cind(3))*Q(4,cind(3))".into());
 
     let box_sample = sample_generator(3, &graph.bare_graph, None);
 
-    let mut box_graph =
-        graph.process_numerator(&model, ContractionSettings::Normal, path, &export_settings);
+    let mut box_graph: Graph = todo!();
+
+    // graph.process_numerator(&model, ContractionSettings::Normal, path, &export_settings);
 
     println!("{}", box_graph.bare_graph.dot_lmb());
 
@@ -2065,8 +2069,9 @@ fn scalar_box_to_triangle() {
     graph.generate_cff();
 
     let export_settings = test_export_settings();
-    let mut triangle_graph =
-        graph.process_numerator(&model, ContractionSettings::Normal, path, &export_settings);
+    let mut triangle_graph: Graph = todo!();
+
+    // graph.process_numerator(&model, ContractionSettings::Normal, path, &export_settings);
 
     let box_energy = box_graph
         .bare_graph
@@ -2141,21 +2146,25 @@ pub fn compare_numerator_evals(amp_name: &str) -> Result<()> {
             verbose: false,
         });
 
-    let mut graph_iterative_compiled_poly = graph.clone().process_numerator(
-        &model,
-        ContractionSettings::Normal,
-        path.clone(),
-        &export_settings,
-    );
+    let mut graph_iterative_compiled_poly: Graph = todo!();
+
+    //     graph.clone().process_numerator(
+    //     &model,
+    //     ContractionSettings::Normal,
+    //     path.clone(),
+    //     &export_settings,
+    // );
 
     export_settings.numerator_settings.parse_mode = NumeratorParseMode::Direct;
 
-    let mut graph_iterative_compiled = graph.clone().process_numerator(
-        &model,
-        ContractionSettings::Normal,
-        path.clone(),
-        &export_settings,
-    );
+    let mut graph_iterative_compiled: Graph = todo!();
+
+    //     graph.clone().process_numerator(
+    //     &model,
+    //     ContractionSettings::Normal,
+    //     path.clone(),
+    //     &export_settings,
+    // );
 
     export_settings.numerator_settings.eval_settings =
         NumeratorEvaluatorOptions::Joint(EvaluatorOptions {
@@ -2163,42 +2172,47 @@ pub fn compare_numerator_evals(amp_name: &str) -> Result<()> {
             compile_options: NumeratorCompileOptions::Compiled,
         });
 
-    let mut graph_joint_compiled = graph.clone().process_numerator(
-        &model,
-        ContractionSettings::Normal,
-        path.clone(),
-        &export_settings,
-    );
+    let mut graph_joint_compiled: Graph = todo!();
+    // graph.clone().process_numerator(
+    //     &model,
+    //     ContractionSettings::Normal,
+    //     path.clone(),
+    //     &export_settings,
+    // );
 
     export_settings.numerator_settings.parse_mode = NumeratorParseMode::Polynomial;
 
-    let mut graph_joint_compiled_poly = graph.clone().process_numerator(
-        &model,
-        ContractionSettings::Normal,
-        path.clone(),
-        &export_settings,
-    );
+    let mut graph_joint_compiled_poly: Graph = todo!();
+    //     graph.clone().process_numerator(
+    //     &model,
+    //     ContractionSettings::Normal,
+    //     path.clone(),
+    //     &export_settings,
+    // );
     export_settings.numerator_settings.eval_settings =
         NumeratorEvaluatorOptions::Single(EvaluatorOptions {
             cpe_rounds: Some(1),
             compile_options: NumeratorCompileOptions::Compiled,
         });
 
-    let mut graph_single_compiled_poly = graph.clone().process_numerator(
-        &model,
-        ContractionSettings::Normal,
-        path.clone(),
-        &export_settings,
-    );
+    let mut graph_single_compiled_poly: Graph = todo!();
+    //     graph.clone().process_numerator(
+    //     &model,
+    //     ContractionSettings::Normal,
+    //     path.clone(),
+    //     &export_settings,
+    // );
 
     export_settings.numerator_settings.parse_mode = NumeratorParseMode::Direct;
 
-    let mut graph_single_compiled = graph.clone().process_numerator(
-        &model,
-        ContractionSettings::Normal,
-        path.clone(),
-        &export_settings,
-    );
+    let mut graph_single_compiled: Graph = todo!();
+
+    //     graph.clone().process_numerator(
+    //     &model,
+    //     ContractionSettings::Normal,
+    //     path.clone(),
+    //     &export_settings,
+    // );
 
     export_settings.numerator_settings.eval_settings =
         NumeratorEvaluatorOptions::Iterative(IterativeOptions {

@@ -3,16 +3,18 @@ use std::cell::RefCell;
 use crate::evaluation_result::{EvaluationMetaData, EvaluationResult};
 use crate::integrands::{HasIntegrand, Integrand};
 use crate::integrate::UserData;
+use crate::model::Model;
 use crate::momentum::{self, Rotation};
 use crate::momentum_sample::{BareMomentumSample, LoopMomenta, MomentumSample};
 use crate::new_graph::{FeynmanGraph, Graph, LmbIndex, LoopMomentumBasis};
-use crate::utils::{format_for_compare_digits, get_n_dim_for_n_loop_momenta, FloatLike, F};
+use crate::utils::{format_for_compare_digits, get_n_dim_for_n_loop_momenta, FloatLike, F, GS};
 use bincode_trait_derive::{Decode, Encode};
 use colored::Colorize;
 use derive_more::{From, Into};
 use enum_dispatch::enum_dispatch;
 use gammaloop_sample::{parameterize, DiscreteGraphSample, GammaLoopSample};
 use itertools::Itertools;
+use linnet::half_edge::involution::HedgePair;
 use momtrop::float::MomTropFloat;
 use momtrop::SampleGenerator;
 use serde::{Deserialize, Serialize};
@@ -22,6 +24,7 @@ use spenso::tensors::parametric::SerializableCompiledEvaluator;
 use std::time::Duration;
 use symbolica::atom::{Atom, AtomCore};
 use symbolica::evaluate::{ExpressionEvaluator, FunctionMap};
+use symbolica::function;
 use symbolica::numerical_integration::{ContinuousGrid, DiscreteGrid, Grid, Sample};
 use typed_index_collections::TiVec;
 pub mod amplitude_integrand;
@@ -764,47 +767,48 @@ fn evaluate_sample<I: GammaloopIntegrand>(
     for stability_level in stability_iterator.into_iter() {
         let before_parameterization = std::time::Instant::now();
 
-        let ((results, ltd_evaluation_time), parameterization_time) = match stability_level
-            .precision
-        {
-            Precision::Double => {
-                let mut param_builder = ParamBuilder::<f64>::new();
+        let ((results, ltd_evaluation_time), parameterization_time) =
+            match stability_level.precision {
+                Precision::Double => {
+                    let mut param_builder = ParamBuilder::<f64>::new();
 
-                param_builder.m_uv_value(Complex::new_re(HARD_CODED_M_UV));
-                param_builder.mu_r_sq_value(Complex::new_re(HARD_CODED_M_R_SQ));
-                param_builder.model_parameters_value(integrand.get_model_parameter_cache::<f64>());
+                    param_builder.m_uv_value(Complex::new_re(HARD_CODED_M_UV));
+                    param_builder.mu_r_sq_value(Complex::new_re(HARD_CODED_M_R_SQ));
+                    param_builder.model_parameters.values =
+                        integrand.get_model_parameter_cache::<f64>();
 
-                if let Ok(gammaloop_sample) = parameterize::<f64, I>(sample, integrand) {
-                    let parameterization_time = before_parameterization.elapsed();
-                    (
-                        evaluate_all_rotations(integrand, &gammaloop_sample, param_builder),
-                        parameterization_time,
-                    )
-                } else {
-                    continue;
+                    if let Ok(gammaloop_sample) = parameterize::<f64, I>(sample, integrand) {
+                        let parameterization_time = before_parameterization.elapsed();
+                        (
+                            evaluate_all_rotations(integrand, &gammaloop_sample, param_builder),
+                            parameterization_time,
+                        )
+                    } else {
+                        continue;
+                    }
                 }
-            }
-            Precision::Quad => {
-                let mut param_builder = ParamBuilder::<f128>::new();
+                Precision::Quad => {
+                    let mut param_builder = ParamBuilder::<f128>::new();
 
-                param_builder.m_uv_value(Complex::new_re(F::from_ff64(HARD_CODED_M_UV)));
-                param_builder.mu_r_sq_value(Complex::new_re(F::from_ff64(HARD_CODED_M_R_SQ)));
-                param_builder.model_parameters_value(integrand.get_model_parameter_cache::<f128>());
+                    param_builder.m_uv_value(Complex::new_re(F::from_ff64(HARD_CODED_M_UV)));
+                    param_builder.mu_r_sq_value(Complex::new_re(F::from_ff64(HARD_CODED_M_R_SQ)));
+                    param_builder.model_parameters.values =
+                        integrand.get_model_parameter_cache::<f128>();
 
-                if let Ok(gammaloop_sample) = parameterize::<f128, I>(sample, integrand) {
-                    let parameterization_time = before_parameterization.elapsed();
-                    (
-                        evaluate_all_rotations(integrand, &gammaloop_sample, param_builder),
-                        parameterization_time,
-                    )
-                } else {
-                    continue;
+                    if let Ok(gammaloop_sample) = parameterize::<f128, I>(sample, integrand) {
+                        let parameterization_time = before_parameterization.elapsed();
+                        (
+                            evaluate_all_rotations(integrand, &gammaloop_sample, param_builder),
+                            parameterization_time,
+                        )
+                    } else {
+                        continue;
+                    }
                 }
-            }
-            Precision::Arb => {
-                todo!()
-            }
-        };
+                Precision::Arb => {
+                    todo!()
+                }
+            };
 
         let (average_result, is_stable) = stability_check(
             integrand.get_settings(),
@@ -918,25 +922,39 @@ fn evaluate_sample<I: GammaloopIntegrand>(
 }
 
 #[derive(Clone)]
+pub struct ParamValuePairs<T: FloatLike> {
+    values: Vec<Complex<F<T>>>,
+    params: Vec<Atom>,
+}
+
+impl<T: FloatLike> Default for ParamValuePairs<T> {
+    fn default() -> Self {
+        Self {
+            values: Vec::new(),
+            params: Vec::new(),
+        }
+    }
+}
+
+#[derive(Clone)]
 pub struct ParamBuilder<T: FloatLike> {
-    m_uv: (Option<Vec<Atom>>, Option<Vec<Complex<F<T>>>>),
-    mu_r_sq: (Option<Vec<Atom>>, Option<Vec<Complex<F<T>>>>),
-    model_parameters: (Option<Vec<Atom>>, Option<Vec<Complex<F<T>>>>),
-    external_energies: (Option<Vec<Atom>>, Option<Vec<Complex<F<T>>>>),
-    external_spatial: (Option<Vec<Atom>>, Option<Vec<Complex<F<T>>>>),
-    emr_spatial: (Option<Vec<Atom>>, Option<Vec<Complex<F<T>>>>),
-    tstar: (Option<Vec<Atom>>, Option<Vec<Complex<F<T>>>>),
-    h_function: (Option<Vec<Atom>>, Option<Vec<Complex<F<T>>>>),
-    derivative_at_tstar: (Option<Vec<Atom>>, Option<Vec<Complex<F<T>>>>),
-    uv_damp: (Option<Vec<Atom>>, Option<Vec<Complex<F<T>>>>),
-    radius: (Option<Vec<Atom>>, Option<Vec<Complex<F<T>>>>),
-    radius_star: (Option<Vec<Atom>>, Option<Vec<Complex<F<T>>>>),
+    m_uv: ParamValuePairs<T>,
+    mu_r_sq: ParamValuePairs<T>,
+    model_parameters: ParamValuePairs<T>,
+    external_energies: ParamValuePairs<T>,
+    external_spatial: ParamValuePairs<T>,
+    polarizations: ParamValuePairs<T>,
+    emr_spatial: ParamValuePairs<T>,
+    tstar: ParamValuePairs<T>,
+    h_function: ParamValuePairs<T>,
+    derivative_at_tstar: ParamValuePairs<T>,
+    uv_damp: ParamValuePairs<T>,
+    radius: ParamValuePairs<T>,
+    radius_star: ParamValuePairs<T>,
 }
 
 impl<T: FloatLike> ParamBuilder<T> {
-    fn into_iter_amplitude(
-        self,
-    ) -> impl Iterator<Item = (Option<Vec<Atom>>, Option<Vec<Complex<F<T>>>>)> {
+    fn into_iter_amplitude(self) -> impl Iterator<Item = ParamValuePairs<T>> {
         [
             self.m_uv,
             self.mu_r_sq,
@@ -944,11 +962,12 @@ impl<T: FloatLike> ParamBuilder<T> {
             self.external_energies,
             self.external_spatial,
             self.emr_spatial,
+            self.polarizations,
         ]
         .into_iter()
     }
 
-    fn into_iter_cs(self) -> impl Iterator<Item = (Option<Vec<Atom>>, Option<Vec<Complex<F<T>>>>)> {
+    fn into_iter_cs(self) -> impl Iterator<Item = ParamValuePairs<T>> {
         [
             self.m_uv,
             self.mu_r_sq,
@@ -956,6 +975,7 @@ impl<T: FloatLike> ParamBuilder<T> {
             self.external_energies,
             self.external_spatial,
             self.emr_spatial,
+            self.polarizations,
             self.tstar,
             self.h_function,
             self.derivative_at_tstar,
@@ -963,9 +983,7 @@ impl<T: FloatLike> ParamBuilder<T> {
         .into_iter()
     }
 
-    fn into_iter_threshold_ct(
-        self,
-    ) -> impl Iterator<Item = (Option<Vec<Atom>>, Option<Vec<Complex<F<T>>>>)> {
+    fn into_iter_threshold_ct(self) -> impl Iterator<Item = ParamValuePairs<T>> {
         [
             self.m_uv,
             self.mu_r_sq,
@@ -984,170 +1002,175 @@ impl<T: FloatLike> ParamBuilder<T> {
 
     pub fn build_params_amplitude(self) -> Result<Vec<Atom>> {
         let mut params = Vec::with_capacity(100);
-        for (atom, _) in self.into_iter_amplitude() {
-            if let Some(atoms) = atom {
-                params.extend(atoms);
-            } else {
-                return Err(eyre::eyre!("Missing required parameter atoms"));
-            }
+        for pair in self.into_iter_amplitude() {
+            params.extend(pair.params);
         }
         Ok(params)
     }
 
     pub fn build_values_amplitude(self) -> Result<Vec<Complex<F<T>>>> {
         let mut values = Vec::with_capacity(100);
-        for (_, value) in self.into_iter_amplitude() {
-            if let Some(value_vec) = value {
-                values.extend(value_vec);
-            } else {
-                return Err(eyre::eyre!("Missing required parameter values"));
-            }
+        for value in self.into_iter_amplitude() {
+            values.extend(value.values);
         }
         Ok(values)
     }
 
     pub fn build_params_threshold_ct(self) -> Result<Vec<Atom>> {
         let mut params = Vec::with_capacity(100);
-        for (atom, _) in self.into_iter_threshold_ct() {
-            if let Some(atoms) = atom {
-                params.extend(atoms);
-            } else {
-                return Err(eyre::eyre!("Missing required parameter atoms"));
-            }
+        for pair in self.into_iter_threshold_ct() {
+            params.extend(pair.params);
         }
         Ok(params)
     }
 
     pub fn build_params_cs(self) -> Result<Vec<Atom>> {
         let mut params = Vec::with_capacity(100);
-        for (atom, _) in self.into_iter_cs() {
-            if let Some(atoms) = atom {
-                params.extend(atoms);
-            } else {
-                return Err(eyre::eyre!("Missing required parameter atoms"));
-            }
+        for atom in self.into_iter_cs() {
+            params.extend(atom.params);
         }
         Ok(params)
     }
 
     pub fn build_values_cs(self) -> Result<Vec<Complex<F<T>>>> {
         let mut values = Vec::with_capacity(100);
-        for (_, value) in self.into_iter_cs() {
-            if let Some(value_vec) = value {
-                values.extend(value_vec);
-            } else {
-                return Err(eyre::eyre!("Missing required parameter values"));
-            }
+        for value in self.into_iter_cs() {
+            values.extend(value.values);
         }
         Ok(values)
     }
 
     pub fn build_values_threshold_ct(self) -> Result<Vec<Complex<F<T>>>> {
         let mut values = Vec::with_capacity(100);
-        for (_, value) in self.into_iter_threshold_ct() {
-            if let Some(value_vec) = value {
-                values.extend(value_vec);
-            } else {
-                return Err(eyre::eyre!("Missing required parameter values"));
-            }
+        for value in self.into_iter_threshold_ct() {
+            values.extend(value.values);
         }
         Ok(values)
     }
 
     pub fn new() -> Self {
         Self {
-            m_uv: (None, None),
-            mu_r_sq: (None, None),
-            model_parameters: (None, None),
-            external_energies: (None, None),
-            external_spatial: (None, None),
-            emr_spatial: (None, None),
-            tstar: (None, None),
-            h_function: (None, None),
-            derivative_at_tstar: (None, None),
-            uv_damp: (None, None),
-            radius: (None, None),
-            radius_star: (None, None),
+            m_uv: ParamValuePairs::default(),
+            mu_r_sq: ParamValuePairs::default(),
+            model_parameters: ParamValuePairs::default(),
+            external_energies: ParamValuePairs::default(),
+            polarizations: ParamValuePairs::default(),
+            external_spatial: ParamValuePairs::default(),
+            emr_spatial: ParamValuePairs::default(),
+            tstar: ParamValuePairs::default(),
+            h_function: ParamValuePairs::default(),
+            derivative_at_tstar: ParamValuePairs::default(),
+            uv_damp: ParamValuePairs::default(),
+            radius: ParamValuePairs::default(),
+            radius_star: ParamValuePairs::default(),
         }
     }
 
     pub fn m_uv_atom(&mut self, m_uv: Atom) {
-        self.m_uv.0 = Some(vec![m_uv]);
+        self.m_uv.params = vec![m_uv];
     }
 
     pub fn m_uv_value(&mut self, m_uv: Complex<F<T>>) {
-        self.m_uv.1 = Some(vec![m_uv]);
+        self.m_uv.values = vec![m_uv];
     }
 
     pub fn mu_r_sq_atom(&mut self, mu_r_sq: Atom) {
-        self.mu_r_sq.0 = Some(vec![mu_r_sq]);
+        self.mu_r_sq.params = vec![mu_r_sq];
     }
 
     pub fn mu_r_sq_value(&mut self, mu_r_sq: Complex<F<T>>) {
-        self.mu_r_sq.1.get_or_insert_with(Vec::new).push(mu_r_sq);
+        self.mu_r_sq.values = vec![mu_r_sq];
     }
 
-    pub fn model_parameters_atom(&mut self, model_parameters: Vec<Atom>) {
-        self.model_parameters.0 = Some(model_parameters);
+    pub fn model_parameters_atom(&mut self, model: &Model) {
+        self.model_parameters.params = model.generate_params();
     }
 
-    pub fn model_parameters_value(&mut self, model_parameters: Vec<Complex<F<T>>>) {
-        self.model_parameters.1 = Some(model_parameters);
+    pub fn model_parameters_value(&mut self, model: &Model) {
+        self.model_parameters.values = model.generate_values();
     }
 
-    pub fn external_energies_atom(&mut self, external_energies: Vec<Atom>) {
-        self.external_energies.0 = Some(external_energies);
+    pub fn external_energies_atom(&mut self, graph: &Graph) {
+        self.external_energies.params = graph.get_external_energy_atoms();
+    }
+
+    pub fn polarizations(&mut self, graph: &Graph) {
+        self.polarizations.params = graph.polarization_params();
     }
 
     pub fn external_energies_value(&mut self, momentum_sample: &MomentumSample<T>) {
-        self.external_energies.1 = Some(
-            momentum_sample
-                .external_moms()
-                .iter()
-                .map(|x| Complex::new_re(x.temporal.value.clone()))
-                .collect_vec(),
-        );
+        self.external_energies.values = momentum_sample
+            .external_moms()
+            .iter()
+            .map(|x| Complex::new_re(x.temporal.value.clone()))
+            .collect_vec();
     }
 
-    pub fn external_spatial_atom(&mut self, external_spatial: Vec<Atom>) {
-        self.external_spatial.0 = Some(external_spatial);
+    pub fn external_spatial_atom(&mut self, graph: &Graph) {
+        self.external_spatial.params = graph
+            .iter_edges()
+            .flat_map(|(pair, edge_id, _)| {
+                if let HedgePair::Unpaired { .. } = pair {
+                    let i64_id = Into::<usize>::into(edge_id) as i64;
+                    vec![
+                        function!(GS.external_mom, i64_id, 1),
+                        function!(GS.external_mom, i64_id, 2),
+                        function!(GS.external_mom, i64_id, 3),
+                    ]
+                } else {
+                    vec![]
+                }
+            })
+            .collect();
     }
 
     pub fn external_spatial_value(&mut self, momentum_sample: &MomentumSample<T>) {
-        self.external_spatial.1 = Some(
-            momentum_sample
-                .external_moms()
-                .iter()
-                .flat_map(|x| x.spatial.clone().into_iter().map(|c| Complex::new_re(c)))
-                .collect_vec(),
-        );
+        self.external_spatial.values = momentum_sample
+            .external_moms()
+            .iter()
+            .flat_map(|x| x.spatial.clone().into_iter().map(|c| Complex::new_re(c)))
+            .collect_vec();
     }
 
-    pub fn emr_spatial_atom(&mut self, emr_spatial: Vec<Atom>) {
-        self.emr_spatial.0 = Some(emr_spatial);
+    pub fn emr_spatial_atom(&mut self, graph: &Graph) {
+        self.emr_spatial.params = graph
+            .iter_edges()
+            .flat_map(|(pair, edge_id, _)| {
+                if let HedgePair::Paired { .. } = pair {
+                    let i64_id = Into::<usize>::into(edge_id) as i64;
+                    vec![
+                        function!(GS.emr_vec, i64_id, 1),
+                        function!(GS.emr_vec, i64_id, 2),
+                        function!(GS.emr_vec, i64_id, 3),
+                    ]
+                } else {
+                    vec![]
+                }
+            })
+            .collect();
     }
 
     pub fn emr_spatial_value(&mut self, emr_spatial: Vec<Complex<F<T>>>) {
-        self.emr_spatial.1 = Some(emr_spatial);
+        self.emr_spatial.values = emr_spatial;
     }
 
     pub fn tstar_atom(&mut self, tstar: Atom) {
-        self.tstar.0 = Some(vec![tstar]);
+        self.tstar.params = vec![tstar];
     }
 
     pub fn tstar_value(&mut self, tstar: Complex<F<T>>) {
-        self.tstar.1 = Some(vec![tstar]);
+        self.tstar.values = vec![tstar];
     }
     pub fn h_function_atom(&mut self, h_function: Atom) {
-        self.h_function.0 = Some(vec![h_function]);
+        self.h_function.params = vec![h_function];
     }
     pub fn h_function_value(&mut self, h_function: Complex<F<T>>) {
-        self.h_function.1 = Some(vec![h_function]);
+        self.h_function.values = vec![h_function];
     }
     pub fn derivative_at_tstar_atom(&mut self, derivative_at_tstar: Atom) {
-        self.derivative_at_tstar.0 = Some(vec![derivative_at_tstar]);
+        self.derivative_at_tstar.params = vec![derivative_at_tstar];
     }
     pub fn derivative_at_tstar_value(&mut self, derivative_at_tstar: Complex<F<T>>) {
-        self.derivative_at_tstar.1 = Some(vec![derivative_at_tstar]);
+        self.derivative_at_tstar.values = vec![derivative_at_tstar];
     }
 }

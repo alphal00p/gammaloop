@@ -1,16 +1,17 @@
 use itertools::Itertools;
 use linnet::{
     half_edge::{
-        involution::{Hedge, Orientation},
+        involution::{EdgeIndex, Hedge, Orientation},
         EdgeAccessors,
     },
     parser::DotHedgeData,
 };
 use spenso::structure::{
-    representation::LibraryRep, slot::IsAbstractSlot, OrderedStructure, PermutedStructure,
-    TensorStructure,
+    representation::{LibraryRep, LibrarySlot},
+    slot::IsAbstractSlot,
+    OrderedStructure, PermutedStructure, TensorStructure,
 };
-use symbolica::atom::Atom;
+use symbolica::atom::{Atom, FunctionBuilder};
 
 use crate::numerator::aind::Aind;
 
@@ -111,21 +112,52 @@ pub struct NumHedgeData {
 }
 
 impl NumHedgeData {
-    pub fn color_kronekers(&self, other: &Self) -> Atom {
-        let mut color = Atom::num(1);
-        for (i, j) in self
-            .num_indices
+    pub fn edge_slots<'a>(&'a self) -> impl Iterator<Item = LibrarySlot<Aind>> + 'a {
+        self.edge_color_slots().chain(self.edge_spin_slots())
+    }
+
+    pub fn edge_color_slots<'a>(&'a self) -> impl Iterator<Item = LibrarySlot<Aind>> + 'a {
+        self.num_indices
             .color_indices
             .edge_indices
             .external_structure_iter()
-            .zip_eq(
-                other
-                    .num_indices
-                    .color_indices
-                    .edge_indices
-                    .external_structure_iter(),
-            )
-        {
+    }
+
+    pub fn edge_spin_slots<'a>(&'a self) -> impl Iterator<Item = LibrarySlot<Aind>> + 'a {
+        self.num_indices
+            .spin_indices
+            .edge_indices
+            .external_structure_iter()
+    }
+
+    pub fn vertex_slots<'a>(&'a self) -> impl Iterator<Item = LibrarySlot<Aind>> + 'a {
+        self.vertex_color_slots().chain(self.vertex_spin_slots())
+    }
+
+    pub fn vertex_color_slots<'a>(&'a self) -> impl Iterator<Item = LibrarySlot<Aind>> + 'a {
+        self.num_indices
+            .color_indices
+            .vertex_indices
+            .external_structure_iter()
+    }
+
+    pub fn vertex_spin_slots<'a>(&'a self) -> impl Iterator<Item = LibrarySlot<Aind>> + 'a {
+        self.num_indices
+            .spin_indices
+            .edge_indices
+            .external_structure_iter()
+    }
+
+    pub fn polarization(&self, mut builder: FunctionBuilder) -> Atom {
+        for s in self.edge_spin_slots() {
+            builder = builder.add_arg(s.to_atom())
+        }
+        builder.finish()
+    }
+
+    pub fn color_kronekers(&self, other: &Self) -> Atom {
+        let mut color = Atom::num(1);
+        for (i, j) in self.edge_color_slots().zip_eq(other.edge_color_slots()) {
             if i.rep().matches(&j.rep()) {
                 color *= j.rep().id(i.aind, j.aind);
             } else {

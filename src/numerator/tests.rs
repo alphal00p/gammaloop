@@ -60,25 +60,6 @@ fn hhgghh() {
     validate_gamma(amplitude.amplitude_graphs[0].graph.clone(), &model, path);
 }
 
-#[ignore]
-#[test]
-fn hairy_glue_box() {
-    let _ = env_logger::builder().is_test(true).try_init();
-    let (_, amplitude, _) = load_amplitude_output(
-        &("TEST_AMPLITUDE_".to_string() + "hairy_glue_box" + "/GL_OUTPUT"),
-        true,
-    );
-
-    let graph = amplitude.amplitude_graphs[0].graph.clone();
-    for (i, s) in graph.bare_graph.external_slots().iter().enumerate() {
-        println!("{i}:{}", s);
-    }
-
-    let _color = graph.derived_data.unwrap().numerator.from_graph(&graph.bare_graph,&GlobalPrefactor{color:parse!("f(aind(coad(8,1),coad(8,2),coad(8,3)))*f(aind(coad(8,4),coad(8,5),coad(8,6)))*id(aind(coad(8,7),coad(8,0)))"),colorless:Atom::num(1)}).color_simplify().state.color.to_dense().map_data(|a|a.to_string());
-
-    // insta::assert_ron_snapshot!(color);
-}
-
 #[test]
 fn trees() {
     let _ = env_logger::builder().is_test(true).try_init();
@@ -221,6 +202,7 @@ fn compare_poly_to_direct(graph: &BareGraph, prefactor: &GlobalPrefactor) -> boo
 
     let direct = color_simplified
         .parse()
+        .unwrap()
         .contract(ContractionSettings::<Rational>::Normal)
         .unwrap()
         .state
@@ -238,6 +220,7 @@ pub fn save_expr(graph: &BareGraph, prefactor: &GlobalPrefactor, name: &str) {
         .color_simplify();
     let direct = color_simplified
         .parse()
+        .unwrap()
         .contract::<Rational>(ContractionSettings::<Rational>::Normal)
         .unwrap()
         .state
@@ -443,6 +426,7 @@ pub fn validate_gamma(g: Graph<UnInit>, model: &Model, path: PathBuf) {
         .color_simplify()
         // .gamma_symplify()
         .parse()
+        .unwrap()
         .contract::<Rational>(ContractionSettings::<Rational>::Normal)
         .unwrap()
         .generate_evaluators(
@@ -460,6 +444,7 @@ pub fn validate_gamma(g: Graph<UnInit>, model: &Model, path: PathBuf) {
         .color_simplify()
         .gamma_simplify()
         .parse()
+        .unwrap()
         .contract::<Rational>(ContractionSettings::<Rational>::Normal)
         .unwrap()
         .generate_evaluators(
@@ -751,6 +736,7 @@ fn tree_h_ttxaah_0() {
         // .color_project()
         // .gamma_symplify()
         .parse()
+        .unwrap()
         .contract(ContractionSettings::<Rational>::Normal)
         .unwrap();
     // println!("{}", new.export());
@@ -807,7 +793,7 @@ fn gamma_simplify_one() {
         //     .tensor;
         let g_simp = atom.simplify_gamma();
         let _g_simp_t = Network::parse_impl(g_simp.as_view())
-            .contract::<Rational>(ContractionSettings::Normal)
+            .contract(ContractionSettings::)
             .unwrap()
             .tensor;
 
@@ -900,7 +886,7 @@ fn gamma_algebra() {
     println!(
         "{}",
         Network::parse_impl(g.as_view())
-            .contract::<Rational>(ContractionSettings::Normal)
+            .contract(ContractionSettings::)
             .unwrap()
             .tensor
             .scalar()
@@ -1025,23 +1011,23 @@ fn one_loop_lbl_concretize() {
         .color_simplify()
         .parse();
 
-    let reps = feyn.random_concretize_reps(None, true);
-    let rep_views = reps
-        .iter()
-        .map(|(a, b)| (a.as_view(), b.as_view()))
-        .collect::<Vec<_>>();
+    // let reps = feyn.random_concretize_reps(None, true);
+    // let rep_views = reps
+    //     .iter()
+    //     .map(|(a, b)| (a.as_view(), b.as_view()))
+    //     .collect::<Vec<_>>();
 
-    println!(
-        "{}",
-        feyn.apply_reps(&rep_views)
-            .contract::<Rational>(ContractionSettings::Normal)
-            .unwrap()
-            .state
-            .tensor
-            .scalar()
-            .unwrap()
-            .expand()
-    );
+    // println!(
+    //     "{}",
+    //     feyn.apply_reps(&rep_views)
+    //         .contract::<Rational>(ContractionSettings::Normal)
+    //         .unwrap()
+    //         .state
+    //         .tensor
+    //         .scalar()
+    //         .unwrap()
+    //         .expand()
+    // );
 }
 
 // #[test]
@@ -1094,6 +1080,7 @@ fn dumb_four_gluon() {
 
     let expanded = colorsimp
         .parse()
+        .unwrap()
         .contract::<Rational>(ContractionSettings::Normal)
         .unwrap()
         .state

@@ -55,10 +55,6 @@ export_settings:
       cpe_rounds: 1
       compile_options:
         subtype: Compiled
-    global_numerator: null
-    global_prefactor:
-      color: "1"
-      colorless: "1"
     gamma_algebra: Concrete
     parse_mode: Polynomial
   cpe_rounds_cff: 1

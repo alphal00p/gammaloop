@@ -174,14 +174,17 @@ no_python = []
 # symbolica = { git = "https://github.com/alphal00p/symbolica", rev = "a23ebaa71b1bc715a129ac765764ece7273625dc" }
 # symbolica = {path="../symbolica"}
 # spenso-macros = { path = "../spenso/spenso-macros" }
-spenso = { git = "https://github.com/alphal00p/spenso", rev = "b625d4ea9be5dbabb46b86979d2a9e58006bc150" }
-spenso-hep-lib = { git = "https://github.com/alphal00p/spenso", rev = "b625d4ea9be5dbabb46b86979d2a9e58006bc150" }
-idenso = { git = "https://github.com/alphal00p/spenso", rev = "b625d4ea9be5dbabb46b86979d2a9e58006bc150" }
-spenso-macros = { git = "https://github.com/alphal00p/spenso", rev = "b625d4ea9be5dbabb46b86979d2a9e58006bc150" }
+spenso = { git = "https://github.com/alphal00p/spenso", rev = "8071a1986d8569f1c8d5e41139e907e4d2a78e29" }
 # spenso = { path = "../spenso/spenso" }
+spenso-hep-lib = { git = "https://github.com/alphal00p/spenso", rev = "8071a1986d8569f1c8d5e41139e907e4d2a78e29" }
+# spenso-hep-lib = { path = "../spenso/spenso-hep-lib" }
+idenso = { git = "https://github.com/alphal00p/spenso", rev = "8071a1986d8569f1c8d5e41139e907e4d2a78e29" }
+# idenso = { path = "../spenso/idenso" }
+spenso-macros = { git = "https://github.com/alphal00p/spenso", rev = "8071a1986d8569f1c8d5e41139e907e4d2a78e29" }
+# spenso-macros = { path = "../spenso/spenso-macros" }
 # linnet = "0.10.0"
 # linnet = { path = "../linnet" }
-linnet = { git = "https://github.com/alphal00p/linnet", rev = "2e7f1c3466acb701a1c9f6c4e870206625ff2954" }
+linnet = { git = "https://github.com/alphal00p/linnet", rev = "044f5947ac5154bdb6120d9229fc3cf1a9243bfb" }
 
 # symbolica-community={path="../symbolica-community"}
 # linnet = { git = "https://github.com/alphal00p/linnet", rev = "d72588ecbea39c6df3fdde9ffa4e4f3575f93542" }

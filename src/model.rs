@@ -10,6 +10,8 @@ use eyre::{eyre, Context};
 use itertools::Itertools;
 use linnet::half_edge::drawing::Decoration;
 use linnet::half_edge::involution::Flow;
+use rand::rngs::SmallRng;
+use rand::{Rng, SeedableRng};
 use spenso::structure::{IndexLess, PermutedStructure};
 
 // use log::{info, trace};
@@ -786,6 +788,21 @@ pub struct Particle {
 }
 
 impl Particle {
+    pub fn random_helicity(&self, seed: u64) -> Helicity {
+        let mut rng = SmallRng::seed_from_u64(seed);
+        if self.is_spinor() {
+            if rng.random_bool(0.5) {
+                Helicity::Plus
+            } else {
+                Helicity::Minus
+            }
+        } else if self.is_vector() {
+            Helicity::try_from(rng.gen_range(1..=1)).unwrap()
+        } else {
+            Helicity::Zero
+        }
+    }
+
     pub fn is_massless(&self) -> bool {
         !self.is_massive()
     }
@@ -807,6 +824,18 @@ impl Particle {
 
     pub fn is_fermion(&self) -> bool {
         self.spin % 2 == 0
+    }
+
+    pub fn is_vector(&self) -> bool {
+        self.spin == 3
+    }
+
+    pub fn is_scalar(&self) -> bool {
+        self.spin == 1
+    }
+
+    pub fn is_spinor(&self) -> bool {
+        self.spin == 2
     }
 
     pub fn is_ghost(&self) -> bool {

@@ -14,6 +14,7 @@ use linnet::half_edge::{
 use color_eyre::Result;
 use derive_more::{From, Into};
 use eyre::eyre;
+use log::warn;
 use nalgebra::DMatrix;
 use serde::{Deserialize, Serialize};
 use symbolica::{
@@ -385,7 +386,11 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
         // println!("Tree:{}", self.dot(tree));
         // println!("subgraph:{}", self.dot(subgraph));
         // println!("Cotree:{}", self.dot(&cotree));
-        let tree = SimpleTraversalTree::depth_first_traverse(self, tree, &root_node, None).unwrap();
+        let Ok(tree) = SimpleTraversalTree::depth_first_traverse(self, tree, &root_node, None)
+        else {
+            warn!("Depth-first traversal failed");
+            return self.empty_lmb();
+        };
 
         let mut loop_edges: TiVec<LoopIndex, EdgeIndex> = vec![].into();
         let mut cycles = vec![];

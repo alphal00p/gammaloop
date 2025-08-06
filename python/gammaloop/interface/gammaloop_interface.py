@@ -138,8 +138,6 @@ class GammaLoopConfiguration(object):
                             'subtype': 'Compiled',
                         }
                     },
-                    'global_numerator': None,
-                    'global_prefactor': {'color': "1", 'colorless': "1"},
                     'dump_expression': 'Mathematica',
                     'gamma_algebra': 'Concrete',
                     'parse_mode': 'Polynomial',

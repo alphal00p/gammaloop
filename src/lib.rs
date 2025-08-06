@@ -40,7 +40,6 @@ pub mod tests;
 pub mod tests_from_pytest;
 pub mod utils;
 pub mod uv;
-
 use crate::utils::f128;
 use clap::Args;
 use color_eyre::{Help, Report, Result};
@@ -52,6 +51,8 @@ use idenso::representations::initialize;
 use integrands::*;
 use itertools::Itertools;
 use log::debug;
+use rand::rngs::SmallRng;
+use rand::{Rng, SeedableRng};
 
 use model::ArcParticle;
 use model::Model;
@@ -65,7 +66,7 @@ use momentum::RotationMethod;
 use momentum::SignOrZero;
 use momentum::ThreeMomentum;
 use momentum_sample::ExternalFourMomenta;
-use new_graph::ExternalConnection;
+use new_graph::{ExternalConnection, Graph};
 use numerator::NumeratorSettings;
 
 use observables::ObservableSettings;
@@ -274,6 +275,15 @@ pub enum IntegratedPhase {
 pub struct KinematicsSettings {
     pub e_cm: F<f64>,
     pub externals: Externals,
+}
+
+impl KinematicsSettings {
+    pub fn random(graph: &Graph, seed: u64) -> Self {
+        Self {
+            e_cm: F(64.),
+            externals: graph.random_externals(seed),
+        }
+    }
 }
 
 impl Default for KinematicsSettings {
@@ -549,6 +559,8 @@ pub enum Externals {
     },
     // add different type of pdfs here when needed
 }
+
+impl Externals {}
 
 impl Rotatable for Externals {
     fn rotate(&self, rotation: &momentum::Rotation) -> Self {

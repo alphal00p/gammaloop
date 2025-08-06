@@ -708,10 +708,10 @@ impl PythonWorker {
 
         let mut global_prefactor = GlobalPrefactor::default();
         if let Some(global_prefactor_color) = global_prefactor_color {
-            global_prefactor.color = parse!(&global_prefactor_color);
+            global_prefactor.num = parse!(&global_prefactor_color);
         }
         if let Some(global_prefactor_colorless) = global_prefactor_colorless {
-            global_prefactor.colorless = parse!(&global_prefactor_colorless);
+            global_prefactor.projector = parse!(&global_prefactor_colorless);
         }
 
         let diagrams = diagram_generator

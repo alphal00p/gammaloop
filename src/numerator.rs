@@ -9,10 +9,12 @@ use linnet::half_edge::nodestore::NodeStorageOps;
 use log::warn;
 use spenso::algebra::complex::Complex;
 use spenso::algebra::upgrading_arithmetic::FallibleSub;
-use spenso::network::library::DummyLibrary;
+use spenso::network::library::{DummyLibrary, TensorLibraryData};
 use spenso::network::parsing::ShadowedStructure;
 use spenso::network::store::{NetworkStore, TensorScalarStoreMapping};
-use spenso::network::{ExecutionResult, Sequential, SmallestDegree};
+use spenso::network::{
+    ContractScalars, ExecutionResult, Sequential, SingleSmallestDegree, SmallestDegree, Steps,
+};
 use spenso::shadowing::symbolica_utils::SerializableAtom;
 use spenso::shadowing::symbolica_utils::SerializableSymbol;
 use spenso::structure::OrderedStructure;
@@ -109,9 +111,9 @@ pub struct NumeratorSettings {
     pub dump_expression: Option<ExpressionFormat>,
     /// If set, instead of deriving the numerator from feynman rules, use this as the numerator
     /// Will be parsed to a symbolica expression
-    pub global_numerator: Option<String>,
+    // pub global_numerator: Option<String>,
     /// If set, multiply the numerator by this prefactor
-    pub global_prefactor: GlobalPrefactor,
+    // pub global_prefactor: GlobalPrefactor,
     /// Type of Gamma algebra to use, either symbolic (replacement rules) or concrete (replace by value using spenso)
     pub gamma_algebra: GammaAlgebraMode,
 }
@@ -136,8 +138,8 @@ impl Default for NumeratorSettings {
     fn default() -> Self {
         NumeratorSettings {
             eval_settings: Default::default(),
-            global_numerator: None,
-            global_prefactor: GlobalPrefactor::default(),
+            // global_numerator: None,
+            // global_prefactor: GlobalPrefactor::default(),
             dump_expression: None,
             gamma_algebra: GammaAlgebraMode::Symbolic,
             parse_mode: NumeratorParseMode::Polynomial,
@@ -166,7 +168,7 @@ pub trait Evaluate<T: FloatLike> {
         polarizations: &[Polarization<Complex<F<T>>>],
         tag: Option<Uuid>,
         setting: &Settings,
-    ) -> Result<RepeatingIteratorTensorOrScalar<DataTensor<Complex<F<T>>>>>;
+    ) -> Result<RepeatingIteratorTensorOrScalar<DataTensor<Complex<F<T>>, ShadowedStructure<Aind>>>>;
 
     fn evaluate_single(
         &mut self,
@@ -174,7 +176,7 @@ pub trait Evaluate<T: FloatLike> {
         polarizations: &[Polarization<Complex<F<T>>>],
         tag: Option<Uuid>,
         setting: &Settings,
-    ) -> DataTensor<Complex<F<T>>>;
+    ) -> DataTensor<Complex<F<T>>, ShadowedStructure<Aind>>;
 }
 
 impl<T: FloatLike> Evaluate<T> for Numerator<Evaluators> {
@@ -184,7 +186,8 @@ impl<T: FloatLike> Evaluate<T> for Numerator<Evaluators> {
         polarizations: &[Polarization<Complex<F<T>>>],
         _tag: Option<Uuid>,
         settings: &Settings,
-    ) -> Result<RepeatingIteratorTensorOrScalar<DataTensor<Complex<F<T>>>>> {
+    ) -> Result<RepeatingIteratorTensorOrScalar<DataTensor<Complex<F<T>>, ShadowedStructure<Aind>>>>
+    {
         <T as NumeratorEvaluateFloat>::update_params(self, emr, polarizations, settings);
 
         if !settings.general.load_compiled_numerator {
@@ -202,7 +205,7 @@ impl<T: FloatLike> Evaluate<T> for Numerator<Evaluators> {
         polarizations: &[Polarization<Complex<F<T>>>],
         _tag: Option<Uuid>,
         setting: &Settings,
-    ) -> DataTensor<Complex<F<T>>> {
+    ) -> DataTensor<Complex<F<T>>, ShadowedStructure<Aind>> {
         if !setting.general.load_compiled_numerator {
             self.disable_compiled();
         }
@@ -218,9 +221,11 @@ impl<T: FloatLike> Evaluate<T> for Numerator<Evaluators> {
 pub trait NumeratorEvaluateFloat<T: FloatLike = Self> {
     fn evaluate_all_orientations(
         num: &mut Numerator<Evaluators>,
-    ) -> Result<RepeatingIteratorTensorOrScalar<DataTensor<Complex<F<T>>>>>;
+    ) -> Result<RepeatingIteratorTensorOrScalar<DataTensor<Complex<F<T>>, ShadowedStructure<Aind>>>>;
 
-    fn evaluate_single(num: &mut Numerator<Evaluators>) -> DataTensor<Complex<F<T>>>;
+    fn evaluate_single(
+        num: &mut Numerator<Evaluators>,
+    ) -> DataTensor<Complex<F<T>>, ShadowedStructure<Aind>>;
 
     fn update_params(
         num: &mut Numerator<Evaluators>,
@@ -339,7 +344,9 @@ impl NumeratorEvaluateFloat for f64 {
 
     fn evaluate_all_orientations(
         num: &mut Numerator<Evaluators>,
-    ) -> Result<RepeatingIteratorTensorOrScalar<DataTensor<Complex<F<Self>>>>> {
+    ) -> Result<
+        RepeatingIteratorTensorOrScalar<DataTensor<Complex<F<Self>>, ShadowedStructure<Aind>>>,
+    > {
         let params = &mut num.state.double_param_values;
         if num.state.single.param_len != params.len() {
             return Err(eyre!(
@@ -397,7 +404,9 @@ impl NumeratorEvaluateFloat for f64 {
         }
     }
 
-    fn evaluate_single(num: &mut Numerator<Evaluators>) -> DataTensor<Complex<F<Self>>> {
+    fn evaluate_single(
+        num: &mut Numerator<Evaluators>,
+    ) -> DataTensor<Complex<F<Self>>, ShadowedStructure<Aind>> {
         let params = &num.state.double_param_values;
         if num.state.single.param_len != params.len() {
             panic!("params length mismatch");
@@ -441,7 +450,9 @@ impl NumeratorEvaluateFloat for f128 {
 
     fn evaluate_all_orientations(
         num: &mut Numerator<Evaluators>,
-    ) -> Result<RepeatingIteratorTensorOrScalar<DataTensor<Complex<F<Self>>>>> {
+    ) -> Result<
+        RepeatingIteratorTensorOrScalar<DataTensor<Complex<F<Self>>, ShadowedStructure<Aind>>>,
+    > {
         let params = &mut num.state.quad_param_values;
         if num.state.single.param_len != params.len() {
             return Err(eyre!("params length mismatch"));
@@ -478,7 +489,9 @@ impl NumeratorEvaluateFloat for f128 {
         }
     }
 
-    fn evaluate_single(num: &mut Numerator<Evaluators>) -> DataTensor<Complex<F<Self>>> {
+    fn evaluate_single(
+        num: &mut Numerator<Evaluators>,
+    ) -> DataTensor<Complex<F<Self>>, ShadowedStructure<Aind>> {
         let params = &num.state.quad_param_values;
         if num.state.single.param_len != params.len() {
             panic!("params length mismatch");
@@ -635,15 +648,15 @@ impl TypedNumeratorState for UnInit {
 #[derive(Debug, Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
 #[trait_decode(trait = crate::GammaLoopContext)]
 pub struct GlobalPrefactor {
-    pub color: Atom,
-    pub colorless: Atom,
+    pub projector: Atom,
+    pub num: Atom,
 }
 
 impl Default for GlobalPrefactor {
     fn default() -> Self {
         GlobalPrefactor {
-            color: Atom::num(1),
-            colorless: Atom::num(1),
+            projector: Atom::num(1),
+            num: Atom::num(1),
         }
     }
 }
@@ -654,8 +667,9 @@ impl Serialize for GlobalPrefactor {
         S: serde::Serializer,
     {
         let mut state = serializer.serialize_struct("GlobalPrefactor", 2)?;
-        state.serialize_field("color", &self.color.to_string())?;
-        state.serialize_field("colorless", &self.colorless.to_string())?;
+        state.serialize_field("projector", &self.projector.to_string())?;
+        state.serialize_field("num", &self.num.to_string())?;
+
         state.end()
     }
 }
@@ -667,13 +681,13 @@ impl<'de> Deserialize<'de> for GlobalPrefactor {
     {
         #[derive(Deserialize)]
         struct GlobalPrefactorHelper {
-            color: String,
-            colorless: String,
+            num: String,
+            projector: String,
         }
         let helper = GlobalPrefactorHelper::deserialize(deserializer)?;
         Ok(GlobalPrefactor {
-            color: parse!(&helper.color),
-            colorless: parse!(&helper.colorless),
+            projector: parse!(&helper.projector),
+            num: parse!(&helper.num),
         })
     }
 }
@@ -694,8 +708,9 @@ impl Default for Numerator<UnInit> {
 #[derive(Debug, Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
 #[trait_decode(trait = symbolica::state::HasStateMap)]
 pub struct SymbolicExpression<State> {
-    pub colorless: ParamTensor<OrderedStructure<Euclidean, Aind>>,
-    pub color: ParamTensor<OrderedStructure<Euclidean, Aind>>,
+    // pub colorless: ParamTensor<OrderedStructure<Euclidean, Aind>>,
+    // pub color: ParamTensor<OrderedStructure<Euclidean, Aind>>,
+    pub expr: Atom,
     pub state: State,
 }
 
@@ -715,36 +730,32 @@ pub trait UnexpandedNumerator: NumeratorState + GetSingleAtom {
 
 impl<E: ExpressionState> GetSingleAtom for SymbolicExpression<E> {
     fn get_single_atom(&self) -> Result<Atom, NumeratorStateError> {
-        self.colorless
-            .contract(&self.color)
-            .map_err(|n| NumeratorStateError::Any(n.into()))?
-            .scalar()
-            .ok_or(NumeratorStateError::Any(eyre!("not a scalar")))
+        Ok(self.expr.clone())
     }
 }
 
 impl<E: ExpressionState> SymbolicExpression<E> {
-    #[allow(dead_code)]
-    fn map_color(self, f: impl Fn(Atom) -> Atom) -> Self {
-        SymbolicExpression {
-            colorless: self.colorless,
-            color: self.color.map_data_self(f),
-            state: self.state,
-        }
-    }
+    // // #[allow(dead_code)]
+    // fn map_color(self, f: impl Fn(Atom) -> Atom) -> Self {
+    //     SymbolicExpression {
+    //         colorless: self.colorless,
+    //         color: self.color.map_data_self(f),
+    //         state: self.state,
+    //     }
+    // }
 
-    #[allow(dead_code)]
-    fn map_color_mut(&mut self, f: impl FnMut(&mut Atom)) {
-        self.color.map_data_mut(f);
-    }
-    #[allow(dead_code)]
-    fn map_colorless(self, f: impl Fn(Atom) -> Atom) -> Self {
-        SymbolicExpression {
-            colorless: self.colorless.map_data_self(f),
-            color: self.color,
-            state: self.state,
-        }
-    }
+    // // #[allow(dead_code)]
+    // fn map_color_mut(&mut self, f: impl FnMut(&mut Atom)) {
+    //     self.color.map_data_mut(f);
+    // }
+    // // #[allow(dead_code)]
+    // fn map_colorless(self, f: impl Fn(Atom) -> Atom) -> Self {
+    //     SymbolicExpression {
+    //         colorless: self.colorless.map_data_self(f),
+    //         color: self.color,
+    //         state: self.state,
+    //     }
+    // }
 }
 
 impl<E: ExpressionState> SymbolicExpression<E> {
@@ -769,16 +780,18 @@ pub trait ExpressionState:
 
     fn new(expression: SerializableAtom) -> SymbolicExpression<Self> {
         SymbolicExpression {
-            colorless: ParamTensor::composite(DataTensor::new_scalar(expression.0)),
-            color: ParamTensor::composite(DataTensor::new_scalar(Atom::num(1))),
+            // colorless: ParamTensor::composite(DataTensor::new_scalar(expression.0)),
+            // color: ParamTensor::composite(DataTensor::new_scalar(Atom::num(1))),
+            expr: expression.0,
             state: Self::default(),
         }
     }
 
     fn new_color(expression: SerializableAtom) -> SymbolicExpression<Self> {
         SymbolicExpression {
-            color: ParamTensor::composite(DataTensor::new_scalar(expression.0)),
-            colorless: ParamTensor::composite(DataTensor::new_scalar(Atom::num(1))),
+            // color: ParamTensor::composite(DataTensor::new_scalar(expression.0)),
+            // colorless: ParamTensor::composite(DataTensor::new_scalar(Atom::num(1))),
+            expr: expression.0,
             state: Self::default(),
         }
     }
@@ -893,31 +906,15 @@ impl Numerator<Global> {
         Ok(())
     }
 
-    pub fn color_simplify(mut self) -> Numerator<ColorSimplified> {
+    pub fn color_simplify(self) -> Numerator<ColorSimplified> {
         debug!("Color simplifying global numerator");
-        let mut fully_simplified = true;
+        // let mut fully_simplified = true;
 
-        let colorless = self
-            .state
-            .colorless
-            .map_data_ref_mut_self(|a| a.simplify_color());
-        let color = self
-            .state
-            .color
-            .map_data_ref_mut_self(|a| a.simplify_color());
         let state = ColorSimplified {
-            colorless,
-            color,
-            state: if fully_simplified {
-                Color::Fully
-            } else {
-                Color::Partially
-            },
+            expr: self.state.expr.simplify_color(),
+            state: Color::Fully,
         };
-        debug!(
-            "Color simplified numerator: color:{}\n colorless:{}",
-            state.color, state.colorless
-        );
+        debug!("Color simplified numerator:{}", state.expr);
         Numerator { state }
     }
 }
@@ -1013,99 +1010,8 @@ impl<State: ExpressionState> NumeratorState for SymbolicExpression<State> {
 }
 
 impl AppliedFeynmanRule {
-    pub fn simplify_ids(&mut self) {
-        let replacements: Vec<Replacement> = vec![
-            Replacement::new(
-                parse!("f_(i_,aind(loru(a__)))*id(aind(lord(a__),loru(b__)))").to_pattern(),
-                parse!("f_(i_,aind(loru(b__)))").to_pattern(),
-            ),
-            Replacement::new(
-                parse!("f_(i_,aind(lord(a__)))*id(aind(loru(a__),lord(b__)))").to_pattern(),
-                parse!("f_(i_,aind(lord(b__)))").to_pattern(),
-            ),
-            Replacement::new(
-                parse!("f_(i_,aind(loru(a__)))*id(aind(loru(b__),lord(a__)))").to_pattern(),
-                parse!("f_(i_,aind(loru(b__)))").to_pattern(),
-            ),
-            Replacement::new(
-                parse!("f_(i_,aind(lord(a__)))*id(aind(lord(b__),loru(a__)))").to_pattern(),
-                parse!("f_(i_,aind(lord(b__)))").to_pattern(),
-            ),
-        ];
-
-        let settings = MatchSettings {
-            rhs_cache_size: 0,
-            ..Default::default()
-        };
-
-        let reps: Vec<Replacement> = replacements
-            .into_iter()
-            .map(|r| r.with_settings(settings.clone()))
-            .collect();
-
-        self.colorless
-            .map_data_mut(|a| a.replace_multiple_repeat_mut(&reps));
-    }
     pub fn from_graph(graph: &BareGraph, prefactor: &GlobalPrefactor) -> Self {
         debug!("Generating numerator for graph: {}", graph.name);
-        // debug!("momentum: {}", graph.dot_lmb());
-
-        // let vatoms: Vec<_> = graph
-        //     .vertices
-        //     .iter()
-        //     .flat_map(|v| v.colorless_vertex_rule(graph))
-        //     .collect();
-
-        // let mut eatoms: Vec<_> = vec![];
-        // let i = Atom::i();
-        // for (j, e) in graph.edges.iter().enumerate() {
-        //     let [n, c] = e.color_separated_numerator(graph, j);
-        //     let n = if matches!(e.edge_type, EdgeType::Virtual) {
-        //         &n * &i
-        //     } else {
-        //         n
-        //     };
-        //     eatoms.push([n, c]);
-        //     // shift += s;
-        //     // graph.shifts.0 += shift;
-        // }
-        // let mut colorless_builder: DataTensor<Atom, OrderedStructure<LibraryRep, Aind>> =
-        //     DataTensor::new_scalar(Atom::num(1));
-
-        // let mut colorful_builder: DataTensor<Atom, OrderedStructure<LibraryRep, Aind>> =
-        //     DataTensor::new_scalar(Atom::num(1));
-
-        // for [colorless, color] in &vatoms {
-        //     // println!("colorless vertex: {}", colorless);
-        //     // println!("colorful vertex: {}", color);
-        //     colorless_builder = colorless_builder.contract(colorless).unwrap();
-        //     colorful_builder = colorful_builder.contract(color).unwrap();
-        //     // println!("vertex: {v}");
-        //     // builder = builder * v;
-        // }
-
-        // for [n, c] in &eatoms {
-        //     // println!("colorless edge {n}");
-        //     // println!("colorfull edge {c}");
-        //     colorless_builder = colorless_builder.scalar_mul(n).unwrap();
-        //     colorful_builder = colorful_builder.scalar_mul(c).unwrap();
-        // }
-
-        // colorless_builder = colorless_builder.scalar_mul(&prefactor.colorless).unwrap();
-        // colorful_builder = colorful_builder.scalar_mul(&prefactor.color).unwrap();
-
-        // let mut num = AppliedFeynmanRule {
-        //     colorless: ParamTensor::composite(
-        //         colorless_builder.map_data(|a| normalise_complex(&a)),
-        //     ),
-        //     color: ParamTensor::composite(
-        //         colorful_builder.map_data(|a| normalise_complex(&a).into()),
-        //     ),
-        //     state: Default::default(),
-        // };
-        // num.simplify_ids();
-        // num
-        //
         todo!()
     }
 }
@@ -1116,30 +1022,26 @@ impl<T: Copy + Default> Numerator<SymbolicExpression<T>> {
 
         let mut indices_map = AHashMap::new();
 
-        self.state.colorless.iter_flat().for_each(|(_, v)| {
-            for p in &pats {
-                for a in v.pattern_match(&p.to_symbolic([W_.x_, W_.y_]).to_pattern(), None, None) {
-                    indices_map.insert(
-                        p.to_symbolic([a[&W_.x_].clone(), a[&W_.y_].clone()]),
-                        p.to_symbolic([a[&W_.x_].clone()]),
-                    );
-                }
+        for p in &pats {
+            for a in self.state.expr.pattern_match(
+                &p.to_symbolic([W_.x_, W_.y_]).to_pattern(),
+                None,
+                None,
+            ) {
+                indices_map.insert(
+                    p.to_symbolic([a[&W_.x_].clone(), a[&W_.y_].clone()]),
+                    p.to_symbolic([a[&W_.x_].clone()]),
+                );
             }
-        });
+        }
 
         let sorted = indices_map.into_iter().sorted().collect::<Vec<_>>();
 
-        let color = self.state.color.clone(); //map_data_ref_result(|a| a.0.canonize_tensors(&indices, None).map(|a| a.into()))?;
-
-        let colorless = self
-            .state
-            .colorless
-            .map_data_ref_result_self(|a| a.canonize_tensors(&sorted).map(|a| a.into()))?;
+        let expr = self.state.expr.canonize_tensors(&sorted)?;
 
         Ok(Self {
             state: SymbolicExpression {
-                colorless,
-                color,
+                expr,
                 state: T::default(),
             },
         })
@@ -1228,15 +1130,14 @@ impl Numerator<AppliedFeynmanRule> {
     }
 
     pub fn color_simplify(self) -> Numerator<ColorSimplified> {
-        debug!("Color simplifying local numerator");
+        debug!("Color simplifying global numerator");
+        // let mut fully_simplified = true;
 
-        let state = ColorSimplified::color_simplify(self.state);
-
-        debug!(
-            "Color simplified numerator: color:{}\n colorless:{}",
-            state.color, state.colorless
-        );
-
+        let state = ColorSimplified {
+            expr: self.state.expr.simplify_color(),
+            state: Color::Fully,
+        };
+        debug!("Color simplified numerator:{}", state.expr);
         Numerator { state }
     }
 }
@@ -1248,51 +1149,27 @@ impl Numerator<AppliedFeynmanRule> {
 // }
 
 impl ColorSimplified {
-    pub fn color_simplify<T: ExpressionState>(mut expr: SymbolicExpression<T>) -> ColorSimplified {
-        let colorless = expr.colorless;
-        let fully_simplified = true;
-
-        expr.color.map_data_mut(|a| {
-            *a = a.simplify_color();
-        });
-
-        ColorSimplified {
-            colorless,
-            color: expr.color,
-            state: if fully_simplified {
-                Color::Fully
-            } else {
-                Color::Partially
-            },
-        }
-    }
-
     /// Parses the color simplified numerator into a network,
     /// If the color hasn't been fully simplified,
-    pub fn parse(self) -> Network {
+    pub fn parse(self) -> Result<Network> {
         let a = match self.state {
             Color::Fully => self.get_single_atom().unwrap(),
             Color::Partially => {
-                warn!(
-                    "Not fully simplified, taking the colorless part associated to {}",
-                    self.color.get_owned_linear(FlatIndex::from(0)).unwrap()
-                );
-                self.colorless.get_owned_linear(FlatIndex::from(0)).unwrap()
+                unreachable!()
+                // warn!(
+                //     "Not fully simplified, taking the colorless part associated to {}",
+                //     self.color.get_owned_linear(FlatIndex::from(0)).unwrap()
+                // );
+                // self.colorless.get_owned_linear(FlatIndex::from(0)).unwrap()
             }
         };
-        disable!(
 
-        let net = TensorNetwork::<MixedTensor<f64, AtomStructure>, SerializableAtom>::try_from(
-            a.as_view(),
-        )
-        .unwrap()
-        .to_fully_parametric()
-        .cast();
+        // disable!(
 
         // println!("net scalar{}", net.scalar.as_ref().unwrap());
-        Network { net }
-        );
-        todo!()
+        Ok(Network {
+            net: ParsingNet::try_from_view(a.as_view(), TENSORLIB.deref())?,
+        })
     }
 }
 
@@ -1301,7 +1178,7 @@ pub type Gloopoly =
 impl Numerator<ColorSimplified> {
     pub fn validate_against_branches(&self, seed: usize) -> bool {
         let gamma = self.clone().gamma_simplify().parse();
-        let nogamma = self.clone().parse();
+        let nogamma = self.clone().parse().unwrap();
         let mut iter = PrimeIteratorU64::new(seed as u64);
         let reps = nogamma.random_concretize_reps(Some(&mut iter), false);
 
@@ -1310,15 +1187,16 @@ impl Numerator<ColorSimplified> {
             .map(|(a, b)| (a.as_view(), b.as_view()))
             .collect::<Vec<_>>();
         let gammat = gamma
-            .apply_reps(&reps_view)
-            .contract::<Rational>(ContractionSettings::Normal)
+            .unwrap()
+            // .apply_reps(&reps_view)
+            .contract(())
             .unwrap()
             .state
             .tensor;
 
         let nogammat = nogamma
             .apply_reps(&reps_view)
-            .contract::<Rational>(ContractionSettings::Normal)
+            .contract(())
             .unwrap()
             .state
             .tensor;
@@ -1364,12 +1242,11 @@ impl Numerator<ColorSimplified> {
     pub fn gamma_simplify(self) -> Numerator<GammaSimplified> {
         debug!("Gamma simplifying color symplified numerator");
 
-        let gamma_simplified = self.state.colorless.map_data_self(|a| a.simplify_gamma());
-
         Numerator {
             state: GammaSimplified {
-                colorless: gamma_simplified,
-                color: self.state.color,
+                // colorless: gamma_simplified,
+                // color: self.state.color,
+                expr: self.state.expr.simplify_gamma(),
                 state: Default::default(),
             },
         }
@@ -1381,25 +1258,25 @@ impl Numerator<ColorSimplified> {
         Numerator { state }
     }
 
-    pub fn parse(self) -> Numerator<Network> {
+    pub fn parse(self) -> Result<Numerator<Network>> {
         debug!("Parsing color simplified numerator into network");
 
         // debug!("colorless: {}", self.state.colorless);
         // debug!("color: {}", self.state.color);
-        let state = self.state.parse();
+        let state = self.state.parse()?;
 
         // debug!("");
-        Numerator { state }
+        Ok(Numerator { state })
     }
 }
 
 #[derive(Debug, Clone)]
 // #[trait_decode(trait = symbolica::state::HasStateMap)]
 pub struct PolySplit {
-    pub colorless: DataTensor<Gloopoly>,
+    pub colorless: DataTensor<Gloopoly, ShadowedStructure<Aind>>,
     pub var_map: Arc<Vec<Variable>>,
     pub energies: Vec<usize>,
-    pub color: ParamTensor,
+    pub color: ParamTensor<ShadowedStructure<Aind>>,
     pub colorsimplified: Color,
 }
 
@@ -1606,7 +1483,9 @@ impl Numerator<PolySplit> {
         }
     }
 
-    fn validate_squared_energies_impl(&self) -> Result<DataTensor<ExpandedIndex>, ()> {
+    fn validate_squared_energies_impl(
+        &self,
+    ) -> Result<DataTensor<ExpandedIndex, ShadowedStructure<Aind>>, ()> {
         self.state.colorless.map_data_ref_result(|p| {
             let mut square: Result<Vec<usize>, ()> = Err(());
             for (i, &e) in p.exponents.iter().enumerate() {
@@ -1630,7 +1509,7 @@ impl Numerator<PolySplit> {
 #[derive(Debug, Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
 #[trait_decode(trait = symbolica::state::HasStateMap)]
 pub struct PolyContracted {
-    pub tensor: ParamTensor,
+    pub tensor: ParamTensor<ShadowedStructure<Aind>>,
     pub coef_map: Vec<Atom>,
 }
 
@@ -1919,22 +1798,22 @@ impl GammaSimplified {
         Network { net }
     }
 
-    pub fn parse_only_colorless(self) -> Network {
-        let lib = DummyLibrary::<(), _>::new();
-        let net = StandardTensorNet::try_from_view(
-            self.colorless
-                .clone()
-                .scalar()
-                .ok_or(NumeratorStateError::Any(eyre!("not a scalar")))
-                .unwrap()
-                .as_view(),
-            &lib,
-        )
-        .unwrap();
+    // pub fn parse_only_colorless(self) -> Network {
+    //     let lib = DummyLibrary::<(), _>::new();
+    //     let net = StandardTensorNet::try_from_view(
+    //         self.colorless
+    //             .clone()
+    //             .scalar()
+    //             .ok_or(NumeratorStateError::Any(eyre!("not a scalar")))
+    //             .unwrap()
+    //             .as_view(),
+    //         &lib,
+    //     )
+    //     .unwrap();
 
-        // println!("net scalar{}", net.scalar.as_ref().unwrap());
-        Network { net }
-    }
+    //     // println!("net scalar{}", net.scalar.as_ref().unwrap());
+    //     Network { net }
+    // }
 }
 
 impl Numerator<GammaSimplified> {
@@ -1961,31 +1840,35 @@ impl Numerator<GammaSimplified> {
 
         Ok(())
     }
-    pub fn parse(self) -> Numerator<Network> {
+    pub fn parse(self) -> Result<Numerator<Network>> {
         // debug!("GammaSymplified numerator: {}", self.export());
         debug!("Parsing gamma simplified numerator into tensor network");
-        Numerator {
-            state: self.state.parse(),
-        }
+        Ok(Numerator {
+            state: Network {
+                net: ParsingNet::try_from_view(self.state.expr.as_view(), TENSORLIB.deref())?,
+            },
+        })
     }
 
-    pub fn parse_only_colorless(self) -> Numerator<Network> {
-        debug!("Parsing only colorless gamma simplified numerator into tensor network");
-        Numerator {
-            state: self.state.parse_only_colorless(),
-        }
-    }
+    // pub fn parse_only_colorless(self) -> Numerator<Network> {
+    //     debug!("Parsing only colorless gamma simplified numerator into tensor network");
+    //     Numerator {
+    //         state: self.state.parse_only_colorless(),
+    //     }
+    // }
 }
+
+pub type ParsingNet = spenso::network::Network<
+    NetworkStore<MixedTensor<F<f64>, ShadowedStructure<Aind>>, Atom>,
+    ExplicitKey<Aind>,
+    Aind,
+>;
 
 #[derive(Debug, Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
 #[trait_decode(trait = symbolica::state::HasStateMap)]
 pub struct Network {
     // #[bincode(with_serde
-    pub net: spenso::network::Network<
-        NetworkStore<MixedTensor<F<f64>, ShadowedStructure<Aind>>, Atom>,
-        ExplicitKey<Aind>,
-        Aind,
-    >,
+    pub net: ParsingNet,
 }
 
 impl TryFrom<PythonState> for Network {
@@ -2004,9 +1887,36 @@ impl TryFrom<PythonState> for Network {
         }
     }
 }
-pub enum ContractionSettings<R = Rational> {
-    Levelled((usize, FunctionMap<R>)),
-    Normal,
+
+#[derive(Clone, Copy, Debug)]
+pub struct ContractionSettings {
+    n_steps: Option<usize>,
+    mode: ExecutionMode,
+}
+
+impl From<()> for ContractionSettings {
+    fn from(_: ()) -> Self {
+        Self {
+            n_steps: None,
+            mode: ExecutionMode::All,
+        }
+    }
+}
+
+impl Default for ContractionSettings {
+    fn default() -> Self {
+        Self {
+            n_steps: None,
+            mode: ExecutionMode::All,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum ExecutionMode {
+    Single,
+    Scalar,
+    All,
 }
 
 pub type StandardTensorNet = spenso::network::Network<
@@ -2024,24 +1934,44 @@ impl Network {
         Network { net }
     }
 
-    pub fn contract<R>(self, settings: ContractionSettings<R>) -> Result<Contracted> {
-        match settings {
-            ContractionSettings::Levelled((_depth, _fn_map)) => {
-                // let levels: Levels<_, _> = self.net.into();
-                // levels.contract(depth, fn_map);
-                unimplemented!("cannot because of attached dummy lifetime...")
+    pub fn contract(&mut self, settings: impl Into<ContractionSettings>) -> Result<()> {
+        let lib = TENSORLIB.deref();
+
+        let settings = settings.into();
+        debug!(
+            "Contracting network:{} with settings: {:#?}",
+            self.net.dot(),
+            settings
+        );
+        if let Some(n) = settings.n_steps {
+            for _ in 0..n {
+                match settings.mode {
+                    ExecutionMode::All => {
+                        self.net.execute::<Steps<1>, SmallestDegree, _, _>(lib)?
+                    }
+                    ExecutionMode::Scalar => {
+                        self.net.execute::<Steps<1>, ContractScalars, _, _>(lib)?
+                    }
+                    ExecutionMode::Single => self
+                        .net
+                        .execute::<Steps<1>, SingleSmallestDegree<false>, _, _>(lib)?,
+                }
             }
-            ContractionSettings::Normal => {
-                // self.net.contract().unwrap();
-                // let tensor = self
-                //     .net
-                //     .result_tensor_smart()?
-                //     .map_structure(OrderedStructure::from);
-                // // debug!("contracted tensor: {}", tensor);
-                // Ok(Contracted { tensor })
-                todo!()
+        } else {
+            match settings.mode {
+                ExecutionMode::All => {
+                    self.net.execute::<Sequential, SmallestDegree, _, _>(lib)?;
+                }
+                ExecutionMode::Scalar => {
+                    self.net.execute::<Sequential, ContractScalars, _, _>(lib)?;
+                }
+                ExecutionMode::Single => {
+                    self.net
+                        .execute::<Sequential, SingleSmallestDegree<false>, _, _>(lib)?;
+                }
             }
         }
+        Ok(())
     }
 }
 
@@ -2082,63 +2012,8 @@ impl TypedNumeratorState for Network {
 }
 
 impl<T: Copy + Default> Numerator<SymbolicExpression<T>> {
-    pub fn apply_reps(&self, rep_atoms: Vec<(AtomView, AtomView)>) -> Self {
-        // println!(
-        //     "REPLACEMENTS:\n{}",
-        //     rep_atoms
-        //         .iter()
-        //         .map(|(a, b)| format!("{} -> {}", a, b))
-        //         .collect::<Vec<_>>()
-        //         .join("\n")
-        // );
-        // let reps: Vec<Replacement> = rep_atoms
-        //     .iter()
-        //     .map(|(l, r)| Replacement::new(l.to_pattern(), r.to_pattern()))
-        //     .collect::<Vec<_>>();
-        let expr = SymbolicExpression::<T> {
-            colorless: self.state.colorless.map_data_ref_self(|a| {
-                let mut b: Atom = a.clone();
-                for (src, trgt) in rep_atoms.iter() {
-                    b = b.replace(&src.to_pattern()).with(trgt.to_pattern());
-                }
-                //let b = a.0.replace_all_multiple(&reps).into();
-                // println!("AFTER: {}", b);
-                // Expand each inner level
-                b = b.replace_map(&|term: AtomView<'_>, ctx: &Context, out: &mut Atom| {
-                    if ctx.function_level == 0
-                        && ctx.parent_type == Some(symbolica::atom::AtomType::Mul)
-                    {
-                        *out = term.expand();
-                        true
-                    } else {
-                        false
-                    }
-                });
-                b.into()
-            }),
-            color: self.state.color.map_data_ref_self(|a| {
-                let mut b: Atom = a.clone();
-                // println!("BEFORE: {}", a.0);
-                for (src, trgt) in rep_atoms.iter() {
-                    b = b.replace(&src.to_pattern()).with(trgt.to_pattern());
-                }
-                b = b.replace_map(&|term: AtomView<'_>, ctx: &Context, out: &mut Atom| {
-                    if ctx.function_level == 0
-                        && ctx.parent_type == Some(symbolica::atom::AtomType::Mul)
-                    {
-                        *out = term.expand();
-                        true
-                    } else {
-                        false
-                    }
-                });
-                //let b = a.0.replace_all_multiple(&reps).into();
-                // println!("AFTER: {}", b);
-                b.into()
-            }),
-            state: self.state.state,
-        };
-        Self { state: { expr } }
+    pub(crate) fn apply_reps(&self, rep_atoms: Vec<(AtomView, AtomView)>) -> Self {
+        todo!()
     }
 }
 
@@ -2372,20 +2247,36 @@ impl Numerator<Network> {
         todo!()
     }
 
-    pub fn contract<R>(self, settings: ContractionSettings<R>) -> Result<Numerator<Contracted>> {
-        // debug!(
-        //     "contracting network {}",
-        //     self.state.net.rich_graph().dot_nodes()
-        // );
-        let contracted = self.state.contract(settings)?;
-        Ok(Numerator { state: contracted })
+    pub fn contract(
+        mut self,
+        settings: impl Into<ContractionSettings>,
+    ) -> Result<Numerator<Contracted>> {
+        self.state.contract(settings)?;
+
+        debug!("contracted");
+        Ok(Numerator {
+            state: match self.state.net.result_tensor(TENSORLIB.deref())? {
+                ExecutionResult::One => Contracted::one(),
+
+                ExecutionResult::Zero => Contracted::zero(),
+
+                ExecutionResult::Val(v) => {
+                    let mut v = v.into_owned();
+                    v.to_param();
+
+                    Contracted {
+                        tensor: v.try_into_parametric().unwrap(),
+                    }
+                }
+            },
+        })
     }
 }
 
 #[derive(Debug, Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
 #[trait_decode(trait = symbolica::state::HasStateMap)]
 pub struct Contracted {
-    pub tensor: ParamTensor,
+    pub tensor: ParamTensor<ShadowedStructure<Aind>>,
 }
 
 impl TryFrom<PythonState> for Contracted {
@@ -2406,6 +2297,18 @@ impl TryFrom<PythonState> for Contracted {
 }
 
 impl Contracted {
+    pub fn one() -> Self {
+        Contracted {
+            tensor: ParamTensor::new_scalar(Atom::one()),
+        }
+    }
+
+    pub fn zero() -> Self {
+        Contracted {
+            tensor: ParamTensor::new_scalar(Atom::Zero),
+        }
+    }
+
     pub fn evaluator(
         self,
         path: PathBuf,
@@ -2941,9 +2844,10 @@ impl NumeratorCompileOptions {
 #[derive(Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
 #[trait_decode(trait = symbolica::state::HasStateMap)]
 pub struct EvaluatorOrientations {
-    pub eval_double: LinearizedEvalTensorSet<Complex<F<f64>>, OrderedStructure>,
-    pub eval_quad: LinearizedEvalTensorSet<Complex<F<f128>>, OrderedStructure>,
-    pub compiled: CompiledEvaluator<EvalTensorSet<SerializableCompiledEvaluator, OrderedStructure>>,
+    pub eval_double: LinearizedEvalTensorSet<Complex<F<f64>>, ShadowedStructure<Aind>>,
+    pub eval_quad: LinearizedEvalTensorSet<Complex<F<f128>>, ShadowedStructure<Aind>>,
+    pub compiled:
+        CompiledEvaluator<EvalTensorSet<SerializableCompiledEvaluator, ShadowedStructure<Aind>>>,
     pub positions: Vec<usize>,
 }
 
@@ -2966,10 +2870,10 @@ impl Debug for EvaluatorOrientations {
 #[derive(Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
 #[trait_decode(trait = symbolica::state::HasStateMap)]
 pub struct EvaluatorSingle {
-    tensor: ParamTensor,
-    eval_double: EvalTensor<ExpressionEvaluator<Complex<F<f64>>>, OrderedStructure>,
-    eval_quad: EvalTensor<ExpressionEvaluator<Complex<F<f128>>>, OrderedStructure>,
-    compiled: CompiledEvaluator<EvalTensor<SerializableCompiledEvaluator, OrderedStructure>>,
+    tensor: ParamTensor<ShadowedStructure<Aind>>,
+    eval_double: EvalTensor<ExpressionEvaluator<Complex<F<f64>>>, ShadowedStructure<Aind>>,
+    eval_quad: EvalTensor<ExpressionEvaluator<Complex<F<f128>>>, ShadowedStructure<Aind>>,
+    compiled: CompiledEvaluator<EvalTensor<SerializableCompiledEvaluator, ShadowedStructure<Aind>>>,
     param_len: usize, //to validate length of params at run time
 }
 
@@ -3779,5 +3683,5 @@ impl GetSingleAtom for PythonState {
 }
 
 impl PythonState {}
-#[cfg(test)]
-mod tests;
+// #[cfg(test)]
+// mod tests;

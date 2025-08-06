@@ -164,9 +164,27 @@ impl From<Aind> for Atom {
         match value {
             Aind::Dummy(i) => function!(symbol!("dummy"), i as i64),
             Aind::Normal(i) => Atom::num(i as i64),
-            Aind::Edge(i, j) => function!(symbol!("edge"), i as i64, j as i64),
-            Aind::Hedge(i, j) => function!(symbol!("hedge"), i as i64, j as i64),
-            Aind::Vertex(i, j) => function!(symbol!("vertex"), i as i64, j as i64),
+            Aind::Edge(i, j) => {
+                if j != 0 {
+                    function!(symbol!("edge"), i as i64, j as i64)
+                } else {
+                    function!(symbol!("edge"), i as i64)
+                }
+            }
+            Aind::Hedge(i, j) => {
+                if j != 0 {
+                    function!(symbol!("hedge"), i as i64, j as i64)
+                } else {
+                    function!(symbol!("hedge"), i as i64)
+                }
+            }
+            Aind::Vertex(i, j) => {
+                if j != 0 {
+                    function!(symbol!("vertex"), i as i64, j as i64)
+                } else {
+                    function!(symbol!("vertex"), i as i64)
+                }
+            }
         }
     }
 }
@@ -210,6 +228,7 @@ impl TryFrom<AtomView<'_>> for Aind {
 
                         if let Ok(a) = i64::try_from(arg) {
                             if a >= 0 {
+                                DUMMYCOUNTER.fetch_max(a as usize + 1, Ordering::Relaxed);
                                 Ok(Aind::Dummy(a as usize))
                             } else {
                                 Err(AindError::NotIndex(format!("Negative index {}", a)))
@@ -224,12 +243,12 @@ impl TryFrom<AtomView<'_>> for Aind {
                         )))
                     }
                 } else if f.get_symbol() == symbol!("edge") {
-                    if f.get_nargs() == 2 {
+                    if f.get_nargs() <= 2 {
                         let mut iter = f.iter();
                         let i = iter.next().unwrap();
-                        let j = iter.next().unwrap();
+                        let j = iter.next().map(i64::try_from).unwrap_or(Ok(0));
 
-                        if let (Ok(a), Ok(b)) = (i64::try_from(i), i64::try_from(j)) {
+                        if let (Ok(a), Ok(b)) = (i64::try_from(i), j) {
                             if a >= 0 && b >= 0 {
                                 Ok(Aind::Edge(a as u16, b as u16))
                             } else {
@@ -248,12 +267,12 @@ impl TryFrom<AtomView<'_>> for Aind {
                         )))
                     }
                 } else if f.get_symbol() == symbol!("hedge") {
-                    if f.get_nargs() == 2 {
+                    if f.get_nargs() <= 2 {
                         let mut iter = f.iter();
                         let i = iter.next().unwrap();
-                        let j = iter.next().unwrap();
+                        let j = iter.next().map(i64::try_from).unwrap_or(Ok(0));
 
-                        if let (Ok(a), Ok(b)) = (i64::try_from(i), i64::try_from(j)) {
+                        if let (Ok(a), Ok(b)) = (i64::try_from(i), j) {
                             if a >= 0 && b >= 0 {
                                 Ok(Aind::Hedge(a as u16, b as u16))
                             } else {
@@ -272,12 +291,12 @@ impl TryFrom<AtomView<'_>> for Aind {
                         )))
                     }
                 } else if f.get_symbol() == symbol!("vertex") {
-                    if f.get_nargs() == 2 {
+                    if f.get_nargs() <= 2 {
                         let mut iter = f.iter();
                         let i = iter.next().unwrap();
-                        let j = iter.next().unwrap();
+                        let j = iter.next().map(i64::try_from).unwrap_or(Ok(0));
 
-                        if let (Ok(a), Ok(b)) = (i64::try_from(i), i64::try_from(j)) {
+                        if let (Ok(a), Ok(b)) = (i64::try_from(i), j) {
                             if a >= 0 && b >= 0 {
                                 Ok(Aind::Vertex(a as u16, b as u16))
                             } else {
@@ -310,24 +329,46 @@ impl TryFrom<AtomView<'_>> for Aind {
 
 #[cfg(test)]
 mod tests {
-    use spenso::{network::parsing::ShadowedStructure, structure::PermutedStructure};
-    use symbolica::parse_lit;
+    use idenso::metric::MetricSimplifier;
+    use spenso::{
+        network::parsing::ShadowedStructure,
+        structure::{permuted::Perm, PermutedStructure, TensorStructure},
+        tensors::symbolic::SymbolicTensor,
+    };
+    use symbolica::{atom::AtomCore, parse_lit};
 
     use super::*;
 
     #[test]
     fn test_structure_parsing() {
-        let structure = PermutedStructure::<ShadowedStructure<Aind>>::try_from(parse_lit!(gamma(
+        let expr = parse_lit!(gamma(
             spenso::mink(4, edge(1, 1)),
+            spenso::mink(4, edge(1)),
             spenso::mink(4, hedge(1, 1)),
+            spenso::mink(4, hedge(1)),
             spenso::mink(4, vertex(2, 1)),
-            spenso::mink(4, dummy(1)),
+            spenso::mink(4, vertex(2)),
+            spenso::mink(4, dummy(111)),
             spenso::mink(4, 1)
-        )));
+        ));
+        let structure = PermutedStructure::<ShadowedStructure<Aind>>::try_from(expr.clone());
 
         match structure {
             Ok(s) => {
-                println!("{}", s.structure)
+                let pexpr = s
+                    .clone()
+                    .map_structure(|a| SymbolicTensor::from_named(&a).unwrap())
+                    .permute_inds()
+                    .expression
+                    .simplify_metrics();
+                assert_eq!(s.structure.order(), 8);
+                assert_eq!(
+                    expr,
+                    pexpr,
+                    "{}\n not equal to\n{}",
+                    expr.to_canonical_string(),
+                    pexpr.to_canonical_string()
+                );
             }
             Err(e) => println!("Error parsing structure: {}", e),
         }

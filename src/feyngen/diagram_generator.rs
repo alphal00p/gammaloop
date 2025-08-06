@@ -3522,7 +3522,7 @@ impl FeynGen {
                                     .map(|(a, b)| a.dual().rep().id(Atom::from(a.aind), Atom::from(b.aind)))
                                     .fold(Atom::num(1), |acc, x| acc * x);
 
-                                numerator.state.color.map_data_mut(|a|{*a *=&color});
+                                // numerator.state.color.map_data_mut(|a|{*a *=&color});
 
                             }
                         }
@@ -4352,20 +4352,21 @@ impl ProcessedNumeratorForComparison {
                 {
                     // TODO: Once symbolica supports `collect_factors()`, substitute `collect_num()` below with it.
                     let decomposed_net =
-                        processed_numerator
-                            .state
-                            .colorless
-                            .map_data_ref(|data| Numerator {
-                                state: Network {
-                                    net: {
-                                        StandardTensorNet::try_from_view(
-                                            data.collect_num().as_atom_view(),
-                                            TENSORLIB.deref(),
-                                        )
-                                        .unwrap()
-                                    },
-                                },
-                            });
+                        // processed_numerator
+                        //     .state
+                        //     .colorless
+                        //     .map_data_ref(|data| Numerator {
+                        //         state: Network {
+                        //             net: {
+                        //                 StandardTensorNet::try_from_view(
+                        //                     data.collect_num().as_atom_view(),
+                        //                     TENSORLIB.deref(),
+                        //                 )
+                        //                 .unwrap()
+                        //             },
+                        //         },
+                        //     });
+                        todo!();
                     // println!(
                     //     "Scalar part: {}",
                     //     decomposed_net
@@ -4403,15 +4404,17 @@ impl ProcessedNumeratorForComparison {
                             })
                             .collect::<Vec<_>>();
 
-                        let colored_tensor = processed_numerator.state.color.map_data_ref(|a| {
-                            if grouping_options
-                                .fully_numerical_substitution_when_comparing_numerators
-                            {
-                                FeynGen::substitute_color_factors(a.as_atom_view()).expand()
-                            } else {
-                                a.to_owned()
-                            }
-                        });
+                        let colored_tensor: DataTensor<Atom, OrderedStructure<Euclidean, Aind>> =
+                            todo!();
+                        // processed_numerator.state.color.map_data_ref(|a| {
+                        //     if grouping_options
+                        //         .fully_numerical_substitution_when_comparing_numerators
+                        //     {
+                        //         FeynGen::substitute_color_factors(a.as_atom_view()).expand()
+                        //     } else {
+                        //         a.to_owned()
+                        //     }
+                        // });
                         let sample_evaluations = sample_points_decomposed
                             .iter()
                             .map(|sp| {
@@ -4431,15 +4434,15 @@ impl ProcessedNumeratorForComparison {
                             })
                             .collect::<Result<Vec<_>, _>>()?;
 
-                        debug!(
-                            "Sample evaluation for diagram #{}:\n{}",
-                            diagram_id,
-                            sample_evaluations
-                                .iter()
-                                .map(|av| av.to_string())
-                                .collect::<Vec<_>>()
-                                .join("\n")
-                        );
+                        // debug!(
+                        //     "Sample evaluation for diagram #{}:\n{}",
+                        //     diagram_id,
+                        //     sample_evaluations
+                        //         .iter()
+                        //         .map(|av| av.to_string())
+                        //         .collect::<Vec<_>>()
+                        //         .join("\n")
+                        // );
 
                         (Some(sample_points_decomposed), Some(sample_evaluations))
                     } else {

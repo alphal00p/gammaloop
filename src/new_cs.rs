@@ -497,12 +497,19 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
     }
 
     pub fn preprocess(&mut self, model: &Model, settings: &ProcessSettings) -> Result<()> {
+        debug!("Generating Cff");
         self.generate_cff()?;
+        debug!("Building Evaluator");
         self.build_evaluator(model);
-        self.build_evaluator_for_orientations(model)?;
+        debug!("Building Evaluator for Orientations");
+        self.build_evaluator_for_orientations(model);
+        debug!("Building Tropical Sampler");
         self.build_tropical_sampler(settings)?;
+        debug!("Building Loop Momentum Bases");
         self.build_loop_momentum_bases();
+        debug!("Building Multi-Channeling Channels");
         self.build_multi_channeling_channels();
+        debug!("Building ESurface Derived Data");
         self.build_esurface_derived_data()?;
         self.build_threshold_counterterms(model);
 
@@ -536,49 +543,18 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
         let mut param_builder = ParamBuilder::<f64>::new();
 
         // this is wrong if we allow for vacuum graphs
-        param_builder.external_energies_atom(self.graph.underlying.get_external_energy_atoms());
+        param_builder.external_energies_atom(&self.graph);
+
+        param_builder.polarizations(&self.graph);
+        // param_builder.polar
 
         // spatial components of external momenta
-        param_builder.external_spatial_atom(
-            self.graph
-                .underlying
-                .iter_edges()
-                .flat_map(|(pair, edge_id, _)| {
-                    if let HedgePair::Unpaired { .. } = pair {
-                        let i64_id = Into::<usize>::into(edge_id) as i64;
-                        vec![
-                            function!(GS.external_mom, i64_id, 1),
-                            function!(GS.external_mom, i64_id, 2),
-                            function!(GS.external_mom, i64_id, 3),
-                        ]
-                    } else {
-                        vec![]
-                    }
-                })
-                .collect(),
-        );
+        param_builder.external_spatial_atom(&self.graph);
 
         // spatial EMR
-        param_builder.emr_spatial_atom(
-            self.graph
-                .underlying
-                .iter_edges()
-                .flat_map(|(pair, edge_id, _)| {
-                    if let HedgePair::Paired { .. } = pair {
-                        let i64_id = Into::<usize>::into(edge_id) as i64;
-                        vec![
-                            function!(GS.emr_vec, i64_id, 1),
-                            function!(GS.emr_vec, i64_id, 2),
-                            function!(GS.emr_vec, i64_id, 3),
-                        ]
-                    } else {
-                        vec![]
-                    }
-                })
-                .collect(),
-        );
+        param_builder.emr_spatial_atom(&self.graph);
 
-        param_builder.model_parameters_atom(model.generate_params());
+        param_builder.model_parameters_atom(model);
 
         param_builder.m_uv_atom(Atom::var(GS.m_uv));
 
@@ -604,6 +580,8 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
     }
 
     pub fn build_all_orientations_integrand_atom(&self) -> Atom {
+        debug!("Building all orientations integrand");
+
         let wood = self.graph.wood(&self.graph.underlying.no_dummy());
         let mut forest = wood.unfold(&self.graph, &self.graph.loop_momentum_basis);
 
@@ -649,6 +627,9 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
                 None,
             );
             orientation_expr = self.add_additional_factors_to_cff_atom(&orientation_expr);
+
+            // println!("orientation_expr: {}", orientation_expr);
+            //panic!("atom test: {}", spenso_lor_atom(3, 20, GS.dim));
 
             result += orientation_expr;
         }
@@ -849,6 +830,9 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
     pub fn build_evaluator(&mut self, model: &Model) {
         let replace_dots = self.build_all_orientations_integrand_atom();
         let params = self.get_params(model);
+        // for (i, p) in params.iter().enumerate() {
+        //     println!("{i}:{p}")
+        // }
 
         let function_map = self.get_function_map();
 
@@ -1068,8 +1052,8 @@ impl<S: NumeratorState> Amplitude<S> {
     }
 
     pub fn add_graph(&mut self, graph: Graph) -> Result<()> {
-        let new_external_particels = graph.underlying.get_external_partcles();
-        let new_external_signature = graph.underlying.get_external_signature();
+        let new_external_particels = graph.get_external_partcles();
+        let new_external_signature = graph.get_external_signature();
 
         if !self.graphs.is_empty() {
             if self.external_particles != new_external_particels {
@@ -1971,7 +1955,7 @@ fn do_replacement_rules(
             let temp_orientation = orientation.clone();
             orientation_expr = orientation_expr
                 * d.data
-                    .spin_num
+                    .num
                     .replace(function!(GS.emr_mom, edge_id, W_.y_))
                     .with_map(move |m| {
                         let index = m.get(W_.y_).unwrap().to_atom();
@@ -1985,16 +1969,16 @@ fn do_replacement_rules(
     }
 
     // add Feynman rules of external edges
-    for (_p, edge_index, d) in graph.iter_edges_of(&graph.external_filter()) {
-        let edge_id = usize::from(edge_index) as i64;
-        orientation_expr = (orientation_expr * &d.data.spin_num)
-            .replace(function!(GS.emr_mom, edge_id, W_.y_))
-            .with_map(move |m| {
-                let index = m.get(W_.y_).unwrap().to_atom();
+    // for (_p, edge_index, d) in graph.iter_edges_of(&graph.external_filter()) {
+    //     let edge_id = usize::from(edge_index) as i64;
+    //     orientation_expr = (orientation_expr * &d.data.num)
+    //         .replace(function!(GS.emr_mom, edge_id, W_.y_))
+    //         .with_map(move |m| {
+    //             let index = m.get(W_.y_).unwrap().to_atom();
 
-                function!(GS.energy, edge_id, index) + function!(GS.emr_vec, edge_id, index)
-            });
-    }
+    //             function!(GS.energy, edge_id, index) + function!(GS.emr_vec, edge_id, index)
+    //         });
+    // }
 
     let spenso_mink = symbol!("spenso::mink");
 
@@ -2005,6 +1989,7 @@ fn do_replacement_rules(
         .replace(function!(GS.ose, W_.x_, W_.y_, W_.z_, W_.prop_, W_.a___))
         .with(function!(GS.ose, 100, W_.prop_, W_.a___));
 
+    debug!("sta");
     // contract all dot products, set all cross terms ose.q3 to 0
     // MS.dot is a 4d dot product
     orientation_expr = orientation_expr
@@ -2022,8 +2007,11 @@ fn do_replacement_rules(
             function!(GS.emr_vec, W_.x__, function!(spenso_mink, W_.z__))
                 * function!(GS.ose, W_.y__, function!(spenso_mink, W_.z__)).pow(Atom::var(W_.b_)),
         )
-        .with(Atom::Zero)
-        .expand() // TODO: prevent expansion
+        .with(Atom::Zero);
+    debug!("expanding");
+    // orientation_expr=orientation_expr.expand() // TODO: prevent expansion
+    debug!("inter");
+    orientation_expr = orientation_expr
         .replace(
             function!(GS.emr_vec, W_.x__, function!(spenso_mink, W_.z__))
                 * function!(GS.ose, W_.y__, function!(spenso_mink, W_.z__)),
@@ -2127,8 +2115,12 @@ fn do_replacement_rules(
             function!(GS.emr_mom, W_.x__),
             function!(GS.emr_vec, W_.y__)
         ))
-        .with(function!(GS.emr_vec, W_.x__) * function!(GS.emr_vec, W_.y__)); // substitute all OSEs from subgraphs, they are in the form OSE(edge_id, momentum, mass^2, mom.mom + mass^2)
-                                                                              // the sqrt has already been applied
+        .with(function!(GS.emr_vec, W_.x__) * function!(GS.emr_vec, W_.y__));
+
+    debug!("do first reps");
+
+    // substitute all OSEs from subgraphs, they are in the form OSE(edge_id, momentum, mass^2, mom.mom + mass^2)
+    // the sqrt has already been applied
     orientation_expr = orientation_expr
         .replace(function!(GS.ose, W_.x_, W_.y_, W_.z_, W_.prop_))
         .with(function!(GS.ose, 100, W_.prop_)) // do in two steps to get slightly nicer output
@@ -2240,7 +2232,7 @@ mod tests {
 
     use crate::{
         dot,
-        new_graph::{Graph, LoopMomentumBasis},
+        new_graph::{parse::IntoGraph, Graph, LoopMomentumBasis},
         numerator::{
             EvaluatorOptions, GammaAlgebraMode, GlobalPrefactor, NumeratorEvaluatorOptions,
             NumeratorParseMode, NumeratorSettings, UnInit,
@@ -2257,7 +2249,7 @@ mod tests {
         // load the model and hack the masses, go through serializable model since arc is not mutable
         let model = load_generic_model("sm");
 
-        let mut graphs = dot!(
+        let mut graph: Graph = dot!(
             digraph G{
                 e1      [flow=sink]
                 e2      [flow=source]
@@ -2272,7 +2264,6 @@ mod tests {
             }
         )
         .unwrap();
-        let graph = &mut graphs[0];
         let mut loop_momentum_basis = LoopMomentumBasis {
             tree: None,
             loop_edges: vec![EdgeIndex::from(0), EdgeIndex::from(4)].into(),
@@ -2304,11 +2295,8 @@ mod tests {
                         }),
                         parse_mode: NumeratorParseMode::Direct,
                         dump_expression: None,
-                        global_numerator: None,
-                        global_prefactor: GlobalPrefactor {
-                            color: Atom::one(),
-                            colorless: Atom::one(),
-                        },
+                        // global_numerator: None,
+                        // global_prefactor: GlobalPrefactor::default(),
                         gamma_algebra: GammaAlgebraMode::Concrete,
                     },
                     gammaloop_compile_options: GammaloopCompileOptions {
