@@ -27,7 +27,7 @@ use spenso::{
 use crate::{
     cff::{
         cut_expression::SuperGraphOrientationID,
-        esurface::{generate_esurface_data, EsurfaceDerivedData},
+        esurface::{generate_esurface_data, get_existing_esurfaces, EsurfaceDerivedData},
         expression::{
             AmplitudeOrientationID, CFFExpression, OrientationData, SubgraphOrientationID,
         },
@@ -46,6 +46,7 @@ use crate::{
         NumHedgeData, Vertex,
     },
     signature::SignatureLike,
+    subtraction::overlap::find_maximal_overlap,
     utils::{external_energy_atom_from_index, f128, ose_atom_from_index, GS, W_},
     uv::UltravioletGraph,
     GammaLoopContext, GammaLoopContextContainer,
@@ -1018,6 +1019,41 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
             .underlying
             .expected_scale(settings.kinematics.e_cm);
 
+        let esurfaces = &self
+            .derived_data
+            .cff_expression
+            .as_ref()
+            .unwrap()
+            .surfaces
+            .esurface_cache;
+
+        let esurface_data = self.derived_data.esurface_data.as_ref().unwrap();
+        let externals = settings.kinematics.externals.get_dependent_externals(
+            DependentMomentaConstructor::Amplitude(&self.graph.get_external_signature()),
+        );
+
+        let existing_esurfaces = get_existing_esurfaces(
+            esurfaces,
+            esurface_data,
+            &externals,
+            &self.graph.loop_momentum_basis,
+            settings.general.debug,
+            settings.kinematics.e_cm,
+        );
+
+        let edge_masses = self
+            .graph
+            .new_edgevec(|edge, _, _| edge.particle.0.mass.value);
+
+        let overlap = find_maximal_overlap(
+            &self.graph.loop_momentum_basis,
+            &existing_esurfaces,
+            esurfaces,
+            &edge_masses,
+            &externals,
+            &settings,
+        );
+
         AmplitudeGraphTerm {
             bare_cff_evaluator: self.derived_data.bare_cff_evaluator.clone().unwrap(),
             bare_cff_orientation_evaluators: self
@@ -1031,6 +1067,7 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
             lmbs: self.derived_data.lmbs.clone().unwrap(),
             counterterm_evaluators: self.derived_data.threshold_counterterms.clone().unwrap(),
             estimated_scale,
+            overlap,
         }
     }
 }

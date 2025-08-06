@@ -10,7 +10,10 @@ use symbolica::{
 use typed_index_collections::TiVec;
 
 use crate::{
-    cff::expression::AmplitudeOrientationID,
+    cff::{
+        esurface::{Esurface, EsurfaceID},
+        expression::AmplitudeOrientationID,
+    },
     evaluation_result::EvaluationResult,
     integrands::HasIntegrand,
     momentum::Rotation,
@@ -18,6 +21,7 @@ use crate::{
     new_gammaloop_integrand::ParamBuilder,
     new_graph::{FeynmanGraph, Graph, LmbIndex, LoopMomentumBasis},
     signature::SignatureLike,
+    subtraction::overlap::OverlapStructure,
     DependentMomentaConstructor, FloatLike, Polarizations, Settings, F,
 };
 
@@ -33,11 +37,13 @@ const HARD_CODED_M_R_SQ: F<f64> = F(1000.0);
 pub struct AmplitudeGraphTerm {
     pub bare_cff_evaluator: GenericEvaluator,
     pub bare_cff_orientation_evaluators: TiVec<AmplitudeOrientationID, GenericEvaluator>,
+    pub counterterm_evaluators: TiVec<EsurfaceID, GenericEvaluator>,
     pub graph: Graph,
     pub multi_channeling_setup: LmbMultiChannelingSetup,
     pub lmbs: TiVec<LmbIndex, LoopMomentumBasis>,
     pub tropical_sampler: SampleGenerator<3>,
     pub estimated_scale: F<f64>,
+    pub overlap: OverlapStructure,
 }
 
 impl AmplitudeGraphTerm {
