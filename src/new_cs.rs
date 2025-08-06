@@ -538,7 +538,23 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
         self.derived_data.multi_channeling_setup = Some(channels)
     }
 
-    fn get_params(&self, model: &Model) -> Vec<Atom> {
+    fn amplitude_params(&self, model: &Model) -> Vec<Atom> {
+        self.param_builder_core(model)
+            .build_params_amplitude()
+            .unwrap()
+    }
+
+    fn ct_params(&self, model: &Model) -> Vec<Atom> {
+        let mut param_builder = self.param_builder_core(model);
+        param_builder.uv_damp_atom(Atom::var(GS.uv_damp));
+        param_builder.derivative_at_tstar_atom(Atom::var(GS.deta));
+        param_builder.radius_atom(Atom::var(GS.radius));
+        param_builder.radius_star_atom(Atom::var(GS.radius_star));
+
+        param_builder.build_params_threshold_ct().unwrap()
+    }
+
+    fn param_builder_core(&self, model: &Model) -> ParamBuilder<f64> {
         // the float type does not matter here
         let mut param_builder = ParamBuilder::<f64>::new();
 
@@ -559,7 +575,8 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
         param_builder.m_uv_atom(Atom::var(GS.m_uv));
 
         param_builder.mu_r_sq_atom(Atom::var(GS.mu_r_sq));
-        param_builder.build_params_amplitude().unwrap()
+
+        param_builder
     }
 
     fn get_function_map(&self) -> FunctionMap {
@@ -829,7 +846,7 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
 
     pub fn build_evaluator(&mut self, model: &Model) {
         let replace_dots = self.build_all_orientations_integrand_atom();
-        let params = self.get_params(model);
+        let params = self.amplitude_params(model);
         // for (i, p) in params.iter().enumerate() {
         //     println!("{i}:{p}")
         // }
@@ -942,7 +959,7 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
     }
 
     fn build_evaluator_for_orientations(&mut self, model: &Model) -> Result<()> {
-        let params = self.get_params(model);
+        let params = self.amplitude_params(model);
         let function_map = self.get_function_map();
 
         let evaluators = self
