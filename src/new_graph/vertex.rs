@@ -112,11 +112,13 @@ impl ParseVertex {
             let dod = v.get::<_, i32>("dod").transpose()?;
 
             if let Some(num) = v.get::<_, String>("num") {
+                let num = num?;
+                // println!("Parsed with num:{}", num);
                 Ok(ParseVertex {
                     dod,
                     label,
                     vertex_rule: None,
-                    num: Some(<String as StripParse<Atom>>::strip_parse(&num?)),
+                    num: Some(<String as StripParse<Atom>>::strip_parse(&num)),
                 })
             } else if let Some(n) = v.get::<_, String>("int_id") {
                 let vertex_rule = Some(model.get_vertex_rule(n.unwrap()));

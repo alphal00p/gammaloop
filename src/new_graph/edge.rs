@@ -54,7 +54,20 @@ impl From<Atom> for PossibleParticle {
     }
 }
 
+impl From<()> for PossibleParticle {
+    fn from(_: ()) -> Self {
+        PossibleParticle::JustMass {
+            expr: Atom::Zero,
+            value: None,
+        }
+    }
+}
+
 impl PossibleParticle {
+    pub fn zero() -> Self {
+        ().into()
+    }
+
     pub fn color_reps(&self, flow: Flow) -> IndexLess {
         match self {
             PossibleParticle::Particle(p) => p.color_reps(flow),
@@ -341,7 +354,7 @@ impl ParseEdge {
                 } else if let Some(v) = e.get::<_, String>("mass") {
                     <String as StripParse<Atom>>::strip_parse(&v?).into()
                 } else {
-                    return Err(eyre!("no pdg or name found for edge"));
+                    ().into()
                 };
 
                 Ok(ParseEdge {

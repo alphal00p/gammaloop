@@ -147,9 +147,9 @@ impl ParseGraph {
                 for p in &vertex_rule.particles {
                     particles.push(Some(p.clone()));
                 }
-                vertex_rule.name.clone()
+                Some(vertex_rule.name.clone())
             } else {
-                "AAAAAAAAA".into()
+                None
             };
 
             let mut other_order = particles.len();
@@ -172,15 +172,22 @@ impl ParseGraph {
                     Orientation::Reversed => particle.get_anti_particle(model),
                     _ => particle.clone(),
                 });
-                if let Some((pos, i)) = particles.iter_mut().find_position(|p| &&particle == p) {
-                    *i = None;
-                    hedges[h.0] = Some(pos as u8);
+
+                if let Some(name) = &name {
+                    if let Some((pos, i)) = particles.iter_mut().find_position(|p| &&particle == p)
+                    {
+                        *i = None;
+                        hedges[h.0] = Some(pos as u8);
+                    } else {
+                        return Err(eyre!(
+                            "Particle {} not in vertex rule {}",
+                            particle.map(|a| a.name.clone()).unwrap_or("None".into()),
+                            name
+                        ));
+                    }
                 } else {
-                    return Err(eyre!(
-                        "Particle {} not in vertex rule {}",
-                        particle.map(|a| a.name.clone()).unwrap_or("None".into()),
-                        name
-                    ));
+                    hedges[h.0] = Some(other_order as u8);
+                    other_order += 1;
                 }
             }
 
@@ -385,15 +392,18 @@ impl Graph {
 
         let underlying = graph.map(
             |_, i, v| {
-                let num = v.num.unwrap_or(
+                let num = if let Some(num) = v.num {
+                    num
+                } else {
+                    // println!("Num is none  for vertex {}", i);
                     v_spin_num[i.0]
                         .take()
                         .unwrap()
                         .contract(&v_color_num[i.0].take().unwrap())
                         .unwrap()
                         .scalar()
-                        .unwrap(),
-                );
+                        .unwrap()
+                };
 
                 let dod = if let Some(d) = v.dod { d } else { num.dod() };
 
@@ -741,6 +751,7 @@ pub mod test {
             edge [
             pdg=1000
             ]
+            v4 [num=1]
             ext [style=invis]
             ext -> v4:0 [id=1 is_dummy=true]
             ext -> v5:1 [id=0]
@@ -762,12 +773,33 @@ pub mod test {
     }
 
     #[test]
+    fn scalar_without_model() {
+        let g: Graph = dot!(
+            digraph G{
+                ext    [style=invis]
+                node [num=1]
+                ext -> A
+                C -> A
+                A -> D
+                D -> B
+                B -> C
+                C -> D
+                B -> ext
+            }
+        )
+        .unwrap();
+
+        println!("{}", g.dot_serialize())
+    }
+
+    #[test]
     fn parse() {
         let g: Graph = dot!(
             digraph G{
                 ext    [style=invis]
                 ext -> A   [particle=a]
                 C -> A    [particle="b"]
+                A -> B
                 A -> D    [particle="b"]
                 D -> B    [particle="b"]
                 B -> C    [particle="b"]
@@ -786,7 +818,7 @@ pub mod test {
         );
 
         println!("{}", g.dot_serialize());
-        return;
+        // return;
         let num =
             Numerator::<UnInit>::default().from_new_graph(&g, &g.underlying.full_filter(), true);
 
@@ -827,10 +859,10 @@ pub mod test {
         let num = num.color_simplify();
 
         println!("{}", num.state.expr);
-        println!("{}", num.state.expr.to_dots());
-        let num = num.gamma_simplify();
+        // println!("{}", num.state.expr.to_dots());
+        // let num = num.gamma_simplify();
 
-        println!("{}", num.state.expr);
+        // println!("{}", num.state.expr);
     }
     #[test]
     fn parse_local() {
