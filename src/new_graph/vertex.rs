@@ -39,7 +39,7 @@ use super::{
 pub struct Vertex {
     // #[bincode(with_serde)]
     pub label: String,
-    pub vertex_rule: ArcVertexRule,
+    pub vertex_rule: Option<ArcVertexRule>,
     pub num: Atom,
     // pub num_spin: ParamTensor<OrderedStructure<Euclidean, Aind>>,
     // pub num_color: ParamTensor<OrderedStructure<Euclidean, Aind>>,
@@ -56,7 +56,9 @@ impl From<&Vertex> for DotVertexData {
     fn from(value: &Vertex) -> Self {
         let mut v = DotVertexData::empty();
         v.add_statement("label", value.label.clone());
-        v.add_statement("int_id", value.vertex_rule.name.as_str());
+        if let Some(vertex_rule) = &value.vertex_rule {
+            v.add_statement("int_id", vertex_rule.name.as_str());
+        }
         v.add_statement("dod", value.dod);
         v.add_statement("num", value.num.to_quoted());
         v
@@ -67,7 +69,7 @@ impl Vertex {}
 #[derive(Debug, Clone)]
 pub struct ParseVertex {
     pub label: Option<String>,
-    pub vertex_rule: ArcVertexRule,
+    pub vertex_rule: Option<ArcVertexRule>,
     pub num: Option<Atom>,
     pub dod: Option<i32>,
 }
@@ -88,7 +90,7 @@ impl From<ArcVertexRule> for ParseVertex {
     fn from(vertex_rule: ArcVertexRule) -> Self {
         ParseVertex {
             label: None,
-            vertex_rule,
+            vertex_rule: Some(vertex_rule),
             dod: None,
             num: None,
         }
@@ -109,19 +111,21 @@ impl ParseVertex {
 
             let dod = v.get::<_, i32>("dod").transpose()?;
 
-            let num = v
-                .get::<_, String>("num")
-                .transpose()?
-                .map(|a| a.strip_parse());
-
-            if let Some(n) = v.get::<_, String>("int_id") {
-                let vertex_rule = model.get_vertex_rule(n.unwrap());
+            if let Some(num) = v.get::<_, String>("num") {
+                Ok(ParseVertex {
+                    dod,
+                    label,
+                    vertex_rule: None,
+                    num: Some(<String as StripParse<Atom>>::strip_parse(&num?)),
+                })
+            } else if let Some(n) = v.get::<_, String>("int_id") {
+                let vertex_rule = Some(model.get_vertex_rule(n.unwrap()));
 
                 Ok(ParseVertex {
                     dod,
                     label,
                     vertex_rule,
-                    num,
+                    num: None,
                 })
             } else {
                 let mut node_id = NodeIndex(0);
@@ -157,8 +161,8 @@ impl ParseVertex {
                         Ok(ParseVertex {
                             dod,
                             label,
-                            vertex_rule: res[0].clone(),
-                            num,
+                            vertex_rule: Some(res[0].clone()),
+                            num: None,
                         })
                     } else {
                         Err(eyre!("Multiple vertex rules for {:?}", particles))

@@ -143,18 +143,29 @@ impl ParseGraph {
         for (_, neighs, v) in self.iter_nodes() {
             let mut particles = Vec::new();
 
-            for p in &v.vertex_rule.particles {
-                particles.push(Some(p.clone()));
-            }
+            let name = if let Some(vertex_rule) = &v.vertex_rule {
+                for p in &vertex_rule.particles {
+                    particles.push(Some(p.clone()));
+                }
+                vertex_rule.name.clone()
+            } else {
+                "AAAAAAAAA".into()
+            };
+
+            let mut other_order = particles.len();
 
             for h in neighs {
                 let eid = self[&h];
 
                 if self[eid].is_dummy {
+                    hedges[h.0] = Some(other_order as u8);
+                    other_order += 1;
                     continue;
                 }
 
                 let Some(particle) = self[eid].particle.particle() else {
+                    hedges[h.0] = Some(other_order as u8);
+                    other_order += 1;
                     continue;
                 };
                 let particle = Some(match self.orientation(h).relative_to(-self.flow(h)) {
@@ -168,7 +179,7 @@ impl ParseGraph {
                     return Err(eyre!(
                         "Particle {} not in vertex rule {}",
                         particle.map(|a| a.name.clone()).unwrap_or("None".into()),
-                        v.vertex_rule.name
+                        name
                     ));
                 }
             }
@@ -350,8 +361,12 @@ impl Graph {
             perm.apply_slice_in_place(&mut color_slots);
             perm.apply_slice_in_place(&mut spin_slots);
 
+            let Some(vertex_rule) = &v.vertex_rule else {
+                continue;
+            };
+
             let [mut color_structure, mut couplings, mut spin_structure] =
-                v.vertex_rule.tensors(ni.aind(1), ni.aind(0));
+                vertex_rule.tensors(ni.aind(1), ni.aind(0));
 
             spin_structure.map_data_mut(|a| {
                 *a = UFO.reindex_spin(&spin_slots, &momenta, a.clone(), |u| ni.aind(u as u16));

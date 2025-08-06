@@ -433,22 +433,26 @@ impl FeynmanGraph for HedgeGraph<Edge, Vertex, NumHedgeData> {
             // include the values of all couplings
             let coupling_value = vertex
                 .vertex_rule
-                .couplings
-                .iter()
-                .flat_map(|couplings| {
-                    couplings.iter().map(|coupling| {
-                        coupling
-                            .as_ref()
-                            .map(|coupling| {
+                .as_ref()
+                .map(|r| {
+                    r.couplings
+                        .iter()
+                        .flat_map(|couplings| {
+                            couplings.iter().map(|coupling| {
                                 coupling
-                                    .value
-                                    .map(|x| Complex::new(F(x.re), F(x.im)))
+                                    .as_ref()
+                                    .map(|coupling| {
+                                        coupling
+                                            .value
+                                            .map(|x| Complex::new(F(x.re), F(x.im)))
+                                            .unwrap_or(Complex::new_re(F(1.0)))
+                                    })
                                     .unwrap_or(Complex::new_re(F(1.0)))
                             })
-                            .unwrap_or(Complex::new_re(F(1.0)))
-                    })
+                        })
+                        .fold(Complex::new_re(F(1.0)), |product, term| product * term)
                 })
-                .fold(Complex::new_re(F(1.0)), |product, term| product * term);
+                .unwrap_or(Complex::new_re(F(1.0)));
 
             scale *= Complex::new_re(e_cm.powi(vertex.dod)) * coupling_value;
         }
