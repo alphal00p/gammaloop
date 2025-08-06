@@ -842,6 +842,18 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
             counterterm *= prefactor * &counterterm;
             counterterms.push(counterterm);
         }
+
+        let counterterm_evaluators = counterterms
+            .iter()
+            .map(|ct| {
+                let params = self.ct_params(model);
+                let function_map = self.get_function_map();
+
+                GenericEvaluator::new(&ct, &function_map, &params, Some(1))
+            })
+            .collect();
+
+        self.derived_data.threshold_counterterms = Some(counterterm_evaluators);
     }
 
     pub fn build_evaluator(&mut self, model: &Model) {
@@ -1017,6 +1029,7 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
             graph: self.graph.clone(),
             multi_channeling_setup: self.derived_data.multi_channeling_setup.clone().unwrap(),
             lmbs: self.derived_data.lmbs.clone().unwrap(),
+            counterterm_evaluators: self.derived_data.threshold_counterterms.clone().unwrap(),
             estimated_scale,
         }
     }
