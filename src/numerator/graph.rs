@@ -160,18 +160,78 @@ impl ReversibleEdge for EdgeData<&Edge> {
 mod test {
 
     use env_logger::WriteStyle;
-    use log::LevelFilter;
+    use log::{debug, LevelFilter};
     use spenso::structure::HasStructure;
     use symbolica::atom::AtomCore;
 
     use crate::{
         dot,
         new_cs::Amplitude,
-        new_graph::{parse::IntoGraph, Graph},
+        new_graph::{parse::IntoGraph, FeynmanGraph, Graph},
         numerator::UnInit,
         uv::UltravioletGraph,
         KinematicsSettings, ProcessSettings, Settings,
     };
+
+    #[test]
+    fn two_photons() {
+        let _ = env_logger::Builder::new()
+            .filter(None, LevelFilter::Debug)
+            .write_style(WriteStyle::Always)
+            .is_test(true)
+            .try_init();
+        // let _ = env_logger::builder().is_test(true).try_init();
+
+        let model = crate::tests_from_pytest::load_generic_model("sm");
+
+        let graph: Graph = dot!(
+        digraph physical_1L_6photons_0 {
+            edge[dod=-1000]
+            node[dod=-1000]
+            ext    [style=invis]
+            ext -> v1 [particle=a id=1];
+            v2 -> ext [particle=a id=0];
+            v1 -> v2 [pdg=1];
+            v2 -> v1 [pdg=1];
+        })
+        .unwrap();
+        println!("{}", graph.dot_serialize());
+        let reps = graph.get_ose_replacements();
+        for r in reps {
+            println!("{r}")
+        }
+        // return;
+
+        let mut amp: Amplitude<UnInit> = Amplitude::new("name".into());
+
+        let mut settings = Settings::default();
+
+        settings.kinematics = KinematicsSettings::random(&graph, 42);
+        amp.add_graph(graph).unwrap();
+        // Amplitude::new(name)
+
+        let proc_set = ProcessSettings::default();
+
+        amp.preprocess(&model, &proc_set);
+        let integrand = amp.generate_integrand(settings, &model);
+
+        // println!("{}", a.factor());
+
+        //     let mut amp: Amplitude<UnInit> = Amplitude::new("name".into());
+        //     let mut settings = Settings::default();
+        //     for g in graphs {
+        //         settings.kinematics = KinematicsSettings::random(&g, 42);
+        //         amp.add_graph(g).unwrap();
+        //         // Amplitude::new(name)
+        //     }
+
+        //     let proc_set = ProcessSettings::default();
+
+        //     amp.preprocess(&model, &proc_set).unwrap();
+
+        //     let integrand = amp.generate_integrand(settings, &model);
+        // }
+    }
 
     #[test]
     fn six_photons() {
@@ -187,21 +247,26 @@ mod test {
         let graph: Graph = dot!(
         digraph physical_1L_6photons_0 {
             ext    [style=invis]
-        ext -> v7 [particle=a];
-        ext -> v8 [particle=a];
-        v9 -> ext [particle=a];
-        v10 -> ext [particle=a];
-        v11 -> ext [particle=a];
-        v12 -> ext [particle=a];
-        v7 -> v8 [pdg=6];
-        v8 -> v9 [pdg=6];
-        v9 -> v10 [pdg=6];
-        v10 -> v11 [pdg=6];
-        v11 -> v12 [pdg=6];
-        v12 -> v7 [pdg=6];
+            ext -> v7 [particle=a];
+            ext -> v8 [particle=a];
+            v9 -> ext [particle=a];
+            v10 -> ext [particle=a];
+            v11 -> ext [particle=a];
+            v12 -> ext [particle=a];
+            v7 -> v8 [pdg=6];
+            v8 -> v9 [pdg=6];
+            v9 -> v10 [pdg=6];
+            v10 -> v11 [pdg=6];
+            v11 -> v12 [pdg=6];
+            v12 -> v7 [pdg=6];
         })
         .unwrap();
         println!("{}", graph.dot_serialize());
+        let reps = graph.get_ose_replacements();
+        for r in reps {
+            println!("{r}")
+        }
+        // return;
 
         let mut amp: Amplitude<UnInit> = Amplitude::new("name".into());
 
@@ -213,8 +278,15 @@ mod test {
 
         let proc_set = ProcessSettings::default();
 
-        amp.preprocess(&model, &proc_set).unwrap();
+        // amp.graphs[0].generate_cff().unwrap();
+        // let a = amp.graphs[0].build_all_orientations_integrand_atom();
+        // println!("{:>}", a);
+        // debug!("Generating Cff");
+        // amp.graphs[0].generate_cff().unwrap();
+        // debug!("Building Evaluator");
+        // amp.graphs[0].build_evaluator(&model);
 
+        amp.preprocess(&model, &proc_set);
         let integrand = amp.generate_integrand(settings, &model);
 
         // println!("{}", a.factor());

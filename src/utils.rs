@@ -10,6 +10,7 @@ use crate::SamplingSettings;
 use crate::{ParameterizationMapping, ParameterizationMode, MAX_LOOP};
 use bincode::{Decode, Encode};
 use colored::Colorize;
+use idenso::metric::MS;
 use idenso::representations::initialize;
 use itertools::{izip, Itertools};
 use linnet::half_edge::involution::EdgeIndex;
@@ -27,17 +28,19 @@ use spenso::algebra::complex::R;
 use spenso::algebra::upgrading_arithmetic::TrySmallestUpgrade;
 use spenso::network::library::symbolic::{ExplicitKey, TensorLibrary};
 use spenso::network::library::TensorLibraryData;
-use spenso::structure::concrete_index::FlatIndex;
+use spenso::structure::concrete_index::{ExpandedIndex, FlatIndex};
+use spenso::structure::representation::{Minkowski, RepName};
 use spenso::tensors::parametric::to_param::ToAtom;
 use spenso::tensors::parametric::MixedTensor;
 use spenso_hep_lib::hep_lib;
-use symbolica::atom::{AtomOrView, FunctionBuilder, Symbol};
+use symbolica::atom::{AtomCore, AtomOrView, FunctionBuilder, Symbol};
 use symbolica::coefficient::Coefficient;
 use symbolica::domains::float::{
     ConstructibleFloat, NumericalFloatLike, RealNumberLike, SingleFloat,
 };
 use symbolica::domains::integer::Integer;
 use symbolica::evaluate::CompiledEvaluatorFloat;
+use symbolica::id::Replacement;
 use symbolica::{function, parse, symbol};
 
 use statrs::function::gamma::{gamma, gamma_lr, gamma_ur};
@@ -3366,6 +3369,14 @@ pub struct GammaloopSymbols {
     pub uv_damp: Symbol,
 }
 
+impl GammaloopSymbols {
+    // pub fn emr_mom<'a>(&self, edge: EdgeIndex, arg: impl Into<AtomOrView<'a>>) -> Atom {
+    //     let arg = arg.into().as_view();
+
+    //     function!(self.emr_mom, edge, arg)
+    // }
+}
+
 pub static TENSORLIB: LazyLock<TensorLibrary<MixedTensor<F<f64>, ExplicitKey<Aind>>, Aind>> =
     LazyLock::new(|| hep_lib(F(1.), F(0.)));
 
@@ -3498,6 +3509,28 @@ impl GammaloopSymbols {
     pub fn emr_mom<'a>(&self, e: EdgeIndex, arg: impl Into<AtomOrView<'a>>) -> Atom {
         let a = arg.into();
         function!(self.emr_mom, usize::from(e) as i64, a.as_view())
+    }
+
+    pub fn split_mom_pattern<'a>(&self, e: EdgeIndex, e_mass: Atom) -> Replacement {
+        let eidc = usize::from(e) as i64;
+        Replacement::new(
+            self.emr_mom(e, Minkowski {}.to_symbolic([W_.a__]))
+                .to_pattern(),
+            function!(
+                GS.ose,
+                eidc,
+                function!(GS.emr_vec, eidc),
+                &e_mass * &e_mass,
+                (-function!(
+                    MS.dot,
+                    function!(GS.emr_vec, eidc),
+                    function!(GS.emr_vec, eidc)
+                ) + &e_mass * &e_mass)
+                    .npow((1, 2)),
+                Minkowski {}.to_symbolic([W_.a__])
+            ) * sign_atom(e)
+                + function!(GS.emr_vec, eidc, Minkowski {}.to_symbolic([W_.a__])),
+        )
     }
 }
 
@@ -3696,9 +3729,5 @@ pub fn cut_energy(index: EdgeIndex) -> Atom {
 }
 
 pub fn external_energy_atom_from_index(index: EdgeIndex) -> Atom {
-    function!(
-        GS.external_mom,
-        usize::from(index) as i64,
-        Atom::from(FlatIndex::from(0))
-    )
+    GS.emr_mom(index, Atom::from(ExpandedIndex::from_iter([0])))
 }

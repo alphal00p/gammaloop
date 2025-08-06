@@ -45,13 +45,19 @@ set externals.data.helicities [-1,-1,-1,-1,-1,-1]
 # With set_model_param ymt 173.0 -nu
 #3*MP_AMPL(*,          20 )= (-4.33681645839370799E-014,-5.91469876571509264E-012)
 #3*MP_AMPL(*,          20 )= (-4.33681673828354573E-014,-5.91469876522058322E-012)
-set sampling {'type':'discrete_graph_sampling','subtype':'tropical'}
-#set sampling {'type':'default'}
-set n_start 10000
-set n_max 1000000000000
+set max_prob_ratio 1000.0
+set train_on_avg False
+set discrete_dim_learning_rate 0.0
+set continuous_dim_learning_rate 0.0
+set rotation_axis [{'type':'euler_angles','alpha': 0.1,'beta':0.45,'gamma':0.88}]
+#set rotation_axis []
+set n_start 1000000
+set n_max 100000000
+set sampling {'type':'default','mode':'spherical','b':1.0,'mapping':'linear'}
+
 set continuous_dim_learning_rate 0.0
 set seed 1
 #With set_model_param ymt 1500.0 -nu
-#integrate physical_1L_6photons -r -c 8 -t (1.22898408452706e-13,3.94362534040412e-13)
+#integrate default -r -c 8 -t (1.22898408452706e-13,3.94362534040412e-13)
 # With set_model_param ymt 173.0 -nu
-integrate physical_1L_6photons -r -c 16 -t (9.27759500687454717e-11,3.68394576249870544e-11)
+integrate default -r -c 16 -t (9.27759500687454717e-11,3.68394576249870544e-11)

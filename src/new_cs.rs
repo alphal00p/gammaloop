@@ -481,7 +481,7 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
         }
     }
 
-    fn generate_cff(&mut self) -> Result<()> {
+    pub(crate) fn generate_cff(&mut self) -> Result<()> {
         let shift_rewrite = self
             .graph
             .underlying
@@ -583,6 +583,18 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
     fn get_function_map(&self) -> FunctionMap {
         let mut fn_map = FunctionMap::new();
         let pi_rational = Rational::from(std::f64::consts::PI);
+
+        for (p, e, d) in self.graph.iter_edges() {
+            fn_map
+                .add_tagged_function(
+                    GS.ose,
+                    vec![Atom::num(e.0 as i64)],
+                    format!("OSE{e}"),
+                    vec![],
+                    self.graph.explicit_ose_atom(e),
+                )
+                .unwrap()
+        }
         fn_map.add_constant(Atom::PI.into(), pi_rational.into());
         fn_map
     }
@@ -593,7 +605,7 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
             (Atom::var(Atom::PI) * 2).npow(3 * self.graph.underlying.get_loop_number() as i64);
 
         let result = cff_atom / factors_of_pi;
-        debug!("result: {}", result);
+        // debug!("result: {}", result);
         result
     }
 
@@ -771,45 +783,45 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
             .map(|cff_graph| cff_graph.global_orientation)
             .collect::<TiVec<SubgraphOrientationID, _>>();
 
-            circled_forest.compute(
-                &self.graph,
-                &circled,
-                &circled_orientations,
-                &canonize_esurface,
-                &esurface.energies,
-            );
+            // circled_forest.compute(
+            //     &self.graph,
+            //     &circled,
+            //     &circled_orientations,
+            //     &canonize_esurface,
+            //     &esurface.energies,
+            // );
 
-            complement_forest.compute(
-                &self.graph,
-                &complement,
-                &complement_orientations,
-                &canonize_esurface,
-                &esurface.energies,
-            );
+            // complement_forest.compute(
+            //     &self.graph,
+            //     &complement,
+            //     &complement_orientations,
+            //     &canonize_esurface,
+            //     &esurface.energies,
+            // );
 
             let mut counterterm = Atom::new();
             for orientation in orientations {
-                let circled_expr = circled_forest.local_expr(
-                    &full_orientation_list[orientation],
-                    Some(&edges_in_cut),
-                    &self.graph,
-                );
+                // let circled_expr = circled_forest.local_expr(
+                //     &full_orientation_list[orientation],
+                //     Some(&edges_in_cut),
+                //     &self.graph,
+                // );
 
-                let complement_expr = complement_forest.local_expr(
-                    &full_orientation_list[orientation],
-                    Some(&edges_in_cut),
-                    &self.graph,
-                );
+                // let complement_expr = complement_forest.local_expr(
+                //     &full_orientation_list[orientation],
+                //     Some(&edges_in_cut),
+                //     &self.graph,
+                // );
 
-                let product = circled_expr * complement_expr;
-                // let orientation_result = do_replacement_rules(
+                // let product = circled_expr * complement_expr;
+                // // let orientation_result = do_replacement_rules(
                 //     product,
                 //     &self.graph.underlying,
                 //     &full_orientation_list[orientation].orientation,
                 //     Some(&edges_in_cut),
                 // );
 
-                counterterm += product;
+                // counterterm += product;
             }
 
             let loop_3 = self.graph.underlying.get_loop_number() as i64 * 3;

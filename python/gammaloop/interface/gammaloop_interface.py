@@ -626,18 +626,18 @@ class GammaLoop(object):
             processed_yaml_model = self.model.to_yaml()
             self.rust_worker.load_model_from_yaml_str(processed_yaml_model)
 
-            if not args.no_overwrite:
-                ParamCardWriter.write(
-                    self.launched_output.joinpath('cards', 'param_card.dat'), self.model, generic=True)
-                logger.debug("Successfully updated param card '%s' with new value of parameter '%s%s%s' to %s%f%s",
-                             self.launched_output.parent.joinpath('cards', 'param_card.dat'), Colour.GREEN, args.param, Colour.END, Colour.BLUE, args.value, Colour.END)
-                with open(self.launched_output.joinpath('output_metadata.yaml'), 'r', encoding='utf-8') as file:
-                    output_metadata = OutputMetaData.from_yaml_str(file.read())
-                self.launched_output.joinpath('cards', 'param_card.dat')
-                with open(self.launched_output.joinpath('sources', 'model', f"{output_metadata['model_name']}.yaml"), 'w', encoding='utf-8') as file:
-                    file.write(processed_yaml_model)
-                logger.debug("Successfully updated YAML model sources '%s'.", self.launched_output.joinpath(
-                    'sources', 'model', f"{output_metadata['model_name']}.yaml"))
+            # if not args.no_overwrite:
+                # ParamCardWriter.write(
+                #     self.launched_output.joinpath('cards', 'param_card.dat'), self.model, generic=True)
+                # logger.debug("Successfully updated param card '%s' with new value of parameter '%s%s%s' to %s%f%s",
+                #              self.launched_output.parent.joinpath('cards', 'param_card.dat'), Colour.GREEN, args.param, Colour.END, Colour.BLUE, args.value, Colour.END)
+                # with open(self.launched_output.joinpath('output_metadata.yaml'), 'r', encoding='utf-8') as file:
+                #     output_metadata = OutputMetaData.from_yaml_str(file.read())
+                # self.launched_output.joinpath('cards', 'param_card.dat')
+                # with open(self.launched_output.joinpath('sources', 'model', f"{output_metadata['model_name']}.yaml"), 'w', encoding='utf-8') as file:
+                #     file.write(processed_yaml_model)
+                # logger.debug("Successfully updated YAML model sources '%s'.", self.launched_output.joinpath(
+                #     'sources', 'model', f"{output_metadata['model_name']}.yaml"))
 
     # show_settings command
     show_settings = ArgumentParser(prog='show_settings')
@@ -1375,6 +1375,7 @@ class GammaLoop(object):
 
         export_config = yaml.dump(self.config['export_settings'])
         self.rust_worker.preprocess(export_config)
+        # print("Preprocessing complete.")
         self.rust_worker.export(args.output_path)
 
     #

@@ -1,7 +1,6 @@
 digraph triangle {
     graph [
         overall_factor = -1;
-        multiplicity_factor = 1;
     ]
     edge [
         pdg=1000
@@ -9,7 +8,7 @@ digraph triangle {
     ext [style=invis]
     ext -> v4 [name=p1, mom=p1,num="Q(eid,spenso::mink(4,10))"];
     ext -> v5 [name=p2, mom=p2];
-    v6 -> ext [name=p3, mom=p3]; 
+    v6 -> ext [name=p3, mom=p3];
     v5 -> v4 [name=q1,lmb_index=0, num="Q(eid,spenso::mink(4,10))"];
     v6 -> v5 [name=q2];
     v4 -> v6 [name=q3];

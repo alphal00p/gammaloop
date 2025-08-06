@@ -1,7 +1,6 @@
 digraph triangle {
     graph [
         overall_factor = 1;
-        multiplicity_factor = 1;
     ]
     edge [
         pdg=1000

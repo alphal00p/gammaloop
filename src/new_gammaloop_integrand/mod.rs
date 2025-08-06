@@ -20,6 +20,7 @@ use momtrop::SampleGenerator;
 use serde::{Deserialize, Serialize};
 use spenso::algebra::algebraic_traits::IsZero;
 use spenso::algebra::complex::Complex;
+use spenso::structure::concrete_index::ExpandedIndex;
 use spenso::tensors::parametric::SerializableCompiledEvaluator;
 use std::time::Duration;
 use symbolica::atom::{Atom, AtomCore};
@@ -1111,11 +1112,10 @@ impl<T: FloatLike> ParamBuilder<T> {
             .iter_edges()
             .flat_map(|(pair, edge_id, _)| {
                 if let HedgePair::Unpaired { .. } = pair {
-                    let i64_id = Into::<usize>::into(edge_id) as i64;
                     vec![
-                        function!(GS.external_mom, i64_id, 1),
-                        function!(GS.external_mom, i64_id, 2),
-                        function!(GS.external_mom, i64_id, 3),
+                        GS.emr_mom(edge_id, Atom::from(ExpandedIndex::from_iter([1]))),
+                        GS.emr_mom(edge_id, Atom::from(ExpandedIndex::from_iter([2]))),
+                        GS.emr_mom(edge_id, Atom::from(ExpandedIndex::from_iter([3]))),
                     ]
                 } else {
                     vec![]
@@ -1137,11 +1137,10 @@ impl<T: FloatLike> ParamBuilder<T> {
             .iter_edges()
             .flat_map(|(pair, edge_id, _)| {
                 if let HedgePair::Paired { .. } = pair {
-                    let i64_id = Into::<usize>::into(edge_id) as i64;
                     vec![
-                        function!(GS.emr_vec, i64_id, 1),
-                        function!(GS.emr_vec, i64_id, 2),
-                        function!(GS.emr_vec, i64_id, 3),
+                        GS.emr_mom(edge_id, Atom::from(ExpandedIndex::from_iter([1]))),
+                        GS.emr_mom(edge_id, Atom::from(ExpandedIndex::from_iter([2]))),
+                        GS.emr_mom(edge_id, Atom::from(ExpandedIndex::from_iter([3]))),
                     ]
                 } else {
                     vec![]

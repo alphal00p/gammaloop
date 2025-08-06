@@ -13,7 +13,10 @@ use ahash::AHashSet;
 use bitvec::vec::BitVec;
 use idenso::metric::MS;
 use log::debug;
-use spenso::{structure::HasStructure, tensors::parametric::atomcore::PatternReplacement};
+use spenso::{
+    structure::{concrete_index::ExpandedIndex, HasStructure},
+    tensors::parametric::atomcore::PatternReplacement,
+};
 use symbolica::{
     atom::{Atom, AtomCore, FunctionBuilder, Symbol},
     function,
@@ -751,7 +754,7 @@ impl Approximation {
             * uv_graph
                 .numerator(&reduced, false)
                 .color_simplify()
-                .gamma_simplify()
+                // .gamma_simplify()
                 .get_single_atom()
                 .unwrap();
 
@@ -761,36 +764,15 @@ impl Approximation {
         // );
 
         // split numerator momenta into OSEs and spatial parts
+        let mut reps = Vec::new();
         for (p, eid, e) in graph.iter_edges_of(&self.subgraph) {
-            let eidc = usize::from(eid) as i64;
             if p.is_paired() {
                 let e_mass = e.data.mass_atom();
-
-                atomarg = atomarg
-                    .replace(function!(GS.emr_mom, eidc, W_.x___))
-                    .with_map(move |m| {
-                        let index = m.get(W_.x___).unwrap().to_atom();
-
-                        let sign = sign_atom(eid);
-
-                        function!(
-                            GS.ose,
-                            eidc,
-                            function!(GS.emr_vec, eidc),
-                            &e_mass * &e_mass,
-                            -function!(
-                                MS.dot,
-                                function!(GS.emr_vec, eidc),
-                                function!(GS.emr_vec, eidc)
-                            ) + &e_mass * &e_mass,
-                            index
-                        )
-                        .npow((1, 2))
-                            * sign
-                            + function!(GS.emr_vec, eidc, index)
-                    });
+                reps.push(GS.split_mom_pattern(eid, e_mass));
             }
         }
+
+        atomarg = atomarg.replace_multiple(&reps);
 
         // only apply replacements for edges in the reduced graph
         let mom_reps = graph.uv_spatial_wrapped_replacement(&reduced, &self.lmb, &[W_.x___]);
@@ -977,28 +959,13 @@ impl Approximation {
                 cff = cff
                     .replace(function!(GS.energy, eid))
                     .with(function!(GS.ose, eid));
-
-                let e_mass = parse!(&e.data.particle.mass.name);
-                cff = cff.replace(function!(GS.ose, eid)).with(
-                    function!(
-                        GS.ose,
-                        eid,
-                        function!(GS.emr_vec, eid),
-                        &e_mass * &e_mass,
-                        -function!(
-                            MS.dot,
-                            function!(GS.emr_vec, eid),
-                            function!(GS.emr_vec, eid)
-                        ) + &e_mass * &e_mass
-                    )
-                    .npow((1, 2)),
-                );
             }
         }
 
-        let mut res = graph
-            .numerator(&reduced, true)
-            .color_simplify()
+        let mut resnum = graph.numerator(&reduced, true).color_simplify();
+
+        resnum.state.expr *= cff;
+        let mut res = resnum
             .parse()
             .unwrap()
             .contract(())
@@ -1006,42 +973,18 @@ impl Approximation {
             .state
             .tensor
             .scalar()
-            .unwrap()
-            * cff;
+            .unwrap();
 
-        // set the momenta flowing through the reduced graph edges to the identity wrt the supergraph
         for (p, eid, e) in graph.as_ref().iter_edges_of(&reduced) {
-            let eidc = usize::from(eid) as i64;
             if p.is_paired() {
-                let e_mass = parse!(&e.data.particle.mass.name);
                 res = res
-                    .replace(function!(GS.emr_mom, eidc, W_.x___))
-                    .with_map(move |m| {
-                        let index = m.get(W_.x___).unwrap().to_atom();
-
-                        let sign = sign_atom(eid);
-
-                        function!(
-                            GS.ose,
-                            eidc,
-                            function!(GS.emr_vec, eidc),
-                            &e_mass * &e_mass,
-                            -function!(
-                                MS.dot,
-                                function!(GS.emr_vec, eidc),
-                                function!(GS.emr_vec, eidc)
-                            ) + &e_mass * &e_mass,
-                            index
-                        )
-                        .npow((1, 2))
-                            * sign
-                            + function!(GS.emr_vec, eidc, index)
-                    });
+                    .replace(GS.emr_mom(eid, Atom::from(ExpandedIndex::from_iter([0]))))
+                    .with(function!(GS.ose, eid.0 as i64));
             }
         }
 
-        debug!("final_cff {res:>}");
-        Some(do_replacement_rules(res, graph, cut_edges))
+        // debug!("final_cff {res:>}");
+        Some(res)
     }
 
     // pub fn simple_expr(

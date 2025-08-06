@@ -11,7 +11,10 @@ use linnet::half_edge::{
 use log::debug;
 use momtrop::float::MomTropFloat;
 
-use spenso::algebra::{algebraic_traits::IsZero, complex::Complex};
+use spenso::{
+    algebra::{algebraic_traits::IsZero, complex::Complex},
+    structure::concrete_index::ExpandedIndex,
+};
 // use petgraph::Direction::Outgoing;
 use idenso::metric::MS;
 use symbolica::{
@@ -393,8 +396,12 @@ impl FeynmanGraph for HedgeGraph<Edge, Vertex, NumHedgeData> {
         let mass = self[edge].particle.symbolic_mass();
         let mass2 = &mass * &mass;
 
-        let emr_vec = function!(GS.emr_vec, Into::<usize>::into(edge) as i64);
-        let dot = function!(MS.dot, emr_vec, emr_vec);
+        let dot = GS.emr_mom(edge, Atom::from(ExpandedIndex::from_iter([1])))
+            * GS.emr_mom(edge, Atom::from(ExpandedIndex::from_iter([1])))
+            + GS.emr_mom(edge, Atom::from(ExpandedIndex::from_iter([2])))
+                * GS.emr_mom(edge, Atom::from(ExpandedIndex::from_iter([2])))
+            + GS.emr_mom(edge, Atom::from(ExpandedIndex::from_iter([3])))
+                * GS.emr_mom(edge, Atom::from(ExpandedIndex::from_iter([3])));
 
         (mass2 - dot).sqrt()
     }
