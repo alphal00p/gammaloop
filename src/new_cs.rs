@@ -895,10 +895,7 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
             .graph
             .iter_loop_edges()
             .map(|(pair, _edge_id, edge)| {
-                let is_massive = match edge.data.particle.0.mass.value {
-                    Some(complex_mass) => complex_mass.is_non_zero(),
-                    None => false,
-                };
+                let is_massive = edge.data.particle.is_massive();
 
                 let vertices = match pair {
                     HedgePair::Paired { source, sink } => (
@@ -1040,9 +1037,7 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
             settings.kinematics.e_cm,
         );
 
-        let edge_masses = self
-            .graph
-            .new_edgevec(|edge, _, _| edge.particle.0.mass.value);
+        let edge_masses = self.graph.new_edgevec(|edge, _, _| edge.mass_value());
 
         let overlap = find_maximal_overlap(
             &self.graph.loop_momentum_basis,
@@ -1894,12 +1889,12 @@ impl CrossSectionCut {
             let cut_content_builder = self
                 .cut
                 .iter_edges(&cross_section_graph.graph.underlying)
-                .map(|(orientation, edge_data)| {
-                    if orientation == Orientation::Reversed {
-                        edge_data.data.particle.0.get_anti_particle(model)
+                .filter_map(|(orientation, edge_data)| {
+                    Some(if orientation == Orientation::Reversed {
+                        edge_data.data.particle()?.get_anti_particle(model)
                     } else {
-                        edge_data.data.particle.clone()
-                    }
+                        edge_data.data.particle()?.clone()
+                    })
                 })
                 .collect_vec();
 
@@ -1914,7 +1909,7 @@ impl CrossSectionCut {
                     let mut cut_content = cut_content_builder.clone();
                     debug!(
                         "cut content: {:?}",
-                        cut_content.iter().map(|p| p.0.pdg_code).collect_vec()
+                        cut_content.iter().map(|p| p.name.clone()).collect_vec()
                     );
 
                     for particle in particle_content {

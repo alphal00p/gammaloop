@@ -15,7 +15,10 @@ use symbolica::{
 
 use crate::{
     momentum_sample::LoopIndex,
-    new_graph::{Edge, FeynmanGraph, Graph, LMBext, LoopMomentumBasis, NumHedgeData, Vertex},
+    new_graph::{
+        edge::PossibleParticle, Edge, FeynmanGraph, Graph, LMBext, LoopMomentumBasis, NumHedgeData,
+        Vertex,
+    },
     numerator::{AppliedFeynmanRule, Numerator},
     symbolica_ext::CallSymbol,
     utils::{GS, W_},
@@ -229,7 +232,7 @@ impl UltravioletGraph for Graph {
 
         for (pair, eid, d) in self.underlying.iter_edges_of(subgraph) {
             if matches!(pair, HedgePair::Paired { .. }) {
-                let m2 = parse!(d.data.particle.mass.name).npow(2);
+                let m2 = d.data.mass_atom().npow(2);
                 den = den
                     * function!(
                         GS.den,
@@ -281,6 +284,9 @@ pub trait UVE {
 
 impl UVE for Edge {
     fn mass_atom(&self) -> Atom {
-        parse!(&self.particle.mass.name)
+        match &self.particle {
+            PossibleParticle::JustMass { expr, .. } => expr.clone(),
+            PossibleParticle::Particle(p) => parse!(&p.mass.name),
+        }
     }
 }

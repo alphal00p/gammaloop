@@ -31,6 +31,7 @@ use crate::{
     momentum_sample::{ExternalFourMomenta, ExternalIndex, LoopMomenta},
     signature::{ExternalSignature, SignatureLike},
     utils::{external_energy_atom_from_index, ose_atom_from_index, FloatLike, F, GS},
+    uv::uv_graph::UVE,
 };
 
 use super::{
@@ -268,7 +269,7 @@ impl FeynmanGraph for HedgeGraph<Edge, Vertex, NumHedgeData> {
     }
 
     fn get_real_mass_vector<T: FloatLike>(&self) -> EdgeVec<F<T>> {
-        self.new_edgevec(|edge, _edge_id, _| match edge.particle.0.mass.value {
+        self.new_edgevec(|edge, _edge_id, _| match edge.mass_value() {
             Some(mass) => F::from_ff64(mass.re),
             None => F::from_f64(0.0),
         })
@@ -290,7 +291,7 @@ impl FeynmanGraph for HedgeGraph<Edge, Vertex, NumHedgeData> {
                     if p.is_paired() {
                         emr_mom
                             .spatial
-                            .on_shell_energy(edge.data.particle.0.mass.value.map(|m| {
+                            .on_shell_energy(edge.data.mass_value().map(|m| {
                                 if m.im.is_non_zero() {
                                     panic!("Complex masses not yet supported in gammaLoop")
                                 }
@@ -366,7 +367,7 @@ impl FeynmanGraph for HedgeGraph<Edge, Vertex, NumHedgeData> {
     fn get_external_partcles(&self) -> Vec<ArcParticle> {
         self.iter_edges()
             .filter_map(|(pair, _, data)| match pair {
-                HedgePair::Unpaired { .. } => Some(data.data.particle.clone()),
+                HedgePair::Unpaired { .. } => data.data.particle(),
                 _ => None,
             })
             .collect()
@@ -393,7 +394,7 @@ impl FeynmanGraph for HedgeGraph<Edge, Vertex, NumHedgeData> {
     }
 
     fn explicit_ose_atom(&self, edge: EdgeIndex) -> Atom {
-        let mass = self[edge].particle.symbolic_mass();
+        let mass = self[edge].mass_atom();
         let mass2 = &mass * &mass;
 
         let dot = GS.emr_mom(edge, Atom::from(ExpandedIndex::from_iter([1])))

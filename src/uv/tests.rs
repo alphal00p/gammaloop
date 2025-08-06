@@ -4,6 +4,7 @@ use crate::new_graph::global::ParseData;
 use crate::new_graph::hedge_data::ParseHedge;
 use crate::new_graph::parse::ParseGraph;
 use crate::new_graph::vertex::ParseVertex;
+use crate::uv::uv_graph::UVE;
 use itertools::Itertools;
 use linnet::half_edge::involution::Orientation;
 
@@ -913,7 +914,7 @@ fn tri_box_tri_LU() {
         // from this point no UV tests can be done anymore without t-scaling
         for (_p, edge_id, d) in super_uv_graph.iter_edges_of(&c.cut.left) {
             let e = usize::from(edge_id) as i64;
-            let mass2 = Atom::var(symbol!(d.data.particle.mass.name.as_str())).npow(2);
+            let mass2 = d.data.mass_atom().npow(2);
 
             cut_res = cut_res
                 .replace(function!(GS.energy, e))
@@ -1479,7 +1480,7 @@ fn double_triangle_LU() {
             // from this point no UV tests can be done anymore without t-scaling
             for (_p, edge_id, d) in super_uv_graph.iter_edges_of(&c.cut.left) {
                 let e = usize::from(edge_id) as i64;
-                let mass2 = Atom::var(symbol!(d.data.particle.mass.name.as_str())).npow(2);
+                let mass2 = d.data.mass_atom().npow(2);
 
                 cut_res = cut_res
                     .replace(function!(GS.energy, e))

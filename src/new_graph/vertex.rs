@@ -126,9 +126,13 @@ impl ParseVertex {
             } else {
                 let mut node_id = NodeIndex(0);
                 let mut particles: Vec<ArcParticle> = n
-                    .map(|h| {
+                    .filter_map(|h| {
                         node_id = g.node_id(h);
                         let eid = g[&h];
+                        if g[eid].is_dummy {
+                            return None;
+                        }
+
                         // println!(
                         //     "{:?}{:?}{:?}{}",
                         //     g.flow(h),
@@ -137,10 +141,12 @@ impl ParseVertex {
                         //     g[eid].particle.name
                         // );
                         let particle = match g.orientation(h).relative_to(g.flow(h)) {
-                            Orientation::Reversed => g[eid].particle.get_anti_particle(model),
-                            _ => g[eid].particle.clone(),
+                            Orientation::Reversed => {
+                                g[eid].particle.particle()?.get_anti_particle(model)
+                            }
+                            _ => g[eid].particle.particle()?.clone(),
                         };
-                        particle
+                        Some(particle)
                     })
                     .collect();
                 particles.sort();

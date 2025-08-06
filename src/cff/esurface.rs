@@ -531,9 +531,7 @@ pub fn generate_esurface_data(
     lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
     esurfaces: &EsurfaceCollection,
 ) -> Result<EsurfaceDerivedData, Report> {
-    let edge_masses = graph
-        .underlying
-        .new_edgevec(|edge, _, _| edge.particle.0.mass.value);
+    let edge_masses = graph.underlying.new_edgevec(|edge, _, _| edge.mass_value());
 
     let data = esurfaces
         .iter()

@@ -150,9 +150,16 @@ impl ParseGraph {
             for h in neighs {
                 let eid = self[&h];
 
+                if self[eid].is_dummy {
+                    continue;
+                }
+
+                let Some(particle) = self[eid].particle.particle() else {
+                    continue;
+                };
                 let particle = Some(match self.orientation(h).relative_to(-self.flow(h)) {
-                    Orientation::Reversed => self[eid].particle.get_anti_particle(model),
-                    _ => self[eid].particle.clone(),
+                    Orientation::Reversed => particle.get_anti_particle(model),
+                    _ => particle.clone(),
                 });
                 if let Some((pos, i)) = particles.iter_mut().find_position(|p| &&particle == p) {
                     *i = None;
@@ -296,8 +303,12 @@ impl Graph {
                         full_cut.sub(p);
                     }
 
-                    let prop =
-                        ArcPropagator(model.get_propagator_for_particle(&e.data.particle.name));
+                    let prop = e
+                        .data
+                        .particle
+                        .particle()
+                        .map(|p| model.get_propagator_for_particle(&p.name).numerator.clone())
+                        .unwrap_or(Atom::num(1));
 
                     color_num_e[eid] = graph[source].color_kronekers(&graph[sink]);
 
@@ -307,10 +318,9 @@ impl Graph {
                     ];
 
                     let momenta = [graph[&source], graph[&sink]];
-                    let spin_nume =
-                        UFO.reindex_spin(&spin_slots, &momenta, prop.numerator.clone(), |i| {
-                            Aind::Edge(usize::from(eid) as u16, i as u16)
-                        });
+                    let spin_nume = UFO.reindex_spin(&spin_slots, &momenta, prop, |i| {
+                        Aind::Edge(usize::from(eid) as u16, i as u16)
+                    });
 
                     // println!("{}", spin_nume);
                     spin_num_e[eid] = spin_nume;
@@ -392,9 +402,6 @@ impl Graph {
                     Edge {
                         is_dummy: e.is_dummy,
                         name: e.label.unwrap_or(eid.to_string()),
-                        propagator: ArcPropagator(
-                            model.get_propagator_for_particle(&e.particle.name),
-                        ),
                         particle: e.particle,
                         num,
                         dod,

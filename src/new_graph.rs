@@ -77,7 +77,7 @@ impl Graph {
         let ext = self.external_filter();
 
         for (p, i, d) in self.iter_edges_of(&ext) {
-            let hel = d.data.particle.random_helicity(seed);
+            let hel = d.data.random_helicity(seed);
             helicities.push(hel);
             if helicities.len() == 2 {
                 continue;
@@ -122,7 +122,7 @@ impl Graph {
             let massless_edges = lmb
                 .loop_edges
                 .iter()
-                .filter(|&edge_id| self.underlying[*edge_id].particle.0.is_massless())
+                .filter(|&edge_id| self.underlying[*edge_id].particle.is_massless())
                 .collect_vec();
 
             if massless_edges.is_empty() {
@@ -143,7 +143,7 @@ impl Graph {
                 let massless_edges_of_included_channel = lmbs[*channel]
                     .loop_edges
                     .iter()
-                    .filter(|&edge_id| self.underlying[*edge_id].particle.0.is_massless())
+                    .filter(|&edge_id| self.underlying[*edge_id].particle.is_massless())
                     .collect_vec();
 
                 let loop_signatures_of_massless_edges_of_included_channel =

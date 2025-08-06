@@ -1208,7 +1208,7 @@ fn do_replacement_rules<H, G: UltravioletGraph + AsRef<HedgeGraph<Edge, Vertex, 
     if let Some(cut) = &cut_edges_subgraph {
         for (_p, edge_id, d) in g.iter_edges_of(cut) {
             let e = usize::from(edge_id) as i64;
-            let mass2 = Atom::var(symbol!(d.data.particle.mass.name.as_str())).npow(2);
+            let mass2 = d.data.mass_atom().npow(2);
 
             orientation_expr = orientation_expr
                 .replace(function!(GS.energy, e))

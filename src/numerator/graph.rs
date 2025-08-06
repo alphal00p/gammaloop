@@ -98,31 +98,39 @@ pub trait ReversibleEdge {
 
 impl ReversibleEdge for EdgeData<&Edge> {
     fn pdg(&self) -> isize {
-        match self.orientation {
-            Orientation::Default | Orientation::Undirected => self.data.particle.pdg_code,
-            Orientation::Reversed => -self.data.particle.pdg_code,
+        if let Some(p) = self.data.particle() {
+            match self.orientation {
+                Orientation::Default | Orientation::Undirected => p.pdg_code,
+                Orientation::Reversed => -p.pdg_code,
+            }
+        } else {
+            0
         }
     }
 
     fn pol_symbol(&self, flow: Flow) -> Option<Symbol> {
-        match (self.data.particle.spin, flow) {
-            (2, Flow::Sink) => {
-                if self.pdg() > 0 {
-                    Some(GS.u)
-                } else {
-                    Some(GS.vbar)
+        if let Some(p) = self.data.particle() {
+            match (p.spin, flow) {
+                (2, Flow::Sink) => {
+                    if self.pdg() > 0 {
+                        Some(GS.u)
+                    } else {
+                        Some(GS.vbar)
+                    }
                 }
-            }
-            (2, Flow::Source) => {
-                if self.pdg() > 0 {
-                    Some(GS.ubar)
-                } else {
-                    Some(GS.v)
+                (2, Flow::Source) => {
+                    if self.pdg() > 0 {
+                        Some(GS.ubar)
+                    } else {
+                        Some(GS.v)
+                    }
                 }
+                (3, Flow::Sink) => Some(GS.epsilon),
+                (3, Flow::Source) => Some(GS.epsilonbar),
+                _ => None,
             }
-            (3, Flow::Sink) => Some(GS.epsilon),
-            (3, Flow::Source) => Some(GS.epsilonbar),
-            _ => None,
+        } else {
+            None
         }
     }
 
