@@ -10,7 +10,10 @@ use bincode_trait_derive::{Decode, Encode};
 use color_eyre::{Help, Result};
 use indexmap::IndexMap;
 
-use crate::{model::ArcParticle, new_gammaloop_integrand::NewIntegrand, GammaLoopContext};
+use crate::{
+    model::ArcParticle, new_gammaloop_integrand::NewIntegrand, GammaLoopContext,
+    GammaLoopContextContainer,
+};
 use eyre::{eyre, Context};
 
 use itertools::Itertools;
@@ -48,8 +51,9 @@ impl ProcessDefinition {
         }
     }
 
-    pub(crate) fn folder_name(&self, model: &Model) -> String {
+    pub(crate) fn folder_name(&self, model: &Model, id: usize) -> String {
         let mut filename = String::new();
+        filename.push_str(&id.to_string());
         filename.push_str(&model.name);
         filename.push('_');
         for p in self.initial_pdgs.iter() {
@@ -87,8 +91,94 @@ impl<A: AmplitudeState, C: CrossSectionState> Process<A, C> {
 }
 
 impl Process {
+    pub(crate) fn load_amplitude(
+        path: impl AsRef<Path>,
+        context: GammaLoopContextContainer,
+    ) -> Result<Self> {
+        let binary = fs::read(path.as_ref().join("def.bin"))?;
+        let (definition, _) =
+            bincode::decode_from_slice_with_context(&binary, bincode::config::standard(), context)?;
+
+        let mut collection = ProcessCollection::new_amplitude();
+
+        for entry in fs::read_dir(path)? {
+            let entry = entry?;
+            let path = entry.path();
+            let amp = Amplitude::load(path, context.clone())?;
+            collection.add_amplitude(amp);
+        }
+
+        Ok(Self {
+            definition,
+            collection,
+        })
+    }
+
+    pub(crate) fn load_cross_section(
+        path: impl AsRef<Path>,
+        context: GammaLoopContextContainer,
+    ) -> Result<Self> {
+        let binary = fs::read(path.as_ref().join("def.bin"))?;
+        let (definition, _) =
+            bincode::decode_from_slice_with_context(&binary, bincode::config::standard(), context)?;
+
+        let collection = ProcessCollection::new_cross_section();
+
+        // for entry in fs::read_dir(path)? {
+        //     let entry = entry?;
+        //     let path = entry.path();
+        //     let amp = CrossSection::load(path, context.clone())?;
+        //     collection.add_amplitude(amp);
+        // }
+
+        Ok(Self {
+            definition,
+            collection,
+        })
+    }
+
+    pub fn save(
+        &mut self,
+        path: impl AsRef<Path>,
+        override_existing: bool,
+        id: usize,
+        model: &Model,
+    ) -> Result<()> {
+        match &mut self.collection {
+            ProcessCollection::Amplitudes(a) => {
+                let p = path.as_ref().join("amplitudes");
+                fs::create_dir_all(&p);
+                let p = p.join(self.definition.folder_name(model, id));
+
+                let r = fs::create_dir_all(&p).with_context(|| {
+                    format!(
+                        "Trying to create directory to export amplitude dot {}",
+                        p.display()
+                    )
+                });
+                if override_existing {
+                    r?;
+                }
+
+                let binary = bincode::encode_to_vec(&self.definition, bincode::config::standard())?;
+                fs::write(p.join("def.bin"), binary)?;
+
+                for (_, amp) in a {
+                    amp.save(&p, override_existing)?;
+                }
+            }
+            ProcessCollection::CrossSections(a) => {}
+        }
+
+        Ok(())
+    }
+
     pub fn get_integrand(&self, integrand_name: impl AsRef<str>) -> Result<&NewIntegrand> {
         self.collection.get_integrand(integrand_name)
+    }
+
+    pub fn get_integrand_names(&self) -> Vec<&str> {
+        self.collection.get_integrand_names()
     }
 
     pub fn get_integrand_mut(
@@ -98,8 +188,13 @@ impl Process {
         self.collection.get_integrand_mut(integrand_name)
     }
 
-    pub(crate) fn export_dot(&self, settings: &ExportSettings, model: &Model) -> Result<()> {
-        let path = Path::new(&settings.root_folder).join(self.definition.folder_name(model));
+    pub(crate) fn export_dot(
+        &self,
+        settings: &ExportSettings,
+        model: &Model,
+        id: usize,
+    ) -> Result<()> {
+        let path = Path::new(&settings.root_folder).join(self.definition.folder_name(model, id));
 
         match &self.collection {
             ProcessCollection::Amplitudes(a) => {
@@ -190,6 +285,15 @@ pub enum ProcessCollection<A: AmplitudeState = (), C: CrossSectionState = ()> {
 impl<A: AmplitudeState, C: CrossSectionState> ProcessCollection<A, C> {
     fn new_amplitude() -> Self {
         Self::Amplitudes(BTreeMap::new())
+    }
+
+    fn get_integrand_names(&self) -> Vec<&str> {
+        match self {
+            Self::Amplitudes(amplitudes) => amplitudes.keys().map(|a| a.as_str()).collect(),
+            Self::CrossSections(cross_sections) => {
+                cross_sections.keys().map(|a| a.as_str()).collect()
+            }
+        }
     }
 
     fn get_integrand(&self, name: impl AsRef<str>) -> Result<&NewIntegrand> {

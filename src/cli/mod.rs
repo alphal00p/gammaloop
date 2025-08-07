@@ -25,9 +25,9 @@ use log::LevelFilter;
 use log::{debug, error, info, trace, warn};
 use spenso::algebra::complex::Complex;
 use state::{State, LOG_FORMAT, LOG_LEVEL};
-use std::path::PathBuf;
 use std::{env, ops::ControlFlow, path::Path};
 use std::{fs, time::Instant};
+use std::{fs::File, path::PathBuf};
 use symbolica::numerical_integration::Sample;
 
 #[derive(Parser, Debug)]
@@ -38,20 +38,15 @@ use symbolica::numerical_integration::Sample;
 )]
 pub struct Cli {
     /// Path to the configuration file
-    #[arg(short = 'f', long, value_name = "./gammaloop_state/settings.yaml")]
-    config: Option<PathBuf>,
+    #[arg(short = 'f', long, default_value = "./gammaloop_state/settings.yaml")]
+    config: PathBuf,
 
     /// Path to the state file
-    #[arg(
-        short = 's',
-        long,
-        value_name = "STATE_FILE",
-        default_value = "./gammaloop_state"
-    )]
-    pub state_file: PathBuf,
+    #[arg(short = 's', long, default_value = "./gammaloop_state")]
+    pub state_folder: PathBuf,
 
     /// Path to the model file
-    #[arg(short = 'm', long, value_name = "MODEL_FILE")]
+    #[arg(short = 'm', long)]
     pub model_file: Option<PathBuf>,
 
     /// Save state to file after each call
@@ -103,7 +98,7 @@ impl From<bool> for StateSaveSettings {
 impl Cli {
     fn override_settings(&mut self, other: Cli) {
         self.config = other.config;
-        self.state_file = other.state_file;
+        self.state_folder = other.state_folder;
         self.model_file = other.model_file;
         self.save_state = other.save_state;
     }
@@ -197,7 +192,28 @@ impl Cli {
                     *LOG_FORMAT.lock().unwrap() = *format;
                 }
                 Set::BaseDir { path } => {
-                    self.state_file = path.clone();
+                    self.state_folder = path.clone();
+                }
+            },
+
+            Commands::Generate(g) => g.run(state, settings)?,
+
+            Commands::List(l) => match l {
+                List::Integrands { process_id } => {
+                    let process = &state.process_list.processes[*process_id];
+                    println!("Integrands for process {}:", process_id);
+                    for integrand in process.get_integrand_names() {
+                        println!("  {}", integrand);
+                    }
+                }
+                List::Processes => {
+                    println!("Processes:");
+                    for (index, process) in state.process_list.processes.iter().enumerate() {
+                        println!("  {}", process.definition.folder_name(&state.model, index));
+                    }
+                }
+                List::Model => {
+                    println!("{}", state.model.name)
                 }
             },
             _ => {}
@@ -206,7 +222,7 @@ impl Cli {
     }
 
     pub fn run(mut self) {
-        let mut state = match State::load(&self.state_file, self.model_file.clone()) {
+        let mut state = match State::load(&self.state_folder, self.model_file.clone()) {
             Ok(state) => state,
             Err(e) => {
                 warn!("{e} loading default state");
@@ -215,6 +231,7 @@ impl Cli {
         };
 
         let mut settings = self.get_settings().unwrap();
+
         // let mut state = State::load(&cli.state_file,);
 
         let mut override_state_file = false;
@@ -276,12 +293,18 @@ impl Cli {
 
         if self.save_state {
             debug!("Saving State");
-            match state.save(&self.state_file, override_state_file, false) {
+            match state.save(&self.state_folder, override_state_file, false) {
                 Ok(()) => {}
                 Err(e) => {
                     eprintln!("Failed to save state: {}", e);
                 }
             };
+
+            serde_yaml::to_writer(
+                File::create(self.state_folder.join("settings.yaml")).unwrap(),
+                &settings,
+            )
+            .unwrap();
         }
     }
 
@@ -289,11 +312,7 @@ impl Cli {
         crate::set_interrupt_handler();
 
         // Load settings from YAML first so CLI flags can override.
-        let settings: Settings = if let Some(settings_path) = &self.config {
-            Settings::from_file(settings_path)?
-        } else {
-            Settings::default()
-        };
+        let settings: Settings = Settings::from_file(&self.config).unwrap_or_default();
 
         // Override settings from CLI top‑level flags --------------------------
         // if let Some(level) = self.debug {
@@ -308,6 +327,17 @@ impl Cli {
         // if let Some(n) = self.n_increase {
         //     settings.integrator.n_increase = n;
         // }
+
+        *LOG_LEVEL.lock().unwrap() = match settings.general.debug {
+            0 => LevelFilter::Off,
+            1 => LevelFilter::Error,
+            2 => LevelFilter::Warn,
+            3 => LevelFilter::Info,
+            4 => LevelFilter::Debug,
+            _ => LevelFilter::Trace,
+        };
+
+        println!("LOG_LEVEL: {:?}", LOG_LEVEL.lock().unwrap());
 
         // Ensure SYMBOLICA licence variable is set before we do anything heavy.
         if env::var("SYMBOLICA_LICENSE").is_err() {
@@ -356,6 +386,16 @@ pub enum Set {
     },
 }
 
+#[derive(Subcommand, Debug)]
+pub enum List {
+    Model,
+    Processes,
+    Integrands {
+        #[arg(short = 'p')]
+        process_id: usize,
+    },
+}
+
 pub enum Log {
     Level(LevelFilter),
     Format(LogFormat),
@@ -366,6 +406,8 @@ pub mod inspect;
 
 #[derive(Subcommand, Debug)]
 pub enum Commands {
+    #[clap(subcommand)]
+    List(List),
     #[clap(subcommand)]
     Set(Set),
     #[clap(subcommand)]

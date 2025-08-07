@@ -1,9 +1,15 @@
 use bincode::Encode;
 use bincode_trait_derive::Decode;
+use color_eyre::Result;
 use colored::Colorize;
+use eyre::Context;
 use itertools::Itertools;
 use serde::Serialize;
 use spenso::algebra::complex::Complex;
+use std::{
+    fs::{self, File},
+    path::Path,
+};
 use symbolica::numerical_integration::{Grid, Sample};
 use typed_index_collections::TiVec;
 
@@ -20,8 +26,8 @@ use crate::{
     new_gammaloop_integrand::ParamBuilder,
     new_graph::{ExternalConnection, FeynmanGraph, Graph, LmbIndex, LoopMomentumBasis},
     utils::{self, FloatLike, F},
-    DependentMomentaConstructor, GammaLoopContext, IntegratedCounterTermRange, Polarizations,
-    Settings,
+    DependentMomentaConstructor, GammaLoopContext, GammaLoopContextContainer,
+    IntegratedCounterTermRange, Polarizations, Settings,
 };
 
 use super::{
@@ -43,6 +49,74 @@ pub struct CrossSectionIntegrand {
     pub n_incoming: usize,
     pub external_connections: Vec<ExternalConnection>,
     pub model_parameter_cache: Vec<Complex<F<f64>>>,
+}
+
+impl CrossSectionIntegrand {
+    pub(crate) fn save(&self, path: impl AsRef<Path>, override_existing: bool) -> Result<()> {
+        let p = path.as_ref().join("integrand");
+
+        let r = fs::create_dir_all(&p).with_context(|| {
+            format!(
+                "Trying to create directory to save amplitude {}",
+                p.display()
+            )
+        });
+        if override_existing {
+            r?;
+        }
+
+        let binary = bincode::encode_to_vec(&self.rotations, bincode::config::standard())?;
+        fs::write(p.join("rotations.bin"), binary)?;
+        let binary =
+            bincode::encode_to_vec(&self.external_connections, bincode::config::standard())?;
+        fs::write(p.join("external_connections.bin"), binary)?;
+        let binary = bincode::encode_to_vec(&self.graph_terms, bincode::config::standard())?;
+        fs::write(p.join("terms.bin"), binary)?;
+        let binary = bincode::encode_to_vec(&self.polarizations, bincode::config::standard())?;
+        fs::write(p.join("polarizations.bin"), binary)?;
+        let binary =
+            bincode::encode_to_vec(&self.model_parameter_cache, bincode::config::standard())?;
+        fs::write(p.join("model_parameter_cache.bin"), binary)?;
+        let binary = bincode::encode_to_vec(&self.n_incoming, bincode::config::standard())?;
+        fs::write(p.join("n_incoming.bin"), binary)?;
+
+        serde_yaml::to_writer(File::open(p.join("settings.yaml"))?, &self.settings)?;
+
+        Ok(())
+    }
+
+    pub(crate) fn load(path: impl AsRef<Path>, context: GammaLoopContextContainer) -> Result<Self> {
+        let binary = fs::read(path.as_ref().join("rotations.bin"))?;
+        let (rotations, _) =
+            bincode::decode_from_slice_with_context(&binary, bincode::config::standard(), context)?;
+        let binary = fs::read(path.as_ref().join("terms.bin"))?;
+        let (graph_terms, _) =
+            bincode::decode_from_slice_with_context(&binary, bincode::config::standard(), context)?;
+        let binary = fs::read(path.as_ref().join("polarizations.bin"))?;
+        let (polarizations, _) =
+            bincode::decode_from_slice_with_context(&binary, bincode::config::standard(), context)?;
+        let binary = fs::read(path.as_ref().join("model_parameter_cache.bin"))?;
+        let (model_parameter_cache, _) =
+            bincode::decode_from_slice_with_context(&binary, bincode::config::standard(), context)?;
+        let binary = fs::read(path.as_ref().join("n_incoming.bin"))?;
+        let (n_incoming, _) =
+            bincode::decode_from_slice_with_context(&binary, bincode::config::standard(), context)?;
+        let binary = fs::read(path.as_ref().join("external_connections.bin"))?;
+        let (external_connections, _) =
+            bincode::decode_from_slice_with_context(&binary, bincode::config::standard(), context)?;
+
+        let settings = serde_yaml::from_reader(File::open(path.as_ref().join("settings.yaml"))?)?;
+
+        Ok(Self {
+            external_connections,
+            rotations,
+            graph_terms,
+            polarizations,
+            model_parameter_cache,
+            n_incoming,
+            settings,
+        })
+    }
 }
 
 impl GammaloopIntegrand for CrossSectionIntegrand {

@@ -10,7 +10,7 @@ use super::state::State;
 #[derive(Debug, Args)]
 pub struct Inspect {
     /// The process id to inspect
-    #[arg(short = 'p', long = "process-id", value_name = "ID")]
+    #[arg(short = 'i', long = "process-id", value_name = "ID")]
     process_id: usize,
     /// The name of the process to inspect
     #[arg(short = 'n', long = "name", value_name = "NAME")]

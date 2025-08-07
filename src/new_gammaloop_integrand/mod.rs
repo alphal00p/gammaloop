@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::path::Path;
 
 use crate::evaluation_result::{EvaluationMetaData, EvaluationResult};
 use crate::integrands::{HasIntegrand, Integrand};
@@ -54,6 +55,13 @@ pub enum NewIntegrand {
 }
 
 impl NewIntegrand {
+    pub(crate) fn save(&self, path: impl AsRef<Path>, override_existing: bool) -> Result<()> {
+        match self {
+            NewIntegrand::Amplitude(integrand) => integrand.save(path, override_existing),
+            NewIntegrand::CrossSection(integrand) => integrand.save(path, override_existing),
+        }
+    }
+
     pub(crate) fn get_settings(&self) -> &Settings {
         match self {
             NewIntegrand::Amplitude(integrand) => &integrand.settings,

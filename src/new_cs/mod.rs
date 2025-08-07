@@ -1,11 +1,16 @@
-use std::path::PathBuf;
+use std::{
+    fs,
+    io::Read,
+    path::{Path, PathBuf},
+};
 
 use ahash::HashMap;
 // use bincode::{Decode, Encode};
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
+use log::debug;
 
-use crate::GammaLoopContext;
+use crate::{GammaLoopContext, GammaLoopContextContainer};
 use serde::{Deserialize, Serialize};
 
 use crate::{integrands::Integrand, model::Model, ProcessSettings, Settings};
@@ -34,6 +39,62 @@ impl ProcessList {
         ProcessList { processes: vec![] }
     }
 
+    pub(crate) fn load(path: impl AsRef<Path>, context: GammaLoopContextContainer) -> Result<Self> {
+        let mut process_list = Self::new();
+
+        let path = path.as_ref().join("processes");
+        let amplitudes_path = path.join("amplitudes");
+        if amplitudes_path.exists() {
+            debug!("Looking for amplitudes in {}", amplitudes_path.display());
+
+            for entry in fs::read_dir(amplitudes_path)? {
+                let entry = entry?;
+                let path = entry.path();
+                process_list
+                    .processes
+                    .push(Process::load_amplitude(path, context.clone())?);
+            }
+        }
+
+        let cross_sections_path = path.join("cross_sections");
+        if cross_sections_path.exists() {
+            debug!(
+                "Looking for cross sections in {}",
+                cross_sections_path.display()
+            );
+
+            for entry in fs::read_dir(cross_sections_path)? {
+                let entry = entry?;
+                let path = entry.path();
+                process_list
+                    .processes
+                    .push(Process::load_cross_section(path, context.clone())?);
+            }
+        }
+
+        Ok(process_list)
+    }
+
+    pub fn save(
+        &mut self,
+        folder: impl AsRef<Path>,
+        override_existing: bool,
+        model: &Model,
+    ) -> Result<()> {
+        let path = folder.as_ref().join("processes");
+
+        let r = fs::create_dir_all(&path);
+        if !override_existing {
+            r?;
+        }
+
+        for (i, p) in self.processes.iter_mut().enumerate() {
+            p.save(&path, override_existing, i, model)?;
+        }
+
+        Ok(())
+    }
+
     pub fn get_integrand(
         &self,
         process_id: usize,
@@ -53,8 +114,8 @@ impl ProcessList {
     }
 
     pub fn export_dot(&self, settings: &ExportSettings, model: &Model) -> Result<()> {
-        for p in &self.processes {
-            p.export_dot(settings, model)?;
+        for (i, p) in self.processes.iter().enumerate() {
+            p.export_dot(settings, model, i)?;
         }
         Ok(())
     }

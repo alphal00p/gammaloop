@@ -42,11 +42,11 @@ impl State {
         // let root_folder = root_folder.join("gammaloop_state");
 
         let model = if let Some(model_path) = &model_path {
-            debug!("Loading model from {}", model_path.display());
+            println!("Loading model from {}", model_path.display());
             Model::from_file(model_path)?
         } else {
             let model_dir = root_folder.join("model.yaml");
-            debug!(
+            println!(
                 "Loading model from default location: {}",
                 model_dir.display()
             );
@@ -64,13 +64,7 @@ impl State {
             model: &model,
         };
 
-        let process_list_data = fs::read(root_folder.join("process_list.bin"))?;
-
-        let (process_list, _) = bincode::decode_from_slice_with_context(
-            &process_list_data,
-            bincode::config::standard(),
-            context,
-        )?;
+        let process_list = ProcessList::load(root_folder, context)?;
 
         Ok(State {
             model,
@@ -79,7 +73,12 @@ impl State {
         })
     }
 
-    pub fn save(&self, root_folder: &Path, override_state_file: bool, strict: bool) -> Result<()> {
+    pub fn save(
+        &mut self,
+        root_folder: &Path,
+        override_state_file: bool,
+        strict: bool,
+    ) -> Result<()> {
         // let root_folder = root_folder.join("gammaloop_state");
 
         // check if the export root exists, if not create it, if it does return error
@@ -104,9 +103,8 @@ impl State {
             fs::File::create(root_folder.join("symbolica_state.bin"))?;
 
         symbolica::state::State::export(&mut state_file)?;
-
-        let binary = bincode::encode_to_vec(&self.process_list, bincode::config::standard())?;
-        fs::write(root_folder.join("process_list.bin"), binary)?;
+        self.process_list
+            .save(root_folder, override_state_file, &self.model)?;
 
         // let binary = bincode::encode_to_vec(&self.integrands, bincode::config::standard())?;
         // fs::write(root_folder.join("process_list.bin"), binary)?;?

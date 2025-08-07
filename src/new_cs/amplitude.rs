@@ -1,4 +1,4 @@
-use std::{iter, marker::PhantomData, path::Path};
+use std::{fs, iter, marker::PhantomData, path::Path};
 
 use ahash::AHashSet;
 // use bincode::{Decode, Encode};
@@ -30,7 +30,7 @@ use crate::{
     uv::UltravioletGraph,
     GammaLoopContext, GammaLoopContextContainer,
 };
-use eyre::eyre;
+use eyre::{eyre, Context};
 use itertools::Itertools;
 use linnet::half_edge::involution::{HedgePair, Orientation};
 use log::debug;
@@ -64,6 +64,38 @@ pub struct Amplitude<S: AmplitudeState = ()> {
 }
 
 impl<S: AmplitudeState> Amplitude<S> {
+    pub(crate) fn load(path: impl AsRef<Path>, context: GammaLoopContextContainer) -> Result<Self> {
+        let binary = fs::read(path.as_ref())?;
+        let (mut amp, _): (Self, _) =
+            bincode::decode_from_slice_with_context(&binary, bincode::config::standard(), context)?;
+
+        let integrand = AmplitudeIntegrand::load(path.as_ref().join("integrand"), context)?;
+        amp.integrand = Some(NewIntegrand::Amplitude(integrand));
+
+        Ok(amp)
+    }
+
+    pub fn save(&mut self, path: impl AsRef<Path>, override_existing: bool) -> Result<()> {
+        let p = path.as_ref().join(format!("amp_{}", self.name));
+
+        let r = fs::create_dir_all(&p).with_context(|| {
+            format!(
+                "Trying to create directory to save amplitude {}",
+                p.display()
+            )
+        });
+        if override_existing {
+            r?;
+        }
+        if let Some(integrand) = self.integrand.take() {
+            integrand.save(&p, override_existing)?;
+        };
+
+        let binary = bincode::encode_to_vec(&(*self), bincode::config::standard())?;
+        fs::write(p.join("amp"), binary)?;
+        Ok(())
+    }
+
     pub(crate) fn preprocess(&mut self, model: &Model, settings: &ProcessSettings) -> Result<()> {
         for amplitude_graph in self.graphs.iter_mut() {
             amplitude_graph.preprocess(model, settings)?;
