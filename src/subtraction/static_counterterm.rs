@@ -52,7 +52,7 @@ pub struct CounterTerm {
 }
 
 impl CounterTerm {
-    pub fn print_debug_data(
+    pub(crate) fn print_debug_data(
         &self,
         esurfaces: &EsurfaceCollection,
         external_momenta: &[FourMomentum<F<f64>>],
@@ -93,7 +93,7 @@ impl CounterTerm {
         }
     }
 
-    pub fn construct<S: NumeratorState>(
+    pub(crate) fn construct<S: NumeratorState>(
         maximal_overlap: OverlapStructure,
         existing_esurfaces: &ExistingEsurfaces,
         graph: &Graph<S>,
@@ -166,7 +166,7 @@ impl CounterTerm {
             .unwrap_or_else(|| const_builder.zero())
     }
 
-    pub fn evaluate<T: FloatLike>(
+    pub(crate) fn evaluate<T: FloatLike>(
         sample: &DefaultSample<T>,
         graph: &BareGraph,
         esurfaces: &EsurfaceCollection,

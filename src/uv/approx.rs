@@ -71,7 +71,7 @@ impl SimpleApprox {
         ))
     }
 
-    pub fn expr(&self, bigger_graph: &BitVec) -> Atom {
+    pub(crate) fn expr(&self, bigger_graph: &BitVec) -> Atom {
         let reduced = Atom::var(Self::subgraph_shadow(bigger_graph, &self.graph));
         let mut mul = Atom::num(1);
         for i in &self.t_args {
@@ -80,11 +80,11 @@ impl SimpleApprox {
         reduced * mul
     }
 
-    pub fn t_op(&self, bigger_graph: &BitVec) -> Atom {
+    pub(crate) fn t_op(&self, bigger_graph: &BitVec) -> Atom {
         function!(GS.top, self.expr(bigger_graph))
     }
 
-    pub fn root(subgraph: InternalSubGraph) -> Self {
+    pub(crate) fn root(subgraph: InternalSubGraph) -> Self {
         if !subgraph.is_empty() {
             panic!(
                 "Root approximation must be empty {} {:?}",
@@ -99,7 +99,7 @@ impl SimpleApprox {
         }
     }
 
-    pub fn dependent(&self, bigger_graph: InternalSubGraph) -> Self {
+    pub(crate) fn dependent(&self, bigger_graph: InternalSubGraph) -> Self {
         Self {
             t_args: vec![self.t_op(&bigger_graph.filter)],
             sign: -self.sign,
@@ -107,7 +107,7 @@ impl SimpleApprox {
         }
     }
 
-    pub fn union<'a>(
+    pub(crate) fn union<'a>(
         subgraph: InternalSubGraph,
         union: impl IntoIterator<Item = &'a Self>,
     ) -> Self {
@@ -148,14 +148,14 @@ pub enum CFFapprox {
 }
 
 impl CFFapprox {
-    pub fn expr(&self) -> Option<(Atom, Sign)> {
+    pub(crate) fn expr(&self) -> Option<(Atom, Sign)> {
         match self {
             CFFapprox::NotComputed => None,
             CFFapprox::Dependent { sign, t_arg } => Some((t_arg.integrand.clone(), *sign)),
         }
     }
 
-    pub fn dependent<
+    pub(crate) fn dependent<
         E,
         V,
         H,
@@ -201,7 +201,7 @@ impl CFFapprox {
         }
     }
 
-    pub fn root<E, V, H, S: SubGraph, OID: OrientationID, O: GraphOrientation>(
+    pub(crate) fn root<E, V, H, S: SubGraph, OID: OrientationID, O: GraphOrientation>(
         graph: &HedgeGraph<E, V, H>,
         amplitude_subgraph: &S,
         canonize_esurface: &Option<ShiftRewrite>,
@@ -219,7 +219,7 @@ impl CFFapprox {
     }
 }
 impl Approximation {
-    pub fn root<
+    pub(crate) fn root<
         H,
         G: UltravioletGraph + AsRef<HedgeGraph<Edge, Vertex, H>>,
         S: SubGraph<Base = BitVec>,
@@ -244,7 +244,7 @@ impl Approximation {
         self.final_integrand =
             self.final_integrand(graph, amplitude, canonize_esurface, orientations, cut_edges)
     }
-    pub fn simplify_notation(expr: &Atom) -> Atom {
+    pub(crate) fn simplify_notation(expr: &Atom) -> Atom {
         let replacements = [(function!(GS.den, W_.a_, W_.x_), Atom::var(W_.x_))];
 
         let reps: Vec<_> = replacements
@@ -255,7 +255,7 @@ impl Approximation {
         expr.replace_multiple_repeat(&reps)
     }
 
-    pub fn new<G, E, V, H>(
+    pub(crate) fn new<G, E, V, H>(
         spinney: InternalSubGraph,
         graph: &G,
         lmb: &LoopMomentumBasis,
@@ -276,11 +276,11 @@ impl Approximation {
         }
     }
 
-    pub fn reduced_graph(&self, subgraph: &InternalSubGraph) -> InternalSubGraph {
+    pub(crate) fn reduced_graph(&self, subgraph: &InternalSubGraph) -> InternalSubGraph {
         self.subgraph.subtract(subgraph)
     }
 
-    pub fn structure_approximate(&self, dependent: &Self) -> SimpleApprox {
+    pub(crate) fn structure_approximate(&self, dependent: &Self) -> SimpleApprox {
         dependent
             .simple_approx
             .as_ref()
@@ -288,7 +288,7 @@ impl Approximation {
             .dependent(self.subgraph.clone())
     }
 
-    pub fn integrated_4d<
+    pub(crate) fn integrated_4d<
         E: UVE,
         V,
         H,
@@ -636,7 +636,13 @@ impl Approximation {
         }
     }
 
-    pub fn compute<E: UVE, V, H, G: UltravioletGraph + AsRef<HedgeGraph<E, V, H>>, S: SubGraph>(
+    pub(crate) fn compute<
+        E: UVE,
+        V,
+        H,
+        G: UltravioletGraph + AsRef<HedgeGraph<E, V, H>>,
+        S: SubGraph,
+    >(
         &mut self,
         graph: &G,
         amplitude_subgraph: &S,
@@ -646,7 +652,7 @@ impl Approximation {
     }
 
     /// Computes the 3d approximation of the UV
-    pub fn compute_3d<
+    pub(crate) fn compute_3d<
         H,
         G: UltravioletGraph + AsRef<HedgeGraph<Edge, Vertex, H>>,
         S: SubGraph<Base = BitVec>,
@@ -712,7 +718,7 @@ impl Approximation {
             self.final_integrand(graph, amplitude, canonize_esurface, orientations, cut_edges);
     }
 
-    pub fn local_3d<E: UVE, V, H, G: UltravioletGraph + AsRef<HedgeGraph<E, V, H>>>(
+    pub(crate) fn local_3d<E: UVE, V, H, G: UltravioletGraph + AsRef<HedgeGraph<E, V, H>>>(
         &self,
         dependent: &Self,
         uv_graph: &G,
@@ -904,7 +910,7 @@ impl Approximation {
         a
     }
 
-    pub fn final_integrand<
+    pub(crate) fn final_integrand<
         G,
         H,
         S: SubGraph<Base = BitVec>,
@@ -987,7 +993,7 @@ impl Approximation {
         Some(res)
     }
 
-    // pub fn simple_expr(
+    // pub(crate) fn simple_expr(
     //     &self,
     //     graph: &UVGraph,
     //     amplitude: &InternalSubGraph,
@@ -1271,7 +1277,7 @@ fn do_replacement_rules<H, G: UltravioletGraph + AsRef<HedgeGraph<Edge, Vertex, 
 }
 
 impl ApproxOp {
-    pub fn sign(&self) -> Option<Sign> {
+    pub(crate) fn sign(&self) -> Option<Sign> {
         match self {
             ApproxOp::NotComputed => None,
             ApproxOp::Union { sign, .. } => Some(*sign),
@@ -1280,7 +1286,7 @@ impl ApproxOp {
         }
     }
 
-    pub fn expr(&self) -> Option<(Atom, Sign)> {
+    pub(crate) fn expr(&self) -> Option<(Atom, Sign)> {
         match self {
             ApproxOp::NotComputed => None,
             ApproxOp::Union { t_args, sign, .. } => {
@@ -1296,7 +1302,7 @@ impl ApproxOp {
         }
     }
 
-    pub fn union(dependent: &[&Approximation]) -> Option<Self> {
+    pub(crate) fn union(dependent: &[&Approximation]) -> Option<Self> {
         let mut t_args = vec![];
         let mut subgraphs = vec![];
 
@@ -1323,7 +1329,7 @@ impl ApproxOp {
         })
     }
 
-    pub fn is_computed(&self) -> bool {
+    pub(crate) fn is_computed(&self) -> bool {
         match self {
             ApproxOp::NotComputed => false,
             _ => true,

@@ -90,7 +90,7 @@ impl std::fmt::Display for EdgeColor {
 }
 
 impl EdgeColor {
-    pub fn from_particle(particle: ArcParticle) -> Self {
+    pub(crate) fn from_particle(particle: ArcParticle) -> Self {
         Self {
             pdg: particle.0.pdg_code,
         }
@@ -272,11 +272,11 @@ pub struct FeynGen {
 }
 
 impl FeynGen {
-    pub fn new(options: FeynGenOptions) -> Self {
+    pub(crate) fn new(options: FeynGenOptions) -> Self {
         Self { options }
     }
 
-    pub fn evaluate_overall_factor(factor: AtomView) -> Atom {
+    pub(crate) fn evaluate_overall_factor(factor: AtomView) -> Atom {
         let mut res = factor.to_owned();
         for header in [
             "AutG",
@@ -308,7 +308,7 @@ impl FeynGen {
     }
 
     #[allow(clippy::type_complexity)]
-    pub fn assign_node_colors(
+    pub(crate) fn assign_node_colors(
         model: &Model,
         graph: &SymbolicaGraph<NodeColorWithoutVertexRule, EdgeColor>,
         node_colors: &HashMap<
@@ -384,7 +384,7 @@ impl FeynGen {
     }
 
     #[allow(clippy::type_complexity)]
-    pub fn group_isomorphic_graphs<
+    pub(crate) fn group_isomorphic_graphs<
         NodeColor: Clone + PartialEq + Eq + PartialOrd + Ord + std::hash::Hash,
     >(
         graphs: &[SymbolicaGraph<NodeColor, EdgeColor>],
@@ -406,7 +406,7 @@ impl FeynGen {
         mapped_graph
     }
 
-    pub fn contains_particles(
+    pub(crate) fn contains_particles(
         graph: &SymbolicaGraph<NodeColorWithoutVertexRule, EdgeColor>,
         particles: &[isize],
     ) -> bool {
@@ -422,7 +422,7 @@ impl FeynGen {
         false
     }
 
-    pub fn find_edge_position(
+    pub(crate) fn find_edge_position(
         graph: &SymbolicaGraph<NodeColorWithoutVertexRule, EdgeColor>,
         edge_vertices: (usize, usize),
         oriented: bool,
@@ -436,7 +436,7 @@ impl FeynGen {
         }
         None
     }
-    pub fn veto_special_topologies(
+    pub(crate) fn veto_special_topologies(
         model: &Model,
         graph: &SymbolicaGraph<NodeColorWithoutVertexRule, EdgeColor>,
         veto_self_energy: Option<&SelfEnergyFilterOptions>,
@@ -494,7 +494,7 @@ impl FeynGen {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub fn veto_special_topologies_with_spanning_tree_root(
+    pub(crate) fn veto_special_topologies_with_spanning_tree_root(
         model: &Model,
         graph: &SymbolicaGraph<NodeColorWithoutVertexRule, EdgeColor>,
         veto_self_energy: Option<&SelfEnergyFilterOptions>,
@@ -869,7 +869,7 @@ impl FeynGen {
         false
     }
 
-    pub fn unresolved_cut_content(&self, model: &Model) -> (usize, AHashSet<ArcParticle>) {
+    pub(crate) fn unresolved_cut_content(&self, model: &Model) -> (usize, AHashSet<ArcParticle>) {
         if let Some(p) = self.options.cross_section_filters.get_perturbative_orders() {
             let mut unresolved = AHashSet::new();
             for k in p.keys() {
@@ -884,7 +884,7 @@ impl FeynGen {
         }
     }
 
-    pub fn half_edge_filters<NodeColor>(
+    pub(crate) fn half_edge_filters<NodeColor>(
         &self,
         model: &Model,
         graph: &SymbolicaGraph<NodeColor, EdgeColor>,
@@ -1198,7 +1198,7 @@ impl FeynGen {
 
     // This fast cut checker does not enumerate all cuts, but rather checks if the graph can contain a cut with the right particles
     // It also does not consider amplitude-level filters
-    pub fn contains_cut_fast<NodeColor: NodeColorFunctions>(
+    pub(crate) fn contains_cut_fast<NodeColor: NodeColorFunctions>(
         &self,
         model: &Model,
         graph: &SymbolicaGraph<NodeColor, EdgeColor>,
@@ -1526,7 +1526,7 @@ impl FeynGen {
             .collect()
     }
 
-    pub fn canonize_external_momenta_assignment(
+    pub(crate) fn canonize_external_momenta_assignment(
         &self,
         model: &Model,
         node_colors_for_external_symmetrization: &HashMap<i32, i32>,
@@ -1692,7 +1692,7 @@ impl FeynGen {
     /// This function canonizes the edge and vertex ordering of a graph based on the skeletton graph with only propagator mass as edge color.
     /// This is useful to then allow for further grouping of isomorphic graphs, incl numerator.
     #[allow(clippy::type_complexity)]
-    pub fn canonicalize_edge_and_vertex_ordering(
+    pub(crate) fn canonicalize_edge_and_vertex_ordering(
         &self,
         model: &Model,
         input_graph: &SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>,
@@ -1975,7 +1975,7 @@ impl FeynGen {
         Ok((canonized_skeletton.graph.to_owned(), sorted_g))
     }
 
-    pub fn follow_chain(
+    pub(crate) fn follow_chain(
         current_node: usize,
         vetos: &mut Vec<bool>,
         adj_map: &HashMap<usize, Vec<(usize, usize)>>,
@@ -2014,7 +2014,7 @@ impl FeynGen {
     }
 
     // This function normalize fermion and ghost flows and makes sure that all virtual charged particles without flows (like the W boson) are particles
-    pub fn normalize_flows(
+    pub(crate) fn normalize_flows(
         &self,
         graph: &SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>,
         model: &Model,
@@ -2330,7 +2330,7 @@ impl FeynGen {
     }
 
     // Note, this function will not work as intended with four-fermion vertices, and only aggregated self-loops or fermion-loops not involving four-femion vertices
-    pub fn count_closed_fermion_loops(
+    pub(crate) fn count_closed_fermion_loops(
         &self,
         graph: &SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>,
         model: &Model,
@@ -2376,7 +2376,7 @@ impl FeynGen {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub fn generate(
+    pub(crate) fn generate(
         &self,
         model: &Model,
         numerator_aware_isomorphism_grouping: &NumeratorAwareGraphGroupingOption,
@@ -4118,7 +4118,7 @@ impl FeynGen {
         }
     }
 
-    pub fn substitute_color_factors(expr: AtomView) -> Atom {
+    pub(crate) fn substitute_color_factors(expr: AtomView) -> Atom {
         let replacements = vec![
             (parse!("Nc"), Atom::num(3)),
             (parse!("TR"), parse!("1/2")),
@@ -4568,7 +4568,7 @@ impl ProcessedNumeratorForComparison {
 }
 
 #[test]
-pub fn symbolica_symm_factors_bug() {
+pub(crate) fn symbolica_symm_factors_bug() {
     let external_edges_for_generation: Vec<(usize, (Option<bool>, usize))> = vec![];
 
     let vertex_signatures_for_generation_a = vec![

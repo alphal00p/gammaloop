@@ -56,14 +56,14 @@ pub struct OrientationMap {
 }
 
 impl OrientationMap {
-    pub fn get_lr_or(
+    pub(crate) fn get_lr_or(
         &self,
         orientation_id: SuperGraphOrientationID,
     ) -> Option<(AmplitudeOrientationID, AmplitudeOrientationID)> {
         self.map.get(&orientation_id).copied()
     }
 
-    pub fn get_sg_or(
+    pub(crate) fn get_sg_or(
         &self,
         left: AmplitudeOrientationID,
         right: AmplitudeOrientationID,
@@ -73,14 +73,14 @@ impl OrientationMap {
 }
 
 impl OrientationMap {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             map: HashMap::default(),
             revesed_map: HashMap::default(),
         }
     }
 
-    pub fn insert(
+    pub(crate) fn insert(
         &mut self,
         orientation_id: SuperGraphOrientationID,
         left: AmplitudeOrientationID,
@@ -106,7 +106,7 @@ pub struct CFFCutsExpression {
 }
 
 impl CFFCutsExpression {
-    pub fn new_empty() -> Self {
+    pub(crate) fn new_empty() -> Self {
         Self {
             cut_expressions: TiVec::new(),
             surfaces: SurfaceCache {
@@ -117,7 +117,7 @@ impl CFFCutsExpression {
         }
     }
 
-    pub fn to_atom_for_cut(&self, cut: CutId) -> (Atom, Atom) {
+    pub(crate) fn to_atom_for_cut(&self, cut: CutId) -> (Atom, Atom) {
         let left_amplitude_atom = self.cut_expressions[cut].left_amplitude.to_atom();
 
         let right_amplitude_atom = self.cut_expressions[cut].right_amplitude.to_atom();
@@ -125,7 +125,7 @@ impl CFFCutsExpression {
         (left_amplitude_atom, right_amplitude_atom)
     }
 
-    pub fn get_atom_for_orientation_and_cut(
+    pub(crate) fn get_atom_for_orientation_and_cut(
         &self,
         orientation_id: SuperGraphOrientationID,
         cut: CutId,
@@ -147,7 +147,7 @@ impl CFFCutsExpression {
         }
     }
 
-    pub fn get_orientation_atom(
+    pub(crate) fn get_orientation_atom(
         &self,
         orientation_id: SuperGraphOrientationID,
     ) -> Vec<(Atom, Atom)> {
@@ -174,7 +174,9 @@ impl CFFCutsExpression {
             .collect()
     }
 
-    pub fn get_orientation_atoms(&self) -> TiVec<SuperGraphOrientationID, Vec<(Atom, Atom)>> {
+    pub(crate) fn get_orientation_atoms(
+        &self,
+    ) -> TiVec<SuperGraphOrientationID, Vec<(Atom, Atom)>> {
         self.orientation_data
             .iter_enumerated()
             .map(|(orientation_id, _)| self.get_orientation_atom(orientation_id))
@@ -183,7 +185,7 @@ impl CFFCutsExpression {
 }
 
 // merge orientations, return None if there is a conflict
-pub fn amplitude_orientations_to_sg_orientaion(
+pub(crate) fn amplitude_orientations_to_sg_orientaion(
     left: &EdgeVec<Orientation>,
     right: &EdgeVec<Orientation>,
 ) -> Option<EdgeVec<Orientation>> {

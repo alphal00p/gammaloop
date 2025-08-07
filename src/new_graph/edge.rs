@@ -64,39 +64,39 @@ impl From<()> for PossibleParticle {
 }
 
 impl PossibleParticle {
-    pub fn zero() -> Self {
+    pub(crate) fn zero() -> Self {
         ().into()
     }
 
-    pub fn color_reps(&self, flow: Flow) -> IndexLess {
+    pub(crate) fn color_reps(&self, flow: Flow) -> IndexLess {
         match self {
             PossibleParticle::Particle(p) => p.color_reps(flow),
             _ => IndexLess::scalar_structure(),
         }
     }
 
-    pub fn spin_reps(&self) -> IndexLess {
+    pub(crate) fn spin_reps(&self) -> IndexLess {
         match self {
             PossibleParticle::Particle(p) => p.spin_reps(),
             _ => IndexLess::scalar_structure(),
         }
     }
 
-    pub fn particle(&self) -> Option<ArcParticle> {
+    pub(crate) fn particle(&self) -> Option<ArcParticle> {
         match self {
             PossibleParticle::Particle(p) => Some(p.clone()),
             _ => None,
         }
     }
 
-    pub fn is_massless(&self) -> bool {
+    pub(crate) fn is_massless(&self) -> bool {
         match self {
             PossibleParticle::JustMass { value, .. } => value.is_none(),
             PossibleParticle::Particle(p) => p.is_massless(),
         }
     }
 
-    pub fn is_massive(&self) -> bool {
+    pub(crate) fn is_massive(&self) -> bool {
         !self.is_massless()
     }
 }
@@ -117,11 +117,11 @@ pub struct Edge {
 }
 
 impl Edge {
-    pub fn n_dummies(&self) -> usize {
+    pub(crate) fn n_dummies(&self) -> usize {
         5
     }
 
-    pub fn random_helicity(&self, seed: u64) -> Helicity {
+    pub(crate) fn random_helicity(&self, seed: u64) -> Helicity {
         if let PossibleParticle::Particle(p) = &self.particle {
             p.random_helicity(seed)
         } else {
@@ -129,11 +129,11 @@ impl Edge {
         }
     }
 
-    pub fn particle(&self) -> Option<ArcParticle> {
+    pub(crate) fn particle(&self) -> Option<ArcParticle> {
         self.particle.particle()
     }
 
-    pub fn mass_value(&self) -> Option<Complex<F<f64>>> {
+    pub(crate) fn mass_value(&self) -> Option<Complex<F<f64>>> {
         match &self.particle {
             PossibleParticle::JustMass { value, .. } => value.clone(),
             PossibleParticle::Particle(p) => p.mass.value,
@@ -179,7 +179,7 @@ pub struct ParseEdge {
 }
 
 impl ParseEdge {
-    pub fn new(particle: impl Into<PossibleParticle>) -> Self {
+    pub(crate) fn new(particle: impl Into<PossibleParticle>) -> Self {
         ParseEdge {
             is_dummy: false,
             label: None,
@@ -190,34 +190,38 @@ impl ParseEdge {
         }
     }
 
-    pub fn is_dummy(mut self) -> Self {
+    pub(crate) fn is_dummy(mut self) -> Self {
         self.is_dummy = true;
         self
     }
 
-    pub fn with_label(mut self, label: String) -> Self {
+    pub(crate) fn with_label(mut self, label: String) -> Self {
         self.label = Some(label);
         self
     }
 
-    pub fn with_dod(mut self, dod: i32) -> Self {
+    pub(crate) fn with_dod(mut self, dod: i32) -> Self {
         self.dod = Some(dod);
         self
     }
 
-    pub fn with_lmb_id(mut self, lmb_id: LoopIndex) -> Self {
+    pub(crate) fn with_lmb_id(mut self, lmb_id: LoopIndex) -> Self {
         self.lmb_id = Some(lmb_id);
         self
     }
 
-    pub fn with_num(mut self, num: Atom) -> Self {
+    pub(crate) fn with_num(mut self, num: Atom) -> Self {
         self.num = Some(num);
         self
     }
 }
 
 impl ParseEdge {
-    pub fn localize_ainds(atom: impl AtomCore, eid: EdgeIndex, hedge_pair: HedgePair) -> Atom {
+    pub(crate) fn localize_ainds(
+        atom: impl AtomCore,
+        eid: EdgeIndex,
+        hedge_pair: HedgePair,
+    ) -> Atom {
         let a = atom
             .replace(GS.edgeid)
             .with(Atom::num(usize::from(eid) as i64))
@@ -313,7 +317,7 @@ impl ParseEdge {
             },
         }
     }
-    pub fn parse<'a>(
+    pub(crate) fn parse<'a>(
         model: &'a Model,
     ) -> impl FnMut(
         &'a HedgeGraph<DotEdgeData, DotVertexData, DotHedgeData>,
@@ -341,7 +345,7 @@ impl ParseEdge {
                 });
 
                 let particle: PossibleParticle = if let Some(v) = e.get::<_, isize>("pdg") {
-                    model.get_particle_from_pdg(v?).into()
+                    model.try_get_particle_from_pdg(v?)?.into()
                 } else if let Some(v) = e.get::<_, String>("particle") {
                     let pname = v?;
                     let pname = pname

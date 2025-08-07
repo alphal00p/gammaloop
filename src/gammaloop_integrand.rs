@@ -11,20 +11,12 @@ use crate::evaluation_result::{EvaluationMetaData, EvaluationResult};
 use crate::graph::Graph;
 use crate::integrands::{HasIntegrand, Integrand};
 use crate::integrate::UserData;
-use crate::momentum::{
-    FourMomentum, Polarization, Rotatable, Rotation, Signature, ThreeMomentum,
-};
+use crate::momentum::{FourMomentum, Polarization, Rotatable, Rotation, Signature, ThreeMomentum};
 use crate::numerator::Evaluators;
 //use crate::subtraction::static_counterterm::CounterTerm;
 use crate::disable;
-use crate::utils::{
-    format_for_compare_digits, FloatLike,
-    PrecisionUpgradable, F,
-};
-use crate::{
-    Externals, IntegratedPhase, Polarizations, SamplingSettings,
-    Settings,
-};
+use crate::utils::{format_for_compare_digits, FloatLike, PrecisionUpgradable, F};
+use crate::{Externals, IntegratedPhase, Polarizations, SamplingSettings, Settings};
 use crate::{Precision, StabilityLevelSetting};
 use colored::Colorize;
 use itertools::Itertools;
@@ -876,7 +868,7 @@ impl GammaLoopIntegrand {
     }
 
     /// Used to create the use_data_generator closure for havana_integrate
-    pub fn user_data_generator(&self, num_cores: usize, _settings: &Settings) -> UserData {
+    pub(crate) fn user_data_generator(&self, num_cores: usize, _settings: &Settings) -> UserData {
         UserData {
             integrand: vec![Integrand::GammaLoopIntegrand(self.clone()); num_cores],
         }
@@ -1164,7 +1156,7 @@ impl GammaLoopIntegrand {
         (2. * std::f64::consts::PI).powi(loop_number as i32 * 3)
     }
 
-    pub fn amplitude_integrand_constructor(
+    pub(crate) fn amplitude_integrand_constructor(
         amplitude: Amplitude<Evaluators>,
         settings: Settings,
     ) -> Self {
@@ -1289,7 +1281,7 @@ impl GammaLoopIntegrand {
         }
     }
 
-    pub fn cross_section_integrand_constructor(
+    pub(crate) fn cross_section_integrand_constructor(
         cross_section: CrossSection,
         settings: Settings,
     ) -> Self {
@@ -1381,7 +1373,7 @@ impl GammaLoopSample<f64> {
 }
 
 impl<T: FloatLike> GammaLoopSample<T> {
-    pub fn zero(&self) -> F<T> {
+    pub(crate) fn zero(&self) -> F<T> {
         match self {
             GammaLoopSample::Default(sample) => sample.zero(),
             GammaLoopSample::MultiChanneling { sample, .. } => sample.zero(),
@@ -1390,7 +1382,7 @@ impl<T: FloatLike> GammaLoopSample<T> {
     }
 
     #[allow(dead_code)]
-    pub fn one(&self) -> F<T> {
+    pub(crate) fn one(&self) -> F<T> {
         match self {
             GammaLoopSample::Default(sample) => sample.one(),
             GammaLoopSample::MultiChanneling { sample, .. } => sample.one(),
@@ -1514,7 +1506,7 @@ impl<T: FloatLike> Display for DefaultSample<T> {
 impl DefaultSample<f64> {}
 
 impl<T: FloatLike> BareSample<T> {
-    pub fn new(
+    pub(crate) fn new(
         loop_moms: Vec<ThreeMomentum<F<T>>>,
         external_moms: &Externals,
         jacobian: F<f64>,
@@ -1541,7 +1533,7 @@ impl<T: FloatLike> BareSample<T> {
         }
     }
 
-    pub fn one(&self) -> F<T> {
+    pub(crate) fn one(&self) -> F<T> {
         if let Some(f) = self.loop_moms.first() {
             f.px.one()
         } else if let Some(f) = self.external_moms.first() {
@@ -1551,7 +1543,7 @@ impl<T: FloatLike> BareSample<T> {
         }
     }
 
-    pub fn zero(&self) -> F<T> {
+    pub(crate) fn zero(&self) -> F<T> {
         if let Some(f) = self.loop_moms.first() {
             f.px.zero()
         } else if let Some(f) = self.external_moms.first() {
@@ -1583,7 +1575,7 @@ impl<T: FloatLike> BareSample<T> {
         }
     }
 
-    pub fn higher_precision(&self) -> BareSample<T::Higher>
+    pub(crate) fn higher_precision(&self) -> BareSample<T::Higher>
     where
         T::Higher: FloatLike,
     {
@@ -1607,7 +1599,7 @@ impl<T: FloatLike> BareSample<T> {
         }
     }
 
-    pub fn lower_precision(&self) -> BareSample<T::Lower>
+    pub(crate) fn lower_precision(&self) -> BareSample<T::Lower>
     where
         T::Lower: FloatLike,
     {
@@ -1633,7 +1625,7 @@ impl<T: FloatLike> BareSample<T> {
 
     #[inline]
     /// Rotation for stability checks
-    pub fn get_rotated_sample_cached(
+    pub(crate) fn get_rotated_sample_cached(
         &self,
         rotation: &Rotation,
         rotated_externals: Vec<FourMomentum<F<T>>>,
@@ -1652,7 +1644,7 @@ impl<T: FloatLike> BareSample<T> {
     }
 
     #[inline]
-    pub fn get_rotated_sample(&self, rotation: &Rotation) -> Self {
+    pub(crate) fn get_rotated_sample(&self, rotation: &Rotation) -> Self {
         Self {
             loop_moms: self
                 .loop_moms
@@ -1675,7 +1667,7 @@ impl<T: FloatLike> BareSample<T> {
 }
 
 impl<T: FloatLike> DefaultSample<T> {
-    pub fn possibly_rotated_sample(&self) -> &BareSample<T> {
+    pub(crate) fn possibly_rotated_sample(&self) -> &BareSample<T> {
         if let Some(rot) = self.rotated_sample.as_ref() {
             rot
         } else {
@@ -1683,7 +1675,7 @@ impl<T: FloatLike> DefaultSample<T> {
         }
     }
 
-    pub fn numerator_sample(&self, settings: &Settings) -> (&BareSample<T>, Option<Uuid>) {
+    pub(crate) fn numerator_sample(&self, settings: &Settings) -> (&BareSample<T>, Option<Uuid>) {
         if settings.stability.rotate_numerator {
             (self.possibly_rotated_sample(), self.uuid())
         } else {
@@ -1691,7 +1683,7 @@ impl<T: FloatLike> DefaultSample<T> {
         }
     }
 
-    pub fn uuid(&self) -> Option<Uuid> {
+    pub(crate) fn uuid(&self) -> Option<Uuid> {
         if self.rotated_sample.is_some() {
             None
         } else {
@@ -1699,7 +1691,7 @@ impl<T: FloatLike> DefaultSample<T> {
         }
     }
 
-    pub fn loop_moms(&self) -> &[ThreeMomentum<F<T>>] {
+    pub(crate) fn loop_moms(&self) -> &[ThreeMomentum<F<T>>] {
         if let Some(rotated_sample) = &self.rotated_sample {
             &rotated_sample.loop_moms
         } else {
@@ -1708,14 +1700,14 @@ impl<T: FloatLike> DefaultSample<T> {
     }
 
     #[allow(clippy::type_complexity)]
-    pub fn loop_mom_pair(&self) -> (&[ThreeMomentum<F<T>>], Option<&[ThreeMomentum<F<T>>]>) {
+    pub(crate) fn loop_mom_pair(&self) -> (&[ThreeMomentum<F<T>>], Option<&[ThreeMomentum<F<T>>]>) {
         (
             self.sample.loop_moms.as_slice(),
             self.rotated_sample.as_ref().map(|s| s.loop_moms.as_slice()),
         )
     }
 
-    pub fn external_moms(&self) -> &[FourMomentum<F<T>>] {
+    pub(crate) fn external_moms(&self) -> &[FourMomentum<F<T>>] {
         if let Some(rotated_sample) = &self.rotated_sample {
             &rotated_sample.external_moms
         } else {
@@ -1724,7 +1716,9 @@ impl<T: FloatLike> DefaultSample<T> {
     }
 
     #[allow(clippy::type_complexity)]
-    pub fn external_mom_pair(&self) -> (&[FourMomentum<F<T>>], Option<&[FourMomentum<F<T>>]>) {
+    pub(crate) fn external_mom_pair(
+        &self,
+    ) -> (&[FourMomentum<F<T>>], Option<&[FourMomentum<F<T>>]>) {
         (
             self.sample.external_moms.as_slice(),
             self.rotated_sample
@@ -1733,7 +1727,7 @@ impl<T: FloatLike> DefaultSample<T> {
         )
     }
 
-    pub fn polarizations(&self) -> &[Polarization<Complex<F<T>>>] {
+    pub(crate) fn polarizations(&self) -> &[Polarization<Complex<F<T>>>] {
         if let Some(rotated_sample) = &self.rotated_sample {
             &rotated_sample.polarizations
         } else {
@@ -1742,7 +1736,7 @@ impl<T: FloatLike> DefaultSample<T> {
     }
 
     #[allow(clippy::type_complexity)]
-    pub fn polarizations_pair(
+    pub(crate) fn polarizations_pair(
         &self,
     ) -> (
         &[Polarization<Complex<F<T>>>],
@@ -1756,7 +1750,7 @@ impl<T: FloatLike> DefaultSample<T> {
         )
     }
 
-    pub fn jacobian(&self) -> F<f64> {
+    pub(crate) fn jacobian(&self) -> F<f64> {
         if let Some(rotated_sample) = &self.rotated_sample {
             rotated_sample.jacobian
         } else {
@@ -1764,7 +1758,7 @@ impl<T: FloatLike> DefaultSample<T> {
         }
     }
 
-    pub fn new(
+    pub(crate) fn new(
         loop_moms: Vec<ThreeMomentum<F<T>>>,
         external_moms: &Externals,
         jacobian: F<f64>,
@@ -1784,11 +1778,11 @@ impl<T: FloatLike> DefaultSample<T> {
         }
     }
 
-    pub fn one(&self) -> F<T> {
+    pub(crate) fn one(&self) -> F<T> {
         self.sample.one()
     }
 
-    pub fn zero(&self) -> F<T> {
+    pub(crate) fn zero(&self) -> F<T> {
         self.sample.zero()
     }
 
@@ -1805,7 +1799,7 @@ impl<T: FloatLike> DefaultSample<T> {
         }
     }
 
-    pub fn higher_precision(&self) -> DefaultSample<T::Higher>
+    pub(crate) fn higher_precision(&self) -> DefaultSample<T::Higher>
     where
         T::Higher: FloatLike,
     {
@@ -1816,7 +1810,7 @@ impl<T: FloatLike> DefaultSample<T> {
         }
     }
 
-    pub fn lower_precision(&self) -> DefaultSample<T::Lower>
+    pub(crate) fn lower_precision(&self) -> DefaultSample<T::Lower>
     where
         T::Lower: FloatLike,
     {
@@ -1829,7 +1823,7 @@ impl<T: FloatLike> DefaultSample<T> {
 
     #[inline]
     /// Rotation for stability checks
-    pub fn get_rotated_sample_cached(
+    pub(crate) fn get_rotated_sample_cached(
         &self,
         rotation: &Rotation,
         rotated_externals: Vec<FourMomentum<F<T>>>,
@@ -1847,7 +1841,7 @@ impl<T: FloatLike> DefaultSample<T> {
     }
 
     #[inline]
-    pub fn get_rotated_sample(&self, rotation: &Rotation) -> Self {
+    pub(crate) fn get_rotated_sample(&self, rotation: &Rotation) -> Self {
         Self {
             sample: self.sample.clone(),
             rotated_sample: Some(self.sample.get_rotated_sample(rotation)),
@@ -1874,7 +1868,7 @@ pub enum DiscreteGraphSample<T: FloatLike> {
 }
 
 impl<T: FloatLike> DiscreteGraphSample<T> {
-    pub fn zero(&self) -> F<T> {
+    pub(crate) fn zero(&self) -> F<T> {
         match self {
             DiscreteGraphSample::Default(sample) => sample.zero(),
             DiscreteGraphSample::MultiChanneling { sample, .. } => sample.zero(),
@@ -1883,7 +1877,7 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
         }
     }
 
-    pub fn one(&self) -> F<T> {
+    pub(crate) fn one(&self) -> F<T> {
         match self {
             DiscreteGraphSample::Default(sample) => sample.one(),
             DiscreteGraphSample::MultiChanneling { sample, .. } => sample.one(),

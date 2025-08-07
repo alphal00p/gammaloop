@@ -52,52 +52,5 @@ use super::State;
 pub fn start(mut settings: Settings) -> Result<(), Report> {
     // 1. Create the base clap::Command from your `Cli` type.
 
-    let prompt = DefaultPrompt {
-        left_prompt: DefaultPromptSegment::Basic("γloop".to_owned()),
-        ..DefaultPrompt::default()
-    };
-    let mut state = State::default();
-    warn!("Starting REPL");
-
-    // 2. Build the REPL – clap‑repl takes ownership and configures rustyline.
-    let mut repl = ClapEditor::<Cli>::builder().with_prompt(Box::new(prompt));
-
-    if let Some(home) = home_dir() {
-        repl = repl.with_editor_hook(move |reed| {
-            // Do custom things with `Reedline` instance here
-            reed.with_history(Box::new(
-                FileBackedHistory::with_file(10000, home.join(".gammaLoop_history")).unwrap(),
-            ))
-        })
-    }
-    let mut r = repl.build();
-
-    loop {
-        match r.read_command() {
-            ReadCommandOutput::Command(c) => match c.run_with_settings(&mut settings, &mut state) {
-                Err(e) => eprintln!("{e}"),
-                Ok(ControlFlow::Break(())) => {
-                    break;
-                }
-                _ => {}
-            },
-            ReadCommandOutput::EmptyLine => (),
-            ReadCommandOutput::ClapError(e) => {
-                e.print().unwrap();
-            }
-            ReadCommandOutput::ShlexError => {
-                println!(
-                    "{} input was not valid and could not be processed",
-                    style("Error:").red().bold()
-                );
-            }
-            ReadCommandOutput::ReedlineError(e) => {
-                panic!("{e}");
-            }
-            ReadCommandOutput::CtrlC => continue,
-            ReadCommandOutput::CtrlD => break,
-        }
-    }
-
     Ok(())
 }

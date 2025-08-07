@@ -38,7 +38,7 @@ pub struct FeynGenHedgeGraph<E, V> {
 }
 
 impl<E, V> FeynGenHedgeGraph<E, V> {
-    pub fn cut(&mut self)
+    pub(crate) fn cut(&mut self)
     where
         E: Clone,
     {
@@ -49,7 +49,7 @@ impl<E, V> FeynGenHedgeGraph<E, V> {
         self.state = CutState::Cut;
     }
 
-    pub fn glue_external_hedges(&mut self) {
+    pub(crate) fn glue_external_hedges(&mut self) {
         if self.state == CutState::Cut {
             self.graph.glue_back_strict();
             self.state = CutState::Vacuum;
@@ -57,7 +57,7 @@ impl<E, V> FeynGenHedgeGraph<E, V> {
     }
 
     /// Only on cut graphs
-    pub fn only_default_orientations(&mut self) {
+    pub(crate) fn only_default_orientations(&mut self) {
         let cut = self.graph.cut();
 
         for l in cut.iter_left_hedges() {
@@ -101,7 +101,7 @@ impl<E, V> FeynGenHedgeGraph<E, V> {
         }
     }
 
-    pub fn remove_external_nodes(&mut self)
+    pub(crate) fn remove_external_nodes(&mut self)
     where
         E: Clone,
         V: Clone,
@@ -132,7 +132,7 @@ impl<E, V> FeynGenHedgeGraph<E, V> {
     }
 }
 impl<V> FeynGenHedgeGraph<ArcParticle, V> {
-    pub fn number_of_fermion_loops(&self) -> usize {
+    pub(crate) fn number_of_fermion_loops(&self) -> usize {
         let mut fermions: BitVec = self.graph.empty_subgraph();
 
         for (p, _, d) in self.graph.iter_edges() {
@@ -151,7 +151,7 @@ impl<V> FeynGenHedgeGraph<ArcParticle, V> {
         self.loop_count(&fermions)
     }
 
-    pub fn loop_count<S: SubGraph>(&self, subgraph: &S) -> usize {
+    pub(crate) fn loop_count<S: SubGraph>(&self, subgraph: &S) -> usize {
         let n_hedges = self.graph.count_internal_edges(subgraph);
 
         let n_nodes = self.graph.number_of_nodes_in_subgraph(subgraph);
@@ -162,7 +162,7 @@ impl<V> FeynGenHedgeGraph<ArcParticle, V> {
     }
 
     ///Mutates because it glues external hedges back together
-    pub fn number_of_external_fermion_loops(&mut self) -> usize
+    pub(crate) fn number_of_external_fermion_loops(&mut self) -> usize
     where
         V: Clone,
     {
@@ -177,7 +177,7 @@ impl<V> FeynGenHedgeGraph<ArcParticle, V> {
         all_fermion_loops - internal
     }
 
-    pub fn from_feyn_gen_symbolica(
+    pub(crate) fn from_feyn_gen_symbolica(
         graph: SymbolicaGraph<V, EdgeColor>,
         model: &Model,
         n_initials: usize,

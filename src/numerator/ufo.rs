@@ -75,7 +75,7 @@ pub static UFO: LazyLock<UFOSymbols> = LazyLock::new(|| UFOSymbols {
 });
 
 impl UFOSymbols {
-    pub fn normalize_complex(&self, a: impl AtomCore) -> Atom {
+    pub(crate) fn normalize_complex(&self, a: impl AtomCore) -> Atom {
         a.replace_map(|term, _, out| {
             if let AtomView::Fun(f) = term {
                 if f.get_symbol() == self.complex {
@@ -116,7 +116,7 @@ impl UFOSymbols {
         })
     }
 
-    pub fn reindex_spin(
+    pub(crate) fn reindex_spin(
         &self,
         slots: &[&OrderedStructure<LibraryRep, Aind>],
         momenta: &[EdgeIndex],
@@ -480,7 +480,7 @@ impl UFOSymbols {
         atom
     }
 
-    pub fn reindex_color(
+    pub(crate) fn reindex_color(
         &self,
         slots: &[&OrderedStructure<LibraryRep, Aind>],
         mut atom: Atom,
@@ -787,7 +787,7 @@ pub(crate) fn preprocess_ufo_color_wrapped(atom: Atom) -> Atom {
     // atom.replace_multiple(&reps)
     todo!()
 }
-pub fn preprocess_ufo_spin_wrapped(atom: Atom) -> Atom {
+pub(crate) fn preprocess_ufo_spin_wrapped(atom: Atom) -> Atom {
     // let a_ = symbol!("a_");
     // let b_ = symbol!("b_");
     // let c_ = symbol!("c_");

@@ -1,4 +1,4 @@
-use eyre::Result;
+use color_eyre::Result;
 use itertools::Itertools;
 use momtrop::SampleGenerator;
 use serde::de::value;

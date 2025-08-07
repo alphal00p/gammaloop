@@ -52,16 +52,16 @@ impl PartialEq for Hsurface {
 
 impl Hsurface {
     #[inline]
-    pub fn compute_value<T: FloatLike>(&self, energy_cache: &EdgeVec<F<T>>) -> F<T> {
+    pub(crate) fn compute_value<T: FloatLike>(&self, energy_cache: &EdgeVec<F<T>>) -> F<T> {
         surface::compute_value(self, energy_cache)
     }
 
     #[inline]
-    pub fn compute_shift_part<T: FloatLike>(&self, energy_cache: &EdgeVec<F<T>>) -> F<T> {
+    pub(crate) fn compute_shift_part<T: FloatLike>(&self, energy_cache: &EdgeVec<F<T>>) -> F<T> {
         surface::compute_shift_part(self, energy_cache)
     }
 
-    pub fn to_atom(&self, cut_edges: &[EdgeIndex]) -> Atom {
+    pub(crate) fn to_atom(&self, cut_edges: &[EdgeIndex]) -> Atom {
         let (symbolic_positive_energies, symbolic_negative_energies) =
             [&self.positive_energies, &self.negative_energies]
                 .iter()
@@ -98,7 +98,7 @@ impl Hsurface {
         symbolic_sum_positive_energies - &symbolic_sum_negative_energies + &symbolic_shift
     }
 
-    pub fn to_atom_with_rewrite(&self, esurface: &Esurface) -> Option<Atom> {
+    pub(crate) fn to_atom_with_rewrite(&self, esurface: &Esurface) -> Option<Atom> {
         let possible = self
             .negative_energies
             .iter()
@@ -134,7 +134,7 @@ impl Hsurface {
     }
 }
 
-pub fn compute_hsurface_cache<T: FloatLike>(
+pub(crate) fn compute_hsurface_cache<T: FloatLike>(
     hsurfaces: &HsurfaceCollection,
     energy_cache: &EdgeVec<F<T>>,
 ) -> HsurfaceCache<F<T>> {

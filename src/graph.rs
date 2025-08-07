@@ -216,7 +216,7 @@ pub struct SerializableBareEdge {
 }
 
 impl SerializableBareEdge {
-    pub fn from_edge(graph: &BareGraph, edge: &BareEdge) -> SerializableBareEdge {
+    pub(crate) fn from_edge(graph: &BareGraph, edge: &BareEdge) -> SerializableBareEdge {
         SerializableBareEdge {
             name: edge.name.clone(),
             edge_type: edge.edge_type,
@@ -241,7 +241,7 @@ pub struct BareEdge {
 }
 
 impl BareEdge {
-    pub fn dod(&self) -> isize {
+    pub(crate) fn dod(&self) -> isize {
         match self.particle.0.spin {
             2 => -1,
             3 => -2,
@@ -249,10 +249,10 @@ impl BareEdge {
         }
     }
 
-    pub fn n_dummies(&self) -> usize {
+    pub(crate) fn n_dummies(&self) -> usize {
         5
     }
-    pub fn from_serializable_edge(
+    pub(crate) fn from_serializable_edge(
         model: &model::Model,
         graph: &BareGraph,
         serializable_edge: &SerializableBareEdge,
@@ -274,11 +274,11 @@ impl BareEdge {
         }
     }
 
-    pub fn is_incoming_to(&self, vertex: usize) -> bool {
+    pub(crate) fn is_incoming_to(&self, vertex: usize) -> bool {
         self.vertices[1] == vertex
     }
 
-    pub fn denominator(&self, graph: &BareGraph) -> (Atom, Atom) {
+    pub(crate) fn denominator(&self, graph: &BareGraph) -> (Atom, Atom) {
         let num = *graph.edge_name_to_position.get(&self.name).unwrap();
         let mom = parse!(&format!("Q{num}"));
         let mass = self
@@ -292,26 +292,31 @@ impl BareEdge {
         (mom, mass)
     }
 
-    pub fn substitute_lmb(&self, atom: Atom, graph: &BareGraph, lmb: &LoopMomentumBasis) -> Atom {
+    pub(crate) fn substitute_lmb(
+        &self,
+        atom: Atom,
+        graph: &BareGraph,
+        lmb: &LoopMomentumBasis,
+    ) -> Atom {
         let num = *graph.edge_name_to_position.get(&self.name).unwrap();
         let mom = parse!(&format!("Q({num},x_)")).to_pattern();
         let mom_rep = lmb.pattern(num.into());
         atom.replace(&mom).with(&mom_rep)
     }
 
-    pub fn edge_momentum_symbol(&self, graph: &BareGraph) -> Symbol {
+    pub(crate) fn edge_momentum_symbol(&self, graph: &BareGraph) -> Symbol {
         let num = *graph.edge_name_to_position.get(&self.name).unwrap();
         symbol!(format!("Q{num}"))
     }
 
-    pub fn in_slot(&self, graph: &BareGraph) -> EdgeSlots<Minkowski> {
+    pub(crate) fn in_slot(&self, graph: &BareGraph) -> EdgeSlots<Minkowski> {
         let local_pos_in_sink_vertex =
             graph.vertices[self.vertices[0]].get_local_edge_position(self, graph, false);
 
         graph.vertex_slots[self.vertices[0]][local_pos_in_sink_vertex].dual()
     }
 
-    pub fn out_slot(&self, graph: &BareGraph) -> EdgeSlots<Minkowski> {
+    pub(crate) fn out_slot(&self, graph: &BareGraph) -> EdgeSlots<Minkowski> {
         let local_pos_in_sink_vertex = graph.vertices[self.vertices[1]].get_local_edge_position(
             self,
             graph,
@@ -321,13 +326,13 @@ impl BareEdge {
         graph.vertex_slots[self.vertices[1]][local_pos_in_sink_vertex].dual()
     }
 
-    pub fn numerator(&self, graph: &BareGraph, edge_index: usize) -> Atom {
+    pub(crate) fn numerator(&self, graph: &BareGraph, edge_index: usize) -> Atom {
         let [colorless, color] = self.color_separated_numerator(graph, edge_index);
 
         colorless * color
     }
 
-    pub fn color_separated_numerator(&self, graph: &BareGraph, num: usize) -> [Atom; 2] {
+    pub(crate) fn color_separated_numerator(&self, graph: &BareGraph, num: usize) -> [Atom; 2] {
         // let num = *graph.edge_name_to_position.get(&self.name).unwrap();
         let in_slots = self.in_slot(graph);
         let out_slots = self.out_slot(graph);
@@ -525,13 +530,17 @@ impl HasVertexInfo for VertexInfo {
 }
 
 impl VertexInfo {
-    pub fn dod(&self) -> isize {
+    pub(crate) fn dod(&self) -> isize {
         match self {
             VertexInfo::ExternalVertexInfo(_) => 0,
             VertexInfo::InteractonVertexInfo(i) => i.dod(),
         }
     }
-    pub fn generate_vertex_slots(&self, shifts: Shifts, model: &Model) -> (VertexSlots, Shifts) {
+    pub(crate) fn generate_vertex_slots(
+        &self,
+        shifts: Shifts,
+        model: &Model,
+    ) -> (VertexSlots, Shifts) {
         match self {
             VertexInfo::ExternalVertexInfo(e) => {
                 let (e, mut updated_shifts) = match e.direction {
@@ -575,7 +584,7 @@ pub struct ExternalVertexInfo {
 }
 
 impl ExternalVertexInfo {
-    pub fn get_concrete_polarization_atom(
+    pub(crate) fn get_concrete_polarization_atom(
         &self,
         vertex_pos: usize,
         vertex_slots: &VertexSlots,
@@ -633,7 +642,7 @@ pub struct InteractionVertexInfo {
 }
 
 impl InteractionVertexInfo {
-    pub fn dod(&self) -> isize {
+    pub(crate) fn dod(&self) -> isize {
         self.vertex_rule.0.dod()
     }
 }
@@ -851,7 +860,7 @@ pub struct SerializableVertex {
 }
 
 impl SerializableVertex {
-    pub fn from_vertex(graph: &BareGraph, vertex: &BareVertex) -> SerializableVertex {
+    pub(crate) fn from_vertex(graph: &BareGraph, vertex: &BareVertex) -> SerializableVertex {
         SerializableVertex {
             name: vertex.name.clone(),
             vertex_info: serializable_vertex_info(&vertex.vertex_info),
@@ -872,10 +881,10 @@ pub struct BareVertex {
 }
 
 impl BareVertex {
-    pub fn dod(&self) -> isize {
+    pub(crate) fn dod(&self) -> isize {
         self.vertex_info.dod()
     }
-    pub fn get_local_edge_position(
+    pub(crate) fn get_local_edge_position(
         &self,
         edge: &BareEdge,
         graph: &BareGraph,
@@ -893,11 +902,15 @@ impl BareVertex {
             .0
     }
 
-    pub fn generate_vertex_slots(&self, shifts: Shifts, model: &Model) -> (VertexSlots, Shifts) {
+    pub(crate) fn generate_vertex_slots(
+        &self,
+        shifts: Shifts,
+        model: &Model,
+    ) -> (VertexSlots, Shifts) {
         self.vertex_info.generate_vertex_slots(shifts, model)
     }
 
-    pub fn order_edges_following_interaction(
+    pub(crate) fn order_edges_following_interaction(
         &mut self,
         edge_id_and_pdgs_of_current_order: Vec<(usize, ArcParticle)>,
     ) -> Result<(), FeynGenError> {
@@ -938,7 +951,7 @@ impl BareVertex {
         }
     }
 
-    pub fn from_serializable_vertex(
+    pub(crate) fn from_serializable_vertex(
         model: &model::Model,
         vertex: &SerializableVertex,
     ) -> BareVertex {
@@ -950,7 +963,7 @@ impl BareVertex {
         }
     }
 
-    pub fn is_edge_incoming(&self, edge: usize, graph: &BareGraph) -> bool {
+    pub(crate) fn is_edge_incoming(&self, edge: usize, graph: &BareGraph) -> bool {
         graph.is_edge_incoming(edge, graph.get_vertex_position(&self.name).unwrap())
     }
 
@@ -967,7 +980,7 @@ impl BareVertex {
             .collect()
     }
 
-    pub fn apply_vertex_rule(&self, graph: &BareGraph) -> Option<[DataTensor<Atom>; 3]> {
+    pub(crate) fn apply_vertex_rule(&self, graph: &BareGraph) -> Option<[DataTensor<Atom>; 3]> {
         let pos = graph.get_vertex_position(&self.name).unwrap();
         self.vertex_info.apply_vertex_rule(
             &self.add_signs_to_edges(graph),
@@ -976,7 +989,7 @@ impl BareVertex {
         )
     }
 
-    pub fn contracted_vertex_rule(&self, graph: &BareGraph) -> Option<Atom> {
+    pub(crate) fn contracted_vertex_rule(&self, graph: &BareGraph) -> Option<Atom> {
         let all = self.apply_vertex_rule(graph)?;
         let scalar = all
             .into_iter()
@@ -989,7 +1002,7 @@ impl BareVertex {
         Some(scalar)
     }
 
-    pub fn colorless_vertex_rule(&self, graph: &BareGraph) -> Option<[DataTensor<Atom>; 2]> {
+    pub(crate) fn colorless_vertex_rule(&self, graph: &BareGraph) -> Option<[DataTensor<Atom>; 2]> {
         let [spin, color, couplings] = self.apply_vertex_rule(graph)?;
 
         let colorless = spin.contract(&couplings).unwrap();
@@ -998,7 +1011,7 @@ impl BareVertex {
     }
 
     #[allow(clippy::type_complexity)]
-    pub fn contracted_colorless_vertex_rule(
+    pub(crate) fn contracted_colorless_vertex_rule(
         &self,
         graph: &BareGraph,
     ) -> Option<(Atom, DataTensor<Atom, NamedStructure<Symbol, usize>>)> {
@@ -1039,7 +1052,7 @@ pub struct SerializableGraph {
 }
 
 impl SerializableGraph {
-    pub fn from_graph(graph: &BareGraph) -> SerializableGraph {
+    pub(crate) fn from_graph(graph: &BareGraph) -> SerializableGraph {
         SerializableGraph {
             name: graph.name.clone(),
             vertices: graph
@@ -1085,7 +1098,7 @@ impl SerializableGraph {
         }
     }
 
-    pub fn from_yaml_str(yaml_str: String) -> Result<SerializableGraph, Report> {
+    pub(crate) fn from_yaml_str(yaml_str: String) -> Result<SerializableGraph, Report> {
         serde_yaml::from_str(yaml_str.as_str())
             .map_err(|e| eyre!(format!("Error parsing graph yaml: {}", e)))
             .suggestion("Is it a correct yaml file")
@@ -1099,7 +1112,7 @@ pub struct Graph<S: NumeratorState = Evaluators> {
 }
 
 impl Graph<PythonState> {
-    pub fn load_derived_data<S: NumeratorState>(&mut self, path: &Path) -> Result<()> {
+    pub(crate) fn load_derived_data<S: NumeratorState>(&mut self, path: &Path) -> Result<()> {
         let derived_data = DerivedGraphData::load_python_from_path::<S>(path)?;
 
         self.derived_data = Some(derived_data);
@@ -1107,7 +1120,7 @@ impl Graph<PythonState> {
         Ok(())
     }
 
-    pub fn numerator_apply<F, S: TypedNumeratorState, T: TypedNumeratorState>(
+    pub(crate) fn numerator_apply<F, S: TypedNumeratorState, T: TypedNumeratorState>(
         &mut self,
         f: F,
     ) -> Result<()>
@@ -1117,7 +1130,7 @@ impl Graph<PythonState> {
         self.statefull_apply::<_, S, T>(|d, _| d.map_numerator(f))
     }
 
-    pub fn forgetfull_apply<F, S: TypedNumeratorState>(&mut self, mut f: F) -> Result<()>
+    pub(crate) fn forgetfull_apply<F, S: TypedNumeratorState>(&mut self, mut f: F) -> Result<()>
     where
         F: FnMut(DerivedGraphData<S>, &mut BareGraph) -> DerivedGraphData<PythonState>,
     {
@@ -1131,7 +1144,7 @@ impl Graph<PythonState> {
             Err(eyre!("Derived data is None"))
         }
     }
-    pub fn statefull_apply<F, S: TypedNumeratorState, T: TypedNumeratorState>(
+    pub(crate) fn statefull_apply<F, S: TypedNumeratorState, T: TypedNumeratorState>(
         &mut self,
         mut f: F,
     ) -> Result<()>
@@ -1152,7 +1165,7 @@ impl Graph<PythonState> {
         }
     }
 
-    pub fn statefull_apply_res<F, S: TypedNumeratorState, T: TypedNumeratorState>(
+    pub(crate) fn statefull_apply_res<F, S: TypedNumeratorState, T: TypedNumeratorState>(
         &mut self,
         mut f: F,
     ) -> Result<()>
@@ -1205,7 +1218,7 @@ pub struct Shifts {
 }
 
 impl BareGraph {
-    pub fn get_external_index(&self, edge_id: usize) -> Option<ExternalIndex> {
+    pub(crate) fn get_external_index(&self, edge_id: usize) -> Option<ExternalIndex> {
         if self.edges[edge_id].edge_type == EdgeType::Virtual {
             return None;
         }
@@ -1224,7 +1237,7 @@ impl BareGraph {
         None
     }
 
-    pub fn rep_rules_print(&self, printer_ops: PrintOptions) -> Vec<(String, String)> {
+    pub(crate) fn rep_rules_print(&self, printer_ops: PrintOptions) -> Vec<(String, String)> {
         self.generate_lmb_replacement_rules("Q(<i>,x___)", "K(<i>,x___)", "P(<i>,x___)")
             .iter()
             .map(|(lhs, rhs)| {
@@ -1241,7 +1254,7 @@ impl BareGraph {
             })
             .collect()
     }
-    pub fn denominator_print(&self, printer_ops: PrintOptions) -> Vec<(String, String)> {
+    pub(crate) fn denominator_print(&self, printer_ops: PrintOptions) -> Vec<(String, String)> {
         self.edges
             .iter()
             .filter_map(|e| {
@@ -1264,7 +1277,7 @@ impl BareGraph {
             .collect()
     }
 
-    pub fn external_slots(&self) -> Vec<EdgeSlots<Minkowski>> {
+    pub(crate) fn external_slots(&self) -> Vec<EdgeSlots<Minkowski>> {
         self.vertices
             .iter()
             .enumerate()
@@ -1286,27 +1299,27 @@ impl BareGraph {
         //     .collect()
     }
 
-    pub fn external_edges(&self) -> Vec<&BareEdge> {
+    pub(crate) fn external_edges(&self) -> Vec<&BareEdge> {
         self.external_edges
             .iter()
             .map(|&i| &self.edges[i])
             .collect()
     }
-    pub fn external_particle_spin(&self) -> Vec<isize> {
+    pub(crate) fn external_particle_spin(&self) -> Vec<isize> {
         self.external_edges
             .iter()
             .map(|&i| self.edges[i].particle.0.spin)
             .collect()
     }
 
-    pub fn external_particles(&self) -> Vec<ArcParticle> {
+    pub(crate) fn external_particles(&self) -> Vec<ArcParticle> {
         self.external_edges
             .iter()
             .map(|&i| self.edges[i].particle.clone())
             .collect()
     }
 
-    pub fn external_particle_spin_and_masslessness(&self) -> Vec<(isize, bool)> {
+    pub(crate) fn external_particle_spin_and_masslessness(&self) -> Vec<(isize, bool)> {
         self.external_edges
             .iter()
             .map(|&i| {
@@ -1317,11 +1330,11 @@ impl BareGraph {
             })
             .collect()
     }
-    pub fn is_tree(&self) -> bool {
+    pub(crate) fn is_tree(&self) -> bool {
         self.loop_momentum_basis.loop_edges.is_empty()
     }
 
-    pub fn external_in_or_out_signature(&self) -> ExternalSignature {
+    pub(crate) fn external_in_or_out_signature(&self) -> ExternalSignature {
         self.external_edges
             .iter()
             .map(|&i| match self.edges[i].edge_type {
@@ -1332,7 +1345,7 @@ impl BareGraph {
             .collect()
     }
 
-    pub fn get_dependent_externals<T: FloatLike>(
+    pub(crate) fn get_dependent_externals<T: FloatLike>(
         &self,
         indep_externals: &[FourMomentum<F<T>>],
     ) -> Vec<FourMomentum<F<T>>> {
@@ -1346,7 +1359,7 @@ impl BareGraph {
             .collect()
     }
 
-    pub fn dot_preamble(&self) -> String {
+    pub(crate) fn dot_preamble(&self) -> String {
         [
             "digraph G {",
             format!("label=\"{}\";", self.name).as_str(),
@@ -1358,7 +1371,7 @@ impl BareGraph {
         .join("\n")
     }
 
-    pub fn dot(&self) -> String {
+    pub(crate) fn dot(&self) -> String {
         let mut dot = String::new();
         dot.push_str(format!("{}\n", self.dot_preamble()).as_str());
         for (i, edge) in self.edges.iter().enumerate() {
@@ -1373,7 +1386,7 @@ impl BareGraph {
         dot
     }
 
-    pub fn dot_lmb(&self) -> String {
+    pub(crate) fn dot_lmb(&self) -> String {
         let mut dot = String::new();
         dot.push_str(format!("{}\n", self.dot_preamble()).as_str());
         for (i, edge) in self.edges.iter().enumerate() {
@@ -1390,7 +1403,7 @@ impl BareGraph {
         dot
     }
 
-    pub fn dot_internal(&self) -> String {
+    pub(crate) fn dot_internal(&self) -> String {
         let mut dot = String::new();
 
         dot.push_str(format!("{}\n", self.dot_preamble()).as_str());
@@ -1408,7 +1421,7 @@ impl BareGraph {
         dot
     }
 
-    pub fn dot_internal_vertices(&self) -> String {
+    pub(crate) fn dot_internal_vertices(&self) -> String {
         let mut dot = String::new();
         // let mut seen_edges = HashSet::new();
         dot.push_str(format!("{}\n", self.dot_preamble()).as_str());
@@ -1425,7 +1438,10 @@ impl BareGraph {
         dot
     }
 
-    pub fn from_serializable_graph(model: &model::Model, graph: &SerializableGraph) -> BareGraph {
+    pub(crate) fn from_serializable_graph(
+        model: &model::Model,
+        graph: &SerializableGraph,
+    ) -> BareGraph {
         // First build vertices
         let mut vertices: Vec<BareVertex> = vec![];
         let mut vertex_name_to_position: HashMap<SmartString<LazyCompact>, usize, RandomState> =
@@ -1546,7 +1562,7 @@ impl BareGraph {
     }
 
     /*
-    pub fn generate_lmb_replacements(&self) {
+    pub(crate) fn generate_lmb_replacements(&self) {
         let loop_basis = (0..self.loop_momentum_basis.basis.len())
             .map(|i_k| parse!(&format!("K{}", i_k)).unwrap())
             .collect::<Vec<_>>();
@@ -1568,7 +1584,7 @@ impl BareGraph {
     }
     */
 
-    pub fn select_cp_variant(
+    pub(crate) fn select_cp_variant(
         model: &Model,
         vertex_info: &mut VertexInfo,
         edge_particles: &[ArcParticle],
@@ -1641,7 +1657,7 @@ impl BareGraph {
         }
     }
 
-    pub fn from_symbolica_graph(
+    pub(crate) fn from_symbolica_graph(
         model: &model::Model,
         name: String,
         graph: &SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>,
@@ -1973,7 +1989,7 @@ impl BareGraph {
         Ok(g)
     }
 
-    pub fn set_loop_momentum_basis(
+    pub(crate) fn set_loop_momentum_basis(
         &mut self,
         forced_lmb: &Option<Vec<SmartString<LazyCompact>>>,
     ) -> Result<(), FeynGenError> {
@@ -2070,7 +2086,7 @@ impl BareGraph {
         Ok(())
     }
 
-    pub fn verify_external_edge_order(&self) -> Result<Vec<usize>> {
+    pub(crate) fn verify_external_edge_order(&self) -> Result<Vec<usize>> {
         if self.external_edges.is_empty() {
             return Ok(vec![]);
         }
@@ -2254,7 +2270,7 @@ impl BareGraph {
     }
 
     #[inline]
-    pub fn get_vertex(&self, name: &SmartString<LazyCompact>) -> Option<&BareVertex> {
+    pub(crate) fn get_vertex(&self, name: &SmartString<LazyCompact>) -> Option<&BareVertex> {
         match self.vertex_name_to_position.get(name) {
             Some(position) => Some(&self.vertices[*position]),
             None => None,
@@ -2262,12 +2278,12 @@ impl BareGraph {
     }
 
     #[inline]
-    pub fn get_vertex_position(&self, name: &SmartString<LazyCompact>) -> Option<usize> {
+    pub(crate) fn get_vertex_position(&self, name: &SmartString<LazyCompact>) -> Option<usize> {
         self.vertex_name_to_position.get(name).copied()
     }
 
     #[inline]
-    pub fn get_edge(&self, name: &SmartString<LazyCompact>) -> Option<&BareEdge> {
+    pub(crate) fn get_edge(&self, name: &SmartString<LazyCompact>) -> Option<&BareEdge> {
         match self.edge_name_to_position.get(name) {
             Some(position) => Some(&self.edges[*position]),
             None => None,
@@ -2275,12 +2291,12 @@ impl BareGraph {
     }
 
     #[inline]
-    pub fn get_edge_position(&self, name: &SmartString<LazyCompact>) -> Option<usize> {
+    pub(crate) fn get_edge_position(&self, name: &SmartString<LazyCompact>) -> Option<usize> {
         self.edge_name_to_position.get(name).copied()
     }
 
     #[inline]
-    pub fn compute_emr<T: FloatLike>(
+    pub(crate) fn compute_emr<T: FloatLike>(
         &self,
         loop_moms: &LoopMomenta<F<T>>,
         external_moms: &ExternalFourMomenta<F<T>>,
@@ -2289,7 +2305,7 @@ impl BareGraph {
     }
 
     #[inline]
-    pub fn compute_emr_in_lmb<T: FloatLike>(
+    pub(crate) fn compute_emr_in_lmb<T: FloatLike>(
         &self,
         loop_moms: &LoopMomenta<F<T>>,
         external_moms: &ExternalFourMomenta<F<T>>,
@@ -2303,7 +2319,7 @@ impl BareGraph {
     }
 
     #[inline]
-    pub fn compute_onshell_energies<T: FloatLike>(
+    pub(crate) fn compute_onshell_energies<T: FloatLike>(
         &self,
         loop_moms: &LoopMomenta<F<T>>,
         external_moms: &ExternalFourMomenta<F<T>>,
@@ -2312,12 +2328,12 @@ impl BareGraph {
     }
 
     #[inline]
-    pub fn get_mass_vector(&self) -> Vec<Option<Complex<F<f64>>>> {
+    pub(crate) fn get_mass_vector(&self) -> Vec<Option<Complex<F<f64>>>> {
         self.edges.iter().map(|e| e.particle.0.mass.value).collect()
     }
 
     #[inline]
-    pub fn get_real_mass_vector(&self) -> Vec<F<f64>> {
+    pub(crate) fn get_real_mass_vector(&self) -> Vec<F<f64>> {
         self.edges
             .iter()
             .map(|e| match e.particle.0.mass.value {
@@ -2328,7 +2344,7 @@ impl BareGraph {
     }
 
     #[inline]
-    pub fn compute_onshell_energies_in_lmb<T: FloatLike>(
+    pub(crate) fn compute_onshell_energies_in_lmb<T: FloatLike>(
         &self,
         loop_moms: &LoopMomenta<F<T>>,
         external_moms: &ExternalFourMomenta<F<T>>,
@@ -2357,7 +2373,7 @@ impl BareGraph {
     }
 
     #[inline]
-    pub fn compute_energy_product<T: FloatLike>(
+    pub(crate) fn compute_energy_product<T: FloatLike>(
         &self,
         loop_moms: &LoopMomenta<F<T>>,
         external_moms: &ExternalFourMomenta<F<T>>,
@@ -2366,7 +2382,7 @@ impl BareGraph {
     }
 
     #[inline]
-    pub fn compute_energy_product_in_lmb<T: FloatLike>(
+    pub(crate) fn compute_energy_product_in_lmb<T: FloatLike>(
         &self,
         loop_moms: &LoopMomenta<F<T>>,
         external_moms: &ExternalFourMomenta<F<T>>,
@@ -2383,11 +2399,11 @@ impl BareGraph {
     }
 
     #[inline]
-    pub fn get_edge_type_list(&self) -> Vec<EdgeType> {
+    pub(crate) fn get_edge_type_list(&self) -> Vec<EdgeType> {
         self.edges.iter().map(|e| e.edge_type).collect()
     }
 
-    pub fn generate_lmb_replacement_rules(
+    pub(crate) fn generate_lmb_replacement_rules(
         &self,
         q_format: &str,
         k_format: &str,
@@ -2448,11 +2464,11 @@ impl BareGraph {
         acc
     }
 
-    pub fn denominator(self) -> Vec<(Atom, Atom)> {
+    pub(crate) fn denominator(self) -> Vec<(Atom, Atom)> {
         self.edges.iter().map(|e| e.denominator(&self)).collect()
     }
 
-    pub fn cff_emr_from_lmb<T: FloatLike>(
+    pub(crate) fn cff_emr_from_lmb<T: FloatLike>(
         &self,
         sample: &BareMomentumSample<T>,
         lmb: &LoopMomentumBasis,
@@ -2476,10 +2492,10 @@ impl BareGraph {
             .collect()
     }
 
-    pub fn evaluate_model_params(&mut self, _model: &Model) {}
+    pub(crate) fn evaluate_model_params(&mut self, _model: &Model) {}
 
     #[inline]
-    pub fn get_virtual_edges_iterator(&self) -> impl Iterator<Item = (usize, &BareEdge)> {
+    pub(crate) fn get_virtual_edges_iterator(&self) -> impl Iterator<Item = (usize, &BareEdge)> {
         self.edges
             .iter()
             .enumerate()
@@ -2488,7 +2504,7 @@ impl BareGraph {
 
     /// iterate over all edges which are part of a loop, (tree-level attachments removed)
     #[inline]
-    pub fn get_loop_edges_iterator(&self) -> impl Iterator<Item = (usize, &BareEdge)> {
+    pub(crate) fn get_loop_edges_iterator(&self) -> impl Iterator<Item = (usize, &BareEdge)> {
         self.edges.iter().enumerate().filter(|(index, e)| {
             e.edge_type == EdgeType::Virtual && {
                 self.loop_momentum_basis.edge_signatures[EdgeIndex::from(*index)]
@@ -2501,7 +2517,7 @@ impl BareGraph {
 
     /// iterate over all edges which are virtual but do not carry a loop momentum.
     #[inline]
-    pub fn get_tree_level_edges_iterator(&self) -> impl Iterator<Item = (usize, &BareEdge)> {
+    pub(crate) fn get_tree_level_edges_iterator(&self) -> impl Iterator<Item = (usize, &BareEdge)> {
         self.edges.iter().enumerate().filter(|(index, e)| {
             e.edge_type == EdgeType::Virtual && {
                 self.loop_momentum_basis.edge_signatures[EdgeIndex::from(*index)]
@@ -2514,7 +2530,7 @@ impl BareGraph {
 
     /// For a given edge, return the indices of the edges which have the same signature
     #[inline]
-    pub fn is_edge_raised(&self, edge_index: EdgeIndex) -> SmallVec<[usize; 2]> {
+    pub(crate) fn is_edge_raised(&self, edge_index: EdgeIndex) -> SmallVec<[usize; 2]> {
         let edge_signature = &self.loop_momentum_basis.edge_signatures[edge_index];
         let virtual_edges = self.get_virtual_edges_iterator();
 
@@ -2528,7 +2544,7 @@ impl BareGraph {
     }
 
     /// Returns groups of edges which all have the same signature
-    pub fn group_edges_by_signature(&self) -> Vec<SmallVec<[usize; 3]>> {
+    pub(crate) fn group_edges_by_signature(&self) -> Vec<SmallVec<[usize; 3]>> {
         let mut edges: Vec<usize> = self
             .get_virtual_edges_iterator()
             .map(|(index, _)| index)
@@ -2558,11 +2574,11 @@ impl BareGraph {
         grouped_edges
     }
 
-    pub fn is_edge_incoming(&self, edge: usize, vertex: usize) -> bool {
+    pub(crate) fn is_edge_incoming(&self, edge: usize, vertex: usize) -> bool {
         self.edges[edge].is_incoming_to(vertex)
     }
 
-    pub fn build_params_for_cff(&self) -> Vec<Atom> {
+    pub(crate) fn build_params_for_cff(&self) -> Vec<Atom> {
         self.edges
             .iter()
             .enumerate()
@@ -2573,7 +2589,7 @@ impl BareGraph {
             .collect()
     }
 
-    pub fn get_dep_mom_expr(&self) -> (usize, ExternalShift) {
+    pub(crate) fn get_dep_mom_expr(&self) -> (usize, ExternalShift) {
         todo!("port to Amplitude/CrossSection")
 
         //let external_edges = self
@@ -2610,7 +2626,7 @@ impl BareGraph {
         //}
     }
 
-    pub fn generate_loop_momentum_bases(&self) -> Vec<LoopMomentumBasis> {
+    pub(crate) fn generate_loop_momentum_bases(&self) -> Vec<LoopMomentumBasis> {
         todo!("port to hedgegraph")
         //let loop_number = self.loop_momentum_basis.basis.len();
         //let num_edges = self.edges.len();
@@ -2742,7 +2758,7 @@ impl BareGraph {
         //lmbs
     }
 
-    pub fn generate_tropical_subgraph_table(
+    pub(crate) fn generate_tropical_subgraph_table(
         &mut self,
         settings: &TropicalSubgraphTableSettings,
     ) -> Result<SampleGenerator<3>> {
@@ -2827,7 +2843,7 @@ impl BareGraph {
             .map_err(|e| eyre!(e))
     }
 
-    pub fn load_derived_data<NumState: NumeratorState>(
+    pub(crate) fn load_derived_data<NumState: NumeratorState>(
         self,
         model: &Model,
         path: &Path,
@@ -2862,14 +2878,14 @@ impl BareGraph {
 }
 
 impl Graph<UnInit> {
-    pub fn from_serializable_graph(model: &model::Model, graph: &SerializableGraph) -> Self {
+    pub(crate) fn from_serializable_graph(model: &model::Model, graph: &SerializableGraph) -> Self {
         Graph {
             derived_data: Some(DerivedGraphData::new_empty()),
             bare_graph: BareGraph::from_serializable_graph(model, graph),
         }
     }
 
-    pub fn process_numerator(
+    pub(crate) fn process_numerator(
         mut self,
         model: &Model,
         contraction_settings: ContractionSettings,
@@ -2892,7 +2908,7 @@ impl Graph<UnInit> {
         }
     }
 
-    pub fn apply_feynman_rules(
+    pub(crate) fn apply_feynman_rules(
         mut self,
         export_settings: &ProcessSettings,
     ) -> Graph<AppliedFeynmanRule> {
@@ -2907,7 +2923,7 @@ impl Graph<UnInit> {
 }
 
 impl<S: TypedNumeratorState> Graph<S> {
-    pub fn try_from_python(g: Graph<PythonState>) -> Result<Self> {
+    pub(crate) fn try_from_python(g: Graph<PythonState>) -> Result<Self> {
         let derived_data = if let Some(d) = g.derived_data {
             Some(DerivedGraphData::<S>::try_from_python(d)?)
         } else {
@@ -2920,27 +2936,27 @@ impl<S: TypedNumeratorState> Graph<S> {
     }
 }
 impl<S: NumeratorState> Graph<S> {
-    pub fn forget_type(self) -> Graph<PythonState> {
+    pub(crate) fn forget_type(self) -> Graph<PythonState> {
         Graph {
             bare_graph: self.bare_graph,
             derived_data: self.derived_data.map(|d| d.forget_type()),
         }
     }
-    pub fn generate_cff(&mut self) {
+    pub(crate) fn generate_cff(&mut self) {
         todo!("move this function")
         // self.derived_data.as_mut().unwrap().cff_expression =
         //     Some(generate_cff_expression(&self.bare_graph).unwrap());
     }
 
-    pub fn generate_ltd(&mut self) {
+    pub(crate) fn generate_ltd(&mut self) {
         self.derived_data.as_mut().unwrap().ltd_expression = Some(generate_ltd_expression(self));
     }
-    pub fn generate_edge_groups(&mut self) {
+    pub(crate) fn generate_edge_groups(&mut self) {
         self.derived_data.as_mut().unwrap().edge_groups =
             Some(self.bare_graph.group_edges_by_signature());
     }
 
-    pub fn generate_esurface_data(&mut self) -> Result<(), Report> {
+    pub(crate) fn generate_esurface_data(&mut self) -> Result<(), Report> {
         todo!("move this function")
         //let data = generate_esurface_data(self, &self.get_cff().esurfaces)?;
         //self.derived_data.as_mut().unwrap().esurface_derived_data = Some(data);
@@ -2950,7 +2966,7 @@ impl<S: NumeratorState> Graph<S> {
 
     // helper function
     #[inline]
-    pub fn get_cff(&self) -> &CFFExpression<AmplitudeOrientationID> {
+    pub(crate) fn get_cff(&self) -> &CFFExpression<AmplitudeOrientationID> {
         self.derived_data
             .as_ref()
             .unwrap()
@@ -2960,7 +2976,7 @@ impl<S: NumeratorState> Graph<S> {
     }
 
     #[inline]
-    pub fn get_tropical_subgraph_table(&self) -> &SampleGenerator<3> {
+    pub(crate) fn get_tropical_subgraph_table(&self) -> &SampleGenerator<3> {
         self.derived_data
             .as_ref()
             .unwrap()
@@ -2970,7 +2986,7 @@ impl<S: NumeratorState> Graph<S> {
     }
 
     #[inline]
-    pub fn get_esurface_derived_data(&self) -> &EsurfaceDerivedData {
+    pub(crate) fn get_esurface_derived_data(&self) -> &EsurfaceDerivedData {
         self.derived_data
             .as_ref()
             .unwrap()
@@ -2980,7 +2996,7 @@ impl<S: NumeratorState> Graph<S> {
     }
 
     #[inline]
-    pub fn get_existing_esurfaces<T: FloatLike>(
+    pub(crate) fn get_existing_esurfaces<T: FloatLike>(
         &self,
         externals: &ExternalFourMomenta<F<T>>,
         e_cm: F<f64>,
@@ -2997,7 +3013,7 @@ impl<S: NumeratorState> Graph<S> {
     }
 
     #[inline]
-    pub fn get_maximal_overlap(
+    pub(crate) fn get_maximal_overlap(
         &self,
         externals: &ExternalFourMomenta<F<f64>>,
         e_cm: F<f64>,
@@ -3015,7 +3031,7 @@ impl<S: NumeratorState> Graph<S> {
         //)
     }
 
-    pub fn build_compiled_expression(
+    pub(crate) fn build_compiled_expression(
         &mut self,
         export_path: PathBuf,
         export_settings: &ProcessSettings,
@@ -3039,11 +3055,11 @@ impl<S: NumeratorState> Graph<S> {
     }
     // == Generation fns
 
-    pub fn generate_loop_momentum_bases(&mut self) {
+    pub(crate) fn generate_loop_momentum_bases(&mut self) {
         self.derived_data.as_mut().unwrap().loop_momentum_bases =
             Some(self.bare_graph.generate_loop_momentum_bases());
     }
-    pub fn generate_loop_momentum_bases_if_not_exists(&mut self) {
+    pub(crate) fn generate_loop_momentum_bases_if_not_exists(&mut self) {
         if self
             .derived_data
             .as_ref()
@@ -3056,7 +3072,7 @@ impl<S: NumeratorState> Graph<S> {
     }
 
     // attempt to set a new loop momentum basis
-    pub fn set_lmb(&mut self, lmb: &[usize]) -> Result<(), Report> {
+    pub(crate) fn set_lmb(&mut self, lmb: &[usize]) -> Result<(), Report> {
         unimplemented!("setting the lmb must be done at generation time")
         //match &self.derived_data.as_ref().unwrap().loop_momentum_bases {
         //    None => Err(eyre!("lmbs not yet generated")),
@@ -3097,7 +3113,7 @@ impl<S: NumeratorState> Graph<S> {
     }
 
     #[inline]
-    pub fn generate_params<T: FloatLike>(
+    pub(crate) fn generate_params<T: FloatLike>(
         &mut self,
         sample: &MomentumSample<T>,
         _settings: &Settings,
@@ -3108,7 +3124,10 @@ impl<S: NumeratorState> Graph<S> {
             .generate_params(&self.bare_graph, sample.possibly_rotated_sample())
     }
 
-    pub fn generate_tropical_subgraph_table(&mut self, settings: &TropicalSubgraphTableSettings) {
+    pub(crate) fn generate_tropical_subgraph_table(
+        &mut self,
+        settings: &TropicalSubgraphTableSettings,
+    ) {
         let table = self.bare_graph.generate_tropical_subgraph_table(settings);
 
         match table {
@@ -3136,7 +3155,7 @@ impl<S: NumeratorState> Graph<S> {
         }
     }
 
-    pub fn map_numerator<F, T: NumeratorState>(mut self, f: F) -> Graph<T>
+    pub(crate) fn map_numerator<F, T: NumeratorState>(mut self, f: F) -> Graph<T>
     where
         F: FnOnce(Numerator<S>, &mut BareGraph) -> Numerator<T>,
     {
@@ -3151,7 +3170,7 @@ impl<S: NumeratorState> Graph<S> {
         }
     }
 
-    pub fn map_numerator_res<E, F, T: NumeratorState>(mut self, f: F) -> Result<Graph<T>, E>
+    pub(crate) fn map_numerator_res<E, F, T: NumeratorState>(mut self, f: F) -> Result<Graph<T>, E>
     where
         F: FnOnce(Numerator<S>, &mut BareGraph) -> Result<Numerator<T>, E>,
     {
@@ -3168,7 +3187,7 @@ impl<S: NumeratorState> Graph<S> {
     }
 }
 impl Graph<Evaluators> {
-    pub fn evaluate_fourd_expr<T: FloatLike>(
+    pub(crate) fn evaluate_fourd_expr<T: FloatLike>(
         &mut self,
         loop_mom: &[FourMomentum<F<T>>],
         external_mom: &[FourMomentum<F<T>>],
@@ -3185,7 +3204,7 @@ impl Graph<Evaluators> {
     }
 
     #[inline]
-    pub fn evaluate_cff_expression<T: FloatLike>(
+    pub(crate) fn evaluate_cff_expression<T: FloatLike>(
         &mut self,
         sample: &MomentumSample<T>,
         settings: &Settings,
@@ -3199,7 +3218,7 @@ impl Graph<Evaluators> {
     }
 
     #[inline]
-    pub fn evaluate_cff_expression_in_lmb<T: FloatLike>(
+    pub(crate) fn evaluate_cff_expression_in_lmb<T: FloatLike>(
         &mut self,
         sample: &MomentumSample<T>,
         lmb_specification: &LoopMomentumBasisSpecification,
@@ -3213,7 +3232,7 @@ impl Graph<Evaluators> {
             .unwrap()
     }
     #[inline]
-    pub fn evaluate_cff_all_orientations<T: FloatLike>(
+    pub(crate) fn evaluate_cff_all_orientations<T: FloatLike>(
         &mut self,
         sample: &MomentumSample<T>,
         settings: &Settings,
@@ -3229,7 +3248,7 @@ impl Graph<Evaluators> {
     }
 
     #[inline]
-    pub fn evaluate_numerator_all_orientations<T: FloatLike>(
+    pub(crate) fn evaluate_numerator_all_orientations<T: FloatLike>(
         &mut self,
         sample: &MomentumSample<T>,
         settings: &Settings,
@@ -3246,7 +3265,7 @@ impl Graph<Evaluators> {
     }
 
     #[inline]
-    pub fn evaluate_ltd_expression<T: FloatLike>(
+    pub(crate) fn evaluate_ltd_expression<T: FloatLike>(
         &mut self,
         sample: &MomentumSample<T>,
         settings: &Settings,
@@ -3260,7 +3279,7 @@ impl Graph<Evaluators> {
     }
 
     #[inline]
-    pub fn evaluate_ltd_expression_in_lmb<T: FloatLike>(
+    pub(crate) fn evaluate_ltd_expression_in_lmb<T: FloatLike>(
         &mut self,
         sample: &MomentumSample<T>,
         lmb: &LoopMomentumBasis,
@@ -3276,7 +3295,7 @@ impl Graph<Evaluators> {
 
     #[inline]
     /// evaluates the cff expression at the given loop momenta and external momenta. The loop momenta are assumed to be in the loop momentum basis specified, and have irrelevant energy components. The output is a vector of complex numbers, one for each orientation.
-    pub fn evaluate_cff_orientations<T: FloatLike>(
+    pub(crate) fn evaluate_cff_orientations<T: FloatLike>(
         &self,
         sample: &DefaultSample<T>,
         lmb_specification: &LoopMomentumBasisSpecification,
@@ -3302,7 +3321,7 @@ impl Graph<Evaluators> {
         }
     }
 
-    pub fn evaluate_threshold_counterterm<T: FloatLike>(
+    pub(crate) fn evaluate_threshold_counterterm<T: FloatLike>(
         &mut self,
         sample: &DefaultSample<T>,
         rotation_for_overlap: &Rotation,
@@ -3336,7 +3355,7 @@ pub struct DerivedGraphData<NumState> {
 }
 
 impl DerivedGraphData<PythonState> {
-    pub fn load_python_from_path<S: NumeratorState>(path: &Path) -> Result<Self, Report> {
+    pub(crate) fn load_python_from_path<S: NumeratorState>(path: &Path) -> Result<Self, Report> {
         let mut source = std::fs::File::open(path)?;
         let statemap = State::import(&mut source, None)?;
         match std::fs::read(path) {
@@ -3360,7 +3379,7 @@ impl DerivedGraphData<PythonState> {
         }
     }
 
-    pub fn apply<F, S: TypedNumeratorState, T: TypedNumeratorState>(
+    pub(crate) fn apply<F, S: TypedNumeratorState, T: TypedNumeratorState>(
         &mut self,
         f: F,
     ) -> Result<(), NumeratorStateError>
@@ -3372,7 +3391,7 @@ impl DerivedGraphData<PythonState> {
 }
 
 impl<NumState: NumeratorState> DerivedGraphData<NumState> {
-    pub fn map_numerator<F, T: NumeratorState>(self, f: F) -> DerivedGraphData<T>
+    pub(crate) fn map_numerator<F, T: NumeratorState>(self, f: F) -> DerivedGraphData<T>
     where
         F: FnOnce(Numerator<NumState>) -> Numerator<T>,
     {
@@ -3388,7 +3407,10 @@ impl<NumState: NumeratorState> DerivedGraphData<NumState> {
         }
     }
 
-    pub fn map_numerator_res<E, F, T: NumeratorState>(self, f: F) -> Result<DerivedGraphData<T>, E>
+    pub(crate) fn map_numerator_res<E, F, T: NumeratorState>(
+        self,
+        f: F,
+    ) -> Result<DerivedGraphData<T>, E>
     where
         F: FnOnce(Numerator<NumState>) -> Result<Numerator<T>, E>,
     {
@@ -3412,7 +3434,7 @@ impl<NumState: TypedNumeratorState> DerivedGraphData<NumState> {
 }
 
 impl DerivedGraphData<Evaluators> {
-    pub fn evaluate_fourd_expr<T: FloatLike>(
+    pub(crate) fn evaluate_fourd_expr<T: FloatLike>(
         &mut self,
         loop_moms: &[FourMomentum<F<T>>],
         external_moms: &[FourMomentum<F<T>>],
@@ -3451,7 +3473,7 @@ impl DerivedGraphData<Evaluators> {
     }
 
     #[inline]
-    pub fn evaluate_ltd_expression<T: FloatLike>(
+    pub(crate) fn evaluate_ltd_expression<T: FloatLike>(
         &mut self,
         sample: &MomentumSample<T>,
         settings: &Settings,
@@ -3474,7 +3496,7 @@ impl DerivedGraphData<Evaluators> {
     }
 
     #[inline]
-    pub fn evaluate_ltd_expression_in_lmb<T: FloatLike>(
+    pub(crate) fn evaluate_ltd_expression_in_lmb<T: FloatLike>(
         &mut self,
         sample: &MomentumSample<T>,
         settings: &Settings,
@@ -3499,7 +3521,7 @@ impl DerivedGraphData<Evaluators> {
 
     #[inline]
     /// evaluates the cff expression at the given loop momenta and external momenta. The loop momenta are assumed to be in the loop momentum basis specified, and have irrelevant energy components. The output is a vector of complex numbers, one for each orientation.
-    pub fn evaluate_cff_expression_in_lmb<T: FloatLike>(
+    pub(crate) fn evaluate_cff_expression_in_lmb<T: FloatLike>(
         &mut self,
         graph: &BareGraph,
         sample: &MomentumSample<T>,
@@ -3571,7 +3593,7 @@ impl DerivedGraphData<Evaluators> {
         }
     }
 
-    pub fn evaluate_numerator_all_orientations<T: FloatLike>(
+    pub(crate) fn evaluate_numerator_all_orientations<T: FloatLike>(
         &mut self,
         graph: &BareGraph,
         sample: &BareMomentumSample<T>,
@@ -3613,7 +3635,7 @@ impl DerivedGraphData<Evaluators> {
         }
     }
 
-    pub fn evaluate_threshold_counterterm<T: FloatLike>(
+    pub(crate) fn evaluate_threshold_counterterm<T: FloatLike>(
         &mut self,
         graph: &BareGraph,
         sample: &DefaultSample<T>,
@@ -3637,7 +3659,7 @@ impl DerivedGraphData<Evaluators> {
 
     #[inline]
     /// evaluates the numerator at the given loop momenta and external momenta. The loop momenta are assumed to be in the loop momentum basis specified, and have irrelevant energy components. The output is a vector of complex numbers, one for each orientation.
-    pub fn evaluate_numerator_orientations<T: FloatLike>(
+    pub(crate) fn evaluate_numerator_orientations<T: FloatLike>(
         &mut self,
         graph: &BareGraph,
         sample: &BareMomentumSample<T>,
@@ -3654,7 +3676,7 @@ impl DerivedGraphData<Evaluators> {
     }
 
     #[inline]
-    pub fn evaluate_cff_expression<T: FloatLike>(
+    pub(crate) fn evaluate_cff_expression<T: FloatLike>(
         &mut self,
         graph: &BareGraph,
         sample: &MomentumSample<T>,
@@ -3666,7 +3688,7 @@ impl DerivedGraphData<Evaluators> {
 }
 
 impl DerivedGraphData<UnInit> {
-    pub fn new_empty() -> Self {
+    pub(crate) fn new_empty() -> Self {
         Self {
             loop_momentum_bases: None,
             cff_expression: None,
@@ -3679,7 +3701,7 @@ impl DerivedGraphData<UnInit> {
         }
     }
 
-    pub fn process_numerator_no_eval(
+    pub(crate) fn process_numerator_no_eval(
         self,
         base_graph: &mut BareGraph,
         contraction_settings: ContractionSettings,
@@ -3781,7 +3803,7 @@ impl DerivedGraphData<UnInit> {
         // })
     }
 
-    pub fn process_numerator(
+    pub(crate) fn process_numerator(
         self,
         base_graph: &mut BareGraph,
         model: &Model,
@@ -3904,10 +3926,10 @@ impl DerivedGraphData<UnInit> {
 }
 
 impl<NumState: NumeratorState> DerivedGraphData<NumState> {
-    pub fn forget_type(self) -> DerivedGraphData<PythonState> {
+    pub(crate) fn forget_type(self) -> DerivedGraphData<PythonState> {
         self.map_numerator(|n| n.forget_type())
     }
-    pub fn generate_extra_info(&self, export_path: PathBuf) -> ExtraInfo {
+    pub(crate) fn generate_extra_info(&self, export_path: PathBuf) -> ExtraInfo {
         ExtraInfo {
             orientations: self
                 .cff_expression
@@ -3920,7 +3942,7 @@ impl<NumState: NumeratorState> DerivedGraphData<NumState> {
             path: export_path,
         }
     }
-    pub fn evaluate_cff_all_orientations<T: FloatLike>(
+    pub(crate) fn evaluate_cff_all_orientations<T: FloatLike>(
         &mut self,
         graph: &BareGraph,
         sample: &BareMomentumSample<T>,
@@ -3939,7 +3961,7 @@ impl<NumState: NumeratorState> DerivedGraphData<NumState> {
 
     #[inline]
     /// evaluates the cff expression at the given loop momenta and external momenta. The loop momenta are assumed to be in the loop momentum basis specified, and have irrelevant energy components. The output is a vector of complex numbers, one for each orientation.
-    pub fn evaluate_cff_orientations<T: FloatLike>(
+    pub(crate) fn evaluate_cff_orientations<T: FloatLike>(
         &self,
         graph: &BareGraph,
         sample: &BareMomentumSample<T>,
@@ -3957,7 +3979,7 @@ impl<NumState: NumeratorState> DerivedGraphData<NumState> {
         //        .evaluate_orientations(&energy_cache, settings)
     }
 
-    pub fn generate_params<T: FloatLike>(
+    pub(crate) fn generate_params<T: FloatLike>(
         &mut self,
         graph: &BareGraph,
         sample: &BareMomentumSample<T>,
@@ -3979,7 +4001,10 @@ impl<NumState: NumeratorState> DerivedGraphData<NumState> {
         params
     }
 
-    pub fn load_from_path(derived_data_path: &Path, state_path: &Path) -> Result<Self, Report> {
+    pub(crate) fn load_from_path(
+        derived_data_path: &Path,
+        state_path: &Path,
+    ) -> Result<Self, Report> {
         let mut source = std::fs::File::open(state_path)?;
         let statemap = State::import(&mut source, None)?;
         match std::fs::read(derived_data_path) {
@@ -4032,7 +4057,7 @@ impl<NumState: NumeratorState> DerivedGraphData<NumState> {
 //        Self {
 //            internal: Signature::from_iter(loops),
 //            oopExtSignature {
-//                pub fn compute_momentum<'a, 'b: 'a, T>(&self, loop_moms: &'a [T], external_moms: &'b [T]) -> T
+//                pub(crate) fn compute_momentum<'a, 'b: 'a, T>(&self, loop_moms: &'a [T], external_moms: &'b [T]) -> T
 //                where
 //                    T: RefZero + Clone + Neg<Output = T> + AddAssign<T>,
 //                {
@@ -4047,7 +4072,7 @@ impl<NumState: NumeratorState> DerivedGraphData<NumState> {
 //                    res
 //                }
 //
-//                pub fn to_momtrop_format(&self) -> (Vec<isize>, Vec<isize>) {
+//                pub(crate) fn to_momtrop_format(&self) -> (Vec<isize>, Vec<isize>) {
 //                    (
 //                        self.internal.to_momtrop_format(),
 //                        self.external.to_momtrop_format(),
@@ -4055,7 +4080,7 @@ impl<NumState: NumeratorState> DerivedGraphData<NumState> {
 //                }
 //
 //                /// Usefull for debugging
-//                pub fn format_momentum(&self) -> String {
+//                pub(crate) fn format_momentum(&self) -> String {
 //                    let mut res = String::new();
 //                    let mut first = true;
 //
@@ -4085,7 +4110,7 @@ impl<NumState: NumeratorState> DerivedGraphData<NumState> {
 //                }
 //
 //                #[allow(unused)]
-//                pub fn compute_four_momentum_from_three<T: FloatLike>(
+//                pub(crate) fn compute_four_momentum_from_three<T: FloatLike>(
 //                    &self,
 //                    loop_moms: &[ThreeMomentum<F<T>>],
 //                    external_moms: &[FourMomentum<F<T>>],
@@ -4097,7 +4122,7 @@ impl<NumState: NumeratorState> DerivedGraphData<NumState> {
 //                    self.compute_momentum(&loop_moms, external_moms)
 //                }
 //
-//                pub fn compute_three_momentum_from_four<T: FloatLike>(
+//                pub(crate) fn compute_three_momentum_from_four<T: FloatLike>(
 //                    &self,
 //                    loop_moms: &[ThreeMomentum<F<T>>],
 //                    external_moms: &[FourMomentum<F<T>>],
@@ -4116,7 +4141,7 @@ impl<NumState: NumeratorState> DerivedGraphData<NumState> {
 //impl L
 
 //impl LoopMomentumBasis {
-//    pub fn spatial_emr<T: FloatLike>(&self, sample: &BareSample<T>) -> Vec<ThreeMomentum<F<T>>> {
+//    pub(crate) fn spatial_emr<T: FloatLike>(&self, sample: &BareSample<T>) -> Vec<ThreeMomentum<F<T>>> {
 //        let three_externals = sample
 //            .external_moms
 //            .iter()
@@ -4128,7 +4153,7 @@ impl<NumState: NumeratorState> DerivedGraphData<NumState> {
 //            .collect()
 //    }
 //
-//    pub fn to_massless_emr<T: FloatLike>(&self, sample: &BareSample<T>) -> Vec<FourMomentum<F<T>>> {
+//    pub(crate) fn to_massless_emr<T: FloatLike>(&self, sample: &BareSample<T>) -> Vec<FourMomentum<F<T>>> {
 //        self.edge_signatures
 //            .iter()
 //            .map(|sig| {
@@ -4137,7 +4162,7 @@ impl<NumState: NumeratorState> DerivedGraphData<NumState> {
 //            .collect()
 //    }
 //
-//    pub fn pattern(&self, edge_id: usize) -> Pattern {
+//    pub(crate) fn pattern(&self, edge_id: usize) -> Pattern {
 //        let signature = self.edge_signatures[edge_id].clone();
 //
 //        let mut atom = Atom::num(0);
@@ -4156,7 +4181,7 @@ impl<NumState: NumeratorState> DerivedGraphData<NumState> {
 //        atom.to_pattern()
 //    }
 //
-//    pub fn set_edge_signatures(&mut self, graph: &BareGraph) -> Result<(), Report> {
+//    pub(crate) fn set_edge_signatures(&mut self, graph: &BareGraph) -> Result<(), Report> {
 //        // Initialize signature
 //        self.edge_signatures = vec![
 //            LoopExtSignature {
@@ -4336,7 +4361,7 @@ pub enum LoopMomentumBasisSpecification<'a> {
 }
 
 impl<'a> LoopMomentumBasisSpecification<'a> {
-    pub fn basis(&self, graph: &'a Graph) -> &'a LoopMomentumBasis {
+    pub(crate) fn basis(&self, graph: &'a Graph) -> &'a LoopMomentumBasis {
         match self {
             LoopMomentumBasisSpecification::Literal(basis) => basis,
             LoopMomentumBasisSpecification::FromList(idx) => &graph
@@ -4349,7 +4374,7 @@ impl<'a> LoopMomentumBasisSpecification<'a> {
         }
     }
 
-    pub fn basis_from_derived<S: NumeratorState>(
+    pub(crate) fn basis_from_derived<S: NumeratorState>(
         &self,
         derived: &'a DerivedGraphData<S>,
     ) -> &'a LoopMomentumBasis {

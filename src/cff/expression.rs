@@ -162,7 +162,7 @@ impl GraphOrientation for OrientationData {
 }
 
 impl OrientationData {
-    pub fn dot<E, V, N: NodeStorageOps<NodeData = V>>(&self, graph: &HedgeGraph<E, V, N>) {
+    pub(crate) fn dot<E, V, N: NodeStorageOps<NodeData = V>>(&self, graph: &HedgeGraph<E, V, N>) {
         let mut writer = String::new();
         writer.push_str("digraph {{");
 
@@ -187,7 +187,7 @@ impl OrientationData {
         writer.push_str("}}");
     }
 
-    pub fn get_ose_replacements(&self) -> Vec<Replacement> {
+    pub(crate) fn get_ose_replacements(&self) -> Vec<Replacement> {
         self.orientation
             .borrow()
             .into_iter()
@@ -230,7 +230,7 @@ impl<O: OrientationID> CFFExpression<O>
 where
     usize: From<O>,
 {
-    pub fn new_empty() -> Self {
+    pub(crate) fn new_empty() -> Self {
         Self {
             orientations: TiVec::new(),
             surfaces: SurfaceCache {
@@ -240,7 +240,7 @@ where
         }
     }
 
-    pub fn to_atom(&self) -> Atom {
+    pub(crate) fn to_atom(&self) -> Atom {
         self.orientations
             .iter()
             .map(|orientation| orientation.expression.to_atom_inv())
@@ -248,14 +248,14 @@ where
             .unwrap_or_default()
     }
 
-    pub fn get_orientation_atoms(&self) -> TiVec<AmplitudeOrientationID, Atom> {
+    pub(crate) fn get_orientation_atoms(&self) -> TiVec<AmplitudeOrientationID, Atom> {
         self.orientations
             .iter()
             .map(|orientation| orientation.expression.to_atom_inv())
             .collect()
     }
 
-    pub fn get_orientation_atoms_with_data(
+    pub(crate) fn get_orientation_atoms_with_data(
         &self,
     ) -> TiVec<AmplitudeOrientationID, (Atom, OrientationData)> {
         self.orientations
@@ -268,18 +268,18 @@ where
             .collect()
     }
 
-    pub fn get_orientation_atom(&self, orientation_id: O) -> Atom {
+    pub(crate) fn get_orientation_atom(&self, orientation_id: O) -> Atom {
         self.orientations[orientation_id].expression.to_atom_inv()
     }
 
-    pub fn num_unfolded_terms(&self) -> usize {
+    pub(crate) fn num_unfolded_terms(&self) -> usize {
         self.orientations
             .iter()
             .map(|o| o.expression.get_bottom_layer().len())
             .sum()
     }
 
-    pub fn get_orientations_with_esurface(&self, esurface_id: EsurfaceID) -> Vec<O> {
+    pub(crate) fn get_orientations_with_esurface(&self, esurface_id: EsurfaceID) -> Vec<O> {
         self.orientations
             .iter_enumerated()
             .filter_map(|(id, orientation)| {

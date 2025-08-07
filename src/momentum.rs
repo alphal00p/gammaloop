@@ -10,11 +10,7 @@ use momtrop::vector::Vector;
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use spenso::{
-    algebra::{
-        algebraic_traits::RefZero,
-        complex::Complex,
-        upgrading_arithmetic::FallibleAdd,
-    },
+    algebra::{algebraic_traits::RefZero, complex::Complex, upgrading_arithmetic::FallibleAdd},
     contraction::Contract,
     iterators::IteratableTensor,
     shadowing::{symbolica_utils::NoArgs, Shadowable},
@@ -63,13 +59,13 @@ pub struct Energy<T> {
 }
 
 impl<T> Energy<T> {
-    pub fn map_ref<U>(&self, f: &impl Fn(&T) -> U) -> Energy<U> {
+    pub(crate) fn map_ref<U>(&self, f: &impl Fn(&T) -> U) -> Energy<U> {
         Energy {
             value: f(&self.value),
         }
     }
 
-    pub fn map<U>(self, f: &impl Fn(T) -> U) -> Energy<U> {
+    pub(crate) fn map<U>(self, f: &impl Fn(T) -> U) -> Energy<U> {
         Energy {
             value: f(self.value),
         }
@@ -83,7 +79,7 @@ impl<T: FloatLike> ApproxEq<Energy<F<T>>, F<T>> for Energy<F<T>> {
 }
 
 impl<T: FloatLike> Energy<F<T>> {
-    pub fn higher(&self) -> Energy<F<T::Higher>>
+    pub(crate) fn higher(&self) -> Energy<F<T::Higher>>
     where
         T::Higher: FloatLike,
     {
@@ -92,7 +88,7 @@ impl<T: FloatLike> Energy<F<T>> {
         }
     }
 
-    pub fn lower(&self) -> Energy<F<T::Lower>>
+    pub(crate) fn lower(&self) -> Energy<F<T::Lower>>
     where
         T::Lower: FloatLike,
     {
@@ -101,7 +97,7 @@ impl<T: FloatLike> Energy<F<T>> {
         }
     }
 
-    pub fn from_ff64(energy: Energy<F<f64>>) -> Self {
+    pub(crate) fn from_ff64(energy: Energy<F<f64>>) -> Self {
         Energy {
             value: F::from_ff64(energy.value),
         }
@@ -117,7 +113,7 @@ impl<T: FloatLike> From<Energy<T>> for Energy<F<T>> {
 }
 
 impl<T: Real> Energy<T> {
-    pub fn zero(&self) -> Self {
+    pub(crate) fn zero(&self) -> Self {
         Energy {
             value: self.value.zero(),
         }
@@ -247,11 +243,11 @@ where
 }
 
 impl<T> Energy<T> {
-    pub fn new(value: T) -> Self {
+    pub(crate) fn new(value: T) -> Self {
         Energy { value }
     }
 
-    // pub fn from_three_momentum(three_momentum: &ThreeMomentum<T>) -> Self
+    // pub(crate) fn from_three_momentum(three_momentum: &ThreeMomentum<T>) -> Self
     // where
     //     T: std::ops::Mul<Output = T> + std::ops::Add<Output = T> + Copy,
     // {
@@ -282,7 +278,7 @@ where
 }
 
 impl Energy<Atom> {
-    pub fn new_parametric(id: usize) -> Self {
+    pub(crate) fn new_parametric(id: usize) -> Self {
         let value = parse!(&format!("E_{}", id));
         Energy { value }
     }
@@ -322,7 +318,7 @@ pub struct ThreeMomentum<T> {
 }
 
 impl<T> ThreeMomentum<T> {
-    pub fn map_ref<U>(&self, f: &impl Fn(&T) -> U) -> ThreeMomentum<U> {
+    pub(crate) fn map_ref<U>(&self, f: &impl Fn(&T) -> U) -> ThreeMomentum<U> {
         ThreeMomentum {
             px: f(&self.px),
             py: f(&self.py),
@@ -330,7 +326,7 @@ impl<T> ThreeMomentum<T> {
         }
     }
 
-    pub fn map<U>(self, f: &impl Fn(T) -> U) -> ThreeMomentum<U> {
+    pub(crate) fn map<U>(self, f: &impl Fn(T) -> U) -> ThreeMomentum<U> {
         ThreeMomentum {
             px: f(self.px),
             py: f(self.py),
@@ -355,7 +351,7 @@ pub struct ThreeRotation<T> {
 }
 
 impl<T: Neg<Output = T>> ThreeRotation<T> {
-    pub fn half_pi_x() -> Self {
+    pub(crate) fn half_pi_x() -> Self {
         let map = |mut momentum: ThreeMomentum<T>| -> ThreeMomentum<T> {
             std::mem::swap(&mut momentum.py, &mut momentum.pz);
             momentum.pz = -momentum.pz;
@@ -371,7 +367,7 @@ impl<T: Neg<Output = T>> ThreeRotation<T> {
         ThreeRotation { map, inv_map }
     }
 
-    pub fn half_pi_y() -> Self {
+    pub(crate) fn half_pi_y() -> Self {
         let map = |mut momentum: ThreeMomentum<T>| -> ThreeMomentum<T> {
             std::mem::swap(&mut momentum.px, &mut momentum.pz);
             momentum.px = -momentum.px;
@@ -387,7 +383,7 @@ impl<T: Neg<Output = T>> ThreeRotation<T> {
         ThreeRotation { map, inv_map }
     }
 
-    pub fn half_pi_z() -> Self {
+    pub(crate) fn half_pi_z() -> Self {
         let map = |mut momentum: ThreeMomentum<T>| -> ThreeMomentum<T> {
             std::mem::swap(&mut momentum.px, &mut momentum.py);
             momentum.py = -momentum.py;
@@ -405,7 +401,7 @@ impl<T: Neg<Output = T>> ThreeRotation<T> {
 }
 
 impl<T: FloatLike> ThreeMomentum<F<T>> {
-    pub fn higher(&self) -> ThreeMomentum<F<T::Higher>>
+    pub(crate) fn higher(&self) -> ThreeMomentum<F<T::Higher>>
     where
         T::Higher: FloatLike,
     {
@@ -416,7 +412,7 @@ impl<T: FloatLike> ThreeMomentum<F<T>> {
         }
     }
 
-    pub fn lower(&self) -> ThreeMomentum<F<T::Lower>>
+    pub(crate) fn lower(&self) -> ThreeMomentum<F<T::Lower>>
     where
         T::Lower: FloatLike,
     {
@@ -427,7 +423,7 @@ impl<T: FloatLike> ThreeMomentum<F<T>> {
         }
     }
 
-    pub fn from_ff64(three_mom: ThreeMomentum<F<f64>>) -> Self {
+    pub(crate) fn from_ff64(three_mom: ThreeMomentum<F<f64>>) -> Self {
         ThreeMomentum {
             px: F::from_ff64(three_mom.px),
             py: F::from_ff64(three_mom.py),
@@ -478,7 +474,7 @@ impl<T: Real> RefDefault for ThreeMomentum<T> {
 }
 
 impl<T: Real> ThreeMomentum<T> {
-    pub fn zero(&self) -> Self {
+    pub(crate) fn zero(&self) -> Self {
         let zero = self.px.zero();
         ThreeMomentum {
             px: zero.clone(),
@@ -499,11 +495,11 @@ impl<T: RefZero> RefZero for ThreeMomentum<T> {
 }
 
 impl<T> ThreeMomentum<T> {
-    pub fn new(px: T, py: T, pz: T) -> Self {
+    pub(crate) fn new(px: T, py: T, pz: T) -> Self {
         ThreeMomentum { px, py, pz }
     }
 
-    pub fn into_dense(self, index: AbstractIndex) -> DenseTensor<T, OrderedStructure>
+    pub(crate) fn into_dense(self, index: AbstractIndex) -> DenseTensor<T, OrderedStructure>
     where
         T: Clone,
     {
@@ -512,7 +508,7 @@ impl<T> ThreeMomentum<T> {
         DenseTensor::from_data(vec![self.px, self.py, self.pz], structure).unwrap()
     }
 
-    pub fn into_dense_param(self, index: AbstractIndex) -> DenseTensor<T, OrderedStructure>
+    pub(crate) fn into_dense_param(self, index: AbstractIndex) -> DenseTensor<T, OrderedStructure>
     where
         T: Clone,
     {
@@ -523,7 +519,7 @@ impl<T> ThreeMomentum<T> {
 }
 
 impl<T: FloatLike> ThreeMomentum<F<T>> {
-    pub fn to_f64(&self) -> ThreeMomentum<F<f64>> {
+    pub(crate) fn to_f64(&self) -> ThreeMomentum<F<f64>> {
         ThreeMomentum {
             px: F(self.px.to_f64()),
             py: F(self.py.to_f64()),
@@ -531,7 +527,7 @@ impl<T: FloatLike> ThreeMomentum<F<T>> {
         }
     }
     /// Compute the phi-angle separation with p2.
-    pub fn getdelphi(&self, p2: &ThreeMomentum<F<T>>) -> F<T> {
+    pub(crate) fn getdelphi(&self, p2: &ThreeMomentum<F<T>>) -> F<T> {
         let pt1 = self.pt();
         let pt2 = p2.pt();
         if pt1.is_zero() {
@@ -556,7 +552,7 @@ impl<T: FloatLike> ThreeMomentum<F<T>> {
 
     /// Compute the deltaR separation with momentum p2.
     #[inline]
-    pub fn delta_r(&self, p2: &ThreeMomentum<F<T>>) -> F<T>
+    pub(crate) fn delta_r(&self, p2: &ThreeMomentum<F<T>>) -> F<T>
     where
         T: Real,
     {
@@ -565,7 +561,7 @@ impl<T: FloatLike> ThreeMomentum<F<T>> {
         (delta_eta.square() + delta_phi.square()).sqrt()
     }
 
-    pub fn rotate_mut(&mut self, alpha: &F<T>, beta: &F<T>, gamma: &F<T>) {
+    pub(crate) fn rotate_mut(&mut self, alpha: &F<T>, beta: &F<T>, gamma: &F<T>) {
         let sin_alpha = alpha.sin();
         let cos_alpha = alpha.cos();
         let sin_beta = beta.sin();
@@ -592,13 +588,13 @@ impl<T: FloatLike> ThreeMomentum<F<T>> {
 
     /// Compute transverse momentum.
     #[inline]
-    pub fn pt(&self) -> F<T> {
+    pub(crate) fn pt(&self) -> F<T> {
         (self.px.square() + self.py.square()).sqrt()
     }
 
     /// Compute pseudorapidity.
     #[inline]
-    pub fn pseudo_rap(&self) -> F<T> {
+    pub(crate) fn pseudo_rap(&self) -> F<T> {
         let pt = self.pt();
         if pt.less_than_epsilon() && self.pz.norm().less_than_epsilon() {
             if self.pz.positive() {
@@ -614,12 +610,12 @@ impl<T: FloatLike> ThreeMomentum<F<T>> {
 }
 
 impl<T: Neg<Output = T> + Clone> ThreeMomentum<T> {
-    pub fn perform_pi2_rotation_x_mut(&mut self) {
+    pub(crate) fn perform_pi2_rotation_x_mut(&mut self) {
         self.pz = -self.pz.clone();
         std::mem::swap(&mut self.pz, &mut self.py);
     }
 
-    pub fn perform_pi2_rotation_x(&self) -> Self {
+    pub(crate) fn perform_pi2_rotation_x(&self) -> Self {
         Self {
             px: self.px.clone(),
             py: -self.pz.clone(),
@@ -627,12 +623,12 @@ impl<T: Neg<Output = T> + Clone> ThreeMomentum<T> {
         }
     }
 
-    pub fn perform_pi2_rotation_y_mut(&mut self) {
+    pub(crate) fn perform_pi2_rotation_y_mut(&mut self) {
         self.px = -self.px.clone();
         std::mem::swap(&mut self.px, &mut self.pz);
     }
 
-    pub fn perform_pi2_rotation_y(&self) -> Self {
+    pub(crate) fn perform_pi2_rotation_y(&self) -> Self {
         Self {
             px: self.pz.clone(),
             py: self.py.clone(),
@@ -640,12 +636,12 @@ impl<T: Neg<Output = T> + Clone> ThreeMomentum<T> {
         }
     }
 
-    pub fn perform_pi2_rotation_z_mut(&mut self) {
+    pub(crate) fn perform_pi2_rotation_z_mut(&mut self) {
         self.py = -self.py.clone();
         std::mem::swap(&mut self.px, &mut self.py);
     }
 
-    pub fn perform_pi2_rotation_z(&self) -> Self {
+    pub(crate) fn perform_pi2_rotation_z(&self) -> Self {
         Self {
             px: -self.py.clone(),
             py: self.px.clone(),
@@ -901,14 +897,14 @@ impl<T: Default> Default for ThreeMomentum<T> {
 }
 
 impl<T> ThreeMomentum<T> {
-    pub fn norm_squared(&self) -> T
+    pub(crate) fn norm_squared(&self) -> T
     where
         T: for<'a> Mul<&'a T, Output = T> + Add<T, Output = T> + Clone,
     {
         self.px.clone() * &self.px + self.py.clone() * &self.py + self.pz.clone() * &self.pz
     }
 
-    pub fn on_shell_energy(&self, mass: Option<T>) -> Energy<T>
+    pub(crate) fn on_shell_energy(&self, mass: Option<T>) -> Energy<T>
     where
         T: Mul<T, Output = T> + Add<T, Output = T> + Clone + std::ops::Add<Output = T> + Real,
     {
@@ -918,7 +914,7 @@ impl<T> ThreeMomentum<T> {
         }
     }
 
-    pub fn on_shell_energy_squared(&self, mass: Option<T>) -> Energy<T>
+    pub(crate) fn on_shell_energy_squared(&self, mass: Option<T>) -> Energy<T>
     where
         T: for<'a> Mul<&'a T, Output = T>
             + Add<T, Output = T>
@@ -937,14 +933,14 @@ impl<T> ThreeMomentum<T> {
         }
     }
 
-    pub fn norm(&self) -> T
+    pub(crate) fn norm(&self) -> T
     where
         T: for<'a> Mul<&'a T, Output = T> + Add<T> + Real,
     {
         self.norm_squared().sqrt()
     }
 
-    pub fn into_four_momentum_parametric(self, id: usize) -> FourMomentum<T, Atom> {
+    pub(crate) fn into_four_momentum_parametric(self, id: usize) -> FourMomentum<T, Atom> {
         let energy = Energy::new_parametric(id);
         FourMomentum {
             temporal: energy,
@@ -952,14 +948,14 @@ impl<T> ThreeMomentum<T> {
         }
     }
 
-    pub fn into_on_shell_four_momentum(self, mass: Option<T>) -> FourMomentum<T, T>
+    pub(crate) fn into_on_shell_four_momentum(self, mass: Option<T>) -> FourMomentum<T, T>
     where
         T: Mul<T> + Add<T> + std::ops::Add<Output = T> + Real,
     {
         FourMomentum::new_on_shell(self, mass)
     }
 
-    pub fn cast<U>(&self) -> ThreeMomentum<U>
+    pub(crate) fn cast<U>(&self) -> ThreeMomentum<U>
     where
         T: Clone + Into<U>,
     {
@@ -970,7 +966,7 @@ impl<T> ThreeMomentum<T> {
         }
     }
 
-    pub fn into_f64(&self) -> ThreeMomentum<f64>
+    pub(crate) fn into_f64(&self) -> ThreeMomentum<f64>
     where
         T: FloatLike,
     {
@@ -1015,14 +1011,14 @@ pub struct FourMomentum<T, U = T> {
 }
 
 impl<T> FourMomentum<T> {
-    pub fn map_ref<U>(&self, f: &impl Fn(&T) -> U) -> FourMomentum<U> {
+    pub(crate) fn map_ref<U>(&self, f: &impl Fn(&T) -> U) -> FourMomentum<U> {
         FourMomentum {
             temporal: self.temporal.map_ref(f),
             spatial: self.spatial.map_ref(f),
         }
     }
 
-    pub fn map<U>(self, f: &impl Fn(T) -> U) -> FourMomentum<U> {
+    pub(crate) fn map<U>(self, f: &impl Fn(T) -> U) -> FourMomentum<U> {
         FourMomentum {
             temporal: self.temporal.map(f),
             spatial: self.spatial.map(f),
@@ -1069,7 +1065,7 @@ impl<T: FloatLike> ApproxEq<Polarization<Complex<F<T>>>, F<T>> for FourMomentum<
 }
 
 impl<T: FloatLike> FourMomentum<F<T>> {
-    pub fn from_ff64(four_momentum: &FourMomentum<F<f64>>) -> Self {
+    pub(crate) fn from_ff64(four_momentum: &FourMomentum<F<f64>>) -> Self {
         let temporal = Energy::from_ff64(four_momentum.temporal);
         let spatial = ThreeMomentum::from_ff64(four_momentum.spatial);
         FourMomentum { temporal, spatial }
@@ -1159,7 +1155,7 @@ pub enum PolType {
 }
 
 impl PolType {
-    pub fn bar(self) -> Self {
+    pub(crate) fn bar(self) -> Self {
         match self {
             Self::Epsilon => Self::EpsilonBar,
             Self::Scalar => Self::Scalar,
@@ -1259,7 +1255,7 @@ impl<T: FloatLike> LowerExp for Polarization<Complex<F<T>>> {
 }
 
 impl<T> Polarization<T> {
-    pub fn map<U>(&self, f: impl Fn(&T) -> U) -> Polarization<U> {
+    pub(crate) fn map<U>(&self, f: impl Fn(&T) -> U) -> Polarization<U> {
         Polarization {
             tensor: self.tensor.map_data_ref(f),
             pol_type: self.pol_type,
@@ -1268,10 +1264,10 @@ impl<T> Polarization<T> {
 }
 
 impl<T: Clone> Polarization<T> {
-    pub fn is_scalar(&self) -> bool {
+    pub(crate) fn is_scalar(&self) -> bool {
         self.pol_type == PolType::Scalar
     }
-    pub fn scalar(value: T) -> Self {
+    pub(crate) fn scalar(value: T) -> Self {
         let structure = IndexLess::new(vec![]);
         Polarization {
             tensor: DenseTensor {
@@ -1282,7 +1278,7 @@ impl<T: Clone> Polarization<T> {
         }
     }
 
-    pub fn lorentz(value: [T; 4]) -> Self {
+    pub(crate) fn lorentz(value: [T; 4]) -> Self {
         let structure = IndexLess::new(vec![Minkowski {}.new_rep(4).cast()]);
         Polarization {
             tensor: DenseTensor {
@@ -1293,7 +1289,7 @@ impl<T: Clone> Polarization<T> {
         }
     }
 
-    pub fn bispinor_u(value: [T; 4]) -> Self {
+    pub(crate) fn bispinor_u(value: [T; 4]) -> Self {
         let structure = IndexLess::new(vec![Bispinor {}.new_rep(4).cast()]);
 
         Polarization {
@@ -1305,7 +1301,7 @@ impl<T: Clone> Polarization<T> {
         }
     }
 
-    pub fn bispinor_v(value: [T; 4]) -> Self {
+    pub(crate) fn bispinor_v(value: [T; 4]) -> Self {
         let structure = IndexLess::new(vec![Bispinor {}.new_rep(4).cast()]);
 
         Polarization {
@@ -1317,7 +1313,7 @@ impl<T: Clone> Polarization<T> {
         }
     }
 
-    pub fn shadow(&self) -> DenseTensor<Atom, IndexLess<LibraryRep>> {
+    pub(crate) fn shadow(&self) -> DenseTensor<Atom, IndexLess<LibraryRep>> {
         self.tensor
             .structure
             .clone()
@@ -1387,7 +1383,7 @@ where
 }
 
 impl<T> Polarization<T> {
-    pub fn cast<U>(&self) -> Polarization<U>
+    pub(crate) fn cast<U>(&self) -> Polarization<U>
     where
         T: Clone,
         U: Clone + From<T>,
@@ -1400,7 +1396,7 @@ impl<T> Polarization<T> {
 }
 
 impl<T> Polarization<Complex<T>> {
-    pub fn complex_cast<U>(&self) -> Polarization<Complex<U>>
+    pub(crate) fn complex_cast<U>(&self) -> Polarization<Complex<U>>
     where
         T: Clone,
         U: Clone + From<T>,
@@ -1415,7 +1411,7 @@ impl<T> Polarization<Complex<T>> {
 }
 
 impl<T: FloatLike> Polarization<Complex<F<T>>> {
-    pub fn higher(&self) -> Polarization<Complex<F<T::Higher>>>
+    pub(crate) fn higher(&self) -> Polarization<Complex<F<T::Higher>>>
     where
         T::Higher: FloatLike,
     {
@@ -1425,7 +1421,7 @@ impl<T: FloatLike> Polarization<Complex<F<T>>> {
         }
     }
 
-    pub fn lower(&self) -> Polarization<Complex<F<T::Lower>>>
+    pub(crate) fn lower(&self) -> Polarization<Complex<F<T::Lower>>>
     where
         T::Lower: FloatLike,
     {
@@ -1446,7 +1442,7 @@ impl<T: FloatLike, U: FloatLike> From<FourMomentum<T, U>> for FourMomentum<F<T>,
 }
 
 impl<T: FloatLike, U: FloatLike> FourMomentum<F<T>, F<U>> {
-    pub fn higher(&self) -> FourMomentum<F<T::Higher>, F<U::Higher>>
+    pub(crate) fn higher(&self) -> FourMomentum<F<T::Higher>, F<U::Higher>>
     where
         T::Higher: FloatLike,
         U::Higher: FloatLike,
@@ -1457,7 +1453,7 @@ impl<T: FloatLike, U: FloatLike> FourMomentum<F<T>, F<U>> {
         }
     }
 
-    pub fn lower(&self) -> FourMomentum<F<T::Lower>, F<U::Lower>>
+    pub(crate) fn lower(&self) -> FourMomentum<F<T::Lower>, F<U::Lower>>
     where
         T::Lower: FloatLike,
         U::Lower: FloatLike,
@@ -1470,7 +1466,7 @@ impl<T: FloatLike, U: FloatLike> FourMomentum<F<T>, F<U>> {
 }
 
 impl<T, U> FourMomentum<T, U> {
-    pub fn new(energy: Energy<U>, three_momentum: ThreeMomentum<T>) -> Self {
+    pub(crate) fn new(energy: Energy<U>, three_momentum: ThreeMomentum<T>) -> Self {
         FourMomentum {
             temporal: energy,
             spatial: three_momentum,
@@ -1519,7 +1515,7 @@ where
 }
 
 impl<T> FourMomentum<T, T> {
-    pub fn zero(&self) -> Self
+    pub(crate) fn zero(&self) -> Self
     where
         T: Real,
     {
@@ -1530,7 +1526,7 @@ impl<T> FourMomentum<T, T> {
         }
     }
 
-    pub fn square(&self) -> T
+    pub(crate) fn square(&self) -> T
     where
         T: for<'a> Mul<&'a T, Output = T> + Add<T, Output = T> + Clone + Sub<T, Output = T>,
     {
@@ -1539,14 +1535,14 @@ impl<T> FourMomentum<T, T> {
         temporal * &self.temporal.value - spatial
     }
 
-    pub fn norm(&self) -> T
+    pub(crate) fn norm(&self) -> T
     where
         T: Real,
     {
         self.square().sqrt()
     }
 
-    pub fn from_args(energy: T, px: T, py: T, pz: T) -> Self {
+    pub(crate) fn from_args(energy: T, px: T, py: T, pz: T) -> Self {
         let energy = Energy::new(energy);
         let three_momentum = ThreeMomentum { px, py, pz };
         FourMomentum {
@@ -1554,7 +1550,7 @@ impl<T> FourMomentum<T, T> {
             spatial: three_momentum,
         }
     }
-    pub fn new_on_shell(three_momentum: ThreeMomentum<T>, mass: Option<T>) -> Self
+    pub(crate) fn new_on_shell(three_momentum: ThreeMomentum<T>, mass: Option<T>) -> Self
     where
         T: Mul<T> + Add<T> + std::ops::Add<Output = T> + Real,
     {
@@ -1566,7 +1562,7 @@ impl<T> FourMomentum<T, T> {
         }
     }
 
-    pub fn into_dense(self, index: AbstractIndex) -> DenseTensor<T, OrderedStructure>
+    pub(crate) fn into_dense(self, index: AbstractIndex) -> DenseTensor<T, OrderedStructure>
     where
         T: Clone,
     {
@@ -1585,7 +1581,7 @@ impl<T> FourMomentum<T, T> {
         .unwrap()
     }
 
-    pub fn into_dense_named(
+    pub(crate) fn into_dense_named(
         self,
         index: AbstractIndex,
         name: Symbol,
@@ -1613,7 +1609,7 @@ impl<T> FourMomentum<T, T> {
         .unwrap()
     }
 
-    pub fn cast<U>(&self) -> FourMomentum<U, U>
+    pub(crate) fn cast<U>(&self) -> FourMomentum<U, U>
     where
         T: Clone + Into<U>,
     {
@@ -1623,7 +1619,7 @@ impl<T> FourMomentum<T, T> {
         }
     }
 
-    pub fn boost(&self, boost_vector: &FourMomentum<T>) -> FourMomentum<T>
+    pub(crate) fn boost(&self, boost_vector: &FourMomentum<T>) -> FourMomentum<T>
     where
         T: Real + SingleFloat + PartialOrd,
     {
@@ -1651,7 +1647,7 @@ impl<T> FourMomentum<T, T> {
 
 impl<T: FloatLike> FourMomentum<F<T>, F<T>> {
     /// Compute the phi-angle separation with p2.
-    pub fn getdelphi(&self, p2: &FourMomentum<F<T>>) -> F<T>
+    pub(crate) fn getdelphi(&self, p2: &FourMomentum<F<T>>) -> F<T>
     where
         T: Real,
     {
@@ -1660,21 +1656,21 @@ impl<T: FloatLike> FourMomentum<F<T>, F<T>> {
 
     /// Compute the deltaR separation with momentum p2.
     #[inline]
-    pub fn delta_r(&self, p2: &FourMomentum<F<T>>) -> F<T>
+    pub(crate) fn delta_r(&self, p2: &FourMomentum<F<T>>) -> F<T>
     where
         T: Real,
     {
         self.spatial.delta_r(&p2.spatial)
     }
 
-    pub fn pt(&self) -> F<T>
+    pub(crate) fn pt(&self) -> F<T>
     where
         T: Real,
     {
         self.spatial.pt()
     }
 
-    pub fn to_f64(&self) -> FourMomentum<F<f64>, F<f64>> {
+    pub(crate) fn to_f64(&self) -> FourMomentum<F<f64>, F<f64>> {
         FourMomentum {
             temporal: Energy {
                 value: F(self.temporal.value.to_f64()),
@@ -1683,7 +1679,7 @@ impl<T: FloatLike> FourMomentum<F<T>, F<T>> {
         }
     }
 
-    pub fn pol_one(&self) -> [F<T>; 4]
+    pub(crate) fn pol_one(&self) -> [F<T>; 4]
     where
         T: FloatLike,
     {
@@ -1716,7 +1712,7 @@ impl<T: FloatLike> FourMomentum<F<T>, F<T>> {
         // debug!("pol :{pol}");
     }
 
-    pub fn pol_two(&self) -> [F<T>; 4]
+    pub(crate) fn pol_two(&self) -> [F<T>; 4]
     where
         T: FloatLike,
     {
@@ -1734,7 +1730,7 @@ impl<T: FloatLike> FourMomentum<F<T>, F<T>> {
         [pt.zero(), e1, e2, e3]
     }
 
-    pub fn pol_three(&self) -> Polarization<F<T>>
+    pub(crate) fn pol_three(&self) -> Polarization<F<T>>
     where
         T: FloatLike,
     {
@@ -1750,7 +1746,7 @@ impl<T: FloatLike> FourMomentum<F<T>, F<T>> {
         Polarization::lorentz([e0, e1, e2, e3])
     }
 
-    pub fn pol(&self, lambda: Helicity) -> Polarization<Complex<F<T>>> {
+    pub(crate) fn pol(&self, lambda: Helicity) -> Polarization<Complex<F<T>>> {
         if lambda.is_zero() {
             self.pol_three().cast()
         } else {
@@ -1782,14 +1778,14 @@ impl<T: FloatLike> FourMomentum<F<T>, F<T>> {
         }
     }
 
-    pub fn omega(&self, lambda: Sign) -> Complex<F<T>> {
+    pub(crate) fn omega(&self, lambda: Sign) -> Complex<F<T>> {
         match lambda {
             Sign::Positive => (&self.temporal.value + self.spatial.norm()).complex_sqrt(),
             Sign::Negative => (&self.temporal.value - self.spatial.norm()).complex_sqrt(),
         }
     }
 
-    pub fn u(&self, lambda: Sign) -> Polarization<Complex<F<T>>> {
+    pub(crate) fn u(&self, lambda: Sign) -> Polarization<Complex<F<T>>> {
         let xi = self.xi(lambda);
         Polarization::bispinor_u([
             self.omega(-lambda) * &xi[0],
@@ -1799,7 +1795,7 @@ impl<T: FloatLike> FourMomentum<F<T>, F<T>> {
         ])
     }
 
-    pub fn v(&self, lambda: Sign) -> Polarization<Complex<F<T>>> {
+    pub(crate) fn v(&self, lambda: Sign) -> Polarization<Complex<F<T>>> {
         let xi = self.xi(-lambda);
         Polarization::bispinor_v([
             (-lambda) * self.omega(lambda) * &xi[0],
@@ -1809,7 +1805,7 @@ impl<T: FloatLike> FourMomentum<F<T>, F<T>> {
         ])
     }
 
-    pub fn xi(&self, lambda: Sign) -> [Complex<F<T>>; 2] {
+    pub(crate) fn xi(&self, lambda: Sign) -> [Complex<F<T>>; 2] {
         if self.spatial.pz == -self.spatial.norm() {
             let zero: Complex<F<T>> = self.temporal.value.zero().into();
             let one = zero.one();
@@ -1838,7 +1834,7 @@ impl<T: FloatLike> FourMomentum<F<T>, F<T>> {
 }
 
 impl<T: FloatLike> Polarization<Complex<F<T>>> {
-    pub fn bar(&self) -> Self {
+    pub(crate) fn bar(&self) -> Self {
         let mut tensor = self.tensor.map_data_ref(Complex::conj);
 
         if matches!(
@@ -2152,11 +2148,11 @@ impl Index<usize> for Signature {
 }
 
 impl Signature {
-    pub fn validate_basis<T>(&self, basis: &[T]) -> bool {
+    pub(crate) fn validate_basis<T>(&self, basis: &[T]) -> bool {
         self.len() == basis.len()
     }
 
-    pub fn sum(&mut self, other: &Self) {
+    pub(crate) fn sum(&mut self, other: &Self) {
         for (i, sign) in other.iter().enumerate() {
             match (self[i], sign) {
                 (SignOrZero::Zero, SignOrZero::Zero) => self.0[i] = SignOrZero::Zero,
@@ -2172,7 +2168,7 @@ impl Signature {
         }
     }
 
-    pub fn panic_validate_basis<T>(&self, basis: &[T]) {
+    pub(crate) fn panic_validate_basis<T>(&self, basis: &[T]) {
         if !self.validate_basis(basis) {
             panic!(
                 "Invalid basis for Signature, expected length {}, got length {}",
@@ -2182,7 +2178,7 @@ impl Signature {
         }
     }
 
-    pub fn to_momtrop_format(&self) -> Vec<isize> {
+    pub(crate) fn to_momtrop_format(&self) -> Vec<isize> {
         self.0
             .iter()
             .map(|x| match x {
@@ -2192,18 +2188,18 @@ impl Signature {
             })
             .collect()
     }
-    pub fn len(&self) -> usize {
+    pub(crate) fn len(&self) -> usize {
         self.0.len()
     }
 
-    pub fn iter(&self) -> std::slice::Iter<SignOrZero> {
+    pub(crate) fn iter(&self) -> std::slice::Iter<SignOrZero> {
         self.0.iter()
     }
 
-    pub fn is_empty(&self) -> bool {
+    pub(crate) fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
-    pub fn apply<T>(&self, basis: &[T]) -> T
+    pub(crate) fn apply<T>(&self, basis: &[T]) -> T
     where
         T: RefZero + Clone + Neg<Output = T> + AddAssign<T>,
     {
@@ -2215,7 +2211,7 @@ impl Signature {
         result
     }
 
-    pub fn apply_iter<I, T>(&self, basis: I) -> Option<T>
+    pub(crate) fn apply_iter<I, T>(&self, basis: I) -> Option<T>
     where
         I: IntoIterator,
         I::Item: RefZero<T>,
@@ -2262,7 +2258,7 @@ impl Signature {
         None
     }
 
-    pub fn label_with(&self, label: &str) -> String {
+    pub(crate) fn label_with(&self, label: &str) -> String {
         let mut result = String::new();
         let mut first = true;
         for (i, sign) in self.0.iter().enumerate() {
@@ -2347,19 +2343,19 @@ fn test_signature() {
 // }
 #[allow(non_upper_case_globals)]
 impl Helicity {
-    pub fn is_zero(&self) -> bool {
+    pub(crate) fn is_zero(&self) -> bool {
         matches!(self, Helicity::Zero)
     }
 
-    pub fn is_sign(&self) -> bool {
+    pub(crate) fn is_sign(&self) -> bool {
         matches!(self, Helicity::Plus | Helicity::Minus)
     }
 
-    pub fn is_positive(&self) -> bool {
+    pub(crate) fn is_positive(&self) -> bool {
         matches!(self, Helicity::Plus)
     }
 
-    pub fn is_negative(&self) -> bool {
+    pub(crate) fn is_negative(&self) -> bool {
         matches!(self, Helicity::Minus)
     }
 }
@@ -2459,7 +2455,7 @@ impl<T> From<FourMomentum<T, T>> for (T, T, T, T) {
 }
 
 impl<T> FourMomentum<T, Atom> {
-    pub fn into_dense_param(
+    pub(crate) fn into_dense_param(
         self,
         index: AbstractIndex,
     ) -> DenseTensor<MultivariatePolynomial<RationalField, T>, OrderedStructure>
@@ -2622,23 +2618,23 @@ pub trait LorentzTransformable<T>: Rotatable {
 // }
 
 // impl IrriducibleLorentzRep {
-//     pub fn scalar() -> Self {
+//     pub(crate) fn scalar() -> Self {
 //         Self { m: 0, n: 0 }
 //     }
 
-//     pub fn vector() -> Self {
+//     pub(crate) fn vector() -> Self {
 //         Self { m: 1, n: 1 }
 //     }
 
-//     pub fn tensor() -> Self {
+//     pub(crate) fn tensor() -> Self {
 //         Self { m: 2, n: 2 }
 //     }
 
-//     pub fn left_weyl() -> Self {
+//     pub(crate) fn left_weyl() -> Self {
 //         Self { m: 1, n: 0 }
 //     }
 
-//     pub fn right_weyl() -> Self {
+//     pub(crate) fn right_weyl() -> Self {
 //         Self { m: 0, n: 1 }
 //     }
 // }
@@ -2675,10 +2671,10 @@ pub struct Rotation {
 }
 
 impl Rotation {
-    pub fn is_identity(&self) -> bool {
+    pub(crate) fn is_identity(&self) -> bool {
         matches!(self.method, RotationMethod::Identity)
     }
-    pub fn setting(&self) -> RotationSetting {
+    pub(crate) fn setting(&self) -> RotationSetting {
         match self.method {
             RotationMethod::EulerAngles(alpha, beta, gamma) => {
                 RotationSetting::EulerAngles { alpha, beta, gamma }
@@ -2689,7 +2685,7 @@ impl Rotation {
             RotationMethod::Identity => RotationSetting::None,
         }
     }
-    pub fn new(method: RotationMethod) -> Self {
+    pub(crate) fn new(method: RotationMethod) -> Self {
         let mu = Minkowski::slot(4, 1);
 
         let al = Minkowski::slot(4, 3);
@@ -2767,7 +2763,7 @@ impl Rotation {
 }
 
 impl RotationMethod {
-    pub fn generator(
+    pub(crate) fn generator(
         &self,
         i: AbstractIndex,
         j: AbstractIndex,
@@ -2816,7 +2812,7 @@ impl RotationMethod {
         }
     }
 
-    pub fn lorentz_tensor(
+    pub(crate) fn lorentz_tensor(
         &self,
         i: Slot<Minkowski>,
         j: Slot<Minkowski>,
@@ -2933,7 +2929,7 @@ impl RotationMethod {
         }
     }
 
-    pub fn bispinor_tensor(
+    pub(crate) fn bispinor_tensor(
         &self,
         i: Slot<Bispinor>,
         j: Slot<Bispinor>,
@@ -3107,11 +3103,7 @@ mod tests {
     use core::f64;
 
     use eyre::Context;
-    use spenso::{
-        iterators::IteratableTensor,
-        structure::TensorStructure,
-    };
-    
+    use spenso::{iterators::IteratableTensor, structure::TensorStructure};
 
     use crate::utils::F;
 

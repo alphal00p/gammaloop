@@ -1,13 +1,12 @@
 use std::{collections::BTreeMap, ops::Deref, path::Path};
 
 use crate::{
-    model::{ArcPropagator, Model},
+    model::Model,
     momentum_sample::LoopIndex,
-    new_cs::Amplitude,
     numerator::{
         aind::{Aind, NewAind},
         ufo::UFO,
-        GlobalPrefactor, NumeratorState,
+        GlobalPrefactor,
     },
     symbolica_ext::CallSymbol,
     utils::{GS, W_},
@@ -27,16 +26,11 @@ use linnet::{
     parser::{DotEdgeData, DotGraph, DotHedgeData, DotVertexData, GraphSet},
     permutation::Permutation,
 };
-use log::{debug, info};
-use smartstring::{LazyCompact, SmartString};
+use log::debug;
 use spenso::{
     contraction::Contract,
-    iterators::IteratableTensor,
-    network::library::{LibraryTensor, TensorLibraryData},
-    structure::{
-        representation::{Euclidean, RepName},
-        HasStructure, OrderedStructure, PermutedStructure,
-    },
+    network::library::TensorLibraryData,
+    structure::{representation::Euclidean, HasStructure, OrderedStructure},
     tensors::{data::StorageTensor, parametric::ParamTensor},
 };
 use symbolica::{
@@ -136,7 +130,7 @@ impl Deref for ParseGraph {
 }
 
 impl ParseGraph {
-    pub fn hedge_order(&self, model: &Model) -> Result<Vec<u8>> {
+    pub(crate) fn hedge_order(&self, model: &Model) -> Result<Vec<u8>> {
         let mut hedges = vec![None; self.n_hedges()];
 
         // Figure out the hedge order for each vertex to align with ufo
@@ -207,7 +201,7 @@ impl ParseGraph {
         }
     }
 
-    pub fn from_parsed(graph: DotGraph, model: &Model) -> Result<Self> {
+    pub(crate) fn from_parsed(graph: DotGraph, model: &Model) -> Result<Self> {
         let global_data = graph.global_data.into();
         let graph = graph
             .graph
@@ -256,18 +250,21 @@ impl DOD for AtomView<'_> {
 }
 
 impl Graph {
-    pub fn dot_serialize(&self) -> String {
+    pub(crate) fn dot_serialize(&self) -> String {
         let mut out = String::new();
         self.dot_serialize_fmt(&mut out).unwrap();
         out
     }
 
-    pub fn dot_serialize_io(&self, writer: &mut impl std::io::Write) -> Result<(), std::io::Error> {
+    pub(crate) fn dot_serialize_io(
+        &self,
+        writer: &mut impl std::io::Write,
+    ) -> Result<(), std::io::Error> {
         let g = DotGraph::from(self);
         g.write_io(writer)
     }
 
-    pub fn dot_serialize_fmt(
+    pub(crate) fn dot_serialize_fmt(
         &self,
         writer: &mut impl std::fmt::Write,
     ) -> Result<(), std::fmt::Error> {
@@ -275,7 +272,7 @@ impl Graph {
         g.write_fmt(writer)
     }
 
-    pub fn from_parsed(graph: ParseGraph, model: &Model) -> Result<Self> {
+    pub(crate) fn from_parsed(graph: ParseGraph, model: &Model) -> Result<Self> {
         let hedge_order = graph.hedge_order(model)?;
         let overall_factor = graph.global_data.overall_factor.clone();
         let add_polarizations = graph.global_data.projectors.is_none();
@@ -408,7 +405,7 @@ impl Graph {
                 let dod = if let Some(d) = v.dod { d } else { num.dod() };
 
                 Vertex {
-                    label: v.label.unwrap_or(i.to_string()),
+                    name: v.name.unwrap_or(i.to_string()),
                     num,
                     dod,
                     vertex_rule: v.vertex_rule,
@@ -433,7 +430,7 @@ impl Graph {
                     }
                 })
             },
-            |e, h| h,
+            |_, h| h,
         );
 
         let mut loop_momentum_basis = if let Some(i) = full_cut.included_iter().next() {
@@ -503,10 +500,10 @@ impl Graph {
         // Ok(NumGraph { graph })
     }
 
-    pub fn from_dot(graph: DotGraph, model: &Model) -> Result<Self> {
+    pub(crate) fn from_dot(graph: DotGraph, model: &Model) -> Result<Self> {
         Self::from_parsed(ParseGraph::from_parsed(graph, model)?, model)
     }
-    pub fn from_file<'a, P>(p: P, model: &Model) -> Result<Vec<Self>>
+    pub(crate) fn from_file<'a, P>(p: P, model: &Model) -> Result<Vec<Self>>
     where
         P: AsRef<Path>,
     {
@@ -521,7 +518,7 @@ impl Graph {
         Self::from_hedge_graph_set(hedge_graph_set, model)
     }
 
-    pub fn from_string<Str: AsRef<str>>(s: Str, model: &Model) -> Result<Vec<Self>> {
+    pub(crate) fn from_string<Str: AsRef<str>>(s: Str, model: &Model) -> Result<Vec<Self>> {
         let hedge_graph_set: GraphSet<
             DotEdgeData,
             DotVertexData,
@@ -662,15 +659,14 @@ macro_rules! dot {
 
 #[cfg(test)]
 pub mod test {
-    use idenso::metric::MetricSimplifier;
-    use linnet::half_edge::involution::{EdgeIndex, HedgePair};
+    use linnet::half_edge::involution::HedgePair;
     use log::info;
     use spenso::{
         network::{
             library::DummyLibrary, parsing::ShadowedStructure, store::NetworkStore, Network,
         },
-        structure::{concrete_index::FlatIndex, HasName, HasStructure, PermutedStructure},
-        tensors::{data::GetTensorData, symbolic::SymbolicTensor},
+        structure::{HasName, PermutedStructure},
+        tensors::symbolic::SymbolicTensor,
     };
     use symbolica::atom::{Atom, FunctionBuilder};
 
@@ -679,7 +675,6 @@ pub mod test {
         new_graph::parse::IntoGraph,
         new_graph::LMBext,
         numerator::{aind::Aind, Numerator, UnInit},
-        tests_from_pytest::load_generic_model,
     };
 
     use super::Graph;

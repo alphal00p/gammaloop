@@ -51,7 +51,7 @@ use crate::{
     uv::UltravioletGraph,
     GammaLoopContext, GammaLoopContextContainer,
 };
-use eyre::eyre;
+use eyre::{eyre, Context};
 use itertools::Itertools;
 use linnet::half_edge::{
     involution::{EdgeVec, Flow, HedgePair, Orientation},
@@ -104,7 +104,7 @@ pub struct ProcessDefinition {
 }
 
 impl ProcessDefinition {
-    pub fn new_empty() -> Self {
+    pub(crate) fn new_empty() -> Self {
         Self {
             initial_pdgs: vec![],
             final_pdgs_lists: vec![],
@@ -115,7 +115,7 @@ impl ProcessDefinition {
         }
     }
 
-    pub fn folder_name(&self, model: &Model) -> String {
+    pub(crate) fn folder_name(&self, model: &Model) -> String {
         let mut filename = String::new();
         filename.push_str(&model.name);
         filename.push('_');
@@ -147,7 +147,7 @@ pub struct Process<S: NumeratorState = PythonState> {
 }
 
 impl<S: NumeratorState> Process<S> {
-    pub fn preprocess(&mut self, model: &Model, settings: &ProcessSettings) -> Result<()> {
+    pub(crate) fn preprocess(&mut self, model: &Model, settings: &ProcessSettings) -> Result<()> {
         self.collection
             .preprocess(model, &self.definition, settings)?;
         Ok(())
@@ -161,9 +161,20 @@ impl Process {
         match &self.collection {
             ProcessCollection::Amplitudes(a) => {
                 let p = path.join("amplitudes");
-                fs::create_dir_all(&p)?;
+                fs::create_dir_all(&p).with_context(|| {
+                    format!(
+                        "Trying to create directory to export amplitude dot {}",
+                        p.display()
+                    )
+                })?;
                 for amp in a {
-                    let mut dot = File::create_new(p.join(&format!("{}.dot", amp.name)))?;
+                    let mut dot = File::create_new(p.join(&format!("{}.dot", amp.name)))
+                        .with_context(|| {
+                            format!(
+                                "Trying to create file to export amplitude dot {}",
+                                p.join(&format!("{}.dot", amp.name)).display()
+                            )
+                        })?;
                     amp.write_dot(&mut dot)?;
                 }
             }
@@ -172,7 +183,7 @@ impl Process {
         Ok(())
     }
 
-    pub fn from_graph_list(
+    pub(crate) fn from_graph_list(
         name: String,
         graphs: Vec<Graph>,
         generation_type: GenerationType,
@@ -223,7 +234,7 @@ impl Process {
         }
     }
 
-    pub fn from_bare_graph_list(
+    pub(crate) fn from_bare_graph_list(
         name: String,
         bare_graphs: Vec<BareGraph>,
         generation_type: GenerationType,
@@ -259,28 +270,28 @@ impl Default for ProcessList {
 // Python Api
 impl ProcessList {
     /// Generates a new empty process list
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         ProcessList { processes: vec![] }
     }
 
-    pub fn export_dot(&self, settings: &ExportSettings, model: &Model) -> Result<()> {
+    pub(crate) fn export_dot(&self, settings: &ExportSettings, model: &Model) -> Result<()> {
         for p in &self.processes {
             p.export_dot(settings, model)?;
         }
         Ok(())
     }
 
-    pub fn add_process(&mut self, process: Process) {
+    pub(crate) fn add_process(&mut self, process: Process) {
         self.processes.push(process);
     }
 
     /// imports a process list from a folder
-    pub fn import(_settings: ExportSettings) -> Result<Self> {
+    pub(crate) fn import(_settings: ExportSettings) -> Result<Self> {
         Ok(Self::new())
     }
 
     ///preprocesses the process list according to the settings
-    pub fn preprocess(&mut self, model: &Model, settings: ProcessSettings) -> Result<()> {
+    pub(crate) fn preprocess(&mut self, model: &Model, settings: ProcessSettings) -> Result<()> {
         for process in self.processes.iter_mut() {
             process.preprocess(model, &settings)?;
         }
@@ -288,7 +299,7 @@ impl ProcessList {
         Ok(())
     }
 
-    pub fn generate_integrands(
+    pub(crate) fn generate_integrands(
         &self,
         settings: Settings,
         model: &Model,
@@ -320,14 +331,14 @@ impl<S: NumeratorState> ProcessCollection<S> {
         Self::CrossSections(vec![])
     }
 
-    pub fn add_amplitude(&mut self, amplitude: Amplitude<S>) {
+    pub(crate) fn add_amplitude(&mut self, amplitude: Amplitude<S>) {
         match self {
             Self::Amplitudes(amplitudes) => amplitudes.push(amplitude),
             _ => panic!("Cannot add amplitude to a cross section collection"),
         }
     }
 
-    pub fn add_cross_section(&mut self, cross_section: CrossSection<S>) {
+    pub(crate) fn add_cross_section(&mut self, cross_section: CrossSection<S>) {
         match self {
             Self::CrossSections(cross_sections) => cross_sections.push(cross_section),
             _ => panic!("Cannot add cross section to an amplitude collection"),
@@ -387,14 +398,14 @@ pub struct Amplitude<S: NumeratorState = PythonState> {
 }
 
 impl<S: NumeratorState> Amplitude<S> {
-    pub fn preprocess(&mut self, model: &Model, settings: &ProcessSettings) -> Result<()> {
+    pub(crate) fn preprocess(&mut self, model: &Model, settings: &ProcessSettings) -> Result<()> {
         for amplitude_graph in self.graphs.iter_mut() {
             amplitude_graph.preprocess(model, settings)?;
         }
         Ok(())
     }
 
-    pub fn generate_integrand(&self, settings: Settings, model: &Model) -> Integrand {
+    pub(crate) fn generate_integrand(&self, settings: Settings, model: &Model) -> Integrand {
         let terms = self
             .graphs
             .iter()
@@ -431,7 +442,10 @@ impl<S: NumeratorState> Amplitude<S> {
         Integrand::NewIntegrand(NewIntegrand::Amplitude(amplitude_integrand))
     }
 
-    pub fn write_dot<W: std::io::Write>(&self, writer: &mut W) -> Result<(), std::io::Error> {
+    pub(crate) fn write_dot<W: std::io::Write>(
+        &self,
+        writer: &mut W,
+    ) -> Result<(), std::io::Error> {
         for graph in &self.graphs {
             graph.write_dot(writer)?;
             writeln!(writer)?;
@@ -464,7 +478,7 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
         self.graph.dot_serialize_io(writer)
     }
 
-    pub fn new(graph: Graph) -> Self {
+    pub(crate) fn new(graph: Graph) -> Self {
         AmplitudeGraph {
             graph,
             derived_data: AmplitudeDerivedData {
@@ -497,7 +511,7 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
         Ok(())
     }
 
-    pub fn preprocess(&mut self, model: &Model, settings: &ProcessSettings) -> Result<()> {
+    pub(crate) fn preprocess(&mut self, model: &Model, settings: &ProcessSettings) -> Result<()> {
         debug!("Generating Cff");
         self.generate_cff()?;
         debug!("Building Evaluator");
@@ -517,7 +531,7 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
         Ok(())
     }
 
-    pub fn build_esurface_derived_data(&mut self) -> Result<()> {
+    pub(crate) fn build_esurface_derived_data(&mut self) -> Result<()> {
         let lmbs = self.derived_data.lmbs.as_ref().unwrap();
         let esurfaces = &self
             .derived_data
@@ -609,7 +623,7 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
         result
     }
 
-    pub fn build_all_orientations_integrand_atom(&self) -> Atom {
+    pub(crate) fn build_all_orientations_integrand_atom(&self) -> Atom {
         debug!("Building all orientations integrand");
 
         let wood = self.graph.wood(&self.graph.underlying.no_dummy());
@@ -856,7 +870,7 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
         self.derived_data.threshold_counterterms = Some(counterterm_evaluators);
     }
 
-    pub fn build_evaluator(&mut self, model: &Model) {
+    pub(crate) fn build_evaluator(&mut self, model: &Model) {
         let replace_dots = self.build_all_orientations_integrand_atom();
         let params = self.amplitude_params(model);
         // for (i, p) in params.iter().enumerate() {
@@ -1080,7 +1094,11 @@ pub struct AmplitudeDerivedData<S: NumeratorState> {
 }
 
 impl<S: NumeratorState> Amplitude<S> {
-    pub fn from_dot_string<Str: AsRef<str>>(s: Str, name: String, model: &Model) -> Result<Self> {
+    pub(crate) fn from_dot_string<Str: AsRef<str>>(
+        s: Str,
+        name: String,
+        model: &Model,
+    ) -> Result<Self> {
         let graphs = Graph::from_string(s, model)?;
 
         let mut amp = Amplitude::new(name);
@@ -1090,7 +1108,7 @@ impl<S: NumeratorState> Amplitude<S> {
         Ok(amp)
     }
 
-    pub fn from_dot_file<'a, P>(p: P, name: String, model: &Model) -> Result<Self>
+    pub(crate) fn from_dot_file<'a, P>(p: P, name: String, model: &Model) -> Result<Self>
     where
         P: AsRef<Path>,
     {
@@ -1103,7 +1121,7 @@ impl<S: NumeratorState> Amplitude<S> {
         Ok(amp)
     }
 
-    pub fn new(name: String) -> Self {
+    pub(crate) fn new(name: String) -> Self {
         Self {
             name,
             graphs: vec![],
@@ -1112,7 +1130,7 @@ impl<S: NumeratorState> Amplitude<S> {
         }
     }
 
-    pub fn add_graph(&mut self, graph: Graph) -> Result<()> {
+    pub(crate) fn add_graph(&mut self, graph: Graph) -> Result<()> {
         let new_external_particels = graph.get_external_partcles();
         let new_external_signature = graph.get_external_signature();
 
@@ -1147,7 +1165,7 @@ pub struct CrossSection<S: NumeratorState> {
 }
 
 impl<S: NumeratorState> CrossSection<S> {
-    pub fn new(name: String) -> Self {
+    pub(crate) fn new(name: String) -> Self {
         Self {
             name,
             supergraphs: vec![],
@@ -1157,7 +1175,7 @@ impl<S: NumeratorState> CrossSection<S> {
         }
     }
 
-    pub fn add_supergraph(&mut self, supergraph: Graph) -> Result<()> {
+    pub(crate) fn add_supergraph(&mut self, supergraph: Graph) -> Result<()> {
         if self.external_particles.is_empty() {
             let external_particles = supergraph.underlying.get_external_partcles();
             if external_particles.len() % 2 != 0 {
@@ -1180,7 +1198,7 @@ impl<S: NumeratorState> CrossSection<S> {
         Ok(())
     }
 
-    pub fn preprocess(
+    pub(crate) fn preprocess(
         &mut self,
         model: &Model,
         process_definition: &ProcessDefinition,
@@ -1191,7 +1209,7 @@ impl<S: NumeratorState> CrossSection<S> {
         Ok(())
     }
 
-    pub fn generate_integrand(&self, settings: Settings, model: &Model) -> Integrand {
+    pub(crate) fn generate_integrand(&self, settings: Settings, model: &Model) -> Integrand {
         let terms = self
             .supergraphs
             .iter()
@@ -1267,7 +1285,7 @@ pub struct CrossSectionGraph<S: NumeratorState = PythonState> {
 }
 
 impl<S: NumeratorState> CrossSectionGraph<S> {
-    pub fn new(graph: Graph) -> Self {
+    pub(crate) fn new(graph: Graph) -> Self {
         let mut source_nodes = AHashSet::new();
         let mut target_nodes = AHashSet::new();
 
@@ -1312,7 +1330,7 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
         }
     }
 
-    pub fn preprocess(
+    pub(crate) fn preprocess(
         &mut self,
         model: &Model,
         process_definition: &ProcessDefinition,
@@ -1329,7 +1347,7 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
         Ok(self.build_multi_channeling_channels())
     }
 
-    pub fn build_esurface_derived_data(&mut self) -> Result<()> {
+    pub(crate) fn build_esurface_derived_data(&mut self) -> Result<()> {
         let lmbs = self.derived_data.lmbs.as_ref().unwrap();
         let esurfaces = &self
             .derived_data
@@ -1343,7 +1361,7 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
         Ok(self.derived_data.esurface_data = Some(esurface_data))
     }
 
-    pub fn update_surface_cache(&mut self) {
+    pub(crate) fn update_surface_cache(&mut self) {
         let esurface_cache = &mut self
             .derived_data
             .cff_expression
@@ -1471,7 +1489,7 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
         )
     }
 
-    pub fn build_left_right_amplitudes_for_orientation(
+    pub(crate) fn build_left_right_amplitudes_for_orientation(
         &self,
         cut: CutId,
         orientation: SuperGraphOrientationID,
@@ -1573,7 +1591,11 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
     }
 
     // do not use this function together with do_replacement_rules
-    pub fn add_additional_factors_to_cff_atom(&self, cut_atom: &Atom, cut_id: CutId) -> Atom {
+    pub(crate) fn add_additional_factors_to_cff_atom(
+        &self,
+        cut_atom: &Atom,
+        cut_id: CutId,
+    ) -> Atom {
         let loop_3 = self.graph.underlying.get_loop_number() as i64 * 3;
         let t_star_factor = Atom::var(GS.rescale_star).npow(loop_3);
 
@@ -1655,7 +1677,7 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
         fn_map
     }
 
-    pub fn build_cut_evaluators(
+    pub(crate) fn build_cut_evaluators(
         &mut self,
         model: &Model,
         overwrite_atoms_for_test: Option<TiVec<CutId, Atom>>,
@@ -1854,7 +1876,7 @@ pub struct CrossSectionCut {
 }
 
 impl CrossSectionCut {
-    pub fn is_s_channel<S: NumeratorState>(
+    pub(crate) fn is_s_channel<S: NumeratorState>(
         &self,
         cross_section_graph: &CrossSectionGraph<S>,
     ) -> Result<bool> {
@@ -1879,7 +1901,7 @@ impl CrossSectionCut {
         Ok(true)
     }
 
-    pub fn is_valid_for_process<S: NumeratorState>(
+    pub(crate) fn is_valid_for_process<S: NumeratorState>(
         &self,
         cross_section_graph: &CrossSectionGraph<S>,
         process: &ProcessDefinition,

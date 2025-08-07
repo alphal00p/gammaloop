@@ -39,7 +39,7 @@ use std::fs;
 use symbolica::coefficient::CoefficientView;
 use symbolica::evaluate::FunctionMap;
 
-use eyre::Result;
+use color_eyre::Result;
 use std::ops::{Deref, Index};
 use std::path::Path;
 use std::sync::Arc;
@@ -148,7 +148,7 @@ impl<T: HasModel> Decode<T> for ArcVertexRule {
 }
 
 #[allow(unused)]
-pub fn normalise_complex(atom: &Atom) -> Atom {
+pub(crate) fn normalise_complex(atom: &Atom) -> Atom {
     let re = parse!("re_");
     let im = parse!("im_");
 
@@ -190,7 +190,7 @@ pub struct SerializableVertexRule {
 }
 
 impl SerializableVertexRule {
-    pub fn from_vertex_rule(vertex_rule: &VertexRule) -> SerializableVertexRule {
+    pub(crate) fn from_vertex_rule(vertex_rule: &VertexRule) -> SerializableVertexRule {
         SerializableVertexRule {
             name: vertex_rule.name.clone(),
             particles: vertex_rule
@@ -229,23 +229,23 @@ pub struct ColorStructure {
 }
 
 impl ColorStructure {
-    pub fn new(color_structure: Vec<Atom>) -> Self {
+    pub(crate) fn new(color_structure: Vec<Atom>) -> Self {
         ColorStructure { color_structure }
     }
 
-    pub fn len(&self) -> usize {
+    pub(crate) fn len(&self) -> usize {
         self.color_structure.len()
     }
 
-    pub fn is_empty(&self) -> bool {
+    pub(crate) fn is_empty(&self) -> bool {
         self.color_structure.is_empty()
     }
 
-    pub fn iter(&self) -> std::slice::Iter<Atom> {
+    pub(crate) fn iter(&self) -> std::slice::Iter<Atom> {
         self.color_structure.iter()
     }
 
-    pub fn number_of_dummies_in_atom(a: AtomView) -> usize {
+    pub(crate) fn number_of_dummies_in_atom(a: AtomView) -> usize {
         // let mut count = 0;
 
         // if let AtomView::Mul(m) = a {
@@ -266,7 +266,7 @@ impl ColorStructure {
         VertexRule::n_dummy_atom(&a.to_owned())
     }
 
-    pub fn number_of_dummies(&self) -> usize {
+    pub(crate) fn number_of_dummies(&self) -> usize {
         self.color_structure
             .iter()
             .map(VertexRule::n_dummy_atom)
@@ -319,7 +319,11 @@ impl std::hash::Hash for VertexRule {
 }
 
 impl VertexRule {
-    pub fn tensors(&self, i: Aind, j: Aind) -> [ParamTensor<OrderedStructure<Euclidean, Aind>>; 3] {
+    pub(crate) fn tensors(
+        &self,
+        i: Aind,
+        j: Aind,
+    ) -> [ParamTensor<OrderedStructure<Euclidean, Aind>>; 3] {
         let spin_structure = self
             .lorentz_structures
             .iter()
@@ -363,7 +367,7 @@ impl VertexRule {
     }
 
     #[allow(clippy::complexity)]
-    pub fn get_coupling_orders(
+    pub(crate) fn get_coupling_orders(
         &self,
     ) -> Vec<Vec<Option<BTreeMap<SmartString<LazyCompact>, usize>>>> {
         self.couplings
@@ -386,7 +390,7 @@ pub struct VertexSlots {
 }
 
 impl VertexSlots {
-    pub fn shift_internals(&mut self, shifts: &Shifts) {
+    pub(crate) fn shift_internals(&mut self, shifts: &Shifts) {
         let lorentz_shift = shifts.lorentz + shifts.spin;
         let color_shift = shifts.color;
 
@@ -448,7 +452,7 @@ impl From<EdgeSlots<Minkowski>> for VertexSlots {
 }
 
 impl VertexRule {
-    pub fn coupling_orders(&self) -> AHashMap<SmartString<LazyCompact>, usize> {
+    pub(crate) fn coupling_orders(&self) -> AHashMap<SmartString<LazyCompact>, usize> {
         let mut node_coupling_orders = AHashMap::default();
         self.couplings.iter().for_each(|cs| {
             cs.iter().for_each(|c_opt| {
@@ -467,7 +471,7 @@ impl VertexRule {
         node_coupling_orders
     }
 
-    pub fn dod(&self) -> isize {
+    pub(crate) fn dod(&self) -> isize {
         let dod;
         let mut spins = vec![];
         for p in &self.particles {
@@ -547,7 +551,7 @@ impl VertexRule {
         n_dummy
     }
 
-    pub fn n_dummies(&self) -> (usize, usize) {
+    pub(crate) fn n_dummies(&self) -> (usize, usize) {
         let n_color_dummies = self
             .color_structures
             .color_structure
@@ -564,7 +568,7 @@ impl VertexRule {
         (n_color_dummies, n_lorentz_dummies)
     }
 
-    pub fn generate_vertex_slots(&self, mut shifts: Shifts) -> (VertexSlots, Shifts) {
+    pub(crate) fn generate_vertex_slots(&self, mut shifts: Shifts) -> (VertexSlots, Shifts) {
         let mut edge_slots = vec![];
         for p in &self.particles {
             let (e, s) = p.0.slots(shifts);
@@ -601,7 +605,7 @@ impl VertexRule {
             },
         )
     }
-    pub fn from_serializable_vertex_rule(
+    pub(crate) fn from_serializable_vertex_rule(
         model: &Model,
         vertex_rule: &SerializableVertexRule,
     ) -> VertexRule {
@@ -653,7 +657,7 @@ pub struct SerializablePropagator {
 }
 
 impl SerializablePropagator {
-    pub fn from_propagator(propagator: &Propagator) -> SerializablePropagator {
+    pub(crate) fn from_propagator(propagator: &Propagator) -> SerializablePropagator {
         SerializablePropagator {
             name: propagator.name.clone(),
             particle: propagator.particle.0.name.clone(),
@@ -673,7 +677,7 @@ pub struct Propagator {
 }
 
 impl Propagator {
-    pub fn from_serializable_propagator(
+    pub(crate) fn from_serializable_propagator(
         model: &Model,
         propagator: &SerializablePropagator,
     ) -> Propagator {
@@ -696,7 +700,7 @@ pub struct SerializableCoupling {
 }
 
 impl SerializableCoupling {
-    pub fn from_coupling(coupling: &Coupling) -> SerializableCoupling {
+    pub(crate) fn from_coupling(coupling: &Coupling) -> SerializableCoupling {
         SerializableCoupling {
             name: coupling.name.clone(),
             expression: coupling.expression.to_canonical_string().into(),
@@ -715,7 +719,7 @@ pub struct Coupling {
 }
 
 impl Coupling {
-    pub fn from_serializable_coupling(coupling: &SerializableCoupling) -> Coupling {
+    pub(crate) fn from_serializable_coupling(coupling: &SerializableCoupling) -> Coupling {
         Coupling {
             name: coupling.name.clone(),
             expression: utils::parse_python_expression(coupling.expression.as_str()),
@@ -724,7 +728,7 @@ impl Coupling {
         }
     }
 
-    pub fn rep_rule(&self) -> [Atom; 2] {
+    pub(crate) fn rep_rule(&self) -> [Atom; 2] {
         let lhs = parse!(&self.name);
         //let rhs = normalise_complex(&self.expression);
         let rhs = self.expression.clone();
@@ -751,7 +755,7 @@ pub struct SerializableParticle {
 }
 
 impl SerializableParticle {
-    pub fn from_particle(particle: &Particle) -> SerializableParticle {
+    pub(crate) fn from_particle(particle: &Particle) -> SerializableParticle {
         SerializableParticle {
             pdg_code: particle.pdg_code,
             name: particle.name.clone(),
@@ -788,7 +792,7 @@ pub struct Particle {
 }
 
 impl Particle {
-    pub fn random_helicity(&self, seed: u64) -> Helicity {
+    pub(crate) fn random_helicity(&self, seed: u64) -> Helicity {
         let mut rng = SmallRng::seed_from_u64(seed);
         if self.is_spinor() {
             if rng.random_bool(0.5) {
@@ -803,10 +807,10 @@ impl Particle {
         }
     }
 
-    pub fn is_massless(&self) -> bool {
+    pub(crate) fn is_massless(&self) -> bool {
         !self.is_massive()
     }
-    pub fn decoration(&self) -> Decoration {
+    pub(crate) fn decoration(&self) -> Decoration {
         match self.spin {
             0 => Decoration::Dashed,
             1 => Decoration::None,
@@ -822,27 +826,27 @@ impl Particle {
         }
     }
 
-    pub fn is_fermion(&self) -> bool {
+    pub(crate) fn is_fermion(&self) -> bool {
         self.spin % 2 == 0
     }
 
-    pub fn is_vector(&self) -> bool {
+    pub(crate) fn is_vector(&self) -> bool {
         self.spin == 3
     }
 
-    pub fn is_scalar(&self) -> bool {
+    pub(crate) fn is_scalar(&self) -> bool {
         self.spin == 1
     }
 
-    pub fn is_spinor(&self) -> bool {
+    pub(crate) fn is_spinor(&self) -> bool {
         self.spin == 2
     }
 
-    pub fn is_ghost(&self) -> bool {
+    pub(crate) fn is_ghost(&self) -> bool {
         self.ghost_number != 0
     }
 
-    pub fn symbolic_mass(&self) -> Atom {
+    pub(crate) fn symbolic_mass(&self) -> Atom {
         match self.mass.value {
             Some(value) => {
                 if value.is_non_zero() {
@@ -1014,7 +1018,7 @@ impl From<EdgeSlots<Lorentz>> for OrderedStructure {
 }
 
 impl<LorRep: BaseRepName> EdgeSlots<LorRep> {
-    pub fn kroneker(&self, other: &EdgeSlots<LorRep::Dual>) -> [Atom; 3] {
+    pub(crate) fn kroneker(&self, other: &EdgeSlots<LorRep::Dual>) -> [Atom; 3] {
         let lorentz = self
             .lorentz
             .iter()
@@ -1037,7 +1041,7 @@ impl<LorRep: BaseRepName> EdgeSlots<LorRep> {
         [lorentz, spin, color]
     }
 
-    pub fn size(&self) -> usize {
+    pub(crate) fn size(&self) -> usize {
         if self.spin.is_empty() && self.lorentz.is_empty() && self.color.is_empty() {
             0
         } else {
@@ -1045,35 +1049,35 @@ impl<LorRep: BaseRepName> EdgeSlots<LorRep> {
         }
     }
 
-    pub fn lorentz_size(&self) -> usize {
+    pub(crate) fn lorentz_size(&self) -> usize {
         self.lorentz
             .iter()
             .map(|s| usize::try_from(s.dim()).unwrap())
             .product()
     }
 
-    pub fn spin_size(&self) -> usize {
+    pub(crate) fn spin_size(&self) -> usize {
         self.spin
             .iter()
             .map(|s| usize::try_from(s.dim()).unwrap())
             .product()
     }
 
-    pub fn color_size(&self) -> usize {
+    pub(crate) fn color_size(&self) -> usize {
         self.color
             .iter()
             .map(|s| usize::try_from(s.dim()).unwrap())
             .product()
     }
 
-    pub fn dual(&self) -> EdgeSlots<LorRep::Dual> {
+    pub(crate) fn dual(&self) -> EdgeSlots<LorRep::Dual> {
         EdgeSlots {
             lorentz: self.lorentz.iter().map(|l| l.dual()).collect(),
             spin: self.spin.iter().map(|s| s.dual()).collect(),
             color: self.color.iter().map(|c| c.dual()).collect(),
         }
     }
-    pub fn replacements(&self, id: usize) -> Vec<Replacement> {
+    pub(crate) fn replacements(&self, id: usize) -> Vec<Replacement> {
         let rhs_lor = <Atom as AtomCore>::to_pattern(&LorRep::slot(4, id).to_symbolic_wrapped());
 
         let rhs_spin = Bispinor {}.new_slot::<Aind, _, _>(4, id);
@@ -1107,7 +1111,7 @@ impl<LorRep: BaseRepName> EdgeSlots<LorRep> {
 
         reps
     }
-    pub fn complete_fn_builder(&self, mut fn_builder: FunctionBuilder) -> Atom {
+    pub(crate) fn complete_fn_builder(&self, mut fn_builder: FunctionBuilder) -> Atom {
         for l in &self.lorentz {
             fn_builder = fn_builder.add_arg(l.to_atom().as_view());
         }
@@ -1122,36 +1126,18 @@ impl<LorRep: BaseRepName> EdgeSlots<LorRep> {
 
         fn_builder.finish()
     }
-
-    pub fn to_cind_atom(&self) -> Atom {
-        let mut builder = FunctionBuilder::new(symbol!(CONCRETEIND));
-
-        for l in &self.lorentz {
-            builder = builder.add_arg(l.to_atom().as_view());
-        }
-
-        for s in &self.spin {
-            builder = builder.add_arg(s.to_atom().as_view());
-        }
-
-        for c in &self.color {
-            builder = builder.add_arg(c.to_atom().as_view());
-        }
-
-        builder.finish()
-    }
 }
 
 impl Particle {
-    pub fn is_antiparticle(&self) -> bool {
+    pub(crate) fn is_antiparticle(&self) -> bool {
         self.pdg_code < 0
     }
 
-    pub fn get_anti_particle(&self, model: &Model) -> ArcParticle {
+    pub(crate) fn get_anti_particle(&self, model: &Model) -> ArcParticle {
         model.get_particle(&self.antiname)
     }
 
-    pub fn is_self_antiparticle(&self) -> bool {
+    pub(crate) fn is_self_antiparticle(&self) -> bool {
         self.name == self.antiname
     }
 
@@ -1164,7 +1150,7 @@ impl Particle {
         }
     }
 
-    pub fn spin_reps(&self) -> IndexLess {
+    pub(crate) fn spin_reps(&self) -> IndexLess {
         PermutedStructure::<IndexLess>::from_iter(match self.spin {
             3 => vec![Minkowski {}.new_rep(4).cast()],
             2 => vec![Bispinor {}.new_rep(4).cast()],
@@ -1182,7 +1168,7 @@ impl Particle {
         }
     }
 
-    pub fn is_massive(&self) -> bool {
+    pub(crate) fn is_massive(&self) -> bool {
         if let Some(v) = self.mass.value {
             v.norm_squared().abs().positive()
         } else {
@@ -1190,7 +1176,7 @@ impl Particle {
         }
     }
 
-    pub fn color_reps(&self, flow: Flow) -> IndexLess {
+    pub(crate) fn color_reps(&self, flow: Flow) -> IndexLess {
         let reps = match flow {
             Flow::Source => match self.color {
                 3 => vec![ColorFundamental {}.new_rep(3).cast()],
@@ -1226,7 +1212,7 @@ impl Particle {
         (vec![rep.slot(shift)], shift + 1)
     }
 
-    pub fn slots<LR: BaseRepName>(&self, shifts: Shifts) -> (EdgeSlots<LR>, Shifts) {
+    pub(crate) fn slots<LR: BaseRepName>(&self, shifts: Shifts) -> (EdgeSlots<LR>, Shifts) {
         let (lorentz, shift_lor) = self.lorentz_slots(shifts.lorentz);
         let (spin, shift_spin) = self.spin_slots(shifts.spin);
         let (color, shift_color) = self.color_slots(shifts.color);
@@ -1248,7 +1234,10 @@ impl Particle {
         )
     }
 
-    pub fn from_serializable_particle(model: &Model, particle: &SerializableParticle) -> Particle {
+    pub(crate) fn from_serializable_particle(
+        model: &Model,
+        particle: &SerializableParticle,
+    ) -> Particle {
         Particle {
             pdg_code: particle.pdg_code,
             name: particle.name.clone(),
@@ -1266,7 +1255,7 @@ impl Particle {
         }
     }
 
-    pub fn incoming_polarization_atom(
+    pub(crate) fn incoming_polarization_atom(
         &self,
         edge_slots: &EdgeSlots<Minkowski>,
         num: usize,
@@ -1280,7 +1269,7 @@ impl Particle {
         }
     }
 
-    pub fn in_pol_symbol(&self) -> Option<Symbol> {
+    pub(crate) fn in_pol_symbol(&self) -> Option<Symbol> {
         match self.spin {
             2 => {
                 if self.pdg_code > 0 {
@@ -1294,7 +1283,7 @@ impl Particle {
         }
     }
 
-    pub fn out_pol_symbol(&self) -> Option<Symbol> {
+    pub(crate) fn out_pol_symbol(&self) -> Option<Symbol> {
         match self.spin {
             2 => {
                 if self.pdg_code > 0 {
@@ -1308,7 +1297,7 @@ impl Particle {
         }
     }
 
-    pub fn incoming_polarization_atom_concrete(
+    pub(crate) fn incoming_polarization_atom_concrete(
         &self,
         edge_slots: &EdgeSlots<Minkowski>,
         num: usize,
@@ -1329,7 +1318,7 @@ impl Particle {
         }
     }
 
-    pub fn outgoing_polarization_atom_concrete(
+    pub(crate) fn outgoing_polarization_atom_concrete(
         &self,
         edge_slots: &EdgeSlots<Minkowski>,
         num: usize,
@@ -1351,7 +1340,7 @@ impl Particle {
         }
     }
 
-    pub fn incoming_polarization_match<T: FloatLike>(
+    pub(crate) fn incoming_polarization_match<T: FloatLike>(
         &self,
         num: usize,
         mom: &FourMomentum<F<T>>,
@@ -1405,7 +1394,7 @@ impl Particle {
         out
     }
 
-    pub fn incoming_polarization<T: FloatLike>(
+    pub(crate) fn incoming_polarization<T: FloatLike>(
         &self,
         mom: &FourMomentum<F<T>>,
         helicity: Helicity,
@@ -1413,7 +1402,7 @@ impl Particle {
         Self::incoming_polarization_impl(self.spin, self.pdg_code, mom, helicity)
     }
 
-    pub fn incoming_polarization_impl<T: FloatLike>(
+    pub(crate) fn incoming_polarization_impl<T: FloatLike>(
         spin: isize,
         pdg_code: isize,
         mom: &FourMomentum<F<T>>,
@@ -1441,7 +1430,7 @@ impl Particle {
         }
     }
 
-    pub fn outgoing_polarization_atom(
+    pub(crate) fn outgoing_polarization_atom(
         &self,
         edge_slots: &EdgeSlots<Minkowski>,
         num: usize,
@@ -1455,7 +1444,7 @@ impl Particle {
         }
     }
 
-    pub fn outgoing_polarization<T: FloatLike>(
+    pub(crate) fn outgoing_polarization<T: FloatLike>(
         &self,
         mom: &FourMomentum<F<T>>,
         helicity: Helicity,
@@ -1463,7 +1452,7 @@ impl Particle {
         Self::outgoing_polarization_impl(self.spin, self.pdg_code, mom, helicity)
     }
 
-    pub fn outgoing_polarization_impl<T: FloatLike>(
+    pub(crate) fn outgoing_polarization_impl<T: FloatLike>(
         spin: isize,
         pdg_code: isize,
         mom: &FourMomentum<F<T>>,
@@ -1490,7 +1479,7 @@ impl Particle {
         }
     }
 
-    pub fn outgoing_polarization_match<T: FloatLike>(
+    pub(crate) fn outgoing_polarization_match<T: FloatLike>(
         &self,
         num: usize,
         mom: &FourMomentum<F<T>>,
@@ -1587,7 +1576,7 @@ pub struct SerializableLorentzStructure {
 }
 
 impl SerializableLorentzStructure {
-    pub fn from_lorentz_structure(ls: &LorentzStructure) -> SerializableLorentzStructure {
+    pub(crate) fn from_lorentz_structure(ls: &LorentzStructure) -> SerializableLorentzStructure {
         SerializableLorentzStructure {
             name: ls.name.clone(),
             spins: ls.spins.clone(),
@@ -1604,7 +1593,7 @@ pub struct LorentzStructure {
 }
 
 impl LorentzStructure {
-    pub fn from_serializable_lorentz_structure(
+    pub(crate) fn from_serializable_lorentz_structure(
         ls: &SerializableLorentzStructure,
     ) -> LorentzStructure {
         LorentzStructure {
@@ -1614,7 +1603,7 @@ impl LorentzStructure {
         }
     }
 
-    pub fn number_of_dummies(&self) -> usize {
+    pub(crate) fn number_of_dummies(&self) -> usize {
         VertexRule::n_dummy_atom(&self.structure)
     }
 }
@@ -1631,7 +1620,7 @@ pub struct SerializableParameter {
 }
 
 impl SerializableParameter {
-    pub fn from_parameter(param: &Parameter) -> SerializableParameter {
+    pub(crate) fn from_parameter(param: &Parameter) -> SerializableParameter {
         SerializableParameter {
             name: param.name.clone(),
             lhablock: param.lhablock.clone(),
@@ -1680,7 +1669,7 @@ impl PartialEq for Parameter {
 impl Eq for Parameter {}
 
 impl Parameter {
-    pub fn from_serializable_parameter(param: &SerializableParameter) -> Parameter {
+    pub(crate) fn from_serializable_parameter(param: &SerializableParameter) -> Parameter {
         Parameter {
             name: param.name.clone(),
             lhablock: param.lhablock.clone(),
@@ -1695,7 +1684,7 @@ impl Parameter {
         }
     }
 
-    pub fn rep_rule(&self) -> Option<[Atom; 2]> {
+    pub(crate) fn rep_rule(&self) -> Option<[Atom; 2]> {
         let lhs = parse!(&self.name);
         let rhs = self.expression.clone();
 
@@ -1724,22 +1713,27 @@ pub struct SerializableModel {
 }
 
 impl SerializableModel {
-    pub fn from_file(file_path: String) -> Result<SerializableModel, Report> {
-        let f = File::open(file_path.clone())
-            .wrap_err_with(|| format!("Could not open model yaml file {}", file_path))
+    pub(crate) fn from_file(file_path: impl AsRef<Path>) -> Result<SerializableModel, Report> {
+        let f = File::open(file_path.as_ref())
+            .wrap_err_with(|| {
+                format!(
+                    "Could not open model yaml file {}",
+                    file_path.as_ref().display()
+                )
+            })
             .suggestion("Does the path exist?")?;
         serde_yaml::from_reader(f)
             .map_err(|e| eyre!(format!("Error parsing model yaml: {}", e)))
             .suggestion("Is it a correct yaml file")
     }
 
-    pub fn from_yaml_str(yaml_str: String) -> Result<SerializableModel, Report> {
+    pub(crate) fn from_yaml_str(yaml_str: String) -> Result<SerializableModel, Report> {
         serde_yaml::from_str(yaml_str.as_str())
             .map_err(|e| eyre!(format!("Error parsing model yaml: {}", e)))
             .suggestion("Is it a correct yaml file")
     }
 
-    pub fn from_model(model: &Model) -> SerializableModel {
+    pub(crate) fn from_model(model: &Model) -> SerializableModel {
         SerializableModel {
             name: model.name.clone(),
             restriction: model.restriction.clone(),
@@ -1849,7 +1843,7 @@ impl Default for Model {
     }
 }
 impl Model {
-    pub fn recompute_dependents(&mut self) {
+    pub(crate) fn recompute_dependents(&mut self) {
         let mut fn_map = FunctionMap::new();
 
         let mut expr = vec![];
@@ -1907,7 +1901,7 @@ impl Model {
         // }
     }
 
-    pub fn substitute_model_params(&self, atom: &Atom) -> Atom {
+    pub(crate) fn substitute_model_params(&self, atom: &Atom) -> Atom {
         let mut sub_atom = atom.clone();
         for cpl in self.couplings.iter() {
             let [pattern, rhs] = cpl.rep_rule();
@@ -1927,7 +1921,7 @@ impl Model {
         sub_atom
     }
 
-    pub fn dependent_coupling_replacements(&self) -> Vec<(Pattern, Pattern)> {
+    pub(crate) fn dependent_coupling_replacements(&self) -> Vec<(Pattern, Pattern)> {
         let mut reps = vec![];
         for cpl in self.couplings.iter().filter(|c| c.value.is_none()) {
             let [pattern, rhs] = cpl.rep_rule();
@@ -1936,7 +1930,7 @@ impl Model {
         reps
     }
 
-    pub fn internal_parameter_replacements(&self) -> Vec<(Pattern, Pattern)> {
+    pub(crate) fn internal_parameter_replacements(&self) -> Vec<(Pattern, Pattern)> {
         let mut reps = vec![];
         for para in self
             .parameters
@@ -1950,7 +1944,7 @@ impl Model {
         reps
     }
 
-    pub fn valued_coupling_re_im_split(&self) -> Vec<(Pattern, Pattern)> {
+    pub(crate) fn valued_coupling_re_im_split(&self) -> Vec<(Pattern, Pattern)> {
         let mut reps = vec![];
         for cpl in self.couplings.iter().filter(|c| c.value.is_some()) {
             let lhs = parse!(&cpl.name).to_pattern();
@@ -1977,7 +1971,7 @@ impl Model {
         reps
     }
 
-    pub fn generate_values<T: FloatLike>(&self) -> Vec<Complex<F<T>>> {
+    pub(crate) fn generate_values<T: FloatLike>(&self) -> Vec<Complex<F<T>>> {
         let mut values = vec![];
 
         for cpl in self.couplings.iter().filter(|c| c.value.is_some()) {
@@ -2002,7 +1996,7 @@ impl Model {
         values
     }
 
-    pub fn generate_params(&self) -> Vec<Atom> {
+    pub(crate) fn generate_params(&self) -> Vec<Atom> {
         let mut params = vec![];
 
         for cpl in self.couplings.iter().filter(|c| c.value.is_some()) {
@@ -2020,11 +2014,11 @@ impl Model {
         params
     }
 
-    pub fn substitute_split_model_params(&self, atom: &Atom) -> Atom {
+    pub(crate) fn substitute_split_model_params(&self, atom: &Atom) -> Atom {
         atom.clone()
     }
 
-    pub fn valued_parameter_re_im_split(&self) -> Vec<(Pattern, Pattern)> {
+    pub(crate) fn valued_parameter_re_im_split(&self) -> Vec<(Pattern, Pattern)> {
         let mut reps = vec![];
         for param in self.parameters.iter().filter(|p| p.value.is_some()) {
             let lhs = parse!(&param.name).to_pattern();
@@ -2056,7 +2050,7 @@ impl Model {
         reps
     }
 
-    pub fn evaluate_couplings(&self, atom: Atom) -> Atom {
+    pub(crate) fn evaluate_couplings(&self, atom: Atom) -> Atom {
         // let mut atom = atom;
         // for cpl in self.couplings.iter() {
         //     if let Some(value) = cpl.value {
@@ -2071,7 +2065,7 @@ impl Model {
         atom
     }
 
-    pub fn append_coupling_eval<'a, T: FloatLike>(
+    pub(crate) fn append_coupling_eval<'a, T: FloatLike>(
         &'a self,
         const_map: &mut HashMap<AtomView<'a>, Complex<F<T>>>,
     ) {
@@ -2084,7 +2078,7 @@ impl Model {
         }
     }
 
-    pub fn append_parameter_map(&self, const_map: &mut AHashMap<Atom, Complex<F<f64>>>) {
+    pub(crate) fn append_parameter_map(&self, const_map: &mut AHashMap<Atom, Complex<F<f64>>>) {
         // let mut atom = atom;
         for cpl in self.parameters.iter() {
             if let Some(value) = cpl.value {
@@ -2093,11 +2087,11 @@ impl Model {
             }
         }
     }
-    pub fn is_empty(&self) -> bool {
+    pub(crate) fn is_empty(&self) -> bool {
         self.name == "ModelNotLoaded" || self.particles.is_empty()
     }
 
-    pub fn export_coupling_replacement_rules(
+    pub(crate) fn export_coupling_replacement_rules(
         &self,
         export_root: &str,
         print_ops: PrintOptions,
@@ -2169,7 +2163,7 @@ impl Model {
         self.unresolved_particles = map;
     }
 
-    pub fn from_serializable_model(serializable_model: SerializableModel) -> Model {
+    pub(crate) fn from_serializable_model(serializable_model: SerializableModel) -> Model {
         //initialize the UFO and ETS symbols
 
         // let _ = *UFO;
@@ -2314,24 +2308,24 @@ impl Model {
         model
     }
 
-    pub fn to_serializable(&self) -> SerializableModel {
+    pub(crate) fn to_serializable(&self) -> SerializableModel {
         SerializableModel::from_model(self)
     }
 
-    pub fn to_yaml(&self) -> Result<String, Error> {
+    pub(crate) fn to_yaml(&self) -> Result<String, Error> {
         serde_yaml::to_string(&self.to_serializable())
     }
 
-    pub fn from_file(file_path: String) -> Result<Model, Report> {
+    pub(crate) fn from_file(file_path: impl AsRef<Path>) -> Result<Model, Report> {
         SerializableModel::from_file(file_path).map(Model::from_serializable_model)
     }
 
-    pub fn from_yaml_str(yaml_str: String) -> Result<Model, Report> {
+    pub(crate) fn from_yaml_str(yaml_str: String) -> Result<Model, Report> {
         SerializableModel::from_yaml_str(yaml_str).map(Model::from_serializable_model)
     }
 
     #[inline]
-    pub fn get_propagator_for_particle<S: AsRef<str>>(&self, name: S) -> Arc<Propagator> {
+    pub(crate) fn get_propagator_for_particle<S: AsRef<str>>(&self, name: S) -> Arc<Propagator> {
         if let Some(position) = self.particle_name_to_propagator_position.get(name.as_ref()) {
             self.propagators[*position].clone()
         } else {
@@ -2345,7 +2339,7 @@ impl Model {
     }
 
     #[inline]
-    pub fn get_particle<S: AsRef<str>>(&self, name: S) -> ArcParticle {
+    pub(crate) fn get_particle<S: AsRef<str>>(&self, name: S) -> ArcParticle {
         if let Some(position) = self.particle_name_to_position.get(name.as_ref()) {
             self.particles[*position].clone()
         } else {
@@ -2358,7 +2352,7 @@ impl Model {
         }
     }
     #[inline]
-    pub fn get_particle_from_pdg(&self, pdg: isize) -> ArcParticle {
+    pub(crate) fn get_particle_from_pdg(&self, pdg: isize) -> ArcParticle {
         if let Some(position) = self.particle_pdg_to_position.get(&pdg) {
             self.particles[*position].clone()
         } else {
@@ -2370,7 +2364,20 @@ impl Model {
     }
 
     #[inline]
-    pub fn get_propagator<S: AsRef<str>>(&self, name: S) -> ArcPropagator {
+    pub(crate) fn try_get_particle_from_pdg(&self, pdg: isize) -> Result<ArcParticle> {
+        if let Some(position) = self.particle_pdg_to_position.get(&pdg) {
+            Ok(self.particles[*position].clone())
+        } else {
+            Err(eyre!(
+                "Particle with PDG {} not found in model '{}'.",
+                pdg,
+                self.name
+            ))
+        }
+    }
+
+    #[inline]
+    pub(crate) fn get_propagator<S: AsRef<str>>(&self, name: S) -> ArcPropagator {
         if let Some(position) = self.propagator_name_to_position.get(name.as_ref()) {
             ArcPropagator(self.propagators[*position].clone())
         } else {
@@ -2383,7 +2390,7 @@ impl Model {
     }
 
     #[inline]
-    pub fn get_parameter<S: AsRef<str>>(&self, name: S) -> Arc<Parameter> {
+    pub(crate) fn get_parameter<S: AsRef<str>>(&self, name: S) -> Arc<Parameter> {
         if let Some(position) = self.parameter_name_to_position.get(name.as_ref()) {
             self.parameters[*position].clone()
         } else {
@@ -2395,7 +2402,7 @@ impl Model {
         }
     }
     #[inline]
-    pub fn get_order<S: AsRef<str>>(&self, name: S) -> Arc<Order> {
+    pub(crate) fn get_order<S: AsRef<str>>(&self, name: S) -> Arc<Order> {
         if let Some(position) = self.order_name_to_position.get(name.as_ref()) {
             self.orders[*position].clone()
         } else {
@@ -2407,7 +2414,7 @@ impl Model {
         }
     }
     #[inline]
-    pub fn get_lorentz_structure<S: AsRef<str>>(&self, name: S) -> Arc<LorentzStructure> {
+    pub(crate) fn get_lorentz_structure<S: AsRef<str>>(&self, name: S) -> Arc<LorentzStructure> {
         if let Some(position) = self.lorentz_structure_name_to_position.get(name.as_ref()) {
             self.lorentz_structures[*position].clone()
         } else {
@@ -2419,7 +2426,7 @@ impl Model {
         }
     }
     #[inline]
-    pub fn get_coupling<S: AsRef<str>>(&self, name: S) -> Arc<Coupling> {
+    pub(crate) fn get_coupling<S: AsRef<str>>(&self, name: S) -> Arc<Coupling> {
         if let Some(position) = self.coupling_name_to_position.get(name.as_ref()) {
             self.couplings[*position].clone()
         } else {
@@ -2431,7 +2438,7 @@ impl Model {
         }
     }
     #[inline]
-    pub fn get_vertex_rule<S: AsRef<str>>(&self, name: S) -> ArcVertexRule {
+    pub(crate) fn get_vertex_rule<S: AsRef<str>>(&self, name: S) -> ArcVertexRule {
         if let Some(position) = self.vertex_rule_name_to_position.get(name.as_ref()) {
             self.vertex_rules[*position].clone()
         } else {

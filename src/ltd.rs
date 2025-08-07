@@ -568,7 +568,7 @@ pub struct LTDExpression {
 }
 
 impl LTDExpression {
-    pub fn evaluate<T: FloatLike>(
+    pub(crate) fn evaluate<T: FloatLike>(
         &self,
         sample: &MomentumSample<T>,
         graph: &BareGraph,
@@ -602,7 +602,7 @@ impl LTDExpression {
         //    .unwrap_or(DataTensor::new_scalar(Complex::new_re(zero)))
     }
 
-    pub fn evaluate_in_lmb<T: FloatLike>(
+    pub(crate) fn evaluate_in_lmb<T: FloatLike>(
         &self,
         sample: &MomentumSample<T>,
         graph: &BareGraph,
@@ -636,7 +636,7 @@ impl LTDExpression {
     }
 }
 
-pub fn generate_ltd_expression<S: NumeratorState>(graph: &mut Graph<S>) -> LTDExpression {
+pub(crate) fn generate_ltd_expression<S: NumeratorState>(graph: &mut Graph<S>) -> LTDExpression {
     debug!(
         "generating ltd expression for graph: {:?}",
         graph.bare_graph.name

@@ -236,7 +236,7 @@ fn construct_solver(
     .unwrap()
 }
 
-pub fn find_center(
+pub(crate) fn find_center(
     lmb: &LoopMomentumBasis,
     esurfaces_to_consider: &[ExistingEsurfaceId],
     existing_esurfaces: &ExistingEsurfaces,
@@ -294,7 +294,7 @@ pub fn find_center(
 
 /// TODO: When this function will be called at runtime, panics should be removed and this function should return result.
 /// When the overlap finding fails, treat the point as unstable
-pub fn find_maximal_overlap(
+pub(crate) fn find_maximal_overlap(
     lmb: &LoopMomentumBasis,
     existing_esurfaces: &ExistingEsurfaces,
     esurfaces: &EsurfaceCollection,

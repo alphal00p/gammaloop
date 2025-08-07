@@ -247,7 +247,7 @@ fn cut_content() {
 //     chain_dis_generate(&options, &model)
 // }
 
-pub fn dis_options_impl(
+pub(crate) fn dis_options_impl(
     init: &[isize],
     final_states: &[Vec<isize>],
     pert: usize,
@@ -321,7 +321,7 @@ pub fn dis_options_impl(
     }
 }
 
-pub fn dis_options(
+pub(crate) fn dis_options(
     init: &[&'static str],
     final_states: &[Vec<&'static str>],
     pert: usize,
@@ -394,7 +394,7 @@ impl<T: Clone> Iterator for CombinationsWithRepetition<T> {
     }
 }
 
-pub fn dis_cart_prod_impl(initial_states: &[isize], loop_count: usize) -> Vec<FeynGen> {
+pub(crate) fn dis_cart_prod_impl(initial_states: &[isize], loop_count: usize) -> Vec<FeynGen> {
     let mut options = vec![];
 
     let initial_states: HashSet<isize> = initial_states.iter().cloned().collect();
@@ -437,7 +437,7 @@ pub fn dis_cart_prod_impl(initial_states: &[isize], loop_count: usize) -> Vec<Fe
     options
 }
 
-pub fn dis_cart_prod(
+pub(crate) fn dis_cart_prod(
     initial_states: &[&'static str],
     loop_count: usize,
     model: &Model,
@@ -449,7 +449,7 @@ pub fn dis_cart_prod(
     dis_cart_prod_impl(&initial_states, loop_count)
 }
 
-pub fn chain_dis_generate(options: &[FeynGen], model: &Model) -> Vec<BareGraph> {
+pub(crate) fn chain_dis_generate(options: &[FeynGen], model: &Model) -> Vec<BareGraph> {
     options
         .iter()
         .flat_map(|a| {

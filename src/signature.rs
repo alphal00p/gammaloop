@@ -53,17 +53,17 @@ pub struct LoopExtSignature {
 }
 
 impl LoopExtSignature {
-    pub fn swap_loops(&mut self, i: LoopIndex, j: LoopIndex) {
+    pub(crate) fn swap_loops(&mut self, i: LoopIndex, j: LoopIndex) {
         // println!("i{i},j{j}");÷
         if self.internal.len() > 0 {
             self.internal.0.swap(i, j);
         }
     }
-    pub fn swap_external(&mut self, i: ExternalIndex, j: ExternalIndex) {
+    pub(crate) fn swap_external(&mut self, i: ExternalIndex, j: ExternalIndex) {
         self.external.0.swap(i, j);
     }
 
-    pub fn loop_atom<'a, I>(
+    pub(crate) fn loop_atom<'a, I>(
         &self,
         mom_symbol: Symbol,
         additional_args: &'a [I],
@@ -75,7 +75,7 @@ impl LoopExtSignature {
         self.internal.atom(mom_symbol, additional_args, id_map)
     }
 
-    pub fn ext_atom<'a, I>(
+    pub(crate) fn ext_atom<'a, I>(
         &self,
         mom_symbol: Symbol,
         additional_args: &'a [I],
@@ -224,7 +224,7 @@ where
     T: From<usize> + Copy,
     usize: From<T>,
 {
-    pub fn atom<'a, I>(
+    pub(crate) fn atom<'a, I>(
         &self,
         mom_symbol: Symbol,
         additional_args: &'a [I],
@@ -249,14 +249,14 @@ where
         rep
     }
 
-    pub fn iter_enumerated(&self) -> impl Iterator<Item = (T, &SignOrZero)> {
+    pub(crate) fn iter_enumerated(&self) -> impl Iterator<Item = (T, &SignOrZero)> {
         self.0.iter_enumerated()
     }
-    pub fn validate_basis<B>(&self, basis: &[B]) -> bool {
+    pub(crate) fn validate_basis<B>(&self, basis: &[B]) -> bool {
         self.len() == basis.len()
     }
 
-    pub fn sum(&mut self, other: &Self) {
+    pub(crate) fn sum(&mut self, other: &Self) {
         for (i, sign) in other.iter_enumerated() {
             match (self[i], sign) {
                 (SignOrZero::Zero, SignOrZero::Zero) => self.0[i] = SignOrZero::Zero,
@@ -272,7 +272,7 @@ where
         }
     }
 
-    pub fn panic_validate_basis<B>(&self, basis: &[B]) {
+    pub(crate) fn panic_validate_basis<B>(&self, basis: &[B]) {
         if !self.validate_basis(basis) {
             panic!(
                 "Invalid basis for Signature, expected length {}, got length {}",
@@ -282,7 +282,7 @@ where
         }
     }
 
-    pub fn to_momtrop_format(&self) -> Vec<isize> {
+    pub(crate) fn to_momtrop_format(&self) -> Vec<isize> {
         self.0
             .iter()
             .map(|x| match x {
@@ -292,18 +292,18 @@ where
             })
             .collect()
     }
-    pub fn len(&self) -> usize {
+    pub(crate) fn len(&self) -> usize {
         self.0.len()
     }
 
-    pub fn iter(&self) -> std::slice::Iter<SignOrZero> {
+    pub(crate) fn iter(&self) -> std::slice::Iter<SignOrZero> {
         self.0.iter()
     }
 
-    pub fn is_empty(&self) -> bool {
+    pub(crate) fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
-    pub fn apply<B>(&self, basis: &[B]) -> B
+    pub(crate) fn apply<B>(&self, basis: &[B]) -> B
     where
         B: RefZero + Clone + Neg<Output = B> + AddAssign<B>,
     {
@@ -315,7 +315,7 @@ where
         result
     }
 
-    pub fn apply_typed<O, I, V>(&self, basis: &V) -> O
+    pub(crate) fn apply_typed<O, I, V>(&self, basis: &V) -> O
     where
         V: Index<I, Output = O>,
         O: RefZero + Neg<Output = O> + AddAssign<O> + Clone,
@@ -330,7 +330,7 @@ where
         result
     }
 
-    pub fn apply_iter<I, O>(&self, basis: I) -> Option<O>
+    pub(crate) fn apply_iter<I, O>(&self, basis: I) -> Option<O>
     where
         I: IntoIterator,
         I::Item: RefZero<O>,
@@ -377,7 +377,7 @@ where
         None
     }
 
-    pub fn label_with(&self, label: &str) -> String {
+    pub(crate) fn label_with(&self, label: &str) -> String {
         let mut result = String::new();
         let mut first = true;
         for (i, sign) in self.0.iter().enumerate() {
@@ -396,7 +396,7 @@ where
     /// Canonization function to compare two signatures up to an overall sign,
     /// If the first nonzero entry is positive, it will return itself,
     /// otherwise it will return the negative of itself.
-    pub fn first_abs(&self) -> Self {
+    pub(crate) fn first_abs(&self) -> Self {
         let sign = self.iter().find(|x| x.is_sign());
 
         if let Some(sign) = sign {
@@ -451,7 +451,7 @@ fn test_signature() {
 }
 
 impl LoopExtSignature {
-    pub fn compute_momentum_untyped<'a, 'b: 'a, T>(
+    pub(crate) fn compute_momentum_untyped<'a, 'b: 'a, T>(
         &self,
         loop_moms: &'a [T],
         external_moms: &'b [T],
@@ -470,7 +470,7 @@ impl LoopExtSignature {
         res
     }
 
-    pub fn compute_momentum<L, E, M>(&self, loop_momenta: &L, external_momenta: &E) -> M
+    pub(crate) fn compute_momentum<L, E, M>(&self, loop_momenta: &L, external_momenta: &E) -> M
     where
         M: RefZero + Clone + Neg<Output = M> + AddAssign<M>,
         L: Index<LoopIndex, Output = M> + Length,
@@ -489,7 +489,7 @@ impl LoopExtSignature {
         res
     }
 
-    pub fn to_momtrop_format(&self) -> (Vec<isize>, Vec<isize>) {
+    pub(crate) fn to_momtrop_format(&self) -> (Vec<isize>, Vec<isize>) {
         (
             self.internal.to_momtrop_format(),
             self.external.to_momtrop_format(),
@@ -497,7 +497,7 @@ impl LoopExtSignature {
     }
 
     /// Usefull for debugging
-    pub fn format_momentum(&self) -> String {
+    pub(crate) fn format_momentum(&self) -> String {
         let mut res = String::new();
         let mut first = true;
 
@@ -526,7 +526,7 @@ impl LoopExtSignature {
     }
 
     #[allow(unused)]
-    pub fn compute_four_momentum_from_three<T: FloatLike>(
+    pub(crate) fn compute_four_momentum_from_three<T: FloatLike>(
         &self,
         loop_moms: &LoopMomenta<F<T>>,
         external_moms: &ExternalFourMomenta<F<T>>,
@@ -539,7 +539,7 @@ impl LoopExtSignature {
         self.compute_momentum(&loop_moms, external_moms)
     }
 
-    pub fn compute_three_momentum_from_four<T: FloatLike>(
+    pub(crate) fn compute_three_momentum_from_four<T: FloatLike>(
         &self,
         loop_moms: &LoopMomenta<F<T>>,
         external_moms: &ExternalFourMomenta<F<T>>,

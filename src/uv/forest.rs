@@ -30,11 +30,11 @@ pub struct Forest {
 }
 
 impl Forest {
-    pub fn n_terms(&self) -> usize {
+    pub(crate) fn n_terms(&self) -> usize {
         self.dag.nodes.len()
     }
 
-    pub fn compute<
+    pub(crate) fn compute<
         H,
         G: UltravioletGraph + AsRef<HedgeGraph<Edge, Vertex, H>>,
         S: SubGraph<Base = BitVec>,
@@ -122,7 +122,7 @@ impl Forest {
         }
     }
 
-    pub fn local_expr(
+    pub(crate) fn local_expr(
         &self,
         orientation: &OrientationData,
         cut_edges: Option<&BitVec>,
@@ -176,7 +176,7 @@ impl Forest {
         sum
     }
 
-    // pub fn simple_expr(
+    // pub(crate) fn simple_expr(
     //     &self,
     //     graph: &UVGraph,
     //     amplitude: &InternalSubGraph,
@@ -189,12 +189,12 @@ impl Forest {
     //     Some(sum)
     // }
 
-    pub fn graphs(&self) -> String {
+    pub(crate) fn graphs(&self) -> String {
         self.dag
             .to_dot_impl(&|n| format!("label=S_{}", n.data.subgraph.string_label()))
     }
 
-    // pub fn show_structure(&self, graph: &UVGraph, amplitude: &InternalSubGraph) -> Option<String> {
+    // pub(crate) fn show_structure(&self, graph: &UVGraph, amplitude: &InternalSubGraph) -> Option<String> {
     //     let mut out = String::new();
 
     //     out.push_str(

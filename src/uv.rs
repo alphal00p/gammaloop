@@ -59,7 +59,7 @@ use crate::{
     model::normalise_complex,
 };
 
-pub fn spenso_lor(
+pub(crate) fn spenso_lor(
     tag: i32,
     ind: impl Into<Aind>,
     dim: impl Into<Dimension>,
@@ -68,7 +68,7 @@ pub fn spenso_lor(
     NamedStructure::from_iter([mink], GS.emr_mom, Some(vec![Atom::num(tag)])).structure
 }
 
-pub fn spenso_lor_atom(tag: i32, ind: impl Into<Aind>, dim: impl Into<Dimension>) -> Atom {
+pub(crate) fn spenso_lor_atom(tag: i32, ind: impl Into<Aind>, dim: impl Into<Dimension>) -> Atom {
     spenso_lor(tag, ind, dim).to_symbolic(None).unwrap()
 }
 
@@ -78,7 +78,7 @@ pub struct IntegrandExpr {
     // add_arg: Option<Atom>,
 }
 
-pub fn is_not_paired(pair: &HedgePair) -> bool {
+pub(crate) fn is_not_paired(pair: &HedgePair) -> bool {
     !pair.is_paired()
 }
 

@@ -22,7 +22,7 @@ const BASE_N_START_SAMPLE: usize = 100_000;
 
 const N_CORES_FOR_INTEGRATION_IN_TESTS: usize = 16;
 
-pub fn load_default_settings() -> Settings {
+pub(crate) fn load_default_settings() -> Settings {
     Settings::default()
 }
 

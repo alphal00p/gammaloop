@@ -114,7 +114,7 @@ fn cli_wrapper(py: Python) -> PyResult<()> {
     }
 }
 
-pub fn format_level(level: log::Level) -> ColoredString {
+pub(crate) fn format_level(level: log::Level) -> ColoredString {
     match level {
         log::Level::Error => format!("{:<8}", "ERROR").red(),
         log::Level::Warn => format!("{:<8}", "WARNING").yellow(),
@@ -124,7 +124,7 @@ pub fn format_level(level: log::Level) -> ColoredString {
     }
 }
 
-pub fn format_target(target: String, level: log::Level) -> ColoredString {
+pub(crate) fn format_target(target: String, level: log::Level) -> ColoredString {
     let split_targets = target.split("::").collect::<Vec<_>>();
     //[-2..].iter().join("::");
     let start = split_targets.len().saturating_sub(2);
@@ -137,7 +137,7 @@ pub fn format_target(target: String, level: log::Level) -> ColoredString {
 
 #[pyfunction]
 #[pyo3(name = "evaluate_graph_overall_factor")]
-pub fn evaluate_graph_overall_factor(overall_factor: &str) -> PyResult<String> {
+pub(crate) fn evaluate_graph_overall_factor(overall_factor: &str) -> PyResult<String> {
     let overall_factor = parse!(overall_factor);
     let overall_factor_evaluated = FeynGen::evaluate_overall_factor(overall_factor.as_view());
     Ok(overall_factor_evaluated.to_canonical_string())
@@ -145,7 +145,7 @@ pub fn evaluate_graph_overall_factor(overall_factor: &str) -> PyResult<String> {
 
 #[pyfunction]
 #[pyo3(name = "atom_to_canonical_string")]
-pub fn atom_to_canonical_string(atom_str: &str) -> PyResult<String> {
+pub(crate) fn atom_to_canonical_string(atom_str: &str) -> PyResult<String> {
     Ok(parse!(atom_str).to_canonical_string())
 }
 
@@ -209,7 +209,7 @@ fn setup_logging(level: String, format: String) -> PyResult<()> {
     Ok(())
 }
 
-pub fn get_python_log_level() -> Result<String, pyo3::PyErr> {
+pub(crate) fn get_python_log_level() -> Result<String, pyo3::PyErr> {
     Python::with_gil(|py| {
         let py_code = r#"
 def get_gamma_loop_log_level():
@@ -227,7 +227,7 @@ def get_gamma_loop_log_level():
     })
 }
 
-pub fn convert_log_level(level: &str) -> LevelFilter {
+pub(crate) fn convert_log_level(level: &str) -> LevelFilter {
     match level {
         "DEBUG" => LevelFilter::Debug,
         "INFO" => LevelFilter::Info,
@@ -292,7 +292,7 @@ pub struct PySnailFilterOptions {
 #[pymethods]
 impl PySnailFilterOptions {
     #[new]
-    pub fn __new__(
+    pub(crate) fn __new__(
         veto_snails_attached_to_massive_lines: Option<bool>,
         veto_snails_attached_to_massless_lines: Option<bool>,
         veto_only_scaleless_snails: Option<bool>,
@@ -308,7 +308,7 @@ impl PySnailFilterOptions {
         })
     }
 
-    pub fn __str__(&self) -> PyResult<String> {
+    pub(crate) fn __str__(&self) -> PyResult<String> {
         Ok(format!("{}", self.filter_options))
     }
 }
@@ -321,7 +321,7 @@ pub struct PySelfEnergyFilterOptions {
 #[pymethods]
 impl PySelfEnergyFilterOptions {
     #[new]
-    pub fn __new__(
+    pub(crate) fn __new__(
         veto_self_energy_of_massive_lines: Option<bool>,
         veto_self_energy_of_massless_lines: Option<bool>,
         veto_only_scaleless_self_energy: Option<bool>,
@@ -337,7 +337,7 @@ impl PySelfEnergyFilterOptions {
         })
     }
 
-    pub fn __str__(&self) -> PyResult<String> {
+    pub(crate) fn __str__(&self) -> PyResult<String> {
         Ok(format!("{}", self.filter_options))
     }
 }
@@ -350,7 +350,7 @@ pub struct PySewedFilterOptions {
 #[pymethods]
 impl PySewedFilterOptions {
     #[new]
-    pub fn __new__(filter_tadpoles: Option<bool>) -> PyResult<PySewedFilterOptions> {
+    pub(crate) fn __new__(filter_tadpoles: Option<bool>) -> PyResult<PySewedFilterOptions> {
         Ok(PySewedFilterOptions {
             filter_options: SewedFilterOptions {
                 filter_tadpoles: filter_tadpoles.unwrap_or(false),
@@ -367,7 +367,7 @@ pub struct PyTadpolesFilterOptions {
 #[pymethods]
 impl PyTadpolesFilterOptions {
     #[new]
-    pub fn __new__(
+    pub(crate) fn __new__(
         veto_tadpoles_attached_to_massive_lines: Option<bool>,
         veto_tadpoles_attached_to_massless_lines: Option<bool>,
         veto_only_scaleless_tadpoles: Option<bool>,
@@ -383,7 +383,7 @@ impl PyTadpolesFilterOptions {
         })
     }
 
-    pub fn __str__(&self) -> PyResult<String> {
+    pub(crate) fn __str__(&self) -> PyResult<String> {
         Ok(format!("{}", self.filter_options))
     }
 }
@@ -406,13 +406,13 @@ impl<'a> FromPyObject<'a> for PyFeynGenFilters {
 
 #[pymethods]
 impl PyFeynGenFilters {
-    pub fn __str__(&self) -> PyResult<String> {
+    pub(crate) fn __str__(&self) -> PyResult<String> {
         Ok(self.filters.iter().map(|f| format!(" > {}", f)).join("\n"))
     }
 
     #[new]
     #[allow(clippy::too_many_arguments)]
-    pub fn __new__(
+    pub(crate) fn __new__(
         particle_veto: Option<Vec<i64>>,
         max_number_of_bridges: Option<usize>,
         sewed_filter: Option<PyRef<PySewedFilterOptions>>,
@@ -496,12 +496,12 @@ fn feyngen_to_python_error(error: FeynGenError) -> PyErr {
 
 #[pymethods]
 impl PyFeynGenOptions {
-    pub fn __str__(&self) -> PyResult<String> {
+    pub(crate) fn __str__(&self) -> PyResult<String> {
         Ok(format!("{}", self.options))
     }
     #[allow(clippy::too_many_arguments)]
     #[new]
-    pub fn __new__(
+    pub(crate) fn __new__(
         generation_type: String,
         initial_particles: Vec<i64>,
         final_particles_lists: Vec<Vec<i64>>,
@@ -579,7 +579,7 @@ pub struct PyNumeratorAwareGroupingOption {
 #[pymethods]
 impl PyNumeratorAwareGroupingOption {
     #[new]
-    pub fn __new__(
+    pub(crate) fn __new__(
         numerator_aware_grouping_option: Option<String>,
         compare_canonized_numerator: Option<bool>,
         number_of_samples_for_numerator_comparisons: Option<usize>,
@@ -602,7 +602,7 @@ impl PyNumeratorAwareGroupingOption {
         })
     }
 
-    pub fn __str__(&self) -> PyResult<String> {
+    pub(crate) fn __str__(&self) -> PyResult<String> {
         Ok(format!("{}", self.grouping_options))
     }
 }
@@ -611,7 +611,7 @@ impl PyNumeratorAwareGroupingOption {
 #[pymethods]
 impl PythonWorker {
     #[new]
-    pub fn new() -> PyResult<PythonWorker> {
+    pub(crate) fn new() -> PyResult<PythonWorker> {
         crate::set_interrupt_handler();
         Ok(PythonWorker {
             model: Model::default(),
@@ -622,7 +622,7 @@ impl PythonWorker {
     }
 
     #[pyo3(signature = (path,name=None))]
-    pub fn import_amplitude(&mut self, path: PathBuf, name: Option<String>) -> PyResult<()> {
+    pub(crate) fn import_amplitude(&mut self, path: PathBuf, name: Option<String>) -> PyResult<()> {
         // println!("")
         let graphs = Graph::from_file(&path, &self.model)
             .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
@@ -640,13 +640,13 @@ impl PythonWorker {
         Ok(())
     }
 
-    pub fn load_model(&mut self, file_path: &str) -> PyResult<()> {
+    pub(crate) fn load_model(&mut self, file_path: &str) -> PyResult<()> {
         Model::from_file(String::from(file_path))
             .map_err(|e| exceptions::PyException::new_err(e.to_string()))
             .map(|m| self.model = m)
     }
 
-    pub fn load_model_from_yaml_str(&mut self, yaml_str: &str) -> PyResult<()> {
+    pub(crate) fn load_model_from_yaml_str(&mut self, yaml_str: &str) -> PyResult<()> {
         Model::from_yaml_str(String::from(yaml_str))
             .map_err(|e| exceptions::PyException::new_err(e.root_cause().to_string()))
             .map(|m| self.model = m)
@@ -655,13 +655,13 @@ impl PythonWorker {
     // Note: one could consider returning a PyModel class containing the serialisable model as well,
     // but since python already has its native class for this, it is better for now to pass a yaml representation
     // which will be deserialize in said native class.
-    pub fn get_model(&self) -> PyResult<String> {
+    pub(crate) fn get_model(&self) -> PyResult<String> {
         self.model
             .to_yaml()
             .map_err(|e| exceptions::PyException::new_err(e.to_string()))
     }
 
-    pub fn preprocess(&mut self, export_yaml_str: &str) -> PyResult<()> {
+    pub(crate) fn preprocess(&mut self, export_yaml_str: &str) -> PyResult<()> {
         let process_settings: ProcessSettings = serde_yaml::from_str(export_yaml_str)
             .map_err(|e| exceptions::PyException::new_err(e.to_string()))
             .unwrap();
@@ -676,7 +676,7 @@ impl PythonWorker {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub fn generate_diagrams(
+    pub(crate) fn generate_diagrams(
         &mut self,
         generation_options: PyRef<PyFeynGenOptions>,
         proccess_name: String,
@@ -762,7 +762,7 @@ impl PythonWorker {
         res
     }
 
-    pub fn export_expressions(
+    pub(crate) fn export_expressions(
         &mut self,
         export_root: &str,
         amplitued_list: Vec<String>,
@@ -790,7 +790,7 @@ impl PythonWorker {
         Ok("Exported expressions".to_string())
     }
 
-    pub fn export_coupling_replacement_rules(
+    pub(crate) fn export_coupling_replacement_rules(
         &self,
         export_root: &str,
         format: &str,
@@ -801,7 +801,7 @@ impl PythonWorker {
         Ok("Exported coupling substitutions".to_string())
     }
 
-    pub fn inspect_integrand(
+    pub(crate) fn inspect_integrand(
         &mut self,
         integrand: &str,
         pt: Vec<f64>,
@@ -841,7 +841,7 @@ impl PythonWorker {
         }
     }
 
-    pub fn inspect_lmw_integrand(
+    pub(crate) fn inspect_lmw_integrand(
         &mut self,
         integrand: &str,
         workspace_path: &str,
@@ -927,7 +927,7 @@ impl PythonWorker {
         }
     }
 
-    pub fn integrate_integrand(
+    pub(crate) fn integrate_integrand(
         &mut self,
         integrand: &str,
         num_cores: usize,
@@ -1037,7 +1037,7 @@ impl PythonWorker {
         }
     }
 
-    pub fn load_master_node(&mut self, integrand: &str) -> PyResult<String> {
+    pub(crate) fn load_master_node(&mut self, integrand: &str) -> PyResult<String> {
         let selected_integrand = if let Some(selected_integrand) = self.integrands.get(integrand) {
             selected_integrand
         } else {
@@ -1056,7 +1056,7 @@ impl PythonWorker {
         Ok(format!("Initialized master grid for {}", integrand))
     }
 
-    pub fn write_batch_input(
+    pub(crate) fn write_batch_input(
         &mut self,
         num_cores: usize,
         num_samples: usize,
@@ -1087,7 +1087,7 @@ impl PythonWorker {
         }
     }
 
-    pub fn process_batch_output(
+    pub(crate) fn process_batch_output(
         &mut self,
         workspace_path: &str,
         job_id: usize,
@@ -1113,19 +1113,19 @@ impl PythonWorker {
         Ok(format!("Processed job {}", job_id))
     }
 
-    pub fn display_master_node_status(&self) {
+    pub(crate) fn display_master_node_status(&self) {
         if let Some(master_node) = &self.master_node {
             master_node.display_status();
         }
     }
 
-    pub fn update_iter(&mut self) {
+    pub(crate) fn update_iter(&mut self) {
         if let Some(master_node) = &mut self.master_node {
             master_node.update_iter();
         }
     }
 
-    pub fn generate_integrands(&mut self, settings_yaml_str: &str) {
+    pub(crate) fn generate_integrands(&mut self, settings_yaml_str: &str) {
         let settings =
             serde_yaml::from_str::<Settings>(settings_yaml_str).expect("Could not parse settings");
         println!("calling generate_integrands");
@@ -1135,7 +1135,7 @@ impl PythonWorker {
         self.integrands = integrands;
     }
 
-    pub fn export(&mut self, export_root: &str) -> PyResult<()> {
+    pub(crate) fn export(&mut self, export_root: &str) -> PyResult<()> {
         let export_settings = ExportSettings {
             root_folder: PathBuf::from_str(export_root)?,
         };
@@ -1175,7 +1175,7 @@ impl PythonWorker {
         Ok(())
     }
 
-    pub fn load(&mut self, import_root: &str) -> PyResult<()> {
+    pub(crate) fn load(&mut self, import_root: &str) -> PyResult<()> {
         let import_root = PathBuf::from(import_root);
 
         let model_dir = import_root.join("model.yaml");

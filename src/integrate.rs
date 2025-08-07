@@ -73,7 +73,7 @@ pub struct ComplexAccumulator {
 }
 
 impl ComplexAccumulator {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             re: StatisticsAccumulator::new(),
             im: StatisticsAccumulator::new(),
@@ -81,7 +81,7 @@ impl ComplexAccumulator {
     }
 
     /// used to escalate the stability test on high evaluation values
-    pub fn get_worst_case(&self) -> Complex<F<f64>> {
+    pub(crate) fn get_worst_case(&self) -> Complex<F<f64>> {
         Complex::new(
             self.re
                 .max_eval_positive
@@ -95,7 +95,7 @@ impl ComplexAccumulator {
     }
 
     /// add a sample to the accumulator
-    pub fn add_sample(
+    pub(crate) fn add_sample(
         &mut self,
         result: Complex<F<f64>>,
         sample_weight: F<f64>,
@@ -105,17 +105,17 @@ impl ComplexAccumulator {
         self.im.add_sample(result.im * sample_weight, sample);
     }
 
-    pub fn merge(&mut self, other: &Self) {
+    pub(crate) fn merge(&mut self, other: &Self) {
         self.re.merge_samples_no_reset(&other.re);
         self.im.merge_samples_no_reset(&other.im);
     }
 
-    pub fn update_iter(&mut self, use_weighted_average: bool) {
+    pub(crate) fn update_iter(&mut self, use_weighted_average: bool) {
         self.re.update_iter(use_weighted_average);
         self.im.update_iter(use_weighted_average);
     }
 
-    pub fn format_max_weights(&self, i_itg: usize) -> Vec<String> {
+    pub(crate) fn format_max_weights(&self, i_itg: usize) -> Vec<String> {
         let max_evals = [
             &self.re.max_eval_positive,
             &self.re.max_eval_negative,
@@ -261,7 +261,7 @@ pub struct CoreResult {
 }
 
 /// Integrate function used for local runs
-pub fn havana_integrate<T>(
+pub(crate) fn havana_integrate<T>(
     settings: &Settings,
     user_data_generator: T,
     target: Option<Complex<F<f64>>>,
@@ -620,7 +620,10 @@ where
 
 /// Batch integrate function used for distributed runs, used by the worker nodes.
 /// Evaluates a batch of points and returns the results in a manner specified by the user.
-pub fn batch_integrate(integrand: &mut Integrand, input: BatchIntegrateInput) -> BatchResult {
+pub(crate) fn batch_integrate(
+    integrand: &mut Integrand,
+    input: BatchIntegrateInput,
+) -> BatchResult {
     let samples = match input.samples {
         SampleInput::SampleList { samples } => samples,
         SampleInput::Grid {
@@ -873,7 +876,7 @@ pub struct SerializableBatchIntegrateInput {
 }
 
 impl SerializableBatchIntegrateInput {
-    pub fn into_batch_integrate_input(self, settings: &Settings) -> BatchIntegrateInput<'_> {
+    pub(crate) fn into_batch_integrate_input(self, settings: &Settings) -> BatchIntegrateInput<'_> {
         BatchIntegrateInput {
             max_eval: self.max_eval,
             iter: self.iter,
@@ -898,7 +901,7 @@ pub struct MasterNode {
 }
 
 impl MasterNode {
-    pub fn new(grid: Grid<F<f64>>, integrator_settings: IntegratorSettings) -> Self {
+    pub(crate) fn new(grid: Grid<F<f64>>, integrator_settings: IntegratorSettings) -> Self {
         MasterNode {
             grid,
             integrator_settings,
@@ -936,7 +939,7 @@ impl MasterNode {
     }
 
     /// Update the accumulators with the data from another set of accumulators.
-    pub fn update_accumulators_with_accumulators(
+    pub(crate) fn update_accumulators_with_accumulators(
         &mut self,
         mut real_accumulator: StatisticsAccumulator<F<f64>>,
         mut imaginary_accumulator: StatisticsAccumulator<F<f64>>,
@@ -969,7 +972,7 @@ impl MasterNode {
     }
 
     /// Finish the current iteration. This should be called after all jobs have been processed.
-    pub fn update_iter(&mut self) {
+    pub(crate) fn update_iter(&mut self) {
         self.grid.update(
             self.integrator_settings.discrete_dim_learning_rate,
             self.integrator_settings.continuous_dim_learning_rate,
@@ -981,7 +984,7 @@ impl MasterNode {
     }
 
     /// Write the input for a batch job to a file.
-    pub fn write_batch_input(
+    pub(crate) fn write_batch_input(
         &mut self,
         num_cores: usize,
         num_samples: usize,
@@ -1042,7 +1045,7 @@ impl MasterNode {
     }
 
     /// Process the output of a batch job.
-    pub fn process_batch_output(&mut self, output: BatchResult) -> Result<(), String> {
+    pub(crate) fn process_batch_output(&mut self, output: BatchResult) -> Result<(), String> {
         self.update_metadata_statistics(output.statistics);
 
         match output.integrand_data {
@@ -1067,7 +1070,7 @@ impl MasterNode {
     }
 
     /// Display the current status of the integration. Usually called after each iteration.
-    pub fn display_status(&self) {
+    pub(crate) fn display_status(&self) {
         print_integral_result(
             &self.master_accumulator_re,
             1,
@@ -1089,7 +1092,7 @@ impl MasterNode {
 }
 
 #[allow(clippy::format_in_format_args)]
-pub fn show_integration_status(
+pub(crate) fn show_integration_status(
     integration_state: &IntegrationState,
     cores: usize,
     elapsed_time: Duration,
@@ -1184,7 +1187,7 @@ pub fn show_integration_status(
     integration_state.stats.display_status();
 }
 
-pub fn print_integral_result(
+pub(crate) fn print_integral_result(
     itg: &StatisticsAccumulator<F<f64>>,
     i_itg: usize,
     i_iter: usize,

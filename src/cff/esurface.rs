@@ -63,7 +63,7 @@ impl PartialEq for Esurface {
 impl Eq for Esurface {}
 
 impl Esurface {
-    pub fn to_atom(&self, cut_edges: &[EdgeIndex]) -> Atom {
+    pub(crate) fn to_atom(&self, cut_edges: &[EdgeIndex]) -> Atom {
         let symbolic_energies = self
             .energies
             .iter()
@@ -94,20 +94,20 @@ impl Esurface {
     /// Compute the value of the esurface from an energy cache that can be computed from the underlying graph
     /// This is the fastest way to compute the value of all esurfaces in a full evaluation
     #[inline]
-    pub fn compute_value<T: FloatLike>(&self, energy_cache: &EdgeVec<F<T>>) -> F<T> {
+    pub(crate) fn compute_value<T: FloatLike>(&self, energy_cache: &EdgeVec<F<T>>) -> F<T> {
         surface::compute_value(self, energy_cache)
     }
 
     /// Only compute the shift part, useful for existence checks
     #[inline]
-    pub fn compute_shift_part<T: FloatLike>(&self, energy_cache: &EdgeVec<F<T>>) -> F<T> {
+    pub(crate) fn compute_shift_part<T: FloatLike>(&self, energy_cache: &EdgeVec<F<T>>) -> F<T> {
         surface::compute_shift_part(self, energy_cache)
     }
 
     /// Compute the value of the esurface from the momenta, needed to check if an arbitrary point
     /// is inside the esurface
     #[inline]
-    pub fn compute_from_momenta<T: FloatLike>(
+    pub(crate) fn compute_from_momenta<T: FloatLike>(
         &self,
         lmb: &LoopMomentumBasis,
         real_mass_vector: &EdgeVec<F<T>>,
@@ -137,7 +137,7 @@ impl Esurface {
 
     /// Only compute the shift part, useful for center finding.
     #[inline]
-    pub fn compute_shift_part_from_momenta<T: FloatLike>(
+    pub(crate) fn compute_shift_part_from_momenta<T: FloatLike>(
         &self,
         lmb: &LoopMomentumBasis,
         external_moms: &ExternalFourMomenta<F<T>>,
@@ -154,7 +154,7 @@ impl Esurface {
     }
 
     #[inline]
-    pub fn compute_self_and_r_derivative<T: FloatLike>(
+    pub(crate) fn compute_self_and_r_derivative<T: FloatLike>(
         &self,
         radius: &F<T>,
         shifted_unit_loops: &LoopMomenta<F<T>>,
@@ -201,7 +201,7 @@ impl Esurface {
         (energy_sum + shift, derivative)
     }
 
-    pub fn get_subgraph_components<E, V, H>(
+    pub(crate) fn get_subgraph_components<E, V, H>(
         &self,
         graph: &HedgeGraph<E, V, H>,
     ) -> (BitVec, BitVec) {
@@ -210,7 +210,7 @@ impl Esurface {
         (vertex_subgraph, complement)
     }
 
-    pub fn bitvec<E, V, H>(&self, graph: &HedgeGraph<E, V, H>) -> BitVec {
+    pub(crate) fn bitvec<E, V, H>(&self, graph: &HedgeGraph<E, V, H>) -> BitVec {
         let mut result: BitVec = graph.empty_subgraph();
         for edge_id in self.energies.iter() {
             let (_, pair) = graph[edge_id];
@@ -221,7 +221,7 @@ impl Esurface {
     }
 
     #[inline]
-    pub fn get_radius_guess<T: FloatLike>(
+    pub(crate) fn get_radius_guess<T: FloatLike>(
         &self,
         unit_loops: &LoopMomenta<F<T>>,
         external_moms: &ExternalFourMomenta<F<T>>,
@@ -260,7 +260,7 @@ impl Esurface {
     }
 
     /// Write out the esurface expression in a given lmb
-    pub fn string_format_in_lmb(&self, lmb: &LoopMomentumBasis) -> String {
+    pub(crate) fn string_format_in_lmb(&self, lmb: &LoopMomentumBasis) -> String {
         let mut energy_sum = self
             .energies
             .iter()
@@ -292,15 +292,15 @@ impl Esurface {
     }
 
     /// Write out the esurface expression in a generic way
-    pub fn string_format(&self) -> String {
+    pub(crate) fn string_format(&self) -> String {
         surface::string_format(self)
     }
 
-    pub fn get_point_inside(&self) -> Vec<LorentzVector<f64>> {
+    pub(crate) fn get_point_inside(&self) -> Vec<LorentzVector<f64>> {
         todo!()
     }
 
-    pub fn canonicalize_shift(&mut self, shift_rewrite: &ShiftRewrite) {
+    pub(crate) fn canonicalize_shift(&mut self, shift_rewrite: &ShiftRewrite) {
         if let Some(dep_mom_pos) = self
             .external_shift
             .iter()
@@ -318,7 +318,10 @@ impl Esurface {
         }
     }
 
-    pub fn new_from_cut_left<E, V, H>(graph: &HedgeGraph<E, V, H>, cut: &CrossSectionCut) -> Self {
+    pub(crate) fn new_from_cut_left<E, V, H>(
+        graph: &HedgeGraph<E, V, H>,
+        cut: &CrossSectionCut,
+    ) -> Self {
         let edges = graph
             .iter_edges_of(&cut.cut)
             .map(|(_, id, _)| id)
@@ -353,7 +356,7 @@ impl Esurface {
 
 pub type EsurfaceCollection = TiVec<EsurfaceID, Esurface>;
 
-pub fn compute_esurface_cache<T: FloatLike>(
+pub(crate) fn compute_esurface_cache<T: FloatLike>(
     esurfaces: &EsurfaceCollection,
     energy_cache: &EdgeVec<F<T>>,
 ) -> EsurfaceCache<F<T>> {
@@ -385,7 +388,7 @@ const EXISTENCE_THRESHOLD: F<f64> = F(1.0e-7);
 
 /// Returns the list of esurfaces which may exist, must be called each time at evaluation if externals are not fixed.
 #[inline]
-pub fn get_existing_esurfaces<T: FloatLike>(
+pub(crate) fn get_existing_esurfaces<T: FloatLike>(
     esurfaces: &EsurfaceCollection,
     esurface_derived_data: &EsurfaceDerivedData,
     externals: &ExternalFourMomenta<F<T>>,
@@ -516,7 +519,7 @@ impl EsurfaceData {
         )
     }
 
-    pub fn compute_shift_part_from_externals<T: FloatLike>(
+    pub(crate) fn compute_shift_part_from_externals<T: FloatLike>(
         &self,
         externals: &[FourMomentum<F<T>>],
     ) -> F<T> {
@@ -526,7 +529,7 @@ impl EsurfaceData {
     }
 }
 
-pub fn generate_esurface_data(
+pub(crate) fn generate_esurface_data(
     graph: &new_graph::Graph,
     lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
     esurfaces: &EsurfaceCollection,
@@ -628,7 +631,7 @@ pub fn generate_esurface_data(
 pub type ExternalShift = Vec<(EdgeIndex, i64)>;
 
 /// add two external shifts, eliminates zero signs and sorts
-pub fn add_external_shifts(lhs: &ExternalShift, rhs: &ExternalShift) -> ExternalShift {
+pub(crate) fn add_external_shifts(lhs: &ExternalShift, rhs: &ExternalShift) -> ExternalShift {
     let mut res = lhs.clone();
 
     for rhs_element in rhs.iter() {

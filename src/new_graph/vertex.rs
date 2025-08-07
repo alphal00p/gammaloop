@@ -6,22 +6,11 @@ use linnet::{
     },
     parser::DotVertexData,
 };
-use spenso::{
-    contraction::Contract,
-    structure::{
-        concrete_index::FlatIndex, representation::Euclidean, HasStructure, OrderedStructure,
-        TensorStructure,
-    },
-    tensors::{data::GetTensorData, parametric::ParamTensor},
-};
-use symbolica::{
-    atom::{Atom, AtomCore},
-    parse,
-};
+
+use symbolica::atom::Atom;
 
 use crate::{
     model::{ArcParticle, ArcVertexRule, Model},
-    numerator::aind::Aind,
     GammaLoopContext,
 };
 use color_eyre::Result;
@@ -38,7 +27,7 @@ use super::{
 #[trait_decode(trait = GammaLoopContext)]
 pub struct Vertex {
     // #[bincode(with_serde)]
-    pub label: String,
+    pub name: String,
     pub vertex_rule: Option<ArcVertexRule>,
     pub num: Atom,
     // pub num_spin: ParamTensor<OrderedStructure<Euclidean, Aind>>,
@@ -47,7 +36,7 @@ pub struct Vertex {
 }
 
 impl Vertex {
-    pub fn get_num(&self) -> Atom {
+    pub(crate) fn get_num(&self) -> Atom {
         self.num.clone()
     }
 }
@@ -55,7 +44,7 @@ impl Vertex {
 impl From<&Vertex> for DotVertexData {
     fn from(value: &Vertex) -> Self {
         let mut v = DotVertexData::empty();
-        v.add_statement("label", value.label.clone());
+        v.add_statement("name", value.name.clone());
         if let Some(vertex_rule) = &value.vertex_rule {
             v.add_statement("int_id", vertex_rule.name.as_str());
         }
@@ -68,20 +57,21 @@ impl Vertex {}
 
 #[derive(Debug, Clone)]
 pub struct ParseVertex {
-    pub label: Option<String>,
+    pub name: Option<String>,
+    // pub strict: bool,
     pub vertex_rule: Option<ArcVertexRule>,
     pub num: Option<Atom>,
     pub dod: Option<i32>,
 }
 
 impl ParseVertex {
-    pub fn with_num(mut self, num: Atom) -> Self {
+    pub(crate) fn with_num(mut self, num: Atom) -> Self {
         self.num = Some(num);
         self
     }
 
-    pub fn with_label(mut self, label: String) -> Self {
-        self.label = Some(label);
+    pub(crate) fn with_label(mut self, label: String) -> Self {
+        self.name = Some(label);
         self
     }
 }
@@ -89,7 +79,8 @@ impl ParseVertex {
 impl From<ArcVertexRule> for ParseVertex {
     fn from(vertex_rule: ArcVertexRule) -> Self {
         ParseVertex {
-            label: None,
+            name: None,
+            // strict: false,
             vertex_rule: Some(vertex_rule),
             dod: None,
             num: None,
@@ -98,7 +89,7 @@ impl From<ArcVertexRule> for ParseVertex {
 }
 
 impl ParseVertex {
-    pub fn parse<'a>(
+    pub(crate) fn parse<'a>(
         model: &'a Model,
         parse_data: &'a ParseData,
     ) -> impl FnMut(
@@ -107,16 +98,19 @@ impl ParseVertex {
         &'a &'a DotVertexData,
     ) -> Result<Self> {
         move |g, n, v| {
-            let label = v.name().map(|id| id.to_string());
+            let name = v.name().map(|id| id.to_string());
 
             let dod = v.get::<_, i32>("dod").transpose()?;
+
+            // let strict = v.get::<_, bool>("strict").transpose()?.unwrap_or(false);
 
             if let Some(num) = v.get::<_, String>("num") {
                 let num = num?;
                 // println!("Parsed with num:{}", num);
                 Ok(ParseVertex {
                     dod,
-                    label,
+                    // strict,
+                    name,
                     vertex_rule: None,
                     num: Some(<String as StripParse<Atom>>::strip_parse(&num)),
                 })
@@ -125,7 +119,8 @@ impl ParseVertex {
 
                 Ok(ParseVertex {
                     dod,
-                    label,
+                    // strict,
+                    name,
                     vertex_rule,
                     num: None,
                 })
@@ -162,7 +157,8 @@ impl ParseVertex {
                     if res.len() == 1 {
                         Ok(ParseVertex {
                             dod,
-                            label,
+                            // strict,
+                            name,
                             vertex_rule: Some(res[0].clone()),
                             num: None,
                         })

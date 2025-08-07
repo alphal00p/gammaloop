@@ -30,7 +30,7 @@ pub struct HFunctionTestIntegrand {
 
 #[allow(unused)]
 impl HFunctionTestIntegrand {
-    pub fn new(
+    pub(crate) fn new(
         settings: Settings,
         integrand_settings: HFunctionTestSettings,
     ) -> HFunctionTestIntegrand {

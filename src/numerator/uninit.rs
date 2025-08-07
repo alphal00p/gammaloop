@@ -16,7 +16,7 @@ use crate::new_graph::Graph;
 use super::{AppliedFeynmanRule, Global, GlobalPrefactor, Numerator, UnInit};
 
 impl Numerator<UnInit> {
-    pub fn from_graph(
+    pub(crate) fn from_graph(
         self,
         graph: &BareGraph,
         prefactor: &GlobalPrefactor,
@@ -27,7 +27,7 @@ impl Numerator<UnInit> {
         Numerator { state }
     }
 
-    pub fn from_new_graph<S: SubGraph>(
+    pub(crate) fn from_new_graph<S: SubGraph>(
         self,
         graph: &Graph,
         subgraph: &S,
@@ -58,7 +58,7 @@ impl Numerator<UnInit> {
         }
     }
 
-    pub fn from_global(
+    pub(crate) fn from_global(
         self,
         global: Atom,
         // _graph: &BareGraph,
@@ -74,7 +74,7 @@ impl Numerator<UnInit> {
         Numerator { state }
     }
 
-    pub fn from_global_color(
+    pub(crate) fn from_global_color(
         self,
         global: Atom,
         // _graph: &BareGraph,

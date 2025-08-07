@@ -97,7 +97,7 @@ const PHASEMINUSONE: F<f64> = F(f64::consts::PI);
 #[allow(unused)]
 const PHASEMINUSI: F<f64> = F(-f64::consts::FRAC_PI_2);
 
-pub fn test_export_settings() -> ProcessSettings {
+pub(crate) fn test_export_settings() -> ProcessSettings {
     ProcessSettings {
         compile_cff: true,
         numerator_settings: NumeratorSettings {
@@ -134,7 +134,7 @@ use rand::{Rng, SeedableRng};
 // Create small, cheap to initialize and fast RNG with a random seed.
 // The randomness is supplied by the operating system.
 
-pub fn sample_generator<T: FloatLike>(
+pub(crate) fn sample_generator<T: FloatLike>(
     seed: u64,
     bare_graph: &BareGraph,
     helicities: Option<Vec<Helicity>>,
@@ -197,7 +197,7 @@ where
     )
 }
 
-pub fn kinematics_builder(
+pub(crate) fn kinematics_builder(
     n_indep_externals: usize,
     n_loops: usize,
     bare_graph: &BareGraph,
@@ -250,7 +250,7 @@ pub fn kinematics_builder(
         None,
     )
 }
-pub fn load_generic_model(name: &str) -> Model {
+pub(crate) fn load_generic_model(name: &str) -> Model {
     Model::from_file(String::from(
         Path::new(&output_dir())
             .join(format!("gammaloop_models/{}.yaml", name))
@@ -268,7 +268,7 @@ fn output_dir() -> String {
     }
 }
 
-pub fn load_amplitude_output(
+pub(crate) fn load_amplitude_output(
     output_path: &str,
     generic_model: bool,
 ) -> (Model, Amplitude<UnInit>, PathBuf) {
@@ -2120,7 +2120,7 @@ fn scalar_box_to_triangle() {
     .unwrap();
 }
 
-pub fn compare_numerator_evals(amp_name: &str) -> Result<()> {
+pub(crate) fn compare_numerator_evals(amp_name: &str) -> Result<()> {
     let default_settings = load_default_settings();
     let (model, amplitude, path) =
         load_amplitude_output(&format!("TEST_AMPLITUDE_{amp_name}/GL_OUTPUT"), true);

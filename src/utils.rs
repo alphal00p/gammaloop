@@ -100,7 +100,7 @@ pub mod sorted_vectorize {
     use serde::{Deserialize, Deserializer, Serialize, Serializer};
     use std::iter::FromIterator;
 
-    pub fn serialize<'a, T, K, V, S>(target: T, ser: S) -> Result<S::Ok, S::Error>
+    pub(crate) fn serialize<'a, T, K, V, S>(target: T, ser: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
         T: IntoIterator<Item = (&'a K, &'a V)>,
@@ -112,7 +112,7 @@ pub mod sorted_vectorize {
         serde::Serialize::serialize(&container, ser)
     }
 
-    pub fn deserialize<'de, T, K, V, D>(des: D) -> Result<T, D::Error>
+    pub(crate) fn deserialize<'de, T, K, V, D>(des: D) -> Result<T, D::Error>
     where
         D: Deserializer<'de>,
         T: FromIterator<(K, V)>,
@@ -705,13 +705,13 @@ impl<const N: u32> VarFloat<N> {
         Self::PI().inv()
     }
 
-    pub fn from_f64(x: f64) -> Self {
+    pub(crate) fn from_f64(x: f64) -> Self {
         VarFloat {
             float: rug::Float::with_val(N, x),
         }
     }
 
-    pub fn to_f64(&self) -> f64 {
+    pub(crate) fn to_f64(&self) -> f64 {
         self.float.to_f64()
     }
 }
@@ -1144,7 +1144,7 @@ impl<T: FloatLike> Real for F<T> {
 use delegate::delegate;
 
 impl<T: FloatLike> F<T> {
-    pub fn max(self, other: F<T>) -> F<T> {
+    pub(crate) fn max(self, other: F<T>) -> F<T> {
         if self < other {
             other
         } else {
@@ -1152,49 +1152,49 @@ impl<T: FloatLike> F<T> {
         }
     }
 
-    pub fn negate(&mut self) {
+    pub(crate) fn negate(&mut self) {
         self.0 = -self.0.clone();
     }
 
-    pub fn from_ff64(x: F<f64>) -> Self {
+    pub(crate) fn from_ff64(x: F<f64>) -> Self {
         F(T::from_f64(x.0))
     }
 
-    pub fn higher(&self) -> F<T::Higher>
+    pub(crate) fn higher(&self) -> F<T::Higher>
     where
         T::Higher: FloatLike,
     {
         F(self.0.higher())
     }
 
-    pub fn lower(&self) -> F<T::Lower>
+    pub(crate) fn lower(&self) -> F<T::Lower>
     where
         T::Lower: FloatLike,
     {
         F(self.0.lower())
     }
 
-    pub fn from_f64(x: f64) -> Self {
+    pub(crate) fn from_f64(x: f64) -> Self {
         F(T::from_f64(x))
     }
 
-    pub fn into_ff64(&self) -> F<f64> {
+    pub(crate) fn into_ff64(&self) -> F<f64> {
         F(self.0.into_f64())
     }
 
-    pub fn abs(&self) -> Self {
+    pub(crate) fn abs(&self) -> Self {
         F(self.0.norm())
     }
 
-    pub fn i(&self) -> Complex<Self> {
+    pub(crate) fn i(&self) -> Complex<Self> {
         Complex::new(self.zero(), self.one())
     }
 
-    pub fn log10(&self) -> Self {
+    pub(crate) fn log10(&self) -> Self {
         self.ln()
     }
 
-    pub fn complex_sqrt(&self) -> Complex<Self> {
+    pub(crate) fn complex_sqrt(&self) -> Complex<Self> {
         if self.positive() {
             Complex::new(self.sqrt(), self.zero())
         } else {
@@ -1202,7 +1202,7 @@ impl<T: FloatLike> F<T> {
         }
     }
 
-    pub fn rem_euclid(&self, rhs: &Self) -> Self {
+    pub(crate) fn rem_euclid(&self, rhs: &Self) -> Self {
         F(self.0.rem_euclid(&rhs.0))
     }
 
@@ -1210,31 +1210,31 @@ impl<T: FloatLike> F<T> {
         #[into]
         to self.0 {
             #[allow(non_snake_case)]
-            pub fn PI(&self) -> Self;
+            pub(crate) fn PI(&self) -> Self;
             #[allow(non_snake_case)]
-            pub fn E(&self) -> Self;
+            pub(crate) fn E(&self) -> Self;
             #[allow(non_snake_case)]
-            pub fn TAU(&self) -> Self;
+            pub(crate) fn TAU(&self) -> Self;
             #[allow(non_snake_case)]
-            pub fn PIHALF(&self) -> Self;
+            pub(crate) fn PIHALF(&self) -> Self;
             #[allow(non_snake_case)]
-            pub fn SQRT_2(&self) -> Self;
+            pub(crate) fn SQRT_2(&self) -> Self;
             #[allow(non_snake_case)]
-            pub fn SQRT_2_HALF(&self) -> Self;
+            pub(crate) fn SQRT_2_HALF(&self) -> Self;
             #[allow(non_snake_case)]
-            pub fn FRAC_1_PI(&self) -> Self;
-            pub fn into_f64(&self) -> f64;
-            pub fn square(&self) -> Self;
-            pub fn powi(&self, n: i32) -> Self;
-            pub fn epsilon(&self) -> Self;
-            pub fn less_than_epsilon(&self) -> bool;
-            pub fn positive(&self) -> bool;
-            pub fn max_value(&self) -> Self;
-            pub fn min_value(&self) -> Self;
-            pub fn ln(&self) -> Self;
-            pub fn is_nan(&self) -> bool;
-            pub fn is_infinite(&self) -> bool;
-            pub fn floor(&self) -> Self;
+            pub(crate) fn FRAC_1_PI(&self) -> Self;
+            pub(crate) fn into_f64(&self) -> f64;
+            pub(crate) fn square(&self) -> Self;
+            pub(crate) fn powi(&self, n: i32) -> Self;
+            pub(crate) fn epsilon(&self) -> Self;
+            pub(crate) fn less_than_epsilon(&self) -> bool;
+            pub(crate) fn positive(&self) -> bool;
+            pub(crate) fn max_value(&self) -> Self;
+            pub(crate) fn min_value(&self) -> Self;
+            pub(crate) fn ln(&self) -> Self;
+            pub(crate) fn is_nan(&self) -> bool;
+            pub(crate) fn is_infinite(&self) -> bool;
+            pub(crate) fn floor(&self) -> Self;
         }
     }
 }
@@ -1539,7 +1539,7 @@ pub struct ZipEq<I, J> {
 /// An iterator which iterates two other iterators simultaneously and checks
 /// if the sizes are equal in debug mode.
 #[allow(unused)]
-pub fn zip_eq<I, J>(i: I, j: J) -> ZipEq<I::IntoIter, J::IntoIter>
+pub(crate) fn zip_eq<I, J>(i: I, j: J) -> ZipEq<I::IntoIter, J::IntoIter>
 where
     I: IntoIterator,
     J: IntoIterator,
@@ -1590,7 +1590,7 @@ where
 {
 }
 
-pub fn parse_python_expression(expression: &str) -> Atom {
+pub(crate) fn parse_python_expression(expression: &str) -> Atom {
     initialize();
     let _ = UFO.metric;
     let processed_string = String::from(expression)
@@ -1605,7 +1605,7 @@ pub fn parse_python_expression(expression: &str) -> Atom {
 
 /// Format a mean ± sdev as mean(sdev) with the correct number of digits.
 /// Based on the Python package gvar.
-pub fn format_uncertainty(mean: F<f64>, sdev: F<f64>) -> String {
+pub(crate) fn format_uncertainty(mean: F<f64>, sdev: F<f64>) -> String {
     let mean = mean.0;
     let sdev = sdev.0;
 
@@ -1701,7 +1701,7 @@ pub fn format_uncertainty(mean: F<f64>, sdev: F<f64>) -> String {
 
 /// Compare two slices, selecting on length first
 #[allow(unused)]
-pub fn compare_slice<T: Ord>(slice1: &[T], slice2: &[T]) -> Ordering {
+pub(crate) fn compare_slice<T: Ord>(slice1: &[T], slice2: &[T]) -> Ordering {
     match slice1.len().cmp(&slice2.len()) {
         Ordering::Equal => (),
         non_eq => return non_eq,
@@ -1790,14 +1790,14 @@ impl<T: FloatLike> Signum for FourMomentum<F<T>> {
 #[allow(unused)]
 #[inline]
 /// Invert with better precision
-pub fn finv<T: FloatLike>(c: Complex<F<T>>) -> Complex<F<T>> {
+pub(crate) fn finv<T: FloatLike>(c: Complex<F<T>>) -> Complex<F<T>> {
     let norm = c.norm_squared();
     c.conj() / norm
 }
 
 #[allow(unused)]
 #[inline]
-pub fn powi<T: FloatLike>(c: Complex<F<T>>, n: i32) -> Complex<F<T>> {
+pub(crate) fn powi<T: FloatLike>(c: Complex<F<T>>, n: i32) -> Complex<F<T>> {
     if n.is_negative() {
         let u = -n as u64;
         finv(c.pow(u))
@@ -1808,7 +1808,10 @@ pub fn powi<T: FloatLike>(c: Complex<F<T>>, n: i32) -> Complex<F<T>> {
 }
 
 #[allow(unused)]
-pub fn evaluate_signature<T>(signature: &[i8], momenta: &[FourMomentum<F<T>>]) -> FourMomentum<F<T>>
+pub(crate) fn evaluate_signature<T>(
+    signature: &[i8],
+    momenta: &[FourMomentum<F<T>>],
+) -> FourMomentum<F<T>>
 where
     T: FloatLike,
 {
@@ -1830,7 +1833,7 @@ where
 
 #[allow(unused)]
 #[inline]
-pub fn pinch_dampening_function<T: FloatLike>(
+pub(crate) fn pinch_dampening_function<T: FloatLike>(
     dampening_arg: F<T>,
     delta_t: F<T>,
     powers: (u64, u64),
@@ -1842,7 +1845,7 @@ pub fn pinch_dampening_function<T: FloatLike>(
     &a / (&a + F::<T>::from_f64(multiplier) * delta_t.pow(powers.1))
 }
 
-pub fn h<T: FloatLike>(
+pub(crate) fn h<T: FloatLike>(
     t: &F<T>,
     tstar: Option<F<T>>,
     sigma: Option<F<T>>,
@@ -1953,7 +1956,7 @@ pub fn h<T: FloatLike>(
 /// Calculate the determinant of any complex-valued input matrix using LU-decomposition.
 /// Original C-code by W. Gong and D.E. Soper.
 #[allow(unused)]
-pub fn determinant<T: FloatLike>(bb: &[Complex<F<T>>], dimension: usize) -> Complex<F<T>> {
+pub(crate) fn determinant<T: FloatLike>(bb: &[Complex<F<T>>], dimension: usize) -> Complex<F<T>> {
     let one = bb[0].re.one();
     let zero = one.zero();
     // Define matrix related variables.
@@ -2050,7 +2053,7 @@ pub fn determinant<T: FloatLike>(bb: &[Complex<F<T>>], dimension: usize) -> Comp
 }
 
 #[allow(unused)]
-pub fn next_combination_with_replacement(state: &mut [usize], max_entry: usize) -> bool {
+pub(crate) fn next_combination_with_replacement(state: &mut [usize], max_entry: usize) -> bool {
     for i in (0..state.len()).rev() {
         if state[i] < max_entry {
             state[i] += 1;
@@ -2063,14 +2066,14 @@ pub fn next_combination_with_replacement(state: &mut [usize], max_entry: usize) 
     false
 }
 
-pub fn compute_loop_part<T: FloatLike>(
+pub(crate) fn compute_loop_part<T: FloatLike>(
     loop_signature: &LoopSignature,
     loop_moms: &LoopMomenta<F<T>>,
 ) -> ThreeMomentum<F<T>> {
     loop_signature.apply_typed(loop_moms)
 }
 
-pub fn compute_shift_part<T: FloatLike>(
+pub(crate) fn compute_shift_part<T: FloatLike>(
     external_signature: &ExternalSignature,
     external_moms: &ExternalFourMomenta<F<T>>,
 ) -> FourMomentum<F<T>> {
@@ -2078,7 +2081,7 @@ pub fn compute_shift_part<T: FloatLike>(
         .apply_typed::<FourMomentum<F<T>>, ExternalIndex, ExternalFourMomenta<F<T>>>(external_moms)
 }
 
-pub fn compute_t_part_of_shift_part<T: FloatLike>(
+pub(crate) fn compute_t_part_of_shift_part<T: FloatLike>(
     external_signature: &ExternalSignature,
     external_moms: &ExternalFourMomenta<F<T>>,
 ) -> F<T> {
@@ -2091,7 +2094,7 @@ pub fn compute_t_part_of_shift_part<T: FloatLike>(
 // Bilinear form for E-surface defined as sqrt[(k+p1)^2+m1sq] + sqrt[(k+p2)^2+m2sq] + e_shift
 // The Bilinear system then reads 4 k.a.k + 4 k.n + C = 0
 #[allow(unused, clippy::type_complexity)]
-pub fn one_loop_e_surface_bilinear_form<T: FloatLike>(
+pub(crate) fn one_loop_e_surface_bilinear_form<T: FloatLike>(
     p1: &[F<T>; 3],
     p2: &[F<T>; 3],
     m1_sq: F<T>,
@@ -2131,7 +2134,7 @@ pub fn one_loop_e_surface_bilinear_form<T: FloatLike>(
 }
 
 #[allow(unused)]
-pub fn one_loop_e_surface_exists<T: FloatLike>(
+pub(crate) fn one_loop_e_surface_exists<T: FloatLike>(
     p1: &[F<T>; 3],
     p2: &[F<T>; 3],
     m1_sq: F<T>,
@@ -2317,7 +2320,7 @@ impl<T: FloatLike> ApproxEq<Complex<F<T>>, F<T>> for F<T> {
 }
 
 #[allow(unused)]
-pub fn one_loop_eval_e_surf<T: FloatLike>(
+pub(crate) fn one_loop_eval_e_surf<T: FloatLike>(
     k: &[F<T>; 3],
     p1: &[F<T>; 3],
     p2: &[F<T>; 3],
@@ -2339,7 +2342,7 @@ pub fn one_loop_eval_e_surf<T: FloatLike>(
 }
 
 #[allow(unused)]
-pub fn one_loop_eval_e_surf_k_derivative<T: FloatLike>(
+pub(crate) fn one_loop_eval_e_surf_k_derivative<T: FloatLike>(
     k: &[F<T>; 3],
     p1: &[F<T>; 3],
     p2: &[F<T>; 3],
@@ -2364,7 +2367,7 @@ pub fn one_loop_eval_e_surf_k_derivative<T: FloatLike>(
 }
 
 #[allow(unused)]
-pub fn one_loop_get_e_surf_t_scaling<T: FloatLike>(
+pub(crate) fn one_loop_get_e_surf_t_scaling<T: FloatLike>(
     k: &[F<T>; 3],
     p1: &[F<T>; 3],
     p2: &[F<T>; 3],
@@ -2398,13 +2401,13 @@ pub fn one_loop_get_e_surf_t_scaling<T: FloatLike>(
     }
 }
 
-pub fn box_muller<T: FloatLike>(x1: F<T>, x2: F<T>) -> (F<T>, F<T>) {
+pub(crate) fn box_muller<T: FloatLike>(x1: F<T>, x2: F<T>) -> (F<T>, F<T>) {
     let r = (-x1.from_i64(2) * x1.log()).sqrt();
     let theta = r.from_i64(2) * r.PI() * x2;
     (r.clone() * theta.cos(), r * theta.sin())
 }
 
-pub fn compute_surface_and_volume<T: FloatLike>(n_dim: usize, radius: F<T>) -> (F<T>, F<T>) {
+pub(crate) fn compute_surface_and_volume<T: FloatLike>(n_dim: usize, radius: F<T>) -> (F<T>, F<T>) {
     let mut surface = radius.from_i64(2);
     let one = radius.one();
     let mut volume = one.clone();
@@ -2420,7 +2423,7 @@ pub fn compute_surface_and_volume<T: FloatLike>(n_dim: usize, radius: F<T>) -> (
     )
 }
 
-pub fn get_n_dim_for_n_loop_momenta(
+pub(crate) fn get_n_dim_for_n_loop_momenta(
     settings: &SamplingSettings,
     n_loop_momenta: usize,
     force_radius: bool,
@@ -2461,7 +2464,7 @@ pub fn get_n_dim_for_n_loop_momenta(
     }
 }
 
-pub fn global_parameterize<T: FloatLike>(
+pub(crate) fn global_parameterize<T: FloatLike>(
     x: &[F<T>],
     e_cm_squared: F<T>,
     settings: &ParameterizationSettings,
@@ -2610,7 +2613,7 @@ pub fn global_parameterize<T: FloatLike>(
 }
 
 #[allow(unused)]
-pub fn global_inv_parameterize<T: FloatLike>(
+pub(crate) fn global_inv_parameterize<T: FloatLike>(
     moms: &[ThreeMomentum<F<T>>],
     e_cm_squared: F<T>,
     settings: &ParameterizationSettings,
@@ -2718,7 +2721,7 @@ pub fn global_inv_parameterize<T: FloatLike>(
 
 /// Map a vector in the unit hypercube to the infinite hypercube.
 /// Also compute the Jacobian.
-pub fn parameterize3d<T: FloatLike>(
+pub(crate) fn parameterize3d<T: FloatLike>(
     x: &[F<T>],
     e_cm_squared: F<T>,
     loop_index: usize,
@@ -2804,7 +2807,7 @@ pub fn parameterize3d<T: FloatLike>(
     (l_space, jac)
 }
 
-pub fn inv_parametrize3d<T: FloatLike>(
+pub(crate) fn inv_parametrize3d<T: FloatLike>(
     mom: &ThreeMomentum<F<T>>,
     e_cm_squared: F<T>,
     loop_index: usize,
@@ -2870,7 +2873,7 @@ pub const MINUTE: usize = 60;
 pub const HOUR: usize = 3_600;
 pub const DAY: usize = 86_400;
 pub const WEEK: usize = 604_800;
-pub fn format_wdhms(seconds: usize) -> String {
+pub(crate) fn format_wdhms(seconds: usize) -> String {
     let mut compound_duration = vec![];
     if seconds == 0 {
         compound_duration.push("0s".to_string());
@@ -2913,12 +2916,12 @@ pub fn format_wdhms(seconds: usize) -> String {
     compound_duration.join(" ")
 }
 
-pub fn format_wdhms_from_duration(duration: Duration) -> String {
+pub(crate) fn format_wdhms_from_duration(duration: Duration) -> String {
     format_wdhms(duration.as_secs() as usize)
 }
 
 #[allow(unused)]
-pub fn inverse_gamma_lr(a: f64, p: f64, n_iter: usize) -> f64 {
+pub(crate) fn inverse_gamma_lr(a: f64, p: f64, n_iter: usize) -> f64 {
     // this algorithm is taken from https://dl.acm.org/doi/pdf/10.1145/22721.23109
 
     // get an estimate for x0 to start newton iterations.
@@ -3082,7 +3085,7 @@ pub fn inverse_gamma_lr(a: f64, p: f64, n_iter: usize) -> f64 {
 }
 
 #[allow(unused)]
-pub fn inv_3x3_sig_matrix(mat: [[isize; 3]; 3]) -> [[isize; 3]; 3] {
+pub(crate) fn inv_3x3_sig_matrix(mat: [[isize; 3]; 3]) -> [[isize; 3]; 3] {
     let denom = -mat[0][2] * mat[1][1] * mat[2][0]
         + mat[0][1] * mat[1][2] * mat[2][0]
         + mat[0][2] * mat[1][0] * mat[2][1]
@@ -3106,7 +3109,7 @@ pub fn inv_3x3_sig_matrix(mat: [[isize; 3]; 3]) -> [[isize; 3]; 3] {
     inv_mat
 }
 
-pub fn print_banner() {
+pub(crate) fn print_banner() {
     println!(
         "\n{}{}\n",
         r"                                        _
@@ -3130,7 +3133,7 @@ pub fn print_banner() {
 }
 
 #[allow(unused)]
-pub fn format_for_compare_digits(x: F<f64>, y: F<f64>) -> (String, String) {
+pub(crate) fn format_for_compare_digits(x: F<f64>, y: F<f64>) -> (String, String) {
     let mut string_x = format!("{:.16e}", x);
     let mut string_y = format!("{:.16e}", y);
 
@@ -3164,7 +3167,7 @@ pub fn format_for_compare_digits(x: F<f64>, y: F<f64>) -> (String, String) {
 }
 
 #[allow(unused)]
-pub fn format_evaluation_time(time: Duration) -> String {
+pub(crate) fn format_evaluation_time(time: Duration) -> String {
     let time_secs = time.as_secs_f64();
     if time_secs < 1e-6 {
         format!("{} ns", time.as_nanos())
@@ -3177,11 +3180,11 @@ pub fn format_evaluation_time(time: Duration) -> String {
     }
 }
 
-pub fn format_evaluation_time_from_f64(time: f64) -> String {
+pub(crate) fn format_evaluation_time_from_f64(time: f64) -> String {
     format_evaluation_time(Duration::from_secs_f64(time))
 }
 
-pub fn format_sample(sample: &Sample<F<f64>>) -> String {
+pub(crate) fn format_sample(sample: &Sample<F<f64>>) -> String {
     match sample {
         Sample::Continuous(_, xs) => {
             let xs_point = xs.iter().map(|x| format!("{:.16}", x)).join(", ");
@@ -3210,7 +3213,7 @@ pub fn format_sample(sample: &Sample<F<f64>>) -> String {
     }
 }
 
-pub fn view_list_diff_typed<K, T: PartialEq + std::fmt::Debug>(
+pub(crate) fn view_list_diff_typed<K, T: PartialEq + std::fmt::Debug>(
     vec1: &TiSlice<K, T>,
     vec2: &TiSlice<K, T>,
 ) -> String {
@@ -3231,7 +3234,7 @@ pub fn view_list_diff_typed<K, T: PartialEq + std::fmt::Debug>(
     result
 }
 
-pub fn into_complex_ff64<T: FloatLike>(c: &Complex<F<T>>) -> Complex<F<f64>> {
+pub(crate) fn into_complex_ff64<T: FloatLike>(c: &Complex<F<T>>) -> Complex<F<f64>> {
     Complex::new(c.re.into_ff64(), c.im.into_ff64())
 }
 
@@ -3370,7 +3373,7 @@ pub struct GammaloopSymbols {
 }
 
 impl GammaloopSymbols {
-    // pub fn emr_mom<'a>(&self, edge: EdgeIndex, arg: impl Into<AtomOrView<'a>>) -> Atom {
+    // pub(crate) fn emr_mom<'a>(&self, edge: EdgeIndex, arg: impl Into<AtomOrView<'a>>) -> Atom {
     //     let arg = arg.into().as_view();
 
     //     function!(self.emr_mom, edge, arg)
@@ -3506,12 +3509,12 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
 });
 
 impl GammaloopSymbols {
-    pub fn emr_mom<'a>(&self, e: EdgeIndex, arg: impl Into<AtomOrView<'a>>) -> Atom {
+    pub(crate) fn emr_mom<'a>(&self, e: EdgeIndex, arg: impl Into<AtomOrView<'a>>) -> Atom {
         let a = arg.into();
         function!(self.emr_mom, usize::from(e) as i64, a.as_view())
     }
 
-    pub fn split_mom_pattern<'a>(&self, e: EdgeIndex, e_mass: Atom) -> Replacement {
+    pub(crate) fn split_mom_pattern<'a>(&self, e: EdgeIndex, e_mass: Atom) -> Replacement {
         let eidc = usize::from(e) as i64;
         Replacement::new(
             self.emr_mom(e, Minkowski {}.to_symbolic([W_.a__]))
@@ -3534,14 +3537,14 @@ impl GammaloopSymbols {
     }
 }
 
-pub fn sign_atom(eid: EdgeIndex) -> Atom {
+pub(crate) fn sign_atom(eid: EdgeIndex) -> Atom {
     FunctionBuilder::new(symbol!("σ"))
         .add_arg(usize::from(eid) as i64)
         .finish()
 }
 
 /// Checks if two lists are permutations of eachother, and establish a map between indices
-pub fn is_permutation<T: PartialEq>(left: &[T], right: &[T]) -> Option<PermutationMap> {
+pub(crate) fn is_permutation<T: PartialEq>(left: &[T], right: &[T]) -> Option<PermutationMap> {
     if left.len() != right.len() {
         return None;
     }
@@ -3580,11 +3583,11 @@ pub struct PermutationMap {
 }
 
 impl PermutationMap {
-    pub fn left_to_right(&self, left_index: usize) -> usize {
+    pub(crate) fn left_to_right(&self, left_index: usize) -> usize {
         self.left_to_right[left_index]
     }
 
-    pub fn right_to_left(&self, right_index: usize) -> usize {
+    pub(crate) fn right_to_left(&self, right_index: usize) -> usize {
         self.right_to_left[right_index]
     }
 }
@@ -3679,7 +3682,7 @@ impl<T: FloatLike> momtrop::float::MomTropFloat for F<T> {
     }
 }
 
-pub fn dummy_hedge_graph(num_edges: usize) -> linnet::half_edge::HedgeGraph<(), ()> {
+pub(crate) fn dummy_hedge_graph(num_edges: usize) -> linnet::half_edge::HedgeGraph<(), ()> {
     use linnet::half_edge::builder::HedgeGraphBuilder;
     use linnet::half_edge::involution::Orientation;
     use linnet::half_edge::NodeIndex;
@@ -3717,17 +3720,17 @@ impl<T> Length for Vec<T> {
     }
 }
 
-pub fn ose_atom_from_index(index: EdgeIndex) -> Atom {
+pub(crate) fn ose_atom_from_index(index: EdgeIndex) -> Atom {
     function!(
         GS.ose,
         usize::from(index) as i64 // Atom::from(FlatIndex::from(0))
     )
 }
 
-pub fn cut_energy(index: EdgeIndex) -> Atom {
+pub(crate) fn cut_energy(index: EdgeIndex) -> Atom {
     function!(GS.energy, usize::from(index) as i64)
 }
 
-pub fn external_energy_atom_from_index(index: EdgeIndex) -> Atom {
+pub(crate) fn external_energy_atom_from_index(index: EdgeIndex) -> Atom {
     GS.emr_mom(index, Atom::from(ExpandedIndex::from_iter([0])))
 }

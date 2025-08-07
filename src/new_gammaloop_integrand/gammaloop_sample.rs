@@ -103,7 +103,7 @@ impl GammaLoopSample<f64> {
 }
 
 impl<T: FloatLike> GammaLoopSample<T> {
-    pub fn get_rotated_sample(&self, rotation: &Rotation) -> Self {
+    pub(crate) fn get_rotated_sample(&self, rotation: &Rotation) -> Self {
         if rotation.is_identity() {
             return self.clone();
         }
@@ -125,7 +125,7 @@ impl<T: FloatLike> GammaLoopSample<T> {
         }
     }
 
-    pub fn zero(&self) -> F<T> {
+    pub(crate) fn zero(&self) -> F<T> {
         match self {
             GammaLoopSample::Default(sample) => sample.zero(),
             GammaLoopSample::MultiChanneling { sample, .. } => sample.zero(),
@@ -134,7 +134,7 @@ impl<T: FloatLike> GammaLoopSample<T> {
     }
 
     #[allow(dead_code)]
-    pub fn one(&self) -> F<T> {
+    pub(crate) fn one(&self) -> F<T> {
         match self {
             GammaLoopSample::Default(sample) => sample.one(),
             GammaLoopSample::MultiChanneling { sample, .. } => sample.one(),
@@ -206,7 +206,7 @@ impl<T: FloatLike> GammaLoopSample<T> {
 
     /// Retrieve the default sample which is contained in all types
     #[inline]
-    pub fn get_default_sample(&self) -> &MomentumSample<T> {
+    pub(crate) fn get_default_sample(&self) -> &MomentumSample<T> {
         match self {
             GammaLoopSample::Default(sample) => sample,
             GammaLoopSample::MultiChanneling { sample, .. } => sample,
@@ -233,7 +233,7 @@ pub enum DiscreteGraphSample<T: FloatLike> {
 }
 
 impl<T: FloatLike> DiscreteGraphSample<T> {
-    pub fn zero(&self) -> F<T> {
+    pub(crate) fn zero(&self) -> F<T> {
         match self {
             DiscreteGraphSample::Default(sample) => sample.zero(),
             DiscreteGraphSample::MultiChanneling { sample, .. } => sample.zero(),
@@ -242,7 +242,7 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
         }
     }
 
-    pub fn one(&self) -> F<T> {
+    pub(crate) fn one(&self) -> F<T> {
         match self {
             DiscreteGraphSample::Default(sample) => sample.one(),
             DiscreteGraphSample::MultiChanneling { sample, .. } => sample.one(),
@@ -252,7 +252,7 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
     }
     /// Rotation for stability checks
     #[inline]
-    pub fn get_rotated_sample_cached(
+    pub(crate) fn get_rotated_sample_cached(
         &self,
         rotation: &Rotation,
         rotated_externals: ExternalFourMomenta<F<T>>,
@@ -429,7 +429,7 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
 }
 
 #[inline]
-pub fn parameterize<T: FloatLike, I: GammaloopIntegrand>(
+pub(crate) fn parameterize<T: FloatLike, I: GammaloopIntegrand>(
     sample_point: &Sample<F<f64>>,
     integrand: &I,
 ) -> Result<GammaLoopSample<T>, String> {

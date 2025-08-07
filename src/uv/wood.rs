@@ -72,11 +72,11 @@ pub struct Wood {
 }
 
 impl Wood {
-    pub fn n_spinneys(&self) -> usize {
+    pub(crate) fn n_spinneys(&self) -> usize {
         self.poset.n_nodes()
     }
 
-    pub fn from_spinneys<E, V, H, I: IntoIterator<Item = InternalSubGraph>>(
+    pub(crate) fn from_spinneys<E, V, H, I: IntoIterator<Item = InternalSubGraph>>(
         s: I,
         graph: impl AsRef<HedgeGraph<E, V, H>>,
     ) -> Self {
@@ -184,7 +184,7 @@ impl Wood {
         tree_root
     }
 
-    pub fn unfold<E, V, H, G>(&self, graph: &G, lmb: &LoopMomentumBasis) -> Forest
+    pub(crate) fn unfold<E, V, H, G>(&self, graph: &G, lmb: &LoopMomentumBasis) -> Forest
     where
         G: UltravioletGraph + AsRef<HedgeGraph<E, V, H>>,
     {
@@ -204,7 +204,7 @@ impl Wood {
         Forest { dag }
     }
 
-    pub fn dot(&self, graph: &impl UltravioletGraph) -> String {
+    pub(crate) fn dot(&self, graph: &impl UltravioletGraph) -> String {
         let shift = self.poset.shift();
         self.poset.to_dot_impl(&|n| {
             format!(
@@ -217,7 +217,7 @@ impl Wood {
         })
     }
 
-    pub fn dot_spinneys<E, V, H, G>(&self, graph: &G)
+    pub(crate) fn dot_spinneys<E, V, H, G>(&self, graph: &G)
     where
         G: UltravioletGraph + AsRef<HedgeGraph<E, V, H>>,
     {
@@ -233,7 +233,7 @@ impl Wood {
 }
 
 impl Wood {
-    pub fn show_graphs<H, G>(&self, graph: &G) -> String
+    pub(crate) fn show_graphs<H, G>(&self, graph: &G) -> String
     where
         G: UltravioletGraph + AsRef<HedgeGraph<Edge, Vertex, H>>,
     {

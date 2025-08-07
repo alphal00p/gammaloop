@@ -1,4 +1,4 @@
-use eyre::Result;
+use color_eyre::Result;
 use symbolica::activate_oem_license;
 
 pub(crate) fn initialise() -> Result<()> {

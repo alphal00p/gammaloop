@@ -75,11 +75,11 @@ impl<T> Length for LoopMomenta<T> {
 pub type Subspace<'a> = Option<&'a [LoopIndex]>; // None means full space
 
 impl<T> LoopMomenta<T> {
-    pub fn iter(&self) -> std::slice::Iter<'_, ThreeMomentum<T>> {
+    pub(crate) fn iter(&self) -> std::slice::Iter<'_, ThreeMomentum<T>> {
         self.0.iter()
     }
 
-    pub fn first(&self) -> Option<&ThreeMomentum<T>> {
+    pub(crate) fn first(&self) -> Option<&ThreeMomentum<T>> {
         self.0.first()
     }
 }
@@ -128,7 +128,7 @@ impl<T> IndexMut<LoopIndex> for LoopMomenta<T> {
 }
 
 impl<T: FloatLike> LoopMomenta<F<T>> {
-    pub fn hyper_radius(&self, subspace: Subspace) -> F<T> {
+    pub(crate) fn hyper_radius(&self, subspace: Subspace) -> F<T> {
         let zero = self.0[0].px.zero();
         match subspace {
             None => self.iter().fold(zero, |acc, x| acc + x.norm_squared()),
@@ -138,7 +138,7 @@ impl<T: FloatLike> LoopMomenta<F<T>> {
         }
     }
 
-    pub fn rescale(&self, factor: &F<T>, subspace: Subspace) -> Self {
+    pub(crate) fn rescale(&self, factor: &F<T>, subspace: Subspace) -> Self {
         match subspace {
             None => LoopMomenta::from_iter(self.iter().map(|k| k * factor)),
             Some(subspace) => LoopMomenta::from_iter(subspace.iter().map(|&i| &self[i] * factor)),
@@ -186,7 +186,7 @@ impl<T: FloatLike> Display for MomentumSample<T> {
 }
 
 impl<T: FloatLike> BareMomentumSample<T> {
-    pub fn new(
+    pub(crate) fn new(
         loop_moms: LoopMomenta<F<T>>,
         external_moms: &Externals,
         jacobian: F<T>,
@@ -213,7 +213,7 @@ impl<T: FloatLike> BareMomentumSample<T> {
         }
     }
 
-    pub fn one(&self) -> F<T> {
+    pub(crate) fn one(&self) -> F<T> {
         if let Some(f) = self.loop_moms.first() {
             f.px.one()
         } else if let Some(f) = self.external_moms.first() {
@@ -223,7 +223,7 @@ impl<T: FloatLike> BareMomentumSample<T> {
         }
     }
 
-    pub fn zero(&self) -> F<T> {
+    pub(crate) fn zero(&self) -> F<T> {
         if let Some(f) = self.loop_moms.first() {
             f.px.zero()
         } else if let Some(f) = self.external_moms.first() {
@@ -252,7 +252,7 @@ impl<T: FloatLike> BareMomentumSample<T> {
         }
     }
 
-    pub fn higher_precision(&self) -> BareMomentumSample<T::Higher>
+    pub(crate) fn higher_precision(&self) -> BareMomentumSample<T::Higher>
     where
         T::Higher: FloatLike,
     {
@@ -273,7 +273,7 @@ impl<T: FloatLike> BareMomentumSample<T> {
         }
     }
 
-    pub fn lower_precision(&self) -> BareMomentumSample<T::Lower>
+    pub(crate) fn lower_precision(&self) -> BareMomentumSample<T::Lower>
     where
         T::Lower: FloatLike,
     {
@@ -288,7 +288,7 @@ impl<T: FloatLike> BareMomentumSample<T> {
 
     #[inline]
     /// Rotation for stability checks
-    pub fn get_rotated_sample_cached(
+    pub(crate) fn get_rotated_sample_cached(
         &self,
         rotation: &Rotation,
         rotated_externals: ExternalFourMomenta<F<T>>,
@@ -304,7 +304,7 @@ impl<T: FloatLike> BareMomentumSample<T> {
     }
 
     #[inline]
-    pub fn get_rotated_sample(&self, rotation: &Rotation) -> Self {
+    pub(crate) fn get_rotated_sample(&self, rotation: &Rotation) -> Self {
         Self {
             loop_moms: self.loop_moms.iter().map(|l| l.rotate(rotation)).collect(),
             external_moms: self
@@ -323,7 +323,7 @@ impl<T: FloatLike> BareMomentumSample<T> {
     }
 
     #[inline]
-    pub fn rescaled_loop_momenta(&self, factor: &F<T>, subspace: Subspace) -> Self {
+    pub(crate) fn rescaled_loop_momenta(&self, factor: &F<T>, subspace: Subspace) -> Self {
         Self {
             loop_moms: self.loop_moms.rescale(factor, subspace),
             external_moms: self.external_moms.clone(),
@@ -335,7 +335,7 @@ impl<T: FloatLike> BareMomentumSample<T> {
 }
 
 impl<T: FloatLike> MomentumSample<T> {
-    pub fn possibly_rotated_sample(&self) -> &BareMomentumSample<T> {
+    pub(crate) fn possibly_rotated_sample(&self) -> &BareMomentumSample<T> {
         if let Some(rot) = self.rotated_sample.as_ref() {
             rot
         } else {
@@ -343,7 +343,10 @@ impl<T: FloatLike> MomentumSample<T> {
         }
     }
 
-    pub fn numerator_sample(&self, settings: &Settings) -> (&BareMomentumSample<T>, Option<Uuid>) {
+    pub(crate) fn numerator_sample(
+        &self,
+        settings: &Settings,
+    ) -> (&BareMomentumSample<T>, Option<Uuid>) {
         if settings.stability.rotate_numerator {
             (self.possibly_rotated_sample(), self.uuid())
         } else {
@@ -351,7 +354,7 @@ impl<T: FloatLike> MomentumSample<T> {
         }
     }
 
-    pub fn uuid(&self) -> Option<Uuid> {
+    pub(crate) fn uuid(&self) -> Option<Uuid> {
         if self.rotated_sample.is_some() {
             None
         } else {
@@ -359,7 +362,7 @@ impl<T: FloatLike> MomentumSample<T> {
         }
     }
 
-    pub fn loop_moms(&self) -> &LoopMomenta<F<T>> {
+    pub(crate) fn loop_moms(&self) -> &LoopMomenta<F<T>> {
         if let Some(rotated_sample) = &self.rotated_sample {
             &rotated_sample.loop_moms
         } else {
@@ -368,14 +371,14 @@ impl<T: FloatLike> MomentumSample<T> {
     }
 
     #[allow(clippy::type_complexity)]
-    pub fn loop_mom_pair(&self) -> (&LoopMomenta<F<T>>, Option<&LoopMomenta<F<T>>>) {
+    pub(crate) fn loop_mom_pair(&self) -> (&LoopMomenta<F<T>>, Option<&LoopMomenta<F<T>>>) {
         (
             &self.sample.loop_moms,
             self.rotated_sample.as_ref().map(|s| &s.loop_moms),
         )
     }
 
-    pub fn external_moms(&self) -> &ExternalFourMomenta<F<T>> {
+    pub(crate) fn external_moms(&self) -> &ExternalFourMomenta<F<T>> {
         if let Some(rotated_sample) = &self.rotated_sample {
             &rotated_sample.external_moms
         } else {
@@ -384,7 +387,7 @@ impl<T: FloatLike> MomentumSample<T> {
     }
 
     #[allow(clippy::type_complexity)]
-    pub fn external_mom_pair(
+    pub(crate) fn external_mom_pair(
         &self,
     ) -> (
         &ExternalFourMomenta<F<T>>,
@@ -398,7 +401,7 @@ impl<T: FloatLike> MomentumSample<T> {
         )
     }
 
-    pub fn polarizations(&self) -> &PolarizationVectors<Complex<F<T>>> {
+    pub(crate) fn polarizations(&self) -> &PolarizationVectors<Complex<F<T>>> {
         if let Some(rotated_sample) = &self.rotated_sample {
             &rotated_sample.polarizations
         } else {
@@ -407,7 +410,7 @@ impl<T: FloatLike> MomentumSample<T> {
     }
 
     #[allow(clippy::type_complexity)]
-    pub fn polarizations_pair(
+    pub(crate) fn polarizations_pair(
         &self,
     ) -> (
         &PolarizationVectors<Complex<F<T>>>,
@@ -421,7 +424,7 @@ impl<T: FloatLike> MomentumSample<T> {
         )
     }
 
-    pub fn jacobian(&self) -> F<T> {
+    pub(crate) fn jacobian(&self) -> F<T> {
         if let Some(rotated_sample) = &self.rotated_sample {
             rotated_sample.jacobian.clone()
         } else {
@@ -429,7 +432,7 @@ impl<T: FloatLike> MomentumSample<T> {
         }
     }
 
-    pub fn new(
+    pub(crate) fn new(
         loop_moms: LoopMomenta<F<T>>,
         external_moms: &Externals,
         jacobian: F<T>,
@@ -451,17 +454,17 @@ impl<T: FloatLike> MomentumSample<T> {
         }
     }
 
-    pub fn one(&self) -> F<T> {
+    pub(crate) fn one(&self) -> F<T> {
         self.sample.one()
     }
 
-    pub fn zero(&self) -> F<T> {
+    pub(crate) fn zero(&self) -> F<T> {
         self.sample.zero()
     }
 
     /// Cast the sample to a different precision
     #[inline]
-    pub fn cast_sample<T2: FloatLike>(&self) -> MomentumSample<T2>
+    pub(crate) fn cast_sample<T2: FloatLike>(&self) -> MomentumSample<T2>
     where
         F<T2>: From<F<T>>,
     {
@@ -472,7 +475,7 @@ impl<T: FloatLike> MomentumSample<T> {
         }
     }
 
-    pub fn higher_precision(&self) -> MomentumSample<T::Higher>
+    pub(crate) fn higher_precision(&self) -> MomentumSample<T::Higher>
     where
         T::Higher: FloatLike,
     {
@@ -483,7 +486,7 @@ impl<T: FloatLike> MomentumSample<T> {
         }
     }
 
-    pub fn lower_precision(&self) -> MomentumSample<T::Lower>
+    pub(crate) fn lower_precision(&self) -> MomentumSample<T::Lower>
     where
         T::Lower: FloatLike,
     {
@@ -496,7 +499,7 @@ impl<T: FloatLike> MomentumSample<T> {
 
     #[inline]
     /// Rotation for stability checks
-    pub fn get_rotated_sample_cached(
+    pub(crate) fn get_rotated_sample_cached(
         &self,
         rotation: &Rotation,
         rotated_externals: ExternalFourMomenta<F<T>>,
@@ -514,7 +517,7 @@ impl<T: FloatLike> MomentumSample<T> {
     }
 
     #[inline]
-    pub fn get_rotated_sample(&self, rotation: &Rotation) -> Self {
+    pub(crate) fn get_rotated_sample(&self, rotation: &Rotation) -> Self {
         Self {
             sample: self.sample.clone(),
             rotated_sample: Some(self.sample.get_rotated_sample(rotation)),
@@ -523,7 +526,7 @@ impl<T: FloatLike> MomentumSample<T> {
     }
 
     #[inline]
-    pub fn rescaled_loop_momenta(&self, factor: &F<T>, subspace: Subspace) -> Self {
+    pub(crate) fn rescaled_loop_momenta(&self, factor: &F<T>, subspace: Subspace) -> Self {
         Self {
             sample: self.sample.rescaled_loop_momenta(factor, subspace),
             rotated_sample: self

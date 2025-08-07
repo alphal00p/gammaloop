@@ -141,9 +141,9 @@ mod fjcore {
 
     #[link(name = "fjcore", kind = "static")]
     extern "C" {
-        pub fn fastjet_workspace() -> *mut c_void;
-        //pub fn fastjet_free(workspace: *mut c_void);
-        pub fn fastjetppgenkt_(
+        pub(crate) fn fastjet_workspace() -> *mut c_void;
+        //pub(crate) fn fastjet_free(workspace: *mut c_void);
+        pub(crate) fn fastjetppgenkt_(
             workspace: *mut c_void,
             p: *const c_double,
             npart: *const c_int,
@@ -182,13 +182,13 @@ pub struct AverageAndErrorAccumulator {
 }
 
 impl AverageAndErrorAccumulator {
-    pub fn add_sample(&mut self, sample: f64) {
+    pub(crate) fn add_sample(&mut self, sample: f64) {
         self.sum += sample;
         self.sum_sq += sample * sample;
         self.num_samples += 1;
     }
 
-    pub fn merge_samples(&mut self, other: &mut AverageAndErrorAccumulator) {
+    pub(crate) fn merge_samples(&mut self, other: &mut AverageAndErrorAccumulator) {
         self.sum += other.sum;
         self.sum_sq += other.sum_sq;
         self.num_samples += other.num_samples;
@@ -199,7 +199,7 @@ impl AverageAndErrorAccumulator {
         other.num_samples = 0;
     }
 
-    pub fn update_iter(&mut self) {
+    pub(crate) fn update_iter(&mut self) {
         // TODO: we could be throwing away events that are very rare
         if self.num_samples < 2 {
             self.cur_iter += 1;
@@ -256,7 +256,7 @@ pub struct EventManager {
 
 #[allow(unused)]
 impl EventManager {
-    pub fn new(track_events: bool, settings: Settings) -> EventManager {
+    pub(crate) fn new(track_events: bool, settings: Settings) -> EventManager {
         let mut observables = vec![];
         for o in &settings.observables {
             match o {
@@ -337,7 +337,7 @@ impl EventManager {
         }
     }
 
-    pub fn create_event<T: FloatLike>(
+    pub(crate) fn create_event<T: FloatLike>(
         &self,
         orig_incoming_momenta: Vec<FourMomentum<F<T>>>,
         cut_momenta: Vec<FourMomentum<F<T>>>,
@@ -359,7 +359,7 @@ impl EventManager {
         }
     }
 
-    pub fn pass_selection(&mut self, event: &mut Event) -> bool {
+    pub(crate) fn pass_selection(&mut self, event: &mut Event) -> bool {
         for f in &mut self.event_selector {
             if !f.process_event(event) {
                 return false;
@@ -368,7 +368,7 @@ impl EventManager {
         true
     }
 
-    pub fn add_event(&mut self, mut event: Event) -> bool {
+    pub(crate) fn add_event(&mut self, mut event: Event) -> bool {
         if !self.track_events && self.event_selector.is_empty() {
             return true;
         }
@@ -390,7 +390,7 @@ impl EventManager {
         true
     }
 
-    pub fn merge_samples(&mut self, other: &mut EventManager) {
+    pub(crate) fn merge_samples(&mut self, other: &mut EventManager) {
         for (o1, o2) in self
             .observables
             .iter_mut()
@@ -413,13 +413,13 @@ impl EventManager {
         other.integrand_evaluation_timing = 0;
     }
 
-    pub fn update_result(&mut self, iter: usize) {
+    pub(crate) fn update_result(&mut self, iter: usize) {
         for o in &mut self.observables {
             o.update_result(self.event_group_counter, iter);
         }
     }
 
-    pub fn update_live_result(&mut self) {
+    pub(crate) fn update_live_result(&mut self) {
         for o in &mut self.observables {
             // for now, only live update the cross section
             #[allow(clippy::single_match)]
@@ -430,7 +430,7 @@ impl EventManager {
         }
     }
 
-    pub fn clear(&mut self, count_as_rejected: bool) {
+    pub(crate) fn clear(&mut self, count_as_rejected: bool) {
         self.accepted_event_counter -= self.event_buffer.len();
         if count_as_rejected {
             self.rejected_event_counter += self.event_buffer.len();
@@ -438,7 +438,7 @@ impl EventManager {
         self.event_buffer.clear();
     }
 
-    pub fn process_events(&mut self, integrand_result: Complex<f64>, integrand_weight: f64) {
+    pub(crate) fn process_events(&mut self, integrand_result: Complex<f64>, integrand_weight: f64) {
         if self.track_events {
             // give the events to an observable function
             for o in &mut self.observables {
@@ -538,7 +538,7 @@ impl EventSelector for RangedSelector {
 
 #[allow(dead_code)]
 impl RangedSelector {
-    pub fn new(s: &RangeFilterSettings) -> RangedSelector {
+    pub(crate) fn new(s: &RangeFilterSettings) -> RangedSelector {
         RangedSelector {
             pdgs: s.pdgs.clone(),
             filter: s.filter,
@@ -567,7 +567,7 @@ unsafe impl std::marker::Send for JetClustering {}
 
 #[allow(dead_code)]
 impl JetClustering {
-    pub fn new(use_fastjet: bool, d_r: f64, min_jpt: f64) -> JetClustering {
+    pub(crate) fn new(use_fastjet: bool, d_r: f64, min_jpt: f64) -> JetClustering {
         #[cfg(feature = "fjcore")]
         let fastjet_workspace = unsafe { fjcore::fastjet_workspace() }; // TODO: free
 
@@ -586,7 +586,7 @@ impl JetClustering {
         }
     }
 
-    pub fn cluster_fastjet(&mut self, event: &Event) {
+    pub(crate) fn cluster_fastjet(&mut self, event: &Event) {
         self.fastjet_jets_in.clear();
 
         #[allow(unused_variables)]
@@ -652,7 +652,7 @@ impl JetClustering {
         self.ordered_pt.retain(|&pt| pt >= min_pt);
     }
 
-    pub fn cluster(&mut self, event: &Event) {
+    pub(crate) fn cluster(&mut self, event: &Event) {
         if self.use_fastjet {
             self.cluster_fastjet(event)
         } else {
@@ -660,7 +660,7 @@ impl JetClustering {
         }
     }
 
-    pub fn cluster_custom(&mut self, event: &Event) {
+    pub(crate) fn cluster_custom(&mut self, event: &Event) {
         //self.ordered_jets.clear();
         self.ordered_pt.clear();
         //self.jet_structure.clear();
@@ -723,7 +723,7 @@ pub struct JetSelector {
 }
 
 impl JetSelector {
-    pub fn new(settings: &JetSliceSettings) -> JetSelector {
+    pub(crate) fn new(settings: &JetSliceSettings) -> JetSelector {
         JetSelector {
             jet_selector_settings: settings.clone(),
             clustering: JetClustering::new(settings.use_fastjet, settings.dR, settings.min_jpt),
@@ -763,7 +763,7 @@ pub enum Observables {
 #[allow(dead_code)]
 impl Observables {
     #[inline]
-    pub fn process_event_group(&mut self, event: &[Event], integrator_weight: f64) {
+    pub(crate) fn process_event_group(&mut self, event: &[Event], integrator_weight: f64) {
         use self::Observables::*;
         match self {
             CrossSection(o) => o.process_event_group(event, integrator_weight),
@@ -774,7 +774,7 @@ impl Observables {
     }
 
     #[inline]
-    pub fn merge_samples(&mut self, other: &mut Observables) {
+    pub(crate) fn merge_samples(&mut self, other: &mut Observables) {
         use self::Observables::*;
         match (self, other) {
             (CrossSection(o1), CrossSection(o2)) => o1.merge_samples(o2),
@@ -790,7 +790,7 @@ impl Observables {
 
     /// Produce the result (histogram, etc.) of the observable from all processed event groups.
     #[inline]
-    pub fn update_result(&mut self, total_events: usize, iter: usize) {
+    pub(crate) fn update_result(&mut self, total_events: usize, iter: usize) {
         use self::Observables::*;
         match self {
             CrossSection(o) => o.update_result(total_events, iter),
@@ -820,13 +820,13 @@ pub struct CrossSectionObservable {
 }
 
 impl CrossSectionObservable {
-    pub fn add_sample(&mut self, integrand: Complex<f64>, integrator_weight: f64) {
+    pub(crate) fn add_sample(&mut self, integrand: Complex<f64>, integrator_weight: f64) {
         self.re.add_sample(integrand.re * integrator_weight);
         self.im.add_sample(integrand.im * integrator_weight);
     }
 
     /// Give a live update on a copy of the statistics
-    pub fn update_live_result(&self) {
+    pub(crate) fn update_live_result(&self) {
         let mut re = self.re.clone();
         re.update_iter();
         let mut im = self.im.clone();
@@ -870,7 +870,7 @@ pub struct Jet1PTObservable {
 
 impl Jet1PTObservable {
     #[allow(clippy::too_many_arguments)]
-    pub fn new(
+    pub(crate) fn new(
         x_min: f64,
         x_max: f64,
         num_bins: usize,
@@ -1006,7 +1006,7 @@ pub struct AFBObservable {
 }
 
 impl AFBObservable {
-    pub fn new(
+    pub(crate) fn new(
         x_min: f64,
         x_max: f64,
         num_bins: usize,
@@ -1155,7 +1155,7 @@ pub struct SingleParticleObservable {
 
 impl SingleParticleObservable {
     #[allow(clippy::too_many_arguments)]
-    pub fn new(
+    pub(crate) fn new(
         x_min: f64,
         x_max: f64,
         num_bins: usize,

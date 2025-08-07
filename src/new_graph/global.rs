@@ -28,7 +28,7 @@ impl Default for ParseData {
 }
 
 impl ParseData {
-    pub fn with_overall_factor(self, overall_factor: Atom) -> Self {
+    pub(crate) fn with_overall_factor(self, overall_factor: Atom) -> Self {
         ParseData {
             name: self.name,
             overall_factor,
@@ -37,7 +37,7 @@ impl ParseData {
         }
     }
 
-    pub fn with_polarizations(self, polarizations: Atom) -> Self {
+    pub(crate) fn with_polarizations(self, polarizations: Atom) -> Self {
         ParseData {
             name: self.name,
             overall_factor: self.overall_factor,
@@ -46,7 +46,7 @@ impl ParseData {
         }
     }
 
-    pub fn with_num(self, num: Atom) -> Self {
+    pub(crate) fn with_num(self, num: Atom) -> Self {
         ParseData {
             name: self.name,
             overall_factor: self.overall_factor,
@@ -79,7 +79,7 @@ impl From<linnet::parser::GlobalData> for ParseData {
 }
 
 impl Graph {
-    pub fn global_data(&self) -> GlobalData {
+    pub(crate) fn global_data(&self) -> GlobalData {
         let mut g = GlobalData::from(());
 
         // println!("Name: {}", self.name);

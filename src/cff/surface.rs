@@ -35,7 +35,10 @@ impl Surface for UnitSurface {
 }
 
 #[inline]
-pub fn compute_value<T: FloatLike, S: Surface>(surface: &S, energy_cache: &EdgeVec<F<T>>) -> F<T> {
+pub(crate) fn compute_value<T: FloatLike, S: Surface>(
+    surface: &S,
+    energy_cache: &EdgeVec<F<T>>,
+) -> F<T> {
     let positive_energies = surface.get_positive_energies();
     let negative_energies = surface.get_negative_energies();
 
@@ -57,7 +60,7 @@ pub fn compute_value<T: FloatLike, S: Surface>(surface: &S, energy_cache: &EdgeV
 }
 
 #[inline]
-pub fn compute_shift_part<T: FloatLike, S: Surface>(
+pub(crate) fn compute_shift_part<T: FloatLike, S: Surface>(
     surface: &S,
     energy_cache: &EdgeVec<F<T>>,
 ) -> F<T> {
@@ -68,7 +71,7 @@ pub fn compute_shift_part<T: FloatLike, S: Surface>(
         .unwrap_or_else(|| energy_cache[EdgeIndex::from(0)].zero())
 }
 
-pub fn string_format<S: Surface>(surface: &S) -> String {
+pub(crate) fn string_format<S: Surface>(surface: &S) -> String {
     let positive_energy_sum = surface
         .get_positive_energies()
         .map(|index| format!("E_{}", Into::<usize>::into(*index)))
@@ -111,7 +114,7 @@ pub enum HybridSurface {
 }
 
 impl HybridSurface {
-    pub fn to_atom(&self, cut_edges: &[EdgeIndex]) -> Atom {
+    pub(crate) fn to_atom(&self, cut_edges: &[EdgeIndex]) -> Atom {
         match self {
             HybridSurface::Esurface(surface) => surface.to_atom(cut_edges),
             HybridSurface::Hsurface(surface) => surface.to_atom(cut_edges),
@@ -128,7 +131,7 @@ pub enum HybridSurfaceRef<'a> {
 }
 
 impl HybridSurfaceRef<'_> {
-    pub fn to_atom(&self, cut_edges: &[EdgeIndex]) -> Atom {
+    pub(crate) fn to_atom(&self, cut_edges: &[EdgeIndex]) -> Atom {
         match self {
             HybridSurfaceRef::Esurface(surface) => surface.to_atom(cut_edges),
             HybridSurfaceRef::Hsurface(surface) => surface.to_atom(cut_edges),

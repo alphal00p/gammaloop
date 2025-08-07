@@ -158,7 +158,7 @@ pub struct VertexSet {
 }
 
 impl VertexSet {
-    pub fn from_usize(id: usize) -> Self {
+    pub(crate) fn from_usize(id: usize) -> Self {
         assert!(id < MAX_VERTEX_COUNT, "Vertex ID out of bounds");
 
         VertexSet {
@@ -166,7 +166,7 @@ impl VertexSet {
         }
     }
 
-    pub fn join(&self, other: &VertexSet) -> VertexSet {
+    pub(crate) fn join(&self, other: &VertexSet) -> VertexSet {
         VertexSet {
             vertex_set: self.vertex_set | other.vertex_set,
         }
@@ -186,7 +186,7 @@ impl VertexSet {
             .collect()
     }
 
-    pub fn subgraph<E, V, H>(&self, graph: &HedgeGraph<E, V, H>) -> BitVec {
+    pub(crate) fn subgraph<E, V, H>(&self, graph: &HedgeGraph<E, V, H>) -> BitVec {
         let mut result: BitVec = graph.empty_subgraph();
         for hedge in self
             .get_nodes()
@@ -198,7 +198,7 @@ impl VertexSet {
         result
     }
 
-    pub fn dummy() -> Self {
+    pub(crate) fn dummy() -> Self {
         VertexSet { vertex_set: 0 }
     }
 }
@@ -276,7 +276,7 @@ impl CFFGenerationGraph {
 
     // helper function for tests
     #[cfg(test)]
-    pub fn from_vec(
+    pub(crate) fn from_vec(
         edges: Vec<(usize, usize)>,
         incoming_vertices: Vec<(usize, CFFEdgeType)>,
         orientation: Option<EdgeVec<Orientation>>,
@@ -385,7 +385,7 @@ impl CFFGenerationGraph {
         }
     }
 
-    pub fn remove_self_edges(&mut self) {
+    pub(crate) fn remove_self_edges(&mut self) {
         let self_edges = self.get_self_edges();
 
         for self_edge in self_edges.iter() {
@@ -393,7 +393,7 @@ impl CFFGenerationGraph {
         }
     }
 
-    pub fn get_self_edges(&self) -> Vec<EdgeIndex> {
+    pub(crate) fn get_self_edges(&self) -> Vec<EdgeIndex> {
         let mut self_edges = vec![];
 
         for vertex in self.vertices.iter() {
@@ -438,7 +438,7 @@ impl CFFGenerationGraph {
         self.depth_first_search(seed_vertex, &mut visited, &mut stack)
     }
 
-    pub fn has_directed_cycle_initial(&self) -> bool {
+    pub(crate) fn has_directed_cycle_initial(&self) -> bool {
         self.vertices
             .iter()
             .any(|vertex| self.has_directed_cycle(&vertex.vertex_set))
@@ -533,7 +533,7 @@ impl CFFGenerationGraph {
         self.contract_vertices_impl(vertex_1, vertex_2, None)
     }
 
-    pub fn contract_edge(&self, edge_id: EdgeIndex) -> Self {
+    pub(crate) fn contract_edge(&self, edge_id: EdgeIndex) -> Self {
         let (source, sink) = self.get_source_sink_of_edge(edge_id);
         let vertex_1 = &source.vertex_set;
         let vertex_2 = &sink.vertex_set;
@@ -661,7 +661,7 @@ impl CFFGenerationGraph {
         (source, sink)
     }
 
-    pub fn generate_children(&self) -> (Option<Vec<Self>>, HybridSurface) {
+    pub(crate) fn generate_children(&self) -> (Option<Vec<Self>>, HybridSurface) {
         if self.vertices.len() < 2 {
             return (None, HybridSurface::Unit(UnitSurface {}));
         }
@@ -807,7 +807,7 @@ impl CFFGenerationGraph {
     }
 
     /// for now only non-cut graphs are supported
-    pub fn new<E, V, H>(
+    pub(crate) fn new<E, V, H>(
         graph: &HedgeGraph<E, V, H>,
         global_orientation: EdgeVec<Orientation>,
         dummy_edges: &[EdgeIndex],
@@ -863,7 +863,7 @@ impl CFFGenerationGraph {
         }
     }
 
-    pub fn new_from_subgraph<E, V, H, S: SubGraph>(
+    pub(crate) fn new_from_subgraph<E, V, H, S: SubGraph>(
         graph: &HedgeGraph<E, V, H>,
         global_orientation: EdgeVec<Orientation>,
         subgraph: &S,
@@ -1001,7 +1001,7 @@ impl CFFGenerationGraph {
         Ok(res)
     }
 
-    pub fn generate_cut(&self, circled_vertices: VertexSet) -> (Self, Self) {
+    pub(crate) fn generate_cut(&self, circled_vertices: VertexSet) -> (Self, Self) {
         let vertices_in_cut = circled_vertices.contains_vertices();
         let mut vertices = self.vertices.clone();
 

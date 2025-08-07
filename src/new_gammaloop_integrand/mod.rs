@@ -38,7 +38,7 @@ use crate::{
     IntegratorSettings, Polarizations, Precision, SamplingSettings, Settings,
     StabilityLevelSetting, StabilitySettings,
 };
-use eyre::Result;
+use color_eyre::Result;
 
 const HARD_CODED_M_UV: F<f64> = F(1000.0);
 const HARD_CODED_M_R_SQ: F<f64> = F(1000.0);
@@ -51,7 +51,7 @@ pub enum NewIntegrand {
 }
 
 impl NewIntegrand {
-    pub fn get_settings(&self) -> &Settings {
+    pub(crate) fn get_settings(&self) -> &Settings {
         match self {
             NewIntegrand::Amplitude(integrand) => &integrand.settings,
             NewIntegrand::CrossSection(integrand) => &integrand.settings,
@@ -59,13 +59,13 @@ impl NewIntegrand {
     }
 
     /// Used to create the use_data_generator closure for havana_integrate
-    pub fn user_data_generator(&self, num_cores: usize, _settings: &Settings) -> UserData {
+    pub(crate) fn user_data_generator(&self, num_cores: usize, _settings: &Settings) -> UserData {
         UserData {
             integrand: vec![Integrand::NewIntegrand(self.clone()); num_cores],
         }
     }
 
-    pub fn get_mut_settings(&mut self) -> &mut Settings {
+    pub(crate) fn get_mut_settings(&mut self) -> &mut Settings {
         match self {
             NewIntegrand::Amplitude(integrand) => &mut integrand.settings,
             NewIntegrand::CrossSection(integrand) => &mut integrand.settings,
@@ -192,7 +192,7 @@ pub struct GenericEvaluator {
 }
 
 impl GenericEvaluator {
-    pub fn new(
+    pub(crate) fn new(
         atom: &Atom,
         fn_map: &FunctionMap,
         params: &[Atom],
@@ -318,7 +318,7 @@ impl LmbMultiChannelingSetup {
         }
     }
 
-    pub fn reinterpret_loop_momenta_and_compute_prefactor_all_channels<T: FloatLike>(
+    pub(crate) fn reinterpret_loop_momenta_and_compute_prefactor_all_channels<T: FloatLike>(
         &self,
         momentum_sample: &MomentumSample<T>,
         graph: &Graph,
@@ -342,7 +342,7 @@ impl LmbMultiChannelingSetup {
     /// This function is used to do do LMB multi-channeling without fully switching to a different lmb
     /// for each channel. The momenta provided are reinterpreted as loop momenta of the lmb corresponding to the channel_index.
     /// Then we transform these loop momenta to the fixed lmb of the graph. The prefactor is immediately computed for the requested channel
-    pub fn reinterpret_loop_momenta_and_compute_prefactor<T: FloatLike>(
+    pub(crate) fn reinterpret_loop_momenta_and_compute_prefactor<T: FloatLike>(
         &self,
         channel_index: ChannelIndex,
         momentum_sample: &MomentumSample<T>,
@@ -1001,7 +1001,7 @@ impl<T: FloatLike> ParamBuilder<T> {
         .into_iter()
     }
 
-    pub fn build_params_amplitude(self) -> Result<Vec<Atom>> {
+    pub(crate) fn build_params_amplitude(self) -> Result<Vec<Atom>> {
         let mut params = Vec::with_capacity(100);
         for pair in self.into_iter_amplitude() {
             params.extend(pair.params);
@@ -1009,7 +1009,7 @@ impl<T: FloatLike> ParamBuilder<T> {
         Ok(params)
     }
 
-    pub fn build_values_amplitude(self) -> Result<Vec<Complex<F<T>>>> {
+    pub(crate) fn build_values_amplitude(self) -> Result<Vec<Complex<F<T>>>> {
         let mut values = Vec::with_capacity(100);
         for value in self.into_iter_amplitude() {
             values.extend(value.values);
@@ -1017,7 +1017,7 @@ impl<T: FloatLike> ParamBuilder<T> {
         Ok(values)
     }
 
-    pub fn build_params_threshold_ct(self) -> Result<Vec<Atom>> {
+    pub(crate) fn build_params_threshold_ct(self) -> Result<Vec<Atom>> {
         let mut params = Vec::with_capacity(100);
         for pair in self.into_iter_threshold_ct() {
             params.extend(pair.params);
@@ -1025,7 +1025,7 @@ impl<T: FloatLike> ParamBuilder<T> {
         Ok(params)
     }
 
-    pub fn build_params_cs(self) -> Result<Vec<Atom>> {
+    pub(crate) fn build_params_cs(self) -> Result<Vec<Atom>> {
         let mut params = Vec::with_capacity(100);
         for atom in self.into_iter_cs() {
             params.extend(atom.params);
@@ -1033,7 +1033,7 @@ impl<T: FloatLike> ParamBuilder<T> {
         Ok(params)
     }
 
-    pub fn build_values_cs(self) -> Result<Vec<Complex<F<T>>>> {
+    pub(crate) fn build_values_cs(self) -> Result<Vec<Complex<F<T>>>> {
         let mut values = Vec::with_capacity(100);
         for value in self.into_iter_cs() {
             values.extend(value.values);
@@ -1041,7 +1041,7 @@ impl<T: FloatLike> ParamBuilder<T> {
         Ok(values)
     }
 
-    pub fn build_values_threshold_ct(self) -> Result<Vec<Complex<F<T>>>> {
+    pub(crate) fn build_values_threshold_ct(self) -> Result<Vec<Complex<F<T>>>> {
         let mut values = Vec::with_capacity(100);
         for value in self.into_iter_threshold_ct() {
             values.extend(value.values);
@@ -1049,7 +1049,7 @@ impl<T: FloatLike> ParamBuilder<T> {
         Ok(values)
     }
 
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             m_uv: ParamValuePairs::default(),
             mu_r_sq: ParamValuePairs::default(),
@@ -1067,39 +1067,39 @@ impl<T: FloatLike> ParamBuilder<T> {
         }
     }
 
-    pub fn m_uv_atom(&mut self, m_uv: Atom) {
+    pub(crate) fn m_uv_atom(&mut self, m_uv: Atom) {
         self.m_uv.params = vec![m_uv];
     }
 
-    pub fn m_uv_value(&mut self, m_uv: Complex<F<T>>) {
+    pub(crate) fn m_uv_value(&mut self, m_uv: Complex<F<T>>) {
         self.m_uv.values = vec![m_uv];
     }
 
-    pub fn mu_r_sq_atom(&mut self, mu_r_sq: Atom) {
+    pub(crate) fn mu_r_sq_atom(&mut self, mu_r_sq: Atom) {
         self.mu_r_sq.params = vec![mu_r_sq];
     }
 
-    pub fn mu_r_sq_value(&mut self, mu_r_sq: Complex<F<T>>) {
+    pub(crate) fn mu_r_sq_value(&mut self, mu_r_sq: Complex<F<T>>) {
         self.mu_r_sq.values = vec![mu_r_sq];
     }
 
-    pub fn model_parameters_atom(&mut self, model: &Model) {
+    pub(crate) fn model_parameters_atom(&mut self, model: &Model) {
         self.model_parameters.params = model.generate_params();
     }
 
-    pub fn model_parameters_value(&mut self, model: &Model) {
+    pub(crate) fn model_parameters_value(&mut self, model: &Model) {
         self.model_parameters.values = model.generate_values();
     }
 
-    pub fn external_energies_atom(&mut self, graph: &Graph) {
+    pub(crate) fn external_energies_atom(&mut self, graph: &Graph) {
         self.external_energies.params = graph.get_external_energy_atoms();
     }
 
-    pub fn polarizations(&mut self, graph: &Graph) {
+    pub(crate) fn polarizations(&mut self, graph: &Graph) {
         self.polarizations.params = graph.polarization_params();
     }
 
-    pub fn external_energies_value(&mut self, momentum_sample: &MomentumSample<T>) {
+    pub(crate) fn external_energies_value(&mut self, momentum_sample: &MomentumSample<T>) {
         self.external_energies.values = momentum_sample
             .external_moms()
             .iter()
@@ -1107,7 +1107,7 @@ impl<T: FloatLike> ParamBuilder<T> {
             .collect_vec();
     }
 
-    pub fn external_spatial_atom(&mut self, graph: &Graph) {
+    pub(crate) fn external_spatial_atom(&mut self, graph: &Graph) {
         self.external_spatial.params = graph
             .iter_edges()
             .flat_map(|(pair, edge_id, _)| {
@@ -1124,7 +1124,7 @@ impl<T: FloatLike> ParamBuilder<T> {
             .collect();
     }
 
-    pub fn external_spatial_value(&mut self, momentum_sample: &MomentumSample<T>) {
+    pub(crate) fn external_spatial_value(&mut self, momentum_sample: &MomentumSample<T>) {
         self.external_spatial.values = momentum_sample
             .external_moms()
             .iter()
@@ -1132,7 +1132,7 @@ impl<T: FloatLike> ParamBuilder<T> {
             .collect_vec();
     }
 
-    pub fn emr_spatial_atom(&mut self, graph: &Graph) {
+    pub(crate) fn emr_spatial_atom(&mut self, graph: &Graph) {
         self.emr_spatial.params = graph
             .iter_edges()
             .flat_map(|(pair, edge_id, _)| {
@@ -1149,48 +1149,48 @@ impl<T: FloatLike> ParamBuilder<T> {
             .collect();
     }
 
-    pub fn emr_spatial_value(&mut self, emr_spatial: Vec<Complex<F<T>>>) {
+    pub(crate) fn emr_spatial_value(&mut self, emr_spatial: Vec<Complex<F<T>>>) {
         self.emr_spatial.values = emr_spatial;
     }
 
-    pub fn tstar_atom(&mut self, tstar: Atom) {
+    pub(crate) fn tstar_atom(&mut self, tstar: Atom) {
         self.tstar.params = vec![tstar];
     }
 
-    pub fn tstar_value(&mut self, tstar: Complex<F<T>>) {
+    pub(crate) fn tstar_value(&mut self, tstar: Complex<F<T>>) {
         self.tstar.values = vec![tstar];
     }
-    pub fn h_function_atom(&mut self, h_function: Atom) {
+    pub(crate) fn h_function_atom(&mut self, h_function: Atom) {
         self.h_function.params = vec![h_function];
     }
-    pub fn h_function_value(&mut self, h_function: Complex<F<T>>) {
+    pub(crate) fn h_function_value(&mut self, h_function: Complex<F<T>>) {
         self.h_function.values = vec![h_function];
     }
-    pub fn derivative_at_tstar_atom(&mut self, derivative_at_tstar: Atom) {
+    pub(crate) fn derivative_at_tstar_atom(&mut self, derivative_at_tstar: Atom) {
         self.derivative_at_tstar.params = vec![derivative_at_tstar];
     }
-    pub fn derivative_at_tstar_value(&mut self, derivative_at_tstar: Complex<F<T>>) {
+    pub(crate) fn derivative_at_tstar_value(&mut self, derivative_at_tstar: Complex<F<T>>) {
         self.derivative_at_tstar.values = vec![derivative_at_tstar];
     }
 
-    pub fn uv_damp_atom(&mut self, uv_damp: Atom) {
+    pub(crate) fn uv_damp_atom(&mut self, uv_damp: Atom) {
         self.uv_damp.params = vec![uv_damp];
     }
-    pub fn uv_damp_value(&mut self, uv_damp: Complex<F<T>>) {
+    pub(crate) fn uv_damp_value(&mut self, uv_damp: Complex<F<T>>) {
         self.uv_damp.values = vec![uv_damp];
     }
 
-    pub fn radius_atom(&mut self, radius: Atom) {
+    pub(crate) fn radius_atom(&mut self, radius: Atom) {
         self.radius.params = vec![radius];
     }
-    pub fn radius_value(&mut self, radius: Complex<F<T>>) {
+    pub(crate) fn radius_value(&mut self, radius: Complex<F<T>>) {
         self.radius.values = vec![radius];
     }
 
-    pub fn radius_star_atom(&mut self, radius_star: Atom) {
+    pub(crate) fn radius_star_atom(&mut self, radius_star: Atom) {
         self.radius_star.params = vec![radius_star];
     }
-    pub fn radius_star_value(&mut self, radius_star: Complex<F<T>>) {
+    pub(crate) fn radius_star_value(&mut self, radius_star: Complex<F<T>>) {
         self.radius_star.values = vec![radius_star];
     }
 }

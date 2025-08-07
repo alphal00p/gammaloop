@@ -173,7 +173,7 @@ fn get_orientations<E, V, H>(
         .collect_vec()
 }
 
-pub fn get_orientations_from_subgraph<E, V, H, S: SubGraph>(
+pub(crate) fn get_orientations_from_subgraph<E, V, H, S: SubGraph>(
     graph: &HedgeGraph<E, V, H>,
     subgraph: &S,
     reversed_dangling: &[EdgeIndex],
@@ -328,7 +328,7 @@ fn get_possible_orientations_for_cut_list<E, V, H>(
     orientations
 }
 
-pub fn generate_cff_expression<E, V, H>(
+pub(crate) fn generate_cff_expression<E, V, H>(
     graph: &HedgeGraph<E, V, H>,
     canonize_esurface: &Option<ShiftRewrite>,
     dummy_edges: &[EdgeIndex],
@@ -345,7 +345,7 @@ pub fn generate_cff_expression<E, V, H>(
     Ok(graph_cff)
 }
 
-pub fn generate_cff_expression_from_subgraph<E, V, H, S: SubGraph>(
+pub(crate) fn generate_cff_expression_from_subgraph<E, V, H, S: SubGraph>(
     graph: &HedgeGraph<E, V, H>,
     subgraph: &S,
     canonize_esurface: &Option<ShiftRewrite>,
@@ -357,7 +357,7 @@ pub fn generate_cff_expression_from_subgraph<E, V, H, S: SubGraph>(
     Ok(cff)
 }
 
-pub fn generate_uv_cff<E, V, H, S: SubGraph>(
+pub(crate) fn generate_uv_cff<E, V, H, S: SubGraph>(
     graph: &HedgeGraph<E, V, H>,
     subgraph: &S,
     canonize_esurface: &Option<ShiftRewrite>,
@@ -439,7 +439,7 @@ fn generate_cff_for_orientation<E, V, H>(
         .collect()
 }
 
-pub fn generate_cff_with_cuts<E, V, H>(
+pub(crate) fn generate_cff_with_cuts<E, V, H>(
     graph: &HedgeGraph<E, V, H>,
     canonize_esurface: &Option<ShiftRewrite>,
     cuts: &TiVec<CutId, CrossSectionCut>,
@@ -585,12 +585,12 @@ pub struct SurfaceCache {
 }
 
 impl SurfaceCache {
-    pub fn substitute_energies(&self, atom: &Atom, cut_edges: &[EdgeIndex]) -> Atom {
+    pub(crate) fn substitute_energies(&self, atom: &Atom, cut_edges: &[EdgeIndex]) -> Atom {
         let replacement_rules = self.get_all_replacements(cut_edges);
         atom.replace_multiple(&replacement_rules)
     }
 
-    pub fn iter_all_surfaces(
+    pub(crate) fn iter_all_surfaces(
         &self,
     ) -> impl Iterator<Item = (HybridSurfaceID, HybridSurfaceRef)> + '_ {
         let esurface_id_iter = self.esurface_cache.iter_enumerated().map(|(id, esurface)| {
@@ -610,7 +610,7 @@ impl SurfaceCache {
         esurface_id_iter.chain(hsurface_id_iter)
     }
 
-    pub fn get_all_replacements(&self, cut_edges: &[EdgeIndex]) -> Vec<Replacement> {
+    pub(crate) fn get_all_replacements(&self, cut_edges: &[EdgeIndex]) -> Vec<Replacement> {
         self.iter_all_surfaces()
             .map(|(id, surface)| {
                 let id_atom = Pattern::from(Atom::from(id));
@@ -620,7 +620,7 @@ impl SurfaceCache {
             .collect()
     }
 
-    pub fn get_surface(&self, surface_id: HybridSurfaceID) -> HybridSurfaceRef {
+    pub(crate) fn get_surface(&self, surface_id: HybridSurfaceID) -> HybridSurfaceRef {
         match surface_id {
             HybridSurfaceID::Esurface(id) => HybridSurfaceRef::Esurface(&self.esurface_cache[id]),
             HybridSurfaceID::Hsurface(id) => HybridSurfaceRef::Hsurface(&self.hsurface_cache[id]),
@@ -628,7 +628,7 @@ impl SurfaceCache {
         }
     }
 
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             esurface_cache: EsurfaceCollection::from_iter(std::iter::empty()),
             hsurface_cache: HsurfaceCollection::from_iter(std::iter::empty()),

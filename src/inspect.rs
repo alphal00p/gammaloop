@@ -15,7 +15,7 @@ use crate::Integrand;
 use crate::SamplingSettings;
 use crate::Settings;
 
-pub fn inspect(
+pub(crate) fn inspect(
     settings: &Settings,
     integrand: &mut Integrand,
     mut pt: Vec<F<f64>>,

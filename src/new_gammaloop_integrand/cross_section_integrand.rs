@@ -1,7 +1,7 @@
 use bincode::Encode;
 use bincode_trait_derive::Decode;
+use color_eyre::Result;
 use colored::Colorize;
-use eyre::Result;
 use itertools::Itertools;
 use serde::Serialize;
 use spenso::algebra::complex::Complex;

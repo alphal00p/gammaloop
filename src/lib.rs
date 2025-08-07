@@ -95,7 +95,7 @@ pub static INTERRUPTED: AtomicBool = AtomicBool::new(false);
 pub const GAMMALOOP_NAMESPACE: &str = "GL";
 pub const MAX_CORES: usize = 1000;
 
-pub fn initialize_reps() {
+pub(crate) fn initialize_reps() {
     initialize();
 }
 
@@ -149,7 +149,7 @@ pub enum HFunction {
     ExponentialCT,
 }
 
-pub fn set_interrupt_handler() {
+pub(crate) fn set_interrupt_handler() {
     INTERRUPTED.store(false, std::sync::atomic::Ordering::Relaxed);
     let _ = ctrlc::set_handler(|| {
         INTERRUPTED.store(true, std::sync::atomic::Ordering::Relaxed);
@@ -157,12 +157,12 @@ pub fn set_interrupt_handler() {
 }
 
 #[inline]
-pub fn is_interrupted() -> bool {
+pub(crate) fn is_interrupted() -> bool {
     INTERRUPTED.load(std::sync::atomic::Ordering::Relaxed)
 }
 
 #[inline]
-pub fn set_interrupted(flag: bool) {
+pub(crate) fn set_interrupted(flag: bool) {
     INTERRUPTED.store(flag, std::sync::atomic::Ordering::Relaxed);
 }
 
@@ -278,7 +278,7 @@ pub struct KinematicsSettings {
 }
 
 impl KinematicsSettings {
-    pub fn random(graph: &Graph, seed: u64) -> Self {
+    pub(crate) fn random(graph: &Graph, seed: u64) -> Self {
         Self {
             e_cm: F(64.),
             externals: graph.random_externals(seed),
@@ -380,7 +380,7 @@ pub struct Settings {
 }
 
 impl Settings {
-    pub fn sync_with_amplitude(&mut self, amplitude: &Amplitude) -> Result<()> {
+    pub(crate) fn sync_with_amplitude(&mut self, amplitude: &Amplitude) -> Result<()> {
         let external_signature = amplitude.external_signature();
         let external_particle_spin = amplitude.external_particle_spin_and_masslessness();
 
@@ -395,7 +395,7 @@ impl Settings {
         Ok(())
     }
 
-    pub fn from_file(filename: impl AsRef<Path>) -> Result<Settings, Report> {
+    pub(crate) fn from_file(filename: impl AsRef<Path>) -> Result<Settings, Report> {
         let filename = filename.as_ref();
         let f = File::open(filename)
             .wrap_err_with(|| format!("Could not open settings file {}", filename.display()))
@@ -480,7 +480,7 @@ pub enum RotationSetting {
 }
 
 impl RotationSetting {
-    pub fn rotation_method(&self) -> RotationMethod {
+    pub(crate) fn rotation_method(&self) -> RotationMethod {
         match self {
             Self::Pi2X => RotationMethod::Pi2X,
             Self::Pi2Y => RotationMethod::Pi2Y,
@@ -493,7 +493,7 @@ impl RotationSetting {
     }
 
     #[allow(clippy::type_complexity)]
-    pub fn rotation_function<'a, T: FloatLike + 'a>(
+    pub(crate) fn rotation_function<'a, T: FloatLike + 'a>(
         &'a self,
     ) -> Box<dyn Fn(&'a ThreeMomentum<F<T>>) -> ThreeMomentum<F<T>> + 'a> {
         match self {
@@ -620,7 +620,7 @@ pub enum ExternalsValidationError {
 }
 
 impl Externals {
-    pub fn validate_helicities(
+    pub(crate) fn validate_helicities(
         &self,
         spins: &[(isize, bool)],
     ) -> Result<(), ExternalsValidationError> {
@@ -662,7 +662,7 @@ impl Externals {
         }
     }
 
-    pub fn generate_polarizations(
+    pub(crate) fn generate_polarizations(
         &self,
         external_particles: &[ArcParticle],
         dependent_momenta_constructor: DependentMomentaConstructor,
@@ -714,7 +714,7 @@ impl Externals {
         Polarizations::Constant { polarizations }
     }
 
-    pub fn set_dependent_at_end(
+    pub(crate) fn set_dependent_at_end(
         &mut self,
         signature: &ExternalSignature,
     ) -> Result<(), ExternalsValidationError> {
@@ -759,7 +759,7 @@ impl Externals {
         }
     }
 
-    pub fn get_dependent_externals<T: FloatLike>(
+    pub(crate) fn get_dependent_externals<T: FloatLike>(
         &self,
         dependent_momenta_constructor: DependentMomentaConstructor,
     ) -> ExternalFourMomenta<F<T>>
@@ -840,7 +840,7 @@ impl Externals {
 
     #[allow(unused_variables)]
     #[inline]
-    pub fn get_indep_externals(&self) -> Vec<FourMomentum<F<f64>>> {
+    pub(crate) fn get_indep_externals(&self) -> Vec<FourMomentum<F<f64>>> {
         match self {
             Externals::Constant {
                 momenta,
@@ -855,13 +855,13 @@ impl Externals {
         }
     }
 
-    pub fn get_helicities(&self) -> &[Helicity] {
+    pub(crate) fn get_helicities(&self) -> &[Helicity] {
         match self {
             Externals::Constant { helicities, .. } => helicities,
         }
     }
 
-    pub fn pdf(&self, _x_space_point: &[F<f64>]) -> F<f64> {
+    pub(crate) fn pdf(&self, _x_space_point: &[F<f64>]) -> F<f64> {
         match self {
             Externals::Constant { .. } => F(1.0),
         }
@@ -1052,7 +1052,7 @@ impl Default for GammaloopTropicalSamplingSettings {
 }
 
 impl GammaloopTropicalSamplingSettings {
-    pub fn into_tropical_sampling_settings(
+    pub(crate) fn into_tropical_sampling_settings(
         &self,
         debug: usize,
     ) -> momtrop::TropicalSamplingSettings {
@@ -1220,7 +1220,7 @@ impl Default for GammaloopCompileOptions {
 }
 
 impl GammaloopCompileOptions {
-    pub fn inline_asm(&self) -> InlineASM {
+    pub(crate) fn inline_asm(&self) -> InlineASM {
         if self.inline_asm {
             InlineASM::default()
         } else {
@@ -1229,7 +1229,7 @@ impl GammaloopCompileOptions {
     }
 
     #[allow(clippy::needless_update)]
-    pub fn to_symbolica_compile_options(&self) -> CompileOptions {
+    pub(crate) fn to_symbolica_compile_options(&self) -> CompileOptions {
         CompileOptions {
             optimization_level: self.optimization_level,
             fast_math: self.fast_math,

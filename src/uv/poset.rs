@@ -59,11 +59,11 @@ impl<T: PartialEq + Eq, R: Key> Ord for SlotNode<T, R> {
 }
 
 impl<T, R: Key> SlotNode<T, R> {
-    pub fn dot_id(&self, shift: u64) -> String {
+    pub(crate) fn dot_id(&self, shift: u64) -> String {
         base62::encode(self.id() - shift)
     }
 
-    pub fn to_topo_ordered(&self) -> Result<TopoOrdered<T>>
+    pub(crate) fn to_topo_ordered(&self) -> Result<TopoOrdered<T>>
     where
         T: Clone,
     {
@@ -74,39 +74,39 @@ impl<T, R: Key> SlotNode<T, R> {
         ))
     }
 
-    pub fn in_degree(&self) -> usize {
+    pub(crate) fn in_degree(&self) -> usize {
         self.parents.len()
     }
 
-    pub fn out_degree(&self) -> usize {
+    pub(crate) fn out_degree(&self) -> usize {
         self.children.len()
     }
 
-    pub fn id(&self) -> u64 {
+    pub(crate) fn id(&self) -> u64 {
         self.id.data().as_ffi()
     }
 
-    pub fn add_parent(&mut self, parent: R) {
+    pub(crate) fn add_parent(&mut self, parent: R) {
         self.parents.push(parent);
     }
 
-    pub fn add_child(&mut self, child: R) {
+    pub(crate) fn add_child(&mut self, child: R) {
         self.children.push(child);
     }
 
-    pub fn remove_child(&mut self, child: R) {
+    pub(crate) fn remove_child(&mut self, child: R) {
         self.children.retain(|&c| c != child);
     }
 
-    pub fn remove_parent(&mut self, parent: R) {
+    pub(crate) fn remove_parent(&mut self, parent: R) {
         self.parents.retain(|&c| c != parent);
     }
 
-    pub fn is_parent_of(&self, child: R) -> bool {
+    pub(crate) fn is_parent_of(&self, child: R) -> bool {
         self.children.contains(&child)
     }
 
-    pub fn new(data: T, id: R) -> Self {
+    pub(crate) fn new(data: T, id: R) -> Self {
         SlotNode {
             data,
             id,
@@ -116,7 +116,7 @@ impl<T, R: Key> SlotNode<T, R> {
         }
     }
 
-    pub fn compare_data(&self, other: &Self) -> Option<std::cmp::Ordering>
+    pub(crate) fn compare_data(&self, other: &Self) -> Option<std::cmp::Ordering>
     where
         T: PartialOrd,
     {
@@ -131,7 +131,7 @@ pub struct DAG<T, R: Key, D = ()> {
 }
 
 impl<T, R: Key, D> DAG<T, R, D> {
-    pub fn n_nodes(&self) -> usize {
+    pub(crate) fn n_nodes(&self) -> usize {
         self.nodes.len()
     }
 }
@@ -146,7 +146,7 @@ pub struct TopoOrdered<T> {
 }
 
 impl<T> TopoOrdered<T> {
-    pub fn new(data: T, order: u64) -> Self {
+    pub(crate) fn new(data: T, order: u64) -> Self {
         TopoOrdered { data, order }
     }
 }
@@ -173,72 +173,72 @@ impl<T> Ord for TopoOrdered<T> {
 }
 
 impl<T, R: Key, D> DAG<T, R, D> {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         DAG {
             nodes: SlotMap::with_key(),
             associated_data: SecondaryMap::new(),
         }
     }
 
-    pub fn children(&self, key: R) -> impl Iterator<Item = R> + '_ {
+    pub(crate) fn children(&self, key: R) -> impl Iterator<Item = R> + '_ {
         self.nodes.get(key).unwrap().children.iter().copied()
     }
 
-    pub fn dot_id(&self, key: R) -> String {
+    pub(crate) fn dot_id(&self, key: R) -> String {
         self.nodes.get(key).unwrap().dot_id(self.shift())
     }
 
-    pub fn node_values(&self) -> impl Iterator<Item = &T> {
+    pub(crate) fn node_values(&self) -> impl Iterator<Item = &T> {
         self.nodes.values().map(|node| &node.data)
     }
 
-    pub fn add_edge(&mut self, from: R, to: R) {
+    pub(crate) fn add_edge(&mut self, from: R, to: R) {
         let from_node = self.nodes.get_mut(from).unwrap();
         from_node.add_child(to);
         let to_node = self.nodes.get_mut(to).unwrap();
         to_node.add_parent(from);
     }
 
-    pub fn add_edge_if_new(&mut self, from: R, to: R) {
+    pub(crate) fn add_edge_if_new(&mut self, from: R, to: R) {
         if !self.nodes.get(from).unwrap().is_parent_of(to) {
             self.add_edge(from, to);
         }
     }
 
-    pub fn remove_edge(&mut self, from: R, to: R) {
+    pub(crate) fn remove_edge(&mut self, from: R, to: R) {
         let from_node = self.nodes.get_mut(from).unwrap();
         from_node.remove_child(to);
         let to_node = self.nodes.get_mut(to).unwrap();
         to_node.remove_parent(from);
     }
 
-    pub fn bfs_reach<'a>(
+    pub(crate) fn bfs_reach<'a>(
         &'a self,
         start: &'a R,
     ) -> BfsReachable<&'a R, impl FnMut(&'a &'a R) -> &'a [R]> {
         pathfinding::directed::bfs::bfs_reach(start, |&s| self.succesors(*s))
     }
 
-    pub fn maximum(&self) -> Option<R>
+    pub(crate) fn maximum(&self) -> Option<R>
     where
         T: Eq,
     {
         Some(self.nodes.values().max()?.id)
     }
 
-    pub fn minimum(&self) -> Option<R>
+    pub(crate) fn minimum(&self) -> Option<R>
     where
         T: Eq,
     {
         Some(self.nodes.values().min()?.id)
     }
 
-    pub fn succesors(&self, node_key: R) -> &[R] {
+    pub(crate) fn succesors(&self, node_key: R) -> &[R] {
         &self.nodes.get(node_key).unwrap().children
     }
 
     /// Returns an iterator over all paths starting from the root node, traversed in BFS order.
-    pub fn bfs_paths(&self) -> BfsPaths<T, R>
+    pub(crate) fn bfs_paths(&self) -> BfsPaths<T, R>
     where
         T: Eq,
     {
@@ -251,13 +251,13 @@ impl<T, R: Key, D> DAG<T, R, D> {
         }
     }
 
-    pub fn invert(&mut self) {
+    pub(crate) fn invert(&mut self) {
         self.nodes.iter_mut().for_each(|(_, node)| {
             std::mem::swap(&mut node.children, &mut node.parents);
         });
     }
 
-    pub fn bfs_paths_inv(&self) -> BfsPaths<T, R> {
+    pub(crate) fn bfs_paths_inv(&self) -> BfsPaths<T, R> {
         let mut queue = VecDeque::new();
         let mut maximal_elements = Vec::new();
         let mut has_incoming = HashSet::new();
@@ -285,15 +285,15 @@ impl<T, R: Key, D> DAG<T, R, D> {
         }
     }
 
-    pub fn data(&self, key: R) -> &T {
+    pub(crate) fn data(&self, key: R) -> &T {
         &self.nodes.get(key).unwrap().data
     }
 
-    pub fn shift(&self) -> u64 {
+    pub(crate) fn shift(&self) -> u64 {
         self.nodes.iter().next().unwrap().1.id()
     }
 
-    pub fn to_dot(&self, label: &impl Fn(&T) -> String) -> String {
+    pub(crate) fn to_dot(&self, label: &impl Fn(&T) -> String) -> String {
         self.to_dot_impl(&|node| label(&node.data))
     }
 
@@ -320,12 +320,12 @@ impl<T, R: Key, D> DAG<T, R, D> {
         dot
     }
 
-    pub fn dot_structure(&self) -> String {
+    pub(crate) fn dot_structure(&self) -> String {
         let shift = self.shift();
         self.to_dot_impl(&|n| format!("label={}", n.dot_id(shift)))
     }
 
-    pub fn add_node(&mut self, data: T) -> R {
+    pub(crate) fn add_node(&mut self, data: T) -> R {
         self.nodes.insert_with_key(|key| SlotNode::new(data, key))
     }
 
@@ -359,7 +359,7 @@ impl<T, R: Key, D> DAG<T, R, D> {
         ancestors
     }
 
-    pub fn transitive_edges(&self, a: R) -> Vec<(R, R)> {
+    pub(crate) fn transitive_edges(&self, a: R) -> Vec<(R, R)> {
         let mut edges = Vec::new();
 
         let children: AHashSet<_> = self
@@ -381,11 +381,11 @@ impl<T, R: Key, D> DAG<T, R, D> {
         edges
     }
 
-    pub fn in_degree(&self, key: R) -> usize {
+    pub(crate) fn in_degree(&self, key: R) -> usize {
         self.nodes.get(key).unwrap().in_degree()
     }
 
-    pub fn compute_topological_order(&mut self) -> Vec<R> {
+    pub(crate) fn compute_topological_order(&mut self) -> Vec<R> {
         // Initialize queue with nodes having in-degree zero
         let mut queue = VecDeque::new(); //S in the wikipedia article
 
@@ -430,7 +430,7 @@ impl<T, R: Key, D> Default for DAG<T, R, D> {
 }
 
 impl<T, D> Poset<T, D> {
-    pub fn poset_family(&self, data: &T) -> [Vec<PosetNode>; 2]
+    pub(crate) fn poset_family(&self, data: &T) -> [Vec<PosetNode>; 2]
     where
         T: PartialOrd,
     {
@@ -449,7 +449,7 @@ impl<T, D> Poset<T, D> {
         }
         [parents, children]
     }
-    pub fn poset_push(&mut self, data: T, associated_data: D, flip: bool) -> PosetNode
+    pub(crate) fn poset_push(&mut self, data: T, associated_data: D, flip: bool) -> PosetNode
     where
         T: PartialOrd,
     {
@@ -492,7 +492,7 @@ impl<T, D> Poset<T, D> {
         }
     }
 
-    pub fn remove_transitive_edges(mut self) -> HasseDiagram<T, D> {
+    pub(crate) fn remove_transitive_edges(mut self) -> HasseDiagram<T, D> {
         let edges_to_remove: Vec<_> = self
             .nodes
             .keys()

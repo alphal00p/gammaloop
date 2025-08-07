@@ -46,7 +46,7 @@ pub struct SerializableSuperGraphCut {
 }
 
 impl SerializableSuperGraphCut {
-    pub fn from_supergraph_cut(
+    pub(crate) fn from_supergraph_cut(
         graph: &BareGraph,
         supergraph_cut: &SuperGraphCut,
     ) -> SerializableSuperGraphCut {
@@ -71,7 +71,7 @@ pub struct SuperGraphCut {
 }
 
 impl SuperGraphCut {
-    pub fn from_serializable_supergraph_cut(
+    pub(crate) fn from_serializable_supergraph_cut(
         model: &Model,
         graph: &BareGraph,
         serializable_supergraph_cut: &SerializableSuperGraphCut,
@@ -106,7 +106,7 @@ pub struct SerializableSuperGraph {
 }
 
 impl SerializableSuperGraph {
-    pub fn from_supergraph(supergraph: &SuperGraph) -> SerializableSuperGraph {
+    pub(crate) fn from_supergraph(supergraph: &SuperGraph) -> SerializableSuperGraph {
         SerializableSuperGraph {
             sg_id: supergraph.sg_id,
             graph: SerializableGraph::from_graph(&supergraph.graph.bare_graph),
@@ -137,7 +137,7 @@ pub struct SuperGraph {
 }
 
 impl SuperGraph {
-    pub fn from_serializable_supergraph(
+    pub(crate) fn from_serializable_supergraph(
         model: &Model,
         serializable_supergraph: &SerializableSuperGraph,
     ) -> SuperGraph {
@@ -165,7 +165,7 @@ pub struct SerializableForwardScatteringGraphCut {
 }
 
 impl SerializableForwardScatteringGraphCut {
-    pub fn from_forward_scattering_graph_cut(
+    pub(crate) fn from_forward_scattering_graph_cut(
         graph: &BareGraph,
         forward_scattering_graph_cut: &ForwardScatteringGraphCut,
     ) -> SerializableForwardScatteringGraphCut {
@@ -189,7 +189,7 @@ pub struct ForwardScatteringGraphCut {
 }
 
 impl ForwardScatteringGraphCut {
-    pub fn from_serializable_forward_scattering_graph_cut(
+    pub(crate) fn from_serializable_forward_scattering_graph_cut(
         model: &Model,
         graph: &BareGraph,
         serializable_forward_scattering_graph_cut: &SerializableForwardScatteringGraphCut,
@@ -228,7 +228,7 @@ pub struct SerializableForwardScatteringGraph {
 }
 
 impl SerializableForwardScatteringGraph {
-    pub fn from_forward_scattering_graph(
+    pub(crate) fn from_forward_scattering_graph(
         forward_scattering_graph: &ForwardScatteringGraph,
     ) -> SerializableForwardScatteringGraph {
         SerializableForwardScatteringGraph {
@@ -260,7 +260,7 @@ pub struct ForwardScatteringGraph {
 }
 
 impl ForwardScatteringGraph {
-    pub fn from_serializable_forward_scattering_graph(
+    pub(crate) fn from_serializable_forward_scattering_graph(
         model: &Model,
         forward_scattering_graph: &SerializableForwardScatteringGraph,
     ) -> ForwardScatteringGraph {
@@ -296,7 +296,7 @@ pub struct SerializableAmplitudeGraph {
 }
 
 impl SerializableAmplitudeGraph {
-    pub fn from_amplitude_graph<S: NumeratorState>(
+    pub(crate) fn from_amplitude_graph<S: NumeratorState>(
         amplitude_graph: &AmplitudeGraph<S>,
     ) -> SerializableAmplitudeGraph {
         SerializableAmplitudeGraph {
@@ -323,19 +323,19 @@ pub struct AmplitudeGraph<NumState: NumeratorState> {
 }
 
 impl<S: TypedNumeratorState> AmplitudeGraph<S> {
-    pub fn try_from_python(ag: AmplitudeGraph<PythonState>) -> Result<Self> {
+    pub(crate) fn try_from_python(ag: AmplitudeGraph<PythonState>) -> Result<Self> {
         ag.map_res(Graph::<S>::try_from_python)
     }
 }
 
 impl AmplitudeGraph<PythonState> {
-    pub fn sync(&mut self, _model: &Model) {
+    pub(crate) fn sync(&mut self, _model: &Model) {
         // self.graph.sync();
     }
 }
 
 impl<S: NumeratorState> AmplitudeGraph<S> {
-    pub fn load_derived_data_mut(
+    pub(crate) fn load_derived_data_mut(
         &mut self,
         model: &Model,
         path: &Path,
@@ -352,7 +352,7 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
         //  load_derived_data::<S>(path)
     }
 
-    pub fn load_derived_data<T: NumeratorState>(
+    pub(crate) fn load_derived_data<T: NumeratorState>(
         self,
         model: &Model,
         path: &Path,
@@ -375,7 +375,7 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
         //  load_derived_data::<S>(path)
     }
 
-    pub fn map<F, U: NumeratorState>(self, mut f: F) -> AmplitudeGraph<U>
+    pub(crate) fn map<F, U: NumeratorState>(self, mut f: F) -> AmplitudeGraph<U>
     where
         F: FnMut(Graph<S>) -> Graph<U>,
     {
@@ -390,14 +390,14 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
         }
     }
 
-    pub fn map_mut<F>(&mut self, mut f: F)
+    pub(crate) fn map_mut<F>(&mut self, mut f: F)
     where
         F: FnMut(&mut Graph<S>),
     {
         f(&mut self.graph);
     }
 
-    pub fn map_res<F, U: NumeratorState, E>(self, mut f: F) -> Result<AmplitudeGraph<U>, E>
+    pub(crate) fn map_res<F, U: NumeratorState, E>(self, mut f: F) -> Result<AmplitudeGraph<U>, E>
     where
         F: FnMut(Graph<S>) -> Result<Graph<U>, E>,
     {
@@ -414,7 +414,7 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
 }
 
 impl AmplitudeGraph<UnInit> {
-    pub fn from_amplitude_graph(
+    pub(crate) fn from_amplitude_graph(
         model: &Model,
         amplitude_graph: &SerializableAmplitudeGraph,
     ) -> Self {
@@ -429,7 +429,7 @@ impl AmplitudeGraph<UnInit> {
         }
     }
 
-    pub fn apply_feynman_rules(
+    pub(crate) fn apply_feynman_rules(
         self,
         export_settings: &ProcessSettings,
     ) -> AmplitudeGraph<AppliedFeynmanRule> {
@@ -453,7 +453,7 @@ pub struct SerializableCrossSection {
 }
 
 impl SerializableCrossSection {
-    pub fn from_file(file_path: String) -> Result<SerializableCrossSection, Report> {
+    pub(crate) fn from_file(file_path: String) -> Result<SerializableCrossSection, Report> {
         let f = File::open(file_path.clone())
             .wrap_err_with(|| format!("Could not open cross-section yaml file {}", file_path))
             .suggestion("Does the path exist?")?;
@@ -462,7 +462,7 @@ impl SerializableCrossSection {
             .suggestion("Is it a correct yaml file")
     }
 
-    pub fn from_cross_section(cross_section: &CrossSection) -> SerializableCrossSection {
+    pub(crate) fn from_cross_section(cross_section: &CrossSection) -> SerializableCrossSection {
         SerializableCrossSection {
             name: cross_section.name.clone(),
             supergraphs: cross_section
@@ -473,7 +473,7 @@ impl SerializableCrossSection {
         }
     }
 
-    pub fn from_yaml_str(yaml_str: String) -> Result<SerializableCrossSection, Report> {
+    pub(crate) fn from_yaml_str(yaml_str: String) -> Result<SerializableCrossSection, Report> {
         serde_yaml::from_str(yaml_str.as_str())
             .map_err(|e| eyre!(format!("Error parsing cross-section yaml: {}", e)))
             .suggestion("Is it a correct yaml file")
@@ -487,19 +487,19 @@ pub struct CrossSection {
 }
 
 impl CrossSection {
-    pub fn from_file(model: &Model, file_path: String) -> Result<CrossSection, Report> {
+    pub(crate) fn from_file(model: &Model, file_path: String) -> Result<CrossSection, Report> {
         SerializableCrossSection::from_file(file_path).map(|serializable_cross_section| {
             CrossSection::from_serializable_cross_section(model, &serializable_cross_section)
         })
     }
 
-    pub fn from_yaml_str(model: &Model, yaml_str: String) -> Result<CrossSection, Report> {
+    pub(crate) fn from_yaml_str(model: &Model, yaml_str: String) -> Result<CrossSection, Report> {
         SerializableCrossSection::from_yaml_str(yaml_str).map(|serializable_cross_section| {
             CrossSection::from_serializable_cross_section(model, &serializable_cross_section)
         })
     }
 
-    pub fn from_serializable_cross_section(
+    pub(crate) fn from_serializable_cross_section(
         model: &Model,
         serializable_cross_section: &SerializableCrossSection,
     ) -> CrossSection {
@@ -513,12 +513,12 @@ impl CrossSection {
         }
     }
 
-    pub fn to_serializable(&self) -> SerializableCrossSection {
+    pub(crate) fn to_serializable(&self) -> SerializableCrossSection {
         SerializableCrossSection::from_cross_section(self)
     }
 
     #[allow(unused)]
-    pub fn export(&self, export_root: &str, model: &Model) -> Result<(), Report> {
+    pub(crate) fn export(&self, export_root: &str, model: &Model) -> Result<(), Report> {
         // TODO process cross-section by adding lots of additional information necessary for runtime.
         // e.g. generate e-surface, cff expression, counterterms, etc.
 
@@ -547,7 +547,9 @@ pub struct SerializableAmplitude {
 }
 
 impl SerializableAmplitude {
-    pub fn from_amplitude<S: NumeratorState>(amplitude: &Amplitude<S>) -> SerializableAmplitude {
+    pub(crate) fn from_amplitude<S: NumeratorState>(
+        amplitude: &Amplitude<S>,
+    ) -> SerializableAmplitude {
         SerializableAmplitude {
             name: amplitude.name.clone(),
             amplitude_graphs: amplitude
@@ -558,7 +560,7 @@ impl SerializableAmplitude {
         }
     }
 
-    pub fn from_file(file_path: String) -> Result<SerializableAmplitude, Report> {
+    pub(crate) fn from_file(file_path: String) -> Result<SerializableAmplitude, Report> {
         let f = File::open(file_path.clone())
             .wrap_err_with(|| format!("Could not open amplitude yaml file {}", file_path))
             .suggestion("Does the path exist?")?;
@@ -567,7 +569,7 @@ impl SerializableAmplitude {
             .suggestion("Is it a correct yaml file")
     }
 
-    pub fn from_yaml_str(yaml_str: String) -> Result<SerializableAmplitude, Report> {
+    pub(crate) fn from_yaml_str(yaml_str: String) -> Result<SerializableAmplitude, Report> {
         serde_yaml::from_str(yaml_str.as_str())
             .map_err(|e| eyre!(format!("Error parsing amplitude yaml: {}", e)))
             .suggestion("Is it a correct yaml file")
@@ -587,13 +589,13 @@ pub struct Amplitude<NumState: NumeratorState = Evaluators> {
 }
 
 impl<S: TypedNumeratorState> Amplitude<S> {
-    pub fn try_from_python(amp: Amplitude<PythonState>) -> Result<Self> {
+    pub(crate) fn try_from_python(amp: Amplitude<PythonState>) -> Result<Self> {
         amp.map_res(AmplitudeGraph::<S>::try_from_python)
     }
 }
 
 impl Amplitude<PythonState> {
-    pub fn sync(&mut self, model: &Model) {
+    pub(crate) fn sync(&mut self, model: &Model) {
         self.amplitude_graphs
             .iter_mut()
             .for_each(|ag| ag.sync(model));
@@ -601,7 +603,7 @@ impl Amplitude<PythonState> {
 }
 
 impl<S: NumeratorState> Amplitude<S> {
-    pub fn external_signature(&self) -> ExternalSignature {
+    pub(crate) fn external_signature(&self) -> ExternalSignature {
         let external_signature = self
             .amplitude_graphs
             .first()
@@ -622,7 +624,7 @@ impl<S: NumeratorState> Amplitude<S> {
         external_signature
     }
 
-    pub fn external_particle_spin_and_masslessness(&self) -> Vec<(isize, bool)> {
+    pub(crate) fn external_particle_spin_and_masslessness(&self) -> Vec<(isize, bool)> {
         self.amplitude_graphs
             .first()
             .unwrap()
@@ -631,7 +633,7 @@ impl<S: NumeratorState> Amplitude<S> {
             .external_particle_spin_and_masslessness()
     }
 
-    pub fn load_derived_data_mut(
+    pub(crate) fn load_derived_data_mut(
         &mut self,
         model: &Model,
         path: &Path,
@@ -643,7 +645,7 @@ impl<S: NumeratorState> Amplitude<S> {
         Ok(())
     }
 
-    pub fn map<F, U: NumeratorState>(self, f: F) -> Amplitude<U>
+    pub(crate) fn map<F, U: NumeratorState>(self, f: F) -> Amplitude<U>
     where
         F: FnMut(AmplitudeGraph<S>) -> AmplitudeGraph<U>,
     {
@@ -655,14 +657,14 @@ impl<S: NumeratorState> Amplitude<S> {
         }
     }
 
-    pub fn map_mut<F>(&mut self, f: F)
+    pub(crate) fn map_mut<F>(&mut self, f: F)
     where
         F: FnMut(&mut AmplitudeGraph<S>),
     {
         self.amplitude_graphs.iter_mut().for_each(f);
     }
 
-    pub fn map_res<F, U: NumeratorState, E>(self, f: F) -> Result<Amplitude<U>, E>
+    pub(crate) fn map_res<F, U: NumeratorState, E>(self, f: F) -> Result<Amplitude<U>, E>
     where
         F: FnMut(AmplitudeGraph<S>) -> Result<AmplitudeGraph<U>, E>,
     {
@@ -686,19 +688,19 @@ impl<S: NumeratorState> IsPolarizable for Amplitude<S> {
 }
 
 impl Amplitude<UnInit> {
-    pub fn from_file(model: &Model, file_path: String) -> Result<Self, Report> {
+    pub(crate) fn from_file(model: &Model, file_path: String) -> Result<Self, Report> {
         SerializableAmplitude::from_file(file_path).map(|serializable_amplitude| {
             Amplitude::from_serializable_amplitude(model, &serializable_amplitude)
         })
     }
 
-    pub fn from_yaml_str(model: &Model, yaml_str: String) -> Result<Self, Report> {
+    pub(crate) fn from_yaml_str(model: &Model, yaml_str: String) -> Result<Self, Report> {
         SerializableAmplitude::from_yaml_str(yaml_str).map(|serializable_amplitude| {
             Amplitude::from_serializable_amplitude(model, &serializable_amplitude)
         })
     }
 
-    pub fn from_serializable_amplitude(
+    pub(crate) fn from_serializable_amplitude(
         model: &Model,
         serializable_amplitude: &SerializableAmplitude,
     ) -> Self {
@@ -750,7 +752,7 @@ impl Amplitude<UnInit> {
         }
     }
 
-    pub fn apply_feynman_rules(
+    pub(crate) fn apply_feynman_rules(
         self,
         export_settings: &ProcessSettings,
     ) -> Amplitude<AppliedFeynmanRule> {
@@ -768,7 +770,7 @@ impl Amplitude<UnInit> {
         }
     }
 
-    pub fn load_derived_data<S: NumeratorState>(
+    pub(crate) fn load_derived_data<S: NumeratorState>(
         self,
         model: &Model,
         path: &Path,
@@ -779,7 +781,7 @@ impl Amplitude<UnInit> {
 }
 
 impl Amplitude<PythonState> {
-    pub fn export(
+    pub(crate) fn export(
         &mut self,
         export_root: &str,
         model: &Model,
@@ -860,7 +862,7 @@ impl Amplitude<PythonState> {
     }
 }
 impl<S: GetSingleAtom + NumeratorState> Amplitude<S> {
-    pub fn export_expressions(
+    pub(crate) fn export_expressions(
         &self,
         export_root: &str,
         printer_ops: PrintOptions,
@@ -909,11 +911,11 @@ impl<S: GetSingleAtom + NumeratorState> Amplitude<S> {
     }
 }
 impl<S: NumeratorState> Amplitude<S> {
-    pub fn to_serializable(&self) -> SerializableAmplitude {
+    pub(crate) fn to_serializable(&self) -> SerializableAmplitude {
         SerializableAmplitude::from_amplitude(self)
     }
 
-    pub fn export_denominator(
+    pub(crate) fn export_denominator(
         &self,
         export_root: &str,
         printer_ops: PrintOptions,
@@ -956,7 +958,7 @@ impl<S: NumeratorState> Amplitude<S> {
     }
 }
 impl Amplitude<PythonState> {
-    pub fn generate_integrand(
+    pub(crate) fn generate_integrand(
         &self,
         path_to_settings: &Path,
     ) -> Result<GammaLoopIntegrand, Report> {
@@ -988,10 +990,10 @@ pub struct CrossSectionList {
 }
 
 impl CrossSectionList {
-    pub fn sync(&mut self, _model: &Model) {
+    pub(crate) fn sync(&mut self, _model: &Model) {
         // self.container.iter_mut().for_each(|cs| cs.sync(model));
     }
-    pub fn from_file(model: &Model, file_path: String) -> Result<CrossSectionList, Report> {
+    pub(crate) fn from_file(model: &Model, file_path: String) -> Result<CrossSectionList, Report> {
         let f = File::open(file_path.clone())
             .wrap_err_with(|| format!("Could not open cross-section yaml file {}", file_path))
             .suggestion("Does the path exist?")?;
@@ -1008,7 +1010,10 @@ impl CrossSectionList {
             )
     }
 
-    pub fn from_yaml_str(model: &Model, yaml_str: String) -> Result<CrossSectionList, Report> {
+    pub(crate) fn from_yaml_str(
+        model: &Model,
+        yaml_str: String,
+    ) -> Result<CrossSectionList, Report> {
         serde_yaml::from_str(yaml_str.as_str())
             .wrap_err("Could not parse cross-section yaml content")
             .suggestion("Is it a correct yaml file")
@@ -1022,7 +1027,7 @@ impl CrossSectionList {
             )
     }
 
-    pub fn from_serializable_cross_sections(
+    pub(crate) fn from_serializable_cross_sections(
         model: &Model,
         serializable_cross_sections: &[SerializableCrossSection],
     ) -> CrossSectionList {
@@ -1034,18 +1039,18 @@ impl CrossSectionList {
         }
     }
 
-    pub fn to_serializable(&self) -> Vec<SerializableCrossSection> {
+    pub(crate) fn to_serializable(&self) -> Vec<SerializableCrossSection> {
         self.container
             .iter()
             .map(|cs| cs.to_serializable())
             .collect()
     }
 
-    pub fn to_yaml(&self) -> Result<String, Error> {
+    pub(crate) fn to_yaml(&self) -> Result<String, Error> {
         serde_yaml::to_string(&self.to_serializable())
     }
 
-    pub fn add_cross_section(&mut self, cross_section: CrossSection) {
+    pub(crate) fn add_cross_section(&mut self, cross_section: CrossSection) {
         self.container.push(cross_section);
     }
 }
@@ -1056,19 +1061,19 @@ pub struct AmplitudeList<S: NumeratorState> {
 }
 
 impl<S: TypedNumeratorState> AmplitudeList<S> {
-    pub fn try_from_python(al: AmplitudeList<PythonState>) -> Result<AmplitudeList<S>> {
+    pub(crate) fn try_from_python(al: AmplitudeList<PythonState>) -> Result<AmplitudeList<S>> {
         al.map_res(Amplitude::<S>::try_from_python)
     }
 }
 
 impl AmplitudeList<PythonState> {
-    pub fn sync(&mut self, model: &Model) {
+    pub(crate) fn sync(&mut self, model: &Model) {
         self.container.iter_mut().for_each(|a| a.sync(model));
     }
 }
 
 impl<S: NumeratorState> AmplitudeList<S> {
-    pub fn load_derived_data_mut(
+    pub(crate) fn load_derived_data_mut(
         &mut self,
         model: &Model,
         path: &Path,
@@ -1083,7 +1088,7 @@ impl<S: NumeratorState> AmplitudeList<S> {
         }
         Ok(())
     }
-    pub fn map<F, U: NumeratorState>(self, f: F) -> AmplitudeList<U>
+    pub(crate) fn map<F, U: NumeratorState>(self, f: F) -> AmplitudeList<U>
     where
         F: FnMut(Amplitude<S>) -> Amplitude<U>,
     {
@@ -1092,14 +1097,14 @@ impl<S: NumeratorState> AmplitudeList<S> {
         }
     }
 
-    pub fn map_mut<F>(&mut self, f: F)
+    pub(crate) fn map_mut<F>(&mut self, f: F)
     where
         F: FnMut(&mut Amplitude<S>),
     {
         self.container.iter_mut().for_each(f);
     }
 
-    pub fn map_mut_graphs<F>(&mut self, f: F)
+    pub(crate) fn map_mut_graphs<F>(&mut self, f: F)
     where
         F: FnMut(&mut Graph<S>) + Copy,
     {
@@ -1108,7 +1113,7 @@ impl<S: NumeratorState> AmplitudeList<S> {
             .for_each(|a| a.map_mut(|ag| ag.map_mut(f)));
     }
 
-    pub fn map_res<F, U: NumeratorState, E>(self, f: F) -> Result<AmplitudeList<U>, E>
+    pub(crate) fn map_res<F, U: NumeratorState, E>(self, f: F) -> Result<AmplitudeList<U>, E>
     where
         F: FnMut(Amplitude<S>) -> Result<Amplitude<U>, E>,
     {
@@ -1123,7 +1128,7 @@ impl<S: NumeratorState> AmplitudeList<S> {
 }
 
 impl AmplitudeList<UnInit> {
-    pub fn from_file(model: &Model, file_path: String) -> Result<Self, Report> {
+    pub(crate) fn from_file(model: &Model, file_path: String) -> Result<Self, Report> {
         let f = File::open(file_path.clone())
             .wrap_err_with(|| format!("Could not open amplitude list yaml file {}", file_path))
             .suggestion("Does the path exist?")?;
@@ -1135,7 +1140,7 @@ impl AmplitudeList<UnInit> {
             })
     }
 
-    pub fn from_yaml_str(model: &Model, yaml_str: String) -> Result<Self, Report> {
+    pub(crate) fn from_yaml_str(model: &Model, yaml_str: String) -> Result<Self, Report> {
         serde_yaml::from_str(yaml_str.as_str())
             .wrap_err("Could not parse amplitude list yaml content")
             .suggestion("Is it a correct yaml file")
@@ -1144,7 +1149,7 @@ impl AmplitudeList<UnInit> {
             })
     }
 
-    pub fn from_serializable_amplitudes(
+    pub(crate) fn from_serializable_amplitudes(
         model: &Model,
         serializable_amplitudes: &[SerializableAmplitude],
     ) -> Self {
@@ -1156,7 +1161,7 @@ impl AmplitudeList<UnInit> {
         }
     }
 
-    pub fn load_derived_data<S: NumeratorState>(
+    pub(crate) fn load_derived_data<S: NumeratorState>(
         self,
         model: &Model,
         path: &Path,
@@ -1174,7 +1179,7 @@ impl AmplitudeList<UnInit> {
         })
     }
 
-    pub fn generate_numerator(
+    pub(crate) fn generate_numerator(
         self,
         export_settings: &ProcessSettings,
     ) -> AmplitudeList<AppliedFeynmanRule> {
@@ -1189,18 +1194,18 @@ impl AmplitudeList<UnInit> {
 }
 
 impl<S: NumeratorState> AmplitudeList<S> {
-    pub fn to_serializable(&self) -> Vec<SerializableAmplitude> {
+    pub(crate) fn to_serializable(&self) -> Vec<SerializableAmplitude> {
         self.container
             .iter()
             .map(|cs| cs.to_serializable())
             .collect()
     }
 
-    pub fn to_yaml(&self) -> Result<String, Error> {
+    pub(crate) fn to_yaml(&self) -> Result<String, Error> {
         serde_yaml::to_string(&self.to_serializable())
     }
 
-    pub fn add_amplitude(&mut self, amplitude: Amplitude<S>) {
+    pub(crate) fn add_amplitude(&mut self, amplitude: Amplitude<S>) {
         self.container.push(amplitude);
     }
 }

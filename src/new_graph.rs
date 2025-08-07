@@ -68,7 +68,7 @@ pub mod feynman_graph;
 pub use feynman_graph::FeynmanGraph;
 
 impl Graph {
-    pub fn random_externals(&self, seed: u64) -> Externals {
+    pub(crate) fn random_externals(&self, seed: u64) -> Externals {
         let mut rng = SmallRng::seed_from_u64(seed);
         let mom_range = -10.0..10.0;
 
@@ -97,7 +97,7 @@ impl Graph {
         }
     }
 
-    pub fn new(
+    pub(crate) fn new(
         name: SmartString<LazyCompact>,
         multiplicity: Atom,
         underlying: HedgeGraph<Edge, Vertex, NumHedgeData>,
@@ -111,7 +111,7 @@ impl Graph {
         })
     }
 
-    pub fn build_multi_channeling_channels(
+    pub(crate) fn build_multi_channeling_channels(
         &self,
         lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
     ) -> LmbMultiChannelingSetup {
@@ -195,7 +195,9 @@ impl Graph {
         LmbMultiChannelingSetup { channels }
     }
 
-    pub fn iter_loop_edges(&self) -> impl Iterator<Item = (HedgePair, EdgeIndex, EdgeData<&Edge>)> {
+    pub(crate) fn iter_loop_edges(
+        &self,
+    ) -> impl Iterator<Item = (HedgePair, EdgeIndex, EdgeData<&Edge>)> {
         self.underlying.iter_edges().filter(|(_, edge_index, _)| {
             self.loop_momentum_basis.edge_signatures[*edge_index]
                 .internal
@@ -204,7 +206,7 @@ impl Graph {
         })
     }
 
-    pub fn iter_non_loop_edges(
+    pub(crate) fn iter_non_loop_edges(
         &self,
     ) -> impl Iterator<Item = (HedgePair, EdgeIndex, EdgeData<&Edge>)> {
         self.underlying.iter_edges().filter(|(_, edge_index, _)| {
@@ -217,7 +219,7 @@ impl Graph {
 }
 
 impl Graph {
-    // pub fn apply_vertex_rule(&self, node_id: NodeIndex) -> Option<[DataTensor<Atom>; 3]> {
+    // pub(crate) fn apply_vertex_rule(&self, node_id: NodeIndex) -> Option<[DataTensor<Atom>; 3]> {
     //     // self.underlying[node_id].vertex_info.apply_vertex_rule(
     //     //     &self.underlying.add_signs_to_edges(node_id),
     //     //     Into::<usize>::into(node_id),
@@ -311,7 +313,7 @@ pub struct ExternalConnection {
     pub outgoing_index: ExternalIndex,
 }
 
-pub fn get_cff_inverse_energy_product_impl<E, V, H, S: SubGraph>(
+pub(crate) fn get_cff_inverse_energy_product_impl<E, V, H, S: SubGraph>(
     graph: &HedgeGraph<E, V, H>,
     subgraph: &S,
     contract_edges: &[EdgeIndex],

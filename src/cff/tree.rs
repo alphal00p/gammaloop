@@ -29,7 +29,7 @@ pub struct Tree<T> {
 }
 
 impl<T> Tree<T> {
-    pub fn from_root(data: T) -> Self {
+    pub(crate) fn from_root(data: T) -> Self {
         let node_id = NodeId(0);
         let root_node = TreeNode {
             data,
@@ -42,7 +42,7 @@ impl<T> Tree<T> {
         }
     }
 
-    pub fn insert_node(&mut self, parent_id: NodeId, data: T) {
+    pub(crate) fn insert_node(&mut self, parent_id: NodeId, data: T) {
         let node_id = NodeId(self.nodes.len());
         let new_node = TreeNode {
             data,
@@ -54,19 +54,19 @@ impl<T> Tree<T> {
         self.nodes[parent_id].children.push(node_id);
     }
 
-    pub fn get_node(&self, node_id: NodeId) -> &TreeNode<T> {
+    pub(crate) fn get_node(&self, node_id: NodeId) -> &TreeNode<T> {
         &self.nodes[node_id]
     }
 
-    pub fn get_data_node_mut(&mut self, node_id: NodeId) -> &mut T {
+    pub(crate) fn get_data_node_mut(&mut self, node_id: NodeId) -> &mut T {
         &mut self.nodes[node_id].data
     }
 
-    pub fn apply_mut_closure(&mut self, node_id: NodeId, closure: impl Fn(&mut T)) {
+    pub(crate) fn apply_mut_closure(&mut self, node_id: NodeId, closure: impl Fn(&mut T)) {
         closure(&mut self.nodes[node_id].data);
     }
 
-    pub fn get_bottom_layer(&self) -> Vec<NodeId> {
+    pub(crate) fn get_bottom_layer(&self) -> Vec<NodeId> {
         self.nodes
             .iter()
             .filter(|node| node.children.is_empty())
@@ -74,7 +74,7 @@ impl<T> Tree<T> {
             .collect()
     }
 
-    pub fn map<G>(self, f: impl Fn(T) -> G) -> Tree<G> {
+    pub(crate) fn map<G>(self, f: impl Fn(T) -> G) -> Tree<G> {
         Tree {
             nodes: self
                 .nodes
@@ -89,11 +89,11 @@ impl<T> Tree<T> {
         }
     }
 
-    pub fn get_num_nodes(&self) -> usize {
+    pub(crate) fn get_num_nodes(&self) -> usize {
         self.nodes.len()
     }
 
-    pub fn iter_nodes(&self) -> impl Iterator<Item = &TreeNode<T>> {
+    pub(crate) fn iter_nodes(&self) -> impl Iterator<Item = &TreeNode<T>> {
         self.nodes.iter()
     }
 }
@@ -117,7 +117,7 @@ where
         inv_data_esurface * child_sum
     }
 
-    pub fn to_atom_inv(&self) -> Atom {
+    pub(crate) fn to_atom_inv(&self) -> Atom {
         self.to_atom_inv_impl(NodeId::root())
     }
 }

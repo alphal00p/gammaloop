@@ -1,21 +1,16 @@
-use std::{borrow::Borrow, collections::VecDeque, fmt::Display};
+use std::{borrow::Borrow, fmt::Display};
 
-use ahash::{HashMap, HashMapExt};
 use bincode_trait_derive::{Decode, Encode};
 use bitvec::vec::BitVec;
+use derive_more::{From, Into};
 use itertools::Itertools;
 use linnet::half_edge::{
     involution::{EdgeData, EdgeIndex, EdgeVec, Flow, Hedge, HedgePair, Orientation},
     subgraph::{cycle::SignedCycle, Inclusion, ModifySubgraph, SubGraph, SubGraphOps},
     tree::SimpleTraversalTree,
-    HedgeGraph, NoData, NodeIndex,
+    HedgeGraph, NoData,
 };
-
-use color_eyre::Result;
-use derive_more::{From, Into};
-use eyre::eyre;
 use log::warn;
-use nalgebra::DMatrix;
 use serde::{Deserialize, Serialize};
 use symbolica::{
     atom::{Atom, AtomCore, AtomOrView, FunctionBuilder, Symbol},
@@ -29,7 +24,7 @@ use typed_index_collections::TiVec;
 use crate::{
     momentum::{FourMomentum, SignOrZero, ThreeMomentum},
     momentum_sample::{BareMomentumSample, ExternalIndex, ExternalThreeMomenta, LoopIndex},
-    signature::{ExternalSignature, LoopExtSignature, LoopSignature, SignatureLike},
+    signature::{LoopExtSignature, SignatureLike},
     symbolica_ext::CallSymbol,
     utils::{FloatLike, F, GS, W_},
     GAMMALOOP_NAMESPACE,
@@ -86,7 +81,7 @@ impl Display for LoopMomentumBasis {
 }
 
 impl LoopMomentumBasis {
-    pub fn swap_loops(&mut self, i: LoopIndex, j: LoopIndex) {
+    pub(crate) fn swap_loops(&mut self, i: LoopIndex, j: LoopIndex) {
         self.loop_edges.swap(i, j);
         self.edge_signatures = self
             .edge_signatures
@@ -98,7 +93,7 @@ impl LoopMomentumBasis {
             })
             .collect();
     }
-    pub fn swap_external(&mut self, i: ExternalIndex, j: ExternalIndex) {
+    pub(crate) fn swap_external(&mut self, i: ExternalIndex, j: ExternalIndex) {
         self.ext_edges.swap(i, j);
         self.edge_signatures = self
             .edge_signatures
@@ -277,7 +272,7 @@ pub trait LMBext {
     fn dot_lmb<S: SubGraph>(&self, subgraph: &S, lmb: &LoopMomentumBasis) -> String;
 }
 
-pub fn no_filter(pair: &HedgePair) -> bool {
+pub(crate) fn no_filter(_pair: &HedgePair) -> bool {
     true
 }
 
@@ -296,7 +291,7 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
 
         let emrgraph = self.map_data_ref(
             |_, _, _| "",
-            |_, e, _, d| {
+            |_, e, _, _| {
                 EdgeData::new(
                     GS.emr_mom
                         .f([usize::from(e) as i32])
@@ -304,7 +299,7 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
                     Orientation::Default,
                 )
             },
-            |_, h| NoData {},
+            |_, _| NoData {},
         );
         emrgraph.dot_label(subgraph)
     }
@@ -420,7 +415,7 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
         };
         // println!("//Externals {}", self.dot(&externals));
 
-        for (p, e, d) in self.iter_edges_of(&externals) {
+        for (p, e, _) in self.iter_edges_of(&externals) {
             let mut path_to_dep: S = self.empty_subgraph();
             path_to_dep.add(dep_ext.unwrap());
 
@@ -472,7 +467,7 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
         //     );
         // }
 
-        let signature = self.new_edgevec(|d, eid, p| {
+        let signature = self.new_edgevec(|_, eid, p| {
             let mut internal = vec![];
             let mut external = vec![];
             if dep_ext.is_some() {
@@ -566,7 +561,7 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
             + ModifySubgraph<HedgePair>
             + ModifySubgraph<Hedge>,
     {
-        let Some(i) = subgraph.included_iter().next() else {
+        let Some(_) = subgraph.included_iter().next() else {
             return vec![].into();
         };
 
@@ -709,7 +704,7 @@ impl LoopMomentumBasis {
             .collect()
     }
 
-    pub fn loop_atom<'a, I>(
+    pub(crate) fn loop_atom<'a, I>(
         &self,
         edge_id: EdgeIndex,
         mom_symbol: Symbol,
@@ -728,7 +723,7 @@ impl LoopMomentumBasis {
         })
     }
 
-    pub fn ext_atom<'a, I>(
+    pub(crate) fn ext_atom<'a, I>(
         &self,
         edge_id: EdgeIndex,
         mom_symbol: Symbol,
@@ -747,7 +742,7 @@ impl LoopMomentumBasis {
         })
     }
 
-    pub fn to_massless_emr<T: FloatLike>(
+    pub(crate) fn to_massless_emr<T: FloatLike>(
         &self,
         sample: &BareMomentumSample<T>,
     ) -> Vec<FourMomentum<F<T>>> {

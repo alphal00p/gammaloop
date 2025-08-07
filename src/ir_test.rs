@@ -31,7 +31,11 @@ pub struct ApproachSettings {
 }
 
 impl CrossSectionGraphTerm {
-    pub fn test_ir(&self, settings: &Settings, approach_settings: &ApproachSettings) -> Result<()> {
+    pub(crate) fn test_ir(
+        &self,
+        settings: &Settings,
+        approach_settings: &ApproachSettings,
+    ) -> Result<()> {
         let rng = MonteCarloRng::new(settings.integrator.seed, 0);
 
         for (cut_id, esurface) in self.cut_esurface.iter_enumerated() {
@@ -84,7 +88,7 @@ impl CrossSectionGraphTerm {
         Ok(())
     }
 
-    pub fn test_single_ir_limit(
+    pub(crate) fn test_single_ir_limit(
         &self,
         limit: &str,
         rng: &mut MonteCarloRng,

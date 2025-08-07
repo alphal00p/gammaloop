@@ -109,7 +109,7 @@ impl FromStr for NumeratorAwareGraphGroupingOption {
 }
 
 impl NumeratorAwareGraphGroupingOption {
-    pub fn set_options(&mut self) -> Option<&mut GraphGroupingOptions> {
+    pub(crate) fn set_options(&mut self) -> Option<&mut GraphGroupingOptions> {
         match self {
             Self::NoGrouping => None,
             Self::OnlyDetectZeroes => None,
@@ -118,7 +118,7 @@ impl NumeratorAwareGraphGroupingOption {
         }
     }
 
-    pub fn get_options(&self) -> Option<&GraphGroupingOptions> {
+    pub(crate) fn get_options(&self) -> Option<&GraphGroupingOptions> {
         match self {
             Self::NoGrouping => None,
             Self::OnlyDetectZeroes => None,
@@ -127,7 +127,7 @@ impl NumeratorAwareGraphGroupingOption {
         }
     }
 
-    pub fn description(&self) -> String {
+    pub(crate) fn description(&self) -> String {
         format!(
             "{}{}",
             self,
@@ -135,7 +135,7 @@ impl NumeratorAwareGraphGroupingOption {
         )
     }
 
-    pub fn new_with_attributes(
+    pub(crate) fn new_with_attributes(
         strategy: &str,
         seed: Option<u16>,
         num_samples: Option<usize>,
@@ -205,7 +205,7 @@ impl FromStr for GenerationType {
     }
 }
 
-pub fn get_coupling_orders<NodeColor: diagram_generator::NodeColorFunctions>(
+pub(crate) fn get_coupling_orders<NodeColor: diagram_generator::NodeColorFunctions>(
     graph: &SymbolicaGraph<NodeColor, EdgeColor>,
 ) -> AHashMap<SmartString<LazyCompact>, usize> {
     let mut coupling_orders = AHashMap::default();
@@ -221,14 +221,14 @@ pub fn get_coupling_orders<NodeColor: diagram_generator::NodeColorFunctions>(
 pub struct FeynGenFilters(pub Vec<FeynGenFilter>);
 
 impl FeynGenFilters {
-    pub fn get_max_bridge(&self) -> Option<usize> {
+    pub(crate) fn get_max_bridge(&self) -> Option<usize> {
         self.0.iter().find_map(|f| match f {
             FeynGenFilter::MaxNumberOfBridges(n) => Some(*n),
             _ => None,
         })
     }
 
-    pub fn get_blob_range(&self) -> Option<&RangeInclusive<usize>> {
+    pub(crate) fn get_blob_range(&self) -> Option<&RangeInclusive<usize>> {
         self.0.iter().find_map(|f| {
             if let FeynGenFilter::BlobRange(v) = f {
                 Some(v)
@@ -238,7 +238,7 @@ impl FeynGenFilters {
         })
     }
 
-    pub fn get_spectator_range(&self) -> Option<&RangeInclusive<usize>> {
+    pub(crate) fn get_spectator_range(&self) -> Option<&RangeInclusive<usize>> {
         self.0.iter().find_map(|f| {
             if let FeynGenFilter::SpectatorRange(v) = f {
                 Some(v)
@@ -248,14 +248,14 @@ impl FeynGenFilters {
         })
     }
 
-    pub fn allow_tadpoles(&self) -> bool {
+    pub(crate) fn allow_tadpoles(&self) -> bool {
         !self
             .0
             .iter()
             .any(|f| matches!(f, FeynGenFilter::TadpolesFilter(_)))
     }
 
-    pub fn filter_cross_section_tadpoles(&self) -> bool {
+    pub(crate) fn filter_cross_section_tadpoles(&self) -> bool {
         self.0.iter().any(|f| {
             matches!(
                 f,
@@ -267,7 +267,7 @@ impl FeynGenFilters {
         })
     }
 
-    pub fn get_particle_vetos(&self) -> Option<&[i64]> {
+    pub(crate) fn get_particle_vetos(&self) -> Option<&[i64]> {
         self.0.iter().find_map(|f| {
             if let FeynGenFilter::ParticleVeto(v) = f {
                 Some(v.as_slice())
@@ -277,7 +277,7 @@ impl FeynGenFilters {
         })
     }
 
-    pub fn get_coupling_orders(&self) -> Option<&HashMap<String, (usize, Option<usize>)>> {
+    pub(crate) fn get_coupling_orders(&self) -> Option<&HashMap<String, (usize, Option<usize>)>> {
         self.0.iter().find_map(|f| {
             if let FeynGenFilter::CouplingOrders(o) = f {
                 Some(o)
@@ -287,7 +287,7 @@ impl FeynGenFilters {
         })
     }
 
-    pub fn get_perturbative_orders(&self) -> Option<&HashMap<String, usize>> {
+    pub(crate) fn get_perturbative_orders(&self) -> Option<&HashMap<String, usize>> {
         self.0.iter().find_map(|f| {
             if let FeynGenFilter::PerturbativeOrders(o) = f {
                 Some(o)
@@ -297,7 +297,7 @@ impl FeynGenFilters {
         })
     }
 
-    pub fn get_loop_count_range(&self) -> Option<(usize, usize)> {
+    pub(crate) fn get_loop_count_range(&self) -> Option<(usize, usize)> {
         self.0.iter().find_map(|f| {
             if let FeynGenFilter::LoopCountRange(o) = f {
                 Some(*o)
@@ -307,7 +307,7 @@ impl FeynGenFilters {
         })
     }
 
-    pub fn get_fermion_loop_count_range(&self) -> Option<(usize, usize)> {
+    pub(crate) fn get_fermion_loop_count_range(&self) -> Option<(usize, usize)> {
         self.0.iter().find_map(|f: &FeynGenFilter| {
             if let FeynGenFilter::FermionLoopCountRange(o) = f {
                 Some(*o)
@@ -318,7 +318,9 @@ impl FeynGenFilters {
     }
 
     #[allow(clippy::type_complexity)]
-    pub fn apply_filters<NodeColor: diagram_generator::NodeColorFunctions + Send + Sync + Clone>(
+    pub(crate) fn apply_filters<
+        NodeColor: diagram_generator::NodeColorFunctions + Send + Sync + Clone,
+    >(
         &self,
         graphs: &mut Vec<(SymbolicaGraph<NodeColor, EdgeColor>, Atom)>,
         pool: &rayon::ThreadPool,

@@ -83,7 +83,7 @@ impl DebugLogger {
     }
 
     #[cold]
-    pub fn write<T: Serialize>(&self, msg: &str, data: &T) {
+    pub(crate) fn write<T: Serialize>(&self, msg: &str, data: &T) {
         self.logger
             .lock()
             .unwrap()
@@ -92,7 +92,7 @@ impl DebugLogger {
     }
 
     #[cold]
-    pub fn set_state(&self, state: EvalState) {
+    pub(crate) fn set_state(&self, state: EvalState) {
         self.logger
             .lock()
             .unwrap()
@@ -100,7 +100,7 @@ impl DebugLogger {
             .expect("failed to change state")
     }
 
-    pub fn reset(&self) {
+    pub(crate) fn reset(&self) {
         self.logger.lock().unwrap().reset();
     }
 }

@@ -1,7 +1,7 @@
 use itertools::Itertools;
 use linnet::{
     half_edge::{
-        involution::{EdgeIndex, Hedge, Orientation},
+        involution::{Hedge, Orientation},
         EdgeAccessors,
     },
     parser::DotHedgeData,
@@ -27,7 +27,7 @@ pub struct HedgeIndices {
 }
 
 impl HedgeIndices {
-    pub fn new(edge_indices: OrderedStructure<LibraryRep, Aind>) -> Self {
+    pub(crate) fn new(edge_indices: OrderedStructure<LibraryRep, Aind>) -> Self {
         Self {
             vertex_indices: edge_indices.clone().dual(),
             edge_indices,
@@ -43,7 +43,7 @@ pub struct NumIndices {
 }
 
 impl NumIndices {
-    pub fn parse<'a>(graph: &'a ParseGraph) -> impl FnMut(Hedge, &'a ParseHedge) -> Self {
+    pub(crate) fn parse<'a>(graph: &'a ParseGraph) -> impl FnMut(Hedge, &'a ParseHedge) -> Self {
         |h, _| {
             let eid = graph[&h];
             let flow = graph.flow(h);
@@ -112,50 +112,50 @@ pub struct NumHedgeData {
 }
 
 impl NumHedgeData {
-    pub fn edge_slots<'a>(&'a self) -> impl Iterator<Item = LibrarySlot<Aind>> + 'a {
+    pub(crate) fn edge_slots<'a>(&'a self) -> impl Iterator<Item = LibrarySlot<Aind>> + 'a {
         self.edge_color_slots().chain(self.edge_spin_slots())
     }
 
-    pub fn edge_color_slots<'a>(&'a self) -> impl Iterator<Item = LibrarySlot<Aind>> + 'a {
+    pub(crate) fn edge_color_slots<'a>(&'a self) -> impl Iterator<Item = LibrarySlot<Aind>> + 'a {
         self.num_indices
             .color_indices
             .edge_indices
             .external_structure_iter()
     }
 
-    pub fn edge_spin_slots<'a>(&'a self) -> impl Iterator<Item = LibrarySlot<Aind>> + 'a {
+    pub(crate) fn edge_spin_slots<'a>(&'a self) -> impl Iterator<Item = LibrarySlot<Aind>> + 'a {
         self.num_indices
             .spin_indices
             .edge_indices
             .external_structure_iter()
     }
 
-    pub fn vertex_slots<'a>(&'a self) -> impl Iterator<Item = LibrarySlot<Aind>> + 'a {
+    pub(crate) fn vertex_slots<'a>(&'a self) -> impl Iterator<Item = LibrarySlot<Aind>> + 'a {
         self.vertex_color_slots().chain(self.vertex_spin_slots())
     }
 
-    pub fn vertex_color_slots<'a>(&'a self) -> impl Iterator<Item = LibrarySlot<Aind>> + 'a {
+    pub(crate) fn vertex_color_slots<'a>(&'a self) -> impl Iterator<Item = LibrarySlot<Aind>> + 'a {
         self.num_indices
             .color_indices
             .vertex_indices
             .external_structure_iter()
     }
 
-    pub fn vertex_spin_slots<'a>(&'a self) -> impl Iterator<Item = LibrarySlot<Aind>> + 'a {
+    pub(crate) fn vertex_spin_slots<'a>(&'a self) -> impl Iterator<Item = LibrarySlot<Aind>> + 'a {
         self.num_indices
             .spin_indices
             .edge_indices
             .external_structure_iter()
     }
 
-    pub fn polarization(&self, mut builder: FunctionBuilder) -> Atom {
+    pub(crate) fn polarization(&self, mut builder: FunctionBuilder) -> Atom {
         for s in self.edge_spin_slots() {
             builder = builder.add_arg(s.to_atom())
         }
         builder.finish()
     }
 
-    pub fn color_kronekers(&self, other: &Self) -> Atom {
+    pub(crate) fn color_kronekers(&self, other: &Self) -> Atom {
         let mut color = Atom::num(1);
         for (i, j) in self.edge_color_slots().zip_eq(other.edge_color_slots()) {
             if i.rep().matches(&j.rep()) {
@@ -175,7 +175,7 @@ pub struct ParseHedge {
 }
 
 impl ParseHedge {
-    pub fn parse<'a>() -> impl FnMut((Hedge, &'a DotHedgeData)) -> Result<Self> {
+    pub(crate) fn parse<'a>() -> impl FnMut((Hedge, &'a DotHedgeData)) -> Result<Self> {
         |(i, h)| {
             let hedge_id = h
                 .statement

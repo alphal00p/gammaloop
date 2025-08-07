@@ -12,25 +12,32 @@ use crate::{
 };
 use chrono::{Datelike, Local, Timelike};
 use clap::{Args, Parser, Subcommand, ValueEnum};
+use clap_repl::{
+    reedline::{DefaultPrompt, DefaultPromptSegment, FileBackedHistory},
+    ClapEditor, ReadCommandOutput,
+};
 use color_eyre::Report;
 use color_eyre::Result;
 use colored::{ColoredString, Colorize};
+use console::style;
+use dirs::home_dir;
 use eyre::eyre;
 use libc::stat;
 use log::LevelFilter;
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
 use spenso::algebra::complex::Complex;
+use state::{State, LOG_FORMAT, LOG_LEVEL};
 use std::{
     env,
     ops::ControlFlow,
+    path::Path,
     sync::{LazyLock, Mutex},
 };
 use std::{fs, time::Instant};
 use std::{path::PathBuf, str::FromStr};
 use symbolica::numerical_integration::Sample;
-pub mod repl;
-/// Top‑level CLI definition using **clap**'s `derive` API (requires `features = ["derive"]`).
+
 #[derive(Parser, Debug)]
 #[command(
     name = "gammaLoop",
@@ -38,78 +45,278 @@ pub mod repl;
     about = "New breed of Local Unitarity implementation",
 )]
 pub struct Cli {
-    /// Number of Rayon worker threads (cores)
-    #[arg(short = 'c', long, value_name = "NUMCORES", default_value_t = 1)]
-    cores: usize,
-
+    // /// Number of Rayon worker threads (cores)
+    // #[arg(short = 'c', long, value_name = "NUMCORES", default_value_t = 1)]
+    // cores: usize,
     /// Path to the configuration file
+    #[arg(short = 'f', long, value_name = "CONFIG_FILE")]
+    config: Option<PathBuf>,
+
+    /// Path to the state file
     #[arg(
-        short = 'f',
+        short = 's',
         long,
-        value_name = "CONFIG_FILE",
-        default_value = "./python/gammaloop/data/run_cards/rust_run_config.yaml"
+        value_name = "STATE_FILE",
+        default_value = "./gammaloop_state"
     )]
-    config: PathBuf,
+    pub state_file: PathBuf,
 
-    /// Target result to match (real, imag)
-    #[arg(short = 't', long, value_name = "TARGET", num_args = 2)]
-    target: Option<Vec<f64>>, // length must be 2
+    /// Path to the model file
+    #[arg(short = 'm', long, value_name = "MODEL_FILE")]
+    pub model_file: Option<PathBuf>,
 
-    /// Global debug verbosity level
-    #[arg(short = 'd', long, value_name = "LEVEL")]
-    debug: Option<usize>,
+    /// Save state to file after each call
+    #[arg(short = 'S', long, default_value_t = true)]
+    save_state: bool,
 
-    /// Integrator starting samples
-    #[arg(long, value_name = "N_START")]
-    n_start: Option<usize>,
+    // /// Target result to match (real, imag)
+    // #[arg(short = 't', long, value_name = "TARGET", num_args = 2)]
+    // target: Option<Vec<f64>>, // length must be 2
 
-    /// Integrator maximum samples
-    #[arg(long, value_name = "N_MAX")]
-    n_max: Option<usize>,
+    // /// Global debug verbosity level
+    // #[arg(short = 'd', long, value_name = "LEVEL")]
+    // debug: Option<usize>,
 
-    /// Integrator samples increase per iteration
-    #[arg(long, value_name = "N_INCREASE")]
-    n_increase: Option<usize>,
+    // /// Integrator starting samples
+    // #[arg(long, value_name = "N_START")]
+    // n_start: Option<usize>,
 
+    // /// Integrator maximum samples
+    // #[arg(long, value_name = "N_MAX")]
+    // n_max: Option<usize>,
+
+    // /// Integrator samples increase per iteration
+    // #[arg(long, value_name = "N_INCREASE")]
+    // n_increase: Option<usize>,
     /// Optional sub‑command
     #[command(subcommand)]
     pub command: Option<Commands>,
 }
 
+pub struct StateSaveSettings {
+    pub override_state: bool,
+}
+
+impl From<()> for StateSaveSettings {
+    fn from(_: ()) -> Self {
+        StateSaveSettings {
+            override_state: false,
+        }
+    }
+}
+
+impl From<bool> for StateSaveSettings {
+    fn from(override_state: bool) -> Self {
+        StateSaveSettings { override_state }
+    }
+}
+
 impl Cli {
-    pub fn run_with_settings(
-        self,
+    fn override_settings(&mut self, other: Cli) {
+        self.config = other.config;
+        self.state_file = other.state_file;
+        self.model_file = other.model_file;
+        self.save_state = other.save_state;
+    }
+
+    fn run_command(
+        &mut self,
         settings: &mut Settings,
         state: &mut State,
-    ) -> Result<ControlFlow<()>, Report> {
-        if let Some(c) = self.command {
-            c.run(settings, state)
-        } else {
-            let target = self.target.as_ref().map(|v| {
-                assert_eq!(v.len(), 2, "--target expects exactly two numbers");
-                Complex::new(F(v[0]), F(v[1]))
-            });
-            let user_data_generator = |settings: &Settings| UserData {
-                integrand: (0..self.cores)
-                    .map(|_| integrand_factory(settings))
-                    .collect(),
-            };
-            let result = havana_integrate(&settings, user_data_generator, target, None, None);
+    ) -> Result<ControlFlow<StateSaveSettings>, Report> {
+        match self.command.as_ref().ok_or(eyre!("missing command"))? {
+            Commands::Quit { override_state } => {
+                return Ok(ControlFlow::Break((*override_state).into()));
+            }
+            Commands::Batch {
+                process_file,
+                batch_input_file,
+                name,
+                output_name,
+            } => {
+                return Ok(ControlFlow::Continue(batch_branch(
+                    process_file,
+                    batch_input_file,
+                    &name,
+                    &output_name,
+                )?));
+            }
 
-            info!("");
-            info!(
-                "{}",
-                format!(
-                    "Havana integration completed after {} sample evaluations.",
-                    format!("{:.2}M", (result.neval as f64) / 1_000_000.)
-                        .bold()
-                        .blue()
-                )
-                .bold()
-                .green()
-            );
-            info!("");
-            Ok(ControlFlow::Continue(()))
+            Commands::Inspect {
+                point,
+                use_f128,
+                force_radius,
+                momentum_space,
+                debug,
+                term,
+            } => {
+                if let Some(level) = debug {
+                    settings.general.debug = *level;
+                }
+
+                let mut integrand = integrand_factory(&settings);
+
+                let pt = point.into_iter().map(|f| F(*f)).collect::<Vec<_>>();
+
+                let _ = inspect(
+                    &settings,
+                    &mut integrand,
+                    pt,
+                    &term,
+                    *force_radius,
+                    *momentum_space,
+                    *use_f128,
+                );
+            }
+
+            Commands::Bench { samples } => {
+                info!(
+                    "\nBenchmarking runtime of integrand '{}' over {} samples...\n",
+                    format!("{}", settings.hard_coded_integrand).green(),
+                    format!("{}", samples).blue()
+                );
+                let mut integrand = integrand_factory(&settings);
+                let now = Instant::now();
+                for _ in 0..*samples {
+                    integrand.evaluate_sample(
+                        &Sample::Continuous(
+                            F(1.),
+                            (0..integrand.get_n_dim())
+                                .map(|_| F(rand::random::<f64>()))
+                                .collect(),
+                        ),
+                        F(1.),
+                        1,
+                        false,
+                        Complex::new_zero(),
+                    );
+                }
+                let total_time = now.elapsed().as_secs_f64();
+                info!(
+                    "\n> Total time: {} s for {} samples, {} ms per sample\n",
+                    format!("{:.1}", total_time).blue(),
+                    format!("{}", samples).blue(),
+                    format!("{:.5}", total_time * 1000. / (*samples as f64)).green(),
+                );
+            }
+            Commands::Import(s) => match s {
+                Import::Amplitude { path } => {
+                    let graphs = Graph::from_file(&path, &state.model)?;
+                    let name = path.file_stem().unwrap().to_string_lossy().into_owned();
+                    let process = Process::from_graph_list(
+                        name,
+                        graphs,
+                        GenerationType::Amplitude,
+                        ProcessDefinition::new_empty(),
+                        None,
+                    )?;
+
+                    state.process_list.add_process(process);
+                }
+                Import::Model { path } => {
+                    state.model = Model::from_file(path)?;
+                }
+            },
+            Commands::Export(s) => match s {
+                Export::Dot { path } => {
+                    let exp_set = ExportSettings {
+                        root_folder: path.clone(),
+                    };
+                    state.process_list.export_dot(&exp_set, &state.model)?
+                }
+                Export::Bin => {}
+            },
+            Commands::Set(s) => match s {
+                Set::Log { level, format } => {
+                    if let Some(level) = level {
+                        *LOG_LEVEL.lock().unwrap() = *level;
+                    }
+
+                    *LOG_FORMAT.lock().unwrap() = *format;
+                }
+                Set::BaseDir { path } => {
+                    self.state_file = path.clone();
+                }
+            },
+            _ => {}
+        }
+        Ok(ControlFlow::Continue(()))
+    }
+
+    pub fn run_with_settings(mut self, settings: &mut Settings) {
+        let mut state = match State::load(&self.state_file, self.model_file.clone()) {
+            Ok(state) => state,
+            Err(e) => {
+                warn!("{e} loading default state");
+                State::default()
+            }
+        };
+
+        let mut override_state_file = false;
+
+        if let Some(_) = &self.command {
+            self.run_command(settings, &mut state);
+        } else {
+            let prompt = DefaultPrompt {
+                left_prompt: DefaultPromptSegment::Basic("γloop".to_owned()),
+                ..DefaultPrompt::default()
+            };
+
+            // 2. Build the REPL – clap‑repl takes ownership and configures rustyline.
+            let mut repl = ClapEditor::<Cli>::builder().with_prompt(Box::new(prompt));
+
+            if let Some(home) = home_dir() {
+                repl = repl.with_editor_hook(move |reed| {
+                    // Do custom things with `Reedline` instance here
+                    reed.with_history(Box::new(
+                        FileBackedHistory::with_file(10000, home.join(".gammaLoop_history"))
+                            .unwrap(),
+                    ))
+                })
+            }
+            let mut r = repl.build();
+
+            loop {
+                match r.read_command() {
+                    ReadCommandOutput::Command(mut c) => {
+                        match c.run_command(settings, &mut state) {
+                            Err(e) => eprintln!("{e}"),
+                            Ok(ControlFlow::Break(StateSaveSettings { override_state })) => {
+                                override_state_file = override_state;
+                                break;
+                            }
+                            _ => {
+                                self.override_settings(c);
+                            }
+                        }
+                    }
+                    ReadCommandOutput::EmptyLine => (),
+                    ReadCommandOutput::ClapError(e) => {
+                        e.print().unwrap();
+                    }
+                    ReadCommandOutput::ShlexError => {
+                        println!(
+                            "{} input was not valid and could not be processed",
+                            style("Error:").red().bold()
+                        );
+                    }
+                    ReadCommandOutput::ReedlineError(e) => {
+                        panic!("{e}");
+                    }
+                    ReadCommandOutput::CtrlC => continue,
+                    ReadCommandOutput::CtrlD => break,
+                }
+            }
+        }
+
+        if self.save_state {
+            debug!("Saving State");
+            match state.save(&self.state_file, override_state_file, false) {
+                Ok(()) => {}
+                Err(e) => {
+                    eprintln!("Failed to save state: {}", e);
+                }
+            };
         }
     }
 
@@ -117,21 +324,25 @@ impl Cli {
         crate::set_interrupt_handler();
 
         // Load settings from YAML first so CLI flags can override.
-        let mut settings: Settings = Settings::from_file(&self.config)?;
+        let mut settings: Settings = if let Some(settings_path) = &self.config {
+            Settings::from_file(settings_path)?
+        } else {
+            Settings::default()
+        };
 
         // Override settings from CLI top‑level flags --------------------------
-        if let Some(level) = self.debug {
-            settings.general.debug = level;
-        }
-        if let Some(n) = self.n_start {
-            settings.integrator.n_start = n;
-        }
-        if let Some(n) = self.n_max {
-            settings.integrator.n_max = n;
-        }
-        if let Some(n) = self.n_increase {
-            settings.integrator.n_increase = n;
-        }
+        // if let Some(level) = self.debug {
+        //     settings.general.debug = level;
+        // }
+        // if let Some(n) = self.n_start {
+        //     settings.integrator.n_start = n;
+        // }
+        // if let Some(n) = self.n_max {
+        //     settings.integrator.n_max = n;
+        // }
+        // if let Some(n) = self.n_increase {
+        //     settings.integrator.n_increase = n;
+        // }
 
         // Ensure SYMBOLICA licence variable is set before we do anything heavy.
         if env::var("SYMBOLICA_LICENSE").is_err() {
@@ -141,65 +352,69 @@ impl Cli {
         print_banner();
         Ok(settings)
     }
-    pub fn run(self) -> Result<Settings, Report> {
-        // Load settings from YAML first so CLI flags can override.
-        let mut settings: Settings = self.get_settings()?;
 
-        // ---------------------------------------------------------------------
-        // RAYON THREAD‑POOL SET‑UP -------------------------------------------
-        // ---------------------------------------------------------------------
-        rayon::ThreadPoolBuilder::new()
-            .num_threads(self.cores)
-            .build_global()
-            .unwrap();
+    // pub fn get_state(&self) -> Result<State, Report> {
+    //     State
+    // }
+    // pub(crate) fn run(self) -> Result<Settings, Report> {
+    //     // Load settings from YAML first so CLI flags can override.
+    //     let mut settings: Settings = self.get_settings()?;
 
-        let num_integrands = self.cores; // keep old logic
+    //     // ---------------------------------------------------------------------
+    //     // RAYON THREAD‑POOL SET‑UP -------------------------------------------
+    //     // ---------------------------------------------------------------------
+    //     rayon::ThreadPoolBuilder::new()
+    //         .num_threads(self.cores)
+    //         .build_global()
+    //         .unwrap();
 
-        // Parse target if supplied -------------------------------------------
-        let target = self.target.as_ref().map(|v| {
-            assert_eq!(v.len(), 2, "--target expects exactly two numbers");
-            Complex::new(F(v[0]), F(v[1]))
-        });
+    //     let num_integrands = self.cores; // keep old logic
 
-        if settings.general.debug > 0 {
-            info!(
-                "{}",
-                format!("Debug mode enabled at level {}", settings.general.debug).red()
-            );
-            info!("");
-        }
-        let mut state = State::default();
-        if let Some(c) = self.command {
-            c.run(&mut settings, &mut state)?;
-            Ok(settings)
-        } else {
-            let user_data_generator = |settings: &Settings| UserData {
-                integrand: (0..num_integrands)
-                    .map(|_| integrand_factory(settings))
-                    .collect(),
-            };
-            let result = havana_integrate(&settings, user_data_generator, target, None, None);
+    //     // Parse target if supplied -------------------------------------------
+    //     let target = self.target.as_ref().map(|v| {
+    //         assert_eq!(v.len(), 2, "--target expects exactly two numbers");
+    //         Complex::new(F(v[0]), F(v[1]))
+    //     });
 
-            info!("");
-            info!(
-                "{}",
-                format!(
-                    "Havana integration completed after {} sample evaluations.",
-                    format!("{:.2}M", (result.neval as f64) / 1_000_000.)
-                        .bold()
-                        .blue()
-                )
-                .bold()
-                .green()
-            );
-            info!("");
-            Ok(settings)
-        }
+    //     if settings.general.debug > 0 {
+    //         info!(
+    //             "{}",
+    //             format!("Debug mode enabled at level {}", settings.general.debug).red()
+    //         );
+    //         info!("");
+    //     }
+    //     let mut state = State::default();
+    //     if let Some(c) = self.command {
+    //         c.run(&mut settings, &mut state)?;
+    //         Ok(settings)
+    //     } else {
+    //         let user_data_generator = |settings: &Settings| UserData {
+    //             integrand: (0..num_integrands)
+    //                 .map(|_| integrand_factory(settings))
+    //                 .collect(),
+    //         };
+    //         let result = havana_integrate(&settings, user_data_generator, target, None, None);
 
-        // =====================================================================
-        // DISPATCH TO SUB‑COMMANDS OR DEFAULT INTEGRATION PATH  ===============
-        // =====================================================================
-    }
+    //         info!("");
+    //         info!(
+    //             "{}",
+    //             format!(
+    //                 "Havana integration completed after {} sample evaluations.",
+    //                 format!("{:.2}M", (result.neval as f64) / 1_000_000.)
+    //                     .bold()
+    //                     .blue()
+    //             )
+    //             .bold()
+    //             .green()
+    //         );
+    //         info!("");
+    //         Ok(settings)
+    //     }
+
+    //     // =====================================================================
+    //     // DISPATCH TO SUB‑COMMANDS OR DEFAULT INTEGRATION PATH  ===============
+    //     // =====================================================================
+    // }
 }
 
 #[derive(Subcommand, Debug)]
@@ -246,15 +461,17 @@ pub enum Log {
 
 #[derive(Subcommand, Debug)]
 pub enum Commands {
-    Repl,
-    #[clap(flatten)]
+    #[clap(subcommand)]
     Set(Set),
     #[clap(subcommand)]
     Import(Import),
     #[clap(subcommand)]
     Export(Export),
-    Increment,
-    Quit,
+    /// Quit gammaloop
+    Quit {
+        #[arg(short = 'o', long, default_value_t = false)]
+        override_state: bool,
+    },
     /// Inspect a single phase‑space point / momentum configuration
     Inspect {
         /// The point to inspect (x y) or (p0 px ...)
@@ -303,11 +520,8 @@ pub enum Commands {
     },
 }
 
-pub struct State {
-    pub model: Model,
-    pub process_list: ProcessList,
-    pub settings: Settings,
-}
+pub mod settings;
+pub mod state;
 
 #[repr(usize)]
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Hash, ValueEnum)]
@@ -331,143 +545,11 @@ pub enum LogFormat {
 //     }
 // }
 
-impl Default for State {
-    fn default() -> Self {
-        let a = Self {
-            model: Model::default(),
-            process_list: ProcessList::default(),
-            settings: Settings::default(),
-        };
-        a.setup_log().unwrap();
-        a
-    }
-}
-
-impl Commands {
-    pub fn run(
-        self,
-        settings: &mut Settings,
-        state: &mut State,
-    ) -> Result<ControlFlow<()>, Report> {
-        match self {
-            Commands::Quit => {
-                return Ok(ControlFlow::Break(()));
-            }
-            Commands::Batch {
-                process_file,
-                batch_input_file,
-                name,
-                output_name,
-            } => {
-                return Ok(ControlFlow::Continue(batch_branch(
-                    process_file,
-                    batch_input_file,
-                    &name,
-                    &output_name,
-                )?));
-            }
-
-            Commands::Inspect {
-                point,
-                use_f128,
-                force_radius,
-                momentum_space,
-                debug,
-                term,
-            } => {
-                if let Some(level) = debug {
-                    settings.general.debug = level;
-                }
-
-                let mut integrand = integrand_factory(&settings);
-
-                let pt = point.into_iter().map(F).collect::<Vec<_>>();
-
-                let _ = inspect(
-                    &settings,
-                    &mut integrand,
-                    pt,
-                    &term,
-                    force_radius,
-                    momentum_space,
-                    use_f128,
-                );
-            }
-
-            Commands::Bench { samples } => {
-                info!(
-                    "\nBenchmarking runtime of integrand '{}' over {} samples...\n",
-                    format!("{}", settings.hard_coded_integrand).green(),
-                    format!("{}", samples).blue()
-                );
-                let mut integrand = integrand_factory(&settings);
-                let now = Instant::now();
-                for _ in 0..samples {
-                    integrand.evaluate_sample(
-                        &Sample::Continuous(
-                            F(1.),
-                            (0..integrand.get_n_dim())
-                                .map(|_| F(rand::random::<f64>()))
-                                .collect(),
-                        ),
-                        F(1.),
-                        1,
-                        false,
-                        Complex::new_zero(),
-                    );
-                }
-                let total_time = now.elapsed().as_secs_f64();
-                info!(
-                    "\n> Total time: {} s for {} samples, {} ms per sample\n",
-                    format!("{:.1}", total_time).blue(),
-                    format!("{}", samples).blue(),
-                    format!("{:.5}", total_time * 1000. / (samples as f64)).green(),
-                );
-            }
-            Self::Import(s) => match s {
-                Import::Amplitude { path } => {
-                    let graphs = Graph::from_file(&path, &state.model)?;
-                    let name = path.file_stem().unwrap().to_string_lossy().into_owned();
-                    let process = Process::from_graph_list(
-                        name,
-                        graphs,
-                        GenerationType::Amplitude,
-                        ProcessDefinition::new_empty(),
-                        None,
-                    )?;
-
-                    state.process_list.add_process(process);
-                }
-                Import::Model { path } => {
-                    state.model = Model::from_file(path.to_string_lossy().to_string())?;
-                }
-            },
-            Self::Export(s) => match s {
-                Export::Dot { path } => {
-                    let exp_set = ExportSettings { root_folder: path };
-                    state.process_list.export_dot(&exp_set, &state.model)?
-                }
-                Export::Bin => {}
-            },
-            Self::Set(s) => match s {
-                Set::Log { level, format } => {
-                    if let Some(level) = level {
-                        *LOG_LEVEL.lock().unwrap() = level;
-                    }
-
-                    *LOG_FORMAT.lock().unwrap() = format;
-                }
-                _ => {}
-            },
-            _ => {}
-        }
-        Ok(ControlFlow::Continue(()))
-    }
-}
+impl Commands {}
 
 fn batch_branch(
-    process_output_file: PathBuf,
-    batch_input_file: PathBuf,
+    process_output_file: impl AsRef<Path>,
+    batch_input_file: impl AsRef<Path>,
     amplitude_name: &str,
     output_name: &str,
 ) -> Result<(), Report> {
@@ -476,12 +558,16 @@ fn batch_branch(
     println!("settings passed by command line will be overwritten by configurations in the process output and batch input");
 
     // load the settings
-    let path_to_settings = process_output_file.join("cards").join("run_card.yaml");
+    let path_to_settings = process_output_file
+        .as_ref()
+        .join("cards")
+        .join("run_card.yaml");
     let settings_string = std::fs::read_to_string(path_to_settings.clone())?;
     let settings: Settings = serde_yaml::from_str(&settings_string)?;
 
     // load the model, hardcoded to scalars.yaml for now
     let path_to_model = process_output_file
+        .as_ref()
         .join("sources")
         .join("model")
         .join("scalars.yaml");
@@ -495,6 +581,7 @@ fn batch_branch(
 
     // load the amplitude
     let path_to_amplitude_yaml = process_output_file
+        .as_ref()
         .join("sources")
         .join("amplitudes")
         .join(amplitude_name)
@@ -508,6 +595,7 @@ fn batch_branch(
         let amp = Amplitude::from_file(&model, path_to_amplitude_yaml_as_string)?;
 
         let derived_data_path = process_output_file
+            .as_ref()
             .join("sources")
             .join("amplitudes")
             .join(amplitude_name);
@@ -539,78 +627,4 @@ fn batch_branch(
     fs::write(output_name, batch_result_bytes)?;
 
     Ok(())
-}
-
-pub static LOG_LEVEL: LazyLock<Mutex<LevelFilter>> = LazyLock::new(|| Mutex::new(LevelFilter::Off));
-pub static LOG_FORMAT: LazyLock<Mutex<LogFormat>> = LazyLock::new(|| Mutex::new(LogFormat::Long));
-
-impl State {
-    pub fn setup_log(&self) -> Result<()> {
-        fern::Dispatch::new()
-            .filter(|metadata| metadata.level() <= (*LOG_LEVEL.lock().unwrap()))
-            // Perform allocation-free log formatting
-            .format(|out, message, record| {
-                let now = Local::now();
-                match *LOG_FORMAT.lock().unwrap() {
-                    LogFormat::Long => out.finish(format_args!(
-                        "[{}] @{} {}: {}",
-                        format!(
-                            "{:04}-{:02}-{:02} {:02}:{:02}:{:02}.{:03}",
-                            now.year(),
-                            now.month(),
-                            now.day(),
-                            now.hour(),
-                            now.minute(),
-                            now.second(),
-                            now.timestamp_subsec_millis()
-                        )
-                        .bright_green(),
-                        format_target(record.target().into(), record.level()),
-                        format_level(record.level()),
-                        message
-                    )),
-                    LogFormat::Short => out.finish(format_args!(
-                        "[{}] {}: {}",
-                        format!("{:02}:{:02}:{:02}", now.hour(), now.minute(), now.second())
-                            .bright_green(),
-                        format_level(record.level()),
-                        message
-                    )),
-                    LogFormat::Min => out.finish(format_args!(
-                        "{}: {}",
-                        format_level(record.level()),
-                        message
-                    )),
-                    LogFormat::None => out.finish(format_args!("{}", message)),
-                }
-            })
-            // Output to stdout, files, and other Dispatch configurations
-            .chain(std::io::stdout())
-            .chain(fern::log_file("gammaloop_rust_output.log")?)
-            // Apply globally
-            .apply()?;
-
-        Ok(())
-    }
-}
-
-pub fn format_level(level: log::Level) -> ColoredString {
-    match level {
-        log::Level::Error => format!("{:<8}", "ERROR").red(),
-        log::Level::Warn => format!("{:<8}", "WARNING").yellow(),
-        log::Level::Info => format!("{:<8}", "INFO").into(),
-        log::Level::Debug => format!("{:<8}", "DEBUG").bright_black(),
-        log::Level::Trace => format!("{:<8}", "TRACE").into(),
-    }
-}
-
-pub fn format_target(target: String, level: log::Level) -> ColoredString {
-    let split_targets = target.split("::").collect::<Vec<_>>();
-    //[-2..].iter().join("::");
-    let start = split_targets.len().saturating_sub(2);
-    let mut shortened_path = split_targets[start..].join("::");
-    if level < log::Level::Debug && shortened_path.len() > 20 {
-        shortened_path = format!("{}...", shortened_path.chars().take(17).collect::<String>());
-    }
-    format!("{:<20}", shortened_path).bright_blue()
 }

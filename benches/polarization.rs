@@ -6,15 +6,14 @@ use _gammaloop::{
     numerator::ContractionSettings,
     tests_from_pytest::load_amplitude_output,
     utils::F,
-    Externals, GammaloopCompileOptions, ProcessSettings,
-    TropicalSubgraphTableSettings,
+    Externals, GammaloopCompileOptions, ProcessSettings, TropicalSubgraphTableSettings,
 };
 use criterion::{criterion_group, criterion_main, Criterion};
 use pprof::criterion::{Output, PProfProfiler};
 
 const COMPILED_DUMP: &str = "TMP_COMPILED";
 
-pub fn load_helper(path: &str, use_orientations: bool) -> Graph {
+pub(crate) fn load_helper(path: &str, use_orientations: bool) -> Graph {
     let (model, mut amplitude, _) = load_amplitude_output(path, true);
     amplitude.amplitude_graphs[0].graph.generate_cff();
 

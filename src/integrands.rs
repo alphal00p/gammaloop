@@ -158,7 +158,7 @@ impl HasIntegrand for Integrand {
     }
 }
 
-pub fn integrand_factory(settings: &Settings) -> Integrand {
+pub(crate) fn integrand_factory(settings: &Settings) -> Integrand {
     match settings.hard_coded_integrand.clone() {
         IntegrandSettings::UnitSurface(integrand_settings) => Integrand::UnitSurface(
             UnitSurfaceIntegrand::new(settings.clone(), integrand_settings),
@@ -190,7 +190,7 @@ pub struct UnitSurfaceIntegrand {
 
 #[allow(unused)]
 impl UnitSurfaceIntegrand {
-    pub fn new(
+    pub(crate) fn new(
         settings: Settings,
         integrand_settings: UnitSurfaceSettings,
     ) -> UnitSurfaceIntegrand {
@@ -331,7 +331,10 @@ pub struct UnitVolumeIntegrand {
 
 #[allow(unused)]
 impl UnitVolumeIntegrand {
-    pub fn new(settings: Settings, integrand_settings: UnitVolumeSettings) -> UnitVolumeIntegrand {
+    pub(crate) fn new(
+        settings: Settings,
+        integrand_settings: UnitVolumeSettings,
+    ) -> UnitVolumeIntegrand {
         let n_dim = utils::get_n_dim_for_n_loop_momenta(
             &settings.sampling,
             integrand_settings.n_3d_momenta,

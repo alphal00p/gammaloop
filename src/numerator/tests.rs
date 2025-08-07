@@ -214,7 +214,7 @@ fn compare_poly_to_direct(graph: &BareGraph, prefactor: &GlobalPrefactor) -> boo
 }
 
 #[allow(dead_code)]
-pub fn save_expr(graph: &BareGraph, prefactor: &GlobalPrefactor, name: &str) {
+pub(crate) fn save_expr(graph: &BareGraph, prefactor: &GlobalPrefactor, name: &str) {
     let color_simplified = Numerator::default()
         .from_graph(graph, prefactor)
         .color_simplify();
@@ -407,7 +407,7 @@ fn tree_ta_ta_1() {
     );
 }
 
-pub fn validate_gamma(g: Graph<UnInit>, model: &Model, path: PathBuf) {
+pub(crate) fn validate_gamma(g: Graph<UnInit>, model: &Model, path: PathBuf) {
     let num = g.derived_data.as_ref().unwrap().numerator.clone();
 
     let num = num.from_graph(&g.bare_graph, &GlobalPrefactor::default());
