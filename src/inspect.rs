@@ -11,13 +11,12 @@ use crate::momentum::ThreeMomentum;
 use crate::utils;
 use crate::utils::f128;
 use crate::utils::F;
-use crate::Integrand;
 use crate::SamplingSettings;
 use crate::Settings;
 
-pub(crate) fn inspect(
+pub(crate) fn inspect<I: HasIntegrand>(
     settings: &Settings,
-    integrand: &mut Integrand,
+    integrand: &mut I,
     mut pt: Vec<F<f64>>,
     _term: &[usize],
     mut force_radius: bool,

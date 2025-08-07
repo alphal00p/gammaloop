@@ -67,8 +67,8 @@ clap = { version = "4.5.41", features = [
 ] }
 rustyline = "12"
 shell-words = "1.1"
-color-eyre = { version = "^0.3", default-features = false }
-eyre = "^0.4"
+color-eyre = { version = "0.6", default-features = false }
+eyre = "^0.6"
 lorentz_vector = { git = "https://github.com/benruijl/lorentz_vector", branch = "hyperdual", features = [
     "serde_support",
     "hyperdual_support",
@@ -139,7 +139,7 @@ linreg = "0.2.0"
 dot-parser = "0.4.2"
 console = "0.16.0"
 [dependencies.pyo3]
-features = ["abi3", "abi3-py37"]
+features = ["abi3", "abi3-py37", "eyre"]
 optional = true
 version = "0.24"
 
@@ -168,20 +168,19 @@ no_python = []
 # insta.opt-level = 3
 
 [patch.crates-io]
+spenso = { git = "https://github.com/alphal00p/spenso", rev = "3386041d300355cd17203597955542e0c244ba82" }
+# spenso = { path = "../spenso/spenso" }
+spenso-hep-lib = { git = "https://github.com/alphal00p/spenso", rev = "3386041d300355cd17203597955542e0c244ba82" }
+# spenso-hep-lib = { path = "../spenso/spenso-hep-lib" }
+idenso = { git = "https://github.com/alphal00p/spenso", rev = "3386041d300355cd17203597955542e0c244ba82" }
+# idenso = { path = "../spenso/idenso" }
+spenso-macros = { git = "https://github.com/alphal00p/spenso", rev = "3386041d300355cd17203597955542e0c244ba82" }
+# spenso-macros = { path = "../spenso/spenso-macros" }
 # symbolica = { git = "https://github.com/benruijl/symbolica", branch = "optim" }
 # symbolica = { path = "./python/gammaloop/dependencies/symbolica" }
 # symbolica={git="https://github.com/benruijl/symbolica",rev="a714571c8c8ee1a292237eb3ef1bc8123a4d7db4"}
 # symbolica = { git = "https://github.com/alphal00p/symbolica", rev = "a23ebaa71b1bc715a129ac765764ece7273625dc" }
 # symbolica = {path="../symbolica"}
-# spenso-macros = { path = "../spenso/spenso-macros" }
-spenso = { git = "https://github.com/alphal00p/spenso", rev = "202d53ab247ed02a0f2e2fe5856633e1630a08f9" }
-# spenso = { path = "../spenso/spenso" }
-spenso-hep-lib = { git = "https://github.com/alphal00p/spenso", rev = "202d53ab247ed02a0f2e2fe5856633e1630a08f9" }
-# spenso-hep-lib = { path = "../spenso/spenso-hep-lib" }
-idenso = { git = "https://github.com/alphal00p/spenso", rev = "202d53ab247ed02a0f2e2fe5856633e1630a08f9" }
-# idenso = { path = "../spenso/idenso" }
-spenso-macros = { git = "https://github.com/alphal00p/spenso", rev = "202d53ab247ed02a0f2e2fe5856633e1630a08f9" }
-# spenso-macros = { path = "../spenso/spenso-macros" }
 # linnet = "0.10.0"
 # linnet = { path = "../linnet" }
 linnet = { git = "https://github.com/alphal00p/linnet", rev = "044f5947ac5154bdb6120d9229fc3cf1a9243bfb" }

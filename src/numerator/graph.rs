@@ -1,4 +1,3 @@
-use std::ops::Sub;
 
 use linnet::half_edge::{
     involution::{EdgeData, Flow, Orientation},
@@ -8,8 +7,8 @@ use spenso::{
     iterators::IteratableTensor,
     network::parsing::ShadowedStructure,
     shadowing::Concretize,
-    structure::{PermutedStructure, TensorStructure, ToSymbolic},
-    tensors::{data::DataIterator, parametric::ParamTensor, symbolic::SymbolicTensor},
+    structure::{PermutedStructure, TensorStructure},
+    tensors::parametric::ParamTensor,
 };
 use symbolica::atom::{Atom, AtomOrView, FunctionBuilder, Symbol};
 

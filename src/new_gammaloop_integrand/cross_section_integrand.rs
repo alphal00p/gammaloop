@@ -1,14 +1,10 @@
 use bincode::Encode;
 use bincode_trait_derive::Decode;
-use color_eyre::Result;
 use colored::Colorize;
 use itertools::Itertools;
 use serde::Serialize;
 use spenso::algebra::complex::Complex;
-use symbolica::{
-    atom::Atom,
-    numerical_integration::{Grid, Sample},
-};
+use symbolica::numerical_integration::{Grid, Sample};
 use typed_index_collections::TiVec;
 
 use crate::{
@@ -24,7 +20,8 @@ use crate::{
     new_gammaloop_integrand::ParamBuilder,
     new_graph::{ExternalConnection, FeynmanGraph, Graph, LmbIndex, LoopMomentumBasis},
     utils::{self, FloatLike, F},
-    DependentMomentaConstructor, IntegratedCounterTermRange, Polarizations, Settings,
+    DependentMomentaConstructor, GammaLoopContext, IntegratedCounterTermRange, Polarizations,
+    Settings,
 };
 
 use super::{
@@ -36,7 +33,8 @@ const TOLERANCE: F<f64> = F(2.0);
 const HARD_CODED_M_UV: F<f64> = F(1000.0);
 const HARD_CODED_M_R_SQ: F<f64> = F(1000.0);
 
-#[derive(Clone)]
+#[derive(Clone, Encode, Decode)]
+#[trait_decode(trait = GammaLoopContext)]
 pub struct CrossSectionIntegrand {
     pub settings: Settings,
     pub polarizations: Vec<Polarizations>,
@@ -89,7 +87,8 @@ pub struct OrientationEvaluator {
     pub evaluators: Vec<GenericEvaluator>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Encode, Decode)]
+#[trait_decode(trait = GammaLoopContext)]
 pub struct CrossSectionGraphTerm {
     pub bare_cff_evaluators: TiVec<CutId, GenericEvaluator>,
     pub bare_cff_orientation_evaluators: TiVec<SuperGraphOrientationID, OrientationEvaluator>,

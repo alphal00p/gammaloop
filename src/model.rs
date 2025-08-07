@@ -24,7 +24,7 @@ use spenso::algebra::complex::Complex;
 use spenso::network::library::symbolic::ETS;
 use spenso::structure::representation::{LibraryRep, Minkowski};
 use spenso::structure::{
-    abstract_index::AbstractIndex, concrete_index::CONCRETEIND, representation::Euclidean,
+    abstract_index::AbstractIndex, representation::Euclidean,
 };
 use spenso::structure::{
     representation::BaseRepName, representation::Lorentz, representation::RepName,

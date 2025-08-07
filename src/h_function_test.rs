@@ -11,12 +11,14 @@ use crate::ParameterizationMapping;
 use crate::Precision;
 use crate::SamplingSettings;
 use crate::Settings;
+use bincode_trait_derive::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
 use symbolica::domains::float::NumericalFloatLike;
 use symbolica::numerical_integration::{ContinuousGrid, Grid, Sample};
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Encode, Decode)]
+// #[trait_decode(trait= GammaLoopContext)]
 pub struct HFunctionTestSettings {
     pub h_function: crate::HFunctionSettings,
 }

@@ -1,14 +1,12 @@
 use std::{borrow::Borrow, ops::Deref};
 
 use bitvec::vec::BitVec;
-use color_eyre::Result;
 use itertools::Itertools;
 use linnet::half_edge::{
     involution::{EdgeIndex, EdgeVec, Flow, HedgePair},
     subgraph::{InternalSubGraph, ModifySubgraph, SubGraphOps},
     HedgeGraph, NodeIndex,
 };
-use log::debug;
 use momtrop::float::MomTropFloat;
 
 use spenso::{
@@ -16,10 +14,8 @@ use spenso::{
     structure::concrete_index::ExpandedIndex,
 };
 // use petgraph::Direction::Outgoing;
-use idenso::metric::MS;
 use symbolica::{
     atom::{Atom, AtomCore},
-    function,
     id::Replacement,
     parse,
 };
@@ -312,12 +308,16 @@ impl FeynmanGraph for HedgeGraph<Edge, Vertex, NumHedgeData> {
         external_moms: &ExternalFourMomenta<F<T>>,
         lmb: &LoopMomentumBasis,
     ) -> Vec<F<T>> {
-        lmb.edge_signatures
-            .iter()
-            .zip(self.iter_edges())
-            .filter(|(_, (pair, _, _))| matches!(pair, HedgePair::Paired { .. }))
-            .map(|((_, sig), _)| sig.compute_three_momentum_from_four(loop_moms, external_moms))
-            .flat_map(|emr_vec| [emr_vec.px, emr_vec.py, emr_vec.pz])
+        self.iter_edges()
+            .flat_map(|(pair, edge_id, _)| {
+                if let HedgePair::Paired { .. } = pair {
+                    let emr_vec = lmb.edge_signatures[edge_id]
+                        .compute_three_momentum_from_four(loop_moms, external_moms);
+                    vec![emr_vec.px, emr_vec.py, emr_vec.pz]
+                } else {
+                    vec![]
+                }
+            })
             .collect()
     }
 

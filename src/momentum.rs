@@ -4,7 +4,7 @@ use std::{
     ops::{Add, AddAssign, Index, Mul, MulAssign, Neg, Sub, SubAssign},
 };
 
-use bincode::{Decode, Encode};
+use bincode_trait_derive::{Decode, Encode};
 use eyre::Context;
 use momtrop::vector::Vector;
 use serde::{Deserialize, Serialize};
@@ -50,7 +50,7 @@ use symbolica::{parse, symbol};
 
 use crate::{
     utils::{ApproxEq, FloatLike, RefDefault, F},
-    RotationSetting,
+    GammaLoopContext, RotationSetting,
 };
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize, Encode, Decode)]
@@ -1072,7 +1072,8 @@ impl<T: FloatLike> FourMomentum<F<T>> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize, Encode, Decode)]
+// #[trait_decode(trait= GammaLoopContext)]
 #[serde(untagged)]
 pub enum ExternalMomenta<T> {
     Dependent(Dep),
@@ -1091,7 +1092,7 @@ impl<T: FloatLike> Rotatable for ExternalMomenta<F<T>> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize, Encode, Decode)]
 pub enum Dep {
     #[serde(rename = "dependent")]
     Dep,
@@ -2647,7 +2648,7 @@ pub enum LorentzRep {
     Bispinor,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Encode, Decode)]
 pub enum RotationMethod {
     EulerAngles(f64, f64, f64),
     Pi2X,
@@ -2662,7 +2663,8 @@ impl From<RotationMethod> for Rotation {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Encode, Decode)]
+#[trait_decode(trait = GammaLoopContext)]
 pub struct Rotation {
     pub method: RotationMethod,
     pub lorentz_rotation: EvalTensor<ExpressionEvaluator<Complex<F<f64>>>, OrderedStructure>,

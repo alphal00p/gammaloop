@@ -17,11 +17,11 @@ use symbolica::{
 use linnet::half_edge::{involution::EdgeIndex, subgraph::SubGraph, HedgeGraph};
 
 use typed_index_collections::TiVec;
+use vakint::Vakint;
 
 use super::{
     approx::Approximation,
     poset::{DagNode, DAG},
-    uv_graph::UVE,
     UltravioletGraph,
 };
 
@@ -44,6 +44,7 @@ impl Forest {
         &mut self,
         graph: &G,
         amplitude_subgraph: &S,
+        vakint: &Vakint,
         orientations: &TiVec<OID, O>,
         canonize_esurface: &Option<ShiftRewrite>,
         cut_edges: &[EdgeIndex],
@@ -71,7 +72,7 @@ impl Forest {
                     assert!(matches!(parent.data.local_3d, CFFapprox::Dependent { .. }));
                     current
                         .data
-                        .compute(graph, amplitude_subgraph, &parent.data);
+                        .compute(graph, vakint, amplitude_subgraph, &parent.data);
                     current.data.compute_3d(
                         graph,
                         amplitude_subgraph,

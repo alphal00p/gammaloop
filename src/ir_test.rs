@@ -418,7 +418,8 @@ impl IrLimit {
 
                             if opening_bracket != '(' {
                                 return Err(eyre!(
-                                    "Expected '(' after 'S' in soft edge at position {}, found '{}'",));
+                                    "Expected '(' after 'S' in soft edge at position , found ''",
+                                ));
                             }
 
                             let mut edge_str = String::new();

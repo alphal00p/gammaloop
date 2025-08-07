@@ -1,64 +1,16 @@
-use std::{cmp::Ordering, collections::VecDeque, hash::Hash, ops::Deref};
+use std::collections::VecDeque;
 
-use crate::{
-    cff::{
-        expression::{GraphOrientation, OrientationData, OrientationID},
-        generation::{generate_uv_cff, ShiftRewrite},
-    },
-    model::ArcParticle,
-    momentum::Sign,
-    new_graph::{Edge, LMBext, LoopMomentumBasis, Vertex},
-    numerator::aind::Aind,
-    utils::{sign_atom, GS, W_},
-};
-use ahash::AHashSet;
-use bitvec::vec::BitVec;
-use eyre::eyre;
-use idenso::metric::MS;
-use log::debug;
-use pathfinding::prelude::BfsReachable;
-use serde::{Deserialize, Serialize};
+use crate::new_graph::{Edge, LoopMomentumBasis, Vertex};
 use slotmap::SecondaryMap;
-use spenso::{
-    algebra::ScalarMul,
-    network::parsing::ShadowedStructure,
-    shadowing::symbolica_utils::SerializableAtom,
-    structure::{
-        dimension::Dimension,
-        representation::{Minkowski, RepName},
-        HasStructure, NamedStructure, OrderedStructure, ToSymbolic,
-    },
-    tensors::parametric::{
-        atomcore::{PatternReplacement, TensorAtomMaps},
-        ParamTensor,
-    },
-};
-use symbolica::{
-    atom::{Atom, AtomCore, FunctionBuilder, Symbol},
-    function,
-    id::Replacement,
-    parse,
-    printer::PrintOptions,
-    symbol,
-};
+use symbolica::atom::AtomCore;
 
 use linnet::half_edge::{
-    involution::{EdgeIndex, HedgePair, SignOrZero},
-    subgraph::{Inclusion, InternalSubGraph, SubGraph, SubGraphOps},
+    subgraph::InternalSubGraph,
     HedgeGraph,
 };
 
-use typed_index_collections::TiVec;
-use vakint::{
-    vakint_symbol, EvaluationOrder, LoopNormalizationFactor, Vakint, VakintExpression,
-    VakintSettings,
-};
 // use vakint::{EvaluationOrder, LoopNormalizationFactor, Vakint, VakintSettings};
 
-use crate::{
-    graph::{BareEdge, BareGraph, BareVertex},
-    model::normalise_complex,
-};
 
 use super::{
     approx::Approximation,

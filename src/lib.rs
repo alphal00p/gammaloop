@@ -51,9 +51,6 @@ use idenso::representations::initialize;
 use integrands::*;
 use itertools::Itertools;
 use log::debug;
-use rand::rngs::SmallRng;
-use rand::{Rng, SeedableRng};
-
 use model::ArcParticle;
 use model::Model;
 use momentum::Dep;
@@ -71,20 +68,18 @@ use numerator::NumeratorSettings;
 
 use observables::ObservableSettings;
 
+use bincode_trait_derive::{Decode, Encode};
 use observables::PhaseSpaceSelectorSettings;
-
 use signature::ExternalSignature;
 use spenso::algebra::complex::Complex;
 use std::fmt::Display;
 use std::fs::File;
 use std::path::Path;
-use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use symbolica::evaluate::CompileOptions;
 use symbolica::evaluate::InlineASM;
 use symbolica::state::HasStateMap;
 use symbolica::state::StateMap;
-use tabled::Tabled;
 use utils::FloatLike;
 use utils::F;
 
@@ -136,7 +131,8 @@ pub const MAX_LOOP: usize = 3;
 #[cfg(feature = "higher_loops")]
 pub const MAX_LOOP: usize = 6;
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Encode, Decode)]
+// #[trait_decode(trait= GammaLoopContext)]
 pub enum HFunction {
     #[default]
     #[serde(rename = "poly_exponential")]
@@ -182,7 +178,8 @@ fn _default_shifts() -> Vec<(f64, f64, f64, f64)> {
     vec![(1.0, 0.0, 0.0, 0.0); 15]
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Encode, Decode)]
+// #[trait_decode(trait= GammaLoopContext)]
 pub struct HFunctionSettings {
     pub function: HFunction,
     pub sigma: f64,
@@ -192,7 +189,7 @@ pub struct HFunctionSettings {
     pub power: Option<usize>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, Encode, Decode)]
 pub enum ParameterizationMode {
     #[serde(rename = "cartesian")]
     Cartesian,
@@ -223,7 +220,7 @@ impl Display for ParameterizationMode {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, PartialEq, Default, Serialize)]
+#[derive(Debug, Clone, Deserialize, PartialEq, Default, Serialize, Encode, Decode)]
 pub enum ParameterizationMapping {
     #[serde(rename = "log")]
     #[default]
@@ -232,7 +229,8 @@ pub enum ParameterizationMapping {
     Linear,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, Encode, Decode)]
+#[trait_decode(trait= GammaLoopContext)]
 pub struct GeneralSettings {
     pub debug: usize,
     pub use_ltd: bool,
@@ -260,7 +258,8 @@ impl Default for GeneralSettings {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Deserialize, Default, Serialize)]
+#[derive(Debug, Copy, Clone, PartialEq, Deserialize, Default, Serialize, Encode, Decode)]
+// #[trait_decode(trait= GammaLoopContext)]
 pub enum IntegratedPhase {
     #[serde(rename = "real")]
     #[default]
@@ -271,7 +270,8 @@ pub enum IntegratedPhase {
     Both,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, Encode, Decode)]
+#[trait_decode(trait= GammaLoopContext)]
 pub struct KinematicsSettings {
     pub e_cm: F<f64>,
     pub externals: Externals,
@@ -295,7 +295,8 @@ impl Default for KinematicsSettings {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, Encode, Decode)]
+// #[trait_decode(trait= GammaLoopContext)]
 pub struct IntegratorSettings {
     pub n_bins: usize,
     pub bin_number_evolution: Option<Vec<usize>>,
@@ -332,7 +333,7 @@ impl Default for IntegratorSettings {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Encode, Decode)]
 pub struct ParameterizationSettings {
     pub mode: ParameterizationMode,
     pub mapping: ParameterizationMapping,
@@ -355,7 +356,8 @@ impl Default for ParameterizationSettings {
     }
 }
 
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize, Encode, Decode)]
+#[trait_decode(trait= GammaLoopContext)]
 pub struct Settings {
     // Runtime settings
     #[serde(rename = "General")]
@@ -415,7 +417,7 @@ pub struct IntegrationResult {
     pub prob: Vec<F<f64>>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Encode, Decode)]
 pub struct StabilitySettings {
     rotation_axis: Vec<RotationSetting>,
     rotate_numerator: bool,
@@ -435,7 +437,7 @@ impl Default for StabilitySettings {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, Encode, Decode)]
 pub struct StabilityLevelSetting {
     precision: Precision,
     required_precision_for_re: F<f64>,
@@ -463,7 +465,7 @@ impl StabilityLevelSetting {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Default, Copy, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, Default, Copy, PartialEq, Encode, Decode)]
 #[serde(tag = "type")]
 pub enum RotationSetting {
     #[serde(rename = "x")]
@@ -525,7 +527,9 @@ impl RotationSetting {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq, Copy, Hash, Eq)]
+#[derive(
+    Serialize, Deserialize, Debug, Clone, Default, PartialEq, Copy, Hash, Eq, Encode, Decode,
+)]
 pub enum Precision {
     #[default]
     Double,
@@ -549,7 +553,8 @@ impl Display for Precision {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Encode, Decode)]
+// #[trait_decode(trait= GammaLoopContext)]
 #[serde(tag = "type", content = "data")]
 pub enum Externals {
     #[serde(rename = "constant")]
@@ -579,7 +584,8 @@ impl Rotatable for Externals {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Encode, Decode)]
+#[trait_decode(trait= GammaLoopContext)]
 pub enum Polarizations {
     Constant {
         polarizations: Vec<Polarization<Complex<F<f64>>>>,
@@ -903,7 +909,7 @@ impl Default for Externals {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode)]
 #[serde(tag = "type")]
 pub enum SamplingSettings {
     #[serde(rename = "default")]
@@ -1021,7 +1027,7 @@ impl SamplingSettings {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode)]
 pub struct MultiChannelingSettings {
     pub alpha: f64,
     pub parameterization_settings: ParameterizationSettings,
@@ -1036,7 +1042,7 @@ impl Default for MultiChannelingSettings {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode)]
 pub struct GammaloopTropicalSamplingSettings {
     pub upcast_on_failure: bool,
     pub matrix_stability_test: Option<f64>,
@@ -1068,7 +1074,7 @@ impl GammaloopTropicalSamplingSettings {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode)]
 #[serde(tag = "subtype")]
 pub enum DiscreteGraphSamplingType {
     #[serde(rename = "default")]
@@ -1081,19 +1087,19 @@ pub enum DiscreteGraphSamplingType {
     TropicalSampling(GammaloopTropicalSamplingSettings),
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode)]
 pub struct DiscreteGraphSamplingSettings {
     pub sample_orientations: bool,
     pub sampling_type: DiscreteGraphSamplingType,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Encode, Decode)]
 pub struct LocalCounterTermSettings {
     pub dampen_integrable_singularity: IntegrableSingularityDampener,
     pub uv_localisation: UVLocalisationSettings,
 }
 
-#[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq, Encode, Decode)]
 #[serde(tag = "type")]
 pub enum IntegrableSingularityDampener {
     #[serde(rename = "none")]
@@ -1105,7 +1111,7 @@ pub enum IntegrableSingularityDampener {
     Powerlike { power: f64 },
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode)]
 pub struct UVLocalisationSettings {
     pub sliver_width: f64,
     pub dynamic_width: bool,
@@ -1122,12 +1128,12 @@ impl Default for UVLocalisationSettings {
     }
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Encode, Decode)]
 pub struct IntegratedCounterTermSettings {
     range: IntegratedCounterTermRange,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode)]
 #[serde(tag = "type")]
 pub enum IntegratedCounterTermRange {
     #[serde(rename = "infinite")]
@@ -1146,7 +1152,7 @@ impl Default for IntegratedCounterTermRange {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode)]
 pub struct OverlapSettings {
     pub force_global_center: Option<Vec<[f64; 3]>>,
     pub check_global_center: bool,
@@ -1165,14 +1171,14 @@ impl Default for OverlapSettings {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, Encode, Decode)]
 pub struct SubtractionSettings {
     pub local_ct_settings: LocalCounterTermSettings,
     pub integrated_ct_settings: IntegratedCounterTermSettings,
     pub overlap_settings: OverlapSettings,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct ProcessSettings {
     // Generation Time settings
     pub compile_cff: bool,
@@ -1196,7 +1202,7 @@ impl Default for ProcessSettings {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct GammaloopCompileOptions {
     pub inline_asm: bool,
     pub optimization_level: usize,
@@ -1241,7 +1247,7 @@ impl GammaloopCompileOptions {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct TropicalSubgraphTableSettings {
     pub panic_on_fail: bool,
     pub target_omega: f64,

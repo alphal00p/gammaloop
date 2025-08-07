@@ -7,14 +7,13 @@ use linnet::{
 };
 use spenso::{
     algebra::complex::Complex,
-    network::library::TensorLibraryData,
     structure::{IndexLess, ScalarStructure},
 };
-use symbolica::atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder};
+use symbolica::atom::{Atom, AtomCore, AtomView};
 
 use crate::{
     graph::BareEdge,
-    model::{ArcParticle, ArcPropagator, Model},
+    model::{ArcParticle, Model},
     momentum::Helicity,
     momentum_sample::LoopIndex,
     numerator::aind::NewAind,
@@ -22,12 +21,8 @@ use crate::{
 };
 
 use color_eyre::Result;
-use eyre::eyre;
 
-use super::{
-    parse::{StripParse, ToQuoted},
-    NumHedgeData,
-};
+use super::parse::{StripParse, ToQuoted};
 
 #[derive(Debug, Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
 #[trait_decode(trait = crate::GammaLoopContext)]

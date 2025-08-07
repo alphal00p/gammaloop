@@ -1,6 +1,6 @@
 use std::{
+    collections::HashMap,
     fs::{self, File},
-    io::ErrorKind,
     path::{Path, PathBuf},
     sync::{LazyLock, Mutex},
 };
@@ -11,11 +11,7 @@ use colored::{ColoredString, Colorize};
 use eyre::eyre;
 use log::{debug, LevelFilter};
 
-use crate::{
-    model::{Model, SerializableModel},
-    new_cs::ProcessList,
-    GammaLoopContextContainer,
-};
+use crate::{integrands::Integrand, model::Model, new_cs::ProcessList, GammaLoopContextContainer};
 
 use super::LogFormat;
 
@@ -111,6 +107,9 @@ impl State {
 
         let binary = bincode::encode_to_vec(&self.process_list, bincode::config::standard())?;
         fs::write(root_folder.join("process_list.bin"), binary)?;
+
+        // let binary = bincode::encode_to_vec(&self.integrands, bincode::config::standard())?;
+        // fs::write(root_folder.join("process_list.bin"), binary)?;?
         let model_yaml = serde_yaml::to_string(&self.model.to_serializable())?;
 
         fs::write(root_folder.join("model.yaml"), model_yaml)?;

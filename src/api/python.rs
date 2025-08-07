@@ -19,10 +19,13 @@ use crate::{
     GammaLoopContextContainer, HasIntegrand, IntegratedPhase, OutputMetadata, ProcessSettings,
     Settings,
 };
+
 use ahash::HashMap;
 use chrono::{Datelike, Local, Timelike};
 use clap::Parser;
+use color_eyre::Result;
 use colored::{ColoredString, Colorize};
+use eyre::eyre;
 use feyngen::{
     FeynGenFilter, GenerationType, SelfEnergyFilterOptions, SnailFilterOptions,
     TadpolesFilterOptions,
@@ -269,7 +272,7 @@ pub struct OutputOptions {}
 pub struct PythonWorker {
     pub model: Model,
     pub process_list: ProcessList,
-    pub integrands: HashMap<String, Integrand>,
+    // pub integrands: HashMap<String, Integrand>,
     pub master_node: Option<MasterNode>,
 }
 
@@ -278,7 +281,7 @@ impl Clone for PythonWorker {
         PythonWorker {
             model: self.model.clone(),
             process_list: self.process_list.clone(),
-            integrands: self.integrands.clone(),
+            // integrands: self.integrands.clone(),
             master_node: self.master_node.clone(),
         }
     }
@@ -616,7 +619,7 @@ impl PythonWorker {
         Ok(PythonWorker {
             model: Model::default(),
             process_list: ProcessList::new(),
-            integrands: HashMap::default(),
+            // integrands: HashMap::default(),
             master_node: None,
         })
     }
@@ -809,243 +812,205 @@ impl PythonWorker {
         force_radius: bool,
         is_momentum_space: bool,
         use_f128: bool,
-    ) -> PyResult<(f64, f64)> {
+    ) -> Result<(f64, f64)> {
         let pt = pt.iter().map(|&x| F(x)).collect::<Vec<F<f64>>>();
-        match self.integrands.get_mut(integrand) {
-            Some(integrand) => {
-                let settings = match integrand {
-                    Integrand::GammaLoopIntegrand(integrand) => {
-                        integrand.global_data.settings.clone()
-                    }
-                    Integrand::NewIntegrand(integrand) => integrand.get_settings().clone(),
-                    _ => todo!(),
-                };
+        let integrand = self.process_list.get_integrand_mut(0, integrand)?;
 
-                let res = inspect::inspect(
-                    &settings,
-                    integrand,
-                    pt,
-                    &term,
-                    force_radius,
-                    is_momentum_space,
-                    use_f128,
-                );
+        let settings = integrand.get_settings().clone();
+        //  match integrand {
+        //     Integrand::GammaLoopIntegrand(integrand) => {
+        //         integrand.global_data.settings.clone()
+        //     }
+        //     Integrand::NewIntegrand(integrand) => integrand.get_settings().clone(),
+        //     _ => todo!(),
+        // };
 
-                Ok((res.re.0, res.im.0))
-            }
-            None => Err(exceptions::PyException::new_err(format!(
-                "Could not find integrand {} available integrands: {:?}",
-                integrand,
-                self.integrands.keys().collect::<Vec<&String>>()
-            ))),
-        }
+        let res = inspect::inspect(
+            &settings,
+            integrand,
+            pt,
+            &term,
+            force_radius,
+            is_momentum_space,
+            use_f128,
+        );
+
+        Ok((res.re.0, res.im.0))
     }
 
     pub(crate) fn inspect_lmw_integrand(
         &mut self,
-        integrand: &str,
+        integrand_name: &str,
         workspace_path: &str,
         use_f128: bool,
-    ) -> PyResult<()> {
-        match self.integrands.get_mut(integrand) {
-            Some(integrand_struct) => {
-                let new_settings = match integrand_struct {
-                    Integrand::GammaLoopIntegrand(integrand_struct) => {
-                        integrand_struct.global_data.settings.clone()
-                    }
-                    _ => todo!(),
-                };
+    ) -> Result<()> {
+        let integrand = self.process_list.get_integrand_mut(0, integrand_name)?;
 
-                let workspace_path = PathBuf::from(workspace_path);
-                let path_to_state = workspace_path.join("integration_state");
+        let settings = integrand.get_settings().clone();
+        let workspace_path = PathBuf::from(workspace_path);
+        let path_to_state = workspace_path.join("integration_state");
 
-                match fs::read(path_to_state) {
-                    Ok(state_bytes) => {
-                        let integration_state: IntegrationState =
-                            bincode::decode_from_slice::<IntegrationState, _>(
-                                &state_bytes,
-                                bincode::config::standard(),
-                            )
-                            .expect("failed to obtain state")
-                            .0;
-                        let path_to_workspace_settings = workspace_path.join("settings.yaml");
-                        let workspace_settings_string =
-                            fs::read_to_string(path_to_workspace_settings)
-                                .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
+        // match fs::read(path_to_state) {
+        //     Ok(state_bytes) => {
+        //         let integration_state: IntegrationState =
+        //             bincode::decode_from_slice::<IntegrationState, _>(
+        //                 &state_bytes,
+        //                 bincode::config::standard(),
+        //             )
+        //             .expect("failed to obtain state")
+        //             .0;
+        //         let path_to_workspace_settings = workspace_path.join("settings.yaml");
+        //         let workspace_settings_string = fs::read_to_string(path_to_workspace_settings)
+        //             .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
 
-                        let mut workspace_settings: Settings =
-                            serde_yaml::from_str(&workspace_settings_string)
-                                .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
+        //         let mut workspace_settings: Settings =
+        //             serde_yaml::from_str(&workspace_settings_string)
+        //                 .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
 
-                        workspace_settings.general.debug = new_settings.general.debug;
+        //         workspace_settings.general.debug = new_settings.general.debug;
 
-                        let max_weight_samples = vec![
-                            integration_state.integral.re.max_eval_positive_xs,
-                            integration_state.integral.re.max_eval_negative_xs,
-                            integration_state.integral.im.max_eval_positive_xs,
-                            integration_state.integral.im.max_eval_negative_xs,
-                        ];
+        //         let max_weight_samples = vec![
+        //             integration_state.integral.re.max_eval_positive_xs,
+        //             integration_state.integral.re.max_eval_negative_xs,
+        //             integration_state.integral.im.max_eval_positive_xs,
+        //             integration_state.integral.im.max_eval_negative_xs,
+        //         ];
 
-                        for max_weight_sample in max_weight_samples
-                            .into_iter()
-                            .filter_map(std::convert::identity)
-                        {
-                            // bypass inspect function as it does not take a symbolica sample as input
-                            let eval_result = integrand_struct.evaluate_sample(
-                                &max_weight_sample,
-                                F(0.0),
-                                1,
-                                use_f128,
-                                Complex::new_zero(),
-                            );
+        //         for max_weight_sample in max_weight_samples
+        //             .into_iter()
+        //             .filter_map(std::convert::identity)
+        //         {
+        //             // bypass inspect function as it does not take a symbolica sample as input
+        //             let eval_result = integrand_struct.evaluate_sample(
+        //                 &max_weight_sample,
+        //                 F(0.0),
+        //                 1,
+        //                 use_f128,
+        //                 Complex::new_zero(),
+        //             );
 
-                            let eval = eval_result.integrand_result;
+        //             let eval = eval_result.integrand_result;
 
-                            info!(
-                            "\nFor input point xs: \n\n{}\n\nThe evaluation of integrand '{}' is:\n\n{}\n",
-                            format!(
-                                "( {:?} )",
-                                max_weight_sample,
-                            )
-                            .blue(),
-                            integrand,
-                            format!("( {:+.16e}, {:+.16e} i)", eval.re, eval.im).blue(),
-                        );
-                        }
+        //             info!(
+        //                     "\nFor input point xs: \n\n{}\n\nThe evaluation of integrand '{}' is:\n\n{}\n",
+        //                     format!(
+        //                         "( {:?} )",
+        //                         max_weight_sample,
+        //                     )
+        //                     .blue(),
+        //                     integrand_name,
+        //                     format!("( {:+.16e}, {:+.16e} i)", eval.re, eval.im).blue(),
+        //                 );
+        //         }
 
-                        Ok(())
-                    }
-                    Err(_) => Err(exceptions::PyException::new_err(
-                        "No previous run to extract max weight from".to_string(),
-                    )),
-                }
-            }
-            None => Err(exceptions::PyException::new_err(format!(
-                "Could not find integrand {}",
-                integrand
-            ))),
-        }
+        //         Ok(())
+        //     }
+        // }
+        //
+        Ok(())
     }
 
     pub(crate) fn integrate_integrand(
         &mut self,
-        integrand: &str,
+        integrand_name: &str,
         num_cores: usize,
         result_path: &str,
         workspace_path: &str,
         target: Option<(f64, f64)>,
-    ) -> PyResult<Vec<(f64, f64)>> {
+    ) -> Result<Vec<(f64, f64)>> {
         let target = target.map(|(re, im)| (F(re), F(im)));
-        match self.integrands.get_mut(integrand) {
-            Some(integrand_enum) => match integrand_enum {
-                Integrand::NewIntegrand(gloop_integrand) => {
-                    let target = match target {
-                        Some((re, im)) => Some(Complex::new(re, im)),
-                        _ => None,
-                    };
 
-                    info!("Gammaloop now integrates {}", integrand.green().bold());
+        let gloop_integrand = self.process_list.get_integrand_mut(0, integrand_name)?;
 
-                    let workspace_path = PathBuf::from(workspace_path);
+        let target = match target {
+            Some((re, im)) => Some(Complex::new(re, im)),
+            _ => None,
+        };
 
-                    let path_to_state = workspace_path.join("integration_state");
+        info!("Gammaloop now integrates {}", integrand_name.green().bold());
 
-                    let integration_state = match fs::read(path_to_state) {
-                        Ok(state_bytes) => {
-                            info!(
-                                "{}",
-                                "Found integration state, result of previous integration:".yellow()
-                            );
-                            info!("");
+        let workspace_path = PathBuf::from(workspace_path);
 
-                            let state: IntegrationState =
-                                bincode::decode_from_slice::<IntegrationState, _>(
-                                    &state_bytes,
-                                    bincode::config::standard(),
-                                )
-                                .expect("Could not deserialize state")
-                                .0;
+        let path_to_state = workspace_path.join("integration_state");
 
-                            let path_to_workspace_settings = workspace_path.join("settings.yaml");
-                            let workspace_settings_string =
-                                fs::read_to_string(path_to_workspace_settings)
-                                    .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
+        let integration_state = match fs::read(path_to_state) {
+            Ok(state_bytes) => {
+                info!(
+                    "{}",
+                    "Found integration state, result of previous integration:".yellow()
+                );
+                info!("");
 
-                            let workspace_settings: Settings =
-                                serde_yaml::from_str(&workspace_settings_string)
-                                    .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
+                let state: IntegrationState = bincode::decode_from_slice::<IntegrationState, _>(
+                    &state_bytes,
+                    bincode::config::standard(),
+                )
+                .expect("Could not deserialize state")
+                .0;
 
-                            // force the settings to be the same as the ones used in the previous integration
-                            *gloop_integrand.get_mut_settings() = workspace_settings.clone();
+                let path_to_workspace_settings = workspace_path.join("settings.yaml");
+                let workspace_settings_string = fs::read_to_string(path_to_workspace_settings)
+                    .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
 
-                            print_integral_result(
-                                &state.integral.re,
-                                1,
-                                state.iter,
-                                "re",
-                                target.map(|c| c.re),
-                            );
+                let workspace_settings: Settings = serde_yaml::from_str(&workspace_settings_string)
+                    .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
 
-                            print_integral_result(
-                                &state.integral.im,
-                                2,
-                                state.iter,
-                                "im",
-                                target.map(|c| c.im),
-                            );
-                            info!("");
-                            warn!("Any changes to the settings will be ignored, integrate with the {} option for changes to take effect","--restart".blue());
-                            info!("{}", "Resuming integration".yellow());
+                // force the settings to be the same as the ones used in the previous integration
+                *gloop_integrand.get_mut_settings() = workspace_settings.clone();
 
-                            Some(state)
-                        }
+                print_integral_result(
+                    &state.integral.re,
+                    1,
+                    state.iter,
+                    "re",
+                    target.map(|c| c.re),
+                );
 
-                        Err(_) => {
-                            info!("No integration state found, starting new integration");
-                            None
-                        }
-                    };
+                print_integral_result(
+                    &state.integral.im,
+                    2,
+                    state.iter,
+                    "im",
+                    target.map(|c| c.im),
+                );
+                info!("");
+                warn!("Any changes to the settings will be ignored, integrate with the {} option for changes to take effect","--restart".blue());
+                info!("{}", "Resuming integration".yellow());
 
-                    let settings = gloop_integrand.get_settings().clone();
-                    let result = havana_integrate(
-                        &settings,
-                        |set| gloop_integrand.user_data_generator(num_cores, set),
-                        target,
-                        integration_state,
-                        Some(workspace_path),
-                    );
+                Some(state)
+            }
 
-                    fs::write(
-                        result_path,
-                        serde_yaml::to_string(&result)
-                            .map_err(|e| exceptions::PyException::new_err(e.to_string()))?,
-                    )?;
+            Err(_) => {
+                info!("No integration state found, starting new integration");
+                None
+            }
+        };
 
-                    Ok(result
-                        .result
-                        .iter()
-                        .tuple_windows()
-                        .map(|(re, im)| (re.0, im.0))
-                        .collect())
-                }
-                _ => unimplemented!("unsupported integrand type"),
-            },
-            None => Err(exceptions::PyException::new_err(format!(
-                "Could not find integrand {}",
-                integrand
-            ))),
-        }
+        let settings = gloop_integrand.get_settings().clone();
+        let result = havana_integrate(
+            &settings,
+            |set| gloop_integrand.user_data_generator(num_cores, set),
+            target,
+            integration_state,
+            Some(workspace_path),
+        );
+
+        fs::write(
+            result_path,
+            serde_yaml::to_string(&result)
+                .map_err(|e| exceptions::PyException::new_err(e.to_string()))?,
+        )?;
+
+        Ok(result
+            .result
+            .iter()
+            .tuple_windows()
+            .map(|(re, im)| (re.0, im.0))
+            .collect())
     }
 
-    pub(crate) fn load_master_node(&mut self, integrand: &str) -> PyResult<String> {
-        let selected_integrand = if let Some(selected_integrand) = self.integrands.get(integrand) {
-            selected_integrand
-        } else {
-            return Err(exceptions::PyException::new_err(format!(
-                "could not find integrand {}",
-                integrand
-            )));
-        };
+    pub(crate) fn load_master_node(&mut self, integrand: &str) -> Result<String> {
+        let selected_integrand = self.process_list.get_integrand_mut(0, integrand)?;
 
         let grid = selected_integrand.create_grid();
         let integrator_settings = selected_integrand.get_integrator_settings();
@@ -1130,9 +1095,9 @@ impl PythonWorker {
             serde_yaml::from_str::<Settings>(settings_yaml_str).expect("Could not parse settings");
         println!("calling generate_integrands");
 
-        let integrands = self.process_list.generate_integrands(settings, &self.model);
-
-        self.integrands = integrands;
+        let integrands = self
+            .process_list
+            .generate_integrands(&settings, &self.model);
     }
 
     pub(crate) fn export(&mut self, export_root: &str) -> PyResult<()> {

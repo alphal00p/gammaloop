@@ -1,15 +1,9 @@
-use idenso::metric::MetricSimplifier;
 use linnet::half_edge::subgraph::SubGraph;
 use log::debug;
-use spenso::{
-    contraction::Contract,
-    network::library::TensorLibraryData,
-    structure::{representation::Euclidean, OrderedStructure, ScalarTensor},
-    tensors::{data::StorageTensor, parametric::ParamTensor},
-};
+use spenso::network::library::TensorLibraryData;
 use symbolica::atom::Atom;
 
-use crate::{graph::BareGraph, numerator::aind::Aind};
+use crate::graph::BareGraph;
 
 use crate::new_graph::Graph;
 

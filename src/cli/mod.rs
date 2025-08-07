@@ -1,41 +1,33 @@
 use crate::{
     cross_section::Amplitude,
     feyngen::GenerationType,
-    inspect::inspect,
     integrands::{integrand_factory, HasIntegrand},
-    integrate::{self, havana_integrate, SerializableBatchIntegrateInput, UserData},
+    integrate::{self, SerializableBatchIntegrateInput},
     model::Model,
-    new_cs::{ExportSettings, Process, ProcessDefinition, ProcessList},
+    new_cs::{ExportSettings, Process, ProcessDefinition},
     new_graph::Graph,
     utils::{print_banner, F, VERSION},
     Integrand, Settings,
 };
-use chrono::{Datelike, Local, Timelike};
-use clap::{Args, Parser, Subcommand, ValueEnum};
+use clap::{Parser, Subcommand, ValueEnum};
 use clap_repl::{
     reedline::{DefaultPrompt, DefaultPromptSegment, FileBackedHistory},
     ClapEditor, ReadCommandOutput,
 };
 use color_eyre::Report;
 use color_eyre::Result;
-use colored::{ColoredString, Colorize};
+use colored::Colorize;
 use console::style;
 use dirs::home_dir;
 use eyre::eyre;
-use libc::stat;
 use log::LevelFilter;
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
 use spenso::algebra::complex::Complex;
 use state::{State, LOG_FORMAT, LOG_LEVEL};
-use std::{
-    env,
-    ops::ControlFlow,
-    path::Path,
-    sync::{LazyLock, Mutex},
-};
+use std::path::PathBuf;
+use std::{env, ops::ControlFlow, path::Path};
 use std::{fs, time::Instant};
-use std::{path::PathBuf, str::FromStr};
 use symbolica::numerical_integration::Sample;
 
 #[derive(Parser, Debug)]
@@ -45,11 +37,8 @@ use symbolica::numerical_integration::Sample;
     about = "New breed of Local Unitarity implementation",
 )]
 pub struct Cli {
-    // /// Number of Rayon worker threads (cores)
-    // #[arg(short = 'c', long, value_name = "NUMCORES", default_value_t = 1)]
-    // cores: usize,
     /// Path to the configuration file
-    #[arg(short = 'f', long, value_name = "CONFIG_FILE")]
+    #[arg(short = 'f', long, value_name = "./gammaloop_state/settings.yaml")]
     config: Option<PathBuf>,
 
     /// Path to the state file
@@ -141,34 +130,7 @@ impl Cli {
                     &output_name,
                 )?));
             }
-
-            Commands::Inspect {
-                point,
-                use_f128,
-                force_radius,
-                momentum_space,
-                debug,
-                term,
-            } => {
-                if let Some(level) = debug {
-                    settings.general.debug = *level;
-                }
-
-                let mut integrand = integrand_factory(&settings);
-
-                let pt = point.into_iter().map(|f| F(*f)).collect::<Vec<_>>();
-
-                let _ = inspect(
-                    &settings,
-                    &mut integrand,
-                    pt,
-                    &term,
-                    *force_radius,
-                    *momentum_space,
-                    *use_f128,
-                );
-            }
-
+            Commands::Inspect(inspect) => inspect.run(state)?,
             Commands::Bench { samples } => {
                 info!(
                     "\nBenchmarking runtime of integrand '{}' over {} samples...\n",
@@ -243,7 +205,7 @@ impl Cli {
         Ok(ControlFlow::Continue(()))
     }
 
-    pub fn run_with_settings(mut self, settings: &mut Settings) {
+    pub fn run(mut self) {
         let mut state = match State::load(&self.state_file, self.model_file.clone()) {
             Ok(state) => state,
             Err(e) => {
@@ -252,10 +214,13 @@ impl Cli {
             }
         };
 
+        let mut settings = self.get_settings().unwrap();
+        // let mut state = State::load(&cli.state_file,);
+
         let mut override_state_file = false;
 
         if let Some(_) = &self.command {
-            self.run_command(settings, &mut state);
+            let _ = self.run_command(&mut settings, &mut state).unwrap();
         } else {
             let prompt = DefaultPrompt {
                 left_prompt: DefaultPromptSegment::Basic("γloop".to_owned()),
@@ -279,7 +244,7 @@ impl Cli {
             loop {
                 match r.read_command() {
                     ReadCommandOutput::Command(mut c) => {
-                        match c.run_command(settings, &mut state) {
+                        match c.run_command(&mut settings, &mut state) {
                             Err(e) => eprintln!("{e}"),
                             Ok(ControlFlow::Break(StateSaveSettings { override_state })) => {
                                 override_state_file = override_state;
@@ -324,7 +289,7 @@ impl Cli {
         crate::set_interrupt_handler();
 
         // Load settings from YAML first so CLI flags can override.
-        let mut settings: Settings = if let Some(settings_path) = &self.config {
+        let settings: Settings = if let Some(settings_path) = &self.config {
             Settings::from_file(settings_path)?
         } else {
             Settings::default()
@@ -352,69 +317,6 @@ impl Cli {
         print_banner();
         Ok(settings)
     }
-
-    // pub fn get_state(&self) -> Result<State, Report> {
-    //     State
-    // }
-    // pub(crate) fn run(self) -> Result<Settings, Report> {
-    //     // Load settings from YAML first so CLI flags can override.
-    //     let mut settings: Settings = self.get_settings()?;
-
-    //     // ---------------------------------------------------------------------
-    //     // RAYON THREAD‑POOL SET‑UP -------------------------------------------
-    //     // ---------------------------------------------------------------------
-    //     rayon::ThreadPoolBuilder::new()
-    //         .num_threads(self.cores)
-    //         .build_global()
-    //         .unwrap();
-
-    //     let num_integrands = self.cores; // keep old logic
-
-    //     // Parse target if supplied -------------------------------------------
-    //     let target = self.target.as_ref().map(|v| {
-    //         assert_eq!(v.len(), 2, "--target expects exactly two numbers");
-    //         Complex::new(F(v[0]), F(v[1]))
-    //     });
-
-    //     if settings.general.debug > 0 {
-    //         info!(
-    //             "{}",
-    //             format!("Debug mode enabled at level {}", settings.general.debug).red()
-    //         );
-    //         info!("");
-    //     }
-    //     let mut state = State::default();
-    //     if let Some(c) = self.command {
-    //         c.run(&mut settings, &mut state)?;
-    //         Ok(settings)
-    //     } else {
-    //         let user_data_generator = |settings: &Settings| UserData {
-    //             integrand: (0..num_integrands)
-    //                 .map(|_| integrand_factory(settings))
-    //                 .collect(),
-    //         };
-    //         let result = havana_integrate(&settings, user_data_generator, target, None, None);
-
-    //         info!("");
-    //         info!(
-    //             "{}",
-    //             format!(
-    //                 "Havana integration completed after {} sample evaluations.",
-    //                 format!("{:.2}M", (result.neval as f64) / 1_000_000.)
-    //                     .bold()
-    //                     .blue()
-    //             )
-    //             .bold()
-    //             .green()
-    //         );
-    //         info!("");
-    //         Ok(settings)
-    //     }
-
-    //     // =====================================================================
-    //     // DISPATCH TO SUB‑COMMANDS OR DEFAULT INTEGRATION PATH  ===============
-    //     // =====================================================================
-    // }
 }
 
 #[derive(Subcommand, Debug)]
@@ -459,6 +361,9 @@ pub enum Log {
     Format(LogFormat),
 }
 
+pub mod generate;
+pub mod inspect;
+
 #[derive(Subcommand, Debug)]
 pub enum Commands {
     #[clap(subcommand)]
@@ -467,38 +372,17 @@ pub enum Commands {
     Import(Import),
     #[clap(subcommand)]
     Export(Export),
+
+    Generate(generate::Generate),
+
     /// Quit gammaloop
     Quit {
         #[arg(short = 'o', long, default_value_t = false)]
         override_state: bool,
     },
     /// Inspect a single phase‑space point / momentum configuration
-    Inspect {
-        /// The point to inspect (x y) or (p0 px ...)
-        #[arg(short = 'p', num_args = 2.., value_name = "POINT")]
-        // allow >2 for momentum‑space
-        point: Vec<f64>,
-
-        /// Evaluate in f128 precision
-        #[arg(short = 'f', long = "use_f128")]
-        use_f128: bool,
-
-        /// Force the radius in the parameterisation
-        #[arg(long)]
-        force_radius: bool,
-
-        /// Interpret point as momentum‑space coordinates
-        #[arg(short = 'm', long)]
-        momentum_space: bool,
-
-        /// Override debug level for this inspection
-        #[arg(short = 'd', long, value_name = "LEVEL")]
-        debug: Option<usize>,
-
-        /// Term(s) to inspect in the integrand
-        #[arg(short = 't', long, value_name = "TERM", num_args = 1..)]
-        term: Vec<usize>,
-    },
+    // #[clap(subcommand)]
+    Inspect(inspect::Inspect),
 
     /// Benchmark raw integrand evaluation speed
     Bench {

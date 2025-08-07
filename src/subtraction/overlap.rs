@@ -12,6 +12,8 @@ use crate::Settings;
 use ahash::HashMap;
 use ahash::HashMapExt;
 use ahash::HashSet;
+use bincode_trait_derive::Decode;
+use bincode_trait_derive::Encode;
 use clarabel::algebra::*;
 use clarabel::solver::*;
 use core::panic;
@@ -26,13 +28,13 @@ use spenso::algebra::complex::Complex;
 
 use crate::signature::LoopExtSignature;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct OverlapGroup {
     pub existing_esurfaces: Vec<ExistingEsurfaceId>,
     pub center: LoopMomenta<F<f64>>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct OverlapStructure {
     pub overlap_groups: Vec<OverlapGroup>,
 }

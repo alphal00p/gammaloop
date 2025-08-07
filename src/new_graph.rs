@@ -1,41 +1,28 @@
-use std::borrow::Borrow;
 
 use ahash::HashSet;
-use bitvec::vec::BitVec;
 use color_eyre::Result;
 use itertools::Itertools;
 use linnet::half_edge::{
-    involution::{EdgeData, EdgeIndex, EdgeVec, Flow, HedgePair},
-    subgraph::{InternalSubGraph, ModifySubgraph, SubGraph, SubGraphOps},
-    HedgeGraph, NodeIndex,
+    involution::{EdgeData, EdgeIndex, HedgePair},
+    subgraph::SubGraph,
+    HedgeGraph,
 };
 use log::debug;
-use momtrop::float::MomTropFloat;
 
 use rand::{rngs::SmallRng, Rng, SeedableRng};
-use spenso::algebra::{algebraic_traits::IsZero, complex::Complex};
+use spenso::algebra::algebraic_traits::IsZero;
 // use petgraph::Direction::Outgoing;
-use idenso::metric::MS;
 use smartstring::{LazyCompact, SmartString};
-use spenso::structure::representation::Minkowski;
-use symbolica::{
-    atom::{Atom, AtomCore},
-    function,
-    id::Replacement,
-    parse,
-};
+use symbolica::atom::{Atom, AtomCore};
 use typed_index_collections::TiVec;
 
 use crate::{
-    cff::generation::ShiftRewrite,
     graph::BareGraph,
-    model::{ArcParticle, EdgeSlots, VertexSlots},
-    momentum::{Dep, ExternalMomenta, Helicity, SignOrZero},
-    momentum_sample::{ExternalFourMomenta, ExternalIndex, LoopMomenta},
+    momentum::{Dep, ExternalMomenta},
+    momentum_sample::ExternalIndex,
     new_gammaloop_integrand::LmbMultiChannelingSetup,
     numerator::GlobalPrefactor,
-    signature::{ExternalSignature, SignatureLike},
-    utils::{external_energy_atom_from_index, ose_atom_from_index, FloatLike, F, GS},
+    utils::{ose_atom_from_index, F},
     Externals,
 };
 

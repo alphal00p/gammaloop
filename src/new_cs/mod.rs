@@ -1,96 +1,14 @@
-use std::{
-    cell::RefCell,
-    collections::HashSet,
-    fmt::{Display, Formatter},
-    fs::{self, File},
-    io::Write,
-    iter,
-    marker::PhantomData,
-    path::{Path, PathBuf},
-};
+use std::path::PathBuf;
 
-use ahash::{AHashSet, HashMap};
+use ahash::HashMap;
 // use bincode::{Decode, Encode};
 use bincode_trait_derive::{Decode, Encode};
-use bitvec::vec::BitVec;
 use color_eyre::Result;
-use momtrop::SampleGenerator;
 
-use idenso::metric::MS;
-
-use spenso::{
-    algebra::{algebraic_traits::IsZero, complex::Complex},
-    iterators::Fiber,
-    tensors::parametric::SerializableCompiledEvaluator,
-};
-
-use crate::{
-    cff::{
-        cut_expression::SuperGraphOrientationID,
-        esurface::{generate_esurface_data, get_existing_esurfaces, EsurfaceDerivedData},
-        expression::{
-            AmplitudeOrientationID, CFFExpression, OrientationData, SubgraphOrientationID,
-        },
-        generation::{generate_cff_expression, get_orientations_from_subgraph},
-    },
-    model::ArcParticle,
-    momentum::SignOrZero,
-    momentum_sample::ExternalIndex,
-    new_gammaloop_integrand::{
-        amplitude_integrand::{AmplitudeGraphTerm, AmplitudeIntegrand},
-        cross_section_integrand::OrientationEvaluator,
-        GenericEvaluator, LmbMultiChannelingSetup, ParamBuilder,
-    },
-    new_graph::{
-        get_cff_inverse_energy_product_impl, Edge, LMBext, LmbIndex, LoopMomentumBasis,
-        NumHedgeData, Vertex,
-    },
-    signature::SignatureLike,
-    subtraction::overlap::find_maximal_overlap,
-    utils::{external_energy_atom_from_index, f128, ose_atom_from_index, GS, W_},
-    uv::UltravioletGraph,
-    GammaLoopContext, GammaLoopContextContainer,
-};
-use eyre::{eyre, Context};
-use itertools::Itertools;
-use linnet::half_edge::{
-    involution::{EdgeVec, Flow, HedgePair, Orientation},
-    subgraph::{HedgeNode, Inclusion, InternalSubGraph, OrientedCut},
-    HedgeGraph,
-};
-use log::{debug, warn};
+use crate::GammaLoopContext;
 use serde::{Deserialize, Serialize};
-use symbolica::{
-    atom::{Atom, AtomCore},
-    domains::rational::Rational,
-    evaluate::{CompileOptions, FunctionMap, OptimizationSettings},
-    function, parse, symbol,
-};
-use typed_index_collections::TiVec;
 
-use crate::{
-    cff::{
-        cut_expression::{CFFCutsExpression, CutOrientationData},
-        esurface::{Esurface, EsurfaceID},
-        generation::generate_cff_with_cuts,
-    },
-    cross_section::IsPolarizable,
-    feyngen::{FeynGenFilters, GenerationType},
-    graph::BareGraph,
-    integrands::Integrand,
-    model::Model,
-    momentum::{Rotatable, Rotation, RotationMethod},
-    new_gammaloop_integrand::{
-        cross_section_integrand::{CrossSectionGraphTerm, CrossSectionIntegrand},
-        NewIntegrand,
-    },
-    new_graph::{ExternalConnection, FeynmanGraph, Graph},
-    numerator::{NumeratorState, PythonState},
-    utils::F,
-    DependentMomentaConstructor, Externals, Polarizations, ProcessSettings, Settings,
-};
-
-use derive_more::{From, Into};
+use crate::{integrands::Integrand, model::Model, ProcessSettings, Settings};
 
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
@@ -116,6 +34,24 @@ impl ProcessList {
         ProcessList { processes: vec![] }
     }
 
+    pub fn get_integrand(
+        &self,
+        process_id: usize,
+        integrand_name: impl AsRef<str>,
+    ) -> Result<&crate::new_gammaloop_integrand::NewIntegrand> {
+        let process = &self.processes[process_id];
+        process.get_integrand(integrand_name)
+    }
+
+    pub fn get_integrand_mut(
+        &mut self,
+        process_id: usize,
+        integrand_name: impl AsRef<str>,
+    ) -> Result<&mut crate::new_gammaloop_integrand::NewIntegrand> {
+        let process = &mut self.processes[process_id];
+        process.get_integrand_mut(integrand_name)
+    }
+
     pub fn export_dot(&self, settings: &ExportSettings, model: &Model) -> Result<()> {
         for p in &self.processes {
             p.export_dot(settings, model)?;
@@ -137,23 +73,14 @@ impl ProcessList {
         for process in self.processes.iter_mut() {
             process.preprocess(model, &settings)?;
         }
-
         Ok(())
     }
 
-    pub fn generate_integrands(
-        &self,
-        settings: Settings,
-        model: &Model,
-    ) -> HashMap<String, Integrand> {
-        let mut result = HashMap::default();
-
-        for process in self.processes.iter() {
-            let integrands = process.generate_integrands(settings.clone(), model);
-            result.extend(integrands);
+    pub fn generate_integrands(&mut self, settings: &Settings, model: &Model) -> Result<()> {
+        for process in &mut self.processes {
+            process.generate_integrands(&settings, model)?;
         }
-
-        result
+        Ok(())
     }
 }
 

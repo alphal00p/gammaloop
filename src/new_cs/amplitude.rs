@@ -1,32 +1,16 @@
-use std::{
-    cell::RefCell,
-    collections::HashSet,
-    fmt::{Display, Formatter},
-    fs::{self, File},
-    io::Write,
-    iter,
-    marker::PhantomData,
-    path::{Path, PathBuf},
-};
+use std::{iter, marker::PhantomData, path::Path};
 
-use ahash::{AHashSet, HashMap};
+use ahash::AHashSet;
 // use bincode::{Decode, Encode};
 use bincode_trait_derive::{Decode, Encode};
-use bitvec::vec::BitVec;
 use color_eyre::Result;
 use momtrop::SampleGenerator;
 
 use idenso::metric::MS;
-
-use spenso::{
-    algebra::{algebraic_traits::IsZero, complex::Complex},
-    iterators::Fiber,
-    tensors::parametric::SerializableCompiledEvaluator,
-};
+use vakint::{EvaluationOrder, LoopNormalizationFactor, Vakint, VakintSettings};
 
 use crate::{
     cff::{
-        cut_expression::SuperGraphOrientationID,
         esurface::{generate_esurface_data, get_existing_esurfaces, EsurfaceDerivedData},
         expression::{
             AmplitudeOrientationID, CFFExpression, OrientationData, SubgraphOrientationID,
@@ -34,68 +18,46 @@ use crate::{
         generation::{generate_cff_expression, get_orientations_from_subgraph},
     },
     model::ArcParticle,
-    momentum::SignOrZero,
     momentum_sample::ExternalIndex,
     new_gammaloop_integrand::{
         amplitude_integrand::{AmplitudeGraphTerm, AmplitudeIntegrand},
-        cross_section_integrand::OrientationEvaluator,
         GenericEvaluator, LmbMultiChannelingSetup, ParamBuilder,
     },
-    new_graph::{
-        get_cff_inverse_energy_product_impl, Edge, LMBext, LmbIndex, LoopMomentumBasis,
-        NumHedgeData, Vertex,
-    },
+    new_graph::{LMBext, LmbIndex, LoopMomentumBasis},
     signature::SignatureLike,
     subtraction::overlap::find_maximal_overlap,
-    utils::{external_energy_atom_from_index, f128, ose_atom_from_index, GS, W_},
+    utils::{GS, W_},
     uv::UltravioletGraph,
     GammaLoopContext, GammaLoopContextContainer,
 };
-use eyre::{eyre, Context};
+use eyre::eyre;
 use itertools::Itertools;
-use linnet::half_edge::{
-    involution::{EdgeVec, Flow, HedgePair, Orientation},
-    subgraph::{HedgeNode, Inclusion, InternalSubGraph, OrientedCut},
-    HedgeGraph,
-};
-use log::{debug, warn};
-use serde::{Deserialize, Serialize};
+use linnet::half_edge::involution::{HedgePair, Orientation};
+use log::debug;
 use symbolica::{
     atom::{Atom, AtomCore},
     domains::rational::Rational,
-    evaluate::{CompileOptions, FunctionMap, OptimizationSettings},
-    function, parse, symbol,
+    evaluate::{FunctionMap, OptimizationSettings},
+    function,
 };
 use typed_index_collections::TiVec;
 
 use crate::{
-    cff::{
-        cut_expression::{CFFCutsExpression, CutOrientationData},
-        esurface::{Esurface, EsurfaceID},
-        generation::generate_cff_with_cuts,
-    },
+    cff::esurface::EsurfaceID,
     cross_section::IsPolarizable,
-    feyngen::{FeynGenFilters, GenerationType},
-    graph::BareGraph,
     integrands::Integrand,
     model::Model,
     momentum::{Rotatable, Rotation, RotationMethod},
-    new_gammaloop_integrand::{
-        cross_section_integrand::{CrossSectionGraphTerm, CrossSectionIntegrand},
-        NewIntegrand,
-    },
-    new_graph::{ExternalConnection, FeynmanGraph, Graph},
-    numerator::{NumeratorState, PythonState},
-    utils::F,
+    new_gammaloop_integrand::NewIntegrand,
+    new_graph::{FeynmanGraph, Graph},
     DependentMomentaConstructor, Externals, Polarizations, ProcessSettings, Settings,
 };
-
-use derive_more::{From, Into};
 
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct Amplitude<S: AmplitudeState = ()> {
     pub name: String,
+    pub integrand: Option<NewIntegrand>,
     pub graphs: Vec<AmplitudeGraph<S>>,
     pub external_particles: Vec<ArcParticle>,
     pub external_signature: SignatureLike<ExternalIndex>,
@@ -109,7 +71,7 @@ impl<S: AmplitudeState> Amplitude<S> {
         Ok(())
     }
 
-    pub(crate) fn generate_integrand(&self, settings: Settings, model: &Model) -> Integrand {
+    pub(crate) fn build_integrand(&mut self, settings: Settings, model: &Model) -> Result<()> {
         let terms = self
             .graphs
             .iter()
@@ -143,7 +105,8 @@ impl<S: AmplitudeState> Amplitude<S> {
             model_parameter_cache: model.generate_values(),
         };
 
-        Integrand::NewIntegrand(NewIntegrand::Amplitude(amplitude_integrand))
+        self.integrand = Some(NewIntegrand::Amplitude(amplitude_integrand));
+        Ok(())
     }
 
     pub(crate) fn write_dot<W: std::io::Write>(
@@ -180,13 +143,13 @@ impl AmplitudeGraph {
             graph,
             derived_data: AmplitudeDerivedData {
                 cff_expression: None,
-                integrand_evaluator_all_orientations: None,
+                all_orientation_integrand_evaluator: None,
                 integrand_evaluators: None,
                 state: PhantomData,
                 lmbs: None,
                 tropical_sampler: None,
                 multi_channeling_setup: None,
-                threshold_counterterms: None,
+                counterterm_evaluators: None,
                 esurface_data: None,
             },
         }
@@ -221,18 +184,18 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
         debug!("Generating Cff");
         self.generate_cff()?;
         debug!("Building Evaluator");
-        self.build_evaluator(model);
+        self.build_all_orientation_integrand_evaluator(model);
         debug!("Building Evaluator for Orientations");
-        self.build_evaluator_for_orientations(model);
+        self.build_integrand_evaluators(model);
         debug!("Building Tropical Sampler");
         self.build_tropical_sampler(settings)?;
         debug!("Building Loop Momentum Bases");
-        self.build_loop_momentum_bases();
+        self.build_lmbs();
         debug!("Building Multi-Channeling Channels");
         self.build_multi_channeling_channels();
         debug!("Building ESurface Derived Data");
         self.build_esurface_derived_data()?;
-        self.build_threshold_counterterms(model);
+        self.build_counterterm_evaluators(model);
 
         Ok(())
     }
@@ -350,9 +313,26 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
             .map(|a| a.data.clone())
             .collect();
 
+        let vakint = Vakint::new(Some(VakintSettings {
+            allow_unknown_integrals: false,
+            evaluation_order: EvaluationOrder::alphaloop_only(),
+            integral_normalization_factor: LoopNormalizationFactor::MSbar,
+            run_time_decimal_precision: 32,
+            number_of_terms_in_epsilon_expansion: self
+                .graph
+                .n_loops(&self.graph.underlying.no_dummy())
+                as i64
+                + 1,
+            // temporary_directory: Some("./form".into()),
+            mu_r_sq_symbol: GS.mu_r_sq.get_name().to_string(),
+            ..VakintSettings::default()
+        }))
+        .unwrap();
+
         forest.compute(
             &self.graph,
             &self.graph.underlying.no_dummy(),
+            &vakint,
             &orientations,
             &canonize_esurface,
             &[],
@@ -377,10 +357,12 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
             result += orientation_expr;
         }
 
+        debug!("All orientations integrand atom:{:>}", result);
+
         result
     }
 
-    fn build_threshold_counterterms(&mut self, model: &Model) {
+    fn build_counterterm_evaluators(&mut self, model: &Model) {
         let mut counterterms: TiVec<EsurfaceID, Atom> = TiVec::new();
         let canonize_esurface = self
             .graph
@@ -469,10 +451,9 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
             let circled_wood = self.graph.wood(&circled);
             let complement_wood = self.graph.wood(&complement);
 
-            let mut circled_forest =
-                circled_wood.unfold(&self.graph, &self.graph.loop_momentum_basis);
+            let circled_forest = circled_wood.unfold(&self.graph, &self.graph.loop_momentum_basis);
 
-            let mut complement_forest =
+            let complement_forest =
                 complement_wood.unfold(&self.graph, &self.graph.loop_momentum_basis);
 
             let reverse_dangling = esurface
@@ -573,10 +554,10 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
             })
             .collect();
 
-        self.derived_data.threshold_counterterms = Some(counterterm_evaluators);
+        self.derived_data.counterterm_evaluators = Some(counterterm_evaluators);
     }
 
-    pub(crate) fn build_evaluator(&mut self, model: &Model) {
+    pub(crate) fn build_all_orientation_integrand_evaluator(&mut self, model: &Model) {
         let replace_dots = self.build_all_orientations_integrand_atom();
         let params = self.amplitude_params(model);
         // for (i, p) in params.iter().enumerate() {
@@ -591,10 +572,10 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
             &params,
             OptimizationSettings::default(),
         );
-        self.derived_data.integrand_evaluator_all_orientations = Some(evaluator)
+        self.derived_data.all_orientation_integrand_evaluator = Some(evaluator)
     }
 
-    fn build_loop_momentum_bases(&mut self) {
+    fn build_lmbs(&mut self) {
         let lmbs = self
             .graph
             .generate_loop_momentum_bases(&self.graph.underlying.no_dummy());
@@ -692,7 +673,7 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
         Ok(self.derived_data.tropical_sampler = Some(sampler))
     }
 
-    fn build_evaluator_for_orientations(&mut self, model: &Model) -> Result<()> {
+    fn build_integrand_evaluators(&mut self, model: &Model) -> Result<()> {
         let params = self.amplitude_params(model);
         let function_map = self.get_function_map();
 
@@ -739,6 +720,7 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
         Ok(self.derived_data.integrand_evaluators = Some(evaluators))
     }
 
+    // Expects cff_expression, esurface_data,
     fn generate_term_for_graph(&self, settings: &Settings) -> AmplitudeGraphTerm {
         let estimated_scale = self
             .graph
@@ -781,15 +763,35 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
         AmplitudeGraphTerm {
             integrand_evaluator_all_orientations: self
                 .derived_data
-                .integrand_evaluator_all_orientations
+                .all_orientation_integrand_evaluator
                 .clone()
-                .unwrap(),
-            integrand_evaluators: self.derived_data.integrand_evaluators.clone().unwrap(),
-            tropical_sampler: self.derived_data.tropical_sampler.clone().unwrap(),
+                .expect("integrand_evaluator_all_orientations should have been created"),
+            integrand_evaluators: self
+                .derived_data
+                .integrand_evaluators
+                .clone()
+                .expect("integrand_evaluators should have been created"),
+            tropical_sampler: self
+                .derived_data
+                .tropical_sampler
+                .clone()
+                .expect("tropical_sampler should have been created"),
             graph: self.graph.clone(),
-            multi_channeling_setup: self.derived_data.multi_channeling_setup.clone().unwrap(),
-            lmbs: self.derived_data.lmbs.clone().unwrap(),
-            counterterm_evaluators: self.derived_data.threshold_counterterms.clone().unwrap(),
+            multi_channeling_setup: self
+                .derived_data
+                .multi_channeling_setup
+                .clone()
+                .expect("multi_channeling_setup should have been created"),
+            lmbs: self
+                .derived_data
+                .lmbs
+                .clone()
+                .expect("lmbs should have been created"),
+            counterterm_evaluators: self
+                .derived_data
+                .counterterm_evaluators
+                .clone()
+                .expect("counterterm_evaluators should have been created"),
             estimated_scale,
             overlap,
         }
@@ -798,15 +800,15 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
 
 #[derive(Clone, Encode, Decode)]
 pub struct AmplitudeDerivedData<S: AmplitudeState> {
-    pub cff_expression: Option<CFFExpression<AmplitudeOrientationID>>,
-    pub integrand_evaluator_all_orientations: Option<GenericEvaluator>,
+    pub all_orientation_integrand_evaluator: Option<GenericEvaluator>,
     pub integrand_evaluators: Option<TiVec<AmplitudeOrientationID, GenericEvaluator>>,
-    pub threshold_counterterms: Option<TiVec<EsurfaceID, GenericEvaluator>>,
-    pub state: PhantomData<S>,
+    pub counterterm_evaluators: Option<TiVec<EsurfaceID, GenericEvaluator>>,
+    pub multi_channeling_setup: Option<LmbMultiChannelingSetup>,
     pub lmbs: Option<TiVec<LmbIndex, LoopMomentumBasis>>,
     pub tropical_sampler: Option<SampleGenerator<3>>,
+    pub cff_expression: Option<CFFExpression<AmplitudeOrientationID>>,
     pub esurface_data: Option<EsurfaceDerivedData>,
-    pub multi_channeling_setup: Option<LmbMultiChannelingSetup>,
+    pub state: PhantomData<S>,
 }
 
 pub trait AmplitudeState:
@@ -814,6 +816,14 @@ pub trait AmplitudeState:
 {
 }
 impl AmplitudeState for () {}
+
+#[derive(Clone, Encode, Decode, Debug)]
+pub struct ReadyForTerm {}
+impl AmplitudeState for ReadyForTerm {}
+
+// #[derive(Clone, Encode, Decode, Debug)]
+// pub struct ReadyForTerm {}
+// impl AmplitudeState for ReadyForTerm {}
 
 impl Amplitude {
     pub(crate) fn from_dot_string<Str: AsRef<str>>(
@@ -845,6 +855,7 @@ impl Amplitude {
 
     pub(crate) fn new(name: String) -> Self {
         Self {
+            integrand: None,
             name,
             graphs: vec![],
             external_particles: vec![],

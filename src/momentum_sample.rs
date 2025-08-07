@@ -3,7 +3,7 @@ use std::fmt::Display;
 use crate::momentum::{FourMomentum, Polarization, Rotatable, Rotation, ThreeMomentum};
 use crate::utils::{FloatLike, Length, F};
 use crate::{DependentMomentaConstructor, Externals, Polarizations, Settings};
-use bincode::{Decode, Encode};
+use bincode_trait_derive::{Decode, Encode};
 use derive_more::{From, Into};
 use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
@@ -59,7 +59,7 @@ impl Display for ExternalIndex {
     }
 }
 
-#[derive(From, Into, Serialize, Deserialize, Clone, PartialEq, Debug)]
+#[derive(From, Into, Serialize, Deserialize, Clone, PartialEq, Debug, Encode, Decode)]
 pub struct LoopMomenta<T>(Vec<ThreeMomentum<T>>);
 
 impl<T> Length for LoopMomenta<T> {

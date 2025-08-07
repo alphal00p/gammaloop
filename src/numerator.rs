@@ -1,7 +1,7 @@
 use crate::debug_info::DEBUG_LOGGER;
 use crate::feyngen::FeynGenError;
 use aind::Aind;
-use idenso::color::{ColorError, ColorSimplifier};
+use idenso::color::ColorSimplifier;
 use idenso::gamma::GammaSimplifier;
 use idenso::representations::Bispinor;
 use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation};
@@ -17,12 +17,10 @@ use spenso::network::{
 };
 use spenso::shadowing::symbolica_utils::SerializableAtom;
 use spenso::shadowing::symbolica_utils::SerializableSymbol;
-use spenso::structure::OrderedStructure;
 use spenso::tensors::complex::RealOrComplexTensor;
 use spenso::tensors::data::DataTensor;
 use spenso::tensors::data::GetTensorData;
 use spenso::tensors::data::StorageTensor;
-use spenso::tensors::parametric::atomcore::PatternReplacement;
 use spenso::tensors::parametric::atomcore::TensorAtomMaps;
 use spenso::tensors::parametric::atomcore::TensorAtomOps;
 use spenso::tensors::parametric::EvalTensor;
@@ -74,7 +72,7 @@ use spenso::network::library::symbolic::{ExplicitKey, ETS};
 
 use spenso::structure::concrete_index::{ExpandedIndex, FlatIndex};
 
-use spenso::structure::representation::{Euclidean, LibraryRep, Minkowski};
+use spenso::structure::representation::{LibraryRep, Minkowski};
 use spenso::structure::{HasStructure, ScalarTensor, SmartShadowStructure};
 
 use spenso::{
@@ -93,15 +91,17 @@ use symbolica::state::Workspace;
 use crate::numerator::ufo::UFO;
 use symbolica::atom::{AtomCore, AtomView};
 use symbolica::evaluate::{CompileOptions, ExpressionEvaluator, InlineASM};
-use symbolica::id::{Context, MatchSettings};
+use symbolica::id::MatchSettings;
 use symbolica::{
     atom::{Atom, FunctionBuilder},
     function, parse, symbol,
 };
+
+use clap::{Args, ValueEnum};
 use symbolica::{domains::float::NumericalFloatLike, evaluate::FunctionMap, id::Replacement};
 pub mod aind;
 pub mod ufo;
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 /// Settings for the numerator
 pub struct NumeratorSettings {
     pub eval_settings: NumeratorEvaluatorOptions,
@@ -118,7 +118,7 @@ pub struct NumeratorSettings {
     pub gamma_algebra: GammaAlgebraMode,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default, Encode, Decode)]
 pub enum ExpressionFormat {
     Mathematica,
     #[default]
@@ -147,7 +147,7 @@ impl Default for NumeratorSettings {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub enum GammaAlgebraMode {
     Symbolic,
     Concrete,

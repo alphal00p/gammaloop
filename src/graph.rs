@@ -19,8 +19,8 @@ use crate::{
     numerator::{
         aind::Aind,
         ufo::{preprocess_ufo_color_wrapped, preprocess_ufo_spin_wrapped, UFO},
-        AppliedFeynmanRule, ContractionSettings, Evaluate, Evaluators, ExtraInfo, GammaAlgebraMode,
-        Numerator, NumeratorParseMode, NumeratorState, NumeratorStateError, PythonState,
+        AppliedFeynmanRule, ContractionSettings, Evaluate, Evaluators, ExtraInfo,
+        Numerator, NumeratorState, NumeratorStateError, PythonState,
         RepeatingIteratorTensorOrScalar, TypedNumeratorState, UnInit,
     },
     signature::{ExternalSignature, LoopExtSignature, SignatureLike},
@@ -83,7 +83,6 @@ use std::{
     borrow::Borrow,
     collections::{HashMap, VecDeque},
     fmt::{Display, Formatter},
-    fs,
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -91,7 +90,7 @@ use std::{
 use symbolica::{
     atom::{Atom, Symbol},
     coefficient::CoefficientView,
-    domains::{float::NumericalFloatLike, rational::Rational},
+    domains::float::NumericalFloatLike,
     function,
     id::{Pattern, Replacement},
     parse,
@@ -2063,7 +2062,7 @@ impl BareGraph {
                     external: SignatureLike::from_iter(std::iter::empty::<SignOrZero>()),
                 });
 
-        let mut lmb: LoopMomentumBasis = LoopMomentumBasis {
+        let lmb: LoopMomentumBasis = LoopMomentumBasis {
             tree: None,
             loop_edges: lmb_basis,
             ext_edges: vec![].into(),

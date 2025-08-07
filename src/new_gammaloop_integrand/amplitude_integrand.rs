@@ -1,19 +1,12 @@
-use color_eyre::Result;
+use bincode_trait_derive::{Decode, Encode};
 use itertools::Itertools;
 use momtrop::SampleGenerator;
-use serde::de::value;
 use spenso::algebra::complex::Complex;
-use symbolica::{
-    atom::Atom,
-    numerical_integration::{Grid, Sample},
-};
+use symbolica::numerical_integration::{Grid, Sample};
 use typed_index_collections::TiVec;
 
 use crate::{
-    cff::{
-        esurface::{Esurface, EsurfaceID},
-        expression::AmplitudeOrientationID,
-    },
+    cff::{esurface::EsurfaceID, expression::AmplitudeOrientationID},
     evaluation_result::EvaluationResult,
     integrands::HasIntegrand,
     momentum::Rotation,
@@ -22,7 +15,7 @@ use crate::{
     new_graph::{FeynmanGraph, Graph, LmbIndex, LoopMomentumBasis},
     signature::SignatureLike,
     subtraction::overlap::OverlapStructure,
-    DependentMomentaConstructor, FloatLike, Polarizations, Settings, F,
+    DependentMomentaConstructor, FloatLike, GammaLoopContext, Polarizations, Settings, F,
 };
 
 use super::{
@@ -33,15 +26,16 @@ use super::{
 const HARD_CODED_M_UV: F<f64> = F(1000.0);
 const HARD_CODED_M_R_SQ: F<f64> = F(1000.0);
 
-#[derive(Clone)]
+#[derive(Clone, Encode, Decode)]
+#[trait_decode(trait = GammaLoopContext)]
 pub struct AmplitudeGraphTerm {
     pub integrand_evaluator_all_orientations: GenericEvaluator,
     pub integrand_evaluators: TiVec<AmplitudeOrientationID, GenericEvaluator>,
     pub counterterm_evaluators: TiVec<EsurfaceID, GenericEvaluator>,
-    pub graph: Graph,
     pub multi_channeling_setup: LmbMultiChannelingSetup,
     pub lmbs: TiVec<LmbIndex, LoopMomentumBasis>,
     pub tropical_sampler: SampleGenerator<3>,
+    pub graph: Graph,
     pub estimated_scale: F<f64>,
     pub overlap: OverlapStructure,
 }
@@ -76,7 +70,6 @@ impl AmplitudeGraphTerm {
 
         param_builder.emr_spatial_value(
             self.graph
-                .underlying
                 .get_emr_vec_cache(
                     momentum_sample.loop_moms(),
                     momentum_sample.external_moms(),
@@ -140,7 +133,8 @@ impl GraphTerm for AmplitudeGraphTerm {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Encode, Decode)]
+#[trait_decode(trait = GammaLoopContext)]
 pub struct AmplitudeIntegrand {
     pub settings: Settings,
     pub rotations: Vec<Rotation>,

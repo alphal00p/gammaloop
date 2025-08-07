@@ -13,7 +13,6 @@ use linnet::half_edge::HedgeGraph;
 use lorentz_vector::LorentzVector;
 use ref_ops::RefNeg;
 use serde::{Deserialize, Serialize};
-use spenso::network::graph;
 use symbolica::atom::Atom;
 use symbolica::domains::float::{NumericalFloatLike, Real};
 use symbolica::parse;
@@ -378,7 +377,20 @@ pub type ExistingEsurfaces = TiVec<ExistingEsurfaceId, EsurfaceID>;
 
 /// Index in the list of all existing esurfaces, essentially a pointer to a pointer to an esurface
 #[derive(
-    Debug, From, Into, Copy, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord,
+    Debug,
+    From,
+    Into,
+    Copy,
+    Clone,
+    Serialize,
+    Deserialize,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    Encode,
+    Decode,
 )]
 pub struct ExistingEsurfaceId(usize);
 

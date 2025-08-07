@@ -2,12 +2,12 @@ use std::hash::Hash;
 
 use crate::{
     cff::{
-        expression::{GraphOrientation, OrientationData, OrientationID},
+        expression::{GraphOrientation, OrientationID},
         generation::{generate_uv_cff, ShiftRewrite},
     },
     momentum::Sign,
     new_graph::{Edge, LMBext, LoopMomentumBasis, Vertex},
-    utils::{external_energy_atom_from_index, ose_atom_from_index, sign_atom, GS, W_},
+    utils::{external_energy_atom_from_index, ose_atom_from_index, GS, W_},
 };
 use ahash::AHashSet;
 use bitvec::vec::BitVec;
@@ -25,7 +25,7 @@ use symbolica::{
 };
 
 use linnet::half_edge::{
-    involution::{EdgeIndex, HedgePair, SignOrZero},
+    involution::{EdgeIndex, HedgePair},
     subgraph::{Inclusion, InternalSubGraph, ModifySubgraph, SubGraph, SubGraphOps},
     HedgeGraph,
 };
@@ -297,6 +297,7 @@ impl Approximation {
     >(
         &self,
         dependent: &Self,
+        vakint: &Vakint,
         uv_graph: &G,
         amplitude_subgraph: &S,
     ) -> ApproxOp {
@@ -443,18 +444,6 @@ impl Approximation {
 
         let mut integrand_vakint = a.expand();
         let mut propagator_id = 1;
-
-        let vakint = Vakint::new(Some(VakintSettings {
-            allow_unknown_integrals: false,
-            evaluation_order: EvaluationOrder::alphaloop_only(),
-            integral_normalization_factor: LoopNormalizationFactor::MSbar,
-            run_time_decimal_precision: 32,
-            number_of_terms_in_epsilon_expansion: uv_graph.n_loops(amplitude_subgraph) as i64 + 1,
-            temporary_directory: Some("./form".into()),
-            mu_r_sq_symbol: GS.mu_r_sq.get_name().to_string(),
-            ..VakintSettings::default()
-        }))
-        .unwrap();
 
         let vk_prop = vakint_symbol!("prop");
         let vk_edge = vakint_symbol!("edge");
@@ -645,10 +634,11 @@ impl Approximation {
     >(
         &mut self,
         graph: &G,
+        vakint: &Vakint,
         amplitude_subgraph: &S,
         dependent: &Self,
     ) {
-        self.integrated_4d = self.integrated_4d(dependent, graph, amplitude_subgraph);
+        self.integrated_4d = self.integrated_4d(dependent, vakint, graph, amplitude_subgraph);
     }
 
     /// Computes the 3d approximation of the UV

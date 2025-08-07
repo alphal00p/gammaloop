@@ -2,7 +2,7 @@ use crate::gammaloop_integrand::GammaLoopIntegrand;
 use crate::graph::{BareGraph, Graph, SerializableGraph};
 use crate::model::{ArcParticle, Model};
 use crate::numerator::{
-    AppliedFeynmanRule, ContractionSettings, Evaluators, GetSingleAtom, Numerator, NumeratorState,
+    AppliedFeynmanRule, Evaluators, GetSingleAtom, NumeratorState,
     PythonState, TypedNumeratorState, UnInit,
 };
 use crate::signature::ExternalSignature;

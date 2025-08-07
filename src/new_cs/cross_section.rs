@@ -1,70 +1,42 @@
 use std::{
-    cell::RefCell,
-    collections::HashSet,
     fmt::{Display, Formatter},
-    fs::{self, File},
-    io::Write,
-    iter,
     marker::PhantomData,
-    path::{Path, PathBuf},
 };
 
-use ahash::{AHashSet, HashMap};
+use ahash::AHashSet;
 // use bincode::{Decode, Encode};
 use bincode_trait_derive::{Decode, Encode};
 use bitvec::vec::BitVec;
 use color_eyre::Result;
-use momtrop::SampleGenerator;
 
 use idenso::metric::MS;
-
-use spenso::{
-    algebra::{algebraic_traits::IsZero, complex::Complex},
-    iterators::Fiber,
-    tensors::parametric::SerializableCompiledEvaluator,
-};
 
 use crate::{
     cff::{
         cut_expression::SuperGraphOrientationID,
-        esurface::{generate_esurface_data, get_existing_esurfaces, EsurfaceDerivedData},
-        expression::{
-            AmplitudeOrientationID, CFFExpression, OrientationData, SubgraphOrientationID,
-        },
-        generation::{generate_cff_expression, get_orientations_from_subgraph},
+        esurface::{generate_esurface_data, EsurfaceDerivedData},
     },
     model::ArcParticle,
-    momentum::SignOrZero,
-    momentum_sample::ExternalIndex,
     new_gammaloop_integrand::{
-        amplitude_integrand::{AmplitudeGraphTerm, AmplitudeIntegrand},
-        cross_section_integrand::OrientationEvaluator,
-        GenericEvaluator, LmbMultiChannelingSetup, ParamBuilder,
+        cross_section_integrand::OrientationEvaluator, GenericEvaluator, LmbMultiChannelingSetup,
     },
-    new_graph::{
-        get_cff_inverse_energy_product_impl, Edge, LMBext, LmbIndex, LoopMomentumBasis,
-        NumHedgeData, Vertex,
-    },
-    signature::SignatureLike,
-    subtraction::overlap::find_maximal_overlap,
-    utils::{external_energy_atom_from_index, f128, ose_atom_from_index, GS, W_},
-    uv::UltravioletGraph,
+    new_graph::{get_cff_inverse_energy_product_impl, LMBext, LmbIndex, LoopMomentumBasis},
+    utils::{ose_atom_from_index, GS, W_},
     GammaLoopContext, GammaLoopContextContainer,
 };
-use eyre::{eyre, Context};
+use eyre::eyre;
 use itertools::Itertools;
 use linnet::half_edge::{
-    involution::{EdgeVec, Flow, HedgePair, Orientation},
+    involution::{Flow, HedgePair, Orientation},
     subgraph::{HedgeNode, Inclusion, InternalSubGraph, OrientedCut},
-    HedgeGraph,
 };
 use log::{debug, warn};
 use serde::{Deserialize, Serialize};
 use symbolica::{
     atom::{Atom, AtomCore},
     domains::rational::Rational,
-    evaluate::{CompileOptions, FunctionMap, OptimizationSettings},
-    function, parse, symbol,
+    evaluate::{FunctionMap, OptimizationSettings},
+    function,
 };
 use typed_index_collections::TiVec;
 
@@ -75,8 +47,6 @@ use crate::{
         generation::generate_cff_with_cuts,
     },
     cross_section::IsPolarizable,
-    feyngen::{FeynGenFilters, GenerationType},
-    graph::BareGraph,
     integrands::Integrand,
     model::Model,
     momentum::{Rotatable, Rotation, RotationMethod},
@@ -85,9 +55,7 @@ use crate::{
         NewIntegrand,
     },
     new_graph::{ExternalConnection, FeynmanGraph, Graph},
-    numerator::{NumeratorState, PythonState},
-    utils::F,
-    DependentMomentaConstructor, Externals, Polarizations, ProcessSettings, Settings,
+    DependentMomentaConstructor, Externals, Polarizations, Settings,
 };
 
 use super::ProcessDefinition;
@@ -103,6 +71,7 @@ use derive_more::{From, Into};
 #[trait_decode(trait = GammaLoopContext)]
 pub struct CrossSection<S: CrossSectionState = ()> {
     pub name: String,
+    pub integrand: Option<NewIntegrand>,
     pub supergraphs: Vec<CrossSectionGraph<S>>,
     pub external_particles: Vec<ArcParticle>,
     pub external_connections: Vec<ExternalConnection>,
@@ -113,6 +82,7 @@ impl<S: CrossSectionState> CrossSection<S> {
     pub(crate) fn new(name: String) -> Self {
         Self {
             name,
+            integrand: None,
             supergraphs: vec![],
             external_connections: vec![],
             external_particles: vec![],
@@ -154,7 +124,7 @@ impl<S: CrossSectionState> CrossSection<S> {
         Ok(())
     }
 
-    pub(crate) fn generate_integrand(&self, settings: Settings, model: &Model) -> Integrand {
+    pub(crate) fn build_integrand(&mut self, settings: Settings, model: &Model) -> Result<()> {
         let terms = self
             .supergraphs
             .iter()
@@ -191,7 +161,8 @@ impl<S: CrossSectionState> CrossSection<S> {
             model_parameter_cache,
         };
 
-        Integrand::NewIntegrand(NewIntegrand::CrossSection(cross_section_integrand))
+        self.integrand = Some(NewIntegrand::CrossSection(cross_section_integrand));
+        Ok(())
     }
 }
 

@@ -1,97 +1,29 @@
 use std::{
-    cell::RefCell,
-    collections::HashSet,
-    fmt::{Display, Formatter},
+    collections::{BTreeMap, HashSet},
     fs::{self, File},
-    io::Write,
-    iter,
-    marker::PhantomData,
-    path::{Path, PathBuf},
+    path::Path,
 };
 
-use ahash::{AHashSet, HashMap};
+use ahash::HashMap;
 // use bincode::{Decode, Encode};
 use bincode_trait_derive::{Decode, Encode};
-use bitvec::vec::BitVec;
-use color_eyre::Result;
-use momtrop::SampleGenerator;
+use color_eyre::{Help, Result};
+use indexmap::IndexMap;
 
-use idenso::metric::MS;
-
-use spenso::{
-    algebra::{algebraic_traits::IsZero, complex::Complex},
-    iterators::Fiber,
-    tensors::parametric::SerializableCompiledEvaluator,
-};
-
-use crate::{
-    cff::{
-        cut_expression::SuperGraphOrientationID,
-        esurface::{generate_esurface_data, get_existing_esurfaces, EsurfaceDerivedData},
-        expression::{
-            AmplitudeOrientationID, CFFExpression, OrientationData, SubgraphOrientationID,
-        },
-        generation::{generate_cff_expression, get_orientations_from_subgraph},
-    },
-    model::ArcParticle,
-    momentum::SignOrZero,
-    momentum_sample::ExternalIndex,
-    new_gammaloop_integrand::{
-        amplitude_integrand::{AmplitudeGraphTerm, AmplitudeIntegrand},
-        cross_section_integrand::OrientationEvaluator,
-        GenericEvaluator, LmbMultiChannelingSetup, ParamBuilder,
-    },
-    new_graph::{
-        get_cff_inverse_energy_product_impl, Edge, LMBext, LmbIndex, LoopMomentumBasis,
-        NumHedgeData, Vertex,
-    },
-    signature::SignatureLike,
-    subtraction::overlap::find_maximal_overlap,
-    utils::{external_energy_atom_from_index, f128, ose_atom_from_index, GS, W_},
-    uv::UltravioletGraph,
-    GammaLoopContext, GammaLoopContextContainer,
-};
+use crate::{model::ArcParticle, new_gammaloop_integrand::NewIntegrand, GammaLoopContext};
 use eyre::{eyre, Context};
+
 use itertools::Itertools;
-use linnet::half_edge::{
-    involution::{EdgeVec, Flow, HedgePair, Orientation},
-    subgraph::{HedgeNode, Inclusion, InternalSubGraph, OrientedCut},
-    HedgeGraph,
-};
-use log::{debug, warn};
-use serde::{Deserialize, Serialize};
-use symbolica::{
-    atom::{Atom, AtomCore},
-    domains::rational::Rational,
-    evaluate::{CompileOptions, FunctionMap, OptimizationSettings},
-    function, parse, symbol,
-};
-use typed_index_collections::TiVec;
 
 use crate::{
-    cff::{
-        cut_expression::{CFFCutsExpression, CutOrientationData},
-        esurface::{Esurface, EsurfaceID},
-        generation::generate_cff_with_cuts,
-    },
-    cross_section::IsPolarizable,
     feyngen::{FeynGenFilters, GenerationType},
-    graph::BareGraph,
     integrands::Integrand,
     model::Model,
-    momentum::{Rotatable, Rotation, RotationMethod},
-    new_gammaloop_integrand::{
-        cross_section_integrand::{CrossSectionGraphTerm, CrossSectionIntegrand},
-        NewIntegrand,
-    },
-    new_graph::{ExternalConnection, FeynmanGraph, Graph},
-    numerator::{NumeratorState, PythonState},
-    utils::F,
-    DependentMomentaConstructor, Externals, Polarizations, ProcessSettings, Settings,
+    new_graph::Graph,
+    ProcessSettings, Settings,
 };
 
 use super::{Amplitude, AmplitudeState, CrossSection, CrossSectionState, ExportSettings};
-use derive_more::{From, Into};
 
 #[derive(Debug, Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
@@ -155,6 +87,17 @@ impl<A: AmplitudeState, C: CrossSectionState> Process<A, C> {
 }
 
 impl Process {
+    pub fn get_integrand(&self, integrand_name: impl AsRef<str>) -> Result<&NewIntegrand> {
+        self.collection.get_integrand(integrand_name)
+    }
+
+    pub fn get_integrand_mut(
+        &mut self,
+        integrand_name: impl AsRef<str>,
+    ) -> Result<&mut NewIntegrand> {
+        self.collection.get_integrand_mut(integrand_name)
+    }
+
     pub(crate) fn export_dot(&self, settings: &ExportSettings, model: &Model) -> Result<()> {
         let path = Path::new(&settings.root_folder).join(self.definition.folder_name(model));
 
@@ -167,7 +110,7 @@ impl Process {
                         p.display()
                     )
                 })?;
-                for amp in a {
+                for (_, amp) in a {
                     let mut dot = File::create_new(p.join(&format!("{}.dot", amp.name)))
                         .with_context(|| {
                             format!(
@@ -232,11 +175,7 @@ impl Process {
         }
     }
 
-    pub(super) fn generate_integrands(
-        &self,
-        settings: Settings,
-        model: &Model,
-    ) -> HashMap<String, Integrand> {
+    pub(super) fn generate_integrands(&mut self, settings: &Settings, model: &Model) -> Result<()> {
         self.collection.generate_integrands(settings, model)
     }
 }
@@ -244,29 +183,119 @@ impl Process {
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub enum ProcessCollection<A: AmplitudeState = (), C: CrossSectionState = ()> {
-    Amplitudes(Vec<Amplitude<A>>),
-    CrossSections(Vec<CrossSection<C>>),
+    Amplitudes(BTreeMap<String, Amplitude<A>>),
+    CrossSections(BTreeMap<String, CrossSection<C>>),
 }
 
 impl<A: AmplitudeState, C: CrossSectionState> ProcessCollection<A, C> {
     fn new_amplitude() -> Self {
-        Self::Amplitudes(vec![])
+        Self::Amplitudes(BTreeMap::new())
+    }
+
+    fn get_integrand(&self, name: impl AsRef<str>) -> Result<&NewIntegrand> {
+        let res = match self {
+            Self::Amplitudes(amplitudes) => {
+                if amplitudes.contains_key(name.as_ref()) {
+                    Ok(amplitudes.get(name.as_ref()).unwrap().integrand.as_ref())
+                } else {
+                    let names = amplitudes.keys().map(|a| a.as_str()).collect::<Vec<_>>();
+
+                    Err(eyre!("Integrand {} does not exist", name.as_ref()))
+                        .suggestion(format!("Available amplitude names: {}", names.join(", ")))
+                }
+            }
+            Self::CrossSections(cross_sections) => {
+                if cross_sections.contains_key(name.as_ref()) {
+                    Ok(cross_sections
+                        .get(name.as_ref())
+                        .unwrap()
+                        .integrand
+                        .as_ref())
+                } else {
+                    let names = cross_sections
+                        .keys()
+                        .map(|a| a.as_str())
+                        .collect::<Vec<_>>();
+
+                    Err(eyre!("Integrand {} does not exist", name.as_ref())).suggestion(format!(
+                        "Available cross section names: {}",
+                        names.join(", ")
+                    ))
+                }
+            }
+        }?;
+
+        match res {
+            Some(integrand) => Ok(integrand),
+            None => Err(eyre!(
+                "Integrand {} has not yet been generated, but exists",
+                name.as_ref()
+            )),
+        }
+    }
+
+    fn get_integrand_mut(&mut self, name: impl AsRef<str>) -> Result<&mut NewIntegrand> {
+        let res = match self {
+            Self::Amplitudes(amplitudes) => {
+                if amplitudes.contains_key(name.as_ref()) {
+                    Ok(amplitudes
+                        .get_mut(name.as_ref())
+                        .unwrap()
+                        .integrand
+                        .as_mut())
+                } else {
+                    let names = amplitudes.keys().map(|a| a.as_str()).collect::<Vec<_>>();
+
+                    Err(eyre!("Integrand {} does not exist", name.as_ref()))
+                        .suggestion(format!("Available amplitude names: {}", names.join(", ")))
+                }
+            }
+            Self::CrossSections(cross_sections) => {
+                if cross_sections.contains_key(name.as_ref()) {
+                    Ok(cross_sections
+                        .get_mut(name.as_ref())
+                        .unwrap()
+                        .integrand
+                        .as_mut())
+                } else {
+                    let names = cross_sections
+                        .keys()
+                        .map(|a| a.as_str())
+                        .collect::<Vec<_>>();
+
+                    Err(eyre!("Integrand {} does not exist", name.as_ref())).suggestion(format!(
+                        "Available cross section names: {}",
+                        names.join(", ")
+                    ))
+                }
+            }
+        }?;
+
+        match res {
+            Some(integrand) => Ok(integrand),
+            None => Err(eyre!(
+                "Integrand {} has not yet been generated, but exists",
+                name.as_ref()
+            )),
+        }
     }
 
     fn new_cross_section() -> Self {
-        Self::CrossSections(vec![])
+        Self::CrossSections(BTreeMap::new())
     }
 
     pub(crate) fn add_amplitude(&mut self, amplitude: Amplitude<A>) {
         match self {
-            Self::Amplitudes(amplitudes) => amplitudes.push(amplitude),
+            Self::Amplitudes(amplitudes) => amplitudes.insert(amplitude.name.clone(), amplitude),
             _ => panic!("Cannot add amplitude to a cross section collection"),
-        }
+        };
     }
 
     pub(crate) fn add_cross_section(&mut self, cross_section: CrossSection<C>) {
         match self {
-            Self::CrossSections(cross_sections) => cross_sections.push(cross_section),
+            Self::CrossSections(cross_sections) => {
+                cross_sections.insert(cross_section.name.clone(), cross_section);
+            }
             _ => panic!("Cannot add cross section to an amplitude collection"),
         }
     }
@@ -279,12 +308,12 @@ impl<A: AmplitudeState, C: CrossSectionState> ProcessCollection<A, C> {
     ) -> Result<()> {
         match self {
             Self::Amplitudes(amplitudes) => {
-                for amplitude in amplitudes {
+                for (_, amplitude) in amplitudes {
                     amplitude.preprocess(model, settings)?;
                 }
             }
             Self::CrossSections(cross_sections) => {
-                for cross_section in cross_sections {
+                for (_, cross_section) in cross_sections {
                     cross_section.preprocess(model, process_definition)?;
                 }
             }
@@ -292,24 +321,21 @@ impl<A: AmplitudeState, C: CrossSectionState> ProcessCollection<A, C> {
         Ok(())
     }
 
-    fn generate_integrands(&self, settings: Settings, model: &Model) -> HashMap<String, Integrand> {
-        let mut result = HashMap::default();
+    fn generate_integrands(&mut self, settings: &Settings, model: &Model) -> Result<()> {
+        // let mut result = HashMap::default();
         match self {
             Self::Amplitudes(amplitudes) => {
-                let name = "default".to_owned();
-                for amplitude in amplitudes {
-                    let integrand = amplitude.generate_integrand(settings.clone(), model);
-                    result.insert(name.clone(), integrand);
+                for (_, amplitude) in amplitudes {
+                    amplitude.build_integrand(settings.clone(), model)?;
                 }
             }
             Self::CrossSections(cross_sections) => {
-                let name = "default".to_owned();
-                for cross_section in cross_sections {
-                    let integrand = cross_section.generate_integrand(settings.clone(), model);
-                    result.insert(name.clone(), integrand);
+                for (_, cross_section) in cross_sections {
+                    cross_section.build_integrand(settings.clone(), model)?;
                 }
             }
         }
-        result
+        // result
+        Ok(())
     }
 }

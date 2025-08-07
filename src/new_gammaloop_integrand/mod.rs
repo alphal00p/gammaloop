@@ -4,7 +4,7 @@ use crate::evaluation_result::{EvaluationMetaData, EvaluationResult};
 use crate::integrands::{HasIntegrand, Integrand};
 use crate::integrate::UserData;
 use crate::model::Model;
-use crate::momentum::{self, Rotation};
+use crate::momentum::Rotation;
 use crate::momentum_sample::{BareMomentumSample, LoopMomenta, MomentumSample};
 use crate::new_graph::{FeynmanGraph, Graph, LmbIndex, LoopMomentumBasis};
 use crate::utils::{format_for_compare_digits, get_n_dim_for_n_loop_momenta, FloatLike, F, GS};
@@ -28,7 +28,6 @@ use symbolica::domains::rational::Rational;
 use symbolica::evaluate::{
     CompileOptions, ExpressionEvaluator, FunctionMap, InlineASM, OptimizationSettings,
 };
-use symbolica::function;
 use symbolica::numerical_integration::{ContinuousGrid, DiscreteGrid, Grid, Sample};
 use typed_index_collections::TiVec;
 pub mod amplitude_integrand;
@@ -38,7 +37,7 @@ use crate::observables::EventManager;
 use crate::utils::f128;
 use crate::{
     DependentMomentaConstructor, DiscreteGraphSamplingSettings, DiscreteGraphSamplingType,
-    IntegratorSettings, Polarizations, Precision, SamplingSettings, Settings,
+    GammaLoopContext, IntegratorSettings, Polarizations, Precision, SamplingSettings, Settings,
     StabilityLevelSetting, StabilitySettings,
 };
 use color_eyre::Result;
@@ -46,7 +45,8 @@ use color_eyre::Result;
 const HARD_CODED_M_UV: F<f64> = F(1000.0);
 const HARD_CODED_M_R_SQ: F<f64> = F(1000.0);
 
-#[derive(Clone)]
+#[derive(Clone, Encode, Decode)]
+#[trait_decode(trait = GammaLoopContext)]
 #[enum_dispatch(HasIntegrand)]
 pub enum NewIntegrand {
     Amplitude(amplitude_integrand::AmplitudeIntegrand),

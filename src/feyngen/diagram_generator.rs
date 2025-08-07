@@ -16,7 +16,7 @@ use spenso::structure::slot::{DualSlotTo, IsAbstractSlot};
 use spenso::structure::{HasStructure, OrderedStructure};
 use std::collections::hash_map::Entry;
 use std::collections::HashSet;
-use std::ops::{Deref, RangeInclusive};
+use std::ops::RangeInclusive;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use symbolica::atom::AtomView;
@@ -51,8 +51,8 @@ use crate::numerator::aind::Aind;
 use crate::numerator::Network;
 use crate::numerator::SymbolicExpression;
 use crate::numerator::{ExpressionState, GlobalPrefactor};
-use crate::numerator::{Numerator, StandardTensorNet};
-use crate::utils::{self, TENSORLIB, W_};
+use crate::numerator::Numerator;
+use crate::utils::{self, W_};
 use crate::{
     feyngen::{FeynGenFilter, GenerationType},
     graph::BareGraph,
@@ -3506,7 +3506,7 @@ impl FeynGen {
                     } else {
                         // println!("Processing graph #{}...", i_g);
                         // println!("Bare graph: {}",bare_graph.dot());
-                        let mut numerator =
+                        let numerator =
                             Numerator::default().from_graph(&bare_graph, &numerator_global_prefactor);
                         // println!("Num single atom: {}",numerator.get_single_atom().unwrap());
                         for connection in bare_graph.external_connections.iter() {

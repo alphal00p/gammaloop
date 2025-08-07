@@ -1,7 +1,6 @@
 use linnet::parser::GlobalData;
-use log::info;
 use spenso::network::library::TensorLibraryData;
-use symbolica::atom::{Atom, AtomCore};
+use symbolica::atom::Atom;
 
 use super::{
     parse::{StripParse, ToQuoted},
