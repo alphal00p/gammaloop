@@ -3429,7 +3429,6 @@ dependencies = [
 [[package]]
 name = "spenso"
 version = "0.5.2"
-source = "git+https://github.com/alphal00p/spenso?rev=202d53ab247ed02a0f2e2fe5856633e1630a08f9#202d53ab247ed02a0f2e2fe5856633e1630a08f9"
 dependencies = [
  "ahash",
  "anyhow",

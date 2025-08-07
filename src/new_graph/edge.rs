@@ -33,6 +33,11 @@ use super::{
 #[trait_decode(trait = crate::GammaLoopContext)]
 pub enum PossibleParticle {
     Particle(ArcParticle),
+    MassOverriddenParticle {
+        particle: ArcParticle,
+        mass: Atom,
+        mass_value: Option<Complex<F<f64>>>,
+    },
     JustMass {
         expr: Atom,
         value: Option<Complex<F<f64>>>,
@@ -64,6 +69,8 @@ impl From<()> for PossibleParticle {
 }
 
 impl PossibleParticle {
+    // pub fn just_mass(mass:Atom,)
+
     pub(crate) fn zero() -> Self {
         ().into()
     }
@@ -93,6 +100,7 @@ impl PossibleParticle {
         match self {
             PossibleParticle::JustMass { value, .. } => value.is_none(),
             PossibleParticle::Particle(p) => p.is_massless(),
+            PossibleParticle::MassOverriddenParticle { mass_value, .. } => mass_value.is_none(),
         }
     }
 
@@ -137,6 +145,7 @@ impl Edge {
         match &self.particle {
             PossibleParticle::JustMass { value, .. } => value.clone(),
             PossibleParticle::Particle(p) => p.mass.value,
+            PossibleParticle::MassOverriddenParticle { mass_value, .. } => mass_value.clone(),
         }
     }
 }
@@ -157,6 +166,10 @@ impl From<&Edge> for DotEdgeData {
             }
             PossibleParticle::JustMass { expr, value } => {
                 e.add_statement("mass", expr.to_quoted());
+            }
+            PossibleParticle::MassOverriddenParticle { mass, particle, .. } => {
+                e.add_statement("mass", mass.to_quoted());
+                e.add_statement("particle", format!("\"{}\"", particle.name));
             }
         }
         e.add_statement("dod", value.dod);

@@ -98,20 +98,20 @@ fn cli_wrapper(py: Python) -> PyResult<()> {
             .getattr("argv")?
             .extract::<Vec<String>>()?
     );
-    Ok(())
     */
-    crate::set_interrupt_handler();
+    // crate::set_interrupt_handler();
+    Ok(())
 
-    match Cli::parse_from(
-        &py.import_bound("sys")?
-            .getattr("argv")?
-            .extract::<Vec<String>>()?,
-    )
-    .run()
-    {
-        Err(e) => Err(exceptions::PyException::new_err(e.to_string())),
-        Ok(_) => Ok(()),
-    }
+    // match Cli::parse_from(
+    //     &py.import_bound("sys")?
+    //         .getattr("argv")?
+    //         .extract::<Vec<String>>()?,
+    // )
+    // .run()
+    // {
+    //     Err(e) => Err(exceptions::PyException::new_err(e.to_string())),
+    //     Ok(_) => Ok(()),
+    // }
 }
 
 pub(crate) fn format_level(level: log::Level) -> ColoredString {

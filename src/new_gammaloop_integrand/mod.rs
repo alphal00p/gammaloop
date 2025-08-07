@@ -24,7 +24,10 @@ use spenso::structure::concrete_index::ExpandedIndex;
 use spenso::tensors::parametric::SerializableCompiledEvaluator;
 use std::time::Duration;
 use symbolica::atom::{Atom, AtomCore};
-use symbolica::evaluate::{ExpressionEvaluator, FunctionMap};
+use symbolica::domains::rational::Rational;
+use symbolica::evaluate::{
+    CompileOptions, ExpressionEvaluator, FunctionMap, InlineASM, OptimizationSettings,
+};
 use symbolica::function;
 use symbolica::numerical_integration::{ContinuousGrid, DiscreteGrid, Grid, Sample};
 use typed_index_collections::TiVec;
@@ -186,32 +189,115 @@ fn stability_check(
 
 #[derive(Clone, Encode, Decode)]
 pub struct GenericEvaluator {
+    pub rational:
+        RefCell<Option<ExpressionEvaluator<symbolica::domains::float::Complex<Rational>>>>,
     pub f64_compiled: Option<RefCell<SerializableCompiledEvaluator>>,
     pub f64_eager: RefCell<ExpressionEvaluator<Complex<F<f64>>>>,
     pub f128: RefCell<ExpressionEvaluator<Complex<F<f128>>>>,
 }
 
+pub trait GenericEvaluate<T> {
+    fn evaluate(&self, params: &[T], out: &mut [T]);
+    fn evaluate_single(&self, params: &[T]) -> T;
+}
+
+// impl<T: Real + Default> GenericEvaluate<T> for GenericEvaluator
+// where
+//     T: for<'a> From<&'a symbolica::domains::float::Complex<Rational>>,
+//     symbolica::domains::float::Complex<Rational>: for<'a> From<&'a T>,
+// {
+//     fn evaluate(&self, params: &[T], out: &mut [T]) {
+//         let rational = self.rational.take().unwrap();
+//         let mut t_eval = rational.map_coeff(&|t| T::from(t));
+//         t_eval.evaluate(params, out);
+//         self.rational.replace(Some(t_eval.map_coeff(&|t| t.into())));
+//     }
+
+//     fn evaluate_single(&self, params: &[T]) -> T {
+//         let rational = self.rational.take().unwrap();
+//         let mut t_eval = rational.map_coeff(&|t| T::from(t));
+//         let out = t_eval.evaluate_single(params);
+//         self.rational.replace(Some(t_eval.map_coeff(&|t| t.into())));
+//         out
+//     }
+// }
+
+impl GenericEvaluate<Complex<F<f64>>> for GenericEvaluator {
+    fn evaluate(&self, params: &[Complex<F<f64>>], out: &mut [Complex<F<f64>>]) {
+        if let Some(f64_compiled) = &self.f64_compiled {
+            f64_compiled.borrow_mut().evaluate(params, out);
+        } else {
+            self.f64_eager.borrow_mut().evaluate(params, out);
+        }
+    }
+
+    fn evaluate_single(&self, params: &[Complex<F<f64>>]) -> Complex<F<f64>> {
+        if let Some(f64_compiled) = &self.f64_compiled {
+            let mut out = [Complex::default()];
+            f64_compiled.borrow_mut().evaluate(params, &mut out);
+            out[0]
+        } else {
+            self.f64_eager.borrow_mut().evaluate_single(params)
+        }
+    }
+}
+
+impl GenericEvaluate<Complex<F<f128>>> for GenericEvaluator {
+    fn evaluate(&self, params: &[Complex<F<f128>>], out: &mut [Complex<F<f128>>]) {
+        self.f128.borrow_mut().evaluate(params, out);
+    }
+
+    fn evaluate_single(&self, params: &[Complex<F<f128>>]) -> Complex<F<f128>> {
+        self.f128.borrow_mut().evaluate_single(params)
+    }
+}
+
 impl GenericEvaluator {
+    pub(crate) fn compile(
+        &mut self,
+        filename: impl AsRef<str>,
+        function_name: impl AsRef<str>,
+        lib_name: impl AsRef<str>,
+        inline_asm: InlineASM,
+    ) {
+        let compile = self
+            .f64_eager
+            .borrow()
+            .export_cpp(filename.as_ref(), function_name.as_ref(), true, inline_asm)
+            .unwrap()
+            .compile(lib_name.as_ref(), CompileOptions::default())
+            .unwrap()
+            .load()
+            .unwrap();
+
+        self.f64_compiled = Some(RefCell::new(SerializableCompiledEvaluator {
+            evaluator: compile,
+            library_filename: lib_name.as_ref().to_string(),
+            function_name: function_name.as_ref().to_string(),
+        }));
+    }
+
     pub(crate) fn new(
-        atom: &Atom,
+        atom: impl AtomCore,
         fn_map: &FunctionMap,
         params: &[Atom],
-        cpe_rounds: Option<usize>,
+        optimization_settings: OptimizationSettings,
     ) -> Self {
-        let mut tree = atom.to_evaluation_tree(&fn_map, &params).unwrap();
-        tree.horner_scheme();
-        tree.common_subexpression_elimination();
+        let tree = atom
+            .evaluator(&fn_map, &params, optimization_settings)
+            .unwrap();
 
-        let tree_double = tree
-            .map_coeff::<Complex<F<f64>>, _>(&|r| Complex::new(F(r.re.to_f64()), F(r.im.to_f64())));
-        let tree_quad = tree.map_coeff::<Complex<F<f128>>, _>(&|r| {
-            Complex::new(F((&r.re).into()), F((&r.im).into()))
-        });
+        let rational = tree.clone();
+        let f64_eager = tree
+            .clone()
+            .map_coeff(&|r| Complex::new(F::from(&r.re), F::from(&r.im)));
+        let f128 = tree.map_coeff(&|r| Complex::new(F::from(&r.re), F::from(&r.im)));
 
         let evaluator = GenericEvaluator {
+            rational: RefCell::new(Some(rational)),
             f64_compiled: None,
-            f64_eager: RefCell::new(tree_double.linearize(cpe_rounds)),
-            f128: RefCell::new(tree_quad.linearize(cpe_rounds)),
+            f64_eager: RefCell::new(f64_eager),
+            f128: RefCell::new(f128),
         };
 
         evaluator

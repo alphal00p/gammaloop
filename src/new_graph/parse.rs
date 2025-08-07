@@ -671,9 +671,8 @@ pub mod test {
     use symbolica::atom::{Atom, FunctionBuilder};
 
     use crate::{
-        cli::State,
-        new_graph::parse::IntoGraph,
-        new_graph::LMBext,
+        cli::state::State,
+        new_graph::{parse::IntoGraph, LMBext},
         numerator::{aind::Aind, Numerator, UnInit},
     };
 

@@ -63,7 +63,7 @@ use serde::{Deserialize, Serialize};
 use symbolica::{
     atom::{Atom, AtomCore},
     domains::rational::Rational,
-    evaluate::{CompileOptions, FunctionMap},
+    evaluate::{CompileOptions, FunctionMap, OptimizationSettings},
     function, parse, symbol,
 };
 use typed_index_collections::TiVec;
@@ -863,7 +863,7 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
                 let params = self.ct_params(model);
                 let function_map = self.get_function_map();
 
-                GenericEvaluator::new(&ct, &function_map, &params, Some(1))
+                GenericEvaluator::new(&ct, &function_map, &params, OptimizationSettings::default())
             })
             .collect();
 
@@ -879,7 +879,12 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
 
         let function_map = self.get_function_map();
 
-        let evaluator = GenericEvaluator::new(&replace_dots, &function_map, &params, Some(1));
+        let evaluator = GenericEvaluator::new(
+            &replace_dots,
+            &function_map,
+            &params,
+            OptimizationSettings::default(),
+        );
         self.derived_data.bare_cff_evaluator = Some(evaluator)
     }
 
@@ -1016,7 +1021,12 @@ impl<S: NumeratorState> AmplitudeGraph<S> {
                             + function!(GS.emr_vec, W_.x_, 3) * function!(GS.emr_vec, W_.y_, 3)),
                     );
 
-                GenericEvaluator::new(&replace_dots, &function_map, &params, Some(1))
+                GenericEvaluator::new(
+                    &replace_dots,
+                    &function_map,
+                    &params,
+                    OptimizationSettings::default(),
+                )
             })
             .collect();
 
@@ -1693,47 +1703,24 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
                 };
 
                 let params = self.get_params(model);
-                let mut tree = atom
-                    .to_evaluation_tree(&self.get_function_map(), &params)
-                    .unwrap();
 
-                tree.horner_scheme();
-                tree.common_subexpression_elimination();
-
-                let tree_double = tree.map_coeff::<F<f64>, _>(&|r| (&r.re).into());
-                let tree_quad = tree.map_coeff::<F<f128>, _>(&|r| (&r.re).into());
-
-                let tree_complex_double = tree.map_coeff::<Complex<F<f64>>, _>(&|r| {
-                    Complex::new(F(r.re.to_f64()), F(r.im.to_f64()))
-                });
-                let tree_complex_quad = tree.map_coeff::<Complex<F<f128>>, _>(&|r| {
-                    Complex::new(F((&r.re).into()), F((&r.im).into()))
-                });
-
-                let lin = tree_double.linearize(None);
-                let lin_complex = tree_complex_double.linearize(None);
-
+                let mut eval = GenericEvaluator::new(
+                    atom,
+                    &self.get_function_map(),
+                    &params,
+                    OptimizationSettings::default(),
+                );
                 let filename = format!("{}_cut_{}.cpp", self.graph.name, cut_id);
                 let function_name = format!("{}_cut_{}", self.graph.name, cut_id);
                 let lib_name = format!("{}_cut_{}.so", self.graph.name, cut_id);
-                let _exp = lin
-                    .export_cpp(
-                        &filename,
-                        &function_name,
-                        true,
-                        symbolica::evaluate::InlineASM::None,
-                    )
-                    .unwrap()
-                    .compile(&lib_name, CompileOptions::default())
-                    .unwrap();
 
-                GenericEvaluator {
-                    f64_compiled: Some(RefCell::new(
-                        SerializableCompiledEvaluator::load(&lib_name, &function_name).unwrap(),
-                    )),
-                    f64_eager: RefCell::new(lin_complex.into()),
-                    f128: RefCell::new(tree_complex_quad.linearize(None)),
-                }
+                eval.compile(
+                    filename,
+                    function_name,
+                    lib_name,
+                    symbolica::evaluate::InlineASM::None,
+                );
+                eval
             })
             .collect();
 
@@ -1766,25 +1753,13 @@ impl<S: NumeratorState> CrossSectionGraph<S> {
                     .iter()
                     .map(|cut_atom| {
                         let params = self.get_params(model);
-                        let mut tree = cut_atom
-                            .to_evaluation_tree(&self.get_function_map(), &params)
-                            .unwrap();
 
-                        tree.horner_scheme();
-                        tree.common_subexpression_elimination();
-
-                        let tree_double = tree.map_coeff::<Complex<F<f64>>, _>(&|r| {
-                            Complex::new(F(r.re.to_f64()), F(r.im.to_f64()))
-                        });
-                        let tree_quad = tree.map_coeff::<Complex<F<f128>>, _>(&|r| {
-                            Complex::new(F((&r.re).into()), F((&r.im).into()))
-                        });
-
-                        GenericEvaluator {
-                            f64_compiled: None,
-                            f64_eager: RefCell::new(tree_double.linearize(Some(1))),
-                            f128: RefCell::new(tree_quad.linearize(Some(1))),
-                        }
+                        GenericEvaluator::new(
+                            cut_atom,
+                            &self.get_function_map(),
+                            &params,
+                            OptimizationSettings::default(),
+                        )
                     })
                     .collect_vec();
 

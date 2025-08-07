@@ -287,6 +287,7 @@ impl UVE for Edge {
         match &self.particle {
             PossibleParticle::JustMass { expr, .. } => expr.clone(),
             PossibleParticle::Particle(p) => parse!(&p.mass.name),
+            PossibleParticle::MassOverriddenParticle { mass, .. } => mass.clone(),
         }
     }
 }
