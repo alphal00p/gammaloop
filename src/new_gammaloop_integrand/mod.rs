@@ -318,23 +318,14 @@ impl GenericEvaluatorFloat for f64 {
         #[inline(always)]
         |params: &[Complex<F<f64>>]| {
             if let Some(compiled) = &generic_evaluator.f64_compiled {
-                let mut out = [symbolica::domains::float::Complex::new_zero()];
-                let symbolica_params = params
-                    .iter()
-                    .map(|c| symbolica::domains::float::Complex::new(c.re.0, c.im.0))
-                    .collect_vec();
-                compiled
-                    .borrow_mut()
-                    .evaluate_complex(&symbolica_params, &mut out);
-
-                Complex::new(F(out[0].re), F(out[0].im))
+                let mut out = [Complex::default()];
+                compiled.borrow_mut().evaluate(params, &mut out);
+                out[0]
             } else {
-                let mut out = [Complex::new_zero()];
                 generic_evaluator
                     .f64_eager
                     .borrow_mut()
-                    .evaluate(params, &mut out);
-                out[0]
+                    .evaluate_single(params)
             }
         }
     }

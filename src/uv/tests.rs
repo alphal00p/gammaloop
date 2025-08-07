@@ -57,7 +57,7 @@ fn tri_uv_AMP() {
         .underlying
         .get_esurface_canonization(&graph.loop_momentum_basis);
 
-    let mut amplitude_graph = AmplitudeGraph::<UnInit>::new(graph.clone());
+    let mut amplitude_graph = AmplitudeGraph::new(graph.clone());
     amplitude_graph
         .preprocess(&model, &ProcessSettings::default())
         .unwrap();
@@ -408,7 +408,7 @@ fn tri_box_tri_LU() {
             .dot_lmb(&graph.underlying.full_filter(), &graph.loop_momentum_basis)
     );
 
-    let mut cs: CrossSectionGraph<UnInit> = CrossSectionGraph::new(graph);
+    let mut cs: CrossSectionGraph = CrossSectionGraph::new(graph);
 
     let hpdg = hp.pdg_code as i64;
     let tpdg = tp.pdg_code as i64;
@@ -1157,7 +1157,7 @@ fn double_triangle_LU() {
 
     let graph = Graph::from_parsed(underlying, &model).unwrap();
 
-    let mut cs: CrossSectionGraph<UnInit> = CrossSectionGraph::new(graph);
+    let mut cs: CrossSectionGraph = CrossSectionGraph::new(graph);
 
     let hpdg = hp.pdg_code as i64;
     let tpdg = tp.pdg_code as i64;

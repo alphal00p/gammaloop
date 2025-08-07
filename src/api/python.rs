@@ -748,9 +748,9 @@ impl PythonWorker {
             cross_section_filters,
         };
 
-        let process = Process::from_bare_graph_list(
+        let process = Process::from_graph_list(
             proccess_name.into(),
-            diagrams,
+            vec![],
             generation_type,
             process_definition,
             None,

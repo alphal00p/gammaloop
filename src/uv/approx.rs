@@ -979,7 +979,7 @@ impl Approximation {
             .state
             .tensor
             .scalar()
-            .unwrap();
+            .expect("Expected a scalar value when contracting integrand tensor network");
 
         for (p, eid, e) in graph.as_ref().iter_edges_of(&reduced) {
             if p.is_paired() {

@@ -210,7 +210,7 @@ mod test {
         }
         // return;
 
-        let mut amp: Amplitude<UnInit> = Amplitude::new("name".into());
+        let mut amp: Amplitude = Amplitude::new("name".into());
 
         let mut settings = Settings::default();
 
@@ -276,7 +276,7 @@ mod test {
         }
         // return;
 
-        let mut amp: Amplitude<UnInit> = Amplitude::new("name".into());
+        let mut amp: Amplitude = Amplitude::new("name".into());
 
         let mut settings = Settings::default();
 
@@ -332,7 +332,7 @@ mod test {
         })
         .unwrap();
 
-        let mut amp: Amplitude<UnInit> = Amplitude::new("name".into());
+        let mut amp: Amplitude = Amplitude::new("name".into());
         let mut settings = Settings::default();
         for g in graphs {
             println!("{}", g.dot_serialize());

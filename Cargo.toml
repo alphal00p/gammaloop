@@ -174,8 +174,8 @@ no_python = []
 # symbolica = { git = "https://github.com/alphal00p/symbolica", rev = "a23ebaa71b1bc715a129ac765764ece7273625dc" }
 # symbolica = {path="../symbolica"}
 # spenso-macros = { path = "../spenso/spenso-macros" }
-# spenso = { git = "https://github.com/alphal00p/spenso", rev = "202d53ab247ed02a0f2e2fe5856633e1630a08f9" }
-spenso = { path = "../spenso/spenso" }
+spenso = { git = "https://github.com/alphal00p/spenso", rev = "202d53ab247ed02a0f2e2fe5856633e1630a08f9" }
+# spenso = { path = "../spenso/spenso" }
 spenso-hep-lib = { git = "https://github.com/alphal00p/spenso", rev = "202d53ab247ed02a0f2e2fe5856633e1630a08f9" }
 # spenso-hep-lib = { path = "../spenso/spenso-hep-lib" }
 idenso = { git = "https://github.com/alphal00p/spenso", rev = "202d53ab247ed02a0f2e2fe5856633e1630a08f9" }

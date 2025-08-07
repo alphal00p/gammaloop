@@ -35,8 +35,8 @@ const HARD_CODED_M_R_SQ: F<f64> = F(1000.0);
 
 #[derive(Clone)]
 pub struct AmplitudeGraphTerm {
-    pub bare_cff_evaluator: GenericEvaluator,
-    pub bare_cff_orientation_evaluators: TiVec<AmplitudeOrientationID, GenericEvaluator>,
+    pub integrand_evaluator_all_orientations: GenericEvaluator,
+    pub integrand_evaluators: TiVec<AmplitudeOrientationID, GenericEvaluator>,
     pub counterterm_evaluators: TiVec<EsurfaceID, GenericEvaluator>,
     pub graph: Graph,
     pub multi_channeling_setup: LmbMultiChannelingSetup,
@@ -92,11 +92,11 @@ impl AmplitudeGraphTerm {
         let result = match momentum_sample.sample.orientation {
             Some(orientation_id) => {
                 let orientation_id = AmplitudeOrientationID::from(orientation_id);
-                let orientation_evaluator = &self.bare_cff_orientation_evaluators[orientation_id];
+                let orientation_evaluator = &self.integrand_evaluators[orientation_id];
                 <T as GenericEvaluatorFloat>::get_evaluator(orientation_evaluator)(&params)
             }
             None => {
-                let evaluator = &self.bare_cff_evaluator;
+                let evaluator = &self.integrand_evaluator_all_orientations;
                 <T as GenericEvaluatorFloat>::get_evaluator(evaluator)(&params)
             }
         };
@@ -132,7 +132,7 @@ impl GraphTerm for AmplitudeGraphTerm {
     }
 
     fn get_num_orientations(&self) -> usize {
-        self.bare_cff_orientation_evaluators.len()
+        self.integrand_evaluators.len()
     }
 
     fn get_tropical_sampler(&self) -> &SampleGenerator<3> {
