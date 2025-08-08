@@ -71,8 +71,9 @@ impl State {
             model: &model,
         };
 
-        let process_list =
-            ProcessList::load(root_folder, context).context("Trying to load processList")?;
+        let process_list = ProcessList::load(root_folder, context)
+            .context("Trying to load processList")
+            .unwrap();
 
         Ok(State {
             model,

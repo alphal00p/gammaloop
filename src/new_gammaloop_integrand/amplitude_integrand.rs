@@ -167,7 +167,7 @@ impl AmplitudeIntegrand {
 
         // debug!("HE3");
         serde_yaml::to_writer(
-            File::open(path.as_ref().join("settings.yaml"))?,
+            File::create(path.as_ref().join("settings.yaml"))?,
             &self.settings,
         )?;
         // debug!("HE");

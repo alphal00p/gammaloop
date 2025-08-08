@@ -61,7 +61,7 @@ impl CrossSectionIntegrand {
         let binary = bincode::encode_to_vec(&self, bincode::config::standard())?;
         fs::write(path.as_ref().join("integrand.bin"), binary)?;
         serde_yaml::to_writer(
-            File::open(path.as_ref().join("settings.yaml"))?,
+            File::create(path.as_ref().join("settings.yaml"))?,
             &self.settings,
         )?;
         Ok(())
