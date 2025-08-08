@@ -619,11 +619,11 @@ impl From<&Graph> for DotGraph {
         for (e, i, v) in value.iter_edges() {
             let loop_expr = value
                 .loop_momentum_basis
-                .loop_atom(i, GS.loop_mom, &[W_.a___], true);
+                .loop_atom(i, GS.loop_mom, &[W_.a___], false);
             let external_expr =
                 value
                     .loop_momentum_basis
-                    .ext_atom(i, GS.loop_mom, &[W_.a___], true);
+                    .ext_atom(i, GS.external_mom, &[W_.a___], false);
 
             graph[i].add_statement("lmb_rep", (loop_expr + external_expr).to_quoted());
         }

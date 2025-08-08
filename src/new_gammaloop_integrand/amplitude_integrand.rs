@@ -7,6 +7,7 @@ use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
 use eyre::Context;
 use itertools::Itertools;
+use log::debug;
 use momtrop::SampleGenerator;
 use spenso::algebra::complex::Complex;
 use symbolica::numerical_integration::{Grid, Sample};
@@ -163,10 +164,13 @@ impl AmplitudeIntegrand {
     pub(crate) fn save(&self, path: impl AsRef<Path>, override_existing: bool) -> Result<()> {
         let binary = bincode::encode_to_vec(&self.data, bincode::config::standard())?;
         fs::write(path.as_ref().join("integrand.bin"), binary)?;
+
+        // debug!("HE3");
         serde_yaml::to_writer(
             File::open(path.as_ref().join("settings.yaml"))?,
             &self.settings,
         )?;
+        // debug!("HE");
 
         Ok(())
     }
