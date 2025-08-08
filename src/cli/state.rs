@@ -8,10 +8,15 @@ use std::{
 use chrono::{Datelike, Local, Timelike};
 use color_eyre::Result;
 use colored::{ColoredString, Colorize};
-use eyre::eyre;
+use eyre::{eyre, Context};
 use log::{debug, LevelFilter};
 
-use crate::{integrands::Integrand, model::Model, new_cs::ProcessList, GammaLoopContextContainer};
+use crate::{
+    integrands::Integrand,
+    model::{Model, SerializableModel},
+    new_cs::ProcessList,
+    GammaLoopContextContainer,
+};
 
 use super::LogFormat;
 
@@ -28,7 +33,6 @@ impl Default for State {
             process_list: ProcessList::default(),
             model_path: None,
         };
-        a.setup_log().unwrap();
         a
     }
 }
@@ -42,20 +46,23 @@ impl State {
         // let root_folder = root_folder.join("gammaloop_state");
 
         let model = if let Some(model_path) = &model_path {
-            println!("Loading model from {}", model_path.display());
+            debug!("Loading model from {}", model_path.display());
             Model::from_file(model_path)?
         } else {
             let model_dir = root_folder.join("model.yaml");
-            println!(
+            debug!(
                 "Loading model from default location: {}",
                 model_dir.display()
             );
 
-            Model::from_serializable_model(serde_yaml::from_reader(File::open(model_dir)?)?)
+            Model::from_serializable_model(SerializableModel::from_file(model_dir)?)
         };
 
+        debug!("Loaded model: {}", model.name);
+
         let state = symbolica::state::State::import(
-            &mut fs::File::open(root_folder.join("symbolica_state.bin"))?,
+            &mut fs::File::open(root_folder.join("symbolica_state.bin"))
+                .context("Trying to open symbolica state binary")?,
             None,
         )?;
 
@@ -64,7 +71,8 @@ impl State {
             model: &model,
         };
 
-        let process_list = ProcessList::load(root_folder, context)?;
+        let process_list =
+            ProcessList::load(root_folder, context).context("Trying to load processList")?;
 
         Ok(State {
             model,
@@ -111,54 +119,6 @@ impl State {
         let model_yaml = serde_yaml::to_string(&self.model.to_serializable())?;
 
         fs::write(root_folder.join("model.yaml"), model_yaml)?;
-        Ok(())
-    }
-
-    pub(crate) fn setup_log(&self) -> Result<()> {
-        fern::Dispatch::new()
-            .filter(|metadata| metadata.level() <= (*LOG_LEVEL.lock().unwrap()))
-            // Perform allocation-free log formatting
-            .format(|out, message, record| {
-                let now = Local::now();
-                match *LOG_FORMAT.lock().unwrap() {
-                    LogFormat::Long => out.finish(format_args!(
-                        "[{}] @{} {}: {}",
-                        format!(
-                            "{:04}-{:02}-{:02} {:02}:{:02}:{:02}.{:03}",
-                            now.year(),
-                            now.month(),
-                            now.day(),
-                            now.hour(),
-                            now.minute(),
-                            now.second(),
-                            now.timestamp_subsec_millis()
-                        )
-                        .bright_green(),
-                        format_target(record.target().into(), record.level()),
-                        format_level(record.level()),
-                        message
-                    )),
-                    LogFormat::Short => out.finish(format_args!(
-                        "[{}] {}: {}",
-                        format!("{:02}:{:02}:{:02}", now.hour(), now.minute(), now.second())
-                            .bright_green(),
-                        format_level(record.level()),
-                        message
-                    )),
-                    LogFormat::Min => out.finish(format_args!(
-                        "{}: {}",
-                        format_level(record.level()),
-                        message
-                    )),
-                    LogFormat::None => out.finish(format_args!("{}", message)),
-                }
-            })
-            // Output to stdout, files, and other Dispatch configurations
-            .chain(std::io::stdout())
-            .chain(fern::log_file("gammaloop_rust_output.log")?)
-            // Apply globally
-            .apply()?;
-
         Ok(())
     }
 }

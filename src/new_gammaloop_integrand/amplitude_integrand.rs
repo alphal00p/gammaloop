@@ -145,7 +145,14 @@ impl GraphTerm for AmplitudeGraphTerm {
 #[trait_decode(trait = GammaLoopContext)]
 pub struct AmplitudeIntegrand {
     pub settings: Settings,
+    pub data: AmplitudeIntegrandData,
+}
+
+#[derive(Clone, Encode, Decode)]
+#[trait_decode(trait = GammaLoopContext)]
+pub struct AmplitudeIntegrandData {
     pub rotations: Vec<Rotation>,
+    pub name: String,
     pub polarizations: Vec<Polarizations>,
     pub graph_terms: Vec<AmplitudeGraphTerm>,
     pub external_signature: SignatureLike<ExternalIndex>,
@@ -154,62 +161,24 @@ pub struct AmplitudeIntegrand {
 
 impl AmplitudeIntegrand {
     pub(crate) fn save(&self, path: impl AsRef<Path>, override_existing: bool) -> Result<()> {
-        let p = path.as_ref().join("integrand");
-
-        let r = fs::create_dir_all(&p).with_context(|| {
-            format!(
-                "Trying to create directory to save amplitude {}",
-                p.display()
-            )
-        });
-        if override_existing {
-            r?;
-        }
-
-        let binary = bincode::encode_to_vec(&self.rotations, bincode::config::standard())?;
-        fs::write(p.join("rotations.bin"), binary)?;
-        let binary = bincode::encode_to_vec(&self.external_signature, bincode::config::standard())?;
-        fs::write(p.join("external_signature.bin"), binary)?;
-
-        let binary = bincode::encode_to_vec(&self.graph_terms, bincode::config::standard())?;
-        fs::write(p.join("terms.bin"), binary)?;
-        let binary = bincode::encode_to_vec(&self.polarizations, bincode::config::standard())?;
-        fs::write(p.join("polarizations.bin"), binary)?;
-        let binary =
-            bincode::encode_to_vec(&self.model_parameter_cache, bincode::config::standard())?;
-        fs::write(p.join("model_parameter_cache.bin"), binary)?;
-        serde_yaml::to_writer(File::open(p.join("settings.yaml"))?, &self.settings)?;
+        let binary = bincode::encode_to_vec(&self.data, bincode::config::standard())?;
+        fs::write(path.as_ref().join("integrand.bin"), binary)?;
+        serde_yaml::to_writer(
+            File::open(path.as_ref().join("settings.yaml"))?,
+            &self.settings,
+        )?;
 
         Ok(())
     }
 
     pub(crate) fn load(path: impl AsRef<Path>, context: GammaLoopContextContainer) -> Result<Self> {
-        let binary = fs::read(path.as_ref().join("rotations.bin"))?;
-        let (rotations, _) =
-            bincode::decode_from_slice_with_context(&binary, bincode::config::standard(), context)?;
-        let binary = fs::read(path.as_ref().join("terms.bin"))?;
-        let (graph_terms, _) =
-            bincode::decode_from_slice_with_context(&binary, bincode::config::standard(), context)?;
-        let binary = fs::read(path.as_ref().join("polarizations.bin"))?;
-        let (polarizations, _) =
-            bincode::decode_from_slice_with_context(&binary, bincode::config::standard(), context)?;
-        let binary = fs::read(path.as_ref().join("model_parameter_cache.bin"))?;
-        let (model_parameter_cache, _) =
-            bincode::decode_from_slice_with_context(&binary, bincode::config::standard(), context)?;
-        let binary = fs::read(path.as_ref().join("external_signature.bin"))?;
-        let (external_signature, _) =
+        let binary = fs::read(path.as_ref().join("integrand.bin"))?;
+        let (data, _) =
             bincode::decode_from_slice_with_context(&binary, bincode::config::standard(), context)?;
 
         let settings = serde_yaml::from_reader(File::open(path.as_ref().join("settings.yaml"))?)?;
 
-        Ok(Self {
-            rotations,
-            graph_terms,
-            polarizations,
-            model_parameter_cache,
-            external_signature,
-            settings,
-        })
+        Ok(AmplitudeIntegrand { settings, data })
     }
 }
 
@@ -217,11 +186,11 @@ impl GammaloopIntegrand for AmplitudeIntegrand {
     type G = AmplitudeGraphTerm;
 
     fn get_rotations(&self) -> impl Iterator<Item = &Rotation> {
-        self.rotations.iter()
+        self.data.rotations.iter()
     }
 
     fn get_terms(&self) -> impl Iterator<Item = &Self::G> {
-        self.graph_terms.iter()
+        self.data.graph_terms.iter()
     }
 
     fn get_settings(&self) -> &Settings {
@@ -229,19 +198,20 @@ impl GammaloopIntegrand for AmplitudeIntegrand {
     }
 
     fn get_graph(&self, graph_id: usize) -> &Self::G {
-        &self.graph_terms[graph_id]
+        &self.data.graph_terms[graph_id]
     }
 
     fn get_polarizations(&self) -> &[Polarizations] {
-        &self.polarizations
+        &self.data.polarizations
     }
 
     fn get_dependent_momenta_constructor(&self) -> DependentMomentaConstructor {
-        DependentMomentaConstructor::Amplitude(&self.external_signature)
+        DependentMomentaConstructor::Amplitude(&self.data.external_signature)
     }
 
     fn get_model_parameter_cache<T: FloatLike>(&self) -> Vec<Complex<F<T>>> {
-        self.model_parameter_cache
+        self.data
+            .model_parameter_cache
             .iter()
             .map(|x| Complex::new(F::from_ff64(x.re), F::from_ff64(x.im)))
             .collect()
@@ -251,6 +221,10 @@ impl GammaloopIntegrand for AmplitudeIntegrand {
 impl HasIntegrand for AmplitudeIntegrand {
     fn create_grid(&self) -> Grid<F<f64>> {
         create_grid(self)
+    }
+
+    fn name(&self) -> String {
+        self.data.name.clone()
     }
 
     fn evaluate_sample(
@@ -271,9 +245,10 @@ impl HasIntegrand for AmplitudeIntegrand {
             .get_parameterization_settings()
             .is_some()
         {
-            self.graph_terms[0].graph.underlying.get_loop_number() * 3
+            self.data.graph_terms[0].graph.underlying.get_loop_number() * 3
         } else {
             let dimensions = self
+                .data
                 .graph_terms
                 .iter()
                 .map(|term| term.get_tropical_sampler().get_dimension())

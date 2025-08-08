@@ -54,6 +54,8 @@ impl Default for IntegrandSettings {
 pub trait HasIntegrand {
     fn create_grid(&self) -> Grid<F<f64>>;
 
+    fn name(&self) -> String;
+
     fn evaluate_sample(
         &mut self,
         sample: &Sample<F<f64>>,
@@ -92,6 +94,16 @@ pub enum Integrand {
 }
 
 impl HasIntegrand for Integrand {
+    fn name(&self) -> String {
+        match self {
+            Integrand::UnitSurface(_) => "UnitSurface".to_string(),
+            Integrand::UnitVolume(_) => "UnitVolume".to_string(),
+            Integrand::HFunctionTest(_) => "HFunctionTest".to_string(),
+            Integrand::GammaLoopIntegrand(_) => "GammaLoopIntegrand".to_string(),
+            Integrand::NewIntegrand(i) => i.name(),
+        }
+    }
+
     fn create_grid(&self) -> Grid<F<f64>> {
         match self {
             Integrand::UnitSurface(integrand) => integrand.create_grid(),
@@ -237,6 +249,10 @@ impl UnitSurfaceIntegrand {
 
 #[allow(unused)]
 impl HasIntegrand for UnitSurfaceIntegrand {
+    fn name(&self) -> String {
+        "UnitSurfaceIntegrand".to_string()
+    }
+
     fn create_grid(&self) -> Grid<F<f64>> {
         Grid::Continuous(ContinuousGrid::new(
             self.n_dim,
@@ -391,6 +407,9 @@ impl UnitVolumeIntegrand {
 
 #[allow(unused)]
 impl HasIntegrand for UnitVolumeIntegrand {
+    fn name(&self) -> String {
+        "UnitVolumeIntegrand".to_string()
+    }
     fn create_grid(&self) -> Grid<F<f64>> {
         Grid::Continuous(ContinuousGrid::new(
             self.n_dim,

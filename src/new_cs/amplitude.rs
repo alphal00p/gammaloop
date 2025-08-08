@@ -20,7 +20,7 @@ use crate::{
     model::ArcParticle,
     momentum_sample::ExternalIndex,
     new_gammaloop_integrand::{
-        amplitude_integrand::{AmplitudeGraphTerm, AmplitudeIntegrand},
+        amplitude_integrand::{AmplitudeGraphTerm, AmplitudeIntegrand, AmplitudeIntegrandData},
         GenericEvaluator, LmbMultiChannelingSetup, ParamBuilder,
     },
     new_graph::{LMBext, LmbIndex, LoopMomentumBasis},
@@ -65,12 +65,14 @@ pub struct Amplitude<S: AmplitudeState = ()> {
 
 impl<S: AmplitudeState> Amplitude<S> {
     pub(crate) fn load(path: impl AsRef<Path>, context: GammaLoopContextContainer) -> Result<Self> {
-        let binary = fs::read(path.as_ref())?;
+        let binary = fs::read(path.as_ref().join("amp.bin"))?;
         let (mut amp, _): (Self, _) =
             bincode::decode_from_slice_with_context(&binary, bincode::config::standard(), context)?;
 
-        let integrand = AmplitudeIntegrand::load(path.as_ref().join("integrand"), context)?;
-        amp.integrand = Some(NewIntegrand::Amplitude(integrand));
+        if path.as_ref().join("integrand").exists() {
+            let integrand = AmplitudeIntegrand::load(path.as_ref().join("integrand"), context)?;
+            amp.integrand = Some(NewIntegrand::Amplitude(integrand));
+        }
 
         Ok(amp)
     }
@@ -92,7 +94,7 @@ impl<S: AmplitudeState> Amplitude<S> {
         };
 
         let binary = bincode::encode_to_vec(&(*self), bincode::config::standard())?;
-        fs::write(p.join("amp"), binary)?;
+        fs::write(p.join("amp.bin"), binary)?;
         Ok(())
     }
 
@@ -130,13 +132,15 @@ impl<S: AmplitudeState> Amplitude<S> {
 
         let amplitude_integrand = AmplitudeIntegrand {
             settings,
-            rotations,
-            polarizations,
-            graph_terms: terms,
-            external_signature: self.external_signature.clone(),
-            model_parameter_cache: model.generate_values(),
+            data: AmplitudeIntegrandData {
+                name: self.name.clone(),
+                rotations,
+                polarizations,
+                graph_terms: terms,
+                external_signature: self.external_signature.clone(),
+                model_parameter_cache: model.generate_values(),
+            },
         };
-
         self.integrand = Some(NewIntegrand::Amplitude(amplitude_integrand));
         Ok(())
     }
@@ -597,6 +601,8 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
         // }
 
         let function_map = self.get_function_map();
+
+        debug!("Generating evaluator for graph {}", self.graph.name);
 
         let evaluator = GenericEvaluator::new(
             &replace_dots,

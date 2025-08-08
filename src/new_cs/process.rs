@@ -9,6 +9,7 @@ use ahash::HashMap;
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::{Help, Result};
 use indexmap::IndexMap;
+use log::debug;
 
 use crate::{
     model::ArcParticle, new_gammaloop_integrand::NewIntegrand, GammaLoopContext,
@@ -95,16 +96,31 @@ impl Process {
         path: impl AsRef<Path>,
         context: GammaLoopContextContainer,
     ) -> Result<Self> {
-        let binary = fs::read(path.as_ref().join("def.bin"))?;
+        let binary = fs::read(path.as_ref().join("def.bin")).context(format!(
+            "Error reading def.bin in {}",
+            path.as_ref().display()
+        ))?;
+
         let (definition, _) =
-            bincode::decode_from_slice_with_context(&binary, bincode::config::standard(), context)?;
+            bincode::decode_from_slice_with_context(&binary, bincode::config::standard(), context)
+                .context("Error decoding process definition")?;
 
         let mut collection = ProcessCollection::new_amplitude();
 
-        for entry in fs::read_dir(path)? {
-            let entry = entry?;
+        for entry in fs::read_dir(path.as_ref())
+            .context(format!("Error reading {}", path.as_ref().display()))?
+        {
+            let Ok(entry) = entry else {
+                debug!("Error reading entry");
+                continue;
+            };
+            if entry.file_type()?.is_file() {
+                continue; //skip def.bin, amplitudes are in folders
+            }
             let path = entry.path();
-            let amp = Amplitude::load(path, context.clone())?;
+            debug!("loading amplitude at {}", path.display());
+            let amp = Amplitude::load(path, context.clone()).context("Error loading amplitude")?;
+
             collection.add_amplitude(amp);
         }
 
@@ -190,23 +206,18 @@ impl Process {
 
     pub(crate) fn export_dot(
         &self,
-        settings: &ExportSettings,
+        path: impl AsRef<Path>,
         model: &Model,
         id: usize,
     ) -> Result<()> {
-        let path = Path::new(&settings.root_folder).join(self.definition.folder_name(model, id));
+        let p = path.as_ref().join("amplitudes");
+        let path = p.join(self.definition.folder_name(model, id));
+        fs::create_dir_all(&path)?;
 
         match &self.collection {
             ProcessCollection::Amplitudes(a) => {
-                let p = path.join("amplitudes");
-                fs::create_dir_all(&p).with_context(|| {
-                    format!(
-                        "Trying to create directory to export amplitude dot {}",
-                        p.display()
-                    )
-                })?;
                 for (_, amp) in a {
-                    let mut dot = File::create_new(p.join(&format!("{}.dot", amp.name)))
+                    let mut dot = File::create_new(path.join(&format!("{}.dot", amp.name)))
                         .with_context(|| {
                             format!(
                                 "Trying to create file to export amplitude dot {}",

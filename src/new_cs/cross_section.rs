@@ -18,7 +18,8 @@ use crate::{
     },
     model::ArcParticle,
     new_gammaloop_integrand::{
-        cross_section_integrand::OrientationEvaluator, GenericEvaluator, LmbMultiChannelingSetup,
+        cross_section_integrand::{CrossSectionIntegrandData, OrientationEvaluator},
+        GenericEvaluator, LmbMultiChannelingSetup,
     },
     new_graph::{get_cff_inverse_energy_product_impl, LMBext, LmbIndex, LoopMomentumBasis},
     utils::{ose_atom_from_index, GS, W_},
@@ -152,13 +153,16 @@ impl<S: CrossSectionState> CrossSection<S> {
         let model_parameter_cache = model.generate_values();
 
         let cross_section_integrand = CrossSectionIntegrand {
-            rotations,
-            external_connections: self.external_connections.clone(),
-            n_incoming: self.n_incmoming,
-            polarizations,
             settings,
-            graph_terms: terms,
-            model_parameter_cache,
+            data: CrossSectionIntegrandData {
+                rotations,
+                name: self.name.clone(),
+                external_connections: self.external_connections.clone(),
+                n_incoming: self.n_incmoming,
+                polarizations,
+                graph_terms: terms,
+                model_parameter_cache,
+            },
         };
 
         self.integrand = Some(NewIntegrand::CrossSection(cross_section_integrand));

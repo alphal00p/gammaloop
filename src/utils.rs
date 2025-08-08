@@ -1,3 +1,4 @@
+use crate::cli::state::LOG_LEVEL;
 use crate::momentum::{FourMomentum, ThreeMomentum};
 use crate::momentum_sample::{ExternalFourMomenta, ExternalIndex, LoopMomenta};
 use crate::new_gammaloop_integrand::GenericEvaluatorFloat;
@@ -3106,29 +3107,6 @@ pub(crate) fn inv_3x3_sig_matrix(mat: [[isize; 3]; 3]) -> [[isize; 3]; 3] {
     inv_mat[2][2] = (-mat[0][1] * mat[1][0] + mat[0][0] * mat[1][1]) * denom;
 
     inv_mat
-}
-
-pub(crate) fn print_banner() {
-    println!(
-        "\n{}{}\n",
-        r"                                        _
-                                       | |
-   __ _  __ _ _ __ ___  _ __ ___   __ _| |     ___   ___  _ __
-  / _` |/ _` | '_ ` _ \| '_ ` _ \ / _` | |    / _ \ / _ \| '_ \
- | (_| | (_| | | | | | | | | | | | (_| | |___| (_) | (_) | |_) |
-  \__, |\__,_|_| |_| |_|_| |_| |_|\__,_|______\___/ \___/| .__/
-   __/ |                                                 | |
-"
-        .to_string()
-        .bold()
-        .blue(),
-        format!(
-            r#"  |___/    {}                    |_|    "#,
-            format!("{:-26}", GIT_VERSION).green(),
-        )
-        .bold()
-        .blue(),
-    );
 }
 
 #[allow(unused)]

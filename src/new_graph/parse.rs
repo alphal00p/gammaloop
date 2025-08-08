@@ -36,6 +36,7 @@ use spenso::{
 use symbolica::{
     atom::{Atom, AtomCore, AtomView},
     parse,
+    printer::PrintOptions,
 };
 
 use super::{
@@ -61,7 +62,9 @@ where
     A: AtomCore,
 {
     fn to_quoted(&self) -> String {
-        format!("\"{}\"", self.to_canonical_string())
+        let mut opts = PrintOptions::file();
+        opts.hide_namespace = Some("_gammaloop");
+        format!("\"{}\"", self.printer(opts))
     }
 }
 
@@ -611,6 +614,19 @@ impl From<&Graph> for DotGraph {
                 |_, _, _, e| e.map(|e| e.into()),
                 |_, d| d.into(),
             );
+
+        // value.normal_emr_replacement(subgraph, lmb, rep_args, filter_pair)
+        for (e, i, v) in value.iter_edges() {
+            let loop_expr = value
+                .loop_momentum_basis
+                .loop_atom(i, GS.loop_mom, &[W_.a___], true);
+            let external_expr =
+                value
+                    .loop_momentum_basis
+                    .ext_atom(i, GS.loop_mom, &[W_.a___], true);
+
+            graph[i].add_statement("lmb_rep", (loop_expr + external_expr).to_quoted());
+        }
 
         for (l, i) in value.loop_momentum_basis.loop_edges.iter_enumerated() {
             graph[i].0.add_statement("lmb_id", l);

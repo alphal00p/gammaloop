@@ -6,9 +6,10 @@ use crate::{
     model::Model,
     new_cs::{ExportSettings, Process, ProcessDefinition},
     new_graph::Graph,
-    utils::{print_banner, F, VERSION},
+    utils::{F, GIT_VERSION, VERSION},
     Integrand, Settings,
 };
+use chrono::{Datelike, Local, Timelike};
 use clap::{Parser, Subcommand, ValueEnum};
 use clap_repl::{
     reedline::{DefaultPrompt, DefaultPromptSegment, FileBackedHistory},
@@ -24,18 +25,15 @@ use log::LevelFilter;
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
 use spenso::algebra::complex::Complex;
-use state::{State, LOG_FORMAT, LOG_LEVEL};
+use state::{format_level, format_target, State, LOG_FORMAT, LOG_LEVEL};
 use std::{env, ops::ControlFlow, path::Path};
 use std::{fs, time::Instant};
 use std::{fs::File, path::PathBuf};
 use symbolica::numerical_integration::Sample;
 
 #[derive(Parser, Debug)]
-#[command(
-    name = "gammaLoop",
-    version = VERSION,
-    about = "New breed of Local Unitarity implementation",
-)]
+#[command(name = "gammaLoop", version, about)]
+#[command(next_line_help = true)]
 pub struct Cli {
     /// Path to the configuration file
     #[arg(short = 'f', long, default_value = "./gammaloop_state/settings.yaml")]
@@ -49,9 +47,13 @@ pub struct Cli {
     #[arg(short = 'm', long)]
     pub model_file: Option<PathBuf>,
 
+    /// Skip the
+    #[arg(short = 'n', long, default_value_t = false, group = "saving")]
+    no_save_state: bool,
+
     /// Save state to file after each call
-    #[arg(short = 'S', long, default_value_t = true)]
-    save_state: bool,
+    #[arg(short = 'o', long, default_value_t = false, group = "saving")]
+    override_state: bool,
 
     // /// Target result to match (real, imag)
     // #[arg(short = 't', long, value_name = "TARGET", num_args = 2)]
@@ -100,17 +102,18 @@ impl Cli {
         self.config = other.config;
         self.state_folder = other.state_folder;
         self.model_file = other.model_file;
-        self.save_state = other.save_state;
+        self.override_state = other.override_state;
+        self.no_save_state = other.no_save_state;
     }
 
     fn run_command(
         &mut self,
         settings: &mut Settings,
         state: &mut State,
-    ) -> Result<ControlFlow<StateSaveSettings>, Report> {
+    ) -> Result<ControlFlow<()>, Report> {
         match self.command.as_ref().ok_or(eyre!("missing command"))? {
-            Commands::Quit { override_state } => {
-                return Ok(ControlFlow::Break((*override_state).into()));
+            Commands::Quit {} => {
+                return Ok(ControlFlow::Break(()));
             }
             Commands::Batch {
                 process_file,
@@ -174,14 +177,28 @@ impl Cli {
                     state.model = Model::from_file(path)?;
                 }
             },
-            Commands::Export(s) => match s {
-                Export::Dot { path } => {
+            Commands::Save(s) => match s {
+                Save::Dot { path } => {
                     let exp_set = ExportSettings {
-                        root_folder: path.clone(),
+                        root_folder: path.clone().unwrap_or(self.state_folder.clone()),
                     };
                     state.process_list.export_dot(&exp_set, &state.model)?
                 }
-                Export::Bin => {}
+                Save::State {} => {
+                    debug!("Saving State, overriding: {}", self.override_state);
+                    match state.save(&self.state_folder, self.override_state, false) {
+                        Ok(()) => {}
+                        Err(e) => {
+                            eprintln!("Failed to save state: {}", e);
+                        }
+                    };
+
+                    serde_yaml::to_writer(
+                        File::create(self.state_folder.join("settings.yaml")).unwrap(),
+                        &settings,
+                    )
+                    .unwrap();
+                }
             },
             Commands::Set(s) => match s {
                 Set::Log { level, format } => {
@@ -198,21 +215,21 @@ impl Cli {
 
             Commands::Generate(g) => g.run(state, settings)?,
 
-            Commands::List(l) => match l {
-                List::Integrands { process_id } => {
+            Commands::Display(l) => match l {
+                Display::Integrands { process_id } => {
                     let process = &state.process_list.processes[*process_id];
                     println!("Integrands for process {}:", process_id);
                     for integrand in process.get_integrand_names() {
                         println!("  {}", integrand);
                     }
                 }
-                List::Processes => {
+                Display::Processes => {
                     println!("Processes:");
                     for (index, process) in state.process_list.processes.iter().enumerate() {
                         println!("  {}", process.definition.folder_name(&state.model, index));
                     }
                 }
-                List::Model => {
+                Display::Model => {
                     println!("{}", state.model.name)
                 }
             },
@@ -222,25 +239,33 @@ impl Cli {
     }
 
     pub fn run(mut self) {
+        setup_log().unwrap();
+        let mut settings = self.get_settings().unwrap();
         let mut state = match State::load(&self.state_folder, self.model_file.clone()) {
             Ok(state) => state,
             Err(e) => {
-                warn!("{e} loading default state");
+                error!(
+                    "{e} state folder:{} model_file:{} loading default state",
+                    self.state_folder.display(),
+                    self.model_file
+                        .as_ref()
+                        .map(|p| p.display().to_string())
+                        .unwrap_or("None".to_string())
+                );
                 State::default()
             }
         };
 
-        let mut settings = self.get_settings().unwrap();
-
         // let mut state = State::load(&cli.state_file,);
-
-        let mut override_state_file = false;
 
         if let Some(_) = &self.command {
             let _ = self.run_command(&mut settings, &mut state).unwrap();
         } else {
             let prompt = DefaultPrompt {
-                left_prompt: DefaultPromptSegment::Basic("γloop".to_owned()),
+                left_prompt: DefaultPromptSegment::Basic(format!(
+                    "{}:γloop",
+                    self.state_folder.display()
+                )),
                 ..DefaultPrompt::default()
             };
 
@@ -262,9 +287,12 @@ impl Cli {
                 match r.read_command() {
                     ReadCommandOutput::Command(mut c) => {
                         match c.run_command(&mut settings, &mut state) {
-                            Err(e) => eprintln!("{e}"),
-                            Ok(ControlFlow::Break(StateSaveSettings { override_state })) => {
-                                override_state_file = override_state;
+                            Err(e) => {
+                                eprintln!("{e}");
+                                self.override_settings(c);
+                            }
+                            Ok(ControlFlow::Break(())) => {
+                                self.override_settings(c);
                                 break;
                             }
                             _ => {
@@ -291,9 +319,9 @@ impl Cli {
             }
         }
 
-        if self.save_state {
-            debug!("Saving State");
-            match state.save(&self.state_folder, override_state_file, false) {
+        if !self.no_save_state {
+            debug!("Saving State, override: {}", self.override_state);
+            match state.save(&self.state_folder, self.override_state, false) {
                 Ok(()) => {}
                 Err(e) => {
                     eprintln!("Failed to save state: {}", e);
@@ -352,24 +380,26 @@ impl Cli {
 #[derive(Subcommand, Debug)]
 pub enum Import {
     Model {
-        #[arg(short = 'p')]
+        // #[arg(short = 'p')]
         path: PathBuf,
         // format: String,
     },
     Amplitude {
-        #[arg(short = 'p')]
+        // #[arg(short = 'p')]
         path: PathBuf,
         // format: String,
     },
 }
 
 #[derive(Subcommand, Debug)]
-pub enum Export {
+pub enum Save {
     Dot {
-        #[arg(short = 'p')]
-        path: PathBuf,
+        path: Option<PathBuf>,
     },
-    Bin,
+    State {
+        // #[arg(short = 'o', long, default_value_t = false)]
+        // override_state: bool,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -387,13 +417,10 @@ pub enum Set {
 }
 
 #[derive(Subcommand, Debug)]
-pub enum List {
+pub enum Display {
     Model,
     Processes,
-    Integrands {
-        #[arg(short = 'p')]
-        process_id: usize,
-    },
+    Integrands { process_id: usize },
 }
 
 pub enum Log {
@@ -407,20 +434,20 @@ pub mod inspect;
 #[derive(Subcommand, Debug)]
 pub enum Commands {
     #[clap(subcommand)]
-    List(List),
+    Display(Display),
     #[clap(subcommand)]
     Set(Set),
     #[clap(subcommand)]
     Import(Import),
     #[clap(subcommand)]
-    Export(Export),
+    Save(Save),
 
     Generate(generate::Generate),
 
     /// Quit gammaloop
     Quit {
-        #[arg(short = 'o', long, default_value_t = false)]
-        override_state: bool,
+        // #[arg(short = 'o', long, default_value_t = false)]
+        // override_state: bool,
     },
     /// Inspect a single phase‑space point / momentum configuration
     // #[clap(subcommand)]
@@ -551,6 +578,78 @@ fn batch_branch(
 
     let batch_result_bytes = bincode::encode_to_vec(&batch_result, bincode::config::standard())?;
     fs::write(output_name, batch_result_bytes)?;
+
+    Ok(())
+}
+
+pub(crate) fn print_banner() {
+    println!(
+        "\n{}{}\n",
+        r"                                        _
+                                       | |
+   __ _  __ _ _ __ ___  _ __ ___   __ _| |     ___   ___  _ __
+  / _` |/ _` | '_ ` _ \| '_ ` _ \ / _` | |    / _ \ / _ \| '_ \
+ | (_| | (_| | | | | | | | | | | | (_| | |___| (_) | (_) | |_) |
+  \__, |\__,_|_| |_| |_|_| |_| |_|\__,_|______\___/ \___/| .__/
+   __/ |                                                 | |
+"
+        .to_string()
+        .bold()
+        .blue(),
+        format!(
+            r#"  |___/    version:{} {}          |_|    "#,
+            format!("{:<15}", GIT_VERSION).green(),
+            format!("{:>10}", LOG_LEVEL.lock().unwrap().as_str()).green(),
+        )
+        .bold()
+        .blue(),
+    );
+}
+
+pub(crate) fn setup_log() -> Result<()> {
+    fern::Dispatch::new()
+        .filter(|metadata| metadata.level() <= (*LOG_LEVEL.lock().unwrap()))
+        // Perform allocation-free log formatting
+        .format(|out, message, record| {
+            let now = Local::now();
+            match *LOG_FORMAT.lock().unwrap() {
+                LogFormat::Long => out.finish(format_args!(
+                    "[{}] @{} {}: {}",
+                    format!(
+                        "{:04}-{:02}-{:02} {:02}:{:02}:{:02}.{:03}",
+                        now.year(),
+                        now.month(),
+                        now.day(),
+                        now.hour(),
+                        now.minute(),
+                        now.second(),
+                        now.timestamp_subsec_millis()
+                    )
+                    .bright_green(),
+                    format_target(record.target().into(), record.level()),
+                    format_level(record.level()),
+                    message
+                )),
+                LogFormat::Short => out.finish(format_args!(
+                    "[{}] {}: {}",
+                    format!("{:02}:{:02}:{:02}", now.hour(), now.minute(), now.second())
+                        .bright_green(),
+                    format_level(record.level()),
+                    message
+                )),
+                LogFormat::Min => out.finish(format_args!(
+                    "{}: {}",
+                    format_level(record.level()),
+                    message
+                )),
+                LogFormat::None => out.finish(format_args!("{}", message)),
+            }
+        })
+        // Output to stdout, files, and other Dispatch configurations
+        .chain(std::io::stdout())
+        .chain(fern::log_file("gammaloop_rust_output.log")?)
+        // Apply globally
+        .apply()?;
 
     Ok(())
 }

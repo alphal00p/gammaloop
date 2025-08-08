@@ -603,6 +603,10 @@ impl GraphIntegrands {
 }
 
 impl HasIntegrand for GammaLoopIntegrand {
+    fn name(&self) -> String {
+        "GammaLoopIntegrand".to_string()
+    }
+
     fn create_grid(&self) -> Grid<F<f64>> {
         self.graph_integrands
             .create_grid(&self.global_data.settings)

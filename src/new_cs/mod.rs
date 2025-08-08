@@ -8,6 +8,7 @@ use ahash::HashMap;
 // use bincode::{Decode, Encode};
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
+use eyre::Context;
 use log::debug;
 
 use crate::{GammaLoopContext, GammaLoopContextContainer};
@@ -47,12 +48,17 @@ impl ProcessList {
         if amplitudes_path.exists() {
             debug!("Looking for amplitudes in {}", amplitudes_path.display());
 
-            for entry in fs::read_dir(amplitudes_path)? {
-                let entry = entry?;
+            for entry in fs::read_dir(amplitudes_path).context("Error reading dir")? {
+                let Ok(entry) = entry else {
+                    debug!("Skipping invalid entry");
+
+                    continue;
+                };
                 let path = entry.path();
-                process_list
-                    .processes
-                    .push(Process::load_amplitude(path, context.clone())?);
+                process_list.processes.push(
+                    Process::load_amplitude(path, context.clone())
+                        .context("Error loading amplitude")?,
+                );
             }
         }
 
@@ -114,8 +120,11 @@ impl ProcessList {
     }
 
     pub fn export_dot(&self, settings: &ExportSettings, model: &Model) -> Result<()> {
+        let path = settings.root_folder.join("processes");
+
+        let r = fs::create_dir_all(&path);
         for (i, p) in self.processes.iter().enumerate() {
-            p.export_dot(settings, model, i)?;
+            p.export_dot(&path, model, i)?;
         }
         Ok(())
     }

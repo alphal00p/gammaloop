@@ -25,7 +25,7 @@ pub(crate) fn inspect<I: HasIntegrand>(
 ) -> Complex<F<f64>> {
     DEBUG_LOGGER.reset();
 
-    if integrand.get_n_dim() == pt.len() - 1 {
+    if integrand.get_n_dim() as isize == pt.len() as isize - 1 {
         force_radius = true;
     }
 
@@ -84,7 +84,7 @@ pub(crate) fn inspect<I: HasIntegrand>(
                 .join(", ")
         )
         .blue(),
-        format!("{}", settings.hard_coded_integrand).green(),
+        format!("{}", integrand.name()).green(),
         format!("( {:+.16e}, {:+.16e} i)", eval.re, eval.im).blue(),
     );
 

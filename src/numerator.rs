@@ -1261,7 +1261,8 @@ impl Numerator<ColorSimplified> {
     pub(crate) fn parse(self) -> Result<Numerator<Network>> {
         debug!("Parsing color simplified numerator into network");
 
-        // debug!("colorless: {}", self.state.colorless);
+        debug!("Expression: {:>}", self.state.expr);
+
         // debug!("color: {}", self.state.color);
         let state = self.state.parse()?;
 

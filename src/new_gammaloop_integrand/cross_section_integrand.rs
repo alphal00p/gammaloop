@@ -2,7 +2,6 @@ use bincode::Encode;
 use bincode_trait_derive::Decode;
 use color_eyre::Result;
 use colored::Colorize;
-use eyre::Context;
 use itertools::Itertools;
 use serde::Serialize;
 use spenso::algebra::complex::Complex;
@@ -43,6 +42,12 @@ const HARD_CODED_M_R_SQ: F<f64> = F(1000.0);
 #[trait_decode(trait = GammaLoopContext)]
 pub struct CrossSectionIntegrand {
     pub settings: Settings,
+    pub data: CrossSectionIntegrandData,
+}
+#[derive(Clone, Encode, Decode)]
+#[trait_decode(trait = GammaLoopContext)]
+pub struct CrossSectionIntegrandData {
+    pub name: String,
     pub polarizations: Vec<Polarizations>,
     pub rotations: Vec<Rotation>,
     pub graph_terms: Vec<CrossSectionGraphTerm>,
@@ -53,80 +58,33 @@ pub struct CrossSectionIntegrand {
 
 impl CrossSectionIntegrand {
     pub(crate) fn save(&self, path: impl AsRef<Path>, override_existing: bool) -> Result<()> {
-        let p = path.as_ref().join("integrand");
-
-        let r = fs::create_dir_all(&p).with_context(|| {
-            format!(
-                "Trying to create directory to save amplitude {}",
-                p.display()
-            )
-        });
-        if override_existing {
-            r?;
-        }
-
-        let binary = bincode::encode_to_vec(&self.rotations, bincode::config::standard())?;
-        fs::write(p.join("rotations.bin"), binary)?;
-        let binary =
-            bincode::encode_to_vec(&self.external_connections, bincode::config::standard())?;
-        fs::write(p.join("external_connections.bin"), binary)?;
-        let binary = bincode::encode_to_vec(&self.graph_terms, bincode::config::standard())?;
-        fs::write(p.join("terms.bin"), binary)?;
-        let binary = bincode::encode_to_vec(&self.polarizations, bincode::config::standard())?;
-        fs::write(p.join("polarizations.bin"), binary)?;
-        let binary =
-            bincode::encode_to_vec(&self.model_parameter_cache, bincode::config::standard())?;
-        fs::write(p.join("model_parameter_cache.bin"), binary)?;
-        let binary = bincode::encode_to_vec(&self.n_incoming, bincode::config::standard())?;
-        fs::write(p.join("n_incoming.bin"), binary)?;
-
-        serde_yaml::to_writer(File::open(p.join("settings.yaml"))?, &self.settings)?;
-
+        let binary = bincode::encode_to_vec(&self, bincode::config::standard())?;
+        fs::write(path.as_ref().join("integrand.bin"), binary)?;
+        serde_yaml::to_writer(
+            File::open(path.as_ref().join("settings.yaml"))?,
+            &self.settings,
+        )?;
         Ok(())
     }
 
     pub(crate) fn load(path: impl AsRef<Path>, context: GammaLoopContextContainer) -> Result<Self> {
-        let binary = fs::read(path.as_ref().join("rotations.bin"))?;
-        let (rotations, _) =
+        let binary = fs::read(path.as_ref().join("integrand.bin"))?;
+        let (data, _) =
             bincode::decode_from_slice_with_context(&binary, bincode::config::standard(), context)?;
-        let binary = fs::read(path.as_ref().join("terms.bin"))?;
-        let (graph_terms, _) =
-            bincode::decode_from_slice_with_context(&binary, bincode::config::standard(), context)?;
-        let binary = fs::read(path.as_ref().join("polarizations.bin"))?;
-        let (polarizations, _) =
-            bincode::decode_from_slice_with_context(&binary, bincode::config::standard(), context)?;
-        let binary = fs::read(path.as_ref().join("model_parameter_cache.bin"))?;
-        let (model_parameter_cache, _) =
-            bincode::decode_from_slice_with_context(&binary, bincode::config::standard(), context)?;
-        let binary = fs::read(path.as_ref().join("n_incoming.bin"))?;
-        let (n_incoming, _) =
-            bincode::decode_from_slice_with_context(&binary, bincode::config::standard(), context)?;
-        let binary = fs::read(path.as_ref().join("external_connections.bin"))?;
-        let (external_connections, _) =
-            bincode::decode_from_slice_with_context(&binary, bincode::config::standard(), context)?;
-
         let settings = serde_yaml::from_reader(File::open(path.as_ref().join("settings.yaml"))?)?;
 
-        Ok(Self {
-            external_connections,
-            rotations,
-            graph_terms,
-            polarizations,
-            model_parameter_cache,
-            n_incoming,
-            settings,
-        })
+        Ok(CrossSectionIntegrand { settings, data })
     }
 }
 
 impl GammaloopIntegrand for CrossSectionIntegrand {
     type G = CrossSectionGraphTerm;
     fn get_rotations(&self) -> impl Iterator<Item = &Rotation> {
-        self.rotations.iter()
+        self.data.rotations.iter()
     }
 
     fn get_terms(&self) -> impl Iterator<Item = &Self::G> {
-        self.graph_terms.iter()
+        self.data.graph_terms.iter()
     }
 
     fn get_settings(&self) -> &Settings {
@@ -134,21 +92,22 @@ impl GammaloopIntegrand for CrossSectionIntegrand {
     }
 
     fn get_graph(&self, graph_id: usize) -> &Self::G {
-        &self.graph_terms[graph_id]
+        &self.data.graph_terms[graph_id]
     }
 
     fn get_polarizations(&self) -> &[Polarizations] {
-        &self.polarizations
+        &self.data.polarizations
     }
 
     fn get_dependent_momenta_constructor(&self) -> DependentMomentaConstructor {
         DependentMomentaConstructor::CrossSection {
-            external_connections: &self.external_connections,
+            external_connections: &self.data.external_connections,
         }
     }
 
     fn get_model_parameter_cache<T: FloatLike>(&self) -> Vec<Complex<F<T>>> {
-        self.model_parameter_cache
+        self.data
+            .model_parameter_cache
             .iter()
             .map(|x| Complex::new(F::from_ff64(x.re), F::from_ff64(x.im)))
             .collect()
@@ -403,6 +362,10 @@ impl HasIntegrand for CrossSectionIntegrand {
         create_grid(self)
     }
 
+    fn name(&self) -> String {
+        self.data.name.clone()
+    }
+
     fn evaluate_sample(
         &mut self,
         sample: &Sample<F<f64>>,
@@ -429,12 +392,13 @@ impl HasIntegrand for CrossSectionIntegrand {
         );
 
         assert!(self
+            .data
             .graph_terms
             .iter()
             .map(|term| term.graph.underlying.get_loop_number())
             .all_equal());
 
-        self.graph_terms[0].graph.underlying.get_loop_number() * 3
+        self.data.graph_terms[0].graph.underlying.get_loop_number() * 3
     }
 }
 

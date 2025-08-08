@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::fs;
 use std::path::Path;
 
 use crate::evaluation_result::{EvaluationMetaData, EvaluationResult};
@@ -13,6 +14,7 @@ use bincode_trait_derive::{Decode, Encode};
 use colored::Colorize;
 use derive_more::{From, Into};
 use enum_dispatch::enum_dispatch;
+use eyre::Context;
 use gammaloop_sample::{parameterize, DiscreteGraphSample, GammaLoopSample};
 use itertools::Itertools;
 use linnet::half_edge::involution::HedgePair;
@@ -56,6 +58,17 @@ pub enum NewIntegrand {
 
 impl NewIntegrand {
     pub(crate) fn save(&self, path: impl AsRef<Path>, override_existing: bool) -> Result<()> {
+        let path = path.as_ref().join("integrand");
+
+        let r = fs::create_dir_all(&path).with_context(|| {
+            format!(
+                "Trying to create directory to save amplitude {}",
+                path.display()
+            )
+        });
+        if override_existing {
+            r?;
+        }
         match self {
             NewIntegrand::Amplitude(integrand) => integrand.save(path, override_existing),
             NewIntegrand::CrossSection(integrand) => integrand.save(path, override_existing),
