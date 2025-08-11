@@ -229,10 +229,7 @@ impl CrossSectionGraphTerm {
 
                     LambdaPointEval {
                         lambda_point,
-                        value: self
-                            .evaluate(&sample, settings, todo!())
-                            .norm_squared()
-                            .sqrt(),
+                        value: self.evaluate(&sample, settings).norm_squared().sqrt(),
                     }
                 })
                 .collect(),

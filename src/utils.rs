@@ -611,6 +611,11 @@ impl<const N: u32> Real for VarFloat<N> {
     }
 }
 
+impl<const N: u32> From<VarFloat<N>> for symbolica::domains::float::Float {
+    fn from(value: VarFloat<N>) -> Self {
+        symbolica::domains::float::Float::from(value.float)
+    }
+}
 impl FloatLike for VarFloat<113> {
     fn E(&self) -> Self {
         Self::E()
@@ -795,6 +800,7 @@ pub trait FloatLike:
     + Display
     + NumeratorEvaluateFloat
     + GenericEvaluatorFloat
+    + Into<symbolica::domains::float::Float>
     {
 
     #[allow(non_snake_case)]
@@ -868,6 +874,17 @@ pub trait FloatLike:
     Debug, Clone, PartialEq, PartialOrd, Copy, Default, Serialize, Deserialize, Encode, Decode, Hash,
 )]
 pub struct F<T: FloatLike>(pub T);
+
+impl<T: FloatLike> ToCoefficient for F<T> {
+    fn to_coefficient(self) -> Coefficient {
+        let z = self.zero();
+        Coefficient::Float(symbolica::domains::float::Complex {
+            re: self.into(),
+            im: z.into(),
+        })
+    }
+}
+
 use symbolica::evaluate::ExportNumber;
 impl<T: FloatLike + ExportNumber> ExportNumber for F<T> {
     fn export(&self) -> String {
@@ -908,6 +925,25 @@ impl<'a> From<&'a F<f64>> for Coefficient {
 impl ToAtom for F<f64> {
     fn to_atom(self) -> Atom {
         Atom::num(self.0)
+    }
+}
+
+pub trait ToCoefficient {
+    fn to_coefficient(self) -> Coefficient;
+}
+
+impl<T: FloatLike> From<F<T>> for symbolica::domains::float::Float {
+    fn from(value: F<T>) -> Self {
+        value.0.into()
+    }
+}
+
+impl<T: FloatLike> ToCoefficient for Complex<F<T>> {
+    fn to_coefficient(self) -> Coefficient {
+        Coefficient::Float(symbolica::domains::float::Complex {
+            re: self.re.0.into(),
+            im: self.im.0.into(),
+        })
     }
 }
 
@@ -1063,20 +1099,33 @@ impl<T: FloatLike> NumericalFloatLike for F<T> {
         F(self.0.ref_neg())
     }
 
-    delegate! {
-        #[into]
-        to self.0{
-            fn zero(&self) -> Self;
-            fn one(&self) -> Self;
-            // fn norm(&self) -> Self;
-            fn from_usize(&self, x: usize) -> Self;
-            fn from_i64(&self, x: i64) -> Self;
-            fn pow(&self, n: u64) -> Self;
-            fn inv(&self) -> Self;
-            fn get_precision(&self) -> u32;
-            fn get_epsilon(&self) -> f64;
-            fn fixed_precision(&self) -> bool;
-        }
+    fn zero(&self) -> Self {
+        F(self.0.zero())
+    }
+    fn one(&self) -> Self {
+        F(self.0.one())
+    }
+    // fn norm(&self) -> Self;
+    fn from_usize(&self, x: usize) -> Self {
+        F(self.0.from_usize(x))
+    }
+    fn from_i64(&self, x: i64) -> Self {
+        F(self.0.from_i64(x))
+    }
+    fn pow(&self, n: u64) -> Self {
+        F(self.0.pow(n))
+    }
+    fn inv(&self) -> Self {
+        F(self.0.inv())
+    }
+    fn get_precision(&self) -> u32 {
+        self.0.get_precision()
+    }
+    fn get_epsilon(&self) -> f64 {
+        self.0.get_epsilon()
+    }
+    fn fixed_precision(&self) -> bool {
+        self.0.fixed_precision()
     }
 }
 
@@ -1115,29 +1164,59 @@ impl<T: FloatLike> Real for F<T> {
         F(self.0.norm())
     }
 
-    delegate! {
-        #[into]
-        to self.0{
-            fn e(&self)->Self;
-            fn phi(&self)->Self;
-            fn euler(&self)->Self;
-            fn pi(&self)->Self;
-            fn sqrt(&self) -> Self;
-            fn log(&self) -> Self;
-            fn exp(&self) -> Self;
-            fn sin(&self) -> Self;
-            fn cos(&self) -> Self;
-            fn tan(&self) -> Self;
-            fn asin(&self) -> Self;
-            fn acos(&self) -> Self;
-            fn sinh(&self) -> Self;
-            fn cosh(&self) -> Self;
-            fn tanh(&self) -> Self;
-            fn asinh(&self) -> Self;
-            fn acosh(&self) -> Self;
-            fn atanh(&self) -> Self;
-
-        }
+    fn e(&self) -> Self {
+        F(self.0.e())
+    }
+    fn phi(&self) -> Self {
+        F(self.0.phi())
+    }
+    fn euler(&self) -> Self {
+        F(self.0.euler())
+    }
+    fn pi(&self) -> Self {
+        F(self.0.pi())
+    }
+    fn sqrt(&self) -> Self {
+        F(self.0.sqrt())
+    }
+    fn log(&self) -> Self {
+        F(self.0.log())
+    }
+    fn exp(&self) -> Self {
+        F(self.0.exp())
+    }
+    fn sin(&self) -> Self {
+        F(self.0.sin())
+    }
+    fn cos(&self) -> Self {
+        F(self.0.cos())
+    }
+    fn tan(&self) -> Self {
+        F(self.0.tan())
+    }
+    fn asin(&self) -> Self {
+        F(self.0.asin())
+    }
+    fn acos(&self) -> Self {
+        F(self.0.acos())
+    }
+    fn sinh(&self) -> Self {
+        F(self.0.sinh())
+    }
+    fn cosh(&self) -> Self {
+        F(self.0.cosh())
+    }
+    fn tanh(&self) -> Self {
+        F(self.0.tanh())
+    }
+    fn asinh(&self) -> Self {
+        F(self.0.asinh())
+    }
+    fn acosh(&self) -> Self {
+        F(self.0.acosh())
+    }
+    fn atanh(&self) -> Self {
+        F(self.0.atanh())
     }
 }
 
@@ -1206,36 +1285,69 @@ impl<T: FloatLike> F<T> {
         F(self.0.rem_euclid(&rhs.0))
     }
 
-    delegate! {
-        #[into]
-        to self.0 {
-            #[allow(non_snake_case)]
-            pub(crate) fn PI(&self) -> Self;
-            #[allow(non_snake_case)]
-            pub(crate) fn E(&self) -> Self;
-            #[allow(non_snake_case)]
-            pub(crate) fn TAU(&self) -> Self;
-            #[allow(non_snake_case)]
-            pub(crate) fn PIHALF(&self) -> Self;
-            #[allow(non_snake_case)]
-            pub(crate) fn SQRT_2(&self) -> Self;
-            #[allow(non_snake_case)]
-            pub(crate) fn SQRT_2_HALF(&self) -> Self;
-            #[allow(non_snake_case)]
-            pub(crate) fn FRAC_1_PI(&self) -> Self;
-            pub(crate) fn into_f64(&self) -> f64;
-            pub(crate) fn square(&self) -> Self;
-            pub(crate) fn powi(&self, n: i32) -> Self;
-            pub(crate) fn epsilon(&self) -> Self;
-            pub(crate) fn less_than_epsilon(&self) -> bool;
-            pub(crate) fn positive(&self) -> bool;
-            pub(crate) fn max_value(&self) -> Self;
-            pub(crate) fn min_value(&self) -> Self;
-            pub(crate) fn ln(&self) -> Self;
-            pub(crate) fn is_nan(&self) -> bool;
-            pub(crate) fn is_infinite(&self) -> bool;
-            pub(crate) fn floor(&self) -> Self;
-        }
+    #[allow(non_snake_case)]
+    pub(crate) fn PI(&self) -> Self {
+        F(self.0.PI())
+    }
+    #[allow(non_snake_case)]
+    pub(crate) fn E(&self) -> Self {
+        F(self.0.E())
+    }
+    #[allow(non_snake_case)]
+    pub(crate) fn TAU(&self) -> Self {
+        F(self.0.TAU())
+    }
+    #[allow(non_snake_case)]
+    pub(crate) fn PIHALF(&self) -> Self {
+        F(self.0.PIHALF())
+    }
+    #[allow(non_snake_case)]
+    pub(crate) fn SQRT_2(&self) -> Self {
+        F(self.0.SQRT_2())
+    }
+    #[allow(non_snake_case)]
+    pub(crate) fn SQRT_2_HALF(&self) -> Self {
+        F(self.0.SQRT_2_HALF())
+    }
+    #[allow(non_snake_case)]
+    pub(crate) fn FRAC_1_PI(&self) -> Self {
+        F(self.0.FRAC_1_PI())
+    }
+    pub(crate) fn into_f64(&self) -> f64 {
+        self.0.into_f64()
+    }
+    pub(crate) fn square(&self) -> Self {
+        F(self.0.square())
+    }
+    pub(crate) fn powi(&self, n: i32) -> Self {
+        F(self.0.powi(n))
+    }
+    pub(crate) fn epsilon(&self) -> Self {
+        F(self.0.epsilon())
+    }
+    pub(crate) fn less_than_epsilon(&self) -> bool {
+        self.0.less_than_epsilon()
+    }
+    pub(crate) fn positive(&self) -> bool {
+        self.0.positive()
+    }
+    pub(crate) fn max_value(&self) -> Self {
+        F(self.0.max_value())
+    }
+    pub(crate) fn min_value(&self) -> Self {
+        F(self.0.min_value())
+    }
+    pub(crate) fn ln(&self) -> Self {
+        F(self.0.ln())
+    }
+    pub(crate) fn is_nan(&self) -> bool {
+        self.0.is_nan()
+    }
+    pub(crate) fn is_infinite(&self) -> bool {
+        self.0.is_infinite()
+    }
+    pub(crate) fn floor(&self) -> Self {
+        F(self.0.floor())
     }
 }
 
@@ -3108,6 +3220,8 @@ pub(crate) fn inv_3x3_sig_matrix(mat: [[isize; 3]; 3]) -> [[isize; 3]; 3] {
 
     inv_mat
 }
+
+pub mod index_vec;
 
 #[allow(unused)]
 pub(crate) fn format_for_compare_digits(x: F<f64>, y: F<f64>) -> (String, String) {

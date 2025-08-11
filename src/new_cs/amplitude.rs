@@ -21,7 +21,7 @@ use crate::{
     momentum_sample::ExternalIndex,
     new_gammaloop_integrand::{
         amplitude_integrand::{AmplitudeGraphTerm, AmplitudeIntegrand, AmplitudeIntegrandData},
-        GenericEvaluator, LmbMultiChannelingSetup, ParamBuilder,
+        GenericEvaluator, GenericEvaluatorDebug, LmbMultiChannelingSetup, ParamBuilder,
     },
     new_graph::{LMBext, LmbIndex, LoopMomentumBasis},
     signature::SignatureLike,
@@ -45,7 +45,6 @@ use typed_index_collections::TiVec;
 use crate::{
     cff::esurface::EsurfaceID,
     cross_section::IsPolarizable,
-    integrands::Integrand,
     model::Model,
     momentum::{Rotatable, Rotation, RotationMethod},
     new_gammaloop_integrand::NewIntegrand,
@@ -109,7 +108,7 @@ impl<S: AmplitudeState> Amplitude<S> {
         let terms = self
             .graphs
             .iter()
-            .map(|graph| graph.generate_term_for_graph(&settings))
+            .map(|graph| graph.generate_term_for_graph(&settings, model))
             .collect_vec();
 
         let rotations: Vec<Rotation> = Some(Rotation::new(RotationMethod::Identity))
@@ -138,7 +137,7 @@ impl<S: AmplitudeState> Amplitude<S> {
                 polarizations,
                 graph_terms: terms,
                 external_signature: self.external_signature.clone(),
-                model_parameter_cache: model.generate_values(),
+                // param_builder: self.
             },
         };
         self.integrand = Some(NewIntegrand::Amplitude(amplitude_integrand));
@@ -258,20 +257,13 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
         self.derived_data.multi_channeling_setup = Some(channels)
     }
 
-    fn amplitude_params(&self, model: &Model) -> Vec<Atom> {
-        self.param_builder_core(model)
-            .build_params_amplitude()
-            .unwrap()
-    }
-
-    fn ct_params(&self, model: &Model) -> Vec<Atom> {
+    fn ct_params(&self, model: &Model) -> ParamBuilder<f64> {
         let mut param_builder = self.param_builder_core(model);
         param_builder.uv_damp_atom(Atom::var(GS.uv_damp));
         param_builder.derivative_at_tstar_atom(Atom::var(GS.deta));
         param_builder.radius_atom(Atom::var(GS.radius));
         param_builder.radius_star_atom(Atom::var(GS.radius_star));
-
-        param_builder.build_params_threshold_ct().unwrap()
+        param_builder
     }
 
     fn param_builder_core(&self, model: &Model) -> ParamBuilder<f64> {
@@ -296,6 +288,8 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
 
         param_builder.mu_r_sq_atom(Atom::var(GS.mu_r_sq));
 
+        param_builder.fn_map = self.get_function_map();
+
         param_builder
     }
 
@@ -317,6 +311,8 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
         fn_map.add_constant(Atom::PI.into(), pi_rational.into());
         fn_map
     }
+
+    // fn get_eager_const_map(&self)->HashM
 
     fn add_additional_factors_to_cff_atom(&self, cff_atom: &Atom) -> Atom {
         // let inverse_energy_product = self.graph.underlying.get_cff_inverse_energy_product();
@@ -584,9 +580,7 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
             .iter()
             .map(|ct| {
                 let params = self.ct_params(model);
-                let function_map = self.get_function_map();
-
-                GenericEvaluator::new(&ct, &function_map, &params, OptimizationSettings::default())
+                GenericEvaluator::new_from_builder(&ct, params, OptimizationSettings::default())
             })
             .collect();
 
@@ -595,19 +589,12 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
 
     pub(crate) fn build_all_orientation_integrand_evaluator(&mut self, model: &Model) {
         let replace_dots = self.build_all_orientations_integrand_atom();
-        let params = self.amplitude_params(model);
-        // for (i, p) in params.iter().enumerate() {
-        //     println!("{i}:{p}")
-        // }
 
-        let function_map = self.get_function_map();
+        let builder = self.param_builder_core(model);
 
-        debug!("Generating evaluator for graph {}", self.graph.name);
-
-        let evaluator = GenericEvaluator::new(
+        let evaluator = GenericEvaluatorDebug::new_from_builder(
             &replace_dots,
-            &function_map,
-            &params,
+            builder,
             OptimizationSettings::default(),
         );
         self.derived_data.all_orientation_integrand_evaluator = Some(evaluator)
@@ -712,8 +699,7 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
     }
 
     fn build_integrand_evaluators(&mut self, model: &Model) -> Result<()> {
-        let params = self.amplitude_params(model);
-        let function_map = self.get_function_map();
+        let params = self.param_builder_core(model);
 
         let evaluators = self
             .derived_data
@@ -746,10 +732,9 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
                             + function!(GS.emr_vec, W_.x_, 3) * function!(GS.emr_vec, W_.y_, 3)),
                     );
 
-                GenericEvaluator::new(
+                GenericEvaluator::new_from_builder(
                     &replace_dots,
-                    &function_map,
-                    &params,
+                    params.clone(),
                     OptimizationSettings::default(),
                 )
             })
@@ -759,7 +744,7 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
     }
 
     // Expects cff_expression, esurface_data,
-    fn generate_term_for_graph(&self, settings: &Settings) -> AmplitudeGraphTerm {
+    fn generate_term_for_graph(&self, settings: &Settings, model: &Model) -> AmplitudeGraphTerm {
         let estimated_scale = self
             .graph
             .underlying
@@ -786,6 +771,8 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
             settings.general.debug,
             settings.kinematics.e_cm,
         );
+
+        let param_builder = self.param_builder_core(model);
 
         let edge_masses = self.graph.new_edgevec(|edge, _, _| edge.mass_value());
 
@@ -832,13 +819,15 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
                 .expect("counterterm_evaluators should have been created"),
             estimated_scale,
             overlap,
+            param_builder,
         }
     }
 }
 
 #[derive(Clone, Encode, Decode)]
+#[trait_decode(trait = GammaLoopContext)]
 pub struct AmplitudeDerivedData<S: AmplitudeState> {
-    pub all_orientation_integrand_evaluator: Option<GenericEvaluator>,
+    pub all_orientation_integrand_evaluator: Option<GenericEvaluatorDebug>,
     pub integrand_evaluators: Option<TiVec<AmplitudeOrientationID, GenericEvaluator>>,
     pub counterterm_evaluators: Option<TiVec<EsurfaceID, GenericEvaluator>>,
     pub multi_channeling_setup: Option<LmbMultiChannelingSetup>,

@@ -1337,6 +1337,7 @@ dependencies = [
  "lorentz_vector",
  "momtrop",
  "nalgebra 0.32.6",
+ "paste",
  "pathfinding",
  "pprof",
  "pyo3",

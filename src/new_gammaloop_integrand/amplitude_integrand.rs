@@ -28,8 +28,8 @@ use crate::{
 };
 
 use super::{
-    create_grid, evaluate_sample, GammaloopIntegrand, GenericEvaluator, GenericEvaluatorFloat,
-    GraphTerm, LmbMultiChannelingSetup,
+    create_grid, evaluate_sample, GammaloopIntegrand, GenericEvaluator, GenericEvaluatorDebug,
+    GenericEvaluatorFloat, GraphTerm, LmbMultiChannelingSetup,
 };
 
 const HARD_CODED_M_UV: F<f64> = F(1000.0);
@@ -38,7 +38,7 @@ const HARD_CODED_M_R_SQ: F<f64> = F(1000.0);
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct AmplitudeGraphTerm {
-    pub integrand_evaluator_all_orientations: GenericEvaluator,
+    pub integrand_evaluator_all_orientations: GenericEvaluatorDebug,
     pub integrand_evaluators: TiVec<AmplitudeOrientationID, GenericEvaluator>,
     pub counterterm_evaluators: TiVec<EsurfaceID, GenericEvaluator>,
     pub multi_channeling_setup: LmbMultiChannelingSetup,
@@ -47,14 +47,15 @@ pub struct AmplitudeGraphTerm {
     pub graph: Graph,
     pub estimated_scale: F<f64>,
     pub overlap: OverlapStructure,
+    pub param_builder: ParamBuilder<f64>,
 }
 
 impl AmplitudeGraphTerm {
-    fn evaluate<T: FloatLike>(
-        &self,
+    fn evaluate_impl<T: FloatLike>(
+        &mut self,
         momentum_sample: &MomentumSample<T>,
         settings: &Settings,
-        mut param_builder: ParamBuilder<T>,
+        // mut param_builder: ParamBuilder<T>,
     ) -> Complex<F<T>> {
         if let Some(forced_orientations) = &settings.general.force_orientations {
             if momentum_sample.sample.orientation.is_none() {
@@ -63,7 +64,7 @@ impl AmplitudeGraphTerm {
                     .map(|orientation_usize| {
                         let mut new_sample = momentum_sample.clone();
                         new_sample.sample.orientation = Some(*orientation_usize);
-                        self.evaluate(&new_sample, settings, param_builder.clone())
+                        self.evaluate(&new_sample, settings)
                     })
                     .fold(
                         Complex::new_re(momentum_sample.zero()),
@@ -72,34 +73,37 @@ impl AmplitudeGraphTerm {
             }
         }
 
-        if settings.general.debug > 0 {
-            println!("loop_momenta: {:?}", momentum_sample.loop_moms());
-            println!("external_momenta: {:?}", momentum_sample.external_moms());
-        }
+        debug!("Sample: \n\t{}", momentum_sample);
 
-        param_builder.emr_spatial_value(
-            self.graph
-                .get_emr_vec_cache(
-                    momentum_sample.loop_moms(),
-                    momentum_sample.external_moms(),
-                    &self.graph.loop_momentum_basis,
-                )
-                .into_iter()
-                .map(|q| Complex::new_re(q))
-                .collect(),
-        );
+        // param_builder
 
-        let params = param_builder.build_values_amplitude().unwrap();
+        // self.param_cach_upade_
+        let a = self
+            .param_builder
+            .update_emr_and_get_params(momentum_sample, &self.graph);
+
+        // emr_spatial_value(
+        //     self.graph
+        //         .get_emr_vec_cache(
+        //             momentum_sample.loop_moms(),
+        //             momentum_sample.external_moms(),
+        //             &self.graph.loop_momentum_basis,
+        //         )
+        //         .into_iter()
+        //         .map(|q| Complex::new_re(q))
+        //         .collect(),
+        // );
 
         let result = match momentum_sample.sample.orientation {
             Some(orientation_id) => {
                 let orientation_id = AmplitudeOrientationID::from(orientation_id);
                 let orientation_evaluator = &self.integrand_evaluators[orientation_id];
-                <T as GenericEvaluatorFloat>::get_evaluator(orientation_evaluator)(&params)
+                <T as GenericEvaluatorFloat>::get_evaluator(orientation_evaluator)(&a)
             }
             None => {
                 let evaluator = &self.integrand_evaluator_all_orientations;
-                <T as GenericEvaluatorFloat>::get_evaluator(evaluator)(&params)
+                // evaluator.validate(&param_builder);
+                <T as GenericEvaluatorFloat>::get_debug_evaluator(evaluator)(&a)
             }
         };
 
@@ -125,12 +129,12 @@ impl GraphTerm for AmplitudeGraphTerm {
     }
 
     fn evaluate<T: FloatLike>(
-        &self,
+        &mut self,
         momentum_sample: &MomentumSample<T>,
         settings: &Settings,
-        param_builder: ParamBuilder<T>,
+        // param_builder: ParamBuilder<T>,
     ) -> Complex<F<T>> {
-        self.evaluate(momentum_sample, settings, param_builder)
+        self.evaluate_impl(momentum_sample, settings)
     }
 
     fn get_num_orientations(&self) -> usize {
@@ -157,7 +161,8 @@ pub struct AmplitudeIntegrandData {
     pub polarizations: Vec<Polarizations>,
     pub graph_terms: Vec<AmplitudeGraphTerm>,
     pub external_signature: SignatureLike<ExternalIndex>,
-    pub model_parameter_cache: Vec<Complex<F<f64>>>,
+    // pub builder_cache: ParamBuilder<f64>,
+    // pub model_parameter_cache: Vec<Complex<F<f64>>>,
 }
 
 impl AmplitudeIntegrand {
@@ -193,6 +198,14 @@ impl GammaloopIntegrand for AmplitudeIntegrand {
         self.data.rotations.iter()
     }
 
+    fn get_terms_mut(&mut self) -> impl Iterator<Item = &mut Self::G> {
+        self.data.graph_terms.iter_mut()
+    }
+
+    fn get_graph(&self, graph_id: usize) -> &Self::G {
+        &self.data.graph_terms[graph_id]
+    }
+
     fn get_terms(&self) -> impl Iterator<Item = &Self::G> {
         self.data.graph_terms.iter()
     }
@@ -201,8 +214,8 @@ impl GammaloopIntegrand for AmplitudeIntegrand {
         &self.settings
     }
 
-    fn get_graph(&self, graph_id: usize) -> &Self::G {
-        &self.data.graph_terms[graph_id]
+    fn get_graph_mut(&mut self, graph_id: usize) -> &mut Self::G {
+        &mut self.data.graph_terms[graph_id]
     }
 
     fn get_polarizations(&self) -> &[Polarizations] {
@@ -213,13 +226,9 @@ impl GammaloopIntegrand for AmplitudeIntegrand {
         DependentMomentaConstructor::Amplitude(&self.data.external_signature)
     }
 
-    fn get_model_parameter_cache<T: FloatLike>(&self) -> Vec<Complex<F<T>>> {
-        self.data
-            .model_parameter_cache
-            .iter()
-            .map(|x| Complex::new(F::from_ff64(x.re), F::from_ff64(x.im)))
-            .collect()
-    }
+    // fn get_builder_cache(&self) -> &ParamBuilder<f64> {
+    //     &self.data.builder_cache
+    // }
 }
 
 impl HasIntegrand for AmplitudeIntegrand {

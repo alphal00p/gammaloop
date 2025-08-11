@@ -19,7 +19,7 @@ use crate::{
     model::ArcParticle,
     new_gammaloop_integrand::{
         cross_section_integrand::{CrossSectionIntegrandData, OrientationEvaluator},
-        GenericEvaluator, LmbMultiChannelingSetup,
+        GenericEvaluator, LmbMultiChannelingSetup, ParamBuilder,
     },
     new_graph::{get_cff_inverse_energy_product_impl, LMBext, LmbIndex, LoopMomentumBasis},
     utils::{ose_atom_from_index, GS, W_},
@@ -150,7 +150,7 @@ impl<S: CrossSectionState> CrossSection<S> {
             .map(|r| orig_polarizations.rotate(r))
             .collect();
 
-        let model_parameter_cache = model.generate_values();
+        // let model_parameter_cache = model.generate_values();
 
         let cross_section_integrand = CrossSectionIntegrand {
             settings,
@@ -161,7 +161,6 @@ impl<S: CrossSectionState> CrossSection<S> {
                 n_incoming: self.n_incmoming,
                 polarizations,
                 graph_terms: terms,
-                model_parameter_cache,
             },
         };
 
@@ -682,7 +681,7 @@ impl<S: CrossSectionState> CrossSectionGraph<S> {
         result
     }
 
-    fn get_params(&self, model: &Model) -> Vec<Atom> {
+    fn get_builder(&self, model: &Model) -> ParamBuilder<f64> {
         let mut params = vec![];
 
         // all external energies
@@ -728,8 +727,7 @@ impl<S: CrossSectionState> CrossSectionGraph<S> {
         params.push(Atom::var(GS.rescale_star));
         params.push(Atom::var(GS.hfunction));
         params.push(Atom::var(GS.deta));
-
-        params
+        ParamBuilder::new()
     }
 
     fn get_function_map(&self) -> FunctionMap {
@@ -754,12 +752,11 @@ impl<S: CrossSectionState> CrossSectionGraph<S> {
                     self.build_atom_for_cut(cut_id)
                 };
 
-                let params = self.get_params(model);
+                let params = self.get_builder(model);
 
-                let mut eval = GenericEvaluator::new(
+                let mut eval = GenericEvaluator::new_from_builder(
                     atom,
-                    &self.get_function_map(),
-                    &params,
+                    params,
                     OptimizationSettings::default(),
                 );
                 let filename = format!("{}_cut_{}.cpp", self.graph.name, cut_id);
@@ -804,12 +801,11 @@ impl<S: CrossSectionState> CrossSectionGraph<S> {
                 let cut_evaluators = cut_atoms
                     .iter()
                     .map(|cut_atom| {
-                        let params = self.get_params(model);
+                        let params = self.get_builder(model);
 
-                        GenericEvaluator::new(
+                        GenericEvaluator::new_from_builder(
                             cut_atom,
-                            &self.get_function_map(),
-                            &params,
+                            params,
                             OptimizationSettings::default(),
                         )
                     })
@@ -861,6 +857,7 @@ impl<S: CrossSectionState> CrossSectionGraph<S> {
             cut_esurface: self.cut_esurface.clone(),
             lmbs: self.derived_data.lmbs.clone().unwrap(),
             estimated_scale,
+            param_builder: ParamBuilder::new(),
         }
     }
 }

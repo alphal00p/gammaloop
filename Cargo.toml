@@ -138,6 +138,7 @@ chrono = "0.4.39"
 linreg = "0.2.0"
 dot-parser = "0.4.2"
 console = "0.16.0"
+paste = "1.0.15"
 [dependencies.pyo3]
 features = ["abi3", "abi3-py37", "eyre"]
 optional = true

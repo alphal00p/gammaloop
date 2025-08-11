@@ -435,9 +435,9 @@ impl<T: FloatLike> ThreeMomentum<F<T>> {
 impl<T: FloatLike> From<ThreeMomentum<T>> for ThreeMomentum<F<T>> {
     fn from(value: ThreeMomentum<T>) -> Self {
         ThreeMomentum {
-            px: value.px.into(),
-            py: value.py.into(),
-            pz: value.pz.into(),
+            px: F(value.px),
+            py: F(value.py),
+            pz: F(value.pz),
         }
     }
 }

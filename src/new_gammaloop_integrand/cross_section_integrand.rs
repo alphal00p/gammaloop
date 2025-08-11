@@ -3,6 +3,7 @@ use bincode_trait_derive::Decode;
 use color_eyre::Result;
 use colored::Colorize;
 use itertools::Itertools;
+use log::debug;
 use serde::Serialize;
 use spenso::algebra::complex::Complex;
 use std::{
@@ -53,7 +54,7 @@ pub struct CrossSectionIntegrandData {
     pub graph_terms: Vec<CrossSectionGraphTerm>,
     pub n_incoming: usize,
     pub external_connections: Vec<ExternalConnection>,
-    pub model_parameter_cache: Vec<Complex<F<f64>>>,
+    // pub builder_cache: ParamBuilder<f64>,
 }
 
 impl CrossSectionIntegrand {
@@ -83,12 +84,20 @@ impl GammaloopIntegrand for CrossSectionIntegrand {
         self.data.rotations.iter()
     }
 
+    fn get_terms_mut(&mut self) -> impl Iterator<Item = &mut Self::G> {
+        self.data.graph_terms.iter_mut()
+    }
+
     fn get_terms(&self) -> impl Iterator<Item = &Self::G> {
         self.data.graph_terms.iter()
     }
 
     fn get_settings(&self) -> &Settings {
         &self.settings
+    }
+
+    fn get_graph_mut(&mut self, graph_id: usize) -> &mut Self::G {
+        &mut self.data.graph_terms[graph_id]
     }
 
     fn get_graph(&self, graph_id: usize) -> &Self::G {
@@ -105,13 +114,9 @@ impl GammaloopIntegrand for CrossSectionIntegrand {
         }
     }
 
-    fn get_model_parameter_cache<T: FloatLike>(&self) -> Vec<Complex<F<T>>> {
-        self.data
-            .model_parameter_cache
-            .iter()
-            .map(|x| Complex::new(F::from_ff64(x.re), F::from_ff64(x.im)))
-            .collect()
-    }
+    // fn get_builder_cache(&self) -> &ParamBuilder<f64> {
+    //     &self.data.builder_cache
+    // }
 }
 
 #[derive(Clone, Encode, Decode)]
@@ -131,16 +136,16 @@ pub struct CrossSectionGraphTerm {
     pub multi_channeling_setup: LmbMultiChannelingSetup,
     pub lmbs: TiVec<LmbIndex, LoopMomentumBasis>,
     pub estimated_scale: F<f64>,
+    pub param_builder: ParamBuilder<f64>,
 }
 
 impl GraphTerm for CrossSectionGraphTerm {
     fn evaluate<T: FloatLike>(
-        &self,
+        &mut self,
         momentum_sample: &MomentumSample<T>,
         settings: &Settings,
-        param_builder: ParamBuilder<T>,
     ) -> Complex<F<T>> {
-        self.evaluate(momentum_sample, settings, param_builder)
+        self.evaluate(momentum_sample, settings)
     }
 
     fn get_multi_channeling_setup(&self) -> &LmbMultiChannelingSetup {
@@ -206,10 +211,8 @@ impl CrossSectionGraphTerm {
             }
         }
 
-        if settings.general.debug > 0 {
-            println!("loop_momenta: {:?}", momentum_sample.loop_moms());
-            println!("external_momenta: {:?}", momentum_sample.external_moms());
-        }
+        debug!("loop_momenta: {:?}", momentum_sample.loop_moms());
+        debug!("external_momenta: {:?}", momentum_sample.external_moms());
 
         let center = LoopMomenta::from_iter(vec![
             ThreeMomentum::from([
@@ -301,7 +304,7 @@ impl CrossSectionGraphTerm {
                     newton_result.derivative_at_solution,
                 ));
 
-                let params = cut_param_builder.build_values_cs().unwrap();
+                let params = cut_param_builder.build_values();
                 params
             });
 

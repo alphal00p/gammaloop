@@ -2,13 +2,17 @@ use std::fmt::Display;
 
 use crate::momentum::{FourMomentum, Polarization, Rotatable, Rotation, ThreeMomentum};
 use crate::utils::{FloatLike, Length, F};
-use crate::{DependentMomentaConstructor, Externals, Polarizations, Settings};
+use crate::{
+    define_index, define_indexed_vec, DependentMomentaConstructor, Externals, Polarizations,
+    Settings,
+};
 use bincode_trait_derive::{Decode, Encode};
 use derive_more::{From, Into};
 use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
 use std::ops::{Index, IndexMut};
 use symbolica::domains::float::NumericalFloatLike;
+use tabled::settings::Style;
 use typed_index_collections::TiVec;
 use uuid::Uuid;
 
@@ -29,23 +33,34 @@ use uuid::Uuid;
     Deserialize,
 )]
 pub struct LoopIndex(pub usize);
-#[derive(
-    From,
-    Into,
-    Copy,
-    Clone,
-    Hash,
-    Eq,
-    Ord,
-    PartialEq,
-    PartialOrd,
-    Encode,
-    Decode,
-    Debug,
-    Serialize,
-    Deserialize,
-)]
-pub struct ExternalIndex(pub usize);
+
+// #[derive(
+//     From,
+//     Into,
+//     Copy,
+//     Clone,
+//     Hash,
+//     Eq,
+//     Ord,
+//     PartialEq,
+//     PartialOrd,
+//     Encode,
+//     Decode,
+//     Debug,
+//     Serialize,
+//     Deserialize,
+// )]
+// pub struct ExternalIndex(pub usize);
+
+define_index!(
+    pub struct ExternalIndex;
+);
+
+// define_indexed_vec!(
+//     EdgeIndex;
+
+//     pub struct ExternalThr;
+// );
 
 impl Display for LoopIndex {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -61,6 +76,22 @@ impl Display for ExternalIndex {
 
 #[derive(From, Into, Serialize, Deserialize, Clone, PartialEq, Debug, Encode, Decode)]
 pub struct LoopMomenta<T>(Vec<ThreeMomentum<T>>);
+
+impl<T: Display> Display for LoopMomenta<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut table_builder = tabled::builder::Builder::new();
+        for (i, mom) in self.0.iter().enumerate() {
+            let mut row = Vec::new();
+            row.push(i.to_string());
+            for m in mom {
+                row.push(m.to_string());
+            }
+            table_builder.push_record(row);
+        }
+
+        write!(f, "{}", table_builder.build().with(Style::modern_rounded()))
+    }
+}
 
 impl<T> Length for LoopMomenta<T> {
     fn is_empty(&self) -> bool {
@@ -81,20 +112,6 @@ impl<T> LoopMomenta<T> {
 
     pub(crate) fn first(&self) -> Option<&ThreeMomentum<T>> {
         self.0.first()
-    }
-}
-
-impl<T: Display> Display for LoopMomenta<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut str = String::from("[");
-
-        for mom in &self.0 {
-            str.push_str(&format!("{}, ", mom));
-        }
-
-        str.push(']');
-
-        write!(f, "{}", str)
     }
 }
 
@@ -146,8 +163,28 @@ impl<T: FloatLike> LoopMomenta<F<T>> {
     }
 }
 
+// define_indexed_vec!(
+//     MyIdx;
+//     pub struct ExternalMomentumtwo<ThreeMomentum<T>>;
+// );
 pub type ExternalThreeMomenta<T> = TiVec<ExternalIndex, ThreeMomentum<T>>;
+// define_indexed_vec!()
 pub type ExternalFourMomenta<T> = TiVec<ExternalIndex, FourMomentum<T>>;
+// impl<T: Display> Display for ExternalFourMomenta<T> {
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         let mut table_builder = tabled::builder::Builder::new();
+//         for (i, mom) in self.iter_enumerated() {
+//             let mut row = Vec::new();
+//             row.push(i.to_string());
+//             for m in mom {
+//                 row.push(m.to_string());
+//             }
+//             table_builder.push_record(row);
+//         }
+
+//         write!(f, "{}", table_builder.build().with(Style::modern_rounded()))
+//     }
+// }
 pub type PolarizationVectors<T> = TiVec<ExternalIndex, Polarization<T>>; // should be the same length as #externals
 
 #[derive(Debug, Clone)]
