@@ -10,7 +10,7 @@ use crate::integrands::{HasIntegrand, Integrand};
 use crate::integrate::UserData;
 use crate::model::Model;
 use crate::momentum::Rotation;
-use crate::momentum_sample::{BareMomentumSample, LoopMomenta, MomentumSample};
+use crate::momentum_sample::{self, BareMomentumSample, LoopMomenta, MomentumSample};
 use crate::new_graph::{FeynmanGraph, Graph, LmbIndex, LoopMomentumBasis};
 use crate::utils::{
     format_for_compare_digits, get_n_dim_for_n_loop_momenta, FloatLike, PrecisionUpgradable,
@@ -476,6 +476,12 @@ pub trait GenericEvaluatorFloat<T: FloatLike = Self> {
         generic_evaluator: &GenericEvaluator,
     ) -> impl Fn(&[Complex<F<T>>]) -> Complex<F<T>>;
 
+    fn get_parameters<'a>(
+        param_builder: &'a mut ParamBuilder,
+        graph: &'a Graph,
+        sample: &'a MomentumSample<T>,
+    ) -> Cow<'a, Vec<Complex<F<T>>>>;
+
     fn get_debug_evaluator(
         generic_evaluator: &GenericEvaluatorDebug,
     ) -> impl Fn(&[Complex<F<T>>]) -> Complex<F<T>>;
@@ -499,6 +505,14 @@ impl GenericEvaluatorFloat for f64 {
                     .evaluate_single(params)
             }
         }
+    }
+
+    fn get_parameters<'a>(
+        param_builder: &'a mut ParamBuilder,
+        graph: &'a Graph,
+        sample: &'a MomentumSample<Self>,
+    ) -> Cow<'a, Vec<Complex<F<Self>>>> {
+        param_builder.update_emr_and_get_params(sample, graph)
     }
 
     fn get_debug_evaluator(
@@ -549,6 +563,14 @@ impl GenericEvaluatorFloat for f128 {
     ) -> impl Fn(&[Complex<F<f128>>]) -> Complex<F<f128>> {
         #[inline(always)]
         |params: &[Complex<F<f128>>]| generic_evaluator.f128.borrow_mut().evaluate_single(params)
+    }
+
+    fn get_parameters<'a>(
+        param_builder: &'a mut ParamBuilder,
+        graph: &'a Graph,
+        sample: &'a MomentumSample<Self>,
+    ) -> Cow<'a, Vec<Complex<F<Self>>>> {
+        param_builder.update_emr_and_get_params(sample, graph)
     }
 
     fn get_debug_evaluator(
@@ -1282,7 +1304,7 @@ where
 
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
-pub struct ParamBuilder<T: FloatLike> {
+pub struct ParamBuilder<T: FloatLike = f64> {
     m_uv: ParamValuePairs<T>,
     mu_r_sq: ParamValuePairs<T>,
     model_parameters: ParamValuePairs<T>,
@@ -1303,24 +1325,50 @@ pub struct ParamBuilder<T: FloatLike> {
     pub fn_map: FunctionMap,
 }
 
-impl ParamBuilder<f64> {
-    pub fn update_emr_and_get_params<T: FloatLike>(
+pub trait UpdateAndGetParams<T: FloatLike> {
+    fn update_emr_and_get_params<'a>(
+        &'a mut self,
+        sample: &'a MomentumSample<T>,
+        graph: &'a Graph,
+    ) -> Cow<'a, Vec<Complex<F<T>>>>;
+}
+
+impl UpdateAndGetParams<f64> for ParamBuilder<f64> {
+    fn update_emr_and_get_params<'a>(
+        &'a mut self,
+        sample: &'a MomentumSample<f64>,
+        graph: &'a Graph,
+    ) -> Cow<'a, Vec<Complex<F<f64>>>> {
+        let emr_spatial: Vec<_> = graph
+            .iter_edges()
+            .flat_map(|(pair, edge_id, _)| {
+                if let HedgePair::Paired { .. } = pair {
+                    let emr_vec = graph.loop_momentum_basis.edge_signatures[edge_id]
+                        .compute_three_momentum_from_four(
+                            sample.loop_moms(),
+                            sample.external_moms(),
+                        );
+                    vec![
+                        Complex::new_re(emr_vec.px),
+                        Complex::new_re(emr_vec.py),
+                        Complex::new_re(emr_vec.pz),
+                    ]
+                } else {
+                    vec![]
+                }
+            })
+            .collect();
+
+        Cow::Owned(Vec::new())
+    }
+}
+
+impl UpdateAndGetParams<f128> for ParamBuilder<f64> {
+    fn update_emr_and_get_params(
         &mut self,
-        sample: &MomentumSample<T>,
+        sample: &MomentumSample<f128>,
         graph: &Graph,
-    ) -> Cow<Vec<Complex<F<T>>>> {
-        // let map = self.map_values()
-        // self.param_builder.emr_spatial_value(
-        //     self.graph
-        //         .get_emr_vec_cache(
-        //             momentum_sample.loop_moms(),
-        //             momentum_sample.external_moms(),
-        //             &self.graph.loop_momentum_basis,
-        //         )
-        //         .into_iter()
-        //         .map(|q| Complex::new_re(q))
-        //         .collect(),
-        // );
+    ) -> Cow<Vec<Complex<F<f128>>>> {
         Cow::Owned(Vec::new())
     }
 }

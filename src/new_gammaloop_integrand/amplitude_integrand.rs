@@ -75,24 +75,7 @@ impl AmplitudeGraphTerm {
 
         debug!("Sample: \n\t{}", momentum_sample);
 
-        // param_builder
-
-        // self.param_cach_upade_
-        let a = self
-            .param_builder
-            .update_emr_and_get_params(momentum_sample, &self.graph);
-
-        // emr_spatial_value(
-        //     self.graph
-        //         .get_emr_vec_cache(
-        //             momentum_sample.loop_moms(),
-        //             momentum_sample.external_moms(),
-        //             &self.graph.loop_momentum_basis,
-        //         )
-        //         .into_iter()
-        //         .map(|q| Complex::new_re(q))
-        //         .collect(),
-        // );
+        let a = T::get_parameters(&mut self.param_builder, &self.graph, momentum_sample);
 
         let result = match momentum_sample.sample.orientation {
             Some(orientation_id) => {
