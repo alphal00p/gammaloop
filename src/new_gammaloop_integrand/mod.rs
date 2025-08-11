@@ -10,7 +10,9 @@ use crate::integrands::{HasIntegrand, Integrand};
 use crate::integrate::UserData;
 use crate::model::Model;
 use crate::momentum::Rotation;
-use crate::momentum_sample::{self, BareMomentumSample, LoopMomenta, MomentumSample};
+use crate::momentum_sample::{
+    self, BareMomentumSample, ExternalFourMomenta, LoopMomenta, MomentumSample,
+};
 use crate::new_graph::{FeynmanGraph, Graph, LmbIndex, LoopMomentumBasis};
 use crate::utils::{
     format_for_compare_digits, get_n_dim_for_n_loop_momenta, FloatLike, PrecisionUpgradable,
@@ -217,7 +219,9 @@ fn stability_check(
 }
 
 #[derive(Clone, Encode, Decode)]
+#[trait_decode(trait = GammaLoopContext)]
 pub struct GenericEvaluator {
+    pub expr: Atom,
     pub rational:
         RefCell<Option<ExpressionEvaluator<symbolica::domains::float::Complex<Rational>>>>,
     pub f64_compiled: Option<RefCell<SerializableCompiledEvaluator>>,
@@ -336,130 +340,6 @@ impl GenericEvaluator {
         let f128 = tree.map_coeff(&|r| Complex::new(F::from(&r.re), F::from(&r.im)));
 
         let evaluator = GenericEvaluator {
-            rational: RefCell::new(Some(rational)),
-            f64_compiled: None,
-            f64_eager: RefCell::new(f64_eager),
-            f128: RefCell::new(f128),
-        };
-
-        evaluator
-    }
-}
-#[derive(Clone, Encode, Decode)]
-#[trait_decode(trait = GammaLoopContext)]
-pub struct GenericEvaluatorDebug {
-    pub expr: Atom,
-    // pub builder: RefCell<ParamBuilder<f64>>,
-    pub rational:
-        RefCell<Option<ExpressionEvaluator<symbolica::domains::float::Complex<Rational>>>>,
-    pub f64_compiled: Option<RefCell<SerializableCompiledEvaluator>>,
-    pub f64_eager: RefCell<ExpressionEvaluator<Complex<F<f64>>>>,
-    pub f128: RefCell<ExpressionEvaluator<Complex<F<f128>>>>,
-}
-
-impl GenericEvaluate<Complex<F<f64>>> for GenericEvaluatorDebug {
-    fn evaluate(&self, params: &[Complex<F<f64>>], out: &mut [Complex<F<f64>>]) {
-        if let Some(f64_compiled) = &self.f64_compiled {
-            f64_compiled.borrow_mut().evaluate(params, out);
-        } else {
-            self.f64_eager.borrow_mut().evaluate(params, out);
-        }
-    }
-
-    fn evaluate_single(&self, params: &[Complex<F<f64>>]) -> Complex<F<f64>> {
-        if let Some(f64_compiled) = &self.f64_compiled {
-            let mut out = [Complex::default()];
-            f64_compiled.borrow_mut().evaluate(params, &mut out);
-            out[0]
-        } else {
-            self.f64_eager.borrow_mut().evaluate_single(params)
-        }
-    }
-}
-
-impl GenericEvaluate<Complex<F<f128>>> for GenericEvaluatorDebug {
-    fn evaluate(&self, params: &[Complex<F<f128>>], out: &mut [Complex<F<f128>>]) {
-        self.f128.borrow_mut().evaluate(params, out);
-    }
-
-    fn evaluate_single(&self, params: &[Complex<F<f128>>]) -> Complex<F<f128>> {
-        self.f128.borrow_mut().evaluate_single(params)
-    }
-}
-
-impl GenericEvaluatorDebug {
-    // pub fn validate<T: FloatLike>(&self, parambuilder: &ParamBuilder<T>) {
-    //     for (p, pb) in (self.builder.borrow().deref())
-    //         .into_iter()
-    //         .zip_eq(parambuilder)
-    //     {
-    //         debug!("Checking");
-    //         if p.params.len() != pb.params.len() {
-    //             for pv in p.params.iter() {
-    //                 debug!("Parameter mismatch: {}", pv);
-    //             }
-    //             debug!("Got:");
-    //             for pbv in pb.params.iter() {
-    //                 debug!("Parameter mismatch: {}", pbv);
-    //             }
-    //             panic!(
-    //                 "Parameter length mismatch, expected {} but got {}",
-    //                 pb.params.len(),
-    //                 p.params.len()
-    //             );
-    //         }
-
-    //         for (pv, pbv) in p.params.iter().zip_eq(pb.params.iter()) {
-    //             assert_eq!(pv, pv, "{pv} vs {pbv}");
-    //         }
-    //     }
-    // }
-
-    pub(crate) fn compile(
-        &mut self,
-        filename: impl AsRef<str>,
-        function_name: impl AsRef<str>,
-        lib_name: impl AsRef<str>,
-        inline_asm: InlineASM,
-    ) {
-        let compile = self
-            .f64_eager
-            .borrow()
-            .export_cpp(filename.as_ref(), function_name.as_ref(), true, inline_asm)
-            .unwrap()
-            .compile(lib_name.as_ref(), CompileOptions::default())
-            .unwrap()
-            .load()
-            .unwrap();
-
-        self.f64_compiled = Some(RefCell::new(SerializableCompiledEvaluator {
-            evaluator: compile,
-            library_filename: lib_name.as_ref().to_string(),
-            function_name: function_name.as_ref().to_string(),
-        }));
-    }
-
-    pub(crate) fn new_from_builder(
-        atom: impl AtomCore,
-        builder: ParamBuilder<f64>,
-        optimization_settings: OptimizationSettings,
-    ) -> Self {
-        let params: Vec<Atom> = (&builder)
-            .into_iter()
-            .flat_map(|p| p.params.clone())
-            .collect();
-
-        let tree = atom
-            .evaluator(&builder.fn_map, &params, optimization_settings)
-            .unwrap();
-
-        let rational = tree.clone();
-        let f64_eager = tree
-            .clone()
-            .map_coeff(&|r| Complex::new(F::from(&r.re), F::from(&r.im)));
-        let f128 = tree.map_coeff(&|r| Complex::new(F::from(&r.re), F::from(&r.im)));
-
-        let evaluator = GenericEvaluatorDebug {
             expr: atom.as_atom_view().to_owned(),
             rational: RefCell::new(Some(rational)),
             f64_compiled: None,
@@ -481,10 +361,6 @@ pub trait GenericEvaluatorFloat<T: FloatLike = Self> {
         graph: &'a Graph,
         sample: &'a MomentumSample<T>,
     ) -> Cow<'a, Vec<Complex<F<T>>>>;
-
-    fn get_debug_evaluator(
-        generic_evaluator: &GenericEvaluatorDebug,
-    ) -> impl Fn(&[Complex<F<T>>]) -> Complex<F<T>>;
 }
 
 impl GenericEvaluatorFloat for f64 {
@@ -515,45 +391,45 @@ impl GenericEvaluatorFloat for f64 {
         param_builder.update_emr_and_get_params(sample, graph)
     }
 
-    fn get_debug_evaluator(
-        generic_evaluator: &GenericEvaluatorDebug,
-    ) -> impl Fn(&[Complex<F<Self>>]) -> Complex<F<Self>> {
-        #[inline(always)]
-        |params: &[Complex<F<f64>>]| {
-            // generic_evaluator
-            //     .builder
-            //     .borrow_mut()
-            //     .fill_in_values(Vec::from_iter(params.iter().cloned()));
+    // fn get_debug_evaluator(
+    //     generic_evaluator: &GenericEvaluatorDebug,
+    // ) -> impl Fn(&[Complex<F<Self>>]) -> Complex<F<Self>> {
+    //     #[inline(always)]
+    //     |params: &[Complex<F<f64>>]| {
+    //         // generic_evaluator
+    //         //     .builder
+    //         //     .borrow_mut()
+    //         //     .fill_in_values(Vec::from_iter(params.iter().cloned()));
 
-            // let a = generic_evaluator
-            //     .builder
-            //     .borrow()
-            //     .replace(&generic_evaluator.expr);
+    //         // let a = generic_evaluator
+    //         //     .builder
+    //         //     .borrow()
+    //         //     .replace(&generic_evaluator.expr);
 
-            // debug!("Replaced atom:{:+>}", a);
-            // generic_evaluator
-            //     .expr
-            //     .evaluate(
-            //         |c| Complex::new_re(F::<f64>::from(c)),
-            //         const_map,
-            //         function_map,
-            //     )
-            //     .unwrap()
+    //         // debug!("Replaced atom:{:+>}", a);
+    //         // generic_evaluator
+    //         //     .expr
+    //         //     .evaluate(
+    //         //         |c| Complex::new_re(F::<f64>::from(c)),
+    //         //         const_map,
+    //         //         function_map,
+    //         //     )
+    //         //     .unwrap()
 
-            // generic_evaluator.expr.evaluate(coeff_map, const_map, function_map)
+    //         // generic_evaluator.expr.evaluate(coeff_map, const_map, function_map)
 
-            if let Some(compiled) = &generic_evaluator.f64_compiled {
-                let mut out = [Complex::default()];
-                compiled.borrow_mut().evaluate(params, &mut out);
-                out[0]
-            } else {
-                generic_evaluator
-                    .f64_eager
-                    .borrow_mut()
-                    .evaluate_single(params)
-            }
-        }
-    }
+    //         if let Some(compiled) = &generic_evaluator.f64_compiled {
+    //             let mut out = [Complex::default()];
+    //             compiled.borrow_mut().evaluate(params, &mut out);
+    //             out[0]
+    //         } else {
+    //             generic_evaluator
+    //                 .f64_eager
+    //                 .borrow_mut()
+    //                 .evaluate_single(params)
+    //         }
+    //     }
+    // }
 }
 
 impl GenericEvaluatorFloat for f128 {
@@ -571,13 +447,6 @@ impl GenericEvaluatorFloat for f128 {
         sample: &'a MomentumSample<Self>,
     ) -> Cow<'a, Vec<Complex<F<Self>>>> {
         param_builder.update_emr_and_get_params(sample, graph)
-    }
-
-    fn get_debug_evaluator(
-        generic_evaluator: &GenericEvaluatorDebug,
-    ) -> impl Fn(&[Complex<F<Self>>]) -> Complex<F<Self>> {
-        #[inline(always)]
-        |params: &[Complex<F<f128>>]| generic_evaluator.f128.borrow_mut().evaluate_single(params)
     }
 }
 
@@ -1233,6 +1102,14 @@ pub struct ParamValuePairs<T: FloatLike> {
 }
 
 impl<T: FloatLike> ParamValuePairs<T> {
+    pub fn validate(&self) {
+        assert_eq!(
+            self.values.len(),
+            self.params.len(),
+            "Number of values and parameters must match"
+        );
+    }
+
     pub fn map_values<U: FloatLike>(
         &self,
         mut map: impl FnMut(&Complex<F<T>>) -> Complex<F<U>>,
@@ -1246,6 +1123,7 @@ impl<T: FloatLike> ParamValuePairs<T> {
     pub fn replacement(&self) -> Vec<Replacement> {
         let mut replacements = Vec::new();
         for (p, v) in self.params.iter().zip_eq(self.values.iter()) {
+            println!("{p}");
             let replacement = Replacement::new(
                 p.clone().to_pattern(),
                 Atom::num(v.clone().to_coefficient()),
@@ -1307,9 +1185,9 @@ where
 pub struct ParamBuilder<T: FloatLike = f64> {
     m_uv: ParamValuePairs<T>,
     mu_r_sq: ParamValuePairs<T>,
-    model_parameters: ParamValuePairs<T>,
-    external_energies: ParamValuePairs<T>,
-    external_spatial: ParamValuePairs<T>,
+    pub model_parameters: ParamValuePairs<T>,
+    pub external_energies: ParamValuePairs<T>,
+    pub external_spatial: ParamValuePairs<T>,
     polarizations: ParamValuePairs<T>,
     emr_spatial: ParamValuePairs<T>,
     tstar: ParamValuePairs<T>,
@@ -1374,27 +1252,31 @@ impl UpdateAndGetParams<f128> for ParamBuilder<f64> {
 }
 
 impl<T: FloatLike> ParamBuilder<T> {
-    pub fn map_values<U: FloatLike>(
-        &self,
-        mut map: impl FnMut(&Complex<F<T>>) -> Complex<F<U>>,
-    ) -> ParamBuilder<U> {
-        ParamBuilder {
-            m_uv: self.m_uv.map_values(&mut map),
-            mu_r_sq: self.mu_r_sq.map_values(&mut map),
-            model_parameters: self.model_parameters.map_values(&mut map),
-            external_energies: self.external_energies.map_values(&mut map),
-            external_spatial: self.external_spatial.map_values(&mut map),
-            polarizations: self.polarizations.map_values(&mut map),
-            emr_spatial: self.emr_spatial.map_values(&mut map),
-            tstar: self.tstar.map_values(&mut map),
-            h_function: self.h_function.map_values(&mut map),
-            derivative_at_tstar: self.derivative_at_tstar.map_values(&mut map),
-            uv_damp: self.uv_damp.map_values(&mut map),
-            radius: self.radius.map_values(&mut map),
-            radius_star: self.radius_star.map_values(&mut map),
-            reps: self.reps.clone(),
-            fn_map: self.fn_map.clone(),
-        }
+    pub fn validate(&self) {
+        debug!("Validating mu_r_sq");
+        self.mu_r_sq.validate();
+        debug!("Validating model_parameters");
+        self.model_parameters.validate();
+        debug!("Validating external_energies");
+        self.external_energies.validate();
+        debug!("Validating external_spatial");
+        self.external_spatial.validate();
+        debug!("Validating polarizations");
+        self.polarizations.validate();
+        debug!("Validating emr_spatial");
+        self.emr_spatial.validate();
+        debug!("Validating tstar");
+        self.tstar.validate();
+        debug!("Validating h_function");
+        self.h_function.validate();
+        debug!("Validating derivative_at_tstar");
+        self.derivative_at_tstar.validate();
+        debug!("Validating uv_damp");
+        self.uv_damp.validate();
+        debug!("Validating radius");
+        self.radius.validate();
+        debug!("Validating radius_star");
+        self.radius_star.validate();
     }
 
     pub fn fill_in_values(&mut self, mut values: Vec<Complex<F<T>>>) {
@@ -1413,7 +1295,7 @@ impl<T: FloatLike> ParamBuilder<T> {
         self.radius_star.extract_and_fill(&mut values);
     }
 
-    pub fn replace(&self, atom: impl AtomCore) -> Atom {
+    pub fn replace_non_emr(&self, atom: impl AtomCore) -> Atom {
         let reps = self
             .reps
             .iter()
@@ -1421,7 +1303,23 @@ impl<T: FloatLike> ParamBuilder<T> {
             .collect_vec();
         let mut a = atom.replace_multiple(&reps);
 
-        for r in (&self).into_iter() {
+        for r in [
+            &self.m_uv,
+            &self.mu_r_sq,
+            &self.model_parameters,
+            &self.external_energies,
+            &self.external_spatial,
+            &self.polarizations,
+            // &self.emr_spatial,
+            &self.tstar,
+            &self.h_function,
+            &self.derivative_at_tstar,
+            &self.uv_damp,
+            &self.radius,
+            &self.radius_star,
+        ]
+        .into_iter()
+        {
             a = a.replace_multiple(&r.replacement());
         }
         a
@@ -1525,8 +1423,32 @@ impl<T: FloatLike> ParamBuilder<T> {
         self.external_energies.params = graph.get_external_energy_atoms();
     }
 
+    pub(crate) fn add_external_four_mom(&mut self, ext: &ExternalFourMomenta<F<T>>) {
+        self.external_energies.values = ext
+            .iter()
+            .map(|x| Complex::new_re(x.temporal.value.clone()))
+            .collect_vec();
+        self.external_spatial.values = ext
+            .iter()
+            .flat_map(|x| x.spatial.clone().into_iter().map(|c| Complex::new_re(c)))
+            .collect_vec();
+    }
+
     pub(crate) fn polarizations(&mut self, graph: &Graph) {
         self.polarizations.params = graph.polarization_params();
+    }
+
+    pub(crate) fn polarizations_values(&mut self, polarizations: Polarizations) {
+        let mut values = Vec::new();
+        match polarizations {
+            Polarizations::Constant { polarizations } => {
+                for p in polarizations {
+                    values.extend(p.into_iter().map(|c| c.map(|t| F(T::from_f64(t.0)))))
+                }
+            }
+            Polarizations::None => {}
+        }
+        self.polarizations.values = values;
     }
 
     pub(crate) fn external_energies_value(&mut self, momentum_sample: &MomentumSample<T>) {

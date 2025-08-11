@@ -863,6 +863,7 @@ impl<S: CrossSectionState> CrossSectionGraph<S> {
 }
 
 #[derive(Clone, Encode, Decode)]
+#[trait_decode(trait = GammaLoopContext)]
 pub struct CrossSectionDerivedData<S: CrossSectionState = ()> {
     pub orientations: Option<TiVec<SuperGraphOrientationID, CutOrientationData>>,
     pub bare_cff_evaluators: Option<TiVec<CutId, GenericEvaluator>>,

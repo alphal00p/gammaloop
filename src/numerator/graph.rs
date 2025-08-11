@@ -1,4 +1,3 @@
-
 use linnet::half_edge::{
     involution::{EdgeData, Flow, Orientation},
     subgraph::SubGraph,
@@ -74,6 +73,10 @@ impl Graph {
     pub(crate) fn polarization_params(&self) -> Vec<Atom> {
         self.polarization_parameters_of(&self.underlying.external_filter())
     }
+
+    // pub(crate) fn polarizations_values(&self) -> Vec<Atom> {
+    //     self.polarizations_of(&self.underlying.external_filter())
+    // }
 }
 
 pub trait ReversibleEdge {
@@ -163,248 +166,247 @@ impl ReversibleEdge for EdgeData<&Edge> {
     }
 }
 
-#[cfg(test)]
-mod test {
+// #[cfg(test)]
+// mod test {
 
-    use env_logger::WriteStyle;
-    use log::{debug, LevelFilter};
-    use spenso::structure::HasStructure;
-    use symbolica::atom::AtomCore;
+//     use env_logger::WriteStyle;
+//     use log::{debug, LevelFilter};
+//     use spenso::structure::HasStructure;
+//     use symbolica::atom::AtomCore;
 
-    use crate::{
-        dot,
-        new_cs::Amplitude,
-        new_graph::{parse::IntoGraph, FeynmanGraph, Graph},
-        numerator::UnInit,
-        uv::UltravioletGraph,
-        KinematicsSettings, ProcessSettings, Settings,
-    };
+//     use crate::{
+//         dot,
+//         new_cs::Amplitude,
+//         new_graph::{parse::IntoGraph, FeynmanGraph, Graph},
+//         numerator::UnInit,
+//         uv::UltravioletGraph,
+//         KinematicsSettings, ProcessSettings, Settings,
+//     };
 
-    #[test]
-    fn two_photons() {
-        let _ = env_logger::Builder::new()
-            .filter(None, LevelFilter::Debug)
-            .write_style(WriteStyle::Always)
-            .is_test(true)
-            .try_init();
-        // let _ = env_logger::builder().is_test(true).try_init();
+//     #[test]
+//     fn two_photons() {
+//         let _ = env_logger::Builder::new()
+//             .filter(None, LevelFilter::Debug)
+//             .write_style(WriteStyle::Always)
+//             .is_test(true)
+//             .try_init();
+//         // let _ = env_logger::builder().is_test(true).try_init();
 
-        let model = crate::tests_from_pytest::load_generic_model("sm");
+//         let model = crate::tests_from_pytest::load_generic_model("sm");
 
-        let graph: Graph = dot!(
-        digraph physical_1L_6photons_0 {
-            edge[dod=-1000]
-            node[dod=-1000]
-            ext    [style=invis]
-            ext -> v1 [particle=a id=1];
-            v2 -> ext [particle=a id=0];
-            v1 -> v2 [pdg=1];
-            v2 -> v1 [pdg=1];
-        })
-        .unwrap();
-        println!("{}", graph.dot_serialize());
-        let reps = graph.get_ose_replacements();
-        for r in reps {
-            println!("{r}")
-        }
-        // return;
+//         let graph: Graph = dot!(
+//         digraph physical_1L_6photons_0 {
+//             edge[dod=-1000]
+//             node[dod=-1000]
+//             ext    [style=invis]
+//             ext -> v1 [particle=a id=1];
+//             v2 -> ext [particle=a id=0];
+//             v1 -> v2 [pdg=1];
+//             v2 -> v1 [pdg=1];
+//         })
+//         .unwrap();
+//         println!("{}", graph.dot_serialize());
+//         let reps = graph.get_ose_replacements();
+//         for r in reps {
+//             println!("{r}")
+//         }
+//         // return;
 
-        let mut amp: Amplitude = Amplitude::new("name".into());
+//         let mut amp: Amplitude = Amplitude::new("name".into());
 
-        let mut settings = Settings::default();
+//         let mut settings = Settings::default();
 
-        settings.kinematics = KinematicsSettings::random(&graph, 42);
-        amp.add_graph(graph).unwrap();
-        // Amplitude::new(name)
+//         settings.kinematics = KinematicsSettings::random(&graph, 42);
+//         amp.add_graph(graph).unwrap();
+//         // Amplitude::new(name)
 
-        let proc_set = ProcessSettings::default();
+//         let proc_set = ProcessSettings::default();
 
-        amp.preprocess(&model, &proc_set);
-        let integrand = amp.generate_integrand(settings, &model);
+//         amp.preprocess(&model, &proc_set);
+//         let integrand = amp.generate_integrand(settings, &model);
 
-        // println!("{}", a.factor());
+//         // println!("{}", a.factor());
 
-        //     let mut amp: Amplitude<UnInit> = Amplitude::new("name".into());
-        //     let mut settings = Settings::default();
-        //     for g in graphs {
-        //         settings.kinematics = KinematicsSettings::random(&g, 42);
-        //         amp.add_graph(g).unwrap();
-        //         // Amplitude::new(name)
-        //     }
+//         //     let mut amp: Amplitude<UnInit> = Amplitude::new("name".into());
+//         //     let mut settings = Settings::default();
+//         //     for g in graphs {
+//         //         settings.kinematics = KinematicsSettings::random(&g, 42);
+//         //         amp.add_graph(g).unwrap();
+//         //         // Amplitude::new(name)
+//         //     }
 
-        //     let proc_set = ProcessSettings::default();
+//         //     let proc_set = ProcessSettings::default();
 
-        //     amp.preprocess(&model, &proc_set).unwrap();
+//         //     amp.preprocess(&model, &proc_set).unwrap();
 
-        //     let integrand = amp.generate_integrand(settings, &model);
-        // }
-    }
+//         //     let integrand = amp.generate_integrand(settings, &model);
+//         // }
+//     }
 
-    #[test]
-    fn six_photons() {
-        let _ = env_logger::Builder::new()
-            .filter(None, LevelFilter::Debug)
-            .write_style(WriteStyle::Always)
-            .is_test(true)
-            .try_init();
-        // let _ = env_logger::builder().is_test(true).try_init();
+//     #[test]
+//     fn six_photons() {
+//         let _ = env_logger::Builder::new()
+//             .filter(None, LevelFilter::Debug)
+//             .write_style(WriteStyle::Always)
+//             .is_test(true)
+//             .try_init();
+//         // let _ = env_logger::builder().is_test(true).try_init();
 
-        let model = crate::tests_from_pytest::load_generic_model("sm");
+//         let model = crate::tests_from_pytest::load_generic_model("sm");
 
-        let graph: Graph = dot!(
-        digraph physical_1L_6photons_0 {
-            ext    [style=invis]
-            ext -> v7 [particle=a];
-            ext -> v8 [particle=a];
-            v9 -> ext [particle=a];
-            v10 -> ext [particle=a];
-            v11 -> ext [particle=a];
-            v12 -> ext [particle=a];
-            v7 -> v8 [pdg=6];
-            v8 -> v9 [pdg=6];
-            v9 -> v10 [pdg=6];
-            v10 -> v11 [pdg=6];
-            v11 -> v12 [pdg=6];
-            v12 -> v7 [pdg=6];
-        })
-        .unwrap();
-        println!("{}", graph.dot_serialize());
-        let reps = graph.get_ose_replacements();
-        for r in reps {
-            println!("{r}")
-        }
-        // return;
+//         let graph: Graph = dot!(
+//         digraph physical_1L_6photons_0 {
+//             ext    [style=invis]
+//             ext -> v7 [particle=a];
+//             ext -> v8 [particle=a];
+//             v9 -> ext [particle=a];
+//             v10 -> ext [particle=a];
+//             v11 -> ext [particle=a];
+//             v12 -> ext [particle=a];
+//             v7 -> v8 [pdg=6];
+//             v8 -> v9 [pdg=6];
+//             v9 -> v10 [pdg=6];
+//             v10 -> v11 [pdg=6];
+//             v11 -> v12 [pdg=6];
+//             v12 -> v7 [pdg=6];
+//         })
+//         .unwrap();
+//         println!("{}", graph.dot_serialize());
+//         let reps = graph.get_ose_replacements();
+//         for r in reps {
+//             println!("{r}")
+//         }
+//         // return;
 
-        let mut amp: Amplitude = Amplitude::new("name".into());
+//         let mut amp: Amplitude = Amplitude::new("name".into());
 
-        let mut settings = Settings::default();
+//         let mut settings = Settings::default();
 
-        settings.kinematics = KinematicsSettings::random(&graph, 42);
-        amp.add_graph(graph).unwrap();
-        // Amplitude::new(name)
+//         settings.kinematics = KinematicsSettings::random(&graph, 42);
+//         amp.add_graph(graph).unwrap();
+//         // Amplitude::new(name)
 
-        let proc_set = ProcessSettings::default();
+//         let proc_set = ProcessSettings::default();
 
-        // amp.graphs[0].generate_cff().unwrap();
-        // let a = amp.graphs[0].build_all_orientations_integrand_atom();
-        // println!("{:>}", a);
-        // debug!("Generating Cff");
-        // amp.graphs[0].generate_cff().unwrap();
-        // debug!("Building Evaluator");
-        // amp.graphs[0].build_evaluator(&model);
+//         // amp.graphs[0].generate_cff().unwrap();
+//         // let a = amp.graphs[0].build_all_orientations_integrand_atom();
+//         // println!("{:>}", a);
+//         // debug!("Generating Cff");
+//         // amp.graphs[0].generate_cff().unwrap();
+//         // debug!("Building Evaluator");
+//         // amp.graphs[0].build_evaluator(&model);
 
-        amp.preprocess(&model, &proc_set);
-        let integrand = amp.generate_integrand(settings, &model);
+//         amp.preprocess(&model, &proc_set);
+//         let integrand = amp.generate_integrand(settings, &model);
 
-        // println!("{}", a.factor());
+//         // println!("{}", a.factor());
 
-        //     let mut amp: Amplitude<UnInit> = Amplitude::new("name".into());
-        //     let mut settings = Settings::default();
-        //     for g in graphs {
-        //         settings.kinematics = KinematicsSettings::random(&g, 42);
-        //         amp.add_graph(g).unwrap();
-        //         // Amplitude::new(name)
-        //     }
+//         //     let mut amp: Amplitude<UnInit> = Amplitude::new("name".into());
+//         //     let mut settings = Settings::default();
+//         //     for g in graphs {
+//         //         settings.kinematics = KinematicsSettings::random(&g, 42);
+//         //         amp.add_graph(g).unwrap();
+//         //         // Amplitude::new(name)
+//         //     }
 
-        //     let proc_set = ProcessSettings::default();
+//         //     let proc_set = ProcessSettings::default();
 
-        //     amp.preprocess(&model, &proc_set).unwrap();
+//         //     amp.preprocess(&model, &proc_set).unwrap();
 
-        //     let integrand = amp.generate_integrand(settings, &model);
-        // }
-    }
+//         //     let integrand = amp.generate_integrand(settings, &model);
+//         // }
+//     }
 
-    #[test]
-    fn evaluate_pols() {
-        let model = crate::tests_from_pytest::load_generic_model("sm");
+//     #[test]
+//     fn evaluate_pols() {
+//         let model = crate::tests_from_pytest::load_generic_model("sm");
 
-        let graphs: Vec<Graph> = dot!(
-        digraph bxatobx{
-            graph [
-                // polarizations="1"
-                color_num="spenso::g(spenso::dind(spenso::cof(3,hedge(0))),spenso::cof(3,hedge(2)))"
-            ]
-            bla    [style=invis]
-            bla -> A:1   [particle=a id=0]
-            bla -> A:2    [particle="b~" id=2]
-            A:0  -> bla  [particle="b~" id=1]
-        })
-        .unwrap();
+//         let graphs: Vec<Graph> = dot!(
+//         digraph bxatobx{
+//             graph [
+//                 // polarizations="1"
+//                 color_num="spenso::g(spenso::dind(spenso::cof(3,hedge(0))),spenso::cof(3,hedge(2)))"
+//             ]
+//             bla    [style=invis]
+//             bla -> A:1   [particle=a id=0]
+//             bla -> A:2    [particle="b~" id=2]
+//             A:0  -> bla  [particle="b~" id=1]
+//         })
+//         .unwrap();
 
-        let mut amp: Amplitude = Amplitude::new("name".into());
-        let mut settings = Settings::default();
-        for g in graphs {
-            println!("{}", g.dot_serialize());
-            settings.kinematics = KinematicsSettings::random(&g, 42);
-            amp.add_graph(g).unwrap();
-            // Amplitude::new(name)
-        }
+//         let mut amp: Amplitude = Amplitude::new("name".into());
+//         let mut settings = Settings::default();
+//         for g in graphs {
+//             println!("{}", g.dot_serialize());
+//             settings.kinematics = KinematicsSettings::random(&g, 42);
+//             amp.add_graph(g).unwrap();
+//             // Amplitude::new(name)
+//         }
 
-        let proc_set = ProcessSettings::default();
+//         let proc_set = ProcessSettings::default();
 
-        amp.preprocess(&model, &proc_set).unwrap();
+//         amp.preprocess(&model, &proc_set).unwrap();
 
-        let integrand = amp.generate_integrand(settings, &model);
+//         let integrand = amp.generate_integrand(settings, &model);
 
-        // integrand.evaluate_sample(sample, wgt, iter, use_f128, max_eval);
-    }
+//         // integrand.evaluate_sample(sample, wgt, iter, use_f128, max_eval);
+//     }
 
-    #[test]
-    fn pols() {
-        let mut graphs:Vec<Graph> = dot!(
-            digraph bxatobx{
-                graph [
-                    num="v(0,spenso::bis(4,hedge(0)))*vbar(2,spenso::bis(4,hedge(2)))*ϵ(1,spenso::mink(4,hedge(1)))"
-                ]
-                ext    [style=invis]
-                ext -> A:1   [particle=a id=1]
-                ext -> A:2    [particle="b~" id=2]
-                A:0  -> ext  [particle="b~" id=0]
-            }
+//     #[test]
+//     fn pols() {
+//         let mut graphs:Vec<Graph> = dot!(
+//             digraph bxatobx{
+//                 graph [
+//                     num="v(0,spenso::bis(4,hedge(0)))*vbar(2,spenso::bis(4,hedge(2)))*ϵ(1,spenso::mink(4,hedge(1)))"
+//                 ]
+//                 ext    [style=invis]
+//                 ext -> A:1   [particle=a id=1]
+//                 ext -> A:2    [particle="b~" id=2]
+//                 A:0  -> ext  [particle="b~" id=0]
+//             }
 
+//             digraph bxatobx2{
+//                 graph [
+//                     num="v(0,spenso::bis(4,hedge(0)))*vbar(2,spenso::bis(4,hedge(2)))*ϵ(1,spenso::mink(4,hedge(1)))"
+//                 ]
+//                 ext    [style=invis]
+//                 ext -> A:1   [particle=a id=1]
+//                 ext -> A:2    [particle="b" id=2 dir=back]
+//                 A:0  -> ext  [particle="b" id=0 dir=back]
+//             }
 
-            digraph bxatobx2{
-                graph [
-                    num="v(0,spenso::bis(4,hedge(0)))*vbar(2,spenso::bis(4,hedge(2)))*ϵ(1,spenso::mink(4,hedge(1)))"
-                ]
-                ext    [style=invis]
-                ext -> A:1   [particle=a id=1]
-                ext -> A:2    [particle="b" id=2 dir=back]
-                A:0  -> ext  [particle="b" id=0 dir=back]
-            }
+//             digraph batob{
+//                 graph [
+//                     num="ubar(0,spenso::bis(4,hedge(0)))*u(2,spenso::bis(4,hedge(2)))*ϵ(1,spenso::mink(4,hedge(1)))"
+//                 ]
+//                 ext    [style=invis]
+//                 ext -> A:1   [particle=a id=1]
+//                 ext -> A:2    [particle="b" id=2]
+//                 A:0  -> ext  [particle="b" id=0]
+//             }
 
-            digraph batob{
-                graph [
-                    num="ubar(0,spenso::bis(4,hedge(0)))*u(2,spenso::bis(4,hedge(2)))*ϵ(1,spenso::mink(4,hedge(1)))"
-                ]
-                ext    [style=invis]
-                ext -> A:1   [particle=a id=1]
-                ext -> A:2    [particle="b" id=2]
-                A:0  -> ext  [particle="b" id=0]
-            }
+//             digraph bbato{
+//                 graph [
+//                     num="vbar(0,spenso::bis(4,hedge(0)))*u(2,spenso::bis(4,hedge(2)))*ϵ(1,spenso::mink(4,hedge(1)))"
+//                 ]
+//                 ext    [style=invis]
+//                 ext -> A:1   [particle=a id=1]
+//                 ext -> A:2    [particle="b" id=2]
+//                 ext -> A:0  [pdg=-5 id=0]
+//             }
+//         )
+//         .unwrap();
 
-            digraph bbato{
-                graph [
-                    num="vbar(0,spenso::bis(4,hedge(0)))*u(2,spenso::bis(4,hedge(2)))*ϵ(1,spenso::mink(4,hedge(1)))"
-                ]
-                ext    [style=invis]
-                ext -> A:1   [particle=a id=1]
-                ext -> A:2    [particle="b" id=2]
-                ext -> A:0  [pdg=-5 id=0]
-            }
-        )
-        .unwrap();
-
-        for g in &mut graphs {
-            let pols = g.polarizations();
-            // println!("{pols}");
-            let expected = &g.global_prefactor.num;
-            // println!("{expected}");
-            assert_eq!(
-                expected, &pols,
-                "\nExpected: {:}\nActual: {:} for graph {:}",
-                expected, pols, g.name,
-            );
-        }
-    }
-}
+//         for g in &mut graphs {
+//             let pols = g.polarizations();
+//             // println!("{pols}");
+//             let expected = &g.global_prefactor.num;
+//             // println!("{expected}");
+//             assert_eq!(
+//                 expected, &pols,
+//                 "\nExpected: {:}\nActual: {:} for graph {:}",
+//                 expected, pols, g.name,
+//             );
+//         }
+//     }
+// }

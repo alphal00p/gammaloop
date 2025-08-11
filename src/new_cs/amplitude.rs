@@ -7,6 +7,7 @@ use color_eyre::Result;
 use momtrop::SampleGenerator;
 
 use idenso::metric::MS;
+use spenso::algebra::complex::Complex;
 use vakint::{EvaluationOrder, LoopNormalizationFactor, Vakint, VakintSettings};
 
 use crate::{
@@ -21,7 +22,7 @@ use crate::{
     momentum_sample::ExternalIndex,
     new_gammaloop_integrand::{
         amplitude_integrand::{AmplitudeGraphTerm, AmplitudeIntegrand, AmplitudeIntegrandData},
-        GenericEvaluator, GenericEvaluatorDebug, LmbMultiChannelingSetup, ParamBuilder,
+        GenericEvaluator, LmbMultiChannelingSetup, ParamBuilder,
     },
     new_graph::{LMBext, LmbIndex, LoopMomentumBasis},
     signature::SignatureLike,
@@ -108,7 +109,13 @@ impl<S: AmplitudeState> Amplitude<S> {
         let terms = self
             .graphs
             .iter()
-            .map(|graph| graph.generate_term_for_graph(&settings, model))
+            .map(|graph| {
+                graph.generate_term_for_graph(
+                    &settings,
+                    model,
+                    self.polarizations(&settings.kinematics.externals),
+                )
+            })
             .collect_vec();
 
         let rotations: Vec<Rotation> = Some(Rotation::new(RotationMethod::Identity))
@@ -292,6 +299,15 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
 
         param_builder
     }
+
+    // pub fn fill_in_params(
+    //     &self,
+    //     param_builder: &mut ParamBuilder,
+    //     model: &Model,
+    //     settings: &Settings,
+    // ) {
+    //     param_builder.external_energies_value(momentum_sample);
+    // }
 
     fn get_function_map(&self) -> FunctionMap {
         let mut fn_map = FunctionMap::new();
@@ -592,7 +608,7 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
 
         let builder = self.param_builder_core(model);
 
-        let evaluator = GenericEvaluatorDebug::new_from_builder(
+        let evaluator = GenericEvaluator::new_from_builder(
             &replace_dots,
             builder,
             OptimizationSettings::default(),
@@ -744,7 +760,12 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
     }
 
     // Expects cff_expression, esurface_data,
-    fn generate_term_for_graph(&self, settings: &Settings, model: &Model) -> AmplitudeGraphTerm {
+    fn generate_term_for_graph(
+        &self,
+        settings: &Settings,
+        model: &Model,
+        pols: Polarizations,
+    ) -> AmplitudeGraphTerm {
         let estimated_scale = self
             .graph
             .underlying
@@ -772,7 +793,14 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
             settings.kinematics.e_cm,
         );
 
-        let param_builder = self.param_builder_core(model);
+        let mut param_builder = self.param_builder_core(model);
+        param_builder.add_external_four_mom(&externals);
+        param_builder.polarizations_values(pols);
+        param_builder.model_parameters_value(model);
+        param_builder.mu_r_sq_value(Complex::new_zero());
+        param_builder.m_uv_value(Complex::new_zero());
+
+        // (momentum_sample);
 
         let edge_masses = self.graph.new_edgevec(|edge, _, _| edge.mass_value());
 
@@ -827,7 +855,7 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct AmplitudeDerivedData<S: AmplitudeState> {
-    pub all_orientation_integrand_evaluator: Option<GenericEvaluatorDebug>,
+    pub all_orientation_integrand_evaluator: Option<GenericEvaluator>,
     pub integrand_evaluators: Option<TiVec<AmplitudeOrientationID, GenericEvaluator>>,
     pub counterterm_evaluators: Option<TiVec<EsurfaceID, GenericEvaluator>>,
     pub multi_channeling_setup: Option<LmbMultiChannelingSetup>,

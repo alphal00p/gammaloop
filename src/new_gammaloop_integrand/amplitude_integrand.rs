@@ -10,7 +10,10 @@ use itertools::Itertools;
 use log::debug;
 use momtrop::SampleGenerator;
 use spenso::algebra::complex::Complex;
-use symbolica::numerical_integration::{Grid, Sample};
+use symbolica::{
+    atom::AtomCore,
+    numerical_integration::{Grid, Sample},
+};
 use typed_index_collections::TiVec;
 
 use crate::{
@@ -28,8 +31,8 @@ use crate::{
 };
 
 use super::{
-    create_grid, evaluate_sample, GammaloopIntegrand, GenericEvaluator, GenericEvaluatorDebug,
-    GenericEvaluatorFloat, GraphTerm, LmbMultiChannelingSetup,
+    create_grid, evaluate_sample, GammaloopIntegrand, GenericEvaluator, GenericEvaluatorFloat,
+    GraphTerm, LmbMultiChannelingSetup,
 };
 
 const HARD_CODED_M_UV: F<f64> = F(1000.0);
@@ -38,7 +41,7 @@ const HARD_CODED_M_R_SQ: F<f64> = F(1000.0);
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct AmplitudeGraphTerm {
-    pub integrand_evaluator_all_orientations: GenericEvaluatorDebug,
+    pub integrand_evaluator_all_orientations: GenericEvaluator,
     pub integrand_evaluators: TiVec<AmplitudeOrientationID, GenericEvaluator>,
     pub counterterm_evaluators: TiVec<EsurfaceID, GenericEvaluator>,
     pub multi_channeling_setup: LmbMultiChannelingSetup,
@@ -75,18 +78,23 @@ impl AmplitudeGraphTerm {
 
         debug!("Sample: \n\t{}", momentum_sample);
 
-        let a = T::get_parameters(&mut self.param_builder, &self.graph, momentum_sample);
-
         let result = match momentum_sample.sample.orientation {
             Some(orientation_id) => {
+                let a = T::get_parameters(&mut self.param_builder, &self.graph, momentum_sample);
                 let orientation_id = AmplitudeOrientationID::from(orientation_id);
                 let orientation_evaluator = &self.integrand_evaluators[orientation_id];
                 <T as GenericEvaluatorFloat>::get_evaluator(orientation_evaluator)(&a)
             }
             None => {
                 let evaluator = &self.integrand_evaluator_all_orientations;
+
+                let replaced = self.param_builder.replace_non_emr(evaluator.expr.clone());
+                println!("replaced: {:+>}", replaced.expand());
                 // evaluator.validate(&param_builder);
-                <T as GenericEvaluatorFloat>::get_debug_evaluator(evaluator)(&a)
+                let a = T::get_parameters(&mut self.param_builder, &self.graph, momentum_sample);
+                // self.param_builder.validate();
+
+                <T as GenericEvaluatorFloat>::get_evaluator(evaluator)(&a)
             }
         };
 

@@ -120,6 +120,7 @@ impl GammaloopIntegrand for CrossSectionIntegrand {
 }
 
 #[derive(Clone, Encode, Decode)]
+#[trait_decode(trait = GammaLoopContext)]
 pub struct OrientationEvaluator {
     pub orientation_data: CutOrientationData,
     pub evaluators: Vec<GenericEvaluator>,

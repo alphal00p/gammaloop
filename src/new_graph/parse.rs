@@ -691,8 +691,9 @@ pub mod test {
         new_graph::{parse::IntoGraph, LMBext},
         numerator::{aind::Aind, Numerator, UnInit},
     };
+    use symbolica::{parse, parse_lit};
 
-    use super::Graph;
+    use super::{Graph, StripParse};
 
     #[test]
     fn test_load() {
