@@ -295,7 +295,7 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
 
         param_builder.mu_r_sq_atom(Atom::var(GS.mu_r_sq));
 
-        param_builder.fn_map = self.get_function_map();
+        self.add_function_map(&mut param_builder);
 
         param_builder
     }
@@ -309,12 +309,11 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
     //     param_builder.external_energies_value(momentum_sample);
     // }
 
-    fn get_function_map(&self) -> FunctionMap {
-        let mut fn_map = FunctionMap::new();
+    fn add_function_map(&self, parambuilder: &mut ParamBuilder) {
         let pi_rational = Rational::from(std::f64::consts::PI);
 
         for (p, e, d) in self.graph.iter_edges() {
-            fn_map
+            parambuilder
                 .add_tagged_function(
                     GS.ose,
                     vec![Atom::num(e.0 as i64)],
@@ -324,8 +323,8 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
                 )
                 .unwrap()
         }
-        fn_map.add_constant(Atom::PI.into(), pi_rational.into());
-        fn_map
+        parambuilder.add_constant(Atom::PI.into(), pi_rational.into());
+        // fn_map
     }
 
     // fn get_eager_const_map(&self)->HashM

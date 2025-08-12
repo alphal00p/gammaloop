@@ -1183,6 +1183,7 @@ where
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct ParamBuilder<T: FloatLike = f64> {
+    // values: Vec<Complex<F<T>>
     m_uv: ParamValuePairs<T>,
     mu_r_sq: ParamValuePairs<T>,
     pub model_parameters: ParamValuePairs<T>,
@@ -1237,7 +1238,9 @@ impl UpdateAndGetParams<f64> for ParamBuilder<f64> {
             })
             .collect();
 
-        Cow::Owned(Vec::new())
+        self.emr_spatial.values = emr_spatial;
+
+        Cow::Owned(self.clone().build_values()) // ideally borrows a single vec
     }
 }
 
@@ -1247,10 +1250,77 @@ impl UpdateAndGetParams<f128> for ParamBuilder<f64> {
         sample: &MomentumSample<f128>,
         graph: &Graph,
     ) -> Cow<Vec<Complex<F<f128>>>> {
-        Cow::Owned(Vec::new())
+        let emr_spatial: Vec<_> = graph
+            .iter_edges()
+            .flat_map(|(pair, edge_id, _)| {
+                if let HedgePair::Paired { .. } = pair {
+                    let emr_vec = graph.loop_momentum_basis.edge_signatures[edge_id]
+                        .compute_three_momentum_from_four(
+                            sample.loop_moms(),
+                            sample.external_moms(),
+                        );
+                    vec![
+                        Complex::new_re(emr_vec.px),
+                        Complex::new_re(emr_vec.py),
+                        Complex::new_re(emr_vec.pz),
+                    ]
+                } else {
+                    vec![]
+                }
+            })
+            .collect();
+
+        let mut new_param_builder = self.higher();
+        new_param_builder.emr_spatial.values = emr_spatial;
+
+        Cow::Owned(new_param_builder.build_values())
     }
 }
 
+impl<T: FloatLike> ParamBuilder<T>
+where
+    T::Higher: FloatLike,
+    T::Lower: FloatLike,
+{
+    fn higher(&self) -> ParamBuilder<T::Higher> {
+        ParamBuilder {
+            fn_map: self.fn_map.clone(),
+            reps: self.reps.clone(),
+            m_uv: self.m_uv.higher(),
+            mu_r_sq: self.mu_r_sq.higher(),
+            model_parameters: self.model_parameters.higher(),
+            external_energies: self.external_energies.higher(),
+            external_spatial: self.external_spatial.higher(),
+            polarizations: self.polarizations.higher(),
+            emr_spatial: self.emr_spatial.higher(),
+            tstar: self.tstar.higher(),
+            h_function: self.h_function.higher(),
+            derivative_at_tstar: self.derivative_at_tstar.higher(),
+            uv_damp: self.uv_damp.higher(),
+            radius: self.radius.higher(),
+            radius_star: self.radius_star.higher(),
+        }
+    }
+    fn lower(&self) -> ParamBuilder<T::Lower> {
+        ParamBuilder {
+            fn_map: self.fn_map.clone(),
+            reps: self.reps.clone(),
+            m_uv: self.m_uv.lower(),
+            mu_r_sq: self.mu_r_sq.lower(),
+            model_parameters: self.model_parameters.lower(),
+            external_energies: self.external_energies.lower(),
+            external_spatial: self.external_spatial.lower(),
+            polarizations: self.polarizations.lower(),
+            emr_spatial: self.emr_spatial.lower(),
+            tstar: self.tstar.lower(),
+            h_function: self.h_function.lower(),
+            derivative_at_tstar: self.derivative_at_tstar.lower(),
+            uv_damp: self.uv_damp.lower(),
+            radius: self.radius.lower(),
+            radius_star: self.radius_star.lower(),
+        }
+    }
+}
 impl<T: FloatLike> ParamBuilder<T> {
     pub fn validate(&self) {
         debug!("Validating mu_r_sq");
@@ -1325,7 +1395,7 @@ impl<T: FloatLike> ParamBuilder<T> {
         a
     }
 
-    fn add_tagged_function(
+    pub fn add_tagged_function(
         &mut self,
         name: Symbol,
         tags: Vec<Atom>,
@@ -1333,12 +1403,13 @@ impl<T: FloatLike> ParamBuilder<T> {
         args: Vec<Symbol>,
         body: Atom,
     ) -> Result<(), &str> {
-        if args.len() == 0 {
-            self.reps.push((
-                FunctionBuilder::new(name).add_args(&tags).finish(),
-                body.clone(),
-            ))
-        }
+        self.reps.push((
+            FunctionBuilder::new(name)
+                .add_args(&tags)
+                .add_args(&args)
+                .finish(),
+            body.clone(),
+        ));
 
         self.fn_map
             .add_tagged_function(name, tags, rename, args, body)

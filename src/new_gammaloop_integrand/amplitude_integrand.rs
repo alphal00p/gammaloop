@@ -76,7 +76,7 @@ impl AmplitudeGraphTerm {
             }
         }
 
-        debug!("Sample: \n\t{}", momentum_sample);
+        // debug!("Sample: \n\t{}", momentum_sample);
 
         let result = match momentum_sample.sample.orientation {
             Some(orientation_id) => {
@@ -88,8 +88,8 @@ impl AmplitudeGraphTerm {
             None => {
                 let evaluator = &self.integrand_evaluator_all_orientations;
 
-                let replaced = self.param_builder.replace_non_emr(evaluator.expr.clone());
-                println!("replaced: {:+>}", replaced.expand());
+                // let replaced = self.param_builder.replace_non_emr(evaluator.expr.clone());
+                // println!("replaced: {:+>}", replaced.collect_num());
                 // evaluator.validate(&param_builder);
                 let a = T::get_parameters(&mut self.param_builder, &self.graph, momentum_sample);
                 // self.param_builder.validate();
