@@ -31,14 +31,30 @@ use crate::signature::LoopExtSignature;
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct OverlapGroup {
     pub existing_esurfaces: Vec<ExistingEsurfaceId>,
+    pub complement: Vec<ExistingEsurfaceId>,
     pub center: LoopMomenta<F<f64>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct OverlapStructure {
     pub overlap_groups: Vec<OverlapGroup>,
+    pub existing_esurfaces: ExistingEsurfaces,
 }
 
+impl OverlapStructure {
+    pub fn fill_in_complements(&mut self) {
+        for group in self.overlap_groups.iter_mut() {
+            group.complement = self
+                .existing_esurfaces
+                .iter_enumerated()
+                .map(|(existing_esurface_id, _)| existing_esurface_id)
+                .filter(|&existing_esurface_id| {
+                    !group.existing_esurfaces.contains(&existing_esurface_id)
+                })
+                .collect();
+        }
+    }
+}
 /// Helper struct to construct the socp problem
 struct PropagatorConstraint<'a> {
     propagator_id: EdgeIndex,    // index into the graph's edges
@@ -306,6 +322,7 @@ pub(crate) fn find_maximal_overlap(
 ) -> OverlapStructure {
     let mut res = OverlapStructure {
         overlap_groups: vec![],
+        existing_esurfaces: existing_esurfaces.clone(),
     };
 
     let all_existing_esurfaces = existing_esurfaces
@@ -357,8 +374,11 @@ pub(crate) fn find_maximal_overlap(
         let single_group = OverlapGroup {
             existing_esurfaces: all_existing_esurfaces,
             center: global_center_f,
+            complement: vec![],
         };
         res.overlap_groups.push(single_group);
+
+        res.fill_in_complements();
         return res;
     }
 
@@ -384,8 +404,10 @@ pub(crate) fn find_maximal_overlap(
         let single_group = OverlapGroup {
             existing_esurfaces: all_existing_esurfaces,
             center,
+            complement: vec![],
         };
         res.overlap_groups.push(single_group);
+        res.fill_in_complements();
         return res;
     }
 
@@ -442,6 +464,7 @@ pub(crate) fn find_maximal_overlap(
 
                     panic!("{}", error_message)
                 }),
+                complement: vec![],
             });
             num_disconnected_surfaces += 1;
         }
@@ -452,6 +475,7 @@ pub(crate) fn find_maximal_overlap(
     }
 
     if num_disconnected_surfaces == existing_esurfaces.len() {
+        res.fill_in_complements();
         return res;
     }
 
@@ -481,6 +505,7 @@ pub(crate) fn find_maximal_overlap(
                 res.overlap_groups.push(OverlapGroup {
                     existing_esurfaces: subset.clone(),
                     center,
+                    complement: vec![],
                 });
             }
         }
@@ -495,6 +520,7 @@ pub(crate) fn find_maximal_overlap(
         subset_size -= 1;
     }
 
+    res.fill_in_complements();
     res
 }
 
@@ -698,6 +724,7 @@ mod tests {
     use super::*;
     use itertools::Itertools;
     use spenso::algebra::complex::Complex;
+    use tabled::assert;
     use typed_index_collections::ti_vec;
 
     use crate::{
@@ -918,8 +945,10 @@ mod tests {
                 .map(|(group, center)| OverlapGroup {
                     existing_esurfaces: group,
                     center,
+                    complement: vec![],
                 })
                 .collect_vec(),
+            existing_esurfaces: ti_vec![],
         };
 
         let fake_subset = vec![
@@ -977,6 +1006,7 @@ mod tests {
 
         let res = OverlapStructure {
             overlap_groups: vec![],
+            existing_esurfaces: box4e.existing_esurfaces.clone(),
         };
         let subsets_3 =
             esurface_pairs.construct_possible_subsets_of_len(&box4e.existing_esurfaces, 3, &res);
@@ -1009,6 +1039,7 @@ mod tests {
             let center = &overlap_group.center;
 
             assert_eq!(esurfaces.len(), 2);
+            assert_eq!(overlap_group.complement.len(), 2);
 
             for esurface in esurfaces.iter() {
                 let esurfaec_val = box4e.esurfaces[box4e.existing_esurfaces[*esurface]]
@@ -1057,6 +1088,8 @@ mod tests {
 
                 assert!(esurfaec_val < F(0.0));
             }
+
+            assert_eq!(overlap_group.complement.len(), 3);
         }
     }
 
@@ -1081,5 +1114,10 @@ mod tests {
         println!("center: {:#?}", maximal_overlap);
 
         assert_eq!(maximal_overlap.overlap_groups.len(), 1);
+        assert_eq!(
+            maximal_overlap.overlap_groups[0].existing_esurfaces.len(),
+            1
+        );
+        assert!(maximal_overlap.overlap_groups[0].complement.is_empty());
     }
 }
