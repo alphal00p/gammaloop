@@ -76,11 +76,13 @@ impl AmplitudeGraphTerm {
             }
         }
 
-        debug!("Sample: \n\t{}", momentum_sample);
+        debug!("Sample: \n{:>40}", momentum_sample);
+        let hel = settings.kinematics.externals.get_helicities();
 
         let result = match momentum_sample.sample.orientation {
             Some(orientation_id) => {
-                let a = T::get_parameters(&mut self.param_builder, &self.graph, momentum_sample);
+                let a =
+                    T::get_parameters(&mut self.param_builder, &self.graph, momentum_sample, hel);
                 let orientation_id = AmplitudeOrientationID::from(orientation_id);
                 let orientation_evaluator = &self.integrand_evaluators[orientation_id];
                 <T as GenericEvaluatorFloat>::get_evaluator(orientation_evaluator)(&a)
@@ -91,7 +93,8 @@ impl AmplitudeGraphTerm {
                 // let replaced = self.param_builder.replace_non_emr(evaluator.expr.clone());
                 // println!("replaced: {:+>}", replaced.collect_num());
                 // evaluator.validate(&param_builder);
-                let a = T::get_parameters(&mut self.param_builder, &self.graph, momentum_sample);
+                let a =
+                    T::get_parameters(&mut self.param_builder, &self.graph, momentum_sample, hel);
                 // self.param_builder.validate();
 
                 <T as GenericEvaluatorFloat>::get_evaluator(evaluator)(&a)

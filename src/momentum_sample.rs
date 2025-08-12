@@ -224,20 +224,33 @@ pub struct MomentumSample<T: FloatLike> {
 
 impl<T: FloatLike> Display for MomentumSample<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Sample")?;
-        write!(f, "\n\tloop momenta: ")?;
+        let mut table = tabled::builder::Builder::new();
+        table.push_record(["Sample"]);
+        table.push_record(["Loop Momenta", "p_x", "p_y", "p_z"]);
+        // table
+
         for (index, loop_mom) in self.sample.loop_moms.iter().enumerate() {
-            write!(f, "\n\t\tloop momentum {}: {}", index, loop_mom)?;
+            table.push_record([
+                index.to_string(),
+                loop_mom.px.to_string(),
+                loop_mom.py.to_string(),
+                loop_mom.pz.to_string(),
+            ]);
         }
-        write!(f, "\n\texternal momenta: ")?;
+
+        table.push_record(["External Momenta", "E", "p_x", "p_y", "p_z"]);
         for (index, external_mom) in self.sample.external_moms.iter().enumerate() {
-            write!(f, "\n\t\texternal momentum {}: {}", index, external_mom)?;
+            table.push_record([
+                index.to_string(),
+                external_mom.temporal.to_string(),
+                external_mom.spatial.px.to_string(),
+                external_mom.spatial.py.to_string(),
+                external_mom.spatial.pz.to_string(),
+            ]);
         }
-        // write!(f, "\n\tpolarizations: ")?;
-        // for (index, polarization) in self.sample.polarizations.iter().enumerate() {
-        //     write!(f, "\n\t\tpolarization {}: {}", index, polarization)?;
-        // }
-        write!(f, "\n\tjacobian: {:+e}", self.sample.jacobian)
+
+        table.push_record(["Jacobian".into(), format!("{:+e}", self.sample.jacobian)]);
+        table.build().with(Style::rounded()).fmt(f)
     }
 }
 
@@ -520,8 +533,8 @@ impl<T: FloatLike> MomentumSample<T> {
     #[inline]
     pub(crate) fn get_rotated_sample(&self, rotation: &Rotation) -> Self {
         Self {
-            sample: self.sample.clone(),
-            rotated_sample: Some(self.sample.get_rotated_sample(rotation)),
+            sample: self.sample.get_rotated_sample(rotation),
+            rotated_sample: None, //Some(self.sample.get_rotated_sample(rotation)),
             uuid: self.uuid,
         }
     }

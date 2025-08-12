@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::fmt::Display;
 use std::fs;
 use std::ops::Deref;
 use std::path::Path;
@@ -20,6 +21,7 @@ use crate::utils::{
     ToCoefficient, F, GS, TENSORLIB,
 };
 use bincode_trait_derive::{Decode, Encode};
+use color_eyre::owo_colors::OwoColorize;
 use colored::Colorize;
 use derive_more::{From, Into};
 use enum_dispatch::enum_dispatch;
@@ -45,6 +47,7 @@ use symbolica::evaluate::{
 };
 use symbolica::id::Replacement;
 use symbolica::numerical_integration::{ContinuousGrid, DiscreteGrid, Grid, Sample};
+use tabled::settings::Style;
 use typed_index_collections::TiVec;
 pub mod amplitude_integrand;
 pub mod cross_section_integrand;
@@ -363,6 +366,7 @@ pub trait GenericEvaluatorFloat<T: FloatLike = Self> {
         param_builder: &'a mut ParamBuilder,
         graph: &'a Graph,
         sample: &'a MomentumSample<T>,
+        helicities: &[Helicity],
     ) -> Cow<'a, Vec<Complex<F<T>>>>;
 }
 
@@ -390,8 +394,9 @@ impl GenericEvaluatorFloat for f64 {
         param_builder: &'a mut ParamBuilder,
         graph: &'a Graph,
         sample: &'a MomentumSample<Self>,
+        helicities: &[Helicity],
     ) -> Cow<'a, Vec<Complex<F<Self>>>> {
-        param_builder.update_emr_and_get_params(sample, graph)
+        param_builder.update_emr_and_get_params(sample, graph, helicities)
     }
 
     // fn get_debug_evaluator(
@@ -448,8 +453,9 @@ impl GenericEvaluatorFloat for f128 {
         param_builder: &'a mut ParamBuilder,
         graph: &'a Graph,
         sample: &'a MomentumSample<Self>,
+        helicities: &[Helicity],
     ) -> Cow<'a, Vec<Complex<F<Self>>>> {
-        param_builder.update_emr_and_get_params(sample, graph)
+        param_builder.update_emr_and_get_params(sample, graph, helicities)
     }
 }
 
@@ -1211,6 +1217,7 @@ pub trait UpdateAndGetParams<T: FloatLike> {
         &'a mut self,
         sample: &'a MomentumSample<T>,
         graph: &'a Graph,
+        helicities: &[Helicity],
     ) -> Cow<'a, Vec<Complex<F<T>>>>;
 }
 
@@ -1219,6 +1226,7 @@ impl UpdateAndGetParams<f64> for ParamBuilder<f64> {
         &'a mut self,
         sample: &'a MomentumSample<f64>,
         graph: &'a Graph,
+        helicities: &[Helicity],
     ) -> Cow<'a, Vec<Complex<F<f64>>>> {
         let emr_spatial: Vec<_> = graph
             .iter_edges()
@@ -1229,6 +1237,7 @@ impl UpdateAndGetParams<f64> for ParamBuilder<f64> {
                             sample.loop_moms(),
                             sample.external_moms(),
                         );
+                    // println!("{edge_id}:{emr_vec}");
                     vec![
                         Complex::new_re(emr_vec.px),
                         Complex::new_re(emr_vec.py),
@@ -1240,7 +1249,12 @@ impl UpdateAndGetParams<f64> for ParamBuilder<f64> {
             })
             .collect();
 
+        self.external_spatial_value(sample);
+        self.external_energies_value(sample);
         self.emr_spatial.values = emr_spatial;
+        self.polarizations_values(graph, sample.external_moms(), helicities);
+
+        // println!("ParamBuilder after eval f64:\n{}", self);
 
         Cow::Owned(self.clone().build_values()) // ideally borrows a single vec
     }
@@ -1251,6 +1265,7 @@ impl UpdateAndGetParams<f128> for ParamBuilder<f64> {
         &mut self,
         sample: &MomentumSample<f128>,
         graph: &Graph,
+        helicities: &[Helicity],
     ) -> Cow<Vec<Complex<F<f128>>>> {
         let emr_spatial: Vec<_> = graph
             .iter_edges()
@@ -1274,6 +1289,11 @@ impl UpdateAndGetParams<f128> for ParamBuilder<f64> {
 
         let mut new_param_builder = self.higher();
         new_param_builder.emr_spatial.values = emr_spatial;
+        new_param_builder.external_spatial_value(sample);
+        new_param_builder.external_energies_value(sample);
+        new_param_builder.polarizations_values(graph, sample.external_moms(), helicities);
+
+        // println!("ParamBuilder before eval f128:\n{}", self);
 
         Cow::Owned(new_param_builder.build_values())
     }
@@ -1381,7 +1401,7 @@ impl<T: FloatLike> ParamBuilder<T> {
             &self.model_parameters,
             &self.external_energies,
             &self.external_spatial,
-            &self.polarizations,
+            // &self.polarizations,
             // &self.emr_spatial,
             &self.tstar,
             &self.h_function,
@@ -1551,6 +1571,8 @@ impl<T: FloatLike> ParamBuilder<T> {
         for (p, a) in pols {
             let extid = graph.loop_momentum_basis.ext_from(p.eid).unwrap();
             let hel = p.hel.unwrap_or(helicities[extid.0]);
+            // println!("MOM:{}", ext[extid]);
+            // println!("Pol {},{},{:?}", extid, hel, p.pol_type);
             let pol = match p.pol_type {
                 PolType::Epsilon => ext[extid].pol(hel),
                 PolType::EpsilonBar => ext[extid].pol(hel).bar(),
@@ -1564,6 +1586,7 @@ impl<T: FloatLike> ParamBuilder<T> {
             };
 
             for (_, val) in pol.tensor.iter_flat() {
+                // println!("{val}");
                 vals.push(val.clone());
             }
         }
@@ -1666,6 +1689,20 @@ impl<T: FloatLike> ParamBuilder<T> {
     }
     pub(crate) fn radius_star_value(&mut self, radius_star: Complex<F<T>>) {
         self.radius_star.values = vec![radius_star];
+    }
+}
+
+impl<T: FloatLike> Display for ParamBuilder<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut table = tabled::builder::Builder::new();
+
+        for i in self {
+            for (v, p) in i.values.iter().zip(i.params.iter()) {
+                table.push_record(vec![p.to_string(), v.to_string()]);
+            }
+        }
+
+        table.build().with(Style::rounded()).to_string().fmt(f)
     }
 }
 

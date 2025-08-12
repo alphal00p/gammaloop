@@ -44,7 +44,7 @@ impl Vertex {
 impl From<&Vertex> for DotVertexData {
     fn from(value: &Vertex) -> Self {
         let mut v = DotVertexData::empty();
-        v.add_statement("name", value.name.clone());
+        v.name = Some(value.name.clone());
         if let Some(vertex_rule) = &value.vertex_rule {
             v.add_statement("int_id", vertex_rule.name.as_str());
         }

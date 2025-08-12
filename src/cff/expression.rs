@@ -181,7 +181,15 @@ impl OrientationData {
             let attr = hedge_pair.fill_color(attr);
             hedge_pair
                 .add_data(graph)
-                .dot_fmt(&mut writer, graph, id, |_| None, self.orientation[id], attr)
+                .dot_fmt(
+                    &mut writer,
+                    graph,
+                    id,
+                    |_| None,
+                    |a| a.to_string(),
+                    self.orientation[id],
+                    attr,
+                )
                 .unwrap();
         }
         writer.push_str("}}");
