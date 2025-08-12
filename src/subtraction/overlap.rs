@@ -724,7 +724,6 @@ mod tests {
     use super::*;
     use itertools::Itertools;
     use spenso::algebra::complex::Complex;
-    use tabled::assert;
     use typed_index_collections::ti_vec;
 
     use crate::{

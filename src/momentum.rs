@@ -738,6 +738,20 @@ where
     }
 }
 
+impl<T> Sub<&ThreeMomentum<T>> for &ThreeMomentum<T>
+where
+    for<'a> &'a T: Sub<&'a T, Output = T>,
+{
+    type Output = ThreeMomentum<T>;
+    fn sub(self, rhs: &ThreeMomentum<T>) -> Self::Output {
+        ThreeMomentum {
+            px: &self.px - &rhs.px,
+            py: &self.py - &rhs.py,
+            pz: &self.pz - &rhs.pz,
+        }
+    }
+}
+
 impl<T> SubAssign<ThreeMomentum<T>> for ThreeMomentum<T>
 where
     T: SubAssign<T>,

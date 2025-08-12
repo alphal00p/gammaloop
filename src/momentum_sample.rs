@@ -10,7 +10,7 @@ use bincode_trait_derive::{Decode, Encode};
 use derive_more::{From, Into};
 use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
-use std::ops::{Index, IndexMut};
+use std::ops::{Index, IndexMut, Sub};
 use symbolica::domains::float::NumericalFloatLike;
 use tabled::settings::Style;
 use typed_index_collections::TiVec;
@@ -145,7 +145,7 @@ impl<T> IndexMut<LoopIndex> for LoopMomenta<T> {
 }
 
 impl<T: FloatLike> LoopMomenta<F<T>> {
-    pub(crate) fn hyper_radius(&self, subspace: Subspace) -> F<T> {
+    pub(crate) fn hyper_radius_squared(&self, subspace: Subspace) -> F<T> {
         let zero = self.0[0].px.zero();
         match subspace {
             None => self.iter().fold(zero, |acc, x| acc + x.norm_squared()),
@@ -158,8 +158,27 @@ impl<T: FloatLike> LoopMomenta<F<T>> {
     pub(crate) fn rescale(&self, factor: &F<T>, subspace: Subspace) -> Self {
         match subspace {
             None => LoopMomenta::from_iter(self.iter().map(|k| k * factor)),
+            // this branch is wrong
             Some(subspace) => LoopMomenta::from_iter(subspace.iter().map(|&i| &self[i] * factor)),
         }
+    }
+
+    pub(crate) fn rotate(&self, rotation: &Rotation) -> Self {
+        LoopMomenta::from_iter(self.iter().map(|k| k.rotate(rotation)))
+    }
+}
+
+impl LoopMomenta<F<f64>> {
+    pub(crate) fn cast<T: FloatLike>(&self) -> LoopMomenta<F<T>> {
+        LoopMomenta::from_iter(self.iter().map(|m| m.map(&|x| F::from_ff64(x))))
+    }
+}
+
+impl<T: FloatLike> Sub<&LoopMomenta<F<T>>> for &LoopMomenta<F<T>> {
+    type Output = LoopMomenta<F<T>>;
+
+    fn sub(self, rhs: &LoopMomenta<F<T>>) -> Self::Output {
+        LoopMomenta::from_iter(self.iter().zip(rhs.iter()).map(|(l, r)| l - r))
     }
 }
 
