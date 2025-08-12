@@ -29,7 +29,7 @@ use crate::{
     new_cs::{AmplitudeGraph, CrossSection, CrossSectionGraph, CutId, ProcessDefinition},
     new_graph::{parse::IntoGraph, ExternalConnection, FeynmanGraph, Graph},
     signature::LoopExtSignature,
-    tests_from_pytest::load_generic_model,
+    utils::test_utils::load_generic_model,
     utils::{external_energy_atom_from_index, F},
     ProcessSettings, Settings,
 };

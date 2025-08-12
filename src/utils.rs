@@ -3758,3 +3758,5 @@ pub(crate) fn cut_energy(index: EdgeIndex) -> Atom {
 pub(crate) fn external_energy_atom_from_index(index: EdgeIndex) -> Atom {
     GS.emr_mom(index, Atom::from(ExpandedIndex::from_iter([0])))
 }
+
+pub mod test_utils;

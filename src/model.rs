@@ -1,4 +1,3 @@
-use crate::graph::Shifts;
 use crate::momentum::{FourMomentum, Helicity, Polarization};
 use crate::numerator::aind::Aind;
 use crate::utils::{self, FloatLike, F, W_};
@@ -379,76 +378,6 @@ impl VertexRule {
     }
 }
 
-#[derive(Debug, Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
-#[trait_decode(trait = symbolica::state::HasStateMap)]
-pub struct VertexSlots {
-    pub(crate) edge_slots: Vec<EdgeSlots<Minkowski>>,
-    pub coupling_indices: Option<[Slot<Euclidean>; 2]>, //None for external vertices
-    pub internal_dummy: DummyIndices,
-}
-
-impl VertexSlots {
-    pub(crate) fn shift_internals(&mut self, shifts: &Shifts) {
-        let lorentz_shift = shifts.lorentz + shifts.spin;
-        let color_shift = shifts.color;
-
-        self.internal_dummy
-            .color
-            .iter_mut()
-            .for_each(|c| *c += color_shift.into());
-
-        self.internal_dummy
-            .lorentz_and_spin
-            .iter_mut()
-            .for_each(|l| *l += lorentz_shift.into());
-    }
-}
-
-#[derive(
-    Debug,
-    Clone,
-    Serialize,
-    Deserialize,
-    Default,
-    bincode_trait_derive::Encode,
-    bincode_trait_derive::Decode,
-)]
-#[trait_decode(trait = symbolica::state::HasStateMap)]
-pub struct DummyIndices {
-    pub lorentz_and_spin: Vec<AbstractIndex>,
-    pub color: Vec<AbstractIndex>,
-}
-
-impl std::fmt::Display for VertexSlots {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        for edge_slot in &self.edge_slots {
-            write!(f, "{}", edge_slot)?;
-        }
-        if let Some([i, j]) = self.coupling_indices {
-            write!(f, "{} {}", i, j)
-        } else {
-            write!(f, "None")
-        }
-    }
-}
-
-impl Index<usize> for VertexSlots {
-    type Output = EdgeSlots<Minkowski>;
-    fn index(&self, index: usize) -> &Self::Output {
-        &self.edge_slots[index]
-    }
-}
-
-impl From<EdgeSlots<Minkowski>> for VertexSlots {
-    fn from(value: EdgeSlots<Minkowski>) -> Self {
-        VertexSlots {
-            edge_slots: vec![value],
-            coupling_indices: None,
-            internal_dummy: Default::default(),
-        }
-    }
-}
-
 impl VertexRule {
     pub(crate) fn coupling_orders(&self) -> AHashMap<SmartString<LazyCompact>, usize> {
         let mut node_coupling_orders = AHashMap::default();
@@ -486,36 +415,6 @@ impl VertexRule {
             dod = 0;
         }
         dod
-    }
-
-    fn generate_dummy_indices(&self, shifts: &mut Shifts) -> DummyIndices {
-        let mut lorentz_and_spin = vec![];
-        let mut color = vec![];
-
-        let n_color_dummies = self.color_structures.number_of_dummies();
-        for a in 0..n_color_dummies {
-            color.push((shifts.colordummy + a).into());
-        }
-
-        shifts.colordummy += n_color_dummies;
-
-        let n_lorentz_dummies = self
-            .lorentz_structures
-            .iter()
-            .map(|a| Self::n_dummy_atom(&a.structure))
-            .max()
-            .unwrap_or(0);
-
-        for a in 0..n_lorentz_dummies {
-            lorentz_and_spin.push((shifts.lorentzdummy + a).into());
-        }
-
-        shifts.lorentzdummy += n_lorentz_dummies;
-
-        DummyIndices {
-            lorentz_and_spin,
-            color,
-        }
     }
 
     fn n_dummy_atom(atom: &Atom) -> usize {
@@ -566,43 +465,6 @@ impl VertexRule {
         (n_color_dummies, n_lorentz_dummies)
     }
 
-    pub(crate) fn generate_vertex_slots(&self, mut shifts: Shifts) -> (VertexSlots, Shifts) {
-        let mut edge_slots = vec![];
-        for p in &self.particles {
-            let (e, s) = p.0.slots(shifts);
-            edge_slots.push(e);
-            shifts = s;
-        }
-
-        let Shifts {
-            coupling: coupling_shift,
-            ..
-        } = shifts;
-
-        let i_dim = self.color_structures.len();
-        let j_dim = self.lorentz_structures.len();
-
-        let coupling_indices = Some([
-            Euclidean {}.new_slot(i_dim, coupling_shift),
-            Euclidean {}.new_slot(j_dim, coupling_shift + 1),
-        ]);
-
-        (
-            VertexSlots {
-                edge_slots,
-                coupling_indices,
-                internal_dummy: self.generate_dummy_indices(&mut shifts),
-            },
-            Shifts {
-                lorentz: shifts.lorentz,
-                spin: shifts.spin,
-                lorentzdummy: shifts.lorentzdummy,
-                color: shifts.color,
-                colordummy: shifts.colordummy,
-                coupling: coupling_shift + 2,
-            },
-        )
-    }
     pub(crate) fn from_serializable_vertex_rule(
         model: &Model,
         vertex_rule: &SerializableVertexRule,
@@ -1208,28 +1070,6 @@ impl Particle {
         };
 
         (vec![rep.slot(shift)], shift + 1)
-    }
-
-    pub(crate) fn slots<LR: BaseRepName>(&self, shifts: Shifts) -> (EdgeSlots<LR>, Shifts) {
-        let (lorentz, shift_lor) = self.lorentz_slots(shifts.lorentz);
-        let (spin, shift_spin) = self.spin_slots(shifts.spin);
-        let (color, shift_color) = self.color_slots(shifts.color);
-
-        (
-            EdgeSlots {
-                lorentz,
-                spin,
-                color,
-            },
-            Shifts {
-                lorentz: shift_lor,
-                lorentzdummy: shifts.lorentzdummy,
-                colordummy: shifts.colordummy,
-                spin: shift_spin,
-                color: shift_color,
-                coupling: shifts.coupling,
-            },
-        )
     }
 
     pub(crate) fn from_serializable_particle(
@@ -2454,8 +2294,7 @@ mod tests {
     use crate::{
         model::{ArcPropagator, ArcVertexRule},
         momentum::FourMomentum,
-        tests_from_pytest::load_generic_model,
-        utils::F,
+        utils::{test_utils::load_generic_model, F},
     };
 
     use super::ArcParticle;

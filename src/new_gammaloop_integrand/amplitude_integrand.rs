@@ -149,7 +149,7 @@ pub struct AmplitudeIntegrand {
 pub struct AmplitudeIntegrandData {
     pub rotations: Vec<Rotation>,
     pub name: String,
-    pub polarizations: Vec<Polarizations>,
+
     pub graph_terms: Vec<AmplitudeGraphTerm>,
     pub external_signature: SignatureLike<ExternalIndex>,
     // pub builder_cache: ParamBuilder<f64>,
@@ -207,10 +207,6 @@ impl GammaloopIntegrand for AmplitudeIntegrand {
 
     fn get_graph_mut(&mut self, graph_id: usize) -> &mut Self::G {
         &mut self.data.graph_terms[graph_id]
-    }
-
-    fn get_polarizations(&self) -> &[Polarizations] {
-        &self.data.polarizations
     }
 
     fn get_dependent_momenta_constructor(&self) -> DependentMomentaConstructor {

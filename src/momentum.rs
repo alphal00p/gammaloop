@@ -6,6 +6,7 @@ use std::{
 
 use bincode_trait_derive::{Decode, Encode};
 use eyre::Context;
+use linnet::half_edge::involution::EdgeIndex;
 use momtrop::vector::Vector;
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
@@ -1158,7 +1159,18 @@ impl<T: RefZero, U: RefZero> RefZero<FourMomentum<T, U>> for &FourMomentum<T, U>
     }
 }
 
-#[derive(Debug, PartialEq, Clone, Copy, Serialize, Deserialize, Encode, Decode)]
+#[derive(
+    Debug, PartialEq, Clone, Copy, Serialize, Deserialize, Encode, Decode, Eq, PartialOrd, Ord,
+)]
+pub struct PolDef {
+    pub pol_type: PolType,
+    pub eid: EdgeIndex,
+    pub hel: Option<Helicity>,
+}
+
+#[derive(
+    Debug, PartialEq, Clone, Copy, Serialize, Deserialize, Encode, Decode, Eq, PartialOrd, Ord,
+)]
 pub enum PolType {
     U,
     V,

@@ -61,42 +61,26 @@ impl GammaLoopSample<f64> {
         &self,
         rotation: &Rotation,
         rotated_externals: Externals,
-        rotated_polarizations: Polarizations,
     ) -> Self {
         if rotation.is_identity() {
             return self.clone();
         }
 
         let rotated_externals = rotated_externals.get_indep_externals().into();
-        let rotated_polarizations = match rotated_polarizations {
-            Polarizations::None => TiVec::new(),
-            Polarizations::Constant { polarizations } => polarizations.into(),
-        };
+
         match self {
-            GammaLoopSample::Default(sample) => {
-                GammaLoopSample::Default(sample.get_rotated_sample_cached(
-                    rotation,
-                    rotated_externals,
-                    rotated_polarizations,
-                ))
-            }
+            GammaLoopSample::Default(sample) => GammaLoopSample::Default(
+                sample.get_rotated_sample_cached(rotation, rotated_externals),
+            ),
             GammaLoopSample::MultiChanneling { alpha, sample } => {
                 GammaLoopSample::MultiChanneling {
                     alpha: *alpha,
-                    sample: sample.get_rotated_sample_cached(
-                        rotation,
-                        rotated_externals,
-                        rotated_polarizations,
-                    ),
+                    sample: sample.get_rotated_sample_cached(rotation, rotated_externals),
                 }
             }
             GammaLoopSample::DiscreteGraph { graph_id, sample } => GammaLoopSample::DiscreteGraph {
                 graph_id: *graph_id,
-                sample: sample.get_rotated_sample_cached(
-                    rotation,
-                    rotated_externals,
-                    rotated_polarizations,
-                ),
+                sample: sample.get_rotated_sample_cached(rotation, rotated_externals),
             },
         }
     }
@@ -256,33 +240,20 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
         &self,
         rotation: &Rotation,
         rotated_externals: ExternalFourMomenta<F<T>>,
-        rotated_polarizations: PolarizationVectors<Complex<F<T>>>,
     ) -> Self {
         match self {
-            DiscreteGraphSample::Default(sample) => {
-                DiscreteGraphSample::Default(sample.get_rotated_sample_cached(
-                    rotation,
-                    rotated_externals,
-                    rotated_polarizations,
-                ))
-            }
+            DiscreteGraphSample::Default(sample) => DiscreteGraphSample::Default(
+                sample.get_rotated_sample_cached(rotation, rotated_externals),
+            ),
             DiscreteGraphSample::MultiChanneling { alpha, sample } => {
                 DiscreteGraphSample::MultiChanneling {
                     alpha: alpha.clone(),
-                    sample: sample.get_rotated_sample_cached(
-                        rotation,
-                        rotated_externals,
-                        rotated_polarizations,
-                    ),
+                    sample: sample.get_rotated_sample_cached(rotation, rotated_externals),
                 }
             }
-            DiscreteGraphSample::Tropical(sample) => {
-                DiscreteGraphSample::Tropical(sample.get_rotated_sample_cached(
-                    rotation,
-                    rotated_externals,
-                    rotated_polarizations,
-                ))
-            }
+            DiscreteGraphSample::Tropical(sample) => DiscreteGraphSample::Tropical(
+                sample.get_rotated_sample_cached(rotation, rotated_externals),
+            ),
             DiscreteGraphSample::DiscreteMultiChanneling {
                 alpha,
                 channel_id,
@@ -290,11 +261,7 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
             } => DiscreteGraphSample::DiscreteMultiChanneling {
                 alpha: alpha.clone(),
                 channel_id: *channel_id,
-                sample: sample.get_rotated_sample_cached(
-                    rotation,
-                    rotated_externals,
-                    rotated_polarizations,
-                ),
+                sample: sample.get_rotated_sample_cached(rotation, rotated_externals),
             },
         }
     }
@@ -436,14 +403,12 @@ pub(crate) fn parameterize<T: FloatLike, I: GammaloopIntegrand>(
     let (discrete_indices, xs) = unwrap_sample(sample_point);
     let settings = integrand.get_settings();
     let dependent_momenta_constructor = integrand.get_dependent_momenta_constructor();
-    let polarizations = integrand.get_polarizations();
 
     match &settings.sampling {
         SamplingSettings::Default(parameterization_settings) => {
             Ok(GammaLoopSample::Default(default_parametrize(
                 &xs,
                 dependent_momenta_constructor,
-                polarizations,
                 parameterization_settings,
                 &settings.kinematics,
                 None,
@@ -455,7 +420,6 @@ pub(crate) fn parameterize<T: FloatLike, I: GammaloopIntegrand>(
                 sample: default_parametrize(
                     &xs,
                     dependent_momenta_constructor,
-                    polarizations,
                     &multichanneling_settings.parameterization_settings,
                     &settings.kinematics,
                     None,
@@ -477,7 +441,6 @@ pub(crate) fn parameterize<T: FloatLike, I: GammaloopIntegrand>(
                         sample: DiscreteGraphSample::Default(default_parametrize(
                             &xs,
                             dependent_momenta_constructor,
-                            polarizations,
                             parameterization_settings,
                             &settings.kinematics,
                             orientation_id,
@@ -492,7 +455,6 @@ pub(crate) fn parameterize<T: FloatLike, I: GammaloopIntegrand>(
                             sample: default_parametrize(
                                 &xs,
                                 dependent_momenta_constructor,
-                                polarizations,
                                 &multichanneling_settings.parameterization_settings,
                                 &settings.kinematics,
                                 orientation_id,
@@ -554,7 +516,6 @@ pub(crate) fn parameterize<T: FloatLike, I: GammaloopIntegrand>(
                         loop_moms,
                         &settings.kinematics.externals,
                         sampling_result.jacobian,
-                        &integrand.get_polarizations()[0],
                         dependent_momenta_constructor,
                         orientation_id,
                     );
@@ -574,7 +535,6 @@ pub(crate) fn parameterize<T: FloatLike, I: GammaloopIntegrand>(
                             sample: default_parametrize(
                                 &xs,
                                 dependent_momenta_constructor,
-                                polarizations,
                                 &multichanneling_settings.parameterization_settings,
                                 &settings.kinematics,
                                 orientation_id,
@@ -592,7 +552,6 @@ pub(crate) fn parameterize<T: FloatLike, I: GammaloopIntegrand>(
 fn default_parametrize<T: FloatLike>(
     xs: &[F<T>],
     dependent_momenta_constructor: DependentMomentaConstructor,
-    polarizations: &[Polarizations],
     parameterization_settings: &ParameterizationSettings,
     kinematics: &KinematicsSettings,
     orientation: Option<usize>,
@@ -614,7 +573,6 @@ fn default_parametrize<T: FloatLike>(
         loop_moms,
         externals,
         jacobian,
-        &polarizations[0],
         dependent_momenta_constructor,
         orientation,
     )

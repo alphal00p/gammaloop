@@ -12,19 +12,17 @@ pub mod api;
 
 pub mod cff;
 pub mod cli;
-pub mod cross_section;
 pub mod debug_info;
 pub mod evaluation_result;
 pub mod feyngen;
-pub mod gammaloop_integrand;
-pub mod graph;
+// pub mod gammaloop_integrand;
 pub mod h_function_test;
 pub mod initialisation;
 pub mod inspect;
 pub mod integrands;
 pub mod integrate;
 pub mod ir_test;
-pub mod ltd;
+// pub mod ltd;
 pub mod model;
 pub mod momentum;
 pub mod momentum_sample;
@@ -37,7 +35,7 @@ pub mod signature;
 pub mod subtraction;
 pub mod symbolica_ext;
 pub mod tests;
-pub mod tests_from_pytest;
+// pub mod tests_from_pytest;
 pub mod utils;
 pub mod uv;
 use crate::utils::f128;
@@ -45,7 +43,6 @@ use clap::Args;
 use color_eyre::{Help, Report, Result};
 #[allow(unused)]
 use colored::Colorize;
-use cross_section::Amplitude;
 use eyre::WrapErr;
 use idenso::representations::initialize;
 use integrands::*;
@@ -382,21 +379,6 @@ pub struct Settings {
 }
 
 impl Settings {
-    pub(crate) fn sync_with_amplitude(&mut self, amplitude: &Amplitude) -> Result<()> {
-        let external_signature = amplitude.external_signature();
-        let external_particle_spin = amplitude.external_particle_spin_and_masslessness();
-
-        self.kinematics
-            .externals
-            .set_dependent_at_end(&external_signature)?;
-
-        self.kinematics
-            .externals
-            .validate_helicities(&external_particle_spin)?;
-
-        Ok(())
-    }
-
     pub(crate) fn from_file(filename: impl AsRef<Path>) -> Result<Settings, Report> {
         let filename = filename.as_ref();
         let f = File::open(filename)
@@ -564,8 +546,6 @@ pub enum Externals {
     },
     // add different type of pdfs here when needed
 }
-
-impl Externals {}
 
 impl Rotatable for Externals {
     fn rotate(&self, rotation: &momentum::Rotation) -> Self {

@@ -222,7 +222,6 @@ impl CrossSectionGraphTerm {
                         loop_moms,
                         &settings.kinematics.externals,
                         F::from_f64(1.0),
-                        &polarizations,
                         dependent_momenta_constructor,
                         None,
                     );

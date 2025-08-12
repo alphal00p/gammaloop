@@ -6,12 +6,8 @@ use crate::cff::esurface::{
 use crate::cff::expression;
 use crate::cff::generation::generate_cff_expression;
 use crate::cff::hsurface::HsurfaceCollection;
-use crate::cross_section::{Amplitude, OutputMetaData, OutputType};
 use crate::gammaloop_integrand::{DefaultSample, GammaLoopIntegrand};
-use crate::graph::{
-    BareGraph, DerivedGraphData, EdgeType, Graph, HasVertexInfo, InteractionVertexInfo,
-    LoopMomentumBasisSpecification, SerializableGraph, VertexInfo,
-};
+
 use crate::model::{LorentzStructure, Model};
 use crate::momentum::{
     Dep, ExternalMomenta, FourMomentum, Helicity, Rotation, SignOrZero, Signature, ThreeMomentum,
@@ -188,10 +184,6 @@ where
         loop_moms,
         &externals,
         jacobian,
-        &externals.generate_polarizations(
-            &bare_graph.external_particles(),
-            DependentMomentaConstructor::Amplitude(&external_signature),
-        ),
         DependentMomentaConstructor::Amplitude(&external_signature),
         None,
     )
@@ -242,22 +234,9 @@ pub(crate) fn kinematics_builder(
         loop_moms,
         &externals,
         jacobian,
-        &externals.generate_polarizations(
-            &bare_graph.external_particles(),
-            DependentMomentaConstructor::Amplitude(&external_signature),
-        ),
         DependentMomentaConstructor::Amplitude(&external_signature),
         None,
     )
-}
-pub(crate) fn load_generic_model(name: &str) -> Model {
-    Model::from_file(String::from(
-        Path::new(&output_dir())
-            .join(format!("gammaloop_models/{}.yaml", name))
-            .to_str()
-            .unwrap(),
-    ))
-    .unwrap()
 }
 
 fn output_dir() -> String {
@@ -782,7 +761,6 @@ fn pytest_scalar_massless_triangle() {
         LoopMomenta::from(vec![k]),
         &externals,
         F(1.),
-        &crate::Polarizations::None,
         DependentMomentaConstructor::Amplitude(&ExternalSignature::from_iter([1i8, 1, -1])),
         None,
     );
@@ -842,7 +820,6 @@ fn pytest_scalar_fishnet_2x2() {
             ],
         },
         F(1.),
-        &Polarizations::None,
         DependentMomentaConstructor::Amplitude(&ExternalSignature::from_iter([1i8, 1, -1, -1])),
         None,
     );
@@ -1129,7 +1106,6 @@ fn pytest_scalar_isopod() {
         loop_moms,
         &externals,
         F(1.),
-        &crate::Polarizations::None,
         DependentMomentaConstructor::Amplitude(&ExternalSignature::from_iter([1i8, 1, -1i8])),
         None,
     );
@@ -1954,12 +1930,6 @@ fn top_bubble_CP() {
 
     println!("================");
 
-    for i in sample.polarizations() {
-        for p in i {
-            println!("{}", p);
-        }
-    }
-
     #[allow(non_snake_case)]
     let eval_CP = graph.evaluate_cff_expression(&sample_CP, &default_settings);
     // println!("{}", sample);
@@ -2096,7 +2066,6 @@ fn scalar_box_to_triangle() {
             helicities: vec![Helicity::Plus, Helicity::Plus, Helicity::Plus],
         },
         F(1.),
-        &crate::Polarizations::None,
         DependentMomentaConstructor::Amplitude(
             &triangle_graph.bare_graph.external_in_or_out_signature(),
         ),

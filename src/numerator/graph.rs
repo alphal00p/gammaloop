@@ -21,7 +21,7 @@ use super::aind::Aind;
 impl Graph {
     /// Returns the polarizations of the given subgraph. One polarization per half-edge.
     /// If you only want those that are dangling first get the crown of the subgraph.
-    pub(crate) fn polarizations_of<S: SubGraph>(&self, subgraph: &S) -> Atom {
+    pub(crate) fn generate_polarizations_of<S: SubGraph>(&self, subgraph: &S) -> Atom {
         let mut pols = Atom::num(1);
 
         for h in subgraph.included_iter() {
@@ -36,7 +36,10 @@ impl Graph {
         pols
     }
 
-    pub(crate) fn polarization_parameters_of<S: SubGraph>(&self, subgraph: &S) -> Vec<Atom> {
+    pub(crate) fn generate_polarization_parameters_of<S: SubGraph>(
+        &self,
+        subgraph: &S,
+    ) -> Vec<Atom> {
         let mut pols = Vec::new();
 
         for h in subgraph.included_iter() {
@@ -67,11 +70,11 @@ impl Graph {
         pols
     }
 
-    pub(crate) fn polarizations(&self) -> Atom {
-        self.polarizations_of(&self.underlying.external_filter())
+    pub(crate) fn generate_polarizations(&self) -> Atom {
+        self.generate_polarizations_of(&self.underlying.external_filter())
     }
-    pub(crate) fn polarization_params(&self) -> Vec<Atom> {
-        self.polarization_parameters_of(&self.underlying.external_filter())
+    pub(crate) fn generate_polarization_params(&self) -> Vec<Atom> {
+        self.generate_polarization_parameters_of(&self.underlying.external_filter())
     }
 
     // pub(crate) fn polarizations_values(&self) -> Vec<Atom> {
@@ -192,7 +195,7 @@ mod test {
             .try_init();
         // let _ = env_logger::builder().is_test(true).try_init();
 
-        let model = crate::tests_from_pytest::load_generic_model("sm");
+        let model = crate::utils::test_utils::load_generic_model("sm");
 
         let graph: Graph = dot!(
         digraph physical_1L_6photons_0 {
@@ -252,7 +255,7 @@ mod test {
             .try_init();
         // let _ = env_logger::builder().is_test(true).try_init();
 
-        let model = crate::tests_from_pytest::load_generic_model("sm");
+        let model = crate::utils::test_utils::load_generic_model("sm");
 
         let graph: Graph = dot!(
         digraph physical_1L_6photons_0 {
@@ -319,7 +322,7 @@ mod test {
 
     #[test]
     fn evaluate_pols() {
-        let model = crate::tests_from_pytest::load_generic_model("sm");
+        let model = crate::utils::test_utils::load_generic_model("sm");
 
         let graphs: Vec<Graph> = dot!(
         digraph bxatobx{
@@ -408,7 +411,7 @@ mod test {
         .unwrap();
 
         for g in &mut graphs {
-            let pols = g.polarizations();
+            let pols = g.generate_polarizations();
             println!("{pols}");
             let expected = &g.global_prefactor.num;
             println!("{expected}");

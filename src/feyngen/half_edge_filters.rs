@@ -10,8 +10,8 @@ use linnet::half_edge::{
 use symbolica::graph::Graph as SymbolicaGraph;
 
 use crate::{
-    graph::HedgeGraphExt,
     model::{ArcParticle, Model, Particle},
+    new_graph::ext::HedgeGraphExt,
 };
 
 use super::diagram_generator::{EdgeColor, NodeColorFunctions};
@@ -292,7 +292,7 @@ pub mod test {
 
     use crate::{
         feyngen::diagram_generator::{EdgeColor, NodeColorWithoutVertexRule},
-        tests_from_pytest::load_generic_model,
+        utils::test_utils::load_generic_model,
     };
 
     use super::FeynGenHedgeGraph;

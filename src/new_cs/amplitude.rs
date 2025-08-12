@@ -1,4 +1,4 @@
-use std::{fs, iter, marker::PhantomData, path::Path};
+use std::{fs, iter, marker::PhantomData, ops::Deref, path::Path};
 
 use ahash::AHashSet;
 // use bincode::{Decode, Encode};
@@ -25,9 +25,10 @@ use crate::{
         GenericEvaluator, LmbMultiChannelingSetup, ParamBuilder,
     },
     new_graph::{LMBext, LmbIndex, LoopMomentumBasis},
+    numerator::ParsingNet,
     signature::SignatureLike,
     subtraction::overlap::find_maximal_overlap,
-    utils::{GS, W_},
+    utils::{GS, TENSORLIB, W_},
     uv::UltravioletGraph,
     GammaLoopContext, GammaLoopContextContainer,
 };
@@ -45,7 +46,6 @@ use typed_index_collections::TiVec;
 
 use crate::{
     cff::esurface::EsurfaceID,
-    cross_section::IsPolarizable,
     model::Model,
     momentum::{Rotatable, Rotation, RotationMethod},
     new_gammaloop_integrand::NewIntegrand,
@@ -109,13 +109,7 @@ impl<S: AmplitudeState> Amplitude<S> {
         let terms = self
             .graphs
             .iter()
-            .map(|graph| {
-                graph.generate_term_for_graph(
-                    &settings,
-                    model,
-                    self.polarizations(&settings.kinematics.externals),
-                )
-            })
+            .map(|graph| graph.generate_term_for_graph(&settings, model))
             .collect_vec();
 
         let rotations: Vec<Rotation> = Some(Rotation::new(RotationMethod::Identity))
@@ -129,19 +123,19 @@ impl<S: AmplitudeState> Amplitude<S> {
             )
             .collect();
 
-        let orig_polarizations = self.polarizations(&settings.kinematics.externals);
+        // let orig_polarizations = self.polarizations(&settings.kinematics.externals);
 
-        let polarizations = rotations
-            .iter()
-            .map(|r| orig_polarizations.rotate(r))
-            .collect();
+        // let polarizations = rotations
+        //     .iter()
+        //     .map(|r| orig_polarizations.rotate(r))
+        //     .collect();
 
         let amplitude_integrand = AmplitudeIntegrand {
             settings,
             data: AmplitudeIntegrandData {
                 name: self.name.clone(),
                 rotations,
-                polarizations,
+                // polarizations,
                 graph_terms: terms,
                 external_signature: self.external_signature.clone(),
                 // param_builder: self.
@@ -160,15 +154,6 @@ impl<S: AmplitudeState> Amplitude<S> {
             writeln!(writer)?;
         }
         Ok(())
-    }
-}
-
-impl<S: AmplitudeState> IsPolarizable for Amplitude<S> {
-    fn polarizations(&self, externals: &Externals) -> Polarizations {
-        externals.generate_polarizations(
-            &self.external_particles,
-            DependentMomentaConstructor::Amplitude(&self.external_signature),
-        )
     }
 }
 
@@ -280,12 +265,12 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
         // this is wrong if we allow for vacuum graphs
         param_builder.external_energies_atom(&self.graph);
 
-        param_builder.polarizations(&self.graph);
+        // param_builder.polarizations(&self.graph);
         // param_builder.polar
 
         // spatial components of external momenta
         param_builder.external_spatial_atom(&self.graph);
-
+        param_builder.polarization_params(&self.graph);
         // spatial EMR
         param_builder.emr_spatial_atom(&self.graph);
 
@@ -759,12 +744,7 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
     }
 
     // Expects cff_expression, esurface_data,
-    fn generate_term_for_graph(
-        &self,
-        settings: &Settings,
-        model: &Model,
-        pols: Polarizations,
-    ) -> AmplitudeGraphTerm {
+    fn generate_term_for_graph(&self, settings: &Settings, model: &Model) -> AmplitudeGraphTerm {
         let estimated_scale = self
             .graph
             .underlying
@@ -794,7 +774,11 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
 
         let mut param_builder = self.param_builder_core(model);
         param_builder.add_external_four_mom(&externals);
-        param_builder.polarizations_values(pols);
+        param_builder.polarizations_values(
+            &self.graph,
+            &externals,
+            settings.kinematics.externals.get_helicities(),
+        );
         param_builder.model_parameters_value(model);
         param_builder.mu_r_sq_value(Complex::new_zero());
         param_builder.m_uv_value(Complex::new_zero());

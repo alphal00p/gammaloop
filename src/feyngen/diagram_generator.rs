@@ -41,21 +41,22 @@ use super::SnailFilterOptions;
 use super::TadpolesFilterOptions;
 use super::{FeynGenError, FeynGenOptions};
 
+use crate::disable;
 use crate::feyngen::half_edge_filters::FeynGenHedgeGraph;
-use crate::graph::{EdgeType, HedgeGraphExt};
 use crate::model::ArcVertexRule;
 use crate::model::VertexRule;
 use crate::model::{ArcParticle, ColorStructure};
 use crate::momentum::{Pow, Sign, SignOrZero};
+use crate::new_graph::ext::HedgeGraphExt;
+use crate::new_graph::Graph;
 use crate::numerator::aind::Aind;
 use crate::numerator::Network;
+use crate::numerator::Numerator;
 use crate::numerator::SymbolicExpression;
 use crate::numerator::{ExpressionState, GlobalPrefactor};
-use crate::numerator::Numerator;
 use crate::utils::{self, W_};
 use crate::{
     feyngen::{FeynGenFilter, GenerationType},
-    graph::BareGraph,
     model::Model,
 };
 use itertools::Itertools;
@@ -2387,7 +2388,7 @@ impl FeynGen {
         loop_momentum_bases: Option<HashMap<String, Vec<String>>>,
         numerator_global_prefactor: GlobalPrefactor,
         num_threads: Option<usize>,
-    ) -> Result<Vec<BareGraph>, FeynGenError> {
+    ) -> Result<Vec<Graph>, FeynGenError> {
         let progress_bar_style = ProgressStyle::with_template(
             "[{elapsed_precise} | ETA: {eta_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} ({percent}%) {msg}",
         )
@@ -3450,38 +3451,39 @@ impl FeynGen {
                             return Ok(())
                         }
                     }
-                    let bare_graph = BareGraph::from_symbolica_graph(
-                        model,
-                        graph_name.clone(),
-                        &canonical_graph.graph,
-                        canonical_graph.symmetry_factor.clone(),
-                        external_connections.clone(),
-                        None,
-                    )?;
+                    // let bare_graph = BareGraph::from_symbolica_graph(
+                    //     model,
+                    //     graph_name.clone(),
+                    //     &canonical_graph.graph,
+                    //     canonical_graph.symmetry_factor.clone(),
+                    //     external_connections.clone(),
+                    //     None,
+                    // )?;
 
                     // The step below is optional, but it is nice to have all internal fermion edges canonized as particles.
                     // Notice that we cannot do this on the bare graph used for numerator local comparisons and diagram grouping because
                     // it induces a misalignment of the LMB (w.r.t to their sign/orientation) due to the flip of the edges.
                     // In principle this could be fixed by forcing to pick an LMB for edges that have not been flipped and allowing closed loops
                     // of antiparticles as well, but I prefer to leave this a post-re-processing option instead.
-                    let canonized_fermion_flow_bare_graph = if CANONIZE_GRAPH_FLOWS {
-                        BareGraph::from_symbolica_graph(
-                            model,
-                            graph_name,
-                            &canonical_graph.graph_with_canonized_flow,
-                            canonical_graph.symmetry_factor.clone(),
-                            external_connections.clone(),
-                            None,
-                        )?
-                    } else {
-                        bare_graph.clone()
-                    };
+                    // let canonized_fermion_flow_bare_graph = if CANONIZE_GRAPH_FLOWS {
+                    //     BareGraph::from_symbolica_graph(
+                    //         model,
+                    //         graph_name,
+                    //         &canonical_graph.graph_with_canonized_flow,
+                    //         canonical_graph.symmetry_factor.clone(),
+                    //         external_connections.clone(),
+                    //         None,
+                    //     )?
+                    // } else {
+                    //     bare_graph.clone()
+                    // };
 
                     // println!(
                     //     "bare_graph:\n{}",
                     //     bare_graph.dot()
                     // );
                     // When disabling numerator-aware graph isomorphism, each graph is added separately
+                    disable!(
                     let pooled_graph = PooledGraphData {
                         graph_id: i_g,
                         numerator_data: None,
@@ -3566,6 +3568,9 @@ impl FeynGen {
                                 }
                             }
                         } else {
+                            disable!(
+
+
                             // println!(
                             //     "I have:\n{}",
                             //     numerator_color_simplified
@@ -3668,9 +3673,11 @@ impl FeynGen {
                                         }
                                     }
                                 }
-                            }
+                            });
+
                         }
                     }
+                    );
                     Ok(())
 
                 }).collect::<Result<Vec<()>, FeynGenError>>()
@@ -3678,7 +3685,7 @@ impl FeynGen {
         bar.finish_and_clear();
 
         // Now combine the pooled graphs identified to be combined.
-        let mut bare_graphs: Vec<(usize, BareGraph)> = Vec::default();
+        let mut bare_graphs: Vec<(usize, Graph)> = Vec::default();
         let mut pooled_bare_graphs_len = 0;
         let mut n_cancellations: i32 = 0;
         for (_canonical_repr, pooled_graphs_lists_for_this_topology) in
@@ -3722,7 +3729,7 @@ impl FeynGen {
                 }
             }
         }
-        bare_graphs.sort_by(|a: &(usize, BareGraph), b| (a.0).cmp(&b.0));
+        bare_graphs.sort_by(|a: &(usize, Graph), b| (a.0).cmp(&b.0));
 
         let (n_zeroes_color_value, n_zeroes_lorentz_value, n_groupings_value) = {
             (
@@ -3757,17 +3764,18 @@ impl FeynGen {
         );
 
         for (_graph_id, graph) in bare_graphs.iter_mut() {
-            let forced_lmb = if let Some(lmbs) = loop_momentum_bases.as_ref() {
-                let g_name = String::from(graph.name.clone());
-                lmbs.get(&g_name).map(|lmb: &Vec<String>| {
-                    lmb.iter().map(SmartString::<LazyCompact>::from).collect()
-                })
-            } else {
-                None
-            };
-            if forced_lmb.is_some() {
-                graph.set_loop_momentum_basis(&forced_lmb)?;
-            }
+            // let forced_lmb = if let Some(lmbs) = loop_momentum_bases.as_ref() {
+            //     let g_name = String::from(graph.name.clone());
+            //     // lmbs.get(&g_name).map(|lmb: &Vec<String>| {
+            //     //     lmb.iter().map(SmartString::<LazyCompact>::from).collect()
+            //     // })
+            //     None
+            // } else {
+            //     None
+            // };
+            // if forced_lmb.is_some() {
+            //     graph.set_loop_momentum_basis(&forced_lmb)?;
+            // }
         }
         debug!(
             "Graphs: [\n{}\n]",
@@ -4177,7 +4185,7 @@ struct PooledGraphData {
     graph_id: usize,
     numerator_data: Option<ProcessedNumeratorForComparison>,
     ratio: Atom,
-    bare_graph: BareGraph,
+    bare_graph: Graph,
 }
 
 #[derive(Clone)]
@@ -4191,10 +4199,11 @@ struct ProcessedNumeratorForComparison {
 impl ProcessedNumeratorForComparison {
     fn from_numerator_symbolic_expression<T: Copy + Default + ExpressionState>(
         diagram_id: usize,
-        bare_graph: &BareGraph,
+        bare_graph: &Graph,
         numerator: Numerator<SymbolicExpression<T>>,
         numerator_aware_isomorphism_grouping: &NumeratorAwareGraphGroupingOption,
     ) -> Result<Self, FeynGenError> {
+        disable!(
         // println!("----");
         // println!(
         //     "Numerator input for diagram        #{}: {}",
@@ -4241,62 +4250,62 @@ impl ProcessedNumeratorForComparison {
                 //     }
                 // }
                 // Force "final-state" momenta and pol vectors to be identical to external momenta
-                for (i_ext, connection) in bare_graph.external_connections.iter().enumerate() {
-                    if let (Some(left_external_node_pos), Some(right_external_node_pos)) =
-                        connection
-                    {
-                        let left_edge = &bare_graph.edges
-                            [bare_graph.vertices[*left_external_node_pos].edges[0]];
+                // for (i_ext, connection) in bare_graph.external_connections.iter().enumerate() {
+                //     if let (Some(left_external_node_pos), Some(right_external_node_pos)) =
+                //         connection
+                //     {
+                //         let left_edge = &bare_graph.edges
+                //             [bare_graph.vertices[*left_external_node_pos].edges[0]];
 
-                        let right_edge = &bare_graph.edges
-                            [bare_graph.vertices[*right_external_node_pos].edges[0]];
-                        let connected_external_id = bare_graph.external_connections.len() + i_ext;
-                        for rep in lmb_replacements.iter_mut() {
-                            rep.1 = rep
-                                .1
-                                .replace(
-                                    &parse!(&format!("P({},x__)", connected_external_id))
-                                        .to_pattern(),
-                                )
-                                .with(parse!(&format!("P({},x__)", i_ext)).to_pattern());
-                        }
-                        let left_edge_pol = match left_edge.edge_type {
-                            EdgeType::Incoming => left_edge.particle.0.in_pol_symbol(),
-                            EdgeType::Outgoing => left_edge.particle.0.out_pol_symbol(),
-                            _ => unreachable!(),
-                        };
-                        let right_edge_pol = match right_edge.edge_type {
-                            EdgeType::Incoming => right_edge.particle.0.in_pol_symbol(),
-                            EdgeType::Outgoing => right_edge.particle.0.out_pol_symbol(),
-                            _ => unreachable!(),
-                        };
-                        if let (Some(left_edge_pol), Some(right_edge_pol)) =
-                            (left_edge_pol, right_edge_pol)
-                        {
-                            lmb_replacements.push((
-                                parse!(&format!(
-                                    "{}({},x__)",
-                                    right_edge_pol, connected_external_id
-                                )),
-                                parse!(&format!("{}({},x__)", left_edge_pol, i_ext)),
-                            ));
-                            // lmb_replacements.push((
-                            //     parse!(&format!(
-                            //         "{}({},xA__)*{}({},xB__)",
-                            //         left_edge_pol, i_ext, right_edge_pol, connected_external_id,
-                            //     ))
-                            //     .unwrap(),
-                            //     parse!("Metric(xA__,xB__)").unwrap(),
-                            // ));
-                        }
-                    }
-                }
+                //         let right_edge = &bare_graph.edges
+                //             [bare_graph.vertices[*right_external_node_pos].edges[0]];
+                //         let connected_external_id = bare_graph.external_connections.len() + i_ext;
+                //         for rep in lmb_replacements.iter_mut() {
+                //             rep.1 = rep
+                //                 .1
+                //                 .replace(
+                //                     &parse!(&format!("P({},x__)", connected_external_id))
+                //                         .to_pattern(),
+                //                 )
+                //                 .with(parse!(&format!("P({},x__)", i_ext)).to_pattern());
+                //         }
+                //         let left_edge_pol = match left_edge.edge_type {
+                //             EdgeType::Incoming => left_edge.particle.0.in_pol_symbol(),
+                //             EdgeType::Outgoing => left_edge.particle.0.out_pol_symbol(),
+                //             _ => unreachable!(),
+                //         };
+                //         let right_edge_pol = match right_edge.edge_type {
+                //             EdgeType::Incoming => right_edge.particle.0.in_pol_symbol(),
+                //             EdgeType::Outgoing => right_edge.particle.0.out_pol_symbol(),
+                //             _ => unreachable!(),
+                //         };
+                //         if let (Some(left_edge_pol), Some(right_edge_pol)) =
+                //             (left_edge_pol, right_edge_pol)
+                //         {
+                //             lmb_replacements.push((
+                //                 parse!(&format!(
+                //                     "{}({},x__)",
+                //                     right_edge_pol, connected_external_id
+                //                 )),
+                //                 parse!(&format!("{}({},x__)", left_edge_pol, i_ext)),
+                //             ));
+                //             // lmb_replacements.push((
+                //             //     parse!(&format!(
+                //             //         "{}({},xA__)*{}({},xB__)",
+                //             //         left_edge_pol, i_ext, right_edge_pol, connected_external_id,
+                //             //     ))
+                //             //     .unwrap(),
+                //             //     parse!("Metric(xA__,xB__)").unwrap(),
+                //             // ));
+                //         }
+                //     }
+                // }
 
                 // Make sure to normalize the replacements
-                lmb_replacements = lmb_replacements
-                    .iter()
-                    .map(|(src, trgt)| (src.expand(), trgt.expand()))
-                    .collect::<Vec<_>>();
+                // lmb_replacements = lmb_replacements
+                //     .iter()
+                //     .map(|(src, trgt)| (src.expand(), trgt.expand()))
+                //     .collect::<Vec<_>>();
 
                 //lmb_replacements.push((Atom::parse("MB").unwrap(), Atom::Zero));
                 // println!(
@@ -4311,12 +4320,12 @@ impl ProcessedNumeratorForComparison {
                 //         .collect::<Vec<_>>()
                 //         .join("\n")
                 // );
-                processed_numerator = processed_numerator.apply_reps(
-                    lmb_replacements
-                        .iter()
-                        .map(|(a, b)| (a.as_view(), b.as_view()))
-                        .collect::<Vec<_>>(),
-                );
+                // processed_numerator = processed_numerator.apply_reps(
+                //     lmb_replacements
+                //         .iter()
+                //         .map(|(a, b)| (a.as_view(), b.as_view()))
+                //         .collect::<Vec<_>>(),
+                // );
                 // println!(
                 //     "AFTER: {}",
                 //     processed_numerator.get_single_atom().unwrap().0
@@ -4464,7 +4473,8 @@ impl ProcessedNumeratorForComparison {
         } else {
             default_processed_data
         };
-        Ok(res)
+        Ok(res));
+        todo!()
     }
 
     #[allow(clippy::type_complexity)]

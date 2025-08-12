@@ -1,11 +1,9 @@
 use crate::{
     cli::Cli,
-    cross_section::{Amplitude, AmplitudeList, CrossSection, CrossSectionList},
     feyngen::{
         self, diagram_generator::FeynGen, FeynGenError, FeynGenFilters, FeynGenOptions,
         NumeratorAwareGraphGroupingOption, SewedFilterOptions,
     },
-    graph::SerializableGraph,
     inspect,
     integrands::Integrand,
     integrate::{
@@ -733,10 +731,10 @@ impl PythonWorker {
             )
             .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
 
-        let res = Ok(diagrams
-            .iter()
-            .map(|d| serde_yaml::to_string(&SerializableGraph::from_graph(d)).unwrap())
-            .collect());
+        // let res = Ok(diagrams
+        //     .iter()
+        //     .map(|d| serde_yaml::to_string(&SerializableGraph::from_graph(d)).unwrap())
+        //     .collect());
 
         // load everything into processlist
         let (n_unresolved, unresolved_cut_content) =
@@ -762,36 +760,36 @@ impl PythonWorker {
 
         self.process_list.add_process(process);
 
-        res
+        Ok(Vec::new())
     }
 
-    pub(crate) fn export_expressions(
-        &mut self,
-        export_root: &str,
-        amplitued_list: Vec<String>,
-        format: &str,
-        export_yaml_str: &str,
-    ) -> PyResult<String> {
-        let export_settings: ProcessSettings = serde_yaml::from_str(export_yaml_str)
-            .map_err(|e| exceptions::PyException::new_err(e.to_string()))
-            .unwrap();
+    // pub(crate) fn export_expressions(
+    //     &mut self,
+    //     export_root: &str,
+    //     amplitued_list: Vec<String>,
+    //     format: &str,
+    //     export_yaml_str: &str,
+    // ) -> PyResult<String> {
+    //     let export_settings: ProcessSettings = serde_yaml::from_str(export_yaml_str)
+    //         .map_err(|e| exceptions::PyException::new_err(e.to_string()))
+    //         .unwrap();
 
-        for amplitude in amplitued_list.into_iter() {
-            match Amplitude::from_yaml_str(&self.model, amplitude) {
-                Ok(amp) => {
-                    amp.map(|a| a.map(|ag| ag.forget_type()))
-                        .export_expressions(
-                            export_root,
-                            Self::printer_options(format),
-                            &export_settings,
-                        )
-                        .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
-                }
-                Err(e) => return Err(exceptions::PyException::new_err(e.to_string())),
-            }
-        }
-        Ok("Exported expressions".to_string())
-    }
+    //     for amplitude in amplitued_list.into_iter() {
+    //         match Amplitude::from_yaml_str(&self.model, amplitude) {
+    //             Ok(amp) => {
+    //                 amp.map(|a| a.map(|ag| ag.forget_type()))
+    //                     .export_expressions(
+    //                         export_root,
+    //                         Self::printer_options(format),
+    //                         &export_settings,
+    //                     )
+    //                     .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
+    //             }
+    //             Err(e) => return Err(exceptions::PyException::new_err(e.to_string())),
+    //         }
+    //     }
+    //     Ok("Exported expressions".to_string())
+    // }
 
     pub(crate) fn export_coupling_replacement_rules(
         &self,

@@ -177,7 +177,7 @@ mod tests {
             NumeratorParseMode, NumeratorSettings, UnInit,
         },
         signature::LoopExtSignature,
-        tests_from_pytest::load_generic_model,
+        utils::test_utils::load_generic_model,
         GammaLoopContextContainer, GammaloopCompileOptions, TropicalSubgraphTableSettings,
     };
 

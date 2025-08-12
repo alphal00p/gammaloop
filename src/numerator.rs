@@ -39,11 +39,10 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 // use crate::feyngen::dis::{DisEdge, DisVertex};
-use crate::graph::{BareGraph, VertexInfo};
-use crate::momentum::Polarization;
+
+use crate::momentum::{PolDef, PolType, Polarization};
 use crate::utils::{f128, GS, TENSORLIB, W_};
 use crate::{
-    graph::EdgeType,
     model::Model,
     momentum::FourMomentum,
     utils::{FloatLike, F},
@@ -652,6 +651,127 @@ pub struct GlobalPrefactor {
     pub num: Atom,
 }
 
+impl GlobalPrefactor {
+    pub fn polarizations(&self) -> Vec<(PolDef, Atom)> {
+        let mut pols = Vec::new();
+        let pat = function!(GS.epsilon, W_.e_, W_.i_).to_pattern();
+        for m in self.projector.pattern_match(&pat, None, None) {
+            let Some(e) = m.get(&W_.e_) else {
+                continue;
+            };
+            let Ok(e) = i64::try_from(e) else {
+                continue;
+            };
+
+            pols.push((
+                PolDef {
+                    pol_type: PolType::Epsilon,
+                    eid: EdgeIndex(e as usize),
+                    hel: None,
+                },
+                pat.replace_wildcards(&m),
+            ));
+        }
+
+        let pat = function!(GS.epsilonbar, W_.e_, W_.i_).to_pattern();
+        for m in self.projector.pattern_match(&pat, None, None) {
+            let Some(e) = m.get(&W_.e_) else {
+                continue;
+            };
+            let Ok(e) = i64::try_from(e) else {
+                continue;
+            };
+
+            pols.push((
+                PolDef {
+                    pol_type: PolType::EpsilonBar,
+                    eid: EdgeIndex(e as usize),
+                    hel: None,
+                },
+                pat.replace_wildcards(&m),
+            ));
+        }
+
+        let pat = function!(GS.u, W_.e_, W_.i_).to_pattern();
+        for m in self.projector.pattern_match(&pat, None, None) {
+            let Some(e) = m.get(&W_.e_) else {
+                continue;
+            };
+            let Ok(e) = i64::try_from(e) else {
+                continue;
+            };
+
+            pols.push((
+                PolDef {
+                    pol_type: PolType::U,
+                    eid: EdgeIndex(e as usize),
+                    hel: None,
+                },
+                pat.replace_wildcards(&m),
+            ));
+        }
+
+        let pat = function!(GS.v, W_.e_, W_.i_).to_pattern();
+        for m in self.projector.pattern_match(&pat, None, None) {
+            let Some(e) = m.get(&W_.e_) else {
+                continue;
+            };
+            let Ok(e) = i64::try_from(e) else {
+                continue;
+            };
+
+            pols.push((
+                PolDef {
+                    pol_type: PolType::V,
+                    eid: EdgeIndex(e as usize),
+                    hel: None,
+                },
+                pat.replace_wildcards(&m),
+            ));
+        }
+
+        let pat = function!(GS.ubar, W_.e_, W_.i_).to_pattern();
+        for m in self.projector.pattern_match(&pat, None, None) {
+            let Some(e) = m.get(&W_.e_) else {
+                continue;
+            };
+            let Ok(e) = i64::try_from(e) else {
+                continue;
+            };
+
+            pols.push((
+                PolDef {
+                    pol_type: PolType::UBar,
+                    eid: EdgeIndex(e as usize),
+                    hel: None,
+                },
+                pat.replace_wildcards(&m),
+            ));
+        }
+
+        let pat = function!(GS.vbar, W_.e_, W_.i_).to_pattern();
+        for m in self.projector.pattern_match(&pat, None, None) {
+            let Some(e) = m.get(&W_.e_) else {
+                continue;
+            };
+            let Ok(e) = i64::try_from(e) else {
+                continue;
+            };
+
+            pols.push((
+                PolDef {
+                    pol_type: PolType::VBar,
+                    eid: EdgeIndex(e as usize),
+                    hel: None,
+                },
+                pat.replace_wildcards(&m),
+            ));
+        }
+
+        pols
+    }
+}
+
 impl Default for GlobalPrefactor {
     fn default() -> Self {
         GlobalPrefactor {
@@ -882,30 +1002,6 @@ impl ExpressionState for NonLocal {
 }
 
 impl Numerator<Global> {
-    pub(crate) fn write(
-        &self,
-        extra_info: &ExtraInfo,
-        bare_graph: &BareGraph,
-        numerator_format: ExpressionFormat,
-    ) -> std::io::Result<()> {
-        debug!("Writing global numerator");
-        let file_path = extra_info.path.join("expressions");
-
-        let printer_ops = numerator_format.into();
-
-        let out = format!(
-            "{}",
-            AtomPrinter::new_with_options(self.get_single_atom().unwrap().as_view(), printer_ops)
-        );
-
-        fs::write(
-            file_path.join(format!("global_{}_exp.json", bare_graph.name)),
-            serde_json::to_string_pretty(&out).unwrap(),
-        )?;
-
-        Ok(())
-    }
-
     pub(crate) fn color_simplify(self) -> Numerator<ColorSimplified> {
         debug!("Color simplifying global numerator");
         // let mut fully_simplified = true;
@@ -1009,13 +1105,6 @@ impl<State: ExpressionState> NumeratorState for SymbolicExpression<State> {
     }
 }
 
-impl AppliedFeynmanRule {
-    pub(crate) fn from_graph(graph: &BareGraph, prefactor: &GlobalPrefactor) -> Self {
-        debug!("Generating numerator for graph: {}", graph.name);
-        todo!()
-    }
-}
-
 impl<T: Copy + Default> Numerator<SymbolicExpression<T>> {
     pub(crate) fn canonize_lorentz(&self) -> Result<Self, String> {
         let pats: Vec<LibraryRep> = vec![Minkowski {}.into(), Bispinor {}.into()];
@@ -1105,30 +1194,6 @@ impl<T: Copy + Default> Numerator<SymbolicExpression<T>> {
 }
 
 impl Numerator<AppliedFeynmanRule> {
-    pub(crate) fn write(
-        &self,
-        extra_info: &ExtraInfo,
-        bare_graph: &BareGraph,
-        numerator_format: ExpressionFormat,
-    ) -> std::io::Result<()> {
-        debug!("Writing local numerator");
-        let file_path = extra_info.path.join("expressions");
-
-        let printer_ops = numerator_format.into();
-
-        let out = format!(
-            "{}",
-            AtomPrinter::new_with_options(self.get_single_atom().unwrap().as_view(), printer_ops)
-        );
-
-        fs::write(
-            file_path.join(format!("local_{}_exp.json", bare_graph.name)),
-            serde_json::to_string_pretty(&out).unwrap(),
-        )?;
-
-        Ok(())
-    }
-
     pub(crate) fn color_simplify(self) -> Numerator<ColorSimplified> {
         debug!("Color simplifying global numerator");
         // let mut fully_simplified = true;
@@ -1215,30 +1280,6 @@ impl Numerator<ColorSimplified> {
             })
     }
 
-    pub(crate) fn write(
-        &self,
-        extra_info: &ExtraInfo,
-        bare_graph: &BareGraph,
-        numerator_format: ExpressionFormat,
-    ) -> std::io::Result<()> {
-        debug!("Writing color simplified numerator");
-        let file_path = extra_info.path.join("expressions");
-
-        let printer_ops = numerator_format.into();
-
-        let out = format!(
-            "{}",
-            AtomPrinter::new_with_options(self.get_single_atom().unwrap().as_view(), printer_ops)
-        );
-
-        fs::write(
-            file_path.join(format!("color_simplified_{}_exp.json", bare_graph.name)),
-            serde_json::to_string_pretty(&out).unwrap(),
-        )?;
-
-        Ok(())
-    }
-
     pub(crate) fn gamma_simplify(self) -> Numerator<GammaSimplified> {
         debug!("Gamma simplifying color symplified numerator");
 
@@ -1250,12 +1291,6 @@ impl Numerator<ColorSimplified> {
                 state: Default::default(),
             },
         }
-    }
-
-    pub(crate) fn parse_poly(self, bare_graph: &BareGraph) -> Numerator<PolySplit> {
-        debug!("Parsing color simplified numerator into polynomial");
-        let state = PolySplit::from_color_simplified(self, bare_graph);
-        Numerator { state }
     }
 
     pub(crate) fn parse(self) -> Result<Numerator<Network>> {
@@ -1291,30 +1326,6 @@ impl Encode for PolySplit {
 }
 
 impl PolySplit {
-    fn generate_variables(bare_graph: &BareGraph) -> Vec<Variable> {
-        let mut vars: Vec<Variable> = vec![];
-
-        for (i, e) in bare_graph.edges.iter().enumerate() {
-            if let EdgeType::Virtual = e.edge_type {
-                let named_structure: NamedStructure<String> =
-                    NamedStructure::from_iter([Minkowski {}.new_slot(4, i)], "Q".into(), Some(i))
-                        .structure;
-
-                vars.push(
-                    named_structure
-                        .to_shell()
-                        .expanded_shadow()
-                        .unwrap()
-                        .get_owned_linear(0.into())
-                        .unwrap()
-                        .into(),
-                );
-            }
-        }
-
-        vars
-    }
-
     pub(crate) fn from_color_out(color_simplified: Numerator<ColorSimplified>) -> DataTensor<Atom> {
         disable!(
 
@@ -1338,47 +1349,6 @@ impl PolySplit {
             .unwrap();
 
         colorless_parsed
-        );
-        todo!()
-    }
-
-    fn from_color_simplified(
-        color_simplified: Numerator<ColorSimplified>,
-        bare_graph: &BareGraph,
-    ) -> Self {
-        let var_map = Arc::new(Self::generate_variables(bare_graph));
-        let energies: Vec<_> = (0..var_map.len()).collect();
-
-        disable!(
-
-        let colorless_parsed = color_simplified
-            .state
-            .colorless
-            .map_data(|a| {
-                let mut net =
-                    spenso::network::Network::<
-                        NetworkStore<MixedTensor<f64, AtomStructure>, Atom>,
-                        ExplicitKey,
-                    >::try_from_view(a.as_view(), &DummyLibrary::default())
-                    .unwrap();
-                net.contract().unwrap();
-                net.to_fully_parametric()
-                    .result_tensor_smart()
-                    .unwrap()
-                    .tensor
-                    .map_structure(OrderedStructure::from)
-            })
-            .flatten(&Atom::num(0))
-            .unwrap()
-            .map_data(|a| a.as_view().to_polynomial_in_vars::<u8>(&var_map));
-
-        PolySplit {
-            colorless: colorless_parsed,
-            var_map,
-            energies,
-            color: color_simplified.state.color,
-            colorsimplified: color_simplified.state.state,
-        }
         );
         todo!()
     }
@@ -1515,45 +1485,6 @@ pub struct PolyContracted {
 }
 
 impl Numerator<PolyContracted> {
-    pub(crate) fn write(
-        &self,
-        extra_info: &ExtraInfo,
-        bare_graph: &BareGraph,
-        numerator_format: ExpressionFormat,
-    ) -> std::io::Result<()> {
-        debug!("Writing poly contracted numerator");
-        let file_path = extra_info.path.join("expressions");
-
-        let printer_ops = numerator_format.into();
-
-        let out = (
-            self.state
-                .coef_map
-                .iter()
-                .map(|a| {
-                    format!(
-                        "{}",
-                        AtomPrinter::new_with_options(a.as_view(), printer_ops)
-                    )
-                })
-                .collect_vec(),
-            format!(
-                "{}",
-                AtomPrinter::new_with_options(
-                    self.state.tensor.iter_flat().next().unwrap().1,
-                    printer_ops
-                )
-            ),
-        );
-
-        fs::write(
-            file_path.join(format!("poly_contracted_{}_exp.json", bare_graph.name)),
-            serde_json::to_string_pretty(&out).unwrap(),
-        )?;
-
-        Ok(())
-    }
-
     pub(crate) fn to_contracted(self) -> Numerator<Contracted> {
         let coefs: Vec<_> = (0..self.state.coef_map.len())
             .map(|i| function!(GS.coeff, Atom::num(i as i64)).to_pattern())
@@ -1591,103 +1522,6 @@ impl Numerator<PolyContracted> {
 
         Numerator::<Contracted>::add_consts_to_fn_map(&mut fn_map);
         fn_map
-    }
-    pub(crate) fn generate_evaluators(
-        self,
-        model: &Model,
-        graph: &BareGraph,
-        extra_info: &ExtraInfo,
-        export_settings: &ProcessSettings,
-    ) -> Numerator<Evaluators> {
-        let s = &export_settings.numerator_settings.eval_settings;
-        debug!("generating evaluators for contracted numerator");
-        let (params, double_param_values, quad_param_values, model_params_start) =
-            Contracted::generate_params(graph, model);
-
-        let emr_len = graph.edges.len();
-
-        let fn_map = self.generate_fn_map();
-
-        // let fn_map: FunctionMap = (&owned_fn_map).into();
-        let settings = NumeratorEvaluatorSettings {
-            options: s,
-            inline_asm: export_settings.gammaloop_compile_options.inline_asm(),
-            compile_options: export_settings
-                .gammaloop_compile_options
-                .to_symbolica_compile_options(),
-        };
-
-        let single = self.state.evaluator(
-            extra_info.path.clone(),
-            &graph.name,
-            &settings,
-            &params,
-            &fn_map,
-        );
-
-        match s {
-            NumeratorEvaluatorOptions::Joint(_) => Numerator {
-                state: Evaluators {
-                    orientated: Some(
-                        single.orientated_joint(graph, &params, extra_info, &settings, &fn_map),
-                    ),
-                    single,
-                    choice: SingleOrCombined::Combined,
-                    orientations: extra_info.orientations.clone(),
-                    quad_param_values,
-                    double_param_values,
-                    model_params_start,
-                    emr_len,
-                    fn_map,
-                },
-            },
-            NumeratorEvaluatorOptions::Iterative(IterativeOptions {
-                iterations,
-                n_cores,
-                verbose,
-                ..
-            }) => Numerator {
-                state: Evaluators {
-                    orientated: Some(single.orientated_iterative(
-                        graph,
-                        &params,
-                        extra_info,
-                        &settings,
-                        *iterations,
-                        *n_cores,
-                        *verbose,
-                        &fn_map,
-                    )),
-                    single,
-                    choice: SingleOrCombined::Combined,
-                    orientations: extra_info.orientations.clone(),
-                    quad_param_values,
-                    double_param_values,
-                    model_params_start,
-                    emr_len,
-                    fn_map,
-                },
-            },
-            _ => Numerator {
-                state: Evaluators {
-                    orientated: None,
-                    single,
-                    choice: SingleOrCombined::Single,
-                    orientations: extra_info.orientations.clone(),
-                    quad_param_values,
-                    double_param_values,
-                    model_params_start,
-                    emr_len,
-                    fn_map,
-                },
-            },
-        }
-
-        // else {
-        //     let first = self.state.tensor.iter_flat().next().unwrap().1.to_owned();
-
-        //     Err(self)
-        // }
     }
 }
 
@@ -1818,29 +1652,6 @@ impl GammaSimplified {
 }
 
 impl Numerator<GammaSimplified> {
-    pub(crate) fn write(
-        &self,
-        extra_info: &ExtraInfo,
-        bare_graph: &BareGraph,
-        numerator_format: ExpressionFormat,
-    ) -> std::io::Result<()> {
-        debug!("Writing gamma simplified numerator");
-        let file_path = extra_info.path.join("expressions");
-
-        let printer_ops = numerator_format.into();
-
-        let out = format!(
-            "{}",
-            AtomPrinter::new_with_options(self.get_single_atom().unwrap().as_view(), printer_ops)
-        );
-
-        fs::write(
-            file_path.join(format!("gamma_simplified_{}_exp.json", bare_graph.name)),
-            serde_json::to_string_pretty(&out).unwrap(),
-        )?;
-
-        Ok(())
-    }
     pub(crate) fn parse(self) -> Result<Numerator<Network>> {
         // debug!("GammaSymplified numerator: {}", self.export());
         debug!("Parsing gamma simplified numerator into tensor network");
@@ -2436,65 +2247,6 @@ impl Contracted {
 
         params
     }
-    #[allow(clippy::type_complexity)]
-    pub(crate) fn generate_params(
-        graph: &BareGraph,
-        model: &Model,
-    ) -> (
-        Vec<Atom>,
-        Vec<Complex<F<f64>>>,
-        Vec<Complex<F<f128>>>,
-        usize,
-    ) {
-        let mut params: Vec<Atom> = vec![];
-        let mut param_values: Vec<Complex<F<f64>>> = vec![];
-        let mut pols = Vec::new();
-
-        for (i, _) in graph.edges.iter().enumerate() {
-            let named_structure: NamedStructure<String> =
-                NamedStructure::from_iter([Lorentz {}.new_slot(4, i)], "Q".into(), Some(i))
-                    .structure;
-            params.extend(
-                named_structure
-                    .to_shell()
-                    .expanded_shadow()
-                    .unwrap()
-                    .data
-                    .clone(),
-            );
-            param_values.extend([Complex::new_zero(); 4]);
-        }
-
-        for i in graph
-            .vertices
-            .iter()
-            .filter(|v| matches!(v.vertex_info, VertexInfo::ExternalVertexInfo(_)))
-        {
-            let pos = graph.get_vertex_position(&i.name).unwrap();
-            let vertex_slot = &graph.vertex_slots[pos];
-            if let VertexInfo::ExternalVertexInfo(e) = &i.vertex_info {
-                pols.extend(e.get_concrete_polarization_atom(pos, vertex_slot));
-            }
-        }
-
-        param_values.extend(vec![Complex::new_zero(); pols.len()]);
-        params.extend(pols);
-
-        param_values.push(Complex::new_i());
-        params.push(Atom::i());
-
-        let model_params_start = params.len();
-        param_values.extend(model.generate_values());
-        params.extend(model.generate_params());
-
-        let quad_values = param_values.iter().map(|c| c.map(|f| f.higher())).collect();
-
-        // for p in params.iter() {
-        //     println!("Param: {}", p);
-        // }
-
-        (params, param_values, quad_values, model_params_start)
-    }
 }
 
 impl NumeratorState for Contracted {
@@ -2531,32 +2283,6 @@ impl TypedNumeratorState for Contracted {
 }
 
 impl Numerator<Contracted> {
-    pub(crate) fn write(
-        &self,
-        extra_info: &ExtraInfo,
-        bare_graph: &BareGraph,
-        numerator_format: ExpressionFormat,
-    ) -> std::io::Result<()> {
-        debug!("Writing contracted numerator");
-        let file_path = extra_info.path.join("expressions");
-
-        let printer_ops = numerator_format.into();
-
-        let out = format!(
-            "{}",
-            AtomPrinter::new_with_options(
-                self.state.tensor.iter_flat().next().unwrap().1,
-                printer_ops
-            )
-        );
-
-        fs::write(
-            file_path.join(format!("contracted_{}_exp.json", bare_graph.name)),
-            serde_json::to_string_pretty(&out).unwrap(),
-        )?;
-
-        Ok(())
-    }
     fn generate_fn_map(&self) -> FunctionMap {
         let mut map = FunctionMap::new();
         Numerator::<Contracted>::add_consts_to_fn_map(&mut map);
@@ -2656,99 +2382,6 @@ impl Numerator<Contracted> {
                     double_param_values,
                     model_params_start,
                     emr_len: n_edges,
-                    fn_map,
-                },
-            },
-        }
-    }
-
-    pub(crate) fn generate_evaluators(
-        self,
-        model: &Model,
-        graph: &BareGraph,
-        extra_info: &ExtraInfo,
-        export_settings: &ProcessSettings,
-    ) -> Numerator<Evaluators> {
-        let o = &export_settings.numerator_settings.eval_settings;
-        debug!("generating evaluators for contracted numerator");
-        let (params, double_param_values, quad_param_values, model_params_start) =
-            Contracted::generate_params(graph, model);
-
-        trace!("params length:{}", params.len());
-
-        let emr_len = graph.edges.len();
-
-        let fn_map = self.generate_fn_map();
-
-        let settings = NumeratorEvaluatorSettings {
-            options: o,
-            inline_asm: export_settings.gammaloop_compile_options.inline_asm(),
-            compile_options: export_settings
-                .gammaloop_compile_options
-                .to_symbolica_compile_options(),
-        };
-
-        let single = self.state.evaluator(
-            extra_info.path.clone(),
-            &graph.name,
-            &settings,
-            &params,
-            &fn_map,
-        );
-
-        match o {
-            NumeratorEvaluatorOptions::Joint(_) => Numerator {
-                state: Evaluators {
-                    orientated: Some(
-                        single.orientated_joint(graph, &params, extra_info, &settings, &fn_map),
-                    ),
-                    single,
-                    choice: SingleOrCombined::Combined,
-                    orientations: extra_info.orientations.clone(),
-                    quad_param_values,
-                    double_param_values,
-                    model_params_start,
-                    emr_len,
-                    fn_map,
-                },
-            },
-            NumeratorEvaluatorOptions::Iterative(IterativeOptions {
-                iterations,
-                n_cores,
-                verbose,
-                ..
-            }) => Numerator {
-                state: Evaluators {
-                    orientated: Some(single.orientated_iterative(
-                        graph,
-                        &params,
-                        extra_info,
-                        &settings,
-                        *iterations,
-                        *n_cores,
-                        *verbose,
-                        &fn_map,
-                    )),
-                    single,
-                    choice: SingleOrCombined::Combined,
-                    orientations: extra_info.orientations.clone(),
-                    double_param_values,
-                    quad_param_values,
-                    model_params_start,
-                    emr_len,
-                    fn_map,
-                },
-            },
-            _ => Numerator {
-                state: Evaluators {
-                    orientated: None,
-                    single,
-                    choice: SingleOrCombined::Single,
-                    orientations: extra_info.orientations.clone(),
-                    double_param_values,
-                    quad_param_values,
-                    model_params_start,
-                    emr_len,
                     fn_map,
                 },
             },
@@ -3049,32 +2682,6 @@ impl EvaluatorSingle {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn orientated_iterative(
-        &self,
-        graph: &BareGraph,
-        params: &[Atom],
-        extra_info: &ExtraInfo,
-        export_settings: &NumeratorEvaluatorSettings,
-        iterations: usize,
-        n_cores: usize,
-        verbose: bool,
-        fn_map: &FunctionMap,
-    ) -> EvaluatorOrientations {
-        debug!("generate iterative evaluator");
-        self.orientated_iterative_impl(
-            graph.edges.len(),
-            &graph.name,
-            params,
-            extra_info,
-            export_settings,
-            iterations,
-            n_cores,
-            verbose,
-            fn_map,
-        )
-    }
-
     pub(crate) fn orientated_joint_impl(
         &self,
         n_edges: usize,
@@ -3221,25 +2828,6 @@ impl EvaluatorSingle {
             eval_quad,
             compiled,
         }
-    }
-
-    pub(crate) fn orientated_joint(
-        &self,
-        graph: &BareGraph,
-        params: &[Atom],
-        extra_info: &ExtraInfo,
-        eval_options: &NumeratorEvaluatorSettings,
-        fn_map: &FunctionMap,
-    ) -> EvaluatorOrientations {
-        debug!("Generate joint evaluator");
-        self.orientated_joint_impl(
-            graph.edges.len(),
-            &graph.name,
-            params,
-            extra_info,
-            eval_options,
-            fn_map,
-        )
     }
 }
 
@@ -3424,28 +3012,6 @@ impl Numerator<Evaluators> {
             orientated.compiled.enable().unwrap();
         }
         self.state.single.compiled.enable().unwrap();
-    }
-
-    pub(crate) fn enable_combined(
-        &mut self,
-        generate: Option<(&Model, &BareGraph, &ExtraInfo, &NumeratorEvaluatorSettings)>,
-    ) {
-        if self.state.orientated.is_some() {
-            self.state.choice = SingleOrCombined::Combined;
-        } else if let Some((model, graph, extra_info, export_settings)) = generate {
-            let (params, _, _, _) = Contracted::generate_params(graph, model);
-            let orientated = self.state.single.orientated_joint(
-                graph,
-                &params,
-                extra_info,
-                export_settings,
-                &self.state.fn_map,
-            );
-            self.state.orientated = Some(orientated);
-            self.state.choice = SingleOrCombined::Combined;
-        } else {
-            panic!("Cannot enable combined without generating the evaluators")
-        }
     }
 }
 

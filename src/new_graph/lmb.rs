@@ -81,6 +81,12 @@ impl Display for LoopMomentumBasis {
 }
 
 impl LoopMomentumBasis {
+    pub(crate) fn ext_from(&self, eid: EdgeIndex) -> Option<ExternalIndex> {
+        self.ext_edges
+            .iter()
+            .position(|&e| e == eid)
+            .map(|i| ExternalIndex(i))
+    }
     pub(crate) fn swap_loops(&mut self, i: LoopIndex, j: LoopIndex) {
         self.loop_edges.swap(i, j);
         self.edge_signatures = self

@@ -9,14 +9,15 @@ use crate::evaluation_result::{EvaluationMetaData, EvaluationResult};
 use crate::integrands::{HasIntegrand, Integrand};
 use crate::integrate::UserData;
 use crate::model::Model;
-use crate::momentum::Rotation;
+use crate::momentum::{Helicity, PolType, Rotation};
 use crate::momentum_sample::{
-    self, BareMomentumSample, ExternalFourMomenta, LoopMomenta, MomentumSample,
+    self, BareMomentumSample, ExternalFourMomenta, ExternalIndex, LoopMomenta, MomentumSample,
 };
 use crate::new_graph::{FeynmanGraph, Graph, LmbIndex, LoopMomentumBasis};
+use crate::numerator::ParsingNet;
 use crate::utils::{
     format_for_compare_digits, get_n_dim_for_n_loop_momenta, FloatLike, PrecisionUpgradable,
-    ToCoefficient, F, GS,
+    ToCoefficient, F, GS, TENSORLIB,
 };
 use bincode_trait_derive::{Decode, Encode};
 use colored::Colorize;
@@ -32,8 +33,10 @@ use momtrop::SampleGenerator;
 use serde::{Deserialize, Serialize};
 use spenso::algebra::algebraic_traits::IsZero;
 use spenso::algebra::complex::Complex;
+use spenso::iterators::IteratableTensor;
+use spenso::network::ExecutionResult;
 use spenso::structure::concrete_index::ExpandedIndex;
-use spenso::tensors::parametric::SerializableCompiledEvaluator;
+use spenso::tensors::parametric::{AtomViewOrConcrete, SerializableCompiledEvaluator};
 use std::time::Duration;
 use symbolica::atom::{Atom, AtomCore, FunctionBuilder, Symbol};
 use symbolica::domains::rational::Rational;
@@ -498,7 +501,6 @@ impl LmbMultiChannelingSetup {
         BareMomentumSample {
             loop_moms: new_loop_moms,
             external_moms: momentum_sample.external_moms.clone(),
-            polarizations: momentum_sample.polarizations.clone(),
             jacobian: momentum_sample.jacobian.clone(),
             orientation: momentum_sample.orientation,
         }
@@ -616,7 +618,7 @@ pub trait GammaloopIntegrand {
     fn get_graph(&self, graph_id: usize) -> &Self::G;
     fn get_graph_mut(&mut self, graph_id: usize) -> &mut Self::G;
     fn get_dependent_momenta_constructor(&self) -> DependentMomentaConstructor;
-    fn get_polarizations(&self) -> &[Polarizations];
+
     // fn get_builder_cache(&self) -> &ParamBuilder<f64>;
 }
 
@@ -1505,21 +1507,70 @@ impl<T: FloatLike> ParamBuilder<T> {
             .collect_vec();
     }
 
-    pub(crate) fn polarizations(&mut self, graph: &Graph) {
-        self.polarizations.params = graph.polarization_params();
-    }
+    pub(crate) fn polarization_params(&mut self, graph: &Graph) {
+        let mut pols = graph.global_prefactor.polarizations();
+        pols.sort_by(|a, b| a.0.cmp(&b.0));
+        let mut params = Vec::new();
 
-    pub(crate) fn polarizations_values(&mut self, polarizations: Polarizations) {
-        let mut values = Vec::new();
-        match polarizations {
-            Polarizations::Constant { polarizations } => {
-                for p in polarizations {
-                    values.extend(p.into_iter().map(|c| c.map(|t| F(T::from_f64(t.0)))))
+        for (p, a) in pols {
+            match ParsingNet::try_from_view(a.as_view(), TENSORLIB.deref())
+                .unwrap()
+                .result_tensor(TENSORLIB.deref())
+                .unwrap()
+            {
+                ExecutionResult::One => {}
+                ExecutionResult::Zero => {}
+                ExecutionResult::Val(a) => {
+                    for (_, val) in a.iter_flat() {
+                        let AtomViewOrConcrete::Atom(a) = val else {
+                            panic!("SHOULD BE ATOMVIEW")
+                        };
+
+                        params.push(a.to_owned());
+                    }
                 }
             }
-            Polarizations::None => {}
         }
-        self.polarizations.values = values;
+
+        self.polarizations.params = params;
+
+        // self.polarizations.params = graph.generate_polarization_params();
+    }
+
+    pub(crate) fn polarizations_values(
+        &mut self,
+        graph: &Graph,
+        ext: &ExternalFourMomenta<F<T>>,
+        helicities: &[Helicity],
+    ) {
+        let mut pols = graph.global_prefactor.polarizations();
+        pols.sort_by(|a, b| a.0.cmp(&b.0));
+
+        let mut vals = Vec::new();
+
+        for (p, a) in pols {
+            let extid = graph.loop_momentum_basis.ext_from(p.eid).unwrap();
+            let hel = p.hel.unwrap_or(helicities[extid.0]);
+            let pol = match p.pol_type {
+                PolType::Epsilon => ext[extid].pol(hel),
+                PolType::EpsilonBar => ext[extid].pol(hel).bar(),
+                PolType::Scalar => {
+                    continue;
+                }
+                PolType::U => ext[extid].u(hel.try_into().unwrap()),
+                PolType::V => ext[extid].v(hel.try_into().unwrap()),
+                PolType::UBar => ext[extid].u(hel.try_into().unwrap()).bar(),
+                PolType::VBar => ext[extid].v(hel.try_into().unwrap()).bar(),
+            };
+
+            for (_, val) in pol.tensor.iter_flat() {
+                vals.push(val.clone());
+            }
+        }
+
+        self.polarizations.values = vals;
+
+        // self.polarizations.params = graph.generate_polarization_params();
     }
 
     pub(crate) fn external_energies_value(&mut self, momentum_sample: &MomentumSample<T>) {

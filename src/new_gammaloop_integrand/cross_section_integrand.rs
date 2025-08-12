@@ -49,7 +49,7 @@ pub struct CrossSectionIntegrand {
 #[trait_decode(trait = GammaLoopContext)]
 pub struct CrossSectionIntegrandData {
     pub name: String,
-    pub polarizations: Vec<Polarizations>,
+    // pub polarizations: Vec<Polarizations>,
     pub rotations: Vec<Rotation>,
     pub graph_terms: Vec<CrossSectionGraphTerm>,
     pub n_incoming: usize,
@@ -102,10 +102,6 @@ impl GammaloopIntegrand for CrossSectionIntegrand {
 
     fn get_graph(&self, graph_id: usize) -> &Self::G {
         &self.data.graph_terms[graph_id]
-    }
-
-    fn get_polarizations(&self) -> &[Polarizations] {
-        &self.data.polarizations
     }
 
     fn get_dependent_momenta_constructor(&self) -> DependentMomentaConstructor {

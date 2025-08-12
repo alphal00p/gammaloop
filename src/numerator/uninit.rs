@@ -3,24 +3,11 @@ use log::debug;
 use spenso::network::library::TensorLibraryData;
 use symbolica::atom::Atom;
 
-use crate::graph::BareGraph;
-
 use crate::new_graph::Graph;
 
 use super::{AppliedFeynmanRule, Global, GlobalPrefactor, Numerator, UnInit};
 
 impl Numerator<UnInit> {
-    pub(crate) fn from_graph(
-        self,
-        graph: &BareGraph,
-        prefactor: &GlobalPrefactor,
-    ) -> Numerator<AppliedFeynmanRule> {
-        debug!("Applying feynman rules");
-        let state = AppliedFeynmanRule::from_graph(graph, prefactor);
-        debug!("Applied feynman rules:\n\t{:>}", state.expr);
-        Numerator { state }
-    }
-
     pub(crate) fn from_new_graph<S: SubGraph>(
         self,
         graph: &Graph,

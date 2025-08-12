@@ -47,8 +47,6 @@ use crate::{
         esurface::{Esurface, EsurfaceID},
         generation::generate_cff_with_cuts,
     },
-    cross_section::IsPolarizable,
-    integrands::Integrand,
     model::Model,
     momentum::{Rotatable, Rotation, RotationMethod},
     new_gammaloop_integrand::{
@@ -143,12 +141,12 @@ impl<S: CrossSectionState> CrossSection<S> {
             )
             .collect(); // want this to include the identity rotation (i.e the first sample)
 
-        let orig_polarizations = self.polarizations(&settings.kinematics.externals);
+        // let orig_polarizations = self.polarizations(&settings.kinematics.externals);
 
-        let polarizations = rotations
-            .iter()
-            .map(|r| orig_polarizations.rotate(r))
-            .collect();
+        // let polarizations = rotations
+        //     .iter()
+        //     .map(|r| orig_polarizations.rotate(r))
+        //     .collect();
 
         // let model_parameter_cache = model.generate_values();
 
@@ -159,7 +157,7 @@ impl<S: CrossSectionState> CrossSection<S> {
                 name: self.name.clone(),
                 external_connections: self.external_connections.clone(),
                 n_incoming: self.n_incmoming,
-                polarizations,
+                // polarizations,
                 graph_terms: terms,
             },
         };
@@ -169,16 +167,6 @@ impl<S: CrossSectionState> CrossSection<S> {
     }
 }
 
-impl<S: CrossSectionState> IsPolarizable for CrossSection<S> {
-    fn polarizations(&self, externals: &Externals) -> Polarizations {
-        externals.generate_polarizations(
-            &self.external_particles,
-            DependentMomentaConstructor::CrossSection {
-                external_connections: &self.external_connections,
-            },
-        )
-    }
-}
 #[derive(Clone, bincode::Encode, bincode::Decode)]
 pub struct CrossSectionCut {
     pub cut: OrientedCut,

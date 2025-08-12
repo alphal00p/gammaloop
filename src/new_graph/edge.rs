@@ -12,7 +12,6 @@ use spenso::{
 use symbolica::atom::{Atom, AtomCore, AtomView};
 
 use crate::{
-    graph::BareEdge,
     model::{ArcParticle, Model},
     momentum::Helicity,
     momentum_sample::LoopIndex,
@@ -142,12 +141,6 @@ impl Edge {
             PossibleParticle::Particle(p) => p.mass.value,
             PossibleParticle::MassOverriddenParticle { mass_value, .. } => mass_value.clone(),
         }
-    }
-}
-
-impl From<BareEdge> for Edge {
-    fn from(value: BareEdge) -> Self {
-        todo!()
     }
 }
 

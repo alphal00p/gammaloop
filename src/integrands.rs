@@ -1,5 +1,5 @@
 use crate::evaluation_result::{EvaluationMetaData, EvaluationResult};
-use crate::gammaloop_integrand::GammaLoopIntegrand;
+// use crate::gammaloop_integrand::GammaLoopIntegrand;
 use crate::h_function_test::{HFunctionTestIntegrand, HFunctionTestSettings};
 use crate::momentum::FourMomentum;
 use crate::new_gammaloop_integrand::NewIntegrand;
@@ -89,7 +89,7 @@ pub enum Integrand {
     UnitSurface(UnitSurfaceIntegrand),
     UnitVolume(UnitVolumeIntegrand),
     HFunctionTest(HFunctionTestIntegrand),
-    GammaLoopIntegrand(GammaLoopIntegrand),
+    // GammaLoopIntegrand(GammaLoopIntegrand),
     NewIntegrand(NewIntegrand),
 }
 
@@ -99,7 +99,7 @@ impl HasIntegrand for Integrand {
             Integrand::UnitSurface(_) => "UnitSurface".to_string(),
             Integrand::UnitVolume(_) => "UnitVolume".to_string(),
             Integrand::HFunctionTest(_) => "HFunctionTest".to_string(),
-            Integrand::GammaLoopIntegrand(_) => "GammaLoopIntegrand".to_string(),
+            // Integrand::GammaLoopIntegrand(_) => "GammaLoopIntegrand".to_string(),
             Integrand::NewIntegrand(i) => i.name(),
         }
     }
@@ -109,7 +109,7 @@ impl HasIntegrand for Integrand {
             Integrand::UnitSurface(integrand) => integrand.create_grid(),
             Integrand::UnitVolume(integrand) => integrand.create_grid(),
             Integrand::HFunctionTest(integrand) => integrand.create_grid(),
-            Integrand::GammaLoopIntegrand(integrand) => integrand.create_grid(),
+            // Integrand::GammaLoopIntegrand(integrand) => integrand.create_grid(),
             Integrand::NewIntegrand(integrand) => integrand.create_grid(),
         }
     }
@@ -132,9 +132,9 @@ impl HasIntegrand for Integrand {
             Integrand::HFunctionTest(integrand) => {
                 integrand.evaluate_sample(sample, wgt, iter, use_f128, max_eval)
             }
-            Integrand::GammaLoopIntegrand(integrand) => {
-                integrand.evaluate_sample(sample, wgt, iter, use_f128, max_eval)
-            }
+            // Integrand::GammaLoopIntegrand(integrand) => {
+            //     integrand.evaluate_sample(sample, wgt, iter, use_f128, max_eval)
+            // }
             Integrand::NewIntegrand(integrand) => {
                 integrand.evaluate_sample(sample, wgt, iter, use_f128, max_eval)
             }
@@ -146,7 +146,7 @@ impl HasIntegrand for Integrand {
             Integrand::UnitSurface(integrand) => integrand.get_n_dim(),
             Integrand::UnitVolume(integrand) => integrand.get_n_dim(),
             Integrand::HFunctionTest(integrand) => integrand.get_n_dim(),
-            Integrand::GammaLoopIntegrand(integrand) => integrand.get_n_dim(),
+            // Integrand::GammaLoopIntegrand(integrand) => integrand.get_n_dim(),
             Integrand::NewIntegrand(integrand) => integrand.get_n_dim(),
         }
     }
@@ -156,7 +156,7 @@ impl HasIntegrand for Integrand {
             Integrand::UnitSurface(integrand) => integrand.get_integrator_settings(),
             Integrand::UnitVolume(integrand) => integrand.get_integrator_settings(),
             Integrand::HFunctionTest(integrand) => integrand.get_integrator_settings(),
-            Integrand::GammaLoopIntegrand(integrand) => integrand.get_integrator_settings(),
+            // Integrand::GammaLoopIntegrand(integrand) => integrand.get_integrator_settings(),
             Integrand::NewIntegrand(integrand) => integrand.get_integrator_settings(),
         }
     }
@@ -166,7 +166,7 @@ impl HasIntegrand for Integrand {
             Integrand::UnitSurface(integrand) => integrand.merge_results(other, iter),
             Integrand::UnitVolume(integrand) => integrand.merge_results(other, iter),
             Integrand::HFunctionTest(integrand) => integrand.merge_results(other, iter),
-            Integrand::GammaLoopIntegrand(integrand) => integrand.merge_results(other, iter),
+            // Integrand::GammaLoopIntegrand(integrand) => integrand.merge_results(other, iter),
             Integrand::NewIntegrand(integrand) => integrand.merge_results(other, iter),
         }
     }

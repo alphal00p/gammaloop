@@ -210,7 +210,7 @@ pub type PolarizationVectors<T> = TiVec<ExternalIndex, Polarization<T>>; // shou
 pub struct BareMomentumSample<T: FloatLike> {
     pub loop_moms: LoopMomenta<F<T>>,
     pub external_moms: ExternalFourMomenta<F<T>>,
-    pub polarizations: PolarizationVectors<Complex<F<T>>>,
+    // pub polarizations: PolarizationVectors<Complex<F<T>>>,
     pub jacobian: F<T>,
     pub orientation: Option<usize>,
 }
@@ -233,10 +233,10 @@ impl<T: FloatLike> Display for MomentumSample<T> {
         for (index, external_mom) in self.sample.external_moms.iter().enumerate() {
             write!(f, "\n\t\texternal momentum {}: {}", index, external_mom)?;
         }
-        write!(f, "\n\tpolarizations: ")?;
-        for (index, polarization) in self.sample.polarizations.iter().enumerate() {
-            write!(f, "\n\t\tpolarization {}: {}", index, polarization)?;
-        }
+        // write!(f, "\n\tpolarizations: ")?;
+        // for (index, polarization) in self.sample.polarizations.iter().enumerate() {
+        //     write!(f, "\n\t\tpolarization {}: {}", index, polarization)?;
+        // }
         write!(f, "\n\tjacobian: {:+e}", self.sample.jacobian)
     }
 }
@@ -246,22 +246,12 @@ impl<T: FloatLike> BareMomentumSample<T> {
         loop_moms: LoopMomenta<F<T>>,
         external_moms: &Externals,
         jacobian: F<T>,
-        polarizations: &Polarizations,
         dependent_momenta_constructor: DependentMomentaConstructor,
         orientation: Option<usize>,
     ) -> Self {
-        let polarizations = match polarizations {
-            Polarizations::None => PolarizationVectors::new(),
-            Polarizations::Constant { polarizations } => polarizations
-                .iter()
-                .map(|p| p.map(|c| c.map(|f| F::from_ff64(f))))
-                .collect(),
-        };
-
         let external_moms = external_moms.get_dependent_externals(dependent_momenta_constructor);
 
         Self {
-            polarizations,
             loop_moms,
             external_moms,
             jacobian,
@@ -298,11 +288,7 @@ impl<T: FloatLike> BareMomentumSample<T> {
         BareMomentumSample {
             loop_moms: self.loop_moms.iter().map(ThreeMomentum::cast).collect(),
             external_moms: self.external_moms.iter().map(FourMomentum::cast).collect(),
-            polarizations: self
-                .polarizations
-                .iter()
-                .map(Polarization::complex_cast)
-                .collect(),
+
             jacobian: self.jacobian.clone().into(),
             orientation: self.orientation,
         }
@@ -319,11 +305,6 @@ impl<T: FloatLike> BareMomentumSample<T> {
                 .iter()
                 .map(FourMomentum::higher)
                 .collect(),
-            polarizations: self
-                .polarizations
-                .iter()
-                .map(Polarization::higher)
-                .collect(),
             jacobian: self.jacobian.higher(),
             orientation: self.orientation,
         }
@@ -336,7 +317,6 @@ impl<T: FloatLike> BareMomentumSample<T> {
         BareMomentumSample {
             loop_moms: self.loop_moms.iter().map(ThreeMomentum::lower).collect(),
             external_moms: self.external_moms.iter().map(FourMomentum::lower).collect(),
-            polarizations: self.polarizations.iter().map(Polarization::lower).collect(),
             jacobian: self.jacobian.lower(),
             orientation: self.orientation,
         }
@@ -348,12 +328,10 @@ impl<T: FloatLike> BareMomentumSample<T> {
         &self,
         rotation: &Rotation,
         rotated_externals: ExternalFourMomenta<F<T>>,
-        rotated_polarizations: PolarizationVectors<Complex<F<T>>>,
     ) -> Self {
         Self {
             loop_moms: self.loop_moms.iter().map(|l| l.rotate(rotation)).collect(),
             external_moms: rotated_externals,
-            polarizations: rotated_polarizations,
             jacobian: self.jacobian.clone(),
             orientation: self.orientation,
         }
@@ -368,11 +346,6 @@ impl<T: FloatLike> BareMomentumSample<T> {
                 .iter()
                 .map(|l| l.rotate(rotation))
                 .collect(),
-            polarizations: self
-                .polarizations
-                .iter()
-                .map(|l| l.rotate(rotation))
-                .collect(),
             jacobian: self.jacobian.clone(),
             orientation: self.orientation,
         }
@@ -383,7 +356,6 @@ impl<T: FloatLike> BareMomentumSample<T> {
         Self {
             loop_moms: self.loop_moms.rescale(factor, subspace),
             external_moms: self.external_moms.clone(),
-            polarizations: self.polarizations.clone(),
             jacobian: self.jacobian.clone(),
             orientation: self.orientation,
         }
@@ -457,29 +429,6 @@ impl<T: FloatLike> MomentumSample<T> {
         )
     }
 
-    pub(crate) fn polarizations(&self) -> &PolarizationVectors<Complex<F<T>>> {
-        if let Some(rotated_sample) = &self.rotated_sample {
-            &rotated_sample.polarizations
-        } else {
-            &self.sample.polarizations
-        }
-    }
-
-    #[allow(clippy::type_complexity)]
-    pub(crate) fn polarizations_pair(
-        &self,
-    ) -> (
-        &PolarizationVectors<Complex<F<T>>>,
-        Option<&PolarizationVectors<Complex<F<T>>>>,
-    ) {
-        (
-            self.sample.polarizations.as_ref(),
-            self.rotated_sample
-                .as_ref()
-                .map(|s| s.polarizations.as_ref()),
-        )
-    }
-
     pub(crate) fn jacobian(&self) -> F<T> {
         if let Some(rotated_sample) = &self.rotated_sample {
             rotated_sample.jacobian.clone()
@@ -492,7 +441,6 @@ impl<T: FloatLike> MomentumSample<T> {
         loop_moms: LoopMomenta<F<T>>,
         external_moms: &Externals,
         jacobian: F<T>,
-        polarizations: &Polarizations,
         dependent_momenta_constructor: DependentMomentaConstructor,
         orientation: Option<usize>,
     ) -> Self {
@@ -501,7 +449,6 @@ impl<T: FloatLike> MomentumSample<T> {
                 loop_moms,
                 external_moms,
                 jacobian,
-                polarizations,
                 dependent_momenta_constructor,
                 orientation,
             ),
@@ -559,15 +506,13 @@ impl<T: FloatLike> MomentumSample<T> {
         &self,
         rotation: &Rotation,
         rotated_externals: ExternalFourMomenta<F<T>>,
-        rotated_polarizations: PolarizationVectors<Complex<F<T>>>,
     ) -> Self {
         Self {
             sample: self.sample.clone(),
-            rotated_sample: Some(self.sample.get_rotated_sample_cached(
-                rotation,
-                rotated_externals,
-                rotated_polarizations,
-            )),
+            rotated_sample: Some(
+                self.sample
+                    .get_rotated_sample_cached(rotation, rotated_externals),
+            ),
             uuid: self.uuid,
         }
     }

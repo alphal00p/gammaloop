@@ -1,7 +1,6 @@
 use core::panic;
 
 use crate::{
-    graph::{BareGraph, EdgeType, Graph},
     momentum::{Energy, FourMomentum, Polarization, Signature, ThreeMomentum},
     momentum_sample::MomentumSample,
     new_graph::LoopMomentumBasis,

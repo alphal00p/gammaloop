@@ -1,4 +1,3 @@
-
 use ahash::HashSet;
 use color_eyre::Result;
 use itertools::Itertools;
@@ -17,7 +16,6 @@ use symbolica::atom::{Atom, AtomCore};
 use typed_index_collections::TiVec;
 
 use crate::{
-    graph::BareGraph,
     momentum::{Dep, ExternalMomenta},
     momentum_sample::ExternalIndex,
     new_gammaloop_integrand::LmbMultiChannelingSetup,
@@ -45,15 +43,9 @@ pub struct Graph {
 //     type Target = HedgeGraph<Edge, Vertex>;
 // }
 
-impl From<BareGraph> for Graph {
-    fn from(value: BareGraph) -> Self {
-        todo!()
-    }
-}
-
 pub mod feynman_graph;
 pub use feynman_graph::FeynmanGraph;
-
+pub mod ext;
 impl Graph {
     pub(crate) fn random_externals(&self, seed: u64) -> Externals {
         let mut rng = SmallRng::seed_from_u64(seed);

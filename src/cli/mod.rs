@@ -1,10 +1,9 @@
 use crate::{
-    cross_section::Amplitude,
     feyngen::GenerationType,
     integrands::{integrand_factory, HasIntegrand},
     integrate::{self, SerializableBatchIntegrateInput},
     model::Model,
-    new_cs::{ExportSettings, Process, ProcessDefinition},
+    new_cs::{Amplitude, ExportSettings, Process, ProcessDefinition},
     new_graph::Graph,
     utils::{F, GIT_VERSION, VERSION},
     Integrand, Settings,
@@ -114,19 +113,6 @@ impl Cli {
         match self.command.as_ref().ok_or(eyre!("missing command"))? {
             Commands::Quit {} => {
                 return Ok(ControlFlow::Break(()));
-            }
-            Commands::Batch {
-                process_file,
-                batch_input_file,
-                name,
-                output_name,
-            } => {
-                return Ok(ControlFlow::Continue(batch_branch(
-                    process_file,
-                    batch_input_file,
-                    &name,
-                    &output_name,
-                )?));
             }
             Commands::Inspect(inspect) => inspect.run(state)?,
             Commands::Bench { samples } => {
@@ -499,88 +485,6 @@ pub enum LogFormat {
 // }
 
 impl Commands {}
-
-fn batch_branch(
-    process_output_file: impl AsRef<Path>,
-    batch_input_file: impl AsRef<Path>,
-    amplitude_name: &str,
-    output_name: &str,
-) -> Result<(), Report> {
-    // much of this should be moved to the main cli function
-
-    println!("settings passed by command line will be overwritten by configurations in the process output and batch input");
-
-    // load the settings
-    let path_to_settings = process_output_file
-        .as_ref()
-        .join("cards")
-        .join("run_card.yaml");
-    let settings_string = std::fs::read_to_string(path_to_settings.clone())?;
-    let settings: Settings = serde_yaml::from_str(&settings_string)?;
-
-    // load the model, hardcoded to scalars.yaml for now
-    let path_to_model = process_output_file
-        .as_ref()
-        .join("sources")
-        .join("model")
-        .join("scalars.yaml");
-
-    let path_to_model_string = path_to_model
-        .to_str()
-        .ok_or_else(|| eyre!("could not convert path to string"))?
-        .to_string();
-
-    let model = Model::from_file(path_to_model_string)?;
-
-    // load the amplitude
-    let path_to_amplitude_yaml = process_output_file
-        .as_ref()
-        .join("sources")
-        .join("amplitudes")
-        .join(amplitude_name)
-        .join("amplitude.yaml");
-
-    // we should change all the file_path arguments to PathBuf or &Path
-    let path_to_amplitude_yaml_as_string = path_to_amplitude_yaml.to_str().unwrap().to_string();
-
-    // this is all very amplitude focused, will be generalized later when the structure is clearer
-    let amplitude: Amplitude<_> = {
-        let amp = Amplitude::from_file(&model, path_to_amplitude_yaml_as_string)?;
-
-        let derived_data_path = process_output_file
-            .as_ref()
-            .join("sources")
-            .join("amplitudes")
-            .join(amplitude_name);
-
-        amp.load_derived_data(&model, &derived_data_path, &settings)?
-    };
-
-    // load input data
-
-    let batch_input_bytes = std::fs::read(batch_input_file)?;
-    let serializable_batch_input =
-        bincode::decode_from_slice::<SerializableBatchIntegrateInput, _>(
-            &batch_input_bytes,
-            bincode::config::standard(),
-        )?
-        .0;
-    let batch_integrate_input = serializable_batch_input.into_batch_integrate_input(&settings);
-
-    // construct integrand
-    let mut integrand =
-        Integrand::GammaLoopIntegrand(amplitude.generate_integrand(&path_to_settings)?);
-
-    // integrate
-    let batch_result = integrate::batch_integrate(&mut integrand, batch_integrate_input);
-
-    // save result
-
-    let batch_result_bytes = bincode::encode_to_vec(&batch_result, bincode::config::standard())?;
-    fs::write(output_name, batch_result_bytes)?;
-
-    Ok(())
-}
 
 pub(crate) fn print_banner() {
     println!(
