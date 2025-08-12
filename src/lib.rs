@@ -704,6 +704,10 @@ impl Externals {
             .zip(external_particles.iter())
             .zip(external_signatture.iter())
         {
+            println!(
+                "Ext_mom: {}\n Helicity: {}\n Particle: {}\n Sign: {}",
+                ext_mom, hel, p.name, s
+            );
             match s {
                 SignOrZero::Minus => {
                     polarizations.push(p.0.incoming_polarization(ext_mom, *hel));

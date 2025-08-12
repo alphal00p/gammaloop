@@ -3131,19 +3131,21 @@ mod tests {
         let mom = FourMomentum::from_args(F(1.), F(1.), F(0.), F(0.));
 
         let pol: Polarization<F<f64>> = Polarization::lorentz(mom.pol_one());
-        let pol2 = pol.clone();
+        println!("{}", pol)
 
-        print!("{}", pol.add_fallible(&pol2).unwrap());
+        // let pol2 = pol.clone();
 
-        println!("pol_one: {:?}", pol);
+        // print!("{}", pol.add_fallible(&pol2).unwrap());
 
-        let structure = pol.tensor.structure.clone();
+        // println!("pol_one: {:?}", pol);
 
-        println!("{}", structure.flat_index([2]).unwrap());
+        // let structure = pol.tensor.structure.clone();
 
-        pol.tensor
-            .iter_flat()
-            .for_each(|(i, d)| println!("{}{}", i, d));
+        // println!("{}", structure.flat_index([2]).unwrap());
+
+        // pol.tensor
+        //     .iter_flat()
+        //     .for_each(|(i, d)| println!("{}{}", i, d));
     }
 
     #[test]

@@ -76,7 +76,7 @@ impl AmplitudeGraphTerm {
             }
         }
 
-        // debug!("Sample: \n\t{}", momentum_sample);
+        debug!("Sample: \n\t{}", momentum_sample);
 
         let result = match momentum_sample.sample.orientation {
             Some(orientation_id) => {
@@ -98,9 +98,9 @@ impl AmplitudeGraphTerm {
             }
         };
 
-        if settings.general.debug > 0 {
-            println!("result of graph {}: {:16e}", self.graph.name, result);
-        }
+        // if settings.general.debug > 0 {
+        debug!("result of graph {}: {:16e}", self.graph.name, result);
+        // }
 
         result
     }

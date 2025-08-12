@@ -165,7 +165,7 @@ impl ParseGraph {
                     other_order += 1;
                     continue;
                 };
-                let particle = Some(match self.orientation(h).relative_to(-self.flow(h)) {
+                let particle = Some(match self.orientation(h).relative_to(self.flow(h)) {
                     Orientation::Reversed => particle.get_anti_particle(model),
                     _ => particle.clone(),
                 });

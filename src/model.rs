@@ -2453,7 +2453,9 @@ impl Model {
 mod tests {
     use crate::{
         model::{ArcPropagator, ArcVertexRule},
+        momentum::FourMomentum,
         tests_from_pytest::load_generic_model,
+        utils::F,
     };
 
     use super::ArcParticle;
@@ -2511,5 +2513,28 @@ mod tests {
         .0;
 
         assert_eq!(propagator.name, propagator_decoded.name);
+    }
+
+    #[test]
+    fn test_pols() {
+        let model = load_generic_model("sm");
+        let particle = model.get_particle("a");
+        let vals = [
+            0.8043373880952149,
+            -0.23220497692297942,
+            -0.5524552502561161,
+            0.5365003998549139,
+        ]
+        .into_iter()
+        .map(F)
+        .collect::<Vec<_>>();
+        let mom = FourMomentum::from_args(vals[0], vals[1], vals[2], vals[3]);
+
+        println!("mom:{mom}");
+        let inc = particle.incoming_polarization(&mom, crate::momentum::SignOrZero::Plus);
+
+        let out = particle.outgoing_polarization(&mom, crate::momentum::SignOrZero::Plus);
+        println!("{}", inc);
+        println!("{}", out);
     }
 }

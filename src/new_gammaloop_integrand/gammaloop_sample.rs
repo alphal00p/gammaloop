@@ -431,7 +431,7 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
 #[inline]
 pub(crate) fn parameterize<T: FloatLike, I: GammaloopIntegrand>(
     sample_point: &Sample<F<f64>>,
-    integrand: &I,
+    integrand: &mut I,
 ) -> Result<GammaLoopSample<T>, String> {
     let (discrete_indices, xs) = unwrap_sample(sample_point);
     let settings = integrand.get_settings();
