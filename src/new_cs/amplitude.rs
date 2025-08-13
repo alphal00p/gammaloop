@@ -251,7 +251,10 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
 
     fn ct_params(&self, model: &Model) -> ParamBuilder<f64> {
         let mut param_builder = self.param_builder_core(model);
-        param_builder.uv_damp_atom(Atom::var(GS.uv_damp));
+        param_builder.uv_damp_atom(vec![
+            Atom::var(GS.uv_damp_plus),
+            Atom::var(GS.uv_damp_minus),
+        ]);
         param_builder.derivative_at_tstar_atom(Atom::var(GS.deta));
         param_builder.radius_atom(Atom::var(GS.radius));
         param_builder.radius_star_atom(Atom::var(GS.radius_star));
@@ -483,9 +486,10 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
             let circled_wood = self.graph.wood(&circled);
             let complement_wood = self.graph.wood(&complement);
 
-            let circled_forest = circled_wood.unfold(&self.graph, &self.graph.loop_momentum_basis);
+            let mut circled_forest =
+                circled_wood.unfold(&self.graph, &self.graph.loop_momentum_basis);
 
-            let complement_forest =
+            let mut complement_forest =
                 complement_wood.unfold(&self.graph, &self.graph.loop_momentum_basis);
 
             let reverse_dangling = esurface
@@ -516,45 +520,49 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
             .map(|cff_graph| cff_graph.global_orientation)
             .collect::<TiVec<SubgraphOrientationID, _>>();
 
-            // circled_forest.compute(
-            //     &self.graph,
-            //     &circled,
-            //     &circled_orientations,
-            //     &canonize_esurface,
-            //     &esurface.energies,
-            // );
+            circled_forest.compute(
+                &self.graph,
+                &circled,
+                todo!(),
+                &circled_orientations,
+                &canonize_esurface,
+                &esurface.energies,
+            );
 
-            // complement_forest.compute(
-            //     &self.graph,
-            //     &complement,
-            //     &complement_orientations,
-            //     &canonize_esurface,
-            //     &esurface.energies,
-            // );
+            complement_forest.compute(
+                &self.graph,
+                &complement,
+                todo!(),
+                &complement_orientations,
+                &canonize_esurface,
+                &esurface.energies,
+            );
 
             let mut counterterm = Atom::new();
             for orientation in orientations {
-                // let circled_expr = circled_forest.local_expr(
-                //     &full_orientation_list[orientation],
-                //     Some(&edges_in_cut),
-                //     &self.graph,
-                // );
+                let circled_expr = circled_forest.local_expr(
+                    &full_orientation_list[orientation],
+                    Some(&edges_in_cut),
+                    &self.graph,
+                );
 
-                // let complement_expr = complement_forest.local_expr(
-                //     &full_orientation_list[orientation],
-                //     Some(&edges_in_cut),
-                //     &self.graph,
-                // );
+                let complement_expr = complement_forest.local_expr(
+                    &full_orientation_list[orientation],
+                    Some(&edges_in_cut),
+                    &self.graph,
+                );
 
-                // let product = circled_expr * complement_expr;
-                // // let orientation_result = do_replacement_rules(
-                //     product,
-                //     &self.graph.underlying,
-                //     &full_orientation_list[orientation].orientation,
-                //     Some(&edges_in_cut),
-                // );
+                let product = circled_expr * complement_expr;
+                //let orientation_result = do_replacement_rules(
+                //    product,
+                //    &self.graph.underlying,
+                //    &full_orientation_list[orientation].orientation,
+                //    Some(&edges_in_cut),
+                //);
 
-                // counterterm += product;
+                let orientation_result: Atom = todo!();
+
+                counterterm += orientation_result;
             }
 
             let loop_3 = self.graph.underlying.get_loop_number() as i64 * 3;
@@ -564,13 +572,16 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
 
             let radius = Atom::var(GS.radius);
             let radius_star = Atom::var(GS.radius_star);
-            let uv_damp = Atom::var(GS.uv_damp);
+            let uv_damp_plus = Atom::var(GS.uv_damp_plus);
+            let uv_damp_minus = Atom::var(GS.uv_damp_minus);
 
-            let delta_r = &radius - &radius_star;
+            let delta_r_plus = &radius - &radius_star;
+            let delta_r_minus = -&radius - &radius_star;
 
             let jacobian_ratio = (&radius_star / &radius).npow(loop_3 - 1);
 
-            let prefactor = jacobian_ratio / factors_of_pi / grad_eta / delta_r * uv_damp;
+            let prefactor = jacobian_ratio / factors_of_pi / grad_eta
+                * (uv_damp_plus / delta_r_plus + uv_damp_minus / delta_r_minus);
 
             counterterm *= prefactor * &counterterm;
             counterterms.push(counterterm);

@@ -3460,7 +3460,8 @@ pub struct GammaloopSymbols {
     pub den: Symbol,
     pub radius: Symbol,
     pub radius_star: Symbol,
-    pub uv_damp: Symbol,
+    pub uv_damp_plus: Symbol,
+    pub uv_damp_minus: Symbol,
 }
 
 impl GammaloopSymbols {
@@ -3596,7 +3597,8 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
     coeff: symbol!("coef"),
     radius: symbol!("r"),
     radius_star: symbol!("r⃰"),
-    uv_damp: symbol!("damp"),
+    uv_damp_plus: symbol!("damp_plus"),
+    uv_damp_minus: symbol!("damp_minus"),
 });
 
 impl GammaloopSymbols {

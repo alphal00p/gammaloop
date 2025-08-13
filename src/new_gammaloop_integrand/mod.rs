@@ -1670,11 +1670,11 @@ impl<T: FloatLike> ParamBuilder<T> {
         self.derivative_at_tstar.values = vec![derivative_at_tstar];
     }
 
-    pub(crate) fn uv_damp_atom(&mut self, uv_damp: Atom) {
-        self.uv_damp.params = vec![uv_damp];
+    pub(crate) fn uv_damp_atom(&mut self, uv_dampers: Vec<Atom>) {
+        self.uv_damp.params = uv_dampers;
     }
-    pub(crate) fn uv_damp_value(&mut self, uv_damp: Complex<F<T>>) {
-        self.uv_damp.values = vec![uv_damp];
+    pub(crate) fn uv_damp_value(&mut self, uv_dampers: Vec<Complex<F<T>>>) {
+        self.uv_damp.values = uv_dampers;
     }
 
     pub(crate) fn radius_atom(&mut self, radius: Atom) {

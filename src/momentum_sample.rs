@@ -10,7 +10,7 @@ use bincode_trait_derive::{Decode, Encode};
 use derive_more::{From, Into};
 use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
-use std::ops::{Index, IndexMut, Sub};
+use std::ops::{Add, Index, IndexMut, Sub};
 use symbolica::domains::float::NumericalFloatLike;
 use tabled::settings::Style;
 use typed_index_collections::TiVec;
@@ -179,6 +179,14 @@ impl<T: FloatLike> Sub<&LoopMomenta<F<T>>> for &LoopMomenta<F<T>> {
 
     fn sub(self, rhs: &LoopMomenta<F<T>>) -> Self::Output {
         LoopMomenta::from_iter(self.iter().zip(rhs.iter()).map(|(l, r)| l - r))
+    }
+}
+
+impl<T: FloatLike> Add<&LoopMomenta<F<T>>> for &LoopMomenta<F<T>> {
+    type Output = LoopMomenta<F<T>>;
+
+    fn add(self, rhs: &LoopMomenta<F<T>>) -> Self::Output {
+        LoopMomenta::from_iter(self.iter().zip(rhs.iter()).map(|(l, r)| l + r))
     }
 }
 
