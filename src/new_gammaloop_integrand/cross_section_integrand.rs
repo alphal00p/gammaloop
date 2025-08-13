@@ -25,7 +25,7 @@ use crate::{
     new_cs::{CrossSectionCut, CutId},
     new_gammaloop_integrand::ParamBuilder,
     new_graph::{ExternalConnection, FeynmanGraph, Graph, LmbIndex, LoopMomentumBasis},
-    utils::{self, FloatLike, F},
+    utils::{self, newton_solver::newton_iteration_and_derivative, FloatLike, F},
     DependentMomentaConstructor, GammaLoopContext, GammaLoopContextContainer,
     IntegratedCounterTermRange, Polarizations, Settings,
 };
@@ -400,40 +400,4 @@ impl HasIntegrand for CrossSectionIntegrand {
 
         self.data.graph_terms[0].graph.underlying.get_loop_number() * 3
     }
-}
-
-/// root finding, returns the derivative at the root, so that we don't have to recompute it.
-/// Also returns the value of the function whose root is being found and the number of iterations used for debug information
-fn newton_iteration_and_derivative<T: FloatLike>(
-    guess: &F<T>,
-    f_x_and_df_x: impl Fn(&F<T>) -> (F<T>, F<T>),
-    tolerance: &F<T>,
-    max_iterations: usize,
-    e_cm: &F<T>,
-) -> NewtonIterationResult<T> {
-    let mut x = guess.clone();
-    let (mut val_f_x, mut val_df_x) = f_x_and_df_x(&x);
-
-    let mut iteration = 0;
-
-    while iteration < max_iterations && val_f_x.abs() > guess.epsilon() * tolerance * e_cm {
-        x -= val_f_x / val_df_x;
-        (val_f_x, val_df_x) = f_x_and_df_x(&x);
-        iteration += 1;
-    }
-
-    NewtonIterationResult {
-        solution: x,
-        derivative_at_solution: val_df_x,
-        error_of_function: val_f_x,
-        num_iterations_used: iteration,
-    }
-}
-
-#[derive(Serialize, Clone, Debug)]
-struct NewtonIterationResult<T: FloatLike> {
-    solution: F<T>,
-    derivative_at_solution: F<T>,
-    error_of_function: F<T>,
-    num_iterations_used: usize,
 }

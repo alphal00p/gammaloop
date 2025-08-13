@@ -11,7 +11,7 @@ use crate::{
     new_gammaloop_integrand::GenericEvaluator,
     new_graph::{FeynmanGraph, Graph, LoopMomentumBasis},
     subtraction::overlap::{OverlapGroup, OverlapStructure},
-    utils::{FloatLike, F},
+    utils::{newton_solver::NewtonIterationResult, FloatLike, F},
     Settings,
 };
 
@@ -167,4 +167,9 @@ struct EsurfaceCTBuilder<'a, T: FloatLike> {
     overlap_builder: &'a OverlapBuilder<'a, T>,
     existing_esurface_id: ExistingEsurfaceId,
     esurface: &'a Esurface,
+}
+
+struct RstarSolution<'a, T: FloatLike> {
+    esurface_ct_builder: EsurfaceCTBuilder<'a, T>,
+    solution: NewtonIterationResult<T>,
 }
