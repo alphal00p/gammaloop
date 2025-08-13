@@ -617,6 +617,7 @@ impl<T: Neg<Output = T> + Clone> ThreeMomentum<T> {
     }
 
     pub(crate) fn perform_pi2_rotation_x(&self) -> Self {
+        // println!("X rotation");
         Self {
             px: self.px.clone(),
             py: -self.pz.clone(),
@@ -630,6 +631,7 @@ impl<T: Neg<Output = T> + Clone> ThreeMomentum<T> {
     }
 
     pub(crate) fn perform_pi2_rotation_y(&self) -> Self {
+        // println!("Y rotation");
         Self {
             px: self.pz.clone(),
             py: self.py.clone(),
@@ -643,6 +645,7 @@ impl<T: Neg<Output = T> + Clone> ThreeMomentum<T> {
     }
 
     pub(crate) fn perform_pi2_rotation_z(&self) -> Self {
+        // println!("Z rotation");
         Self {
             px: -self.py.clone(),
             py: self.px.clone(),

@@ -1,8 +1,9 @@
 use itertools::Itertools;
 use linnet::{
     half_edge::{
-        involution::Orientation, nodestore::BitVecNeighborIter, EdgeAccessors, HedgeGraph,
-        NodeIndex,
+        involution::Orientation,
+        nodestore::{BitVecNeighborIter, NodeStorageOps},
+        EdgeAccessors, HedgeGraph, NodeIndex,
     },
     parser::DotVertexData,
 };
@@ -88,6 +89,44 @@ impl From<ArcVertexRule> for ParseVertex {
     }
 }
 
+pub trait ParticleEdge {
+    fn particle(&self) -> Option<ArcParticle>;
+    fn is_dummy(&self) -> bool;
+}
+
+pub trait NodeCrownExt {
+    fn all_incoming_particles(&self, node: NodeIndex) -> Vec<ArcParticle>;
+}
+
+// impl<E: ParticleEdge, V, N: NodeStorageOps<NodeData = V>, H> NodeCrownExt
+//     for HedgeGraph<E, V, H, N>
+// {
+//     fn all_incoming_particles(&self, node: NodeIndex) -> Vec<ArcParticle> {
+//         let mut particles: Vec<ArcParticle> = self
+//             .iter_crown(node)
+//             .filter_map(|h| {
+//                 let eid = self[&h];
+//                 if self[eid].is_dummy() {
+//                     return None;
+//                 }
+
+//                 let particle = match g.orientation(h).reverse().relative_to(g.flow(h)) {
+//                     Orientation::Reversed => {
+//                         println!("Reverse");
+//                         g[eid].particle.particle()?.get_anti_particle(model)
+//                     }
+//                     _ => g[eid].particle.particle()?.clone(),
+//                 };
+
+//                 println!("Local Particle to node: {node_id}: {}", particle.name);
+//                 Some(particle)
+//             })
+//             .collect();
+//         particles.sort();
+//         particles
+//     }
+// }
+
 impl ParseVertex {
     pub(crate) fn parse<'a>(
         model: &'a Model,
@@ -135,18 +174,21 @@ impl ParseVertex {
                         }
 
                         // println!(
-                        //     "{:?}{:?}{:?}{}",
+                        //     "Flow of {h}: {:?}\n\tOrientation: {:?}\n\tRelative Orientation: {:?}\n\tParticle: {}",
                         //     g.flow(h),
                         //     g.orientation(h),
                         //     g.orientation(h).reverse().relative_to(g.flow(h)),
-                        //     g[eid].particle.name
+                        //     g[eid].particle.particle()?.name
                         // );
-                        let particle = match g.orientation(h).relative_to(g.flow(h)) {
+                        let particle = match g.orientation(h).reverse().relative_to(g.flow(h)) {
                             Orientation::Reversed => {
+                                // println!("Reverse");
                                 g[eid].particle.particle()?.get_anti_particle(model)
                             }
                             _ => g[eid].particle.particle()?.clone(),
                         };
+
+                        // println!("Local Particle to node: {node_id}: {}",particle.name);
                         Some(particle)
                     })
                     .collect();

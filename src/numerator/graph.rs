@@ -175,7 +175,7 @@ mod test {
     use env_logger::WriteStyle;
     use log::{debug, LevelFilter};
     use spenso::structure::HasStructure;
-    use symbolica::atom::AtomCore;
+    use symbolica::atom::{Atom, AtomCore};
 
     use crate::{
         dot,
@@ -421,6 +421,125 @@ mod test {
                 "\nExpected: {:}\nActual: {:} for graph {:}",
                 expected, pols, g.name,
             );
+        }
+    }
+
+    #[test]
+    fn vertex_rule() {
+        let mut graphs: Vec<Graph> = dot!(
+            digraph dxda{
+                ext [style=invis]
+                ext->v1:0[particle="d" id=0]
+                ext->v1:1[particle="d~" id=1]
+                v1:2->ext[particle="a" id=2]
+            }
+
+        )
+        .unwrap();
+
+        for g in &mut graphs {
+            let mut out = String::new();
+            g.dot_serialize_fmt(&mut out);
+            println!("{}", out);
+
+            assert!(g.iter_nodes().all(|(_, _, v)| {
+                let a = v.vertex_rule.as_ref().unwrap().name.as_str();
+                a == "V_71"
+            }),);
+        }
+    }
+    #[test]
+    fn pslash() {
+        let mut graphs: Vec<Graph> = dot!(
+            digraph dxda{
+                ext [style=invis]
+                node[num=1]
+                ext->v1:0[particle="d" id=0]
+                v1:1->v2:2[particle="d" id=1]
+                v2:3->ext[particle="d" id=2]
+            }
+
+        )
+        .unwrap();
+
+        for g in &mut graphs {
+            let mut out = String::new();
+            g.dot_serialize_fmt(&mut out);
+            println!("{}", out);
+        }
+    }
+
+    #[test]
+    fn tree() {
+        let mut graphs: Vec<Graph> = dot!(
+            digraph qqx_aaa_tree_1 {
+                        graph[num="spenso::g(spenso::dind(spenso::cof(3, hedge(1))), spenso::cof(3, hedge(2)))"]
+                        ext    [style=invis]
+                        ext -> v1:1 [particle="d" id=1];
+                        ext -> v3:2 [particle="d~" id=2];
+                        v1:3 -> ext [particle="a" id=3];
+                        v2:4 -> ext [particle="a" id=4];
+                        v3:0 -> ext [particle="a" id=0];
+                        v1 -> v2 [particle="d" id=5];
+                        v2 -> v3 [particle="d" id=6];
+            }
+
+            digraph qqx_aaa_tree_1_glob {
+            ext [style=invis];
+            ext -> v1:1 [particle="d", id=1];
+            ext -> v3:2 [particle="d~", id=2];
+            v1:3 -> ext [particle="a", id=3];
+            v2:4 -> ext [particle="a", id=4];
+            v3:0 -> ext [particle="a", id=0];
+            v1 -> v2 [particle="d", id=5];
+            v2 -> v3 [particle="d", id=6];
+            graph [num="1𝑖/27
+                *ee^3
+                *spenso::g(spenso::cof(3,hedge(1)),spenso::dind(spenso::cof(3,hedge(5))))
+                *spenso::gamma(spenso::bis(4,hedge(5)),spenso::bis(4,hedge(1)),spenso::mink(4,hedge(3)))
+
+                *spenso::g(spenso::cof(3,hedge(5)),spenso::dind(spenso::cof(3,hedge(6))))
+                *Q(5,spenso::mink(4,edge(5,1)))
+                *spenso::gamma(spenso::bis(4,hedge(6)),spenso::bis(4,hedge(5)),spenso::mink(4,edge(5,1)))
+
+
+                *spenso::g(spenso::cof(3,hedge(6)),spenso::dind(spenso::cof(3,hedge(7))))
+                *spenso::gamma(spenso::bis(4,hedge(7)),spenso::bis(4,hedge(6)),spenso::mink(4,hedge(4)))
+
+                *spenso::g(spenso::cof(3,hedge(7)),spenso::dind(spenso::cof(3,hedge(8))))
+                *spenso::gamma(spenso::bis(4,hedge(8)),spenso::bis(4,hedge(7)),spenso::mink(4,edge(6,1)))
+                *Q(6,spenso::mink(4,edge(6,1)))
+
+                *spenso::g(spenso::cof(3,hedge(8)),spenso::dind(spenso::cof(3,hedge(2))))
+                *spenso::gamma(spenso::bis(4,hedge(2)),spenso::bis(4,hedge(8)),spenso::mink(4,hedge(0)))
+
+                    *u(1,spenso::bis(4,hedge(1)))
+                    *vbar(2,spenso::bis(4,hedge(2)))
+                    *ϵbar(0,spenso::mink(4,hedge(0)))
+                    *ϵbar(3,spenso::mink(4,hedge(3)))
+                    *ϵbar(4,spenso::mink(4,hedge(4)))
+                    *spenso::g(spenso::cof(3,hedge(2)),spenso::dind(spenso::cof(3,hedge(1))))"
+            , overall_factor="1", projector="1"
+            ];
+            edge [num="1"];
+            node [num="1"];
+            }
+
+
+        )
+        .unwrap();
+
+        let mut a: Option<Atom> = None;
+        for g in &mut graphs {
+            let mut out = String::new();
+            let new_a = g.numerator(&g.full_filter(), true).state.expr;
+            if let Some(a) = &a {
+                assert_eq!(&new_a, a, "{}", (&new_a / a).expand().to_canonical_string());
+            } else {
+                a = Some(new_a);
+            }
+            g.dot_serialize_fmt(&mut out);
+            println!("{}", out);
         }
     }
 }

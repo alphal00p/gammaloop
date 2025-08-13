@@ -130,7 +130,7 @@ impl UFOSymbols {
         //     println!("{}", s);
         // }
         // println!("in:{atom}");
-        // //
+        //
         atom = self.normalize_complex(atom);
         for (i, s) in slots.iter().enumerate() {
             let i = (i + 1) as i64;
@@ -425,6 +425,7 @@ impl UFOSymbols {
         .map(|(pat, rep)| Replacement::new(pat.to_pattern(), rep))
         .collect();
 
+        // println!("out:{atom}");
         atom = atom.replace_multiple(&reps);
 
         atom = atom.replace_map(|term, _, out| {

@@ -1305,7 +1305,7 @@ propagators:
   denominator: P(1)^2
 - name: ve_propFeynman
   particle: ve
-  numerator: PSlash(1,2)
+  numerator: PSlash(2,1)
   denominator: P(1)^2
 - name: ve~_propFeynman
   particle: ve~
@@ -1313,7 +1313,7 @@ propagators:
   denominator: P(1)^2
 - name: vm_propFeynman
   particle: vm
-  numerator: PSlash(1,2)
+  numerator: PSlash(2,1)
   denominator: P(1)^2
 - name: vm~_propFeynman
   particle: vm~
@@ -1321,7 +1321,7 @@ propagators:
   denominator: P(1)^2
 - name: vt_propFeynman
   particle: vt
-  numerator: PSlash(1,2)
+  numerator: PSlash(2,1)
   denominator: P(1)^2
 - name: vt~_propFeynman
   particle: vt~
@@ -1329,7 +1329,7 @@ propagators:
   denominator: P(1)^2
 - name: u_propFeynman
   particle: u
-  numerator: PSlash(1,2)
+  numerator: PSlash(2,1)
   denominator: P(1)^2
 - name: u~_propFeynman
   particle: u~
@@ -1337,7 +1337,7 @@ propagators:
   denominator: P(1)^2
 - name: c_propFeynman
   particle: c
-  numerator: PSlash(1,2)+MC*Identity(1,2)
+  numerator: PSlash(2,1)-MC*Identity(2,1)
   denominator: -MC^2+P(1)^2
 - name: c~_propFeynman
   particle: c~
@@ -1345,7 +1345,7 @@ propagators:
   denominator: -MC^2+P(1)^2
 - name: t_propFeynman
   particle: t
-  numerator: PSlash(1,2)+MT*Identity(1,2)
+  numerator: PSlash(2,1)-MT*Identity(2,1)
   denominator: -MT^2+P(1)^2
 - name: t~_propFeynman
   particle: t~
@@ -1353,7 +1353,7 @@ propagators:
   denominator: -MT^2+P(1)^2
 - name: d_propFeynman
   particle: d
-  numerator: PSlash(1,2)
+  numerator: PSlash(2,1)
   denominator: P(1)^2
 - name: d~_propFeynman
   particle: d~
@@ -1361,7 +1361,7 @@ propagators:
   denominator: P(1)^2
 - name: s_propFeynman
   particle: s
-  numerator: PSlash(1,2)
+  numerator: PSlash(2,1)
   denominator: P(1)^2
 - name: s~_propFeynman
   particle: s~
@@ -1369,7 +1369,7 @@ propagators:
   denominator: P(1)^2
 - name: b_propFeynman
   particle: b
-  numerator: PSlash(1,2)+MB*Identity(1,2)
+  numerator: PSlash(2,1)-MB*Identity(2,1)
   denominator: -MB^2+P(1)^2
 - name: b~_propFeynman
   particle: b~
@@ -1393,7 +1393,7 @@ propagators:
   denominator: -MW^2+P(1)^2
 - name: e-_propFeynman
   particle: e-
-  numerator: PSlash(1,2)+Me*Identity(1,2)
+  numerator: PSlash(2,1)-Me*Identity(2,1)
   denominator: -Me^2+P(1)^2
 - name: e+_propFeynman
   particle: e+
@@ -1401,7 +1401,7 @@ propagators:
   denominator: -Me^2+P(1)^2
 - name: mu-_propFeynman
   particle: mu-
-  numerator: PSlash(1,2)+MM*Identity(1,2)
+  numerator: PSlash(2,1)-MM*Identity(2,1)
   denominator: -MM^2+P(1)^2
 - name: mu+_propFeynman
   particle: mu+
@@ -1409,7 +1409,7 @@ propagators:
   denominator: -MM^2+P(1)^2
 - name: ta-_propFeynman
   particle: ta-
-  numerator: PSlash(1,2)+MTA*Identity(1,2)
+  numerator: PSlash(2,1)-MTA*Identity(2,1)
   denominator: -MTA^2+P(1)^2
 - name: ta+_propFeynman
   particle: ta+
@@ -1463,7 +1463,7 @@ lorentz_structures:
   - 2
   - 2
   - 3
-  structure: Gamma(3,2,1)
+  structure: Gamma(3,1,2)
 - name: FFV2
   spins:
   - 2
