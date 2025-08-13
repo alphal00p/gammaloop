@@ -3,6 +3,7 @@ use linnet::half_edge::involution::{EdgeIndex, EdgeVec};
 use spenso::algebra::complex::Complex;
 use symbolica::domains::float::{NumericalFloatLike, Real};
 use typed_index_collections::TiVec;
+use vakint::Momentum;
 
 use crate::{
     cff::esurface::{self, Esurface, EsurfaceCollection, EsurfaceID, ExistingEsurfaceId},
@@ -228,4 +229,65 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
 struct RstarSolution<'a, T: FloatLike> {
     esurface_ct_builder: EsurfaceCTBuilder<'a, T>,
     solution: NewtonIterationResult<T>,
+}
+
+impl<'a, T: FloatLike> RstarSolution<'a, T> {
+    fn rstar_samples(self) -> RstarSample<'a, T> {
+        let rstar_loop_momenta = &self
+            .esurface_ct_builder
+            .overlap_builder
+            .unit_shifted_momenta
+            .rescale(&self.solution.solution, None)
+            + &self.esurface_ct_builder.overlap_builder.rotated_center;
+
+        // some gymnastics to get the sample right
+        // do not touch!
+        let mut sample_to_modify = self
+            .esurface_ct_builder
+            .overlap_builder
+            .counterterm_builder
+            .sample
+            .clone();
+
+        let new_sample = match self
+            .esurface_ct_builder
+            .overlap_builder
+            .counterterm_builder
+            .sample
+            .rotated_sample
+        {
+            None => {
+                sample_to_modify.sample.loop_moms = rstar_loop_momenta;
+                sample_to_modify
+            }
+            Some(_) => {
+                sample_to_modify.rotated_sample.as_mut().unwrap().loop_moms = rstar_loop_momenta;
+
+                let new_unrotated_momenta = &(&self
+                    .esurface_ct_builder
+                    .overlap_builder
+                    .counterterm_builder
+                    .sample
+                    .sample
+                    .loop_moms
+                    - &self.esurface_ct_builder.overlap_builder.unrotated_center)
+                    .rescale(&self.esurface_ct_builder.overlap_builder.radius.inv(), None)
+                    .rescale(&self.solution.solution, None)
+                    + &self.esurface_ct_builder.overlap_builder.unrotated_center;
+
+                sample_to_modify.sample.loop_moms = new_unrotated_momenta;
+                sample_to_modify
+            }
+        };
+
+        RstarSample {
+            rstar_solution: self,
+            rstar_sample: new_sample,
+        }
+    }
+}
+
+struct RstarSample<'a, T: FloatLike> {
+    rstar_solution: RstarSolution<'a, T>,
+    rstar_sample: MomentumSample<T>,
 }
