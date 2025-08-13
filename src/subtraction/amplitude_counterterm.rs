@@ -11,9 +11,15 @@ use crate::{
     new_gammaloop_integrand::GenericEvaluator,
     new_graph::{FeynmanGraph, Graph, LoopMomentumBasis},
     subtraction::overlap::{OverlapGroup, OverlapStructure},
-    utils::{newton_solver::NewtonIterationResult, FloatLike, F},
+    utils::{
+        newton_solver::{newton_iteration_and_derivative, NewtonIterationResult},
+        FloatLike, F,
+    },
     Settings,
 };
+
+const MAX_ITERATIONS: usize = 40;
+const TOLERANCE: f64 = 1.0;
 
 pub struct AmplitudeCountertermData {
     pub overlap: OverlapStructure,
@@ -167,6 +173,56 @@ struct EsurfaceCTBuilder<'a, T: FloatLike> {
     overlap_builder: &'a OverlapBuilder<'a, T>,
     existing_esurface_id: ExistingEsurfaceId,
     esurface: &'a Esurface,
+}
+
+impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
+    fn solve_rstar(self) -> RstarSolution<'a, T> {
+        let settings = self.overlap_builder.counterterm_builder.settings;
+        let (radius_guess, _) = self.esurface.get_radius_guess(
+            &self.overlap_builder.unit_shifted_momenta,
+            &self
+                .overlap_builder
+                .counterterm_builder
+                .sample
+                .external_moms(),
+            &self
+                .overlap_builder
+                .counterterm_builder
+                .graph
+                .loop_momentum_basis,
+        );
+
+        let function = |r: &_| {
+            self.esurface.compute_self_and_r_derivative(
+                r,
+                &self.overlap_builder.unit_shifted_momenta,
+                &self.overlap_builder.rotated_center,
+                self.overlap_builder
+                    .counterterm_builder
+                    .sample
+                    .external_moms(),
+                &self
+                    .overlap_builder
+                    .counterterm_builder
+                    .graph
+                    .loop_momentum_basis,
+                &self.overlap_builder.counterterm_builder.real_mass_vector,
+            )
+        };
+
+        let solution = newton_iteration_and_derivative(
+            &radius_guess,
+            function,
+            &F::from_f64(TOLERANCE),
+            MAX_ITERATIONS,
+            &self.overlap_builder.counterterm_builder.e_cm,
+        );
+
+        RstarSolution {
+            esurface_ct_builder: self,
+            solution,
+        }
+    }
 }
 
 struct RstarSolution<'a, T: FloatLike> {
