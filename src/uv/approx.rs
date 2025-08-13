@@ -1300,7 +1300,7 @@ pub(crate) fn do_replacement_rules<H, G: UltravioletGraph + AsRef<HedgeGraph<Edg
 
         orientation_expr = orientation_expr
             .replace(function!(GS.emr_vec, edge_id, W_.x_))
-            .with(function!(GS.external_mom, edge_id, W_.x_));
+            .with(function!(GS.emr_vec, edge_id, W_.x_));
     }
 
     orientation_expr
