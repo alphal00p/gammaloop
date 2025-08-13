@@ -29,7 +29,7 @@ use crate::{
     signature::SignatureLike,
     subtraction::overlap::find_maximal_overlap,
     utils::{GS, TENSORLIB, W_},
-    uv::UltravioletGraph,
+    uv::{approx::do_replacement_rules, UltravioletGraph},
     GammaLoopContext, GammaLoopContextContainer,
 };
 use eyre::{eyre, Context};
@@ -327,6 +327,24 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
         result
     }
 
+    fn new_vakint(&self) -> Vakint {
+        Vakint::new(Some(VakintSettings {
+            allow_unknown_integrals: false,
+            evaluation_order: EvaluationOrder::alphaloop_only(),
+            integral_normalization_factor: LoopNormalizationFactor::MSbar,
+            run_time_decimal_precision: 32,
+            number_of_terms_in_epsilon_expansion: self
+                .graph
+                .n_loops(&self.graph.underlying.no_dummy())
+                as i64
+                + 1,
+            // temporary_directory: Some("./form".into()),
+            mu_r_sq_symbol: GS.mu_r_sq.get_name().to_string(),
+            ..VakintSettings::default()
+        }))
+        .unwrap()
+    }
+
     pub(crate) fn build_all_orientations_integrand_atom(&self) -> Atom {
         debug!("Building all orientations integrand");
 
@@ -348,21 +366,7 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
             .map(|a| a.data.clone())
             .collect();
 
-        let vakint = Vakint::new(Some(VakintSettings {
-            allow_unknown_integrals: false,
-            evaluation_order: EvaluationOrder::alphaloop_only(),
-            integral_normalization_factor: LoopNormalizationFactor::MSbar,
-            run_time_decimal_precision: 32,
-            number_of_terms_in_epsilon_expansion: self
-                .graph
-                .n_loops(&self.graph.underlying.no_dummy())
-                as i64
-                + 1,
-            // temporary_directory: Some("./form".into()),
-            mu_r_sq_symbol: GS.mu_r_sq.get_name().to_string(),
-            ..VakintSettings::default()
-        }))
-        .unwrap();
+        let vakint = self.new_vakint();
 
         forest.compute(
             &self.graph,
@@ -520,10 +524,12 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
             .map(|cff_graph| cff_graph.global_orientation)
             .collect::<TiVec<SubgraphOrientationID, _>>();
 
+            let vakint = self.new_vakint();
+
             circled_forest.compute(
                 &self.graph,
                 &circled,
-                todo!(),
+                &vakint,
                 &circled_orientations,
                 &canonize_esurface,
                 &esurface.energies,
@@ -532,7 +538,7 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
             complement_forest.compute(
                 &self.graph,
                 &complement,
-                todo!(),
+                &vakint,
                 &complement_orientations,
                 &canonize_esurface,
                 &esurface.energies,
@@ -553,14 +559,12 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
                 );
 
                 let product = circled_expr * complement_expr;
-                //let orientation_result = do_replacement_rules(
-                //    product,
-                //    &self.graph.underlying,
-                //    &full_orientation_list[orientation].orientation,
-                //    Some(&edges_in_cut),
-                //);
-
-                let orientation_result: Atom = todo!();
+                let orientation_result = do_replacement_rules(
+                    product,
+                    &self.graph,
+                    &esurface.energies,
+                    &full_orientation_list[orientation].orientation,
+                );
 
                 counterterm += orientation_result;
             }

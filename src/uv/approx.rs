@@ -5,7 +5,7 @@ use crate::{
         expression::{GraphOrientation, OrientationID},
         generation::{generate_uv_cff, ShiftRewrite},
     },
-    momentum::Sign,
+    momentum::{Sign, SignOrZero},
     new_graph::{Edge, LMBext, LoopMomentumBasis, Vertex},
     utils::{external_energy_atom_from_index, ose_atom_from_index, GS, W_},
 };
@@ -25,7 +25,7 @@ use symbolica::{
 };
 
 use linnet::half_edge::{
-    involution::{EdgeIndex, HedgePair},
+    involution::{EdgeIndex, EdgeVec, HedgePair, Orientation},
     subgraph::{Inclusion, InternalSubGraph, ModifySubgraph, SubGraph, SubGraphOps},
     HedgeGraph,
 };
@@ -994,10 +994,11 @@ impl Approximation {
     // }
 }
 
-fn do_replacement_rules<H, G: UltravioletGraph + AsRef<HedgeGraph<Edge, Vertex, H>>>(
+pub(crate) fn do_replacement_rules<H, G: UltravioletGraph + AsRef<HedgeGraph<Edge, Vertex, H>>>(
     mut orientation_expr: Atom,
     graph: &G,
     cut_edges: &[EdgeIndex],
+    orientation: &EdgeVec<Orientation>,
 ) -> Atom {
     let g = graph.as_ref();
     let mut cut_edges_subgraph: BitVec = g.empty_subgraph();
@@ -1013,17 +1014,56 @@ fn do_replacement_rules<H, G: UltravioletGraph + AsRef<HedgeGraph<Edge, Vertex, 
         Some(cut_edges_subgraph)
     };
 
-    // add Feynman rules of external edges
-    // for (_p, edge_index, d) in graph.iter_edges_of(&graph.external_filter()) {
-    //     let edge_id = usize::from(edge_index) as i64;
-    //     orientation_expr = (orientation_expr * &d.data.num)
-    //         .replace(function!(GS.emr_mom, edge_id, W_.y_))
-    //         .with_map(move |m| {
-    //             let index = m.get(W_.y_).unwrap().to_atom();
+    if let Some(cut) = &cut_edges_subgraph {
+        // add Feynman rules of cut edges
+        for (_p, edge_index, d) in graph.as_ref().iter_edges_of(cut) {
+            let edge_id = usize::from(edge_index) as i64;
 
-    //             function!(GS.energy, edge_id, index) + function!(GS.emr_vec, edge_id, index)
-    //         });
-    // }
+            // do not set the cut momenta generated in the amplitude to their OSE values
+            // yet in order to do 4d scaling tests
+            let temp_orientation = orientation.clone();
+
+            orientation_expr = orientation_expr
+                .replace(function!(GS.emr_mom, edge_id, W_.y_))
+                .with_map(move |m| {
+                    let index = m.get(W_.y_).unwrap().to_atom();
+
+                    let sign = SignOrZero::from((&temp_orientation[edge_index]).clone()) * 1;
+
+                    function!(GS.energy, edge_id, sign, index)
+                        + function!(GS.emr_vec, edge_id, index)
+                });
+
+            let temp_orientation = orientation.clone();
+            orientation_expr = orientation_expr
+                * d.data
+                    .num
+                    .replace(function!(GS.emr_mom, edge_id, W_.y_))
+                    .with_map(move |m| {
+                        let index = m.get(W_.y_).unwrap().to_atom();
+
+                        let sign = SignOrZero::from((&temp_orientation[edge_index]).clone()) * 1;
+
+                        function!(GS.ose, edge_id, index) * sign
+                            + function!(GS.emr_vec, edge_id, index)
+                    });
+        }
+    }
+
+    // add Feynman rules of external edges
+    for (_p, edge_index, d) in graph
+        .as_ref()
+        .iter_edges_of(&graph.as_ref().external_filter())
+    {
+        let edge_id = usize::from(edge_index) as i64;
+        orientation_expr = (orientation_expr * &d.data.num)
+            .replace(function!(GS.emr_mom, edge_id, W_.y_))
+            .with_map(move |m| {
+                let index = m.get(W_.y_).unwrap().to_atom();
+
+                function!(GS.energy, edge_id, index) + function!(GS.emr_vec, edge_id, index)
+            });
+    }
 
     let spenso_mink = symbol!("spenso::mink");
 
