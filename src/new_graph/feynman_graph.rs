@@ -397,6 +397,8 @@ impl FeynmanGraph for HedgeGraph<Edge, Vertex, NumHedgeData> {
         let mass = self[edge].mass_atom();
         let mass2 = &mass * &mass;
 
+        // println!("{}", mass2);
+
         let dot = GS.emr_mom(edge, Atom::from(ExpandedIndex::from_iter([1])))
             * GS.emr_mom(edge, Atom::from(ExpandedIndex::from_iter([1])))
             + GS.emr_mom(edge, Atom::from(ExpandedIndex::from_iter([2])))
@@ -404,7 +406,7 @@ impl FeynmanGraph for HedgeGraph<Edge, Vertex, NumHedgeData> {
             + GS.emr_mom(edge, Atom::from(ExpandedIndex::from_iter([3])))
                 * GS.emr_mom(edge, Atom::from(ExpandedIndex::from_iter([3])));
 
-        (mass2 - dot).sqrt()
+        (dot + mass2).sqrt()
     }
 
     fn get_ose_replacements(&self) -> Vec<Replacement> {

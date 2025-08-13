@@ -75,7 +75,7 @@ impl Display for ExternalIndex {
 }
 
 #[derive(From, Into, Serialize, Deserialize, Clone, PartialEq, Debug, Encode, Decode)]
-pub struct LoopMomenta<T>(Vec<ThreeMomentum<T>>);
+pub struct LoopMomenta<T>(pub Vec<ThreeMomentum<T>>);
 
 impl<T: Display> Display for LoopMomenta<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -233,11 +233,15 @@ pub struct MomentumSample<T: FloatLike> {
 impl<T: FloatLike> Display for MomentumSample<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut table = tabled::builder::Builder::new();
-        table.push_record(["Sample"]);
+        if self.rotated_sample.is_some() {
+            table.push_record(["Rotated Sample"]);
+        } else {
+            table.push_record(["Sample"]);
+        }
         table.push_record(["Loop Momenta", "p_x", "p_y", "p_z"]);
         // table
 
-        for (index, loop_mom) in self.sample.loop_moms.iter().enumerate() {
+        for (index, loop_mom) in self.loop_moms().0.iter().enumerate() {
             table.push_record([
                 index.to_string(),
                 loop_mom.px.to_string(),
@@ -247,7 +251,7 @@ impl<T: FloatLike> Display for MomentumSample<T> {
         }
 
         table.push_record(["External Momenta", "E", "p_x", "p_y", "p_z"]);
-        for (index, external_mom) in self.sample.external_moms.iter().enumerate() {
+        for (index, external_mom) in self.external_moms().iter_enumerated() {
             table.push_record([
                 index.to_string(),
                 external_mom.temporal.to_string(),
@@ -541,8 +545,8 @@ impl<T: FloatLike> MomentumSample<T> {
     #[inline]
     pub(crate) fn get_rotated_sample(&self, rotation: &Rotation) -> Self {
         Self {
-            sample: self.sample.get_rotated_sample(rotation),
-            rotated_sample: None, //Some(self.sample.get_rotated_sample(rotation)),
+            sample: self.sample.clone(),
+            rotated_sample: Some(self.sample.get_rotated_sample(rotation)),
             uuid: self.uuid,
         }
     }

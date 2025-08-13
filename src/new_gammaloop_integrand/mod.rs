@@ -47,6 +47,7 @@ use symbolica::evaluate::{
 };
 use symbolica::id::Replacement;
 use symbolica::numerical_integration::{ContinuousGrid, DiscreteGrid, Grid, Sample};
+use symbolica::parse;
 use tabled::settings::Style;
 use typed_index_collections::TiVec;
 pub mod amplitude_integrand;
@@ -1249,12 +1250,14 @@ impl UpdateAndGetParams<f64> for ParamBuilder<f64> {
             })
             .collect();
 
+        // parse!("s").evaluator(fn_map, params, optimization_settings).unwrap().
+
         self.external_spatial_value(sample);
         self.external_energies_value(sample);
         self.emr_spatial.values = emr_spatial;
         self.polarizations_values(graph, sample.external_moms(), helicities);
 
-        // println!("ParamBuilder after eval f64:\n{}", self);
+        println!("ParamBuilder after eval f64:\n{}", self);
 
         Cow::Owned(self.clone().build_values()) // ideally borrows a single vec
     }
@@ -1695,6 +1698,10 @@ impl<T: FloatLike> ParamBuilder<T> {
 impl<T: FloatLike> Display for ParamBuilder<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut table = tabled::builder::Builder::new();
+
+        for (lhs, rhs) in &self.reps {
+            table.push_record(vec![lhs.to_string(), rhs.to_string()]);
+        }
 
         for i in self {
             for (v, p) in i.values.iter().zip(i.params.iter()) {

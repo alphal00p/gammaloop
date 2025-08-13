@@ -3628,6 +3628,16 @@ impl GammaloopSymbols {
                 + function!(GS.emr_vec, eidc, Minkowski {}.to_symbolic([W_.a__])),
         )
     }
+
+    pub(crate) fn split_mom_pattern_simple<'a>(&self, e: EdgeIndex) -> Replacement {
+        let eidc = usize::from(e) as i64;
+        Replacement::new(
+            self.emr_mom(e, Minkowski {}.to_symbolic([W_.a__]))
+                .to_pattern(),
+            function!(GS.ose, eidc, Minkowski {}.to_symbolic([W_.a__])) * sign_atom(e)
+                + function!(GS.emr_vec, eidc, Minkowski {}.to_symbolic([W_.a__])),
+        )
+    }
 }
 
 pub(crate) fn sign_atom(eid: EdgeIndex) -> Atom {

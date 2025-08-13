@@ -120,7 +120,7 @@ serde_repr = "0.1.19"
 compensated-summation = "0.3.0"
 uuid = { version = "1.10.0", features = ["serde", "v4"] }
 serde_with = "3.9.0"
-tabled = "0.20.0"
+tabled = { version = "0.20.0", features = ["ansi"] }
 bitvec = { version = "1.0.1", features = ["serde"] }
 pathfinding = "4.11.0"
 insta = { version = "1.40.0", features = ["json", "ron", "serde", "toml"] }
@@ -184,7 +184,7 @@ spenso-macros = { git = "https://github.com/alphal00p/spenso", rev = "3386041d30
 # symbolica = {path="../symbolica"}
 # linnet = "0.10.0"
 # linnet = { path = "../linnet" }
-linnet = { git = "https://github.com/alphal00p/linnet", rev = "33847383067c96c488358b4c861e11b89741a937" }
+linnet = { git = "https://github.com/alphal00p/linnet", rev = "1fecaa2ebe9ff4696ecee4340e6c13090428f924" }
 
 # symbolica-community={path="../symbolica-community"}
 # linnet = { git = "https://github.com/alphal00p/linnet", rev = "d72588ecbea39c6df3fdde9ffa4e4f3575f93542" }

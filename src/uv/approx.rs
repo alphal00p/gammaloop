@@ -14,7 +14,11 @@ use bitvec::vec::BitVec;
 use idenso::metric::MS;
 use log::debug;
 use spenso::{
-    structure::{concrete_index::ExpandedIndex, HasStructure},
+    structure::{
+        abstract_index::AIND_SYMBOLS,
+        concrete_index::{ExpandedIndex, CONCRETEIND},
+        HasStructure,
+    },
     tensors::parametric::atomcore::PatternReplacement,
 };
 use symbolica::{
@@ -960,6 +964,15 @@ impl Approximation {
 
         let mut resnum = graph.numerator(&reduced, true).color_simplify();
 
+        let mut reps = Vec::new();
+        for (p, eid, _) in graph.as_ref().iter_edges_of(&reduced) {
+            if p.is_paired() {
+                // let e_mass = e.data.mass_atom();
+                reps.push(GS.split_mom_pattern_simple(eid));
+            }
+        }
+
+        resnum.state.expr = resnum.state.expr.replace_multiple(&reps);
         resnum.state.expr *= cff;
         let mut res = resnum
             .parse()
@@ -971,13 +984,23 @@ impl Approximation {
             .scalar()
             .expect("Expected a scalar value when contracting integrand tensor network");
 
-        for (p, eid, e) in graph.as_ref().iter_edges_of(&reduced) {
-            if p.is_paired() {
-                res = res
-                    .replace(GS.emr_mom(eid, Atom::from(ExpandedIndex::from_iter([0]))))
-                    .with(function!(GS.ose, eid.0 as i64));
-            }
-        }
+        res = res
+            .replace(function!(
+                GS.emr_vec,
+                W_.a_,
+                function!(AIND_SYMBOLS.cind, 0)
+            ))
+            .with(Atom::Zero)
+            .replace(function!(GS.ose, W_.a_, function!(AIND_SYMBOLS.cind, 1)))
+            .with(Atom::Zero)
+            .replace(function!(GS.ose, W_.a_, function!(AIND_SYMBOLS.cind, 2)))
+            .with(Atom::Zero)
+            .replace(function!(GS.ose, W_.a_, function!(AIND_SYMBOLS.cind, 3)))
+            .with(Atom::Zero)
+            .replace(function!(GS.ose, W_.a_, function!(AIND_SYMBOLS.cind, 0)))
+            .with(function!(GS.ose, W_.a_))
+            .replace(function!(GS.emr_vec, W_.a__))
+            .with(function!(GS.emr_mom, W_.a__));
 
         // debug!("final_cff {res:>}");
         Some(res)

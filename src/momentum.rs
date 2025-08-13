@@ -1765,10 +1765,10 @@ impl<T: FloatLike> FourMomentum<F<T>, F<T>> {
         let m = self.norm();
         let p = self.spatial.norm();
         let emp = &self.temporal.value / (&m * &p);
-        let e0 = p.square() / &self.temporal.value;
-        let e1 = &self.spatial.px / &emp;
-        let e2 = &self.spatial.py / &emp;
-        let e3 = &self.spatial.pz / &emp;
+        let e0 = p / &m;
+        let e1 = &self.spatial.px * &emp;
+        let e2 = &self.spatial.py * &emp;
+        let e3 = &self.spatial.pz * &emp;
 
         Polarization::lorentz([e0, e1, e2, e3])
     }
@@ -1787,7 +1787,7 @@ impl<T: FloatLike> FourMomentum<F<T>, F<T>> {
             Polarization::lorentz([
                 Complex {
                     re: -lambda * eone0 * &sqrt_2_inv,
-                    im: -etwo0 * &sqrt_2_inv,
+                    im: -etwo0 * &sqrt_2_inv, //using opposite convention with respect to helas to align with madgraph
                 },
                 Complex {
                     re: -lambda * eone1 * &sqrt_2_inv,
@@ -1833,12 +1833,17 @@ impl<T: FloatLike> FourMomentum<F<T>, F<T>> {
     }
 
     pub(crate) fn xi(&self, lambda: Sign) -> [Complex<F<T>>; 2] {
-        if self.spatial.pz == -self.spatial.norm() {
+        if (self.spatial.pz < self.spatial.pz.zero()
+            && self.spatial.py.is_zero()
+            && self.spatial.px.is_zero())
+            || (self.spatial.pz == -self.spatial.norm())
+        {
             let zero: Complex<F<T>> = self.temporal.value.zero().into();
             let one = zero.one();
+            // We are defining using madgraph conventions not helas, taking py =0 and the limit px =0 from below
             match lambda {
-                Sign::Positive => [zero, one],
-                Sign::Negative => [-one, zero],
+                Sign::Positive => [zero, -one],
+                Sign::Negative => [one, zero],
             }
         } else {
             let prefactor: F<T> = ((F::from_f64(2.)

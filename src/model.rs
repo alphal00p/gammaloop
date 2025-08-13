@@ -2291,10 +2291,13 @@ impl Model {
 
 #[cfg(test)]
 mod tests {
+    use spenso::algebra::algebraic_traits::IsZero;
+    use symbolica::domains::float::Real;
+
     use crate::{
         model::{ArcPropagator, ArcVertexRule},
-        momentum::FourMomentum,
-        utils::{test_utils::load_generic_model, F},
+        momentum::{FourMomentum, Helicity, ThreeMomentum},
+        utils::{test_utils::load_generic_model, ApproxEq, F},
     };
 
     use super::ArcParticle;
@@ -2355,25 +2358,127 @@ mod tests {
     }
 
     #[test]
-    fn test_pols() {
+    fn test_pol_limit_fermion() {
         let model = load_generic_model("sm");
-        let particle = model.get_particle("a");
-        let vals = [
-            0.8043373880952149,
-            -0.23220497692297942,
-            -0.5524552502561161,
-            0.5365003998549139,
-        ]
-        .into_iter()
-        .map(F)
-        .collect::<Vec<_>>();
-        let mom = FourMomentum::from_args(vals[0], vals[1], vals[2], vals[3]);
+        let particle = model.get_particle("b");
+
+        let vals = [0., 0., -1.].into_iter().map(F).collect::<Vec<_>>();
+        let mom = ThreeMomentum::new(vals[0], vals[1], vals[2]).into_on_shell_four_momentum(None);
+
+        let hel = Helicity::Plus;
+        println!("mom:{mom}\nhel:{hel}");
+        let u = particle.incoming_polarization(&mom, hel);
+
+        let ubar = particle.outgoing_polarization(&mom, hel);
+
+        let v = particle
+            .get_anti_particle(&model)
+            .outgoing_polarization(&mom, hel);
+
+        let vbar = particle
+            .get_anti_particle(&model)
+            .incoming_polarization(&mom, hel);
+
+        // parse!("((A))^(-1/2)")
+
+        assert!(u[0].is_zero());
+        assert!(u[1].is_zero());
+        assert!(u[2].is_zero());
+        assert!(u[3].re.approx_eq(&-F(2.).sqrt(), &F(0.0001)), "{u}");
+
+        assert!(v[0].re.approx_eq(&-F(2.).sqrt(), &F(0.0001)), "{v}");
+        assert!(v[1].is_zero());
+        assert!(v[2].is_zero());
+        assert!(v[3].is_zero());
+        // println);
+
+        assert!(vbar[2].re.approx_eq(&-F(2.).sqrt(), &F(0.0001)), "{vbar}");
+        assert!(vbar[1].is_zero());
+        assert!(vbar[0].is_zero());
+        assert!(vbar[3].is_zero());
+
+        assert!(ubar[1].re.approx_eq(&-F(2.).sqrt(), &F(0.0001)), "{ubar}",);
+        assert!(ubar[0].is_zero());
+        assert!(ubar[2].is_zero());
+        assert!(ubar[3].is_zero());
+
+        let hel = Helicity::Minus;
+        println!("mom:{mom}\nhel:{hel}");
+        let u = particle.incoming_polarization(&mom, hel);
+
+        let ubar = particle.outgoing_polarization(&mom, hel);
+
+        let v = particle
+            .get_anti_particle(&model)
+            .outgoing_polarization(&mom, hel);
+
+        let vbar = particle
+            .get_anti_particle(&model)
+            .incoming_polarization(&mom, hel);
+
+        // parse!("((A))^(-1/2)")
+
+        assert!(u[3].is_zero());
+        assert!(u[1].is_zero());
+        assert!(u[2].is_zero());
+        assert!(u[0].re.approx_eq(&F(2.).sqrt(), &F(0.0001)), "{u}");
+
+        assert!(v[3].re.approx_eq(&F(2.).sqrt(), &F(0.0001)), "{v}");
+        assert!(v[1].is_zero());
+        assert!(v[2].is_zero());
+        assert!(v[0].is_zero());
+        // println);
+
+        assert!(vbar[1].re.approx_eq(&F(2.).sqrt(), &F(0.0001)), "{vbar}");
+        assert!(vbar[2].is_zero());
+        assert!(vbar[0].is_zero());
+        assert!(vbar[3].is_zero());
+
+        assert!(ubar[2].re.approx_eq(&F(2.).sqrt(), &F(0.0001)), "{ubar}",);
+        assert!(ubar[0].is_zero());
+        assert!(ubar[1].is_zero());
+        assert!(ubar[3].is_zero());
+    }
+
+    #[test]
+    fn test_pol_limit_vector() {
+        let vals = [0., 3., 4.].into_iter().map(F).collect::<Vec<_>>();
+        let mom = ThreeMomentum::new(vals[0], vals[1], vals[2]).into_on_shell_four_momentum(None); //Some(F(8.66025)));
+
+        let hel = Helicity::Minus;
+        println!("mom:{mom}");
+        println!("hel{hel}");
+        println!("{}", mom.pol(hel));
+        println!("{}", mom.pol(hel).bar());
+        // let vals = [0.01, 0., 1.].into_iter().map(F).collect::<Vec<_>>();
+        // let mom = ThreeMomentum::new(vals[0], vals[1], vals[2]).into_on_shell_four_momentum(None);
+
+        let hel = Helicity::Plus;
+        println!("mom:{mom}");
+        println!("hel{hel}");
+        println!("{}", mom.pol(hel));
+        println!("{}", mom.pol(hel).bar());
+        let hel = Helicity::Minus;
+
+        println!("hel{hel}");
+        println!("{}", mom.pol(hel));
+        println!("{}", mom.pol(hel).bar());
+
+        let vals = [0., 0., -1.].into_iter().map(F).collect::<Vec<_>>();
+        let mom = ThreeMomentum::new(vals[0], vals[1], vals[2]).into_on_shell_four_momentum(None);
+
+        let hel = Helicity::Plus;
 
         println!("mom:{mom}");
-        let inc = particle.incoming_polarization(&mom, crate::momentum::SignOrZero::Plus);
+        println!("hel{hel}");
 
-        let out = particle.outgoing_polarization(&mom, crate::momentum::SignOrZero::Plus);
-        println!("{}", inc);
-        println!("{}", out);
+        println!("{}", mom.pol(hel));
+        println!("{}", mom.pol(hel).bar());
+
+        let hel = Helicity::Minus;
+
+        println!("hel{hel}");
+        println!("{}", mom.pol(hel));
+        println!("{}", mom.pol(hel).bar());
     }
 }

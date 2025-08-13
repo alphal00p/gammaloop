@@ -357,7 +357,7 @@ mod test {
 
     #[test]
     fn pols() {
-        let mut graphs:Vec<Graph> = dot!(
+        let mut graphs: Vec<Graph> = dot!(
             digraph bxatobx{
                 graph [
                     num="v(0,spenso::bis(4,hedge(0)))*vbar(2,spenso::bis(4,hedge(2)))*ϵ(1,spenso::mink(4,hedge(1)))"
@@ -407,6 +407,7 @@ mod test {
                 ext -> A:2    [particle="b" id=2]
                 ext -> A:0  [pdg=-5 id=0]
             }
+
         )
         .unwrap();
 
