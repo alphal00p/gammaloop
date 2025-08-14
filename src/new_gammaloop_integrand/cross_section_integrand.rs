@@ -27,7 +27,7 @@ use crate::{
     new_graph::{ExternalConnection, FeynmanGraph, Graph, LmbIndex, LoopMomentumBasis},
     utils::{self, newton_solver::newton_iteration_and_derivative, FloatLike, F},
     DependentMomentaConstructor, GammaLoopContext, GammaLoopContextContainer,
-    IntegratedCounterTermRange, Polarizations, Settings,
+    IntegratedCounterTermRange, Polarizations, RuntimeSettings,
 };
 
 use super::{
@@ -42,7 +42,7 @@ const HARD_CODED_M_R_SQ: F<f64> = F(1000.0);
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct CrossSectionIntegrand {
-    pub settings: Settings,
+    pub settings: RuntimeSettings,
     pub data: CrossSectionIntegrandData,
 }
 #[derive(Clone, Encode, Decode)]
@@ -92,7 +92,7 @@ impl GammaloopIntegrand for CrossSectionIntegrand {
         self.data.graph_terms.iter()
     }
 
-    fn get_settings(&self) -> &Settings {
+    fn get_settings(&self) -> &RuntimeSettings {
         &self.settings
     }
 
@@ -140,7 +140,7 @@ impl GraphTerm for CrossSectionGraphTerm {
     fn evaluate<T: FloatLike>(
         &mut self,
         momentum_sample: &MomentumSample<T>,
-        settings: &Settings,
+        settings: &RuntimeSettings,
     ) -> Complex<F<T>> {
         self.evaluate(momentum_sample, settings)
     }
@@ -188,7 +188,7 @@ impl CrossSectionGraphTerm {
     fn evaluate<T: FloatLike>(
         &self,
         momentum_sample: &MomentumSample<T>,
-        settings: &Settings,
+        settings: &RuntimeSettings,
         param_builder: ParamBuilder<T>,
     ) -> Complex<F<T>> {
         // implementation of forced orientations, only works with sample orientation disabled

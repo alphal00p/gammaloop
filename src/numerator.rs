@@ -48,7 +48,7 @@ use crate::{
     utils::{FloatLike, F},
 };
 
-use crate::{disable, GammaLoopContextContainer, ProcessSettings, Settings};
+use crate::{disable, GammaLoopContextContainer, GenerationSettings, RuntimeSettings};
 use ahash::AHashMap;
 use bincode::{Decode, Encode};
 use color_eyre::{Report, Result};
@@ -166,7 +166,7 @@ pub trait Evaluate<T: FloatLike> {
         emr: &[FourMomentum<F<T>>],
         polarizations: &[Polarization<Complex<F<T>>>],
         tag: Option<Uuid>,
-        setting: &Settings,
+        setting: &RuntimeSettings,
     ) -> Result<RepeatingIteratorTensorOrScalar<DataTensor<Complex<F<T>>, ShadowedStructure<Aind>>>>;
 
     fn evaluate_single(
@@ -174,7 +174,7 @@ pub trait Evaluate<T: FloatLike> {
         emr: &[FourMomentum<F<T>>],
         polarizations: &[Polarization<Complex<F<T>>>],
         tag: Option<Uuid>,
-        setting: &Settings,
+        setting: &RuntimeSettings,
     ) -> DataTensor<Complex<F<T>>, ShadowedStructure<Aind>>;
 }
 
@@ -184,7 +184,7 @@ impl<T: FloatLike> Evaluate<T> for Numerator<Evaluators> {
         emr: &[FourMomentum<F<T>>],
         polarizations: &[Polarization<Complex<F<T>>>],
         _tag: Option<Uuid>,
-        settings: &Settings,
+        settings: &RuntimeSettings,
     ) -> Result<RepeatingIteratorTensorOrScalar<DataTensor<Complex<F<T>>, ShadowedStructure<Aind>>>>
     {
         <T as NumeratorEvaluateFloat>::update_params(self, emr, polarizations, settings);
@@ -203,7 +203,7 @@ impl<T: FloatLike> Evaluate<T> for Numerator<Evaluators> {
         emr: &[FourMomentum<F<T>>],
         polarizations: &[Polarization<Complex<F<T>>>],
         _tag: Option<Uuid>,
-        setting: &Settings,
+        setting: &RuntimeSettings,
     ) -> DataTensor<Complex<F<T>>, ShadowedStructure<Aind>> {
         if !setting.general.load_compiled_numerator {
             self.disable_compiled();
@@ -230,7 +230,7 @@ pub trait NumeratorEvaluateFloat<T: FloatLike = Self> {
         num: &mut Numerator<Evaluators>,
         emr: &[FourMomentum<F<T>>],
         polarizations: &[Polarization<Complex<F<T>>>],
-        settings: &Settings,
+        settings: &RuntimeSettings,
     );
 }
 
@@ -311,7 +311,7 @@ impl NumeratorEvaluateFloat for f64 {
         num: &mut Numerator<Evaluators>,
         emr: &[FourMomentum<F<Self>>],
         polarizations: &[Polarization<Complex<F<Self>>>],
-        settings: &Settings,
+        settings: &RuntimeSettings,
     ) {
         let params = &mut num.state.double_param_values;
         emr.iter()
@@ -423,7 +423,7 @@ impl NumeratorEvaluateFloat for f128 {
         num: &mut Numerator<Evaluators>,
         emr: &[FourMomentum<F<Self>>],
         polarizations: &[Polarization<Complex<F<Self>>>],
-        settings: &Settings,
+        settings: &RuntimeSettings,
     ) {
         let params = &mut num.state.quad_param_values;
         emr.iter()
@@ -2298,7 +2298,7 @@ impl Numerator<Contracted> {
         double_param_values: Vec<Complex<F<f64>>>,
         quad_param_values: Vec<Complex<F<f128>>>,
         extra_info: &ExtraInfo,
-        export_settings: &ProcessSettings,
+        export_settings: &GenerationSettings,
     ) -> Numerator<Evaluators> {
         let o = &export_settings.numerator_settings.eval_settings;
         let owned_fn_map = self.generate_fn_map();

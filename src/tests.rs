@@ -3,7 +3,7 @@ use crate::integrands::IntegrandSettings;
 use crate::utils::{self, ApproxEq, F};
 use crate::{
     h_function_test::HFunctionTestSettings, integrand_factory, integrands::UnitVolumeSettings,
-    IntegratedPhase, Settings,
+    IntegratedPhase, RuntimeSettings,
 };
 use crate::{observables::JetSliceSettings, observables::PhaseSpaceSelectorSettings};
 use colored::Colorize;
@@ -22,8 +22,8 @@ const BASE_N_START_SAMPLE: usize = 100_000;
 
 const N_CORES_FOR_INTEGRATION_IN_TESTS: usize = 16;
 
-pub(crate) fn load_default_settings() -> Settings {
-    Settings::default()
+pub(crate) fn load_default_settings() -> RuntimeSettings {
+    RuntimeSettings::default()
 }
 
 fn validate_error(error: F<f64>, target_diff: F<f64>) -> bool {
@@ -35,7 +35,7 @@ fn validate_error(error: F<f64>, target_diff: F<f64>) -> bool {
 }
 
 fn compare_integration(
-    settings: &mut Settings,
+    settings: &mut RuntimeSettings,
     phase: IntegratedPhase,
     target: Complex<F<f64>>,
     tolerance: Option<F<f64>>,
@@ -50,7 +50,7 @@ fn compare_integration(
         .build_global()
         .unwrap_or(());
 
-    let user_data_generator = |settings: &Settings| UserData {
+    let user_data_generator = |settings: &RuntimeSettings| UserData {
         integrand: (0..N_CORES_FOR_INTEGRATION_IN_TESTS)
             .map(|_i| crate::integrand_factory(settings))
             .collect(),
@@ -135,7 +135,7 @@ fn compare_integration(
 }
 
 fn compare_inspect(
-    settings: &mut Settings,
+    settings: &mut RuntimeSettings,
     pt: Vec<f64>,
     term: &[usize],
     is_momentum_space: bool,

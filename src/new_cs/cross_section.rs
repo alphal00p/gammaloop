@@ -54,7 +54,7 @@ use crate::{
         NewIntegrand,
     },
     new_graph::{ExternalConnection, FeynmanGraph, Graph},
-    DependentMomentaConstructor, Externals, Polarizations, Settings,
+    DependentMomentaConstructor, Externals, Polarizations, RuntimeSettings,
 };
 
 use super::ProcessDefinition;
@@ -123,7 +123,7 @@ impl<S: CrossSectionState> CrossSection<S> {
         Ok(())
     }
 
-    pub(crate) fn build_integrand(&mut self, settings: Settings, model: &Model) -> Result<()> {
+    pub(crate) fn build_integrand(&mut self, settings: RuntimeSettings, model: &Model) -> Result<()> {
         let terms = self
             .supergraphs
             .iter()
@@ -826,7 +826,7 @@ impl<S: CrossSectionState> CrossSectionGraph<S> {
         self.derived_data.multi_channeling_setup = Some(channels)
     }
 
-    fn generate_term_for_graph(&self, settings: &Settings) -> CrossSectionGraphTerm {
+    fn generate_term_for_graph(&self, settings: &RuntimeSettings) -> CrossSectionGraphTerm {
         let estimated_scale = self
             .graph
             .underlying

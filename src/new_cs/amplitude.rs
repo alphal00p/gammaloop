@@ -51,7 +51,7 @@ use crate::{
     momentum::{Rotatable, Rotation, RotationMethod},
     new_gammaloop_integrand::NewIntegrand,
     new_graph::{FeynmanGraph, Graph},
-    DependentMomentaConstructor, Externals, Polarizations, ProcessSettings, Settings,
+    DependentMomentaConstructor, Externals, GenerationSettings, Polarizations, RuntimeSettings,
 };
 
 #[derive(Clone, Encode, Decode)]
@@ -99,14 +99,22 @@ impl<S: AmplitudeState> Amplitude<S> {
         Ok(())
     }
 
-    pub(crate) fn preprocess(&mut self, model: &Model, settings: &ProcessSettings) -> Result<()> {
+    pub(crate) fn preprocess(
+        &mut self,
+        model: &Model,
+        settings: &GenerationSettings,
+    ) -> Result<()> {
         for amplitude_graph in self.graphs.iter_mut() {
             amplitude_graph.preprocess(model, settings)?;
         }
         Ok(())
     }
 
-    pub(crate) fn build_integrand(&mut self, settings: Settings, model: &Model) -> Result<()> {
+    pub(crate) fn build_integrand(
+        &mut self,
+        settings: RuntimeSettings,
+        model: &Model,
+    ) -> Result<()> {
         let terms = self
             .graphs
             .iter()
@@ -208,7 +216,11 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
         Ok(())
     }
 
-    pub(crate) fn preprocess(&mut self, model: &Model, settings: &ProcessSettings) -> Result<()> {
+    pub(crate) fn preprocess(
+        &mut self,
+        model: &Model,
+        settings: &GenerationSettings,
+    ) -> Result<()> {
         debug!("Generating Cff");
         self.generate_cff()?;
         debug!("Building Evaluator");
@@ -628,7 +640,14 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
         self.derived_data.lmbs = Some(lmbs)
     }
 
-    fn build_tropical_sampler(&mut self, process_settings: &ProcessSettings) -> Result<()> {
+    fn build_tropical_sampler(&mut self, process_settings: &GenerationSettings) -> Result<()> {
+        if process_settings
+            .tropical_subgraph_table_settings
+            .disable_tropical_generation
+        {
+            debug!("Tropical subgraph table generation is disabled.");
+            return Ok(());
+        }
         let num_virtual_loop_edges = self.graph.iter_loop_edges().count();
         let num_loops = self.graph.loop_momentum_basis.loop_edges.len();
         let target_omega = process_settings
@@ -764,7 +783,11 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
     }
 
     // Expects cff_expression, esurface_data,
-    fn generate_term_for_graph(&self, settings: &Settings, model: &Model) -> AmplitudeGraphTerm {
+    fn generate_term_for_graph(
+        &self,
+        settings: &RuntimeSettings,
+        model: &Model,
+    ) -> AmplitudeGraphTerm {
         let estimated_scale = self
             .graph
             .underlying
@@ -827,11 +850,7 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
                 .integrand_evaluators
                 .clone()
                 .expect("integrand_evaluators should have been created"),
-            tropical_sampler: self
-                .derived_data
-                .tropical_sampler
-                .clone()
-                .expect("tropical_sampler should have been created"),
+            tropical_sampler: self.derived_data.tropical_sampler.clone(),
             graph: self.graph.clone(),
             multi_channeling_setup: self
                 .derived_data

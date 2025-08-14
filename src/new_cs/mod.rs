@@ -14,7 +14,7 @@ use log::debug;
 use crate::{GammaLoopContext, GammaLoopContextContainer};
 use serde::{Deserialize, Serialize};
 
-use crate::{integrands::Integrand, model::Model, ProcessSettings, Settings};
+use crate::{integrands::Integrand, model::Model, GenerationSettings, RuntimeSettings};
 
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
@@ -139,14 +139,14 @@ impl ProcessList {
     }
 
     ///preprocesses the process list according to the settings
-    pub fn preprocess(&mut self, model: &Model, settings: ProcessSettings) -> Result<()> {
+    pub fn preprocess(&mut self, model: &Model, settings: GenerationSettings) -> Result<()> {
         for process in self.processes.iter_mut() {
             process.preprocess(model, &settings)?;
         }
         Ok(())
     }
 
-    pub fn generate_integrands(&mut self, settings: &Settings, model: &Model) -> Result<()> {
+    pub fn generate_integrands(&mut self, settings: &RuntimeSettings, model: &Model) -> Result<()> {
         for process in &mut self.processes {
             process.generate_integrands(&settings, model)?;
         }
@@ -223,7 +223,7 @@ mod tests {
         amplitude
             .preprocess(
                 &model,
-                &crate::ProcessSettings {
+                &crate::GenerationSettings {
                     compile_cff: false,
                     compile_separate_orientations: false,
                     cpe_rounds_cff: None,
@@ -249,6 +249,7 @@ mod tests {
                     tropical_subgraph_table_settings: TropicalSubgraphTableSettings {
                         panic_on_fail: false,
                         target_omega: 1.0,
+                        ..Default::default()
                     },
                     enable_thresholds: true,
                 },

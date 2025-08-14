@@ -18,7 +18,7 @@ use crate::{
     new_gammaloop_integrand::{cross_section_integrand::CrossSectionGraphTerm, GraphTerm},
     new_graph::FeynmanGraph,
     utils::{box_muller, f128, FloatLike, F},
-    DependentMomentaConstructor, Settings,
+    DependentMomentaConstructor, RuntimeSettings,
 };
 
 const SLOPE_STABILITY_points: usize = 50;
@@ -33,7 +33,7 @@ pub struct ApproachSettings {
 impl CrossSectionGraphTerm {
     pub(crate) fn test_ir(
         &self,
-        settings: &Settings,
+        settings: &RuntimeSettings,
         approach_settings: &ApproachSettings,
     ) -> Result<()> {
         let rng = MonteCarloRng::new(settings.integrator.seed, 0);
@@ -92,7 +92,7 @@ impl CrossSectionGraphTerm {
         &self,
         limit: &str,
         rng: &mut MonteCarloRng,
-        settings: &Settings,
+        settings: &RuntimeSettings,
         approach_settings: &ApproachSettings,
         model: &Model,
     ) -> Result<()> {
@@ -104,7 +104,7 @@ impl CrossSectionGraphTerm {
         &self,
         ir_limit: &IrLimit,
         rng: &mut MonteCarloRng,
-        settings: &Settings,
+        settings: &RuntimeSettings,
         approach_settings: &ApproachSettings,
         model: &Model,
     ) -> Result<()> {
@@ -567,7 +567,7 @@ impl IrLimit {
     fn get_momenta(
         &self,
         rng: &mut MonteCarloRng,
-        settings: &Settings,
+        settings: &RuntimeSettings,
         approach_settings: &ApproachSettings,
     ) -> Vec<LambdaPoint<f128>> {
         let momentum_builders = self.get_momentum_builders(rng);

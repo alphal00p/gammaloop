@@ -27,7 +27,7 @@ use crate::{
     signature::SignatureLike,
     subtraction::overlap::OverlapStructure,
     DependentMomentaConstructor, FloatLike, GammaLoopContext, GammaLoopContextContainer,
-    Polarizations, Settings, F,
+    Polarizations, RuntimeSettings, F,
 };
 
 use super::{
@@ -46,7 +46,7 @@ pub struct AmplitudeGraphTerm {
     pub counterterm_evaluators: TiVec<EsurfaceID, GenericEvaluator>,
     pub multi_channeling_setup: LmbMultiChannelingSetup,
     pub lmbs: TiVec<LmbIndex, LoopMomentumBasis>,
-    pub tropical_sampler: SampleGenerator<3>,
+    pub tropical_sampler: Option<SampleGenerator<3>>,
     pub graph: Graph,
     pub estimated_scale: F<f64>,
     pub overlap: OverlapStructure,
@@ -57,7 +57,7 @@ impl AmplitudeGraphTerm {
     fn evaluate_impl<T: FloatLike>(
         &mut self,
         momentum_sample: &MomentumSample<T>,
-        settings: &Settings,
+        settings: &RuntimeSettings,
         // mut param_builder: ParamBuilder<T>,
     ) -> Complex<F<T>> {
         if let Some(forced_orientations) = &settings.general.force_orientations {
@@ -76,7 +76,7 @@ impl AmplitudeGraphTerm {
             }
         }
 
-        if settings.general.debug > 0 {
+        if settings.general.debug > 4 {
             println!("Evaluating graph: {}", self.graph.name);
         }
         let hel = settings.kinematics.externals.get_helicities();
@@ -113,7 +113,7 @@ impl AmplitudeGraphTerm {
             }
         };
 
-        if settings.general.debug > 0 {
+        if settings.general.debug > 4 {
             println!("result of graph {}: {:16e}", self.graph.name, result);
         }
 
@@ -137,7 +137,7 @@ impl GraphTerm for AmplitudeGraphTerm {
     fn evaluate<T: FloatLike>(
         &mut self,
         momentum_sample: &MomentumSample<T>,
-        settings: &Settings,
+        settings: &RuntimeSettings,
         // param_builder: ParamBuilder<T>,
     ) -> Complex<F<T>> {
         self.evaluate_impl(momentum_sample, settings)
@@ -148,14 +148,17 @@ impl GraphTerm for AmplitudeGraphTerm {
     }
 
     fn get_tropical_sampler(&self) -> &SampleGenerator<3> {
-        &self.tropical_sampler
+        &self
+            .tropical_sampler
+            .as_ref()
+            .expect("Tropical sampler should be set.")
     }
 }
 
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct AmplitudeIntegrand {
-    pub settings: Settings,
+    pub settings: RuntimeSettings,
     pub data: AmplitudeIntegrandData,
 }
 
@@ -216,7 +219,7 @@ impl GammaloopIntegrand for AmplitudeIntegrand {
         self.data.graph_terms.iter()
     }
 
-    fn get_settings(&self) -> &Settings {
+    fn get_settings(&self) -> &RuntimeSettings {
         &self.settings
     }
 

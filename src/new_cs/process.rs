@@ -24,7 +24,7 @@ use crate::{
     integrands::Integrand,
     model::Model,
     new_graph::Graph,
-    ProcessSettings, Settings,
+    GenerationSettings, RuntimeSettings,
 };
 
 use super::{Amplitude, AmplitudeState, CrossSection, CrossSectionState, ExportSettings};
@@ -84,7 +84,7 @@ pub struct Process<A: AmplitudeState = (), C: CrossSectionState = ()> {
 }
 
 impl<A: AmplitudeState, C: CrossSectionState> Process<A, C> {
-    pub(crate) fn preprocess(&mut self, model: &Model, settings: &ProcessSettings) -> Result<()> {
+    pub(crate) fn preprocess(&mut self, model: &Model, settings: &GenerationSettings) -> Result<()> {
         self.collection
             .preprocess(model, &self.definition, settings)?;
         Ok(())
@@ -281,7 +281,7 @@ impl Process {
         }
     }
 
-    pub(super) fn generate_integrands(&mut self, settings: &Settings, model: &Model) -> Result<()> {
+    pub(super) fn generate_integrands(&mut self, settings: &RuntimeSettings, model: &Model) -> Result<()> {
         self.collection.generate_integrands(settings, model)
     }
 }
@@ -419,7 +419,7 @@ impl<A: AmplitudeState, C: CrossSectionState> ProcessCollection<A, C> {
         &mut self,
         model: &Model,
         process_definition: &ProcessDefinition,
-        settings: &ProcessSettings,
+        settings: &GenerationSettings,
     ) -> Result<()> {
         match self {
             Self::Amplitudes(amplitudes) => {
@@ -436,7 +436,7 @@ impl<A: AmplitudeState, C: CrossSectionState> ProcessCollection<A, C> {
         Ok(())
     }
 
-    fn generate_integrands(&mut self, settings: &Settings, model: &Model) -> Result<()> {
+    fn generate_integrands(&mut self, settings: &RuntimeSettings, model: &Model) -> Result<()> {
         // let mut result = HashMap::default();
         match self {
             Self::Amplitudes(amplitudes) => {

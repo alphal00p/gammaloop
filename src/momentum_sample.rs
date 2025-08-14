@@ -4,7 +4,7 @@ use crate::momentum::{FourMomentum, Polarization, Rotatable, Rotation, ThreeMome
 use crate::utils::{FloatLike, Length, F};
 use crate::{
     define_index, define_indexed_vec, DependentMomentaConstructor, Externals, Polarizations,
-    Settings,
+    RuntimeSettings,
 };
 use bincode_trait_derive::{Decode, Encode};
 use derive_more::{From, Into};
@@ -398,7 +398,7 @@ impl<T: FloatLike> MomentumSample<T> {
 
     pub(crate) fn numerator_sample(
         &self,
-        settings: &Settings,
+        settings: &RuntimeSettings,
     ) -> (&BareMomentumSample<T>, Option<Uuid>) {
         if settings.stability.rotate_numerator {
             (self.possibly_rotated_sample(), self.uuid())

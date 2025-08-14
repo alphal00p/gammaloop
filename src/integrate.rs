@@ -27,7 +27,7 @@ use crate::utils::F;
 use crate::Integrand;
 use crate::IntegratedPhase;
 use crate::IntegratorSettings;
-use crate::Settings;
+use crate::RuntimeSettings;
 use crate::INTERRUPTED;
 use crate::{is_interrupted, set_interrupted};
 #[allow(unused_imports)]
@@ -217,7 +217,7 @@ impl IntegrationState {
     }
 
     // this thing is an unholy mess
-    fn display_orientation_results(&self, settings: &Settings) {
+    fn display_orientation_results(&self, settings: &RuntimeSettings) {
         if settings.sampling.sample_orientations() {
             if let Grid::Discrete(graph_grids) = &self.grid {
                 for (i_graph, graph_grid) in graph_grids.bins.iter().enumerate() {
@@ -262,14 +262,14 @@ pub struct CoreResult {
 
 /// Integrate function used for local runs
 pub(crate) fn havana_integrate<T>(
-    settings: &Settings,
+    settings: &RuntimeSettings,
     user_data_generator: T,
     target: Option<Complex<F<f64>>>,
     state: Option<IntegrationState>,
     workspace: Option<PathBuf>,
 ) -> crate::IntegrationResult
 where
-    T: Fn(&Settings) -> UserData,
+    T: Fn(&RuntimeSettings) -> UserData,
 {
     let mut user_data = user_data_generator(settings);
 
@@ -595,7 +595,7 @@ where
     integration_state.display_orientation_results(settings);
 
     disable! {
-        IntegrationResult {
+        crate::IntegrationResult {
             neval: integration_state.integral.processed_samples as i64,
             fail: integration_state.integral.num_zero_evaluations as i32,
             result: integration_state
@@ -615,7 +615,13 @@ where
                 .collect::<Vec<_>>(),
         }
     }
-    todo!()
+    crate::IntegrationResult {
+        neval: 0,
+        fail: 0,
+        result: vec![],
+        error: vec![],
+        prob: vec![],
+    }
 }
 
 /// Batch integrate function used for distributed runs, used by the worker nodes.
@@ -729,7 +735,7 @@ fn generate_integrand_output(
 fn generate_event_output(
     evaluation_results: Vec<EvaluationResult>,
     event_output_settings: EventOutputSettings,
-    _settings: &Settings,
+    _settings: &RuntimeSettings,
 ) -> EventOutput {
     match event_output_settings {
         EventOutputSettings::None => EventOutput::None,
@@ -838,7 +844,7 @@ pub struct BatchIntegrateInput<'a> {
     // global run info:
     pub max_eval: Complex<F<f64>>,
     pub iter: usize,
-    pub settings: &'a Settings,
+    pub settings: &'a RuntimeSettings,
     // input data:
     pub samples: SampleInput,
     pub integrand_output_settings: IntegralOutputSettings,
@@ -876,7 +882,10 @@ pub struct SerializableBatchIntegrateInput {
 }
 
 impl SerializableBatchIntegrateInput {
-    pub(crate) fn into_batch_integrate_input(self, settings: &Settings) -> BatchIntegrateInput<'_> {
+    pub(crate) fn into_batch_integrate_input(
+        self,
+        settings: &RuntimeSettings,
+    ) -> BatchIntegrateInput<'_> {
         BatchIntegrateInput {
             max_eval: self.max_eval,
             iter: self.iter,

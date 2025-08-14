@@ -10,7 +10,7 @@ use crate::utils::F;
 use crate::ParameterizationMapping;
 use crate::Precision;
 use crate::SamplingSettings;
-use crate::Settings;
+use crate::RuntimeSettings;
 use bincode_trait_derive::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
@@ -25,7 +25,7 @@ pub struct HFunctionTestSettings {
 
 #[derive(Clone)]
 pub struct HFunctionTestIntegrand {
-    pub settings: Settings,
+    pub settings: RuntimeSettings,
     pub n_dim: usize,
     pub integrand_settings: HFunctionTestSettings,
 }
@@ -33,7 +33,7 @@ pub struct HFunctionTestIntegrand {
 #[allow(unused)]
 impl HFunctionTestIntegrand {
     pub(crate) fn new(
-        settings: Settings,
+        settings: RuntimeSettings,
         integrand_settings: HFunctionTestSettings,
     ) -> HFunctionTestIntegrand {
         let n_dim = 1;

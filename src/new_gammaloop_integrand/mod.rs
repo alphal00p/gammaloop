@@ -57,8 +57,8 @@ use crate::observables::EventManager;
 use crate::utils::f128;
 use crate::{
     DependentMomentaConstructor, DiscreteGraphSamplingSettings, DiscreteGraphSamplingType,
-    GammaLoopContext, IntegratorSettings, Polarizations, Precision, SamplingSettings, Settings,
-    StabilityLevelSetting, StabilitySettings,
+    GammaLoopContext, IntegratorSettings, Polarizations, Precision, RuntimeSettings,
+    SamplingSettings, StabilityLevelSetting, StabilitySettings,
 };
 use color_eyre::Result;
 
@@ -92,7 +92,7 @@ impl NewIntegrand {
         }
     }
 
-    pub(crate) fn get_settings(&self) -> &Settings {
+    pub(crate) fn get_settings(&self) -> &RuntimeSettings {
         match self {
             NewIntegrand::Amplitude(integrand) => &integrand.settings,
             NewIntegrand::CrossSection(integrand) => &integrand.settings,
@@ -100,13 +100,17 @@ impl NewIntegrand {
     }
 
     /// Used to create the use_data_generator closure for havana_integrate
-    pub(crate) fn user_data_generator(&self, num_cores: usize, _settings: &Settings) -> UserData {
+    pub(crate) fn user_data_generator(
+        &self,
+        num_cores: usize,
+        _settings: &RuntimeSettings,
+    ) -> UserData {
         UserData {
             integrand: vec![Integrand::NewIntegrand(self.clone()); num_cores],
         }
     }
 
-    pub(crate) fn get_mut_settings(&mut self) -> &mut Settings {
+    pub(crate) fn get_mut_settings(&mut self) -> &mut RuntimeSettings {
         match self {
             NewIntegrand::Amplitude(integrand) => &mut integrand.settings,
             NewIntegrand::CrossSection(integrand) => &mut integrand.settings,
@@ -147,7 +151,7 @@ fn create_stability_iterator(
 
 #[inline]
 fn stability_check(
-    settings: &Settings,
+    settings: &RuntimeSettings,
     results: &[Complex<F<f64>>],
     stability_settings: &StabilityLevelSetting,
     max_eval: Complex<F<f64>>,
@@ -624,7 +628,7 @@ pub trait GammaloopIntegrand {
     fn get_terms(&self) -> impl Iterator<Item = &Self::G>;
 
     fn get_terms_mut(&mut self) -> impl Iterator<Item = &mut Self::G>;
-    fn get_settings(&self) -> &Settings;
+    fn get_settings(&self) -> &RuntimeSettings;
     fn get_graph(&self, graph_id: usize) -> &Self::G;
     fn get_graph_mut(&mut self, graph_id: usize) -> &mut Self::G;
     fn get_dependent_momenta_constructor(&self) -> DependentMomentaConstructor;
@@ -656,7 +660,7 @@ pub trait GraphTerm {
     fn evaluate<T: FloatLike>(
         &mut self,
         sample: &MomentumSample<T>,
-        settings: &Settings,
+        settings: &RuntimeSettings,
     ) -> Complex<F<T>>;
 
     fn get_multi_channeling_setup(&self) -> &LmbMultiChannelingSetup;
@@ -1044,7 +1048,7 @@ fn evaluate_sample<I: GammaloopIntegrand>(
         }
     }
 
-    if integrand.get_settings().general.debug > 0 {
+    if integrand.get_settings().general.debug > 4 {
         println!("result at each level:");
         for level_result in results_of_stability_levels.iter() {
             println!(

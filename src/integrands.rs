@@ -5,7 +5,7 @@ use crate::momentum::FourMomentum;
 use crate::new_gammaloop_integrand::NewIntegrand;
 use crate::observables::EventManager;
 use crate::utils::{FloatLike, F};
-use crate::{utils, IntegratorSettings, Precision, Settings};
+use crate::{utils, IntegratorSettings, Precision, RuntimeSettings};
 use bincode_trait_derive::{Decode, Encode};
 use enum_dispatch::enum_dispatch;
 #[allow(unused_imports)]
@@ -172,7 +172,7 @@ impl HasIntegrand for Integrand {
     }
 }
 
-pub(crate) fn integrand_factory(settings: &Settings) -> Integrand {
+pub(crate) fn integrand_factory(settings: &RuntimeSettings) -> Integrand {
     match settings.hard_coded_integrand.clone() {
         IntegrandSettings::UnitSurface(integrand_settings) => Integrand::UnitSurface(
             UnitSurfaceIntegrand::new(settings.clone(), integrand_settings),
@@ -197,7 +197,7 @@ pub struct UnitSurfaceSettings {
 
 #[derive(Clone)]
 pub struct UnitSurfaceIntegrand {
-    pub settings: Settings,
+    pub settings: RuntimeSettings,
     pub n_dim: usize,
     pub n_3d_momenta: usize,
     pub surface: F<f64>,
@@ -206,7 +206,7 @@ pub struct UnitSurfaceIntegrand {
 #[allow(unused)]
 impl UnitSurfaceIntegrand {
     pub(crate) fn new(
-        settings: Settings,
+        settings: RuntimeSettings,
         integrand_settings: UnitSurfaceSettings,
     ) -> UnitSurfaceIntegrand {
         let n_dim = utils::get_n_dim_for_n_loop_momenta(
@@ -343,7 +343,7 @@ pub struct UnitVolumeSettings {
 
 #[derive(Clone)]
 pub struct UnitVolumeIntegrand {
-    pub settings: Settings,
+    pub settings: RuntimeSettings,
     pub n_dim: usize,
     pub n_3d_momenta: usize,
     pub volume: F<f64>,
@@ -352,7 +352,7 @@ pub struct UnitVolumeIntegrand {
 #[allow(unused)]
 impl UnitVolumeIntegrand {
     pub(crate) fn new(
-        settings: Settings,
+        settings: RuntimeSettings,
         integrand_settings: UnitVolumeSettings,
     ) -> UnitVolumeIntegrand {
         let n_dim = utils::get_n_dim_for_n_loop_momenta(

@@ -19,7 +19,7 @@ use crate::{
         newton_solver::{newton_iteration_and_derivative, NewtonIterationResult},
         FloatLike, F,
     },
-    Settings, UVLocalisationSettings,
+    RuntimeSettings, UVLocalisationSettings,
 };
 
 const MAX_ITERATIONS: usize = 40;
@@ -38,7 +38,7 @@ impl AmplitudeCountertermData {
         graph: &Graph,
         esurfaces: &EsurfaceCollection,
         rotation: &Rotation,
-        settings: &Settings,
+        settings: &RuntimeSettings,
     ) -> Complex<T> {
         let counter_term_builder = CounterTermBuilder::new(
             graph,
@@ -77,7 +77,7 @@ struct CounterTermBuilder<'a, T: FloatLike> {
     e_cm: F<T>,
     graph: &'a Graph,
     rotation_for_overlap: &'a Rotation,
-    settings: &'a Settings,
+    settings: &'a RuntimeSettings,
     esurface_collection: &'a EsurfaceCollection,
     sample: &'a MomentumSample<T>,
 }
@@ -86,7 +86,7 @@ impl<'a, T: FloatLike> CounterTermBuilder<'a, T> {
     fn new(
         graph: &'a Graph,
         rotation_for_overlap: &'a Rotation,
-        settings: &'a Settings,
+        settings: &'a RuntimeSettings,
         esurface_collection: &'a EsurfaceCollection,
         sample: &'a MomentumSample<T>,
         overlap_structure: &'a OverlapStructure,

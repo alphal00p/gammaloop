@@ -1,12 +1,11 @@
 use crate::{
     feyngen::GenerationType,
     integrands::{integrand_factory, HasIntegrand},
-    integrate::{self, SerializableBatchIntegrateInput},
     model::Model,
     new_cs::{Amplitude, ExportSettings, Process, ProcessDefinition},
     new_graph::Graph,
     utils::{F, GIT_VERSION, VERSION},
-    Integrand, Settings,
+    GenerationSettings, Integrand, RuntimeSettings,
 };
 use chrono::{Datelike, Local, Timelike};
 use clap::{Parser, Subcommand, ValueEnum};
@@ -20,6 +19,7 @@ use colored::Colorize;
 use console::style;
 use dirs::home_dir;
 use eyre::eyre;
+use integrate::Integrate;
 use log::LevelFilter;
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
@@ -30,13 +30,31 @@ use std::{fs, time::Instant};
 use std::{fs::File, path::PathBuf};
 use symbolica::numerical_integration::Sample;
 
+pub mod generate;
+pub mod inspect;
+pub mod integrate;
+pub mod settings;
+pub mod state;
+
 #[derive(Parser, Debug)]
 #[command(name = "gammaLoop", version, about)]
 #[command(next_line_help = true)]
 pub struct Cli {
-    /// Path to the configuration file
-    #[arg(short = 'f', long, default_value = "./gammaloop_state/settings.yaml")]
-    config: PathBuf,
+    /// Path to the run-time settings file
+    #[arg(
+        short = 'r',
+        long,
+        default_value = "./gammaloop_state/runtime_settings.yaml"
+    )]
+    run_settings_path: PathBuf,
+
+    /// Path to the gammaloop settings file
+    #[arg(
+        short = 'g',
+        long,
+        default_value = "./gammaloop_state/generation_settings.yaml"
+    )]
+    generation_settings_path: PathBuf,
 
     /// Path to the state file
     #[arg(short = 's', long, default_value = "./gammaloop_state")]
@@ -98,7 +116,8 @@ impl From<bool> for StateSaveSettings {
 
 impl Cli {
     fn override_settings(&mut self, other: Cli) {
-        self.config = other.config;
+        self.run_settings_path = other.run_settings_path;
+        self.generation_settings_path = other.generation_settings_path;
         self.state_folder = other.state_folder;
         self.model_file = other.model_file;
         self.override_state = other.override_state;
@@ -107,7 +126,8 @@ impl Cli {
 
     fn run_command(
         &mut self,
-        settings: &mut Settings,
+        runtime_settings: &mut RuntimeSettings,
+        generation_settings: &mut GenerationSettings,
         state: &mut State,
     ) -> Result<ControlFlow<()>, Report> {
         match self.command.as_ref().ok_or(eyre!("missing command"))? {
@@ -118,10 +138,10 @@ impl Cli {
             Commands::Bench { samples } => {
                 info!(
                     "\nBenchmarking runtime of integrand '{}' over {} samples...\n",
-                    format!("{}", settings.hard_coded_integrand).green(),
+                    format!("{}", runtime_settings.hard_coded_integrand).green(),
                     format!("{}", samples).blue()
                 );
-                let mut integrand = integrand_factory(&settings);
+                let mut integrand = integrand_factory(&runtime_settings);
                 let now = Instant::now();
                 for _ in 0..*samples {
                     integrand.evaluate_sample(
@@ -147,7 +167,7 @@ impl Cli {
             }
             Commands::Import(s) => match s {
                 Import::Amplitude { path } => {
-                    let graphs = Graph::from_file(&path, &state.model)?;
+                    let graphs = Graph::from_file(path, &state.model)?;
                     let name = path.file_stem().unwrap().to_string_lossy().into_owned();
                     let process = Process::from_graph_list(
                         name,
@@ -180,8 +200,14 @@ impl Cli {
                     };
 
                     serde_yaml::to_writer(
-                        File::create(self.state_folder.join("settings.yaml")).unwrap(),
-                        &settings,
+                        File::create(self.state_folder.join("runtime_settings.yaml")).unwrap(),
+                        &runtime_settings,
+                    )
+                    .unwrap();
+
+                    serde_yaml::to_writer(
+                        File::create(self.state_folder.join("generation_settings.yaml")).unwrap(),
+                        &generation_settings,
                     )
                     .unwrap();
                 }
@@ -199,7 +225,11 @@ impl Cli {
                 }
             },
 
-            Commands::Generate(g) => g.run(state, settings)?,
+            Commands::Generate(g) => g.run(state, generation_settings, runtime_settings)?,
+
+            Commands::Integrate(g) => {
+                g.run(state)?;
+            }
 
             Commands::Display(l) => match l {
                 Display::Integrands { process_id } => {
@@ -226,11 +256,13 @@ impl Cli {
 
     pub fn run(mut self) {
         setup_log().unwrap();
-        let mut settings = self.get_settings().unwrap();
+        let mut runtime_settings = self.get_runtime_settings().unwrap();
+        let mut generation_settings = self.get_generation_settings().unwrap();
+
         let mut state = match State::load(&self.state_folder, self.model_file.clone()) {
             Ok(state) => state,
             Err(e) => {
-                error!(
+                warn!(
                     "{e} state folder:{} model_file:{} loading default state",
                     self.state_folder.display(),
                     self.model_file
@@ -245,7 +277,9 @@ impl Cli {
         // let mut state = State::load(&cli.state_file,);
 
         if let Some(_) = &self.command {
-            let _ = self.run_command(&mut settings, &mut state).unwrap();
+            let _ = self
+                .run_command(&mut runtime_settings, &mut generation_settings, &mut state)
+                .unwrap();
         } else {
             let prompt = DefaultPrompt {
                 left_prompt: DefaultPromptSegment::Basic(format!(
@@ -272,7 +306,11 @@ impl Cli {
             loop {
                 match r.read_command() {
                     ReadCommandOutput::Command(mut c) => {
-                        match c.run_command(&mut settings, &mut state) {
+                        match c.run_command(
+                            &mut runtime_settings,
+                            &mut generation_settings,
+                            &mut state,
+                        ) {
                             Err(e) => {
                                 eprintln!("{e}");
                                 self.override_settings(c);
@@ -315,18 +353,25 @@ impl Cli {
             };
 
             serde_yaml::to_writer(
-                File::create(self.state_folder.join("settings.yaml")).unwrap(),
-                &settings,
+                File::create(self.state_folder.join("runtime_settings.yaml")).unwrap(),
+                &runtime_settings,
+            )
+            .unwrap();
+
+            serde_yaml::to_writer(
+                File::create(self.state_folder.join("generation_settings.yaml")).unwrap(),
+                &generation_settings,
             )
             .unwrap();
         }
     }
 
-    pub fn get_settings(&self) -> Result<Settings, Report> {
+    pub fn get_runtime_settings(&self) -> Result<RuntimeSettings, Report> {
         crate::set_interrupt_handler();
 
         // Load settings from YAML first so CLI flags can override.
-        let settings: Settings = Settings::from_file(&self.config).unwrap_or_default();
+        let settings: RuntimeSettings =
+            RuntimeSettings::from_file(&self.run_settings_path).unwrap_or_default();
 
         // Override settings from CLI top‑level flags --------------------------
         // if let Some(level) = self.debug {
@@ -358,8 +403,15 @@ impl Cli {
             env::set_var("SYMBOLICA_LICENSE", "GAMMALOOP_USER");
         }
 
-        print_banner();
         Ok(settings)
+    }
+
+    pub fn get_generation_settings(&self) -> Result<GenerationSettings, Report> {
+        // Load settings from YAML first so CLI flags can override.
+        let generation_settings: GenerationSettings =
+            GenerationSettings::from_file(&self.generation_settings_path).unwrap_or_default();
+
+        Ok(generation_settings)
     }
 }
 
@@ -414,9 +466,6 @@ pub enum Log {
     Format(LogFormat),
 }
 
-pub mod generate;
-pub mod inspect;
-
 #[derive(Subcommand, Debug)]
 pub enum Commands {
     #[clap(subcommand)]
@@ -427,6 +476,8 @@ pub enum Commands {
     Import(Import),
     #[clap(subcommand)]
     Save(Save),
+
+    Integrate(Integrate),
 
     Generate(generate::Generate),
 
@@ -458,9 +509,6 @@ pub enum Commands {
         output_name: String,
     },
 }
-
-pub mod settings;
-pub mod state;
 
 #[repr(usize)]
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Hash, ValueEnum)]

@@ -2,7 +2,7 @@ use clap::Args;
 use clarabel::solver::traits::Info;
 use log::info;
 
-use crate::{utils::F, Settings};
+use crate::{utils::F, RuntimeSettings};
 use color_eyre::Result;
 
 use super::state::State;

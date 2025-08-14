@@ -4,13 +4,12 @@ use linnet::half_edge::{
     involution::{EdgeIndex, Hedge},
     NodeIndex,
 };
-use serde::{Deserialize, Serialize};
 use spenso::{
     structure::slot::{AbsInd, DummyAind, SlotError},
     utils::{to_subscript, to_superscript},
 };
 use symbolica::{
-    atom::{Atom, AtomView},
+    atom::{Atom, AtomView, Symbol},
     coefficient::CoefficientView,
     function, symbol,
 };
@@ -27,17 +26,17 @@ static DUMMYCOUNTER: AtomicUsize = AtomicUsize::new(0);
     Eq,
     PartialEq,
     Hash,
-    Serialize,
-    Deserialize,
     bincode_trait_derive::Encode,
     bincode_trait_derive::Decode,
     // bincode_trait_derive::BorrowDecodeFromDecode,
 )]
+#[trait_decode(trait = symbolica::state::HasStateMap)]
 pub enum Aind {
     Normal(usize),
     Hedge(u16, u16),
     Edge(u16, u16),
     Vertex(u16, u16),
+    Symbol(Symbol),
     Dummy(usize),
 }
 
@@ -73,6 +72,15 @@ impl DummyAind for Aind {
 impl std::fmt::Display for Aind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Aind::Symbol(v) => {
+                if f.sign_minus() {
+                    write!(f, "_{}", v)
+                } else if f.sign_plus() {
+                    write!(f, "^{}", v)
+                } else {
+                    write!(f, "{}", v)
+                }
+            }
             Aind::Normal(v) => {
                 if f.sign_minus() {
                     write!(f, "{}", to_subscript(*v as isize))
@@ -162,6 +170,7 @@ impl From<usize> for Aind {
 impl From<Aind> for Atom {
     fn from(value: Aind) -> Self {
         match value {
+            Aind::Symbol(s) => Atom::var(s),
             Aind::Dummy(i) => function!(symbol!("dummy"), i as i64),
             Aind::Normal(i) => Atom::num(i as i64),
             Aind::Edge(i, j) => {
@@ -215,6 +224,7 @@ impl TryFrom<AtomView<'_>> for Aind {
 
     fn try_from(view: AtomView<'_>) -> Result<Self, Self::Error> {
         match view {
+            AtomView::Var(v) => Ok(Aind::Symbol(v.get_symbol())),
             AtomView::Num(n) => match n.get_coeff_view() {
                 CoefficientView::Natural(n, 1, _, _) => Ok(Aind::Normal(
                     usize::try_from(n).map_err(|e| AindError::NotIndex(e.to_string()))?,

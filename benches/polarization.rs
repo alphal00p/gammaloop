@@ -6,7 +6,7 @@ use _gammaloop::{
     numerator::ContractionSettings,
     tests_from_pytest::load_amplitude_output,
     utils::F,
-    Externals, GammaloopCompileOptions, ProcessSettings, TropicalSubgraphTableSettings,
+    Externals, GammaloopCompileOptions, GenerationSettings, TropicalSubgraphTableSettings,
 };
 use criterion::{criterion_group, criterion_main, Criterion};
 use pprof::criterion::{Output, PProfProfiler};
@@ -17,7 +17,7 @@ pub(crate) fn load_helper(path: &str, use_orientations: bool) -> Graph {
     let (model, mut amplitude, _) = load_amplitude_output(path, true);
     amplitude.amplitude_graphs[0].graph.generate_cff();
 
-    let export_settings = ProcessSettings {
+    let export_settings = GenerationSettings {
         compile_cff: !use_orientations,
         numerator_settings: Default::default(),
         cpe_rounds_cff: Some(1),
@@ -25,6 +25,7 @@ pub(crate) fn load_helper(path: &str, use_orientations: bool) -> Graph {
         tropical_subgraph_table_settings: TropicalSubgraphTableSettings {
             target_omega: 1.0,
             panic_on_fail: false,
+            ..Default::default()
         },
         gammaloop_compile_options: GammaloopCompileOptions {
             inline_asm: env::var("NO_ASM").is_err(),
@@ -34,6 +35,7 @@ pub(crate) fn load_helper(path: &str, use_orientations: bool) -> Graph {
             compiler: "g++".to_string(),
             custom: vec![],
         },
+        ..Default::default()
     };
 
     let true_path = PathBuf::from(COMPILED_DUMP).join(path);

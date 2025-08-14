@@ -355,7 +355,7 @@ impl Default for ParameterizationSettings {
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize, Encode, Decode)]
 #[trait_decode(trait= GammaLoopContext)]
-pub struct Settings {
+pub struct RuntimeSettings {
     // Runtime settings
     #[serde(rename = "General")]
     pub general: GeneralSettings,
@@ -378,8 +378,8 @@ pub struct Settings {
     pub subtraction: SubtractionSettings,
 }
 
-impl Settings {
-    pub(crate) fn from_file(filename: impl AsRef<Path>) -> Result<Settings, Report> {
+impl RuntimeSettings {
+    pub(crate) fn from_file(filename: impl AsRef<Path>) -> Result<RuntimeSettings, Report> {
         let filename = filename.as_ref();
         let f = File::open(filename)
             .wrap_err_with(|| format!("Could not open settings file {}", filename.display()))
@@ -1163,7 +1163,7 @@ pub struct SubtractionSettings {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
-pub struct ProcessSettings {
+pub struct GenerationSettings {
     // Generation Time settings
     pub compile_cff: bool,
     pub numerator_settings: NumeratorSettings,
@@ -1174,7 +1174,24 @@ pub struct ProcessSettings {
     pub enable_thresholds: bool,
 }
 
-impl Default for ProcessSettings {
+impl GenerationSettings {
+    pub(crate) fn from_file(filename: impl AsRef<Path>) -> Result<GenerationSettings, Report> {
+        let filename = filename.as_ref();
+        let f = File::open(filename)
+            .wrap_err_with(|| {
+                format!(
+                    "Could not open generation settings file {}",
+                    filename.display()
+                )
+            })
+            .suggestion("Does the path exist?")?;
+        serde_yaml::from_reader(f)
+            .wrap_err("Could not parse generation  settings file")
+            .suggestion("Is it a correct yaml file")
+    }
+}
+
+impl Default for GenerationSettings {
     fn default() -> Self {
         Self {
             compile_cff: true,
@@ -1237,6 +1254,7 @@ impl GammaloopCompileOptions {
 pub struct TropicalSubgraphTableSettings {
     pub panic_on_fail: bool,
     pub target_omega: f64,
+    pub disable_tropical_generation: bool,
 }
 
 impl Default for TropicalSubgraphTableSettings {
@@ -1244,6 +1262,7 @@ impl Default for TropicalSubgraphTableSettings {
         Self {
             panic_on_fail: false,
             target_omega: 1.0,
+            disable_tropical_generation: false,
         }
     }
 }

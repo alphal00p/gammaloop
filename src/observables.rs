@@ -1,6 +1,6 @@
 use crate::momentum::FourMomentum;
 use crate::utils::{FloatLike, F};
-use crate::Settings;
+use crate::RuntimeSettings;
 use bincode_trait_derive::{Decode, Encode};
 use itertools::Itertools;
 #[allow(unused_imports)]
@@ -260,7 +260,7 @@ pub struct EventManager {
 
 #[allow(unused)]
 impl EventManager {
-    pub(crate) fn new(track_events: bool, settings: Settings) -> EventManager {
+    pub(crate) fn new(track_events: bool, settings: RuntimeSettings) -> EventManager {
         let mut observables = vec![];
         for o in &settings.observables {
             match o {

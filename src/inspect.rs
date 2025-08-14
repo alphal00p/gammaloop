@@ -12,10 +12,10 @@ use crate::utils;
 use crate::utils::f128;
 use crate::utils::F;
 use crate::SamplingSettings;
-use crate::Settings;
+use crate::RuntimeSettings;
 
 pub(crate) fn inspect<I: HasIntegrand>(
-    settings: &Settings,
+    settings: &RuntimeSettings,
     integrand: &mut I,
     mut pt: Vec<F<f64>>,
     _term: &[usize],

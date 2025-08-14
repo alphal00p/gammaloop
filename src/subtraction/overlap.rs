@@ -8,7 +8,7 @@ use crate::momentum_sample::LoopMomenta;
 use crate::new_graph::LoopMomentumBasis;
 use crate::utils::compute_shift_part;
 use crate::utils::F;
-use crate::Settings;
+use crate::RuntimeSettings;
 use ahash::HashMap;
 use ahash::HashMapExt;
 use ahash::HashSet;
@@ -318,7 +318,7 @@ pub(crate) fn find_maximal_overlap(
     esurfaces: &EsurfaceCollection,
     edge_masses: &EdgeVec<Option<Complex<F<f64>>>>,
     external_momenta: &ExternalFourMomenta<F<f64>>,
-    settings: &Settings,
+    settings: &RuntimeSettings,
 ) -> OverlapStructure {
     let mut res = OverlapStructure {
         overlap_groups: vec![],
@@ -735,7 +735,7 @@ mod tests {
         new_graph::LoopMomentumBasis,
         signature::LoopExtSignature,
         utils::dummy_hedge_graph,
-        Settings,
+        RuntimeSettings,
     };
 
     struct HelperBoxStructure {
@@ -1028,7 +1028,7 @@ mod tests {
             &box4e.esurfaces,
             &box4e.edge_masses,
             &box4e.external_momenta,
-            &Settings::default(),
+            &RuntimeSettings::default(),
         );
 
         assert_eq!(maximal_overlap.overlap_groups.len(), 4);
@@ -1065,7 +1065,7 @@ mod tests {
             &box4e.esurfaces,
             &box4e.edge_masses,
             &box4e.external_momenta,
-            &Settings::default(),
+            &RuntimeSettings::default(),
         );
 
         assert_eq!(maximal_overlap.overlap_groups.len(), 4);
@@ -1107,7 +1107,7 @@ mod tests {
             &banana.esurfaces,
             &banana.edge_masses,
             &banana.external_momenta,
-            &Settings::default(),
+            &RuntimeSettings::default(),
         );
 
         println!("center: {:#?}", maximal_overlap);

@@ -31,7 +31,7 @@ use crate::{
     signature::LoopExtSignature,
     utils::test_utils::load_generic_model,
     utils::{external_energy_atom_from_index, F},
-    ProcessSettings, Settings,
+    GenerationSettings, RuntimeSettings,
 };
 use spenso::{algebra::algebraic_traits::IsZero, network::library::TensorLibraryData};
 use symbolica::evaluate::{FunctionMap, OptimizationSettings};
@@ -63,8 +63,8 @@ fn tri_uv_AMP() {
     let mut amp = Amplitude::new("".into());
     amp.add_graph(graph);
 
-    amp.preprocess(&model, &ProcessSettings::default()).unwrap();
-    amp.build_integrand(Settings::default(), &model).unwrap();
+    amp.preprocess(&model, &GenerationSettings::default()).unwrap();
+    amp.build_integrand(RuntimeSettings::default(), &model).unwrap();
 }
 
 #[test]
@@ -267,7 +267,7 @@ fn tri_box_tri_LU() {
         },
     )
     .unwrap();
-    cs.build_integrand(Settings::default(), &model).unwrap();
+    cs.build_integrand(RuntimeSettings::default(), &model).unwrap();
 
     //println!("Final result: {:>}", sum.expand());
 }
@@ -393,7 +393,7 @@ fn double_triangle_LU() {
     )
     .unwrap();
 
-    cs.build_integrand(Settings::default(), &model).unwrap();
+    cs.build_integrand(RuntimeSettings::default(), &model).unwrap();
 
     //println!("Final result: {:>}", sum.expand());
 }

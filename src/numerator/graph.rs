@@ -183,7 +183,7 @@ mod test {
         new_graph::{parse::IntoGraph, FeynmanGraph, Graph},
         numerator::UnInit,
         uv::UltravioletGraph,
-        KinematicsSettings, ProcessSettings, Settings,
+        KinematicsSettings, GenerationSettings, RuntimeSettings,
     };
 
     #[test]
@@ -217,13 +217,13 @@ mod test {
 
         let mut amp: Amplitude = Amplitude::new("name".into());
 
-        let mut settings = Settings::default();
+        let mut settings = RuntimeSettings::default();
 
         settings.kinematics = KinematicsSettings::random(&graph, 42);
         amp.add_graph(graph).unwrap();
         // Amplitude::new(name)
 
-        let proc_set = ProcessSettings::default();
+        let proc_set = GenerationSettings::default();
 
         amp.preprocess(&model, &proc_set);
         let integrand = amp.build_integrand(settings, &model);
@@ -283,13 +283,13 @@ mod test {
 
         let mut amp: Amplitude = Amplitude::new("name".into());
 
-        let mut settings = Settings::default();
+        let mut settings = RuntimeSettings::default();
 
         settings.kinematics = KinematicsSettings::random(&graph, 42);
         amp.add_graph(graph).unwrap();
         // Amplitude::new(name)
 
-        let proc_set = ProcessSettings::default();
+        let proc_set = GenerationSettings::default();
 
         // amp.graphs[0].generate_cff().unwrap();
         // let a = amp.graphs[0].build_all_orientations_integrand_atom();
@@ -338,7 +338,7 @@ mod test {
         .unwrap();
 
         let mut amp: Amplitude = Amplitude::new("name".into());
-        let mut settings = Settings::default();
+        let mut settings = RuntimeSettings::default();
         for g in graphs {
             println!("{}", g.dot_serialize());
             settings.kinematics = KinematicsSettings::random(&g, 42);
@@ -346,7 +346,7 @@ mod test {
             // Amplitude::new(name)
         }
 
-        let proc_set = ProcessSettings::default();
+        let proc_set = GenerationSettings::default();
 
         amp.preprocess(&model, &proc_set).unwrap();
 
