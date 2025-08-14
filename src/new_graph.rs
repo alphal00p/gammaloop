@@ -19,8 +19,8 @@ use crate::{
     momentum::{Dep, ExternalMomenta},
     momentum_sample::ExternalIndex,
     new_gammaloop_integrand::LmbMultiChannelingSetup,
-    numerator::GlobalPrefactor,
-    utils::{ose_atom_from_index, F},
+    numerator::{symbolica_ext::AtomCoreExt, GlobalPrefactor, ParsingNet},
+    utils::{ose_atom_from_index, F, GS},
     Externals,
 };
 
@@ -47,6 +47,13 @@ pub mod feynman_graph;
 pub use feynman_graph::FeynmanGraph;
 pub mod ext;
 impl Graph {
+    pub(crate) fn global_network(&self) -> ParsingNet {
+        (&self.global_prefactor.num * &self.global_prefactor.projector)
+            .wrap_color(GS.color_wrap)
+            .parse_into_net()
+            .unwrap()
+    }
+
     pub(crate) fn random_externals(&self, seed: u64) -> Externals {
         let mut rng = SmallRng::seed_from_u64(seed);
         let mom_range = -10.0..10.0;

@@ -281,6 +281,7 @@ impl Cli {
                 .run_command(&mut runtime_settings, &mut generation_settings, &mut state)
                 .unwrap();
         } else {
+            print_banner();
             let prompt = DefaultPrompt {
                 left_prompt: DefaultPromptSegment::Basic(format!(
                     "{}:γloop",

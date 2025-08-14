@@ -326,10 +326,7 @@ impl GenericEvaluator {
         builder: &ParamBuilder<f64>,
         optimization_settings: OptimizationSettings,
     ) -> Self {
-        let params: Vec<Atom> = (builder)
-            .into_iter()
-            .flat_map(|p| p.params.clone())
-            .collect();
+        let params: Vec<Atom> = builder.into_iter().flat_map(|p| p.params.clone()).collect();
 
         Self::new(atom, &builder.fn_map, &params, optimization_settings)
     }
@@ -340,6 +337,7 @@ impl GenericEvaluator {
         params: &[Atom],
         optimization_settings: OptimizationSettings,
     ) -> Self {
+        // println!("{}", atom.as_atom_view());
         let tree = atom
             .evaluator(&fn_map, &params, optimization_settings)
             .unwrap();
@@ -1566,14 +1564,16 @@ impl<T: FloatLike> ParamBuilder<T> {
     }
 
     pub(crate) fn polarization_params(&mut self, graph: &Graph) {
+        // println!("{}");c
         let mut pols = graph.global_prefactor.polarizations();
         pols.sort_by(|a, b| a.0.cmp(&b.0));
         let mut params = Vec::new();
 
         for (p, a) in pols {
-            match ParsingNet::try_from_view(a.as_view(), TENSORLIB.deref())
+            // println!("{a}");
+            match ParsingNet::try_from_view(a.as_view(), TENSORLIB.read().unwrap().deref())
                 .unwrap()
-                .result_tensor(TENSORLIB.deref())
+                .result_tensor(TENSORLIB.read().unwrap().deref())
                 .unwrap()
             {
                 ExecutionResult::One => {}

@@ -96,6 +96,8 @@ use symbolica::{
     function, parse, symbol,
 };
 
+pub mod symbolica_ext;
+
 use clap::{Args, ValueEnum};
 use symbolica::{domains::float::NumericalFloatLike, evaluate::FunctionMap, id::Replacement};
 pub mod aind;
@@ -654,8 +656,9 @@ pub struct GlobalPrefactor {
 impl GlobalPrefactor {
     pub fn polarizations(&self) -> Vec<(PolDef, Atom)> {
         let mut pols = Vec::new();
+        let full_prefactor = &self.projector * &self.num;
         let pat = function!(GS.epsilon, W_.e_, W_.i_).to_pattern();
-        for m in self.projector.pattern_match(&pat, None, None) {
+        for m in full_prefactor.pattern_match(&pat, None, None) {
             let Some(e) = m.get(&W_.e_) else {
                 continue;
             };
@@ -674,7 +677,7 @@ impl GlobalPrefactor {
         }
 
         let pat = function!(GS.epsilonbar, W_.e_, W_.i_).to_pattern();
-        for m in self.projector.pattern_match(&pat, None, None) {
+        for m in full_prefactor.pattern_match(&pat, None, None) {
             let Some(e) = m.get(&W_.e_) else {
                 continue;
             };
@@ -693,7 +696,7 @@ impl GlobalPrefactor {
         }
 
         let pat = function!(GS.u, W_.e_, W_.i_).to_pattern();
-        for m in self.projector.pattern_match(&pat, None, None) {
+        for m in full_prefactor.pattern_match(&pat, None, None) {
             let Some(e) = m.get(&W_.e_) else {
                 continue;
             };
@@ -712,7 +715,7 @@ impl GlobalPrefactor {
         }
 
         let pat = function!(GS.v, W_.e_, W_.i_).to_pattern();
-        for m in self.projector.pattern_match(&pat, None, None) {
+        for m in full_prefactor.pattern_match(&pat, None, None) {
             let Some(e) = m.get(&W_.e_) else {
                 continue;
             };
@@ -731,7 +734,7 @@ impl GlobalPrefactor {
         }
 
         let pat = function!(GS.ubar, W_.e_, W_.i_).to_pattern();
-        for m in self.projector.pattern_match(&pat, None, None) {
+        for m in full_prefactor.pattern_match(&pat, None, None) {
             let Some(e) = m.get(&W_.e_) else {
                 continue;
             };
@@ -750,7 +753,7 @@ impl GlobalPrefactor {
         }
 
         let pat = function!(GS.vbar, W_.e_, W_.i_).to_pattern();
-        for m in self.projector.pattern_match(&pat, None, None) {
+        for m in full_prefactor.pattern_match(&pat, None, None) {
             let Some(e) = m.get(&W_.e_) else {
                 continue;
             };
@@ -1233,7 +1236,7 @@ impl ColorSimplified {
 
         // println!("net scalar{}", net.scalar.as_ref().unwrap());
         Ok(Network {
-            net: ParsingNet::try_from_view(a.as_view(), TENSORLIB.deref())?,
+            net: ParsingNet::try_from_view(a.as_view(), TENSORLIB.read().unwrap().deref())?,
         })
     }
 }
@@ -1657,7 +1660,10 @@ impl Numerator<GammaSimplified> {
         debug!("Parsing gamma simplified numerator into tensor network");
         Ok(Numerator {
             state: Network {
-                net: ParsingNet::try_from_view(self.state.expr.as_view(), TENSORLIB.deref())?,
+                net: ParsingNet::try_from_view(
+                    self.state.expr.as_view(),
+                    TENSORLIB.read().unwrap().deref(),
+                )?,
             },
         })
     }
@@ -1747,7 +1753,7 @@ impl Network {
     }
 
     pub(crate) fn contract(&mut self, settings: impl Into<ContractionSettings>) -> Result<()> {
-        let lib = TENSORLIB.deref();
+        let lib = TENSORLIB.read().unwrap();
 
         let settings = settings.into();
         debug!(
@@ -1758,28 +1764,30 @@ impl Network {
         if let Some(n) = settings.n_steps {
             for _ in 0..n {
                 match settings.mode {
-                    ExecutionMode::All => {
-                        self.net.execute::<Steps<1>, SmallestDegree, _, _>(lib)?
-                    }
-                    ExecutionMode::Scalar => {
-                        self.net.execute::<Steps<1>, ContractScalars, _, _>(lib)?
-                    }
+                    ExecutionMode::All => self
+                        .net
+                        .execute::<Steps<1>, SmallestDegree, _, _>(lib.deref())?,
+                    ExecutionMode::Scalar => self
+                        .net
+                        .execute::<Steps<1>, ContractScalars, _, _>(lib.deref())?,
                     ExecutionMode::Single => self
                         .net
-                        .execute::<Steps<1>, SingleSmallestDegree<false>, _, _>(lib)?,
+                        .execute::<Steps<1>, SingleSmallestDegree<false>, _, _>(lib.deref())?,
                 }
             }
         } else {
             match settings.mode {
                 ExecutionMode::All => {
-                    self.net.execute::<Sequential, SmallestDegree, _, _>(lib)?;
+                    self.net
+                        .execute::<Sequential, SmallestDegree, _, _>(lib.deref())?;
                 }
                 ExecutionMode::Scalar => {
-                    self.net.execute::<Sequential, ContractScalars, _, _>(lib)?;
+                    self.net
+                        .execute::<Sequential, ContractScalars, _, _>(lib.deref())?;
                 }
                 ExecutionMode::Single => {
                     self.net
-                        .execute::<Sequential, SingleSmallestDegree<false>, _, _>(lib)?;
+                        .execute::<Sequential, SingleSmallestDegree<false>, _, _>(lib.deref())?;
                 }
             }
         }
@@ -1870,7 +1878,7 @@ impl Numerator<Network> {
         if !fully_numerical_substitutions {
             let mut t = self.apply_reps(replacements).state.net;
 
-            t.execute::<Sequential, SmallestDegree, _, _>(TENSORLIB.deref());
+            t.execute::<Sequential, SmallestDegree, _, _>(TENSORLIB.read().unwrap().deref());
 
             let r = match t
                 .result_scalar()
@@ -2067,7 +2075,11 @@ impl Numerator<Network> {
 
         debug!("contracted");
         Ok(Numerator {
-            state: match self.state.net.result_tensor(TENSORLIB.deref())? {
+            state: match self
+                .state
+                .net
+                .result_tensor(TENSORLIB.read().unwrap().deref())?
+            {
                 ExecutionResult::One => Contracted::one(),
 
                 ExecutionResult::Zero => Contracted::zero(),

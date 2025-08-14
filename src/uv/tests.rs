@@ -60,7 +60,7 @@ fn tri_uv_AMP() {
     )
     .unwrap();
 
-    let mut amp = Amplitude::new("".into());
+    let mut amp = Amplitude::new("");
     amp.add_graph(graph);
 
     amp.preprocess(&model, &GenerationSettings::default()).unwrap();

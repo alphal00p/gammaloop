@@ -173,6 +173,7 @@ impl ReversibleEdge for EdgeData<&Edge> {
 mod test {
 
     use env_logger::WriteStyle;
+    use idenso::color::ColorSimplifier;
     use log::{debug, LevelFilter};
     use spenso::structure::HasStructure;
     use symbolica::atom::{Atom, AtomCore};
@@ -183,7 +184,7 @@ mod test {
         new_graph::{parse::IntoGraph, FeynmanGraph, Graph},
         numerator::UnInit,
         uv::UltravioletGraph,
-        KinematicsSettings, GenerationSettings, RuntimeSettings,
+        GenerationSettings, KinematicsSettings, RuntimeSettings,
     };
 
     #[test]
@@ -215,7 +216,7 @@ mod test {
         }
         // return;
 
-        let mut amp: Amplitude = Amplitude::new("name".into());
+        let mut amp: Amplitude = Amplitude::new("name");
 
         let mut settings = RuntimeSettings::default();
 
@@ -281,7 +282,7 @@ mod test {
         }
         // return;
 
-        let mut amp: Amplitude = Amplitude::new("name".into());
+        let mut amp: Amplitude = Amplitude::new("name");
 
         let mut settings = RuntimeSettings::default();
 
@@ -337,8 +338,9 @@ mod test {
         })
         .unwrap();
 
-        let mut amp: Amplitude = Amplitude::new("name".into());
+        let mut amp: Amplitude = Amplitude::new("name");
         let mut settings = RuntimeSettings::default();
+
         for g in graphs {
             println!("{}", g.dot_serialize());
             settings.kinematics = KinematicsSettings::random(&g, 42);
@@ -473,7 +475,7 @@ mod test {
     fn tree() {
         let mut graphs: Vec<Graph> = dot!(
             digraph qqx_aaa_tree_1 {
-                        graph[num="spenso::g(spenso::dind(spenso::cof(3, hedge(1))), spenso::cof(3, hedge(2)))"]
+                        graph[num="spenso::g(spenso::dind(spenso::cof(3, hedge(1))), spenso::cof(3, hedge(2)))/3"]
                         ext    [style=invis]
                         ext -> v1:1 [particle="d" id=1];
                         ext -> v3:2 [particle="d~" id=2];
@@ -483,6 +485,19 @@ mod test {
                         v1 -> v2 [particle="d" id=5];
                         v2 -> v3 [particle="d" id=6];
             }
+
+            digraph qqx_aaa_tree_1 {
+                        ext    [style=invis]
+                        ext -> v1:1 [particle="d" id=1];
+                        ext -> v3:2 [particle="d~" id=2];
+                        v1:3 -> ext [particle="a" id=3];
+                        v2:4 -> ext [particle="a" id=4];
+                        v3:0 -> ext [particle="a" id=0];
+                        v1 -> v2 [particle="d" id=5];
+                        v2 -> v3 [particle="d" id=6];
+                        graph[num="spenso::g(spenso::dind(spenso::cof(3, hedge(1))), spenso::cof(3, hedge(2)))/3"]
+            }
+
 
             digraph qqx_aaa_tree_1_glob {
             ext [style=invis];
@@ -513,13 +528,13 @@ mod test {
                 *spenso::g(spenso::cof(3,hedge(8)),spenso::dind(spenso::cof(3,hedge(2))))
                 *spenso::gamma(spenso::bis(4,hedge(2)),spenso::bis(4,hedge(8)),spenso::mink(4,hedge(0)))
 
-                    *u(1,spenso::bis(4,hedge(1)))
-                    *vbar(2,spenso::bis(4,hedge(2)))
-                    *ϵbar(0,spenso::mink(4,hedge(0)))
-                    *ϵbar(3,spenso::mink(4,hedge(3)))
-                    *ϵbar(4,spenso::mink(4,hedge(4)))
-                    *spenso::g(spenso::cof(3,hedge(2)),spenso::dind(spenso::cof(3,hedge(1))))"
-            , overall_factor="1", projector="1"
+                   "
+            , overall_factor="1", projector="u(1,spenso::bis(4,hedge(1)))
+            *vbar(2,spenso::bis(4,hedge(2)))
+            *ϵbar(0,spenso::mink(4,hedge(0)))
+            *ϵbar(3,spenso::mink(4,hedge(3)))
+            *ϵbar(4,spenso::mink(4,hedge(4)))
+            *spenso::g(spenso::cof(3,hedge(2)),spenso::dind(spenso::cof(3,hedge(1))))/3"
             ];
             edge [num="1"];
             node [num="1"];
@@ -532,8 +547,13 @@ mod test {
         let mut a: Option<Atom> = None;
         for g in &mut graphs {
             let mut out = String::new();
-            let new_a = g.numerator(&g.full_filter(), true).state.expr;
+
+            let new_a = (g.numerator(&g.full_filter(), true).state.expr
+                * &g.global_prefactor.projector)
+                .simplify_color();
+            println!("New:{new_a}");
             if let Some(a) = &a {
+                println!("Old:{a}");
                 assert_eq!(&new_a, a, "{}", (&new_a / a).expand().to_canonical_string());
             } else {
                 a = Some(new_a);
@@ -541,5 +561,15 @@ mod test {
             g.dot_serialize_fmt(&mut out);
             println!("{}", out);
         }
+
+        let mut a = Amplitude::new("test");
+
+        for g in graphs {
+            a.add_graph(g);
+        }
+        let model = crate::utils::test_utils::load_generic_model("sm");
+
+        a.preprocess(&model, &GenerationSettings::default())
+            .unwrap();
     }
 }

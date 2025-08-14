@@ -59,6 +59,7 @@ pub trait GraphOrientation {
         }
         fnbld.finish()
     }
+
     fn select<'a>(&self, atom: impl Into<AtomOrView<'a>>) -> Atom {
         let orientation = self.orientation();
         atom.into().as_view().replace_map(|term, _ctx, out| {

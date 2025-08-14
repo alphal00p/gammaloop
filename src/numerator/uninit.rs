@@ -1,11 +1,30 @@
+use std::sync::atomic::AtomicUsize;
+
 use linnet::half_edge::subgraph::SubGraph;
 use log::debug;
-use spenso::network::library::TensorLibraryData;
+use spenso::{
+    network::library::{symbolic::ExplicitKey, TensorLibraryData},
+    structure::{
+        concrete_index::FlatIndex,
+        representation::{LibraryRep, Minkowski, RepName},
+        IndexLess, PermutedStructure,
+    },
+    tensors::{
+        data::{DenseTensor, SetTensorData},
+        parametric::ParamTensor,
+    },
+};
 use symbolica::atom::Atom;
 
-use crate::new_graph::Graph;
+use crate::{
+    new_graph::Graph,
+    numerator::aind::Aind,
+    utils::{GS, TENSORLIB},
+};
 
-use super::{AppliedFeynmanRule, Global, GlobalPrefactor, Numerator, UnInit};
+use super::{AppliedFeynmanRule, Numerator, UnInit};
+
+static MAXEDGECOUNTER: AtomicUsize = AtomicUsize::new(0);
 
 impl Numerator<UnInit> {
     pub(crate) fn from_new_graph<S: SubGraph>(
@@ -15,15 +34,30 @@ impl Numerator<UnInit> {
         multiply_prefactor: bool,
     ) -> Numerator<AppliedFeynmanRule> {
         debug!("Generating numerator for graph: {}", graph.name);
+
+        debug!("Graph: {}", graph.dot(subgraph));
         let mut num = if multiply_prefactor {
-            graph.global_prefactor.num.clone()
-                * &graph.overall_factor
-                * &graph.global_prefactor.projector
+            &graph.global_prefactor.num * &graph.overall_factor
         } else {
             Atom::one()
         };
 
-        for (p, _, e) in graph.underlying.iter_edges_of(subgraph) {
+        for (p, eid, e) in graph.underlying.iter_edges_of(subgraph) {
+            let i = MAXEDGECOUNTER.fetch_max(eid.0, std::sync::atomic::Ordering::Relaxed);
+            if i == eid.0 {
+                // TENSORLIB.write().unwrap().insert_explicit(
+                //     ExplicitKey::<Aind>::from_iter(
+                //         [Minkowski {}.new_rep(4)],
+                //         GS.emr_vec,
+                //         Some(vec![Atom::num(eid.0 as i64)]),
+                //     )
+                //     .map_structure(|s| {
+                //         let mut a = ParamTensor::param(DenseTensor::fill(s, Atom::new()).into()).into();
+                //         a.set_flat(FlatIndex(0), GS.emr_vec())
+                //         a
+                //     }),
+                // );
+            }
             if p.is_paired() {
                 num *= &e.data.num;
             }
@@ -31,43 +65,12 @@ impl Numerator<UnInit> {
         for (_, _, v) in graph.underlying.iter_nodes_of(subgraph) {
             num *= v.get_num();
         }
+
         Numerator {
             state: AppliedFeynmanRule {
                 expr: num,
                 state: Default::default(),
             },
         }
-    }
-
-    pub(crate) fn from_global(
-        self,
-        global: Atom,
-        // _graph: &BareGraph,
-        prefactor: &GlobalPrefactor,
-    ) -> Numerator<Global> {
-        debug!("Setting global numerator");
-        let state = {
-            let mut global = global;
-            global = global * &prefactor.num * &prefactor.projector;
-            Global::new(global.into())
-        };
-        debug!("Global numerator:\n\t{}", state.expr);
-        Numerator { state }
-    }
-
-    pub(crate) fn from_global_color(
-        self,
-        global: Atom,
-        // _graph: &BareGraph,
-        prefactor: &GlobalPrefactor,
-    ) -> Numerator<Global> {
-        debug!("Setting global numerator");
-        let state = {
-            let mut global = global;
-            global = global * &prefactor.num * &prefactor.projector;
-            Global::new_color(global.into())
-        };
-        debug!("Global numerator:\n\t{}", state.expr);
-        Numerator { state }
     }
 }

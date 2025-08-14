@@ -22,6 +22,7 @@ impl Generate {
         runtime_settings: &mut RuntimeSettings,
     ) -> Result<()> {
         debug!("Preprocessing");
+
         let mut generation_settings_for_this_generation = generation_settings.clone();
         if self.disable_thresholds {
             debug!("Thresholds are disabled");

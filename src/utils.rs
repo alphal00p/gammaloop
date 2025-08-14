@@ -6,6 +6,7 @@ use crate::numerator::aind::Aind;
 use crate::numerator::ufo::UFO;
 use crate::numerator::NumeratorEvaluateFloat;
 use crate::signature::{ExternalSignature, LoopSignature};
+use crate::symbolica_ext::CallSymbol;
 use crate::ParameterizationSettings;
 use crate::SamplingSettings;
 use crate::{ParameterizationMapping, ParameterizationMode, MAX_LOOP};
@@ -29,10 +30,11 @@ use spenso::algebra::complex::R;
 use spenso::algebra::upgrading_arithmetic::TrySmallestUpgrade;
 use spenso::network::library::symbolic::{ExplicitKey, TensorLibrary};
 use spenso::network::library::TensorLibraryData;
+use spenso::structure::abstract_index::AIND_SYMBOLS;
 use spenso::structure::concrete_index::ExpandedIndex;
 use spenso::structure::representation::{Minkowski, RepName};
 use spenso::tensors::parametric::to_param::ToAtom;
-use spenso::tensors::parametric::MixedTensor;
+use spenso::tensors::parametric::{MixedTensor, ParamTensor};
 use spenso_hep_lib::hep_lib;
 use symbolica::atom::{AtomCore, AtomOrView, FunctionBuilder, Symbol};
 use symbolica::coefficient::Coefficient;
@@ -49,7 +51,7 @@ use std::cmp::{Ord, Ordering};
 use std::fmt::{Debug, Display};
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, Sub, SubAssign};
 use std::str::FromStr;
-use std::sync::LazyLock;
+use std::sync::{LazyLock, RwLock};
 use std::time::Duration;
 use symbolica::domains::float::Real;
 use symbolica::domains::rational::Rational;
@@ -3472,8 +3474,9 @@ impl GammaloopSymbols {
     // }
 }
 
-pub static TENSORLIB: LazyLock<TensorLibrary<MixedTensor<F<f64>, ExplicitKey<Aind>>, Aind>> =
-    LazyLock::new(|| hep_lib(F(1.), F(0.)));
+pub static TENSORLIB: LazyLock<
+    RwLock<TensorLibrary<MixedTensor<F<f64>, ExplicitKey<Aind>>, Aind>>,
+> = LazyLock::new(|| RwLock::new(hep_lib(F(1.), F(0.))));
 
 pub static W_: LazyLock<WildCards> = LazyLock::new(|| WildCards {
     edgeid_: symbol!("eid_"),
@@ -3629,6 +3632,8 @@ impl GammaloopSymbols {
         )
     }
 
+    pub(crate) fn emr_vec_lib_tensor(&self, e: EdgeIndex) {}
+
     pub(crate) fn split_mom_pattern_simple<'a>(&self, e: EdgeIndex) -> Replacement {
         let eidc = usize::from(e) as i64;
         Replacement::new(
@@ -3637,6 +3642,18 @@ impl GammaloopSymbols {
             function!(GS.ose, eidc, Minkowski {}.to_symbolic([W_.a__])) * sign_atom(e)
                 + function!(GS.emr_vec, eidc, Minkowski {}.to_symbolic([W_.a__])),
         )
+    }
+
+    pub(crate) fn add_parametric_sign<'a>(&self, e: EdgeIndex) -> Replacement {
+        Replacement::new(
+            self.emr_mom(e, AIND_SYMBOLS.cind.f(&[Atom::Zero]))
+                .to_pattern(),
+            sign_atom(e) * self.ose(e),
+        )
+    }
+
+    pub(crate) fn ose(&self, e: EdgeIndex) -> Atom {
+        function!(GS.ose, usize::from(e) as i64)
     }
 }
 

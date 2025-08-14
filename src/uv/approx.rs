@@ -7,6 +7,8 @@ use crate::{
     },
     momentum::{Sign, SignOrZero},
     new_graph::{Edge, LMBext, LoopMomentumBasis, Vertex},
+    numerator::{symbolica_ext::AtomCoreExt, Network},
+    symbolica_ext::CallSymbol,
     utils::{external_energy_atom_from_index, ose_atom_from_index, GS, W_},
 };
 use ahash::AHashSet;
@@ -140,7 +142,7 @@ pub struct Approximation {
     pub dod: i32,
     pub lmb: LoopMomentumBasis,
     pub local_3d: CFFapprox, //3d denoms
-    pub final_integrand: Option<Atom>,
+    pub final_integrand: Option<Network>,
     pub integrated_4d: ApproxOp, //4d
     pub simple_approx: Option<SimpleApprox>,
 }
@@ -918,7 +920,7 @@ impl Approximation {
         canonize_esurface: &Option<ShiftRewrite>,
         orientations: &TiVec<OID, O>,
         cut_edges: &[EdgeIndex],
-    ) -> Option<Atom>
+    ) -> Option<Network>
     where
         G: UltravioletGraph + AsRef<HedgeGraph<Edge, Vertex, H>>,
     {
@@ -947,7 +949,7 @@ impl Approximation {
             .replace(GS.m_uv_int)
             .with(GS.m_uv);
 
-        println!("Integrated 4d finite part: {}", finite);
+        debug!("Integrated 4d finite part: {}", finite);
 
         let reduced = amplitude.included().subtract(&self.subgraph.included());
 
@@ -962,45 +964,46 @@ impl Approximation {
             }
         }
 
-        let mut resnum = graph.numerator(&reduced, true).color_simplify();
+        let mut resnum = graph.numerator(&reduced, false).color_simplify();
 
         let mut reps = Vec::new();
         for (p, eid, _) in graph.as_ref().iter_edges_of(&reduced) {
             if p.is_paired() {
-                // let e_mass = e.data.mass_atom();
-                reps.push(GS.split_mom_pattern_simple(eid));
+                reps.push(GS.add_parametric_sign(eid));
             }
         }
 
         resnum.state.expr = resnum.state.expr.replace_multiple(&reps);
         resnum.state.expr *= cff;
-        let mut res = resnum
-            .parse()
-            .unwrap()
-            .contract(())
-            .unwrap()
-            .state
-            .tensor
-            .scalar()
-            .expect("Expected a scalar value when contracting integrand tensor network");
+        resnum.state.expr = resnum.state.expr.wrap_color(GS.color_wrap);
+        let mut res = resnum.parse().unwrap().state;
+        // println!("Final Integrand Net:{}", res.net.dot_pretty());
+        res.net = res.net.replace_multiple(&reps);
 
-        res = res
-            .replace(function!(
-                GS.emr_vec,
-                W_.a_,
-                function!(AIND_SYMBOLS.cind, 0)
-            ))
-            .with(Atom::Zero)
-            .replace(function!(GS.ose, W_.a_, function!(AIND_SYMBOLS.cind, 1)))
-            .with(Atom::Zero)
-            .replace(function!(GS.ose, W_.a_, function!(AIND_SYMBOLS.cind, 2)))
-            .with(Atom::Zero)
-            .replace(function!(GS.ose, W_.a_, function!(AIND_SYMBOLS.cind, 3)))
-            .with(Atom::Zero)
-            .replace(function!(GS.ose, W_.a_, function!(AIND_SYMBOLS.cind, 0)))
-            .with(function!(GS.ose, W_.a_))
-            .replace(function!(GS.emr_vec, W_.a__))
-            .with(function!(GS.emr_mom, W_.a__));
+        // .contract(())
+        // .unwrap()
+        // .state
+        // .tensor
+        // .scalar()
+        // .expect("Expected a scalar value when contracting integrand tensor network");
+
+        // res = res
+        //     .replace(function!(
+        //         GS.emr_vec,
+        //         W_.a_,
+        //         function!(AIND_SYMBOLS.cind, 0)
+        //     ))
+        //     .with(Atom::Zero)
+        //     .replace(function!(GS.ose, W_.a_, function!(AIND_SYMBOLS.cind, 1)))
+        //     .with(Atom::Zero)
+        //     .replace(function!(GS.ose, W_.a_, function!(AIND_SYMBOLS.cind, 2)))
+        //     .with(Atom::Zero)
+        //     .replace(function!(GS.ose, W_.a_, function!(AIND_SYMBOLS.cind, 3)))
+        //     .with(Atom::Zero)
+        //     .replace(function!(GS.ose, W_.a_, function!(AIND_SYMBOLS.cind, 0)))
+        //     .with(function!(GS.ose, W_.a_))
+        //     .replace(function!(GS.emr_vec, W_.a__))
+        //     .with(function!(GS.emr_mom, W_.a__));
 
         // debug!("final_cff {res:>}");
         Some(res)
@@ -1037,55 +1040,12 @@ pub(crate) fn do_replacement_rules<H, G: UltravioletGraph + AsRef<HedgeGraph<Edg
         Some(cut_edges_subgraph)
     };
 
-    if let Some(cut) = &cut_edges_subgraph {
-        // add Feynman rules of cut edges
-        for (_p, edge_index, d) in graph.as_ref().iter_edges_of(cut) {
-            let edge_id = usize::from(edge_index) as i64;
-
-            // do not set the cut momenta generated in the amplitude to their OSE values
-            // yet in order to do 4d scaling tests
-            let temp_orientation = orientation.clone();
-
+    for (p, eid, _) in g.iter_edges() {
+        if p.is_paired() {
             orientation_expr = orientation_expr
-                .replace(function!(GS.emr_mom, edge_id, W_.y_))
-                .with_map(move |m| {
-                    let index = m.get(W_.y_).unwrap().to_atom();
-
-                    let sign = SignOrZero::from((&temp_orientation[edge_index]).clone()) * 1;
-
-                    function!(GS.energy, edge_id, sign, index)
-                        + function!(GS.emr_vec, edge_id, index)
-                });
-
-            let temp_orientation = orientation.clone();
-            orientation_expr = orientation_expr
-                * d.data
-                    .num
-                    .replace(function!(GS.emr_mom, edge_id, W_.y_))
-                    .with_map(move |m| {
-                        let index = m.get(W_.y_).unwrap().to_atom();
-
-                        let sign = SignOrZero::from((&temp_orientation[edge_index]).clone()) * 1;
-
-                        function!(GS.ose, edge_id, index) * sign
-                            + function!(GS.emr_vec, edge_id, index)
-                    });
+                .replace(GS.emr_mom(eid, function!(AIND_SYMBOLS.cind, 0)))
+                .with(GS.ose(eid));
         }
-    }
-
-    // add Feynman rules of external edges
-    for (_p, edge_index, d) in graph
-        .as_ref()
-        .iter_edges_of(&graph.as_ref().external_filter())
-    {
-        let edge_id = usize::from(edge_index) as i64;
-        orientation_expr = (orientation_expr * &d.data.num)
-            .replace(function!(GS.emr_mom, edge_id, W_.y_))
-            .with_map(move |m| {
-                let index = m.get(W_.y_).unwrap().to_atom();
-
-                function!(GS.energy, edge_id, index) + function!(GS.emr_vec, edge_id, index)
-            });
     }
 
     let spenso_mink = symbol!("spenso::mink");
@@ -1097,7 +1057,7 @@ pub(crate) fn do_replacement_rules<H, G: UltravioletGraph + AsRef<HedgeGraph<Edg
         .replace(function!(GS.ose, W_.x_, W_.y_, W_.z_, W_.prop_, W_.a___))
         .with(function!(GS.ose, 100, W_.prop_, W_.a___));
 
-    debug!("sta");
+    // debug!("sta");
     // contract all dot products, set all cross terms ose.q3 to 0
     // MS.dot is a 4d dot product
     orientation_expr = orientation_expr
@@ -1116,9 +1076,9 @@ pub(crate) fn do_replacement_rules<H, G: UltravioletGraph + AsRef<HedgeGraph<Edg
                 * function!(GS.ose, W_.y__, function!(spenso_mink, W_.z__)).pow(Atom::var(W_.b_)),
         )
         .with(Atom::Zero);
-    debug!("expanding");
+    // debug!("expanding");
     // orientation_expr=orientation_expr.expand() // TODO: prevent expansion
-    debug!("inter");
+    // debug!("inter");
     orientation_expr = orientation_expr
         .replace(
             function!(GS.emr_vec, W_.x__, function!(spenso_mink, W_.z__))
@@ -1225,7 +1185,7 @@ pub(crate) fn do_replacement_rules<H, G: UltravioletGraph + AsRef<HedgeGraph<Edg
         ))
         .with(function!(GS.emr_vec, W_.x__) * function!(GS.emr_vec, W_.y__));
 
-    debug!("do first reps");
+    // debug!("do first reps");
 
     // substitute all OSEs from subgraphs, they are in the form OSE(edge_id, momentum, mass^2, mom.mom + mass^2)
     // the sqrt has already been applied

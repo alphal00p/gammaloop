@@ -33,6 +33,9 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph {
     {
         self.as_ref().cyclotomatic_number(subgraph)
     }
+
+    ///Get the numerator of the graph.
+    /// If multiply_prefactor is true, the numerator is multiplied by the global  prefactor. (just num not projector)
     fn numerator<S: SubGraph>(
         &self,
         subgraph: &S,

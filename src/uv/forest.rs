@@ -5,13 +5,21 @@ use crate::{
     },
     momentum::SignOrZero,
     new_graph::{Edge, Graph, Vertex},
+    numerator::{symbolica_ext::AtomCoreExt, ParsingNet},
+    symbolica_ext::CallSymbol,
     utils::{GS, W_},
     uv::approx::CFFapprox,
 };
 use bitvec::vec::BitVec;
+use spenso::{
+    network::store::TensorScalarStoreMapping,
+    structure::abstract_index::{ABSTRACTIND, AIND_SYMBOLS},
+    tensors::{data::StorageTensor, parametric::ParamOrConcrete},
+};
 use symbolica::{
     atom::{Atom, AtomCore},
     function,
+    id::Replacement,
 };
 
 use linnet::half_edge::{involution::EdgeIndex, subgraph::SubGraph, HedgeGraph};
@@ -128,13 +136,29 @@ impl Forest {
         orientation: &OrientationData,
         cut_edges: Option<&BitVec>,
         graph: &Graph,
-    ) -> Atom {
-        let mut sum = Atom::Zero;
+    ) -> ParsingNet {
+        let mut sum: Option<ParsingNet> = None;
 
         for (_, n) in &self.dag.nodes {
-            sum += orientation.select(n.data.final_integrand.as_ref().unwrap());
+            let net = n.data.final_integrand.as_ref().unwrap().net.map_ref(
+                |a| orientation.select(a),
+                |a| match a {
+                    ParamOrConcrete::Param(a) => {
+                        ParamOrConcrete::Param(a.map_data_ref_self(|a| orientation.select(a)))
+                    }
+                    a => a.clone(),
+                },
+            );
+            let Some(s) = &mut sum else {
+                sum = Some(net);
+                continue;
+            };
+            *s += net;
         }
 
+        let Some(mut s) = sum else {
+            return ParsingNet::zero();
+        };
         if let Some(cut) = cut_edges {
             // add Feynman rules of cut edges
             for (_p, edge_index, d) in graph.iter_edges_of(cut) {
@@ -144,37 +168,27 @@ impl Forest {
                 // yet in order to do 4d scaling tests
                 let temp_orientation = orientation.clone();
 
-                sum = sum
-                    .replace(function!(GS.emr_mom, edge_id, W_.y_))
-                    .with_map(move |m| {
-                        let index = m.get(W_.y_).unwrap().to_atom();
-
-                        let sign =
-                            SignOrZero::from((&temp_orientation.orientation[edge_index]).clone())
-                                * 1;
-
-                        function!(GS.energy, edge_id, sign, index)
-                            + function!(GS.emr_vec, edge_id, index)
-                    });
-
-                let temp_orientation = orientation.clone();
-                sum = sum
-                    * d.data
-                        .num
-                        .replace(function!(GS.emr_mom, edge_id, W_.y_))
-                        .with_map(move |m| {
-                            let index = m.get(W_.y_).unwrap().to_atom();
-
-                            let sign = SignOrZero::from(
-                                (&temp_orientation.orientation[edge_index]).clone(),
-                            ) * 1;
-
-                            function!(GS.ose, edge_id, index) * sign
-                                + function!(GS.emr_vec, edge_id, index)
-                        });
+                s = s * d
+                    .data
+                    .num
+                    .wrap_color(GS.color_wrap)
+                    .parse_into_net()
+                    .unwrap();
+                s = s.replace_multiple(&[
+                    Replacement::new(
+                        function!(GS.emr_mom, edge_id, AIND_SYMBOLS.cind.f(&[Atom::Zero]))
+                            .to_pattern(),
+                        SignOrZero::from((&temp_orientation.orientation[edge_index]).clone())
+                            * function!(GS.ose, edge_id),
+                    ),
+                    // Replacement::new(
+                    //     function!(GS.color_wrap, W_.a___).to_pattern(),
+                    //     Atom::var(W_.a___),
+                    // ),
+                ]);
             }
         }
-        sum
+        s
     }
 
     // pub(crate) fn simple_expr(
