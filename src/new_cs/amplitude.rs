@@ -1,3 +1,4 @@
+use core::panic;
 use std::{fs, iter, marker::PhantomData, ops::Deref, path::Path};
 
 use ahash::AHashSet;
@@ -606,6 +607,7 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
         let replace_dots = self.build_all_orientations_integrand_atom();
 
         let builder = self.param_builder_core(model);
+        debug!("builder:\n {}", builder);
 
         let evaluator = GenericEvaluator::new_from_builder(
             &replace_dots,

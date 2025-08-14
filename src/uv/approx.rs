@@ -1243,9 +1243,9 @@ pub(crate) fn do_replacement_rules<H, G: UltravioletGraph + AsRef<HedgeGraph<Edg
         .repeat()
         .with(Atom::var(W_.x_).pow(Atom::var(W_.a_) * Atom::var(W_.b_)));
 
-    orientation_expr = orientation_expr
-        .replace(function!(GS.external_mom, W_.x_, W_.y_))
-        .with(function!(GS.energy, W_.x_));
+    //orientation_expr = orientation_expr
+    //   .replace(function!(GS.external_mom, W_.x_, W_.y_))
+    //   .with(function!(GS.energy, W_.x_));
 
     if let Some(cut) = &cut_edges_subgraph {
         let inverse_energy_product = Atom::num(1)
@@ -1260,7 +1260,7 @@ pub(crate) fn do_replacement_rules<H, G: UltravioletGraph + AsRef<HedgeGraph<Edg
     for (_p, edge_index, _d) in g.iter_edges_of(&g.external_filter()) {
         let edge_id = usize::from(edge_index) as i64;
         orientation_expr = orientation_expr
-            .replace(function!(GS.energy, edge_id))
+            .replace(function!(GS.energy, edge_id, W_.x_))
             .with(external_energy_atom_from_index(edge_index));
     }
 
@@ -1310,9 +1310,12 @@ pub(crate) fn do_replacement_rules<H, G: UltravioletGraph + AsRef<HedgeGraph<Edg
             function!(GS.emr_vec, W_.y_)
         ))
         .with(
-            -(function!(GS.emr_vec, W_.x_, 1) * function!(GS.emr_vec, W_.y_, 1)
-                + function!(GS.emr_vec, W_.x_, 2) * function!(GS.emr_vec, W_.y_, 2)
-                + function!(GS.emr_vec, W_.x_, 3) * function!(GS.emr_vec, W_.y_, 3)),
+            -(function!(GS.emr_vec, W_.x_, Atom::from(ExpandedIndex::from_iter([1])))
+                * function!(GS.emr_vec, W_.y_, Atom::from(ExpandedIndex::from_iter([1])))
+                + function!(GS.emr_vec, W_.x_, Atom::from(ExpandedIndex::from_iter([2])))
+                    * function!(GS.emr_vec, W_.y_, Atom::from(ExpandedIndex::from_iter([2])))
+                + function!(GS.emr_vec, W_.x_, Atom::from(ExpandedIndex::from_iter([3])))
+                    * function!(GS.emr_vec, W_.y_, Atom::from(ExpandedIndex::from_iter([3])))),
         )
         .replace(parse!("ZERO"))
         .with(Atom::new());
@@ -1325,6 +1328,11 @@ pub(crate) fn do_replacement_rules<H, G: UltravioletGraph + AsRef<HedgeGraph<Edg
             .replace(function!(GS.emr_vec, edge_id, W_.x_))
             .with(function!(GS.emr_vec, edge_id, W_.x_));
     }
+
+    // now it should be safe to replace Q3 by Q
+    orientation_expr = orientation_expr
+        .replace(function!(GS.emr_vec, W_.x___))
+        .with(function!(GS.emr_mom, W_.x___));
 
     orientation_expr
 }
