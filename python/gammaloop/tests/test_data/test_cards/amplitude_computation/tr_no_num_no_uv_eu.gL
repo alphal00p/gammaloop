@@ -16,5 +16,5 @@ set n_start 1000000
 set n_max 100000000
 set sampling {'type':'default','mode':'spherical','b':1.0,'mapping':'linear'}
 set externals.data.helicities [1,1,1,1]
-integrate default -c 1 -t (0.027669168783,0.0) 
+integrate tr_no_num_no_uv.dot -c 1 -t (0.027669168783,0.0) 
 #target = (- pi^2 / (2 pi)^4)*(-4.36934)

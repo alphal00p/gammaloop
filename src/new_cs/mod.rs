@@ -250,6 +250,7 @@ mod tests {
                         panic_on_fail: false,
                         target_omega: 1.0,
                     },
+                    enable_thresholds: true,
                 },
             )
             .unwrap();

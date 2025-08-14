@@ -1171,6 +1171,7 @@ pub struct ProcessSettings {
     pub compile_separate_orientations: bool,
     pub gammaloop_compile_options: GammaloopCompileOptions,
     pub tropical_subgraph_table_settings: TropicalSubgraphTableSettings,
+    pub enable_thresholds: bool,
 }
 
 impl Default for ProcessSettings {
@@ -1182,6 +1183,7 @@ impl Default for ProcessSettings {
             compile_separate_orientations: true,
             gammaloop_compile_options: GammaloopCompileOptions::default(),
             tropical_subgraph_table_settings: TropicalSubgraphTableSettings::default(),
+            enable_thresholds: true,
         }
     }
 }

@@ -76,7 +76,9 @@ impl AmplitudeGraphTerm {
             }
         }
 
-        debug!("Sample: \n{:>40}", momentum_sample);
+        if settings.general.debug > 0 {
+            println!("Evaluating graph: {}", self.graph.name);
+        }
         let hel = settings.kinematics.externals.get_helicities();
 
         let result = match momentum_sample.sample.orientation {
@@ -101,9 +103,9 @@ impl AmplitudeGraphTerm {
             }
         };
 
-        // if settings.general.debug > 0 {
-        debug!("result of graph {}: {:16e}", self.graph.name, result);
-        // }
+        if settings.general.debug > 0 {
+            println!("result of graph {}: {:16e}", self.graph.name, result);
+        }
 
         result
     }

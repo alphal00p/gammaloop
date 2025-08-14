@@ -223,7 +223,10 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
         self.build_multi_channeling_channels();
         debug!("Building ESurface Derived Data");
         self.build_esurface_derived_data()?;
-        self.build_counterterm_evaluators(model);
+
+        if settings.enable_thresholds {
+            self.build_counterterm_evaluators(model);
+        }
 
         Ok(())
     }

@@ -155,7 +155,8 @@ class GammaLoopConfiguration(object):
                 'tropical_subgraph_table_settings': {
                     'panic_on_fail': False,
                     'target_omega': 1.0
-                }
+                },
+                'enable_thresholds': True
             },
             'run_settings': {
                 'General': {
@@ -627,17 +628,17 @@ class GammaLoop(object):
             self.rust_worker.load_model_from_yaml_str(processed_yaml_model)
 
             # if not args.no_overwrite:
-                # ParamCardWriter.write(
-                #     self.launched_output.joinpath('cards', 'param_card.dat'), self.model, generic=True)
-                # logger.debug("Successfully updated param card '%s' with new value of parameter '%s%s%s' to %s%f%s",
-                #              self.launched_output.parent.joinpath('cards', 'param_card.dat'), Colour.GREEN, args.param, Colour.END, Colour.BLUE, args.value, Colour.END)
-                # with open(self.launched_output.joinpath('output_metadata.yaml'), 'r', encoding='utf-8') as file:
-                #     output_metadata = OutputMetaData.from_yaml_str(file.read())
-                # self.launched_output.joinpath('cards', 'param_card.dat')
-                # with open(self.launched_output.joinpath('sources', 'model', f"{output_metadata['model_name']}.yaml"), 'w', encoding='utf-8') as file:
-                #     file.write(processed_yaml_model)
-                # logger.debug("Successfully updated YAML model sources '%s'.", self.launched_output.joinpath(
-                #     'sources', 'model', f"{output_metadata['model_name']}.yaml"))
+            # ParamCardWriter.write(
+            #     self.launched_output.joinpath('cards', 'param_card.dat'), self.model, generic=True)
+            # logger.debug("Successfully updated param card '%s' with new value of parameter '%s%s%s' to %s%f%s",
+            #              self.launched_output.parent.joinpath('cards', 'param_card.dat'), Colour.GREEN, args.param, Colour.END, Colour.BLUE, args.value, Colour.END)
+            # with open(self.launched_output.joinpath('output_metadata.yaml'), 'r', encoding='utf-8') as file:
+            #     output_metadata = OutputMetaData.from_yaml_str(file.read())
+            # self.launched_output.joinpath('cards', 'param_card.dat')
+            # with open(self.launched_output.joinpath('sources', 'model', f"{output_metadata['model_name']}.yaml"), 'w', encoding='utf-8') as file:
+            #     file.write(processed_yaml_model)
+            # logger.debug("Successfully updated YAML model sources '%s'.", self.launched_output.joinpath(
+            #     'sources', 'model', f"{output_metadata['model_name']}.yaml"))
 
     # show_settings command
     show_settings = ArgumentParser(prog='show_settings')

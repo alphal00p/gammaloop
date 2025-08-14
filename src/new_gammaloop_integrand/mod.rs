@@ -1257,7 +1257,7 @@ impl UpdateAndGetParams<f64> for ParamBuilder<f64> {
         self.emr_spatial.values = emr_spatial;
         self.polarizations_values(graph, sample.external_moms(), helicities);
 
-        println!("ParamBuilder after eval f64:\n{}", self);
+        //println!("ParamBuilder after eval f64:\n{}", self);
 
         Cow::Owned(self.clone().build_values()) // ideally borrows a single vec
     }

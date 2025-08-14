@@ -9,7 +9,7 @@ use crate::{
     cff::esurface::{self, Esurface, EsurfaceCollection, EsurfaceID, ExistingEsurfaceId},
     momentum::{ExternalMomenta, Rotation},
     momentum_sample::{self, ExternalFourMomenta, LoopMomenta, MomentumSample},
-    new_gammaloop_integrand::GenericEvaluator,
+    new_gammaloop_integrand::{GenericEvaluator, ParamBuilder},
     new_graph::{FeynmanGraph, Graph, LoopMomentumBasis},
     subtraction::overlap::{OverlapGroup, OverlapStructure},
     utils::{
@@ -25,6 +25,7 @@ const TOLERANCE: f64 = 1.0;
 pub struct AmplitudeCountertermData {
     pub overlap: OverlapStructure,
     pub evaluators: TiVec<EsurfaceID, GenericEvaluator>,
+    pub param_builder: ParamBuilder<f64>,
 }
 
 impl AmplitudeCountertermData {
@@ -290,4 +291,10 @@ impl<'a, T: FloatLike> RstarSolution<'a, T> {
 struct RstarSample<'a, T: FloatLike> {
     rstar_solution: RstarSolution<'a, T>,
     rstar_sample: MomentumSample<T>,
+}
+
+impl<'a, T: FloatLike> RstarSample<'a, T> {
+    fn evaluate(self, param_builder: &mut ParamBuilder<T>) -> Complex<T> {
+        todo!()
+    }
 }
