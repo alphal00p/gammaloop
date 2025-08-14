@@ -9,14 +9,17 @@ use crate::{
     cff::esurface::{self, Esurface, EsurfaceCollection, EsurfaceID, ExistingEsurfaceId},
     momentum::{ExternalMomenta, Rotation},
     momentum_sample::{self, ExternalFourMomenta, LoopMomenta, MomentumSample},
-    new_gammaloop_integrand::{GenericEvaluator, ParamBuilder},
+    new_gammaloop_integrand::{
+        GenericEvaluator, GenericEvaluatorFloat, ParamBuilder, ThresholdParams,
+    },
     new_graph::{FeynmanGraph, Graph, LoopMomentumBasis},
+    numerator,
     subtraction::overlap::{OverlapGroup, OverlapStructure},
     utils::{
         newton_solver::{newton_iteration_and_derivative, NewtonIterationResult},
         FloatLike, F,
     },
-    Settings,
+    Settings, UVLocalisationSettings,
 };
 
 const MAX_ITERATIONS: usize = 40;
@@ -30,7 +33,7 @@ pub struct AmplitudeCountertermData {
 
 impl AmplitudeCountertermData {
     pub fn evaluate<T: FloatLike>(
-        &self,
+        &mut self,
         momentum_sample: &MomentumSample<T>,
         graph: &Graph,
         esurfaces: &EsurfaceCollection,
@@ -44,50 +47,32 @@ impl AmplitudeCountertermData {
             esurfaces,
             momentum_sample,
             &self.overlap,
+            &self.evaluators,
         );
 
-        self.overlap.overlap_groups.iter().map(|group| {
+        let mut result = Complex::new_re(momentum_sample.zero());
+
+        for group in self.overlap.overlap_groups.iter() {
             let overlap_builder = counter_term_builder.new_overlap_builder(group);
-        });
+
+            for existing_esurface_id in group.existing_esurfaces.iter() {
+                let single_result = overlap_builder
+                    .new_esurface_builder(*existing_esurface_id)
+                    .solve_rstar()
+                    .rstar_samples()
+                    .evaluate(&mut self.param_builder);
+
+                result += single_result;
+            }
+        }
+
         todo!()
-    }
-
-    pub fn evaluate_multichanneling_denominator<T: FloatLike>(
-        &self,
-        momentum_sample: &MomentumSample<T>,
-        lmb: &LoopMomentumBasis,
-        masses: &EdgeVec<F<T>>,
-        esurfaces: &EsurfaceCollection,
-    ) -> F<T> {
-        self.overlap
-            .overlap_groups
-            .iter()
-            .map(|group| {
-                group
-                    .complement
-                    .iter()
-                    .map(|existing_esurface_id| {
-                        let esurface_id = self.overlap.existing_esurfaces[*existing_esurface_id];
-                        let esurface = &esurfaces[esurface_id];
-                        let esurface_val = esurface.compute_from_momenta(
-                            lmb,
-                            masses,
-                            momentum_sample.loop_moms(),
-                            momentum_sample.external_moms(),
-                        );
-
-                        &esurface_val * &esurface_val
-                    })
-                    .reduce(|product, x| &product * &x)
-                    .unwrap_or_else(|| momentum_sample.one())
-            })
-            .reduce(|sum, x| &sum + &x)
-            .unwrap_or_else(|| momentum_sample.zero())
     }
 }
 
 struct CounterTermBuilder<'a, T: FloatLike> {
     overlap_structure: &'a OverlapStructure,
+    evaluators: &'a TiVec<EsurfaceID, GenericEvaluator>,
     real_mass_vector: EdgeVec<F<T>>,
     e_cm: F<T>,
     graph: &'a Graph,
@@ -105,6 +90,7 @@ impl<'a, T: FloatLike> CounterTermBuilder<'a, T> {
         esurface_collection: &'a EsurfaceCollection,
         sample: &'a MomentumSample<T>,
         overlap_structure: &'a OverlapStructure,
+        evaluators: &'a TiVec<EsurfaceID, GenericEvaluator>,
     ) -> Self {
         let real_mass_vector = graph.underlying.get_real_mass_vector();
         let e_cm = F::from_ff64(settings.kinematics.e_cm);
@@ -118,6 +104,7 @@ impl<'a, T: FloatLike> CounterTermBuilder<'a, T> {
             esurface_collection,
             overlap_structure,
             sample,
+            evaluators,
         }
     }
 
@@ -294,7 +281,145 @@ struct RstarSample<'a, T: FloatLike> {
 }
 
 impl<'a, T: FloatLike> RstarSample<'a, T> {
-    fn evaluate(self, param_builder: &mut ParamBuilder<T>) -> Complex<T> {
-        todo!()
+    fn evaluate(self, param_builder: &mut ParamBuilder<f64>) -> Complex<F<T>> {
+        let ct_builder = self
+            .rstar_solution
+            .esurface_ct_builder
+            .overlap_builder
+            .counterterm_builder;
+
+        let existing_esurface_id = self.rstar_solution.esurface_ct_builder.existing_esurface_id;
+
+        let esurface_id = ct_builder.overlap_structure.existing_esurfaces[existing_esurface_id];
+
+        let esurfaces = ct_builder.esurface_collection;
+        let masses = &ct_builder.real_mass_vector;
+        let lmb = &ct_builder.graph.loop_momentum_basis;
+
+        let prefactor =
+            self.evaluate_multichanneling_prefactor(&self.rstar_sample, lmb, masses, esurfaces);
+
+        let radius = self
+            .rstar_solution
+            .esurface_ct_builder
+            .overlap_builder
+            .radius
+            .clone();
+
+        let radius_star = self.rstar_solution.solution.solution;
+        let e_cm = &ct_builder.e_cm;
+        let settings = &ct_builder
+            .settings
+            .subtraction
+            .local_ct_settings
+            .uv_localisation;
+
+        let uv_damp_plus = evaluate_uv_damper(&radius, &radius_star, &e_cm, &settings);
+        let uv_damp_minus = evaluate_uv_damper(&-&radius, &radius_star, &e_cm, &settings);
+
+        let threshold_params = ThresholdParams {
+            radius,
+            radius_star,
+            esurface_derivative: self.rstar_solution.solution.derivative_at_solution,
+
+            uv_damp_plus,
+            uv_damp_minus,
+        };
+
+        let params = T::get_parameters(
+            param_builder,
+            ct_builder.graph,
+            &self.rstar_sample,
+            ct_builder.settings.kinematics.externals.get_helicities(),
+            Some(&threshold_params),
+        );
+
+        let evaluator = &ct_builder.evaluators[esurface_id];
+        <T as GenericEvaluatorFloat>::get_evaluator(evaluator)(&params) * &prefactor
     }
+
+    fn evaluate_multichanneling_prefactor(
+        &self,
+        momentum_sample: &MomentumSample<T>,
+        lmb: &LoopMomentumBasis,
+        masses: &EdgeVec<F<T>>,
+        esurfaces: &EsurfaceCollection,
+    ) -> F<T> {
+        let overlap_builder = self.rstar_solution.esurface_ct_builder.overlap_builder;
+        let overlap = overlap_builder.counterterm_builder.overlap_structure;
+
+        if overlap.overlap_groups.len() < 2 {
+            return momentum_sample.one();
+        }
+
+        let denominator = overlap
+            .overlap_groups
+            .iter()
+            .map(|group| {
+                group
+                    .complement
+                    .iter()
+                    .map(|existing_esurface_id| {
+                        let esurface_id = overlap.existing_esurfaces[*existing_esurface_id];
+                        let esurface = &esurfaces[esurface_id];
+                        let esurface_val = esurface.compute_from_momenta(
+                            lmb,
+                            masses,
+                            momentum_sample.loop_moms(),
+                            momentum_sample.external_moms(),
+                        );
+
+                        &esurface_val * &esurface_val
+                    })
+                    .reduce(|product, x| &product * &x)
+                    .unwrap_or_else(|| momentum_sample.one())
+            })
+            .reduce(|sum, x| &sum + &x)
+            .unwrap_or_else(|| momentum_sample.zero());
+
+        let numerator = overlap_builder
+            .overlap_group
+            .complement
+            .iter()
+            .map(|existing_esurface_id| {
+                let esurface_id = overlap.existing_esurfaces[*existing_esurface_id];
+                let esurface = &esurfaces[esurface_id];
+                let esurface_val = esurface.compute_from_momenta(
+                    lmb,
+                    masses,
+                    momentum_sample.loop_moms(),
+                    momentum_sample.external_moms(),
+                );
+
+                &esurface_val * &esurface_val
+            })
+            .reduce(|product, x| &product * &x)
+            .unwrap_or_else(|| momentum_sample.one());
+
+        numerator / denominator
+    }
+}
+
+fn evaluate_uv_damper<T: FloatLike>(
+    radius: &F<T>,
+    radius_star: &F<T>,
+    e_cm: &F<T>,
+    settings: &UVLocalisationSettings,
+) -> F<T> {
+    let normalizing_scale = match settings.dynamic_width {
+        true => radius_star,
+        false => e_cm,
+    };
+
+    let delta_r = radius - radius_star;
+
+    if delta_r.abs() > F::from_f64(settings.sliver_width) * normalizing_scale {
+        return radius.zero();
+    }
+
+    let delta_r_sq = &delta_r * &delta_r;
+    let width = F::from_f64(settings.gaussian_width) * normalizing_scale;
+    let width_sq = &width * &width;
+
+    (-delta_r_sq / width_sq).exp()
 }
