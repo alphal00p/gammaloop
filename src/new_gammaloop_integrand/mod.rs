@@ -368,6 +368,7 @@ pub trait GenericEvaluatorFloat<T: FloatLike = Self> {
         graph: &'a Graph,
         sample: &'a MomentumSample<T>,
         helicities: &[Helicity],
+        threshold_params: Option<&ThresholdParams<T>>,
     ) -> Cow<'a, Vec<Complex<F<T>>>>;
 }
 
@@ -396,8 +397,9 @@ impl GenericEvaluatorFloat for f64 {
         graph: &'a Graph,
         sample: &'a MomentumSample<Self>,
         helicities: &[Helicity],
+        threshold_params: Option<&ThresholdParams<f64>>,
     ) -> Cow<'a, Vec<Complex<F<Self>>>> {
-        param_builder.update_emr_and_get_params(sample, graph, helicities)
+        param_builder.update_emr_and_get_params(sample, graph, helicities, threshold_params)
     }
 
     // fn get_debug_evaluator(
@@ -455,8 +457,9 @@ impl GenericEvaluatorFloat for f128 {
         graph: &'a Graph,
         sample: &'a MomentumSample<Self>,
         helicities: &[Helicity],
+        threshold_params: Option<&ThresholdParams<f128>>,
     ) -> Cow<'a, Vec<Complex<F<Self>>>> {
-        param_builder.update_emr_and_get_params(sample, graph, helicities)
+        param_builder.update_emr_and_get_params(sample, graph, helicities, threshold_params)
     }
 }
 
@@ -1202,7 +1205,7 @@ pub struct ParamBuilder<T: FloatLike = f64> {
     emr_spatial: ParamValuePairs<T>,
     tstar: ParamValuePairs<T>,
     h_function: ParamValuePairs<T>,
-    derivative_at_tstar: ParamValuePairs<T>,
+    esurface_derivative: ParamValuePairs<T>,
     uv_damp: ParamValuePairs<T>,
     radius: ParamValuePairs<T>,
     radius_star: ParamValuePairs<T>,
@@ -1213,12 +1216,21 @@ pub struct ParamBuilder<T: FloatLike = f64> {
     pub fn_map: FunctionMap,
 }
 
+pub struct ThresholdParams<T: FloatLike> {
+    pub radius: F<T>,
+    pub radius_star: F<T>,
+    pub esurface_derivative: F<T>,
+    pub uv_damp_plus: F<T>,
+    pub uv_damp_minus: F<T>,
+}
+
 pub trait UpdateAndGetParams<T: FloatLike> {
     fn update_emr_and_get_params<'a>(
         &'a mut self,
         sample: &'a MomentumSample<T>,
         graph: &'a Graph,
         helicities: &[Helicity],
+        threshold_params: Option<&ThresholdParams<T>>,
     ) -> Cow<'a, Vec<Complex<F<T>>>>;
 }
 
@@ -1228,6 +1240,7 @@ impl UpdateAndGetParams<f64> for ParamBuilder<f64> {
         sample: &'a MomentumSample<f64>,
         graph: &'a Graph,
         helicities: &[Helicity],
+        threshold_params: Option<&ThresholdParams<f64>>,
     ) -> Cow<'a, Vec<Complex<F<f64>>>> {
         let emr_spatial: Vec<_> = graph
             .iter_edges()
@@ -1257,6 +1270,10 @@ impl UpdateAndGetParams<f64> for ParamBuilder<f64> {
         self.emr_spatial.values = emr_spatial;
         self.polarizations_values(graph, sample.external_moms(), helicities);
 
+        if let Some(threshold_params) = threshold_params {
+            self.threshold_params(threshold_params);
+        }
+
         //println!("ParamBuilder after eval f64:\n{}", self);
 
         Cow::Owned(self.clone().build_values()) // ideally borrows a single vec
@@ -1269,6 +1286,7 @@ impl UpdateAndGetParams<f128> for ParamBuilder<f64> {
         sample: &MomentumSample<f128>,
         graph: &Graph,
         helicities: &[Helicity],
+        threshold_params: Option<&ThresholdParams<f128>>,
     ) -> Cow<Vec<Complex<F<f128>>>> {
         let emr_spatial: Vec<_> = graph
             .iter_edges()
@@ -1296,6 +1314,10 @@ impl UpdateAndGetParams<f128> for ParamBuilder<f64> {
         new_param_builder.external_energies_value(sample);
         new_param_builder.polarizations_values(graph, sample.external_moms(), helicities);
 
+        if let Some(threshold_params) = threshold_params {
+            new_param_builder.threshold_params(threshold_params);
+        }
+
         // println!("ParamBuilder before eval f128:\n{}", self);
 
         Cow::Owned(new_param_builder.build_values())
@@ -1320,7 +1342,7 @@ where
             emr_spatial: self.emr_spatial.higher(),
             tstar: self.tstar.higher(),
             h_function: self.h_function.higher(),
-            derivative_at_tstar: self.derivative_at_tstar.higher(),
+            esurface_derivative: self.esurface_derivative.higher(),
             uv_damp: self.uv_damp.higher(),
             radius: self.radius.higher(),
             radius_star: self.radius_star.higher(),
@@ -1339,7 +1361,7 @@ where
             emr_spatial: self.emr_spatial.lower(),
             tstar: self.tstar.lower(),
             h_function: self.h_function.lower(),
-            derivative_at_tstar: self.derivative_at_tstar.lower(),
+            esurface_derivative: self.esurface_derivative.lower(),
             uv_damp: self.uv_damp.lower(),
             radius: self.radius.lower(),
             radius_star: self.radius_star.lower(),
@@ -1365,7 +1387,7 @@ impl<T: FloatLike> ParamBuilder<T> {
         debug!("Validating h_function");
         self.h_function.validate();
         debug!("Validating derivative_at_tstar");
-        self.derivative_at_tstar.validate();
+        self.esurface_derivative.validate();
         debug!("Validating uv_damp");
         self.uv_damp.validate();
         debug!("Validating radius");
@@ -1384,7 +1406,7 @@ impl<T: FloatLike> ParamBuilder<T> {
         self.emr_spatial.extract_and_fill(&mut values);
         self.tstar.extract_and_fill(&mut values);
         self.h_function.extract_and_fill(&mut values);
-        self.derivative_at_tstar.extract_and_fill(&mut values);
+        self.esurface_derivative.extract_and_fill(&mut values);
         self.uv_damp.extract_and_fill(&mut values);
         self.radius.extract_and_fill(&mut values);
         self.radius_star.extract_and_fill(&mut values);
@@ -1408,7 +1430,7 @@ impl<T: FloatLike> ParamBuilder<T> {
             // &self.emr_spatial,
             &self.tstar,
             &self.h_function,
-            &self.derivative_at_tstar,
+            &self.esurface_derivative,
             &self.uv_damp,
             &self.radius,
             &self.radius_star,
@@ -1483,7 +1505,7 @@ impl<T: FloatLike> ParamBuilder<T> {
             emr_spatial: ParamValuePairs::default(),
             tstar: ParamValuePairs::default(),
             h_function: ParamValuePairs::default(),
-            derivative_at_tstar: ParamValuePairs::default(),
+            esurface_derivative: ParamValuePairs::default(),
             uv_damp: ParamValuePairs::default(),
             radius: ParamValuePairs::default(),
             radius_star: ParamValuePairs::default(),
@@ -1667,31 +1689,34 @@ impl<T: FloatLike> ParamBuilder<T> {
         self.h_function.values = vec![h_function];
     }
     pub(crate) fn derivative_at_tstar_atom(&mut self, derivative_at_tstar: Atom) {
-        self.derivative_at_tstar.params = vec![derivative_at_tstar];
+        self.esurface_derivative.params = vec![derivative_at_tstar];
     }
     pub(crate) fn derivative_at_tstar_value(&mut self, derivative_at_tstar: Complex<F<T>>) {
-        self.derivative_at_tstar.values = vec![derivative_at_tstar];
+        self.esurface_derivative.values = vec![derivative_at_tstar];
     }
 
     pub(crate) fn uv_damp_atom(&mut self, uv_dampers: Vec<Atom>) {
         self.uv_damp.params = uv_dampers;
     }
-    pub(crate) fn uv_damp_value(&mut self, uv_dampers: Vec<Complex<F<T>>>) {
-        self.uv_damp.values = uv_dampers;
-    }
 
     pub(crate) fn radius_atom(&mut self, radius: Atom) {
         self.radius.params = vec![radius];
-    }
-    pub(crate) fn radius_value(&mut self, radius: Complex<F<T>>) {
-        self.radius.values = vec![radius];
     }
 
     pub(crate) fn radius_star_atom(&mut self, radius_star: Atom) {
         self.radius_star.params = vec![radius_star];
     }
-    pub(crate) fn radius_star_value(&mut self, radius_star: Complex<F<T>>) {
-        self.radius_star.values = vec![radius_star];
+
+    pub(crate) fn threshold_params(&mut self, threshold_params: &ThresholdParams<T>) {
+        self.radius.values = vec![Complex::new_re(threshold_params.radius.clone())];
+        self.radius_star.values = vec![Complex::new_re(threshold_params.radius_star.clone())];
+        self.esurface_derivative.values = vec![Complex::new_re(
+            threshold_params.esurface_derivative.clone(),
+        )];
+        self.uv_damp.values = vec![
+            Complex::new_re(threshold_params.uv_damp_plus.clone()),
+            Complex::new_re(threshold_params.uv_damp_minus.clone()),
+        ];
     }
 }
 
@@ -1734,7 +1759,7 @@ impl<T: FloatLike> IntoIterator for ParamBuilder<T> {
             self.emr_spatial,
             self.tstar,
             self.h_function,
-            self.derivative_at_tstar,
+            self.esurface_derivative,
             self.uv_damp,
             self.radius,
             self.radius_star,
@@ -1758,7 +1783,7 @@ impl<'a, T: FloatLike> IntoIterator for &'a ParamBuilder<T> {
             &self.emr_spatial,
             &self.tstar,
             &self.h_function,
-            &self.derivative_at_tstar,
+            &self.esurface_derivative,
             &self.uv_damp,
             &self.radius,
             &self.radius_star,
