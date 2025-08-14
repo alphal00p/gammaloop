@@ -595,11 +595,11 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
             counterterms.push(counterterm);
         }
 
+        let params = self.ct_params(model);
         let counterterm_evaluators = counterterms
             .iter()
             .map(|ct| {
-                let params = self.ct_params(model);
-                GenericEvaluator::new_from_builder(&ct, params, OptimizationSettings::default())
+                GenericEvaluator::new_from_builder(&ct, &params, OptimizationSettings::default())
             })
             .collect();
 
@@ -614,7 +614,7 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
 
         let evaluator = GenericEvaluator::new_from_builder(
             &replace_dots,
-            builder,
+            &builder,
             OptimizationSettings::default(),
         );
         self.derived_data.all_orientation_integrand_evaluator = Some(evaluator)
@@ -754,7 +754,7 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
 
                 GenericEvaluator::new_from_builder(
                     &replace_dots,
-                    params.clone(),
+                    &params,
                     OptimizationSettings::default(),
                 )
             })

@@ -319,10 +319,10 @@ impl GenericEvaluator {
 
     pub(crate) fn new_from_builder(
         atom: impl AtomCore,
-        builder: ParamBuilder<f64>,
+        builder: &ParamBuilder<f64>,
         optimization_settings: OptimizationSettings,
     ) -> Self {
-        let params: Vec<Atom> = (&builder)
+        let params: Vec<Atom> = (builder)
             .into_iter()
             .flat_map(|p| p.params.clone())
             .collect();

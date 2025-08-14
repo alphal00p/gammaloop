@@ -744,7 +744,7 @@ impl<S: CrossSectionState> CrossSectionGraph<S> {
 
                 let mut eval = GenericEvaluator::new_from_builder(
                     atom,
-                    params,
+                    &params,
                     OptimizationSettings::default(),
                 );
                 let filename = format!("{}_cut_{}.cpp", self.graph.name, cut_id);
@@ -793,7 +793,7 @@ impl<S: CrossSectionState> CrossSectionGraph<S> {
 
                         GenericEvaluator::new_from_builder(
                             cut_atom,
-                            params,
+                            &params,
                             OptimizationSettings::default(),
                         )
                     })
