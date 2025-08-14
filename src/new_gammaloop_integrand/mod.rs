@@ -1704,8 +1704,14 @@ impl<T: FloatLike> Display for ParamBuilder<T> {
         }
 
         for i in self {
-            for (v, p) in i.values.iter().zip(i.params.iter()) {
-                table.push_record(vec![p.to_string(), v.to_string()]);
+            if i.values.is_empty() {
+                for p in i.params.iter() {
+                    table.push_record(vec![p.to_string(), "N/A".to_string()]);
+                }
+            } else {
+                for (v, p) in i.values.iter().zip(i.params.iter()) {
+                    table.push_record(vec![p.to_string(), v.to_string()]);
+                }
             }
         }
 
