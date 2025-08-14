@@ -43,7 +43,7 @@ use symbolica::{
     evaluate::{FunctionMap, OptimizationSettings},
     function,
 };
-use typed_index_collections::TiVec;
+use typed_index_collections::{ti_vec, TiVec};
 
 use crate::{
     cff::esurface::EsurfaceID,
@@ -847,7 +847,7 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
                 .derived_data
                 .counterterm_evaluators
                 .clone()
-                .expect("counterterm_evaluators should have been created"),
+                .unwrap_or_else(|| ti_vec![]),
             estimated_scale,
             overlap,
             param_builder,
