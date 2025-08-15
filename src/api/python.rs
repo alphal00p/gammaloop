@@ -14,8 +14,8 @@ use crate::{
     new_graph::Graph,
     numerator::{GlobalPrefactor, Numerator, PythonState},
     utils::F,
-    GammaLoopContextContainer, HasIntegrand, IntegratedPhase, OutputMetadata, ProcessSettings,
-    Settings,
+    GammaLoopContextContainer, GenerationSettings, HasIntegrand, IntegratedPhase, OutputMetadata,
+    RuntimeSettings,
 };
 
 use ahash::HashMap;
@@ -663,7 +663,7 @@ impl PythonWorker {
     }
 
     pub(crate) fn preprocess(&mut self, export_yaml_str: &str) -> PyResult<()> {
-        let process_settings: ProcessSettings = serde_yaml::from_str(export_yaml_str)
+        let process_settings: GenerationSettings = serde_yaml::from_str(export_yaml_str)
             .map_err(|e| exceptions::PyException::new_err(e.to_string()))
             .unwrap();
 
@@ -950,8 +950,9 @@ impl PythonWorker {
                 let workspace_settings_string = fs::read_to_string(path_to_workspace_settings)
                     .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
 
-                let workspace_settings: Settings = serde_yaml::from_str(&workspace_settings_string)
-                    .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
+                let workspace_settings: RuntimeSettings =
+                    serde_yaml::from_str(&workspace_settings_string)
+                        .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
 
                 // force the settings to be the same as the ones used in the previous integration
                 *gloop_integrand.get_mut_settings() = workspace_settings.clone();
@@ -1089,8 +1090,8 @@ impl PythonWorker {
     }
 
     pub(crate) fn generate_integrands(&mut self, settings_yaml_str: &str) {
-        let settings =
-            serde_yaml::from_str::<Settings>(settings_yaml_str).expect("Could not parse settings");
+        let settings = serde_yaml::from_str::<RuntimeSettings>(settings_yaml_str)
+            .expect("Could not parse settings");
         println!("calling generate_integrands");
 
         let integrands = self
