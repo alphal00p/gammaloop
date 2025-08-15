@@ -123,7 +123,11 @@ impl<S: CrossSectionState> CrossSection<S> {
         Ok(())
     }
 
-    pub(crate) fn build_integrand(&mut self, settings: RuntimeSettings, model: &Model) -> Result<()> {
+    pub(crate) fn build_integrand(
+        &mut self,
+        settings: RuntimeSettings,
+        model: &Model,
+    ) -> Result<()> {
         let terms = self
             .supergraphs
             .iter()
@@ -743,10 +747,11 @@ impl<S: CrossSectionState> CrossSectionGraph<S> {
                 let params = self.get_builder(model);
 
                 let mut eval = GenericEvaluator::new_from_builder(
-                    atom,
+                    [atom],
                     &params,
                     OptimizationSettings::default(),
-                );
+                )
+                .unwrap();
                 let filename = format!("{}_cut_{}.cpp", self.graph.name, cut_id);
                 let function_name = format!("{}_cut_{}", self.graph.name, cut_id);
                 let lib_name = format!("{}_cut_{}.so", self.graph.name, cut_id);
@@ -792,10 +797,11 @@ impl<S: CrossSectionState> CrossSectionGraph<S> {
                         let params = self.get_builder(model);
 
                         GenericEvaluator::new_from_builder(
-                            cut_atom,
+                            [cut_atom.clone()],
                             &params,
                             OptimizationSettings::default(),
                         )
+                        .unwrap()
                     })
                     .collect_vec();
 

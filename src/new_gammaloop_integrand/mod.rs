@@ -232,7 +232,7 @@ fn stability_check(
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct GenericEvaluator {
-    pub expr: Atom,
+    pub exprs: Vec<Atom>,
     pub rational:
         RefCell<Option<ExpressionEvaluator<symbolica::domains::float::Complex<Rational>>>>,
     pub f64_compiled: Option<RefCell<SerializableCompiledEvaluator>>,
@@ -321,26 +321,24 @@ impl GenericEvaluator {
         }));
     }
 
-    pub(crate) fn new_from_builder(
-        atom: impl AtomCore,
+    pub(crate) fn new_from_builder<I: IntoIterator<Item = Atom>>(
+        atoms: I,
         builder: &ParamBuilder<f64>,
         optimization_settings: OptimizationSettings,
-    ) -> Self {
+    ) -> Option<Self> {
         let params: Vec<Atom> = builder.into_iter().flat_map(|p| p.params.clone()).collect();
 
-        Self::new(atom, &builder.fn_map, &params, optimization_settings)
-    }
-
-    fn new(
-        atom: impl AtomCore,
-        fn_map: &FunctionMap,
-        params: &[Atom],
-        optimization_settings: OptimizationSettings,
-    ) -> Self {
-        // println!("{}", atom.as_atom_view());
-        let tree = atom
-            .evaluator(&fn_map, &params, optimization_settings)
-            .unwrap();
+        let exprs: Vec<Atom> = atoms.into_iter().collect();
+        let tree = exprs
+            .iter()
+            .map(|n| {
+                n.evaluator(&builder.fn_map, &params, optimization_settings.clone())
+                    .unwrap()
+            })
+            .reduce(|mut acc, n| {
+                acc.merge(n, optimization_settings.cpe_iterations);
+                acc
+            })?;
 
         let rational = tree.clone();
         let f64_eager = tree
@@ -349,14 +347,14 @@ impl GenericEvaluator {
         let f128 = tree.map_coeff(&|r| Complex::new(F::from(&r.re), F::from(&r.im)));
 
         let evaluator = GenericEvaluator {
-            expr: atom.as_atom_view().to_owned(),
+            exprs,
             rational: RefCell::new(Some(rational)),
             f64_compiled: None,
             f64_eager: RefCell::new(f64_eager),
             f128: RefCell::new(f128),
         };
 
-        evaluator
+        Some(evaluator)
     }
 }
 

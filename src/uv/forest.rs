@@ -131,6 +131,40 @@ impl Forest {
         }
     }
 
+    pub(crate) fn orientation_parametric_expr(
+        &self,
+        cut_edges: Option<&BitVec>,
+        graph: &Graph,
+    ) -> ParsingNet {
+        let mut sum: Option<ParsingNet> = None;
+
+        for (_, n) in &self.dag.nodes {
+            let net = n.data.final_integrand.clone().unwrap().net;
+            let Some(s) = &mut sum else {
+                sum = Some(net);
+                continue;
+            };
+            *s += net;
+        }
+
+        let Some(mut s) = sum else {
+            return ParsingNet::zero();
+        };
+        if let Some(cut) = cut_edges {
+            // add Feynman rules of cut edges
+            for (_p, edge_index, d) in graph.iter_edges_of(cut) {
+                s = s * d
+                    .data
+                    .num
+                    .wrap_color(GS.color_wrap)
+                    .parse_into_net()
+                    .unwrap();
+                s = s.replace_multiple(&[GS.add_parametric_sign(edge_index)]);
+            }
+        }
+        s
+    }
+
     pub(crate) fn local_expr(
         &self,
         orientation: &OrientationData,

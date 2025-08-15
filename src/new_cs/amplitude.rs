@@ -1,4 +1,3 @@
-use core::panic;
 use std::{fs, iter, marker::PhantomData, ops::Deref, path::Path};
 
 use ahash::AHashSet;
@@ -7,11 +6,10 @@ use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
 use momtrop::SampleGenerator;
 
-use idenso::{color::ColorSimplifier, metric::MS};
+use idenso::color::ColorSimplifier;
 use spenso::{
     algebra::complex::Complex,
-    network::{store::TensorScalarStoreMapping, Sequential, SmallestDegree, Steps},
-    structure::HasName,
+    network::{store::TensorScalarStoreMapping, Sequential, SmallestDegree},
     tensors::{data::StorageTensor, parametric::ParamOrConcrete},
 };
 use vakint::{EvaluationOrder, LoopNormalizationFactor, Vakint, VakintSettings};
@@ -32,35 +30,30 @@ use crate::{
         GenericEvaluator, LmbMultiChannelingSetup, ParamBuilder,
     },
     new_graph::{LMBext, LmbIndex, LoopMomentumBasis},
-    numerator::{symbolica_ext::AtomCoreExt, ParsingNet},
+    numerator::symbolica_ext::AtomCoreExt,
     signature::SignatureLike,
     subtraction::{
         amplitude_counterterm::AmplitudeCountertermData,
         overlap::{find_maximal_overlap, OverlapStructure},
     },
-    utils::{GS, TENSORLIB, W_},
+    utils::{GS, TENSORLIB},
     uv::{approx::do_replacement_rules, UltravioletGraph},
     GammaLoopContext, GammaLoopContextContainer,
 };
 use eyre::{eyre, Context};
-use itertools::{Itertools, Step};
+use itertools::Itertools;
 use linnet::half_edge::involution::{HedgePair, Orientation};
 use log::debug;
-use symbolica::{
-    atom::{Atom, AtomCore},
-    domains::rational::Rational,
-    evaluate::{FunctionMap, OptimizationSettings},
-    function,
-};
-use typed_index_collections::{ti_vec, TiVec};
+use symbolica::{atom::Atom, domains::rational::Rational, evaluate::OptimizationSettings};
+use typed_index_collections::TiVec;
 
 use crate::{
     cff::esurface::EsurfaceID,
     model::Model,
-    momentum::{Rotatable, Rotation, RotationMethod},
+    momentum::{Rotation, RotationMethod},
     new_gammaloop_integrand::NewIntegrand,
     new_graph::{FeynmanGraph, Graph},
-    DependentMomentaConstructor, Externals, GenerationSettings, Polarizations, RuntimeSettings,
+    DependentMomentaConstructor, GenerationSettings, RuntimeSettings,
 };
 
 #[derive(Clone, Encode, Decode)]
@@ -187,9 +180,8 @@ impl AmplitudeGraph {
         AmplitudeGraph {
             graph,
             derived_data: AmplitudeDerivedData {
+                all_mighty_integrand: Atom::Zero,
                 cff_expression: None,
-                all_orientation_integrand_evaluator: None,
-                integrand_evaluators: None,
                 state: PhantomData,
                 lmbs: None,
                 tropical_sampler: None,
@@ -225,6 +217,7 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
         Ok(())
     }
 
+    //Stage 1
     pub(crate) fn preprocess(
         &mut self,
         model: &Model,
@@ -232,10 +225,8 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
     ) -> Result<()> {
         debug!("Generating Cff");
         self.generate_cff()?;
-        debug!("Building Evaluator");
-        self.build_all_orientation_integrand_evaluator(model);
-        debug!("Building Evaluator for Orientations");
-        self.build_integrand_evaluators(model);
+        debug!("Building Parametric Integrand");
+        self.build_parametric_integrand();
         debug!("Building Tropical Sampler");
         self.build_tropical_sampler(settings)?;
         debug!("Building Loop Momentum Bases");
@@ -325,7 +316,7 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
     fn add_function_map(&self, parambuilder: &mut ParamBuilder) {
         let pi_rational = Rational::from(std::f64::consts::PI);
 
-        for (p, e, d) in self.graph.iter_edges() {
+        for (_, e, _) in self.graph.iter_edges() {
             parambuilder
                 .add_tagged_function(
                     GS.ose,
@@ -370,9 +361,195 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
         .unwrap()
     }
 
-    pub(crate) fn build_all_orientations_integrand_atom(&self) -> Atom {
-        debug!("Building all orientations integrand");
+    pub(crate) fn build_parametric_integrand(&mut self) {
+        self.derived_data.all_mighty_integrand += self.build_original_parametric_integrand();
+        for (_, a) in self
+            .build_threshold_counterterm_parametric_integrand()
+            .into_iter_enumerated()
+        {
+            self.derived_data.all_mighty_integrand += a;
+        }
+    }
 
+    fn build_threshold_counterterm_parametric_integrand(&self) -> TiVec<EsurfaceID, Atom> {
+        let pols = self.graph.global_network();
+
+        let mut counterterms: TiVec<EsurfaceID, Atom> = TiVec::new();
+        let canonize_esurface = self
+            .graph
+            .underlying
+            .get_esurface_canonization(&self.graph.loop_momentum_basis);
+
+        for (esurface_id, esurface) in self
+            .derived_data
+            .cff_expression
+            .as_ref()
+            .unwrap()
+            .surfaces
+            .esurface_cache
+            .iter_enumerated()
+        {
+            if esurface.external_shift.is_empty() {
+                // these will never satsify the threshold condition
+                // so we can skip them
+                counterterms.push(Atom::new());
+                continue;
+            }
+
+            let (circled, complement) = esurface.get_subgraph_components(&self.graph.underlying);
+            let edges_in_cut = esurface.bitvec(&self.graph.underlying);
+
+            let orientations = self
+                .derived_data
+                .cff_expression
+                .as_ref()
+                .unwrap()
+                .get_orientations_with_esurface(esurface_id);
+
+            let first_orientation = &self
+                .derived_data
+                .cff_expression
+                .as_ref()
+                .unwrap()
+                .orientations[orientations[0]]
+                .data
+                .orientation;
+
+            let orientation_of_edges_in_esurface = esurface
+                .energies
+                .iter()
+                .map(|e| first_orientation[*e])
+                .collect_vec();
+
+            assert!(orientations.iter().all(|o| {
+                let or = &self
+                    .derived_data
+                    .cff_expression
+                    .as_ref()
+                    .unwrap()
+                    .orientations[*o]
+                    .data
+                    .orientation;
+
+                let orientation_of_esurface_in_this_orientation =
+                    esurface.energies.iter().map(|e| or[*e]).collect_vec();
+
+                if orientation_of_edges_in_esurface != orientation_of_esurface_in_this_orientation {
+                    println!("{:?}", orientation_of_edges_in_esurface);
+                    println!("{:?}", orientation_of_esurface_in_this_orientation);
+                    println!("esurface shift: {:?}", esurface.external_shift);
+                    false
+                } else {
+                    true
+                }
+            }));
+
+            let circled_wood = self.graph.wood(&circled);
+            let complement_wood = self.graph.wood(&complement);
+
+            let mut circled_forest =
+                circled_wood.unfold(&self.graph, &self.graph.loop_momentum_basis);
+
+            let mut complement_forest =
+                complement_wood.unfold(&self.graph, &self.graph.loop_momentum_basis);
+
+            let reverse_dangling = esurface
+                .energies
+                .iter()
+                .zip(orientation_of_edges_in_esurface)
+                .filter_map(|(e, o)| {
+                    if o == Orientation::Reversed {
+                        Some(*e)
+                    } else {
+                        None
+                    }
+                })
+                .collect_vec();
+
+            let circled_orientations =
+                get_orientations_from_subgraph(&self.graph.underlying, &circled, &reverse_dangling)
+                    .into_iter()
+                    .map(|cff_graph| cff_graph.global_orientation)
+                    .collect::<TiVec<SubgraphOrientationID, _>>();
+
+            let complement_orientations = get_orientations_from_subgraph(
+                &self.graph.underlying,
+                &complement,
+                &reverse_dangling,
+            )
+            .into_iter()
+            .map(|cff_graph| cff_graph.global_orientation)
+            .collect::<TiVec<SubgraphOrientationID, _>>();
+
+            let vakint = self.new_vakint();
+
+            circled_forest.compute(
+                &self.graph,
+                &circled,
+                &vakint,
+                &circled_orientations,
+                &canonize_esurface,
+                &esurface.energies,
+            );
+
+            complement_forest.compute(
+                &self.graph,
+                &complement,
+                &vakint,
+                &complement_orientations,
+                &canonize_esurface,
+                &esurface.energies,
+            );
+
+            let circled_expr =
+                circled_forest.orientation_parametric_expr(Some(&edges_in_cut), &self.graph);
+
+            let complement_expr = complement_forest.orientation_parametric_expr(None, &self.graph);
+
+            // println!("Circled Expression Network:");
+            // println!("{}", circled_expr.dot_pretty());
+
+            // println!("Complement Expression Network:");
+            // println!("{}", complement_expr.dot_pretty());
+
+            let mut product = circled_expr * complement_expr * pols.clone();
+
+            product
+                .execute::<Sequential, SmallestDegree, _, _>(TENSORLIB.read().unwrap().deref())
+                .unwrap();
+            // println!("{}", product.dot_pretty());
+
+            let scalar: Atom = product.result_scalar().unwrap().into();
+
+            let mut counterterm = scalar.unwrap_function(GS.color_wrap).simplify_color();
+
+            let loop_3 = self.graph.underlying.get_loop_number() as i64 * 3;
+
+            let grad_eta = Atom::var(GS.deta);
+            let factors_of_pi = (Atom::num(2) * Atom::var(GS.pi)).npow(loop_3);
+
+            let radius = Atom::var(GS.radius);
+            let radius_star = Atom::var(GS.radius_star);
+            let uv_damp_plus = Atom::var(GS.uv_damp_plus);
+            let uv_damp_minus = Atom::var(GS.uv_damp_minus);
+
+            let delta_r_plus = &radius - &radius_star;
+            let delta_r_minus = -&radius - &radius_star;
+
+            let jacobian_ratio = (&radius_star / &radius).npow(loop_3 - 1);
+
+            let prefactor = jacobian_ratio / factors_of_pi / grad_eta
+                * (uv_damp_plus / delta_r_plus + uv_damp_minus / delta_r_minus);
+
+            counterterm *= prefactor * &counterterm;
+            // println!("CounterTerm{}", counterterm);
+            counterterms.push(counterterm);
+        }
+
+        counterterms
+    }
+
+    fn build_original_parametric_integrand(&self) -> Atom {
         let wood = self.graph.wood(&self.graph.underlying.no_dummy());
         let mut forest = wood.unfold(&self.graph, &self.graph.loop_momentum_basis);
 
@@ -402,8 +579,6 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
             &[],
         );
 
-        let mut result = Atom::new();
-
         let mut pols = self.graph.global_network();
 
         let mut reps = Vec::new();
@@ -415,59 +590,28 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
 
         pols = pols.replace_multiple(&reps);
 
-        for (_orientation_id, orientation_data) in orientations.iter_enumerated() {
-            let mut orientation_expr = forest.local_expr(orientation_data, None, &self.graph);
+        let mut full = forest.orientation_parametric_expr(None, &self.graph);
 
-            orientation_expr *= pols.map_ref(
-                |a| orientation_data.select(a),
-                |a| match a {
-                    ParamOrConcrete::Param(a) => {
-                        ParamOrConcrete::Param(a.map_data_ref_self(|a| orientation_data.select(a)))
-                    }
-                    a => a.clone(),
-                },
-            );
-            // println!("{}", orientation_expr.dot_pretty());
+        full *= pols;
 
-            orientation_expr
-                .execute::<Steps<1>, SmallestDegree, _, _>(TENSORLIB.read().unwrap().deref())
-                .unwrap();
+        full.execute::<Sequential, SmallestDegree, _, _>(TENSORLIB.read().unwrap().deref())
+            .unwrap();
 
-            orientation_expr
-                .execute::<Sequential, SmallestDegree, _, _>(TENSORLIB.read().unwrap().deref())
-                .unwrap();
+        let mut scalar: Atom = full
+            .result_scalar()
+            .expect(&format!(
+                "Failed to get scalar from network:{}",
+                full.dot_pretty()
+            ))
+            .into();
 
-            let mut scalar: Atom = orientation_expr
-                .result_scalar()
-                .expect(&format!(
-                    "Failed to get scalar from network:{}",
-                    orientation_expr.graph.dot_impl(
-                        |i| format!("{}", i),
-                        |k| format!(
-                            "{}",
-                            k.global_name
-                                .map(|a| a.to_string())
-                                .unwrap_or("NA".to_string())
-                        ),
-                        |t| format!("{}", t)
-                    )
-                ))
-                .into();
-            scalar = scalar.unwrap_function(GS.color_wrap).simplify_color();
+        scalar = scalar.unwrap_function(GS.color_wrap).simplify_color();
 
-            scalar = self.add_additional_factors_to_cff_atom(&scalar);
+        scalar = self.add_additional_factors_to_cff_atom(&scalar);
 
-            // println!("{}", scalar);
+        debug!("All parametric integrand atom:{:>}", scalar);
 
-            // println!("orientation_expr: {}", orientation_expr);
-            //panic!("atom test: {}", spenso_lor_atom(3, 20, GS.dim));
-
-            result += scalar;
-        }
-
-        debug!("All orientations integrand atom:{:>}", result);
-
-        result
+        scalar
     }
 
     fn build_counterterm_evaluators(&mut self, model: &Model) {
@@ -553,11 +697,6 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
                     true
                 }
             }));
-
-            let cut_momentum_basis = self.derived_data.esurface_data.as_ref().unwrap()[esurface_id]
-                .as_ref()
-                .unwrap()
-                .cut_momentum_basis;
 
             let circled_wood = self.graph.wood(&circled);
             let complement_wood = self.graph.wood(&complement);
@@ -694,9 +833,10 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
 
         let params = self.ct_params(model);
         let counterterm_evaluators = counterterms
-            .iter()
+            .into_iter()
             .map(|ct| {
-                GenericEvaluator::new_from_builder(&ct, &params, OptimizationSettings::default())
+                GenericEvaluator::new_from_builder([ct], &params, OptimizationSettings::default())
+                    .unwrap()
             })
             .collect();
 
@@ -709,18 +849,48 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
         self.derived_data.threshold_counterterm = threshold_counterterm;
     }
 
-    pub(crate) fn build_all_orientation_integrand_evaluator(&mut self, model: &Model) {
-        let replace_dots = self.build_all_orientations_integrand_atom();
-
-        let builder = self.param_builder_core(model);
-        debug!("builder:\n {}", builder);
-
-        let evaluator = GenericEvaluator::new_from_builder(
-            &replace_dots,
-            &builder,
+    pub(crate) fn build_all_orientation_integrand_evaluator(
+        &self,
+        param_builder: &ParamBuilder,
+    ) -> GenericEvaluator {
+        debug!("Building all orientation integrand_evaluator");
+        GenericEvaluator::new_from_builder(
+            [self
+                .orientation_atoms()
+                .into_iter()
+                .fold(Atom::Zero, |acc, a| acc + a)],
+            &param_builder,
             OptimizationSettings::default(),
-        );
-        self.derived_data.all_orientation_integrand_evaluator = Some(evaluator)
+        )
+        .unwrap()
+    }
+
+    pub(crate) fn build_orientations_evaluators(
+        &self,
+        param_builder: &ParamBuilder,
+    ) -> TiVec<AmplitudeOrientationID, GenericEvaluator> {
+        self.orientation_atoms()
+            .into_iter()
+            .map(|a| {
+                GenericEvaluator::new_from_builder(
+                    [a],
+                    &param_builder,
+                    OptimizationSettings::default(),
+                )
+                .unwrap()
+            })
+            .collect()
+    }
+
+    fn orientation_atoms(&self) -> TiVec<AmplitudeOrientationID, Atom> {
+        self.derived_data
+            .cff_expression
+            .as_ref()
+            .unwrap()
+            .orientations
+            .iter()
+            .map(|o| o.data.select(&self.derived_data.all_mighty_integrand))
+            .collect()
     }
 
     fn build_lmbs(&mut self) {
@@ -828,51 +998,6 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
         Ok(self.derived_data.tropical_sampler = Some(sampler))
     }
 
-    fn build_integrand_evaluators(&mut self, model: &Model) -> Result<()> {
-        let params = self.param_builder_core(model);
-
-        let evaluators = self
-            .derived_data
-            .cff_expression
-            .as_ref()
-            .unwrap()
-            .get_orientation_atoms()
-            .iter()
-            .map(|orientation_atom_unsubstituted| {
-                let atom_no_prefactor = self
-                    .derived_data
-                    .cff_expression
-                    .as_ref()
-                    .unwrap()
-                    .surfaces
-                    .substitute_energies(orientation_atom_unsubstituted, &[]);
-
-                let atom = self.add_additional_factors_to_cff_atom(&atom_no_prefactor);
-                let replacements = self.graph.underlying.get_ose_replacements();
-                let replaced_atom = atom.replace_multiple(&replacements);
-                let replace_dots = replaced_atom
-                    .replace(function!(
-                        MS.dot,
-                        function!(GS.emr_vec, W_.x_),
-                        function!(GS.emr_vec, W_.y_)
-                    ))
-                    .with(
-                        -(function!(GS.emr_vec, W_.x_, 1) * function!(GS.emr_vec, W_.y_, 1)
-                            + function!(GS.emr_vec, W_.x_, 2) * function!(GS.emr_vec, W_.y_, 2)
-                            + function!(GS.emr_vec, W_.x_, 3) * function!(GS.emr_vec, W_.y_, 3)),
-                    );
-
-                GenericEvaluator::new_from_builder(
-                    &replace_dots,
-                    &params,
-                    OptimizationSettings::default(),
-                )
-            })
-            .collect();
-
-        Ok(self.derived_data.integrand_evaluators = Some(evaluators))
-    }
-
     // Expects cff_expression, esurface_data,
     fn generate_term_for_graph(
         &self,
@@ -954,15 +1079,8 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
 
         AmplitudeGraphTerm {
             integrand_evaluator_all_orientations: self
-                .derived_data
-                .all_orientation_integrand_evaluator
-                .clone()
-                .expect("integrand_evaluator_all_orientations should have been created"),
-            integrand_evaluators: self
-                .derived_data
-                .integrand_evaluators
-                .clone()
-                .expect("integrand_evaluators should have been created"),
+                .build_all_orientation_integrand_evaluator(&param_builder),
+            integrand_evaluators: self.build_orientations_evaluators(&param_builder),
             tropical_sampler: self.derived_data.tropical_sampler.clone(),
             graph: self.graph.clone(),
             multi_channeling_setup: self
@@ -994,8 +1112,7 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct AmplitudeDerivedData<S: AmplitudeState> {
-    pub all_orientation_integrand_evaluator: Option<GenericEvaluator>,
-    pub integrand_evaluators: Option<TiVec<AmplitudeOrientationID, GenericEvaluator>>,
+    pub all_mighty_integrand: Atom,
     pub threshold_counterterm: AmplitudeCountertermData,
     pub multi_channeling_setup: Option<LmbMultiChannelingSetup>,
     pub lmbs: Option<TiVec<LmbIndex, LoopMomentumBasis>>,
