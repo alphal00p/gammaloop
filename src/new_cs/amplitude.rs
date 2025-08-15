@@ -877,6 +877,14 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
                 .expect("lmbs should have been created"),
             threshold_counterterm,
             estimated_scale,
+            esurfaces: self
+                .derived_data
+                .cff_expression
+                .as_ref()
+                .expect("cff_expression should have been created")
+                .surfaces
+                .esurface_cache
+                .clone(),
 
             param_builder,
         }

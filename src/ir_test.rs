@@ -13,7 +13,7 @@ use symbolica::{
 use crate::{
     cff::surface::Surface,
     model::Model,
-    momentum::ThreeMomentum,
+    momentum::{Rotation, RotationMethod, ThreeMomentum},
     momentum_sample::{LoopIndex, LoopMomenta, MomentumSample},
     new_gammaloop_integrand::{cross_section_integrand::CrossSectionGraphTerm, GraphTerm},
     new_graph::FeynmanGraph,
@@ -228,7 +228,10 @@ impl CrossSectionGraphTerm {
 
                     LambdaPointEval {
                         lambda_point,
-                        value: self.evaluate(&sample, settings).norm_squared().sqrt(),
+                        value: self
+                            .evaluate(&sample, settings, &Rotation::new(RotationMethod::Identity))
+                            .norm_squared()
+                            .sqrt(),
                     }
                 })
                 .collect(),

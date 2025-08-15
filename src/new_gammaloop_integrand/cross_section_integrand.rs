@@ -141,8 +141,9 @@ impl GraphTerm for CrossSectionGraphTerm {
         &mut self,
         momentum_sample: &MomentumSample<T>,
         settings: &RuntimeSettings,
+        rotation: &Rotation,
     ) -> Complex<F<T>> {
-        self.evaluate(momentum_sample, settings)
+        self.evaluate(momentum_sample, settings, rotation)
     }
 
     fn get_multi_channeling_setup(&self) -> &LmbMultiChannelingSetup {

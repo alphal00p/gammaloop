@@ -17,7 +17,10 @@ use symbolica::{
 use typed_index_collections::TiVec;
 
 use crate::{
-    cff::{esurface::EsurfaceID, expression::AmplitudeOrientationID},
+    cff::{
+        esurface::{EsurfaceCollection, EsurfaceID},
+        expression::AmplitudeOrientationID,
+    },
     evaluation_result::EvaluationResult,
     integrands::HasIntegrand,
     momentum::Rotation,
@@ -43,6 +46,7 @@ const HARD_CODED_M_R_SQ: F<f64> = F(1000.0);
 pub struct AmplitudeGraphTerm {
     pub integrand_evaluator_all_orientations: GenericEvaluator,
     pub integrand_evaluators: TiVec<AmplitudeOrientationID, GenericEvaluator>,
+    pub esurfaces: EsurfaceCollection,
     pub threshold_counterterm: AmplitudeCountertermData,
     pub multi_channeling_setup: LmbMultiChannelingSetup,
     pub lmbs: TiVec<LmbIndex, LoopMomentumBasis>,
@@ -57,7 +61,7 @@ impl AmplitudeGraphTerm {
         &mut self,
         momentum_sample: &MomentumSample<T>,
         settings: &RuntimeSettings,
-        // mut param_builder: ParamBuilder<T>,
+        rotation: &Rotation,
     ) -> Complex<F<T>> {
         if let Some(forced_orientations) = &settings.general.force_orientations {
             if momentum_sample.sample.orientation.is_none() {
@@ -66,7 +70,7 @@ impl AmplitudeGraphTerm {
                     .map(|orientation_usize| {
                         let mut new_sample = momentum_sample.clone();
                         new_sample.sample.orientation = Some(*orientation_usize);
-                        self.evaluate(&new_sample, settings)
+                        self.evaluate(&new_sample, settings, rotation)
                     })
                     .fold(
                         Complex::new_re(momentum_sample.zero()),
@@ -116,6 +120,15 @@ impl AmplitudeGraphTerm {
             println!("result of graph {}: {:16e}", self.graph.name, result);
         }
 
+        let sum_of_cts = self.threshold_counterterm.evaluate(
+            momentum_sample,
+            &self.graph,
+            &self.esurfaces,
+            rotation,
+            settings,
+            // param_builder,
+        );
+
         result
     }
 }
@@ -137,9 +150,9 @@ impl GraphTerm for AmplitudeGraphTerm {
         &mut self,
         momentum_sample: &MomentumSample<T>,
         settings: &RuntimeSettings,
-        // param_builder: ParamBuilder<T>,
+        rotation: &Rotation,
     ) -> Complex<F<T>> {
-        self.evaluate_impl(momentum_sample, settings)
+        self.evaluate_impl(momentum_sample, settings, rotation)
     }
 
     fn get_num_orientations(&self) -> usize {
