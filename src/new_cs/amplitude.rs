@@ -28,7 +28,10 @@ use crate::{
     new_graph::{LMBext, LmbIndex, LoopMomentumBasis},
     numerator::ParsingNet,
     signature::SignatureLike,
-    subtraction::overlap::find_maximal_overlap,
+    subtraction::{
+        amplitude_counterterm::AmplitudeCountertermData,
+        overlap::{find_maximal_overlap, OverlapStructure},
+    },
     utils::{GS, TENSORLIB, W_},
     uv::{approx::do_replacement_rules, UltravioletGraph},
     GammaLoopContext, GammaLoopContextContainer,
@@ -185,7 +188,7 @@ impl AmplitudeGraph {
                 lmbs: None,
                 tropical_sampler: None,
                 multi_channeling_setup: None,
-                counterterm_evaluators: None,
+                threshold_counterterm: AmplitudeCountertermData::new_empty(),
                 esurface_data: None,
             },
         }
@@ -615,7 +618,13 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
             })
             .collect();
 
-        self.derived_data.counterterm_evaluators = Some(counterterm_evaluators);
+        let threshold_counterterm = AmplitudeCountertermData {
+            overlap: OverlapStructure::new_empty(),
+            evaluators: counterterm_evaluators,
+            param_builder: params,
+        };
+
+        self.derived_data.threshold_counterterm = threshold_counterterm;
     }
 
     pub(crate) fn build_all_orientation_integrand_evaluator(&mut self, model: &Model) {
@@ -839,6 +848,10 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
             &settings,
         );
 
+        let mut threshold_counterterm = self.derived_data.threshold_counterterm.clone();
+
+        threshold_counterterm.overlap = overlap;
+
         AmplitudeGraphTerm {
             integrand_evaluator_all_orientations: self
                 .derived_data
@@ -862,13 +875,9 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
                 .lmbs
                 .clone()
                 .expect("lmbs should have been created"),
-            counterterm_evaluators: self
-                .derived_data
-                .counterterm_evaluators
-                .clone()
-                .unwrap_or_else(|| ti_vec![]),
+            threshold_counterterm,
             estimated_scale,
-            overlap,
+
             param_builder,
         }
     }
@@ -879,7 +888,7 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
 pub struct AmplitudeDerivedData<S: AmplitudeState> {
     pub all_orientation_integrand_evaluator: Option<GenericEvaluator>,
     pub integrand_evaluators: Option<TiVec<AmplitudeOrientationID, GenericEvaluator>>,
-    pub counterterm_evaluators: Option<TiVec<EsurfaceID, GenericEvaluator>>,
+    pub threshold_counterterm: AmplitudeCountertermData,
     pub multi_channeling_setup: Option<LmbMultiChannelingSetup>,
     pub lmbs: Option<TiVec<LmbIndex, LoopMomentumBasis>>,
     pub tropical_sampler: Option<SampleGenerator<3>>,

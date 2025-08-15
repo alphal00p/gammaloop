@@ -25,7 +25,7 @@ use crate::{
     new_gammaloop_integrand::ParamBuilder,
     new_graph::{FeynmanGraph, Graph, LmbIndex, LoopMomentumBasis},
     signature::SignatureLike,
-    subtraction::overlap::OverlapStructure,
+    subtraction::{amplitude_counterterm::AmplitudeCountertermData, overlap::OverlapStructure},
     DependentMomentaConstructor, FloatLike, GammaLoopContext, GammaLoopContextContainer,
     Polarizations, RuntimeSettings, F,
 };
@@ -43,13 +43,12 @@ const HARD_CODED_M_R_SQ: F<f64> = F(1000.0);
 pub struct AmplitudeGraphTerm {
     pub integrand_evaluator_all_orientations: GenericEvaluator,
     pub integrand_evaluators: TiVec<AmplitudeOrientationID, GenericEvaluator>,
-    pub counterterm_evaluators: TiVec<EsurfaceID, GenericEvaluator>,
+    pub threshold_counterterm: AmplitudeCountertermData,
     pub multi_channeling_setup: LmbMultiChannelingSetup,
     pub lmbs: TiVec<LmbIndex, LoopMomentumBasis>,
     pub tropical_sampler: Option<SampleGenerator<3>>,
     pub graph: Graph,
     pub estimated_scale: F<f64>,
-    pub overlap: OverlapStructure,
     pub param_builder: ParamBuilder<f64>,
 }
 

@@ -54,6 +54,13 @@ impl OverlapStructure {
                 .collect();
         }
     }
+
+    pub fn new_empty() -> Self {
+        Self {
+            overlap_groups: vec![],
+            existing_esurfaces: ExistingEsurfaces::new(),
+        }
+    }
 }
 /// Helper struct to construct the socp problem
 struct PropagatorConstraint<'a> {

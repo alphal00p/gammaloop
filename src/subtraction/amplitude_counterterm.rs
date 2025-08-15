@@ -1,3 +1,4 @@
+use bincode_trait_derive::{Decode, Encode};
 use dot_parser::canonical::Edge;
 use linnet::half_edge::involution::{EdgeIndex, EdgeVec};
 use spenso::algebra::complex::Complex;
@@ -19,12 +20,14 @@ use crate::{
         newton_solver::{newton_iteration_and_derivative, NewtonIterationResult},
         FloatLike, F,
     },
-    RuntimeSettings, UVLocalisationSettings,
+    GammaLoopContext, RuntimeSettings, UVLocalisationSettings,
 };
 
 const MAX_ITERATIONS: usize = 40;
 const TOLERANCE: f64 = 1.0;
 
+#[derive(Clone, Encode, Decode)]
+#[trait_decode(trait = GammaLoopContext)]
 pub struct AmplitudeCountertermData {
     pub overlap: OverlapStructure,
     pub evaluators: TiVec<EsurfaceID, GenericEvaluator>,
@@ -32,6 +35,14 @@ pub struct AmplitudeCountertermData {
 }
 
 impl AmplitudeCountertermData {
+    pub fn new_empty() -> Self {
+        Self {
+            overlap: OverlapStructure::new_empty(),
+            evaluators: TiVec::new(),
+            param_builder: ParamBuilder::new(),
+        }
+    }
+
     pub fn evaluate<T: FloatLike>(
         &mut self,
         momentum_sample: &MomentumSample<T>,
@@ -39,7 +50,7 @@ impl AmplitudeCountertermData {
         esurfaces: &EsurfaceCollection,
         rotation: &Rotation,
         settings: &RuntimeSettings,
-    ) -> Complex<T> {
+    ) -> Complex<F<T>> {
         let counter_term_builder = CounterTermBuilder::new(
             graph,
             rotation,
@@ -66,7 +77,7 @@ impl AmplitudeCountertermData {
             }
         }
 
-        todo!()
+        result
     }
 }
 
