@@ -44,8 +44,13 @@ use eyre::{eyre, Context};
 use itertools::Itertools;
 use linnet::half_edge::involution::{HedgePair, Orientation};
 use log::debug;
-use symbolica::{atom::Atom, domains::rational::Rational, evaluate::OptimizationSettings};
-use typed_index_collections::TiVec;
+use symbolica::{
+    atom::{Atom, AtomCore, Symbol},
+    domains::rational::Rational,
+    evaluate::{FunctionMap, OptimizationSettings},
+    function,
+};
+use typed_index_collections::{ti_vec, TiVec};
 
 use crate::{
     cff::esurface::EsurfaceID,
@@ -274,6 +279,7 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
         param_builder.derivative_at_tstar_atom(Atom::var(GS.deta));
         param_builder.radius_atom(Atom::var(GS.radius));
         param_builder.radius_star_atom(Atom::var(GS.radius_star));
+        param_builder.h_function_atom(Atom::var(GS.hfunction));
         param_builder
     }
 
@@ -812,23 +818,30 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
 
             let grad_eta = Atom::var(GS.deta);
             let factors_of_pi = (Atom::num(2) * Atom::var(GS.pi)).npow(loop_3);
+            let i = Atom::i();
 
             let radius = Atom::var(GS.radius);
             let radius_star = Atom::var(GS.radius_star);
             let uv_damp_plus = Atom::var(GS.uv_damp_plus);
             let uv_damp_minus = Atom::var(GS.uv_damp_minus);
+            let hfunction = Atom::var(GS.hfunction);
 
             let delta_r_plus = &radius - &radius_star;
             let delta_r_minus = -&radius - &radius_star;
 
             let jacobian_ratio = (&radius_star / &radius).npow(loop_3 - 1);
 
-            let prefactor = jacobian_ratio / factors_of_pi / grad_eta
+            let local_prefactor = &jacobian_ratio / &factors_of_pi / &grad_eta
                 * (uv_damp_plus / delta_r_plus + uv_damp_minus / delta_r_minus);
 
-            counterterm = prefactor * &counterterm;
+            let integrated_prefactor =
+                i * Atom::var(GS.pi) * &jacobian_ratio * hfunction / factors_of_pi / grad_eta;
+
+            let local_counterterm = local_prefactor * &counterterm;
+            let integrated_counterterm = integrated_prefactor * &counterterm;
+
             // println!("CounterTerm{}", counterterm);
-            counterterms.push(counterterm);
+            counterterms.push(local_counterterm + integrated_counterterm);
         }
 
         let params = self.ct_params(model);

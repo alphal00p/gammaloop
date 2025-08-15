@@ -17,10 +17,12 @@ use crate::{
     numerator,
     subtraction::overlap::{OverlapGroup, OverlapStructure},
     utils::{
+        self,
         newton_solver::{newton_iteration_and_derivative, NewtonIterationResult},
         FloatLike, F,
     },
-    GammaLoopContext, RuntimeSettings, UVLocalisationSettings,
+    GammaLoopContext, IntegratedCounterTermRange, IntegratedCounterTermSettings, RuntimeSettings,
+    UVLocalisationSettings,
 };
 
 const MAX_ITERATIONS: usize = 40;
@@ -337,8 +339,17 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
             .local_ct_settings
             .uv_localisation;
 
+        let integrated_settings = &ct_builder.settings.subtraction.integrated_ct_settings;
+
         let uv_damp_plus = evaluate_uv_damper(&radius, &radius_star, &e_cm, &settings);
         let uv_damp_minus = evaluate_uv_damper(&-&radius, &radius_star, &e_cm, &settings);
+
+        let h_function = evaluate_integrated_ct_normalisation(
+            &radius,
+            &radius_star,
+            &e_cm,
+            &integrated_settings,
+        );
 
         let threshold_params = ThresholdParams {
             radius,
@@ -347,6 +358,7 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
 
             uv_damp_plus,
             uv_damp_minus,
+            h_function,
         };
 
         let params = T::get_parameters(
@@ -462,4 +474,23 @@ fn evaluate_uv_damper<T: FloatLike>(
     let width_sq = &width * &width;
 
     (-delta_r_sq / width_sq).exp()
+}
+
+fn evaluate_integrated_ct_normalisation<T: FloatLike>(
+    radius: &F<T>,
+    radius_star: &F<T>,
+    _e_cm: &F<T>,
+    settings: &IntegratedCounterTermSettings,
+) -> F<T> {
+    match &settings.range {
+        IntegratedCounterTermRange::Infinite {
+            h_function_settings,
+        } => {
+            let h = utils::h(&(radius_star / radius), None, None, h_function_settings);
+            h * (radius_star).inv()
+        }
+        IntegratedCounterTermRange::Compact => {
+            todo!();
+        }
+    }
 }

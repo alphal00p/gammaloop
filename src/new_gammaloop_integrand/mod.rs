@@ -1231,6 +1231,7 @@ pub struct ThresholdParams<T: FloatLike> {
     pub esurface_derivative: F<T>,
     pub uv_damp_plus: F<T>,
     pub uv_damp_minus: F<T>,
+    pub h_function: F<T>,
 }
 
 pub trait UpdateAndGetParams<T: FloatLike> {
@@ -1728,6 +1729,7 @@ impl<T: FloatLike> ParamBuilder<T> {
             Complex::new_re(threshold_params.uv_damp_plus.clone()),
             Complex::new_re(threshold_params.uv_damp_minus.clone()),
         ];
+        self.h_function.values = vec![Complex::new_re(threshold_params.h_function.clone())];
     }
 }
 
