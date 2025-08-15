@@ -370,7 +370,7 @@ pub type EsurfaceCache<T> = TiVec<EsurfaceID, T>;
 
 /// Index type for esurface, location of an esurface in the list of all esurfaces of a graph
 #[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq, From, Into, Eq, Encode, Decode)]
-pub struct EsurfaceID(usize);
+pub struct EsurfaceID(pub usize);
 
 /// Container for esurfaces that exist at a given point in the phase space
 pub type ExistingEsurfaces = TiVec<ExistingEsurfaceId, EsurfaceID>;

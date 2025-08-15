@@ -116,10 +116,6 @@ impl AmplitudeGraphTerm {
             }
         };
 
-        if settings.general.debug > 4 {
-            println!("result of graph {}: {:16e}", self.graph.name, result);
-        }
-
         let sum_of_cts = self.threshold_counterterm.evaluate(
             momentum_sample,
             &self.graph,
@@ -129,7 +125,13 @@ impl AmplitudeGraphTerm {
             // param_builder,
         );
 
-        result
+        if settings.general.debug > 0 {
+            println!("graph: {}", self.graph.name);
+            println!("evaluated integrand: {:16e}", result);
+            println!("evaluated threshold counterterm: {:16e}", sum_of_cts);
+        }
+
+        result - sum_of_cts
     }
 }
 

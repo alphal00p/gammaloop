@@ -852,6 +852,24 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
 
         threshold_counterterm.overlap = overlap;
 
+        threshold_counterterm
+            .param_builder
+            .add_external_four_mom(&externals);
+        threshold_counterterm.param_builder.polarizations_values(
+            &self.graph,
+            &externals,
+            settings.kinematics.externals.get_helicities(),
+        );
+        threshold_counterterm
+            .param_builder
+            .model_parameters_value(model);
+        threshold_counterterm
+            .param_builder
+            .mu_r_sq_value(Complex::new_zero());
+        threshold_counterterm
+            .param_builder
+            .m_uv_value(Complex::new_zero());
+
         AmplitudeGraphTerm {
             integrand_evaluator_all_orientations: self
                 .derived_data
