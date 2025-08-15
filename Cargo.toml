@@ -184,7 +184,7 @@ spenso-macros = { git = "https://github.com/alphal00p/spenso", rev = "dd026330d0
 # symbolica = {path="../symbolica"}
 # linnet = "0.10.0"
 # linnet = { path = "../linnet" }
-linnet = { git = "https://github.com/alphal00p/linnet", rev = "6a13c34b2e58021aebec7ed0c78bc70c50c72283" }
+linnet = { git = "https://github.com/alphal00p/linnet", rev = "1fb23e7dea3950de3e33f927af899922619b3270" }
 
 # symbolica-community={path="../symbolica-community"}
 # linnet = { git = "https://github.com/alphal00p/linnet", rev = "d72588ecbea39c6df3fdde9ffa4e4f3575f93542" }
