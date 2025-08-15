@@ -180,7 +180,7 @@ mod test {
 
     use crate::{
         dot,
-        new_cs::Amplitude,
+        new_cs::{Amplitude, AmplitudeGraph},
         new_graph::{parse::IntoGraph, FeynmanGraph, Graph},
         numerator::UnInit,
         uv::UltravioletGraph,
@@ -471,6 +471,27 @@ mod test {
         }
     }
 
+    #[test]
+    fn qqx_aaa_tree() {
+        let mut graph:AmplitudeGraph = dot!(digraph qqx_aaa_tree_1 {
+                    num="spenso::g(spenso::dind(spenso::cof(3, hedge(1))), spenso::cof(3, hedge(2)))/3"
+                    ext    [style=invis]
+                    ext -> v1:1 [particle="d" id=1];
+                    ext -> v3:2 [particle="d~" id=2];
+                    v1:3 -> ext [particle="a" id=3];
+                    v2:4 -> ext [particle="a" id=4];
+                    v3:0 -> ext [particle="a" id=0];
+                    v1 -> v2 [particle="d" id=5];
+                    v2 -> v3 [particle="d" id=6];
+        }).unwrap();
+
+        // let model = crate::utils::test_utils::load_generic_model("sm");
+
+        graph.generate_cff();
+        graph.build_parametric_integrand();
+
+        println!("{}", graph.derived_data.all_mighty_integrand);
+    }
     #[test]
     fn tree() {
         let mut graphs: Vec<Graph> = dot!(

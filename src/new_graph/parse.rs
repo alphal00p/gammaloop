@@ -3,6 +3,7 @@ use std::{collections::BTreeMap, ops::Deref, path::Path};
 use crate::{
     model::Model,
     momentum_sample::LoopIndex,
+    new_cs::AmplitudeGraph,
     numerator::{
         aind::{Aind, NewAind},
         ufo::UFO,
@@ -508,7 +509,7 @@ impl Graph {
     pub(crate) fn from_dot(graph: DotGraph, model: &Model) -> Result<Self> {
         Self::from_parsed(ParseGraph::from_parsed(graph, model)?, model)
     }
-    pub(crate) fn from_file<'a, P>(p: P, model: &Model) -> Result<Vec<Self>>
+    pub(crate) fn from_file<P>(p: P, model: &Model) -> Result<Vec<Self>>
     where
         P: AsRef<Path>,
     {
@@ -561,6 +562,19 @@ impl Graph {
 
 pub trait IntoGraph<T> {
     fn into_graph(self, model: &Model) -> Result<T>;
+}
+
+impl IntoGraph<AmplitudeGraph> for String {
+    fn into_graph(self, model: &Model) -> Result<AmplitudeGraph> {
+        let g: Graph = self.into_graph(model)?;
+        Ok(AmplitudeGraph::new(g))
+    }
+}
+impl IntoGraph<AmplitudeGraph> for &str {
+    fn into_graph(self, model: &Model) -> Result<AmplitudeGraph> {
+        let g: Graph = self.into_graph(model)?;
+        Ok(AmplitudeGraph::new(g))
+    }
 }
 
 impl IntoGraph<Vec<Graph>> for String {

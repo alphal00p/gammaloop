@@ -84,7 +84,11 @@ pub struct Process<A: AmplitudeState = (), C: CrossSectionState = ()> {
 }
 
 impl<A: AmplitudeState, C: CrossSectionState> Process<A, C> {
-    pub(crate) fn preprocess(&mut self, model: &Model, settings: &GenerationSettings) -> Result<()> {
+    pub(crate) fn preprocess(
+        &mut self,
+        model: &Model,
+        settings: &GenerationSettings,
+    ) -> Result<()> {
         self.collection
             .preprocess(model, &self.definition, settings)?;
         Ok(())
@@ -281,7 +285,11 @@ impl Process {
         }
     }
 
-    pub(super) fn generate_integrands(&mut self, settings: &RuntimeSettings, model: &Model) -> Result<()> {
+    pub(super) fn generate_integrands(
+        &mut self,
+        settings: &RuntimeSettings,
+        model: &Model,
+    ) -> Result<()> {
         self.collection.generate_integrands(settings, model)
     }
 }

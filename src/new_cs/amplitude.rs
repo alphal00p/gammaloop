@@ -367,7 +367,7 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
             .build_threshold_counterterm_parametric_integrand()
             .into_iter_enumerated()
         {
-            self.derived_data.all_mighty_integrand += a;
+            // self.derived_data.all_mighty_integrand += a;
         }
     }
 
