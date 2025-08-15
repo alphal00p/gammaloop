@@ -154,7 +154,8 @@ class GammaLoopConfiguration(object):
                 },
                 'tropical_subgraph_table_settings': {
                     'panic_on_fail': False,
-                    'target_omega': 1.0
+                    'target_omega': 1.0,
+                    'disable_tropical_generation': False,
                 },
                 'enable_thresholds': True
             },
