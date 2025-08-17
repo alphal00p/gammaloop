@@ -25,6 +25,8 @@ use serde::Deserialize;
 use serde::Serialize;
 use serde_with::serde_as;
 use spenso::algebra::complex::Complex;
+use std::fmt::write;
+use std::fmt::Display;
 
 use crate::signature::LoopExtSignature;
 
@@ -39,6 +41,31 @@ pub struct OverlapGroup {
 pub struct OverlapStructure {
     pub overlap_groups: Vec<OverlapGroup>,
     pub existing_esurfaces: ExistingEsurfaces,
+}
+
+impl Display for OverlapStructure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let existing_esurfaces: Vec<_> = self.existing_esurfaces.iter().map(|id| id.0).collect();
+        writeln!(f, "existing esurfaces: {:?}", existing_esurfaces)?;
+
+        for (i, group) in self.overlap_groups.iter().enumerate() {
+            writeln!(f, "Group {}:", i)?;
+            let existing_esurfaces_in_group: Vec<_> = group
+                .existing_esurfaces
+                .iter()
+                .map(|id| self.existing_esurfaces[*id].0)
+                .collect();
+
+            writeln!(f, "center:\n {}", group.center)?;
+            writeln!(
+                f,
+                "existing esurfaces in group: {:?}",
+                existing_esurfaces_in_group
+            )?;
+        }
+
+        Ok(())
+    }
 }
 
 impl OverlapStructure {

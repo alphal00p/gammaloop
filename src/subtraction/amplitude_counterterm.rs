@@ -54,6 +54,18 @@ impl AmplitudeCountertermData {
         rotation: &Rotation,
         settings: &RuntimeSettings,
     ) -> Complex<F<T>> {
+        if settings.general.debug > 4 {
+            println!("start evaluate threshold counterterm");
+            let existing_esurfaces = self
+                .overlap
+                .existing_esurfaces
+                .iter()
+                .map(|e| e.0)
+                .collect::<Vec<_>>();
+            println!("subtracting esurfaces: {:?}", existing_esurfaces);
+            println!("overlap structure\n: {}", self.overlap);
+        }
+
         let counter_term_builder = CounterTermBuilder::new(
             graph,
             rotation,
@@ -75,14 +87,6 @@ impl AmplitudeCountertermData {
                     .solve_rstar()
                     .rstar_samples()
                     .evaluate(&mut self.param_builder);
-
-                if settings.general.debug > 4 {
-                    let esurface_id = self.overlap.existing_esurfaces[*existing_esurface_id];
-                    println!(
-                        "Evaluating esurface {} with result: {}",
-                        esurface_id.0, single_result
-                    );
-                }
 
                 result += single_result;
             }
@@ -321,10 +325,6 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
         let prefactor =
             self.evaluate_multichanneling_prefactor(&self.rstar_sample, lmb, masses, esurfaces);
 
-        if ct_builder.settings.general.debug > 4 {
-            println!("multi-channeling prefactor: {}", prefactor);
-        }
-
         let radius = self
             .rstar_solution
             .esurface_ct_builder
@@ -372,24 +372,32 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
 
         let evaluator = &ct_builder.evaluators[esurface_id];
         let result_no_prefactor = <T as GenericEvaluatorFloat>::get_evaluator(evaluator)(&params);
-        let result_no_prefactor = &result_no_prefactor[0] + &result_no_prefactor[1];
+
+        let local_ct = &result_no_prefactor[0];
+        let integrated_ct = &result_no_prefactor[1];
 
         if ct_builder.settings.general.debug > 4 {
             println!(
-                "Evaluating esurface {} with params: {}",
+                "Evaluating ct for esurface {}\nwith params:\n {}",
                 esurface_id.0,
                 param_builder.clone()
             );
-        }
 
-        if ct_builder.settings.general.debug > 4 {
             println!(
-                "Evaluated esurface {} with result (without prefactor): {}",
-                esurface_id.0, result_no_prefactor
+                "results\nlocal ct:      {:+16e}\nintegrated ct: {:+16e}\nprefactor:     {:+16e}",
+                local_ct, integrated_ct, prefactor
             );
         }
 
-        result_no_prefactor * prefactor
+        let final_result = (local_ct + integrated_ct) * prefactor;
+
+        if ct_builder.settings.general.debug > 4 {
+            println!(
+                "sum of local and integrated ct (with prefactor): {}",
+                final_result
+            );
+        }
+        final_result
     }
 
     fn evaluate_multichanneling_prefactor(
