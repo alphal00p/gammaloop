@@ -1,7 +1,7 @@
 use crate::cli::state::LOG_LEVEL;
 use crate::momentum::{FourMomentum, ThreeMomentum};
 use crate::momentum_sample::{ExternalFourMomenta, ExternalIndex, LoopMomenta};
-use crate::new_gammaloop_integrand::GenericEvaluatorFloat;
+use crate::new_gammaloop_integrand::{GenericEvaluate, GenericEvaluator, GenericEvaluatorFloat};
 use crate::numerator::aind::Aind;
 use crate::numerator::ufo::UFO;
 use crate::numerator::NumeratorEvaluateFloat;
@@ -800,10 +800,10 @@ pub trait FloatLike:
     + PrecisionUpgradable
     + Serialize
     + Display
-    + NumeratorEvaluateFloat
+    + NumeratorEvaluateFloat 
     + GenericEvaluatorFloat
     + Into<symbolica::domains::float::Float>
-    {
+{
 
     #[allow(non_snake_case)]
     fn PI(&self) -> Self;

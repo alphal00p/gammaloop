@@ -316,7 +316,7 @@ impl CrossSectionGraphTerm {
                     .zip(params)
                     .map(|(evaluator, params)| {
                         let cut_results =
-                            <T as GenericEvaluatorFloat>::get_evaluator(evaluator)(&params);
+                            <T as GenericEvaluatorFloat>::get_evaluator_single(evaluator)(&params);
                         cut_results
                     })
                     .fold(
@@ -331,7 +331,7 @@ impl CrossSectionGraphTerm {
                 .enumerate()
                 .map(|(id, (evaluator, params))| {
                     let cut_results =
-                        <T as GenericEvaluatorFloat>::get_evaluator(evaluator)(&params);
+                        <T as GenericEvaluatorFloat>::get_evaluator_single(evaluator)(&params);
                     if settings.general.debug > 0 && id == 2 {
                         println!(
                             "cut: {}, result: {}",

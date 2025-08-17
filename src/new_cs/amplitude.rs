@@ -624,7 +624,7 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
         let pols = self.graph.global_network();
 
         // println!("Pols:{}", pols.dot_pretty());
-        let mut counterterms: TiVec<EsurfaceID, Atom> = TiVec::new();
+        let mut counterterms: TiVec<EsurfaceID, [Atom; 2]> = TiVec::new();
         let canonize_esurface = self
             .graph
             .underlying
@@ -652,7 +652,7 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
             if esurface.external_shift.is_empty() {
                 // these will never satsify the threshold condition
                 // so we can skip them
-                counterterms.push(Atom::new());
+                counterterms.push([Atom::new(), Atom::new()]);
                 continue;
             }
 
@@ -841,14 +841,14 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
             let integrated_counterterm = integrated_prefactor * &counterterm;
 
             // println!("CounterTerm{}", counterterm);
-            counterterms.push(local_counterterm + integrated_counterterm);
+            counterterms.push([local_counterterm, integrated_counterterm]);
         }
 
         let params = self.ct_params(model);
         let counterterm_evaluators = counterterms
             .into_iter()
             .map(|ct| {
-                GenericEvaluator::new_from_builder([ct], &params, OptimizationSettings::default())
+                GenericEvaluator::new_from_builder(ct, &params, OptimizationSettings::default())
                     .unwrap()
             })
             .collect();

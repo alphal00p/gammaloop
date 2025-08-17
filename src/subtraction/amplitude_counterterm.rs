@@ -1,6 +1,7 @@
 use bincode_trait_derive::{Decode, Encode};
 use dot_parser::canonical::Edge;
 use linnet::half_edge::involution::{EdgeIndex, EdgeVec};
+use rayon::result;
 use spenso::algebra::complex::Complex;
 use symbolica::domains::float::{NumericalFloatLike, Real};
 use typed_index_collections::TiVec;
@@ -11,7 +12,7 @@ use crate::{
     momentum::{ExternalMomenta, Rotation},
     momentum_sample::{self, ExternalFourMomenta, LoopMomenta, MomentumSample},
     new_gammaloop_integrand::{
-        GenericEvaluator, GenericEvaluatorFloat, ParamBuilder, ThresholdParams,
+        GenericEvaluate, GenericEvaluator, GenericEvaluatorFloat, ParamBuilder, ThresholdParams,
     },
     new_graph::{FeynmanGraph, Graph, LoopMomentumBasis},
     numerator,
@@ -371,6 +372,7 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
 
         let evaluator = &ct_builder.evaluators[esurface_id];
         let result_no_prefactor = <T as GenericEvaluatorFloat>::get_evaluator(evaluator)(&params);
+        let result_no_prefactor = &result_no_prefactor[0] + &result_no_prefactor[1];
 
         if ct_builder.settings.general.debug > 4 {
             println!(

@@ -359,9 +359,13 @@ impl GenericEvaluator {
 }
 
 pub trait GenericEvaluatorFloat<T: FloatLike = Self> {
-    fn get_evaluator(
+    fn get_evaluator_single(
         generic_evaluator: &GenericEvaluator,
     ) -> impl Fn(&[Complex<F<T>>]) -> Complex<F<T>>;
+
+    fn get_evaluator(
+        generic_evaluator: &GenericEvaluator,
+    ) -> impl Fn(&[Complex<F<T>>]) -> Vec<Complex<F<T>>>;
 
     fn get_parameters<'a>(
         param_builder: &'a mut ParamBuilder,
@@ -374,7 +378,7 @@ pub trait GenericEvaluatorFloat<T: FloatLike = Self> {
 
 impl GenericEvaluatorFloat for f64 {
     #[inline(always)]
-    fn get_evaluator(
+    fn get_evaluator_single(
         generic_evaluator: &GenericEvaluator,
     ) -> impl Fn(&[Complex<F<f64>>]) -> Complex<F<f64>> {
         #[inline(always)]
@@ -388,6 +392,24 @@ impl GenericEvaluatorFloat for f64 {
                     .f64_eager
                     .borrow_mut()
                     .evaluate_single(params)
+            }
+        }
+    }
+
+    fn get_evaluator(
+        generic_evaluator: &GenericEvaluator,
+    ) -> impl Fn(&[Complex<F<Self>>]) -> Vec<Complex<F<Self>>> {
+        |params: &[Complex<F<f64>>]| {
+            let mut out = vec![Complex::default(); generic_evaluator.exprs.len()];
+            if let Some(compiled) = &generic_evaluator.f64_compiled {
+                compiled.borrow_mut().evaluate(params, &mut out);
+                out
+            } else {
+                generic_evaluator
+                    .f64_eager
+                    .borrow_mut()
+                    .evaluate(params, &mut out);
+                out
             }
         }
     }
@@ -445,11 +467,24 @@ impl GenericEvaluatorFloat for f64 {
 
 impl GenericEvaluatorFloat for f128 {
     #[inline(always)]
-    fn get_evaluator(
+    fn get_evaluator_single(
         generic_evaluator: &GenericEvaluator,
     ) -> impl Fn(&[Complex<F<f128>>]) -> Complex<F<f128>> {
         #[inline(always)]
         |params: &[Complex<F<f128>>]| generic_evaluator.f128.borrow_mut().evaluate_single(params)
+    }
+
+    fn get_evaluator(
+        generic_evaluator: &GenericEvaluator,
+    ) -> impl Fn(&[Complex<F<f128>>]) -> Vec<Complex<F<f128>>> {
+        |params: &[Complex<F<f128>>]| {
+            let mut out = vec![Complex::default(); generic_evaluator.exprs.len()];
+            generic_evaluator
+                .f128
+                .borrow_mut()
+                .evaluate(params, &mut out);
+            out
+        }
     }
 
     fn get_parameters<'a>(

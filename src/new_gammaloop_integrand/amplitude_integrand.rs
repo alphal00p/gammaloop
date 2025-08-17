@@ -95,7 +95,7 @@ impl AmplitudeGraphTerm {
                 );
                 let orientation_id = AmplitudeOrientationID::from(orientation_id);
                 let orientation_evaluator = &self.integrand_evaluators[orientation_id];
-                <T as GenericEvaluatorFloat>::get_evaluator(orientation_evaluator)(&a)
+                <T as GenericEvaluatorFloat>::get_evaluator_single(orientation_evaluator)(&a)
             }
             None => {
                 let evaluator = &self.integrand_evaluator_all_orientations;
@@ -112,7 +112,7 @@ impl AmplitudeGraphTerm {
                 );
                 // self.param_builder.validate();
 
-                <T as GenericEvaluatorFloat>::get_evaluator(evaluator)(&a)
+                <T as GenericEvaluatorFloat>::get_evaluator_single(evaluator)(&a)
             }
         };
 
