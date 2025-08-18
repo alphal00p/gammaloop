@@ -3,6 +3,8 @@ use linnet::parser::GlobalData;
 use spenso::network::library::TensorLibraryData;
 use symbolica::atom::Atom;
 
+use crate::new_graph::GroupId;
+
 use super::{
     parse::{StripParse, ToQuoted},
     Graph,
@@ -14,6 +16,7 @@ pub struct ParseData {
     pub overall_factor: Atom,
     pub projectors: Option<Atom>,
     pub num: Atom,
+    pub group_id: Option<GroupId>,
 }
 
 impl Default for ParseData {
@@ -23,6 +26,7 @@ impl Default for ParseData {
             overall_factor: Atom::one(),
             projectors: None,
             num: Atom::one(),
+            group_id: None,
         }
     }
 }
@@ -34,6 +38,7 @@ impl ParseData {
             overall_factor,
             projectors: self.projectors,
             num: self.num,
+            group_id: self.group_id,
         }
     }
 
@@ -43,6 +48,7 @@ impl ParseData {
             overall_factor: self.overall_factor,
             projectors: Some(polarizations),
             num: self.num,
+            group_id: self.group_id,
         }
     }
 
@@ -52,6 +58,7 @@ impl ParseData {
             overall_factor: self.overall_factor,
             projectors: self.projectors,
             num,
+            group_id: self.group_id,
         }
     }
 }

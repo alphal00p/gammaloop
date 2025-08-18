@@ -294,6 +294,7 @@ impl Graph {
             num: graph.global_data.num.clone(),
             projector,
         };
+        let group_id = graph.global_data.group_id;
 
         let name = graph.global_data.name.clone();
         let graph = graph.graph.map_data_ref(
@@ -501,6 +502,7 @@ impl Graph {
             name,
             loop_momentum_basis,
             underlying,
+            group_id,
         };
 
         if add_polarizations {

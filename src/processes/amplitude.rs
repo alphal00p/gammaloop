@@ -533,7 +533,7 @@ impl AmplitudeGraph {
             let prefactor = jacobian_ratio / factors_of_pi / grad_eta
                 * (uv_damp_plus / delta_r_plus + uv_damp_minus / delta_r_minus);
 
-            counterterm *= prefactor * &counterterm;
+            counterterm = prefactor * &counterterm;
             // println!("CounterTerm{}", counterterm);
             counterterms.push(counterterm);
         }

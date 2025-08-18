@@ -15,6 +15,7 @@ use symbolica::atom::Atom;
 use typed_index_collections::TiVec;
 
 use crate::{
+    define_index,
     gammaloop_integrand::LmbMultiChannelingSetup,
     momentum::{Dep, ExternalMomenta},
     momentum_sample::ExternalIndex,
@@ -28,11 +29,14 @@ pub mod global;
 #[derive(Clone, Copy, bincode_trait_derive::Encode, bincode_trait_derive::Decode, Default)]
 pub struct VertexOrder(pub u8);
 
+define_index! {pub struct GroupId;}
+
 #[derive(Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
 #[trait_decode(trait = crate::GammaLoopContext)]
 pub struct Graph {
     pub overall_factor: Atom,
     pub name: String,
+    pub group_id: Option<GroupId>,
     pub underlying: HedgeGraph<Edge, Vertex, NumHedgeData>,
     pub loop_momentum_basis: LoopMomentumBasis,
     pub global_prefactor: GlobalPrefactor,
@@ -101,6 +105,7 @@ impl Graph {
             name: name.to_string(),
             overall_factor: multiplicity,
             loop_momentum_basis: underlying.lmb(&underlying.full_filter()),
+            group_id: None,
             underlying,
             global_prefactor: GlobalPrefactor::default(),
         })
