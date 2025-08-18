@@ -1,3 +1,4 @@
+use eyre::Context;
 use linnet::parser::GlobalData;
 use spenso::network::library::TensorLibraryData;
 use symbolica::atom::Atom;
@@ -62,15 +63,17 @@ impl From<linnet::parser::GlobalData> for ParseData {
         parse_data.name = value.name;
 
         if let Some(factor) = value.statements.get("overall_factor") {
-            parse_data = parse_data.with_overall_factor(factor.strip_parse());
+            parse_data = parse_data
+                .with_overall_factor(factor.strip_parse().context("overall_factor").unwrap());
         }
 
         if let Some(polarizations) = value.statements.get("projector") {
-            parse_data = parse_data.with_polarizations(polarizations.strip_parse());
+            parse_data = parse_data
+                .with_polarizations(polarizations.strip_parse().context("projector").unwrap());
         }
 
         if let Some(factor) = value.statements.get("num") {
-            parse_data = parse_data.with_num(factor.strip_parse());
+            parse_data = parse_data.with_num(factor.strip_parse().context("num").unwrap());
         }
 
         parse_data

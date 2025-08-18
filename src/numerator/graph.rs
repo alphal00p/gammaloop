@@ -592,4 +592,32 @@ mod test {
         a.preprocess(&model, &GenerationSettings::default())
             .unwrap();
     }
+
+    #[test]
+    fn dod_override() {
+        let gr:Vec<Graph> = dot!(digraph g{
+            node [num=1]
+            edge [num=1]
+            a->b[dod=-100]
+            b->c[dod="-100"]
+        }
+        digraph triangle_ct {
+        num="(-1*_gammaloop::P(1,spenso::cind(1))*_gammaloop::P(2,spenso::cind(1))+-1*_gammaloop::P(1,spenso::cind(2))*_gammaloop::P(2,spenso::cind(2))+-1*_gammaloop::P(1,spenso::cind(3))*_gammaloop::P(2,spenso::cind(3))+_gammaloop::P(1,spenso::cind(0))*_gammaloop::P(2,spenso::cind(0)))^-2*(-1*_gammaloop::P(2,spenso::mink(4,python::mu2))+-1*_gammaloop::Q(6,spenso::mink(4,python::mu2))+_gammaloop::P(1,spenso::mink(4,python::mu7)))*(-1*_gammaloop::Q(7,spenso::mink(4,python::mu2))+_gammaloop::P(2,spenso::mink(4,python::mu2)))*-1/4*_gammaloop::G^2*_gammaloop::P(1,spenso::mink(4,python::mu3))*_gammaloop::P(1,spenso::mink(4,python::mu5))*_gammaloop::P(2,spenso::mink(4,python::mu4))*_gammaloop::P(2,spenso::mink(4,python::mu6))*spenso::gamma(spenso::bis(4,_gammaloop::hedge(2)),spenso::bis(4,python::s1),spenso::mink(4,python::mu1))*spenso::gamma(spenso::bis(4,python::s1),spenso::bis(4,python::s2),spenso::mink(4,python::mu2))*spenso::gamma(spenso::bis(4,python::s2),spenso::bis(4,python::s3),spenso::mink(4,python::mu3))*spenso::gamma(spenso::bis(4,python::s3),spenso::bis(4,python::tree_form_factor_spinor_2),spenso::mink(4,python::mu4))*spenso::gamma(spenso::bis(4,python::s4),spenso::bis(4,python::s6),spenso::mink(4,python::mu7))*spenso::gamma(spenso::bis(4,python::s5),spenso::bis(4,python::s4),spenso::mink(4,python::mu6))*spenso::gamma(spenso::bis(4,python::s6),spenso::bis(4,_gammaloop::hedge(1)),spenso::mink(4,python::mu1))*spenso::gamma(spenso::bis(4,python::tree_form_factor_spinor_1),spenso::bis(4,python::s5),spenso::mink(4,python::mu5))";
+        overall_factor="1";
+        projector="((-1*_gammaloop::P(3,spenso::cind(0))+-1*_gammaloop::P(4,spenso::cind(0))+_gammaloop::P(1,spenso::cind(0)))^2+(-1*_gammaloop::P(3,spenso::cind(1))+-1*_gammaloop::P(4,spenso::cind(1))+_gammaloop::P(1,spenso::cind(1)))^2*-1+(-1*_gammaloop::P(3,spenso::cind(2))+-1*_gammaloop::P(4,spenso::cind(2))+_gammaloop::P(1,spenso::cind(2)))^2*-1+(-1*_gammaloop::P(3,spenso::cind(3))+-1*_gammaloop::P(4,spenso::cind(3))+_gammaloop::P(1,spenso::cind(3)))^2*-1)^-1*((-1*_gammaloop::P(3,spenso::cind(0))+_gammaloop::P(1,spenso::cind(0)))^2+(-1*_gammaloop::P(3,spenso::cind(1))+_gammaloop::P(1,spenso::cind(1)))^2*-1+(-1*_gammaloop::P(3,spenso::cind(2))+_gammaloop::P(1,spenso::cind(2)))^2*-1+(-1*_gammaloop::P(3,spenso::cind(3))+_gammaloop::P(1,spenso::cind(3)))^2*-1)^-1*(-1*_gammaloop::P(3,spenso::mink(4,_gammaloop::edge(5,1)))+_gammaloop::P(1,spenso::mink(4,_gammaloop::edge(5,1))))*(-1*_gammaloop::P(3,spenso::mink(4,_gammaloop::edge(6,1)))+-1*_gammaloop::P(4,spenso::mink(4,_gammaloop::edge(6,1)))+_gammaloop::P(1,spenso::mink(4,_gammaloop::edge(6,1))))*-1/27*_gammaloop::ee^3*_gammaloop::u(1,spenso::bis(4,_gammaloop::hedge(1)))*_gammaloop::vbar(2,spenso::bis(4,_gammaloop::hedge(2)))*_gammaloop::ϵbar(0,spenso::mink(4,_gammaloop::hedge(0)))*_gammaloop::ϵbar(3,spenso::mink(4,_gammaloop::hedge(3)))*_gammaloop::ϵbar(4,spenso::mink(4,_gammaloop::hedge(4)))*spenso::gamma(spenso::bis(4,_gammaloop::hedge(5)),spenso::bis(4,python::tree_form_factor_spinor_1),spenso::mink(4,_gammaloop::hedge(3)))*spenso::gamma(spenso::bis(4,_gammaloop::hedge(6)),spenso::bis(4,_gammaloop::hedge(5)),spenso::mink(4,_gammaloop::edge(5,1)))*spenso::gamma(spenso::bis(4,_gammaloop::hedge(7)),spenso::bis(4,_gammaloop::hedge(6)),spenso::mink(4,_gammaloop::hedge(4)))*spenso::gamma(spenso::bis(4,_gammaloop::hedge(8)),spenso::bis(4,_gammaloop::hedge(7)),spenso::mink(4,_gammaloop::edge(6,1)))*spenso::gamma(spenso::bis(4,python::tree_form_factor_spinor_2),spenso::bis(4,_gammaloop::hedge(8)),spenso::mink(4,_gammaloop::hedge(0)))";
+        edge [num="1", dod="-100"];
+        node [num="1", dod="-100"];
+        ext [style=invis];
+        ext -> vl1:1 [particle="d", id=1];
+        ext -> vl2:2 [particle="d~", id=2];
+        v1:3 -> ext [id=3];
+        v1:4 -> ext [id=4];
+        v1:0 -> ext [id=0];
+        vl1 -> v1 [particle="d", id=5];
+        v1 -> vl2 [particle="d", id=6];
+        vl1 -> vl2 [particle="g", id=7, lmb_id=0];
+        }
+)
+        .unwrap();
+    }
 }

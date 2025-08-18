@@ -8,6 +8,7 @@ use color_eyre::Result;
 
 use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeVec, Orientation};
+use log::debug;
 use momtrop::SampleGenerator;
 use spenso::algebra::complex::Complex;
 use symbolica::{
@@ -241,23 +242,22 @@ impl AmplitudeGraphTerm {
                 res
             }
         };
+        debug!("evaluated integrand: {:16e}", result);
 
-        let sum_of_cts = self.threshold_counterterm.evaluate(
-            momentum_sample,
-            &self.graph,
-            &self.esurfaces,
-            rotation,
-            settings,
-            // param_builder,
-        );
-
-        if settings.general.debug > 0 {
-            println!("graph: {}", self.graph.name);
-            println!("evaluated integrand: {:16e}", result);
-            println!("evaluated threshold counterterm: {:16e}", sum_of_cts);
+        if !settings.general.disable_threshold_subtraction {
+            let sum_of_cts = self.threshold_counterterm.evaluate(
+                momentum_sample,
+                &self.graph,
+                &self.esurfaces,
+                rotation,
+                settings,
+                // param_builder,
+            );
+            debug!("evaluated threshold counterterm: {:16e}", sum_of_cts);
+            result - sum_of_cts
+        } else {
+            result
         }
-
-        result - sum_of_cts
     }
 }
 

@@ -1,4 +1,4 @@
-use std::{fs, iter, marker::PhantomData, ops::Deref, path::Path};
+use std::{fs, iter, ops::Deref, path::Path};
 
 use ahash::AHashSet;
 // use bincode::{Decode, Encode};
@@ -8,7 +8,6 @@ use momtrop::SampleGenerator;
 
 use idenso::color::ColorSimplifier;
 use spenso::{
-    algebra::complex::Complex,
     network::{store::TensorScalarStoreMapping, Sequential, SmallestDegree},
     tensors::{data::StorageTensor, parametric::ParamOrConcrete},
 };
@@ -16,14 +15,13 @@ use vakint::{EvaluationOrder, LoopNormalizationFactor, Vakint, VakintSettings};
 
 use crate::{
     cff::{
-        esurface::{generate_esurface_data, get_existing_esurfaces, EsurfaceDerivedData},
+        esurface::{generate_esurface_data, EsurfaceDerivedData},
         expression::{
             AmplitudeOrientationID, CFFExpression, GraphOrientation, OrientationData,
             SubgraphOrientationID,
         },
         generation::{generate_cff_expression, get_orientations_from_subgraph},
     },
-    dot,
     gammaloop_integrand::{
         amplitude_integrand::{AmplitudeGraphTerm, AmplitudeIntegrand, AmplitudeIntegrandData},
         GenericEvaluator, LmbMultiChannelingSetup, ParamBuilder,
@@ -33,10 +31,7 @@ use crate::{
     momentum_sample::ExternalIndex,
     numerator::symbolica_ext::AtomCoreExt,
     signature::SignatureLike,
-    subtraction::{
-        amplitude_counterterm::AmplitudeCountertermData,
-        overlap::{find_maximal_overlap, OverlapStructure},
-    },
+    subtraction::{amplitude_counterterm::AmplitudeCountertermData, overlap::OverlapStructure},
     utils::{GS, TENSORLIB},
     uv::{approx::do_replacement_rules, UltravioletGraph},
     GammaLoopContext, GammaLoopContextContainer,
@@ -45,13 +40,8 @@ use eyre::{eyre, Context};
 use itertools::Itertools;
 use linnet::half_edge::involution::{HedgePair, Orientation};
 use log::debug;
-use symbolica::{
-    atom::{Atom, AtomCore, Symbol},
-    domains::rational::Rational,
-    evaluate::{FunctionMap, OptimizationSettings},
-    function,
-};
-use typed_index_collections::{ti_vec, TiVec};
+use symbolica::{atom::Atom, domains::rational::Rational, evaluate::OptimizationSettings};
+use typed_index_collections::TiVec;
 
 use crate::{
     cff::esurface::EsurfaceID,
@@ -59,7 +49,7 @@ use crate::{
     graph::{FeynmanGraph, Graph},
     model::Model,
     momentum::{Rotation, RotationMethod},
-    DependentMomentaConstructor, GenerationSettings, RuntimeSettings,
+    GenerationSettings, RuntimeSettings,
 };
 
 #[derive(Clone, Encode, Decode)]
@@ -1095,10 +1085,13 @@ impl Amplitude {
     }
 }
 
-use crate::graph::parse::IntoGraph;
-#[test]
-fn amplitude_tree() {
-    let mut graph: AmplitudeGraph = dot!(digraph qqx_aaa_tree_1 {
+#[cfg(test)]
+pub mod test {
+
+    use crate::{dot, graph::parse::IntoGraph, processes::AmplitudeGraph};
+    #[test]
+    fn amplitude_tree() {
+        let mut graph: AmplitudeGraph = dot!(digraph qqx_aaa_tree_1 {
                 num="spenso::g(spenso::dind(spenso::cof(3, hedge(1))), spenso::cof(3, hedge(2)))/3"
                 ext    [style=invis]
                 ext -> v1:1 [particle="d" id=1];
@@ -1111,7 +1104,8 @@ fn amplitude_tree() {
     })
     .unwrap();
 
-    graph.generate_cff();
-    let a = graph.build_original_parametric_integrand();
-    println!(" {}", a);
+        graph.generate_cff();
+        let a = graph.build_original_parametric_integrand();
+        println!(" {}", a);
+    }
 }

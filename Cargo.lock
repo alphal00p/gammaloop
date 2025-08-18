@@ -1076,17 +1076,6 @@ dependencies = [
 
 [[package]]
 name = "dot-parser"
-version = "0.4.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4f6d24c07743a3ef530749637f2cd177d9fc37f535678e4e443ea729eba64f50"
-dependencies = [
- "either",
- "pest",
- "pest_derive",
-]
-
-[[package]]
-name = "dot-parser"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6cce83b336cd8d9b2718f4e8228a185de6e7a1cfe34f237e8c4acaf1c4141630"
@@ -1336,7 +1325,7 @@ dependencies = [
  "delegate",
  "derive_more",
  "dirs",
- "dot-parser 0.4.2",
+ "dot-parser",
  "enum_dispatch",
  "env_logger",
  "eyre",
@@ -1854,7 +1843,7 @@ dependencies = [
  "by_address",
  "cgmath",
  "derive_more",
- "dot-parser 0.5.1",
+ "dot-parser",
  "duplicate 2.0.0",
  "indenter",
  "indexmap 2.10.0",

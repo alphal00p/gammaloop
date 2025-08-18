@@ -230,6 +230,7 @@ pub enum ParameterizationMapping {
 pub struct GeneralSettings {
     pub debug: usize,
     pub use_ltd: bool,
+    pub disable_threshold_subtraction: bool,
     pub load_compiled_cff: bool,
     pub load_compiled_numerator: bool,
     pub joint_numerator_eval: bool,
@@ -243,6 +244,7 @@ impl Default for GeneralSettings {
     fn default() -> Self {
         Self {
             debug: 0,
+            disable_threshold_subtraction: false,
             use_ltd: false,
             load_compiled_numerator: true,
             joint_numerator_eval: true,

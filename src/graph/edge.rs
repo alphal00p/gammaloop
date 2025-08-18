@@ -339,12 +339,21 @@ impl ParseEdge {
                     .get::<_, String>("dod")
                     .transpose()
                     .with_context(|| format!("Error parsing dod"))?
-                    .map(|a| a.strip_parse());
+                    .map(|a| a.strip_parse())
+                    .transpose()?;
                 let is_dummy = e.get::<_, bool>("is_dummy").transpose()?.unwrap_or(false);
 
-                let num = e.get::<_, String>("num").transpose()?.map(|a| {
-                    Self::localize_ainds(<String as StripParse<Atom>>::strip_parse(&a), eid, p)
-                });
+                let num = e
+                    .get::<_, String>("num")
+                    .transpose()?
+                    .map(|a| -> Result<Atom> {
+                        Ok(Self::localize_ainds(
+                            <String as StripParse<Atom>>::strip_parse(&a)?,
+                            eid,
+                            p,
+                        ))
+                    })
+                    .transpose()?;
 
                 let particle: PossibleParticle = if let Some(v) = e.get::<_, isize>("pdg") {
                     model.try_get_particle_from_pdg(v?)?.into()
@@ -358,7 +367,7 @@ impl ParseEdge {
                         .unwrap_or(&pname);
                     model.get_particle(pname).into()
                 } else if let Some(v) = e.get::<_, String>("mass") {
-                    <String as StripParse<Atom>>::strip_parse(&v?).into()
+                    <String as StripParse<Atom>>::strip_parse(&v?)?.into()
                 } else {
                     ().into()
                 };

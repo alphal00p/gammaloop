@@ -4,8 +4,9 @@ use crate::graph::hedge_data::ParseHedge;
 use crate::graph::parse::ParseGraph;
 use crate::graph::vertex::ParseVertex;
 use crate::graph::{LMBext, LoopMomentumBasis};
+use crate::initialisation::{initialise, test_initialise};
 use crate::momentum_sample::LoopIndex;
-use crate::processes::Amplitude;
+use crate::processes::{Amplitude, AmplitudeGraph};
 use crate::utils::W_;
 use linnet::half_edge::involution::EdgeIndex;
 
@@ -23,6 +24,28 @@ use crate::{
 };
 use spenso::{algebra::algebraic_traits::IsZero, network::library::TensorLibraryData};
 use symbolica::{atom::AtomCore, function, parse};
+
+#[test]
+fn four_photon_one_loop_amp() {
+    test_initialise().unwrap();
+    let mut amp: AmplitudeGraph = dot!(
+        digraph physical_1L_4photons_0 {
+        ext    [style=invis]
+        ext -> v1 [particle=a];
+        ext -> v2 [particle=a];
+        v3 -> ext [particle=a];
+        v4 -> ext [particle=a];
+        v1 -> v2 [particle=t];
+        v2 -> v3 [particle=t];
+        v3 -> v4 [particle=t];
+        v4 -> v1 [particle=t];
+        }
+    )
+    .unwrap();
+
+    amp.generate_cff().unwrap();
+    amp.build_parametric_integrand();
+}
 
 #[test]
 fn tri_uv_AMP() {

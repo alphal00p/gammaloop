@@ -53,8 +53,8 @@ use crate::{
     },
     graph::{ExternalConnection, FeynmanGraph, Graph},
     model::Model,
-    momentum::{Rotatable, Rotation, RotationMethod},
-    DependentMomentaConstructor, Externals, Polarizations, RuntimeSettings,
+    momentum::{Rotation, RotationMethod},
+    RuntimeSettings,
 };
 
 use super::ProcessDefinition;

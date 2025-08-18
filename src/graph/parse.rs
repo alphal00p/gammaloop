@@ -14,7 +14,9 @@ use crate::{
 };
 use bitvec::vec::BitVec;
 use color_eyre::Result;
-use eyre::eyre;
+use dot_parser::ast::{GraphFromFileError, IOError};
+use eyre::{eyre, Error};
+use idenso::color;
 use itertools::Itertools;
 use linnet::{
     half_edge::{
@@ -24,7 +26,7 @@ use linnet::{
         tree::SimpleTraversalTree,
         EdgeAccessors, HedgeGraph,
     },
-    parser::{DotEdgeData, DotGraph, DotHedgeData, DotVertexData, GraphSet},
+    parser::{DotEdgeData, DotGraph, DotHedgeData, DotVertexData, GraphSet, HedgeParseError},
     permutation::Permutation,
 };
 use log::debug;
@@ -38,6 +40,7 @@ use symbolica::{
     atom::{Atom, AtomCore, AtomView},
     parse,
     printer::PrintOptions,
+    try_parse,
 };
 
 use super::{
@@ -70,74 +73,56 @@ where
 }
 
 pub trait StripParse<T> {
-    fn strip_parse(&self) -> T;
+    fn strip_parse(&self) -> Result<T>;
 }
 
 impl StripParse<Atom> for String {
-    fn strip_parse(&self) -> Atom {
-        let a = self
-            .as_str()
-            .strip_prefix('"')
-            .unwrap_or(&self)
-            .strip_suffix('"')
-            .unwrap_or(&self);
-        parse!(a)
+    fn strip_parse(&self) -> Result<Atom> {
+        (&&self).strip_parse()
     }
 }
 impl StripParse<Atom> for &String {
-    fn strip_parse(&self) -> Atom {
+    fn strip_parse(&self) -> Result<Atom> {
         let a = self
             .as_str()
             .strip_prefix('"')
             .unwrap_or(&self)
             .strip_suffix('"')
             .unwrap_or(&self);
-        parse!(a)
+        Ok(try_parse!(a).map_err(|e| eyre!("Symbolica parsing error: {e}"))?)
     }
 }
 
 impl StripParse<bool> for String {
-    fn strip_parse(&self) -> bool {
-        let a = self
-            .as_str()
-            .strip_prefix('"')
-            .unwrap_or(&self)
-            .strip_suffix('"')
-            .unwrap_or(&self);
-        a.parse().unwrap()
+    fn strip_parse(&self) -> Result<bool> {
+        (&&self).strip_parse()
     }
 }
 impl StripParse<bool> for &String {
-    fn strip_parse(&self) -> bool {
+    fn strip_parse(&self) -> Result<bool> {
         let a = self
             .as_str()
             .strip_prefix('"')
             .unwrap_or(&self)
             .strip_suffix('"')
             .unwrap_or(&self);
-        a.parse().unwrap()
+        Ok(a.parse()?)
     }
 }
 impl StripParse<i32> for String {
-    fn strip_parse(&self) -> i32 {
-        let a = self
-            .as_str()
-            .strip_prefix('"')
-            .unwrap_or(&self)
-            .strip_suffix('"')
-            .unwrap_or(&self);
-        a.parse().unwrap()
+    fn strip_parse(&self) -> Result<i32> {
+        (&&self).strip_parse()
     }
 }
 impl StripParse<i32> for &String {
-    fn strip_parse(&self) -> i32 {
+    fn strip_parse(&self) -> Result<i32> {
         let a = self
             .as_str()
             .strip_prefix('"')
             .unwrap_or(&self)
             .strip_suffix('"')
             .unwrap_or(&self);
-        a.parse().unwrap()
+        Ok(a.parse()?)
     }
 }
 
@@ -541,8 +526,17 @@ impl Graph {
             DotHedgeData,
             linnet::parser::GlobalData,
             NodeStorageVec<DotVertexData>,
-        > = GraphSet::from_file(p).unwrap();
-
+        > = GraphSet::from_file(p).map_err(|a| match a {
+            HedgeParseError::GraphFromFile(e) => match e {
+                GraphFromFileError::FileError(e) => color_eyre::Report::from(e),
+                GraphFromFileError::ParseError(e) => eyre!("Dot parsing error: {}", e),
+                GraphFromFileError::PestParseError(e) => color_eyre::Report::from(e),
+            },
+            HedgeParseError::ParseError(i) => color_eyre::Report::from(i),
+            _ => {
+                eyre!("hhee")
+            }
+        })?;
         Self::from_hedge_graph_set(hedge_graph_set, model)
     }
 
@@ -553,7 +547,17 @@ impl Graph {
             DotHedgeData,
             linnet::parser::GlobalData,
             NodeStorageVec<DotVertexData>,
-        > = GraphSet::from_string(s).unwrap();
+        > = GraphSet::from_string(s).map_err(|a| match a {
+            HedgeParseError::GraphFromFile(e) => match e {
+                GraphFromFileError::FileError(e) => color_eyre::Report::from(e),
+                GraphFromFileError::ParseError(e) => eyre!("Dot parsing error: {}", e),
+                GraphFromFileError::PestParseError(e) => color_eyre::Report::from(e),
+            },
+            HedgeParseError::ParseError(i) => color_eyre::Report::from(i),
+            _ => {
+                eyre!("hhee")
+            }
+        })?;
 
         Self::from_hedge_graph_set(hedge_graph_set, model)
     }
@@ -724,12 +728,12 @@ pub mod test {
     };
     use symbolica::atom::{Atom, FunctionBuilder};
 
+    use super::Graph;
     use crate::{
         cli::state::State,
         graph::{parse::IntoGraph, LMBext},
         numerator::{aind::Aind, Numerator, UnInit},
     };
-    use super::{Graph};
 
     #[test]
     fn test_load() {

@@ -10,3 +10,10 @@ pub(crate) fn initialise() -> Result<()> {
 
     Ok(())
 }
+#[cfg(test)]
+pub(crate) fn test_initialise() -> Result<()> {
+    env_logger::builder().is_test(true).try_init()?;
+    crate::initialize_reps();
+
+    Ok(())
+}

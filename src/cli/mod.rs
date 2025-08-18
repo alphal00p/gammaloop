@@ -28,7 +28,7 @@ use state::{format_level, format_target, State, LOG_FORMAT, LOG_LEVEL};
 use std::time::Instant;
 use std::{env, ops::ControlFlow};
 use std::{fs::File, path::PathBuf};
-use symbolica::numerical_integration::Sample;
+use symbolica::{activate_oem_license, numerical_integration::Sample};
 
 pub mod generate;
 pub mod inspect;
@@ -256,6 +256,7 @@ impl Cli {
 
     pub fn run(mut self) {
         setup_log().unwrap();
+        self.initialize();
         let mut runtime_settings = self.get_runtime_settings().unwrap();
         let mut generation_settings = self.get_generation_settings().unwrap();
 
@@ -367,9 +368,14 @@ impl Cli {
         }
     }
 
-    pub fn get_runtime_settings(&self) -> Result<RuntimeSettings, Report> {
+    pub fn initialize(&self) {
         crate::set_interrupt_handler();
+        // activate_oem_license!("SYMBOLICA_OEM_KEY_23177b25");
 
+        crate::initialize_reps();
+    }
+
+    pub fn get_runtime_settings(&self) -> Result<RuntimeSettings, Report> {
         // Load settings from YAML first so CLI flags can override.
         let settings: RuntimeSettings =
             RuntimeSettings::from_file(&self.run_settings_path).unwrap_or_default();
@@ -398,11 +404,6 @@ impl Cli {
         };
 
         println!("LOG_LEVEL: {:?}", LOG_LEVEL.lock().unwrap());
-
-        // Ensure SYMBOLICA licence variable is set before we do anything heavy.
-        if env::var("SYMBOLICA_LICENSE").is_err() {
-            env::set_var("SYMBOLICA_LICENSE", "GAMMALOOP_USER");
-        }
 
         Ok(settings)
     }
