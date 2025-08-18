@@ -47,11 +47,21 @@ pub mod feynman_graph;
 pub use feynman_graph::FeynmanGraph;
 pub mod ext;
 impl Graph {
+    /// With wrapped color, so that it doesn't enter the network as a tensor. Can unwrap using `unwrap_function`
+    /// Contains the parametric sign on the OSE
     pub(crate) fn global_network(&self) -> ParsingNet {
-        (&self.global_prefactor.num * &self.global_prefactor.projector)
+        let net = (&self.global_prefactor.num * &self.global_prefactor.projector)
             .wrap_color(GS.color_wrap)
             .parse_into_net()
-            .unwrap()
+            .unwrap();
+
+        let mut reps = Vec::new();
+        for (p, eid, _) in self.iter_edges() {
+            if p.is_paired() {
+                reps.push(GS.add_parametric_sign(eid));
+            }
+        }
+        net.replace_multiple(&reps)
     }
 
     pub(crate) fn random_externals(&self, seed: u64) -> Externals {

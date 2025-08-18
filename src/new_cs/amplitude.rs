@@ -378,7 +378,7 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
     }
 
     fn build_threshold_counterterm_parametric_integrand(&self) -> TiVec<EsurfaceID, Atom> {
-        let pols = self.graph.global_network();
+        let global_num = self.graph.global_network();
 
         let mut counterterms: TiVec<EsurfaceID, Atom> = TiVec::new();
         let canonize_esurface = self
@@ -518,7 +518,7 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
             // println!("Complement Expression Network:");
             // println!("{}", complement_expr.dot_pretty());
 
-            let mut product = circled_expr * complement_expr * pols.clone();
+            let mut product = circled_expr * complement_expr * global_num.clone();
 
             product
                 .execute::<Sequential, SmallestDegree, _, _>(TENSORLIB.read().unwrap().deref())
@@ -585,20 +585,10 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
             &[],
         );
 
-        let mut pols = self.graph.global_network();
-
-        let mut reps = Vec::new();
-        for (p, eid, _) in self.graph.as_ref().iter_edges() {
-            if p.is_paired() {
-                reps.push(GS.add_parametric_sign(eid));
-            }
-        }
-
-        pols = pols.replace_multiple(&reps);
-
+        let global_num = self.graph.global_network();
         let mut full = forest.orientation_parametric_expr(None, &self.graph);
 
-        full *= pols;
+        full *= global_num;
 
         full.execute::<Sequential, SmallestDegree, _, _>(TENSORLIB.read().unwrap().deref())
             .unwrap();

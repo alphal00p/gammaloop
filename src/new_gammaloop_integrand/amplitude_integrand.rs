@@ -53,8 +53,10 @@ pub struct AmplitudeGraphTerm {
     pub tropical_sampler: Option<SampleGenerator<3>>,
     pub graph: Graph,
     pub estimated_scale: F<f64>,
-    pub param_builder: ParamBuilder<f64>,
+    pub param_builder: ParamBuilder,
 }
+
+/// Num(sigma_1,sigma_2,...)*(CFF_1 delta(edge(1),1) delta_(1,1,1,-1,1)+CFF_3 delta_(1,1,1,-1,1)+CFF_2 delta_(1,1,1,-1,1))
 
 impl AmplitudeGraphTerm {
     fn evaluate_impl<T: FloatLike>(

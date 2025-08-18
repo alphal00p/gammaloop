@@ -48,70 +48,45 @@ pub trait GraphOrientation {
     fn orientation(&self) -> &EdgeVec<Orientation>;
 
     fn orientation_delta(&self) -> Atom {
-        let mut fnbld = FunctionBuilder::new(GS.sign_delta);
+        let mut delta = Atom::num(1);
 
-        for (_, h) in self.orientation() {
+        for (e, h) in self.orientation() {
             match h {
-                Orientation::Default => fnbld = fnbld.add_arg(1),
-                Orientation::Reversed => fnbld = fnbld.add_arg(-1),
-                Orientation::Undirected => fnbld = fnbld.add_arg(0),
+                Orientation::Default => {
+                    delta *= GS.sign_theta(GS.sign(e));
+                }
+                Orientation::Reversed => {
+                    delta *= GS.sign_theta(-GS.sign(e));
+                }
+                _ => {}
             }
         }
-        fnbld.finish()
+        delta
     }
 
     fn select<'a>(&self, atom: impl Into<AtomOrView<'a>>) -> Atom {
-        let orientation = self.orientation();
-        atom.into().as_view().replace_map(|term, _ctx, out| {
-            if let AtomView::Fun(f) = term {
-                if f.get_symbol() == GS.sign_delta {
-                    if f.iter()
-                        .zip_longest(orientation.into_iter())
-                        .all(|either| match either {
-                            EitherOrBoth::Both(a, (_, o)) => {
-                                if let Ok(a) = i64::try_from(a) {
-                                    match o {
-                                        Orientation::Default => a >= 0,
-                                        Orientation::Reversed => a <= 0,
-                                        Orientation::Undirected => true,
-                                    }
-                                } else {
-                                    false
-                                }
-                            }
-                            EitherOrBoth::Left(_) | EitherOrBoth::Right(_) => false,
-                        })
-                    {
-                        *out = Atom::num(1);
-                    } else {
-                        *out = Atom::Zero;
-                    }
-                    return true;
-                }
+        let theta_reps = vec![
+            Replacement::new(GS.sign_theta(1).to_pattern(), Atom::num(1)),
+            Replacement::new(GS.sign_theta(-1).to_pattern(), Atom::Zero),
+        ];
 
-                if f.get_symbol() == GS.sign {
-                    if f.get_nargs() == 1 {
-                        let arg = f.iter().next().unwrap();
-                        if let Ok(a) = i64::try_from(arg) {
-                            if let Ok(a) = usize::try_from(a) {
-                                match orientation[EdgeIndex::from(a)] {
-                                    Orientation::Default => {
-                                        *out = Atom::num(1);
-                                        return true;
-                                    }
-                                    Orientation::Reversed => {
-                                        *out = Atom::num(-1);
-                                        return true;
-                                    }
-                                    Orientation::Undirected => {}
-                                }
-                            }
-                        }
-                    }
+        let mut reps = Vec::new();
+
+        for (e, h) in self.orientation() {
+            match h {
+                Orientation::Default => {
+                    reps.push(Replacement::new(GS.sign(e).to_pattern(), Atom::num(1)));
                 }
+                Orientation::Reversed => {
+                    reps.push(Replacement::new(GS.sign(e).to_pattern(), Atom::num(-1)));
+                }
+                _ => {}
             }
-            false
-        })
+        }
+
+        atom.into()
+            .replace_multiple(&reps)
+            .replace_multiple(&theta_reps)
     }
 }
 

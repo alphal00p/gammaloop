@@ -800,7 +800,7 @@ pub trait FloatLike:
     + PrecisionUpgradable
     + Serialize
     + Display
-    + NumeratorEvaluateFloat 
+    + NumeratorEvaluateFloat
     + GenericEvaluatorFloat
     + Into<symbolica::domains::float::Float>
 {
@@ -3450,7 +3450,8 @@ pub struct GammaloopSymbols {
     pub m_uv_int: Symbol,
     pub mu_r_sq: Symbol,
     pub sign: Symbol,
-    pub sign_delta: Symbol,
+    pub theta: Symbol,
+
     pub emr_mom: Symbol,
     pub emr_vec: Symbol,
     pub dot: Symbol,
@@ -3467,11 +3468,15 @@ pub struct GammaloopSymbols {
 }
 
 impl GammaloopSymbols {
-    // pub(crate) fn emr_mom<'a>(&self, edge: EdgeIndex, arg: impl Into<AtomOrView<'a>>) -> Atom {
-    //     let arg = arg.into().as_view();
+    pub(crate) fn sign_theta<'a>(&self, arg: impl Into<AtomOrView<'a>>) -> Atom {
+        let arg = arg.into();
 
-    //     function!(self.emr_mom, edge, arg)
-    // }
+        function!(self.theta, arg.as_view())
+    }
+
+    pub(crate) fn sign<'a>(&self, edge: EdgeIndex) -> Atom {
+        function!(self.sign, Atom::num(edge.0 as i64))
+    }
 }
 
 pub static TENSORLIB: LazyLock<
@@ -3573,7 +3578,7 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
     source_id: symbol!("source"),
     sink_id: symbol!("sink"),
     sign: symbol!("σ"),
-    sign_delta: symbol!("delta_σ"),
+    theta: symbol!("θ"),
     spensocind: symbol!("spenso::cind"),
     m_uv: symbol!("mUV"),
     m_uv_int: symbol!("mUVI"),
