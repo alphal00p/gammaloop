@@ -1,8 +1,8 @@
 use crate::evaluation_result::{EvaluationMetaData, EvaluationResult};
 // use crate::gammaloop_integrand::GammaLoopIntegrand;
+use crate::gammaloop_integrand::NewIntegrand;
 use crate::h_function_test::{HFunctionTestIntegrand, HFunctionTestSettings};
 use crate::momentum::FourMomentum;
-use crate::new_gammaloop_integrand::NewIntegrand;
 use crate::observables::EventManager;
 use crate::utils::{FloatLike, F};
 use crate::{utils, IntegratorSettings, Precision, RuntimeSettings};

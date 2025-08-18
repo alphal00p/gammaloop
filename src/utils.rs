@@ -1,7 +1,6 @@
-use crate::cli::state::LOG_LEVEL;
+use crate::gammaloop_integrand::GenericEvaluatorFloat;
 use crate::momentum::{FourMomentum, ThreeMomentum};
 use crate::momentum_sample::{ExternalFourMomenta, ExternalIndex, LoopMomenta};
-use crate::new_gammaloop_integrand::{GenericEvaluate, GenericEvaluator, GenericEvaluatorFloat};
 use crate::numerator::aind::Aind;
 use crate::numerator::ufo::UFO;
 use crate::numerator::NumeratorEvaluateFloat;

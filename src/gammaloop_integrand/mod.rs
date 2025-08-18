@@ -1,6 +1,5 @@
 use std::borrow::Cow;
 use std::cell::RefCell;
-use std::collections::HashMap;
 use std::fmt::Display;
 use std::fs;
 use std::ops::Deref;
@@ -8,14 +7,14 @@ use std::path::Path;
 
 use crate::cff::expression::GraphOrientation;
 use crate::evaluation_result::{EvaluationMetaData, EvaluationResult};
+use crate::graph::{FeynmanGraph, Graph, LmbIndex, LoopMomentumBasis};
 use crate::integrands::{HasIntegrand, Integrand};
 use crate::integrate::UserData;
 use crate::model::Model;
 use crate::momentum::{Helicity, PolType, Rotation};
 use crate::momentum_sample::{
-    self, BareMomentumSample, ExternalFourMomenta, ExternalIndex, LoopMomenta, MomentumSample,
+    BareMomentumSample, ExternalFourMomenta, LoopMomenta, MomentumSample,
 };
-use crate::new_graph::{FeynmanGraph, Graph, LmbIndex, LoopMomentumBasis};
 use crate::numerator::ParsingNet;
 use crate::utils::{
     format_for_compare_digits, get_n_dim_for_n_loop_momenta, FloatLike, PrecisionUpgradable,
@@ -44,11 +43,10 @@ use std::time::Duration;
 use symbolica::atom::{Atom, AtomCore, FunctionBuilder, Symbol};
 use symbolica::domains::rational::Rational;
 use symbolica::evaluate::{
-    CompileOptions, EvaluationFn, ExpressionEvaluator, FunctionMap, InlineASM, OptimizationSettings,
+    CompileOptions, ExpressionEvaluator, FunctionMap, InlineASM, OptimizationSettings,
 };
 use symbolica::id::Replacement;
 use symbolica::numerical_integration::{ContinuousGrid, DiscreteGrid, Grid, Sample};
-use symbolica::parse;
 use tabled::settings::Style;
 use typed_index_collections::TiVec;
 pub mod amplitude_integrand;
@@ -58,8 +56,8 @@ use crate::observables::EventManager;
 use crate::utils::f128;
 use crate::{
     DependentMomentaConstructor, DiscreteGraphSamplingSettings, DiscreteGraphSamplingType,
-    GammaLoopContext, IntegratorSettings, Polarizations, Precision, RuntimeSettings,
-    SamplingSettings, StabilityLevelSetting, StabilitySettings,
+    GammaLoopContext, IntegratorSettings, Precision, RuntimeSettings, SamplingSettings,
+    StabilityLevelSetting, StabilitySettings,
 };
 use color_eyre::Result;
 

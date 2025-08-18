@@ -1,16 +1,11 @@
 use std::collections::VecDeque;
 
-use crate::new_graph::{Edge, LoopMomentumBasis, Vertex};
+use crate::graph::{Edge, LoopMomentumBasis, Vertex};
 use slotmap::SecondaryMap;
-use symbolica::atom::AtomCore;
 
-use linnet::half_edge::{
-    subgraph::InternalSubGraph,
-    HedgeGraph,
-};
+use linnet::half_edge::{subgraph::InternalSubGraph, HedgeGraph};
 
 // use vakint::{EvaluationOrder, LoopNormalizationFactor, Vakint, VakintSettings};
-
 
 use super::{
     approx::Approximation,

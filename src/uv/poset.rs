@@ -8,8 +8,6 @@ use eyre::eyre;
 use pathfinding::prelude::BfsReachable;
 use serde::{Deserialize, Serialize};
 
-use symbolica::atom::AtomCore;
-
 // Define a new key type for the Poset
 new_key_type! {
     pub struct PosetNode;

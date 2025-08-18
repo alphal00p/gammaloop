@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use symbolica::atom::Atom;
 use typed_index_collections::TiVec;
 
-use crate::new_cs::CutId;
+use crate::processes::CutId;
 
 use super::{
     expression::{AmplitudeOrientationID, CFFExpression, GraphOrientation},
@@ -233,7 +233,7 @@ mod tests {
 
     use crate::{
         cff,
-        new_cs::{CrossSectionCut, CutId},
+        processes::{CrossSectionCut, CutId},
     };
 
     #[test]

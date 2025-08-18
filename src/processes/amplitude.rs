@@ -23,13 +23,14 @@ use crate::{
         },
         generation::{generate_cff_expression, get_orientations_from_subgraph},
     },
-    model::ArcParticle,
-    momentum_sample::ExternalIndex,
-    new_gammaloop_integrand::{
+    dot,
+    gammaloop_integrand::{
         amplitude_integrand::{AmplitudeGraphTerm, AmplitudeIntegrand, AmplitudeIntegrandData},
         GenericEvaluator, LmbMultiChannelingSetup, ParamBuilder,
     },
-    new_graph::{LMBext, LmbIndex, LoopMomentumBasis},
+    graph::{LMBext, LmbIndex, LoopMomentumBasis},
+    model::ArcParticle,
+    momentum_sample::ExternalIndex,
     numerator::symbolica_ext::AtomCoreExt,
     signature::SignatureLike,
     subtraction::{
@@ -54,10 +55,10 @@ use typed_index_collections::{ti_vec, TiVec};
 
 use crate::{
     cff::esurface::EsurfaceID,
+    gammaloop_integrand::NewIntegrand,
+    graph::{FeynmanGraph, Graph},
     model::Model,
     momentum::{Rotation, RotationMethod},
-    new_gammaloop_integrand::NewIntegrand,
-    new_graph::{FeynmanGraph, Graph},
     DependentMomentaConstructor, GenerationSettings, RuntimeSettings,
 };
 
@@ -1092,4 +1093,25 @@ impl Amplitude {
         //  TODO: validate that the graph is compatible
         Ok(())
     }
+}
+
+use crate::graph::parse::IntoGraph;
+#[test]
+fn amplitude_tree() {
+    let mut graph: AmplitudeGraph = dot!(digraph qqx_aaa_tree_1 {
+                num="spenso::g(spenso::dind(spenso::cof(3, hedge(1))), spenso::cof(3, hedge(2)))/3"
+                ext    [style=invis]
+                ext -> v1:1 [particle="d" id=1];
+                ext -> v3:2 [particle="d~" id=2];
+                v1:3 -> ext [particle="a" id=3];
+                v2:4 -> ext [particle="a" id=4];
+                v3:0 -> ext [particle="a" id=0];
+                v1 -> v2 [particle="d" id=5];
+                v2 -> v3 [particle="d" id=6];
+    })
+    .unwrap();
+
+    graph.generate_cff();
+    let a = graph.build_original_parametric_integrand();
+    println!(" {}", a);
 }

@@ -1,15 +1,13 @@
 use itertools::Itertools;
 use momtrop::vector::Vector;
-use spenso::algebra::complex::Complex;
-use typed_index_collections::TiVec;
 
 use crate::debug_info::DEBUG_LOGGER;
 use crate::momentum::{Rotation, ThreeMomentum};
-use crate::momentum_sample::{ExternalFourMomenta, MomentumSample, PolarizationVectors};
+use crate::momentum_sample::{ExternalFourMomenta, MomentumSample};
 use crate::utils::{self, global_parameterize, FloatLike, F};
 use crate::{
     DependentMomentaConstructor, DiscreteGraphSamplingType, Externals, KinematicsSettings,
-    ParameterizationSettings, Polarizations, SamplingSettings,
+    ParameterizationSettings, SamplingSettings,
 };
 use symbolica::numerical_integration::Sample;
 

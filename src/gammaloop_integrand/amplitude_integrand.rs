@@ -5,14 +5,12 @@ use std::{
 
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
-use eyre::Context;
+
 use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeVec, Orientation};
-use log::debug;
 use momtrop::SampleGenerator;
 use spenso::algebra::complex::Complex;
 use symbolica::{
-    atom::AtomCore,
     evaluate::OptimizationSettings,
     numerical_integration::{Grid, Sample},
 };
@@ -20,24 +18,21 @@ use typed_index_collections::TiVec;
 
 use crate::{
     cff::{
-        esurface::{get_existing_esurfaces, EsurfaceCollection, EsurfaceID},
-        expression::{AmplitudeOrientationID, OrientationData},
+        esurface::{get_existing_esurfaces, EsurfaceCollection},
+        expression::AmplitudeOrientationID,
     },
     evaluation_result::EvaluationResult,
+    gammaloop_integrand::ParamBuilder,
+    graph::{FeynmanGraph, Graph, LmbIndex, LoopMomentumBasis},
     integrands::HasIntegrand,
     model::Model,
     momentum::Rotation,
     momentum_sample::{ExternalIndex, MomentumSample},
-    new_cs::{AmplitudeGraph, AmplitudeState, Processed},
-    new_gammaloop_integrand::ParamBuilder,
-    new_graph::{FeynmanGraph, Graph, LmbIndex, LoopMomentumBasis},
+    processes::AmplitudeGraph,
     signature::SignatureLike,
-    subtraction::{
-        amplitude_counterterm::AmplitudeCountertermData,
-        overlap::{find_maximal_overlap, OverlapStructure},
-    },
+    subtraction::{amplitude_counterterm::AmplitudeCountertermData, overlap::find_maximal_overlap},
     DependentMomentaConstructor, FloatLike, GammaLoopContext, GammaLoopContextContainer,
-    Polarizations, RuntimeSettings, F,
+    RuntimeSettings, F,
 };
 
 use super::{
@@ -225,7 +220,6 @@ impl AmplitudeGraphTerm {
                     hel,
                     None,
                 );
-
                 let evaluator = &self.orientation_parametric_integrand;
                 <T as GenericEvaluatorFloat>::get_evaluator_single(evaluator)(&a)
             }
@@ -235,10 +229,6 @@ impl AmplitudeGraphTerm {
 
                 for e in &self.orientations {
                     self.param_builder.orientation_value(e);
-
-                    // let replaced = self.param_builder.replace_non_emr(evaluator.expr.clone());
-                    // println!("replaced: {:+>}", replaced.collect_num());
-                    // evaluator.validate(&param_builder);
                     let a = T::get_parameters(
                         &mut self.param_builder,
                         &self.graph,
@@ -246,9 +236,6 @@ impl AmplitudeGraphTerm {
                         hel,
                         None,
                     );
-
-                    // self.param_builder.validate();
-
                     res += <T as GenericEvaluatorFloat>::get_evaluator_single(evaluator)(&a)
                 }
                 res

@@ -6,15 +6,14 @@ use crate::{
 };
 use bincode_trait_derive::{Decode, Encode};
 use derive_more::{From, Into};
-use itertools::{EitherOrBoth, Itertools};
 use linnet::half_edge::{
-    involution::{EdgeIndex, EdgeVec, Orientation},
+    involution::{EdgeVec, Orientation},
     nodestore::NodeStorageOps,
     GVEdgeAttrs, HedgeGraph,
 };
 use serde::{Deserialize, Serialize};
 use symbolica::{
-    atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol},
+    atom::{Atom, AtomCore, AtomOrView, Symbol},
     function,
     id::{Pattern, Replacement},
     symbol,

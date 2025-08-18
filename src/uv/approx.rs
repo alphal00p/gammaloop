@@ -5,10 +5,9 @@ use crate::{
         expression::{GraphOrientation, OrientationID},
         generation::{generate_uv_cff, ShiftRewrite},
     },
-    momentum::{Sign, SignOrZero},
-    new_graph::{Edge, LMBext, LoopMomentumBasis, Vertex},
+    graph::{Edge, LMBext, LoopMomentumBasis, Vertex},
+    momentum::Sign,
     numerator::{symbolica_ext::AtomCoreExt, Network},
-    symbolica_ext::CallSymbol,
     utils::{external_energy_atom_from_index, ose_atom_from_index, GS, W_},
 };
 use ahash::AHashSet;
@@ -16,11 +15,7 @@ use bitvec::vec::BitVec;
 use idenso::metric::MS;
 use log::debug;
 use spenso::{
-    structure::{
-        abstract_index::AIND_SYMBOLS,
-        concrete_index::{ExpandedIndex, CONCRETEIND},
-        HasStructure,
-    },
+    structure::{abstract_index::AIND_SYMBOLS, concrete_index::ExpandedIndex},
     tensors::parametric::atomcore::PatternReplacement,
 };
 use symbolica::{
@@ -37,10 +32,7 @@ use linnet::half_edge::{
 };
 
 use typed_index_collections::TiVec;
-use vakint::{
-    vakint_symbol, EvaluationOrder, LoopNormalizationFactor, Vakint, VakintExpression,
-    VakintSettings,
-};
+use vakint::{vakint_symbol, Vakint, VakintExpression};
 // use vakint::{EvaluationOrder, LoopNormalizationFactor, Vakint, VakintSettings};
 
 use super::{uv_graph::UVE, IntegrandExpr, UltravioletGraph};

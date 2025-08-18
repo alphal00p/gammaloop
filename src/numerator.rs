@@ -5,7 +5,6 @@ use idenso::color::ColorSimplifier;
 use idenso::gamma::GammaSimplifier;
 use idenso::representations::Bispinor;
 use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation};
-use linnet::half_edge::nodestore::NodeStorageOps;
 use log::warn;
 use spenso::algebra::complex::Complex;
 use spenso::algebra::upgrading_arithmetic::FallibleSub;
@@ -33,7 +32,6 @@ use spenso::tensors::parametric::ParamTensorSet;
 use spenso::tensors::parametric::SerializableCompiledEvaluator;
 use spenso::tensors::parametric::TensorSet;
 use std::fmt::Debug;
-use std::fs;
 use std::ops::Deref;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -84,7 +82,7 @@ use spenso::{
 use symbolica::domains::finite_field::PrimeIteratorU64;
 use symbolica::domains::rational::Rational;
 use symbolica::poly::Variable;
-use symbolica::printer::{AtomPrinter, PrintOptions};
+use symbolica::printer::PrintOptions;
 use symbolica::state::Workspace;
 
 use crate::numerator::ufo::UFO;
@@ -98,8 +96,7 @@ use symbolica::{
 
 pub mod symbolica_ext;
 
-use clap::{Args, ValueEnum};
-use symbolica::{domains::float::NumericalFloatLike, evaluate::FunctionMap, id::Replacement};
+use symbolica::{evaluate::FunctionMap, id::Replacement};
 pub mod aind;
 pub mod ufo;
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]

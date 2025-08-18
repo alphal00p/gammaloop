@@ -10,8 +10,8 @@ use linnet::half_edge::{
 use symbolica::graph::Graph as SymbolicaGraph;
 
 use crate::{
+    graph::ext::HedgeGraphExt,
     model::{ArcParticle, Model, Particle},
-    new_graph::ext::HedgeGraphExt,
 };
 
 use super::diagram_generator::{EdgeColor, NodeColorFunctions};

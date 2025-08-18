@@ -1,10 +1,8 @@
 use std::{
     fs,
-    io::Read,
     path::{Path, PathBuf},
 };
 
-use ahash::HashMap;
 // use bincode::{Decode, Encode};
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
@@ -14,7 +12,7 @@ use log::debug;
 use crate::{GammaLoopContext, GammaLoopContextContainer};
 use serde::{Deserialize, Serialize};
 
-use crate::{integrands::Integrand, model::Model, GenerationSettings, RuntimeSettings};
+use crate::{model::Model, GenerationSettings, RuntimeSettings};
 
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
@@ -105,7 +103,7 @@ impl ProcessList {
         &self,
         process_id: usize,
         integrand_name: impl AsRef<str>,
-    ) -> Result<&crate::new_gammaloop_integrand::NewIntegrand> {
+    ) -> Result<&crate::gammaloop_integrand::NewIntegrand> {
         let process = &self.processes[process_id];
         process.get_integrand(integrand_name)
     }
@@ -114,7 +112,7 @@ impl ProcessList {
         &mut self,
         process_id: usize,
         integrand_name: impl AsRef<str>,
-    ) -> Result<&mut crate::new_gammaloop_integrand::NewIntegrand> {
+    ) -> Result<&mut crate::gammaloop_integrand::NewIntegrand> {
         let process = &mut self.processes[process_id];
         process.get_integrand_mut(integrand_name)
     }
@@ -171,7 +169,7 @@ mod tests {
 
     use crate::{
         dot,
-        new_graph::{parse::IntoGraph, Graph, LoopMomentumBasis},
+        graph::{parse::IntoGraph, Graph, LoopMomentumBasis},
         numerator::{
             EvaluatorOptions, GammaAlgebraMode, GlobalPrefactor, NumeratorEvaluatorOptions,
             NumeratorParseMode, NumeratorSettings, UnInit,

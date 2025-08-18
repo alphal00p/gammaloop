@@ -1,40 +1,27 @@
-use crate::cff::expression::OrientationData;
-use crate::momentum::SignOrZero;
+use crate::graph::edge::ParseEdge;
+use crate::graph::global::ParseData;
+use crate::graph::hedge_data::ParseHedge;
+use crate::graph::parse::ParseGraph;
+use crate::graph::vertex::ParseVertex;
+use crate::graph::{LMBext, LoopMomentumBasis};
 use crate::momentum_sample::LoopIndex;
-use crate::new_cs::Amplitude;
-use crate::new_graph::edge::ParseEdge;
-use crate::new_graph::global::ParseData;
-use crate::new_graph::hedge_data::ParseHedge;
-use crate::new_graph::parse::ParseGraph;
-use crate::new_graph::vertex::ParseVertex;
-use crate::new_graph::{LMBext, LoopMomentumBasis};
+use crate::processes::Amplitude;
 use crate::utils::W_;
-use crate::uv::uv_graph::UVE;
-use idenso::metric::MS;
-use itertools::Itertools;
-use linnet::half_edge::involution::{EdgeIndex, Orientation};
+use linnet::half_edge::involution::EdgeIndex;
 
 use linnet::half_edge::{builder::HedgeGraphBuilder, involution::Flow};
 use symbolica::symbol;
-use typed_index_collections::TiVec;
 
 use crate::{
-    cff::{cut_expression::SuperGraphOrientationID, expression::AmplitudeOrientationID},
     dot,
     feyngen::FeynGenFilters,
-    inspect::inspect,
-    integrands::Integrand,
-    integrate::havana_integrate,
-    momentum_sample::ExternalIndex,
-    new_cs::{AmplitudeGraph, CrossSection, CrossSectionGraph, CutId, ProcessDefinition},
-    new_graph::{parse::IntoGraph, ExternalConnection, FeynmanGraph, Graph},
+    graph::{parse::IntoGraph, Graph},
+    processes::{CrossSection, CutId, ProcessDefinition},
     signature::LoopExtSignature,
     utils::test_utils::load_generic_model,
-    utils::{external_energy_atom_from_index, F},
     GenerationSettings, RuntimeSettings,
 };
 use spenso::{algebra::algebraic_traits::IsZero, network::library::TensorLibraryData};
-use symbolica::evaluate::{FunctionMap, OptimizationSettings};
 use symbolica::{atom::AtomCore, function, parse};
 
 #[test]
@@ -63,8 +50,10 @@ fn tri_uv_AMP() {
     let mut amp = Amplitude::new("");
     amp.add_graph(graph);
 
-    amp.preprocess(&model, &GenerationSettings::default()).unwrap();
-    amp.build_integrand(RuntimeSettings::default(), &model).unwrap();
+    amp.preprocess(&model, &GenerationSettings::default())
+        .unwrap();
+    amp.build_integrand(RuntimeSettings::default(), &model)
+        .unwrap();
 }
 
 #[test]
@@ -267,7 +256,8 @@ fn tri_box_tri_LU() {
         },
     )
     .unwrap();
-    cs.build_integrand(RuntimeSettings::default(), &model).unwrap();
+    cs.build_integrand(RuntimeSettings::default(), &model)
+        .unwrap();
 
     //println!("Final result: {:>}", sum.expand());
 }
@@ -393,7 +383,8 @@ fn double_triangle_LU() {
     )
     .unwrap();
 
-    cs.build_integrand(RuntimeSettings::default(), &model).unwrap();
+    cs.build_integrand(RuntimeSettings::default(), &model)
+        .unwrap();
 
     //println!("Final result: {:>}", sum.expand());
 }

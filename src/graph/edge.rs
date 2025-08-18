@@ -1,3 +1,4 @@
+use eyre::Context;
 use linnet::{
     half_edge::{
         involution::{EdgeData, EdgeIndex, Flow, HedgePair},
@@ -119,10 +120,6 @@ pub struct Edge {
 }
 
 impl Edge {
-    pub(crate) fn n_dummies(&self) -> usize {
-        5
-    }
-
     pub(crate) fn random_helicity(&self, seed: u64) -> Helicity {
         if let PossibleParticle::Particle(p) = &self.particle {
             p.random_helicity(seed)
@@ -226,7 +223,7 @@ impl ParseEdge {
         let a = atom
             .replace(GS.edgeid)
             .with(Atom::num(usize::from(eid) as i64))
-            .replace_map(|term, ctx, out| {
+            .replace_map(|term, _, out| {
                 if let AtomView::Fun(f) = term {
                     if f.get_symbol() == GS.edgeid {
                         if f.get_nargs() == 1 {
@@ -246,7 +243,7 @@ impl ParseEdge {
             HedgePair::Paired { source, sink } | HedgePair::Split { source, sink, .. } => a
                 .replace(GS.sink_id)
                 .with(Atom::num(sink.0 as i64))
-                .replace_map(|term, ctx, out| {
+                .replace_map(|term, _, out| {
                     if let AtomView::Fun(f) = term {
                         if f.get_symbol() == GS.sink_id {
                             if f.get_nargs() == 1 {
@@ -263,7 +260,7 @@ impl ParseEdge {
                 })
                 .replace(GS.source_id)
                 .with(Atom::num(source.0 as i64))
-                .replace_map(|term, ctx, out| {
+                .replace_map(|term, _, out| {
                     if let AtomView::Fun(f) = term {
                         if f.get_symbol() == GS.source_id {
                             if f.get_nargs() == 1 {
@@ -282,7 +279,7 @@ impl ParseEdge {
                 Flow::Source => a
                     .replace(GS.source_id)
                     .with(Atom::num(hedge.0 as i64))
-                    .replace_map(|term, ctx, out| {
+                    .replace_map(|term, _, out| {
                         if let AtomView::Fun(f) = term {
                             if f.get_symbol() == GS.source_id {
                                 if f.get_nargs() == 1 {
@@ -300,7 +297,7 @@ impl ParseEdge {
                 Flow::Sink => a
                     .replace(GS.sink_id)
                     .with(Atom::num(hedge.0 as i64))
-                    .replace_map(|term, ctx, out| {
+                    .replace_map(|term, _, out| {
                         if let AtomView::Fun(f) = term {
                             if f.get_symbol() == GS.sink_id {
                                 if f.get_nargs() == 1 {
@@ -326,7 +323,7 @@ impl ParseEdge {
         HedgePair,
         EdgeData<&'a DotEdgeData>,
     ) -> Result<EdgeData<Self>> {
-        |graph: &'a HedgeGraph<DotEdgeData, DotVertexData, DotHedgeData>,
+        |_: &'a HedgeGraph<DotEdgeData, DotVertexData, DotHedgeData>,
          eid: EdgeIndex,
          p: HedgePair,
          e_data: EdgeData<&'a DotEdgeData>| {
@@ -340,7 +337,8 @@ impl ParseEdge {
 
                 let dod = e
                     .get::<_, String>("dod")
-                    .transpose()?
+                    .transpose()
+                    .with_context(|| format!("Error parsing dod"))?
                     .map(|a| a.strip_parse());
                 let is_dummy = e.get::<_, bool>("is_dummy").transpose()?.unwrap_or(false);
 

@@ -480,7 +480,7 @@ impl FeynmanGraph for HedgeGraph<Edge, Vertex, NumHedgeData> {
 
     fn dummy_list(&self) -> Vec<EdgeIndex> {
         self.iter_edges()
-            .filter_map(|(hedge_pair, edge_index, edge_data)| {
+            .filter_map(|(_, edge_index, edge_data)| {
                 if edge_data.data.is_dummy {
                     Some(edge_index)
                 } else {

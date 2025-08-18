@@ -4,7 +4,6 @@ use color_eyre::Result;
 use colored::Colorize;
 use itertools::Itertools;
 use log::debug;
-use serde::Serialize;
 use spenso::algebra::complex::Complex;
 use std::{
     fs::{self, File},
@@ -19,15 +18,15 @@ use crate::{
         esurface::Esurface,
     },
     evaluation_result::EvaluationResult,
+    gammaloop_integrand::ParamBuilder,
+    graph::{ExternalConnection, FeynmanGraph, Graph, LmbIndex, LoopMomentumBasis},
     integrands::HasIntegrand,
     momentum::{Rotation, ThreeMomentum},
     momentum_sample::{LoopMomenta, MomentumSample},
-    new_cs::{CrossSectionCut, CutId},
-    new_gammaloop_integrand::ParamBuilder,
-    new_graph::{ExternalConnection, FeynmanGraph, Graph, LmbIndex, LoopMomentumBasis},
+    processes::{CrossSectionCut, CutId},
     utils::{self, newton_solver::newton_iteration_and_derivative, FloatLike, F},
     DependentMomentaConstructor, GammaLoopContext, GammaLoopContextContainer,
-    IntegratedCounterTermRange, Polarizations, RuntimeSettings,
+    IntegratedCounterTermRange, RuntimeSettings,
 };
 
 use super::{

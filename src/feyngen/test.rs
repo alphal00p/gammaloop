@@ -9,11 +9,11 @@ use symbolica::graph::Graph as SymbolicaGraph;
 
 use crate::feyngen::diagram_generator::EdgeColor;
 // use crate::graph::BareGraph;
+use crate::graph::Graph;
 use crate::model::ArcVertexRule;
 use crate::model::ColorStructure;
 use crate::model::Model;
 use crate::model::VertexRule;
-use crate::new_graph::Graph;
 use crate::numerator::GlobalPrefactor;
 use crate::utils::test_utils::load_generic_model;
 

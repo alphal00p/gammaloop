@@ -1,11 +1,11 @@
 use crate::{
     feyngen::GenerationType,
+    graph::Graph,
     integrands::{integrand_factory, HasIntegrand},
     model::Model,
-    new_cs::{Amplitude, ExportSettings, Process, ProcessDefinition},
-    new_graph::Graph,
-    utils::{F, GIT_VERSION, VERSION},
-    GenerationSettings, Integrand, RuntimeSettings,
+    processes::{ExportSettings, Process, ProcessDefinition},
+    utils::{F, GIT_VERSION},
+    GenerationSettings, RuntimeSettings,
 };
 use chrono::{Datelike, Local, Timelike};
 use clap::{Parser, Subcommand, ValueEnum};
@@ -25,8 +25,8 @@ use log::LevelFilter;
 use log::{debug, error, info, trace, warn};
 use spenso::algebra::complex::Complex;
 use state::{format_level, format_target, State, LOG_FORMAT, LOG_LEVEL};
-use std::{env, ops::ControlFlow, path::Path};
-use std::{fs, time::Instant};
+use std::time::Instant;
+use std::{env, ops::ControlFlow};
 use std::{fs::File, path::PathBuf};
 use symbolica::numerical_integration::Sample;
 

@@ -14,11 +14,11 @@ use symbolica::{
 };
 
 use crate::{
-    momentum_sample::LoopIndex,
-    new_graph::{
+    graph::{
         edge::PossibleParticle, Edge, FeynmanGraph, Graph, LMBext, LoopMomentumBasis, NumHedgeData,
         Vertex,
     },
+    momentum_sample::LoopIndex,
     numerator::{AppliedFeynmanRule, Numerator},
     symbolica_ext::CallSymbol,
     utils::{GS, W_},

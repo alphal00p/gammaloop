@@ -3,17 +3,17 @@ use crate::{
         expression::{GraphOrientation, OrientationData, OrientationID},
         generation::ShiftRewrite,
     },
+    graph::{Edge, Graph, Vertex},
     momentum::SignOrZero,
-    new_graph::{Edge, Graph, Vertex},
     numerator::{symbolica_ext::AtomCoreExt, ParsingNet},
     symbolica_ext::CallSymbol,
-    utils::{GS, W_},
+    utils::GS,
     uv::approx::CFFapprox,
 };
 use bitvec::vec::BitVec;
 use spenso::{
     network::store::TensorScalarStoreMapping,
-    structure::abstract_index::{ABSTRACTIND, AIND_SYMBOLS},
+    structure::abstract_index::AIND_SYMBOLS,
     tensors::{data::StorageTensor, parametric::ParamOrConcrete},
 };
 use symbolica::{

@@ -2,25 +2,10 @@ use std::sync::atomic::AtomicUsize;
 
 use linnet::half_edge::subgraph::SubGraph;
 use log::debug;
-use spenso::{
-    network::library::{symbolic::ExplicitKey, TensorLibraryData},
-    structure::{
-        concrete_index::FlatIndex,
-        representation::{LibraryRep, Minkowski, RepName},
-        IndexLess, PermutedStructure,
-    },
-    tensors::{
-        data::{DenseTensor, SetTensorData},
-        parametric::ParamTensor,
-    },
-};
+use spenso::network::library::TensorLibraryData;
 use symbolica::atom::Atom;
 
-use crate::{
-    new_graph::Graph,
-    numerator::aind::Aind,
-    utils::{GS, TENSORLIB},
-};
+use crate::graph::Graph;
 
 use super::{AppliedFeynmanRule, Numerator, UnInit};
 

@@ -3,12 +3,12 @@ use std::{collections::BTreeMap, ops::Deref, path::Path};
 use crate::{
     model::Model,
     momentum_sample::LoopIndex,
-    new_cs::AmplitudeGraph,
     numerator::{
         aind::{Aind, NewAind},
         ufo::UFO,
         GlobalPrefactor,
     },
+    processes::AmplitudeGraph,
     symbolica_ext::CallSymbol,
     utils::{GS, W_},
 };
@@ -654,7 +654,7 @@ impl From<&Graph> for DotGraph {
             );
 
         // value.normal_emr_replacement(subgraph, lmb, rep_args, filter_pair)
-        for (e, i, v) in value.iter_edges() {
+        for (_, i, _) in value.iter_edges() {
             let loop_expr = value
                 .loop_momentum_basis
                 .loop_atom(i, GS.loop_mom, &[W_.a___], false);
@@ -726,12 +726,10 @@ pub mod test {
 
     use crate::{
         cli::state::State,
-        new_graph::{parse::IntoGraph, LMBext},
+        graph::{parse::IntoGraph, LMBext},
         numerator::{aind::Aind, Numerator, UnInit},
     };
-    use symbolica::{parse, parse_lit};
-
-    use super::{Graph, StripParse};
+    use super::{Graph};
 
     #[test]
     fn test_load() {

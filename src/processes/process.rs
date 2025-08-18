@@ -4,30 +4,25 @@ use std::{
     path::Path,
 };
 
-use ahash::HashMap;
 // use bincode::{Decode, Encode};
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::{Help, Result};
-use indexmap::IndexMap;
 use log::debug;
 
 use crate::{
-    model::ArcParticle, new_gammaloop_integrand::NewIntegrand, GammaLoopContext,
+    gammaloop_integrand::NewIntegrand, model::ArcParticle, GammaLoopContext,
     GammaLoopContextContainer,
 };
 use eyre::{eyre, Context};
 
-use itertools::Itertools;
-
 use crate::{
     feyngen::{FeynGenFilters, GenerationType},
-    integrands::Integrand,
+    graph::Graph,
     model::Model,
-    new_graph::Graph,
     GenerationSettings, RuntimeSettings,
 };
 
-use super::{Amplitude, AmplitudeState, CrossSection, CrossSectionState, ExportSettings};
+use super::{Amplitude, CrossSection};
 
 #[derive(Debug, Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]

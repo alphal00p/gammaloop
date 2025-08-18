@@ -1,9 +1,8 @@
 use itertools::Itertools;
 use linnet::{
     half_edge::{
-        involution::Orientation,
-        nodestore::{BitVecNeighborIter, NodeStorageOps},
-        EdgeAccessors, HedgeGraph, NodeIndex,
+        involution::Orientation, nodestore::BitVecNeighborIter, EdgeAccessors, HedgeGraph,
+        NodeIndex,
     },
     parser::DotVertexData,
 };

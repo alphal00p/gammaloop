@@ -1,7 +1,6 @@
 use std::{fs, path::PathBuf};
 
 use clap::Args;
-use clarabel::solver::traits::Info;
 use itertools::Itertools;
 use log::{info, warn};
 use spenso::algebra::complex::Complex;
@@ -12,7 +11,7 @@ use crate::{
     RuntimeSettings,
 };
 use color_eyre::Result;
-use colored::{ColoredString, Colorize};
+use colored::Colorize;
 
 use super::state::State;
 

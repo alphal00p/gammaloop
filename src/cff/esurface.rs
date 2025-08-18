@@ -20,12 +20,12 @@ use typed_index_collections::TiVec;
 
 use crate::cff::cff_graph::VertexSet;
 use crate::debug_info::DEBUG_LOGGER;
+use crate::graph::{Graph, LmbIndex, LoopMomentumBasis};
 use crate::momentum::FourMomentum;
 use crate::momentum_sample::{
     ExternalFourMomenta, ExternalIndex, ExternalThreeMomenta, LoopIndex, LoopMomenta,
 };
-use crate::new_cs::CrossSectionCut;
-use crate::new_graph::{self, LmbIndex, LoopMomentumBasis};
+use crate::processes::CrossSectionCut;
 use crate::signature::ExternalSignature;
 use crate::utils::{
     compute_loop_part, compute_shift_part, compute_t_part_of_shift_part, cut_energy,
@@ -542,7 +542,7 @@ impl EsurfaceData {
 }
 
 pub(crate) fn generate_esurface_data(
-    graph: &new_graph::Graph,
+    graph: &Graph,
     lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
     esurfaces: &EsurfaceCollection,
 ) -> Result<EsurfaceDerivedData, Report> {
@@ -679,7 +679,7 @@ mod tests {
     use symbolica::parse;
 
     use crate::cff::cff_graph::VertexSet;
-    use crate::new_cs::CrossSectionCut;
+    use crate::processes::CrossSectionCut;
     use crate::{
         cff::{esurface::Esurface, generation::ShiftRewrite},
         utils::{dummy_hedge_graph, F},

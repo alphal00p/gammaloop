@@ -1,39 +1,33 @@
 use crate::{
-    cli::Cli,
     feyngen::{
         self, diagram_generator::FeynGen, FeynGenError, FeynGenFilters, FeynGenOptions,
         NumeratorAwareGraphGroupingOption, SewedFilterOptions,
     },
+    graph::Graph,
     inspect,
-    integrands::Integrand,
     integrate::{
         havana_integrate, print_integral_result, BatchResult, IntegrationState, MasterNode,
     },
     model::Model,
-    new_cs::{self, ExportSettings, Process, ProcessCollection, ProcessDefinition, ProcessList},
-    new_graph::Graph,
-    numerator::{GlobalPrefactor, Numerator, PythonState},
+    numerator::GlobalPrefactor,
+    processes::{ExportSettings, Process, ProcessDefinition, ProcessList},
     utils::F,
-    GammaLoopContextContainer, GenerationSettings, HasIntegrand, IntegratedPhase, OutputMetadata,
-    RuntimeSettings,
+    GammaLoopContextContainer, GenerationSettings, HasIntegrand, RuntimeSettings,
 };
 
 use ahash::HashMap;
 use chrono::{Datelike, Local, Timelike};
-use clap::Parser;
 use color_eyre::Result;
 use colored::{ColoredString, Colorize};
-use eyre::eyre;
 use feyngen::{
     FeynGenFilter, GenerationType, SelfEnergyFilterOptions, SnailFilterOptions,
     TadpolesFilterOptions,
 };
 use git_version::git_version;
 use itertools::{self, Itertools};
-use log::{debug, info, warn, LevelFilter};
-use pyo3::{import_exception, types::PyDict};
+use log::{info, warn, LevelFilter};
+use pyo3::types::PyDict;
 use spenso::algebra::complex::Complex;
-use std::cmp::Ordering;
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -57,7 +51,7 @@ use pyo3::{
     pyclass::CompareOp,
     pyfunction, pymethods, pymodule,
     types::{PyComplex, PyModule, PyTuple, PyType},
-    wrap_pyfunction, FromPyObject, IntoPy, PyObject, PyRef, PyResult, Python,
+    wrap_pyfunction, FromPyObject, PyObject, PyRef, PyResult, Python,
 };
 
 //use pyo3_log;

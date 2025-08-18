@@ -21,8 +21,8 @@ use smartstring::{LazyCompact, SmartString};
 use spenso::algebra::algebraic_traits::IsZero;
 use spenso::algebra::complex::Complex;
 use spenso::network::library::symbolic::ETS;
+use spenso::structure::representation::Euclidean;
 use spenso::structure::representation::{LibraryRep, Minkowski};
-use spenso::structure::{abstract_index::AbstractIndex, representation::Euclidean};
 use spenso::structure::{
     representation::BaseRepName, representation::Lorentz, representation::RepName,
     representation::Representation, slot::DualSlotTo, slot::IsAbstractSlot, slot::Slot,
@@ -37,7 +37,7 @@ use symbolica::coefficient::CoefficientView;
 use symbolica::evaluate::FunctionMap;
 
 use color_eyre::Result;
-use std::ops::{Deref, Index};
+use std::ops::Deref;
 use std::path::Path;
 use std::sync::Arc;
 use std::{collections::HashMap, fs::File};

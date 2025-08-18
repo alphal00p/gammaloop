@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use spenso::algebra::algebraic_traits::RefZero;
 use std::fmt::Display;
 use std::ops::{AddAssign, Index, IndexMut, Neg, SubAssign};
-use symbolica::atom::{Atom, AtomCore, AtomOrView, FunctionBuilder, Symbol};
+use symbolica::atom::{Atom, AtomOrView, FunctionBuilder, Symbol};
 use typed_index_collections::TiVec;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, PartialOrd, Eq, Ord, Hash)]

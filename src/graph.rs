@@ -9,16 +9,15 @@ use linnet::half_edge::{
 use log::debug;
 
 use rand::{rngs::SmallRng, Rng, SeedableRng};
-use spenso::algebra::algebraic_traits::IsZero;
 // use petgraph::Direction::Outgoing;
 use smartstring::{LazyCompact, SmartString};
-use symbolica::atom::{Atom, AtomCore};
+use symbolica::atom::Atom;
 use typed_index_collections::TiVec;
 
 use crate::{
+    gammaloop_integrand::LmbMultiChannelingSetup,
     momentum::{Dep, ExternalMomenta},
     momentum_sample::ExternalIndex,
-    new_gammaloop_integrand::LmbMultiChannelingSetup,
     numerator::{symbolica_ext::AtomCoreExt, GlobalPrefactor, ParsingNet},
     utils::{ose_atom_from_index, F, GS},
     Externals,

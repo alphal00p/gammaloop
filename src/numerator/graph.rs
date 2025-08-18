@@ -12,7 +12,7 @@ use spenso::{
 use symbolica::atom::{Atom, AtomOrView, FunctionBuilder, Symbol};
 
 use crate::{
-    new_graph::{Edge, Graph, NumHedgeData},
+    graph::{Edge, Graph, NumHedgeData},
     utils::GS,
 };
 
@@ -174,15 +174,13 @@ mod test {
 
     use env_logger::WriteStyle;
     use idenso::color::ColorSimplifier;
-    use log::{debug, LevelFilter};
-    use spenso::structure::HasStructure;
+    use log::LevelFilter;
     use symbolica::atom::{Atom, AtomCore};
 
     use crate::{
         dot,
-        new_cs::{Amplitude, AmplitudeGraph},
-        new_graph::{parse::IntoGraph, FeynmanGraph, Graph},
-        numerator::UnInit,
+        graph::{parse::IntoGraph, FeynmanGraph, Graph},
+        processes::{Amplitude, AmplitudeGraph},
         uv::UltravioletGraph,
         GenerationSettings, KinematicsSettings, RuntimeSettings,
     };

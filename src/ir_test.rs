@@ -12,11 +12,11 @@ use symbolica::{
 
 use crate::{
     cff::surface::Surface,
+    gammaloop_integrand::{cross_section_integrand::CrossSectionGraphTerm, GraphTerm},
+    graph::FeynmanGraph,
     model::Model,
     momentum::{Rotation, RotationMethod, ThreeMomentum},
     momentum_sample::{LoopIndex, LoopMomenta, MomentumSample},
-    new_gammaloop_integrand::{cross_section_integrand::CrossSectionGraphTerm, GraphTerm},
-    new_graph::FeynmanGraph,
     utils::{box_muller, f128, FloatLike, F},
     DependentMomentaConstructor, RuntimeSettings,
 };

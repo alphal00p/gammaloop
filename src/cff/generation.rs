@@ -7,8 +7,8 @@ use crate::{
         surface::{HybridSurface, HybridSurfaceID},
         tree::Tree,
     },
-    new_cs::{CrossSectionCut, CutId},
-    new_graph::get_cff_inverse_energy_product_impl,
+    graph::get_cff_inverse_energy_product_impl,
+    processes::{CrossSectionCut, CutId},
 };
 use bincode::{Decode, Encode};
 use color_eyre::Report;
@@ -1617,7 +1617,7 @@ mod tests_cff {
             .with(parse!("OSE(5)"));
 
         let mut topology_builder = HedgeGraphBuilder::new();
-        let nodes = (0..4).map(|_| topology_builder.add_node(())).collect_vec();
+        let _nodes = (0..4).map(|_| topology_builder.add_node(())).collect_vec();
 
         topology_builder.add_edge(dotted_nodes[0], dotted_nodes[3], (), false);
         topology_builder.add_edge(dotted_nodes[0], dotted_nodes[2], (), false);

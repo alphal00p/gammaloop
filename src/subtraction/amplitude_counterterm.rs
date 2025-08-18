@@ -1,21 +1,15 @@
 use bincode_trait_derive::{Decode, Encode};
-use dot_parser::canonical::Edge;
-use linnet::half_edge::involution::{EdgeIndex, EdgeVec};
-use rayon::result;
+use linnet::half_edge::involution::EdgeVec;
 use spenso::algebra::complex::Complex;
 use symbolica::domains::float::{NumericalFloatLike, Real};
 use typed_index_collections::TiVec;
-use vakint::Momentum;
 
 use crate::{
-    cff::esurface::{self, Esurface, EsurfaceCollection, EsurfaceID, ExistingEsurfaceId},
-    momentum::{ExternalMomenta, Rotation},
-    momentum_sample::{self, ExternalFourMomenta, LoopMomenta, MomentumSample},
-    new_gammaloop_integrand::{
-        GenericEvaluate, GenericEvaluator, GenericEvaluatorFloat, ParamBuilder, ThresholdParams,
-    },
-    new_graph::{FeynmanGraph, Graph, LoopMomentumBasis},
-    numerator,
+    cff::esurface::{Esurface, EsurfaceCollection, EsurfaceID, ExistingEsurfaceId},
+    gammaloop_integrand::{GenericEvaluator, GenericEvaluatorFloat, ParamBuilder, ThresholdParams},
+    graph::{FeynmanGraph, Graph, LoopMomentumBasis},
+    momentum::Rotation,
+    momentum_sample::{LoopMomenta, MomentumSample},
     subtraction::overlap::{OverlapGroup, OverlapStructure},
     utils::{
         self,

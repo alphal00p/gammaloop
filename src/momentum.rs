@@ -29,8 +29,7 @@ use spenso::{
             StorageTensor,
         },
         parametric::{
-            atomcore::{TensorAtomMaps, TensorAtomOps},
-            EvalTensor, FlatCoefficent, MixedTensor, ParamOrConcrete,
+            atomcore::TensorAtomOps, EvalTensor, FlatCoefficent, MixedTensor, ParamOrConcrete,
         },
     },
 };
@@ -3139,7 +3138,6 @@ mod tests {
     use core::f64;
 
     use eyre::Context;
-    use spenso::{iterators::IteratableTensor, structure::TensorStructure};
 
     use crate::utils::F;
 

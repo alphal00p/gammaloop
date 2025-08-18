@@ -2,14 +2,10 @@ use std::fmt::Display;
 
 use crate::momentum::{FourMomentum, Polarization, Rotatable, Rotation, ThreeMomentum};
 use crate::utils::{FloatLike, Length, F};
-use crate::{
-    define_index, define_indexed_vec, DependentMomentaConstructor, Externals, Polarizations,
-    RuntimeSettings,
-};
+use crate::{define_index, DependentMomentaConstructor, Externals, RuntimeSettings};
 use bincode_trait_derive::{Decode, Encode};
 use derive_more::{From, Into};
 use serde::{Deserialize, Serialize};
-use spenso::algebra::complex::Complex;
 use std::ops::{Add, Index, IndexMut, Sub};
 use symbolica::domains::float::NumericalFloatLike;
 use tabled::settings::Style;

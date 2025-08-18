@@ -16,12 +16,12 @@ use crate::{
         cut_expression::SuperGraphOrientationID,
         esurface::{generate_esurface_data, EsurfaceDerivedData},
     },
-    model::ArcParticle,
-    new_gammaloop_integrand::{
+    gammaloop_integrand::{
         cross_section_integrand::{CrossSectionIntegrandData, OrientationEvaluator},
         GenericEvaluator, LmbMultiChannelingSetup, ParamBuilder,
     },
-    new_graph::{get_cff_inverse_energy_product_impl, LMBext, LmbIndex, LoopMomentumBasis},
+    graph::{get_cff_inverse_energy_product_impl, LMBext, LmbIndex, LoopMomentumBasis},
+    model::ArcParticle,
     utils::{ose_atom_from_index, GS, W_},
     GammaLoopContext, GammaLoopContextContainer,
 };
@@ -47,13 +47,13 @@ use crate::{
         esurface::{Esurface, EsurfaceID},
         generation::generate_cff_with_cuts,
     },
-    model::Model,
-    momentum::{Rotatable, Rotation, RotationMethod},
-    new_gammaloop_integrand::{
+    gammaloop_integrand::{
         cross_section_integrand::{CrossSectionGraphTerm, CrossSectionIntegrand},
         NewIntegrand,
     },
-    new_graph::{ExternalConnection, FeynmanGraph, Graph},
+    graph::{ExternalConnection, FeynmanGraph, Graph},
+    model::Model,
+    momentum::{Rotatable, Rotation, RotationMethod},
     DependentMomentaConstructor, Externals, Polarizations, RuntimeSettings,
 };
 
