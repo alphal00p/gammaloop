@@ -118,6 +118,28 @@ impl StripParse<bool> for &String {
         a.parse().unwrap()
     }
 }
+impl StripParse<i32> for String {
+    fn strip_parse(&self) -> i32 {
+        let a = self
+            .as_str()
+            .strip_prefix('"')
+            .unwrap_or(&self)
+            .strip_suffix('"')
+            .unwrap_or(&self);
+        a.parse().unwrap()
+    }
+}
+impl StripParse<i32> for &String {
+    fn strip_parse(&self) -> i32 {
+        let a = self
+            .as_str()
+            .strip_prefix('"')
+            .unwrap_or(&self)
+            .strip_suffix('"')
+            .unwrap_or(&self);
+        a.parse().unwrap()
+    }
+}
 
 #[derive(Clone, Debug)]
 pub struct ParseGraph {

@@ -338,7 +338,10 @@ impl ParseEdge {
                     .transpose()?
                     .map(LoopIndex::from);
 
-                let dod = e.get::<_, i32>("dod").transpose()?;
+                let dod = e
+                    .get::<_, String>("dod")
+                    .transpose()?
+                    .map(|a| a.strip_parse());
                 let is_dummy = e.get::<_, bool>("is_dummy").transpose()?.unwrap_or(false);
 
                 let num = e.get::<_, String>("num").transpose()?.map(|a| {
