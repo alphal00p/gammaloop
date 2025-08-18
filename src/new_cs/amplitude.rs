@@ -63,15 +63,15 @@ use crate::{
 
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
-pub struct Amplitude<S: AmplitudeState = ()> {
+pub struct Amplitude {
     pub name: String,
     pub integrand: Option<NewIntegrand>,
-    pub graphs: Vec<AmplitudeGraph<S>>,
+    pub graphs: Vec<AmplitudeGraph>,
     pub external_particles: Vec<ArcParticle>,
     pub external_signature: SignatureLike<ExternalIndex>,
 }
 
-impl<S: AmplitudeState> Amplitude<S> {
+impl Amplitude {
     pub(crate) fn load(path: impl AsRef<Path>, context: GammaLoopContextContainer) -> Result<Self> {
         let binary = fs::read(path.as_ref().join("amp.bin"))?;
         let (mut amp, _): (Self, _) =
@@ -175,9 +175,9 @@ impl<S: AmplitudeState> Amplitude<S> {
 
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait= GammaLoopContext)]
-pub struct AmplitudeGraph<S: AmplitudeState = ()> {
+pub struct AmplitudeGraph {
     pub graph: Graph,
-    pub derived_data: AmplitudeDerivedData<S>,
+    pub derived_data: AmplitudeDerivedData,
 }
 
 impl AmplitudeGraph {
@@ -187,7 +187,7 @@ impl AmplitudeGraph {
             derived_data: AmplitudeDerivedData {
                 all_mighty_integrand: Atom::Zero,
                 cff_expression: None,
-                state: PhantomData,
+
                 lmbs: None,
                 tropical_sampler: None,
                 multi_channeling_setup: None,
@@ -198,7 +198,7 @@ impl AmplitudeGraph {
     }
 }
 
-impl<S: AmplitudeState> AmplitudeGraph<S> {
+impl AmplitudeGraph {
     pub(crate) fn write_dot<W: std::io::Write>(
         &self,
         writer: &mut W,
@@ -283,12 +283,13 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
         param_builder
     }
 
-    fn param_builder_core(&self, model: &Model) -> ParamBuilder<f64> {
+    pub(crate) fn param_builder_core(&self, model: &Model) -> ParamBuilder<f64> {
         // the float type does not matter here
         let mut param_builder = ParamBuilder::<f64>::new();
 
         // this is wrong if we allow for vacuum graphs
         param_builder.external_energies_atom(&self.graph);
+        param_builder.orientation_params(&self.graph);
 
         // param_builder.polarizations(&self.graph);
         // param_builder.polar
@@ -369,12 +370,6 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
 
     pub(crate) fn build_parametric_integrand(&mut self) {
         self.derived_data.all_mighty_integrand += self.build_original_parametric_integrand();
-        for (_, a) in self
-            .build_threshold_counterterm_parametric_integrand()
-            .into_iter_enumerated()
-        {
-            // self.derived_data.all_mighty_integrand += a;
-        }
     }
 
     fn build_threshold_counterterm_parametric_integrand(&self) -> TiVec<EsurfaceID, Atom> {
@@ -1007,114 +1002,13 @@ impl<S: AmplitudeState> AmplitudeGraph<S> {
         settings: &RuntimeSettings,
         model: &Model,
     ) -> AmplitudeGraphTerm {
-        let estimated_scale = self
-            .graph
-            .underlying
-            .expected_scale(settings.kinematics.e_cm);
-
-        let esurfaces = &self
-            .derived_data
-            .cff_expression
-            .as_ref()
-            .unwrap()
-            .surfaces
-            .esurface_cache;
-
-        let esurface_data = self.derived_data.esurface_data.as_ref().unwrap();
-        let externals = settings.kinematics.externals.get_dependent_externals(
-            DependentMomentaConstructor::Amplitude(&self.graph.get_external_signature()),
-        );
-
-        let existing_esurfaces = get_existing_esurfaces(
-            esurfaces,
-            esurface_data,
-            &externals,
-            &self.graph.loop_momentum_basis,
-            settings.general.debug,
-            settings.kinematics.e_cm,
-        );
-
-        let mut param_builder = self.param_builder_core(model);
-        param_builder.add_external_four_mom(&externals);
-        param_builder.polarizations_values(
-            &self.graph,
-            &externals,
-            settings.kinematics.externals.get_helicities(),
-        );
-        param_builder.model_parameters_value(model);
-        param_builder.mu_r_sq_value(Complex::new_zero());
-        param_builder.m_uv_value(Complex::new_zero());
-
-        // (momentum_sample);
-
-        let edge_masses = self.graph.new_edgevec(|edge, _, _| edge.mass_value());
-
-        let overlap = find_maximal_overlap(
-            &self.graph.loop_momentum_basis,
-            &existing_esurfaces,
-            esurfaces,
-            &edge_masses,
-            &externals,
-            &settings,
-        );
-
-        let mut threshold_counterterm = self.derived_data.threshold_counterterm.clone();
-
-        threshold_counterterm.overlap = overlap;
-
-        threshold_counterterm
-            .param_builder
-            .add_external_four_mom(&externals);
-        threshold_counterterm.param_builder.polarizations_values(
-            &self.graph,
-            &externals,
-            settings.kinematics.externals.get_helicities(),
-        );
-        threshold_counterterm
-            .param_builder
-            .model_parameters_value(model);
-        threshold_counterterm
-            .param_builder
-            .mu_r_sq_value(Complex::new_zero());
-        threshold_counterterm
-            .param_builder
-            .m_uv_value(Complex::new_zero());
-
-        AmplitudeGraphTerm {
-            integrand_evaluator_all_orientations: self
-                .build_all_orientation_integrand_evaluator(&param_builder),
-            integrand_evaluators: self.build_orientations_evaluators(&param_builder),
-            tropical_sampler: self.derived_data.tropical_sampler.clone(),
-            graph: self.graph.clone(),
-            multi_channeling_setup: self
-                .derived_data
-                .multi_channeling_setup
-                .clone()
-                .expect("multi_channeling_setup should have been created"),
-            lmbs: self
-                .derived_data
-                .lmbs
-                .clone()
-                .expect("lmbs should have been created"),
-            threshold_counterterm,
-            estimated_scale,
-            esurfaces: self
-                .derived_data
-                .cff_expression
-                .as_ref()
-                .expect("cff_expression should have been created")
-                .surfaces
-                .esurface_cache
-                .clone(),
-
-            param_builder,
-        }
+        AmplitudeGraphTerm::from_amplitude_graph(self, settings, model)
     }
 }
 
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
-pub struct AmplitudeDerivedData<S: AmplitudeState> {
+pub struct AmplitudeDerivedData {
     pub all_mighty_integrand: Atom,
     pub threshold_counterterm: AmplitudeCountertermData,
     pub multi_channeling_setup: Option<LmbMultiChannelingSetup>,
@@ -1122,7 +1016,6 @@ pub struct AmplitudeDerivedData<S: AmplitudeState> {
     pub tropical_sampler: Option<SampleGenerator<3>>,
     pub cff_expression: Option<CFFExpression<AmplitudeOrientationID>>,
     pub esurface_data: Option<EsurfaceDerivedData>,
-    pub state: PhantomData<S>,
 }
 
 pub trait AmplitudeState:
@@ -1132,8 +1025,8 @@ pub trait AmplitudeState:
 impl AmplitudeState for () {}
 
 #[derive(Clone, Encode, Decode, Debug)]
-pub struct ReadyForTerm {}
-impl AmplitudeState for ReadyForTerm {}
+pub struct Processed {}
+impl AmplitudeState for Processed {}
 
 // #[derive(Clone, Encode, Decode, Debug)]
 // pub struct ReadyForTerm {}

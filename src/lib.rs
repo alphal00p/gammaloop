@@ -1168,6 +1168,7 @@ pub struct GenerationSettings {
     pub compile_cff: bool,
     pub numerator_settings: NumeratorSettings,
     pub cpe_rounds_cff: Option<usize>,
+    // pub generate
     pub compile_separate_orientations: bool,
     pub gammaloop_compile_options: GammaloopCompileOptions,
     pub tropical_subgraph_table_settings: TropicalSubgraphTableSettings,

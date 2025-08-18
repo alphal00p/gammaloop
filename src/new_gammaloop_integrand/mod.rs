@@ -6,6 +6,7 @@ use std::fs;
 use std::ops::Deref;
 use std::path::Path;
 
+use crate::cff::expression::GraphOrientation;
 use crate::evaluation_result::{EvaluationMetaData, EvaluationResult};
 use crate::integrands::{HasIntegrand, Integrand};
 use crate::integrate::UserData;
@@ -28,12 +29,12 @@ use enum_dispatch::enum_dispatch;
 use eyre::Context;
 use gammaloop_sample::{parameterize, DiscreteGraphSample, GammaLoopSample};
 use itertools::Itertools;
-use linnet::half_edge::involution::HedgePair;
+use linnet::half_edge::involution::{HedgePair, Orientation};
 use log::debug;
 use momtrop::float::MomTropFloat;
 use momtrop::SampleGenerator;
 use serde::{Deserialize, Serialize};
-use spenso::algebra::algebraic_traits::IsZero;
+use spenso::algebra::algebraic_traits::{IsZero, RefOne};
 use spenso::algebra::complex::Complex;
 use spenso::iterators::IteratableTensor;
 use spenso::network::ExecutionResult;
@@ -1242,6 +1243,7 @@ pub struct ParamBuilder<T: FloatLike = f64> {
     // values: Vec<Complex<F<T>>
     m_uv: ParamValuePairs<T>,
     mu_r_sq: ParamValuePairs<T>,
+    orientations: ParamValuePairs<T>,
     pub model_parameters: ParamValuePairs<T>,
     pub external_energies: ParamValuePairs<T>,
     pub external_spatial: ParamValuePairs<T>,
@@ -1319,7 +1321,7 @@ impl UpdateAndGetParams<f64> for ParamBuilder<f64> {
             self.threshold_params(threshold_params);
         }
 
-        //println!("ParamBuilder after eval f64:\n{}", self);
+        // d!("ParamBuilder after eval f64:\n{}", self);
 
         Cow::Owned(self.clone().build_values()) // ideally borrows a single vec
     }
@@ -1380,6 +1382,8 @@ where
             reps: self.reps.clone(),
             m_uv: self.m_uv.higher(),
             mu_r_sq: self.mu_r_sq.higher(),
+
+            orientations: self.orientations.higher(),
             model_parameters: self.model_parameters.higher(),
             external_energies: self.external_energies.higher(),
             external_spatial: self.external_spatial.higher(),
@@ -1395,6 +1399,7 @@ where
     }
     fn lower(&self) -> ParamBuilder<T::Lower> {
         ParamBuilder {
+            orientations: self.orientations.lower(),
             fn_map: self.fn_map.clone(),
             reps: self.reps.clone(),
             m_uv: self.m_uv.lower(),
@@ -1541,6 +1546,7 @@ impl<T: FloatLike> ParamBuilder<T> {
     pub(crate) fn new() -> Self {
         Self {
             fn_map: FunctionMap::default(),
+            orientations: ParamValuePairs::default(),
             m_uv: ParamValuePairs::default(),
             mu_r_sq: ParamValuePairs::default(),
             model_parameters: ParamValuePairs::default(),
@@ -1627,6 +1633,47 @@ impl<T: FloatLike> ParamBuilder<T> {
         self.polarizations.params = params;
 
         // self.polarizations.params = graph.generate_polarization_params();
+    }
+
+    pub(crate) fn orientation_params(&mut self, graph: &Graph) {
+        let mut params = Vec::new();
+
+        for (p, i, d) in graph.iter_edges() {
+            params.push(GS.sign(i));
+            params.push(GS.sign_theta(GS.sign(i)));
+            params.push(GS.sign_theta(-GS.sign(i)));
+        }
+
+        self.orientations.params = params;
+    }
+
+    pub(crate) fn orientation_value<O: GraphOrientation>(&mut self, orientation: &O) {
+        let mut values = Vec::new();
+        let zero: Complex<F<T>> = Complex::new_re(F(T::from_f64(0.)));
+        let one = zero.ref_one();
+        let minusone = -(one.clone());
+
+        for (_, i) in orientation.orientation() {
+            match i {
+                Orientation::Default => {
+                    values.push(one.clone());
+                    values.push(one.clone());
+                    values.push(zero.clone());
+                }
+                Orientation::Reversed => {
+                    values.push(minusone.clone());
+                    values.push(zero.clone());
+                    values.push(one.clone());
+                }
+                Orientation::Undirected => {
+                    values.push(zero.clone());
+                    values.push(zero.clone());
+                    values.push(zero.clone());
+                }
+            }
+        }
+
+        self.orientations.values = values;
     }
 
     pub(crate) fn polarizations_values(
@@ -1794,7 +1841,7 @@ impl<T: FloatLike> Display for ParamBuilder<T> {
 
 impl<T: FloatLike> IntoIterator for ParamBuilder<T> {
     type Item = ParamValuePairs<T>;
-    type IntoIter = std::array::IntoIter<Self::Item, 13>;
+    type IntoIter = std::array::IntoIter<Self::Item, 14>;
 
     fn into_iter(self) -> Self::IntoIter {
         [
@@ -1811,6 +1858,7 @@ impl<T: FloatLike> IntoIterator for ParamBuilder<T> {
             self.uv_damp,
             self.radius,
             self.radius_star,
+            self.orientations,
         ]
         .into_iter()
     }
@@ -1818,7 +1866,7 @@ impl<T: FloatLike> IntoIterator for ParamBuilder<T> {
 
 impl<'a, T: FloatLike> IntoIterator for &'a ParamBuilder<T> {
     type Item = &'a ParamValuePairs<T>;
-    type IntoIter = std::array::IntoIter<Self::Item, 13>;
+    type IntoIter = std::array::IntoIter<Self::Item, 14>;
 
     fn into_iter(self) -> Self::IntoIter {
         [
@@ -1835,7 +1883,27 @@ impl<'a, T: FloatLike> IntoIterator for &'a ParamBuilder<T> {
             &self.uv_damp,
             &self.radius,
             &self.radius_star,
+            &self.orientations,
         ]
         .into_iter()
     }
+}
+
+#[test]
+fn evaltest() {
+    use symbolica::evaluate::{FunctionMap, OptimizationSettings};
+    use symbolica::{atom::AtomCore, parse};
+    let expr = parse!("x(y) + x(z) *z*y");
+    let z = parse!("z");
+    let y = parse!("y");
+    let xy = parse!("x(y)");
+    let xz = parse!("x(z)");
+    let fn_map = FunctionMap::new();
+    let params = vec![z.clone(), y.clone(), xy.clone(), xz.clone()];
+    let optimization_settings = OptimizationSettings::default();
+    let mut evaluator = expr
+        .evaluator(&fn_map, &params, optimization_settings)
+        .unwrap()
+        .map_coeff(&|x| x.to_real().unwrap().to_f64());
+    assert_eq!(evaluator.evaluate_single(&[1.0, 1.0, 4.0, 4.0]), 8.0);
 }

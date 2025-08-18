@@ -1555,8 +1555,9 @@ dependencies = [
 
 [[package]]
 name = "idenso"
-version = "0.2.1"
-source = "git+https://github.com/alphal00p/spenso?rev=dd026330d01a81d3569d6b60ac486c0b1f223669#dd026330d01a81d3569d6b60ac486c0b1f223669"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c7997f80509ef9fa26a972c81fd05a1bba4ed082a6becd95b105b01652f566b9"
 dependencies = [
  "anyhow",
  "bincode",
@@ -1841,8 +1842,9 @@ dependencies = [
 
 [[package]]
 name = "linnet"
-version = "0.11.0"
-source = "git+https://github.com/alphal00p/linnet?rev=1fb23e7dea3950de3e33f927af899922619b3270#1fb23e7dea3950de3e33f927af899922619b3270"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f265dd895af9334b72ef31aa2bfe63d21c40acec93161e50966f5aa1031dfc16"
 dependencies = [
  "ahash",
  "argmin",
@@ -3433,8 +3435,9 @@ dependencies = [
 
 [[package]]
 name = "spenso"
-version = "0.5.2"
-source = "git+https://github.com/alphal00p/spenso?rev=dd026330d01a81d3569d6b60ac486c0b1f223669#dd026330d01a81d3569d6b60ac486c0b1f223669"
+version = "0.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c565bd3bfe1d08f4d49ceff291452980bdd9605993b5e9da8adf49022cbf2fd8"
 dependencies = [
  "ahash",
  "anyhow",
@@ -3473,8 +3476,9 @@ dependencies = [
 
 [[package]]
 name = "spenso-hep-lib"
-version = "0.1.2"
-source = "git+https://github.com/alphal00p/spenso?rev=dd026330d01a81d3569d6b60ac486c0b1f223669#dd026330d01a81d3569d6b60ac486c0b1f223669"
+version = "0.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5e8023c37b4fdd6d0700ad44b5dc40792e7eda7835e38ccf5165f0c544964269"
 dependencies = [
  "ahash",
  "idenso",
@@ -3486,8 +3490,9 @@ dependencies = [
 
 [[package]]
 name = "spenso-macros"
-version = "0.2.0"
-source = "git+https://github.com/alphal00p/spenso?rev=dd026330d01a81d3569d6b60ac486c0b1f223669#dd026330d01a81d3569d6b60ac486c0b1f223669"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7f16187ca109ba4f0c178359a2138604e8ee5fc98efe6ae044158d2ec5a8b02d"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -4064,7 +4069,7 @@ dependencies = [
 [[package]]
 name = "vakint"
 version = "1.0.0"
-source = "git+https://github.com/alphal00p/vakint?branch=main#01773d05233d76f2cf9f7c7ac9bb716d9dc942ae"
+source = "git+https://github.com/alphal00p/vakint?rev=1fb846fa5553c2dfe36186d0d647a6f53be10947#1fb846fa5553c2dfe36186d0d647a6f53be10947"
 dependencies = [
  "ahash",
  "anyhow",

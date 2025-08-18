@@ -78,12 +78,12 @@ impl ProcessDefinition {
 }
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
-pub struct Process<A: AmplitudeState = (), C: CrossSectionState = ()> {
+pub struct Process {
     pub definition: ProcessDefinition,
-    pub collection: ProcessCollection<A, C>,
+    pub collection: ProcessCollection,
 }
 
-impl<A: AmplitudeState, C: CrossSectionState> Process<A, C> {
+impl Process {
     pub(crate) fn preprocess(
         &mut self,
         model: &Model,
@@ -245,12 +245,12 @@ impl Process {
     ) -> Result<Self> {
         match generation_type {
             GenerationType::Amplitude => {
-                let mut collection: ProcessCollection<(), ()> = ProcessCollection::new_amplitude();
+                let mut collection: ProcessCollection = ProcessCollection::new_amplitude();
 
                 if let Some(_sub_classes) = sub_classes {
                     todo!("implement seperation of processes into user defined sub classes");
                 } else {
-                    let mut amplitude: Amplitude<()> = Amplitude::new(name);
+                    let mut amplitude: Amplitude = Amplitude::new(name);
 
                     for amplitude_graph in graphs {
                         amplitude.add_graph(amplitude_graph)?;
@@ -296,12 +296,12 @@ impl Process {
 
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
-pub enum ProcessCollection<A: AmplitudeState = (), C: CrossSectionState = ()> {
-    Amplitudes(BTreeMap<String, Amplitude<A>>),
-    CrossSections(BTreeMap<String, CrossSection<C>>),
+pub enum ProcessCollection {
+    Amplitudes(BTreeMap<String, Amplitude>),
+    CrossSections(BTreeMap<String, CrossSection>),
 }
 
-impl<A: AmplitudeState, C: CrossSectionState> ProcessCollection<A, C> {
+impl ProcessCollection {
     fn new_amplitude() -> Self {
         Self::Amplitudes(BTreeMap::new())
     }
@@ -407,14 +407,14 @@ impl<A: AmplitudeState, C: CrossSectionState> ProcessCollection<A, C> {
         Self::CrossSections(BTreeMap::new())
     }
 
-    pub(crate) fn add_amplitude(&mut self, amplitude: Amplitude<A>) {
+    pub(crate) fn add_amplitude(&mut self, amplitude: Amplitude) {
         match self {
             Self::Amplitudes(amplitudes) => amplitudes.insert(amplitude.name.clone(), amplitude),
             _ => panic!("Cannot add amplitude to a cross section collection"),
         };
     }
 
-    pub(crate) fn add_cross_section(&mut self, cross_section: CrossSection<C>) {
+    pub(crate) fn add_cross_section(&mut self, cross_section: CrossSection) {
         match self {
             Self::CrossSections(cross_sections) => {
                 cross_sections.insert(cross_section.name.clone(), cross_section);

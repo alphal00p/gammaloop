@@ -7,28 +7,35 @@ use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
 use eyre::Context;
 use itertools::Itertools;
+use linnet::half_edge::involution::{EdgeVec, Orientation};
 use log::debug;
 use momtrop::SampleGenerator;
 use spenso::algebra::complex::Complex;
 use symbolica::{
     atom::AtomCore,
+    evaluate::OptimizationSettings,
     numerical_integration::{Grid, Sample},
 };
 use typed_index_collections::TiVec;
 
 use crate::{
     cff::{
-        esurface::{EsurfaceCollection, EsurfaceID},
-        expression::AmplitudeOrientationID,
+        esurface::{get_existing_esurfaces, EsurfaceCollection, EsurfaceID},
+        expression::{AmplitudeOrientationID, OrientationData},
     },
     evaluation_result::EvaluationResult,
     integrands::HasIntegrand,
+    model::Model,
     momentum::Rotation,
     momentum_sample::{ExternalIndex, MomentumSample},
+    new_cs::{AmplitudeGraph, AmplitudeState, Processed},
     new_gammaloop_integrand::ParamBuilder,
     new_graph::{FeynmanGraph, Graph, LmbIndex, LoopMomentumBasis},
     signature::SignatureLike,
-    subtraction::{amplitude_counterterm::AmplitudeCountertermData, overlap::OverlapStructure},
+    subtraction::{
+        amplitude_counterterm::AmplitudeCountertermData,
+        overlap::{find_maximal_overlap, OverlapStructure},
+    },
     DependentMomentaConstructor, FloatLike, GammaLoopContext, GammaLoopContextContainer,
     Polarizations, RuntimeSettings, F,
 };
@@ -44,8 +51,8 @@ const HARD_CODED_M_R_SQ: F<f64> = F(1000.0);
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct AmplitudeGraphTerm {
-    pub integrand_evaluator_all_orientations: GenericEvaluator,
-    pub integrand_evaluators: TiVec<AmplitudeOrientationID, GenericEvaluator>,
+    pub orientation_parametric_integrand: GenericEvaluator,
+    pub orientations: TiVec<AmplitudeOrientationID, EdgeVec<Orientation>>,
     pub esurfaces: EsurfaceCollection,
     pub threshold_counterterm: AmplitudeCountertermData,
     pub multi_channeling_setup: LmbMultiChannelingSetup,
@@ -59,6 +66,127 @@ pub struct AmplitudeGraphTerm {
 /// Num(sigma_1,sigma_2,...)*(CFF_1 delta(edge(1),1) delta_(1,1,1,-1,1)+CFF_3 delta_(1,1,1,-1,1)+CFF_2 delta_(1,1,1,-1,1))
 
 impl AmplitudeGraphTerm {
+    pub fn from_amplitude_graph(
+        graph: &AmplitudeGraph,
+        settings: &RuntimeSettings,
+        model: &Model,
+    ) -> Self {
+        let estimated_scale = graph
+            .graph
+            .underlying
+            .expected_scale(settings.kinematics.e_cm);
+
+        let esurfaces = &graph
+            .derived_data
+            .cff_expression
+            .as_ref()
+            .unwrap()
+            .surfaces
+            .esurface_cache;
+
+        let esurface_data = graph.derived_data.esurface_data.as_ref().unwrap();
+        let externals = settings.kinematics.externals.get_dependent_externals(
+            DependentMomentaConstructor::Amplitude(&graph.graph.get_external_signature()),
+        );
+
+        let existing_esurfaces = get_existing_esurfaces(
+            esurfaces,
+            esurface_data,
+            &externals,
+            &graph.graph.loop_momentum_basis,
+            settings.general.debug,
+            settings.kinematics.e_cm,
+        );
+
+        let mut param_builder = graph.param_builder_core(model);
+        param_builder.add_external_four_mom(&externals);
+        param_builder.polarizations_values(
+            &graph.graph,
+            &externals,
+            settings.kinematics.externals.get_helicities(),
+        );
+        param_builder.model_parameters_value(model);
+        param_builder.mu_r_sq_value(Complex::new_zero());
+        param_builder.m_uv_value(Complex::new_zero());
+
+        // (momentum_sample);
+
+        let edge_masses = graph.graph.new_edgevec(|edge, _, _| edge.mass_value());
+
+        let overlap = find_maximal_overlap(
+            &graph.graph.loop_momentum_basis,
+            &existing_esurfaces,
+            esurfaces,
+            &edge_masses,
+            &externals,
+            &settings,
+        );
+
+        let mut threshold_counterterm = graph.derived_data.threshold_counterterm.clone();
+
+        threshold_counterterm.overlap = overlap;
+
+        threshold_counterterm
+            .param_builder
+            .add_external_four_mom(&externals);
+        threshold_counterterm.param_builder.polarizations_values(
+            &graph.graph,
+            &externals,
+            settings.kinematics.externals.get_helicities(),
+        );
+        threshold_counterterm
+            .param_builder
+            .model_parameters_value(model);
+        threshold_counterterm
+            .param_builder
+            .mu_r_sq_value(Complex::new_zero());
+        threshold_counterterm
+            .param_builder
+            .m_uv_value(Complex::new_zero());
+
+        AmplitudeGraphTerm {
+            orientations: graph
+                .derived_data
+                .cff_expression
+                .as_ref()
+                .unwrap()
+                .orientations
+                .iter()
+                .map(|a| a.data.orientation.clone())
+                .collect(),
+            orientation_parametric_integrand: GenericEvaluator::new_from_builder(
+                [graph.derived_data.all_mighty_integrand.clone()],
+                &param_builder,
+                OptimizationSettings::default(),
+            )
+            .unwrap(),
+            tropical_sampler: graph.derived_data.tropical_sampler.clone(),
+            graph: graph.graph.clone(),
+            multi_channeling_setup: graph
+                .derived_data
+                .multi_channeling_setup
+                .clone()
+                .expect("multi_channeling_setup should have been created"),
+            lmbs: graph
+                .derived_data
+                .lmbs
+                .clone()
+                .expect("lmbs should have been created"),
+            threshold_counterterm,
+            estimated_scale,
+            esurfaces: graph
+                .derived_data
+                .cff_expression
+                .as_ref()
+                .expect("cff_expression should have been created")
+                .surfaces
+                .esurface_cache
+                .clone(),
+
+            param_builder,
+        }
+    }
+
     fn evaluate_impl<T: FloatLike>(
         &mut self,
         momentum_sample: &MomentumSample<T>,
@@ -88,6 +216,8 @@ impl AmplitudeGraphTerm {
 
         let result = match momentum_sample.sample.orientation {
             Some(orientation_id) => {
+                let orientation = &self.orientations[AmplitudeOrientationID::from(orientation_id)];
+                self.param_builder.orientation_value(orientation);
                 let a = T::get_parameters(
                     &mut self.param_builder,
                     &self.graph,
@@ -95,26 +225,33 @@ impl AmplitudeGraphTerm {
                     hel,
                     None,
                 );
-                let orientation_id = AmplitudeOrientationID::from(orientation_id);
-                let orientation_evaluator = &self.integrand_evaluators[orientation_id];
-                <T as GenericEvaluatorFloat>::get_evaluator_single(orientation_evaluator)(&a)
+
+                let evaluator = &self.orientation_parametric_integrand;
+                <T as GenericEvaluatorFloat>::get_evaluator_single(evaluator)(&a)
             }
             None => {
-                let evaluator = &self.integrand_evaluator_all_orientations;
+                let evaluator = &self.orientation_parametric_integrand;
+                let mut res = Complex::new_re(F(T::from_f64(0.)));
 
-                // let replaced = self.param_builder.replace_non_emr(evaluator.expr.clone());
-                // println!("replaced: {:+>}", replaced.collect_num());
-                // evaluator.validate(&param_builder);
-                let a = T::get_parameters(
-                    &mut self.param_builder,
-                    &self.graph,
-                    momentum_sample,
-                    hel,
-                    None,
-                );
-                // self.param_builder.validate();
+                for e in &self.orientations {
+                    self.param_builder.orientation_value(e);
 
-                <T as GenericEvaluatorFloat>::get_evaluator_single(evaluator)(&a)
+                    // let replaced = self.param_builder.replace_non_emr(evaluator.expr.clone());
+                    // println!("replaced: {:+>}", replaced.collect_num());
+                    // evaluator.validate(&param_builder);
+                    let a = T::get_parameters(
+                        &mut self.param_builder,
+                        &self.graph,
+                        momentum_sample,
+                        hel,
+                        None,
+                    );
+
+                    // self.param_builder.validate();
+
+                    res += <T as GenericEvaluatorFloat>::get_evaluator_single(evaluator)(&a)
+                }
+                res
             }
         };
 
@@ -160,7 +297,7 @@ impl GraphTerm for AmplitudeGraphTerm {
     }
 
     fn get_num_orientations(&self) -> usize {
-        self.integrand_evaluators.len()
+        self.orientations.len()
     }
 
     fn get_tropical_sampler(&self) -> &SampleGenerator<3> {

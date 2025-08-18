@@ -588,7 +588,7 @@ impl Approximation {
             .repeat()
             .with(function!(vk_topo, W_.x_ * W_.y_));
 
-        println!("Integrand vakint: {}", integrand_vakint);
+        debug!("Integrand vakint: {:#}", integrand_vakint);
 
         let vakint_expr = VakintExpression::try_from(integrand_vakint.clone()).unwrap();
         println!("\nVakint expression:\n{:#}", vakint_expr);

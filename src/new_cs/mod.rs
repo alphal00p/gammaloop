@@ -18,8 +18,8 @@ use crate::{integrands::Integrand, model::Model, GenerationSettings, RuntimeSett
 
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
-pub struct ProcessList<A: AmplitudeState = (), C: CrossSectionState = ()> {
-    pub processes: Vec<Process<A, C>>,
+pub struct ProcessList {
+    pub processes: Vec<Process>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
