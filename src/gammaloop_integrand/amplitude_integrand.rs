@@ -4,11 +4,12 @@ use std::{
 };
 
 use bincode_trait_derive::{Decode, Encode};
+use brotli::enc::encode::set_parameter;
 use color_eyre::Result;
 
 use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeVec, Orientation};
-use log::debug;
+use log::{debug, warn};
 use momtrop::SampleGenerator;
 use spenso::algebra::complex::Complex;
 use symbolica::{
@@ -120,7 +121,20 @@ impl AmplitudeGraphTerm {
 
         let mut threshold_counterterm = graph.derived_data.threshold_counterterm.clone();
 
-        threshold_counterterm.overlap = overlap;
+        let thresholds_where_not_generated = threshold_counterterm.evaluators.is_empty();
+
+        if thresholds_where_not_generated
+            && !overlap.existing_esurfaces.is_empty()
+            && !settings.subtraction.disable_threshold_subtraction
+        {
+            warn!("Threshold counterterm was not generated, but regime is physical, disable threshold subtraction to avoid this warning");
+        } else if !overlap.existing_esurfaces.is_empty()
+            && !settings.subtraction.disable_threshold_subtraction
+        {
+            debug!("Subtraction disabled in physical region")
+        } else {
+            threshold_counterterm.overlap = overlap;
+        }
 
         AmplitudeGraphTerm {
             orientations: graph
@@ -226,20 +240,16 @@ impl AmplitudeGraphTerm {
         };
         debug!("evaluated integrand: {:16e}", result);
 
-        if !settings.subtraction.disable_threshold_subtraction {
-            let sum_of_cts = self.threshold_counterterm.evaluate(
-                momentum_sample,
-                &self.graph,
-                &self.esurfaces,
-                rotation,
-                settings,
-                &mut self.param_builder,
-            );
-            debug!("evaluated threshold counterterm: {:16e}", sum_of_cts);
-            result - sum_of_cts
-        } else {
-            result
-        }
+        let sum_of_cts = self.threshold_counterterm.evaluate(
+            momentum_sample,
+            &self.graph,
+            &self.esurfaces,
+            rotation,
+            settings,
+            &mut self.param_builder,
+        );
+        debug!("evaluated threshold counterterm: {:16e}", sum_of_cts);
+        result - sum_of_cts
     }
 }
 
