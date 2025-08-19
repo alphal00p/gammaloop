@@ -129,7 +129,7 @@ impl AmplitudeGraphTerm {
         {
             warn!("Threshold counterterm was not generated, but regime is physical, disable threshold subtraction to avoid this warning");
         } else if !overlap.existing_esurfaces.is_empty()
-            && !settings.subtraction.disable_threshold_subtraction
+            && settings.subtraction.disable_threshold_subtraction
         {
             debug!("Subtraction disabled in physical region")
         } else {
