@@ -832,7 +832,6 @@ impl AmplitudeGraph {
         let threshold_counterterm = AmplitudeCountertermData {
             overlap: OverlapStructure::new_empty(),
             evaluators: counterterm_evaluators,
-            param_builder: params,
         };
 
         self.derived_data.threshold_counterterm = threshold_counterterm;

@@ -122,24 +122,6 @@ impl AmplitudeGraphTerm {
 
         threshold_counterterm.overlap = overlap;
 
-        threshold_counterterm
-            .param_builder
-            .add_external_four_mom(&externals);
-        threshold_counterterm.param_builder.polarizations_values(
-            &graph.graph,
-            &externals,
-            settings.kinematics.externals.get_helicities(),
-        );
-        threshold_counterterm
-            .param_builder
-            .model_parameters_value(model);
-        threshold_counterterm
-            .param_builder
-            .mu_r_sq_value(Complex::new_zero());
-        threshold_counterterm
-            .param_builder
-            .m_uv_value(Complex::new_zero());
-
         AmplitudeGraphTerm {
             orientations: graph
                 .derived_data
@@ -244,14 +226,14 @@ impl AmplitudeGraphTerm {
         };
         debug!("evaluated integrand: {:16e}", result);
 
-        if !settings.general.disable_threshold_subtraction {
+        if !settings.subtraction.disable_threshold_subtraction {
             let sum_of_cts = self.threshold_counterterm.evaluate(
                 momentum_sample,
                 &self.graph,
                 &self.esurfaces,
                 rotation,
                 settings,
-                // param_builder,
+                &mut self.param_builder,
             );
             debug!("evaluated threshold counterterm: {:16e}", sum_of_cts);
             result - sum_of_cts

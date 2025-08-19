@@ -28,7 +28,6 @@ const TOLERANCE: f64 = 1.0;
 pub struct AmplitudeCountertermData {
     pub overlap: OverlapStructure,
     pub evaluators: TiVec<EsurfaceID, GenericEvaluator>,
-    pub param_builder: ParamBuilder<f64>,
 }
 
 impl AmplitudeCountertermData {
@@ -36,7 +35,6 @@ impl AmplitudeCountertermData {
         Self {
             overlap: OverlapStructure::new_empty(),
             evaluators: TiVec::new(),
-            param_builder: ParamBuilder::new(),
         }
     }
 
@@ -47,6 +45,7 @@ impl AmplitudeCountertermData {
         esurfaces: &EsurfaceCollection,
         rotation: &Rotation,
         settings: &RuntimeSettings,
+        param_builder: &mut ParamBuilder<f64>,
     ) -> Complex<F<T>> {
         if settings.general.debug > 4 {
             println!("start evaluate threshold counterterm");
@@ -80,7 +79,7 @@ impl AmplitudeCountertermData {
                     .new_esurface_builder(*existing_esurface_id)
                     .solve_rstar()
                     .rstar_samples()
-                    .evaluate(&mut self.param_builder);
+                    .evaluate(param_builder);
 
                 result += single_result;
             }
