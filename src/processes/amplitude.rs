@@ -31,7 +31,10 @@ use crate::{
     momentum_sample::ExternalIndex,
     numerator::symbolica_ext::AtomCoreExt,
     signature::SignatureLike,
-    subtraction::{amplitude_counterterm::AmplitudeCountertermData, overlap::OverlapStructure},
+    subtraction::{
+        amplitude_counterterm::{AmplitudeCountertermAtom, AmplitudeCountertermData},
+        overlap::OverlapStructure,
+    },
     utils::{GS, TENSORLIB},
     uv::{approx::do_replacement_rules, UltravioletGraph},
     GammaLoopContext, GammaLoopContextContainer,
@@ -261,7 +264,7 @@ impl AmplitudeGraph {
         self.derived_data.multi_channeling_setup = Some(channels)
     }
 
-    fn ct_params(&self, model: &Model) -> ParamBuilder<f64> {
+    pub fn ct_params(&self, model: &Model) -> ParamBuilder<f64> {
         let mut param_builder = self.param_builder_core(model);
         param_builder.uv_damp_atom(vec![
             Atom::var(GS.uv_damp_plus),
@@ -363,10 +366,12 @@ impl AmplitudeGraph {
         self.derived_data.all_mighty_integrand += self.build_original_parametric_integrand();
     }
 
-    fn build_threshold_counterterm_parametric_integrand(&self) -> TiVec<EsurfaceID, Atom> {
+    fn build_threshold_counterterm_parametric_integrand(
+        &self,
+    ) -> TiVec<EsurfaceID, AmplitudeCountertermAtom> {
         let global_num = self.graph.global_network();
 
-        let mut counterterms: TiVec<EsurfaceID, Atom> = TiVec::new();
+        let mut counterterms: TiVec<EsurfaceID, AmplitudeCountertermAtom> = TiVec::new();
         let canonize_esurface = self
             .graph
             .underlying
@@ -384,7 +389,12 @@ impl AmplitudeGraph {
             if esurface.external_shift.is_empty() {
                 // these will never satsify the threshold condition
                 // so we can skip them
-                counterterms.push(Atom::new());
+                counterterms.push(AmplitudeCountertermAtom {
+                    parametric_local: Atom::new(),
+                    parametric_integrated: Atom::new(),
+                    concrete_local: None,
+                    concrete_integrated: None,
+                });
                 continue;
             }
 
@@ -513,29 +523,41 @@ impl AmplitudeGraph {
 
             let scalar: Atom = product.result_scalar().unwrap().into();
 
-            let mut counterterm = scalar.unwrap_function(GS.color_wrap).simplify_color();
+            let counterterm = scalar.unwrap_function(GS.color_wrap).simplify_color();
 
             let loop_3 = self.graph.underlying.get_loop_number() as i64 * 3;
 
             let grad_eta = Atom::var(GS.deta);
             let factors_of_pi = (Atom::num(2) * Atom::var(GS.pi)).npow(loop_3);
+            let i = Atom::i();
 
             let radius = Atom::var(GS.radius);
             let radius_star = Atom::var(GS.radius_star);
             let uv_damp_plus = Atom::var(GS.uv_damp_plus);
             let uv_damp_minus = Atom::var(GS.uv_damp_minus);
+            let hfunction = Atom::var(GS.hfunction);
 
             let delta_r_plus = &radius - &radius_star;
             let delta_r_minus = -&radius - &radius_star;
 
             let jacobian_ratio = (&radius_star / &radius).npow(loop_3 - 1);
 
-            let prefactor = jacobian_ratio / factors_of_pi / grad_eta
+            let local_prefactor = &jacobian_ratio / &factors_of_pi / &grad_eta
                 * (uv_damp_plus / delta_r_plus + uv_damp_minus / delta_r_minus);
 
-            counterterm = prefactor * &counterterm;
+            let integrated_prefactor =
+                i * Atom::var(GS.pi) * &jacobian_ratio * hfunction / factors_of_pi / grad_eta;
+
+            let local_counterterm = local_prefactor * &counterterm;
+            let integrated_counterterm = integrated_prefactor * &counterterm;
+
             // println!("CounterTerm{}", counterterm);
-            counterterms.push(counterterm);
+            counterterms.push(AmplitudeCountertermAtom {
+                parametric_local: local_counterterm,
+                parametric_integrated: integrated_counterterm,
+                concrete_local: None,
+                concrete_integrated: None,
+            });
         }
 
         counterterms
@@ -597,6 +619,11 @@ impl AmplitudeGraph {
     }
 
     fn build_counterterm_evaluators(&mut self, model: &Model) {
+        debug!(
+            "building threshold counteterm evaluator for graph: {}",
+            self.graph.name
+        );
+
         let pols = self.graph.global_network();
 
         // println!("Pols:{}", pols.dot_pretty());
@@ -615,6 +642,18 @@ impl AmplitudeGraph {
             .iter()
             .map(|o| o.data.clone())
             .collect::<TiVec<AmplitudeOrientationID, _>>();
+
+        debug!(
+            "number of esurfaces for graph {}: {}",
+            self.graph.name,
+            self.derived_data
+                .cff_expression
+                .as_ref()
+                .unwrap()
+                .surfaces
+                .esurface_cache
+                .len()
+        );
 
         for (esurface_id, esurface) in self
             .derived_data

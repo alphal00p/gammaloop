@@ -95,7 +95,7 @@ impl AmplitudeGraphTerm {
             settings.kinematics.e_cm,
         );
 
-        let mut param_builder = graph.param_builder_core(model);
+        let mut param_builder = graph.ct_params(model);
         param_builder.add_external_four_mom(&externals);
         param_builder.polarizations_values(
             &graph.graph,

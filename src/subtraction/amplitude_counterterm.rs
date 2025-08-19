@@ -1,7 +1,10 @@
 use bincode_trait_derive::{Decode, Encode};
 use linnet::half_edge::involution::EdgeVec;
 use spenso::algebra::complex::Complex;
-use symbolica::domains::float::{NumericalFloatLike, Real};
+use symbolica::{
+    atom::Atom,
+    domains::float::{NumericalFloatLike, Real},
+};
 use typed_index_collections::TiVec;
 
 use crate::{
@@ -25,9 +28,21 @@ const TOLERANCE: f64 = 1.0;
 
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
-pub struct AmplitudeCountertermData {
+pub(crate) struct AmplitudeCountertermData {
     pub overlap: OverlapStructure,
     pub evaluators: TiVec<EsurfaceID, GenericEvaluator>,
+}
+
+pub(crate) struct AmplitudeCountertermAtom {
+    pub parametric_local: Atom,
+    pub parametric_integrated: Atom,
+    pub concrete_local: Option<Atom>,
+    pub concrete_integrated: Option<Atom>,
+}
+
+pub(crate) struct AmplitudeCountertermEvaluator {
+    pub parametric: GenericEvaluator,
+    pub concrete: GenericEvaluator,
 }
 
 impl AmplitudeCountertermData {
