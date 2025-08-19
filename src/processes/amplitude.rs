@@ -185,7 +185,7 @@ impl AmplitudeGraph {
                 lmbs: None,
                 tropical_sampler: None,
                 multi_channeling_setup: None,
-                threshold_counterterm: AmplitudeCountertermData::new_empty(),
+                threshold_counterterms: TiVec::new(),
                 esurface_data: None,
             },
         }
@@ -236,7 +236,8 @@ impl AmplitudeGraph {
         self.build_esurface_derived_data()?;
 
         if settings.enable_thresholds {
-            self.build_counterterm_evaluators(model);
+            self.derived_data.threshold_counterterms =
+                self.build_threshold_counterterm_parametric_integrand();
         }
 
         Ok(())
@@ -859,21 +860,21 @@ impl AmplitudeGraph {
             counterterms.push([local_counterterm, integrated_counterterm]);
         }
 
-        let params = self.ct_params(model);
-        let counterterm_evaluators = counterterms
-            .into_iter()
-            .map(|ct| {
-                GenericEvaluator::new_from_builder(ct, &params, OptimizationSettings::default())
-                    .unwrap()
-            })
-            .collect();
+        //let params = self.ct_params(model);
+        // let counterterm_evaluators = counterterms
+        //     .into_iter()
+        //     .map(|ct| {
+        //         GenericEvaluator::new_from_builder(ct, &params, OptimizationSettings::default())
+        //             .unwrap()
+        //     })
+        //     .collect();
 
-        let threshold_counterterm = AmplitudeCountertermData {
-            overlap: OverlapStructure::new_empty(),
-            evaluators: counterterm_evaluators,
-        };
+        // let threshold_counterterm = AmplitudeCountertermData {
+        //     overlap: OverlapStructure::new_empty(),
+        //     evaluators: counterterm_evaluators,
+        //   };
 
-        self.derived_data.threshold_counterterm = threshold_counterterm;
+        // self.derived_data.threshold_counterterm = threshold_counterterm;
     }
 
     pub(crate) fn build_all_orientation_integrand_evaluator(
@@ -1039,7 +1040,8 @@ impl AmplitudeGraph {
 #[trait_decode(trait = GammaLoopContext)]
 pub struct AmplitudeDerivedData {
     pub all_mighty_integrand: Atom,
-    pub threshold_counterterm: AmplitudeCountertermData,
+    pub threshold_counterterms: TiVec<EsurfaceID, AmplitudeCountertermAtom>,
+
     pub multi_channeling_setup: Option<LmbMultiChannelingSetup>,
     pub lmbs: Option<TiVec<LmbIndex, LoopMomentumBasis>>,
     pub tropical_sampler: Option<SampleGenerator<3>>,

@@ -227,6 +227,7 @@ class GammaLoopConfiguration(object):
                     'upcast_on_failure': False
                 },
                 'subtraction': {
+                    'disable_threshold_subtraction': False,
                     'local_ct_settings': {
                         'uv_localisation': {
                             'sliver_width': 10.0,

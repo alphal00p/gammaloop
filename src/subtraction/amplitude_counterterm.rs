@@ -1,14 +1,19 @@
 use bincode_trait_derive::{Decode, Encode};
-use linnet::half_edge::involution::EdgeVec;
+use itertools::Itertools;
+use linnet::half_edge::involution::{EdgeVec, Orientation};
 use spenso::algebra::complex::Complex;
 use symbolica::{
     atom::Atom,
     domains::float::{NumericalFloatLike, Real},
+    evaluate::OptimizationSettings,
 };
 use typed_index_collections::TiVec;
 
 use crate::{
-    cff::esurface::{Esurface, EsurfaceCollection, EsurfaceID, ExistingEsurfaceId},
+    cff::{
+        esurface::{Esurface, EsurfaceCollection, EsurfaceID, ExistingEsurfaceId},
+        expression::AmplitudeOrientationID,
+    },
     gammaloop_integrand::{GenericEvaluator, GenericEvaluatorFloat, ParamBuilder, ThresholdParams},
     graph::{FeynmanGraph, Graph, LoopMomentumBasis},
     momentum::Rotation,
@@ -30,9 +35,11 @@ const TOLERANCE: f64 = 1.0;
 #[trait_decode(trait = GammaLoopContext)]
 pub(crate) struct AmplitudeCountertermData {
     pub overlap: OverlapStructure,
-    pub evaluators: TiVec<EsurfaceID, GenericEvaluator>,
+    pub evaluators: TiVec<EsurfaceID, AmplitudeCountertermEvaluator>,
 }
 
+#[derive(Clone, Encode, Decode)]
+#[trait_decode(trait = GammaLoopContext)]
 pub(crate) struct AmplitudeCountertermAtom {
     pub parametric_local: Atom,
     pub parametric_integrated: Atom,
@@ -40,9 +47,40 @@ pub(crate) struct AmplitudeCountertermAtom {
     pub concrete_integrated: Option<Atom>,
 }
 
+#[derive(Clone, Copy)]
+pub enum SingleOrAllOrientations<'a> {
+    Single(&'a EdgeVec<Orientation>),
+    All(&'a TiVec<AmplitudeOrientationID, EdgeVec<Orientation>>),
+}
+
+impl AmplitudeCountertermAtom {
+    pub(crate) fn to_evaluator(
+        &self,
+        param_builder: &ParamBuilder,
+        optimiation_settings: OptimizationSettings,
+    ) -> AmplitudeCountertermEvaluator {
+        let parametric = GenericEvaluator::new_from_builder(
+            [
+                self.parametric_local.clone(),
+                self.parametric_integrated.clone(),
+            ],
+            param_builder,
+            optimiation_settings,
+        )
+        .unwrap();
+
+        AmplitudeCountertermEvaluator {
+            parametric,
+            concrete: None,
+        }
+    }
+}
+
+#[derive(Clone, Encode, Decode)]
+#[trait_decode(trait = GammaLoopContext)]
 pub(crate) struct AmplitudeCountertermEvaluator {
     pub parametric: GenericEvaluator,
-    pub concrete: GenericEvaluator,
+    pub concrete: Option<GenericEvaluator>,
 }
 
 impl AmplitudeCountertermData {
@@ -61,6 +99,7 @@ impl AmplitudeCountertermData {
         rotation: &Rotation,
         settings: &RuntimeSettings,
         param_builder: &mut ParamBuilder<f64>,
+        orientation: SingleOrAllOrientations,
     ) -> Complex<F<T>> {
         if settings.general.debug > 4 {
             println!("start evaluate threshold counterterm");
@@ -94,7 +133,7 @@ impl AmplitudeCountertermData {
                     .new_esurface_builder(*existing_esurface_id)
                     .solve_rstar()
                     .rstar_samples()
-                    .evaluate(param_builder);
+                    .evaluate(param_builder, orientation);
 
                 result += single_result;
             }
@@ -106,7 +145,7 @@ impl AmplitudeCountertermData {
 
 struct CounterTermBuilder<'a, T: FloatLike> {
     overlap_structure: &'a OverlapStructure,
-    evaluators: &'a TiVec<EsurfaceID, GenericEvaluator>,
+    evaluators: &'a TiVec<EsurfaceID, AmplitudeCountertermEvaluator>,
     real_mass_vector: EdgeVec<F<T>>,
     e_cm: F<T>,
     graph: &'a Graph,
@@ -124,7 +163,7 @@ impl<'a, T: FloatLike> CounterTermBuilder<'a, T> {
         esurface_collection: &'a EsurfaceCollection,
         sample: &'a MomentumSample<T>,
         overlap_structure: &'a OverlapStructure,
-        evaluators: &'a TiVec<EsurfaceID, GenericEvaluator>,
+        evaluators: &'a TiVec<EsurfaceID, AmplitudeCountertermEvaluator>,
     ) -> Self {
         let real_mass_vector = graph.underlying.get_real_mass_vector();
         let e_cm = F::from_ff64(settings.kinematics.e_cm);
@@ -315,7 +354,11 @@ struct RstarSample<'a, T: FloatLike> {
 }
 
 impl<'a, T: FloatLike> RstarSample<'a, T> {
-    fn evaluate(self, param_builder: &mut ParamBuilder<f64>) -> Complex<F<T>> {
+    fn evaluate(
+        self,
+        param_builder: &mut ParamBuilder<f64>,
+        orientation: SingleOrAllOrientations<'a>,
+    ) -> Complex<F<T>> {
         let ct_builder = self
             .rstar_solution
             .esurface_ct_builder
@@ -370,19 +413,42 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
             h_function,
         };
 
-        let params = T::get_parameters(
-            param_builder,
-            ct_builder.graph,
-            &self.rstar_sample,
-            ct_builder.settings.kinematics.externals.get_helicities(),
-            Some(&threshold_params),
-        );
+        let evaluator = &ct_builder.evaluators[esurface_id].parametric;
+        let (local_ct, integrated_ct) = match orientation {
+            SingleOrAllOrientations::Single(orientation) => {
+                param_builder.orientation_value(orientation);
 
-        let evaluator = &ct_builder.evaluators[esurface_id];
-        let result_no_prefactor = <T as GenericEvaluatorFloat>::get_evaluator(evaluator)(&params);
+                let params = T::get_parameters(
+                    param_builder,
+                    ct_builder.graph,
+                    &self.rstar_sample,
+                    ct_builder.settings.kinematics.externals.get_helicities(),
+                    Some(&threshold_params),
+                );
+                let result = <T as GenericEvaluatorFloat>::get_evaluator(evaluator)(&params);
+                result.into_iter().collect_tuple().unwrap()
+            }
+            SingleOrAllOrientations::All(orientation) => {
+                let mut local_ct = Complex::new_re(F::from_f64(0.0));
+                let mut integrated_ct = Complex::new_re(F::from_f64(0.0));
 
-        let local_ct = &result_no_prefactor[0];
-        let integrated_ct = &result_no_prefactor[1];
+                for orientation in orientation.iter() {
+                    param_builder.orientation_value(orientation);
+
+                    let params = T::get_parameters(
+                        param_builder,
+                        ct_builder.graph,
+                        &self.rstar_sample,
+                        ct_builder.settings.kinematics.externals.get_helicities(),
+                        Some(&threshold_params),
+                    );
+                    let result = <T as GenericEvaluatorFloat>::get_evaluator(evaluator)(&params);
+                    local_ct += &result[0];
+                    integrated_ct += &result[1];
+                }
+                (local_ct, integrated_ct)
+            }
+        };
 
         if ct_builder.settings.general.debug > 4 {
             println!(

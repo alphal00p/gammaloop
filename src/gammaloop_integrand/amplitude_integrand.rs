@@ -32,7 +32,10 @@ use crate::{
     momentum_sample::{ExternalIndex, MomentumSample},
     processes::AmplitudeGraph,
     signature::SignatureLike,
-    subtraction::{amplitude_counterterm::AmplitudeCountertermData, overlap::find_maximal_overlap},
+    subtraction::{
+        amplitude_counterterm::{AmplitudeCountertermData, SingleOrAllOrientations},
+        overlap::find_maximal_overlap,
+    },
     DependentMomentaConstructor, FloatLike, GammaLoopContext, GammaLoopContextContainer,
     RuntimeSettings, F,
 };
@@ -119,9 +122,9 @@ impl AmplitudeGraphTerm {
             &settings,
         );
 
-        let mut threshold_counterterm = graph.derived_data.threshold_counterterm.clone();
+        let mut threshold_counterterm = AmplitudeCountertermData::new_empty();
 
-        let thresholds_where_not_generated = threshold_counterterm.evaluators.is_empty();
+        let thresholds_where_not_generated = graph.derived_data.threshold_counterterms.is_empty();
 
         if thresholds_where_not_generated
             && !overlap.existing_esurfaces.is_empty()
@@ -134,6 +137,12 @@ impl AmplitudeGraphTerm {
             debug!("Subtraction disabled in physical region")
         } else {
             threshold_counterterm.overlap = overlap;
+            threshold_counterterm.evaluators = graph
+                .derived_data
+                .threshold_counterterms
+                .iter()
+                .map(|ct| ct.to_evaluator(&mut param_builder, OptimizationSettings::default()))
+                .collect();
         }
 
         AmplitudeGraphTerm {
@@ -240,6 +249,13 @@ impl AmplitudeGraphTerm {
         };
         debug!("evaluated integrand: {:16e}", result);
 
+        let orientation = match momentum_sample.sample.orientation {
+            Some(orientation_id) => SingleOrAllOrientations::Single(
+                &self.orientations[AmplitudeOrientationID::from(orientation_id)],
+            ),
+            None => SingleOrAllOrientations::All(&self.orientations),
+        };
+
         let sum_of_cts = self.threshold_counterterm.evaluate(
             momentum_sample,
             &self.graph,
@@ -247,6 +263,7 @@ impl AmplitudeGraphTerm {
             rotation,
             settings,
             &mut self.param_builder,
+            orientation,
         );
         debug!("evaluated threshold counterterm: {:16e}", sum_of_cts);
         result - sum_of_cts
