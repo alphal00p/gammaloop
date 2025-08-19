@@ -3,7 +3,7 @@ use linnet::parser::GlobalData;
 use spenso::network::library::TensorLibraryData;
 use symbolica::atom::Atom;
 
-use crate::new_graph::GroupId;
+use crate::graph::GroupId;
 
 use super::{
     parse::{StripParse, ToQuoted},
