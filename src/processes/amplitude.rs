@@ -43,7 +43,11 @@ use eyre::{eyre, Context};
 use itertools::Itertools;
 use linnet::half_edge::involution::{HedgePair, Orientation};
 use log::debug;
-use symbolica::{atom::Atom, domains::rational::Rational, evaluate::OptimizationSettings};
+use symbolica::{
+    atom::{Atom, FunctionBuilder},
+    domains::rational::Rational,
+    evaluate::OptimizationSettings,
+};
 use typed_index_collections::TiVec;
 
 use crate::{
@@ -52,7 +56,8 @@ use crate::{
     graph::{FeynmanGraph, Graph},
     model::Model,
     momentum::{Rotation, RotationMethod},
-    GenerationSettings, RuntimeSettings,
+    settings::global::GenerationSettings,
+    settings::RuntimeSettings,
 };
 
 #[derive(Clone, Encode, Decode)]
@@ -66,6 +71,9 @@ pub struct Amplitude {
 }
 
 impl Amplitude {
+    pub(crate) fn warm_up(&mut self) {
+        self.integrand.as_mut().map(|a| a.warm_up());
+    }
     pub(crate) fn load(path: impl AsRef<Path>, context: GammaLoopContextContainer) -> Result<Self> {
         let binary = fs::read(path.as_ref().join("amp.bin"))?;
         let (mut amp, _): (Self, _) =
@@ -116,11 +124,11 @@ impl Amplitude {
         settings: RuntimeSettings,
         model: &Model,
     ) -> Result<()> {
-        let terms = self
+        let terms: Result<Vec<_>> = self
             .graphs
             .iter()
             .map(|graph| graph.generate_term_for_graph(&settings, model))
-            .collect_vec();
+            .collect();
 
         let rotations: Vec<Rotation> = Some(Rotation::new(RotationMethod::Identity))
             .into_iter()
@@ -146,7 +154,7 @@ impl Amplitude {
                 name: self.name.clone(),
                 rotations,
                 // polarizations,
-                graph_terms: terms,
+                graph_terms: terms?,
                 external_signature: self.external_signature.clone(),
                 // param_builder: self.
             },
@@ -225,7 +233,7 @@ impl AmplitudeGraph {
         debug!("Generating Cff");
         self.generate_cff()?;
         debug!("Building Parametric Integrand");
-        self.build_parametric_integrand();
+        self.build_parametric_integrand(settings);
         debug!("Building Tropical Sampler");
         self.build_tropical_sampler(settings)?;
         debug!("Building Loop Momentum Bases");
@@ -237,7 +245,7 @@ impl AmplitudeGraph {
 
         if settings.enable_thresholds {
             self.derived_data.threshold_counterterms =
-                self.build_threshold_counterterm_parametric_integrand();
+                self.build_threshold_counterterm_parametric_integrand(settings);
         }
 
         Ok(())
@@ -327,7 +335,7 @@ impl AmplitudeGraph {
                     vec![],
                     self.graph.explicit_ose_atom(e),
                 )
-                .unwrap()
+                .unwrap();
         }
         parambuilder.add_constant(Atom::PI.into(), pi_rational.into());
         // fn_map
@@ -363,12 +371,14 @@ impl AmplitudeGraph {
         .unwrap()
     }
 
-    pub(crate) fn build_parametric_integrand(&mut self) {
-        self.derived_data.all_mighty_integrand += self.build_original_parametric_integrand();
+    pub(crate) fn build_parametric_integrand(&mut self, settings: &GenerationSettings) {
+        self.derived_data.all_mighty_integrand +=
+            self.build_original_parametric_integrand(settings);
     }
 
     fn build_threshold_counterterm_parametric_integrand(
         &self,
+        settings: &GenerationSettings,
     ) -> TiVec<EsurfaceID, AmplitudeCountertermAtom> {
         let global_num = self.graph.global_network();
 
@@ -473,6 +483,7 @@ impl AmplitudeGraph {
                 get_orientations_from_subgraph(&self.graph.underlying, &circled, &reverse_dangling)
                     .into_iter()
                     .map(|cff_graph| cff_graph.global_orientation)
+                    .filter(|a| settings.orientation_pattern.filter(a))
                     .collect::<TiVec<SubgraphOrientationID, _>>();
 
             let complement_orientations = get_orientations_from_subgraph(
@@ -482,6 +493,7 @@ impl AmplitudeGraph {
             )
             .into_iter()
             .map(|cff_graph| cff_graph.global_orientation)
+            .filter(|a| settings.orientation_pattern.filter(a))
             .collect::<TiVec<SubgraphOrientationID, _>>();
 
             let vakint = self.new_vakint();
@@ -564,7 +576,7 @@ impl AmplitudeGraph {
         counterterms
     }
 
-    fn build_original_parametric_integrand(&self) -> Atom {
+    fn build_original_parametric_integrand(&self, settings: &GenerationSettings) -> Atom {
         let wood = self.graph.wood(&self.graph.underlying.no_dummy());
         let mut forest = wood.unfold(&self.graph, &self.graph.loop_momentum_basis);
 
@@ -581,6 +593,7 @@ impl AmplitudeGraph {
             .orientations
             .iter()
             .map(|a| a.data.clone())
+            .filter(|a| settings.orientation_pattern.filter(a))
             .collect();
 
         let vakint = self.new_vakint();
@@ -877,39 +890,6 @@ impl AmplitudeGraph {
         // self.derived_data.threshold_counterterm = threshold_counterterm;
     }
 
-    pub(crate) fn build_all_orientation_integrand_evaluator(
-        &self,
-        param_builder: &ParamBuilder,
-    ) -> GenericEvaluator {
-        debug!("Building all orientation integrand_evaluator");
-        GenericEvaluator::new_from_builder(
-            [self
-                .orientation_atoms()
-                .into_iter()
-                .fold(Atom::Zero, |acc, a| acc + a)],
-            &param_builder,
-            OptimizationSettings::default(),
-        )
-        .unwrap()
-    }
-
-    pub(crate) fn build_orientations_evaluators(
-        &self,
-        param_builder: &ParamBuilder,
-    ) -> TiVec<AmplitudeOrientationID, GenericEvaluator> {
-        self.orientation_atoms()
-            .into_iter()
-            .map(|a| {
-                GenericEvaluator::new_from_builder(
-                    [a],
-                    &param_builder,
-                    OptimizationSettings::default(),
-                )
-                .unwrap()
-            })
-            .collect()
-    }
-
     fn orientation_atoms(&self) -> TiVec<AmplitudeOrientationID, Atom> {
         self.derived_data
             .cff_expression
@@ -1031,7 +1011,7 @@ impl AmplitudeGraph {
         &self,
         settings: &RuntimeSettings,
         model: &Model,
-    ) -> AmplitudeGraphTerm {
+    ) -> Result<AmplitudeGraphTerm> {
         AmplitudeGraphTerm::from_amplitude_graph(self, settings, model)
     }
 }
@@ -1128,7 +1108,17 @@ impl Amplitude {
 #[cfg(test)]
 pub mod test {
 
-    use crate::{dot, graph::parse::IntoGraph, processes::AmplitudeGraph};
+    use linnet::half_edge::involution::{EdgeVec, Orientation};
+    use symbolica::evaluate::OptimizationSettings;
+
+    use crate::{
+        dot,
+        gammaloop_integrand::GenericEvaluator,
+        graph::parse::IntoGraph,
+        processes::AmplitudeGraph,
+        settings::global::GenerationSettings,
+        utils::{test_utils::load_generic_model, GS},
+    };
     #[test]
     fn amplitude_tree() {
         let mut graph: AmplitudeGraph = dot!(digraph qqx_aaa_tree_1 {
@@ -1144,8 +1134,20 @@ pub mod test {
     })
     .unwrap();
 
+        let model = load_generic_model("sm");
+
         graph.generate_cff();
-        let a = graph.build_original_parametric_integrand();
-        println!(" {}", a);
+        // graph.build_parametric_integrand(&GenerationSettings::default());
+
+        let mut param_builder = graph.param_builder_core(&model);
+        println!("{param_builder}");
+
+        GenericEvaluator::new_from_builder(
+            [GS.orientation_delta(&EdgeVec::from_iter(vec![Orientation::Default; 7]))],
+            &param_builder,
+            OptimizationSettings::default(),
+        )
+        .unwrap();
+        // println!(" {}", a);
     }
 }

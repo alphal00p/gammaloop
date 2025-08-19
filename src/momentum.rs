@@ -49,8 +49,9 @@ use idenso::representations::Bispinor;
 use symbolica::{parse, symbol};
 
 use crate::{
+    settings::runtime::RotationSetting,
     utils::{ApproxEq, FloatLike, RefDefault, F},
-    GammaLoopContext, RotationSetting,
+    GammaLoopContext,
 };
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize, Encode, Decode)]

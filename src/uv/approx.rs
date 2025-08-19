@@ -182,7 +182,7 @@ impl CFFapprox {
         // println!("{:?}", contract_edges);
 
         for (oid, o) in orientations.iter_enumerated() {
-            cff_sum += o.orientation_delta()
+            cff_sum += o.orientation_thetas()
                 * generate_uv_cff(
                     graph,
                     amplitude_subgraph,

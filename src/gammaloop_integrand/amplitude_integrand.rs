@@ -4,9 +4,14 @@ use std::{
 };
 
 use bincode_trait_derive::{Decode, Encode};
+
 use brotli::enc::encode::set_parameter;
+
+use bitvec::vec::BitVec;
+
 use color_eyre::Result;
 
+use eyre::Context;
 use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeVec, Orientation};
 use log::{debug, warn};
@@ -31,13 +36,14 @@ use crate::{
     momentum::Rotation,
     momentum_sample::{ExternalIndex, MomentumSample},
     processes::AmplitudeGraph,
+    settings::RuntimeSettings,
     signature::SignatureLike,
     subtraction::{
         amplitude_counterterm::{AmplitudeCountertermData, SingleOrAllOrientations},
         overlap::find_maximal_overlap,
     },
-    DependentMomentaConstructor, FloatLike, GammaLoopContext, GammaLoopContextContainer,
-    RuntimeSettings, F,
+    utils::bitvec_ext::BinVec,
+    DependentMomentaConstructor, FloatLike, GammaLoopContext, GammaLoopContextContainer, F,
 };
 
 use super::{
@@ -53,6 +59,7 @@ const HARD_CODED_M_R_SQ: F<f64> = F(1000.0);
 pub struct AmplitudeGraphTerm {
     pub orientation_parametric_integrand: GenericEvaluator,
     pub orientations: TiVec<AmplitudeOrientationID, EdgeVec<Orientation>>,
+    pub orientation_filter: BinVec,
     pub esurfaces: EsurfaceCollection,
     pub threshold_counterterm: AmplitudeCountertermData,
     pub multi_channeling_setup: LmbMultiChannelingSetup,
@@ -70,7 +77,7 @@ impl AmplitudeGraphTerm {
         graph: &AmplitudeGraph,
         settings: &RuntimeSettings,
         model: &Model,
-    ) -> Self {
+    ) -> Result<Self> {
         let estimated_scale = graph
             .graph
             .underlying
@@ -85,9 +92,16 @@ impl AmplitudeGraphTerm {
             .esurface_cache;
 
         let esurface_data = graph.derived_data.esurface_data.as_ref().unwrap();
-        let externals = settings.kinematics.externals.get_dependent_externals(
-            DependentMomentaConstructor::Amplitude(&graph.graph.get_external_signature()),
-        );
+        let externals = settings
+            .kinematics
+            .externals
+            .get_dependent_externals(
+                DependentMomentaConstructor::Amplitude(&graph.graph.get_external_signature()),
+                &graph.graph.name,
+            )
+            .with_context(|| {
+                "when getting externals to build amplitude graph term for integrand"
+            })?;
 
         let existing_esurfaces = get_existing_esurfaces(
             esurfaces,
@@ -145,7 +159,7 @@ impl AmplitudeGraphTerm {
                 .collect();
         }
 
-        AmplitudeGraphTerm {
+        Ok(AmplitudeGraphTerm {
             orientations: graph
                 .derived_data
                 .cff_expression
@@ -155,6 +169,16 @@ impl AmplitudeGraphTerm {
                 .iter()
                 .map(|a| a.data.orientation.clone())
                 .collect(),
+            orientation_filter: BinVec(BitVec::repeat(
+                true,
+                graph
+                    .derived_data
+                    .cff_expression
+                    .as_ref()
+                    .unwrap()
+                    .orientations
+                    .len(),
+            )),
             orientation_parametric_integrand: GenericEvaluator::new_from_builder(
                 [graph.derived_data.all_mighty_integrand.clone()],
                 &param_builder,
@@ -185,7 +209,7 @@ impl AmplitudeGraphTerm {
                 .clone(),
 
             param_builder,
-        }
+        })
     }
 
     fn evaluate_impl<T: FloatLike>(
@@ -271,6 +295,20 @@ impl AmplitudeGraphTerm {
 }
 
 impl GraphTerm for AmplitudeGraphTerm {
+    fn warm_up(&mut self, settings: &RuntimeSettings) {
+        let a: BitVec = self
+            .orientations
+            .iter()
+            .map(|a| settings.general.orientation_pat.filter(a))
+            .collect();
+
+        self.orientation_filter = BinVec(a);
+    }
+
+    fn name(&self) -> String {
+        self.graph.name.clone()
+    }
+
     fn get_graph(&self) -> &Graph {
         &self.graph
     }
@@ -351,6 +389,13 @@ impl AmplitudeIntegrand {
 
 impl GammaloopIntegrand for AmplitudeIntegrand {
     type G = AmplitudeGraphTerm;
+
+    fn warm_up(&mut self) {
+        self.data
+            .graph_terms
+            .iter_mut()
+            .for_each(|a| a.warm_up(&self.settings));
+    }
 
     fn get_rotations(&self) -> impl Iterator<Item = &Rotation> {
         self.data.rotations.iter()

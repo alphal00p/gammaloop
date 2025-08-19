@@ -10,8 +10,8 @@ use color_eyre::{Help, Result};
 use log::debug;
 
 use crate::{
-    gammaloop_integrand::NewIntegrand, model::ArcParticle, GammaLoopContext,
-    GammaLoopContextContainer,
+    gammaloop_integrand::NewIntegrand, model::ArcParticle, settings::GlobalSettings,
+    GammaLoopContext, GammaLoopContextContainer,
 };
 use eyre::{eyre, Context};
 
@@ -19,7 +19,8 @@ use crate::{
     feyngen::{FeynGenFilters, GenerationType},
     graph::Graph,
     model::Model,
-    GenerationSettings, RuntimeSettings,
+    settings::global::GenerationSettings,
+    settings::RuntimeSettings,
 };
 
 use super::{Amplitude, CrossSection};
@@ -75,17 +76,18 @@ impl ProcessDefinition {
 #[trait_decode(trait = GammaLoopContext)]
 pub struct Process {
     pub definition: ProcessDefinition,
+    pub settings_history: Option<GlobalSettings>,
     pub collection: ProcessCollection,
 }
 
 impl Process {
-    pub(crate) fn preprocess(
-        &mut self,
-        model: &Model,
-        settings: &GenerationSettings,
-    ) -> Result<()> {
+    pub(crate) fn warm_up(&mut self) {
+        self.collection.warm_up();
+    }
+    pub(crate) fn preprocess(&mut self, model: &Model, settings: &GlobalSettings) -> Result<()> {
         self.collection
-            .preprocess(model, &self.definition, settings)?;
+            .preprocess(model, &self.definition, &settings.generation)?;
+        self.settings_history = Some(settings.clone());
         Ok(())
     }
 }
@@ -99,6 +101,11 @@ impl Process {
             "Error reading def.bin in {}",
             path.as_ref().display()
         ))?;
+
+        let settings_history = File::open(path.as_ref().join("settings_history.yaml"))
+            .ok()
+            .map(|a| serde_yaml::from_reader(a))
+            .transpose()?;
 
         let (definition, _) =
             bincode::decode_from_slice_with_context(&binary, bincode::config::standard(), context)
@@ -126,6 +133,7 @@ impl Process {
         Ok(Self {
             definition,
             collection,
+            settings_history,
         })
     }
 
@@ -138,6 +146,10 @@ impl Process {
             bincode::decode_from_slice_with_context(&binary, bincode::config::standard(), context)?;
 
         let collection = ProcessCollection::new_cross_section();
+        let settings_history = File::open(path.as_ref().join("settings_history.yaml"))
+            .ok()
+            .map(|a| serde_yaml::from_reader(a))
+            .transpose()?;
 
         // for entry in fs::read_dir(path)? {
         //     let entry = entry?;
@@ -149,6 +161,7 @@ impl Process {
         Ok(Self {
             definition,
             collection,
+            settings_history,
         })
     }
 
@@ -177,6 +190,13 @@ impl Process {
 
                 let binary = bincode::encode_to_vec(&self.definition, bincode::config::standard())?;
                 fs::write(p.join("def.bin"), binary)?;
+
+                if let Some(a) = &self.settings_history {
+                    serde_yaml::to_writer(
+                        File::create(path.as_ref().join("settings_history.yaml"))?,
+                        a,
+                    )?;
+                }
 
                 for (_, amp) in a {
                     amp.save(&p, override_existing)?;
@@ -253,6 +273,7 @@ impl Process {
 
                     collection.add_amplitude(amplitude);
                     Ok(Self {
+                        settings_history: None,
                         definition,
                         collection,
                     })
@@ -272,6 +293,7 @@ impl Process {
 
                     collection.add_cross_section(cross_section);
                     Ok(Self {
+                        settings_history: None,
                         definition,
                         collection,
                     })
@@ -437,6 +459,22 @@ impl ProcessCollection {
             }
         }
         Ok(())
+    }
+
+    fn warm_up(&mut self) {
+        match self {
+            Self::Amplitudes(amplitudes) => {
+                for (_, amplitude) in amplitudes {
+                    amplitude.warm_up();
+                }
+            }
+            Self::CrossSections(cross_sections) => {
+                for (_, cross_section) in cross_sections {
+                    cross_section.warm_up();
+                }
+            }
+        }
+        // Ok(())
     }
 
     fn generate_integrands(&mut self, settings: &RuntimeSettings, model: &Model) -> Result<()> {

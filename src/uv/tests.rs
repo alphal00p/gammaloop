@@ -18,9 +18,10 @@ use crate::{
     feyngen::FeynGenFilters,
     graph::{parse::IntoGraph, Graph},
     processes::{CrossSection, CutId, ProcessDefinition},
+    settings::global::GenerationSettings,
+    settings::RuntimeSettings,
     signature::LoopExtSignature,
     utils::test_utils::load_generic_model,
-    GenerationSettings, RuntimeSettings,
 };
 use spenso::{algebra::algebraic_traits::IsZero, network::library::TensorLibraryData};
 use symbolica::{atom::AtomCore, function, parse};
@@ -44,7 +45,7 @@ fn four_photon_one_loop_amp() {
     .unwrap();
 
     amp.generate_cff().unwrap();
-    amp.build_parametric_integrand();
+    amp.build_parametric_integrand(&GenerationSettings::default());
 }
 
 #[test]

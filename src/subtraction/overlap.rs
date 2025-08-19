@@ -6,9 +6,9 @@ use crate::graph::LoopMomentumBasis;
 use crate::momentum::ThreeMomentum;
 use crate::momentum_sample::ExternalFourMomenta;
 use crate::momentum_sample::LoopMomenta;
+use crate::settings::RuntimeSettings;
 use crate::utils::compute_shift_part;
 use crate::utils::F;
-use crate::RuntimeSettings;
 use ahash::HashMap;
 use ahash::HashMapExt;
 use ahash::HashSet;
@@ -766,9 +766,9 @@ mod tests {
         },
         graph::LoopMomentumBasis,
         momentum::FourMomentum,
+        settings::RuntimeSettings,
         signature::LoopExtSignature,
         utils::dummy_hedge_graph,
-        RuntimeSettings,
     };
 
     struct HelperBoxStructure {

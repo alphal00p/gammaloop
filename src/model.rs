@@ -2189,6 +2189,20 @@ impl Model {
             );
         }
     }
+
+    #[inline]
+    pub(crate) fn try_get_particle<S: AsRef<str>>(&self, name: S) -> Result<ArcParticle> {
+        if let Some(position) = self.particle_name_to_position.get(name.as_ref()) {
+            Ok(self.particles[*position].clone())
+        } else {
+            Err(eyre!(
+                "Particle '{}' not found in model '{}'. Valid entries are:\n{}",
+                name.as_ref(),
+                self.name,
+                self.particle_name_to_position.keys().join(", ")
+            ))
+        }
+    }
     #[inline]
     pub(crate) fn get_particle_from_pdg(&self, pdg: isize) -> ArcParticle {
         if let Some(position) = self.particle_pdg_to_position.get(&pdg) {

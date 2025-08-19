@@ -11,8 +11,9 @@ use crate::{
     model::Model,
     numerator::GlobalPrefactor,
     processes::{ExportSettings, Process, ProcessDefinition, ProcessList},
+    settings::{global::GenerationSettings, GlobalSettings, RuntimeSettings},
     utils::F,
-    GammaLoopContextContainer, GenerationSettings, HasIntegrand, RuntimeSettings,
+    GammaLoopContextContainer, HasIntegrand,
 };
 
 use ahash::HashMap;
@@ -657,7 +658,7 @@ impl PythonWorker {
     }
 
     pub(crate) fn preprocess(&mut self, export_yaml_str: &str) -> PyResult<()> {
-        let process_settings: GenerationSettings = serde_yaml::from_str(export_yaml_str)
+        let process_settings: GlobalSettings = serde_yaml::from_str(export_yaml_str)
             .map_err(|e| exceptions::PyException::new_err(e.to_string()))
             .unwrap();
 
@@ -666,7 +667,7 @@ impl PythonWorker {
         }
 
         self.process_list
-            .preprocess(&self.model, process_settings)
+            .preprocess(&self.model, &process_settings)
             .map_err(|e| exceptions::PyException::new_err(e.to_string()))
     }
 

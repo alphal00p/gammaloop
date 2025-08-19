@@ -54,7 +54,7 @@ use crate::{
     graph::{ExternalConnection, FeynmanGraph, Graph},
     model::Model,
     momentum::{Rotation, RotationMethod},
-    RuntimeSettings,
+    settings::RuntimeSettings,
 };
 
 use super::ProcessDefinition;
@@ -87,6 +87,10 @@ impl<S: CrossSectionState> CrossSection<S> {
             external_particles: vec![],
             n_incmoming: 0,
         }
+    }
+
+    pub(crate) fn warm_up(&mut self) {
+        self.integrand.as_mut().map(|a| a.warm_up());
     }
 
     pub(crate) fn add_supergraph(&mut self, supergraph: Graph) -> Result<()> {

@@ -365,7 +365,7 @@ impl ParseEdge {
                         .unwrap_or(&pname)
                         .strip_suffix('"')
                         .unwrap_or(&pname);
-                    model.get_particle(pname).into()
+                    model.try_get_particle(pname)?.into()
                 } else if let Some(v) = e.get::<_, String>("mass") {
                     <String as StripParse<Atom>>::strip_parse(&v?)?.into()
                 } else {

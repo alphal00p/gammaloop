@@ -21,13 +21,13 @@ use crate::evaluation_result::EvaluationResult;
 use crate::evaluation_result::StatisticsCounter;
 use crate::integrands::HasIntegrand;
 use crate::observables::Event;
+use crate::settings::runtime::{IntegratedPhase, IntegrationResult};
+use crate::settings::IntegratorSettings;
+use crate::settings::RuntimeSettings;
 use crate::utils;
 use crate::utils::format_sample;
 use crate::utils::F;
 use crate::Integrand;
-use crate::IntegratedPhase;
-use crate::IntegratorSettings;
-use crate::RuntimeSettings;
 use crate::INTERRUPTED;
 use crate::{is_interrupted, set_interrupted};
 #[allow(unused_imports)]
@@ -267,7 +267,7 @@ pub(crate) fn havana_integrate<T>(
     target: Option<Complex<F<f64>>>,
     state: Option<IntegrationState>,
     workspace: Option<PathBuf>,
-) -> crate::IntegrationResult
+) -> IntegrationResult
 where
     T: Fn(&RuntimeSettings) -> UserData,
 {
@@ -615,7 +615,7 @@ where
                 .collect::<Vec<_>>(),
         }
     }
-    crate::IntegrationResult {
+    IntegrationResult {
         neval: 0,
         fail: 0,
         result: vec![],

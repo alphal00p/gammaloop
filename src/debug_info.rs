@@ -13,7 +13,7 @@ use ahash::HashMap;
 use color_eyre::Report;
 use serde::Serialize;
 
-use crate::{Precision, RotationSetting};
+use crate::settings::runtime::{Precision, RotationSetting};
 
 pub static DEBUG_LOGGER: DebugLogger = DebugLogger::init();
 
@@ -30,7 +30,7 @@ impl From<&EvalState> for String {
         match value {
             EvalState::General => "general".to_owned(),
             EvalState::PrecRot((rotation_settings, prec)) => {
-                format!("{}_{}", rotation_settings.as_str(), prec.as_string())
+                format!("{}_{}", rotation_settings.as_str(), prec.to_string())
             }
         }
     }

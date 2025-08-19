@@ -5,7 +5,13 @@ use crate::h_function_test::{HFunctionTestIntegrand, HFunctionTestSettings};
 use crate::momentum::FourMomentum;
 use crate::observables::EventManager;
 use crate::utils::{FloatLike, F};
-use crate::{utils, IntegratorSettings, Precision, RuntimeSettings};
+use crate::{
+    settings::{
+        runtime::{IntegratorSettings, Precision},
+        RuntimeSettings,
+    },
+    utils,
+};
 use bincode_trait_derive::{Decode, Encode};
 use enum_dispatch::enum_dispatch;
 #[allow(unused_imports)]

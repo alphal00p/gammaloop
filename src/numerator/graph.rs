@@ -181,8 +181,10 @@ mod test {
         dot,
         graph::{parse::IntoGraph, FeynmanGraph, Graph},
         processes::{Amplitude, AmplitudeGraph},
+        settings::global::GenerationSettings,
+        settings::runtime::kinematic::KinematicsSettings,
+        settings::RuntimeSettings,
         uv::UltravioletGraph,
-        GenerationSettings, KinematicsSettings, RuntimeSettings,
     };
 
     #[test]
@@ -486,7 +488,7 @@ mod test {
         // let model = crate::utils::test_utils::load_generic_model("sm");
 
         graph.generate_cff();
-        graph.build_parametric_integrand();
+        graph.build_parametric_integrand(&GenerationSettings::default());
 
         println!("{}", graph.derived_data.all_mighty_integrand);
     }

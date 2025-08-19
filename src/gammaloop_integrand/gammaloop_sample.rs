@@ -1,3 +1,4 @@
+use eyre::eyre;
 use itertools::Itertools;
 use momtrop::vector::Vector;
 
@@ -6,9 +7,11 @@ use crate::momentum::{Rotation, ThreeMomentum};
 use crate::momentum_sample::{ExternalFourMomenta, MomentumSample};
 use crate::utils::{self, global_parameterize, FloatLike, F};
 use crate::{
-    DependentMomentaConstructor, DiscreteGraphSamplingType, Externals, KinematicsSettings,
-    ParameterizationSettings, SamplingSettings,
+    settings::runtime::kinematic::Externals, settings::runtime::kinematic::KinematicsSettings,
+    settings::runtime::DiscreteGraphSamplingType, settings::runtime::ParameterizationSettings,
+    settings::runtime::SamplingSettings, DependentMomentaConstructor,
 };
+use color_eyre::Result;
 use symbolica::numerical_integration::Sample;
 
 use super::{ChannelIndex, GammaloopIntegrand, GraphTerm};
@@ -397,7 +400,7 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
 pub(crate) fn parameterize<T: FloatLike, I: GammaloopIntegrand>(
     sample_point: &Sample<F<f64>>,
     integrand: &mut I,
-) -> Result<GammaLoopSample<T>, String> {
+) -> Result<GammaLoopSample<T>> {
     let (discrete_indices, xs) = unwrap_sample(sample_point);
     let settings = integrand.get_settings();
     let dependent_momenta_constructor = integrand.get_dependent_momenta_constructor();
@@ -465,7 +468,7 @@ pub(crate) fn parameterize<T: FloatLike, I: GammaloopIntegrand>(
                     let externals = &settings
                         .kinematics
                         .externals
-                        .get_dependent_externals(dependent_momenta_constructor);
+                        .get_dependent_externals(dependent_momenta_constructor, &graph.name())?;
 
                     let sampler = graph.get_tropical_sampler();
 
@@ -500,7 +503,7 @@ pub(crate) fn parameterize<T: FloatLike, I: GammaloopIntegrand>(
                     let sampling_result = match sampling_result_result {
                         Ok(sampling_result) => sampling_result,
                         Err(_) => {
-                            return Err(String::from("tropical sampling failed"));
+                            return Err(eyre!("tropical sampling failed"));
                         }
                     };
 
@@ -515,8 +518,9 @@ pub(crate) fn parameterize<T: FloatLike, I: GammaloopIntegrand>(
                         &settings.kinematics.externals,
                         sampling_result.jacobian,
                         dependent_momenta_constructor,
+                        &graph.name(),
                         orientation_id,
-                    );
+                    )?;
                     Ok(GammaLoopSample::DiscreteGraph {
                         graph_id,
                         sample: DiscreteGraphSample::Tropical(default_sample),
@@ -572,6 +576,8 @@ fn default_parametrize<T: FloatLike>(
         externals,
         jacobian,
         dependent_momenta_constructor,
+        "",
         orientation,
     )
+    .unwrap()
 }

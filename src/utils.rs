@@ -1,20 +1,21 @@
+use crate::cff::expression::GraphOrientation;
 use crate::gammaloop_integrand::GenericEvaluatorFloat;
 use crate::momentum::{FourMomentum, ThreeMomentum};
 use crate::momentum_sample::{ExternalFourMomenta, ExternalIndex, LoopMomenta};
 use crate::numerator::aind::Aind;
 use crate::numerator::ufo::UFO;
 use crate::numerator::NumeratorEvaluateFloat;
+use crate::settings::runtime::ParameterizationSettings;
+use crate::settings::runtime::SamplingSettings;
+use crate::settings::runtime::{ParameterizationMapping, ParameterizationMode};
 use crate::signature::{ExternalSignature, LoopSignature};
 use crate::symbolica_ext::CallSymbol;
-use crate::ParameterizationSettings;
-use crate::SamplingSettings;
-use crate::{ParameterizationMapping, ParameterizationMode, MAX_LOOP};
 use bincode::{Decode, Encode};
 use colored::Colorize;
 use idenso::metric::MS;
 use idenso::representations::initialize;
 use itertools::{izip, Itertools};
-use linnet::half_edge::involution::EdgeIndex;
+use linnet::half_edge::involution::{EdgeIndex, Orientation};
 use rand::Rng;
 use ref_ops::{RefAdd, RefDiv, RefMul, RefNeg, RefRem, RefSub};
 use rug::float::{Constant, ParseFloatError};
@@ -33,7 +34,7 @@ use spenso::structure::abstract_index::AIND_SYMBOLS;
 use spenso::structure::concrete_index::ExpandedIndex;
 use spenso::structure::representation::{Minkowski, RepName};
 use spenso::tensors::parametric::to_param::ToAtom;
-use spenso::tensors::parametric::{MixedTensor, ParamTensor};
+use spenso::tensors::parametric::MixedTensor;
 use spenso_hep_lib::hep_lib;
 use symbolica::atom::{AtomCore, AtomOrView, FunctionBuilder, Symbol};
 use symbolica::coefficient::Coefficient;
@@ -60,12 +61,12 @@ use symbolica::domains::rational::Rational;
 // };
 // use symbolica_community::physics::tensors::structure::SpensoStucture;
 // use symbolica::domains::Field;
-use symbolica::numerical_integration::Sample;
-use typed_index_collections::{TiSlice, TiVec};
-
+use crate::MAX_LOOP;
 #[allow(unused_imports)]
 use log::{debug, info};
 use symbolica::atom::Atom;
+use symbolica::numerical_integration::Sample;
+use typed_index_collections::{TiSlice, TiVec};
 
 use git_version::git_version;
 pub const GIT_VERSION: &str = git_version!(fallback = "unavailable");
@@ -97,6 +98,8 @@ impl From<Side> for usize {
     }
 }
 
+pub mod bitvec_ext;
+pub mod symbolica_ext;
 pub mod sorted_vectorize {
     use serde::{Deserialize, Deserializer, Serialize, Serializer};
     use std::iter::FromIterator;
@@ -3431,6 +3434,7 @@ pub struct GammaloopSymbols {
     pub vertexid: Symbol,
     pub source_id: Symbol,
     pub sink_id: Symbol,
+    pub orientation_delta: Symbol,
     pub ubar: Symbol,
     pub hfunction: Symbol,
     pub deta: Symbol,
@@ -3450,6 +3454,8 @@ pub struct GammaloopSymbols {
     pub mu_r_sq: Symbol,
     pub sign: Symbol,
     pub theta: Symbol,
+    ///for selecting orientations at generation
+    pub selected: Symbol,
 
     pub emr_mom: Symbol,
     pub emr_vec: Symbol,
@@ -3467,6 +3473,21 @@ pub struct GammaloopSymbols {
 }
 
 impl GammaloopSymbols {
+    pub(crate) fn orientation_delta<O: GraphOrientation>(&self, orientation: &O) -> Atom {
+        let args: Vec<i32> = orientation
+            .orientation()
+            .iter()
+            .map(|(_, t)| match t {
+                Orientation::Default => 1,
+                Orientation::Reversed => -1,
+                Orientation::Undirected => 0,
+            })
+            .collect_vec();
+        FunctionBuilder::new(self.orientation_delta)
+            .add_args(&args)
+            .finish()
+    }
+
     pub(crate) fn sign_theta<'a>(&self, arg: impl Into<AtomOrView<'a>>) -> Atom {
         let arg = arg.into();
 
@@ -3475,6 +3496,9 @@ impl GammaloopSymbols {
 
     pub(crate) fn sign<'a>(&self, edge: EdgeIndex) -> Atom {
         function!(self.sign, Atom::num(edge.0 as i64))
+    }
+    pub(crate) fn sign_symbol(&self, edge: EdgeIndex) -> Symbol {
+        symbol!(format!("{}{}", self.sign, edge))
     }
 }
 
@@ -3577,6 +3601,7 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
     source_id: symbol!("source"),
     sink_id: symbol!("sink"),
     sign: symbol!("σ"),
+    selected: symbol!("selected"),
     theta: symbol!("θ"),
     spensocind: symbol!("spenso::cind"),
     m_uv: symbol!("mUV"),
@@ -3592,6 +3617,7 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
     v: symbol!("v"),
     u: symbol!("u"),
     emr_mom: symbol!("Q"),
+    orientation_delta: symbol!("orientation_delta"),
     emr_vec: symbol!("Q3"),
     ose: symbol!("OSE"),
     energy: symbol!("E"),

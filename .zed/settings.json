@@ -10,12 +10,20 @@
     "show_other_hints": true
   },
   "load_direnv": "direct",
+
+  "languages": {
+    "Nickel": {
+      "language_servers": ["nls"]
+    }
+  },
   "lsp": {
     "nls": {
       "enable_lsp_tasks": true,
-      "binary": {
-        "path": "nls"
-        // "args": ["--arg1", "--arg2"]
+      "initialization_options": {
+        "experimentalFeatures": true,
+        "trace": {
+          "server": "verbose"
+        }
       }
     },
     "rust-analyzer": {

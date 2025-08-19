@@ -20,8 +20,8 @@ use crate::{
     momentum::{Dep, ExternalMomenta},
     momentum_sample::ExternalIndex,
     numerator::{symbolica_ext::AtomCoreExt, GlobalPrefactor, ParsingNet},
+    settings::runtime::kinematic::Externals,
     utils::{ose_atom_from_index, F, GS},
-    Externals,
 };
 
 pub mod global;

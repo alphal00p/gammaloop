@@ -2,8 +2,12 @@ use std::fmt::Display;
 
 use crate::momentum::{FourMomentum, Polarization, Rotatable, Rotation, ThreeMomentum};
 use crate::utils::{FloatLike, Length, F};
-use crate::{define_index, DependentMomentaConstructor, Externals, RuntimeSettings};
+use crate::{
+    define_index, settings::runtime::kinematic::Externals, settings::RuntimeSettings,
+    DependentMomentaConstructor,
+};
 use bincode_trait_derive::{Decode, Encode};
+use color_eyre::Result;
 use derive_more::{From, Into};
 use serde::{Deserialize, Serialize};
 use std::ops::{Add, Index, IndexMut, Sub};
@@ -268,16 +272,18 @@ impl<T: FloatLike> BareMomentumSample<T> {
         external_moms: &Externals,
         jacobian: F<T>,
         dependent_momenta_constructor: DependentMomentaConstructor,
+        name: &str,
         orientation: Option<usize>,
-    ) -> Self {
-        let external_moms = external_moms.get_dependent_externals(dependent_momenta_constructor);
+    ) -> Result<Self> {
+        let external_moms =
+            external_moms.get_dependent_externals(dependent_momenta_constructor, name)?;
 
-        Self {
+        Ok(Self {
             loop_moms,
             external_moms,
             jacobian,
             orientation,
-        }
+        })
     }
 
     pub(crate) fn one(&self) -> F<T> {
@@ -463,19 +469,21 @@ impl<T: FloatLike> MomentumSample<T> {
         external_moms: &Externals,
         jacobian: F<T>,
         dependent_momenta_constructor: DependentMomentaConstructor,
+        name: &str,
         orientation: Option<usize>,
-    ) -> Self {
-        Self {
+    ) -> Result<Self> {
+        Ok(Self {
             sample: BareMomentumSample::new(
                 loop_moms,
                 external_moms,
                 jacobian,
                 dependent_momenta_constructor,
+                name,
                 orientation,
-            ),
+            )?,
             rotated_sample: None,
             uuid: Uuid::new_v4(),
-        }
+        })
     }
 
     pub(crate) fn one(&self) -> F<T> {

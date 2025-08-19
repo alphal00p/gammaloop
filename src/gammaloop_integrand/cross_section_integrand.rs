@@ -24,9 +24,10 @@ use crate::{
     momentum::{Rotation, ThreeMomentum},
     momentum_sample::{LoopMomenta, MomentumSample},
     processes::{CrossSectionCut, CutId},
+    settings::runtime::IntegratedCounterTermRange,
+    settings::RuntimeSettings,
     utils::{self, newton_solver::newton_iteration_and_derivative, FloatLike, F},
     DependentMomentaConstructor, GammaLoopContext, GammaLoopContextContainer,
-    IntegratedCounterTermRange, RuntimeSettings,
 };
 
 use super::{
@@ -83,6 +84,8 @@ impl GammaloopIntegrand for CrossSectionIntegrand {
         self.data.rotations.iter()
     }
 
+    fn warm_up(&mut self) {}
+
     fn get_terms_mut(&mut self) -> impl Iterator<Item = &mut Self::G> {
         self.data.graph_terms.iter_mut()
     }
@@ -136,6 +139,7 @@ pub struct CrossSectionGraphTerm {
 }
 
 impl GraphTerm for CrossSectionGraphTerm {
+    fn warm_up(&mut self, settings: &RuntimeSettings) {}
     fn evaluate<T: FloatLike>(
         &mut self,
         momentum_sample: &MomentumSample<T>,
@@ -143,6 +147,9 @@ impl GraphTerm for CrossSectionGraphTerm {
         rotation: &Rotation,
     ) -> Complex<F<T>> {
         self.evaluate(momentum_sample, settings, rotation)
+    }
+    fn name(&self) -> String {
+        self.graph.name.clone()
     }
 
     fn get_multi_channeling_setup(&self) -> &LmbMultiChannelingSetup {

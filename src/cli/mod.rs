@@ -4,8 +4,8 @@ use crate::{
     integrands::{integrand_factory, HasIntegrand},
     model::Model,
     processes::{ExportSettings, Process, ProcessDefinition},
+    settings::{global::GenerationSettings, GlobalSettings, RuntimeSettings},
     utils::{F, GIT_VERSION},
-    GenerationSettings, RuntimeSettings,
 };
 use chrono::{Datelike, Local, Timelike};
 use clap::{Parser, Subcommand, ValueEnum};
@@ -13,22 +13,22 @@ use clap_repl::{
     reedline::{DefaultPrompt, DefaultPromptSegment, FileBackedHistory},
     ClapEditor, ReadCommandOutput,
 };
-use color_eyre::Report;
 use color_eyre::Result;
+use color_eyre::{config::HookBuilder, Report};
 use colored::Colorize;
 use console::style;
 use dirs::home_dir;
-use eyre::eyre;
+use eyre::{eyre, Context};
 use integrate::Integrate;
 use log::LevelFilter;
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
 use spenso::algebra::complex::Complex;
 use state::{format_level, format_target, State, LOG_FORMAT, LOG_LEVEL};
+use std::ops::ControlFlow;
 use std::time::Instant;
-use std::{env, ops::ControlFlow};
 use std::{fs::File, path::PathBuf};
-use symbolica::{activate_oem_license, numerical_integration::Sample};
+use symbolica::numerical_integration::Sample;
 
 pub mod generate;
 pub mod inspect;
@@ -40,21 +40,13 @@ pub mod state;
 #[command(name = "gammaLoop", version, about)]
 #[command(next_line_help = true)]
 pub struct Cli {
-    /// Path to the run-time settings file
-    #[arg(
-        short = 'r',
-        long,
-        default_value = "./gammaloop_state/runtime_settings.yaml"
-    )]
-    run_settings_path: PathBuf,
+    /// Path to the run-time settings file, by default is: `./gammaloop_state/runtime_settings.yaml`
+    #[arg(short = 'r', long)]
+    run_settings_path: Option<PathBuf>,
 
-    /// Path to the gammaloop settings file
-    #[arg(
-        short = 'g',
-        long,
-        default_value = "./gammaloop_state/generation_settings.yaml"
-    )]
-    generation_settings_path: PathBuf,
+    /// Path to the gammaloop settings file, by default is: `./gammaloop_state/global_settings.yaml`
+    #[arg(short = 'g', long)]
+    global_settings_path: Option<PathBuf>,
 
     /// Path to the state file
     #[arg(short = 's', long, default_value = "./gammaloop_state")]
@@ -117,7 +109,7 @@ impl From<bool> for StateSaveSettings {
 impl Cli {
     fn override_settings(&mut self, other: Cli) {
         self.run_settings_path = other.run_settings_path;
-        self.generation_settings_path = other.generation_settings_path;
+        self.global_settings_path = other.global_settings_path;
         self.state_folder = other.state_folder;
         self.model_file = other.model_file;
         self.override_state = other.override_state;
@@ -127,7 +119,7 @@ impl Cli {
     fn run_command(
         &mut self,
         runtime_settings: &mut RuntimeSettings,
-        generation_settings: &mut GenerationSettings,
+        global_settings: &mut GlobalSettings,
         state: &mut State,
     ) -> Result<ControlFlow<()>, Report> {
         match self.command.as_ref().ok_or(eyre!("missing command"))? {
@@ -206,8 +198,8 @@ impl Cli {
                     .unwrap();
 
                     serde_yaml::to_writer(
-                        File::create(self.state_folder.join("generation_settings.yaml")).unwrap(),
-                        &generation_settings,
+                        File::create(self.state_folder.join("global_settings.yaml")).unwrap(),
+                        &global_settings,
                     )
                     .unwrap();
                 }
@@ -225,7 +217,7 @@ impl Cli {
                 }
             },
 
-            Commands::Generate(g) => g.run(state, generation_settings, runtime_settings)?,
+            Commands::Generate(g) => g.run(state, global_settings, runtime_settings)?,
 
             Commands::Integrate(g) => {
                 g.run(state)?;
@@ -258,7 +250,7 @@ impl Cli {
         setup_log().unwrap();
         self.initialize();
         let mut runtime_settings = self.get_runtime_settings().unwrap();
-        let mut generation_settings = self.get_generation_settings().unwrap();
+        let mut generation_settings = self.get_global_settings().unwrap();
 
         let mut state = match State::load(&self.state_folder, self.model_file.clone()) {
             Ok(state) => state,
@@ -314,7 +306,7 @@ impl Cli {
                             &mut state,
                         ) {
                             Err(e) => {
-                                eprintln!("{e}");
+                                eprintln!("{e:?}");
                                 self.override_settings(c);
                             }
                             Ok(ControlFlow::Break(())) => {
@@ -361,7 +353,7 @@ impl Cli {
             .unwrap();
 
             serde_yaml::to_writer(
-                File::create(self.state_folder.join("generation_settings.yaml")).unwrap(),
+                File::create(self.state_folder.join("global_settings.yaml")).unwrap(),
                 &generation_settings,
             )
             .unwrap();
@@ -369,6 +361,11 @@ impl Cli {
     }
 
     pub fn initialize(&self) {
+        let (panic, eyre) = HookBuilder::default()
+            .capture_span_trace_by_default(cfg!(debug_assertions))
+            .into_hooks();
+        panic.install();
+        eyre.install().unwrap();
         crate::set_interrupt_handler();
         // activate_oem_license!("SYMBOLICA_OEM_KEY_23177b25");
 
@@ -377,8 +374,16 @@ impl Cli {
 
     pub fn get_runtime_settings(&self) -> Result<RuntimeSettings, Report> {
         // Load settings from YAML first so CLI flags can override.
-        let settings: RuntimeSettings =
-            RuntimeSettings::from_file(&self.run_settings_path).unwrap_or_default();
+        let settings: RuntimeSettings = self
+            .run_settings_path
+            .as_ref()
+            .map(RuntimeSettings::from_file)
+            .transpose()
+            .with_context(|| "Error trying to read runtime settings from file:")?
+            .unwrap_or(
+                RuntimeSettings::from_file(self.state_folder.join("runtime_settings.yaml"))
+                    .unwrap_or_default(),
+            );
 
         // Override settings from CLI top‑level flags --------------------------
         // if let Some(level) = self.debug {
@@ -408,10 +413,18 @@ impl Cli {
         Ok(settings)
     }
 
-    pub fn get_generation_settings(&self) -> Result<GenerationSettings, Report> {
+    pub fn get_global_settings(&self) -> Result<GlobalSettings, Report> {
         // Load settings from YAML first so CLI flags can override.
-        let generation_settings: GenerationSettings =
-            GenerationSettings::from_file(&self.generation_settings_path).unwrap_or_default();
+        let generation_settings: GlobalSettings = self
+            .global_settings_path
+            .as_ref()
+            .map(GlobalSettings::from_file)
+            .transpose()
+            .with_context(|| "Error trying to read global settings from file:")?
+            .unwrap_or(
+                GlobalSettings::from_file(self.state_folder.join("global_settings.yaml"))
+                    .unwrap_or_default(),
+            );
 
         Ok(generation_settings)
     }

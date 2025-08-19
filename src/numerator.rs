@@ -46,7 +46,10 @@ use crate::{
     utils::{FloatLike, F},
 };
 
-use crate::{disable, GammaLoopContextContainer, GenerationSettings, RuntimeSettings};
+use crate::{
+    disable, settings::global::GenerationSettings, settings::RuntimeSettings,
+    GammaLoopContextContainer,
+};
 use ahash::AHashMap;
 use bincode::{Decode, Encode};
 use color_eyre::{Report, Result};

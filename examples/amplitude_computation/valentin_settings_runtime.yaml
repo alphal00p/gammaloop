@@ -1,6 +1,8 @@
 General:
   debug: 4
   use_ltd: false
+  orientation_pat:
+    pat: null
   load_compiled_cff: false
   load_compiled_numerator: true
   joint_numerator_eval: true
@@ -227,7 +229,7 @@ sampling:
       - 0.0
       - 0.0
 subtraction:
-  disable_threshold_subtraction: false
+  disable_threshold_subtraction: true
   local_ct_settings:
     dampen_integrable_singularity:
       type: exponential

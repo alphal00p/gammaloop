@@ -1,6 +1,8 @@
 General:
   debug: 4
   use_ltd: false
+  orientation_pat:
+    pat: null
   load_compiled_cff: false
   load_compiled_numerator: true
   joint_numerator_eval: true

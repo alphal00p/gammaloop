@@ -1,0 +1,252 @@
+General:
+  debug: 4
+  use_ltd: false
+  orientation_pat:
+    pat: null
+  load_compiled_cff: false
+  load_compiled_numerator: true
+  joint_numerator_eval: true
+  amplitude_prefactor:
+    re: 0.0
+    im: 1.0
+  load_compiled_separate_orientations: false
+  force_orientations: null
+Integrand:
+  type: unit_surface
+  n_3d_momenta: 11
+Kinematics:
+  e_cm: 64.0
+  externals:
+    type: constant
+    data:
+      momenta:
+      - dependent
+      - - 1.0
+        - 0.0
+        - 0.0
+        - 1.0
+      - - 1.0
+        - 0.0
+        - 0.0
+        - -1.0
+      - - 0.9903067841547669
+        - 0.3734458315384239
+        - 0.6393671561700484
+        - -0.657613394982612
+      - - 0.2053558277500182
+        - -0.1412408546154445
+        - -0.0869119059139323
+        - 0.121112995127698
+      helicities:
+      - 1
+      - 1
+      - -1
+      - -1
+      - -1
+Integrator:
+  n_bins: 64
+  bin_number_evolution: null
+  min_samples_for_update: 1000
+  n_start: 100000
+  n_increase: 10000
+  n_max: 10000000000
+  integrated_phase: real
+  discrete_dim_learning_rate: 1.5
+  continuous_dim_learning_rate: 1.5
+  train_on_avg: false
+  show_max_wgt_info: true
+  max_prob_ratio: 0.01
+  seed: 69
+Observables: []
+Selectors: []
+Stability:
+  rotation_axis: []
+  rotate_numerator: false
+  levels:
+  - precision: Double
+    required_precision_for_re: 1e-15
+    required_precision_for_im: 1e-15
+    escalate_for_large_weight_threshold: 0.9
+  - precision: Quad
+    required_precision_for_re: 0.00001
+    required_precision_for_im: 0.00001
+    escalate_for_large_weight_threshold: -1.0
+sampling:
+  type: default
+  mode: spherical
+  mapping: linear
+  b: 1.0
+  input_rescaling:
+  - - - 0.0
+      - 1.0
+    - - 0.0
+      - 1.0
+    - - 0.0
+      - 1.0
+  - - - 0.0
+      - 1.0
+    - - 0.0
+      - 1.0
+    - - 0.0
+      - 1.0
+  - - - 0.0
+      - 1.0
+    - - 0.0
+      - 1.0
+    - - 0.0
+      - 1.0
+  - - - 0.0
+      - 1.0
+    - - 0.0
+      - 1.0
+    - - 0.0
+      - 1.0
+  - - - 0.0
+      - 1.0
+    - - 0.0
+      - 1.0
+    - - 0.0
+      - 1.0
+  - - - 0.0
+      - 1.0
+    - - 0.0
+      - 1.0
+    - - 0.0
+      - 1.0
+  - - - 0.0
+      - 1.0
+    - - 0.0
+      - 1.0
+    - - 0.0
+      - 1.0
+  - - - 0.0
+      - 1.0
+    - - 0.0
+      - 1.0
+    - - 0.0
+      - 1.0
+  - - - 0.0
+      - 1.0
+    - - 0.0
+      - 1.0
+    - - 0.0
+      - 1.0
+  - - - 0.0
+      - 1.0
+    - - 0.0
+      - 1.0
+    - - 0.0
+      - 1.0
+  - - - 0.0
+      - 1.0
+    - - 0.0
+      - 1.0
+    - - 0.0
+      - 1.0
+  - - - 0.0
+      - 1.0
+    - - 0.0
+      - 1.0
+    - - 0.0
+      - 1.0
+  - - - 0.0
+      - 1.0
+    - - 0.0
+      - 1.0
+    - - 0.0
+      - 1.0
+  - - - 0.0
+      - 1.0
+    - - 0.0
+      - 1.0
+    - - 0.0
+      - 1.0
+  - - - 0.0
+      - 1.0
+    - - 0.0
+      - 1.0
+    - - 0.0
+      - 1.0
+  shifts:
+  - - 1.0
+    - 0.0
+    - 0.0
+    - 0.0
+  - - 1.0
+    - 0.0
+    - 0.0
+    - 0.0
+  - - 1.0
+    - 0.0
+    - 0.0
+    - 0.0
+  - - 1.0
+    - 0.0
+    - 0.0
+    - 0.0
+  - - 1.0
+    - 0.0
+    - 0.0
+    - 0.0
+  - - 1.0
+    - 0.0
+    - 0.0
+    - 0.0
+  - - 1.0
+    - 0.0
+    - 0.0
+    - 0.0
+  - - 1.0
+    - 0.0
+    - 0.0
+    - 0.0
+  - - 1.0
+    - 0.0
+    - 0.0
+    - 0.0
+  - - 1.0
+    - 0.0
+    - 0.0
+    - 0.0
+  - - 1.0
+    - 0.0
+    - 0.0
+    - 0.0
+  - - 1.0
+    - 0.0
+    - 0.0
+    - 0.0
+  - - 1.0
+    - 0.0
+    - 0.0
+    - 0.0
+  - - 1.0
+    - 0.0
+    - 0.0
+    - 0.0
+  - - 1.0
+    - 0.0
+    - 0.0
+    - 0.0
+subtraction:
+  local_ct_settings:
+    dampen_integrable_singularity:
+      type: exponential
+    uv_localisation:
+      sliver_width: 10.0
+      dynamic_width: false
+      gaussian_width: 1.0
+  integrated_ct_settings:
+    range:
+      type: infinite
+      h_function_settings:
+        function: poly_exponential
+        sigma: 0.0
+        enabled_dampening: false
+        power: null
+  overlap_settings:
+    force_global_center: null
+    check_global_center: true
+    try_origin: false
+    try_origin_all_lmbs: false
+  disable_threshold_subtraction: true

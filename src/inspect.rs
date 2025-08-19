@@ -8,11 +8,11 @@ use symbolica::numerical_integration::Sample;
 use crate::debug_info::DEBUG_LOGGER;
 use crate::integrands::HasIntegrand;
 use crate::momentum::ThreeMomentum;
+use crate::settings::runtime::SamplingSettings;
+use crate::settings::RuntimeSettings;
 use crate::utils;
 use crate::utils::f128;
 use crate::utils::F;
-use crate::SamplingSettings;
-use crate::RuntimeSettings;
 
 pub(crate) fn inspect<I: HasIntegrand>(
     settings: &RuntimeSettings,

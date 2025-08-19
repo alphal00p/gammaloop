@@ -7,8 +7,8 @@ use spenso::algebra::complex::Complex;
 
 use crate::{
     integrate::{havana_integrate, print_integral_result, IntegrationState},
+    settings::RuntimeSettings,
     utils::F,
-    RuntimeSettings,
 };
 use color_eyre::Result;
 use colored::Colorize;
@@ -49,6 +49,8 @@ impl Integrate {
         } else {
             None
         };
+
+        state.process_list.warm_up();
 
         let gloop_integrand = state
             .process_list

@@ -1,6 +1,6 @@
 use crate::momentum::FourMomentum;
+use crate::settings::RuntimeSettings;
 use crate::utils::{FloatLike, F};
-use crate::RuntimeSettings;
 use bincode_trait_derive::{Decode, Encode};
 use itertools::Itertools;
 #[allow(unused_imports)]

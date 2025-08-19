@@ -6,6 +6,7 @@ use crate::{
 };
 use bincode_trait_derive::{Decode, Encode};
 use derive_more::{From, Into};
+use itertools::{EitherOrBoth, Itertools};
 use linnet::half_edge::{
     involution::{EdgeVec, Orientation},
     nodestore::NodeStorageOps,
@@ -13,7 +14,7 @@ use linnet::half_edge::{
 };
 use serde::{Deserialize, Serialize};
 use symbolica::{
-    atom::{Atom, AtomCore, AtomOrView, Symbol},
+    atom::{Atom, AtomCore, AtomOrView, AtomView, Symbol},
     function,
     id::{Pattern, Replacement},
     symbol,
@@ -46,21 +47,28 @@ impl GraphOrientation for EdgeVec<Orientation> {
 pub trait GraphOrientation {
     fn orientation(&self) -> &EdgeVec<Orientation>;
 
-    fn orientation_delta(&self) -> Atom {
-        let mut delta = Atom::num(1);
+    fn orientation_thetas(&self) -> Atom {
+        let mut thetas = Atom::num(1);
 
         for (e, h) in self.orientation() {
             match h {
                 Orientation::Default => {
-                    delta *= GS.sign_theta(GS.sign(e));
+                    thetas *= GS.sign_theta(GS.sign(e));
                 }
                 Orientation::Reversed => {
-                    delta *= GS.sign_theta(-GS.sign(e));
+                    thetas *= GS.sign_theta(-GS.sign(e));
                 }
                 _ => {}
             }
         }
-        delta
+        thetas
+    }
+
+    fn orientation_delta(&self) -> Atom
+    where
+        Self: Sized,
+    {
+        GS.orientation_delta(self)
     }
 
     fn select<'a>(&self, atom: impl Into<AtomOrView<'a>>) -> Atom {
@@ -83,9 +91,38 @@ pub trait GraphOrientation {
             }
         }
 
+        let orientation = self.orientation();
         atom.into()
             .replace_multiple(&reps)
             .replace_multiple(&theta_reps)
+            .replace_map(|term, _ctx, out| {
+                if let AtomView::Fun(f) = term {
+                    if f.get_symbol() == GS.orientation_delta {
+                        if f.iter().zip_longest(orientation.into_iter()).all(
+                            |either| match either {
+                                EitherOrBoth::Both(a, (_, o)) => {
+                                    if let Ok(a) = i64::try_from(a) {
+                                        match o {
+                                            Orientation::Default => a >= 0,
+                                            Orientation::Reversed => a <= 0,
+                                            Orientation::Undirected => true,
+                                        }
+                                    } else {
+                                        false
+                                    }
+                                }
+                                EitherOrBoth::Left(_) | EitherOrBoth::Right(_) => false,
+                            },
+                        ) {
+                            *out = Atom::num(1);
+                        } else {
+                            *out = Atom::Zero;
+                        }
+                        return true;
+                    }
+                }
+                false
+            })
     }
 }
 

@@ -3,7 +3,7 @@ use crate::integrands::IntegrandSettings;
 use crate::utils::{self, ApproxEq, F};
 use crate::{
     h_function_test::HFunctionTestSettings, integrand_factory, integrands::UnitVolumeSettings,
-    IntegratedPhase, RuntimeSettings,
+    settings::runtime::IntegratedPhase, settings::RuntimeSettings,
 };
 use crate::{observables::JetSliceSettings, observables::PhaseSpaceSelectorSettings};
 use colored::Colorize;
@@ -204,8 +204,8 @@ mod tests_integral {
     use symbolica::domains::float::ConstructibleFloat;
 
     use crate::{
-        HFunction, HFunctionSettings, ParameterizationMode, ParameterizationSettings,
-        SamplingSettings,
+        settings::runtime::ParameterizationMode, settings::runtime::ParameterizationSettings,
+        settings::runtime::SamplingSettings, HFunction, HFunctionSettings,
     };
 
     use super::*;
@@ -321,8 +321,8 @@ mod tests_integral {
 #[cfg(test)]
 mod tests_inspect {
     use crate::{
-        HFunction, HFunctionSettings, ParameterizationMode, ParameterizationSettings,
-        SamplingSettings,
+        settings::runtime::ParameterizationMode, settings::runtime::ParameterizationSettings,
+        settings::runtime::SamplingSettings, HFunction, HFunctionSettings,
     };
 
     use super::*;

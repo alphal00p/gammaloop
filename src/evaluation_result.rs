@@ -9,8 +9,8 @@ use symbolica::domains::float::ConstructibleFloat;
 
 use crate::observables::Event;
 use crate::{
+    settings::runtime::Precision,
     utils::{format_evaluation_time, F},
-    Precision,
 };
 
 /// The result of an evaluation of the integrand

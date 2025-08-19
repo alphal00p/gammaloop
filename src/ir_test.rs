@@ -17,8 +17,9 @@ use crate::{
     model::Model,
     momentum::{Rotation, RotationMethod, ThreeMomentum},
     momentum_sample::{LoopIndex, LoopMomenta, MomentumSample},
+    settings::RuntimeSettings,
     utils::{box_muller, f128, FloatLike, F},
-    DependentMomentaConstructor, RuntimeSettings,
+    DependentMomentaConstructor,
 };
 
 const SLOPE_STABILITY_points: usize = 50;
@@ -186,56 +187,52 @@ impl CrossSectionGraphTerm {
 
         let loop_number = lmb.loop_edges.len();
         let external_particles = self.graph.underlying.get_external_partcles();
-        let polarizations = settings
-            .kinematics
-            .externals
-            .generate_polarizations(&external_particles, dependent_momenta_constructor);
 
-        let limit_data = LimitData {
-            data: momenta
-                .into_iter()
-                .map(|lambda_point| {
-                    let mut loop_moms: LoopMomenta<F<_>> = (0..loop_number)
-                        .map(|_| {
-                            ThreeMomentum::new(F::from_f64(0.0), F::from_f64(0.0), F::from_f64(0.0))
-                        })
-                        .collect();
+        let limit_data: Result<Vec<_>> = momenta
+            .into_iter()
+            .map(|lambda_point| {
+                let mut loop_moms: LoopMomenta<F<_>> = (0..loop_number)
+                    .map(|_| {
+                        ThreeMomentum::new(F::from_f64(0.0), F::from_f64(0.0), F::from_f64(0.0))
+                    })
+                    .collect();
 
-                    for (loop_id, momentum) in non_limit_momenta.iter() {
-                        loop_moms[*loop_id] = momentum.clone();
-                    }
+                for (loop_id, momentum) in non_limit_momenta.iter() {
+                    loop_moms[*loop_id] = momentum.clone();
+                }
 
-                    for tagged_momenta in &lambda_point.momenta {
-                        let edge_id = tagged_momenta.tag;
-                        let loop_id = lmb
-                            .loop_edges
-                            .iter()
-                            .position(|loop_edge| loop_edge == &edge_id)
-                            .unwrap_or_else(|| {
-                                unreachable!("corrupted lmb and ir limit: {}", ir_limit);
-                            });
+                for tagged_momenta in &lambda_point.momenta {
+                    let edge_id = tagged_momenta.tag;
+                    let loop_id = lmb
+                        .loop_edges
+                        .iter()
+                        .position(|loop_edge| loop_edge == &edge_id)
+                        .unwrap_or_else(|| {
+                            unreachable!("corrupted lmb and ir limit: {}", ir_limit);
+                        });
 
-                        loop_moms[LoopIndex(loop_id)] = tagged_momenta.momentum.clone();
-                    }
+                    loop_moms[LoopIndex(loop_id)] = tagged_momenta.momentum.clone();
+                }
 
-                    let sample = MomentumSample::new(
-                        loop_moms,
-                        &settings.kinematics.externals,
-                        F::from_f64(1.0),
-                        dependent_momenta_constructor,
-                        None,
-                    );
+                let sample = MomentumSample::new(
+                    loop_moms,
+                    &settings.kinematics.externals,
+                    F::from_f64(1.0),
+                    dependent_momenta_constructor,
+                    "",
+                    None,
+                )?;
 
-                    LambdaPointEval {
-                        lambda_point,
-                        value: self
-                            .evaluate(&sample, settings, &Rotation::new(RotationMethod::Identity))
-                            .norm_squared()
-                            .sqrt(),
-                    }
+                Ok(LambdaPointEval {
+                    lambda_point,
+                    value: self
+                        .evaluate(&sample, settings, &Rotation::new(RotationMethod::Identity))
+                        .norm_squared()
+                        .sqrt(),
                 })
-                .collect(),
-        };
+            })
+            .collect();
+        let limit_data = LimitData { data: limit_data? };
 
         let slope = limit_data.extract_power();
 

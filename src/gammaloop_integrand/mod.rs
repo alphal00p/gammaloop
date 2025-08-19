@@ -47,6 +47,7 @@ use symbolica::evaluate::{
 };
 use symbolica::id::Replacement;
 use symbolica::numerical_integration::{ContinuousGrid, DiscreteGrid, Grid, Sample};
+use symbolica::symbol;
 use tabled::settings::Style;
 use typed_index_collections::TiVec;
 pub mod amplitude_integrand;
@@ -55,9 +56,11 @@ pub mod gammaloop_sample;
 use crate::observables::EventManager;
 use crate::utils::f128;
 use crate::{
-    DependentMomentaConstructor, DiscreteGraphSamplingSettings, DiscreteGraphSamplingType,
-    GammaLoopContext, IntegratorSettings, Precision, RuntimeSettings, SamplingSettings,
-    StabilityLevelSetting, StabilitySettings,
+    settings::runtime::DiscreteGraphSamplingSettings, settings::runtime::DiscreteGraphSamplingType,
+    settings::runtime::IntegratorSettings, settings::runtime::Precision,
+    settings::runtime::SamplingSettings, settings::runtime::StabilityLevelSetting,
+    settings::runtime::StabilitySettings, settings::RuntimeSettings, DependentMomentaConstructor,
+    GammaLoopContext,
 };
 use color_eyre::Result;
 
@@ -73,6 +76,13 @@ pub enum NewIntegrand {
 }
 
 impl NewIntegrand {
+    pub(crate) fn warm_up(&mut self) {
+        match self {
+            Self::Amplitude(a) => a.warm_up(),
+            Self::CrossSection(a) => a.warm_up(),
+        }
+    }
+
     pub(crate) fn save(&self, path: impl AsRef<Path>, override_existing: bool) -> Result<()> {
         let path = path.as_ref().join("integrand");
 
@@ -653,6 +663,8 @@ impl LmbMultiChannelingSetup {
 
 pub trait GammaloopIntegrand {
     type G: GraphTerm;
+
+    fn warm_up(&mut self);
     fn get_rotations(&self) -> impl Iterator<Item = &Rotation>;
 
     fn get_terms(&self) -> impl Iterator<Item = &Self::G>;
@@ -694,6 +706,9 @@ pub trait GraphTerm {
         rotation: &Rotation,
     ) -> Complex<F<T>>;
 
+    fn name(&self) -> String;
+
+    fn warm_up(&mut self, settings: &RuntimeSettings);
     fn get_multi_channeling_setup(&self) -> &LmbMultiChannelingSetup;
     fn get_graph(&self) -> &Graph;
     fn get_lmbs(&self) -> &TiVec<LmbIndex, LoopMomentumBasis>;
@@ -1143,7 +1158,7 @@ fn evaluate_sample<I: GammaloopIntegrand>(
                 parameterization_time: Duration::ZERO,
                 relative_instability_error: Complex::new(F(0.0), F(0.0)),
                 is_nan: true,
-                highest_precision: crate::Precision::Double,
+                highest_precision: Precision::Double,
             },
         }
     }
@@ -1519,6 +1534,13 @@ impl<T: FloatLike> ParamBuilder<T> {
         args: Vec<Symbol>,
         body: Atom,
     ) -> Result<(), &str> {
+        self.reps.push((
+            FunctionBuilder::new(name)
+                // .add_args()
+                .add_args(&args)
+                .finish(),
+            body.clone(),
+        ));
         self.fn_map.add_function(name, rename, args, body)
     }
 
@@ -1818,7 +1840,7 @@ impl<T: FloatLike> Display for ParamBuilder<T> {
         let mut table = tabled::builder::Builder::new();
 
         for (lhs, rhs) in &self.reps {
-            table.push_record(vec![lhs.to_string(), rhs.to_string()]);
+            table.push_record(vec![lhs.to_canonical_string(), rhs.to_canonical_string()]);
         }
 
         for i in self {
@@ -1891,13 +1913,20 @@ impl<'a, T: FloatLike> IntoIterator for &'a ParamBuilder<T> {
 fn evaltest() {
     use symbolica::evaluate::{FunctionMap, OptimizationSettings};
     use symbolica::{atom::AtomCore, parse};
-    let expr = parse!("x(y) + x(z) *z*y");
-    let z = parse!("z");
-    let y = parse!("y");
-    let xy = parse!("x(y)");
-    let xz = parse!("x(z)");
-    let fn_map = FunctionMap::new();
-    let params = vec![z.clone(), y.clone(), xy.clone(), xz.clone()];
+    let expr = parse!("delta_sigma(1,1,1,1)");
+    let args: Vec<_> = ["x1", "x2", "x3", "x4"]
+        .into_iter()
+        .map(|a| symbol!(a))
+        .collect();
+    let body = parse!("theta(x1*x(1))*theta(x2*x(2))*theta(x3*x(3))*theta(x4*x(4))");
+
+    let mut fn_map = FunctionMap::new();
+
+    let params: Vec<Atom> = vec!["theta(x(1))", "theta(x(2))", "theta(x(3))", "theta(x(4))"]
+        .iter()
+        .map(|a| parse!(a))
+        .collect();
+    fn_map.add_function(symbol!("delta_sigma"), "delta_sigma".into(), args, body);
     let optimization_settings = OptimizationSettings::default();
     let mut evaluator = expr
         .evaluator(&fn_map, &params, optimization_settings)

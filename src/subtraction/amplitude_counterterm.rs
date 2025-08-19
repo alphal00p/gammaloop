@@ -18,14 +18,17 @@ use crate::{
     graph::{FeynmanGraph, Graph, LoopMomentumBasis},
     momentum::Rotation,
     momentum_sample::{LoopMomenta, MomentumSample},
+    settings::runtime::IntegratedCounterTermRange,
+    settings::runtime::IntegratedCounterTermSettings,
+    settings::runtime::UVLocalisationSettings,
+    settings::RuntimeSettings,
     subtraction::overlap::{OverlapGroup, OverlapStructure},
     utils::{
         self,
         newton_solver::{newton_iteration_and_derivative, NewtonIterationResult},
         FloatLike, F,
     },
-    GammaLoopContext, IntegratedCounterTermRange, IntegratedCounterTermSettings, RuntimeSettings,
-    UVLocalisationSettings,
+    GammaLoopContext,
 };
 
 const MAX_ITERATIONS: usize = 40;

@@ -9,14 +9,16 @@ use color_eyre::Result;
 use eyre::Context;
 use log::debug;
 
-use crate::{GammaLoopContext, GammaLoopContextContainer};
+use crate::{settings::GlobalSettings, GammaLoopContext, GammaLoopContextContainer};
 use serde::{Deserialize, Serialize};
 
-use crate::{model::Model, GenerationSettings, RuntimeSettings};
+use crate::{model::Model, settings::global::GenerationSettings, settings::RuntimeSettings};
 
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct ProcessList {
+    // pub amplitude_process: Vec<Process<Amplitude>>
+    // pub cross_section_process: Vec<Process<CrossSection>>
     pub processes: Vec<Process>,
 }
 
@@ -36,6 +38,10 @@ impl ProcessList {
     /// Generates a new empty process list
     pub(crate) fn new() -> Self {
         ProcessList { processes: vec![] }
+    }
+
+    pub(crate) fn warm_up(&mut self) {
+        self.processes.iter_mut().for_each(|a| a.warm_up());
     }
 
     pub(crate) fn load(path: impl AsRef<Path>, context: GammaLoopContextContainer) -> Result<Self> {
@@ -137,9 +143,9 @@ impl ProcessList {
     }
 
     ///preprocesses the process list according to the settings
-    pub fn preprocess(&mut self, model: &Model, settings: GenerationSettings) -> Result<()> {
+    pub fn preprocess(&mut self, model: &Model, settings: &GlobalSettings) -> Result<()> {
         for process in self.processes.iter_mut() {
-            process.preprocess(model, &settings)?;
+            process.preprocess(model, settings)?;
         }
         Ok(())
     }
@@ -174,9 +180,12 @@ mod tests {
             EvaluatorOptions, GammaAlgebraMode, GlobalPrefactor, NumeratorEvaluatorOptions,
             NumeratorParseMode, NumeratorSettings, UnInit,
         },
+        settings::global::{
+            GammaloopCompileOptions, GenerationSettings, TropicalSubgraphTableSettings,
+        },
         signature::LoopExtSignature,
         utils::test_utils::load_generic_model,
-        GammaLoopContextContainer, GammaloopCompileOptions, TropicalSubgraphTableSettings,
+        GammaLoopContextContainer,
     };
 
     use super::AmplitudeGraph;
@@ -221,7 +230,7 @@ mod tests {
         amplitude
             .preprocess(
                 &model,
-                &crate::GenerationSettings {
+                &GenerationSettings {
                     compile_cff: false,
                     compile_separate_orientations: false,
                     cpe_rounds_cff: None,
@@ -249,7 +258,7 @@ mod tests {
                         target_omega: 1.0,
                         ..Default::default()
                     },
-                    enable_thresholds: true,
+                    ..Default::default()
                 },
             )
             .unwrap();
