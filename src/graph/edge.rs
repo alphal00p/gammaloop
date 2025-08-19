@@ -372,11 +372,34 @@ impl ParseEdge {
                     ().into()
                 };
 
+                let processed_particle = if let Some(v) = e.get::<_, String>("mass") {
+                    match particle {
+                        PossibleParticle::Particle(p) => {
+                            let mass = <String as StripParse<Atom>>::strip_parse(&v?)?;
+                            let mass_value = p.mass.value;
+                            PossibleParticle::MassOverriddenParticle {
+                                particle: p,
+                                mass,
+                                mass_value,
+                            }
+                        }
+                        _ => {
+                            let mass = <String as StripParse<Atom>>::strip_parse(&v?)?;
+                            PossibleParticle::JustMass {
+                                expr: mass,
+                                value: None,
+                            }
+                        }
+                    }
+                } else {
+                    particle
+                };
+
                 Ok(ParseEdge {
                     is_dummy,
                     dod,
                     lmb_id,
-                    particle,
+                    particle: processed_particle,
                     num,
                     label,
                 })
