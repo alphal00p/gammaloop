@@ -24,4 +24,4 @@ generation:
     panic_on_fail: false
     target_omega: 1.0
     disable_tropical_generation: true
-  enable_thresholds: false
+  enable_thresholds: true
