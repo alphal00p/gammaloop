@@ -586,7 +586,15 @@ impl AmplitudeGraph {
 
     fn build_original_parametric_integrand(&self, settings: &GenerationSettings) -> Result<Atom> {
         let wood = self.graph.wood(&self.graph.underlying.no_dummy());
+        debug!(
+            "Wood for {}{}",
+            self.graph.name,
+            wood.show_graphs(&self.graph)
+        );
+        // debug!("{}", wood.dot(&self.graph));
         let mut forest = wood.unfold(&self.graph, &self.graph.loop_momentum_basis);
+
+        debug!("Forest: {}", forest.graphs(&self.graph));
 
         let canonize_esurface = self
             .graph

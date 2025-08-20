@@ -482,7 +482,7 @@ impl Graph {
                 "Tree does not cover all: {}, lmb specification must be wrong",
                 underlying.dot(&covers)
             );
-            let external = underlying.external_filter();
+            let external = underlying.internal_crown(&full);
             underlying.lmb_impl(&full, &tree.tree_subgraph, external)
         } else {
             panic!("ata")

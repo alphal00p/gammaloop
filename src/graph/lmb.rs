@@ -16,6 +16,7 @@ use symbolica::{
     atom::{Atom, AtomCore, AtomOrView, FunctionBuilder, Symbol},
     function,
     id::{Pattern, Replacement},
+    printer::PrintOptions,
     with_default_namespace,
 };
 use tabled::{builder::Builder, settings::Style};
@@ -247,13 +248,16 @@ pub trait LMBext {
         subgraph: &S,
         tree: &S,
         externals: S,
-    ) -> LoopMomentumBasis;
+    ) -> LoopMomentumBasis
+    where
+        S::Base: ModifySubgraph<Hedge>;
 
     fn lmb<S: SubGraph<Base = BitVec>>(&self, subgraph: &S) -> LoopMomentumBasis;
 
     fn compatible_sub_lmb<S: SubGraph>(
         &self,
         subgraph: &S,
+        externals: S::Base,
         lmb: &LoopMomentumBasis,
     ) -> LoopMomentumBasis
     where
@@ -268,7 +272,10 @@ pub trait LMBext {
         subgraph: &S,
         cotree: &S,
         externals: S,
-    ) -> LoopMomentumBasis {
+    ) -> LoopMomentumBasis
+    where
+        S::Base: ModifySubgraph<Hedge>,
+    {
         let tree = subgraph.subtract(cotree);
         self.lmb_impl(subgraph, &tree, externals)
     }
@@ -301,7 +308,13 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
                 EdgeData::new(
                     GS.emr_mom
                         .f([usize::from(e) as i32])
-                        .replace_multiple(&reps),
+                        .replace_multiple(&reps)
+                        .printer(PrintOptions {
+                            color_builtin_symbols: false,
+                            color_top_level_sum: false,
+                            ..Default::default()
+                        })
+                        .to_string(),
                     Orientation::Default,
                 )
             },
@@ -327,6 +340,7 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
     fn compatible_sub_lmb<S: SubGraph>(
         &self,
         subgraph: &S,
+        externals: S::Base,
         lmb: &LoopMomentumBasis,
     ) -> LoopMomentumBasis
     where
@@ -361,20 +375,25 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
             }
 
             if self.count_connected_components(&cut_subgraph) == components {
-                let externals = self.full_crown(subgraph);
-                return self.lmb_impl(subgraph.included(), &cut_subgraph, externals);
+                // let externals = self.full_crown(subgraph);
+
+                return self.lmb_impl(subgraph.included(), &cut_subgraph, externals.clone());
             }
         }
 
         panic!("No lmb found for {} and lmb {:?}", self.dot(subgraph), lmb)
     }
 
+    /// The true externals (that will flow through the graph (i.e. not dummy)) are those that are both in the subgraph and in the externals
     fn lmb_impl<S: SubGraph + SubGraphOps + ModifySubgraph<HedgePair> + ModifySubgraph<Hedge>>(
         &self,
         subgraph: &S,
         tree: &S,
-        mut externals: S,
-    ) -> LoopMomentumBasis {
+        true_externals: S,
+    ) -> LoopMomentumBasis
+    where
+        S::Base: ModifySubgraph<Hedge>,
+    {
         // println!(
         //     "//Lmb of subgraph:\n{}\n//Tree:\n{}\n//Externals\n{}",
         //     self.dot(subgraph),
@@ -386,7 +405,7 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
         };
         let mut ext_edges: TiVec<ExternalIndex, EdgeIndex> = vec![].into();
 
-        let true_externals = externals.intersection(subgraph);
+        let mut externals = self.full_crown(subgraph);
         let dep_ext = true_externals.included_iter().next();
 
         let root_node = self.node_id(dep_ext.unwrap_or(h));
@@ -456,7 +475,7 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
                     let ext_sign: SignOrZero = flow.into();
                     // println!("{hedge}");
 
-                    if subgraph.includes(&hedge) {
+                    if true_externals.includes(&hedge) {
                         path_to_dep.add(dep_ext.unwrap());
 
                         if self.node_id(hedge) == root_node {
@@ -687,7 +706,10 @@ impl LMBext for Graph {
         subgraph: &S,
         tree: &S,
         externals: S,
-    ) -> LoopMomentumBasis {
+    ) -> LoopMomentumBasis
+    where
+        S::Base: ModifySubgraph<Hedge>,
+    {
         self.underlying.lmb_impl(subgraph, tree, externals)
     }
 
@@ -698,6 +720,7 @@ impl LMBext for Graph {
     fn compatible_sub_lmb<S: SubGraph>(
         &self,
         subgraph: &S,
+        externals: S::Base,
         lmb: &LoopMomentumBasis,
     ) -> LoopMomentumBasis
     where
@@ -707,7 +730,7 @@ impl LMBext for Graph {
             + ModifySubgraph<HedgePair>
             + ModifySubgraph<Hedge>,
     {
-        self.underlying.compatible_sub_lmb(subgraph, lmb)
+        self.underlying.compatible_sub_lmb(subgraph, externals, lmb)
     }
 }
 
@@ -829,6 +852,10 @@ pub struct LmbIndex(usize);
 
 #[cfg(test)]
 pub mod test {
+    use bitvec::vec::BitVec;
+    use insta::assert_snapshot;
+    use linnet::{half_edge::subgraph::SubGraphOps, parser::DotGraph};
+
     use crate::{
         dot,
         graph::{parse::IntoGraph, Graph, LMBext},
@@ -863,5 +890,40 @@ pub mod test {
                 insta::assert_snapshot!(g.dot_lmb(&g.full_filter(), &g.loop_momentum_basis));
             });
         }
+    }
+
+    #[test]
+    fn compatible_sub_lmb() {
+        let g: DotGraph = linnet::dot!(
+            digraph dxda{
+                            e1 [style=invis]
+                            e2 [style=invis]
+                            e3 [style=invis]
+                            e4 [style=invis]
+                            node[num=1]
+                            e1->v1:0:n[id=0]
+                            e2->v1:1[id=1 ]
+                            v1:s->v2:s
+                            v2:s->v3:s
+                            v3->v1
+                            v1:s->v3:s
+                            e4->v3
+                            e3->v2:2[id=2 ]
+                        }
+
+        )
+        .unwrap();
+
+        let subgraph: BitVec = g.compass_subgraph(Some(dot_parser::ast::CompassPt::S));
+
+        let dummy: BitVec = g.compass_subgraph(Some(dot_parser::ast::CompassPt::N));
+        let non_dummy = g.full_filter().subtract(&dummy);
+        let lmb = g.lmb(&non_dummy);
+        let non_dummy_sub_ext = g.full_crown(&subgraph).subtract(&dummy);
+
+        let sub_lmb = g.compatible_sub_lmb(&subgraph, non_dummy_sub_ext, &lmb);
+
+        assert_snapshot!(g.dot_lmb(&non_dummy, &lmb));
+        assert_snapshot!(g.dot_lmb(&subgraph, &sub_lmb));
     }
 }

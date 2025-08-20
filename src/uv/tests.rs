@@ -11,6 +11,7 @@ use crate::utils::W_;
 use linnet::half_edge::involution::EdgeIndex;
 
 use linnet::half_edge::{builder::HedgeGraphBuilder, involution::Flow};
+use log::debug;
 use symbolica::symbol;
 
 use crate::{
@@ -49,25 +50,26 @@ fn four_photon_one_loop_amp() {
 }
 
 #[test]
-fn tri_uv_AMP() {
+fn tta_uv() {
     test_initialise().unwrap();
     let model = load_generic_model("sm");
 
     let mut amp: AmplitudeGraph = dot!(
         digraph G{
-            node [num=1]
+            // node [num=1]
             e        [style=invis]
-            e -> A:0   [ id=0]
-            e -> B:1   [ id=1]
-            e -> C:2   [ id=2]
-            A -> B    [ lmb_index=0]
-            B -> C
-            C -> D
+            e -> A:0   [ id=0 particle=t]
+            B:1 -> e   [ id=1 particle=t]
+            e -> C:2   [ id=2 particle=a]
+            A -> B    [ lmb_index=0 particle=g]
+            C -> B  [particle=t]
+            A -> C [particle=t]
         },&model
     )
     .unwrap();
 
     println!("{}", amp.graph.debug_dot());
+    debug!("HHH");
 
     amp.generate_cff().unwrap();
     let a = amp

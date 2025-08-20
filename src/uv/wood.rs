@@ -1,7 +1,7 @@
-use std::collections::VecDeque;
-
 use crate::graph::{Edge, LoopMomentumBasis, Vertex};
 use slotmap::SecondaryMap;
+use std::collections::VecDeque;
+use std::fmt::Write;
 
 use linnet::half_edge::{subgraph::InternalSubGraph, HedgeGraph};
 
@@ -164,18 +164,22 @@ impl Wood {
         })
     }
 
-    pub(crate) fn dot_spinneys<E, V, H, G>(&self, graph: &G)
+    pub(crate) fn dot_spinneys<E, V, H, G>(&self, graph: &G) -> String
     where
         G: UltravioletGraph + AsRef<HedgeGraph<E, V, H>>,
     {
+        let mut out = String::new();
         for s in self.poset.node_values() {
-            println!(
+            writeln!(
+                out,
                 "found {} loop spinney with dod {}:{} ",
                 graph.n_loops(s),
                 graph.dod(s),
                 graph.as_ref().dot(s)
-            );
+            )
+            .unwrap();
         }
+        out
     }
 }
 
@@ -190,6 +194,7 @@ impl Wood {
 
         out.push_str("Graphs:\n");
         for (k, n) in self.poset.nodes.iter() {
+            // n.data
             out.push_str(&graph.as_ref().dot_impl(
                 &n.data,
                 format!(

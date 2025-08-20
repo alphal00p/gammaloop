@@ -11,6 +11,7 @@ use crate::{
     uv::approx::CFFapprox,
 };
 use bitvec::vec::BitVec;
+use slotmap::Key;
 use spenso::{
     network::store::TensorScalarStoreMapping,
     structure::abstract_index::AIND_SYMBOLS,
@@ -23,6 +24,7 @@ use symbolica::{
 };
 
 use linnet::half_edge::{involution::EdgeIndex, subgraph::SubGraph, HedgeGraph};
+use std::fmt::Write;
 
 use typed_index_collections::TiVec;
 use vakint::Vakint;
@@ -238,9 +240,26 @@ impl Forest {
     //     Some(sum)
     // }
 
-    pub(crate) fn graphs(&self) -> String {
-        self.dag
-            .to_dot_impl(&|n| format!("label=S_{}", n.data.subgraph.string_label()))
+    pub(crate) fn graphs(&self, graph: &Graph) -> String {
+        let mut out = String::new();
+        self.dag.nodes.iter().for_each(|(_, a)| {
+            writeln!(
+                out,
+                "//S_{}:\n{}",
+                a.data.subgraph.string_label(),
+                a.data.dot(graph)
+            )
+            .unwrap()
+        });
+        writeln!(
+            out,
+            "{}",
+            self.dag
+                .to_dot_impl(&|n| format!("label=S_{}", n.data.subgraph.string_label()))
+        )
+        .unwrap();
+
+        out
     }
 
     // pub(crate) fn show_structure(&self, graph: &UVGraph, amplitude: &InternalSubGraph) -> Option<String> {

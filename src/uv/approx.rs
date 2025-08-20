@@ -5,7 +5,7 @@ use crate::{
         expression::{GraphOrientation, OrientationID},
         generation::{generate_uv_cff, ShiftRewrite},
     },
-    graph::{Edge, LMBext, LoopMomentumBasis, Vertex},
+    graph::{Edge, Graph, LMBext, LoopMomentumBasis, Vertex},
     momentum::Sign,
     numerator::{symbolica_ext::AtomCoreExt, Network},
     utils::{external_energy_atom_from_index, ose_atom_from_index, GS, W_},
@@ -217,6 +217,10 @@ impl CFFapprox {
     }
 }
 impl Approximation {
+    pub(crate) fn dot(&self, graph: &Graph) -> String {
+        graph.dot_lmb(&self.subgraph, &self.lmb)
+    }
+
     pub(crate) fn root<
         H,
         G: UltravioletGraph + AsRef<HedgeGraph<Edge, Vertex, H>>,
@@ -261,7 +265,7 @@ impl Approximation {
     where
         G: UltravioletGraph + AsRef<HedgeGraph<E, V, H>>,
     {
-        let lmb = graph.compatible_sub_lmb(&spinney, lmb);
+        let lmb = graph.compatible_sub_lmb(&spinney, graph.dummy_less_full_crown(&spinney), lmb);
         // println!("//lmb for spinney \n{}", graph.dot_lmb(&spinney, &lmb));
         Approximation {
             dod: graph.dod(&spinney),

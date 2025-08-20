@@ -2,8 +2,8 @@ use ahash::AHashSet;
 use bitvec::vec::BitVec;
 use idenso::metric::MS;
 use linnet::half_edge::{
-    involution::HedgePair,
-    subgraph::{Cycle, InternalSubGraph, SubGraph, SubGraphOps},
+    involution::{Hedge, HedgePair},
+    subgraph::{Cycle, InternalSubGraph, ModifySubgraph, SubGraph, SubGraphOps},
     HedgeGraph, PowersetIterator,
 };
 use symbolica::{
@@ -33,6 +33,10 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph {
     {
         self.as_ref().cyclotomatic_number(subgraph)
     }
+
+    fn dummy_less_full_crown<S: SubGraph>(&self, subgraph: &S) -> S::Base
+    where
+        S::Base: ModifySubgraph<Hedge> + SubGraphOps;
 
     ///Get the numerator of the graph.
     /// If multiply_prefactor is true, the numerator is multiplied by the global  prefactor. (just num not projector)
@@ -230,6 +234,22 @@ impl AsRef<HedgeGraph<Edge, Vertex, NumHedgeData>> for Graph {
 }
 
 impl UltravioletGraph for Graph {
+    fn dummy_less_full_crown<S: SubGraph>(&self, subgraph: &S) -> S::Base
+    where
+        S::Base: ModifySubgraph<Hedge>,
+    {
+        let a = self.full_crown(subgraph);
+        let mut ac = a.clone();
+
+        a.included_iter().for_each(|a| {
+            if self[self[&a]].is_dummy {
+                ac.sub(a);
+            }
+        });
+
+        ac
+    }
+
     fn denominator<S: SubGraph>(&self, subgraph: &S) -> Atom {
         let mut den = Atom::num(1);
 
@@ -276,6 +296,8 @@ impl UltravioletGraph for Graph {
         for (_, _, n) in self.underlying.iter_nodes_of(subgraph) {
             dod += n.dod;
         }
+
+        // println!("Dod:{dod} for subgraph:{}", self.dot(subgraph));
 
         dod
     }
