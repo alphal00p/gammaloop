@@ -71,17 +71,7 @@ pub struct AmplitudeGraphTerm {
 
 impl AmplitudeGraphTerm {
     pub fn from_amplitude_graph(graph: &AmplitudeGraph, model: &Model) -> Result<Self> {
-        let esurfaces = &graph
-            .derived_data
-            .cff_expression
-            .as_ref()
-            .unwrap()
-            .surfaces
-            .esurface_cache;
-
-        let esurface_data = graph.derived_data.esurface_data.as_ref().unwrap();
-
-        let mut param_builder = ParamBuilder::new(&graph.graph, model);
+        let param_builder = ParamBuilder::new(&graph.graph, model);
 
         // (momentum_sample);
 
@@ -314,6 +304,8 @@ impl GraphTerm for AmplitudeGraphTerm {
                 .collect();
         }
 
+        self.threshold_counterterm = Some(threshold_counterterm);
+
         Ok(())
     }
 
@@ -357,7 +349,7 @@ impl GraphTerm for AmplitudeGraphTerm {
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct AmplitudeIntegrand {
-    pub settings: Option<RuntimeSettings>,
+    pub settings: RuntimeSettings,
     pub data: AmplitudeIntegrandData,
 }
 
@@ -402,18 +394,12 @@ impl AmplitudeIntegrand {
 impl GammaloopIntegrand for AmplitudeIntegrand {
     type G = AmplitudeGraphTerm;
 
-    fn warm_up(
-        &mut self,
-        settings: RuntimeSettings,
-        derived_data: &[&AmplitudeDerivedData],
-    ) -> Result<()> {
+    fn warm_up(&mut self, derived_data: &[&AmplitudeDerivedData]) -> Result<()> {
         self.data.rotations = Some(
             Some(Rotation::new(RotationMethod::Identity))
                 .into_iter()
                 .chain(
                     self.settings
-                        .as_ref()
-                        .expect("forgot warmup")
                         .stability
                         .rotation_axis
                         .iter()
@@ -423,7 +409,7 @@ impl GammaloopIntegrand for AmplitudeIntegrand {
         );
 
         for (a, derived_data) in self.data.graph_terms.iter_mut().zip(derived_data) {
-            a.warm_up(derived_data, self.settings.as_ref().expect("forgot warmup"))?;
+            a.warm_up(derived_data, &self.settings)?;
         }
         Ok(())
     }
@@ -445,7 +431,7 @@ impl GammaloopIntegrand for AmplitudeIntegrand {
     }
 
     fn get_settings(&self) -> &RuntimeSettings {
-        self.settings.as_ref().expect("forgot warmup")
+        &self.settings
     }
 
     fn get_graph_mut(&mut self, graph_id: usize) -> &mut Self::G {
@@ -484,8 +470,6 @@ impl HasIntegrand for AmplitudeIntegrand {
     fn get_n_dim(&self) -> usize {
         if self
             .settings
-            .as_ref()
-            .expect("forgot warmup")
             .sampling
             .get_parameterization_settings()
             .is_some()

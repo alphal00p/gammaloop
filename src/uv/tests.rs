@@ -53,7 +53,7 @@ fn tri_uv_AMP() {
     test_initialise().unwrap();
     let model = load_generic_model("sm");
 
-    let graph: Graph = dot!(
+    let mut amp: AmplitudeGraph = dot!(
         digraph G{
             node [num=1]
             e        [style=invis]
@@ -67,12 +67,14 @@ fn tri_uv_AMP() {
     )
     .unwrap();
 
-    let mut amp = Amplitude::new("");
-    amp.add_graph(graph);
+    println!("{}", amp.graph.debug_dot());
 
-    amp.preprocess(&model, &GenerationSettings::default())
+    amp.generate_cff().unwrap();
+    let a = amp
+        .build_parametric_integrand(&GenerationSettings::default())
         .unwrap();
-    amp.build_integrand(&model).unwrap();
+
+    println!("{}", amp.derived_data.all_mighty_integrand);
 }
 
 #[test]
@@ -275,7 +277,8 @@ fn tri_box_tri_LU() {
         },
     )
     .unwrap();
-    cs.build_integrand(&model).unwrap();
+    cs.build_integrand(&model, (&RuntimeSettings::default()).into())
+        .unwrap();
 
     //println!("Final result: {:>}", sum.expand());
 }
@@ -401,7 +404,8 @@ fn double_triangle_LU() {
     )
     .unwrap();
 
-    cs.build_integrand(&model).unwrap();
+    cs.build_integrand(&model, (&RuntimeSettings::default()).into())
+        .unwrap();
 
     //println!("Final result: {:>}", sum.expand());
 }

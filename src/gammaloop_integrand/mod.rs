@@ -105,14 +105,10 @@ impl<'a> DerivedDataContainer<'a> {
 }
 
 impl NewIntegrand {
-    pub(crate) fn warm_up(
-        &mut self,
-        settings: RuntimeSettings,
-        derived_data: DerivedDataContainer,
-    ) -> Result<()> {
+    pub(crate) fn warm_up(&mut self, derived_data: DerivedDataContainer) -> Result<()> {
         match self {
-            Self::Amplitude(a) => a.warm_up(settings, derived_data.amplitude()?),
-            Self::CrossSection(a) => a.warm_up(settings, derived_data.cross_section()?),
+            Self::Amplitude(a) => a.warm_up(derived_data.amplitude()?),
+            Self::CrossSection(a) => a.warm_up(derived_data.cross_section()?),
         }
     }
 
@@ -136,12 +132,8 @@ impl NewIntegrand {
 
     pub(crate) fn get_settings(&self) -> &RuntimeSettings {
         match self {
-            NewIntegrand::Amplitude(integrand) => {
-                integrand.settings.as_ref().expect("forgot warmup")
-            }
-            NewIntegrand::CrossSection(integrand) => {
-                integrand.settings.as_ref().expect("forgot warmup")
-            }
+            NewIntegrand::Amplitude(integrand) => &integrand.settings,
+            NewIntegrand::CrossSection(integrand) => &integrand.settings,
         }
     }
 
@@ -158,12 +150,8 @@ impl NewIntegrand {
 
     pub(crate) fn get_mut_settings(&mut self) -> &mut RuntimeSettings {
         match self {
-            NewIntegrand::Amplitude(integrand) => {
-                integrand.settings.as_mut().expect("forgot warmup")
-            }
-            NewIntegrand::CrossSection(integrand) => {
-                integrand.settings.as_mut().expect("forgot warmup")
-            }
+            NewIntegrand::Amplitude(integrand) => &mut integrand.settings,
+            NewIntegrand::CrossSection(integrand) => &mut integrand.settings,
         }
     }
 }
@@ -710,7 +698,6 @@ pub trait GammaloopIntegrand {
 
     fn warm_up(
         &mut self,
-        settings: RuntimeSettings,
         derived_data: &[&<<Self as GammaloopIntegrand>::G as GraphTerm>::DerivedData],
     ) -> Result<()>;
     fn get_rotations(&self) -> impl Iterator<Item = &Rotation>;

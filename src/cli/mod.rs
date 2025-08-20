@@ -126,7 +126,7 @@ impl Cli {
             Commands::Quit {} => {
                 return Ok(ControlFlow::Break(()));
             }
-            Commands::Inspect(inspect) => inspect.run(state, &runtime_settings)?,
+            Commands::Inspect(inspect) => inspect.run(state)?,
             Commands::Bench { samples } => {
                 info!(
                     "\nBenchmarking runtime of integrand '{}' over {} samples...\n",
@@ -217,10 +217,10 @@ impl Cli {
                 }
             },
 
-            Commands::Generate(g) => g.run(state, global_settings)?,
+            Commands::Generate(g) => g.run(state, global_settings, runtime_settings)?,
 
             Commands::Integrate(g) => {
-                g.run(state, &runtime_settings)?;
+                g.run(state)?;
             }
 
             Commands::Display(l) => match l {

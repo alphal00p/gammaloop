@@ -1091,7 +1091,7 @@ impl PythonWorker {
 
         let integrands = self
             .process_list
-            .generate_integrands(&settings, &self.model);
+            .generate_integrands(&self.model, (&settings).into());
     }
 
     pub(crate) fn export(&mut self, export_root: &str) -> PyResult<()> {

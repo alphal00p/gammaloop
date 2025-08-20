@@ -856,9 +856,9 @@ pub mod test {
         )
         .unwrap();
 
-        for (i, g) in gs.iter().enumerate() {
+        for g in gs {
             insta::with_settings!({
-                snapshot_suffix=>format!("case_{}", i),
+                snapshot_suffix=>format!("{}",g.name),
             }, {
                 insta::assert_snapshot!(g.dot_lmb(&g.full_filter(), &g.loop_momentum_basis));
             });

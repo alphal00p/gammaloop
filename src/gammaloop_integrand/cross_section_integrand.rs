@@ -41,7 +41,7 @@ const HARD_CODED_M_R_SQ: F<f64> = F(1000.0);
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct CrossSectionIntegrand {
-    pub settings: Option<RuntimeSettings>,
+    pub settings: RuntimeSettings,
     pub data: CrossSectionIntegrandData,
 }
 #[derive(Clone, Encode, Decode)]
@@ -83,19 +83,12 @@ impl GammaloopIntegrand for CrossSectionIntegrand {
         self.data.rotations.as_ref().expect("forgot warmup").iter()
     }
 
-    fn warm_up(
-        &mut self,
-        settings: RuntimeSettings,
-        derived_data: &[&CrossSectionDerivedData],
-    ) -> Result<()> {
-        self.settings = Some(settings);
+    fn warm_up(&mut self, derived_data: &[&CrossSectionDerivedData]) -> Result<()> {
         self.data.rotations = Some(
             Some(Rotation::new(RotationMethod::Identity))
                 .into_iter()
                 .chain(
                     self.settings
-                        .as_ref()
-                        .expect("forgot warmup")
                         .stability
                         .rotation_axis
                         .iter()
@@ -105,7 +98,7 @@ impl GammaloopIntegrand for CrossSectionIntegrand {
         );
 
         for (a, derived_data) in self.data.graph_terms.iter_mut().zip(derived_data) {
-            a.warm_up(derived_data, self.settings.as_ref().expect("forgot warmup"))?;
+            a.warm_up(derived_data, &self.settings)?;
         }
         Ok(())
     }
@@ -119,7 +112,7 @@ impl GammaloopIntegrand for CrossSectionIntegrand {
     }
 
     fn get_settings(&self) -> &RuntimeSettings {
-        self.settings.as_ref().expect("forgot warmup")
+        &self.settings
     }
 
     fn get_graph_mut(&mut self, graph_id: usize) -> &mut Self::G {
@@ -420,7 +413,7 @@ impl HasIntegrand for CrossSectionIntegrand {
         max_eval: Complex<F<f64>>,
     ) -> EvaluationResult {
         let result = evaluate_sample(self, sample, wgt, _iter, use_f128, max_eval);
-        if self.settings.as_ref().expect("forgot warmup").general.debug > 0 {
+        if self.settings.general.debug > 0 {
             println!("result: {:?}", result.integrand_result);
         }
 
@@ -430,8 +423,6 @@ impl HasIntegrand for CrossSectionIntegrand {
     fn get_n_dim(&self) -> usize {
         assert!(
             self.settings
-                .as_ref()
-                .expect("forgot warmup")
                 .sampling
                 .get_parameterization_settings()
                 .is_some(),

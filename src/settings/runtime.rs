@@ -22,6 +22,20 @@ pub struct SubtractionSettings {
     pub disable_threshold_subtraction: bool,
 }
 
+#[derive(Copy, Clone)]
+pub struct LockedRuntimeSettings<'a>(&'a RuntimeSettings);
+impl<'a> From<&'a RuntimeSettings> for LockedRuntimeSettings<'a> {
+    fn from(value: &'a RuntimeSettings) -> Self {
+        LockedRuntimeSettings(value)
+    }
+}
+
+impl<'a> From<LockedRuntimeSettings<'a>> for RuntimeSettings {
+    fn from(value: LockedRuntimeSettings) -> Self {
+        value.0.clone()
+    }
+}
+
 impl RuntimeSettings {
     pub(crate) fn from_file(filename: impl AsRef<Path>) -> Result<RuntimeSettings> {
         let filename = filename.as_ref();

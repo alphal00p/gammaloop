@@ -22,6 +22,7 @@ use crate::{
     },
     graph::{get_cff_inverse_energy_product_impl, LMBext, LmbIndex, LoopMomentumBasis},
     model::ArcParticle,
+    settings::runtime::LockedRuntimeSettings,
     utils::{ose_atom_from_index, GS, W_},
     GammaLoopContext, GammaLoopContextContainer,
 };
@@ -138,7 +139,11 @@ impl<S: CrossSectionState> CrossSection<S> {
         Ok(())
     }
 
-    pub(crate) fn build_integrand(&mut self, model: &Model) -> Result<()> {
+    pub(crate) fn build_integrand(
+        &mut self,
+        model: &Model,
+        runtime_default: LockedRuntimeSettings,
+    ) -> Result<()> {
         let terms = self
             .supergraphs
             .iter()
@@ -146,7 +151,7 @@ impl<S: CrossSectionState> CrossSection<S> {
             .collect_vec();
 
         let cross_section_integrand = CrossSectionIntegrand {
-            settings: None,
+            settings: runtime_default.into(),
             data: CrossSectionIntegrandData {
                 rotations: None,
                 name: self.name.clone(),

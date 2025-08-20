@@ -9,7 +9,10 @@ use color_eyre::Result;
 use eyre::Context;
 use log::debug;
 
-use crate::{settings::GlobalSettings, GammaLoopContext, GammaLoopContextContainer};
+use crate::{
+    settings::{runtime::LockedRuntimeSettings, GlobalSettings},
+    GammaLoopContext, GammaLoopContextContainer,
+};
 use serde::{Deserialize, Serialize};
 
 use crate::{model::Model, settings::global::GenerationSettings, settings::RuntimeSettings};
@@ -40,10 +43,8 @@ impl ProcessList {
         ProcessList { processes: vec![] }
     }
 
-    pub(crate) fn warm_up(&mut self, settings: RuntimeSettings) {
-        self.processes
-            .iter_mut()
-            .for_each(|a| a.warm_up(settings.clone()));
+    pub(crate) fn warm_up(&mut self) {
+        self.processes.iter_mut().for_each(|a| a.warm_up());
     }
 
     pub(crate) fn load(path: impl AsRef<Path>, context: GammaLoopContextContainer) -> Result<Self> {
@@ -152,9 +153,13 @@ impl ProcessList {
         Ok(())
     }
 
-    pub fn generate_integrands(&mut self, model: &Model) -> Result<()> {
+    pub fn generate_integrands(
+        &mut self,
+        model: &Model,
+        runtime_default: LockedRuntimeSettings,
+    ) -> Result<()> {
         for process in &mut self.processes {
-            process.generate_integrands(model)?;
+            process.generate_integrands(model, runtime_default)?;
         }
         Ok(())
     }

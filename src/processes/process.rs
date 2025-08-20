@@ -10,7 +10,9 @@ use color_eyre::{Help, Result};
 use log::debug;
 
 use crate::{
-    gammaloop_integrand::NewIntegrand, model::ArcParticle, settings::GlobalSettings,
+    gammaloop_integrand::NewIntegrand,
+    model::ArcParticle,
+    settings::{runtime::LockedRuntimeSettings, GlobalSettings},
     GammaLoopContext, GammaLoopContextContainer,
 };
 use eyre::{eyre, Context};
@@ -81,8 +83,8 @@ pub struct Process {
 }
 
 impl Process {
-    pub(crate) fn warm_up(&mut self, settings: RuntimeSettings) {
-        self.collection.warm_up(settings);
+    pub(crate) fn warm_up(&mut self) {
+        self.collection.warm_up();
     }
     pub(crate) fn preprocess(&mut self, model: &Model, settings: &GlobalSettings) -> Result<()> {
         self.collection
@@ -302,8 +304,12 @@ impl Process {
         }
     }
 
-    pub(super) fn generate_integrands(&mut self, model: &Model) -> Result<()> {
-        self.collection.generate_integrands(model)
+    pub(super) fn generate_integrands(
+        &mut self,
+        model: &Model,
+        runtime_default: LockedRuntimeSettings,
+    ) -> Result<()> {
+        self.collection.generate_integrands(model, runtime_default)
     }
 }
 
@@ -457,11 +463,11 @@ impl ProcessCollection {
         Ok(())
     }
 
-    fn warm_up(&mut self, settings: RuntimeSettings) {
+    fn warm_up(&mut self) {
         match self {
             Self::Amplitudes(amplitudes) => {
                 for (_, amplitude) in amplitudes {
-                    amplitude.warm_up(settings.clone());
+                    amplitude.warm_up();
                 }
             }
             Self::CrossSections(cross_sections) => {
@@ -473,17 +479,21 @@ impl ProcessCollection {
         // Ok(())
     }
 
-    fn generate_integrands(&mut self, model: &Model) -> Result<()> {
+    fn generate_integrands(
+        &mut self,
+        model: &Model,
+        runtime_default: LockedRuntimeSettings,
+    ) -> Result<()> {
         // let mut result = HashMap::default();
         match self {
             Self::Amplitudes(amplitudes) => {
                 for (_, amplitude) in amplitudes {
-                    amplitude.build_integrand(model)?;
+                    amplitude.build_integrand(model, runtime_default)?;
                 }
             }
             Self::CrossSections(cross_sections) => {
                 for (_, cross_section) in cross_sections {
-                    cross_section.build_integrand(model)?;
+                    cross_section.build_integrand(model, runtime_default)?;
                 }
             }
         }

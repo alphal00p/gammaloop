@@ -30,6 +30,7 @@ use crate::{
     model::ArcParticle,
     momentum_sample::ExternalIndex,
     numerator::symbolica_ext::AtomCoreExt,
+    settings::runtime::LockedRuntimeSettings,
     signature::SignatureLike,
     subtraction::{
         amplitude_counterterm::{AmplitudeCountertermAtom, AmplitudeCountertermData},
@@ -75,13 +76,13 @@ pub struct Amplitude {
 }
 
 impl Amplitude {
-    pub(crate) fn warm_up(&mut self, settings: RuntimeSettings) {
+    pub(crate) fn warm_up(&mut self) {
         let derived_data = &self.graphs.iter().map(|g| &g.derived_data).collect_vec();
         let derived_data_container = DerivedDataContainer::Amplitude(&derived_data);
 
         self.integrand
             .as_mut()
-            .map(|a| a.warm_up(settings, derived_data_container));
+            .map(|a| a.warm_up(derived_data_container));
     }
     pub(crate) fn load(path: impl AsRef<Path>, context: GammaLoopContextContainer) -> Result<Self> {
         let binary = fs::read(path.as_ref().join("amp.bin"))?;
@@ -128,7 +129,11 @@ impl Amplitude {
         Ok(())
     }
 
-    pub(crate) fn build_integrand(&mut self, model: &Model) -> Result<()> {
+    pub(crate) fn build_integrand(
+        &mut self,
+        model: &Model,
+        runtime_default: LockedRuntimeSettings,
+    ) -> Result<()> {
         let terms: Result<Vec<_>> = self
             .graphs
             .iter()
@@ -141,9 +146,10 @@ impl Amplitude {
         //     .iter()
         //     .map(|r| orig_polarizations.rotate(r))
         //     .collect();
+        //
 
         let amplitude_integrand = AmplitudeIntegrand {
-            settings: None,
+            settings: runtime_default.into(),
             data: AmplitudeIntegrandData {
                 name: self.name.clone(),
                 rotations: None,

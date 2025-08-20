@@ -1,10 +1,13 @@
 use ahash::HashSet;
 use color_eyre::Result;
 use itertools::Itertools;
-use linnet::half_edge::{
-    involution::{EdgeData, EdgeIndex, HedgePair},
-    subgraph::SubGraph,
-    HedgeGraph,
+use linnet::{
+    half_edge::{
+        involution::{EdgeData, EdgeIndex, HedgePair},
+        subgraph::SubGraph,
+        HedgeGraph,
+    },
+    parser::DotGraph,
 };
 use log::debug;
 
@@ -50,6 +53,10 @@ pub mod feynman_graph;
 pub use feynman_graph::FeynmanGraph;
 pub mod ext;
 impl Graph {
+    pub(crate) fn debug_dot(&self) -> String {
+        DotGraph::from(self).debug_dot()
+    }
+
     /// With wrapped color, so that it doesn't enter the network as a tensor. Can unwrap using `unwrap_function`
     /// Contains the parametric sign on the OSE
     pub(crate) fn global_network(&self) -> ParsingNet {
