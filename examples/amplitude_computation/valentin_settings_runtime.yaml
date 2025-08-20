@@ -11,8 +11,6 @@ General:
     im: 1.0
   load_compiled_separate_orientations: false
   force_orientations: null
-  m_uv: 1.0
-  mu_r_sq: 1.0
 Integrand:
   type: unit_surface
   n_3d_momenta: 11
