@@ -120,6 +120,9 @@ impl AmplitudeGraphTerm {
             settings.kinematics.externals.get_helicities(),
         );
 
+        param_builder.m_uv_value(Complex::new_re(settings.general.m_uv));
+        param_builder.mu_r_sq_value(Complex::new_re(settings.general.mu_r_sq));
+
         // (momentum_sample);
 
         let edge_masses = graph.graph.new_edgevec(|edge, _, _| edge.mass_value());
