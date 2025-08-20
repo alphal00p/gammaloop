@@ -112,16 +112,13 @@ impl AmplitudeGraphTerm {
             settings.kinematics.e_cm,
         );
 
-        let mut param_builder = graph.ct_params(model);
+        let mut param_builder = ParamBuilder::new(&graph.graph, model);
         param_builder.add_external_four_mom(&externals);
         param_builder.polarizations_values(
             &graph.graph,
             &externals,
             settings.kinematics.externals.get_helicities(),
         );
-        param_builder.model_parameters_value(model);
-        param_builder.mu_r_sq_value(Complex::new_zero());
-        param_builder.m_uv_value(Complex::new_zero());
 
         // (momentum_sample);
 

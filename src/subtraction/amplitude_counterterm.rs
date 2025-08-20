@@ -36,14 +36,14 @@ const TOLERANCE: f64 = 1.0;
 
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
-pub(crate) struct AmplitudeCountertermData {
+pub struct AmplitudeCountertermData {
     pub overlap: OverlapStructure,
     pub evaluators: TiVec<EsurfaceID, AmplitudeCountertermEvaluator>,
 }
 
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
-pub(crate) struct AmplitudeCountertermAtom {
+pub struct AmplitudeCountertermAtom {
     pub parametric_local: Atom,
     pub parametric_integrated: Atom,
     pub concrete_local: Option<Atom>,
@@ -81,7 +81,7 @@ impl AmplitudeCountertermAtom {
 
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
-pub(crate) struct AmplitudeCountertermEvaluator {
+pub struct AmplitudeCountertermEvaluator {
     pub parametric: GenericEvaluator,
     pub concrete: Option<GenericEvaluator>,
 }

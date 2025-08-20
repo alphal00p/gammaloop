@@ -723,7 +723,7 @@ impl<S: CrossSectionState> CrossSectionGraph<S> {
         params.push(Atom::var(GS.rescale_star));
         params.push(Atom::var(GS.hfunction));
         params.push(Atom::var(GS.deta));
-        ParamBuilder::new()
+        ParamBuilder::new_empty()
     }
 
     fn get_function_map(&self) -> FunctionMap {
@@ -855,7 +855,7 @@ impl<S: CrossSectionState> CrossSectionGraph<S> {
             cut_esurface: self.cut_esurface.clone(),
             lmbs: self.derived_data.lmbs.clone().unwrap(),
             estimated_scale,
-            param_builder: ParamBuilder::new(),
+            param_builder: ParamBuilder::new_empty(),
         }
     }
 }

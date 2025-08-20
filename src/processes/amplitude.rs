@@ -273,46 +273,46 @@ impl AmplitudeGraph {
         self.derived_data.multi_channeling_setup = Some(channels)
     }
 
-    pub fn ct_params(&self, model: &Model) -> ParamBuilder<f64> {
-        let mut param_builder = self.param_builder_core(model);
-        param_builder.uv_damp_atom(vec![
-            Atom::var(GS.uv_damp_plus),
-            Atom::var(GS.uv_damp_minus),
-        ]);
-        param_builder.derivative_at_tstar_atom(Atom::var(GS.deta));
-        param_builder.radius_atom(Atom::var(GS.radius));
-        param_builder.radius_star_atom(Atom::var(GS.radius_star));
-        param_builder.h_function_atom(Atom::var(GS.hfunction));
-        param_builder
-    }
+    //  pub fn ct_params(&self, model: &Model) -> ParamBuilder<f64> {
+    //      let mut param_builder = self.param_builder_core(model);
+    //      param_builder.uv_damp_atom(vec![
+    //          Atom::var(GS.uv_damp_plus),
+    //          Atom::var(GS.uv_damp_minus),
+    //      ]);
+    //      param_builder.derivative_at_tstar_atom(Atom::var(GS.deta));
+    //      param_builder.radius_atom(Atom::var(GS.radius));
+    //      param_builder.radius_star_atom(Atom::var(GS.radius_star));
+    //      param_builder.h_function_atom(Atom::var(GS.hfunction));
+    //      param_builder
+    //  }
 
-    pub(crate) fn param_builder_core(&self, model: &Model) -> ParamBuilder<f64> {
-        // the float type does not matter here
-        let mut param_builder = ParamBuilder::<f64>::new();
+    //  pub(crate) fn param_builder_core(&self, model: &Model) -> ParamBuilder<f64> {
+    //      // the float type does not matter here
+    //      let mut param_builder = ParamBuilder::<f64>::new_empty();
 
-        // this is wrong if we allow for vacuum graphs
-        param_builder.external_energies_atom(&self.graph);
-        param_builder.orientation_params(&self.graph);
+    //      // this is wrong if we allow for vacuum graphs
+    //      param_builder.external_energies_atom(&self.graph);
+    //      param_builder.orientation_params(&self.graph);
 
-        // param_builder.polarizations(&self.graph);
-        // param_builder.polar
+    //      // param_builder.polarizations(&self.graph);
+    //      // param_builder.polar
 
-        // spatial components of external momenta
-        param_builder.external_spatial_atom(&self.graph);
-        param_builder.polarization_params(&self.graph);
-        // spatial EMR
-        param_builder.emr_spatial_atom(&self.graph);
+    //      // spatial components of external momenta
+    //      param_builder.external_spatial_atom(&self.graph);
+    //      param_builder.polarization_params(&self.graph);
+    //      // spatial EMR
+    //      param_builder.emr_spatial_atom(&self.graph);
 
-        param_builder.model_parameters_atom(model);
+    //      param_builder.model_parameters_atom(model);
 
-        param_builder.m_uv_atom(Atom::var(GS.m_uv));
+    //      param_builder.m_uv_atom(Atom::var(GS.m_uv));
 
-        param_builder.mu_r_sq_atom(Atom::var(GS.mu_r_sq));
+    //      param_builder.mu_r_sq_atom(Atom::var(GS.mu_r_sq));
 
-        self.add_function_map(&mut param_builder);
+    //      self.add_function_map(&mut param_builder);
 
-        param_builder
-    }
+    //      param_builder
+    //  }
 
     // pub fn fill_in_params(
     //     &self,
@@ -1113,7 +1113,7 @@ pub mod test {
 
     use crate::{
         dot,
-        gammaloop_integrand::GenericEvaluator,
+        gammaloop_integrand::{GenericEvaluator, ParamBuilder},
         graph::parse::IntoGraph,
         processes::AmplitudeGraph,
         settings::global::GenerationSettings,
@@ -1139,7 +1139,7 @@ pub mod test {
         graph.generate_cff();
         // graph.build_parametric_integrand(&GenerationSettings::default());
 
-        let mut param_builder = graph.param_builder_core(&model);
+        let mut param_builder = ParamBuilder::new(&graph.graph, &model);
         println!("{param_builder}");
 
         GenericEvaluator::new_from_builder(
