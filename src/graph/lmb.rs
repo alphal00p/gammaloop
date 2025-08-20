@@ -379,7 +379,7 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
             return self.empty_lmb();
         };
         let mut ext_edges: TiVec<ExternalIndex, EdgeIndex> = vec![].into();
-        let dep_ext = externals.included_iter().next();
+        let dep_ext = externals.intersection(subgraph).included_iter().next();
 
         let root_node = self.node_id(dep_ext.unwrap_or(h));
 
@@ -534,6 +534,11 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
                         }
                     } else {
                         external = empty_external;
+                        if externals.includes(hedge) {
+                            if let Some((e, _)) = ext_edges.iter().find_position(|a| *a == &eid) {
+                                external[e] = SignOrZero::Plus;
+                            };
+                        }
                     }
                     internal = empty_internal;
                 }

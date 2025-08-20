@@ -27,6 +27,7 @@ use derive_more::{From, Into};
 use enum_dispatch::enum_dispatch;
 use eyre::Context;
 use gammaloop_sample::{parameterize, DiscreteGraphSample, GammaLoopSample};
+use idenso::color::CS;
 use itertools::Itertools;
 use linnet::half_edge::involution::{HedgePair, Orientation};
 use log::debug;
@@ -1269,6 +1270,7 @@ where
 pub struct ParamBuilder<T: FloatLike = f64> {
     // values: Vec<Complex<F<T>>
     m_uv: ParamValuePairs<T>,
+    idenso_vars: ParamValuePairs<T>,
     mu_r_sq: ParamValuePairs<T>,
     orientations: ParamValuePairs<T>,
     pub model_parameters: ParamValuePairs<T>,
@@ -1410,7 +1412,7 @@ where
             reps: self.reps.clone(),
             m_uv: self.m_uv.higher(),
             mu_r_sq: self.mu_r_sq.higher(),
-
+            idenso_vars: self.idenso_vars.higher(),
             orientations: self.orientations.higher(),
             model_parameters: self.model_parameters.higher(),
             external_energies: self.external_energies.higher(),
@@ -1432,6 +1434,7 @@ where
             fn_map: self.fn_map.clone(),
             reps: self.reps.clone(),
             m_uv: self.m_uv.lower(),
+            idenso_vars: self.idenso_vars.lower(),
             mu_r_sq: self.mu_r_sq.lower(),
             model_parameters: self.model_parameters.lower(),
             external_energies: self.external_energies.lower(),
@@ -1587,6 +1590,7 @@ impl<T: FloatLike> ParamBuilder<T> {
     pub(crate) fn new_empty() -> Self {
         Self {
             fn_map: FunctionMap::default(),
+            idenso_vars: ParamValuePairs::default(),
             orientations: ParamValuePairs::default(),
             m_uv: ParamValuePairs::default(),
             mu_r_sq: ParamValuePairs::default(),
@@ -1606,10 +1610,20 @@ impl<T: FloatLike> ParamBuilder<T> {
         }
     }
 
+    pub(crate) fn idenso_vars(&mut self) {
+        self.idenso_vars.params = [CS.tr, CS.nc].into_iter().map(Atom::var).collect();
+
+        self.idenso_vars.values = vec![
+            Complex::new_re(F(T::from_f64(0.5))),
+            Complex::new_re(F(T::from_f64(3.))),
+        ];
+    }
+
     pub(crate) fn new(graph: &Graph, model: &Model) -> Self {
         let mut new = Self::new_empty();
 
         new.m_uv = ParamValuePairs::default_from_symbol(GS.m_uv);
+
         new.mu_r_sq = ParamValuePairs::default_from_symbol(GS.mu_r_sq);
         new.tstar = ParamValuePairs::default_from_symbol(GS.rescale_star);
         new.radius = ParamValuePairs::default_from_symbol(GS.radius);
@@ -1618,6 +1632,7 @@ impl<T: FloatLike> ParamBuilder<T> {
         new.esurface_derivative = ParamValuePairs::default_from_symbol(GS.deta);
         new.uv_damp_plus = ParamValuePairs::default_from_symbol(GS.uv_damp_plus);
         new.uv_damp_minus = ParamValuePairs::default_from_symbol(GS.uv_damp_minus);
+        new.idenso_vars();
 
         new.update_model_data(model);
         new.external_energies_atom(graph);
