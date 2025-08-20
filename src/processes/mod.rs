@@ -40,8 +40,10 @@ impl ProcessList {
         ProcessList { processes: vec![] }
     }
 
-    pub(crate) fn warm_up(&mut self) {
-        self.processes.iter_mut().for_each(|a| a.warm_up());
+    pub(crate) fn warm_up(&mut self, settings: RuntimeSettings) {
+        self.processes
+            .iter_mut()
+            .for_each(|a| a.warm_up(settings.clone()));
     }
 
     pub(crate) fn load(path: impl AsRef<Path>, context: GammaLoopContextContainer) -> Result<Self> {
@@ -150,9 +152,9 @@ impl ProcessList {
         Ok(())
     }
 
-    pub fn generate_integrands(&mut self, settings: &RuntimeSettings, model: &Model) -> Result<()> {
+    pub fn generate_integrands(&mut self, model: &Model) -> Result<()> {
         for process in &mut self.processes {
-            process.generate_integrands(&settings, model)?;
+            process.generate_integrands(model)?;
         }
         Ok(())
     }

@@ -31,6 +31,7 @@ use crate::utils::{
     compute_loop_part, compute_shift_part, compute_t_part_of_shift_part, cut_energy,
     external_energy_atom_from_index, ose_atom_from_index, FloatLike, F,
 };
+use color_eyre::Result;
 
 use super::generation::ShiftRewrite;
 use super::surface::{self, Surface};
@@ -497,7 +498,7 @@ struct ExistenceCheckDebug {
     threshold: F<f64>,
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug, Encode, bincode_trait_derive::Decode)]
+#[derive(Clone, Serialize, Deserialize, Debug, Encode, Decode)]
 pub struct EsurfaceDerivedData {
     esurface_data: TiVec<EsurfaceID, Option<EsurfaceData>>,
     orientation_pairs: Vec<(EsurfaceID, EsurfaceID)>,
@@ -511,7 +512,7 @@ impl Index<EsurfaceID> for EsurfaceDerivedData {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug, Encode, bincode_trait_derive::Decode)]
+#[derive(Clone, Serialize, Deserialize, Debug, Encode, Decode)]
 pub struct EsurfaceData {
     pub cut_momentum_basis: LmbIndex,
     pub mass_sum_squared: F<f64>,

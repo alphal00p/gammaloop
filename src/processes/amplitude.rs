@@ -24,7 +24,7 @@ use crate::{
     },
     gammaloop_integrand::{
         amplitude_integrand::{AmplitudeGraphTerm, AmplitudeIntegrand, AmplitudeIntegrandData},
-        GenericEvaluator, LmbMultiChannelingSetup, ParamBuilder,
+        DerivedDataContainer, GenericEvaluator, LmbMultiChannelingSetup, ParamBuilder,
     },
     graph::{LMBext, LmbIndex, LoopMomentumBasis},
     model::ArcParticle,
@@ -75,8 +75,13 @@ pub struct Amplitude {
 }
 
 impl Amplitude {
-    pub(crate) fn warm_up(&mut self) {
-        self.integrand.as_mut().map(|a| a.warm_up());
+    pub(crate) fn warm_up(&mut self, settings: RuntimeSettings) {
+        let derived_data = &self.graphs.iter().map(|g| &g.derived_data).collect_vec();
+        let derived_data_container = DerivedDataContainer::Amplitude(&derived_data);
+
+        self.integrand
+            .as_mut()
+            .map(|a| a.warm_up(settings, derived_data_container));
     }
     pub(crate) fn load(path: impl AsRef<Path>, context: GammaLoopContextContainer) -> Result<Self> {
         let binary = fs::read(path.as_ref().join("amp.bin"))?;
@@ -123,26 +128,11 @@ impl Amplitude {
         Ok(())
     }
 
-    pub(crate) fn build_integrand(
-        &mut self,
-        settings: RuntimeSettings,
-        model: &Model,
-    ) -> Result<()> {
+    pub(crate) fn build_integrand(&mut self, model: &Model) -> Result<()> {
         let terms: Result<Vec<_>> = self
             .graphs
             .iter()
-            .map(|graph| graph.generate_term_for_graph(&settings, model))
-            .collect();
-
-        let rotations: Vec<Rotation> = Some(Rotation::new(RotationMethod::Identity))
-            .into_iter()
-            .chain(
-                settings
-                    .stability
-                    .rotation_axis
-                    .iter()
-                    .map(|axis| Rotation::new(axis.rotation_method())),
-            )
+            .map(|graph| graph.generate_term_for_graph(model))
             .collect();
 
         // let orig_polarizations = self.polarizations(&settings.kinematics.externals);
@@ -153,10 +143,10 @@ impl Amplitude {
         //     .collect();
 
         let amplitude_integrand = AmplitudeIntegrand {
-            settings,
+            settings: None,
             data: AmplitudeIntegrandData {
                 name: self.name.clone(),
-                rotations,
+                rotations: None,
                 // polarizations,
                 graph_terms: terms?,
                 external_signature: self.external_signature.clone(),
@@ -1016,12 +1006,8 @@ impl AmplitudeGraph {
     }
 
     // Expects cff_expression, esurface_data,
-    fn generate_term_for_graph(
-        &self,
-        settings: &RuntimeSettings,
-        model: &Model,
-    ) -> Result<AmplitudeGraphTerm> {
-        AmplitudeGraphTerm::from_amplitude_graph(self, settings, model)
+    fn generate_term_for_graph(&self, model: &Model) -> Result<AmplitudeGraphTerm> {
+        AmplitudeGraphTerm::from_amplitude_graph(self, model)
     }
 }
 

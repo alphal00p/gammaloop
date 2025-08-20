@@ -72,8 +72,7 @@ fn tri_uv_AMP() {
 
     amp.preprocess(&model, &GenerationSettings::default())
         .unwrap();
-    amp.build_integrand(RuntimeSettings::default(), &model)
-        .unwrap();
+    amp.build_integrand(&model).unwrap();
 }
 
 #[test]
@@ -276,8 +275,7 @@ fn tri_box_tri_LU() {
         },
     )
     .unwrap();
-    cs.build_integrand(RuntimeSettings::default(), &model)
-        .unwrap();
+    cs.build_integrand(&model).unwrap();
 
     //println!("Final result: {:>}", sum.expand());
 }
@@ -403,8 +401,7 @@ fn double_triangle_LU() {
     )
     .unwrap();
 
-    cs.build_integrand(RuntimeSettings::default(), &model)
-        .unwrap();
+    cs.build_integrand(&model).unwrap();
 
     //println!("Final result: {:>}", sum.expand());
 }

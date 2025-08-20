@@ -2,7 +2,7 @@ use clap::Args;
 use color_eyre::Result;
 use log::debug;
 
-use crate::settings::{GlobalSettings, RuntimeSettings};
+use crate::settings::GlobalSettings;
 
 use super::state::State;
 
@@ -15,12 +15,7 @@ pub struct Generate {
 }
 
 impl Generate {
-    pub fn run(
-        &self,
-        state: &mut State,
-        generation_settings: &mut GlobalSettings,
-        runtime_settings: &mut RuntimeSettings,
-    ) -> Result<()> {
+    pub fn run(&self, state: &mut State, generation_settings: &mut GlobalSettings) -> Result<()> {
         debug!("Preprocessing");
 
         let mut generation_settings_for_this_generation = generation_settings.clone();
@@ -34,8 +29,6 @@ impl Generate {
             .process_list
             .preprocess(&state.model, &generation_settings_for_this_generation)?;
         debug!("Generating integrands");
-        state
-            .process_list
-            .generate_integrands(runtime_settings, &state.model)
+        state.process_list.generate_integrands(&state.model)
     }
 }

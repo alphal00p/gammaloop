@@ -43,14 +43,14 @@ pub struct Integrate {
 }
 
 impl Integrate {
-    pub fn run(&self, state: &mut State) -> Result<Vec<(f64, f64)>> {
+    pub fn run(&self, state: &mut State, settings: &RuntimeSettings) -> Result<Vec<(f64, f64)>> {
         let target = if let Some(t) = self.target.clone() {
             Some(Complex::new(F(t[0]), F(t[1])))
         } else {
             None
         };
 
-        state.process_list.warm_up();
+        state.process_list.warm_up(settings.clone());
 
         let gloop_integrand = state
             .process_list

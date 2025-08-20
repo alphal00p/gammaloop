@@ -21,11 +21,10 @@ use crate::{
     gammaloop_integrand::ParamBuilder,
     graph::{ExternalConnection, FeynmanGraph, Graph, LmbIndex, LoopMomentumBasis},
     integrands::HasIntegrand,
-    momentum::{Rotation, ThreeMomentum},
+    momentum::{Rotation, RotationMethod, ThreeMomentum},
     momentum_sample::{LoopMomenta, MomentumSample},
-    processes::{CrossSectionCut, CutId},
-    settings::runtime::IntegratedCounterTermRange,
-    settings::RuntimeSettings,
+    processes::{CrossSectionCut, CrossSectionDerivedData, CutId},
+    settings::{runtime::IntegratedCounterTermRange, RuntimeSettings},
     utils::{self, newton_solver::newton_iteration_and_derivative, FloatLike, F},
     DependentMomentaConstructor, GammaLoopContext, GammaLoopContextContainer,
 };
@@ -42,7 +41,7 @@ const HARD_CODED_M_R_SQ: F<f64> = F(1000.0);
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct CrossSectionIntegrand {
-    pub settings: RuntimeSettings,
+    pub settings: Option<RuntimeSettings>,
     pub data: CrossSectionIntegrandData,
 }
 #[derive(Clone, Encode, Decode)]
@@ -50,7 +49,7 @@ pub struct CrossSectionIntegrand {
 pub struct CrossSectionIntegrandData {
     pub name: String,
     // pub polarizations: Vec<Polarizations>,
-    pub rotations: Vec<Rotation>,
+    pub rotations: Option<Vec<Rotation>>,
     pub graph_terms: Vec<CrossSectionGraphTerm>,
     pub n_incoming: usize,
     pub external_connections: Vec<ExternalConnection>,
@@ -81,10 +80,35 @@ impl CrossSectionIntegrand {
 impl GammaloopIntegrand for CrossSectionIntegrand {
     type G = CrossSectionGraphTerm;
     fn get_rotations(&self) -> impl Iterator<Item = &Rotation> {
-        self.data.rotations.iter()
+        self.data.rotations.as_ref().expect("forgot warmup").iter()
     }
 
-    fn warm_up(&mut self) {}
+    fn warm_up(
+        &mut self,
+        settings: RuntimeSettings,
+        derived_data: &[&CrossSectionDerivedData],
+    ) -> Result<()> {
+        self.settings = Some(settings);
+        self.data.rotations = Some(
+            Some(Rotation::new(RotationMethod::Identity))
+                .into_iter()
+                .chain(
+                    self.settings
+                        .as_ref()
+                        .expect("forgot warmup")
+                        .stability
+                        .rotation_axis
+                        .iter()
+                        .map(|axis| Rotation::new(axis.rotation_method())),
+                )
+                .collect(),
+        );
+
+        for (a, derived_data) in self.data.graph_terms.iter_mut().zip(derived_data) {
+            a.warm_up(derived_data, self.settings.as_ref().expect("forgot warmup"))?;
+        }
+        Ok(())
+    }
 
     fn get_terms_mut(&mut self) -> impl Iterator<Item = &mut Self::G> {
         self.data.graph_terms.iter_mut()
@@ -95,7 +119,7 @@ impl GammaloopIntegrand for CrossSectionIntegrand {
     }
 
     fn get_settings(&self) -> &RuntimeSettings {
-        &self.settings
+        self.settings.as_ref().expect("forgot warmup")
     }
 
     fn get_graph_mut(&mut self, graph_id: usize) -> &mut Self::G {
@@ -134,12 +158,26 @@ pub struct CrossSectionGraphTerm {
     pub cuts: TiVec<CutId, CrossSectionCut>,
     pub multi_channeling_setup: LmbMultiChannelingSetup,
     pub lmbs: TiVec<LmbIndex, LoopMomentumBasis>,
-    pub estimated_scale: F<f64>,
+    pub estimated_scale: Option<F<f64>>,
     pub param_builder: ParamBuilder<f64>,
 }
 
 impl GraphTerm for CrossSectionGraphTerm {
-    fn warm_up(&mut self, settings: &RuntimeSettings) {}
+    type DerivedData = CrossSectionDerivedData;
+
+    fn warm_up(
+        &mut self,
+        derived_data: &CrossSectionDerivedData,
+        settings: &RuntimeSettings,
+    ) -> Result<()> {
+        self.estimated_scale = Some(
+            self.graph
+                .underlying
+                .expected_scale(settings.kinematics.e_cm),
+        );
+
+        Ok(())
+    }
     fn evaluate<T: FloatLike>(
         &mut self,
         momentum_sample: &MomentumSample<T>,
@@ -382,7 +420,7 @@ impl HasIntegrand for CrossSectionIntegrand {
         max_eval: Complex<F<f64>>,
     ) -> EvaluationResult {
         let result = evaluate_sample(self, sample, wgt, _iter, use_f128, max_eval);
-        if self.settings.general.debug > 0 {
+        if self.settings.as_ref().expect("forgot warmup").general.debug > 0 {
             println!("result: {:?}", result.integrand_result);
         }
 
@@ -392,6 +430,8 @@ impl HasIntegrand for CrossSectionIntegrand {
     fn get_n_dim(&self) -> usize {
         assert!(
             self.settings
+                .as_ref()
+                .expect("forgot warmup")
                 .sampling
                 .get_parameterization_settings()
                 .is_some(),

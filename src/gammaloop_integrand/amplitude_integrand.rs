@@ -11,7 +11,7 @@ use bitvec::vec::BitVec;
 
 use color_eyre::Result;
 
-use eyre::Context;
+use eyre::{eyre, Context};
 use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeVec, Orientation};
 use log::{debug, warn};
@@ -25,7 +25,7 @@ use typed_index_collections::TiVec;
 
 use crate::{
     cff::{
-        esurface::{get_existing_esurfaces, EsurfaceCollection},
+        esurface::{get_existing_esurfaces, EsurfaceCollection, EsurfaceDerivedData},
         expression::AmplitudeOrientationID,
     },
     evaluation_result::EvaluationResult,
@@ -33,9 +33,9 @@ use crate::{
     graph::{FeynmanGraph, Graph, LmbIndex, LoopMomentumBasis},
     integrands::HasIntegrand,
     model::Model,
-    momentum::Rotation,
+    momentum::{Rotation, RotationMethod},
     momentum_sample::{ExternalIndex, MomentumSample},
-    processes::AmplitudeGraph,
+    processes::{AmplitudeDerivedData, AmplitudeGraph},
     settings::RuntimeSettings,
     signature::SignatureLike,
     subtraction::{
@@ -51,9 +51,6 @@ use super::{
     GraphTerm, LmbMultiChannelingSetup,
 };
 
-const HARD_CODED_M_UV: F<f64> = F(1000.0);
-const HARD_CODED_M_R_SQ: F<f64> = F(1000.0);
-
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct AmplitudeGraphTerm {
@@ -61,28 +58,19 @@ pub struct AmplitudeGraphTerm {
     pub orientations: TiVec<AmplitudeOrientationID, EdgeVec<Orientation>>,
     pub orientation_filter: BinVec,
     pub esurfaces: EsurfaceCollection,
-    pub threshold_counterterm: AmplitudeCountertermData,
+    pub threshold_counterterm: Option<AmplitudeCountertermData>,
     pub multi_channeling_setup: LmbMultiChannelingSetup,
     pub lmbs: TiVec<LmbIndex, LoopMomentumBasis>,
     pub tropical_sampler: Option<SampleGenerator<3>>,
     pub graph: Graph,
-    pub estimated_scale: F<f64>,
+    pub estimated_scale: Option<F<f64>>,
     pub param_builder: ParamBuilder,
 }
 
 /// Num(sigma_1,sigma_2,...)*(CFF_1 delta(edge(1),1) delta_(1,1,1,-1,1)+CFF_3 delta_(1,1,1,-1,1)+CFF_2 delta_(1,1,1,-1,1))
 
 impl AmplitudeGraphTerm {
-    pub fn from_amplitude_graph(
-        graph: &AmplitudeGraph,
-        settings: &RuntimeSettings,
-        model: &Model,
-    ) -> Result<Self> {
-        let estimated_scale = graph
-            .graph
-            .underlying
-            .expected_scale(settings.kinematics.e_cm);
-
+    pub fn from_amplitude_graph(graph: &AmplitudeGraph, model: &Model) -> Result<Self> {
         let esurfaces = &graph
             .derived_data
             .cff_expression
@@ -92,72 +80,10 @@ impl AmplitudeGraphTerm {
             .esurface_cache;
 
         let esurface_data = graph.derived_data.esurface_data.as_ref().unwrap();
-        let externals = settings
-            .kinematics
-            .externals
-            .get_dependent_externals(
-                DependentMomentaConstructor::Amplitude(&graph.graph.get_external_signature()),
-                &graph.graph.name,
-            )
-            .with_context(|| {
-                "when getting externals to build amplitude graph term for integrand"
-            })?;
-
-        let existing_esurfaces = get_existing_esurfaces(
-            esurfaces,
-            esurface_data,
-            &externals,
-            &graph.graph.loop_momentum_basis,
-            settings.general.debug,
-            settings.kinematics.e_cm,
-        );
 
         let mut param_builder = ParamBuilder::new(&graph.graph, model);
-        param_builder.add_external_four_mom(&externals);
-        param_builder.polarizations_values(
-            &graph.graph,
-            &externals,
-            settings.kinematics.externals.get_helicities(),
-        );
-
-        param_builder.m_uv_value(Complex::new_re(settings.general.m_uv));
-        param_builder.mu_r_sq_value(Complex::new_re(settings.general.mu_r_sq));
 
         // (momentum_sample);
-
-        let edge_masses = graph.graph.new_edgevec(|edge, _, _| edge.mass_value());
-
-        let overlap = find_maximal_overlap(
-            &graph.graph.loop_momentum_basis,
-            &existing_esurfaces,
-            esurfaces,
-            &edge_masses,
-            &externals,
-            &settings,
-        );
-
-        let mut threshold_counterterm = AmplitudeCountertermData::new_empty();
-
-        let thresholds_where_not_generated = graph.derived_data.threshold_counterterms.is_empty();
-
-        if thresholds_where_not_generated
-            && !overlap.existing_esurfaces.is_empty()
-            && !settings.subtraction.disable_threshold_subtraction
-        {
-            warn!("Threshold counterterm was not generated, but regime is physical, disable threshold subtraction to avoid this warning");
-        } else if !overlap.existing_esurfaces.is_empty()
-            && settings.subtraction.disable_threshold_subtraction
-        {
-            debug!("Subtraction disabled in physical region")
-        } else {
-            threshold_counterterm.overlap = overlap;
-            threshold_counterterm.evaluators = graph
-                .derived_data
-                .threshold_counterterms
-                .iter()
-                .map(|ct| ct.to_evaluator(&mut param_builder, OptimizationSettings::default()))
-                .collect();
-        }
 
         Ok(AmplitudeGraphTerm {
             orientations: graph
@@ -197,8 +123,8 @@ impl AmplitudeGraphTerm {
                 .lmbs
                 .clone()
                 .expect("lmbs should have been created"),
-            threshold_counterterm,
-            estimated_scale,
+            threshold_counterterm: None,
+            estimated_scale: None,
             esurfaces: graph
                 .derived_data
                 .cff_expression
@@ -280,22 +206,33 @@ impl AmplitudeGraphTerm {
             None => SingleOrAllOrientations::All(&self.orientations),
         };
 
-        let sum_of_cts = self.threshold_counterterm.evaluate(
-            momentum_sample,
-            &self.graph,
-            &self.esurfaces,
-            rotation,
-            settings,
-            &mut self.param_builder,
-            orientation,
-        );
+        let sum_of_cts = self
+            .threshold_counterterm
+            .as_mut()
+            .expect("forgot to do warmup?")
+            .evaluate(
+                momentum_sample,
+                &self.graph,
+                &self.esurfaces,
+                rotation,
+                settings,
+                &mut self.param_builder,
+                orientation,
+            );
+
         debug!("evaluated threshold counterterm: {:16e}", sum_of_cts);
         result - sum_of_cts
     }
 }
 
 impl GraphTerm for AmplitudeGraphTerm {
-    fn warm_up(&mut self, settings: &RuntimeSettings) {
+    type DerivedData = AmplitudeDerivedData;
+
+    fn warm_up(
+        &mut self,
+        derived_data: &AmplitudeDerivedData,
+        settings: &RuntimeSettings,
+    ) -> Result<()> {
         let a: BitVec = self
             .orientations
             .iter()
@@ -303,6 +240,81 @@ impl GraphTerm for AmplitudeGraphTerm {
             .collect();
 
         self.orientation_filter = BinVec(a);
+        self.estimated_scale = Some(
+            self.graph
+                .underlying
+                .expected_scale(settings.kinematics.e_cm),
+        );
+
+        let externals = settings
+            .kinematics
+            .externals
+            .get_dependent_externals(
+                DependentMomentaConstructor::Amplitude(&self.graph.get_external_signature()),
+                &self.graph.name,
+            )
+            .with_context(|| {
+                "when getting externals to build amplitude graph term for integrand"
+            })?;
+
+        self.param_builder.add_external_four_mom(&externals);
+        self.param_builder.polarizations_values(
+            &self.graph,
+            &externals,
+            settings.kinematics.externals.get_helicities(),
+        );
+
+        self.param_builder
+            .m_uv_value(Complex::new_re(settings.general.m_uv));
+        self.param_builder
+            .mu_r_sq_value(Complex::new_re(settings.general.mu_r_sq));
+
+        let existing_esurfaces = get_existing_esurfaces(
+            &self.esurfaces,
+            derived_data
+                .esurface_data
+                .as_ref()
+                .ok_or_else(|| eyre!("esurface data missing"))?,
+            &externals,
+            &self.graph.loop_momentum_basis,
+            settings.general.debug,
+            settings.kinematics.e_cm,
+        );
+
+        let edge_masses = self.graph.new_edgevec(|edge, _, _| edge.mass_value());
+
+        let overlap = find_maximal_overlap(
+            &self.graph.loop_momentum_basis,
+            &existing_esurfaces,
+            &self.esurfaces,
+            &edge_masses,
+            &externals,
+            &settings,
+        );
+
+        let mut threshold_counterterm = AmplitudeCountertermData::new_empty();
+
+        let thresholds_where_not_generated = derived_data.threshold_counterterms.is_empty();
+
+        if thresholds_where_not_generated
+            && !overlap.existing_esurfaces.is_empty()
+            && !settings.subtraction.disable_threshold_subtraction
+        {
+            warn!("Threshold counterterm was not generated, but regime is physical, disable threshold subtraction to avoid this warning");
+        } else if !overlap.existing_esurfaces.is_empty()
+            && settings.subtraction.disable_threshold_subtraction
+        {
+            debug!("Subtraction disabled in physical region")
+        } else {
+            threshold_counterterm.overlap = overlap;
+            threshold_counterterm.evaluators = derived_data
+                .threshold_counterterms
+                .iter()
+                .map(|ct| ct.to_evaluator(&mut self.param_builder, OptimizationSettings::default()))
+                .collect();
+        }
+
+        Ok(())
     }
 
     fn name(&self) -> String {
@@ -345,14 +357,14 @@ impl GraphTerm for AmplitudeGraphTerm {
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct AmplitudeIntegrand {
-    pub settings: RuntimeSettings,
+    pub settings: Option<RuntimeSettings>,
     pub data: AmplitudeIntegrandData,
 }
 
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct AmplitudeIntegrandData {
-    pub rotations: Vec<Rotation>,
+    pub rotations: Option<Vec<Rotation>>,
     pub name: String,
 
     pub graph_terms: Vec<AmplitudeGraphTerm>,
@@ -390,15 +402,34 @@ impl AmplitudeIntegrand {
 impl GammaloopIntegrand for AmplitudeIntegrand {
     type G = AmplitudeGraphTerm;
 
-    fn warm_up(&mut self) {
-        self.data
-            .graph_terms
-            .iter_mut()
-            .for_each(|a| a.warm_up(&self.settings));
+    fn warm_up(
+        &mut self,
+        settings: RuntimeSettings,
+        derived_data: &[&AmplitudeDerivedData],
+    ) -> Result<()> {
+        self.data.rotations = Some(
+            Some(Rotation::new(RotationMethod::Identity))
+                .into_iter()
+                .chain(
+                    self.settings
+                        .as_ref()
+                        .expect("forgot warmup")
+                        .stability
+                        .rotation_axis
+                        .iter()
+                        .map(|axis| Rotation::new(axis.rotation_method())),
+                )
+                .collect(),
+        );
+
+        for (a, derived_data) in self.data.graph_terms.iter_mut().zip(derived_data) {
+            a.warm_up(derived_data, self.settings.as_ref().expect("forgot warmup"))?;
+        }
+        Ok(())
     }
 
     fn get_rotations(&self) -> impl Iterator<Item = &Rotation> {
-        self.data.rotations.iter()
+        self.data.rotations.as_ref().expect("forgot warmup").iter()
     }
 
     fn get_terms_mut(&mut self) -> impl Iterator<Item = &mut Self::G> {
@@ -414,7 +445,7 @@ impl GammaloopIntegrand for AmplitudeIntegrand {
     }
 
     fn get_settings(&self) -> &RuntimeSettings {
-        &self.settings
+        self.settings.as_ref().expect("forgot warmup")
     }
 
     fn get_graph_mut(&mut self, graph_id: usize) -> &mut Self::G {
@@ -453,6 +484,8 @@ impl HasIntegrand for AmplitudeIntegrand {
     fn get_n_dim(&self) -> usize {
         if self
             .settings
+            .as_ref()
+            .expect("forgot warmup")
             .sampling
             .get_parameterization_settings()
             .is_some()

@@ -18,7 +18,7 @@ use crate::{
     },
     gammaloop_integrand::{
         cross_section_integrand::{CrossSectionIntegrandData, OrientationEvaluator},
-        GenericEvaluator, LmbMultiChannelingSetup, ParamBuilder,
+        DerivedDataContainer, GenericEvaluator, LmbMultiChannelingSetup, ParamBuilder,
     },
     graph::{get_cff_inverse_energy_product_impl, LMBext, LmbIndex, LoopMomentumBasis},
     model::ArcParticle,
@@ -90,7 +90,18 @@ impl<S: CrossSectionState> CrossSection<S> {
     }
 
     pub(crate) fn warm_up(&mut self) {
-        self.integrand.as_mut().map(|a| a.warm_up());
+        let derived_data = self
+            .supergraphs
+            .iter()
+            .map(|g| &g.derived_data)
+            .collect_vec();
+
+        todo!()
+        //let derived_data_container = DerivedDataContainer::CrossSection(&derived_data);
+
+        //self.integrand
+        //    .as_mut()
+        //    .map(|a| a.warm_up(derived_data_container));
     }
 
     pub(crate) fn add_supergraph(&mut self, supergraph: Graph) -> Result<()> {
@@ -127,41 +138,17 @@ impl<S: CrossSectionState> CrossSection<S> {
         Ok(())
     }
 
-    pub(crate) fn build_integrand(
-        &mut self,
-        settings: RuntimeSettings,
-        model: &Model,
-    ) -> Result<()> {
+    pub(crate) fn build_integrand(&mut self, model: &Model) -> Result<()> {
         let terms = self
             .supergraphs
             .iter()
-            .map(|sg| sg.generate_term_for_graph(&settings))
+            .map(|sg| sg.generate_term_for_graph(model))
             .collect_vec();
 
-        let rotations: Vec<Rotation> = Some(Rotation::new(RotationMethod::Identity))
-            .into_iter()
-            .chain(
-                settings
-                    .stability
-                    .rotation_axis
-                    .iter()
-                    .map(|axis| Rotation::new(axis.rotation_method())),
-            )
-            .collect(); // want this to include the identity rotation (i.e the first sample)
-
-        // let orig_polarizations = self.polarizations(&settings.kinematics.externals);
-
-        // let polarizations = rotations
-        //     .iter()
-        //     .map(|r| orig_polarizations.rotate(r))
-        //     .collect();
-
-        // let model_parameter_cache = model.generate_values();
-
         let cross_section_integrand = CrossSectionIntegrand {
-            settings,
+            settings: None,
             data: CrossSectionIntegrandData {
-                rotations,
+                rotations: None,
                 name: self.name.clone(),
                 external_connections: self.external_connections.clone(),
                 n_incoming: self.n_incmoming,
@@ -836,12 +823,7 @@ impl<S: CrossSectionState> CrossSectionGraph<S> {
         self.derived_data.multi_channeling_setup = Some(channels)
     }
 
-    fn generate_term_for_graph(&self, settings: &RuntimeSettings) -> CrossSectionGraphTerm {
-        let estimated_scale = self
-            .graph
-            .underlying
-            .expected_scale(settings.kinematics.e_cm);
-
+    fn generate_term_for_graph(&self, _model: &Model) -> CrossSectionGraphTerm {
         CrossSectionGraphTerm {
             multi_channeling_setup: self.derived_data.multi_channeling_setup.clone().unwrap(),
             bare_cff_evaluators: self.derived_data.bare_cff_evaluators.clone().unwrap(),
@@ -854,7 +836,7 @@ impl<S: CrossSectionState> CrossSectionGraph<S> {
             cuts: self.cuts.clone(),
             cut_esurface: self.cut_esurface.clone(),
             lmbs: self.derived_data.lmbs.clone().unwrap(),
-            estimated_scale,
+            estimated_scale: None,
             param_builder: ParamBuilder::new_empty(),
         }
     }

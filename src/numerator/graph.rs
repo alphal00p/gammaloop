@@ -227,7 +227,7 @@ mod test {
         let proc_set = GenerationSettings::default();
 
         amp.preprocess(&model, &proc_set);
-        let integrand = amp.build_integrand(settings, &model);
+        let integrand = amp.build_integrand(&model);
 
         // println!("{}", a.factor());
 
@@ -301,7 +301,7 @@ mod test {
         // amp.graphs[0].build_evaluator(&model);
 
         amp.preprocess(&model, &proc_set);
-        let integrand = amp.build_integrand(settings, &model);
+        let integrand = amp.build_integrand(&model);
 
         // println!("{}", a.factor());
 
@@ -352,7 +352,7 @@ mod test {
 
         amp.preprocess(&model, &proc_set).unwrap();
 
-        let integrand = amp.build_integrand(settings, &model);
+        let integrand = amp.build_integrand(&model);
 
         // integrand.evaluate_sample(sample, wgt, iter, use_f128, max_eval);
     }

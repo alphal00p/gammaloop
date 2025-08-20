@@ -81,8 +81,8 @@ pub struct Process {
 }
 
 impl Process {
-    pub(crate) fn warm_up(&mut self) {
-        self.collection.warm_up();
+    pub(crate) fn warm_up(&mut self, settings: RuntimeSettings) {
+        self.collection.warm_up(settings);
     }
     pub(crate) fn preprocess(&mut self, model: &Model, settings: &GlobalSettings) -> Result<()> {
         self.collection
@@ -302,12 +302,8 @@ impl Process {
         }
     }
 
-    pub(super) fn generate_integrands(
-        &mut self,
-        settings: &RuntimeSettings,
-        model: &Model,
-    ) -> Result<()> {
-        self.collection.generate_integrands(settings, model)
+    pub(super) fn generate_integrands(&mut self, model: &Model) -> Result<()> {
+        self.collection.generate_integrands(model)
     }
 }
 
@@ -461,11 +457,11 @@ impl ProcessCollection {
         Ok(())
     }
 
-    fn warm_up(&mut self) {
+    fn warm_up(&mut self, settings: RuntimeSettings) {
         match self {
             Self::Amplitudes(amplitudes) => {
                 for (_, amplitude) in amplitudes {
-                    amplitude.warm_up();
+                    amplitude.warm_up(settings.clone());
                 }
             }
             Self::CrossSections(cross_sections) => {
@@ -477,17 +473,17 @@ impl ProcessCollection {
         // Ok(())
     }
 
-    fn generate_integrands(&mut self, settings: &RuntimeSettings, model: &Model) -> Result<()> {
+    fn generate_integrands(&mut self, model: &Model) -> Result<()> {
         // let mut result = HashMap::default();
         match self {
             Self::Amplitudes(amplitudes) => {
                 for (_, amplitude) in amplitudes {
-                    amplitude.build_integrand(settings.clone(), model)?;
+                    amplitude.build_integrand(model)?;
                 }
             }
             Self::CrossSections(cross_sections) => {
                 for (_, cross_section) in cross_sections {
-                    cross_section.build_integrand(settings.clone(), model)?;
+                    cross_section.build_integrand(model)?;
                 }
             }
         }

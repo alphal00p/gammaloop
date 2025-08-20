@@ -16,6 +16,7 @@ use crate::momentum_sample::{
     BareMomentumSample, ExternalFourMomenta, LoopMomenta, MomentumSample,
 };
 use crate::numerator::ParsingNet;
+use crate::processes::{AmplitudeDerivedData, CrossSectionDerivedData};
 use crate::utils::{
     format_for_compare_digits, get_n_dim_for_n_loop_momenta, FloatLike, PrecisionUpgradable,
     ToCoefficient, F, GS, TENSORLIB,
@@ -25,7 +26,7 @@ use color_eyre::owo_colors::OwoColorize;
 use colored::Colorize;
 use derive_more::{From, Into};
 use enum_dispatch::enum_dispatch;
-use eyre::Context;
+use eyre::{eyre, Context};
 use gammaloop_sample::{parameterize, DiscreteGraphSample, GammaLoopSample};
 use idenso::color::CS;
 use itertools::Itertools;
@@ -76,11 +77,42 @@ pub enum NewIntegrand {
     CrossSection(cross_section_integrand::CrossSectionIntegrand),
 }
 
+pub enum DerivedDataContainer<'a> {
+    Amplitude(&'a [&'a AmplitudeDerivedData]),
+    CrossSection(&'a [&'a CrossSectionDerivedData]),
+}
+
+impl<'a> DerivedDataContainer<'a> {
+    pub fn amplitude(&self) -> Result<&'a [&'a AmplitudeDerivedData]> {
+        if let Self::Amplitude(data) = self {
+            Ok(data)
+        } else {
+            Err(eyre!(
+                "wrong derived data type, expected AmplitudeDerivedData"
+            ))
+        }
+    }
+
+    pub fn cross_section(&self) -> Result<&'a [&'a CrossSectionDerivedData]> {
+        if let Self::CrossSection(data) = self {
+            Ok(data)
+        } else {
+            Err(eyre!(
+                "wrong derived data type, expected CrossSectionDerivedData"
+            ))
+        }
+    }
+}
+
 impl NewIntegrand {
-    pub(crate) fn warm_up(&mut self) {
+    pub(crate) fn warm_up(
+        &mut self,
+        settings: RuntimeSettings,
+        derived_data: DerivedDataContainer,
+    ) -> Result<()> {
         match self {
-            Self::Amplitude(a) => a.warm_up(),
-            Self::CrossSection(a) => a.warm_up(),
+            Self::Amplitude(a) => a.warm_up(settings, derived_data.amplitude()?),
+            Self::CrossSection(a) => a.warm_up(settings, derived_data.cross_section()?),
         }
     }
 
@@ -104,8 +136,12 @@ impl NewIntegrand {
 
     pub(crate) fn get_settings(&self) -> &RuntimeSettings {
         match self {
-            NewIntegrand::Amplitude(integrand) => &integrand.settings,
-            NewIntegrand::CrossSection(integrand) => &integrand.settings,
+            NewIntegrand::Amplitude(integrand) => {
+                integrand.settings.as_ref().expect("forgot warmup")
+            }
+            NewIntegrand::CrossSection(integrand) => {
+                integrand.settings.as_ref().expect("forgot warmup")
+            }
         }
     }
 
@@ -122,8 +158,12 @@ impl NewIntegrand {
 
     pub(crate) fn get_mut_settings(&mut self) -> &mut RuntimeSettings {
         match self {
-            NewIntegrand::Amplitude(integrand) => &mut integrand.settings,
-            NewIntegrand::CrossSection(integrand) => &mut integrand.settings,
+            NewIntegrand::Amplitude(integrand) => {
+                integrand.settings.as_mut().expect("forgot warmup")
+            }
+            NewIntegrand::CrossSection(integrand) => {
+                integrand.settings.as_mut().expect("forgot warmup")
+            }
         }
     }
 }
@@ -668,7 +708,11 @@ impl LmbMultiChannelingSetup {
 pub trait GammaloopIntegrand {
     type G: GraphTerm;
 
-    fn warm_up(&mut self);
+    fn warm_up(
+        &mut self,
+        settings: RuntimeSettings,
+        derived_data: &[&<<Self as GammaloopIntegrand>::G as GraphTerm>::DerivedData],
+    ) -> Result<()>;
     fn get_rotations(&self) -> impl Iterator<Item = &Rotation>;
 
     fn get_terms(&self) -> impl Iterator<Item = &Self::G>;
@@ -703,6 +747,8 @@ fn get_global_dimension_if_exists<I: GammaloopIntegrand>(integrand: &I) -> Optio
 }
 
 pub trait GraphTerm {
+    type DerivedData;
+
     fn evaluate<T: FloatLike>(
         &mut self,
         sample: &MomentumSample<T>,
@@ -712,7 +758,11 @@ pub trait GraphTerm {
 
     fn name(&self) -> String;
 
-    fn warm_up(&mut self, settings: &RuntimeSettings);
+    fn warm_up(
+        &mut self,
+        derived_data: &Self::DerivedData,
+        settings: &RuntimeSettings,
+    ) -> Result<()>;
     fn get_multi_channeling_setup(&self) -> &LmbMultiChannelingSetup;
     fn get_graph(&self) -> &Graph;
     fn get_lmbs(&self) -> &TiVec<LmbIndex, LoopMomentumBasis>;

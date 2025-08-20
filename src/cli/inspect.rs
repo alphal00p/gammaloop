@@ -1,7 +1,7 @@
 use clap::Args;
 use log::info;
 
-use crate::utils::F;
+use crate::{settings::RuntimeSettings, utils::F};
 use color_eyre::Result;
 
 use super::state::State;
@@ -33,8 +33,9 @@ pub struct Inspect {
 }
 
 impl Inspect {
-    pub fn run(&self, state: &mut State) -> Result<()> {
-        state.process_list.warm_up();
+    pub fn run(&self, state: &mut State, runtime_settings: &RuntimeSettings) -> Result<()> {
+        state.process_list.warm_up(runtime_settings.clone());
+
         let integrand = state
             .process_list
             .get_integrand_mut(self.process_id, &self.process_name)?;
