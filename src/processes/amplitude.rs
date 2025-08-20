@@ -35,7 +35,7 @@ use crate::{
         amplitude_counterterm::{AmplitudeCountertermAtom, AmplitudeCountertermData},
         overlap::OverlapStructure,
     },
-    utils::{GS, TENSORLIB},
+    utils::{GS, TENSORLIB, W_},
     uv::{approx::do_replacement_rules, UltravioletGraph},
     GammaLoopContext, GammaLoopContextContainer,
 };
@@ -47,9 +47,10 @@ use linnet::{
 };
 use log::debug;
 use symbolica::{
-    atom::{Atom, FunctionBuilder},
+    atom::{Atom, AtomCore, FunctionBuilder},
     domains::rational::Rational,
     evaluate::OptimizationSettings,
+    function,
 };
 use typed_index_collections::TiVec;
 
@@ -539,7 +540,11 @@ impl AmplitudeGraph {
 
             let scalar: Atom = product.result_scalar().unwrap().into();
 
-            let counterterm = scalar.unwrap_function(GS.color_wrap).simplify_color();
+            let counterterm = scalar
+                .unwrap_function(GS.color_wrap)
+                .simplify_color()
+                .replace(function!(GS.energy, W_.x_))
+                .with(function!(GS.ose, W_.x_));
 
             let loop_3 = self.graph.underlying.get_loop_number() as i64 * 3;
 
