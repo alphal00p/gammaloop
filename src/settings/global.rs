@@ -147,12 +147,12 @@ impl OrientationPattern {
         if let Some(pat) = &self.pat {
             let a = orientation.orientation_delta();
 
-            println!("{a}vs{}", pat.0);
+            // println!("{a}vs{}", pat.0);
             let a = a
                 .pattern_match(&pat.to_pattern(), None, None)
                 .next()
                 .is_some();
-            println!("{a}");
+            // println!("{a}");
             a
         } else {
             true

@@ -3,7 +3,7 @@ use std::{fs, iter, ops::Deref, path::Path};
 use ahash::AHashSet;
 // use bincode::{Decode, Encode};
 use bincode_trait_derive::{Decode, Encode};
-use color_eyre::Result;
+use color_eyre::{Result, Section};
 use momtrop::SampleGenerator;
 
 use idenso::color::ColorSimplifier;
@@ -41,7 +41,10 @@ use crate::{
 };
 use eyre::{eyre, Context};
 use itertools::Itertools;
-use linnet::half_edge::involution::{HedgePair, Orientation};
+use linnet::{
+    half_edge::involution::{HedgePair, Orientation},
+    parser::DotGraph,
+};
 use log::debug;
 use symbolica::{
     atom::{Atom, FunctionBuilder},
@@ -1087,7 +1090,16 @@ impl Amplitude {
 
         if !self.graphs.is_empty() {
             if self.external_particles != new_external_particels {
-                return Err(eyre!("amplitude graph has different number of externals"));
+                return Err(eyre!("amplitude graph has different number of externals")).with_note(
+                    || {
+                        format!(
+                            "Found {} externals, expected {} for the graph {}",
+                            new_external_particels.len(),
+                            self.external_particles.len(),
+                            DotGraph::from(&graph).debug_dot()
+                        )
+                    },
+                );
             }
 
             if self.external_signature != new_external_signature {

@@ -105,7 +105,8 @@ impl PossibleParticle {
 
     pub(crate) fn particle(&self) -> Option<ArcParticle> {
         match self {
-            PossibleParticle::Particle(p) => Some(p.clone()),
+            PossibleParticle::Particle(particle)
+            | PossibleParticle::MassOverriddenParticle { particle, .. } => Some(particle.clone()),
             _ => None,
         }
     }
