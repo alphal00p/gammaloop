@@ -1909,12 +1909,13 @@ impl<T: FloatLike> Display for ParamBuilder<T> {
 
 impl<T: FloatLike> IntoIterator for ParamBuilder<T> {
     type Item = ParamValuePairs<T>;
-    type IntoIter = std::array::IntoIter<Self::Item, 15>;
+    type IntoIter = std::array::IntoIter<Self::Item, 16>;
 
     fn into_iter(self) -> Self::IntoIter {
         [
             self.m_uv,
             self.mu_r_sq,
+            self.idenso_vars,
             self.model_parameters,
             self.external_energies,
             self.external_spatial,
@@ -1935,12 +1936,13 @@ impl<T: FloatLike> IntoIterator for ParamBuilder<T> {
 
 impl<'a, T: FloatLike> IntoIterator for &'a ParamBuilder<T> {
     type Item = &'a ParamValuePairs<T>;
-    type IntoIter = std::array::IntoIter<Self::Item, 15>;
+    type IntoIter = std::array::IntoIter<Self::Item, 16>;
 
     fn into_iter(self) -> Self::IntoIter {
         [
             &self.m_uv,
             &self.mu_r_sq,
+            &self.idenso_vars,
             &self.model_parameters,
             &self.external_energies,
             &self.external_spatial,
