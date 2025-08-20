@@ -11,7 +11,7 @@ generation:
     gamma_algebra: Symbolic
   cpe_rounds_cff: 1
   orientation_pattern:
-    pat: null
+    pat: orientation_delta(1,1,1,1,1,-1,1,-1)
   compile_separate_orientations: true
   gammaloop_compile_options:
     inline_asm: false

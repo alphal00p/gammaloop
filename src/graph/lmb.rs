@@ -375,11 +375,19 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
         tree: &S,
         mut externals: S,
     ) -> LoopMomentumBasis {
+        // println!(
+        //     "//Lmb of subgraph:\n{}\n//Tree:\n{}\n//Externals\n{}",
+        //     self.dot(subgraph),
+        //     self.dot(tree),
+        //     self.dot(&externals)
+        // );
         let Some(h) = subgraph.included_iter().next() else {
             return self.empty_lmb();
         };
         let mut ext_edges: TiVec<ExternalIndex, EdgeIndex> = vec![].into();
-        let dep_ext = externals.intersection(subgraph).included_iter().next();
+
+        let true_externals = externals.intersection(subgraph);
+        let dep_ext = true_externals.included_iter().next();
 
         let root_node = self.node_id(dep_ext.unwrap_or(h));
 
@@ -419,7 +427,6 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
 
         for (p, e, _) in self.iter_edges_of(&externals) {
             let mut path_to_dep: S = self.empty_subgraph();
-            path_to_dep.add(dep_ext.unwrap());
 
             match p {
                 HedgePair::Split {
@@ -427,6 +434,9 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
                     sink,
                     split,
                 } => {
+                    if let Some(dep) = dep_ext {
+                        path_to_dep.add(dep);
+                    }
                     let ext_sign: SignOrZero = split.into();
 
                     if let Some(tree) = &tree {
@@ -446,14 +456,17 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
                     let ext_sign: SignOrZero = flow.into();
                     // println!("{hedge}");
 
-                    if self.node_id(hedge) == root_node {
-                        path_to_dep.add(hedge);
-                    } else {
-                        if let Some(tree) = &tree {
-                            let ext = tree.hedge_parent(hedge, self.as_ref()).unwrap();
+                    if subgraph.includes(&hedge) {
+                        path_to_dep.add(dep_ext.unwrap());
 
-                            for h in tree.ancestor_iter_hedge(ext, self.as_ref()).step_by(2) {
-                                path_to_dep.add(h);
+                        if self.node_id(hedge) == root_node {
+                        } else {
+                            if let Some(tree) = &tree {
+                                let ext = tree.hedge_parent(hedge, self.as_ref()).unwrap();
+
+                                for h in tree.ancestor_iter_hedge(ext, self.as_ref()).step_by(2) {
+                                    path_to_dep.add(h);
+                                }
                             }
                         }
                     }
@@ -818,7 +831,7 @@ pub struct LmbIndex(usize);
 pub mod test {
     use crate::{
         dot,
-        graph::{parse::IntoGraph, Graph},
+        graph::{parse::IntoGraph, Graph, LMBext},
     };
 
     #[test]
@@ -828,23 +841,27 @@ pub mod test {
                 ext [style=invis]
                 node[num=1]
                 ext->v1:0[id=0 is_dummy=true]
-                ext->v1:1[id=1]
-                ext->v1:2[id=2]
+                ext->v1:1[id=1 ]
+                ext->v1:2[id=2 ]
             }
 
             digraph aa{
                 ext [style=invis]
                 node[num=1]
                 ext->v1:0[id=0 is_dummy=true]
-                ext->v1:1[id=1]
+                ext->v1:1[id=1 is_dummy=true]
                 v1->v2
-                ext->v2:2[id=2]
+                ext->v2:2[id=2 ]
             }
         )
         .unwrap();
 
-        for g in gs {
-            println!("{}", g.loop_momentum_basis);
+        for (i, g) in gs.iter().enumerate() {
+            insta::with_settings!({
+                snapshot_suffix=>format!("case_{}", i),
+            }, {
+                insta::assert_snapshot!(g.dot_lmb(&g.full_filter(), &g.loop_momentum_basis));
+            });
         }
     }
 }

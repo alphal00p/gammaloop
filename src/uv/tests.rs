@@ -50,23 +50,19 @@ fn four_photon_one_loop_amp() {
 
 #[test]
 fn tri_uv_AMP() {
-    let _ = env_logger::builder().is_test(true).try_init();
-    let is_massless = true;
-    let model = if is_massless {
-        load_generic_model("sm_massless")
-    } else {
-        load_generic_model("sm")
-    };
+    test_initialise().unwrap();
+    let model = load_generic_model("sm");
 
     let graph: Graph = dot!(
         digraph G{
+            node [num=1]
             e        [style=invis]
-            e -> A   [particle=H id=0]
-            e -> B   [particle=H id=1]
-            e -> C   [particle=H id=2]
-            A -> B    [particle=H lmb_index=0]
-            B -> C    [particle=H]
-            C -> D    [particle=H]
+            e -> A:0   [ id=0]
+            e -> B:1   [ id=1]
+            e -> C:2   [ id=2]
+            A -> B    [ lmb_index=0]
+            B -> C
+            C -> D
         },&model
     )
     .unwrap();

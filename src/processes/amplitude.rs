@@ -237,7 +237,7 @@ impl AmplitudeGraph {
         debug!("Generating Cff");
         self.generate_cff()?;
         debug!("Building Parametric Integrand");
-        self.build_parametric_integrand(settings);
+        self.build_parametric_integrand(settings)?;
         debug!("Building Tropical Sampler");
         self.build_tropical_sampler(settings)?;
         debug!("Building Loop Momentum Bases");
@@ -375,9 +375,13 @@ impl AmplitudeGraph {
         .unwrap()
     }
 
-    pub(crate) fn build_parametric_integrand(&mut self, settings: &GenerationSettings) {
+    pub(crate) fn build_parametric_integrand(
+        &mut self,
+        settings: &GenerationSettings,
+    ) -> Result<()> {
         self.derived_data.all_mighty_integrand +=
-            self.build_original_parametric_integrand(settings);
+            self.build_original_parametric_integrand(settings)?;
+        Ok(())
     }
 
     fn build_threshold_counterterm_parametric_integrand(
@@ -584,7 +588,7 @@ impl AmplitudeGraph {
         counterterms
     }
 
-    fn build_original_parametric_integrand(&self, settings: &GenerationSettings) -> Atom {
+    fn build_original_parametric_integrand(&self, settings: &GenerationSettings) -> Result<Atom> {
         let wood = self.graph.wood(&self.graph.underlying.no_dummy());
         let mut forest = wood.unfold(&self.graph, &self.graph.loop_momentum_basis);
 
@@ -625,10 +629,7 @@ impl AmplitudeGraph {
 
         let mut scalar: Atom = full
             .result_scalar()
-            .expect(&format!(
-                "Failed to get scalar from network:{}",
-                full.dot_pretty()
-            ))
+            .with_context(|| format!("Failed to get scalar from network when building original paramteric integrand.")).with_note(||format!("Network: \n{}\nGraph:\n{}", full.dot_pretty(),DotGraph::from(&self.graph).debug_dot()))?
             .into();
 
         scalar = scalar.unwrap_function(GS.color_wrap).simplify_color();
@@ -637,7 +638,7 @@ impl AmplitudeGraph {
 
         debug!("All parametric integrand atom:{:>}", scalar);
 
-        scalar
+        Ok(scalar)
     }
 
     fn build_counterterm_evaluators(&mut self, model: &Model) {

@@ -488,6 +488,8 @@ impl Graph {
             panic!("ata")
         };
 
+        // loop_momentum_basis
+
         // println!("{:#?}", loop_momentum_basis);
 
         let inv_lmb_ids: BTreeMap<_, _> = lmb_ids.iter().map(|(k, v)| (*v, *k)).collect();
