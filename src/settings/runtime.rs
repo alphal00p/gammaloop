@@ -46,6 +46,8 @@ pub struct GeneralSettings {
     pub amplitude_prefactor: Option<Complex<F<f64>>>,
     pub load_compiled_separate_orientations: bool,
     pub force_orientations: Option<Vec<usize>>,
+    pub m_uv: F<f64>,
+    pub mu_r_sq: F<f64>,
 }
 #[allow(clippy::derivable_impls)] // we might not want the standard defaults in the future
 impl Default for GeneralSettings {
@@ -60,6 +62,8 @@ impl Default for GeneralSettings {
             amplitude_prefactor: Some(Complex::new(F(0.0), F(1.0))),
             force_orientations: None,
             orientation_pat: OrientationPattern::default(),
+            m_uv: F(1000.0),
+            mu_r_sq: F(1000.0 * 1000.0),
         }
     }
 }
