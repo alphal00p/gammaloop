@@ -4,7 +4,7 @@ use bitvec::vec::BitVec;
 use itertools::Itertools;
 use linnet::half_edge::{
     involution::{EdgeIndex, EdgeVec, Flow, HedgePair},
-    subgraph::{InternalSubGraph, ModifySubgraph, SubGraphOps},
+    subgraph::{InternalSubGraph, ModifySubgraph, SubGraph, SubGraphOps},
     HedgeGraph, NodeIndex,
 };
 use momtrop::float::MomTropFloat;
@@ -374,12 +374,11 @@ impl FeynmanGraph for HedgeGraph<Edge, Vertex, NumHedgeData> {
     }
 
     fn get_external_signature(&self) -> SignatureLike<ExternalIndex> {
-        SignatureLike::from_iter(self.iter_edges().filter_map(|(pair, _, _)| match pair {
-            HedgePair::Unpaired { flow, .. } => match flow {
-                Flow::Source => Some(SignOrZero::Minus),
-                Flow::Sink => Some(SignOrZero::Plus),
-            },
-            _ => None,
+        let externals = self.external_filter();
+
+        SignatureLike::from_iter(externals.included_iter().map(|h| match self.flow(h) {
+            Flow::Source => SignOrZero::Minus,
+            Flow::Sink => SignOrZero::Plus,
         }))
     }
 

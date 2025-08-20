@@ -145,24 +145,19 @@ impl ParseVertex {
                 .map(|a| a.strip_parse())
                 .transpose()?;
 
-            // let strict = v.get::<_, bool>("strict").transpose()?.unwrap_or(false);
-
             if let Some(num) = v.get::<_, String>("num") {
                 let num = num?;
-                // println!("Parsed with num:{}", num);
                 Ok(ParseVertex {
                     dod,
-                    // strict,
                     name,
                     vertex_rule: None,
-                    num: Some(<String as StripParse<Atom>>::strip_parse(&num)?),
+                    num: Some(num.strip_parse()?),
                 })
             } else if let Some(n) = v.get::<_, String>("int_id") {
                 let vertex_rule = Some(model.get_vertex_rule(n.unwrap()));
 
                 Ok(ParseVertex {
                     dod,
-                    // strict,
                     name,
                     vertex_rule,
                     num: None,
@@ -176,23 +171,13 @@ impl ParseVertex {
                         if g[eid].is_dummy {
                             return None;
                         }
-
-                        // println!(
-                        //     "Flow of {h}: {:?}\n\tOrientation: {:?}\n\tRelative Orientation: {:?}\n\tParticle: {}",
-                        //     g.flow(h),
-                        //     g.orientation(h),
-                        //     g.orientation(h).reverse().relative_to(g.flow(h)),
-                        //     g[eid].particle.particle()?.name
-                        // );
                         let particle = match g.orientation(h).reverse().relative_to(g.flow(h)) {
                             Orientation::Reversed => {
-                                // println!("Reverse");
                                 g[eid].particle.particle()?.get_anti_particle(model)
                             }
                             _ => g[eid].particle.particle()?.clone(),
                         };
 
-                        // println!("Local Particle to node: {node_id}: {}",particle.name);
                         Some(particle)
                     })
                     .collect();
@@ -203,7 +188,6 @@ impl ParseVertex {
                     if res.len() == 1 {
                         Ok(ParseVertex {
                             dod,
-                            // strict,
                             name,
                             vertex_rule: Some(res[0].clone()),
                             num: None,

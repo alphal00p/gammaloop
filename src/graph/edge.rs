@@ -70,6 +70,25 @@ impl PossibleParticle {
         ().into()
     }
 
+    pub(crate) fn override_mass(self, mass: Option<Atom>) -> Self {
+        let Some(mass) = mass else {
+            return self;
+        };
+
+        match self {
+            PossibleParticle::JustMass { .. } => PossibleParticle::JustMass {
+                expr: mass,
+                value: None,
+            },
+            PossibleParticle::MassOverriddenParticle { particle, .. }
+            | PossibleParticle::Particle(particle) => PossibleParticle::MassOverriddenParticle {
+                particle,
+                mass,
+                mass_value: None,
+            },
+        }
+    }
+
     pub(crate) fn color_reps(&self, flow: Flow) -> IndexLess {
         match self {
             PossibleParticle::Particle(p) => p.color_reps(flow),
@@ -347,59 +366,30 @@ impl ParseEdge {
                     .get::<_, String>("num")
                     .transpose()?
                     .map(|a| -> Result<Atom> {
-                        Ok(Self::localize_ainds(
-                            <String as StripParse<Atom>>::strip_parse(&a)?,
-                            eid,
-                            p,
-                        ))
+                        Ok(Self::localize_ainds(a.strip_parse::<Atom>()?, eid, p))
                     })
+                    .transpose()?;
+
+                let mass = e
+                    .get::<_, String>("mass")
+                    .transpose()?
+                    .map(|a| a.strip_parse::<Atom>())
                     .transpose()?;
 
                 let particle: PossibleParticle = if let Some(v) = e.get::<_, isize>("pdg") {
                     model.try_get_particle_from_pdg(v?)?.into()
                 } else if let Some(v) = e.get::<_, String>("particle") {
-                    let pname = v?;
-                    let pname = pname
-                        .as_str()
-                        .strip_prefix('"')
-                        .unwrap_or(&pname)
-                        .strip_suffix('"')
-                        .unwrap_or(&pname);
+                    let pname: String = v?.strip_parse()?;
                     model.try_get_particle(pname)?.into()
-                } else if let Some(v) = e.get::<_, String>("mass") {
-                    <String as StripParse<Atom>>::strip_parse(&v?)?.into()
                 } else {
                     ().into()
-                };
-
-                let processed_particle = if let Some(v) = e.get::<_, String>("mass") {
-                    match particle {
-                        PossibleParticle::Particle(p) => {
-                            let mass = <String as StripParse<Atom>>::strip_parse(&v?)?;
-                            let mass_value = p.mass.value;
-                            PossibleParticle::MassOverriddenParticle {
-                                particle: p,
-                                mass,
-                                mass_value,
-                            }
-                        }
-                        _ => {
-                            let mass = <String as StripParse<Atom>>::strip_parse(&v?)?;
-                            PossibleParticle::JustMass {
-                                expr: mass,
-                                value: None,
-                            }
-                        }
-                    }
-                } else {
-                    particle
                 };
 
                 Ok(ParseEdge {
                     is_dummy,
                     dod,
                     lmb_id,
-                    particle: processed_particle,
+                    particle: particle.override_mass(mass),
                     num,
                     label,
                 })

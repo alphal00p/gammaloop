@@ -72,57 +72,67 @@ where
     }
 }
 
-pub trait StripParse<T> {
-    fn strip_parse(&self) -> Result<T>;
+pub trait FromStripedStr: Sized {
+    fn strip_from(string: &str) -> Result<Self>;
 }
 
-impl StripParse<Atom> for String {
-    fn strip_parse(&self) -> Result<Atom> {
-        (&&self).strip_parse()
+pub trait StripParse {
+    fn strip_parse<T: FromStripedStr>(&self) -> Result<T>;
+}
+
+impl StripParse for String {
+    fn strip_parse<T: FromStripedStr>(&self) -> Result<T> {
+        T::strip_from(self.as_str())
     }
 }
-impl StripParse<Atom> for &String {
-    fn strip_parse(&self) -> Result<Atom> {
-        let a = self
-            .as_str()
+impl StripParse for &String {
+    fn strip_parse<T: FromStripedStr>(&self) -> Result<T> {
+        T::strip_from(self.as_str())
+    }
+}
+impl StripParse for &str {
+    fn strip_parse<T: FromStripedStr>(&self) -> Result<T> {
+        T::strip_from(self)
+    }
+}
+impl FromStripedStr for String {
+    fn strip_from(string: &str) -> Result<Self> {
+        Ok(string
             .strip_prefix('"')
-            .unwrap_or(&self)
+            .unwrap_or(string)
             .strip_suffix('"')
-            .unwrap_or(&self);
+            .unwrap_or(string)
+            .into())
+    }
+}
+
+impl FromStripedStr for Atom {
+    fn strip_from(string: &str) -> Result<Self> {
+        let a = string
+            .strip_prefix('"')
+            .unwrap_or(string)
+            .strip_suffix('"')
+            .unwrap_or(string);
         Ok(try_parse!(a).map_err(|e| eyre!("Symbolica parsing error: {e}"))?)
     }
 }
 
-impl StripParse<bool> for String {
-    fn strip_parse(&self) -> Result<bool> {
-        (&&self).strip_parse()
-    }
-}
-impl StripParse<bool> for &String {
-    fn strip_parse(&self) -> Result<bool> {
-        let a = self
-            .as_str()
-            .strip_prefix('"')
-            .unwrap_or(&self)
+impl FromStripedStr for bool {
+    fn strip_from(s: &str) -> Result<Self> {
+        Ok(s.strip_prefix('"')
+            .unwrap_or(s)
             .strip_suffix('"')
-            .unwrap_or(&self);
-        Ok(a.parse()?)
+            .unwrap_or(s)
+            .parse()?)
     }
 }
-impl StripParse<i32> for String {
-    fn strip_parse(&self) -> Result<i32> {
-        (&&self).strip_parse()
-    }
-}
-impl StripParse<i32> for &String {
-    fn strip_parse(&self) -> Result<i32> {
-        let a = self
-            .as_str()
-            .strip_prefix('"')
-            .unwrap_or(&self)
+impl FromStripedStr for i32 {
+    fn strip_from(s: &str) -> Result<Self> {
+        Ok(s.strip_prefix('"')
+            .unwrap_or(s)
             .strip_suffix('"')
-            .unwrap_or(&self);
-        Ok(a.parse()?)
+            .unwrap_or(s)
+            .parse()?)
     }
 }
 

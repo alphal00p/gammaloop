@@ -131,6 +131,12 @@ where
     }
 }
 
+impl<T: From<usize>> Default for SignatureLike<T> {
+    fn default() -> Self {
+        SignatureLike(TiVec::new())
+    }
+}
+
 impl<T> FromIterator<SignOrZero> for SignatureLike<T>
 where
     T: From<usize>,

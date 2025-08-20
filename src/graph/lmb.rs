@@ -378,26 +378,21 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
         let Some(h) = subgraph.included_iter().next() else {
             return self.empty_lmb();
         };
-
+        let mut ext_edges: TiVec<ExternalIndex, EdgeIndex> = vec![].into();
         let dep_ext = externals.included_iter().next();
 
         let root_node = self.node_id(dep_ext.unwrap_or(h));
 
         let cotree = subgraph.subtract(&tree);
-        // println!("Tree:{}", self.dot(tree));
-        // println!("subgraph:{}", self.dot(subgraph));
-        // println!("Cotree:{}", self.dot(&cotree));
-        let Ok(tree) = SimpleTraversalTree::depth_first_traverse(self, tree, &root_node, None)
-        else {
-            warn!("Depth-first traversal failed");
-            return self.empty_lmb();
-        };
+        let tree = SimpleTraversalTree::depth_first_traverse(self, tree, &root_node, None).ok();
 
         let mut loop_edges: TiVec<LoopIndex, EdgeIndex> = vec![].into();
         let mut cycles = vec![];
+
+        // create all the cycles. The lmb order is in the order of the hedges not in the tree (and their relative order is ultimately due to the relative order of the hedges)
         for (p, e, _) in self.iter_edges_of(&cotree) {
             if let HedgePair::Paired { source, .. } = p {
-                if let Some(c) = tree.get_cycle(source, self) {
+                if let Some(c) = tree.as_ref().map(|t| t.get_cycle(source, self)).flatten() {
                     if let Some(signed) = SignedCycle::from_cycle(c, source, self) {
                         cycles.push(signed);
                         loop_edges.push(e);
@@ -410,7 +405,8 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
         //     println!("Cycle:{}", self.dot(&c.filter));
         // }
 
-        let mut ext_edges: TiVec<ExternalIndex, EdgeIndex> = vec![].into();
+        // The external flows are signed subgraphs (i.e. with only half of the edges to indicate a direction)
+        // They always contain the dependent external (except for the flow for the dep ext)
         let mut external_flows: TiVec<ExternalIndex, _> = vec![].into();
 
         if let Some(ext) = dep_ext {
@@ -433,12 +429,14 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
                 } => {
                     let ext_sign: SignOrZero = split.into();
 
-                    let ext = match split {
-                        Flow::Sink => tree.hedge_parent(sink, self.as_ref()).unwrap(),
-                        Flow::Source => tree.hedge_parent(source, self.as_ref()).unwrap(),
-                    };
-                    for h in tree.ancestor_iter_hedge(ext, self.as_ref()).step_by(2) {
-                        path_to_dep.add(h);
+                    if let Some(tree) = &tree {
+                        let ext = match split {
+                            Flow::Sink => tree.hedge_parent(sink, self.as_ref()).unwrap(),
+                            Flow::Source => tree.hedge_parent(source, self.as_ref()).unwrap(),
+                        };
+                        for h in tree.ancestor_iter_hedge(ext, self.as_ref()).step_by(2) {
+                            path_to_dep.add(h);
+                        }
                     }
 
                     external_flows.push((ext_sign, path_to_dep));
@@ -451,10 +449,12 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
                     if self.node_id(hedge) == root_node {
                         path_to_dep.add(hedge);
                     } else {
-                        let ext = tree.hedge_parent(hedge, self.as_ref()).unwrap();
+                        if let Some(tree) = &tree {
+                            let ext = tree.hedge_parent(hedge, self.as_ref()).unwrap();
 
-                        for h in tree.ancestor_iter_hedge(ext, self.as_ref()).step_by(2) {
-                            path_to_dep.add(h);
+                            for h in tree.ancestor_iter_hedge(ext, self.as_ref()).step_by(2) {
+                                path_to_dep.add(h);
+                            }
                         }
                     }
                     ext_edges.push(e);
@@ -808,3 +808,38 @@ impl LoopMomentumBasis {
     PartialOrd,
 )]
 pub struct LmbIndex(usize);
+
+#[cfg(test)]
+pub mod test {
+    use crate::{
+        dot,
+        graph::{parse::IntoGraph, Graph},
+    };
+
+    #[test]
+    fn lmb_for_dummy() {
+        let gs: Vec<Graph> = dot!(
+            digraph dxda{
+                ext [style=invis]
+                node[num=1]
+                ext->v1:0[id=0 is_dummy=true]
+                ext->v1:1[id=1]
+                ext->v1:2[id=2]
+            }
+
+            digraph aa{
+                ext [style=invis]
+                node[num=1]
+                ext->v1:0[id=0 is_dummy=true]
+                ext->v1:1[id=1]
+                v1->v2
+                ext->v2:2[id=2]
+            }
+        )
+        .unwrap();
+
+        for g in gs {
+            println!("{}", g.loop_momentum_basis);
+        }
+    }
+}
