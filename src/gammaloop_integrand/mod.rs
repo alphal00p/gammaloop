@@ -1873,7 +1873,7 @@ impl<T: FloatLike> Display for ParamBuilder<T> {
         let mut table = tabled::builder::Builder::new();
 
         for (lhs, rhs) in &self.reps {
-            table.push_record(vec![lhs.to_canonical_string(), rhs.to_canonical_string()]);
+            table.push_record(vec![lhs.to_string(), rhs.to_string()]);
         }
 
         for i in self {

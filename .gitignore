@@ -25,7 +25,7 @@ share/python-wheels/
 *.egg
 MANIFEST
 
-#examples/**/gammaloop_state/
+examples/**/gammaloop_state/
 
 out.yaml
 outmap.yaml
