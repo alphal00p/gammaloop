@@ -25,3 +25,5 @@ generation:
     target_omega: 1.0
     disable_tropical_generation: true
   enable_thresholds: true
+  uv_settings:
+    generate_integrated: true

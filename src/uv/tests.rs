@@ -50,7 +50,21 @@ fn four_photon_one_loop_amp() {
     .unwrap();
 
     amp.generate_cff().unwrap();
-    amp.build_parametric_integrand(&GenerationSettings::default());
+    amp.build_parametric_integrand(&GenerationSettings {
+        orientation_pattern: OrientationPattern::from_orientation(
+            &amp.derived_data
+                .cff_expression
+                .as_ref()
+                .unwrap()
+                .orientations[AmplitudeOrientationID(0)],
+        ),
+        uv_settings: UVgenerationSettings {
+            generate_integrated: false,
+        },
+        ..Default::default()
+    });
+
+    println!("{}", amp.derived_data.all_mighty_integrand);
 }
 
 #[test]
@@ -249,13 +263,13 @@ fn tta_uv() {
     amp.generate_cff().unwrap();
     let a = amp
         .build_parametric_integrand(&GenerationSettings {
-            orientation_pattern: OrientationPattern::from_orientation(
-                &amp.derived_data
-                    .cff_expression
-                    .as_ref()
-                    .unwrap()
-                    .orientations[AmplitudeOrientationID(0)],
-            ),
+            // orientation_pattern: OrientationPattern::from_orientation(
+            //     &amp.derived_data
+            //         .cff_expression
+            //         .as_ref()
+            //         .unwrap()
+            //         .orientations[AmplitudeOrientationID(0)],
+            // ),
             uv_settings: UVgenerationSettings {
                 generate_integrated: false,
             },

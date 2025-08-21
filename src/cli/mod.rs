@@ -5,7 +5,7 @@ use crate::{
     model::Model,
     processes::{ExportSettings, Process, ProcessDefinition},
     settings::{global::GenerationSettings, GlobalSettings, RuntimeSettings},
-    utils::{F, GIT_VERSION},
+    utils::{F, GIT_VERSION, GS},
 };
 use chrono::{Datelike, Local, Timelike};
 use clap::{Parser, Subcommand, ValueEnum};
@@ -366,6 +366,8 @@ impl Cli {
             .into_hooks();
         panic.install();
         eyre.install().unwrap();
+
+        let _ = GS.delta_vec;
         crate::set_interrupt_handler();
         // activate_oem_license!("SYMBOLICA_OEM_KEY_23177b25");
 

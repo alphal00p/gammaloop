@@ -3609,7 +3609,26 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
     m_uv: symbol!("mUV"),
     m_uv_int: symbol!("mUVI"),
     mu_r_sq: symbol!(format!("{}::μᵣ²", vakint::NAMESPACE)),
-    delta_vec: symbol!("delta"),
+    delta_vec: symbol!("δ";; |f, out| {
+        if let AtomView::Fun(ff) = f {
+            if ff.get_nargs()  == 2 {
+                let mut iter = ff.iter();
+                let matchid = iter.next().unwrap();
+               if let AtomView::Fun(cind)=iter.next().unwrap(){
+                   if cind.get_symbol() == AIND_SYMBOLS.cind{
+                       if cind.as_view() !=matchid{
+                        *out = Atom::Zero;
+                       }else{
+                           *out = Atom::num(1);
+
+                       }
+                        return true;
+                   }
+               }
+            }
+        }
+        false
+    }),
     top: symbol!("Top"),
     num: symbol!("num"),
     den: symbol!("den"),
@@ -3674,6 +3693,13 @@ impl GammaloopSymbols {
 
     pub(crate) fn emr_vec_index<'a>(&self, e: EdgeIndex, index: impl Into<AtomOrView<'a>>) -> Atom {
         function!(GS.emr_vec, usize::from(e) as i64, index.into().as_view())
+    }
+
+    pub(crate) fn cind<'a>(&self, e: usize) -> Atom {
+        AIND_SYMBOLS.cind.f([e as i64])
+    }
+    pub(crate) fn delta_vec<'a>(&self, e: usize, index: impl Into<AtomOrView<'a>>) -> Atom {
+        function!(GS.delta_vec, self.cind(e), index.into().as_view())
     }
 
     pub(crate) fn energy_delta<'a>(&self, index: impl Into<AtomOrView<'a>>) -> Atom {

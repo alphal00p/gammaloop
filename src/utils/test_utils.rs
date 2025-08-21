@@ -22,6 +22,7 @@ fn output_dir() -> String {
 
 #[cfg(test)]
 pub mod test {
+    use idenso::color::ColorSimplifier;
     use insta::assert_snapshot;
     use linnet::half_edge::involution::EdgeIndex;
     use spenso::structure::abstract_index::AIND_SYMBOLS;
@@ -36,5 +37,11 @@ pub mod test {
 
         assert_snapshot!(a.to_canonical_string(),@"0");
         assert_snapshot!(b.to_canonical_string(),@"_gammaloop::Q(1,spenso::cind(1))");
+
+        let c = GS.delta_vec(0, GS.cind(1));
+        assert_snapshot!(c.to_canonical_string(),@"0");
+        let c = GS.delta_vec(0, GS.cind(0));
+        assert_snapshot!(c.to_canonical_string(),@"1");
+        c.simplify_color();
     }
 }
