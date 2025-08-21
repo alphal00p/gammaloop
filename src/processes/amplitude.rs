@@ -375,7 +375,7 @@ impl AmplitudeGraph {
         &mut self,
         settings: &GenerationSettings,
     ) -> Result<()> {
-        self.derived_data.all_mighty_integrand +=
+        self.derived_data.all_mighty_integrand =
             self.build_original_parametric_integrand(settings)?;
         Ok(())
     }
@@ -580,6 +580,9 @@ impl AmplitudeGraph {
                 concrete_integrated: None,
             });
         }
+
+        // let ct_4 = &counterterms[EsurfaceID::from(4)];
+        // panic!("Counterterm 4: {}", ct_4.parametric_local);
 
         counterterms
     }

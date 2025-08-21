@@ -7,7 +7,7 @@ use crate::{
     momentum::SignOrZero,
     numerator::{symbolica_ext::AtomCoreExt, ParsingNet},
     symbolica_ext::CallSymbol,
-    utils::GS,
+    utils::{ose_atom_from_index, GS},
     uv::approx::CFFapprox,
 };
 use bitvec::vec::BitVec;
@@ -155,12 +155,12 @@ impl Forest {
         if let Some(cut) = cut_edges {
             // add Feynman rules of cut edges
             for (_p, edge_index, d) in graph.iter_edges_of(cut) {
-                s = s * d
-                    .data
-                    .num
-                    .wrap_color(GS.color_wrap)
-                    .parse_into_net()
-                    .unwrap();
+                s = s
+                    * (&d.data.num / (Atom::num(2) * ose_atom_from_index(edge_index)))
+                        .wrap_color(GS.color_wrap)
+                        .parse_into_net()
+                        .unwrap();
+
                 s = s.replace_multiple(&[GS.add_parametric_sign(edge_index)]);
             }
         }

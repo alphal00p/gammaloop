@@ -228,7 +228,7 @@ fn stability_check(
             || error.im > stability_settings.required_precision_for_im
     });
 
-    if settings.general.debug > 1 {
+    if settings.general.debug > 4 {
         if let Some(unstable_index) = unstable_sample {
             let unstable_point = results[unstable_index];
             let rotation_axis = format!("{:?}", settings.stability.rotation_axis[unstable_index]);
@@ -1115,7 +1115,7 @@ fn evaluate_sample<I: GammaloopIntegrand>(
         if is_stable {
             break;
         } else {
-            if integrand.get_settings().general.debug > 0 {
+            if integrand.get_settings().general.debug > 4 {
                 println!("unstable at level: {}", stability_level.precision);
                 if let Ok(gammaloop_sample) = parameterize::<f64, I>(sample, integrand) {
                     let rotated_samples: Vec<_> = integrand

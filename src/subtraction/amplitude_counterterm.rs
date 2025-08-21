@@ -1,6 +1,7 @@
 use bincode_trait_derive::{Decode, Encode};
 use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeVec, Orientation};
+use log::debug;
 use spenso::algebra::complex::Complex;
 use symbolica::{
     atom::Atom,
@@ -398,6 +399,9 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
 
         let uv_damp_plus = evaluate_uv_damper(&radius, &radius_star, &e_cm, &settings);
         let uv_damp_minus = evaluate_uv_damper(&-&radius, &radius_star, &e_cm, &settings);
+
+        debug!("uv_damp_plus: {:?}", uv_damp_plus);
+        debug!("uv_damp_minus: {:?}", uv_damp_minus);
 
         let h_function = evaluate_integrated_ct_normalisation(
             &radius,
