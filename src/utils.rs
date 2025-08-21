@@ -31,12 +31,12 @@ use spenso::algebra::upgrading_arithmetic::TrySmallestUpgrade;
 use spenso::network::library::symbolic::{ExplicitKey, TensorLibrary};
 use spenso::network::library::TensorLibraryData;
 use spenso::structure::abstract_index::AIND_SYMBOLS;
-use spenso::structure::concrete_index::ExpandedIndex;
+use spenso::structure::concrete_index::{ConcreteIndex, ExpandedIndex};
 use spenso::structure::representation::{Minkowski, RepName};
 use spenso::tensors::parametric::to_param::ToAtom;
 use spenso::tensors::parametric::MixedTensor;
 use spenso_hep_lib::hep_lib;
-use symbolica::atom::{AtomCore, AtomOrView, FunctionBuilder, Symbol};
+use symbolica::atom::{AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol};
 use symbolica::coefficient::Coefficient;
 use symbolica::domains::float::{
     ConstructibleFloat, NumericalFloatLike, RealNumberLike, SingleFloat,
@@ -3457,6 +3457,8 @@ pub struct GammaloopSymbols {
     ///for selecting orientations at generation
     pub selected: Symbol,
 
+    ///For selecting a concete index.
+    pub delta_vec: Symbol,
     pub emr_mom: Symbol,
     pub emr_vec: Symbol,
     pub dot: Symbol,
@@ -3607,6 +3609,7 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
     m_uv: symbol!("mUV"),
     m_uv_int: symbol!("mUVI"),
     mu_r_sq: symbol!(format!("{}::μᵣ²", vakint::NAMESPACE)),
+    delta_vec: symbol!("delta"),
     top: symbol!("Top"),
     num: symbol!("num"),
     den: symbol!("den"),
@@ -3618,7 +3621,32 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
     u: symbol!("u"),
     emr_mom: symbol!("Q"),
     orientation_delta: symbol!("orientation_delta"),
-    emr_vec: symbol!("Q3"),
+    emr_vec: symbol!("Q3"
+    ;; |f, out| {
+        if let AtomView::Fun(ff) = f {
+            if ff.get_nargs()  == 2 {
+                let mut iter = ff.iter();
+                let eid = iter.next().unwrap();
+               if let AtomView::Fun(cind)=iter.next().unwrap(){
+                   if cind.get_symbol() == AIND_SYMBOLS.cind{
+                       if let Some(i) = cind.iter().next(){
+                           if let Ok(i) = i64::try_from(i){
+
+                               if i==0{
+                                   *out=Atom::Zero;
+                               }else{
+                                   *out=symbol!("Q").f(&[eid,cind.as_view()])
+
+                               }
+                                return true;
+                           }
+                       }
+                   }
+               }
+            }
+        }
+        false
+    }),
     ose: symbol!("OSE"),
     energy: symbol!("E"),
     external_mom: symbol!("P"),
@@ -3640,29 +3668,45 @@ impl GammaloopSymbols {
         function!(self.emr_mom, usize::from(e) as i64, a.as_view())
     }
 
-    pub(crate) fn split_mom_pattern<'a>(&self, e: EdgeIndex, e_mass: Atom) -> Replacement {
-        let eidc = usize::from(e) as i64;
-        Replacement::new(
-            self.emr_mom(e, Minkowski {}.to_symbolic([W_.a__]))
-                .to_pattern(),
-            function!(
-                GS.ose,
-                eidc,
-                function!(GS.emr_vec, eidc),
-                &e_mass * &e_mass,
-                (-function!(
-                    MS.dot,
-                    function!(GS.emr_vec, eidc),
-                    function!(GS.emr_vec, eidc)
-                ) + &e_mass * &e_mass)
-                    .npow((1, 2)),
-                Minkowski {}.to_symbolic([W_.a__])
-            ) * sign_atom(e)
-                + function!(GS.emr_vec, eidc, Minkowski {}.to_symbolic([W_.a__])),
-        )
+    pub(crate) fn emr_vec(&self, e: EdgeIndex) -> Atom {
+        function!(GS.emr_vec, usize::from(e) as i64)
     }
 
-    pub(crate) fn emr_vec_lib_tensor(&self, e: EdgeIndex) {}
+    pub(crate) fn emr_vec_index<'a>(&self, e: EdgeIndex, index: impl Into<AtomOrView<'a>>) -> Atom {
+        function!(GS.emr_vec, usize::from(e) as i64, index.into().as_view())
+    }
+
+    pub(crate) fn energy_delta<'a>(&self, index: impl Into<AtomOrView<'a>>) -> Atom {
+        self.delta_vec
+            .f(&[self.spensocind.f(&[0]), index.into().into_owned()])
+    }
+
+    pub(crate) fn ose_full(&self, e: EdgeIndex, e_mass: Atom, index: Option<Atom>) -> Atom {
+        let eidc = usize::from(e) as i64;
+        let m2 = &e_mass * &e_mass;
+        let ose = function!(
+            self.ose,
+            eidc,
+            GS.emr_vec(e),
+            m2,
+            (-function!(MS.dot, GS.emr_vec(e), GS.emr_vec(e)) + m2)
+        )
+        .npow((1, 2));
+
+        if let Some(index) = index {
+            ose * self.energy_delta(index)
+        } else {
+            ose
+        }
+    }
+
+    pub(crate) fn split_mom_pattern<'a>(&self, e: EdgeIndex, e_mass: Atom) -> Replacement {
+        let id = Minkowski {}.to_symbolic([W_.a__]);
+        Replacement::new(
+            self.emr_mom(e, &id).to_pattern(),
+            self.emr_vec_index(e, &id) + self.ose_full(e, e_mass, Some(id)) * sign_atom(e),
+        )
+    }
 
     pub(crate) fn split_mom_pattern_simple<'a>(&self, e: EdgeIndex) -> Replacement {
         let eidc = usize::from(e) as i64;

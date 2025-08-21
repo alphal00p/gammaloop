@@ -38,6 +38,8 @@ pub(crate) fn is_not_paired(pair: &HedgePair) -> bool {
     !pair.is_paired()
 }
 
+pub mod settings;
+pub use settings::UVgenerationSettings;
 pub mod uv_graph;
 pub use uv_graph::UltravioletGraph;
 

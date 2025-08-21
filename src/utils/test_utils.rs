@@ -19,3 +19,22 @@ fn output_dir() -> String {
         String::from("./src/test_resources")
     }
 }
+
+#[cfg(test)]
+pub mod test {
+    use insta::assert_snapshot;
+    use linnet::half_edge::involution::EdgeIndex;
+    use spenso::structure::abstract_index::AIND_SYMBOLS;
+    use symbolica::atom::AtomCore;
+
+    use crate::{symbolica_ext::CallSymbol, utils::GS};
+
+    #[test]
+    fn normalization() {
+        let a = GS.emr_vec_index(EdgeIndex(1), AIND_SYMBOLS.cind.f(&[0]));
+        let b = GS.emr_vec_index(EdgeIndex(1), AIND_SYMBOLS.cind.f(&[1]));
+
+        assert_snapshot!(a.to_canonical_string(),@"0");
+        assert_snapshot!(b.to_canonical_string(),@"_gammaloop::Q(1,spenso::cind(1))");
+    }
+}

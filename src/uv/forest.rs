@@ -32,7 +32,7 @@ use vakint::Vakint;
 use super::{
     approx::Approximation,
     poset::{DagNode, DAG},
-    UltravioletGraph,
+    UVgenerationSettings, UltravioletGraph,
 };
 
 pub struct Forest {
@@ -58,6 +58,7 @@ impl Forest {
         orientations: &TiVec<OID, O>,
         canonize_esurface: &Option<ShiftRewrite>,
         cut_edges: &[EdgeIndex],
+        settings: &UVgenerationSettings,
     ) {
         let order = self.dag.compute_topological_order();
 
@@ -80,10 +81,15 @@ impl Forest {
                         .unwrap();
 
                     assert!(matches!(parent.data.local_3d, CFFapprox::Dependent { .. }));
-                    current
-                        .data
-                        .compute(graph, vakint, amplitude_subgraph, &parent.data);
-                    current.data.compute_3d(
+                    if settings.generate_integrated {
+                        current.data.compute_integrated(
+                            graph,
+                            vakint,
+                            amplitude_subgraph,
+                            &parent.data,
+                        );
+                    }
+                    current.data.compute(
                         graph,
                         amplitude_subgraph,
                         canonize_esurface,
@@ -141,7 +147,7 @@ impl Forest {
         let mut sum: Option<ParsingNet> = None;
 
         for (_, n) in &self.dag.nodes {
-            let net = n.data.final_integrand.clone().unwrap().net;
+            let net = n.data.final_integrand.clone().unwrap();
             let Some(s) = &mut sum else {
                 sum = Some(net);
                 continue;
@@ -176,7 +182,7 @@ impl Forest {
         let mut sum: Option<ParsingNet> = None;
 
         for (_, n) in &self.dag.nodes {
-            let net = n.data.final_integrand.as_ref().unwrap().net.map_ref(
+            let net = n.data.final_integrand.as_ref().unwrap().map_ref(
                 |a| orientation.select(a),
                 |a| match a {
                     ParamOrConcrete::Param(a) => {

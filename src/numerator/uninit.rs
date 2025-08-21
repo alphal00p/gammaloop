@@ -1,6 +1,7 @@
 use std::sync::atomic::AtomicUsize;
 
-use linnet::half_edge::subgraph::SubGraph;
+use bitvec::vec::BitVec;
+use linnet::half_edge::{involution::HedgePair, subgraph::SubGraph};
 use log::debug;
 use spenso::network::library::TensorLibraryData;
 use symbolica::atom::Atom;
@@ -27,6 +28,8 @@ impl Numerator<UnInit> {
             Atom::one()
         };
 
+        let mut seen: BitVec = BitVec::empty(graph.n_nodes());
+
         for (p, eid, e) in graph.underlying.iter_edges_of(subgraph) {
             let i = MAXEDGECOUNTER.fetch_max(eid.0, std::sync::atomic::Ordering::Relaxed);
             if i == eid.0 {
@@ -43,12 +46,19 @@ impl Numerator<UnInit> {
                 //     }),
                 // );
             }
-            if p.is_paired() {
+            if let HedgePair::Paired { source, sink } = p {
+                let source_n = graph.node_id(source);
+                if !seen[source_n.0] {
+                    seen.set(source_n.0, true);
+                    num *= graph[source_n].get_num();
+                }
+                let sink_n = graph.node_id(sink);
+                if !seen[sink_n.0] {
+                    seen.set(sink_n.0, true);
+                    num *= graph[sink_n].get_num();
+                }
                 num *= &e.data.num;
             }
-        }
-        for (_, _, v) in graph.underlying.iter_nodes_of(subgraph) {
-            num *= v.get_num();
         }
 
         Numerator {

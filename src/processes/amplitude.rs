@@ -509,6 +509,7 @@ impl AmplitudeGraph {
                 &circled_orientations,
                 &canonize_esurface,
                 &esurface.energies,
+                &settings.uv_settings,
             );
 
             complement_forest.compute(
@@ -518,6 +519,7 @@ impl AmplitudeGraph {
                 &complement_orientations,
                 &canonize_esurface,
                 &esurface.energies,
+                &settings.uv_settings,
             );
 
             let circled_expr =
@@ -624,6 +626,7 @@ impl AmplitudeGraph {
             &orientations,
             &canonize_esurface,
             &[],
+            &settings.uv_settings,
         );
 
         let global_num = self.graph.global_network();
@@ -639,6 +642,7 @@ impl AmplitudeGraph {
             .with_context(|| format!("Failed to get scalar from network when building original paramteric integrand.")).with_note(||format!("Network: \n{}\nGraph:\n{}", full.dot_pretty(),DotGraph::from(&self.graph).debug_dot()))?
             .into();
 
+        debug!("All parametric before color atom:{:>}", scalar);
         scalar = scalar.unwrap_function(GS.color_wrap).simplify_color();
 
         scalar = self.add_additional_factors_to_cff_atom(&scalar);
@@ -646,264 +650,6 @@ impl AmplitudeGraph {
         debug!("All parametric integrand atom:{:>}", scalar);
 
         Ok(scalar)
-    }
-
-    fn build_counterterm_evaluators(&mut self, model: &Model) {
-        debug!(
-            "building threshold counteterm evaluator for graph: {}",
-            self.graph.name
-        );
-
-        let pols = self.graph.global_network();
-
-        // println!("Pols:{}", pols.dot_pretty());
-        let mut counterterms: TiVec<EsurfaceID, [Atom; 2]> = TiVec::new();
-        let canonize_esurface = self
-            .graph
-            .underlying
-            .get_esurface_canonization(&self.graph.loop_momentum_basis);
-
-        let full_orientation_list = self
-            .derived_data
-            .cff_expression
-            .as_ref()
-            .unwrap()
-            .orientations
-            .iter()
-            .map(|o| o.data.clone())
-            .collect::<TiVec<AmplitudeOrientationID, _>>();
-
-        debug!(
-            "number of esurfaces for graph {}: {}",
-            self.graph.name,
-            self.derived_data
-                .cff_expression
-                .as_ref()
-                .unwrap()
-                .surfaces
-                .esurface_cache
-                .len()
-        );
-
-        for (esurface_id, esurface) in self
-            .derived_data
-            .cff_expression
-            .as_ref()
-            .unwrap()
-            .surfaces
-            .esurface_cache
-            .iter_enumerated()
-        {
-            if esurface.external_shift.is_empty() {
-                // these will never satsify the threshold condition
-                // so we can skip them
-                counterterms.push([Atom::new(), Atom::new()]);
-                continue;
-            }
-
-            let (circled, complement) = esurface.get_subgraph_components(&self.graph.underlying);
-            let edges_in_cut = esurface.bitvec(&self.graph.underlying);
-
-            let orientations = self
-                .derived_data
-                .cff_expression
-                .as_ref()
-                .unwrap()
-                .get_orientations_with_esurface(esurface_id);
-
-            let first_orientation = &self
-                .derived_data
-                .cff_expression
-                .as_ref()
-                .unwrap()
-                .orientations[orientations[0]]
-                .data
-                .orientation;
-
-            let orientation_of_edges_in_esurface = esurface
-                .energies
-                .iter()
-                .map(|e| first_orientation[*e])
-                .collect_vec();
-
-            assert!(orientations.iter().all(|o| {
-                let or = &self
-                    .derived_data
-                    .cff_expression
-                    .as_ref()
-                    .unwrap()
-                    .orientations[*o]
-                    .data
-                    .orientation;
-
-                let orientation_of_esurface_in_this_orientation =
-                    esurface.energies.iter().map(|e| or[*e]).collect_vec();
-
-                if orientation_of_edges_in_esurface != orientation_of_esurface_in_this_orientation {
-                    println!("{:?}", orientation_of_edges_in_esurface);
-                    println!("{:?}", orientation_of_esurface_in_this_orientation);
-                    println!("esurface shift: {:?}", esurface.external_shift);
-                    false
-                } else {
-                    true
-                }
-            }));
-
-            let circled_wood = self.graph.wood(&circled);
-            let complement_wood = self.graph.wood(&complement);
-
-            let mut circled_forest =
-                circled_wood.unfold(&self.graph, &self.graph.loop_momentum_basis);
-
-            let mut complement_forest =
-                complement_wood.unfold(&self.graph, &self.graph.loop_momentum_basis);
-
-            let reverse_dangling = esurface
-                .energies
-                .iter()
-                .zip(orientation_of_edges_in_esurface)
-                .filter_map(|(e, o)| {
-                    if o == Orientation::Reversed {
-                        Some(*e)
-                    } else {
-                        None
-                    }
-                })
-                .collect_vec();
-
-            let circled_orientations =
-                get_orientations_from_subgraph(&self.graph.underlying, &circled, &reverse_dangling)
-                    .into_iter()
-                    .map(|cff_graph| cff_graph.global_orientation)
-                    .collect::<TiVec<SubgraphOrientationID, _>>();
-
-            let complement_orientations = get_orientations_from_subgraph(
-                &self.graph.underlying,
-                &complement,
-                &reverse_dangling,
-            )
-            .into_iter()
-            .map(|cff_graph| cff_graph.global_orientation)
-            .collect::<TiVec<SubgraphOrientationID, _>>();
-
-            let vakint = self.new_vakint();
-
-            circled_forest.compute(
-                &self.graph,
-                &circled,
-                &vakint,
-                &circled_orientations,
-                &canonize_esurface,
-                &esurface.energies,
-            );
-
-            complement_forest.compute(
-                &self.graph,
-                &complement,
-                &vakint,
-                &complement_orientations,
-                &canonize_esurface,
-                &esurface.energies,
-            );
-
-            let mut counterterm = Atom::new();
-            for orientation in orientations {
-                let circled_expr = circled_forest.local_expr(
-                    &full_orientation_list[orientation],
-                    Some(&edges_in_cut),
-                    &self.graph,
-                );
-
-                let complement_expr = complement_forest.local_expr(
-                    &full_orientation_list[orientation],
-                    None,
-                    &self.graph,
-                );
-
-                // println!("Circled Expression Network:");
-                // println!("{}", circled_expr.dot_pretty());
-
-                // println!("Complement Expression Network:");
-                // println!("{}", complement_expr.dot_pretty());
-
-                let mut product = circled_expr
-                    * complement_expr
-                    * pols.map_ref(
-                        |a| full_orientation_list[orientation].select(a),
-                        |a| match a {
-                            ParamOrConcrete::Param(a) => {
-                                ParamOrConcrete::Param(a.map_data_ref_self(|a| {
-                                    full_orientation_list[orientation].select(a)
-                                }))
-                            }
-                            a => a.clone(),
-                        },
-                    );
-
-                product
-                    .execute::<Sequential, SmallestDegree, _, _>(TENSORLIB.read().unwrap().deref())
-                    .unwrap();
-                // println!("{}", product.dot_pretty());
-
-                let mut scalar: Atom = product.result_scalar().unwrap().into();
-
-                scalar = scalar.unwrap_function(GS.color_wrap).simplify_color();
-                let orientation_result = do_replacement_rules(
-                    scalar,
-                    &self.graph,
-                    &esurface.energies,
-                    &full_orientation_list[orientation].orientation,
-                );
-
-                counterterm += orientation_result;
-            }
-            // println!("CounterTerm{}", counterterm);
-
-            let loop_3 = self.graph.underlying.get_loop_number() as i64 * 3;
-
-            let grad_eta = Atom::var(GS.deta);
-            let factors_of_pi = (Atom::num(2) * Atom::var(GS.pi)).npow(loop_3);
-            let i = Atom::i();
-
-            let radius = Atom::var(GS.radius);
-            let radius_star = Atom::var(GS.radius_star);
-            let uv_damp_plus = Atom::var(GS.uv_damp_plus);
-            let uv_damp_minus = Atom::var(GS.uv_damp_minus);
-            let hfunction = Atom::var(GS.hfunction);
-
-            let delta_r_plus = &radius - &radius_star;
-            let delta_r_minus = -&radius - &radius_star;
-
-            let jacobian_ratio = (&radius_star / &radius).npow(loop_3 - 1);
-
-            let local_prefactor = &jacobian_ratio / &factors_of_pi / &grad_eta
-                * (uv_damp_plus / delta_r_plus + uv_damp_minus / delta_r_minus);
-
-            let integrated_prefactor =
-                i * Atom::var(GS.pi) * &jacobian_ratio * hfunction / factors_of_pi / grad_eta;
-
-            let local_counterterm = local_prefactor * &counterterm;
-            let integrated_counterterm = integrated_prefactor * &counterterm;
-
-            // println!("CounterTerm{}", counterterm);
-            counterterms.push([local_counterterm, integrated_counterterm]);
-        }
-
-        //let params = self.ct_params(model);
-        // let counterterm_evaluators = counterterms
-        //     .into_iter()
-        //     .map(|ct| {
-        //         GenericEvaluator::new_from_builder(ct, &params, OptimizationSettings::default())
-        //             .unwrap()
-        //     })
-        //     .collect();
-
-        // let threshold_counterterm = AmplitudeCountertermData {
-        //     overlap: OverlapStructure::new_empty(),
-        //     evaluators: counterterm_evaluators,
-        //   };
-
-        // self.derived_data.threshold_counterterm = threshold_counterterm;
     }
 
     fn orientation_atoms(&self) -> TiVec<AmplitudeOrientationID, Atom> {

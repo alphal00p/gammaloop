@@ -1,3 +1,4 @@
+use crate::cff::expression::{AmplitudeOrientationID, GraphOrientation};
 use crate::graph::edge::ParseEdge;
 use crate::graph::global::ParseData;
 use crate::graph::hedge_data::ParseHedge;
@@ -6,13 +7,16 @@ use crate::graph::vertex::ParseVertex;
 use crate::graph::{LMBext, LoopMomentumBasis};
 use crate::initialisation::{initialise, test_initialise};
 use crate::momentum_sample::LoopIndex;
+use crate::numerator::symbolica_ext::AtomCoreExt;
 use crate::processes::{Amplitude, AmplitudeGraph};
+use crate::settings::global::OrientationPattern;
 use crate::utils::W_;
+use idenso::IndexTooling;
 use linnet::half_edge::involution::EdgeIndex;
 
 use linnet::half_edge::{builder::HedgeGraphBuilder, involution::Flow};
 use log::debug;
-use symbolica::symbol;
+use symbolica::{parse_lit, symbol};
 
 use crate::{
     dot,
@@ -50,12 +54,184 @@ fn four_photon_one_loop_amp() {
 }
 
 #[test]
+fn series() {
+    initialise();
+    let expr = parse_lit!(
+        1 / 18 * ee
+            ^ 2 * G
+            ^ 4 * ((mUV
+                ^ 2 - (mUV ^ 2 - spenso::dot(Q3(3), Q3(3))) - spenso::dot(Q3(3), Q3(3))
+                    + OSE(3, Q3(3), mUV ^ 2, mUV ^ 2 - spenso::dot(Q3(3), Q3(3))))
+                ^ (1 / 2)
+                    + (mUV
+                        ^ 2 - (mUV ^ 2 - spenso::dot(Q3(3), Q3(3))) - spenso::dot(Q3(3), Q3(3))
+                            + OSE(4, -Q3(3), mUV ^ 2, mUV ^ 2 - spenso::dot(Q3(3), Q3(3))))
+                ^ (1 / 2))
+            ^ -1 * ((mUV
+                ^ 2 - (mUV ^ 2 - spenso::dot(Q3(3), Q3(3))) - spenso::dot(Q3(3), Q3(3))
+                    + OSE(3, Q3(3), mUV ^ 2, mUV ^ 2 - spenso::dot(Q3(3), Q3(3))))
+                ^ (1 / 2)
+                    + (mUV
+                        ^ 2 - (mUV ^ 2 - spenso::dot(Q3(3), Q3(3))) - spenso::dot(Q3(3), Q3(3))
+                            + OSE(5, -Q3(3), mUV ^ 2, mUV ^ 2 - spenso::dot(Q3(3), Q3(3))))
+                ^ (1 / 2))
+            ^ -1 * (-Q3(3, spenso::mink(4, edge(4, 1)))
+                + (mUV
+                    ^ 2 - (mUV ^ 2 - spenso::dot(Q3(3), Q3(3))) - spenso::dot(Q3(3), Q3(3))
+                        + OSE(4, -Q3(3), mUV ^ 2, mUV ^ 2 - spenso::dot(Q3(3), Q3(3))))
+                ^ (1 / 2) * σ(4) * delta(spenso::cind(0), spenso::mink(4, edge(4, 1))))
+                * (-Q3(3, spenso::mink(4, edge(5, 1)))
+                    + (mUV
+                        ^ 2 - (mUV ^ 2 - spenso::dot(Q3(3), Q3(3))) - spenso::dot(Q3(3), Q3(3))
+                            + OSE(5, -Q3(3), mUV ^ 2, mUV ^ 2 - spenso::dot(Q3(3), Q3(3))))
+                    ^ (1 / 2) * σ(5) * delta(spenso::cind(0), spenso::mink(4, edge(5, 1))))
+                * (mUV
+                    ^ 2 - (mUV ^ 2 - spenso::dot(Q3(3), Q3(3))) - spenso::dot(Q3(3), Q3(3))
+                        + OSE(3, Q3(3), mUV ^ 2, mUV ^ 2 - spenso::dot(Q3(3), Q3(3))))
+            ^ (-1 / 2)
+                * (mUV
+                    ^ 2 - (mUV ^ 2 - spenso::dot(Q3(3), Q3(3))) - spenso::dot(Q3(3), Q3(3))
+                        + OSE(4, -Q3(3), mUV ^ 2, mUV ^ 2 - spenso::dot(Q3(3), Q3(3))))
+            ^ (-1 / 2)
+                * (mUV
+                    ^ 2 - (mUV ^ 2 - spenso::dot(Q3(3), Q3(3))) - spenso::dot(Q3(3), Q3(3))
+                        + OSE(5, -Q3(3), mUV ^ 2, mUV ^ 2 - spenso::dot(Q3(3), Q3(3))))
+            ^ (-1 / 2)
+                * spenso::g(spenso::mink(4, hedge(3)), spenso::mink(4, hedge(4)))
+                * spenso::gamma(
+                    spenso::bis(4, hedge(1)),
+                    spenso::bis(4, hedge(8)),
+                    spenso::mink(4, hedge(4))
+                )
+            ^ 2 * spenso::gamma(
+                spenso::bis(4, hedge(5)),
+                spenso::bis(4, hedge(0)),
+                spenso::mink(4, hedge(3))
+            )
+            ^ 2 * spenso::gamma(
+                spenso::bis(4, hedge(7)),
+                spenso::bis(4, hedge(6)),
+                spenso::mink(4, hedge(2))
+            )
+            ^ 2 * spenso::gamma(
+                spenso::bis(4, hedge(6)),
+                spenso::bis(4, hedge(5)),
+                spenso::mink(4, edge(4, 1))
+            ) * spenso::gamma(
+                spenso::bis(4, hedge(8)),
+                spenso::bis(4, hedge(7)),
+                spenso::mink(4, edge(5, 1))
+            ) * θ(σ(0))
+                * θ(σ(1))
+                * θ(σ(2))
+                * θ(σ(3))
+                * θ(σ(4))
+                * θ(σ(5))
+                * color(
+                    spenso::g(spenso::coad(8, hedge(3)), spenso::coad(8, hedge(4)))
+                        * spenso::g(
+                            spenso::dind(spenso::cof(3, hedge(6))),
+                            spenso::cof(3, hedge(5))
+                        )
+                        * spenso::g(
+                            spenso::dind(spenso::cof(3, hedge(7))),
+                            spenso::cof(3, hedge(6))
+                        )
+                        ^ 2 * spenso::g(
+                            spenso::dind(spenso::cof(3, hedge(8))),
+                            spenso::cof(3, hedge(7))
+                        ) * spenso::t(
+                            spenso::coad(8, hedge(3)),
+                            spenso::cof(3, hedge(0)),
+                            spenso::dind(spenso::cof(3, hedge(5)))
+                        )
+                        ^ 2 * spenso::t(
+                            spenso::coad(8, hedge(4)),
+                            spenso::cof(3, hedge(8)),
+                            spenso::dind(spenso::cof(3, hedge(1)))
+                        )
+                        ^ 2
+                )
+                + -1𝑖 / 12 * ee * G
+            ^ 2 * (-MT * spenso::g(spenso::bis(4, hedge(5)), spenso::bis(4, hedge(6)))
+                + spenso::gamma(
+                    spenso::bis(4, hedge(6)),
+                    spenso::bis(4, hedge(5)),
+                    spenso::mink(4, edge(4, 1))
+                ) * Q(4, spenso::mink(4, edge(4, 1))))
+                * (-MT * spenso::g(spenso::bis(4, hedge(7)), spenso::bis(4, hedge(8)))
+                    + spenso::gamma(
+                        spenso::bis(4, hedge(8)),
+                        spenso::bis(4, hedge(7)),
+                        spenso::mink(4, edge(5, 1))
+                    ) * Q(5, spenso::mink(4, edge(5, 1))))
+                * (-Q(1, spenso::cind(0)) + OSE(3) + OSE(5))
+            ^ -1 * (-Q(1, spenso::cind(0)) + Q(2, spenso::cind(0)) + OSE(3) + OSE(4))
+            ^ -1 * spenso::g(spenso::mink(4, hedge(3)), spenso::mink(4, hedge(4)))
+                * spenso::gamma(
+                    spenso::bis(4, hedge(1)),
+                    spenso::bis(4, hedge(8)),
+                    spenso::mink(4, hedge(4))
+                )
+                * spenso::gamma(
+                    spenso::bis(4, hedge(5)),
+                    spenso::bis(4, hedge(0)),
+                    spenso::mink(4, hedge(3))
+                )
+                * spenso::gamma(
+                    spenso::bis(4, hedge(7)),
+                    spenso::bis(4, hedge(6)),
+                    spenso::mink(4, hedge(2))
+                )
+                * θ(σ(0))
+                * θ(σ(1))
+                * θ(σ(2))
+                * θ(σ(3))
+                * θ(σ(4))
+                * θ(σ(5))
+                * OSE(3)
+            ^ -1 * OSE(4)
+            ^ -1 * OSE(5)
+            ^ -1 * color(
+                spenso::g(spenso::coad(8, hedge(3)), spenso::coad(8, hedge(4)))
+                    * spenso::g(
+                        spenso::dind(spenso::cof(3, hedge(6))),
+                        spenso::cof(3, hedge(5))
+                    )
+                    * spenso::g(
+                        spenso::dind(spenso::cof(3, hedge(7))),
+                        spenso::cof(3, hedge(6))
+                    )
+                    * spenso::g(
+                        spenso::dind(spenso::cof(3, hedge(8))),
+                        spenso::cof(3, hedge(7))
+                    )
+                    * spenso::t(
+                        spenso::coad(8, hedge(3)),
+                        spenso::cof(3, hedge(0)),
+                        spenso::dind(spenso::cof(3, hedge(5)))
+                    )
+                    * spenso::t(
+                        spenso::coad(8, hedge(4)),
+                        spenso::cof(3, hedge(8)),
+                        spenso::dind(spenso::cof(3, hedge(1)))
+                    )
+            )
+    );
+
+    let a = expr.cook_indices();
+    println!("{}", a);
+    a.parse_into_net().unwrap();
+}
+
+#[test]
 fn tta_uv() {
     test_initialise().unwrap();
     let model = load_generic_model("sm");
 
     let mut amp: AmplitudeGraph = dot!(
         digraph G{
+            num="spenso::g(spenso::dind(spenso::cof(3,hedge(0))),spenso::cof(3,hedge(1)))"
             // node [num=1]
             e        [style=invis]
             e -> A:0   [ id=0 particle=t]
@@ -69,11 +245,22 @@ fn tta_uv() {
     .unwrap();
 
     println!("{}", amp.graph.debug_dot());
-    debug!("HHH");
 
     amp.generate_cff().unwrap();
     let a = amp
-        .build_parametric_integrand(&GenerationSettings::default())
+        .build_parametric_integrand(&GenerationSettings {
+            orientation_pattern: OrientationPattern::from_orientation(
+                &amp.derived_data
+                    .cff_expression
+                    .as_ref()
+                    .unwrap()
+                    .orientations[AmplitudeOrientationID(0)],
+            ),
+            uv_settings: UVgenerationSettings {
+                generate_integrated: false,
+            },
+            ..Default::default()
+        })
         .unwrap();
 
     println!("{}", amp.derived_data.all_mighty_integrand);

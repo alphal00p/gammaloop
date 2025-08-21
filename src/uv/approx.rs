@@ -7,7 +7,7 @@ use crate::{
     },
     graph::{Edge, Graph, LMBext, LoopMomentumBasis, Vertex},
     momentum::Sign,
-    numerator::{symbolica_ext::AtomCoreExt, Network},
+    numerator::{symbolica_ext::AtomCoreExt, Network, ParsingNet},
     utils::{external_energy_atom_from_index, ose_atom_from_index, GS, W_},
 };
 use ahash::AHashSet;
@@ -22,7 +22,9 @@ use symbolica::{
     atom::{Atom, AtomCore, FunctionBuilder, Symbol},
     function,
     id::Replacement,
-    parse, symbol,
+    parse,
+    printer::PrintOptions,
+    symbol,
 };
 
 use linnet::half_edge::{
@@ -35,7 +37,7 @@ use typed_index_collections::TiVec;
 use vakint::{vakint_symbol, Vakint, VakintExpression};
 // use vakint::{EvaluationOrder, LoopNormalizationFactor, Vakint, VakintSettings};
 
-use super::{uv_graph::UVE, IntegrandExpr, UltravioletGraph};
+use super::{uv_graph::UVE, IntegrandExpr, UVgenerationSettings, UltravioletGraph};
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum ApproxOp {
@@ -134,7 +136,7 @@ pub struct Approximation {
     pub dod: i32,
     pub lmb: LoopMomentumBasis,
     pub local_3d: CFFapprox, //3d denoms
-    pub final_integrand: Option<Network>,
+    pub final_integrand: Option<ParsingNet>,
     pub integrated_4d: ApproxOp, //4d
     pub simple_approx: Option<SimpleApprox>,
 }
@@ -179,9 +181,7 @@ impl CFFapprox {
             }
         }
 
-        // println!("{:?}", contract_edges);
-
-        for (oid, o) in orientations.iter_enumerated() {
+        for o in orientations {
             cff_sum += o.orientation_thetas()
                 * generate_uv_cff(
                     graph,
@@ -627,7 +627,7 @@ impl Approximation {
         }
     }
 
-    pub(crate) fn compute<
+    pub(crate) fn compute_integrated<
         E: UVE,
         V,
         H,
@@ -644,7 +644,7 @@ impl Approximation {
     }
 
     /// Computes the 3d approximation of the UV
-    pub(crate) fn compute_3d<
+    pub(crate) fn compute<
         H,
         G: UltravioletGraph + AsRef<HedgeGraph<Edge, Vertex, H>>,
         S: SubGraph<Base = BitVec>,
@@ -669,7 +669,7 @@ impl Approximation {
             dependent
                 .integrated_4d
                 .expr()
-                .expect("Should have computed the dependent integrated 4d")
+                .unwrap_or((Atom::num(0), Sign::Positive))
         };
 
         let CFFapprox::Dependent { t_arg, .. } = CFFapprox::dependent(
@@ -719,47 +719,30 @@ impl Approximation {
         let graph = uv_graph.as_ref();
         let reduced = self.subgraph.subtract(&dependent.subgraph);
 
-        //println!("CFF: {}", cff);
+        println!("CFF: {}", cff);
 
         // add data for OSE computation and add an explicit sqrt
-        for (p, eid, e) in graph.iter_edges_of(&self.subgraph) {
-            let eid = usize::from(eid) as i64;
+        for (p, ei, e) in graph.iter_edges_of(&self.subgraph) {
+            let eid = usize::from(ei) as i64;
             if p.is_paired() {
                 // set energies from inner_t on-shell
-                cff = cff
-                    .replace(function!(GS.energy, eid))
-                    .with(function!(GS.ose, eid));
+                cff = cff.replace(function!(GS.energy, eid)).with(GS.ose(ei));
 
                 let e_mass = e.data.mass_atom();
-                cff = cff.replace(function!(GS.ose, eid)).with(
-                    function!(
-                        GS.ose,
-                        eid,
-                        function!(GS.emr_vec, eid),
-                        &e_mass * &e_mass,
-                        -function!(
-                            MS.dot,
-                            function!(GS.emr_vec, eid),
-                            function!(GS.emr_vec, eid)
-                        ) + &e_mass * &e_mass
-                    )
-                    .npow((1, 2)),
-                );
+                cff = cff.replace(GS.ose(ei)).with(GS.ose_full(ei, e_mass, None));
             }
         }
 
         let mut atomarg = cff
             * uv_graph
                 .numerator(&reduced, false)
-                .color_simplify()
-                // .gamma_simplify()
                 .get_single_atom()
                 .unwrap();
 
-        // println!(
-        //     "Expand-prerep {} with dod={} in {:?}",
-        //     atomarg, self.dod, self.lmb.ext_edges
-        // );
+        println!(
+            "Expand-prerep {} with dod={} in {:?}",
+            atomarg, self.dod, self.lmb.ext_edges
+        );
 
         // split numerator momenta into OSEs and spatial parts
         let mut reps = Vec::new();
@@ -768,6 +751,11 @@ impl Approximation {
                 let e_mass = e.data.mass_atom();
                 reps.push(GS.split_mom_pattern(eid, e_mass));
             }
+        }
+
+        println!("Split reps:");
+        for r in &reps {
+            println!("{r}");
         }
 
         atomarg = atomarg.replace_multiple(&reps);
@@ -786,14 +774,14 @@ impl Approximation {
         for e in &self.lmb.loop_edges {
             println!("Rescale {}", e);
             atomarg = atomarg
-                .replace(function!(GS.emr_vec, usize::from(*e) as i64, W_.x___))
-                .with(function!(GS.emr_vec, usize::from(*e) as i64, W_.x___) * GS.rescale);
+                .replace(GS.emr_vec_index(*e, W_.x___))
+                .with(GS.emr_vec_index(*e, W_.x___) * GS.rescale);
         }
 
-        // println!(
-        //     "Expand {} with dod={} in {:?}",
-        //     atomarg, self.dod, self.lmb.ext_edges
-        // );
+        println!(
+            "Expand {} with dod={} in {:?}",
+            atomarg, self.dod, self.lmb.ext_edges
+        );
 
         let soft_ct = graph.full_crown(&self.subgraph).count_ones() == 2 && self.dod > 0;
 
@@ -808,7 +796,7 @@ impl Approximation {
             } else {
                 // rescale the whole OSE so that the function itself has no poles during the expansion
                 atomarg = atomarg
-                    .replace(function!(GS.ose, eid, W_.mom_, W_.mass_, W_.prop_, W_.a___))
+                    .replace(function!(GS.ose, eid, W_.mom_, W_.mass_, W_.prop_))
                     .with(
                         function!(
                             GS.ose,
@@ -818,12 +806,11 @@ impl Approximation {
                             (GS.m_uv * GS.m_uv * GS.rescale * GS.rescale + W_.prop_
                                 - GS.m_uv * GS.m_uv)
                                 / GS.rescale
-                                / GS.rescale,
-                            W_.a___
+                                / GS.rescale
                         ) * GS.rescale
                             * GS.rescale,
                     )
-                    .replace(function!(GS.ose, eid, W_.mom_, W_.a___))
+                    .replace(function!(GS.ose, eid, W_.mom_, W_.a___)) //rescale the momenta for the same reason
                     .with_map(move |m| {
                         let mut f = FunctionBuilder::new(GS.ose);
                         f = f.add_arg(eid);
@@ -855,7 +842,7 @@ impl Approximation {
         .replace(GS.rescale)
         .with(Atom::num(1) / GS.rescale);
 
-        //println!("atomarg:{}", atomarg);
+        println!("atomarg:{:>}", atomarg.expand());
 
         println!("Series expanding");
 
@@ -864,8 +851,6 @@ impl Approximation {
             .unwrap()
             .to_atom()
             .replace(parse!("der(0,0,0,1, OSE(y__))"))
-            .with(Atom::num(1))
-            .replace(parse!("der(0,0,0,1,0, OSE(y__))"))
             .with(Atom::num(1))
             .replace(parse!("der(x__, OSE(y__))"))
             .with(Atom::num(0));
@@ -897,7 +882,7 @@ impl Approximation {
             a = a.replace(GS.rescale).with(Atom::num(1));
         }
 
-        //println!("Expanded: {:>}", a.expand());
+        println!("Expanded: {:>}", a.expand());
 
         a
     }
@@ -916,7 +901,7 @@ impl Approximation {
         canonize_esurface: &Option<ShiftRewrite>,
         orientations: &TiVec<OID, O>,
         cut_edges: &[EdgeIndex],
-    ) -> Option<Network>
+    ) -> Option<ParsingNet>
     where
         G: UltravioletGraph + AsRef<HedgeGraph<Edge, Vertex, H>>,
     {
@@ -924,7 +909,9 @@ impl Approximation {
         let (t_int, _) = if let ApproxOp::Root = self.integrated_4d {
             (Atom::num(0), Sign::Positive)
         } else {
-            self.integrated_4d.expr()?
+            self.integrated_4d
+                .expr()
+                .unwrap_or((Atom::num(0), Sign::Positive))
         };
 
         let CFFapprox::Dependent { t_arg, .. } = CFFapprox::dependent(
@@ -960,7 +947,9 @@ impl Approximation {
             }
         }
 
-        let mut resnum = graph.numerator(&reduced, false).color_simplify();
+        cff = cff.replace(function!(GS.ose, W_.a__, W_.e_)).with(W_.e_);
+
+        let mut resnum = graph.numerator(&reduced, false).get_single_atom().unwrap();
 
         let mut reps = Vec::new();
         for (p, eid, _) in graph.as_ref().iter_edges_of(&reduced) {
@@ -969,12 +958,22 @@ impl Approximation {
             }
         }
 
-        resnum.state.expr = resnum.state.expr.replace_multiple(&reps);
-        resnum.state.expr *= cff;
-        resnum.state.expr = resnum.state.expr.wrap_color(GS.color_wrap);
-        let mut res = resnum.parse().unwrap().state;
+        resnum = resnum.replace_multiple(&reps);
+        resnum *= cff;
+        resnum = resnum.wrap_color(GS.color_wrap);
+
+        debug!(
+            "Integrand before parsing:{}",
+            resnum.printer(PrintOptions {
+                terms_on_new_line: true,
+                hide_all_namespaces: false,
+                hide_namespace: Some("_gammaloop"),
+                ..Default::default()
+            })
+        );
+        let mut res = resnum.parse_into_net().unwrap();
         // println!("Final Integrand Net:{}", res.net.dot_pretty());
-        res.net = res.net.replace_multiple(&reps);
+        res = res.replace_multiple(&reps);
 
         // .contract(())
         // .unwrap()

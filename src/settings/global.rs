@@ -14,6 +14,7 @@ use crate::{
     cff::expression::GraphOrientation,
     numerator::NumeratorSettings,
     utils::{symbolica_ext::StringSerializedAtom, GS, W_},
+    uv::UVgenerationSettings,
     GammaLoopContext,
 };
 
@@ -47,6 +48,7 @@ pub struct GenerationSettings {
     pub gammaloop_compile_options: GammaloopCompileOptions,
     pub tropical_subgraph_table_settings: TropicalSubgraphTableSettings,
     pub enable_thresholds: bool,
+    pub uv_settings: UVgenerationSettings,
 }
 
 impl Default for GenerationSettings {
@@ -60,6 +62,7 @@ impl Default for GenerationSettings {
             gammaloop_compile_options: GammaloopCompileOptions::default(),
             tropical_subgraph_table_settings: TropicalSubgraphTableSettings::default(),
             enable_thresholds: true,
+            uv_settings: UVgenerationSettings::default(),
         }
     }
 }
@@ -129,10 +132,22 @@ impl Default for TropicalSubgraphTableSettings {
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, Default)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct OrientationPattern {
-    pat: Option<StringSerializedAtom>,
+    pub pat: Option<StringSerializedAtom>,
+}
+
+impl From<Atom> for OrientationPattern {
+    fn from(value: Atom) -> Self {
+        OrientationPattern {
+            pat: Some(StringSerializedAtom(value)),
+        }
+    }
 }
 
 impl OrientationPattern {
+    pub fn from_orientation<O: GraphOrientation>(orientation: &O) -> Self {
+        orientation.orientation_delta().into()
+    }
+
     pub fn select_pattern<'a>(&self, atom: impl AtomCore) -> Option<Atom> {
         Some(
             atom.replace(self.pat.as_ref()?.as_view().to_pattern())
