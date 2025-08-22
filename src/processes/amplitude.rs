@@ -7,10 +7,7 @@ use color_eyre::{Result, Section};
 use momtrop::SampleGenerator;
 
 use idenso::color::ColorSimplifier;
-use spenso::{
-    network::{store::TensorScalarStoreMapping, Sequential, SmallestDegree},
-    tensors::{data::StorageTensor, parametric::ParamOrConcrete},
-};
+use spenso::network::{Sequential, SmallestDegree};
 use vakint::{EvaluationOrder, LoopNormalizationFactor, Vakint, VakintSettings};
 
 use crate::{
@@ -24,20 +21,17 @@ use crate::{
     },
     gammaloop_integrand::{
         amplitude_integrand::{AmplitudeGraphTerm, AmplitudeIntegrand, AmplitudeIntegrandData},
-        DerivedDataContainer, GenericEvaluator, LmbMultiChannelingSetup, ParamBuilder,
+        DerivedDataContainer, LmbMultiChannelingSetup, ParamBuilder,
     },
     graph::{GraphGroup, GroupId, LMBext, LmbIndex, LoopMomentumBasis},
     model::ArcParticle,
     momentum_sample::ExternalIndex,
     numerator::symbolica_ext::AtomCoreExt,
-    settings::runtime::LockedRuntimeSettings,
+    settings::{runtime::LockedRuntimeSettings, GlobalSettings},
     signature::SignatureLike,
-    subtraction::{
-        amplitude_counterterm::{AmplitudeCountertermAtom, AmplitudeCountertermData},
-        overlap::OverlapStructure,
-    },
+    subtraction::amplitude_counterterm::AmplitudeCountertermAtom,
     utils::{GS, TENSORLIB, W_},
-    uv::{approx::do_replacement_rules, UltravioletGraph},
+    uv::UltravioletGraph,
     GammaLoopContext, GammaLoopContextContainer,
 };
 use eyre::{eyre, Context};
@@ -48,9 +42,8 @@ use linnet::{
 };
 use log::debug;
 use symbolica::{
-    atom::{Atom, AtomCore, FunctionBuilder},
+    atom::{Atom, AtomCore},
     domains::rational::Rational,
-    evaluate::OptimizationSettings,
     function,
 };
 use typed_index_collections::TiVec;
@@ -60,9 +53,7 @@ use crate::{
     gammaloop_integrand::NewIntegrand,
     graph::{FeynmanGraph, Graph},
     model::Model,
-    momentum::{Rotation, RotationMethod},
     settings::global::GenerationSettings,
-    settings::RuntimeSettings,
 };
 
 #[derive(Clone, Encode, Decode)]
@@ -96,6 +87,29 @@ impl Amplitude {
         }
 
         Ok(amp)
+    }
+
+    pub fn compile(
+        &mut self,
+        path: impl AsRef<Path>,
+        override_existing: bool,
+        settings: &GlobalSettings,
+    ) -> Result<()> {
+        let p = path.as_ref().join(format!("amp_{}", self.name));
+
+        let r = fs::create_dir_all(&p).with_context(|| {
+            format!(
+                "Trying to create directory to save amplitude {}",
+                p.display()
+            )
+        });
+        if override_existing {
+            r?;
+        }
+        if let Some(integrand) = &mut self.integrand {
+            integrand.compile(&p, override_existing, settings)?;
+        };
+        Ok(())
     }
 
     pub fn save(&mut self, path: impl AsRef<Path>, override_existing: bool) -> Result<()> {
@@ -133,12 +147,13 @@ impl Amplitude {
     pub(crate) fn build_integrand(
         &mut self,
         model: &Model,
+        global_settings: &GlobalSettings,
         runtime_default: LockedRuntimeSettings,
     ) -> Result<()> {
         let terms: Result<Vec<_>> = self
             .graphs
             .iter()
-            .map(|graph| graph.generate_term_for_graph(model))
+            .map(|graph| graph.generate_term_for_graph(model, global_settings))
             .collect();
 
         // let orig_polarizations = self.polarizations(&settings.kinematics.externals);
@@ -775,8 +790,12 @@ impl AmplitudeGraph {
     }
 
     // Expects cff_expression, esurface_data,
-    fn generate_term_for_graph(&self, model: &Model) -> Result<AmplitudeGraphTerm> {
-        AmplitudeGraphTerm::from_amplitude_graph(self, model)
+    fn generate_term_for_graph(
+        &self,
+        model: &Model,
+        global_settings: &GlobalSettings,
+    ) -> Result<AmplitudeGraphTerm> {
+        AmplitudeGraphTerm::from_amplitude_graph(self, model, global_settings)
     }
 }
 

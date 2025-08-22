@@ -36,6 +36,7 @@ use std::ops::Deref;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
+use symbolica_ext::AtomCoreExt;
 // use crate::feyngen::dis::{DisEdge, DisVertex};
 
 use crate::momentum::{PolDef, PolType, Polarization};
@@ -89,7 +90,7 @@ use symbolica::printer::PrintOptions;
 use symbolica::state::Workspace;
 
 use crate::numerator::ufo::UFO;
-use symbolica::atom::{AtomCore, AtomView};
+use symbolica::atom::{AtomCore, AtomOrView, AtomView};
 use symbolica::evaluate::{CompileOptions, ExpressionEvaluator, InlineASM};
 use symbolica::id::MatchSettings;
 use symbolica::{
@@ -1198,6 +1199,11 @@ impl<T: Copy + Default> Numerator<SymbolicExpression<T>> {
 }
 
 impl Numerator<AppliedFeynmanRule> {
+    pub(crate) fn to_d_dim<'a>(mut self, dim: impl Into<AtomOrView<'a>>) -> Self {
+        self.state.expr = self.state.expr.map_mink_dim(dim);
+        self
+    }
+
     pub(crate) fn color_simplify(self) -> Numerator<ColorSimplified> {
         debug!("Color simplifying global numerator");
         // let mut fully_simplified = true;
@@ -2301,105 +2307,105 @@ impl Numerator<Contracted> {
         Numerator::<Contracted>::add_consts_to_fn_map(&mut map);
         map
     }
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn generate_evaluators_from_params(
-        self,
-        n_edges: usize,
-        name: &str,
-        model_params_start: usize,
-        params: &[Atom],
-        double_param_values: Vec<Complex<F<f64>>>,
-        quad_param_values: Vec<Complex<F<f128>>>,
-        extra_info: &ExtraInfo,
-        export_settings: &GenerationSettings,
-    ) -> Numerator<Evaluators> {
-        let o = &export_settings.numerator_settings.eval_settings;
-        let owned_fn_map = self.generate_fn_map();
+    // #[allow(clippy::too_many_arguments)]
+    // pub(crate) fn generate_evaluators_from_params(
+    //     self,
+    //     n_edges: usize,
+    //     name: &str,
+    //     model_params_start: usize,
+    //     params: &[Atom],
+    //     double_param_values: Vec<Complex<F<f64>>>,
+    //     quad_param_values: Vec<Complex<F<f128>>>,
+    //     extra_info: &ExtraInfo,
+    //     export_settings: &GenerationSettings,
+    // ) -> Numerator<Evaluators> {
+    //     let o = &export_settings.numerator_settings.eval_settings;
+    //     let owned_fn_map = self.generate_fn_map();
 
-        let inline_asm = export_settings.gammaloop_compile_options.inline_asm();
-        let compile_options = export_settings
-            .gammaloop_compile_options
-            .to_symbolica_compile_options();
+    //     let inline_asm = export_settings.gammaloop_compile_options.inline_asm();
+    //     let compile_options = export_settings
+    //         .gammaloop_compile_options
+    //         .to_symbolica_compile_options();
 
-        let eval_settings = NumeratorEvaluatorSettings {
-            options: o,
-            inline_asm,
-            compile_options,
-        };
+    //     let eval_settings = NumeratorEvaluatorSettings {
+    //         options: o,
+    //         inline_asm,
+    //         compile_options,
+    //     };
 
-        let fn_map: FunctionMap = owned_fn_map;
-        let single = self.state.evaluator(
-            extra_info.path.clone(),
-            name,
-            &eval_settings,
-            params,
-            &fn_map,
-        );
+    //     let fn_map: FunctionMap = owned_fn_map;
+    //     let single = self.state.evaluator(
+    //         extra_info.path.clone(),
+    //         name,
+    //         &eval_settings,
+    //         params,
+    //         &fn_map,
+    //     );
 
-        match o {
-            NumeratorEvaluatorOptions::Joint(_) => Numerator {
-                state: Evaluators {
-                    orientated: Some(single.orientated_joint_impl(
-                        n_edges,
-                        name,
-                        params,
-                        extra_info,
-                        &eval_settings,
-                        &fn_map,
-                    )),
-                    single,
-                    choice: SingleOrCombined::Combined,
-                    orientations: extra_info.orientations.clone(),
-                    quad_param_values,
-                    double_param_values,
-                    model_params_start,
-                    emr_len: n_edges,
-                    fn_map,
-                },
-            },
-            NumeratorEvaluatorOptions::Iterative(IterativeOptions {
-                iterations,
-                n_cores,
-                verbose,
-                ..
-            }) => Numerator {
-                state: Evaluators {
-                    orientated: Some(single.orientated_iterative_impl(
-                        n_edges,
-                        name,
-                        params,
-                        extra_info,
-                        &eval_settings,
-                        *iterations,
-                        *n_cores,
-                        *verbose,
-                        &fn_map,
-                    )),
-                    single,
-                    choice: SingleOrCombined::Combined,
-                    orientations: extra_info.orientations.clone(),
-                    quad_param_values,
-                    double_param_values,
-                    model_params_start,
-                    emr_len: n_edges,
-                    fn_map,
-                },
-            },
-            _ => Numerator {
-                state: Evaluators {
-                    orientated: None,
-                    single,
-                    choice: SingleOrCombined::Single,
-                    orientations: extra_info.orientations.clone(),
-                    quad_param_values,
-                    double_param_values,
-                    model_params_start,
-                    emr_len: n_edges,
-                    fn_map,
-                },
-            },
-        }
-    }
+    //     match o {
+    //         NumeratorEvaluatorOptions::Joint(_) => Numerator {
+    //             state: Evaluators {
+    //                 orientated: Some(single.orientated_joint_impl(
+    //                     n_edges,
+    //                     name,
+    //                     params,
+    //                     extra_info,
+    //                     &eval_settings,
+    //                     &fn_map,
+    //                 )),
+    //                 single,
+    //                 choice: SingleOrCombined::Combined,
+    //                 orientations: extra_info.orientations.clone(),
+    //                 quad_param_values,
+    //                 double_param_values,
+    //                 model_params_start,
+    //                 emr_len: n_edges,
+    //                 fn_map,
+    //             },
+    //         },
+    //         NumeratorEvaluatorOptions::Iterative(IterativeOptions {
+    //             iterations,
+    //             n_cores,
+    //             verbose,
+    //             ..
+    //         }) => Numerator {
+    //             state: Evaluators {
+    //                 orientated: Some(single.orientated_iterative_impl(
+    //                     n_edges,
+    //                     name,
+    //                     params,
+    //                     extra_info,
+    //                     &eval_settings,
+    //                     *iterations,
+    //                     *n_cores,
+    //                     *verbose,
+    //                     &fn_map,
+    //                 )),
+    //                 single,
+    //                 choice: SingleOrCombined::Combined,
+    //                 orientations: extra_info.orientations.clone(),
+    //                 quad_param_values,
+    //                 double_param_values,
+    //                 model_params_start,
+    //                 emr_len: n_edges,
+    //                 fn_map,
+    //             },
+    //         },
+    //         _ => Numerator {
+    //             state: Evaluators {
+    //                 orientated: None,
+    //                 single,
+    //                 choice: SingleOrCombined::Single,
+    //                 orientations: extra_info.orientations.clone(),
+    //                 quad_param_values,
+    //                 double_param_values,
+    //                 model_params_start,
+    //                 emr_len: n_edges,
+    //                 fn_map,
+    //             },
+    //         },
+    //     }
+    // }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq)]

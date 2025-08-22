@@ -69,10 +69,7 @@ pub struct GeneralSettings {
     pub joint_numerator_eval: bool,
     #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub amplitude_prefactor: Option<Complex<F<f64>>>,
-    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
-    pub load_compiled_separate_orientations: bool,
-    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
-    pub force_orientations: Option<Vec<usize>>,
+
     #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub m_uv: F<f64>,
     #[serde(default, skip_serializing_if = "IsDefault::is_default")]
@@ -87,9 +84,7 @@ impl Default for GeneralSettings {
             load_compiled_numerator: true,
             joint_numerator_eval: true,
             load_compiled_cff: false,
-            load_compiled_separate_orientations: false,
             amplitude_prefactor: Some(Complex::new(F(0.0), F(1.0))),
-            force_orientations: None,
             orientation_pat: OrientationPattern::default(),
             m_uv: F(1000.0),
             mu_r_sq: F(1000.0 * 1000.0),

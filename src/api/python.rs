@@ -1089,9 +1089,10 @@ impl PythonWorker {
             .expect("Could not parse settings");
         println!("calling generate_integrands");
 
-        let integrands = self
-            .process_list
-            .generate_integrands(&self.model, (&settings).into());
+        todo!()
+        // let integrands = self
+        //     .process_list
+        //     .generate_integrands(&self.model, (&settings).into());
     }
 
     pub(crate) fn export(&mut self, export_root: &str) -> PyResult<()> {

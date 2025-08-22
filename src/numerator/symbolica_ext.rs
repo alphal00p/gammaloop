@@ -1,8 +1,9 @@
 use std::ops::Deref;
 
 use idenso::color::SelectiveExpand;
+use spenso::structure::representation::{Minkowski, RepName};
 use symbolica::{
-    atom::{Atom, AtomCore, AtomView, Symbol},
+    atom::{Atom, AtomCore, AtomOrView, AtomView, Symbol},
     function,
 };
 
@@ -21,12 +22,17 @@ pub type ParsingNetError = spenso::network::TensorNetworkError<
 pub trait AtomCoreExt {
     fn wrap_color(&self, symbol: Symbol) -> Atom;
 
+    fn map_mink_dim<'a>(&self, dim: impl Into<AtomOrView<'a>>) -> Atom;
+
     fn unwrap_function(&self, symbol: Symbol) -> Atom;
 
     fn parse_into_net(&self) -> Result<ParsingNet, ParsingNetError>;
 }
 
 impl AtomCoreExt for Atom {
+    fn map_mink_dim<'a>(&self, dim: impl Into<AtomOrView<'a>>) -> Atom {
+        self.as_view().map_mink_dim(dim)
+    }
     fn wrap_color(&self, symbol: Symbol) -> Atom {
         self.as_view().wrap_color(symbol)
     }
@@ -41,6 +47,10 @@ impl AtomCoreExt for Atom {
 }
 
 impl AtomCoreExt for AtomView<'_> {
+    fn map_mink_dim<'a>(&self, dim: impl Into<AtomOrView<'a>>) -> Atom {
+        self.replace(Minkowski {}.to_symbolic([W_.d_, W_.a_]))
+            .with(Minkowski {}.to_symbolic([dim.into().into_owned(), Atom::var(W_.a_)]))
+    }
     fn wrap_color(&self, symbol: Symbol) -> Atom {
         self.expand_color()
             .into_iter()

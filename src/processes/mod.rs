@@ -15,7 +15,24 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::{model::Model, settings::global::GenerationSettings, settings::RuntimeSettings};
+use crate::model::Model;
+
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq)]
+pub struct EvaluatorSettings {
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub iterative_orientation_optimization: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub compile: bool,
+}
+
+impl Default for EvaluatorSettings {
+    fn default() -> Self {
+        Self {
+            iterative_orientation_optimization: false,
+            compile: false,
+        }
+    }
+}
 
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
@@ -108,6 +125,27 @@ impl ProcessList {
         Ok(())
     }
 
+    pub fn compile(
+        &mut self,
+        folder: impl AsRef<Path>,
+        override_existing: bool,
+        settings: &GlobalSettings,
+        model: &Model,
+    ) -> Result<()> {
+        let path = folder.as_ref().join("processes");
+
+        let r = fs::create_dir_all(&path);
+        if !override_existing {
+            r?;
+        }
+
+        for (i, p) in self.processes.iter_mut().enumerate() {
+            p.compile(&path, override_existing, i, model, settings)?;
+        }
+
+        Ok(())
+    }
+
     pub fn get_integrand(
         &self,
         process_id: usize,
@@ -156,10 +194,11 @@ impl ProcessList {
     pub fn generate_integrands(
         &mut self,
         model: &Model,
+        global_settings: &GlobalSettings,
         runtime_default: LockedRuntimeSettings,
     ) -> Result<()> {
         for process in &mut self.processes {
-            process.generate_integrands(model, runtime_default)?;
+            process.generate_integrands(model, global_settings, runtime_default)?;
         }
         Ok(())
     }
@@ -238,20 +277,6 @@ mod tests {
             .preprocess(
                 &model,
                 &GenerationSettings {
-                    compile_cff: false,
-                    compile_separate_orientations: false,
-                    cpe_rounds_cff: None,
-                    numerator_settings: NumeratorSettings {
-                        eval_settings: NumeratorEvaluatorOptions::Single(EvaluatorOptions {
-                            cpe_rounds: None,
-                            compile_options: crate::numerator::NumeratorCompileOptions::NotCompiled,
-                        }),
-                        parse_mode: NumeratorParseMode::Direct,
-                        dump_expression: None,
-                        // global_numerator: None,
-                        // global_prefactor: GlobalPrefactor::default(),
-                        gamma_algebra: GammaAlgebraMode::Concrete,
-                    },
                     gammaloop_compile_options: GammaloopCompileOptions {
                         inline_asm: false,
                         fast_math: false,

@@ -8,7 +8,6 @@ use tabled::{builder::Builder, settings::Style};
 
 use crate::{
     graph::Graph,
-    model::ArcParticle,
     momentum::{
         self, Dep, ExternalMomenta, FourMomentum, Helicity, Polarization, Rotatable, SignOrZero,
     },

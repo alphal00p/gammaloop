@@ -230,21 +230,6 @@ impl CrossSectionGraphTerm {
         param_builder: ParamBuilder<T>,
     ) -> Complex<F<T>> {
         // implementation of forced orientations, only works with sample orientation disabled
-        if let Some(forced_orientations) = &settings.general.force_orientations {
-            if momentum_sample.sample.orientation.is_none() {
-                return forced_orientations
-                    .iter()
-                    .map(|orientation_usize| {
-                        let mut new_sample = momentum_sample.clone();
-                        new_sample.sample.orientation = Some(*orientation_usize);
-                        self.evaluate(&new_sample, settings, param_builder.clone())
-                    })
-                    .fold(
-                        Complex::new_re(momentum_sample.zero()),
-                        |sum, orientation_result| sum + orientation_result,
-                    );
-            }
-        }
 
         debug!("loop_momenta: {:?}", momentum_sample.loop_moms());
         debug!("external_momenta: {:?}", momentum_sample.external_moms());

@@ -1,5 +1,6 @@
 use std::fmt::Display;
 
+use crate::gammaloop_integrand::evaluators::SingleOrAllOrientations;
 use crate::momentum::{FourMomentum, Polarization, Rotatable, Rotation, ThreeMomentum};
 use crate::utils::{FloatLike, Length, F};
 use crate::{
@@ -7,8 +8,10 @@ use crate::{
     DependentMomentaConstructor,
 };
 use bincode_trait_derive::{Decode, Encode};
+use bitvec::vec::BitVec;
 use color_eyre::Result;
 use derive_more::{From, Into};
+use linnet::half_edge::involution::{EdgeVec, Orientation};
 use serde::{Deserialize, Serialize};
 use std::ops::{Add, Index, IndexMut, Sub};
 use symbolica::domains::float::NumericalFloatLike;
@@ -218,7 +221,6 @@ pub type PolarizationVectors<T> = TiVec<ExternalIndex, Polarization<T>>; // shou
 pub struct BareMomentumSample<T: FloatLike> {
     pub loop_moms: LoopMomenta<F<T>>,
     pub external_moms: ExternalFourMomenta<F<T>>,
-    // pub polarizations: PolarizationVectors<Complex<F<T>>>,
     pub jacobian: F<T>,
     pub orientation: Option<usize>,
 }
@@ -315,7 +317,6 @@ impl<T: FloatLike> BareMomentumSample<T> {
         BareMomentumSample {
             loop_moms: self.loop_moms.iter().map(ThreeMomentum::cast).collect(),
             external_moms: self.external_moms.iter().map(FourMomentum::cast).collect(),
-
             jacobian: self.jacobian.clone().into(),
             orientation: self.orientation,
         }
@@ -390,6 +391,28 @@ impl<T: FloatLike> BareMomentumSample<T> {
 }
 
 impl<T: FloatLike> MomentumSample<T> {
+    pub(crate) fn orientations<'a, OID: From<usize> + Copy>(
+        &self,
+        filter: &'a BitVec,
+        orientations: &'a TiVec<OID, EdgeVec<Orientation>>,
+    ) -> SingleOrAllOrientations<'a, OID>
+    where
+        usize: From<OID>,
+    {
+        if let Some(o) = self.sample.orientation {
+            let id = OID::from(o);
+            SingleOrAllOrientations::Single {
+                id,
+                orientation: &orientations[id],
+            }
+        } else {
+            SingleOrAllOrientations::All {
+                all: orientations,
+                filter,
+            }
+        }
+    }
+
     pub(crate) fn possibly_rotated_sample(&self) -> &BareMomentumSample<T> {
         if let Some(rot) = self.rotated_sample.as_ref() {
             rot

@@ -311,6 +311,7 @@ impl Approximation {
         };
         let t_arg = uv_graph
             .numerator(&reduced, false)
+            .to_d_dim(GS.dim)
             .color_simplify()
             .gamma_simplify()
             .get_single_atom()
@@ -556,6 +557,7 @@ impl Approximation {
                 W_.e_ + W_.f_
             ));
 
+        debug!("Integrand pre dot vakint: {:}", integrand_vakint);
         // rewrite numerator
         // linearize the numerator first
         integrand_vakint = integrand_vakint
@@ -564,6 +566,7 @@ impl Approximation {
             .replace(function!(MS.dot, W_.mom_, W_.x_))
             .with(function!(GS.emr_mom, W_.mom_, W_.x_));
 
+        debug!("Integrand pre vakint: {:}", integrand_vakint);
         for (i, l) in self.lmb.loop_edges.iter().enumerate() {
             integrand_vakint = integrand_vakint
                 .replace(function!(GS.emr_mom, usize::from(*l) as i64))
@@ -692,9 +695,17 @@ impl Approximation {
             .unwrap()
             .coefficient((0, 1).into())
             .replace(GS.m_uv_int)
-            .with(GS.m_uv);
+            .with(GS.m_uv)
+            .map_mink_dim(4);
 
-        debug!("Integrated 4d finite part: {}", finite);
+        debug!(
+            "Integrated 4d finite part: {:#}",
+            finite.printer(PrintOptions {
+                hide_all_namespaces: false,
+                hide_namespace: Some("_gammaloop"),
+                ..Default::default()
+            })
+        );
 
         // TODO: multiply by the number of orientations or only apply the counterterm to
         // one orientation
@@ -719,7 +730,7 @@ impl Approximation {
         let graph = uv_graph.as_ref();
         let reduced = self.subgraph.subtract(&dependent.subgraph);
 
-        println!("CFF: {}", cff);
+        // println!("CFF: {}", cff);
 
         // add data for OSE computation and add an explicit sqrt
         for (p, ei, e) in graph.iter_edges_of(&self.subgraph) {
@@ -739,10 +750,10 @@ impl Approximation {
                 .get_single_atom()
                 .unwrap();
 
-        println!(
-            "Expand-prerep {} with dod={} in {:?}",
-            atomarg, self.dod, self.lmb.ext_edges
-        );
+        // println!(
+        //     "Expand-prerep {} with dod={} in {:?}",
+        //     atomarg, self.dod, self.lmb.ext_edges
+        // );
 
         // split numerator momenta into OSEs and spatial parts
         let mut reps = Vec::new();
@@ -753,35 +764,35 @@ impl Approximation {
             }
         }
 
-        println!("Split reps:");
-        for r in &reps {
-            println!("{r}");
-        }
+        // println!("Split reps:");
+        // for r in &reps {
+        //     println!("{r}");
+        // }
 
         atomarg = atomarg.replace_multiple(&reps);
 
         // only apply replacements for edges in the reduced graph
         let mom_reps = graph.uv_spatial_wrapped_replacement(&reduced, &self.lmb, &[W_.x___]);
 
-        println!("Reps:");
-        for r in &mom_reps {
-            println!("{r}");
-        }
+        // println!("Reps:");
+        // for r in &mom_reps {
+        //     println!("{r}");
+        // }
 
         atomarg = atomarg.replace_multiple(&mom_reps);
 
         // rescale the loop momenta in the whole subgraph, including previously expanded cycles
         for e in &self.lmb.loop_edges {
-            println!("Rescale {}", e);
+            // println!("Rescale {}", e);
             atomarg = atomarg
                 .replace(GS.emr_vec_index(*e, W_.x___))
                 .with(GS.emr_vec_index(*e, W_.x___) * GS.rescale);
         }
 
-        println!(
-            "Expand {} with dod={} in {:?}",
-            atomarg, self.dod, self.lmb.ext_edges
-        );
+        // println!(
+        //     "Expand {} with dod={} in {:?}",
+        //     atomarg, self.dod, self.lmb.ext_edges
+        // );
 
         let soft_ct = graph.full_crown(&self.subgraph).count_ones() == 2 && self.dod > 0;
 
@@ -842,9 +853,9 @@ impl Approximation {
         .replace(GS.rescale)
         .with(Atom::num(1) / GS.rescale);
 
-        println!("atomarg:{:>}", atomarg.expand());
+        // println!("atomarg:{:>}", atomarg.expand());
 
-        println!("Series expanding");
+        // println!("Series expanding");
 
         let mut a = atomarg
             .series(GS.rescale, Atom::Zero, self.dod.into(), true)
@@ -882,7 +893,7 @@ impl Approximation {
             a = a.replace(GS.rescale).with(Atom::num(1));
         }
 
-        println!("Expanded: {:>}", a.expand());
+        // println!("Expanded: {:>}", a.expand());
 
         a
     }
@@ -930,10 +941,17 @@ impl Approximation {
             .unwrap()
             .coefficient((0, 1).into())
             .replace(GS.m_uv_int)
-            .with(GS.m_uv);
+            .with(GS.m_uv)
+            .map_mink_dim(4);
 
-        debug!("Integrated 4d finite part: {}", finite);
-
+        debug!(
+            "Integrated 4d finite part: {:#}",
+            finite.printer(PrintOptions {
+                hide_all_namespaces: false,
+                hide_namespace: Some("_gammaloop"),
+                ..Default::default()
+            })
+        );
         let reduced = amplitude.included().subtract(&self.subgraph.included());
 
         let mut cff = s * t - s * finite * t_arg.integrand;

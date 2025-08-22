@@ -1,0 +1,69 @@
+default_runtime_settings:
+  General:
+    debug: 4
+    load_compiled_numerator: true
+    joint_numerator_eval: true
+    amplitude_prefactor:
+      re: 0.0
+      im: 1.0
+    m_uv: 1.0
+    mu_r_sq: 1.0
+  Kinematics:
+    e_cm: 64.0
+    externals:
+      type: constant
+      data:
+        momenta:
+          - dependent
+          - - 1.0
+            - 0.0
+            - 0.0
+            - 1.0
+          - - 1.0
+            - 0.0
+            - 0.0
+            - -1.0
+          - - 0.9903067841547669
+            - 0.3734458315384239
+            - 0.6393671561700484
+            - -0.657613394982612
+          - - 0.2053558277500182
+            - -0.1412408546154445
+            - -0.0869119059139323
+            - 0.121112995127698
+        helicities:
+          - 1
+          - 1
+          - -1
+          - -1
+          - -1
+  Stability:
+    levels:
+      - required_precision_for_re: 1e-15
+        required_precision_for_im: 1e-15
+        escalate_for_large_weight_threshold: 0.9
+      - precision: Quad
+        required_precision_for_re: 0.00001
+        required_precision_for_im: 0.00001
+        escalate_for_large_weight_threshold: -1.0
+  subtraction:
+    disable_threshold_subtraction: true
+global_settings: {}
+commands:
+  - Import:
+      Model:
+        path: ../../src/test_resources/gammaloop_models/sm.yaml
+  - Import:
+      Amplitude:
+        path: ./qqx_aaa_subtracted.dot
+  - Generate: {}
+  - Inspect:
+      process_id: 0
+      process_name: qqx_aaa_subtracted
+      point:
+        - 0.1
+        - 0.2
+        - 0.3
+      use_f128: false
+      force_radius: false
+      momentum_space: true

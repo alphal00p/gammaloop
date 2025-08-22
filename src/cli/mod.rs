@@ -192,6 +192,8 @@ impl Cli {
 
             Commands::Generate(g) => g.run(
                 state,
+                &self.state_folder,
+                self.override_state,
                 &run_history.global_settings,
                 &run_history.default_runtime_settings,
             )?,
@@ -256,7 +258,8 @@ impl Cli {
 
         if let Some(a) = self.command.take() {
             let _ = self.run_command(a.clone(), &mut run_history, &mut state)?;
-            run_history.commands.push(a);
+
+            run_history.push(a);
         } else {
             print_banner();
             let prompt = DefaultPrompt {
@@ -291,12 +294,12 @@ impl Cli {
                                     self.override_settings(cli);
                                 }
                                 Ok(ControlFlow::Break(())) => {
-                                    run_history.commands.push(c);
+                                    run_history.push(c);
                                     self.override_settings(cli);
                                     break;
                                 }
                                 _ => {
-                                    run_history.commands.push(c);
+                                    run_history.push(c);
                                     self.override_settings(cli);
                                 }
                             }
@@ -344,8 +347,10 @@ impl Cli {
     }
 
     fn get_run_history(&self) -> Result<RunHistory> {
+        let default_path = self.state_folder.join("run_history.yaml");
+        let path = self.run_history.as_ref().unwrap_or(&default_path);
         RunHistory::new(
-            &self.state_folder,
+            path,
             self.run_settings_path.as_deref(),
             self.global_settings_path.as_deref(),
         )

@@ -211,6 +211,40 @@ impl Process {
         Ok(())
     }
 
+    pub fn compile(
+        &mut self,
+        path: impl AsRef<Path>,
+        override_existing: bool,
+        id: usize,
+        model: &Model,
+        settings: &GlobalSettings,
+    ) -> Result<()> {
+        match &mut self.collection {
+            ProcessCollection::Amplitudes(a) => {
+                let p = path.as_ref().join("amplitudes");
+                fs::create_dir_all(&p)?;
+                let p = p.join(self.definition.folder_name(model, id));
+
+                let r = fs::create_dir_all(&p).with_context(|| {
+                    format!(
+                        "Trying to create directory to export amplitude dot {}",
+                        p.display()
+                    )
+                });
+                if override_existing {
+                    r?;
+                }
+
+                for (_, amp) in a {
+                    amp.compile(&p, override_existing, settings)?;
+                }
+            }
+            ProcessCollection::CrossSections(a) => {}
+        }
+
+        Ok(())
+    }
+
     pub fn get_integrand(&self, integrand_name: impl AsRef<str>) -> Result<&NewIntegrand> {
         self.collection.get_integrand(integrand_name)
     }
@@ -309,9 +343,11 @@ impl Process {
     pub(super) fn generate_integrands(
         &mut self,
         model: &Model,
+        global_settings: &GlobalSettings,
         runtime_default: LockedRuntimeSettings,
     ) -> Result<()> {
-        self.collection.generate_integrands(model, runtime_default)
+        self.collection
+            .generate_integrands(model, global_settings, runtime_default)
     }
 }
 
@@ -484,13 +520,14 @@ impl ProcessCollection {
     fn generate_integrands(
         &mut self,
         model: &Model,
+        global_settings: &GlobalSettings,
         runtime_default: LockedRuntimeSettings,
     ) -> Result<()> {
         // let mut result = HashMap::default();
         match self {
             Self::Amplitudes(amplitudes) => {
                 for (_, amplitude) in amplitudes {
-                    amplitude.build_integrand(model, runtime_default)?;
+                    amplitude.build_integrand(model, global_settings, runtime_default)?;
                 }
             }
             Self::CrossSections(cross_sections) => {

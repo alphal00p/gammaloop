@@ -12,7 +12,7 @@ use symbolica::{
 
 use crate::{
     cff::expression::GraphOrientation,
-    numerator::NumeratorSettings,
+    processes::EvaluatorSettings,
     utils::{serde_utils::IsDefault, symbolica_ext::StringSerializedAtom, GS, W_},
     uv::UVgenerationSettings,
     GammaLoopContext,
@@ -41,20 +41,14 @@ impl GlobalSettings {
 pub struct GenerationSettings {
     // Generation Time settings
     #[serde(default, skip_serializing_if = "IsDefault::is_default")]
-    pub compile_cff: bool,
-    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
-    pub numerator_settings: NumeratorSettings,
-    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
-    pub cpe_rounds_cff: Option<usize>,
+    pub evaluator_settings: EvaluatorSettings,
     #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub orientation_pattern: OrientationPattern,
-    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
-    pub compile_separate_orientations: bool,
     #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub gammaloop_compile_options: GammaloopCompileOptions,
     #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub tropical_subgraph_table_settings: TropicalSubgraphTableSettings,
-    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")] // default false
     pub enable_thresholds: bool,
     #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub uv_settings: UVgenerationSettings,
@@ -63,14 +57,11 @@ pub struct GenerationSettings {
 impl Default for GenerationSettings {
     fn default() -> Self {
         Self {
-            compile_cff: true,
-            numerator_settings: NumeratorSettings::default(),
-            cpe_rounds_cff: Some(1),
+            evaluator_settings: EvaluatorSettings::default(),
             orientation_pattern: OrientationPattern::default(),
-            compile_separate_orientations: true,
             gammaloop_compile_options: GammaloopCompileOptions::default(),
             tropical_subgraph_table_settings: TropicalSubgraphTableSettings::default(),
-            enable_thresholds: true,
+            enable_thresholds: false,
             uv_settings: UVgenerationSettings::default(),
         }
     }

@@ -181,9 +181,10 @@ mod test {
         dot,
         graph::{parse::IntoGraph, FeynmanGraph, Graph},
         processes::{Amplitude, AmplitudeGraph},
-        settings::global::GenerationSettings,
-        settings::runtime::kinematic::KinematicsSettings,
-        settings::RuntimeSettings,
+        settings::{
+            global::GenerationSettings, runtime::kinematic::KinematicsSettings, GlobalSettings,
+            RuntimeSettings,
+        },
         uv::UltravioletGraph,
     };
 
@@ -227,7 +228,11 @@ mod test {
         let proc_set = GenerationSettings::default();
 
         amp.preprocess(&model, &proc_set);
-        let integrand = amp.build_integrand(&model, (&RuntimeSettings::default()).into());
+        let integrand = amp.build_integrand(
+            &model,
+            &GlobalSettings::default(),
+            (&RuntimeSettings::default()).into(),
+        );
 
         // println!("{}", a.factor());
 
@@ -301,7 +306,11 @@ mod test {
         // amp.graphs[0].build_evaluator(&model);
 
         amp.preprocess(&model, &proc_set);
-        let integrand = amp.build_integrand(&model, (&RuntimeSettings::default()).into());
+        let integrand = amp.build_integrand(
+            &model,
+            &GlobalSettings::default(),
+            (&RuntimeSettings::default()).into(),
+        );
 
         // println!("{}", a.factor());
 
@@ -352,7 +361,11 @@ mod test {
 
         amp.preprocess(&model, &proc_set).unwrap();
 
-        let integrand = amp.build_integrand(&model, (&RuntimeSettings::default()).into());
+        let integrand = amp.build_integrand(
+            &model,
+            &GlobalSettings::default(),
+            (&RuntimeSettings::default()).into(),
+        );
 
         // integrand.evaluate_sample(sample, wgt, iter, use_f128, max_eval);
     }

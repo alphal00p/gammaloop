@@ -9,7 +9,7 @@ use std::{
 use color_eyre::{Result, Section};
 use colored::{ColoredString, Colorize};
 use eyre::{eyre, Context};
-use log::{debug, LevelFilter};
+use log::{debug, warn, LevelFilter};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -30,6 +30,11 @@ pub struct RunHistory {
 }
 
 impl RunHistory {
+    pub fn push(&mut self, command: Commands) {
+        if !matches!(&command, Commands::Quit { .. }) {
+            self.commands.push(command);
+        }
+    }
     pub(crate) fn run(&mut self, cli: &mut Cli, state: &mut State) -> Result<ControlFlow<()>> {
         for command in self.commands.clone() {
             if let ControlFlow::Break(_) = cli.run_command(command, self, state)? {
@@ -68,10 +73,11 @@ impl RunHistory {
         Ok(serde_yaml::from_str(&buf)?)
     }
     pub fn new(
-        state_folder: impl AsRef<Path>,
+        path: impl AsRef<Path>,
         run_settings_path: Option<&Path>,
         global_settings_path: Option<&Path>,
     ) -> Result<Self> {
+        // println!("LOG_LEVEL: {:?}", LOG_LEVEL.lock().unwrap());
         // Load settings from YAML first so CLI flags can override.
         let runtime_settings: Option<RuntimeSettings> = run_settings_path
             .map(RuntimeSettings::from_file)
@@ -83,9 +89,20 @@ impl RunHistory {
             .transpose()
             .with_context(|| "Error trying to read global settings from file:")?;
 
-        let mut runhistory: Self =
-            Self::from_file_yaml(state_folder.as_ref().join("run_history.yaml"))
-                .unwrap_or_default();
+        let mut runhistory: Self = match Self::from_file_yaml(path.as_ref()) {
+            Ok(r) => {
+                debug!("Loaded run history from YAML");
+                r
+            }
+            Err(e) => {
+                warn!(
+                    "Could not load run history from YAML: {}, loading default",
+                    e
+                );
+
+                Default::default()
+            }
+        };
 
         if let Some(runtime_settings) = runtime_settings {
             debug!("Overriding runtime settings from file");
@@ -106,7 +123,7 @@ impl RunHistory {
             _ => LevelFilter::Trace,
         };
 
-        println!("LOG_LEVEL: {:?}", LOG_LEVEL.lock().unwrap());
+        // println!("LOG_LEVEL: {:?}", LOG_LEVEL.lock().unwrap());
 
         Ok(runhistory)
     }
@@ -194,6 +211,19 @@ impl State {
             model_path,
             process_list,
         })
+    }
+
+    pub fn compile(
+        &mut self,
+        root_folder: &Path,
+        override_compiled: bool,
+        settings: &GlobalSettings,
+    ) -> Result<()> {
+        fs::create_dir_all(root_folder)?;
+
+        self.process_list
+            .compile(root_folder, override_compiled, settings, &self.model)?;
+        Ok(())
     }
 
     pub fn save(

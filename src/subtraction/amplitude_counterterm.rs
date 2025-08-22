@@ -1,4 +1,5 @@
 use bincode_trait_derive::{Decode, Encode};
+use bitvec::vec::BitVec;
 use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeVec, Orientation};
 use log::debug;
@@ -15,14 +16,19 @@ use crate::{
         esurface::{Esurface, EsurfaceCollection, EsurfaceID, ExistingEsurfaceId},
         expression::AmplitudeOrientationID,
     },
-    gammaloop_integrand::{GenericEvaluator, GenericEvaluatorFloat, ParamBuilder, ThresholdParams},
+    gammaloop_integrand::{
+        evaluators::SingleOrAllOrientations, GenericEvaluator, GenericEvaluatorFloat, ParamBuilder,
+        ThresholdParams,
+    },
     graph::{FeynmanGraph, Graph, LoopMomentumBasis},
     momentum::Rotation,
     momentum_sample::{LoopMomenta, MomentumSample},
-    settings::runtime::IntegratedCounterTermRange,
-    settings::runtime::IntegratedCounterTermSettings,
-    settings::runtime::UVLocalisationSettings,
-    settings::RuntimeSettings,
+    settings::{
+        runtime::{
+            IntegratedCounterTermRange, IntegratedCounterTermSettings, UVLocalisationSettings,
+        },
+        RuntimeSettings,
+    },
     subtraction::overlap::{OverlapGroup, OverlapStructure},
     utils::{
         self,
@@ -49,12 +55,6 @@ pub struct AmplitudeCountertermAtom {
     pub parametric_integrated: Atom,
     pub concrete_local: Option<Atom>,
     pub concrete_integrated: Option<Atom>,
-}
-
-#[derive(Clone, Copy)]
-pub enum SingleOrAllOrientations<'a> {
-    Single(&'a EdgeVec<Orientation>),
-    All(&'a TiVec<AmplitudeOrientationID, EdgeVec<Orientation>>),
 }
 
 impl AmplitudeCountertermAtom {
@@ -103,7 +103,7 @@ impl AmplitudeCountertermData {
         rotation: &Rotation,
         settings: &RuntimeSettings,
         param_builder: &mut ParamBuilder<f64>,
-        orientation: SingleOrAllOrientations,
+        orientation: SingleOrAllOrientations<'_, AmplitudeOrientationID>,
     ) -> Complex<F<T>> {
         if settings.general.debug > 4 {
             println!("start evaluate threshold counterterm");
@@ -358,10 +358,10 @@ struct RstarSample<'a, T: FloatLike> {
 }
 
 impl<'a, T: FloatLike> RstarSample<'a, T> {
-    fn evaluate(
+    fn evaluate<'b, 'c: 'b>(
         self,
         param_builder: &mut ParamBuilder<f64>,
-        orientation: SingleOrAllOrientations<'a>,
+        orientations: SingleOrAllOrientations<'a, AmplitudeOrientationID>,
     ) -> Complex<F<T>> {
         let ct_builder = self
             .rstar_solution
@@ -421,41 +421,24 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
         };
 
         let evaluator = &ct_builder.evaluators[esurface_id].parametric;
-        let (local_ct, integrated_ct) = match orientation {
-            SingleOrAllOrientations::Single(orientation) => {
-                param_builder.orientation_value(orientation);
 
-                let params = T::get_parameters(
-                    param_builder,
-                    ct_builder.graph,
-                    &self.rstar_sample,
-                    ct_builder.settings.kinematics.externals.get_helicities(),
-                    Some(&threshold_params),
-                );
-                let result = <T as GenericEvaluatorFloat>::get_evaluator(evaluator)(&params);
-                result.into_iter().collect_tuple().unwrap()
-            }
-            SingleOrAllOrientations::All(orientation) => {
-                let mut local_ct = Complex::new_re(F::from_f64(0.0));
-                let mut integrated_ct = Complex::new_re(F::from_f64(0.0));
+        let mut local_ct = Complex::new_re(F::from_f64(0.0));
+        let mut integrated_ct = Complex::new_re(F::from_f64(0.0));
 
-                for orientation in orientation.iter() {
-                    param_builder.orientation_value(orientation);
+        for (i, orientation) in orientations.iter() {
+            param_builder.orientation_value(orientation);
 
-                    let params = T::get_parameters(
-                        param_builder,
-                        ct_builder.graph,
-                        &self.rstar_sample,
-                        ct_builder.settings.kinematics.externals.get_helicities(),
-                        Some(&threshold_params),
-                    );
-                    let result = <T as GenericEvaluatorFloat>::get_evaluator(evaluator)(&params);
-                    local_ct += &result[0];
-                    integrated_ct += &result[1];
-                }
-                (local_ct, integrated_ct)
-            }
-        };
+            let params = T::get_parameters(
+                param_builder,
+                ct_builder.graph,
+                &self.rstar_sample,
+                ct_builder.settings.kinematics.externals.get_helicities(),
+                Some(&threshold_params),
+            );
+            let result = <T as GenericEvaluatorFloat>::get_evaluator(evaluator)(&params);
+            local_ct += &result[0];
+            integrated_ct += &result[1];
+        }
 
         if ct_builder.settings.general.debug > 4 {
             println!(

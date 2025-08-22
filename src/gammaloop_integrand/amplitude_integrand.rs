@@ -5,8 +5,6 @@ use std::{
 
 use bincode_trait_derive::{Decode, Encode};
 
-use brotli::enc::encode::set_parameter;
-
 use bitvec::vec::BitVec;
 
 use color_eyre::Result;
@@ -25,8 +23,8 @@ use typed_index_collections::TiVec;
 
 use crate::{
     cff::{
-        esurface::{get_existing_esurfaces, EsurfaceCollection, EsurfaceDerivedData},
-        expression::AmplitudeOrientationID,
+        esurface::{get_existing_esurfaces, EsurfaceCollection},
+        expression::{AmplitudeOrientationID, GraphOrientation},
     },
     evaluation_result::EvaluationResult,
     gammaloop_integrand::ParamBuilder,
@@ -36,12 +34,9 @@ use crate::{
     momentum::{Rotation, RotationMethod},
     momentum_sample::{ExternalIndex, MomentumSample},
     processes::{AmplitudeDerivedData, AmplitudeGraph},
-    settings::RuntimeSettings,
+    settings::{GlobalSettings, RuntimeSettings},
     signature::SignatureLike,
-    subtraction::{
-        amplitude_counterterm::{AmplitudeCountertermData, SingleOrAllOrientations},
-        overlap::find_maximal_overlap,
-    },
+    subtraction::{amplitude_counterterm::AmplitudeCountertermData, overlap::find_maximal_overlap},
     utils::bitvec_ext::BinVec,
     DependentMomentaConstructor, FloatLike, GammaLoopContext, GammaLoopContextContainer, F,
 };
@@ -55,6 +50,7 @@ use super::{
 #[trait_decode(trait = GammaLoopContext)]
 pub struct AmplitudeGraphTerm {
     pub orientation_parametric_integrand: GenericEvaluator,
+    pub iterative_integrand_evaluator: Option<GenericEvaluator>,
     pub orientations: TiVec<AmplitudeOrientationID, EdgeVec<Orientation>>,
     pub orientation_filter: BinVec,
     pub esurfaces: EsurfaceCollection,
@@ -70,37 +66,51 @@ pub struct AmplitudeGraphTerm {
 /// Num(sigma_1,sigma_2,...)*(CFF_1 delta(edge(1),1) delta_(1,1,1,-1,1)+CFF_3 delta_(1,1,1,-1,1)+CFF_2 delta_(1,1,1,-1,1))
 
 impl AmplitudeGraphTerm {
-    pub fn from_amplitude_graph(graph: &AmplitudeGraph, model: &Model) -> Result<Self> {
+    pub fn from_amplitude_graph(
+        graph: &AmplitudeGraph,
+        model: &Model,
+        settings: &GlobalSettings,
+    ) -> Result<Self> {
         let param_builder = ParamBuilder::new(&graph.graph, model);
 
-        // (momentum_sample);
+        let orientations: TiVec<AmplitudeOrientationID, EdgeVec<Orientation>> = graph
+            .derived_data
+            .cff_expression
+            .as_ref()
+            .unwrap()
+            .orientations
+            .iter()
+            .map(|a| a.data.orientation.clone())
+            .collect();
 
-        Ok(AmplitudeGraphTerm {
-            orientations: graph
-                .derived_data
-                .cff_expression
-                .as_ref()
-                .unwrap()
-                .orientations
-                .iter()
-                .map(|a| a.data.orientation.clone())
-                .collect(),
-            orientation_filter: BinVec(BitVec::repeat(
-                true,
-                graph
-                    .derived_data
-                    .cff_expression
-                    .as_ref()
-                    .unwrap()
-                    .orientations
-                    .len(),
-            )),
-            orientation_parametric_integrand: GenericEvaluator::new_from_builder(
-                [graph.derived_data.all_mighty_integrand.clone()],
+        let orientation_parametric_integrand = GenericEvaluator::new_from_builder(
+            [graph.derived_data.all_mighty_integrand.clone()],
+            &param_builder,
+            OptimizationSettings::default(),
+        )
+        .unwrap();
+
+        let iterative_integrand_evaluator = if settings
+            .generation
+            .evaluator_settings
+            .iterative_orientation_optimization
+        {
+            GenericEvaluator::new_from_builder(
+                orientations
+                    .iter()
+                    .map(|a| a.select(&graph.derived_data.all_mighty_integrand)),
                 &param_builder,
                 OptimizationSettings::default(),
             )
-            .unwrap(),
+        } else {
+            None
+        };
+
+        Ok(AmplitudeGraphTerm {
+            orientation_filter: BinVec(BitVec::repeat(true, orientations.len())),
+            orientations,
+            iterative_integrand_evaluator,
+            orientation_parametric_integrand,
             tropical_sampler: graph.derived_data.tropical_sampler.clone(),
             graph: graph.graph.clone(),
             multi_channeling_setup: graph
@@ -128,37 +138,52 @@ impl AmplitudeGraphTerm {
         })
     }
 
+    pub fn compile(
+        &mut self,
+        path: impl AsRef<Path>,
+        override_existing: bool,
+        settings: &GlobalSettings,
+    ) {
+        self.orientation_parametric_integrand.compile(
+            &path.as_ref().join(&self.graph.name),
+            format!("{}_orientation_parametric_integrand", &self.graph.name,),
+            &self.graph.name,
+            settings.generation.gammaloop_compile_options.inline_asm(),
+        );
+    }
+
     fn evaluate_impl<T: FloatLike>(
         &mut self,
         momentum_sample: &MomentumSample<T>,
         settings: &RuntimeSettings,
         rotation: &Rotation,
     ) -> Complex<F<T>> {
-        if let Some(forced_orientations) = &settings.general.force_orientations {
-            if momentum_sample.sample.orientation.is_none() {
-                return forced_orientations
-                    .iter()
-                    .map(|orientation_usize| {
-                        let mut new_sample = momentum_sample.clone();
-                        new_sample.sample.orientation = Some(*orientation_usize);
-                        self.evaluate(&new_sample, settings, rotation)
-                    })
-                    .fold(
-                        Complex::new_re(momentum_sample.zero()),
-                        |sum, orientation_result| sum + orientation_result,
-                    );
-            }
-        }
+        debug!("Evaluating graph: {}", self.graph.name);
 
-        if settings.general.debug > 4 {
-            println!("Evaluating graph: {}", self.graph.name);
-        }
         let hel = settings.kinematics.externals.get_helicities();
+        let orientations =
+            momentum_sample.orientations(&self.orientation_filter.0, &self.orientations);
 
-        let result = match momentum_sample.sample.orientation {
-            Some(orientation_id) => {
-                let orientation = &self.orientations[AmplitudeOrientationID::from(orientation_id)];
-                self.param_builder.orientation_value(orientation);
+        let evaluator = &self.orientation_parametric_integrand;
+        let mut result = Complex::new_re(F(T::from_f64(0.)));
+
+        let a = T::get_parameters(
+            &mut self.param_builder,
+            &self.graph,
+            momentum_sample,
+            hel,
+            None,
+        );
+        let iterative = self
+            .iterative_integrand_evaluator
+            .as_ref()
+            .map(|ev| <T as GenericEvaluatorFloat>::get_evaluator(ev)(&a));
+
+        for (i, e) in orientations.iter() {
+            if let Some(iterative) = &iterative {
+                result += &iterative[i.0]
+            } else {
+                self.param_builder.orientation_value(e);
                 let a = T::get_parameters(
                     &mut self.param_builder,
                     &self.graph,
@@ -166,35 +191,11 @@ impl AmplitudeGraphTerm {
                     hel,
                     None,
                 );
-                let evaluator = &self.orientation_parametric_integrand;
-                <T as GenericEvaluatorFloat>::get_evaluator_single(evaluator)(&a)
+                result += <T as GenericEvaluatorFloat>::get_evaluator_single(evaluator)(&a)
             }
-            None => {
-                let evaluator = &self.orientation_parametric_integrand;
-                let mut res = Complex::new_re(F(T::from_f64(0.)));
+        }
 
-                for e in &self.orientations {
-                    self.param_builder.orientation_value(e);
-                    let a = T::get_parameters(
-                        &mut self.param_builder,
-                        &self.graph,
-                        momentum_sample,
-                        hel,
-                        None,
-                    );
-                    res += <T as GenericEvaluatorFloat>::get_evaluator_single(evaluator)(&a)
-                }
-                res
-            }
-        };
         debug!("evaluated integrand: {:16e}", result);
-
-        let orientation = match momentum_sample.sample.orientation {
-            Some(orientation_id) => SingleOrAllOrientations::Single(
-                &self.orientations[AmplitudeOrientationID::from(orientation_id)],
-            ),
-            None => SingleOrAllOrientations::All(&self.orientations),
-        };
 
         let sum_of_cts = self
             .threshold_counterterm
@@ -207,7 +208,7 @@ impl AmplitudeGraphTerm {
                 rotation,
                 settings,
                 &mut self.param_builder,
-                orientation,
+                orientations,
             );
 
         debug!("evaluated threshold counterterm: {:16e}", sum_of_cts);
@@ -367,6 +368,19 @@ pub struct AmplitudeIntegrandData {
 }
 
 impl AmplitudeIntegrand {
+    pub(crate) fn compile(
+        &mut self,
+        path: impl AsRef<Path>,
+        override_existing: bool,
+        settings: &GlobalSettings,
+    ) -> Result<()> {
+        for a in &mut self.data.graph_terms {
+            a.compile(path.as_ref(), override_existing, settings);
+        }
+
+        Ok(())
+    }
+
     pub(crate) fn save(&self, path: impl AsRef<Path>, override_existing: bool) -> Result<()> {
         let binary = bincode::encode_to_vec(&self.data, bincode::config::standard())?;
         fs::write(path.as_ref().join("integrand.bin"), binary)?;

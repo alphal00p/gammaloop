@@ -59,7 +59,7 @@ fn four_photon_one_loop_amp() {
                 .orientations[AmplitudeOrientationID(0)],
         ),
         uv_settings: UVgenerationSettings {
-            generate_integrated: false,
+            generate_integrated: true,
         },
         ..Default::default()
     });
