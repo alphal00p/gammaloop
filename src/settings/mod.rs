@@ -5,12 +5,14 @@ use serde::{Deserialize, Serialize};
 use crate::{
     integrands::IntegrandSettings,
     observables::{ObservableSettings, PhaseSpaceSelectorSettings},
+    utils::serde_utils::IsDefault,
     GammaLoopContext,
 };
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize, Encode, Decode)]
 #[trait_decode(trait= GammaLoopContext)]
 pub struct GlobalSettings {
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub generation: GenerationSettings,
 }
 
@@ -18,24 +20,56 @@ pub struct GlobalSettings {
 #[trait_decode(trait= GammaLoopContext)]
 pub struct RuntimeSettings {
     // Runtime settings
-    #[serde(rename = "General")]
+    #[serde(
+        rename = "General",
+        default,
+        skip_serializing_if = "IsDefault::is_default"
+    )]
     pub general: GeneralSettings,
-    #[serde(rename = "Integrand")]
+    #[serde(
+        rename = "Integrand",
+        default,
+        skip_serializing_if = "IsDefault::is_default"
+    )]
     pub hard_coded_integrand: IntegrandSettings,
-    #[serde(rename = "Kinematics")]
+    #[serde(
+        rename = "Kinematics",
+        default,
+        skip_serializing_if = "IsDefault::is_default"
+    )]
     pub kinematics: KinematicsSettings,
-    #[serde(rename = "Integrator")]
+    #[serde(
+        rename = "Integrator",
+        default,
+        skip_serializing_if = "IsDefault::is_default"
+    )]
     pub integrator: IntegratorSettings,
-    #[serde(rename = "Observables")]
+    #[serde(
+        rename = "Observables",
+        default,
+        skip_serializing_if = "IsDefault::is_default"
+    )]
     pub observables: Vec<ObservableSettings>,
-    #[serde(rename = "Selectors")]
+    #[serde(
+        rename = "Selectors",
+        default,
+        skip_serializing_if = "IsDefault::is_default"
+    )]
     pub selectors: Vec<PhaseSpaceSelectorSettings>,
     #[serde(rename = "Stability")]
-    #[serde(default = "StabilitySettings::default")]
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub stability: StabilitySettings,
-    #[serde(rename = "sampling")]
+    #[serde(
+        rename = "sampling",
+        default,
+        skip_serializing_if = "IsDefault::is_default"
+    )]
     pub sampling: SamplingSettings,
-    #[serde(rename = "subtraction")]
+    #[serde(
+        rename = "subtraction",
+        default,
+        skip_serializing_if = "IsDefault::is_default"
+    )]
     pub subtraction: SubtractionSettings,
 }
 

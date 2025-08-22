@@ -16,7 +16,7 @@ use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::Path;
 
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq)]
 #[allow(non_snake_case)]
 #[serde(tag = "type")]
 pub enum PhaseSpaceSelectorSettings {
@@ -26,7 +26,7 @@ pub enum PhaseSpaceSelectorSettings {
     RangeFilter(RangeFilterSettings),
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, Encode, Decode)]
+#[derive(Debug, Clone, Deserialize, Serialize, Encode, Decode, PartialEq)]
 // #[trait_decode(trait= GammaLoopContext)]
 #[allow(non_snake_case)]
 #[serde(tag = "type")]
@@ -40,7 +40,7 @@ pub enum ObservableSettings {
     CrossSection,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, Encode, Decode)]
+#[derive(Debug, Clone, Deserialize, Serialize, Encode, Decode, PartialEq)]
 #[allow(non_snake_case)]
 pub struct RangeFilterSettings {
     pub pdgs: Vec<isize>,
@@ -49,7 +49,7 @@ pub struct RangeFilterSettings {
     pub max_value: f64,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Encode, Decode, PartialEq)]
 #[allow(non_snake_case)]
 pub struct JetSliceSettings {
     pub min_jets: usize,
@@ -61,7 +61,7 @@ pub struct JetSliceSettings {
     pub use_fastjet: bool,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Encode, Decode, PartialEq)]
 // #[trait_decode(trait= GammaLoopContext)]
 #[allow(non_snake_case)]
 pub struct Jet1PTSettings {
@@ -75,7 +75,7 @@ pub struct Jet1PTSettings {
     pub use_fastjet: bool,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Encode, Decode, PartialEq)]
 #[allow(non_snake_case)]
 pub struct AFBSettings {
     pub x_min: f64,
@@ -85,7 +85,7 @@ pub struct AFBSettings {
     pub filename: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq)]
 // #[trait_decode(trait= GammaLoopContext)]
 #[allow(non_snake_case)]
 pub struct SingleParticleObservableSettings {

@@ -1,12 +1,13 @@
 use clap::Args;
 use log::info;
+use serde::{Deserialize, Serialize};
 
 use crate::{settings::RuntimeSettings, utils::F};
 use color_eyre::Result;
 
 use super::state::State;
 
-#[derive(Debug, Args)]
+#[derive(Debug, Args, Serialize, Deserialize, Clone)]
 pub struct Inspect {
     /// The process id to inspect
     #[arg(short = 'i', long = "process-id", value_name = "ID")]

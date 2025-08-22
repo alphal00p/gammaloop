@@ -8,7 +8,7 @@ use spenso::algebra::complex::Complex;
 
 use crate::{
     momentum::{RotationMethod, ThreeMomentum},
-    utils::{FloatLike, F},
+    utils::{serde_utils::IsDefault, FloatLike, F},
     GammaLoopContext, HFunctionSettings,
 };
 
@@ -16,9 +16,13 @@ use super::{global::OrientationPattern, RuntimeSettings};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, Encode, Decode)]
 pub struct SubtractionSettings {
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub local_ct_settings: LocalCounterTermSettings,
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub integrated_ct_settings: IntegratedCounterTermSettings,
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub overlap_settings: OverlapSettings,
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub disable_threshold_subtraction: bool,
 }
 
@@ -48,19 +52,30 @@ impl RuntimeSettings {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, Encode, Decode)]
+#[derive(Debug, Clone, Deserialize, Serialize, Encode, Decode, PartialEq)]
 #[trait_decode(trait= GammaLoopContext)]
 pub struct GeneralSettings {
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub debug: usize,
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub use_ltd: bool,
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub orientation_pat: OrientationPattern,
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub load_compiled_cff: bool,
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub load_compiled_numerator: bool,
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub joint_numerator_eval: bool,
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub amplitude_prefactor: Option<Complex<F<f64>>>,
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub load_compiled_separate_orientations: bool,
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub force_orientations: Option<Vec<usize>>,
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub m_uv: F<f64>,
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub mu_r_sq: F<f64>,
 }
 #[allow(clippy::derivable_impls)] // we might not want the standard defaults in the future
@@ -96,21 +111,34 @@ pub enum IntegratedPhase {
 
 pub mod kinematic;
 
-#[derive(Debug, Clone, Deserialize, Serialize, Encode, Decode)]
+#[derive(Debug, Clone, Deserialize, Serialize, Encode, Decode, PartialEq)]
 // #[trait_decode(trait= GammaLoopContext)]
 pub struct IntegratorSettings {
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub n_bins: usize,
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub bin_number_evolution: Option<Vec<usize>>,
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub min_samples_for_update: usize,
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub n_start: usize,
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub n_increase: usize,
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub n_max: usize,
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub integrated_phase: IntegratedPhase,
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub discrete_dim_learning_rate: F<f64>,
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub continuous_dim_learning_rate: F<f64>,
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub train_on_avg: bool,
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub show_max_wgt_info: bool,
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub max_prob_ratio: F<f64>,
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub seed: u64,
 }
 
@@ -136,12 +164,22 @@ impl Default for IntegratorSettings {
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Encode, Decode)]
 pub struct ParameterizationSettings {
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub mode: ParameterizationMode,
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub mapping: ParameterizationMapping,
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub b: f64,
-    #[serde(default = "_default_input_rescaling")]
+
+    #[serde(
+        default = "_default_input_rescaling",
+        skip_serializing_if = "IsDefault::is_default"
+    )]
     pub input_rescaling: Vec<Vec<(f64, f64)>>,
-    #[serde(default = "_default_shifts")]
+    #[serde(
+        default = "_default_shifts",
+        skip_serializing_if = "IsDefault::is_default"
+    )]
     pub shifts: Vec<(f64, f64, f64, f64)>,
 }
 
@@ -172,10 +210,13 @@ pub struct IntegrationResult {
     pub prob: Vec<F<f64>>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Encode, Decode)]
+#[derive(Serialize, Deserialize, Debug, Clone, Encode, Decode, PartialEq)]
 pub struct StabilitySettings {
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub rotation_axis: Vec<RotationSetting>,
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub rotate_numerator: bool,
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub levels: Vec<StabilityLevelSetting>,
 }
 
@@ -192,11 +233,15 @@ impl Default for StabilitySettings {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, Encode, Decode)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, Encode, Decode, PartialEq)]
 pub struct StabilityLevelSetting {
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub precision: Precision,
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub required_precision_for_re: F<f64>,
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub required_precision_for_im: F<f64>,
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub escalate_for_large_weight_threshold: F<f64>,
 }
 
@@ -317,8 +362,11 @@ pub enum ParameterizationMode {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OutputMetadata {
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub model_name: String,
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub output_type: String,
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub contents: Vec<String>,
 }
 
@@ -462,7 +510,9 @@ impl SamplingSettings {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode)]
 pub struct MultiChannelingSettings {
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub alpha: f64,
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub parameterization_settings: ParameterizationSettings,
 }
 
@@ -477,7 +527,9 @@ impl Default for MultiChannelingSettings {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode)]
 pub struct GammaloopTropicalSamplingSettings {
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub upcast_on_failure: bool,
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub matrix_stability_test: Option<f64>,
 }
 
@@ -520,15 +572,25 @@ pub enum DiscreteGraphSamplingType {
     TropicalSampling(GammaloopTropicalSamplingSettings),
 }
 
+impl Default for DiscreteGraphSamplingType {
+    fn default() -> Self {
+        DiscreteGraphSamplingType::Default(ParameterizationSettings::default())
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode)]
 pub struct DiscreteGraphSamplingSettings {
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub sample_orientations: bool,
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub sampling_type: DiscreteGraphSamplingType,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Encode, Decode)]
 pub struct LocalCounterTermSettings {
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub dampen_integrable_singularity: IntegrableSingularityDampener,
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub uv_localisation: UVLocalisationSettings,
 }
 
@@ -546,8 +608,11 @@ pub enum IntegrableSingularityDampener {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode)]
 pub struct UVLocalisationSettings {
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub sliver_width: f64,
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub dynamic_width: bool,
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub gaussian_width: f64,
 }
 
@@ -563,6 +628,7 @@ impl Default for UVLocalisationSettings {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Encode, Decode)]
 pub struct IntegratedCounterTermSettings {
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub range: IntegratedCounterTermRange,
 }
 
@@ -587,9 +653,13 @@ impl Default for IntegratedCounterTermRange {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode)]
 pub struct OverlapSettings {
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub force_global_center: Option<Vec<[f64; 3]>>,
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub check_global_center: bool,
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub try_origin: bool,
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub try_origin_all_lmbs: bool,
 }
 

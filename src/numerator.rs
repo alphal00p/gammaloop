@@ -43,7 +43,7 @@ use crate::utils::{f128, GS, TENSORLIB, W_};
 use crate::{
     model::Model,
     momentum::FourMomentum,
-    utils::{FloatLike, F},
+    utils::{serde_utils::IsDefault, FloatLike, F},
 };
 
 use crate::{
@@ -102,9 +102,10 @@ pub mod symbolica_ext;
 use symbolica::{evaluate::FunctionMap, id::Replacement};
 pub mod aind;
 pub mod ufo;
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq)]
 /// Settings for the numerator
 pub struct NumeratorSettings {
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub eval_settings: NumeratorEvaluatorOptions,
     /// Parse mode for the numerator, once all processing is done. `Polynomial` turns it into a polynomial in the energies, while `Direct` keeps it as is
     pub parse_mode: NumeratorParseMode,
@@ -119,7 +120,7 @@ pub struct NumeratorSettings {
     pub gamma_algebra: GammaAlgebraMode,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default, Encode, Decode)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Default, Encode, Decode, PartialEq)]
 pub enum ExpressionFormat {
     Mathematica,
     #[default]
@@ -148,7 +149,7 @@ impl Default for NumeratorSettings {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq)]
 pub enum GammaAlgebraMode {
     Symbolic,
     Concrete,
@@ -2401,7 +2402,7 @@ impl Numerator<Contracted> {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq)]
 pub struct IterativeOptions {
     pub eval_options: EvaluatorOptions,
     pub iterations: usize,
@@ -2409,13 +2410,13 @@ pub struct IterativeOptions {
     pub verbose: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq)]
 pub enum NumeratorParseMode {
     Polynomial,
     Direct,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq)]
 #[serde(tag = "type")]
 pub enum NumeratorEvaluatorOptions {
     #[serde(rename = "Single")]

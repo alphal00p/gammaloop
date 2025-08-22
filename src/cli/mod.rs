@@ -4,11 +4,10 @@ use crate::{
     integrands::{integrand_factory, HasIntegrand},
     model::Model,
     processes::{ExportSettings, Process, ProcessDefinition},
-    settings::{global::GenerationSettings, GlobalSettings, RuntimeSettings},
     utils::{F, GIT_VERSION, GS},
 };
 use chrono::{Datelike, Local, Timelike};
-use clap::{Parser, Subcommand, ValueEnum};
+use clap::{Args, Parser, Subcommand, ValueEnum};
 use clap_repl::{
     reedline::{DefaultPrompt, DefaultPromptSegment, FileBackedHistory},
     ClapEditor, ReadCommandOutput,
@@ -18,16 +17,16 @@ use color_eyre::{config::HookBuilder, Report};
 use colored::Colorize;
 use console::style;
 use dirs::home_dir;
-use eyre::{eyre, Context};
 use integrate::Integrate;
 use log::LevelFilter;
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
+use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
-use state::{format_level, format_target, State, LOG_FORMAT, LOG_LEVEL};
+use state::{format_level, format_target, RunHistory, State, LOG_FORMAT, LOG_LEVEL};
 use std::ops::ControlFlow;
+use std::path::PathBuf;
 use std::time::Instant;
-use std::{fs::File, path::PathBuf};
 use symbolica::numerical_integration::Sample;
 
 pub mod generate;
@@ -47,6 +46,10 @@ pub struct Cli {
     /// Path to the gammaloop settings file, by default is: `./gammaloop_state/global_settings.yaml`
     #[arg(short = 'g', long)]
     global_settings_path: Option<PathBuf>,
+
+    /// Path to the a run-history file
+    #[arg(short = 'i', long)]
+    run_history: Option<PathBuf>,
 
     /// Path to the state file
     #[arg(short = 's', long, default_value = "./gammaloop_state")]
@@ -88,24 +91,6 @@ pub struct Cli {
     pub command: Option<Commands>,
 }
 
-pub struct StateSaveSettings {
-    pub override_state: bool,
-}
-
-impl From<()> for StateSaveSettings {
-    fn from(_: ()) -> Self {
-        StateSaveSettings {
-            override_state: false,
-        }
-    }
-}
-
-impl From<bool> for StateSaveSettings {
-    fn from(override_state: bool) -> Self {
-        StateSaveSettings { override_state }
-    }
-}
-
 impl Cli {
     fn override_settings(&mut self, other: Cli) {
         self.run_settings_path = other.run_settings_path;
@@ -118,11 +103,11 @@ impl Cli {
 
     fn run_command(
         &mut self,
-        runtime_settings: &mut RuntimeSettings,
-        global_settings: &mut GlobalSettings,
+        command: Commands,
+        run_history: &mut RunHistory,
         state: &mut State,
     ) -> Result<ControlFlow<()>, Report> {
-        match self.command.as_ref().ok_or(eyre!("missing command"))? {
+        match command {
             Commands::Quit {} => {
                 return Ok(ControlFlow::Break(()));
             }
@@ -130,12 +115,16 @@ impl Cli {
             Commands::Bench { samples } => {
                 info!(
                     "\nBenchmarking runtime of integrand '{}' over {} samples...\n",
-                    format!("{}", runtime_settings.hard_coded_integrand).green(),
+                    format!(
+                        "{}",
+                        run_history.default_runtime_settings.hard_coded_integrand
+                    )
+                    .green(),
                     format!("{}", samples).blue()
                 );
-                let mut integrand = integrand_factory(&runtime_settings);
+                let mut integrand = integrand_factory(&run_history.default_runtime_settings);
                 let now = Instant::now();
-                for _ in 0..*samples {
+                for _ in 0..samples {
                     integrand.evaluate_sample(
                         &Sample::Continuous(
                             F(1.),
@@ -154,12 +143,12 @@ impl Cli {
                     "\n> Total time: {} s for {} samples, {} ms per sample\n",
                     format!("{:.1}", total_time).blue(),
                     format!("{}", samples).blue(),
-                    format!("{:.5}", total_time * 1000. / (*samples as f64)).green(),
+                    format!("{:.5}", total_time * 1000. / (samples as f64)).green(),
                 );
             }
             Commands::Import(s) => match s {
                 Import::Amplitude { path } => {
-                    let graphs = Graph::from_file(path, &state.model)?;
+                    let graphs = Graph::from_file(&path, &state.model)?;
                     let name = path.file_stem().unwrap().to_string_lossy().into_owned();
                     let process = Process::from_graph_list(
                         name,
@@ -184,40 +173,28 @@ impl Cli {
                 }
                 Save::State {} => {
                     debug!("Saving State, overriding: {}", self.override_state);
-                    match state.save(&self.state_folder, self.override_state, false) {
-                        Ok(()) => {}
-                        Err(e) => {
-                            eprintln!("Failed to save state: {}", e);
-                        }
-                    };
-
-                    serde_yaml::to_writer(
-                        File::create(self.state_folder.join("runtime_settings.yaml")).unwrap(),
-                        &runtime_settings,
-                    )
-                    .unwrap();
-
-                    serde_yaml::to_writer(
-                        File::create(self.state_folder.join("global_settings.yaml")).unwrap(),
-                        &global_settings,
-                    )
-                    .unwrap();
+                    state.save(&self.state_folder, self.override_state, false)?;
+                    run_history.save_yaml(&self.state_folder, self.override_state, false)?;
                 }
             },
             Commands::Set(s) => match s {
                 Set::Log { level, format } => {
                     if let Some(level) = level {
-                        *LOG_LEVEL.lock().unwrap() = *level;
+                        *LOG_LEVEL.lock().unwrap() = (level).into();
                     }
 
-                    *LOG_FORMAT.lock().unwrap() = *format;
+                    *LOG_FORMAT.lock().unwrap() = format;
                 }
                 Set::BaseDir { path } => {
                     self.state_folder = path.clone();
                 }
             },
 
-            Commands::Generate(g) => g.run(state, global_settings, runtime_settings)?,
+            Commands::Generate(g) => g.run(
+                state,
+                &run_history.global_settings,
+                &run_history.default_runtime_settings,
+            )?,
 
             Commands::Integrate(g) => {
                 g.run(state)?;
@@ -225,7 +202,7 @@ impl Cli {
 
             Commands::Display(l) => match l {
                 Display::Integrands { process_id } => {
-                    let process = &state.process_list.processes[*process_id];
+                    let process = &state.process_list.processes[process_id];
                     println!("Integrands for process {}:", process_id);
                     for integrand in process.get_integrand_names() {
                         println!("  {}", integrand);
@@ -241,16 +218,24 @@ impl Cli {
                     println!("{}", state.model.name)
                 }
             },
+            Commands::Run(r) => {
+                if let Some(r) = &self.run_history {
+                    let mut new_run_history = RunHistory::from_file_yaml(r)?;
+                    let res = new_run_history.run(self, state);
+
+                    run_history.merge(new_run_history);
+                    return res;
+                }
+            }
             _ => {}
         }
         Ok(ControlFlow::Continue(()))
     }
 
-    pub fn run(mut self) {
+    pub fn run(mut self) -> Result<()> {
         setup_log().unwrap();
         self.initialize();
-        let mut runtime_settings = self.get_runtime_settings().unwrap();
-        let mut generation_settings = self.get_global_settings().unwrap();
+        let mut run_history = self.get_run_history()?;
 
         let mut state = match State::load(&self.state_folder, self.model_file.clone()) {
             Ok(state) => state,
@@ -269,10 +254,9 @@ impl Cli {
 
         // let mut state = State::load(&cli.state_file,);
 
-        if let Some(_) = &self.command {
-            let _ = self
-                .run_command(&mut runtime_settings, &mut generation_settings, &mut state)
-                .unwrap();
+        if let Some(a) = self.command.take() {
+            let _ = self.run_command(a.clone(), &mut run_history, &mut state)?;
+            run_history.commands.push(a);
         } else {
             print_banner();
             let prompt = DefaultPrompt {
@@ -299,22 +283,22 @@ impl Cli {
 
             loop {
                 match r.read_command() {
-                    ReadCommandOutput::Command(mut c) => {
-                        match c.run_command(
-                            &mut runtime_settings,
-                            &mut generation_settings,
-                            &mut state,
-                        ) {
-                            Err(e) => {
-                                eprintln!("{e:?}");
-                                self.override_settings(c);
-                            }
-                            Ok(ControlFlow::Break(())) => {
-                                self.override_settings(c);
-                                break;
-                            }
-                            _ => {
-                                self.override_settings(c);
+                    ReadCommandOutput::Command(mut cli) => {
+                        if let Some(c) = cli.command.take() {
+                            match cli.run_command(c.clone(), &mut run_history, &mut state) {
+                                Err(e) => {
+                                    eprintln!("{e:?}");
+                                    self.override_settings(cli);
+                                }
+                                Ok(ControlFlow::Break(())) => {
+                                    run_history.commands.push(c);
+                                    self.override_settings(cli);
+                                    break;
+                                }
+                                _ => {
+                                    run_history.commands.push(c);
+                                    self.override_settings(cli);
+                                }
                             }
                         }
                     }
@@ -339,25 +323,10 @@ impl Cli {
 
         if !self.no_save_state {
             debug!("Saving State, override: {}", self.override_state);
-            match state.save(&self.state_folder, self.override_state, false) {
-                Ok(()) => {}
-                Err(e) => {
-                    eprintln!("Failed to save state: {}", e);
-                }
-            };
-
-            serde_yaml::to_writer(
-                File::create(self.state_folder.join("runtime_settings.yaml")).unwrap(),
-                &runtime_settings,
-            )
-            .unwrap();
-
-            serde_yaml::to_writer(
-                File::create(self.state_folder.join("global_settings.yaml")).unwrap(),
-                &generation_settings,
-            )
-            .unwrap();
+            state.save(&self.state_folder, self.override_state, false)?;
+            run_history.save_yaml(&self.state_folder, self.override_state, false)?;
         }
+        Ok(())
     }
 
     pub fn initialize(&self) {
@@ -374,65 +343,16 @@ impl Cli {
         crate::initialize_reps();
     }
 
-    pub fn get_runtime_settings(&self) -> Result<RuntimeSettings, Report> {
-        // Load settings from YAML first so CLI flags can override.
-        let settings: RuntimeSettings = self
-            .run_settings_path
-            .as_ref()
-            .map(RuntimeSettings::from_file)
-            .transpose()
-            .with_context(|| "Error trying to read runtime settings from file:")?
-            .unwrap_or(
-                RuntimeSettings::from_file(self.state_folder.join("runtime_settings.yaml"))
-                    .unwrap_or_default(),
-            );
-
-        // Override settings from CLI top‑level flags --------------------------
-        // if let Some(level) = self.debug {
-        //     settings.general.debug = level;
-        // }
-        // if let Some(n) = self.n_start {
-        //     settings.integrator.n_start = n;
-        // }
-        // if let Some(n) = self.n_max {
-        //     settings.integrator.n_max = n;
-        // }
-        // if let Some(n) = self.n_increase {
-        //     settings.integrator.n_increase = n;
-        // }
-
-        *LOG_LEVEL.lock().unwrap() = match settings.general.debug {
-            0 => LevelFilter::Off,
-            1 => LevelFilter::Error,
-            2 => LevelFilter::Warn,
-            3 => LevelFilter::Info,
-            4 => LevelFilter::Debug,
-            _ => LevelFilter::Trace,
-        };
-
-        println!("LOG_LEVEL: {:?}", LOG_LEVEL.lock().unwrap());
-
-        Ok(settings)
-    }
-
-    pub fn get_global_settings(&self) -> Result<GlobalSettings, Report> {
-        // Load settings from YAML first so CLI flags can override.
-        let generation_settings: GlobalSettings = self
-            .global_settings_path
-            .as_ref()
-            .map(GlobalSettings::from_file)
-            .transpose()
-            .with_context(|| "Error trying to read global settings from file:")?
-            .unwrap_or(
-                GlobalSettings::from_file(self.state_folder.join("global_settings.yaml"))
-                    .unwrap_or_default(),
-            );
-
-        Ok(generation_settings)
+    fn get_run_history(&self) -> Result<RunHistory> {
+        RunHistory::new(
+            &self.state_folder,
+            self.run_settings_path.as_deref(),
+            self.global_settings_path.as_deref(),
+        )
     }
 }
 
-#[derive(Subcommand, Debug)]
+#[derive(Subcommand, Debug, Serialize, Deserialize, Clone)]
 pub enum Import {
     Model {
         // #[arg(short = 'p')]
@@ -446,7 +366,7 @@ pub enum Import {
     },
 }
 
-#[derive(Subcommand, Debug)]
+#[derive(Subcommand, Debug, Serialize, Deserialize, Clone)]
 pub enum Save {
     Dot {
         path: Option<PathBuf>,
@@ -457,33 +377,68 @@ pub enum Save {
     },
 }
 
-#[derive(Subcommand, Debug)]
+#[repr(usize)]
+#[derive(
+    Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Hash, ValueEnum, Serialize, Deserialize,
+)]
+pub enum LogLevel {
+    /// A level lower than all log levels.
+    Off,
+    /// Corresponds to the `Error` log level.
+    Error,
+    /// Corresponds to the `Warn` log level.
+    Warn,
+    /// Corresponds to the `Info` log level.
+    Info,
+    /// Corresponds to the `Debug` log level.
+    Debug,
+    /// Corresponds to the `Trace` log level.
+    Trace,
+}
+
+impl From<LogLevel> for LevelFilter {
+    fn from(value: LogLevel) -> Self {
+        match value {
+            LogLevel::Debug => LevelFilter::Debug,
+            LogLevel::Trace => LevelFilter::Trace,
+            LogLevel::Warn => LevelFilter::Warn,
+            LogLevel::Error => LevelFilter::Error,
+            LogLevel::Off => LevelFilter::Off,
+            LogLevel::Info => LevelFilter::Info,
+        }
+    }
+}
+
+#[derive(Subcommand, Debug, Serialize, Deserialize, Clone)]
 pub enum Set {
     BaseDir {
         path: PathBuf,
     },
     Log {
         #[arg(short = 'l')]
-        level: Option<LevelFilter>,
+        level: Option<LogLevel>,
         // #[clap(subcommand)]
         #[arg(short, long, value_enum, default_value_t = LogFormat::Long)]
         format: LogFormat,
     },
 }
 
-#[derive(Subcommand, Debug)]
+#[derive(Subcommand, Debug, Serialize, Deserialize, Clone)]
 pub enum Display {
     Model,
     Processes,
     Integrands { process_id: usize },
 }
 
+#[derive(Debug, Args, Serialize, Deserialize, Clone)]
+pub struct Run {}
+
 pub enum Log {
     Level(LevelFilter),
     Format(LogFormat),
 }
 
-#[derive(Subcommand, Debug)]
+#[derive(Subcommand, Debug, Serialize, Deserialize, Clone)]
 pub enum Commands {
     #[clap(subcommand)]
     Display(Display),
@@ -493,6 +448,8 @@ pub enum Commands {
     Import(Import),
     #[clap(subcommand)]
     Save(Save),
+
+    Run(Run),
 
     Integrate(Integrate),
 
@@ -528,7 +485,9 @@ pub enum Commands {
 }
 
 #[repr(usize)]
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Hash, ValueEnum)]
+#[derive(
+    Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Hash, ValueEnum, Serialize, Deserialize,
+)]
 pub enum LogFormat {
     Long,
     Short,

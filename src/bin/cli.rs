@@ -6,7 +6,9 @@ fn main() -> Result<(), Report> {
     // Parse once with clap‑derive
     let cli = Cli::parse();
 
-    cli.run();
+    if let Err(e) = cli.run() {
+        eprintln!("{:?}", e);
+    }
 
     Ok(())
 }

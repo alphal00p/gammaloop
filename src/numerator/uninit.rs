@@ -1,7 +1,7 @@
 use std::sync::atomic::AtomicUsize;
 
 use bitvec::vec::BitVec;
-use linnet::half_edge::{involution::HedgePair, subgraph::SubGraph};
+use linnet::half_edge::{involution::HedgePair, subgraph::SubGraph, NodeIndex};
 use log::debug;
 use spenso::network::library::TensorLibraryData;
 use symbolica::atom::Atom;
@@ -58,6 +58,17 @@ impl Numerator<UnInit> {
                     num *= graph[sink_n].get_num();
                 }
                 num *= &e.data.num;
+            }
+        }
+
+        // From all the nodes not yet covered by paired edges, include those included in the subgraph, ignoring dummies
+        for n in seen.iter_zeros() {
+            let node_id = NodeIndex(n);
+            if graph
+                .iter_crown(node_id)
+                .all(|h| subgraph.includes(&h) || graph[graph[&h]].is_dummy)
+            {
+                num *= graph[node_id].get_num()
             }
         }
 

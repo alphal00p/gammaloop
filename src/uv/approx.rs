@@ -37,7 +37,7 @@ use typed_index_collections::TiVec;
 use vakint::{vakint_symbol, Vakint, VakintExpression};
 // use vakint::{EvaluationOrder, LoopNormalizationFactor, Vakint, VakintSettings};
 
-use super::{uv_graph::UVE, IntegrandExpr, UVgenerationSettings, UltravioletGraph};
+use super::{uv_graph::UVE, IntegrandExpr, UltravioletGraph};
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum ApproxOp {

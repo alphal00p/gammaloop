@@ -502,6 +502,8 @@ impl AmplitudeGraph {
 
             let vakint = self.new_vakint();
 
+            // println!("//Circled\n{}", self.graph.dot(&circled));
+            // println!("//Complement\n{}", self.graph.dot(&complement));
             circled_forest.compute(
                 &self.graph,
                 &circled,

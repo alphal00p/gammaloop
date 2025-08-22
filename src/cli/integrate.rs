@@ -3,6 +3,7 @@ use std::{fs, path::PathBuf};
 use clap::Args;
 use itertools::Itertools;
 use log::{info, warn};
+use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
 
 use crate::{
@@ -15,7 +16,7 @@ use colored::Colorize;
 
 use super::state::State;
 
-#[derive(Debug, Args)]
+#[derive(Debug, Args, Serialize, Deserialize, Clone)]
 pub struct Integrate {
     /// The process id to inspect
     #[arg(short = 'i', long = "process-id", value_name = "ID")]

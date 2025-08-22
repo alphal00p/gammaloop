@@ -22,7 +22,7 @@ use std::fmt::{Display, Formatter};
 use symbolica::domains::float::{NumericalFloatLike, Real};
 use symbolica::numerical_integration::{ContinuousGrid, Grid, Sample};
 
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq)]
 // #[trait_decode(trait= GammaLoopContext)]
 #[allow(non_snake_case)]
 #[serde(tag = "type")]
@@ -195,7 +195,7 @@ pub(crate) fn integrand_factory(settings: &RuntimeSettings) -> Integrand {
     }
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Encode, Decode, PartialEq)]
 // #[trait_decode(trait= GammaLoopContext)]
 pub struct UnitSurfaceSettings {
     pub n_3d_momenta: usize,
@@ -341,7 +341,7 @@ impl HasIntegrand for UnitSurfaceIntegrand {
     }
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Encode, Decode, PartialEq)]
 // #[trait_decode(trait= GammaLoopContext)]
 pub struct UnitVolumeSettings {
     pub n_3d_momenta: usize,

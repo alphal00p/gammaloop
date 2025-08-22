@@ -13,7 +13,7 @@ use symbolica::{
 use crate::{
     cff::expression::GraphOrientation,
     numerator::NumeratorSettings,
-    utils::{symbolica_ext::StringSerializedAtom, GS, W_},
+    utils::{serde_utils::IsDefault, symbolica_ext::StringSerializedAtom, GS, W_},
     uv::UVgenerationSettings,
     GammaLoopContext,
 };
@@ -36,18 +36,27 @@ impl GlobalSettings {
             .suggestion("Is it a correct yaml file")
     }
 }
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct GenerationSettings {
     // Generation Time settings
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub compile_cff: bool,
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub numerator_settings: NumeratorSettings,
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub cpe_rounds_cff: Option<usize>,
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub orientation_pattern: OrientationPattern,
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub compile_separate_orientations: bool,
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub gammaloop_compile_options: GammaloopCompileOptions,
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub tropical_subgraph_table_settings: TropicalSubgraphTableSettings,
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub enable_thresholds: bool,
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub uv_settings: UVgenerationSettings,
 }
 
@@ -67,7 +76,7 @@ impl Default for GenerationSettings {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq)]
 pub struct GammaloopCompileOptions {
     pub inline_asm: bool,
     pub optimization_level: usize,
@@ -112,7 +121,7 @@ impl GammaloopCompileOptions {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq)]
 pub struct TropicalSubgraphTableSettings {
     pub panic_on_fail: bool,
     pub target_omega: f64,
@@ -129,7 +138,7 @@ impl Default for TropicalSubgraphTableSettings {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, Default, PartialEq)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct OrientationPattern {
     pub pat: Option<StringSerializedAtom>,

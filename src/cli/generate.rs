@@ -1,12 +1,13 @@
 use clap::Args;
 use color_eyre::Result;
 use log::debug;
+use serde::{Deserialize, Serialize};
 
 use crate::settings::{runtime, GlobalSettings, RuntimeSettings};
 
 use super::state::State;
 
-#[derive(Debug, Args)]
+#[derive(Debug, Args, Serialize, Deserialize, Clone)]
 /// Generate integrands
 pub struct Generate {}
 
