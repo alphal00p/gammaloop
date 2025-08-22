@@ -697,7 +697,7 @@ impl From<&Graph> for DotGraph {
 }
 
 /// completes and extract the user defined group structure on a lis of graphs
-fn complete_group_parsing(graphs: &mut [Graph]) -> Result<TiVec<GroupId, Vec<usize>>> {
+fn complete_group_parsing(graphs: &mut [Graph]) -> Result<TiVec<GroupId, GraphGroup>> {
     // validate the input
     let defined_group_ids = graphs
         .iter()
@@ -720,14 +720,69 @@ fn complete_group_parsing(graphs: &mut [Graph]) -> Result<TiVec<GroupId, Vec<usi
     for graph in graphs.iter_mut() {
         if graph.group_id.is_none() {
             graph.group_id = Some(GroupId(current_group_id));
+            graph.is_group_master = true;
             current_group_id += 1;
         }
     }
 
     let num_groups = current_group_id - 1;
-    let mut group_structure = ti_vec![vec![]; num_groups];
 
-    Ok(group_structure)
+    // build the groups
+    (0..num_groups)
+        .map(|group_id| {
+            let group_id = GroupId(group_id);
+            let graphs_in_group = graphs
+                .iter()
+                .enumerate()
+                .filter_map(|(i, g)| {
+                    if g.group_id == Some(group_id) {
+                        Some(i)
+                    } else {
+                        None
+                    }
+                })
+                .collect_vec();
+
+            // the special case of a single graph in the group is easy
+            if graphs_in_group.len() == 1 {
+                Ok(GraphGroup {
+                    master: graphs_in_group[0],
+                    remaining: vec![],
+                })
+            } else {
+                // see if a master is defined
+                let master = graphs_in_group
+                    .iter()
+                    .find(|&&i| graphs[i].is_group_master)
+                    .copied();
+
+                if let Some(master) = master {
+                    // find the remaining graphs and make sure no other master is defined
+                    let remaining = graphs_in_group
+                        .into_iter()
+                        .filter(|&i| i != master)
+                        .collect_vec();
+
+                    let duplicate_master = remaining.iter().any(|&i| graphs[i].is_group_master);
+
+                    if duplicate_master {
+                        return Err(eyre!(
+                            "Multiple group masters defined for group {group_id:?}"
+                        ));
+                    }
+                    Ok(GraphGroup { master, remaining })
+                } else {
+                    // no master defined, take the first graph as master
+                    let master = graphs_in_group[0];
+                    graphs[master].is_group_master = true;
+                    Ok(GraphGroup {
+                        master,
+                        remaining: graphs_in_group[1..].to_vec(),
+                    })
+                }
+            }
+        })
+        .collect::<Result<TiVec<GroupId, GraphGroup>>>()
 }
 
 #[macro_export]
