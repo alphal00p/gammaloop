@@ -245,7 +245,7 @@ impl AmplitudeGraph {
 
         if settings.enable_thresholds {
             self.derived_data.threshold_counterterms =
-                self.build_threshold_counterterm_parametric_integrand(settings);
+                self.build_threshold_counterterm_parametric_integrand(settings)?;
         }
 
         Ok(())
@@ -383,7 +383,7 @@ impl AmplitudeGraph {
     fn build_threshold_counterterm_parametric_integrand(
         &self,
         settings: &GenerationSettings,
-    ) -> TiVec<EsurfaceID, AmplitudeCountertermAtom> {
+    ) -> Result<TiVec<EsurfaceID, AmplitudeCountertermAtom>> {
         let global_num = self.graph.global_network();
 
         let mut counterterms: TiVec<EsurfaceID, AmplitudeCountertermAtom> = TiVec::new();
@@ -540,7 +540,7 @@ impl AmplitudeGraph {
                 .unwrap();
             // println!("{}", product.dot_pretty());
 
-            let scalar: Atom = product.result_scalar().unwrap().into();
+            let scalar: Atom = product.result_scalar()?.into();
 
             let counterterm = scalar
                 .unwrap_function(GS.color_wrap)
@@ -586,7 +586,7 @@ impl AmplitudeGraph {
         // let ct_4 = &counterterms[EsurfaceID::from(4)];
         // panic!("Counterterm 4: {}", ct_4.parametric_local);
 
-        counterterms
+        Ok(counterterms)
     }
 
     fn build_original_parametric_integrand(&self, settings: &GenerationSettings) -> Result<Atom> {
