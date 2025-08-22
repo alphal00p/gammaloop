@@ -17,6 +17,7 @@ pub struct ParseData {
     pub projectors: Option<Atom>,
     pub num: Atom,
     pub group_id: Option<GroupId>,
+    pub is_group_master: bool,
 }
 
 impl Default for ParseData {
@@ -27,6 +28,7 @@ impl Default for ParseData {
             projectors: None,
             num: Atom::one(),
             group_id: None,
+            is_group_master: false,
         }
     }
 }
@@ -39,6 +41,7 @@ impl ParseData {
             projectors: self.projectors,
             num: self.num,
             group_id: self.group_id,
+            is_group_master: self.is_group_master,
         }
     }
 
@@ -49,6 +52,7 @@ impl ParseData {
             projectors: Some(polarizations),
             num: self.num,
             group_id: self.group_id,
+            is_group_master: self.is_group_master,
         }
     }
 
@@ -59,6 +63,7 @@ impl ParseData {
             projectors: self.projectors,
             num,
             group_id: self.group_id,
+            is_group_master: self.is_group_master,
         }
     }
 }

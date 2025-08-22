@@ -1,4 +1,5 @@
 use ahash::HashSet;
+use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
 use itertools::Itertools;
 use linnet::{
@@ -40,6 +41,7 @@ pub struct Graph {
     pub overall_factor: Atom,
     pub name: String,
     pub group_id: Option<GroupId>,
+    pub is_group_master: bool,
     pub underlying: HedgeGraph<Edge, Vertex, NumHedgeData>,
     pub loop_momentum_basis: LoopMomentumBasis,
     pub global_prefactor: GlobalPrefactor,
@@ -113,6 +115,7 @@ impl Graph {
             overall_factor: multiplicity,
             loop_momentum_basis: underlying.lmb(&underlying.full_filter()),
             group_id: None,
+            is_group_master: false,
             underlying,
             global_prefactor: GlobalPrefactor::default(),
         })
@@ -245,6 +248,30 @@ pub use vertex::Vertex;
 
 pub mod lmb;
 pub use lmb::{LMBext, LmbIndex, LoopMomentumBasis};
+
+#[derive(Debug, Clone, Encode, Decode)]
+pub struct GraphGroup {
+    master: usize,
+    remaining: Vec<usize>,
+}
+
+impl GraphGroup {
+    pub fn master(&self) -> usize {
+        self.master
+    }
+}
+
+impl<'a> IntoIterator for &'a GraphGroup {
+    type Item = usize;
+    type IntoIter = std::iter::Chain<
+        std::iter::Copied<std::slice::Iter<'a, usize>>,
+        std::array::IntoIter<usize, 1>,
+    >;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.remaining.iter().copied().chain([self.master])
+    }
+}
 
 // impl From<BareGraph> for HedgeGraph<Edge, Vertex, VertexOrder> {
 //     fn from(value: BareGraph) -> Self {

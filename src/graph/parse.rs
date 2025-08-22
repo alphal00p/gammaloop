@@ -1,7 +1,7 @@
 use std::{collections::BTreeMap, ops::Deref, path::Path};
 
 use crate::{
-    graph::GroupId,
+    graph::{GraphGroup, GroupId},
     model::Model,
     momentum_sample::LoopIndex,
     numerator::{
@@ -43,6 +43,7 @@ use symbolica::{
     printer::PrintOptions,
     try_parse,
 };
+use typed_index_collections::{ti_vec, TiVec};
 
 use super::{
     edge::ParseEdge,
@@ -306,6 +307,7 @@ impl Graph {
             projector,
         };
         let group_id = graph.global_data.group_id;
+        let is_group_master = graph.global_data.is_group_master;
 
         let name = graph.global_data.name.clone();
         let graph = graph.graph.map_data_ref(
@@ -516,6 +518,7 @@ impl Graph {
             loop_momentum_basis,
             underlying,
             group_id,
+            is_group_master,
         };
 
         if add_polarizations {
@@ -694,12 +697,13 @@ impl From<&Graph> for DotGraph {
 }
 
 /// completes and extract the user defined group structure on a lis of graphs
-fn complete_group_parsing(graphs: &mut [Graph]) -> Result<()> {
+fn complete_group_parsing(graphs: &mut [Graph]) -> Result<TiVec<GroupId, Vec<usize>>> {
     // validate the input
     let defined_group_ids = graphs
         .iter()
         .filter_map(|graph| graph.group_id)
         .sorted()
+        .dedup()
         .collect_vec();
 
     let expected_group_ids = (0..defined_group_ids.len())
@@ -711,7 +715,6 @@ fn complete_group_parsing(graphs: &mut [Graph]) -> Result<()> {
             "invalid group ids, group ids must start at 0 and contain no gaps"
         ));
     }
-
     // now set the remaining group ids
     let mut current_group_id = defined_group_ids.len();
     for graph in graphs.iter_mut() {
@@ -721,7 +724,10 @@ fn complete_group_parsing(graphs: &mut [Graph]) -> Result<()> {
         }
     }
 
-    Ok(())
+    let num_groups = current_group_id - 1;
+    let mut group_structure = ti_vec![vec![]; num_groups];
+
+    Ok(group_structure)
 }
 
 #[macro_export]
