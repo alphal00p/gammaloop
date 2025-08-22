@@ -249,7 +249,7 @@ pub use vertex::Vertex;
 pub mod lmb;
 pub use lmb::{LMBext, LmbIndex, LoopMomentumBasis};
 
-#[derive(Debug, Clone, Encode, Decode)]
+#[derive(Debug, Clone, Encode, Decode, PartialEq, Eq)]
 pub struct GraphGroup {
     master: usize,
     remaining: Vec<usize>,

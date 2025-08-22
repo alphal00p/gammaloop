@@ -88,6 +88,18 @@ impl From<linnet::parser::GlobalData> for ParseData {
             parse_data = parse_data.with_num(factor.strip_parse().context("num").unwrap());
         }
 
+        if let Some(is_group_master) = value.statements.get("is_group_master") {
+            parse_data.is_group_master = is_group_master
+                .strip_parse()
+                .context("is_group_master")
+                .unwrap();
+        }
+
+        if let Some(group_id) = value.statements.get("group_id") {
+            parse_data.group_id =
+                Some(GroupId(group_id.strip_parse().context("group_id").unwrap()));
+        }
+
         parse_data
     }
 }

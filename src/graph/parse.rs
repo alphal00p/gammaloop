@@ -137,6 +137,15 @@ impl FromStripedStr for i32 {
             .parse()?)
     }
 }
+impl FromStripedStr for usize {
+    fn strip_from(s: &str) -> Result<Self> {
+        Ok(s.strip_prefix('"')
+            .unwrap_or(s)
+            .strip_suffix('"')
+            .unwrap_or(s)
+            .parse()?)
+    }
+}
 
 #[derive(Clone, Debug)]
 pub struct ParseGraph {
@@ -725,7 +734,7 @@ fn complete_group_parsing(graphs: &mut [Graph]) -> Result<TiVec<GroupId, GraphGr
         }
     }
 
-    let num_groups = current_group_id - 1;
+    let num_groups = current_group_id;
 
     // build the groups
     (0..num_groups)
@@ -834,11 +843,15 @@ pub mod test {
         tensors::symbolic::SymbolicTensor,
     };
     use symbolica::atom::{Atom, FunctionBuilder};
+    use typed_index_collections::ti_vec;
 
     use super::Graph;
     use crate::{
         cli::state::State,
-        graph::{parse::IntoGraph, LMBext},
+        graph::{
+            parse::{complete_group_parsing, IntoGraph},
+            GraphGroup, LMBext,
+        },
         numerator::{aind::Aind, Numerator, UnInit},
     };
 
@@ -1280,5 +1293,338 @@ pub mod test {
 
         assert_eq!(graph_1_test, graph_1_test_2);
         assert_eq!(graph_2_test, graph_2_test_2);
+    }
+
+    #[test]
+    fn test_group_parsing_1() {
+        let mut graphs: Vec<Graph> = dot! (
+            digraph G1{
+                graph [
+                    group_id=0
+                    is_group_master=true
+                ]
+                ext    [style=invis]
+                node [num=1]
+                ext -> A
+                A -> B
+                A -> B
+                B -> ext
+            }
+
+            digraph G2{
+                graph [
+                    group_id=0
+                    is_group_master=false
+                ]
+                ext    [style=invis]
+                node [num=1]
+                ext -> A
+                A -> B
+                A -> B
+                B -> ext
+            }
+
+            digraph G3{
+                graph [
+                    group_id=1
+                    is_group_master=true
+                ]
+                ext    [style=invis]
+                node [num=1]
+                ext -> A
+                A -> B
+                A -> B
+                B -> ext
+            }
+
+            digraph G4{
+                graph [
+                    group_id=1
+                    is_group_master=false
+                ]
+                ext    [style=invis]
+                node [num=1]
+                ext -> A
+                A -> B
+                A -> B
+                B -> ext
+            }
+
+
+        )
+        .unwrap();
+
+        let groups = complete_group_parsing(&mut graphs).unwrap();
+        let expected_result = ti_vec![
+            GraphGroup {
+                master: 0,
+                remaining: vec![1],
+            },
+            GraphGroup {
+                master: 2,
+                remaining: vec![3],
+            },
+        ];
+
+        assert_eq!(groups, expected_result);
+    }
+
+    #[test]
+    fn test_group_parsing_2() {
+        let mut graphs: Vec<Graph> = dot! (
+            digraph G1{
+                graph [
+                    group_id=0
+                    is_group_master=true
+                ]
+                ext    [style=invis]
+                node [num=1]
+                ext -> A
+                A -> B
+                A -> B
+                B -> ext
+            }
+
+            digraph G2{
+                graph [
+                    group_id=0
+                ]
+                ext    [style=invis]
+                node [num=1]
+                ext -> A
+                A -> B
+                A -> B
+                B -> ext
+            }
+
+            digraph G3{
+                graph [
+                    group_id=1
+
+                ]
+                ext    [style=invis]
+                node [num=1]
+                ext -> A
+                A -> B
+                A -> B
+                B -> ext
+            }
+
+            digraph G4{
+                graph [
+                    group_id=1
+                ]
+                ext    [style=invis]
+                node [num=1]
+                ext -> A
+                A -> B
+                A -> B
+                B -> ext
+            }
+
+
+        )
+        .unwrap();
+
+        let groups = complete_group_parsing(&mut graphs).unwrap();
+        let expected_result = ti_vec![
+            GraphGroup {
+                master: 0,
+                remaining: vec![1],
+            },
+            GraphGroup {
+                master: 2,
+                remaining: vec![3],
+            },
+        ];
+
+        assert_eq!(groups, expected_result);
+    }
+
+    #[test]
+    fn test_group_parsing_3() {
+        let mut graphs: Vec<Graph> = dot! (
+            digraph G1{
+                graph [
+                    group_id=0
+                    is_group_master=true
+                ]
+                ext    [style=invis]
+                node [num=1]
+                ext -> A
+                A -> B
+                A -> B
+                B -> ext
+            }
+
+            digraph G2{
+                graph [
+                    group_id=0
+                    is_group_master=false
+                ]
+                ext    [style=invis]
+                node [num=1]
+                ext -> A
+                A -> B
+                A -> B
+                B -> ext
+            }
+
+            digraph G3{
+                ext    [style=invis]
+                node [num=1]
+                ext -> A
+                A -> B
+                A -> B
+                B -> ext
+            }
+
+            digraph G4{
+                ext    [style=invis]
+                node [num=1]
+                ext -> A
+                A -> B
+                A -> B
+                B -> ext
+            }
+
+
+        )
+        .unwrap();
+
+        let groups = complete_group_parsing(&mut graphs).unwrap();
+        let expected_result = ti_vec![
+            GraphGroup {
+                master: 0,
+                remaining: vec![1],
+            },
+            GraphGroup {
+                master: 2,
+                remaining: vec![],
+            },
+            GraphGroup {
+                master: 3,
+                remaining: vec![],
+            },
+        ];
+
+        assert_eq!(groups, expected_result);
+    }
+
+    #[test]
+    fn test_group_parsing_4() {
+        let mut graphs: Vec<Graph> = dot! (
+            digraph G1{
+                graph [
+                    group_id=0
+                    is_group_master=true
+                ]
+                ext    [style=invis]
+                node [num=1]
+                ext -> A
+                A -> B
+                A -> B
+                B -> ext
+            }
+
+            digraph G2{
+                graph [
+                    group_id=0
+                    is_group_master=true
+                ]
+                ext    [style=invis]
+                node [num=1]
+                ext -> A
+                A -> B
+                A -> B
+                B -> ext
+            }
+
+            digraph G3{
+                ext    [style=invis]
+                node [num=1]
+                ext -> A
+                A -> B
+                A -> B
+                B -> ext
+            }
+
+            digraph G4{
+                ext    [style=invis]
+                node [num=1]
+                ext -> A
+                A -> B
+                A -> B
+                B -> ext
+            }
+
+
+        )
+        .unwrap();
+
+        let groups = complete_group_parsing(&mut graphs);
+        assert!(groups.is_err());
+    }
+
+    #[test]
+    fn test_group_parsing_5() {
+        let mut graphs: Vec<Graph> = dot! (
+            digraph G1{
+                graph [
+                    group_id=1
+                    is_group_master=true
+                ]
+                ext    [style=invis]
+                node [num=1]
+                ext -> A
+                A -> B
+                A -> B
+                B -> ext
+            }
+
+            digraph G2{
+                graph [
+                    group_id=1
+                    is_group_master=false
+                ]
+                ext    [style=invis]
+                node [num=1]
+                ext -> A
+                A -> B
+                A -> B
+                B -> ext
+            }
+
+            digraph G3{
+                graph [
+                    group_id=2
+                    is_group_master=true
+                ]
+                ext    [style=invis]
+                node [num=1]
+                ext -> A
+                A -> B
+                A -> B
+                B -> ext
+            }
+
+            digraph G4{
+                graph [
+                    group_id=2
+                    is_group_master=false
+                ]
+                ext    [style=invis]
+                node [num=1]
+                ext -> A
+                A -> B
+                A -> B
+                B -> ext
+            }
+
+
+        )
+        .unwrap();
+
+        assert!(complete_group_parsing(&mut graphs).is_err());
     }
 }
