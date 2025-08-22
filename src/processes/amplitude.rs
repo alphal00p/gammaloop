@@ -540,7 +540,10 @@ impl AmplitudeGraph {
                 .unwrap();
             // println!("{}", product.dot_pretty());
 
-            let scalar: Atom = product.result_scalar()?.into();
+            let scalar: Atom = product
+                .result_scalar()
+                .with_context(|| "in building threshold counterterm")?
+                .into();
 
             let counterterm = scalar
                 .unwrap_function(GS.color_wrap)
