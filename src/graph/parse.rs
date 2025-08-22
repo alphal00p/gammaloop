@@ -1,6 +1,7 @@
 use std::{collections::BTreeMap, ops::Deref, path::Path};
 
 use crate::{
+    graph::GroupId,
     model::Model,
     momentum_sample::LoopIndex,
     numerator::{
@@ -15,9 +16,9 @@ use crate::{
 use bitvec::vec::BitVec;
 use color_eyre::Result;
 use dot_parser::ast::{GraphFromFileError, IOError};
-use eyre::{eyre, Error};
+use eyre::{eyre, Error, Ok};
 use idenso::color;
-use itertools::Itertools;
+use itertools::{Group, Itertools};
 use linnet::{
     half_edge::{
         involution::{EdgeVec, HedgePair, Orientation},
@@ -690,6 +691,37 @@ impl From<&Graph> for DotGraph {
 
         DotGraph { global_data, graph }
     }
+}
+
+/// completes and extract the user defined group structure on a lis of graphs
+fn complete_group_parsing(graphs: &mut [Graph]) -> Result<()> {
+    // validate the input
+    let defined_group_ids = graphs
+        .iter()
+        .filter_map(|graph| graph.group_id)
+        .sorted()
+        .collect_vec();
+
+    let expected_group_ids = (0..defined_group_ids.len())
+        .map(|id| GroupId(id))
+        .collect_vec();
+
+    if defined_group_ids != expected_group_ids {
+        return Err(eyre!(
+            "invalid group ids, group ids must start at 0 and contain no gaps"
+        ));
+    }
+
+    // now set the remaining group ids
+    let mut current_group_id = defined_group_ids.len();
+    for graph in graphs.iter_mut() {
+        if graph.group_id.is_none() {
+            graph.group_id = Some(GroupId(current_group_id));
+            current_group_id += 1;
+        }
+    }
+
+    Ok(())
 }
 
 #[macro_export]
