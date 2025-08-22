@@ -281,6 +281,7 @@ impl GraphTerm for AmplitudeGraphTerm {
             &externals,
             &settings,
         );
+        debug!("found maximal overlap: {}", overlap);
 
         let mut threshold_counterterm = AmplitudeCountertermData::new_empty();
 
