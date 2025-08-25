@@ -11,7 +11,7 @@ use crate::{
     model::Model,
     numerator::GlobalPrefactor,
     processes::{ExportSettings, Process, ProcessDefinition, ProcessList},
-    settings::{global::GenerationSettings, GlobalSettings, RuntimeSettings},
+    settings::{GlobalSettings, RuntimeSettings},
     utils::F,
     GammaLoopContextContainer, HasIntegrand,
 };

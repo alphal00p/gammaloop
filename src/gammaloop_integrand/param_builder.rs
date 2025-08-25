@@ -215,8 +215,6 @@ impl UpdateAndGetParams<f64> for ParamBuilder<f64> {
             self.threshold_params(threshold_params);
         }
 
-        debug!("params:\n {}", self);
-
         Cow::Owned(self.clone().build_values()) // ideally borrows a single vec
     }
 }

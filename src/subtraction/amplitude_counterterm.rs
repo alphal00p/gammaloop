@@ -157,6 +157,11 @@ impl AmplitudeCountertermData {
                     .rstar_samples()
                     .evaluate(param_builder, orientation);
 
+                debug!(
+                    "Param Builder for {}:\n{}",
+                    existing_esurface_id, param_builder
+                );
+
                 result += single_result;
             }
         }

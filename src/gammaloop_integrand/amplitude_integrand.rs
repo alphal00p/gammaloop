@@ -191,34 +191,37 @@ impl AmplitudeGraphTerm {
         let evaluator = &self.orientation_parametric_integrand;
         let mut result = Complex::new_re(F(T::from_f64(0.)));
 
-        let a = T::get_parameters(
-            &mut self.param_builder,
-            &self.graph,
-            momentum_sample,
-            hel,
-            None,
-        );
-        let iterative = self
-            .iterative_integrand_evaluator
-            .as_ref()
-            .map(|ev| <T as GenericEvaluatorFloat>::get_evaluator(ev)(&a));
+        {
+            let a = T::get_parameters(
+                &mut self.param_builder,
+                &self.graph,
+                momentum_sample,
+                hel,
+                None,
+            );
 
-        for (i, e) in orientations.iter() {
-            if let Some(iterative) = &iterative {
-                result += &iterative[i.0]
-            } else {
-                self.param_builder.orientation_value(e);
-                let a = T::get_parameters(
-                    &mut self.param_builder,
-                    &self.graph,
-                    momentum_sample,
-                    hel,
-                    None,
-                );
-                result += <T as GenericEvaluatorFloat>::get_evaluator_single(evaluator)(&a)
+            let iterative = self
+                .iterative_integrand_evaluator
+                .as_ref()
+                .map(|ev| <T as GenericEvaluatorFloat>::get_evaluator(ev)(&a));
+
+            for (i, e) in orientations.iter() {
+                if let Some(iterative) = &iterative {
+                    result += &iterative[i.0]
+                } else {
+                    self.param_builder.orientation_value(e);
+                    let a = T::get_parameters(
+                        &mut self.param_builder,
+                        &self.graph,
+                        momentum_sample,
+                        hel,
+                        None,
+                    );
+                    result += <T as GenericEvaluatorFloat>::get_evaluator_single(evaluator)(&a)
+                }
             }
         }
-
+        debug!("Last params used:\n {}", self.param_builder);
         debug!("evaluated integrand: {:16e}", result);
 
         let sum_of_cts = self.threshold_counterterm.evaluate(

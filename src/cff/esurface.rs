@@ -1,3 +1,4 @@
+use std::fmt::Display;
 use std::ops::Index;
 
 use bincode_trait_derive::{Decode, Encode};
@@ -394,6 +395,12 @@ pub type ExistingEsurfaces = TiVec<ExistingEsurfaceId, EsurfaceID>;
     Decode,
 )]
 pub struct ExistingEsurfaceId(usize);
+
+impl Display for ExistingEsurfaceId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "ExistingEsurfaceID({})", self.0)
+    }
+}
 
 const MAX_EXPECTED_CAPACITY: usize = 32; // Used to prevent reallocations during existence check
 const SHIFT_THRESHOLD: F<f64> = F(1.0e-13);
