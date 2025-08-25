@@ -15,4 +15,4 @@ rm -rf TMP
 #
 #The evaluation of integrand 'qqx_aaa_subtracted' is:
 #
-#( 1.1940882288613568e-1, -9.479203831153372e-2 i)
+#( 1.1948744538168098e-1, -1.9693624149798648e1 i)
