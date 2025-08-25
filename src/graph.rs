@@ -265,12 +265,14 @@ impl GraphGroup {
 impl<'a> IntoIterator for &'a GraphGroup {
     type Item = usize;
     type IntoIter = std::iter::Chain<
-        std::iter::Copied<std::slice::Iter<'a, usize>>,
         std::array::IntoIter<usize, 1>,
+        std::iter::Copied<std::slice::Iter<'a, usize>>,
     >;
 
     fn into_iter(self) -> Self::IntoIter {
-        self.remaining.iter().copied().chain([self.master])
+        [self.master]
+            .into_iter()
+            .chain(self.remaining.iter().copied())
     }
 }
 
