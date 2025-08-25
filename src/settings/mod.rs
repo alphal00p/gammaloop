@@ -3,6 +3,7 @@ use global::GenerationSettings;
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    cli::LogLevel,
     integrands::IntegrandSettings,
     observables::{ObservableSettings, PhaseSpaceSelectorSettings},
     utils::serde_utils::IsDefault,
@@ -12,6 +13,8 @@ use crate::{
 #[derive(Debug, Clone, Default, Deserialize, Serialize, Encode, Decode)]
 #[trait_decode(trait= GammaLoopContext)]
 pub struct GlobalSettings {
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    pub debug_level: LogLevel,
     #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub generation: GenerationSettings,
 }

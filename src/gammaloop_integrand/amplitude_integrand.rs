@@ -156,7 +156,7 @@ impl AmplitudeGraphTerm {
         self.orientation_parametric_integrand.compile(
             &path.as_ref().join(&self.graph.name),
             format!("{}_orientation_parametric_integrand", &self.graph.name,),
-            &self.graph.name,
+            &path.as_ref().join(&self.graph.name),
             settings.generation.gammaloop_compile_options.inline_asm(),
         );
 
@@ -168,9 +168,13 @@ impl AmplitudeGraphTerm {
 
         self.iterative_integrand_evaluator.as_mut().map(|e| {
             e.compile(
-                &path.as_ref().join(&self.graph.name),
+                &path
+                    .as_ref()
+                    .join(format!("{}_iterative", &self.graph.name)),
                 format!("{}_iterative", &self.graph.name,),
-                format!("{}_iterative", &self.graph.name,),
+                &path
+                    .as_ref()
+                    .join(format!("{}_iterative", &self.graph.name)),
                 settings.generation.gammaloop_compile_options.inline_asm(),
             )
         });
@@ -291,7 +295,6 @@ impl GraphTerm for AmplitudeGraphTerm {
                 .ok_or_else(|| eyre!("esurface data missing"))?,
             &externals,
             &self.graph.loop_momentum_basis,
-            settings.general.debug,
             settings.kinematics.e_cm,
         );
 

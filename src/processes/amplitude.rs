@@ -40,7 +40,7 @@ use linnet::{
     half_edge::involution::{HedgePair, Orientation},
     parser::DotGraph,
 };
-use log::debug;
+use log::{debug, info};
 use symbolica::{
     atom::{Atom, AtomCore},
     domains::rational::Rational,
@@ -95,6 +95,7 @@ impl Amplitude {
         override_existing: bool,
         settings: &GlobalSettings,
     ) -> Result<()> {
+        info!("Compiling amplitude {}", self.name);
         let p = path.as_ref().join(format!("amp_{}", self.name));
 
         let r = fs::create_dir_all(&p).with_context(|| {

@@ -173,8 +173,9 @@ no_python = []
 
 [patch.crates-io]
 
-# spenso = { git = "https://github.com/alphal00p/spenso", rev = "dd026330d01a81d3569d6b60ac486c0b1f223669" }
+spenso = { git = "https://github.com/alphal00p/spenso", rev = "363a93610c795c7c03d826408ac083dfdd407f2d" }
 # spenso = { path = "../spenso/spenso" }
+
 # spenso-hep-lib = { git = "https://github.com/alphal00p/spenso", rev = "dd026330d01a81d3569d6b60ac486c0b1f223669" }
 # spenso-hep-lib = { path = "../spenso/spenso-hep-lib" }
 # idenso = { git = "https://github.com/alphal00p/spenso", rev = "dd026330d01a81d3569d6b60ac486c0b1f223669" }

@@ -18,6 +18,7 @@ use enum_dispatch::enum_dispatch;
 use eyre::{eyre, Context};
 use gammaloop_sample::{parameterize, DiscreteGraphSample, GammaLoopSample};
 use itertools::Itertools;
+use log::debug;
 use momtrop::float::MomTropFloat;
 use momtrop::SampleGenerator;
 use serde::{Deserialize, Serialize};
@@ -234,27 +235,22 @@ fn stability_check(
             || error.im > stability_settings.required_precision_for_im
     });
 
-    if settings.general.debug > 4 {
-        if let Some(unstable_index) = unstable_sample {
-            let unstable_point = results[unstable_index];
-            let rotation_axis = format!("{:?}", settings.stability.rotation_axis[unstable_index]);
+    if let Some(unstable_index) = unstable_sample {
+        let unstable_point = results[unstable_index];
+        let rotation_axis = format!("{:?}", settings.stability.rotation_axis[unstable_index]);
 
-            let (
-                (real_formatted, rotated_real_formatted),
-                (imag_formatted, rotated_imag_formatted),
-            ) = (
-                format_for_compare_digits(average.re, unstable_point.re),
-                format_for_compare_digits(average.im, unstable_point.im),
-            );
+        let ((real_formatted, rotated_real_formatted), (imag_formatted, rotated_imag_formatted)) = (
+            format_for_compare_digits(average.re, unstable_point.re),
+            format_for_compare_digits(average.im, unstable_point.im),
+        );
 
-            println!("{}", "\nUnstable point detected:".red());
-            println!("Rotation axis: {}", rotation_axis);
-            println!("\taverage result: {} + {}i", real_formatted, imag_formatted,);
-            println!(
-                "\trotated result: {} + {}i",
-                rotated_real_formatted, rotated_imag_formatted,
-            );
-        }
+        debug!("{}", "\nUnstable point detected:".red());
+        debug!("Rotation axis: {}", rotation_axis);
+        debug!("\taverage result: {} + {}i", real_formatted, imag_formatted,);
+        debug!(
+            "\trotated result: {} + {}i",
+            rotated_real_formatted, rotated_imag_formatted,
+        );
     }
 
     let stable = unstable_sample.is_none();
@@ -864,43 +860,39 @@ fn evaluate_sample<I: GammaloopIntegrand>(
         if is_stable {
             break;
         } else {
-            if integrand.get_settings().general.debug > 4 {
-                println!("unstable at level: {}", stability_level.precision);
-                if let Ok(gammaloop_sample) = parameterize::<f64, I>(sample, integrand) {
-                    let rotated_samples: Vec<_> = integrand
-                        .get_rotations()
-                        .map(|rotation| gammaloop_sample.get_rotated_sample(rotation))
-                        .collect();
+            debug!("unstable at level: {}", stability_level.precision);
+            if let Ok(gammaloop_sample) = parameterize::<f64, I>(sample, integrand) {
+                let rotated_samples: Vec<_> = integrand
+                    .get_rotations()
+                    .map(|rotation| gammaloop_sample.get_rotated_sample(rotation))
+                    .collect();
 
-                    for (sample, result) in rotated_samples.iter().zip(&results) {
-                        let default_sample = sample.get_default_sample();
-                        println!(
-                            "loop_moms: {}, external_moms: {}",
-                            format!("{}", default_sample.loop_moms()).blue(),
-                            format!("{:?}", default_sample.external_moms()).blue()
-                        );
+                for (sample, result) in rotated_samples.iter().zip(&results) {
+                    let default_sample = sample.get_default_sample();
+                    debug!(
+                        "loop_moms: {}, external_moms: {}",
+                        format!("{}", default_sample.loop_moms()).blue(),
+                        format!("{:?}", default_sample.external_moms()).blue()
+                    );
 
-                        println!(
-                            "result of current level: {}",
-                            format!("{:16e}", result).blue()
-                        );
-                    }
-                } else {
-                    println!("parameterization failed");
+                    debug!(
+                        "result of current level: {}",
+                        format!("{:16e}", result).blue()
+                    );
                 }
+            } else {
+                debug!("parameterization failed");
             }
         }
     }
 
-    if integrand.get_settings().general.debug > 4 {
-        println!("result at each level:");
-        for level_result in results_of_stability_levels.iter() {
-            println!(
-                "level: {}. result: {}",
-                format!("{}", level_result.stability_level_used).green(),
-                format!("{:16e}", level_result.result).blue()
-            );
-        }
+    debug!("result at each level:");
+    for level_result in results_of_stability_levels.iter() {
+        debug!(
+            "level: {}. result: {}",
+            format!("{}", level_result.stability_level_used).green(),
+            format!("{:16e}", level_result.result).blue()
+        );
     }
 
     if let Some(stability_level_result) = results_of_stability_levels.last() {

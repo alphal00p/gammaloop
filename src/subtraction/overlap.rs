@@ -453,9 +453,9 @@ pub(crate) fn find_maximal_overlap(
         external_momenta,
     );
 
-    if settings.general.debug > 3 {
-        DEBUG_LOGGER.write("overlap_pairs", &esurface_pairs);
-    }
+    // if settings.general.debug > 3 {
+    //     DEBUG_LOGGER.write("overlap_pairs", &esurface_pairs);
+    // }
 
     let mut num_disconnected_surfaces = 0;
 
@@ -503,9 +503,9 @@ pub(crate) fn find_maximal_overlap(
         }
     }
 
-    if settings.general.debug > 3 {
-        DEBUG_LOGGER.write("num_disconnected_surfaces", &num_disconnected_surfaces);
-    }
+    // if settings.general.debug > 3 {
+    //     DEBUG_LOGGER.write("num_disconnected_surfaces", &num_disconnected_surfaces);
+    // }
 
     if num_disconnected_surfaces == existing_esurfaces.len() {
         res.fill_in_complements();
@@ -543,12 +543,12 @@ pub(crate) fn find_maximal_overlap(
             }
         }
 
-        if settings.general.debug > 3 {
-            DEBUG_LOGGER.write(
-                "subset_size_and_num_possible_subsets_and_res",
-                &(subset_size, possible_subsets.len(), &res),
-            );
-        }
+        // if settings.general.debug > 3 {
+        //     DEBUG_LOGGER.write(
+        //         "subset_size_and_num_possible_subsets_and_res",
+        //         &(subset_size, possible_subsets.len(), &res),
+        //     );
+        // }
 
         subset_size -= 1;
     }

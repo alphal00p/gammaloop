@@ -308,16 +308,15 @@ impl HasIntegrand for UnitSurfaceIntegrand {
         let mut itg_wgt = self.evaluate_numerator(loop_momenta.as_slice());
         // Normalize the integral
         itg_wgt /= self.surface;
-        if self.settings.general.debug > 1 {
-            info!("Sampled loop momenta:");
-            for (i, l) in loop_momenta.iter().enumerate() {
-                info!("k{} = ( {:-23})", i, format!("{:+.16e}", l),);
-            }
-            info!("Integrator weight : {:+.16e}", wgt);
-            info!("Integrand weight  : {:+.16e}", itg_wgt);
-            info!("Sampling jacobian : {:+.16e}", jac);
-            info!("Final contribution: {:+.16e}", itg_wgt * jac);
+
+        info!("Sampled loop momenta:");
+        for (i, l) in loop_momenta.iter().enumerate() {
+            info!("k{} = ( {:-23})", i, format!("{:+.16e}", l),);
         }
+        info!("Integrator weight : {:+.16e}", wgt);
+        info!("Integrand weight  : {:+.16e}", itg_wgt);
+        info!("Sampling jacobian : {:+.16e}", jac);
+        info!("Final contribution: {:+.16e}", itg_wgt * jac);
 
         let is_nan = itg_wgt.is_nan();
 
@@ -459,16 +458,14 @@ impl HasIntegrand for UnitVolumeIntegrand {
         let mut itg_wgt = self.evaluate_numerator(loop_momenta.as_slice());
         // Normalize the integral
         itg_wgt /= self.volume;
-        if self.settings.general.debug > 1 {
-            info!("Sampled loop momenta:");
-            for (i, l) in loop_momenta.iter().enumerate() {
-                info!("k{} = ( {:-23})", i, format!("{:+.16e}", l),);
-            }
-            info!("Integrator weight : {:+.16e}", wgt);
-            info!("Integrand weight  : {:+.16e}", itg_wgt);
-            info!("Sampling jacobian : {:+.16e}", jac);
-            info!("Final contribution: {:+.16e}", itg_wgt * jac);
+        info!("Sampled loop momenta:");
+        for (i, l) in loop_momenta.iter().enumerate() {
+            info!("k{} = ( {:-23})", i, format!("{:+.16e}", l),);
         }
+        info!("Integrator weight : {:+.16e}", wgt);
+        info!("Integrand weight  : {:+.16e}", itg_wgt);
+        info!("Sampling jacobian : {:+.16e}", jac);
+        info!("Final contribution: {:+.16e}", itg_wgt * jac);
 
         let is_nan = itg_wgt.is_nan();
 

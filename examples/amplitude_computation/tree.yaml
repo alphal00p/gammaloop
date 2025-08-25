@@ -1,8 +1,5 @@
 default_runtime_settings:
   General:
-    debug: 3
-    load_compiled_numerator: true
-    joint_numerator_eval: true
     amplitude_prefactor:
       re: 0.0
       im: 1.0
@@ -48,7 +45,12 @@ default_runtime_settings:
         escalate_for_large_weight_threshold: -1.0
   subtraction:
     disable_threshold_subtraction: true
-global_settings: {}
+global_settings:
+  debug_level: Debug
+  generation:
+    evaluator_settings:
+      compile: true
+
 commands:
   - Import:
       Model:
@@ -64,3 +66,5 @@ commands:
       use_f128: false
       force_radius: false
       momentum_space: false
+      discrete_dim:
+        - 0

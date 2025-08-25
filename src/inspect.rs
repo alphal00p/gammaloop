@@ -38,12 +38,12 @@ pub(crate) fn inspect<I: HasIntegrand>(
             &settings.sampling.get_parameterization_settings().unwrap(),
             force_radius,
         );
-        if settings.general.debug > 1 {
-            info!(
-                "f128 sampling jacobian for this point = {:+.32e}",
-                inv_jac.inv()
-            );
-        };
+
+        info!(
+            "f128 sampling jacobian for this point = {:+.32e}",
+            inv_jac.inv()
+        );
+
         xs
     } else {
         pt.iter()

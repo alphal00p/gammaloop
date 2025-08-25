@@ -1,9 +1,7 @@
 use std::path::Path;
 
 use bincode_trait_derive::{Decode, Encode};
-use bitvec::vec::BitVec;
-use itertools::Itertools;
-use linnet::half_edge::involution::{EdgeVec, Orientation};
+use linnet::half_edge::involution::EdgeVec;
 use log::debug;
 use spenso::algebra::complex::Complex;
 use symbolica::{
@@ -107,7 +105,7 @@ impl AmplitudeCountertermData {
             e.parametric.compile(
                 &path.as_ref().join(format!("esurface_{}", i.0)),
                 format!("esurface_{}", i.0),
-                format!("esurface_{}", i.0),
+                &path.as_ref().join(format!("esurface_{}", i.0)),
                 settings.generation.gammaloop_compile_options.inline_asm(),
             );
         }
@@ -123,17 +121,15 @@ impl AmplitudeCountertermData {
         param_builder: &mut ParamBuilder<f64>,
         orientation: SingleOrAllOrientations<'_, AmplitudeOrientationID>,
     ) -> Complex<F<T>> {
-        if settings.general.debug > 4 {
-            println!("start evaluate threshold counterterm");
-            let existing_esurfaces = self
-                .overlap
-                .existing_esurfaces
-                .iter()
-                .map(|e| e.0)
-                .collect::<Vec<_>>();
-            println!("subtracting esurfaces: {:?}", existing_esurfaces);
-            println!("overlap structure\n: {}", self.overlap);
-        }
+        debug!("start evaluate threshold counterterm");
+        let existing_esurfaces = self
+            .overlap
+            .existing_esurfaces
+            .iter()
+            .map(|e| e.0)
+            .collect::<Vec<_>>();
+        debug!("subtracting esurfaces: {:?}", existing_esurfaces);
+        debug!("overlap structure\n: {}", self.overlap);
 
         let counter_term_builder = CounterTermBuilder::new(
             graph,
@@ -463,27 +459,24 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
             integrated_ct += &result[1];
         }
 
-        if ct_builder.settings.general.debug > 4 {
-            println!(
-                "Evaluating ct for esurface {}\nwith params:\n {}",
-                esurface_id.0,
-                param_builder.clone()
-            );
+        debug!(
+            "Evaluating ct for esurface {}\nwith params:\n {}",
+            esurface_id.0,
+            param_builder.clone()
+        );
 
-            println!(
-                "results\nlocal ct:      {:+16e}\nintegrated ct: {:+16e}\nprefactor:     {:+16e}",
-                local_ct, integrated_ct, prefactor
-            );
-        }
+        debug!(
+            "results\nlocal ct:      {:+16e}\nintegrated ct: {:+16e}\nprefactor:     {:+16e}",
+            local_ct, integrated_ct, prefactor
+        );
 
         let final_result = (local_ct + integrated_ct) * prefactor;
 
-        if ct_builder.settings.general.debug > 4 {
-            println!(
-                "sum of local and integrated ct (with prefactor): {}",
-                final_result
-            );
-        }
+        debug!(
+            "sum of local and integrated ct (with prefactor): {}",
+            final_result
+        );
+
         final_result
     }
 

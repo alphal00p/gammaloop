@@ -12,6 +12,8 @@ use crate::utils::f128;
 use crate::utils::FloatLike;
 use crate::utils::F;
 use bincode_trait_derive::{Decode, Encode};
+use log::debug;
+use log::info;
 use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
 use symbolica::domains::float::NumericalFloatLike;
@@ -126,17 +128,16 @@ impl HasIntegrand for HFunctionTestIntegrand {
 
         let mut sample_xs: Vec<F<f64>> = vec![];
         sample_xs.extend(xs);
-        if self.settings.general.debug > 1 {
-            println!(
-                "Sampled x-space : ( {} )",
-                sample_xs
-                    .iter()
-                    .map(|&x| format!("{:.16}", x))
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            );
-            println!("Integrator weight : {:+.16e}", wgt);
-        }
+
+        info!(
+            "Sampled x-space : ( {} )",
+            sample_xs
+                .iter()
+                .map(|&x| format!("{:.16}", x))
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+        info!("Integrator weight : {:+.16e}", wgt);
 
         // TODO implement stability check
         let (integration_result, parameterization_timing, evaluation_timing, precision) =
@@ -145,16 +146,15 @@ impl HasIntegrand for HFunctionTestIntegrand {
                     .iter()
                     .map(|x| x.higher())
                     .collect::<Vec<F<f128>>>();
-                if self.settings.general.debug > 1 {
-                    println!(
-                        "f128 Upcasted x-space sample : ( {} )",
-                        sample_xs_f128
-                            .iter()
-                            .map(|x| format!("{:+e}", x))
-                            .collect::<Vec<_>>()
-                            .join(", ")
-                    );
-                }
+                info!(
+                    "f128 Upcasted x-space sample : ( {} )",
+                    sample_xs_f128
+                        .iter()
+                        .map(|x| format!("{:+e}", x))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
+
                 let (res, parameterization_timing, evaluation_timing) =
                     self.evaluate_sample_generic(sample_xs_f128.as_slice());
                 (

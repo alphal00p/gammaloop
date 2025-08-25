@@ -3,7 +3,7 @@ use bincode_trait_derive::Decode;
 use color_eyre::Result;
 use colored::Colorize;
 use itertools::Itertools;
-use log::debug;
+use log::{debug, info};
 use spenso::algebra::complex::Complex;
 use std::{
     fs::{self, File},
@@ -297,16 +297,14 @@ impl CrossSectionGraphTerm {
 
                 let h_function = utils::h(&newton_result.solution, None, None, h_function_settings);
 
-                if settings.general.debug > 1 && _cut_id == CutId::from(2) {
-                    println!(
-                        "generated parameters for cut: {}",
-                        format!("{}", _cut_id).green()
-                    );
+                debug!(
+                    "generated parameters for cut: {}",
+                    format!("{}", _cut_id).green()
+                );
 
-                    println!("solver: {:#?}", newton_result);
-                    println!("h_function: {}", format!("{:16e}", h_function).green());
-                    println!("rescaled loop momenta: {:?}", rescaled_sample.loop_moms());
-                }
+                debug!("solver: {:#?}", newton_result);
+                debug!("h_function: {}", format!("{:16e}", h_function).green());
+                debug!("rescaled loop momenta: {:?}", rescaled_sample.loop_moms());
 
                 let mut cut_param_builder = param_builder.clone();
 
@@ -359,13 +357,12 @@ impl CrossSectionGraphTerm {
                 .map(|(id, (evaluator, params))| {
                     let cut_results =
                         <T as GenericEvaluatorFloat>::get_evaluator_single(evaluator)(&params);
-                    if settings.general.debug > 0 && id == 2 {
-                        println!(
-                            "cut: {}, result: {}",
-                            format!("{}", id).green(),
-                            format!("{:16e}", cut_results).blue()
-                        );
-                    }
+                    info!(
+                        "cut: {}, result: {}",
+                        format!("{}", id).green(),
+                        format!("{:16e}", cut_results).blue()
+                    );
+
                     cut_results
                 })
                 .fold(
@@ -375,12 +372,11 @@ impl CrossSectionGraphTerm {
         };
 
         let final_result = result;
-        if settings.general.debug > 0 {
-            println!(
-                "sum of all cuts: {}",
-                format!("{:16e}", final_result).blue()
-            );
-        }
+        info!(
+            "sum of all cuts: {}",
+            format!("{:16e}", final_result).blue()
+        );
+
         final_result
     }
 }
@@ -403,9 +399,7 @@ impl HasIntegrand for CrossSectionIntegrand {
         max_eval: Complex<F<f64>>,
     ) -> EvaluationResult {
         let result = evaluate_sample(self, sample, wgt, _iter, use_f128, max_eval);
-        if self.settings.general.debug > 0 {
-            println!("result: {:?}", result.integrand_result);
-        }
+        info!("result: {:?}", result.integrand_result);
 
         result
     }

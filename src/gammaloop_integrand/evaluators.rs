@@ -3,7 +3,10 @@ use std::{borrow::Cow, cell::RefCell, path::Path};
 use bincode_trait_derive::{Decode, Encode};
 use bitvec::{order::Lsb0, slice::IterOnes, vec::BitVec};
 use linnet::half_edge::involution::{EdgeVec, Orientation};
-use spenso::{algebra::complex::Complex, tensors::parametric::SerializableCompiledEvaluator};
+use spenso::{
+    algebra::complex::Complex,
+    tensors::parametric::{SerializableCompiledCode, SerializableCompiledEvaluator},
+};
 use symbolica::{
     atom::{Atom, AtomCore},
     domains::rational::Rational,
@@ -153,30 +156,35 @@ impl GenericEvaluate<Complex<F<f128>>> for GenericEvaluator {
 impl GenericEvaluator {
     pub(crate) fn compile(
         &mut self,
-        filename: impl AsRef<Path>,
+        cpp_path: impl AsRef<Path>,
         function_name: impl AsRef<str>,
-        lib_name: impl AsRef<str>,
+        lib_path: impl AsRef<Path>,
         inline_asm: InlineASM,
     ) {
         let compile = self
             .f64_eager
             .borrow()
             .export_cpp(
-                &filename.as_ref().to_string_lossy(),
+                &cpp_path.as_ref().to_string_lossy(),
                 function_name.as_ref(),
                 true,
                 inline_asm,
             )
             .unwrap()
-            .compile(lib_name.as_ref(), CompileOptions::default())
+            .compile(
+                &lib_path.as_ref().to_string_lossy(),
+                CompileOptions::default(),
+            )
             .unwrap()
             .load()
             .unwrap();
 
         self.f64_compiled = Some(RefCell::new(SerializableCompiledEvaluator {
             evaluator: compile,
-            library_filename: lib_name.as_ref().to_string(),
-            function_name: function_name.as_ref().to_string(),
+            compiled_code: SerializableCompiledCode {
+                library_filename: lib_path.as_ref().to_path_buf(),
+                function_name: function_name.as_ref().to_string(),
+            },
         }));
     }
 

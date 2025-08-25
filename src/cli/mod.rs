@@ -6,6 +6,7 @@ use crate::{
     processes::{ExportSettings, Process, ProcessDefinition},
     utils::{F, GIT_VERSION, GS},
 };
+use bincode_trait_derive::{Decode, Encode};
 use chrono::{Datelike, Local, Timelike};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use clap_repl::{
@@ -384,7 +385,19 @@ pub enum Save {
 
 #[repr(usize)]
 #[derive(
-    Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Hash, ValueEnum, Serialize, Deserialize,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Debug,
+    Hash,
+    ValueEnum,
+    Serialize,
+    Deserialize,
+    Encode,
+    Decode,
 )]
 pub enum LogLevel {
     /// A level lower than all log levels.
@@ -399,6 +412,12 @@ pub enum LogLevel {
     Debug,
     /// Corresponds to the `Trace` log level.
     Trace,
+}
+
+impl Default for LogLevel {
+    fn default() -> Self {
+        LogLevel::Info
+    }
 }
 
 impl From<LogLevel> for LevelFilter {

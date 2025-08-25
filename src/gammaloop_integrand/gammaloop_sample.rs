@@ -496,8 +496,7 @@ pub(crate) fn parameterize<T: FloatLike, I: GammaloopIntegrand>(
                     let sampling_result_result = sampler.generate_sample_from_x_space_point(
                         &xs,
                         edge_data,
-                        &tropical_sampling_settings
-                            .into_tropical_sampling_settings(settings.general.debug),
+                        &tropical_sampling_settings.into_tropical_sampling_settings(),
                         &DEBUG_LOGGER,
                     );
 

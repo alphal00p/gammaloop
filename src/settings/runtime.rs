@@ -56,20 +56,13 @@ impl RuntimeSettings {
 #[trait_decode(trait= GammaLoopContext)]
 pub struct GeneralSettings {
     #[serde(default, skip_serializing_if = "IsDefault::is_default")]
-    pub debug: usize,
-    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub use_ltd: bool,
     #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub orientation_pat: OrientationPattern,
     #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub load_compiled_cff: bool,
     #[serde(default, skip_serializing_if = "IsDefault::is_default")]
-    pub load_compiled_numerator: bool,
-    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
-    pub joint_numerator_eval: bool,
-    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub amplitude_prefactor: Option<Complex<F<f64>>>,
-
     #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub m_uv: F<f64>,
     #[serde(default, skip_serializing_if = "IsDefault::is_default")]
@@ -79,10 +72,7 @@ pub struct GeneralSettings {
 impl Default for GeneralSettings {
     fn default() -> Self {
         Self {
-            debug: 0,
             use_ltd: false,
-            load_compiled_numerator: true,
-            joint_numerator_eval: true,
             load_compiled_cff: false,
             amplitude_prefactor: Some(Complex::new(F(0.0), F(1.0))),
             orientation_pat: OrientationPattern::default(),
@@ -538,17 +528,14 @@ impl Default for GammaloopTropicalSamplingSettings {
 }
 
 impl GammaloopTropicalSamplingSettings {
-    pub(crate) fn into_tropical_sampling_settings(
-        &self,
-        debug: usize,
-    ) -> momtrop::TropicalSamplingSettings {
+    pub(crate) fn into_tropical_sampling_settings(&self) -> momtrop::TropicalSamplingSettings {
         if self.upcast_on_failure {
             unimplemented!("upcast_on_failure removed from momtrop, implement automatic upcast of parameterization in gammaloop and then remove this crash")
         }
 
         momtrop::TropicalSamplingSettings {
             matrix_stability_test: self.matrix_stability_test,
-            print_debug_info: debug > 0,
+            print_debug_info: true,
             return_metadata: false,
         }
     }

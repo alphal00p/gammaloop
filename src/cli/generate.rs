@@ -2,7 +2,7 @@ use std::path::Path;
 
 use clap::Args;
 use color_eyre::Result;
-use log::debug;
+use log::{debug, info};
 use serde::{Deserialize, Serialize};
 
 use crate::settings::{runtime, GlobalSettings, RuntimeSettings};
@@ -22,12 +22,12 @@ impl Generate {
         generation_settings: &GlobalSettings,
         runtime_settings: &RuntimeSettings,
     ) -> Result<()> {
-        debug!("Preprocessing");
+        info!("Preprocessing");
 
         state
             .process_list
             .preprocess(&state.model, generation_settings)?;
-        debug!("Generating integrands");
+        info!("Generating integrands");
         state.process_list.generate_integrands(
             &state.model,
             generation_settings,
@@ -35,6 +35,7 @@ impl Generate {
         )?;
 
         if generation_settings.generation.evaluator_settings.compile {
+            info!("Generating integrands");
             state.process_list.compile(
                 compile_folder,
                 override_existing_compiled,

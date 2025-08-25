@@ -11,6 +11,7 @@ use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Flow, HedgePair};
 use linnet::half_edge::subgraph::{ModifySubgraph, SubGraphOps};
 use linnet::half_edge::HedgeGraph;
+use log::debug;
 use lorentz_vector::LorentzVector;
 use ref_ops::RefNeg;
 use serde::{Deserialize, Serialize};
@@ -413,18 +414,15 @@ pub(crate) fn get_existing_esurfaces<T: FloatLike>(
     esurface_derived_data: &EsurfaceDerivedData,
     externals: &ExternalFourMomenta<F<T>>,
     lmb: &LoopMomentumBasis,
-    debug: usize,
     e_cm: F<f64>,
 ) -> ExistingEsurfaces {
     if lmb.loop_edges.is_empty() {
         return ExistingEsurfaces::new();
     }
-    if debug > 1 {
-        println!(
-            "{}",
-            "Determining all esurfaces which can satisfy the existence condition".green()
-        )
-    }
+    debug!(
+        "{}",
+        "Determining all esurfaces which can satisfy the existence condition".green()
+    );
 
     let mut existing_esurfaces = ExistingEsurfaces::with_capacity(MAX_EXPECTED_CAPACITY);
 
@@ -434,23 +432,23 @@ pub(crate) fn get_existing_esurfaces<T: FloatLike>(
 
             let esurface = &esurfaces[*esurface_id];
 
-            if debug > 1 {
-                DEBUG_LOGGER.write("esurface_pair", &(esurface_id, other_esurface_id));
-            }
+            // if debug > 1 {
+            //     DEBUG_LOGGER.write("esurface_pair", &(esurface_id, other_esurface_id));
+            // }
 
             let shift_part = esurface.compute_shift_part_from_momenta(lmb, externals);
             let shift_zero_sq = &shift_part * &shift_part;
 
             if shift_part < -F::from_ff64(SHIFT_THRESHOLD * e_cm) {
-                if debug > 1 {
-                    DEBUG_LOGGER.write("negative_shift_esurface", &(esurface_id, shift_part));
-                }
+                // if debug > 1 {
+                //     DEBUG_LOGGER.write("negative_shift_esurface", &(esurface_id, shift_part));
+                // }
 
                 Some((*esurface_id, shift_zero_sq))
             } else if shift_part > F::from_ff64(SHIFT_THRESHOLD * e_cm) {
-                if debug > 1 {
-                    DEBUG_LOGGER.write("negative_shift_esurface", &(other_esurface_id, shift_part));
-                }
+                // if debug > 1 {
+                //     DEBUG_LOGGER.write("negative_shift_esurface", &(other_esurface_id, shift_part));
+                // }
 
                 Some((*other_esurface_id, shift_zero_sq))
             } else {
@@ -469,20 +467,20 @@ pub(crate) fn get_existing_esurfaces<T: FloatLike>(
                 let existence_condition =
                     &shift_zero_sq - &shift_spatial_sq - F::from_ff64(mass_sum_squared);
 
-                if debug > 1 {
-                    let helper_struct = ExistenceCheckDebug {
-                        esurface_id: esurface_to_check_id,
-                        shift_zero_sq: shift_zero_sq.into_ff64(),
-                        shift_spatial_sq: shift_spatial_sq.into_ff64(),
-                        mass_sum_sq: mass_sum_squared.into_ff64(),
-                        existence_condition: existence_condition.into_ff64(),
-                        threshold: F::from_ff64(
-                            EXISTENCE_THRESHOLD * EXISTENCE_THRESHOLD * e_cm * e_cm,
-                        ),
-                    };
+                // if debug > 1 {
+                //     let helper_struct = ExistenceCheckDebug {
+                //         esurface_id: esurface_to_check_id,
+                //         shift_zero_sq: shift_zero_sq.into_ff64(),
+                //         shift_spatial_sq: shift_spatial_sq.into_ff64(),
+                //         mass_sum_sq: mass_sum_squared.into_ff64(),
+                //         existence_condition: existence_condition.into_ff64(),
+                //         threshold: F::from_ff64(
+                //             EXISTENCE_THRESHOLD * EXISTENCE_THRESHOLD * e_cm * e_cm,
+                //         ),
+                //     };
 
-                    DEBUG_LOGGER.write("existence_check", &helper_struct);
-                }
+                //     DEBUG_LOGGER.write("existence_check", &helper_struct);
+                // }
 
                 if existence_condition
                     > F::from_ff64(EXISTENCE_THRESHOLD * EXISTENCE_THRESHOLD * e_cm * e_cm)

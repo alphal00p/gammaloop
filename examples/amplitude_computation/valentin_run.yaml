@@ -1,8 +1,5 @@
 default_runtime_settings:
   General:
-    debug: 4
-    load_compiled_numerator: true
-    joint_numerator_eval: true
     amplitude_prefactor:
       re: 0.0
       im: 1.0
@@ -61,10 +58,11 @@ default_runtime_settings:
         required_precision_for_im: 0.00001
         escalate_for_large_weight_threshold: -1.0
   subtraction:
-    disable_threshold_subtraction: false
+    disable_threshold_subtraction: true
 global_settings:
+  debug_level: Debug
   generation:
-    enable_thresholds: true
+    enable_thresholds: false
     evaluator_settings:
       iterative_orientation_optimization: false
       compile: false

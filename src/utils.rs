@@ -4,7 +4,6 @@ use crate::momentum::{FourMomentum, ThreeMomentum};
 use crate::momentum_sample::{ExternalFourMomenta, ExternalIndex, LoopMomenta};
 use crate::numerator::aind::Aind;
 use crate::numerator::ufo::UFO;
-use crate::numerator::NumeratorEvaluateFloat;
 use crate::settings::runtime::ParameterizationSettings;
 use crate::settings::runtime::SamplingSettings;
 use crate::settings::runtime::{ParameterizationMapping, ParameterizationMode};
@@ -31,7 +30,7 @@ use spenso::algebra::upgrading_arithmetic::TrySmallestUpgrade;
 use spenso::network::library::symbolic::{ExplicitKey, TensorLibrary};
 use spenso::network::library::TensorLibraryData;
 use spenso::structure::abstract_index::AIND_SYMBOLS;
-use spenso::structure::concrete_index::{ConcreteIndex, ExpandedIndex};
+use spenso::structure::concrete_index::ExpandedIndex;
 use spenso::structure::representation::{Minkowski, RepName};
 use spenso::tensors::parametric::to_param::ToAtom;
 use spenso::tensors::parametric::MixedTensor;
@@ -802,7 +801,6 @@ pub trait FloatLike:
     + PrecisionUpgradable
     + Serialize
     + Display
-    + NumeratorEvaluateFloat
     + GenericEvaluatorFloat
     + Into<symbolica::domains::float::Float>
 {

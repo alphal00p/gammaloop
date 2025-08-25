@@ -114,14 +114,7 @@ impl RunHistory {
             runhistory.global_settings = global_settings;
         }
 
-        *LOG_LEVEL.lock().unwrap() = match runhistory.default_runtime_settings.general.debug {
-            0 => LevelFilter::Off,
-            1 => LevelFilter::Error,
-            2 => LevelFilter::Warn,
-            3 => LevelFilter::Info,
-            4 => LevelFilter::Debug,
-            _ => LevelFilter::Trace,
-        };
+        *LOG_LEVEL.lock().unwrap() = runhistory.global_settings.debug_level.into();
 
         // println!("LOG_LEVEL: {:?}", LOG_LEVEL.lock().unwrap());
 
@@ -134,7 +127,7 @@ impl RunHistory {
         override_state_file: bool,
         strict: bool,
     ) -> Result<()> {
-        File::create(root_folder.join("run_history.toml"))?
+        File::create(root_folder.join("run.toml"))?
             .write(toml::to_string_pretty(self)?.as_bytes())?;
         Ok(())
     }
@@ -145,7 +138,7 @@ impl RunHistory {
         override_state_file: bool,
         strict: bool,
     ) -> Result<()> {
-        File::create(root_folder.join("run_history.yaml"))?
+        File::create(root_folder.join("run.yaml"))?
             .write(serde_yaml::to_string(self)?.as_bytes())?;
         Ok(())
     }
