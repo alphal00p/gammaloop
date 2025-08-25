@@ -12,7 +12,15 @@ default_runtime_settings:
       re: 0.0
       im: 1.0
     m_uv: 1.0
-    mu_r_sq: 1.0
+    mu_r_sq: 8315.251344
+  subtraction:
+    disable_threshold_subtraction: false
+    # overlap_settings:
+    #   force_global_center:
+    #     - - 0.0
+    #       - 0.0
+    #       - 0.0
+    #   check_global_center: true
   Integrator:
     n_bins: 64
     bin_number_evolution: null
@@ -66,14 +74,6 @@ default_runtime_settings:
         required_precision_for_re: 0.00001
         required_precision_for_im: 0.00001
         escalate_for_large_weight_threshold: -1.0
-  subtraction:
-    disable_threshold_subtraction: false
-    # overlap_settings:
-    #   force_global_center:
-    #     - - 0.0
-    #       - 0.0
-    #       - 0.0
-    #   check_global_center: true
 commands:
   - Import:
       Model:
@@ -83,9 +83,9 @@ commands:
         path: ./qqx_aaa_subtracted.dot
   - Generate: {}
   # Inspect test below with disable_threshold_subtraction: true and enable_thresholds: false, should yield
-  # ( 6.607130838317131e-4, -6.222489033224646e-4 i )
+  # ( 6.923469780323068e-4, -6.181987787694594e-4 i)
   # and with disable_threshold_subtraction: false and enable_thresholds: true, should yield
-  # ( 2.277668274219711e-3, -1.2509976896690079e-3 i)
+  # ( 2.3093021684203047e-3, -1.246947565116003e-3 i)
   - Inspect:
       process_id: 0
       process_name: qqx_aaa_subtracted
