@@ -24,10 +24,7 @@ use typed_index_collections::TiVec;
 
 use crate::{
     cff::{
-        esurface::{
-            get_existing_esurfaces, CrossGraphInquivalentEsurfaces,
-            CrossGraphInquivalentEsurfacesId, EsurfaceCollection,
-        },
+        esurface::{get_existing_esurfaces, EsurfaceCollection},
         expression::{AmplitudeOrientationID, GraphOrientation},
     },
     evaluation_result::EvaluationResult,
@@ -424,14 +421,8 @@ impl AmplitudeIntegrand {
         Ok(AmplitudeIntegrand { settings, data })
     }
 
-    pub(crate) fn get_inequivalent_esurfaces_of_groups(
-        &self,
-    ) -> TiVec<GroupId, CrossGraphInquivalentEsurfaces> {
-        self.data
-            .graph_group_structure
-            .iter()
-            .map(|group| todo!())
-            .collect()
+    pub(crate) fn get_inequivalent_esurfaces_of_groups(&self) {
+        todo!()
     }
 }
 
