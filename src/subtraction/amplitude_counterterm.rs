@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use bincode_trait_derive::{Decode, Encode};
 use bitvec::vec::BitVec;
 use itertools::Itertools;
@@ -27,7 +29,7 @@ use crate::{
         runtime::{
             IntegratedCounterTermRange, IntegratedCounterTermSettings, UVLocalisationSettings,
         },
-        RuntimeSettings,
+        GlobalSettings, RuntimeSettings,
     },
     subtraction::overlap::{OverlapGroup, OverlapStructure},
     utils::{
@@ -92,6 +94,22 @@ impl AmplitudeCountertermData {
         Self {
             overlap: OverlapStructure::new_empty(),
             evaluators: TiVec::new(),
+        }
+    }
+
+    pub fn compile(
+        &mut self,
+        path: impl AsRef<Path>,
+        override_existing: bool,
+        settings: &GlobalSettings,
+    ) {
+        for (i, e) in self.evaluators.iter_mut_enumerated() {
+            e.parametric.compile(
+                &path.as_ref().join(format!("esurface_{}", i.0)),
+                format!("esurface_{}", i.0),
+                format!("esurface_{}", i.0),
+                settings.generation.gammaloop_compile_options.inline_asm(),
+            );
         }
     }
 

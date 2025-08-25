@@ -54,7 +54,7 @@ pub struct AmplitudeGraphTerm {
     pub orientations: TiVec<AmplitudeOrientationID, EdgeVec<Orientation>>,
     pub orientation_filter: BinVec,
     pub esurfaces: EsurfaceCollection,
-    pub threshold_counterterm: Option<AmplitudeCountertermData>,
+    pub threshold_counterterm: AmplitudeCountertermData,
     pub multi_channeling_setup: LmbMultiChannelingSetup,
     pub lmbs: TiVec<LmbIndex, LoopMomentumBasis>,
     pub tropical_sampler: Option<SampleGenerator<3>>,
@@ -106,6 +106,15 @@ impl AmplitudeGraphTerm {
             None
         };
 
+        let mut threshold_counterterm = AmplitudeCountertermData::new_empty();
+
+        threshold_counterterm.evaluators = graph
+            .derived_data
+            .threshold_counterterms
+            .iter()
+            .map(|ct| ct.to_evaluator(&param_builder, OptimizationSettings::default()))
+            .collect();
+
         Ok(AmplitudeGraphTerm {
             orientation_filter: BinVec(BitVec::repeat(true, orientations.len())),
             orientations,
@@ -123,7 +132,7 @@ impl AmplitudeGraphTerm {
                 .lmbs
                 .clone()
                 .expect("lmbs should have been created"),
-            threshold_counterterm: None,
+            threshold_counterterm,
             estimated_scale: None,
             esurfaces: graph
                 .derived_data
@@ -150,6 +159,21 @@ impl AmplitudeGraphTerm {
             &self.graph.name,
             settings.generation.gammaloop_compile_options.inline_asm(),
         );
+
+        self.threshold_counterterm.compile(
+            path.as_ref().join(&self.graph.name),
+            override_existing,
+            settings,
+        );
+
+        self.iterative_integrand_evaluator.as_mut().map(|e| {
+            e.compile(
+                &path.as_ref().join(&self.graph.name),
+                format!("{}_iterative", &self.graph.name,),
+                format!("{}_iterative", &self.graph.name,),
+                settings.generation.gammaloop_compile_options.inline_asm(),
+            )
+        });
     }
 
     fn evaluate_impl<T: FloatLike>(
@@ -197,19 +221,15 @@ impl AmplitudeGraphTerm {
 
         debug!("evaluated integrand: {:16e}", result);
 
-        let sum_of_cts = self
-            .threshold_counterterm
-            .as_mut()
-            .expect("forgot to do warmup?")
-            .evaluate(
-                momentum_sample,
-                &self.graph,
-                &self.esurfaces,
-                rotation,
-                settings,
-                &mut self.param_builder,
-                orientations,
-            );
+        let sum_of_cts = self.threshold_counterterm.evaluate(
+            momentum_sample,
+            &self.graph,
+            &self.esurfaces,
+            rotation,
+            settings,
+            &mut self.param_builder,
+            orientations,
+        );
 
         debug!("evaluated threshold counterterm: {:16e}", sum_of_cts);
         result - sum_of_cts
@@ -282,11 +302,8 @@ impl GraphTerm for AmplitudeGraphTerm {
             &externals,
             &settings,
         );
-        debug!("found maximal overlap: {}", overlap);
 
-        let mut threshold_counterterm = AmplitudeCountertermData::new_empty();
-
-        let thresholds_where_not_generated = derived_data.threshold_counterterms.is_empty();
+        let thresholds_where_not_generated = false;
 
         if thresholds_where_not_generated
             && !overlap.existing_esurfaces.is_empty()
@@ -298,15 +315,8 @@ impl GraphTerm for AmplitudeGraphTerm {
         {
             debug!("Subtraction disabled in physical region")
         } else {
-            threshold_counterterm.overlap = overlap;
-            threshold_counterterm.evaluators = derived_data
-                .threshold_counterterms
-                .iter()
-                .map(|ct| ct.to_evaluator(&mut self.param_builder, OptimizationSettings::default()))
-                .collect();
+            self.threshold_counterterm.overlap = overlap;
         }
-
-        self.threshold_counterterm = Some(threshold_counterterm);
 
         Ok(())
     }
