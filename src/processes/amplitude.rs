@@ -156,14 +156,6 @@ impl Amplitude {
             .map(|graph| graph.generate_term_for_graph(model, global_settings))
             .collect();
 
-        // let orig_polarizations = self.polarizations(&settings.kinematics.externals);
-
-        // let polarizations = rotations
-        //     .iter()
-        //     .map(|r| orig_polarizations.rotate(r))
-        //     .collect();
-        //
-
         let amplitude_integrand = AmplitudeIntegrand {
             settings: runtime_default.into(),
             data: AmplitudeIntegrandData {
@@ -172,6 +164,7 @@ impl Amplitude {
                 // polarizations,
                 graph_terms: terms?,
                 external_signature: self.external_signature.clone(),
+                graph_group_structure: self.graph_group_structure.clone(),
                 // param_builder: self.
             },
         };

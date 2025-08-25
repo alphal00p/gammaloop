@@ -28,7 +28,7 @@ use crate::{
     },
     evaluation_result::EvaluationResult,
     gammaloop_integrand::ParamBuilder,
-    graph::{FeynmanGraph, Graph, LmbIndex, LoopMomentumBasis},
+    graph::{FeynmanGraph, Graph, GraphGroup, GroupId, LmbIndex, LoopMomentumBasis},
     integrands::HasIntegrand,
     model::Model,
     momentum::{Rotation, RotationMethod},
@@ -376,8 +376,7 @@ pub struct AmplitudeIntegrandData {
 
     pub graph_terms: Vec<AmplitudeGraphTerm>,
     pub external_signature: SignatureLike<ExternalIndex>,
-    // pub builder_cache: ParamBuilder<f64>,
-    // pub model_parameter_cache: Vec<Complex<F<f64>>>,
+    pub graph_group_structure: TiVec<GroupId, GraphGroup>,
 }
 
 impl AmplitudeIntegrand {
