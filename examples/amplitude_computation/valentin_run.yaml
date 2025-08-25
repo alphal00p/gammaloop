@@ -8,6 +8,20 @@ default_runtime_settings:
       im: 1.0
     m_uv: 1.0
     mu_r_sq: 1.0
+  Integrator:
+    n_bins: 64
+    bin_number_evolution: null
+    min_samples_for_update: 1000
+    n_start: 100000
+    n_increase: 0
+    n_max: 20000000
+    integrated_phase: real
+    discrete_dim_learning_rate: 1.5
+    continuous_dim_learning_rate: 1.5
+    train_on_avg: false
+    show_max_wgt_info: true
+    max_prob_ratio: 0.01
+    seed: 69
   Kinematics:
     e_cm: 64.0
     externals:
@@ -47,8 +61,12 @@ default_runtime_settings:
         required_precision_for_im: 0.00001
         escalate_for_large_weight_threshold: -1.0
   subtraction:
-    disable_threshold_subtraction: true
-global_settings: {}
+    disable_threshold_subtraction: false
+global_settings:
+  generation:
+    evaluator_settings:
+      iterative_orientation_optimization: false
+      compile: false
 commands:
   - Import:
       Model:
@@ -57,6 +75,8 @@ commands:
       Amplitude:
         path: ./qqx_aaa_subtracted.dot
   - Generate: {}
+  # Inspect test below with disable_threshold_subtraction: true should yield
+  # ( 1.5179731488996302e-2, -1.4296025768067377e-2 i)
   - Inspect:
       process_id: 0
       process_name: qqx_aaa_subtracted
@@ -67,3 +87,12 @@ commands:
       use_f128: false
       force_radius: false
       momentum_space: true
+      discrete_dim:
+        - 0
+  # - Integrate:
+  #     process_id: 0
+  #     process_name: qqx_aaa_subtracted
+  #     result_path: ./integration_workspace/integration_results.txt
+  #     n_cores: 1
+  #     workspace_path: ./integration_workspace
+  #     target: null
