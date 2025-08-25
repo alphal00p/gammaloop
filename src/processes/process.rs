@@ -11,6 +11,7 @@ use log::debug;
 
 use crate::{
     gammaloop_integrand::NewIntegrand,
+    graph::parse::complete_group_parsing,
     model::ArcParticle,
     settings::{runtime::LockedRuntimeSettings, GlobalSettings},
     GammaLoopContext, GammaLoopContextContainer,
@@ -255,7 +256,7 @@ impl Process {
 
     pub fn from_graph_list(
         name: String,
-        graphs: Vec<Graph>,
+        mut graphs: Vec<Graph>,
         generation_type: GenerationType,
         definition: ProcessDefinition,
         sub_classes: Option<Vec<Vec<String>>>,
@@ -268,6 +269,7 @@ impl Process {
                     todo!("implement seperation of processes into user defined sub classes");
                 } else {
                     let mut amplitude: Amplitude = Amplitude::new(name);
+                    amplitude.graph_group_structure = complete_group_parsing(&mut graphs)?;
 
                     for amplitude_graph in graphs {
                         amplitude.add_graph(amplitude_graph)?;

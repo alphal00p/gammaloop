@@ -26,7 +26,7 @@ use crate::{
         amplitude_integrand::{AmplitudeGraphTerm, AmplitudeIntegrand, AmplitudeIntegrandData},
         DerivedDataContainer, GenericEvaluator, LmbMultiChannelingSetup, ParamBuilder,
     },
-    graph::{LMBext, LmbIndex, LoopMomentumBasis},
+    graph::{GraphGroup, GroupId, LMBext, LmbIndex, LoopMomentumBasis},
     model::ArcParticle,
     momentum_sample::ExternalIndex,
     numerator::symbolica_ext::AtomCoreExt,
@@ -71,6 +71,7 @@ pub struct Amplitude {
     pub name: String,
     pub integrand: Option<NewIntegrand>,
     pub graphs: Vec<AmplitudeGraph>,
+    pub graph_group_structure: TiVec<GroupId, GraphGroup>,
     pub external_particles: Vec<ArcParticle>,
     pub external_signature: SignatureLike<ExternalIndex>,
 }
@@ -839,6 +840,7 @@ impl Amplitude {
             integrand: None,
             name: name.to_string(),
             graphs: vec![],
+            graph_group_structure: TiVec::new(),
             external_particles: vec![],
             external_signature: SignatureLike::from_iter(iter::empty::<i8>()),
         }
