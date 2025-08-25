@@ -31,6 +31,10 @@ pub struct Inspect {
     /// Interpret point as momentum‑space coordinates
     #[arg(short = 'm', long)]
     momentum_space: bool,
+
+    /// The discrete dimensions of the sample
+    #[arg(short = 'd', long = "discrete-dim", value_name = "DIMS")]
+    discrete_dim: Vec<usize>,
 }
 
 impl Inspect {
@@ -49,7 +53,7 @@ impl Inspect {
             &settings,
             integrand,
             pt,
-            &[],
+            &self.discrete_dim,
             self.force_radius,
             self.momentum_space,
             self.use_f128,
