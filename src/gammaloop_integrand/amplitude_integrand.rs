@@ -11,6 +11,7 @@ use color_eyre::Result;
 
 use eyre::{eyre, Context};
 use itertools::Itertools;
+use libc::group;
 use linnet::half_edge::involution::{EdgeVec, Orientation};
 use log::{debug, warn};
 use momtrop::SampleGenerator;
@@ -23,7 +24,10 @@ use typed_index_collections::TiVec;
 
 use crate::{
     cff::{
-        esurface::{get_existing_esurfaces, EsurfaceCollection},
+        esurface::{
+            get_existing_esurfaces, CrossGraphInquivalentEsurfaces,
+            CrossGraphInquivalentEsurfacesId, EsurfaceCollection,
+        },
         expression::{AmplitudeOrientationID, GraphOrientation},
     },
     evaluation_result::EvaluationResult,
@@ -309,7 +313,7 @@ impl GraphTerm for AmplitudeGraphTerm {
             &settings,
         );
 
-        let thresholds_where_not_generated = false;
+        let thresholds_where_not_generated = self.threshold_counterterm.evaluators.is_empty();
 
         if thresholds_where_not_generated
             && !overlap.existing_esurfaces.is_empty()
@@ -418,6 +422,16 @@ impl AmplitudeIntegrand {
         let settings = serde_yaml::from_reader(File::open(path.as_ref().join("settings.yaml"))?)?;
 
         Ok(AmplitudeIntegrand { settings, data })
+    }
+
+    pub(crate) fn get_inequivalent_esurfaces_of_groups(
+        &self,
+    ) -> TiVec<GroupId, CrossGraphInquivalentEsurfaces> {
+        self.data
+            .graph_group_structure
+            .iter()
+            .map(|group| todo!())
+            .collect()
     }
 }
 
