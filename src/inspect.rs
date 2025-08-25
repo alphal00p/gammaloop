@@ -18,7 +18,7 @@ pub(crate) fn inspect<I: HasIntegrand>(
     settings: &RuntimeSettings,
     integrand: &mut I,
     mut pt: Vec<F<f64>>,
-    _term: &[usize],
+    discrete_dimensions: &[usize],
     mut force_radius: bool,
     is_momentum_space: bool,
     use_f128: bool,
@@ -53,21 +53,12 @@ pub(crate) fn inspect<I: HasIntegrand>(
     let xs_f64 = xs_f128.iter().map(|x| F(x.into_f64())).collect::<Vec<_>>();
 
     let sample = {
-        let cont_sample = Sample::Continuous(
-            F(1.),
-            if force_radius {
-                xs_f64.clone()[1..].to_vec()
-            } else {
-                xs_f64.clone()
-            },
-        );
-        match &settings.sampling {
-            SamplingSettings::DiscreteGraphs(_) => {
-                let graph_id = _term[0];
-                Sample::Discrete(F(1.), graph_id, Some(Box::new(cont_sample)))
-            }
-            _ => cont_sample,
-        }
+        let cont_sample = if force_radius {
+            xs_f64.clone()[1..].to_vec()
+        } else {
+            xs_f64.clone()
+        };
+        havana_sample(cont_sample, discrete_dimensions)
     };
 
     let eval_result = integrand.evaluate_sample(&sample, F(0.), 1, use_f128, Complex::new_zero());
@@ -89,4 +80,14 @@ pub(crate) fn inspect<I: HasIntegrand>(
     );
 
     eval
+}
+
+fn havana_sample(cont: Vec<F<f64>>, discrete_dimensions: &[usize]) -> Sample<F<f64>> {
+    let mut sample = Sample::Continuous(F(1.), cont);
+
+    for &d in discrete_dimensions.iter().rev() {
+        sample = Sample::Discrete(F(1.), d, Some(Box::new(sample)));
+    }
+
+    sample
 }
