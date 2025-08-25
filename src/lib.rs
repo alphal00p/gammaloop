@@ -138,6 +138,9 @@ const fn _default_true() -> bool {
 const fn _default_false() -> bool {
     false
 }
+const fn _default_one() -> f64 {
+    1.0
+}
 const fn _default_usize_null() -> Option<usize> {
     None
 }
@@ -146,6 +149,7 @@ const fn _default_usize_null() -> Option<usize> {
 // #[trait_decode(trait= GammaLoopContext)]
 pub struct HFunctionSettings {
     pub function: HFunction,
+    #[serde(default = "_default_one")]
     pub sigma: f64,
     #[serde(default = "_default_true")]
     pub enabled_dampening: bool,
