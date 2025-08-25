@@ -40,11 +40,7 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph {
 
     ///Get the numerator of the graph.
     /// If multiply_prefactor is true, the numerator is multiplied by the global  prefactor. (just num not projector)
-    fn numerator<S: SubGraph>(
-        &self,
-        subgraph: &S,
-        multiply_prefactor: bool,
-    ) -> Numerator<AppliedFeynmanRule>;
+    fn numerator<S: SubGraph>(&self, subgraph: &S) -> Numerator<AppliedFeynmanRule>;
     fn denominator<S: SubGraph>(&self, subgraph: &S) -> Atom;
     fn all_cycle_unions<E, V, H, S: SubGraph<Base = BitVec>>(
         &self,
@@ -272,14 +268,10 @@ impl UltravioletGraph for Graph {
 
         den.into()
     }
-    fn numerator<S: SubGraph>(
-        &self,
-        subgraph: &S,
-        multiply_prefactor: bool,
-    ) -> Numerator<AppliedFeynmanRule> {
+    fn numerator<S: SubGraph>(&self, subgraph: &S) -> Numerator<AppliedFeynmanRule> {
         let num = Numerator::default();
 
-        num.from_new_graph(self, subgraph, multiply_prefactor)
+        num.from_new_graph(self, subgraph)
     }
 
     fn dod<S: SubGraph>(&self, subgraph: &S) -> i32 {

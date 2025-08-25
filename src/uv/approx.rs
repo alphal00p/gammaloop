@@ -311,7 +311,7 @@ impl Approximation {
             return ApproxOp::NotComputed;
         };
         let t_arg = uv_graph
-            .numerator(&reduced, false)
+            .numerator(&reduced)
             .to_d_dim(GS.dim)
             .color_simplify()
             .gamma_simplify()
@@ -743,11 +743,7 @@ impl Approximation {
             }
         }
 
-        let mut atomarg = cff
-            * uv_graph
-                .numerator(&reduced, false)
-                .get_single_atom()
-                .unwrap();
+        let mut atomarg = cff * uv_graph.numerator(&reduced).get_single_atom().unwrap();
 
         // println!(
         //     "Expand-prerep {} with dod={} in {:?}",
@@ -966,7 +962,7 @@ impl Approximation {
 
         cff = cff.replace(function!(GS.ose, W_.a__, W_.e_)).with(W_.e_);
 
-        let mut resnum = graph.numerator(&reduced, false).get_single_atom().unwrap();
+        let mut resnum = graph.numerator(&reduced).get_single_atom().unwrap();
 
         let mut reps = Vec::new();
         for (p, eid, _) in graph.as_ref().iter_edges_of(&reduced) {

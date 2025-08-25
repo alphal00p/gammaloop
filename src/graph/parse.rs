@@ -990,8 +990,7 @@ pub mod test {
 
         println!("{}", g.dot_serialize());
         // return;
-        let num =
-            Numerator::<UnInit>::default().from_new_graph(&g, &g.underlying.full_filter(), true);
+        let num = Numerator::<UnInit>::default().from_new_graph(&g, &g.underlying.full_filter());
 
         let expr = num.state.expr.as_view();
 
@@ -1083,8 +1082,7 @@ pub mod test {
                 .dot_lmb(&g.underlying.full(), &g.loop_momentum_basis)
         );
 
-        let num =
-            Numerator::<UnInit>::default().from_new_graph(&g, &g.underlying.full_filter(), true);
+        let num = Numerator::<UnInit>::default().from_new_graph(&g, &g.underlying.full_filter());
 
         let expr = num.state.expr.as_view();
 
@@ -1172,8 +1170,7 @@ pub mod test {
                 .dot_lmb(&g.underlying.full(), &g.loop_momentum_basis)
         );
 
-        let num =
-            Numerator::<UnInit>::default().from_new_graph(&g, &g.underlying.full_filter(), true);
+        let num = Numerator::<UnInit>::default().from_new_graph(&g, &g.underlying.full_filter());
 
         let expr = num.state.expr.as_view();
 

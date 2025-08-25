@@ -583,8 +583,10 @@ mod test {
         for g in &mut graphs {
             let mut out = String::new();
 
-            let new_a = (g.numerator(&g.full_filter(), true).state.expr
-                * &g.global_prefactor.projector)
+            let new_a = (g.numerator(&g.full_filter()).state.expr
+                * &g.global_prefactor.projector
+                * &g.global_prefactor.num
+                * &g.overall_factor)
                 .simplify_color();
             println!("New:{new_a}");
             if let Some(a) = &a {

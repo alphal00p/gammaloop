@@ -17,16 +17,11 @@ impl Numerator<UnInit> {
         self,
         graph: &Graph,
         subgraph: &S,
-        multiply_prefactor: bool,
     ) -> Numerator<AppliedFeynmanRule> {
         debug!("Generating numerator for graph: {}", graph.name);
 
         debug!("Graph: {}", graph.dot(subgraph));
-        let mut num = if multiply_prefactor {
-            &graph.global_prefactor.num * &graph.overall_factor
-        } else {
-            Atom::one()
-        };
+        let mut num = Atom::one();
 
         let mut seen: BitVec = BitVec::empty(graph.n_nodes());
 
