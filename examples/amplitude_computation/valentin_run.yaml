@@ -23,7 +23,7 @@ default_runtime_settings:
     max_prob_ratio: 0.01
     seed: 69
   Kinematics:
-    e_cm: 64.0
+    e_cm: 2.0
     externals:
       type: constant
       data:
@@ -64,6 +64,7 @@ default_runtime_settings:
     disable_threshold_subtraction: false
 global_settings:
   generation:
+    enable_thresholds: true
     evaluator_settings:
       iterative_orientation_optimization: false
       compile: false
@@ -75,8 +76,10 @@ commands:
       Amplitude:
         path: ./qqx_aaa_subtracted.dot
   - Generate: {}
-  # Inspect test below with disable_threshold_subtraction: true should yield
+  # Inspect test below with disable_threshold_subtraction: true and enable_thresholds: false, should yield
   # ( 1.5179731488996302e-2, -1.4296025768067377e-2 i)
+  # and with disable_threshold_subtraction: false and enable_thresholds: true, should yield
+  # ( ??, ??)
   - Inspect:
       process_id: 0
       process_name: qqx_aaa_subtracted
