@@ -161,11 +161,9 @@ impl Amplitude {
             data: AmplitudeIntegrandData {
                 name: self.name.clone(),
                 rotations: None,
-                // polarizations,
                 graph_terms: terms?,
                 external_signature: self.external_signature.clone(),
                 graph_group_structure: self.graph_group_structure.clone(),
-                // param_builder: self.
             },
         };
         self.integrand = Some(NewIntegrand::Amplitude(amplitude_integrand));

@@ -3,6 +3,7 @@ use itertools::Itertools;
 use momtrop::vector::Vector;
 
 use crate::debug_info::DEBUG_LOGGER;
+use crate::graph::GroupId;
 use crate::momentum::{Rotation, ThreeMomentum};
 use crate::momentum_sample::{ExternalFourMomenta, MomentumSample};
 use crate::utils::{self, global_parameterize, FloatLike, F};
@@ -50,7 +51,7 @@ pub enum GammaLoopSample<T: FloatLike> {
         sample: MomentumSample<T>,
     },
     DiscreteGraph {
-        graph_id: usize,
+        group_id: GroupId,
         sample: DiscreteGraphSample<T>,
     },
 }
@@ -79,8 +80,8 @@ impl GammaLoopSample<f64> {
                     sample: sample.get_rotated_sample_cached(rotation, rotated_externals),
                 }
             }
-            GammaLoopSample::DiscreteGraph { graph_id, sample } => GammaLoopSample::DiscreteGraph {
-                graph_id: *graph_id,
+            GammaLoopSample::DiscreteGraph { group_id, sample } => GammaLoopSample::DiscreteGraph {
+                group_id: *group_id,
                 sample: sample.get_rotated_sample_cached(rotation, rotated_externals),
             },
         }
@@ -103,8 +104,8 @@ impl<T: FloatLike> GammaLoopSample<T> {
                     sample: sample.get_rotated_sample(rotation),
                 }
             }
-            GammaLoopSample::DiscreteGraph { graph_id, sample } => GammaLoopSample::DiscreteGraph {
-                graph_id: *graph_id,
+            GammaLoopSample::DiscreteGraph { group_id, sample } => GammaLoopSample::DiscreteGraph {
+                group_id: *group_id,
                 sample: sample.get_rotated_sample(rotation),
             },
         }
@@ -142,8 +143,8 @@ impl<T: FloatLike> GammaLoopSample<T> {
                     sample: sample.cast_sample(),
                 }
             }
-            GammaLoopSample::DiscreteGraph { graph_id, sample } => GammaLoopSample::DiscreteGraph {
-                graph_id: *graph_id,
+            GammaLoopSample::DiscreteGraph { group_id, sample } => GammaLoopSample::DiscreteGraph {
+                group_id: *group_id,
                 sample: sample.cast_sample(),
             },
         }
@@ -162,8 +163,8 @@ impl<T: FloatLike> GammaLoopSample<T> {
                     sample: sample.higher_precision(),
                 }
             }
-            GammaLoopSample::DiscreteGraph { graph_id, sample } => GammaLoopSample::DiscreteGraph {
-                graph_id: *graph_id,
+            GammaLoopSample::DiscreteGraph { group_id, sample } => GammaLoopSample::DiscreteGraph {
+                group_id: *group_id,
                 sample: sample.higher_precision(),
             },
         }
@@ -182,8 +183,8 @@ impl<T: FloatLike> GammaLoopSample<T> {
                     sample: sample.lower_precision(),
                 }
             }
-            GammaLoopSample::DiscreteGraph { graph_id, sample } => GammaLoopSample::DiscreteGraph {
-                graph_id: *graph_id,
+            GammaLoopSample::DiscreteGraph { group_id, sample } => GammaLoopSample::DiscreteGraph {
+                group_id: *group_id,
                 sample: sample.lower_precision(),
             },
         }
@@ -428,7 +429,7 @@ pub(crate) fn parameterize<T: FloatLike, I: GammaloopIntegrand>(
             })
         }
         SamplingSettings::DiscreteGraphs(discrete_graph_settings) => {
-            let graph_id = discrete_indices[0];
+            let group_id = GroupId(discrete_indices[0]);
             let orientation_id = if discrete_graph_settings.sample_orientations {
                 Some(discrete_indices[1])
             } else {
@@ -438,7 +439,7 @@ pub(crate) fn parameterize<T: FloatLike, I: GammaloopIntegrand>(
             match &discrete_graph_settings.sampling_type {
                 DiscreteGraphSamplingType::Default(parameterization_settings) => {
                     Ok(GammaLoopSample::DiscreteGraph {
-                        graph_id,
+                        group_id,
                         sample: DiscreteGraphSample::Default(default_parametrize(
                             &xs,
                             dependent_momenta_constructor,
@@ -450,7 +451,7 @@ pub(crate) fn parameterize<T: FloatLike, I: GammaloopIntegrand>(
                 }
                 DiscreteGraphSamplingType::MultiChanneling(multichanneling_settings) => {
                     Ok(GammaLoopSample::DiscreteGraph {
-                        graph_id,
+                        group_id,
                         sample: DiscreteGraphSample::MultiChanneling {
                             alpha: F::from_f64(multichanneling_settings.alpha),
                             sample: default_parametrize(
@@ -464,7 +465,7 @@ pub(crate) fn parameterize<T: FloatLike, I: GammaloopIntegrand>(
                     })
                 }
                 DiscreteGraphSamplingType::TropicalSampling(tropical_sampling_settings) => {
-                    let graph = integrand.get_graph(graph_id);
+                    let graph = integrand.get_master_graph(group_id);
                     let externals = &settings
                         .kinematics
                         .externals
@@ -522,7 +523,7 @@ pub(crate) fn parameterize<T: FloatLike, I: GammaloopIntegrand>(
                         orientation_id,
                     )?;
                     Ok(GammaLoopSample::DiscreteGraph {
-                        graph_id,
+                        group_id,
                         sample: DiscreteGraphSample::Tropical(default_sample),
                     })
                 }
@@ -530,7 +531,7 @@ pub(crate) fn parameterize<T: FloatLike, I: GammaloopIntegrand>(
                     let channel_id = *discrete_indices.last().expect("invalid_sample_structure");
 
                     Ok(GammaLoopSample::DiscreteGraph {
-                        graph_id,
+                        group_id,
                         sample: DiscreteGraphSample::DiscreteMultiChanneling {
                             alpha: F::from_f64(multichanneling_settings.alpha),
                             channel_id: channel_id.into(),

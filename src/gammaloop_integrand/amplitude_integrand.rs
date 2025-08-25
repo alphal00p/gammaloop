@@ -449,12 +449,16 @@ impl GammaloopIntegrand for AmplitudeIntegrand {
         self.data.graph_terms.iter_mut()
     }
 
-    fn get_graph(&self, graph_id: usize) -> &Self::G {
-        &self.data.graph_terms[graph_id]
+    fn get_master_graph(&self, group_id: GroupId) -> &Self::G {
+        let group_master = self.data.graph_group_structure[group_id].master();
+        &self.data.graph_terms[group_master]
     }
 
-    fn get_terms(&self) -> impl Iterator<Item = &Self::G> {
-        self.data.graph_terms.iter()
+    fn get_group_masters(&self) -> impl Iterator<Item = &Self::G> {
+        self.data
+            .graph_group_structure
+            .iter()
+            .map(|group| &self.data.graph_terms[group.master()])
     }
 
     fn get_settings(&self) -> &RuntimeSettings {
@@ -463,6 +467,10 @@ impl GammaloopIntegrand for AmplitudeIntegrand {
 
     fn get_graph_mut(&mut self, graph_id: usize) -> &mut Self::G {
         &mut self.data.graph_terms[graph_id]
+    }
+
+    fn get_group(&self, group_id: GroupId) -> &GraphGroup {
+        &self.data.graph_group_structure[group_id]
     }
 
     fn get_dependent_momenta_constructor(&self) -> DependentMomentaConstructor {

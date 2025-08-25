@@ -19,7 +19,7 @@ use crate::{
     },
     evaluation_result::EvaluationResult,
     gammaloop_integrand::ParamBuilder,
-    graph::{ExternalConnection, FeynmanGraph, Graph, LmbIndex, LoopMomentumBasis},
+    graph::{ExternalConnection, FeynmanGraph, Graph, GroupId, LmbIndex, LoopMomentumBasis},
     integrands::HasIntegrand,
     momentum::{Rotation, RotationMethod, ThreeMomentum},
     momentum_sample::{LoopMomenta, MomentumSample},
@@ -107,8 +107,9 @@ impl GammaloopIntegrand for CrossSectionIntegrand {
         self.data.graph_terms.iter_mut()
     }
 
-    fn get_terms(&self) -> impl Iterator<Item = &Self::G> {
-        self.data.graph_terms.iter()
+    fn get_group_masters(&self) -> impl Iterator<Item = &Self::G> {
+        todo!();
+        std::iter::empty()
     }
 
     fn get_settings(&self) -> &RuntimeSettings {
@@ -119,8 +120,12 @@ impl GammaloopIntegrand for CrossSectionIntegrand {
         &mut self.data.graph_terms[graph_id]
     }
 
-    fn get_graph(&self, graph_id: usize) -> &Self::G {
-        &self.data.graph_terms[graph_id]
+    fn get_master_graph(&self, group_id: GroupId) -> &Self::G {
+        todo!()
+    }
+
+    fn get_group(&self, group_id: GroupId) -> &crate::graph::GraphGroup {
+        todo!()
     }
 
     fn get_dependent_momenta_constructor(&self) -> DependentMomentaConstructor {

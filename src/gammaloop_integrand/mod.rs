@@ -2,7 +2,7 @@ use std::fs;
 use std::path::Path;
 
 use crate::evaluation_result::{EvaluationMetaData, EvaluationResult};
-use crate::graph::{FeynmanGraph, Graph, LmbIndex, LoopMomentumBasis};
+use crate::graph::{FeynmanGraph, Graph, GraphGroup, GroupId, LmbIndex, LoopMomentumBasis};
 use crate::integrands::{HasIntegrand, Integrand};
 use crate::integrate::UserData;
 use crate::momentum::Rotation;
@@ -436,12 +436,13 @@ pub trait GammaloopIntegrand {
     ) -> Result<()>;
     fn get_rotations(&self) -> impl Iterator<Item = &Rotation>;
 
-    fn get_terms(&self) -> impl Iterator<Item = &Self::G>;
+    fn get_group_masters(&self) -> impl Iterator<Item = &Self::G>;
 
     fn get_terms_mut(&mut self) -> impl Iterator<Item = &mut Self::G>;
     fn get_settings(&self) -> &RuntimeSettings;
-    fn get_graph(&self, graph_id: usize) -> &Self::G;
+    fn get_master_graph(&self, group_id: GroupId) -> &Self::G;
     fn get_graph_mut(&mut self, graph_id: usize) -> &mut Self::G;
+    fn get_group(&self, group_id: GroupId) -> &GraphGroup;
     fn get_dependent_momenta_constructor(&self) -> DependentMomentaConstructor;
 
     // fn get_builder_cache(&self) -> &ParamBuilder<f64>;
@@ -458,7 +459,7 @@ fn get_global_dimension_if_exists<I: GammaloopIntegrand>(integrand: &I) -> Optio
     } else {
         Some(
             integrand
-                .get_graph(0)
+                .get_master_graph(GroupId(0))
                 .get_graph()
                 .underlying
                 .get_loop_number()
@@ -561,72 +562,86 @@ fn evaluate_single_rotation<T: FloatLike, I: GammaloopIntegrand>(
                 Complex::new_re(gammaloop_sample.get_default_sample().zero()),
                 |sum, term| sum + term,
             ),
-        GammaLoopSample::DiscreteGraph { graph_id, sample } => {
-            let graph_term = integrand.get_graph_mut(*graph_id);
-            match sample {
-                DiscreteGraphSample::Default(sample) => {
-                    graph_term.evaluate(sample, &settings, rotation)
-                }
-                DiscreteGraphSample::DiscreteMultiChanneling {
-                    alpha,
-                    channel_id,
-                    sample,
-                } => {
-                    let (reparameterized_sample, prefactor) = graph_term
-                        .get_multi_channeling_setup()
-                        .reinterpret_loop_momenta_and_compute_prefactor(
-                            *channel_id,
-                            sample,
-                            graph_term.get_graph(),
-                            graph_term.get_lmbs(),
-                            alpha,
+        GammaLoopSample::DiscreteGraph { group_id, sample } => {
+            let group = integrand.get_group(*group_id).into_iter().collect_vec(); // collect to avoid borrowing issues
+            let mut res = Complex::new_re(gammaloop_sample.get_default_sample().zero());
+
+            for graph_id in group.into_iter() {
+                let graph_term = integrand.get_graph_mut(graph_id);
+                let graph_term_res = match sample {
+                    DiscreteGraphSample::Default(sample) => {
+                        graph_term.evaluate(sample, &settings, rotation)
+                    }
+                    DiscreteGraphSample::DiscreteMultiChanneling {
+                        alpha,
+                        channel_id,
+                        sample,
+                    } => {
+                        let (reparameterized_sample, prefactor) = graph_term
+                            .get_multi_channeling_setup()
+                            .reinterpret_loop_momenta_and_compute_prefactor(
+                                *channel_id,
+                                sample,
+                                graph_term.get_graph(),
+                                graph_term.get_lmbs(),
+                                alpha,
+                            );
+
+                        Complex::new_re(prefactor)
+                            * graph_term.evaluate(&reparameterized_sample, &settings, rotation)
+                    }
+                    DiscreteGraphSample::MultiChanneling { alpha, sample } => {
+                        let channel_samples = graph_term
+                            .get_multi_channeling_setup()
+                            .reinterpret_loop_momenta_and_compute_prefactor_all_channels(
+                                sample,
+                                graph_term.get_graph(),
+                                graph_term.get_lmbs(),
+                                alpha,
+                            );
+
+                        channel_samples
+                            .into_iter()
+                            .map(|(reparameterized_sample, prefactor)| {
+                                Complex::new_re(prefactor)
+                                    * graph_term.evaluate(
+                                        &reparameterized_sample,
+                                        &settings,
+                                        rotation,
+                                    )
+                            })
+                            .fold(
+                                Complex::new_re(gammaloop_sample.get_default_sample().zero()),
+                                |sum, term| sum + term,
+                            )
+                    }
+                    DiscreteGraphSample::Tropical(sample) => {
+                        let energy_cache = graph_term.get_graph().underlying.get_energy_cache(
+                            &sample.loop_moms(),
+                            &sample.external_moms(),
+                            &graph_term.get_graph().loop_momentum_basis,
                         );
 
-                    Complex::new_re(prefactor)
-                        * graph_term.evaluate(&reparameterized_sample, &settings, rotation)
-                }
-                DiscreteGraphSample::MultiChanneling { alpha, sample } => {
-                    let channel_samples = graph_term
-                        .get_multi_channeling_setup()
-                        .reinterpret_loop_momenta_and_compute_prefactor_all_channels(
-                            sample,
-                            graph_term.get_graph(),
-                            graph_term.get_lmbs(),
-                            alpha,
-                        );
+                        let prefactor = graph_term
+                            .get_graph()
+                            .iter_loop_edges()
+                            .map(|(_, edge_index, _)| edge_index)
+                            .zip(graph_term.get_tropical_sampler().iter_edge_weights())
+                            .fold(sample.one(), |product, (edge_id, weight)| {
+                                let energy = &energy_cache[edge_id];
+                                let edge_weight = weight;
+                                product * energy.powf(&F::from_f64(2. * edge_weight))
+                            });
 
-                    channel_samples
-                        .into_iter()
-                        .map(|(reparameterized_sample, prefactor)| {
-                            Complex::new_re(prefactor)
-                                * graph_term.evaluate(&reparameterized_sample, &settings, rotation)
-                        })
-                        .fold(
-                            Complex::new_re(gammaloop_sample.get_default_sample().zero()),
-                            |sum, term| sum + term,
-                        )
-                }
-                DiscreteGraphSample::Tropical(sample) => {
-                    let energy_cache = graph_term.get_graph().underlying.get_energy_cache(
-                        &sample.loop_moms(),
-                        &sample.external_moms(),
-                        &graph_term.get_graph().loop_momentum_basis,
-                    );
+                        Complex::new_re(prefactor)
+                            * graph_term.evaluate(sample, &settings, rotation)
+                    }
+                };
 
-                    let prefactor = graph_term
-                        .get_graph()
-                        .iter_loop_edges()
-                        .map(|(_, edge_index, _)| edge_index)
-                        .zip(graph_term.get_tropical_sampler().iter_edge_weights())
-                        .fold(sample.one(), |product, (edge_id, weight)| {
-                            let energy = &energy_cache[edge_id];
-                            let edge_weight = weight;
-                            product * energy.powf(&F::from_f64(2. * edge_weight))
-                        });
-
-                    Complex::new_re(prefactor) * graph_term.evaluate(sample, &settings, rotation)
-                }
+                res += graph_term_res;
             }
+
+            res
         }
     };
 
@@ -749,7 +764,7 @@ fn create_grid<I: GammaloopIntegrand>(integrand: &I) -> Grid<F<f64>> {
         SamplingSettings::DiscreteGraphs(discrete_graph_sampling_settings) => {
             Grid::Discrete(DiscreteGrid::new(
                 integrand
-                    .get_terms()
+                    .get_group_masters()
                     .map(|term| {
                         Some(create_grid_for_graph(
                             term,
