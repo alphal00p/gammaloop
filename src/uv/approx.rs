@@ -8,6 +8,7 @@ use crate::{
     graph::{Edge, Graph, LMBext, LoopMomentumBasis, Vertex},
     momentum::Sign,
     numerator::{symbolica_ext::AtomCoreExt, Network, ParsingNet},
+    symbolica_ext::CallSymbol,
     utils::{external_energy_atom_from_index, ose_atom_from_index, GS, W_},
 };
 use ahash::AHashSet;
@@ -561,10 +562,8 @@ impl Approximation {
         // rewrite numerator
         // linearize the numerator first
         integrand_vakint = integrand_vakint
-            .replace(function!(GS.emr_mom, W_.prop_, W_.mom_, W_.x_))
-            .with(function!(MS.dot, W_.mom_, W_.x_))
-            .replace(function!(MS.dot, W_.mom_, W_.x_))
-            .with(function!(GS.emr_mom, W_.mom_, W_.x_));
+            .replace(function!(GS.emr_mom, W_.a___))
+            .with(GS.linearize.f(&[function!(GS.emr_mom, W_.a___)]));
 
         debug!("Integrand pre vakint: {:}", integrand_vakint);
         for (i, l) in self.lmb.loop_edges.iter().enumerate() {

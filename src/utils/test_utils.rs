@@ -26,7 +26,7 @@ pub mod test {
     use insta::assert_snapshot;
     use linnet::half_edge::involution::EdgeIndex;
     use spenso::structure::abstract_index::AIND_SYMBOLS;
-    use symbolica::atom::AtomCore;
+    use symbolica::{atom::AtomCore, parse_lit};
 
     use crate::{symbolica_ext::CallSymbol, utils::GS};
 
@@ -43,5 +43,8 @@ pub mod test {
         let c = GS.delta_vec(0, GS.cind(0));
         assert_snapshot!(c.to_canonical_string(),@"1");
         c.simplify_color();
+
+        let expr = parse_lit!(f(a + p + r));
+        assert_snapshot!(GS.linearize.f(&[expr]).to_canonical_string(),@"_gammaloop::f(_gammaloop::a)+_gammaloop::f(_gammaloop::p)+_gammaloop::f(_gammaloop::r)");
     }
 }

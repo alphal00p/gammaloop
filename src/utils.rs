@@ -3428,6 +3428,8 @@ pub struct WildCards {
 }
 
 pub struct GammaloopSymbols {
+    pub _linear: Symbol,
+    pub linearize: Symbol,
     pub spensocind: Symbol,
     pub loop_mom: Symbol,
     pub edgeid: Symbol,
@@ -3595,6 +3597,21 @@ pub static W_: LazyLock<WildCards> = LazyLock::new(|| WildCards {
 
 pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
     rescale: symbol!("t"),
+    _linear: symbol!("_linear";Linear),
+    linearize: symbol!("linearize";; |f, out| {
+        let AtomView::Fun(ff) = f else{
+            return false;
+        };
+        if ff.get_nargs()  != 1 {
+            return false;
+        }
+        let AtomView::Fun(arg) = ff.iter().next().unwrap() else{
+            return false;
+        };
+        let args = arg.iter().collect_vec();
+        *out = GS._linear.f(args.as_slice()).replace(GS._linear.f(&[W_.a___])).with(arg.get_symbol().f(&[W_.a___]));
+        true
+    }),
     rescale_star: symbol!("t⃰"),
     hfunction: symbol!("h"),
     deta: symbol!("∇η"),
