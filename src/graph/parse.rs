@@ -706,7 +706,7 @@ impl From<&Graph> for DotGraph {
 }
 
 /// completes and extract the user defined group structure on a lis of graphs
-fn complete_group_parsing(graphs: &mut [Graph]) -> Result<TiVec<GroupId, GraphGroup>> {
+pub(crate) fn complete_group_parsing(graphs: &mut [Graph]) -> Result<TiVec<GroupId, GraphGroup>> {
     // validate the input
     let defined_group_ids = graphs
         .iter()
