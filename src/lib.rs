@@ -142,7 +142,7 @@ const fn _default_usize_null() -> Option<usize> {
     None
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Encode, Decode)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode)]
 // #[trait_decode(trait= GammaLoopContext)]
 pub struct HFunctionSettings {
     pub function: HFunction,
@@ -151,6 +151,17 @@ pub struct HFunctionSettings {
     pub enabled_dampening: bool,
     #[serde(default = "_default_usize_null")]
     pub power: Option<usize>,
+}
+
+impl Default for HFunctionSettings {
+    fn default() -> Self {
+        Self {
+            sigma: 1.0,
+            function: HFunction::default(),
+            enabled_dampening: true,
+            power: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
