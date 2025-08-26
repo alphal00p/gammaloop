@@ -14,7 +14,7 @@ default_runtime_settings:
     m_uv: 1.0
     mu_r_sq: 8315.251344
   subtraction:
-    disable_threshold_subtraction: false
+    disable_threshold_subtraction: true
     # overlap_settings:
     #   force_global_center:
     #     - - 0.0
