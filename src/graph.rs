@@ -1,3 +1,5 @@
+use std::ops::Index;
+
 use ahash::HashSet;
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
@@ -25,7 +27,7 @@ use crate::{
     momentum_sample::ExternalIndex,
     numerator::{symbolica_ext::AtomCoreExt, GlobalPrefactor, ParsingNet},
     settings::runtime::kinematic::Externals,
-    utils::{ose_atom_from_index, F, GS},
+    utils::{ose_atom_from_index, Length, F, GS},
 };
 
 pub mod global;
@@ -279,6 +281,24 @@ impl<'a> IntoIterator for &'a GraphGroup {
         [self.master]
             .into_iter()
             .chain(self.remaining.iter().copied())
+    }
+}
+
+impl Length for GraphGroup {
+    fn len(&self) -> usize {
+        1 + self.remaining.len()
+    }
+}
+
+impl Index<GraphGroupPosition> for GraphGroup {
+    type Output = usize;
+
+    fn index(&self, index: GraphGroupPosition) -> &Self::Output {
+        if index.0 == 0 {
+            &self.master
+        } else {
+            &self.remaining[index.0 - 1]
+        }
     }
 }
 
