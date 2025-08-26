@@ -291,12 +291,11 @@ impl GraphTerm for AmplitudeGraphTerm {
         let externals = settings
             .kinematics
             .externals
-            .get_dependent_externals(
-                DependentMomentaConstructor::Amplitude(&self.graph.get_external_signature()),
-                &self.graph.name,
-            )
+            .get_dependent_externals(DependentMomentaConstructor::Amplitude(
+                &self.graph.get_external_signature(),
+            ))
             .with_context(|| {
-                "when getting externals to build amplitude graph term for integrand"
+                format!("when getting externals to build amplitude graph term for integrand for graph: {}", self.graph.name)
             })?;
 
         self.param_builder.add_external_four_mom(&externals);
@@ -443,10 +442,9 @@ impl AmplitudeIntegrand {
             .settings
             .kinematics
             .externals
-            .get_dependent_externals::<f64>(
-                DependentMomentaConstructor::Amplitude(&self.data.external_signature),
-                "n/a",
-            )
+            .get_dependent_externals::<f64>(DependentMomentaConstructor::Amplitude(
+                &self.data.external_signature,
+            ))
             .expect("could not get externals");
 
         group_esurface_map

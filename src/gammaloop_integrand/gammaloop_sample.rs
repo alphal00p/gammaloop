@@ -470,7 +470,7 @@ pub(crate) fn parameterize<T: FloatLike, I: GammaloopIntegrand>(
                     let externals = &settings
                         .kinematics
                         .externals
-                        .get_dependent_externals(dependent_momenta_constructor, &graph.name())?;
+                        .get_dependent_externals(dependent_momenta_constructor)?;
 
                     let sampler = graph.get_tropical_sampler();
 

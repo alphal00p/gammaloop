@@ -205,7 +205,6 @@ impl Externals {
     pub(crate) fn get_dependent_externals<T: FloatLike>(
         &self,
         dependent_momenta_constructor: DependentMomentaConstructor,
-        graph_name: &str,
     ) -> Result<ExternalFourMomenta<F<T>>>
 // where
     //     T::Higher: PrecisionUpgradable<Lower = T> + FloatLike,
@@ -228,16 +227,31 @@ impl Externals {
                         let mut dependent_momenta = vec![];
 
                         if momenta.len() != external_signature.len() {
-                            return Err(eyre!("External Momentum in input do not match the number of externals in graph: {}",graph_name)).with_note(||{
-                                    let mut table = Builder::new();
-                                    for m in momenta{
-                                        match m{
-                                            ExternalMomenta::Dependent(_)=>table.push_record(["Dependent"]),
-                                            ExternalMomenta::Independent([e,x,y,z])=>table.push_record([e.to_string(),x.to_string(),y.to_string(),z.to_string()]),
-                                        }}
-                                    format!("External momenta: \n{}\n{}",table.build().with(Style::rounded()),external_signature)
-
-                                });
+                            return Err(eyre!(
+                                "External Momentum in input do not match the number of externals"
+                            ))
+                            .with_note(|| {
+                                let mut table = Builder::new();
+                                for m in momenta {
+                                    match m {
+                                        ExternalMomenta::Dependent(_) => {
+                                            table.push_record(["Dependent"])
+                                        }
+                                        ExternalMomenta::Independent([e, x, y, z]) => table
+                                            .push_record([
+                                                e.to_string(),
+                                                x.to_string(),
+                                                y.to_string(),
+                                                z.to_string(),
+                                            ]),
+                                    }
+                                }
+                                format!(
+                                    "External momenta: \n{}\n{}",
+                                    table.build().with(Style::rounded()),
+                                    external_signature
+                                )
+                            });
                         }
 
                         for ((i, m), s) in momenta.iter().enumerate().zip(external_signature.iter())
