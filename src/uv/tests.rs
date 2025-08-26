@@ -282,7 +282,6 @@ fn tta_uv() {
 
 #[test]
 fn tri_box_tri_LU() {
-    let _ = env_logger::builder().is_test(true).try_init();
     let uv_dod = 1;
     let box_uv_dod = -1; // can be -1, 0, 1, 2
     let is_massless = false;
@@ -488,7 +487,6 @@ fn tri_box_tri_LU() {
 
 #[test]
 fn double_triangle_LU() {
-    let _ = env_logger::builder().is_test(true).try_init();
     let uv_dod = 1;
 
     // load the model and hack the masses, go through serializable model since arc is not mutable

@@ -1,8 +1,9 @@
 use eyre::eyre;
 use itertools::Itertools;
 use momtrop::vector::Vector;
+use tracing::Level;
 
-use crate::debug_info::DEBUG_LOGGER;
+use crate::cli::tracing::TracingLogger;
 use crate::graph::GroupId;
 use crate::momentum::{Rotation, ThreeMomentum};
 use crate::momentum_sample::{ExternalFourMomenta, MomentumSample};
@@ -497,7 +498,7 @@ pub(crate) fn parameterize<T: FloatLike, I: GammaloopIntegrand>(
                         &xs,
                         edge_data,
                         &tropical_sampling_settings.into_tropical_sampling_settings(),
-                        &DEBUG_LOGGER,
+                        &TracingLogger::to_lib(Level::INFO),
                     );
 
                     let sampling_result = match sampling_result_result {

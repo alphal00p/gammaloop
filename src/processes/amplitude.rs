@@ -8,6 +8,7 @@ use momtrop::SampleGenerator;
 
 use idenso::color::ColorSimplifier;
 use spenso::network::{Sequential, SmallestDegree};
+use tracing::instrument;
 use vakint::{EvaluationOrder, LoopNormalizationFactor, Vakint, VakintSettings};
 
 use crate::{
@@ -29,6 +30,7 @@ use crate::{
     numerator::symbolica_ext::AtomCoreExt,
     settings::{runtime::LockedRuntimeSettings, GlobalSettings},
     signature::SignatureLike,
+    status_debug,
     subtraction::amplitude_counterterm::AmplitudeCountertermAtom,
     utils::{GS, TENSORLIB, W_},
     uv::UltravioletGraph,
@@ -68,6 +70,12 @@ pub struct Amplitude {
 }
 
 impl Amplitude {
+    #[instrument(
+          skip_all,
+          fields(
+              amplitude.name = %self.name,
+          )
+    )]
     pub(crate) fn warm_up(&mut self) {
         let derived_data = &self.graphs.iter().map(|g| &g.derived_data).collect_vec();
         let derived_data_container = DerivedDataContainer::Amplitude(&derived_data);
@@ -76,6 +84,13 @@ impl Amplitude {
             .as_mut()
             .map(|a| a.warm_up(derived_data_container));
     }
+
+    #[instrument(
+          skip_all,
+          fields(
+              path = %path.as_ref().display(),
+          )
+    )]
     pub(crate) fn load(path: impl AsRef<Path>, context: GammaLoopContextContainer) -> Result<Self> {
         let binary = fs::read(path.as_ref().join("amp.bin"))?;
         let (mut amp, _): (Self, _) =
@@ -89,6 +104,12 @@ impl Amplitude {
         Ok(amp)
     }
 
+    #[instrument(
+          skip_all,
+          fields(
+              amplitude.name = %self.name,
+          )
+    )]
     pub fn compile(
         &mut self,
         path: impl AsRef<Path>,
@@ -113,6 +134,13 @@ impl Amplitude {
         Ok(())
     }
 
+    #[instrument(
+          skip_all,
+          fields(
+              amplitude.name = %self.name,
+              path = %path.as_ref().display(),
+          )
+    )]
     pub fn save(&mut self, path: impl AsRef<Path>, override_existing: bool) -> Result<()> {
         let p = path.as_ref().join(format!("amp_{}", self.name));
 
@@ -134,6 +162,12 @@ impl Amplitude {
         Ok(())
     }
 
+    #[instrument(
+        skip_all,
+        fields(
+             amplitude.name = %self.name,
+        )
+    )]
     pub(crate) fn preprocess(
         &mut self,
         model: &Model,
@@ -145,6 +179,12 @@ impl Amplitude {
         Ok(())
     }
 
+    #[instrument(
+        skip_all,
+          fields(
+              amplitude.name = %self.name,
+          )
+      )]
     pub(crate) fn build_integrand(
         &mut self,
         model: &Model,
@@ -171,6 +211,12 @@ impl Amplitude {
         Ok(())
     }
 
+    #[instrument(
+        skip_all,
+          fields(
+              amplitude.name = %self.name,
+          )
+      )]
     pub(crate) fn write_dot<W: std::io::Write>(
         &self,
         writer: &mut W,
@@ -238,20 +284,21 @@ impl AmplitudeGraph {
         model: &Model,
         settings: &GenerationSettings,
     ) -> Result<()> {
-        debug!("Generating Cff");
+        status_debug!("Generating Cff");
         self.generate_cff()?;
-        debug!("Building Parametric Integrand");
+        status_debug!("Building Parametric Integrand");
         self.build_parametric_integrand(settings)?;
-        debug!("Building Tropical Sampler");
+        status_debug!("Building Tropical Sampler");
         self.build_tropical_sampler(settings)?;
-        debug!("Building Loop Momentum Bases");
+        status_debug!("Building Loop Momentum Bases");
         self.build_lmbs();
-        debug!("Building Multi-Channeling Channels");
+        status_debug!("Building Multi-Channeling Channels");
         self.build_multi_channeling_channels();
-        debug!("Building ESurface Derived Data");
+        status_debug!("Building ESurface Derived Data");
         self.build_esurface_derived_data()?;
 
         if settings.enable_thresholds {
+            status_debug!("Building Threshold Counterterms");
             self.derived_data.threshold_counterterms =
                 self.build_threshold_counterterm_parametric_integrand(settings)?;
         }
@@ -782,6 +829,15 @@ impl AmplitudeGraph {
     }
 
     // Expects cff_expression, esurface_data,
+    #[instrument(
+          name = "generate_term_for_graph",
+          level = "info",
+          skip(self, model, global_settings),
+          fields(
+              graph.name = %self.graph.name
+          ),
+          err
+      )]
     fn generate_term_for_graph(
         &self,
         model: &Model,

@@ -22,9 +22,10 @@ use symbolica::{function, parse, symbol};
 use typed_index_collections::TiVec;
 
 use crate::cff::cff_graph::VertexSet;
-use crate::debug_info::DEBUG_LOGGER;
+
 use crate::define_index;
 use crate::graph::{Graph, GraphGroupPosition, LmbIndex, LoopMomentumBasis};
+
 use crate::momentum::FourMomentum;
 use crate::momentum_sample::{
     ExternalFourMomenta, ExternalIndex, ExternalThreeMomenta, LoopIndex, LoopMomenta,

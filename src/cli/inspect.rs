@@ -2,7 +2,7 @@ use clap::Args;
 use log::info;
 use serde::{Deserialize, Serialize};
 
-use crate::{settings::RuntimeSettings, utils::F};
+use crate::{settings::RuntimeSettings, status_info, utils::F};
 use color_eyre::Result;
 
 use super::state::State;
@@ -59,7 +59,7 @@ impl Inspect {
             self.use_f128,
         );
 
-        info!("Result: {}", res);
+        status_info!("Result: {}", res);
 
         Ok(())
     }

@@ -15,7 +15,7 @@ use serde::Serialize;
 
 use crate::settings::runtime::{Precision, RotationSetting};
 
-pub static DEBUG_LOGGER: DebugLogger = DebugLogger::init();
+// pub static DEBUG_LOGGER: DebugLogger = DebugLogger::init();
 
 /// This could also include channel_id or graph_id if the user is doing the explicit sum over lmb channels/graphs, but I don't
 /// support it for now, as it is not used much especially not when debugging.

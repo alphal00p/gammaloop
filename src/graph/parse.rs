@@ -857,7 +857,7 @@ pub mod test {
 
     #[test]
     fn test_load() {
-        State::default();
+        // State::default();
         info!("Loading graph");
         let graph: Vec<Graph> = dot!(digraph triangle {
             graph [

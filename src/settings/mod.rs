@@ -3,7 +3,7 @@ use global::GenerationSettings;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    cli::LogLevel,
+    cli::tracing::LogLevel,
     integrands::IntegrandSettings,
     observables::{ObservableSettings, PhaseSpaceSelectorSettings},
     utils::serde_utils::IsDefault,

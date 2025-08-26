@@ -24,6 +24,7 @@ use crate::observables::Event;
 use crate::settings::runtime::{IntegratedPhase, IntegrationResult};
 use crate::settings::IntegratorSettings;
 use crate::settings::RuntimeSettings;
+use crate::status_info;
 use crate::utils;
 use crate::utils::format_sample;
 use crate::utils::F;
@@ -310,7 +311,7 @@ where
 
     let t_start = Instant::now();
 
-    info!(
+    status_info!(
         "Integrating using {} ltd with {} {} over {} ...",
         if settings.general.use_ltd {
             "naive"
@@ -321,7 +322,7 @@ where
         if cores > 1 { "cores" } else { "core" },
         grid_str
     );
-    info!("");
+    status_info!("");
 
     let mut n_samples_evaluated = 0;
     'integrateLoop: while integration_state.num_points < settings.integrator.n_max {

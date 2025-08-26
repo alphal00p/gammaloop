@@ -1,10 +1,9 @@
-use crate::debug_info::DEBUG_LOGGER;
 use crate::feyngen::FeynGenError;
 use aind::Aind;
 use idenso::color::ColorSimplifier;
 use idenso::gamma::GammaSimplifier;
 use idenso::representations::Bispinor;
-use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation};
+use linnet::half_edge::involution::EdgeIndex;
 use log::warn;
 use spenso::algebra::complex::Complex;
 use spenso::algebra::upgrading_arithmetic::FallibleSub;
@@ -21,47 +20,35 @@ use spenso::tensors::data::DataTensor;
 use spenso::tensors::data::GetTensorData;
 use spenso::tensors::data::StorageTensor;
 use spenso::tensors::parametric::atomcore::TensorAtomMaps;
-use spenso::tensors::parametric::atomcore::TensorAtomOps;
-use spenso::tensors::parametric::EvalTensor;
 use spenso::tensors::parametric::EvalTensorSet;
 use spenso::tensors::parametric::LinearizedEvalTensorSet;
 use spenso::tensors::parametric::MixedTensor;
 use spenso::tensors::parametric::ParamOrConcrete;
 use spenso::tensors::parametric::ParamTensor;
-use spenso::tensors::parametric::ParamTensorSet;
 use spenso::tensors::parametric::SerializableCompiledEvaluator;
 use spenso::tensors::parametric::TensorSet;
 use std::fmt::Debug;
 use std::ops::Deref;
-use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
-use std::time::Instant;
 use symbolica_ext::AtomCoreExt;
 use thiserror::Error;
+use tracing::debug;
 // use crate::feyngen::dis::{DisEdge, DisVertex};
 
-use crate::momentum::{PolDef, PolType, Polarization};
+use crate::momentum::{PolDef, PolType};
 use crate::utils::{f128, GS, TENSORLIB, W_};
 use crate::{
     model::Model,
-    momentum::FourMomentum,
-    utils::{serde_utils::IsDefault, FloatLike, F},
+    utils::{serde_utils::IsDefault, F},
 };
 
-use crate::{
-    disable, settings::global::GenerationSettings, settings::RuntimeSettings,
-    GammaLoopContextContainer,
-};
+use crate::{disable, GammaLoopContextContainer};
 use ahash::AHashMap;
 use bincode::{Decode, Encode};
 use color_eyre::{Report, Result};
 use eyre::eyre;
-use gat_lending_iterator::LendingIterator;
 // use gxhash::GxBuildHasher;
-use indexmap::IndexSet;
 use itertools::Itertools;
-
-use log::{debug, trace};
 
 use serde::de::DeserializeOwned;
 use serde::ser::SerializeStruct;

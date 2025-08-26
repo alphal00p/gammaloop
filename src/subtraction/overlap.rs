@@ -1,7 +1,6 @@
 use crate::cff::esurface::EsurfaceCollection;
 use crate::cff::esurface::ExistingEsurfaceId;
 use crate::cff::esurface::ExistingEsurfaces;
-use crate::debug_info::DEBUG_LOGGER;
 use crate::graph::LoopMomentumBasis;
 use crate::momentum::ThreeMomentum;
 use crate::momentum_sample::ExternalFourMomenta;
@@ -26,6 +25,7 @@ use serde::Serialize;
 use serde_with::serde_as;
 use spenso::algebra::complex::Complex;
 use std::fmt::Display;
+use tracing::debug;
 
 use crate::signature::LoopExtSignature;
 
@@ -264,10 +264,8 @@ fn construct_solver(
         }
     }
 
-    if verbose {
-        DEBUG_LOGGER.write("overlap_a_matrix", &a_matrix);
-        DEBUG_LOGGER.write("overlap_b_vector", &b_vector);
-    }
+    debug!(name:"overlap_a_matrix", value = ?a_matrix);
+    debug!(name:"overlap_b_vector", value = ?b_vector);
 
     let a_matrix_sparse = CscMatrix::from(&a_matrix);
 

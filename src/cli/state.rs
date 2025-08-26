@@ -1,9 +1,10 @@
 use std::{
+    fmt,
     fs::{self, File},
     io::{Read, Write},
     ops::ControlFlow,
     path::{Path, PathBuf},
-    sync::{LazyLock, Mutex},
+    sync::{LazyLock, Mutex, OnceLock},
 };
 
 use color_eyre::{Result, Section};
@@ -11,15 +12,19 @@ use colored::{ColoredString, Colorize};
 use eyre::{eyre, Context};
 use log::{debug, warn, LevelFilter};
 use serde::{Deserialize, Serialize};
+use tracing_appender::rolling;
+use tracing_subscriber::{
+    layer::SubscriberExt, reload, util::SubscriberInitExt, EnvFilter, Layer, Registry,
+};
 
 use crate::{
     model::{Model, SerializableModel},
     processes::ProcessList,
     settings::{GlobalSettings, RuntimeSettings},
-    GammaLoopContextContainer,
+    status_debug, status_warn, GammaLoopContextContainer,
 };
 
-use super::{Cli, Commands, LogFormat};
+use super::{tracing::FILTER_HANDLE, Cli, Commands, LogFormat};
 
 #[derive(Debug, Serialize, Deserialize, Default)]
 pub struct RunHistory {
@@ -72,31 +77,19 @@ impl RunHistory {
 
         Ok(serde_yaml::from_str(&buf)?)
     }
-    pub fn new(
-        path: impl AsRef<Path>,
-        run_settings_path: Option<&Path>,
-        global_settings_path: Option<&Path>,
-    ) -> Result<Self> {
-        // println!("LOG_LEVEL: {:?}", LOG_LEVEL.lock().unwrap());
-        // Load settings from YAML first so CLI flags can override.
-        let runtime_settings: Option<RuntimeSettings> = run_settings_path
-            .map(RuntimeSettings::from_file)
-            .transpose()
-            .with_context(|| "Error trying to read runtime settings from file:")?;
-
-        let global_settings: Option<GlobalSettings> = global_settings_path
-            .map(GlobalSettings::from_file)
-            .transpose()
-            .with_context(|| "Error trying to read global settings from file:")?;
-
-        let mut runhistory: Self = match Self::from_file_yaml(path.as_ref()) {
+    pub fn new(path: impl AsRef<Path>) -> Result<Self> {
+        let runhistory: Self = match Self::from_file_yaml(path.as_ref()) {
             Ok(r) => {
-                debug!("Loaded run history from YAML");
+                status_debug!(
+                    "Loaded run history from YAML file {}",
+                    path.as_ref().display()
+                );
                 r
             }
             Err(e) => {
-                warn!(
-                    "Could not load run history from YAML: {}, loading default",
+                status_warn!(
+                    "Could not load run history from YAML at {}: {}, loading default",
+                    path.as_ref().display(),
                     e
                 );
 
@@ -104,19 +97,8 @@ impl RunHistory {
             }
         };
 
-        if let Some(runtime_settings) = runtime_settings {
-            debug!("Overriding runtime settings from file");
-            runhistory.default_runtime_settings = runtime_settings;
-        }
-
-        if let Some(global_settings) = global_settings {
-            debug!("Overriding global settings from file");
-            runhistory.global_settings = global_settings;
-        }
-
-        *LOG_LEVEL.lock().unwrap() = runhistory.global_settings.debug_level.into();
-
-        // println!("LOG_LEVEL: {:?}", LOG_LEVEL.lock().unwrap());
+        let spec = runhistory.global_settings.debug_level.to_env_spec();
+        let _ = set_log_spec(spec)?;
 
         Ok(runhistory)
     }
@@ -148,11 +130,18 @@ pub struct State {
     pub model: Model,
     pub process_list: ProcessList,
     pub model_path: Option<PathBuf>,
+    save_path: PathBuf,
+    log_filter: reload::Handle<EnvFilter, Registry>,
 }
 
-impl Default for State {
-    fn default() -> Self {
+impl State {
+    pub fn new(save_path: PathBuf) -> Self {
+        let handle =
+            super::tracing::init_tracing("info,symbolica::poly::gcd=off", &save_path.join("logs"));
+
         let a = Self {
+            save_path,
+            log_filter: handle,
             model: Model::default(),
             process_list: ProcessList::default(),
             model_path: None,
@@ -161,19 +150,38 @@ impl Default for State {
     }
 }
 
-pub static LOG_LEVEL: LazyLock<Mutex<LevelFilter>> =
-    LazyLock::new(|| Mutex::new(LevelFilter::Debug));
-pub static LOG_FORMAT: LazyLock<Mutex<LogFormat>> = LazyLock::new(|| Mutex::new(LogFormat::Long));
+// just so you can show it in the banner etc.
+pub(super) static LOG_SPEC: OnceLock<Mutex<String>> = OnceLock::new();
+
+pub fn set_log_spec(spec: &str) -> color_eyre::Result<()> {
+    let handle = FILTER_HANDLE.get().expect("tracing not initialized");
+    handle.modify(|f| *f = EnvFilter::new(spec))?;
+    if let Some(s) = LOG_SPEC.get() {
+        *s.lock().unwrap() = spec.to_string();
+    }
+    Ok(())
+}
+
+pub fn current_log_spec() -> String {
+    LOG_SPEC
+        .get()
+        .map(|s| s.lock().unwrap().clone())
+        .unwrap_or_else(|| "info".into())
+}
 
 impl State {
-    pub fn load(root_folder: &Path, model_path: Option<PathBuf>) -> Result<Self> {
+    pub fn set_log_spec(&self, spec: &str) -> Result<()> {
+        set_log_spec(spec)
+    }
+
+    pub fn load(save_path: PathBuf, model_path: Option<PathBuf>) -> Result<Self> {
         // let root_folder = root_folder.join("gammaloop_state");
 
         let model = if let Some(model_path) = &model_path {
             debug!("Loading model from {}", model_path.display());
             Model::from_file(model_path)?
         } else {
-            let model_dir = root_folder.join("model.yaml");
+            let model_dir = save_path.join("model.yaml");
             debug!(
                 "Loading model from default location: {}",
                 model_dir.display()
@@ -185,7 +193,7 @@ impl State {
         debug!("Loaded model: {}", model.name);
 
         let state = symbolica::state::State::import(
-            &mut fs::File::open(root_folder.join("symbolica_state.bin"))
+            &mut fs::File::open(save_path.join("symbolica_state.bin"))
                 .context("Trying to open symbolica state binary")?,
             None,
         )?;
@@ -195,15 +203,16 @@ impl State {
             model: &model,
         };
 
-        let process_list = ProcessList::load(root_folder, context)
+        let process_list = ProcessList::load(&save_path, context)
             .context("Trying to load processList")
             .unwrap();
 
-        Ok(State {
-            model,
-            model_path,
-            process_list,
-        })
+        let mut state = State::new(save_path);
+
+        state.process_list = process_list;
+        state.model = model;
+        state.model_path = model_path;
+        Ok(state)
     }
 
     pub fn compile(

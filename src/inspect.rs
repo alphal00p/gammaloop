@@ -5,10 +5,8 @@ use spenso::algebra::complex::Complex;
 use symbolica::domains::float::NumericalFloatLike;
 use symbolica::numerical_integration::Sample;
 
-use crate::debug_info::DEBUG_LOGGER;
 use crate::integrands::HasIntegrand;
 use crate::momentum::ThreeMomentum;
-use crate::settings::runtime::SamplingSettings;
 use crate::settings::RuntimeSettings;
 use crate::utils;
 use crate::utils::f128;
@@ -23,8 +21,6 @@ pub(crate) fn inspect<I: HasIntegrand>(
     is_momentum_space: bool,
     use_f128: bool,
 ) -> Complex<F<f64>> {
-    DEBUG_LOGGER.reset();
-
     if integrand.get_n_dim() as isize == pt.len() as isize - 1 {
         force_radius = true;
     }

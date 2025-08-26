@@ -172,7 +172,7 @@ impl ReversibleEdge for EdgeData<&Edge> {
 #[cfg(test)]
 mod test {
 
-    use env_logger::WriteStyle;
+    // use env_logger::WriteStyle;
     use idenso::color::ColorSimplifier;
     use log::LevelFilter;
     use symbolica::atom::{Atom, AtomCore};
@@ -190,11 +190,11 @@ mod test {
 
     #[test]
     fn two_photons() {
-        let _ = env_logger::Builder::new()
-            .filter(None, LevelFilter::Debug)
-            .write_style(WriteStyle::Always)
-            .is_test(true)
-            .try_init();
+        // let _ = env_logger::Builder::new()
+        //     .filter(None, LevelFilter::Debug)
+        //     .write_style(WriteStyle::Always)
+        //     .is_test(true)
+        //     .try_init();
         // let _ = env_logger::builder().is_test(true).try_init();
 
         let model = crate::utils::test_utils::load_generic_model("sm");
@@ -254,11 +254,11 @@ mod test {
 
     #[test]
     fn six_photons() {
-        let _ = env_logger::Builder::new()
-            .filter(None, LevelFilter::Debug)
-            .write_style(WriteStyle::Always)
-            .is_test(true)
-            .try_init();
+        // let _ = env_logger::Builder::new()
+        //     .filter(None, LevelFilter::Debug)
+        //     .write_style(WriteStyle::Always)
+        //     .is_test(true)
+        //     .try_init();
         // let _ = env_logger::builder().is_test(true).try_init();
 
         let model = crate::utils::test_utils::load_generic_model("sm");

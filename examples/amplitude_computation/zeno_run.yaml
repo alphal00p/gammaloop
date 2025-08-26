@@ -1,5 +1,5 @@
 global_settings:
-  debug_level: Info
+  debug_level: Debug
   generation:
     evaluator_settings:
       compile: true
@@ -33,12 +33,22 @@ default_runtime_settings:
             - -0.1412408546154445
             - -0.0869119059139323
             - 0.121112995127698
+          - - 5.0
+            - 1.0
+            - 1.0
+            - 1.0
+          - - 5.0
+            - 1.0
+            - 1.0
+            - 1.0
         helicities:
           - 1
           - 1
           - -1
           - -1
           - -1
+          - 1
+          - 1
   Stability:
     levels:
       - required_precision_for_re: 1e-15
@@ -50,18 +60,17 @@ default_runtime_settings:
         escalate_for_large_weight_threshold: -1.0
   subtraction:
     disable_threshold_subtraction: true
-
 commands:
   - Import:
       Model:
         path: ../../src/test_resources/gammaloop_models/sm.yaml
   - Import:
       Amplitude:
-        path: ./qqx_aaa_tree_user_numerator.dot
+        path: ./zeno_IR.dot
   - Generate: {}
   - Inspect:
       process_id: 0
-      process_name: qqx_aaa_tree_user_numerator
+      process_name: zeno_IR
       point: []
       use_f128: false
       force_radius: false

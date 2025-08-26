@@ -5,7 +5,10 @@ use color_eyre::Result;
 use log::{debug, info};
 use serde::{Deserialize, Serialize};
 
-use crate::settings::{runtime, GlobalSettings, RuntimeSettings};
+use crate::{
+    settings::{runtime, GlobalSettings, RuntimeSettings},
+    status_info,
+};
 
 use super::state::State;
 
@@ -22,12 +25,12 @@ impl Generate {
         generation_settings: &GlobalSettings,
         runtime_settings: &RuntimeSettings,
     ) -> Result<()> {
-        info!("Preprocessing");
+        status_info!("Preprocessing");
 
         state
             .process_list
             .preprocess(&state.model, generation_settings)?;
-        info!("Generating integrands");
+        status_info!("Generating integrands");
         state.process_list.generate_integrands(
             &state.model,
             generation_settings,
@@ -35,7 +38,7 @@ impl Generate {
         )?;
 
         if generation_settings.generation.evaluator_settings.compile {
-            info!("Generating integrands");
+            status_info!("Compiling integrands");
             state.process_list.compile(
                 compile_folder,
                 override_existing_compiled,

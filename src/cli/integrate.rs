@@ -9,6 +9,7 @@ use spenso::algebra::complex::Complex;
 use crate::{
     integrate::{havana_integrate, print_integral_result, IntegrationState},
     settings::RuntimeSettings,
+    status_info, status_warn,
     utils::F,
 };
 use color_eyre::Result;
@@ -57,7 +58,7 @@ impl Integrate {
             .process_list
             .get_integrand_mut(self.process_id, &self.process_name)?;
 
-        info!(
+        status_info!(
             "Gammaloop now integrates {}",
             self.process_name.green().bold()
         );
@@ -66,7 +67,7 @@ impl Integrate {
 
         let integration_state = match fs::read(path_to_state) {
             Ok(state_bytes) => {
-                info!(
+                status_info!(
                     "{}",
                     "Found integration state, result of previous integration:".yellow()
                 );
@@ -103,15 +104,15 @@ impl Integrate {
                     "im",
                     target.map(|c| c.im),
                 );
-                info!("");
-                warn!("Any changes to the settings will be ignored, integrate with the {} option for changes to take effect","--restart".blue());
-                info!("{}", "Resuming integration".yellow());
+                status_info!("");
+                status_warn!("Any changes to the settings will be ignored, integrate with the {} option for changes to take effect","--restart".blue());
+                status_info!("{}", "Resuming integration".yellow());
 
                 Some(state)
             }
 
             Err(_) => {
-                info!("No integration state found, starting new integration");
+                status_info!("No integration state found, starting new integration");
                 None
             }
         };

@@ -19,10 +19,11 @@ use symbolica::{
     id::Replacement,
     symbol,
 };
-use tabled::settings::Style;
+use tabled::{settings::Style, Table, Tabled};
 
 use crate::{
     cff::expression::GraphOrientation,
+    cli::tracing::StatusRenderable,
     graph::{FeynmanGraph, Graph},
     model::Model,
     momentum::{Helicity, PolType},
@@ -743,10 +744,8 @@ impl<T: FloatLike> ParamBuilder<T> {
         self.uv_damp_minus.values = vec![Complex::new_re(threshold_params.uv_damp_minus.clone())];
         self.h_function.values = vec![Complex::new_re(threshold_params.h_function.clone())];
     }
-}
 
-impl<T: FloatLike> Display for ParamBuilder<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    pub fn table(&self) -> Table {
         let mut table = tabled::builder::Builder::new();
 
         for (lhs, rhs) in &self.reps {
@@ -765,7 +764,43 @@ impl<T: FloatLike> Display for ParamBuilder<T> {
             }
         }
 
-        table.build().with(Style::rounded()).to_string().fmt(f)
+        table.build()
+    }
+}
+
+impl<T: FloatLike> StatusRenderable for ParamBuilder<T> {
+    fn status_json(&self) -> serde_json::Value {
+        let mut map = serde_json::Map::new();
+
+        for (lhs, rhs) in &self.reps {
+            map.insert(lhs.to_canonical_string(), rhs.to_canonical_string().into());
+        }
+
+        for pairs in self {
+            if pairs.values.is_empty() {
+                for p in pairs.params.iter() {
+                    map.insert(p.to_canonical_string(), serde_json::Value::Null);
+                }
+            } else {
+                for (param, value) in pairs.params.iter().zip(pairs.values.iter()) {
+                    map.insert(
+                        param.to_canonical_string(),
+                        serde_json::to_value(value).unwrap(),
+                    );
+                }
+            }
+        }
+
+        serde_json::Value::Object(map)
+    }
+    fn status_pretty(&self) -> Cow<'_, str> {
+        format!("\n{}", self).into()
+    }
+}
+
+impl<T: FloatLike> Display for ParamBuilder<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.table().with(Style::rounded()).to_string().fmt(f)
     }
 }
 

@@ -145,66 +145,6 @@ pub(crate) fn atom_to_canonical_string(atom_str: &str) -> PyResult<String> {
     Ok(parse!(atom_str).to_canonical_string())
 }
 
-#[pyfunction]
-#[pyo3(name = "setup_rust_logging")]
-fn setup_logging(level: String, format: String) -> PyResult<()> {
-    let log_format_guard = &mut *LOG_FORMAT.lock().unwrap();
-    *log_format_guard = LogFormat::from_str(&format).map_err(exceptions::PyException::new_err)?;
-
-    let level = convert_log_level(&level);
-    if (*LOG_LEVEL.lock().unwrap()).is_none() {
-        // Configure logger at runtime
-        fern::Dispatch::new()
-            .filter(|metadata| metadata.level() <= (*LOG_LEVEL.lock().unwrap()).unwrap())
-            // Perform allocation-free log formatting
-            .format(|out, message, record| {
-                let now = Local::now();
-                match *LOG_FORMAT.lock().unwrap() {
-                    LogFormat::Long => out.finish(format_args!(
-                        "[{}] @{} {}: {}",
-                        format!(
-                            "{:04}-{:02}-{:02} {:02}:{:02}:{:02}.{:03}",
-                            now.year(),
-                            now.month(),
-                            now.day(),
-                            now.hour(),
-                            now.minute(),
-                            now.second(),
-                            now.timestamp_subsec_millis()
-                        )
-                        .bright_green(),
-                        format_target(record.target().into(), record.level()),
-                        format_level(record.level()),
-                        message
-                    )),
-                    LogFormat::Short => out.finish(format_args!(
-                        "[{}] {}: {}",
-                        format!("{:02}:{:02}:{:02}", now.hour(), now.minute(), now.second())
-                            .bright_green(),
-                        format_level(record.level()),
-                        message
-                    )),
-                    LogFormat::Min => out.finish(format_args!(
-                        "{}: {}",
-                        format_level(record.level()),
-                        message
-                    )),
-                    LogFormat::None => out.finish(format_args!("{}", message)),
-                }
-            })
-            // Output to stdout, files, and other Dispatch configurations
-            .chain(std::io::stdout())
-            .chain(fern::log_file("gammaloop_rust_output.log")?)
-            // Apply globally
-            .apply()
-            .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
-    }
-    let log_level_guard = &mut *LOG_LEVEL.lock().unwrap();
-    *log_level_guard = Some(level);
-
-    Ok(())
-}
-
 pub(crate) fn get_python_log_level() -> Result<String, pyo3::PyErr> {
     Python::with_gil(|py| {
         let py_code = r#"
@@ -238,8 +178,6 @@ pub(crate) fn convert_log_level(level: &str) -> LevelFilter {
 #[pymodule]
 #[pyo3(name = "_gammaloop")]
 fn gammalooprs(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
-    pyo3_pylogger::register("GammaLoopRust");
-
     crate::initialisation::initialise().expect("initialization failed");
     crate::set_interrupt_handler();
     m.add_class::<PythonWorker>()?;
@@ -252,7 +190,6 @@ fn gammalooprs(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     m.add_class::<PyNumeratorAwareGroupingOption>()?;
     m.add("git_version", GIT_VERSION)?;
     m.add_wrapped(wrap_pyfunction!(cli_wrapper))?;
-    m.add_wrapped(wrap_pyfunction!(setup_logging))?;
     m.add_wrapped(wrap_pyfunction!(atom_to_canonical_string))?;
     m.add_wrapped(wrap_pyfunction!(evaluate_graph_overall_factor))?;
     Ok(())

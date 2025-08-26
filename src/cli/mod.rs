@@ -24,35 +24,29 @@ use log::LevelFilter;
 use log::{debug, error, info, trace, warn};
 use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
-use state::{format_level, format_target, RunHistory, State, LOG_FORMAT, LOG_LEVEL};
+use state::{current_log_spec, RunHistory, State};
 use std::ops::ControlFlow;
 use std::path::PathBuf;
 use std::time::Instant;
 use symbolica::numerical_integration::Sample;
+use tracing::{init_tracing, LogLevel};
 
 pub mod generate;
 pub mod inspect;
 pub mod integrate;
 pub mod settings;
 pub mod state;
+pub mod tracing;
 
 #[derive(Parser, Debug)]
 #[command(name = "gammaLoop", version, about)]
 #[command(next_line_help = true)]
 pub struct Cli {
-    /// Path to the run-time settings file, by default is: `./gammaloop_state/runtime_settings.yaml`
+    /// Path to the a run file as history, and as settings, by default is: `./gammaloop_state/run.yaml`
     #[arg(short = 'r', long)]
-    run_settings_path: Option<PathBuf>,
-
-    /// Path to the gammaloop settings file, by default is: `./gammaloop_state/global_settings.yaml`
-    #[arg(short = 'g', long)]
-    global_settings_path: Option<PathBuf>,
-
-    /// Path to the a run-history file
-    #[arg(short = 'i', long)]
     run_history: Option<PathBuf>,
 
-    /// Path to the state file
+    /// Path to the state folder
     #[arg(short = 's', long, default_value = "./gammaloop_state")]
     pub state_folder: PathBuf,
 
@@ -60,7 +54,7 @@ pub struct Cli {
     #[arg(short = 'm', long)]
     pub model_file: Option<PathBuf>,
 
-    /// Skip the
+    /// Skip saving state on exit
     #[arg(short = 'n', long, default_value_t = false, group = "saving")]
     no_save_state: bool,
 
@@ -68,25 +62,9 @@ pub struct Cli {
     #[arg(short = 'o', long, default_value_t = false, group = "saving")]
     override_state: bool,
 
-    // /// Target result to match (real, imag)
-    // #[arg(short = 't', long, value_name = "TARGET", num_args = 2)]
-    // target: Option<Vec<f64>>, // length must be 2
-
-    // /// Global debug verbosity level
-    // #[arg(short = 'd', long, value_name = "LEVEL")]
-    // debug: Option<usize>,
-
-    // /// Integrator starting samples
-    // #[arg(long, value_name = "N_START")]
-    // n_start: Option<usize>,
-
-    // /// Integrator maximum samples
-    // #[arg(long, value_name = "N_MAX")]
-    // n_max: Option<usize>,
-
-    // /// Integrator samples increase per iteration
-    // #[arg(long, value_name = "N_INCREASE")]
-    // n_increase: Option<usize>,
+    // /// Debug level
+    // #[arg(short = 'd', long, value_enum, default_value_t = LogLevel::Info)]
+    // debug_level: LogLevel,
     /// Optional sub‑command
     #[command(subcommand)]
     pub command: Option<Commands>,
@@ -94,8 +72,6 @@ pub struct Cli {
 
 impl Cli {
     fn override_settings(&mut self, other: Cli) {
-        self.run_settings_path = other.run_settings_path;
-        self.global_settings_path = other.global_settings_path;
         self.state_folder = other.state_folder;
         self.model_file = other.model_file;
         self.override_state = other.override_state;
@@ -179,12 +155,11 @@ impl Cli {
                 }
             },
             Commands::Set(s) => match s {
-                Set::Log { level, format } => {
+                Set::Log { level, .. } => {
                     if let Some(level) = level {
-                        *LOG_LEVEL.lock().unwrap() = (level).into();
+                        let spec = level.to_env_spec();
+                        state.set_log_spec(spec)?;
                     }
-
-                    *LOG_FORMAT.lock().unwrap() = format;
                 }
                 Set::BaseDir { path } => {
                     self.state_folder = path.clone();
@@ -221,14 +196,12 @@ impl Cli {
                     println!("{}", state.model.name)
                 }
             },
-            Commands::Run(r) => {
-                if let Some(r) = &self.run_history {
-                    let mut new_run_history = RunHistory::from_file_yaml(r)?;
-                    let res = new_run_history.run(self, state);
+            Commands::Run(Run { path }) => {
+                let mut new_run_history = RunHistory::new(path)?;
+                let res = new_run_history.run(self, state);
 
-                    run_history.merge(new_run_history);
-                    return res;
-                }
+                run_history.merge(new_run_history);
+                return res;
             }
             _ => {}
         }
@@ -236,11 +209,9 @@ impl Cli {
     }
 
     pub fn run(mut self) -> Result<()> {
-        setup_log().unwrap();
         self.initialize();
-        let mut run_history = self.get_run_history()?;
 
-        let mut state = match State::load(&self.state_folder, self.model_file.clone()) {
+        let mut state = match State::load(self.state_folder.clone(), self.model_file.clone()) {
             Ok(state) => state,
             Err(e) => {
                 warn!(
@@ -251,9 +222,10 @@ impl Cli {
                         .map(|p| p.display().to_string())
                         .unwrap_or("None".to_string())
                 );
-                State::default()
+                State::new(self.state_folder.clone())
             }
         };
+        let mut run_history = self.get_run_history()?;
 
         // let mut state = State::load(&cli.state_file,);
 
@@ -348,13 +320,9 @@ impl Cli {
     }
 
     fn get_run_history(&self) -> Result<RunHistory> {
-        let default_path = self.state_folder.join("run_history.yaml");
+        let default_path = self.state_folder.join("run.yaml");
         let path = self.run_history.as_ref().unwrap_or(&default_path);
-        RunHistory::new(
-            path,
-            self.run_settings_path.as_deref(),
-            self.global_settings_path.as_deref(),
-        )
+        RunHistory::new(path)
     }
 }
 
@@ -383,56 +351,6 @@ pub enum Save {
     },
 }
 
-#[repr(usize)]
-#[derive(
-    Clone,
-    Copy,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
-    Debug,
-    Hash,
-    ValueEnum,
-    Serialize,
-    Deserialize,
-    Encode,
-    Decode,
-)]
-pub enum LogLevel {
-    /// A level lower than all log levels.
-    Off,
-    /// Corresponds to the `Error` log level.
-    Error,
-    /// Corresponds to the `Warn` log level.
-    Warn,
-    /// Corresponds to the `Info` log level.
-    Info,
-    /// Corresponds to the `Debug` log level.
-    Debug,
-    /// Corresponds to the `Trace` log level.
-    Trace,
-}
-
-impl Default for LogLevel {
-    fn default() -> Self {
-        LogLevel::Info
-    }
-}
-
-impl From<LogLevel> for LevelFilter {
-    fn from(value: LogLevel) -> Self {
-        match value {
-            LogLevel::Debug => LevelFilter::Debug,
-            LogLevel::Trace => LevelFilter::Trace,
-            LogLevel::Warn => LevelFilter::Warn,
-            LogLevel::Error => LevelFilter::Error,
-            LogLevel::Off => LevelFilter::Off,
-            LogLevel::Info => LevelFilter::Info,
-        }
-    }
-}
-
 #[derive(Subcommand, Debug, Serialize, Deserialize, Clone)]
 pub enum Set {
     BaseDir {
@@ -441,9 +359,9 @@ pub enum Set {
     Log {
         #[arg(short = 'l')]
         level: Option<LogLevel>,
-        // #[clap(subcommand)]
-        #[arg(short, long, value_enum, default_value_t = LogFormat::Long)]
-        format: LogFormat,
+        // // #[clap(subcommand)]
+        // #[arg(short, long, value_enum, default_value_t = LogFormat::Long)]
+        // format: LogFormat,
     },
 }
 
@@ -455,7 +373,10 @@ pub enum Display {
 }
 
 #[derive(Debug, Args, Serialize, Deserialize, Clone)]
-pub struct Run {}
+pub struct Run {
+    /// Path to a run file to execute
+    path: PathBuf,
+}
 
 pub enum Log {
     Level(LevelFilter),
@@ -535,6 +456,7 @@ pub enum LogFormat {
 impl Commands {}
 
 pub(crate) fn print_banner() {
+    let spec = current_log_spec();
     println!(
         "\n{}{}\n",
         r"                                        _
@@ -549,59 +471,11 @@ pub(crate) fn print_banner() {
         .bold()
         .blue(),
         format!(
-            r#"  |___/    version:{} {}          |_|    "#,
-            format!("{:<15}", GIT_VERSION).green(),
-            format!("{:>10}", LOG_LEVEL.lock().unwrap().as_str()).green(),
+            r#"  |___/    version:{:<15} {:>10}          |_|    "#,
+            GIT_VERSION.green(),
+            spec.green(),
         )
         .bold()
         .blue(),
     );
-}
-
-pub(crate) fn setup_log() -> Result<()> {
-    fern::Dispatch::new()
-        .filter(|metadata| metadata.level() <= (*LOG_LEVEL.lock().unwrap()))
-        // Perform allocation-free log formatting
-        .format(|out, message, record| {
-            let now = Local::now();
-            match *LOG_FORMAT.lock().unwrap() {
-                LogFormat::Long => out.finish(format_args!(
-                    "[{}] @{} {}: {}",
-                    format!(
-                        "{:04}-{:02}-{:02} {:02}:{:02}:{:02}.{:03}",
-                        now.year(),
-                        now.month(),
-                        now.day(),
-                        now.hour(),
-                        now.minute(),
-                        now.second(),
-                        now.timestamp_subsec_millis()
-                    )
-                    .bright_green(),
-                    format_target(record.target().into(), record.level()),
-                    format_level(record.level()),
-                    message
-                )),
-                LogFormat::Short => out.finish(format_args!(
-                    "[{}] {}: {}",
-                    format!("{:02}:{:02}:{:02}", now.hour(), now.minute(), now.second())
-                        .bright_green(),
-                    format_level(record.level()),
-                    message
-                )),
-                LogFormat::Min => out.finish(format_args!(
-                    "{}: {}",
-                    format_level(record.level()),
-                    message
-                )),
-                LogFormat::None => out.finish(format_args!("{}", message)),
-            }
-        })
-        // Output to stdout, files, and other Dispatch configurations
-        .chain(std::io::stdout())
-        .chain(fern::log_file("gammaloop_rust_output.log")?)
-        // Apply globally
-        .apply()?;
-
-    Ok(())
 }

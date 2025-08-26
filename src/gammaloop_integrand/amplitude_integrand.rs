@@ -11,15 +11,14 @@ use color_eyre::Result;
 
 use eyre::{eyre, Context};
 use itertools::Itertools;
-use libc::group;
 use linnet::half_edge::involution::{EdgeVec, Orientation};
-use log::{debug, warn};
 use momtrop::SampleGenerator;
 use spenso::algebra::complex::Complex;
 use symbolica::{
     evaluate::OptimizationSettings,
     numerical_integration::{Grid, Sample},
 };
+use tracing::{debug, instrument};
 use typed_index_collections::TiVec;
 
 use crate::{
@@ -37,6 +36,7 @@ use crate::{
     processes::{AmplitudeDerivedData, AmplitudeGraph},
     settings::{GlobalSettings, RuntimeSettings},
     signature::SignatureLike,
+    status_debug, status_warn,
     subtraction::{amplitude_counterterm::AmplitudeCountertermData, overlap::find_maximal_overlap},
     utils::bitvec_ext::BinVec,
     DependentMomentaConstructor, FloatLike, GammaLoopContext, GammaLoopContextContainer, F,
@@ -148,47 +148,63 @@ impl AmplitudeGraphTerm {
         })
     }
 
+    #[instrument(
+          name = "compile",
+          level = "info",
+          skip(self, path, override_existing, settings),
+          fields(
+              graph.name = %self.graph.name,
+              path = %path.as_ref().display(),
+          )
+      )]
     pub fn compile(
         &mut self,
         path: impl AsRef<Path>,
         override_existing: bool,
         settings: &GlobalSettings,
     ) {
+        let graph_path = path.as_ref().join(&self.graph.name);
+
+        let r = fs::create_dir_all(&graph_path)
+            .with_context(|| {
+                format!(
+                    "Trying to create directory to save amplitude {}",
+                    graph_path.display()
+                )
+            })
+            .unwrap();
         self.orientation_parametric_integrand.compile(
-            &path.as_ref().join(&self.graph.name),
+            graph_path.join("orientation_parametric_integrand"),
             format!("{}_orientation_parametric_integrand", &self.graph.name,),
-            &path.as_ref().join(&self.graph.name),
+            graph_path.join("orientation_parametric_integrand"),
             settings.generation.gammaloop_compile_options.inline_asm(),
         );
 
-        self.threshold_counterterm.compile(
-            path.as_ref().join(&self.graph.name),
-            override_existing,
-            settings,
-        );
+        self.threshold_counterterm
+            .compile(&graph_path, override_existing, settings);
 
         self.iterative_integrand_evaluator.as_mut().map(|e| {
             e.compile(
-                &path
-                    .as_ref()
-                    .join(format!("{}_iterative", &self.graph.name)),
+                graph_path.join("iterative"),
                 format!("{}_iterative", &self.graph.name,),
-                &path
-                    .as_ref()
-                    .join(format!("{}_iterative", &self.graph.name)),
+                graph_path.join("iterative"),
                 settings.generation.gammaloop_compile_options.inline_asm(),
             )
         });
     }
 
+    #[instrument(
+          skip_all,
+          fields(
+              term.name = %self.name(),
+          )
+    )]
     fn evaluate_impl<T: FloatLike>(
         &mut self,
         momentum_sample: &MomentumSample<T>,
         settings: &RuntimeSettings,
         rotation: &Rotation,
     ) -> Complex<F<T>> {
-        debug!("Evaluating graph: {}", self.graph.name);
-
         let hel = settings.kinematics.externals.get_helicities();
         let orientations =
             momentum_sample.orientations(&self.orientation_filter.0, &self.orientations);
@@ -226,7 +242,7 @@ impl AmplitudeGraphTerm {
                 }
             }
         }
-        debug!("Last params used:\n {}", self.param_builder);
+        // status_debug!("last_params"; data = self.param_builder);
         debug!("evaluated integrand: {:16e}", result);
 
         let sum_of_cts = self.threshold_counterterm.evaluate(
@@ -247,6 +263,13 @@ impl AmplitudeGraphTerm {
 impl GraphTerm for AmplitudeGraphTerm {
     type DerivedData = AmplitudeDerivedData;
 
+    #[instrument(
+          skip_all,
+          fields(
+              term.name = %self.name(),
+          ),
+          err
+    )]
     fn warm_up(
         &mut self,
         derived_data: &AmplitudeDerivedData,
@@ -316,7 +339,7 @@ impl GraphTerm for AmplitudeGraphTerm {
             && !overlap.existing_esurfaces.is_empty()
             && !settings.subtraction.disable_threshold_subtraction
         {
-            warn!("Threshold counterterm was not generated, but regime is physical, disable threshold subtraction to avoid this warning");
+            status_warn!("Threshold counterterm was not generated, but regime is physical, disable threshold subtraction to avoid this warning");
         } else if !overlap.existing_esurfaces.is_empty()
             && settings.subtraction.disable_threshold_subtraction
         {
@@ -429,6 +452,12 @@ impl AmplitudeIntegrand {
 impl GammaloopIntegrand for AmplitudeIntegrand {
     type G = AmplitudeGraphTerm;
 
+    #[instrument(
+          skip_all,
+          fields(
+              integrand.name = %self.name(),
+          )
+    )]
     fn warm_up(&mut self, derived_data: &[&AmplitudeDerivedData]) -> Result<()> {
         self.data.rotations = Some(
             Some(Rotation::new(RotationMethod::Identity))
