@@ -15,14 +15,16 @@ use log::debug;
 use lorentz_vector::LorentzVector;
 use ref_ops::RefNeg;
 use serde::{Deserialize, Serialize};
-use symbolica::atom::Atom;
+use symbolica::atom::{Atom, AtomCore};
 use symbolica::domains::float::{NumericalFloatLike, Real};
-use symbolica::parse;
+use symbolica::id::Replacement;
+use symbolica::{function, parse, symbol};
 use typed_index_collections::TiVec;
 
 use crate::cff::cff_graph::VertexSet;
 use crate::debug_info::DEBUG_LOGGER;
-use crate::graph::{Graph, LmbIndex, LoopMomentumBasis};
+use crate::define_index;
+use crate::graph::{Graph, GraphGroupPosition, LmbIndex, LoopMomentumBasis};
 use crate::momentum::FourMomentum;
 use crate::momentum_sample::{
     ExternalFourMomenta, ExternalIndex, ExternalThreeMomenta, LoopIndex, LoopMomenta,
@@ -31,8 +33,9 @@ use crate::processes::CrossSectionCut;
 use crate::signature::ExternalSignature;
 use crate::utils::{
     compute_loop_part, compute_shift_part, compute_t_part_of_shift_part, cut_energy,
-    external_energy_atom_from_index, ose_atom_from_index, FloatLike, F,
+    external_energy_atom_from_index, ose_atom_from_index, FloatLike, F, GS,
 };
+use crate::uv::uv_graph::UVE;
 use color_eyre::Result;
 
 use super::generation::ShiftRewrite;
@@ -354,6 +357,25 @@ impl Esurface {
             vertex_set,
         }
     }
+
+    pub(crate) fn lmb_atom(&self, graph: &Graph, lmb_reps: &[Replacement]) -> Atom {
+        self.energies
+            .iter()
+            .map(|index| {
+                let mass_symbol = graph.underlying[*index].mass_atom();
+                let emr_symbol = function!(GS.emr_mom, usize::from(*index) as i32);
+                let atom = (&emr_symbol * &emr_symbol + &mass_symbol * &mass_symbol).sqrt();
+                atom
+            })
+            .chain(self.external_shift.iter().map(|(index, sign)| {
+                function!(GS.emr_mom, usize::from(*index) as i32, 0) * Atom::num(*sign)
+            }))
+            .reduce(|sum, atom| sum + atom)
+            .unwrap_or_else(|| Atom::new())
+            .replace_multiple(lmb_reps)
+            .replace(parse!("ZERO"))
+            .with(Atom::new())
+    }
 }
 
 pub type EsurfaceCollection = TiVec<EsurfaceID, Esurface>;
@@ -377,6 +399,11 @@ pub struct EsurfaceID(pub usize);
 
 /// Container for esurfaces that exist at a given point in the phase space
 pub type ExistingEsurfaces = TiVec<ExistingEsurfaceId, EsurfaceID>;
+
+define_index! {pub struct CrossGraphInquivalentEsurfacesId;}
+/// Points to all inequivalent esurfaces in a given graph group
+pub type CrossGraphInquivalentEsurfaces =
+    TiVec<CrossGraphInquivalentEsurfacesId, (GraphGroupPosition, EsurfaceID)>;
 
 /// Index in the list of all existing esurfaces, essentially a pointer to a pointer to an esurface
 #[derive(

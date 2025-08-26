@@ -276,6 +276,8 @@ impl<'a> IntoIterator for &'a GraphGroup {
     }
 }
 
+define_index! {pub struct GraphGroupPosition;}
+
 // impl From<BareGraph> for HedgeGraph<Edge, Vertex, VertexOrder> {
 //     fn from(value: BareGraph) -> Self {
 //         let mut node_map = AHashMap::default();

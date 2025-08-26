@@ -23,6 +23,7 @@ use tabled::{builder::Builder, settings::Style};
 use typed_index_collections::TiVec;
 
 use crate::{
+    graph,
     momentum::{FourMomentum, SignOrZero, ThreeMomentum},
     momentum_sample::{BareMomentumSample, ExternalIndex, ExternalThreeMomenta, LoopIndex},
     signature::{LoopExtSignature, SignatureLike},
@@ -225,6 +226,35 @@ pub trait LMBext {
             rep_args,
             filter_pair,
             true,
+        )
+    }
+
+    fn integrand_replacement<'a, S: SubGraph, I>(
+        &self,
+        subgraph: &S,
+        lmb: &LoopMomentumBasis,
+        rep_args: &'a [I],
+    ) -> Vec<Replacement>
+    where
+        &'a I: Into<AtomOrView<'a>>,
+    {
+        self.replacement_impl(
+            |e, a, b| {
+                Replacement::new(
+                    GS.emr_mom
+                        .f(([usize::from(e) as i32], rep_args))
+                        .to_pattern(),
+                    (a + b).to_pattern(),
+                )
+            },
+            subgraph,
+            lmb,
+            GS.loop_mom,
+            GS.external_mom,
+            rep_args,
+            rep_args,
+            no_filter,
+            false,
         )
     }
 
