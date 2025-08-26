@@ -141,6 +141,16 @@ impl Esurface {
         energy_sum + self.compute_shift_part_from_momenta(lmb, external_moms)
     }
 
+    #[inline]
+    pub(crate) fn exists<T: FloatLike>(
+        &self,
+        lmb: &LoopMomentumBasis,
+        real_mass_vector: &EdgeVec<F<T>>,
+        external_moms: &ExternalFourMomenta<F<T>>,
+    ) -> bool {
+        todo!()
+    }
+
     /// Only compute the shift part, useful for center finding.
     #[inline]
     pub(crate) fn compute_shift_part_from_momenta<T: FloatLike>(

@@ -23,7 +23,7 @@ use typed_index_collections::TiVec;
 
 use crate::{
     cff::{
-        esurface::{get_existing_esurfaces, EsurfaceCollection},
+        esurface::{self, get_existing_esurfaces, EsurfaceCollection, ExistingEsurfaces},
         expression::{AmplitudeOrientationID, GraphOrientation},
     },
     evaluation_result::EvaluationResult,
@@ -436,8 +436,48 @@ impl AmplitudeIntegrand {
         Ok(AmplitudeIntegrand { settings, data })
     }
 
-    pub(crate) fn get_inequivalent_esurfaces_of_groups(&self) {
-        todo!()
+    pub(crate) fn get_existing_esurfaces_for_group(&self, group_id: GroupId) -> ExistingEsurfaces {
+        let group_esurface_map = &self.data.esurface_group_map[group_id];
+
+        let external_moms = self
+            .settings
+            .kinematics
+            .externals
+            .get_dependent_externals::<f64>(
+                DependentMomentaConstructor::Amplitude(&self.data.external_signature),
+                "n/a",
+            )
+            .expect("could not get externals");
+
+        group_esurface_map
+            .iter_enumerated()
+            .filter_map(|(group_esurface_id, esurface_map)| {
+                let esurface_exists = esurface_map
+                    .iter_enumerated()
+                    .find_map(|(graph_group_pos, option_esurface_id)| {
+                        option_esurface_id.map(|esurface_id| {
+                            // extreme indexing
+                            let graph = &self.data.graph_terms
+                                [self.data.graph_group_structure[group_id][graph_group_pos]];
+
+                            let esurface = &graph.esurfaces[esurface_id];
+
+                            esurface.exists(
+                                &graph.graph.loop_momentum_basis,
+                                &graph.graph.get_real_mass_vector(),
+                                &external_moms,
+                            )
+                        })
+                    })
+                    .expect("no graph in group has this esurface, map corrupted");
+
+                if esurface_exists {
+                    Some(group_esurface_id)
+                } else {
+                    None
+                }
+            })
+            .collect()
     }
 }
 
