@@ -147,8 +147,42 @@ impl Esurface {
         lmb: &LoopMomentumBasis,
         real_mass_vector: &EdgeVec<F<T>>,
         external_moms: &ExternalFourMomenta<F<T>>,
+        e_cm: &F<T>,
     ) -> bool {
-        todo!()
+        if self.external_shift.is_empty() {
+            return false;
+        }
+
+        let shift_part = self.compute_shift_part_from_momenta(lmb, external_moms);
+
+        if shift_part < F::from_ff64(SHIFT_THRESHOLD) * e_cm {
+            return false;
+        }
+
+        let mass_sum: F<T> = self
+            .energies
+            .iter()
+            .map(|index| {
+                let mass = &real_mass_vector[*index];
+                mass * mass
+            })
+            .reduce(|acc, x| acc + x)
+            .unwrap_or_else(|| F::from_f64(0.0));
+
+        let shift_vector_sq = self
+            .external_shift
+            .iter()
+            .map(|(index, sign)| {
+                let external_signature = &lmb.edge_signatures[*index].external;
+                compute_shift_part(external_signature, external_moms).spatial
+                    * F::from_f64(*sign as f64)
+            })
+            .reduce(|acc, x| acc + x)
+            .map(|v| v.norm_squared())
+            .unwrap_or_else(|| F::from_f64(0.0));
+
+        &shift_part * &shift_part - shift_vector_sq - mass_sum
+            > F::from_ff64(EXISTENCE_THRESHOLD) * e_cm * e_cm
     }
 
     /// Only compute the shift part, useful for center finding.

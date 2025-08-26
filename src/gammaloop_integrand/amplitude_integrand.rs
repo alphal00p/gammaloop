@@ -449,6 +449,8 @@ impl AmplitudeIntegrand {
             ))
             .expect("could not get externals");
 
+        let e_cm = self.settings.kinematics.e_cm;
+
         group_esurface_map
             .iter_enumerated()
             .filter_map(|(group_esurface_id, esurface_map)| {
@@ -466,6 +468,7 @@ impl AmplitudeIntegrand {
                                 &graph.graph.loop_momentum_basis,
                                 &graph.graph.get_real_mass_vector(),
                                 &external_moms,
+                                &e_cm,
                             )
                         })
                     })
