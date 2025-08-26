@@ -1,19 +1,26 @@
-use std::{fs, iter, ops::Deref, path::Path};
+use std::{
+    collections::{BTreeMap, HashMap},
+    default, fs, iter,
+    ops::Deref,
+    path::Path,
+};
 
 use ahash::AHashSet;
 // use bincode::{Decode, Encode};
 use bincode_trait_derive::{Decode, Encode};
+use brotli::enc::static_dict::Hash;
 use color_eyre::{Result, Section};
 use momtrop::SampleGenerator;
 
 use idenso::color::ColorSimplifier;
+use pathfinding::matrix::directions::W;
 use spenso::network::{Sequential, SmallestDegree};
 use tracing::instrument;
 use vakint::{EvaluationOrder, LoopNormalizationFactor, Vakint, VakintSettings};
 
 use crate::{
     cff::{
-        esurface::{generate_esurface_data, EsurfaceDerivedData},
+        esurface::{generate_esurface_data, EsurfaceDerivedData, GroupEsurfaceId},
         expression::{
             AmplitudeOrientationID, CFFExpression, GraphOrientation, OrientationData,
             SubgraphOrientationID,
@@ -24,7 +31,7 @@ use crate::{
         amplitude_integrand::{AmplitudeGraphTerm, AmplitudeIntegrand, AmplitudeIntegrandData},
         DerivedDataContainer, LmbMultiChannelingSetup, ParamBuilder,
     },
-    graph::{GraphGroup, GroupId, LMBext, LmbIndex, LoopMomentumBasis},
+    graph::{GraphGroup, GraphGroupPosition, GroupId, LMBext, LmbIndex, LoopMomentumBasis},
     model::ArcParticle,
     momentum_sample::ExternalIndex,
     numerator::symbolica_ext::AtomCoreExt,
@@ -32,7 +39,7 @@ use crate::{
     signature::SignatureLike,
     status_debug,
     subtraction::amplitude_counterterm::AmplitudeCountertermAtom,
-    utils::{GS, TENSORLIB, W_},
+    utils::{Length, GS, TENSORLIB, W_},
     uv::UltravioletGraph,
     GammaLoopContext, GammaLoopContextContainer,
 };
@@ -48,7 +55,7 @@ use symbolica::{
     domains::rational::Rational,
     function,
 };
-use typed_index_collections::TiVec;
+use typed_index_collections::{ti_vec, TiVec};
 
 use crate::{
     cff::esurface::EsurfaceID,
@@ -65,9 +72,13 @@ pub struct Amplitude {
     pub integrand: Option<NewIntegrand>,
     pub graphs: Vec<AmplitudeGraph>,
     pub graph_group_structure: TiVec<GroupId, GraphGroup>,
+    pub grouped_esurface_map: GroupedEsurfaceMap,
     pub external_particles: Vec<ArcParticle>,
     pub external_signature: SignatureLike<ExternalIndex>,
 }
+
+pub type GroupedEsurfaceMap =
+    TiVec<GroupId, TiVec<GroupEsurfaceId, TiVec<GraphGroupPosition, Option<EsurfaceID>>>>;
 
 impl Amplitude {
     #[instrument(
@@ -173,9 +184,13 @@ impl Amplitude {
         model: &Model,
         settings: &GenerationSettings,
     ) -> Result<()> {
+        // preprocess each graph individually
         for amplitude_graph in self.graphs.iter_mut() {
             amplitude_graph.preprocess(model, settings)?;
         }
+
+        self.generate_grouped_esurface_map()?;
+
         Ok(())
     }
 
@@ -226,6 +241,50 @@ impl Amplitude {
             writeln!(writer)?;
         }
         Ok(())
+    }
+
+    pub fn generate_grouped_esurface_map(&mut self) -> Result<()> {
+        // for each group we must collect all inequivalent esurfaces.
+
+        let group_esurface_map = self
+            .graph_group_structure
+            .iter()
+            .map(|group| {
+                let mut group_esurface_structure =
+                    BTreeMap::<Atom, TiVec<GraphGroupPosition, Option<EsurfaceID>>>::default();
+
+                for (graph_group_position, graph_id) in group.iter_enumerated() {
+                    let amplitude_graph = &self.graphs[graph_id];
+                    let lmb_reps = amplitude_graph.graph.integrand_replacement(
+                        &amplitude_graph.graph.full_filter(),
+                        &amplitude_graph.graph.loop_momentum_basis,
+                        &[W_.x___],
+                    );
+
+                    let esurfaces = &amplitude_graph
+                        .derived_data
+                        .cff_expression
+                        .as_ref()
+                        .unwrap()
+                        .surfaces
+                        .esurface_cache;
+
+                    for (esurface_id, esurface) in esurfaces.iter_enumerated() {
+                        let esurface_atom = esurface.lmb_atom(&amplitude_graph.graph, &lmb_reps);
+
+                        group_esurface_structure
+                            .entry(esurface_atom)
+                            .or_insert(ti_vec![None; group.len()])[graph_group_position] =
+                            Some(esurface_id);
+                    }
+                }
+                group_esurface_structure
+                    .into_values()
+                    .collect::<TiVec<GroupEsurfaceId, _>>()
+            })
+            .collect::<TiVec<GroupId, _>>();
+
+        Ok(self.grouped_esurface_map = group_esurface_map)
     }
 }
 
@@ -908,6 +967,7 @@ impl Amplitude {
             name: name.to_string(),
             graphs: vec![],
             graph_group_structure: TiVec::new(),
+            grouped_esurface_map: TiVec::new(),
             external_particles: vec![],
             external_signature: SignatureLike::from_iter(iter::empty::<i8>()),
         }

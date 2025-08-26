@@ -379,6 +379,8 @@ impl Esurface {
     }
 }
 
+define_index! {pub struct GroupEsurfaceId;}
+
 pub type EsurfaceCollection = TiVec<EsurfaceID, Esurface>;
 
 pub(crate) fn compute_esurface_cache<T: FloatLike>(
