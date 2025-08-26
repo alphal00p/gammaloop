@@ -220,6 +220,7 @@ impl Amplitude {
                 graph_terms: terms?,
                 external_signature: self.external_signature.clone(),
                 graph_group_structure: self.graph_group_structure.clone(),
+                esurface_group_map: self.grouped_esurface_map.clone(),
             },
         };
         self.integrand = Some(NewIntegrand::Amplitude(amplitude_integrand));

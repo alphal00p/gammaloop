@@ -33,7 +33,7 @@ use crate::{
     model::Model,
     momentum::{Rotation, RotationMethod},
     momentum_sample::{ExternalIndex, MomentumSample},
-    processes::{AmplitudeDerivedData, AmplitudeGraph},
+    processes::{AmplitudeDerivedData, AmplitudeGraph, GroupedEsurfaceMap},
     settings::{GlobalSettings, RuntimeSettings},
     signature::SignatureLike,
     status_debug, status_warn,
@@ -395,6 +395,7 @@ pub struct AmplitudeIntegrandData {
     pub graph_terms: Vec<AmplitudeGraphTerm>,
     pub external_signature: SignatureLike<ExternalIndex>,
     pub graph_group_structure: TiVec<GroupId, GraphGroup>,
+    pub esurface_group_map: GroupedEsurfaceMap,
 }
 
 impl AmplitudeIntegrand {

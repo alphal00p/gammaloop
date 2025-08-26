@@ -1,6 +1,6 @@
 use crate::cff::esurface::EsurfaceCollection;
 use crate::cff::esurface::ExistingEsurfaceId;
-use crate::cff::esurface::ExistingEsurfaces;
+use crate::cff::esurface::OldExistingEsurfaces;
 use crate::graph::LoopMomentumBasis;
 use crate::momentum::ThreeMomentum;
 use crate::momentum_sample::ExternalFourMomenta;
@@ -39,7 +39,7 @@ pub struct OverlapGroup {
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct OverlapStructure {
     pub overlap_groups: Vec<OverlapGroup>,
-    pub existing_esurfaces: ExistingEsurfaces,
+    pub existing_esurfaces: OldExistingEsurfaces,
 }
 
 impl Display for OverlapStructure {
@@ -84,7 +84,7 @@ impl OverlapStructure {
     pub fn new_empty() -> Self {
         Self {
             overlap_groups: vec![],
-            existing_esurfaces: ExistingEsurfaces::new(),
+            existing_esurfaces: OldExistingEsurfaces::new(),
         }
     }
 }
@@ -122,7 +122,7 @@ fn extract_center(num_loops: usize, solution: &[f64]) -> LoopMomenta<F<f64>> {
 fn construct_solver(
     lmb: &LoopMomentumBasis,
     esurfaces_to_consider: &[ExistingEsurfaceId],
-    existing_esurfaces: &ExistingEsurfaces,
+    existing_esurfaces: &OldExistingEsurfaces,
     esurfaces: &EsurfaceCollection,
     edge_masses: &EdgeVec<Option<Complex<F<f64>>>>,
     external_momenta: &ExternalFourMomenta<F<f64>>,
@@ -288,7 +288,7 @@ fn construct_solver(
 pub(crate) fn find_center(
     lmb: &LoopMomentumBasis,
     esurfaces_to_consider: &[ExistingEsurfaceId],
-    existing_esurfaces: &ExistingEsurfaces,
+    existing_esurfaces: &OldExistingEsurfaces,
     esurfaces: &EsurfaceCollection,
     edge_masses: &EdgeVec<Option<Complex<F<f64>>>>,
     external_momenta: &ExternalFourMomenta<F<f64>>,
@@ -345,7 +345,7 @@ pub(crate) fn find_center(
 /// When the overlap finding fails, treat the point as unstable
 pub(crate) fn find_maximal_overlap(
     lmb: &LoopMomentumBasis,
-    existing_esurfaces: &ExistingEsurfaces,
+    existing_esurfaces: &OldExistingEsurfaces,
     esurfaces: &EsurfaceCollection,
     edge_masses: &EdgeVec<Option<Complex<F<f64>>>>,
     external_momenta: &ExternalFourMomenta<F<f64>>,
@@ -607,7 +607,7 @@ impl EsurfacePairs {
 
     fn new(
         lmb: &LoopMomentumBasis,
-        existing_esurfaces: &ExistingEsurfaces,
+        existing_esurfaces: &OldExistingEsurfaces,
         esurfaces: &EsurfaceCollection,
         edge_masses: &EdgeVec<Option<Complex<F<f64>>>>,
         external_momenta: &ExternalFourMomenta<F<f64>>,
@@ -648,7 +648,7 @@ impl EsurfacePairs {
 
     fn construct_possible_subsets_of_len(
         &self,
-        existing_esurfaces: &ExistingEsurfaces,
+        existing_esurfaces: &OldExistingEsurfaces,
         subset_len: usize,
         result: &OverlapStructure,
     ) -> HashSet<Vec<ExistingEsurfaceId>> {
@@ -773,7 +773,7 @@ mod tests {
         external_momenta: ExternalFourMomenta<F<f64>>,
         lmb: LoopMomentumBasis,
         esurfaces: EsurfaceCollection,
-        existing_esurfaces: ExistingEsurfaces,
+        existing_esurfaces: OldExistingEsurfaces,
         edge_masses: EdgeVec<Option<Complex<F<f64>>>>,
     }
 
@@ -781,7 +781,7 @@ mod tests {
         external_momenta: ExternalFourMomenta<F<f64>>,
         lmb: LoopMomentumBasis,
         esurfaces: EsurfaceCollection,
-        existing_esurfaces: ExistingEsurfaces,
+        existing_esurfaces: OldExistingEsurfaces,
         edge_masses: EdgeVec<Option<Complex<F<f64>>>>,
     }
 

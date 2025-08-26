@@ -401,12 +401,8 @@ pub type EsurfaceCache<T> = TiVec<EsurfaceID, T>;
 pub struct EsurfaceID(pub usize);
 
 /// Container for esurfaces that exist at a given point in the phase space
-pub type ExistingEsurfaces = TiVec<ExistingEsurfaceId, EsurfaceID>;
-
-define_index! {pub struct CrossGraphInquivalentEsurfacesId;}
-/// Points to all inequivalent esurfaces in a given graph group
-pub type CrossGraphInquivalentEsurfaces =
-    TiVec<CrossGraphInquivalentEsurfacesId, (GraphGroupPosition, EsurfaceID)>;
+pub type OldExistingEsurfaces = TiVec<ExistingEsurfaceId, EsurfaceID>;
+pub type ExistingEsurfaces = TiVec<ExistingEsurfaceId, GroupEsurfaceId>;
 
 /// Index in the list of all existing esurfaces, essentially a pointer to a pointer to an esurface
 #[derive(
@@ -439,7 +435,7 @@ const EXISTENCE_THRESHOLD: F<f64> = F(1.0e-7);
 
 /// Returns the list of esurfaces which may exist, must be called each time at evaluation if externals are not fixed.
 #[inline]
-pub(crate) fn get_existing_esurfaces<T: FloatLike>() -> ExistingEsurfaces {
+pub(crate) fn get_existing_esurfaces<T: FloatLike>() -> OldExistingEsurfaces {
     todo!();
 }
 
