@@ -257,11 +257,11 @@ pub struct GraphGroup {
 }
 
 impl GraphGroup {
-    pub fn master(&self) -> usize {
+    pub(crate) fn master(&self) -> usize {
         self.master
     }
 
-    fn iter_enumerated(&self) -> impl Iterator<Item = (GraphGroupPosition, usize)> + '_ {
+    pub(crate) fn iter_enumerated(&self) -> impl Iterator<Item = (GraphGroupPosition, usize)> + '_ {
         self.into_iter()
             .enumerate()
             .map(|(i, graph_id)| (GraphGroupPosition(i), graph_id))
