@@ -1,21 +1,17 @@
 use std::{
-    fmt,
     fs::{self, File},
     io::{Read, Write},
     ops::ControlFlow,
     path::{Path, PathBuf},
-    sync::{LazyLock, Mutex, OnceLock},
+    sync::{Mutex, OnceLock},
 };
 
 use color_eyre::{Result, Section};
 use colored::{ColoredString, Colorize};
 use eyre::{eyre, Context};
-use log::{debug, warn, LevelFilter};
+use log::debug;
 use serde::{Deserialize, Serialize};
-use tracing_appender::rolling;
-use tracing_subscriber::{
-    layer::SubscriberExt, reload, util::SubscriberInitExt, EnvFilter, Layer, Registry,
-};
+use tracing_subscriber::{reload, EnvFilter, Registry};
 
 use crate::{
     model::{Model, SerializableModel},
@@ -24,7 +20,7 @@ use crate::{
     status_debug, status_warn, GammaLoopContextContainer,
 };
 
-use super::{tracing::FILTER_HANDLE, Cli, Commands, LogFormat};
+use super::{tracing::FILTER_HANDLE, Cli, Commands};
 
 #[derive(Debug, Serialize, Deserialize, Default)]
 pub struct RunHistory {

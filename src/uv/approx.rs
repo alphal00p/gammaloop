@@ -13,7 +13,7 @@ use crate::{
 };
 use ahash::AHashSet;
 use bitvec::vec::BitVec;
-use idenso::metric::MS;
+use idenso::{gamma::GammaSimplifier, metric::MS};
 use log::debug;
 use spenso::{
     structure::{abstract_index::AIND_SYMBOLS, concrete_index::ExpandedIndex},
@@ -313,10 +313,9 @@ impl Approximation {
         let t_arg = uv_graph
             .numerator(&reduced)
             .to_d_dim(GS.dim)
-            .color_simplify()
-            .gamma_simplify()
             .get_single_atom()
             .unwrap()
+            .simplify_gamma()
             / uv_graph.denominator(&reduced);
 
         let ep = vakint_symbol!("ε");
@@ -562,8 +561,16 @@ impl Approximation {
         // rewrite numerator
         // linearize the numerator first
         integrand_vakint = integrand_vakint
-            .replace(function!(GS.emr_mom, W_.a___))
+            .replace(function!(GS.emr_mom, W_.prop_, W_.a___))
             .with(GS.linearize.f(&[function!(GS.emr_mom, W_.a___)]));
+
+        // // rewrite numerator
+        // // linearize the numerator first
+        // integrand_vakint = integrand_vakint
+        //     .replace(function!(GS.emr_mom, W_.prop_, W_.mom_, W_.x_))
+        //     .with(function!(MS.dot, W_.mom_, W_.x_))
+        //     .replace(function!(MS.dot, W_.mom_, W_.x_))
+        //     .with(function!(GS.emr_mom, W_.mom_, W_.x_));
 
         debug!("Integrand pre vakint: {:}", integrand_vakint);
         for (i, l) in self.lmb.loop_edges.iter().enumerate() {
