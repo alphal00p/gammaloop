@@ -485,6 +485,26 @@ impl GammaloopIntegrand for AmplitudeIntegrand {
         for (a, derived_data) in self.data.graph_terms.iter_mut().zip(derived_data) {
             a.warm_up(derived_data, &self.settings)?;
         }
+
+        let thresholds_generated = self
+            .data
+            .graph_terms
+            .iter()
+            .all(|term| !term.threshold_counterterm.evaluators.is_empty());
+
+        if !thresholds_generated && !self.settings.subtraction.disable_threshold_subtraction {
+            status_warn!("Not all graphs have threshold counterterms generated, but threshold subtraction is not disabled. disable runtime threshold subtraction to remove this warning");
+            self.settings.subtraction.disable_threshold_subtraction = true;
+        }
+
+        if !self.settings.subtraction.disable_threshold_subtraction {
+            let existing_esurfaces = self.get_existing_esurfaces();
+            todo!(
+                "enable overlap finding across groups: existing esurfaces: {:#?}",
+                existing_esurfaces
+            );
+        }
+
         Ok(())
     }
 
