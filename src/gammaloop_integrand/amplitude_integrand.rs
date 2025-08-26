@@ -311,16 +311,7 @@ impl GraphTerm for AmplitudeGraphTerm {
         self.param_builder
             .mu_r_sq_value(Complex::new_re(settings.general.mu_r_sq));
 
-        let existing_esurfaces = get_existing_esurfaces(
-            &self.esurfaces,
-            derived_data
-                .esurface_data
-                .as_ref()
-                .ok_or_else(|| eyre!("esurface data missing"))?,
-            &externals,
-            &self.graph.loop_momentum_basis,
-            settings.kinematics.e_cm,
-        );
+        let existing_esurfaces = todo!();
 
         let edge_masses = self.graph.new_edgevec(|edge, _, _| edge.mass_value());
 

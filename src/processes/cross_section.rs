@@ -12,10 +12,7 @@ use color_eyre::Result;
 use idenso::metric::MS;
 
 use crate::{
-    cff::{
-        cut_expression::SuperGraphOrientationID,
-        esurface::{generate_esurface_data, EsurfaceDerivedData},
-    },
+    cff::cut_expression::SuperGraphOrientationID,
     gammaloop_integrand::{
         cross_section_integrand::{CrossSectionIntegrandData, OrientationEvaluator},
         DerivedDataContainer, GenericEvaluator, LmbMultiChannelingSetup, ParamBuilder,
@@ -392,22 +389,8 @@ impl<S: CrossSectionState> CrossSectionGraph<S> {
         //self.build_cut_evaluators(model, None);
         //self.build_orientation_evaluators(model);
         self.build_lmbs();
-        self.build_esurface_derived_data()?;
+
         Ok(self.build_multi_channeling_channels())
-    }
-
-    pub(crate) fn build_esurface_derived_data(&mut self) -> Result<()> {
-        let lmbs = self.derived_data.lmbs.as_ref().unwrap();
-        let esurfaces = &self
-            .derived_data
-            .cff_expression
-            .as_ref()
-            .unwrap()
-            .surfaces
-            .esurface_cache;
-
-        let esurface_data = generate_esurface_data(&self.graph, lmbs, esurfaces)?;
-        Ok(self.derived_data.esurface_data = Some(esurface_data))
     }
 
     pub(crate) fn update_surface_cache(&mut self) {
@@ -857,7 +840,6 @@ pub struct CrossSectionDerivedData<S: CrossSectionState = ()> {
     pub cff_expression: Option<CFFCutsExpression>,
     pub lmbs: Option<TiVec<LmbIndex, LoopMomentumBasis>>,
     pub multi_channeling_setup: Option<LmbMultiChannelingSetup>,
-    pub esurface_data: Option<EsurfaceDerivedData>,
     pub _temp_numerator: Option<PhantomData<S>>,
 }
 
@@ -871,7 +853,6 @@ impl<S: CrossSectionState> CrossSectionDerivedData<S> {
             bare_cff_orientation_evaluators: None,
             lmbs: None,
             multi_channeling_setup: None,
-            esurface_data: None,
         }
     }
 }

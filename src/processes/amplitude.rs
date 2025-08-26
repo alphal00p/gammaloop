@@ -20,7 +20,7 @@ use vakint::{EvaluationOrder, LoopNormalizationFactor, Vakint, VakintSettings};
 
 use crate::{
     cff::{
-        esurface::{generate_esurface_data, EsurfaceDerivedData, GroupEsurfaceId},
+        esurface::GroupEsurfaceId,
         expression::{
             AmplitudeOrientationID, CFFExpression, GraphOrientation, OrientationData,
             SubgraphOrientationID,
@@ -307,7 +307,6 @@ impl AmplitudeGraph {
                 tropical_sampler: None,
                 multi_channeling_setup: None,
                 threshold_counterterms: TiVec::new(),
-                esurface_data: None,
             },
         }
     }
@@ -353,8 +352,6 @@ impl AmplitudeGraph {
         self.build_lmbs();
         status_debug!("Building Multi-Channeling Channels");
         self.build_multi_channeling_channels();
-        status_debug!("Building ESurface Derived Data");
-        self.build_esurface_derived_data()?;
 
         if settings.enable_thresholds {
             status_debug!("Building Threshold Counterterms");
@@ -363,20 +360,6 @@ impl AmplitudeGraph {
         }
 
         Ok(())
-    }
-
-    pub(crate) fn build_esurface_derived_data(&mut self) -> Result<()> {
-        let lmbs = self.derived_data.lmbs.as_ref().unwrap();
-        let esurfaces = &self
-            .derived_data
-            .cff_expression
-            .as_ref()
-            .unwrap()
-            .surfaces
-            .esurface_cache;
-
-        let esurface_data = generate_esurface_data(&self.graph, lmbs, esurfaces)?;
-        Ok(self.derived_data.esurface_data = Some(esurface_data))
     }
 
     fn build_multi_channeling_channels(&mut self) {
@@ -916,7 +899,6 @@ pub struct AmplitudeDerivedData {
     pub lmbs: Option<TiVec<LmbIndex, LoopMomentumBasis>>,
     pub tropical_sampler: Option<SampleGenerator<3>>,
     pub cff_expression: Option<CFFExpression<AmplitudeOrientationID>>,
-    pub esurface_data: Option<EsurfaceDerivedData>,
 }
 
 pub trait AmplitudeState:
