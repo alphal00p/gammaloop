@@ -274,11 +274,9 @@ impl<T: FloatLike> BareMomentumSample<T> {
         external_moms: &Externals,
         jacobian: F<T>,
         dependent_momenta_constructor: DependentMomentaConstructor,
-        name: &str,
         orientation: Option<usize>,
     ) -> Result<Self> {
-        let external_moms =
-            external_moms.get_dependent_externals(dependent_momenta_constructor, name)?;
+        let external_moms = external_moms.get_dependent_externals(dependent_momenta_constructor)?;
 
         Ok(Self {
             loop_moms,
@@ -492,7 +490,7 @@ impl<T: FloatLike> MomentumSample<T> {
         external_moms: &Externals,
         jacobian: F<T>,
         dependent_momenta_constructor: DependentMomentaConstructor,
-        name: &str,
+
         orientation: Option<usize>,
     ) -> Result<Self> {
         Ok(Self {
@@ -501,7 +499,6 @@ impl<T: FloatLike> MomentumSample<T> {
                 external_moms,
                 jacobian,
                 dependent_momenta_constructor,
-                name,
                 orientation,
             )?,
             rotated_sample: None,

@@ -219,7 +219,6 @@ impl CrossSectionGraphTerm {
                     &settings.kinematics.externals,
                     F::from_f64(1.0),
                     dependent_momenta_constructor,
-                    "",
                     None,
                 )?;
 

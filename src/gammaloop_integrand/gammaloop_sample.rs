@@ -519,7 +519,6 @@ pub(crate) fn parameterize<T: FloatLike, I: GammaloopIntegrand>(
                         &settings.kinematics.externals,
                         sampling_result.jacobian,
                         dependent_momenta_constructor,
-                        &graph.name(),
                         orientation_id,
                     )?;
                     Ok(GammaLoopSample::DiscreteGraph {
@@ -577,7 +576,6 @@ fn default_parametrize<T: FloatLike>(
         externals,
         jacobian,
         dependent_momenta_constructor,
-        "",
         orientation,
     )
     .unwrap()
