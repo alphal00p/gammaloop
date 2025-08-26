@@ -1,15 +1,21 @@
+use crate::cli::state::{format_level, format_target};
+
 use super::state::LOG_SPEC;
+use super::LogFormat;
 use bincode_trait_derive::{Decode, Encode};
-use chrono::{Local, SecondsFormat};
+use chrono::{Datelike, Local, SecondsFormat, Timelike};
 use clap::ValueEnum;
 use momtrop::log::Logger;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
-use std::sync::{Mutex, OnceLock};
+use std::sync::{LazyLock, Mutex, OnceLock};
 use tracing::level_filters::LevelFilter;
 use tracing_appender::non_blocking::{NonBlockingBuilder, WorkerGuard};
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use tracing_subscriber::filter::filter_fn;
+use tracing_subscriber::fmt::format::Writer;
+use tracing_subscriber::fmt::{FmtContext, FormatEvent, FormatFields};
+use tracing_subscriber::registry::LookupSpan;
 use tracing_subscriber::{fmt, prelude::*, registry::Registry, reload, EnvFilter};
 
 #[repr(usize)]
@@ -118,7 +124,7 @@ pub(super) fn init_tracing(
             // 4) pretty status to stderr, opt-in via `target="status"`
             let status_layer = fmt::layer()
                 .with_target(false)
-                .compact()
+                .event_format(StatusFmt::default())
                 .with_writer(std::io::stderr)
                 .with_filter(filter_fn(|m| m.target() == "status"));
 
@@ -133,7 +139,7 @@ pub(super) fn init_tracing(
         .clone()
 }
 
-use tracing::{event, Level};
+use tracing::{event, Event, Level, Subscriber};
 
 pub enum Target {
     Lib,
@@ -248,4 +254,78 @@ macro_rules! status_debug { ($($x:tt)*) => { $crate::status_event!(DEBUG, $($x)*
 use std::io::IsTerminal;
 pub fn stderr_is_tty() -> bool {
     std::io::stderr().is_terminal()
+}
+
+/// Collect the event's formatted "message" field.
+struct MessageVisitor {
+    message: Option<String>,
+}
+impl tracing::field::Visit for MessageVisitor {
+    fn record_debug(&mut self, f: &tracing::field::Field, v: &dyn std::fmt::Debug) {
+        if f.name() == "message" {
+            self.message = Some(format!("{v:?}"));
+        }
+    }
+}
+
+pub static LOG_FORMAT: LazyLock<Mutex<LogFormat>> = LazyLock::new(|| Mutex::new(LogFormat::Long));
+
+/// Pretty formatter for the *status* layer; mimics your fern formatting.
+#[derive(Clone, Default)]
+struct StatusFmt;
+impl<S, N> FormatEvent<S, N> for StatusFmt
+where
+    S: Subscriber + for<'a> LookupSpan<'a>,
+    N: for<'writer> FormatFields<'writer> + 'static,
+{
+    fn format_event(
+        &self,
+        _ctx: &FmtContext<'_, S, N>,
+        mut w: Writer<'_>,
+        event: &Event<'_>,
+    ) -> std::fmt::Result {
+        let now = Local::now();
+        let meta = event.metadata();
+
+        let mut v = MessageVisitor { message: None };
+        event.record(&mut v);
+        let msg = v.message.as_deref().unwrap_or("");
+
+        match *LOG_FORMAT.lock().unwrap() {
+            LogFormat::Long => {
+                write!(
+                    w,
+                    "[{:04}-{:02}-{:02} {:02}:{:02}:{:02}.{:03}] @{} {}: {}",
+                    now.year(),
+                    now.month(),
+                    now.day(),
+                    now.hour(),
+                    now.minute(),
+                    now.second(),
+                    now.timestamp_subsec_millis(),
+                    format_target(meta.module_path().unwrap_or("").to_string(), *meta.level()),
+                    format_level(*meta.level()),
+                    msg
+                )?;
+            }
+            LogFormat::Short => {
+                write!(
+                    w,
+                    "[{:02}:{:02}:{:02}] {}: {}",
+                    now.hour(),
+                    now.minute(),
+                    now.second(),
+                    format_level(*meta.level()),
+                    msg
+                )?;
+            }
+            LogFormat::Min => {
+                write!(w, "{}: {}", format_level(*meta.level()), msg)?;
+            }
+            LogFormat::None => {
+                write!(w, "{}", msg)?;
+            }
+        }
+        writeln!(w)
+    }
 }

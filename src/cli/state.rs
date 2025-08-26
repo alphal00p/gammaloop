@@ -270,22 +270,23 @@ impl State {
     }
 }
 
-pub(crate) fn format_level(level: log::Level) -> ColoredString {
+pub(crate) fn format_level(level: tracing::Level) -> ColoredString {
     match level {
-        log::Level::Error => format!("{:<8}", "ERROR").red(),
-        log::Level::Warn => format!("{:<8}", "WARNING").yellow(),
-        log::Level::Info => format!("{:<8}", "INFO").into(),
-        log::Level::Debug => format!("{:<8}", "DEBUG").bright_black(),
-        log::Level::Trace => format!("{:<8}", "TRACE").into(),
+        tracing::Level::ERROR => format!("{:<8}", "ERROR").red(),
+        tracing::Level::WARN => format!("{:<8}", "WARNING").yellow(),
+        tracing::Level::INFO => format!("{:<8}", "INFO").into(),
+        tracing::Level::DEBUG => format!("{:<8}", "DEBUG").bright_black(),
+        tracing::Level::TRACE => format!("{:<8}", "TRACE").into(),
     }
 }
 
-pub(crate) fn format_target(target: String, level: log::Level) -> ColoredString {
+pub(crate) fn format_target(target: String, level: tracing::Level) -> ColoredString {
+    // println!("Target: {}", target);
     let split_targets = target.split("::").collect::<Vec<_>>();
     //[-2..].iter().join("::");
     let start = split_targets.len().saturating_sub(2);
     let mut shortened_path = split_targets[start..].join("::");
-    if level < log::Level::Debug && shortened_path.len() > 20 {
+    if level < tracing::Level::DEBUG && shortened_path.len() > 20 {
         shortened_path = format!("{}...", shortened_path.chars().take(17).collect::<String>());
     }
     format!("{:<20}", shortened_path).bright_blue()
