@@ -310,32 +310,34 @@ impl GraphTerm for AmplitudeGraphTerm {
         self.param_builder
             .mu_r_sq_value(Complex::new_re(settings.general.mu_r_sq));
 
-        let existing_esurfaces = todo!();
+        if !settings.subtraction.disable_threshold_subtraction {
+            let existing_esurfaces = todo!();
 
-        let edge_masses = self.graph.new_edgevec(|edge, _, _| edge.mass_value());
+            let edge_masses = self.graph.new_edgevec(|edge, _, _| edge.mass_value());
 
-        let overlap = find_maximal_overlap(
-            &self.graph.loop_momentum_basis,
-            &existing_esurfaces,
-            &self.esurfaces,
-            &edge_masses,
-            &externals,
-            &settings,
-        );
+            let overlap = find_maximal_overlap(
+                &self.graph.loop_momentum_basis,
+                &existing_esurfaces,
+                &self.esurfaces,
+                &edge_masses,
+                &externals,
+                &settings,
+            );
 
-        let thresholds_where_not_generated = self.threshold_counterterm.evaluators.is_empty();
+            let thresholds_where_not_generated = self.threshold_counterterm.evaluators.is_empty();
 
-        if thresholds_where_not_generated
-            && !overlap.existing_esurfaces.is_empty()
-            && !settings.subtraction.disable_threshold_subtraction
-        {
-            status_warn!("Threshold counterterm was not generated, but regime is physical, disable threshold subtraction to avoid this warning");
-        } else if !overlap.existing_esurfaces.is_empty()
-            && settings.subtraction.disable_threshold_subtraction
-        {
-            debug!("Subtraction disabled in physical region")
-        } else {
-            self.threshold_counterterm.overlap = overlap;
+            if thresholds_where_not_generated
+                && !overlap.existing_esurfaces.is_empty()
+                && !settings.subtraction.disable_threshold_subtraction
+            {
+                status_warn!("Threshold counterterm was not generated, but regime is physical, disable threshold subtraction to avoid this warning");
+            } else if !overlap.existing_esurfaces.is_empty()
+                && settings.subtraction.disable_threshold_subtraction
+            {
+                debug!("Subtraction disabled in physical region")
+            } else {
+                self.threshold_counterterm.overlap = overlap;
+            }
         }
 
         Ok(())
