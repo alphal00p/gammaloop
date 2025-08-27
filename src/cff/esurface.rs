@@ -448,6 +448,20 @@ pub struct EsurfaceID(pub usize);
 pub type OldExistingEsurfaces = TiVec<ExistingEsurfaceId, EsurfaceID>;
 pub type ExistingEsurfaces = TiVec<ExistingEsurfaceId, GroupEsurfaceId>;
 
+pub(crate) fn get_representative(
+    esurface_map: &TiVec<GraphGroupPosition, Option<EsurfaceID>>,
+) -> Result<(GraphGroupPosition, EsurfaceID)> {
+    for (group_pos, esurface_option) in esurface_map.iter_enumerated() {
+        if let Some(esurface_id) = esurface_option {
+            return Ok((group_pos, *esurface_id));
+        }
+    }
+
+    Err(eyre!(
+        "No representative esurface found, esurface map corrupted"
+    ))
+}
+
 /// Index in the list of all existing esurfaces, essentially a pointer to a pointer to an esurface
 #[derive(
     Debug,

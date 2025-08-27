@@ -1,6 +1,11 @@
+use crate::cff::esurface::get_representative;
 use crate::cff::esurface::EsurfaceCollection;
+use crate::cff::esurface::EsurfaceID;
 use crate::cff::esurface::ExistingEsurfaceId;
+use crate::cff::esurface::ExistingEsurfaces;
+use crate::cff::esurface::GroupEsurfaceId;
 use crate::cff::esurface::OldExistingEsurfaces;
+use crate::graph::GraphGroupPosition;
 use crate::graph::LoopMomentumBasis;
 use crate::momentum::ThreeMomentum;
 use crate::momentum_sample::ExternalFourMomenta;
@@ -16,6 +21,7 @@ use bincode_trait_derive::Encode;
 use clarabel::algebra::*;
 use clarabel::solver::*;
 use core::panic;
+use eyre::{eyre, Result};
 use itertools::Itertools;
 use linnet::half_edge::involution::EdgeIndex;
 use linnet::half_edge::involution::EdgeVec;
@@ -23,9 +29,11 @@ use linnet::half_edge::swap::Swap;
 use serde::Deserialize;
 use serde::Serialize;
 use serde_with::serde_as;
+use spenso::algebra::algebraic_traits::IsZero;
 use spenso::algebra::complex::Complex;
 use std::fmt::Display;
 use tracing::debug;
+use typed_index_collections::TiVec;
 
 use crate::signature::LoopExtSignature;
 
@@ -39,7 +47,7 @@ pub struct OverlapGroup {
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct OverlapStructure {
     pub overlap_groups: Vec<OverlapGroup>,
-    pub existing_esurfaces: OldExistingEsurfaces,
+    pub existing_esurfaces: ExistingEsurfaces,
 }
 
 impl Display for OverlapStructure {
@@ -84,13 +92,12 @@ impl OverlapStructure {
     pub fn new_empty() -> Self {
         Self {
             overlap_groups: vec![],
-            existing_esurfaces: OldExistingEsurfaces::new(),
+            existing_esurfaces: ExistingEsurfaces::new(),
         }
     }
 }
 /// Helper struct to construct the socp problem
 struct PropagatorConstraint<'a> {
-    propagator_id: EdgeIndex,    // index into the graph's edges
     mass_pointer: Option<usize>, // pointer to value of unique mass
     signature: &'a LoopExtSignature,
 }
@@ -120,50 +127,67 @@ fn extract_center(num_loops: usize, solution: &[f64]) -> LoopMomenta<F<f64>> {
 }
 
 fn construct_solver(
-    lmb: &LoopMomentumBasis,
+    overlap_input: &OverlapInput,
     esurfaces_to_consider: &[ExistingEsurfaceId],
-    existing_esurfaces: &OldExistingEsurfaces,
-    esurfaces: &EsurfaceCollection,
-    edge_masses: &EdgeVec<Option<Complex<F<f64>>>>,
+    existing_esurfaces: &ExistingEsurfaces,
     external_momenta: &ExternalFourMomenta<F<f64>>,
     verbose: bool,
 ) -> DefaultSolver {
-    let num_loops = lmb.loop_edges.len();
+    let num_loops = overlap_input
+        .graph_data
+        .first()
+        .expect("no graphs passed to overlap")
+        .lmb
+        .loop_edges
+        .len();
+
     let num_loop_vars = 3 * num_loops;
-    let num_edges: EdgeIndex = lmb.edge_signatures.len();
 
     // first we study the structure of the problem
-    let mut propagator_constraints: Vec<PropagatorConstraint> = Vec::with_capacity(num_edges.0);
+    let mut propagator_constraints: Vec<PropagatorConstraint> = Vec::with_capacity(20);
 
-    let mut inequivalent_masses: Vec<Complex<F<f64>>> = vec![];
+    let mut inequivalent_masses: Vec<F<f64>> = vec![];
 
     let mut esurface_constraints: Vec<Vec<usize>> = Vec::with_capacity(esurfaces_to_consider.len());
 
     for esurface_id in esurfaces_to_consider.iter() {
-        let esurface = &esurfaces[existing_esurfaces[*esurface_id]];
+        let group_esurface_id = existing_esurfaces[*esurface_id];
+        let (graph_group_pos, esurface_id) =
+            get_representative(&overlap_input.group_esurface_map[group_esurface_id])
+                .expect("esurface map corrupted");
+
+        let esurface = &overlap_input.graph_data[graph_group_pos].esurfaces[esurface_id];
+        let lmb = overlap_input.graph_data[graph_group_pos].lmb;
+        let edge_masses = overlap_input.graph_data[graph_group_pos].edge_masses;
+
         let mut esurface_constraint_indices: Vec<usize> = Vec::with_capacity(6);
 
         for &edge_id in &esurface.energies {
             if let Some(edge_position) = propagator_constraints
                 .iter()
-                .position(|constraint| constraint.propagator_id == edge_id)
+                .position(|constraint| *constraint.signature == lmb.edge_signatures[edge_id])
             {
                 esurface_constraint_indices.push(edge_position);
             } else {
-                let propagator_id = edge_id;
-                let mass_pointer = edge_masses[propagator_id].map(|m| {
-                    if let Some(mass_position) = inequivalent_masses.iter().position(|&x| x == m) {
-                        mass_position
-                    } else {
-                        inequivalent_masses.push(m);
-                        inequivalent_masses.len() - 1
-                    }
-                });
+                let mass_pointer = if edge_masses[edge_id].is_zero() {
+                    None
+                } else {
+                    Some(
+                        if let Some(mass_position) = inequivalent_masses
+                            .iter()
+                            .position(|&x| x == edge_masses[edge_id])
+                        {
+                            mass_position
+                        } else {
+                            inequivalent_masses.push(edge_masses[edge_id]);
+                            inequivalent_masses.len() - 1
+                        },
+                    )
+                };
 
                 let signature = &lmb.edge_signatures[edge_id];
 
                 let propagator_constraint = PropagatorConstraint {
-                    propagator_id,
                     mass_pointer,
                     signature,
                 };
@@ -223,9 +247,13 @@ fn construct_solver(
         for prop_index in esurface_constraint {
             a_matrix[constraint_index + 1][*prop_index + propagator_index_offset] = 1.0;
         }
+        let (graph_group_pos, esurface_id) =
+            get_representative(&overlap_input.group_esurface_map[existing_esurfaces[*esurface_id]])
+                .expect("esurface map corrupted");
+        let lmb = overlap_input.graph_data[graph_group_pos].lmb;
+        let esurface = &overlap_input.graph_data[graph_group_pos].esurfaces[esurface_id];
 
-        let shift_part = esurfaces[existing_esurfaces[*esurface_id]]
-            .compute_shift_part_from_momenta(lmb, external_momenta);
+        let shift_part = esurface.compute_shift_part_from_momenta(lmb, external_momenta);
         b_vector[constraint_index + 1] = -shift_part.0;
         a_matrix[constraint_index + 1][0] = -1.0;
     }
@@ -259,7 +287,7 @@ fn construct_solver(
         vertical_offset += 3;
 
         if let Some(mass_index) = propagator_constraint.mass_pointer {
-            b_vector[vertical_offset] = inequivalent_masses[mass_index].re.0;
+            b_vector[vertical_offset] = inequivalent_masses[mass_index].0;
             vertical_offset += 1;
         }
     }
@@ -286,27 +314,29 @@ fn construct_solver(
 }
 
 pub(crate) fn find_center(
-    lmb: &LoopMomentumBasis,
+    overlap_input: &OverlapInput,
     esurfaces_to_consider: &[ExistingEsurfaceId],
-    existing_esurfaces: &OldExistingEsurfaces,
-    esurfaces: &EsurfaceCollection,
-    edge_masses: &EdgeVec<Option<Complex<F<f64>>>>,
+    existing_esurfaces: &ExistingEsurfaces,
     external_momenta: &ExternalFourMomenta<F<f64>>,
     verbose: bool,
 ) -> Option<LoopMomenta<F<f64>>> {
     let mut solver = construct_solver(
-        lmb,
+        overlap_input,
         esurfaces_to_consider,
         existing_esurfaces,
-        esurfaces,
-        edge_masses,
         external_momenta,
         verbose,
     );
 
     solver.solve();
 
-    let loop_number = lmb.loop_edges.len();
+    let loop_number = overlap_input
+        .graph_data
+        .first()
+        .expect("no graphs passed to overlap")
+        .lmb
+        .loop_edges
+        .len();
 
     if solver.solution.status == SolverStatus::Solved {
         let center = extract_center(loop_number, &solver.solution.x);
@@ -318,13 +348,16 @@ pub(crate) fn find_center(
         let center = extract_center(loop_number, &solver.solution.x);
 
         let is_valid = esurfaces_to_consider.iter().all(|&existing_esurface_id| {
-            let esurface = &esurfaces[existing_esurfaces[existing_esurface_id]];
-            esurface.compute_from_momenta(
-                lmb,
-                &to_real_mass_vector(edge_masses),
-                &center,
-                external_momenta,
-            ) < F::from_f64(0.0)
+            let (graph_group_pos, esurface_id) = get_representative(
+                &overlap_input.group_esurface_map[existing_esurfaces[existing_esurface_id]],
+            )
+            .expect("overlap corrupted");
+
+            let lmb = overlap_input.graph_data[graph_group_pos].lmb;
+            let edge_masses = overlap_input.graph_data[graph_group_pos].edge_masses;
+            let esurface = &overlap_input.graph_data[graph_group_pos].esurfaces[esurface_id];
+            esurface.compute_from_momenta(lmb, &edge_masses, &center, external_momenta)
+                < F::from_f64(0.0)
         });
 
         if is_valid {
@@ -341,20 +374,31 @@ pub(crate) fn find_center(
     }
 }
 
+pub struct SingleGraphOverlapData<'a> {
+    lmb: &'a LoopMomentumBasis,
+    esurfaces: &'a EsurfaceCollection,
+    edge_masses: &'a EdgeVec<F<f64>>,
+}
+
+pub struct OverlapInput<'a> {
+    graph_data: TiVec<GraphGroupPosition, SingleGraphOverlapData<'a>>,
+    settings: &'a RuntimeSettings,
+    group_esurface_map: TiVec<GroupEsurfaceId, TiVec<GraphGroupPosition, Option<EsurfaceID>>>,
+}
+
 /// TODO: When this function will be called at runtime, panics should be removed and this function should return result.
 /// When the overlap finding fails, treat the point as unstable
 pub(crate) fn find_maximal_overlap(
-    lmb: &LoopMomentumBasis,
-    existing_esurfaces: &OldExistingEsurfaces,
-    esurfaces: &EsurfaceCollection,
-    edge_masses: &EdgeVec<Option<Complex<F<f64>>>>,
+    overlap_input: &OverlapInput,
+    existing_esurfaces: &ExistingEsurfaces,
     external_momenta: &ExternalFourMomenta<F<f64>>,
-    settings: &RuntimeSettings,
-) -> OverlapStructure {
+) -> Result<OverlapStructure> {
     let mut res = OverlapStructure {
         overlap_groups: vec![],
         existing_esurfaces: existing_esurfaces.clone(),
     };
+
+    let settings = overlap_input.settings;
 
     let all_existing_esurfaces = existing_esurfaces
         .iter_enumerated()
@@ -362,19 +406,6 @@ pub(crate) fn find_maximal_overlap(
         .collect_vec();
 
     if let Some(global_center) = &settings.subtraction.overlap_settings.force_global_center {
-        let real_mass_vector = edge_masses
-            .iter()
-            .map(|(eid, option_mass)| {
-                (
-                    eid,
-                    match option_mass {
-                        Some(complex_mass) => complex_mass.re,
-                        None => F::from_f64(0.0),
-                    },
-                )
-            })
-            .collect::<EdgeVec<_>>();
-
         let global_center_f = global_center
             .iter()
             .map(|coordinates| ThreeMomentum {
@@ -386,10 +417,18 @@ pub(crate) fn find_maximal_overlap(
 
         if settings.subtraction.overlap_settings.check_global_center {
             let is_valid = existing_esurfaces.iter().all(|existing_esurface_id| {
-                let esurface = &esurfaces[*existing_esurface_id];
+                let (graph_group_postition, esurface_id) =
+                    get_representative(&overlap_input.group_esurface_map[*existing_esurface_id])
+                        .expect("overlap corrupted");
+                let esurface =
+                    &overlap_input.graph_data[graph_group_postition].esurfaces[esurface_id];
+
+                let lmb = overlap_input.graph_data[graph_group_postition].lmb;
+                let edge_masses = overlap_input.graph_data[graph_group_postition].edge_masses;
+
                 let esurface_val = esurface.compute_from_momenta(
                     lmb,
-                    &real_mass_vector,
+                    &edge_masses,
                     &global_center_f,
                     external_momenta,
                 );
@@ -398,7 +437,9 @@ pub(crate) fn find_maximal_overlap(
             });
 
             if !is_valid {
-                panic!("Center provided is not inside all existing esurfaces")
+                return Err(eyre!(
+                    "Center provided is not inside all existing esurfaces"
+                ));
             }
         }
 
@@ -410,7 +451,7 @@ pub(crate) fn find_maximal_overlap(
         res.overlap_groups.push(single_group);
 
         res.fill_in_complements();
-        return res;
+        return Ok(res);
     }
 
     if settings.subtraction.overlap_settings.try_origin
@@ -422,11 +463,9 @@ pub(crate) fn find_maximal_overlap(
     // first try if all esurfaces have a single center, we explitely seach a center instead of trying the
     // origin. This is because the origin might not be optimal.
     let option_center = find_center(
-        lmb,
+        overlap_input,
         &all_existing_esurfaces,
         existing_esurfaces,
-        esurfaces,
-        edge_masses,
         external_momenta,
         false,
     );
@@ -439,17 +478,11 @@ pub(crate) fn find_maximal_overlap(
         };
         res.overlap_groups.push(single_group);
         res.fill_in_complements();
-        return res;
+        return Ok(res);
     }
 
     // if the center is not valid, create a table of all pairs
-    let esurface_pairs = EsurfacePairs::new(
-        lmb,
-        existing_esurfaces,
-        esurfaces,
-        edge_masses,
-        external_momenta,
-    );
+    let esurface_pairs = EsurfacePairs::new(overlap_input, existing_esurfaces, external_momenta);
 
     // if settings.general.debug > 3 {
     //     DEBUG_LOGGER.write("overlap_pairs", &esurface_pairs);
@@ -461,40 +494,37 @@ pub(crate) fn find_maximal_overlap(
         // if an esurface overlaps with no other esurface, it is part of the maximal overlap structure
         if esurface_pairs.has_no_overlap(existing_esurface_id) {
             let center = find_center(
-                lmb,
+                overlap_input,
                 &[existing_esurface_id],
                 existing_esurfaces,
-                esurfaces,
-                edge_masses,
                 external_momenta,
                 false,
-            );
+            )
+            .ok_or_else(|| {
+                let (graph_group_pos, esurface_id) =
+                    get_representative(&overlap_input.group_esurface_map[esurface_id])
+                        .expect("overlap corrupted");
+
+                let esurface = &overlap_input.graph_data[graph_group_pos].esurfaces[esurface_id];
+
+                let mut error_message = String::new();
+
+                error_message.push_str(&format!(
+                    "Could not find center of esuface {:?}\n",
+                    esurface_id
+                ));
+                error_message.push_str(&format!("edges: {:?}\n", esurface.energies));
+
+                error_message.push_str(&format!("external shift: {:?}\n", esurface.external_shift));
+
+                error_message.push_str(&format!("External momenta: {:#?}\n", external_momenta));
+
+                eyre!("{}", error_message)
+            })?;
 
             res.overlap_groups.push(OverlapGroup {
                 existing_esurfaces: vec![existing_esurface_id],
-                center: center.unwrap_or_else(|| {
-                    let esurface = &esurfaces[esurface_id];
-
-                    let mut error_message = String::new();
-
-                    error_message.push_str(&format!(
-                        "Could not find center of esuface {:?}\n",
-                        esurface_id
-                    ));
-                    error_message.push_str(&format!("edges: {:?}\n", esurface.energies));
-
-                    error_message
-                        .push_str(&format!("external shift: {:?}\n", esurface.external_shift));
-
-                    error_message.push_str(&format!(
-                        "Equation in LMB: {}\n",
-                        esurface.string_format_in_lmb(lmb)
-                    ));
-
-                    error_message.push_str(&format!("External momenta: {:#?}\n", external_momenta));
-
-                    panic!("{}", error_message)
-                }),
+                center: center,
                 complement: vec![],
             });
             num_disconnected_surfaces += 1;
@@ -507,7 +537,7 @@ pub(crate) fn find_maximal_overlap(
 
     if num_disconnected_surfaces == existing_esurfaces.len() {
         res.fill_in_complements();
-        return res;
+        return Ok(res);
     }
 
     let mut subset_size =
@@ -523,11 +553,9 @@ pub(crate) fn find_maximal_overlap(
 
         for subset in possible_subsets.iter() {
             let option_center = find_center(
-                lmb,
+                overlap_input,
                 subset,
                 existing_esurfaces,
-                esurfaces,
-                edge_masses,
                 external_momenta,
                 false,
             );
@@ -552,7 +580,7 @@ pub(crate) fn find_maximal_overlap(
     }
 
     res.fill_in_complements();
-    res
+    Ok(res)
 }
 
 fn is_subset_of_result(subset: &[ExistingEsurfaceId], result: &OverlapStructure) -> bool {
@@ -606,10 +634,8 @@ impl EsurfacePairs {
     }
 
     fn new(
-        lmb: &LoopMomentumBasis,
-        existing_esurfaces: &OldExistingEsurfaces,
-        esurfaces: &EsurfaceCollection,
-        edge_masses: &EdgeVec<Option<Complex<F<f64>>>>,
+        overlap_input: &OverlapInput,
+        existing_esurfaces: &ExistingEsurfaces,
         external_momenta: &ExternalFourMomenta<F<f64>>,
     ) -> Self {
         let mut res = Self::new_empty(existing_esurfaces.len());
@@ -622,11 +648,9 @@ impl EsurfacePairs {
         for (i, &esurface_id_1) in all_existing_esurfaces.iter().enumerate() {
             for &esurface_id_2 in all_existing_esurfaces.iter().skip(i + 1) {
                 let center = find_center(
-                    lmb,
+                    overlap_input,
                     &[esurface_id_1, esurface_id_2],
                     existing_esurfaces,
-                    esurfaces,
-                    edge_masses,
                     external_momenta,
                     false,
                 );
@@ -648,7 +672,7 @@ impl EsurfacePairs {
 
     fn construct_possible_subsets_of_len(
         &self,
-        existing_esurfaces: &OldExistingEsurfaces,
+        existing_esurfaces: &ExistingEsurfaces,
         subset_len: usize,
         result: &OverlapStructure,
     ) -> HashSet<Vec<ExistingEsurfaceId>> {
@@ -766,6 +790,7 @@ mod tests {
         momentum::FourMomentum,
         settings::RuntimeSettings,
         signature::LoopExtSignature,
+        subtraction::overlap,
         utils::dummy_hedge_graph,
     };
 
@@ -773,16 +798,16 @@ mod tests {
         external_momenta: ExternalFourMomenta<F<f64>>,
         lmb: LoopMomentumBasis,
         esurfaces: EsurfaceCollection,
-        existing_esurfaces: OldExistingEsurfaces,
-        edge_masses: EdgeVec<Option<Complex<F<f64>>>>,
+        existing_esurfaces: ExistingEsurfaces,
+        edge_masses: EdgeVec<F<f64>>,
     }
 
     struct HelperBananaStructure {
         external_momenta: ExternalFourMomenta<F<f64>>,
         lmb: LoopMomentumBasis,
         esurfaces: EsurfaceCollection,
-        existing_esurfaces: OldExistingEsurfaces,
-        edge_masses: EdgeVec<Option<Complex<F<f64>>>>,
+        existing_esurfaces: ExistingEsurfaces,
+        edge_masses: EdgeVec<F<f64>>,
     }
 
     impl HelperBoxStructure {
@@ -847,19 +872,16 @@ mod tests {
 
             let edge_masses = match masses {
                 Some(masses) => {
-                    let mut edge_masses = vec![None; 4];
-                    let mut real_masses = masses
-                        .iter()
-                        .map(|&x| Some(Complex::new(x, F(0.0))))
-                        .collect_vec();
+                    let mut edge_masses = vec![F(0.0); 4];
+                    let mut real_masses = masses.iter().map(|&x| x).collect_vec();
 
                     edge_masses.append(&mut real_masses);
                     edge_masses
                 }
-                None => vec![None; 8],
+                None => vec![F(0.0); 8],
             };
 
-            let existing_esurfaces = (0..4).map(Into::<EsurfaceID>::into).collect_vec().into();
+            let existing_esurfaces = (0..4).map(Into::<GroupEsurfaceId>::into).collect();
 
             Self {
                 external_momenta,
@@ -925,9 +947,9 @@ mod tests {
 
             let esurfaces = vec![only_esurface].into();
 
-            let existing_esurfaces = vec![Into::<EsurfaceID>::into(0)].into();
+            let existing_esurfaces = vec![Into::<GroupEsurfaceId>::into(0)].into();
             let edge_masses = dummy_hedge_graph
-                .new_edgevec_from_iter(vec![None; 5])
+                .new_edgevec_from_iter(vec![F(0.0); 5])
                 .unwrap();
 
             Self {
@@ -1000,11 +1022,24 @@ mod tests {
     fn test_pair_creator() {
         let box4e = HelperBoxStructure::new(None);
 
+        let overlap_input = OverlapInput {
+            graph_data: ti_vec![SingleGraphOverlapData {
+                lmb: &box4e.lmb,
+                esurfaces: &box4e.esurfaces,
+                edge_masses: &box4e.edge_masses,
+            }],
+            settings: &RuntimeSettings::default(),
+            group_esurface_map: ti_vec![ti_vec![
+                Some(Into::<EsurfaceID>::into(0)),
+                Some(Into::<EsurfaceID>::into(1)),
+                Some(Into::<EsurfaceID>::into(2)),
+                Some(Into::<EsurfaceID>::into(3))
+            ]],
+        };
+
         let esurface_pairs = EsurfacePairs::new(
-            &box4e.lmb,
+            &overlap_input,
             &box4e.existing_esurfaces,
-            &box4e.esurfaces,
-            &box4e.edge_masses,
             &box4e.external_momenta,
         );
 
@@ -1012,10 +1047,8 @@ mod tests {
 
         let box4e_massive = HelperBoxStructure::new(Some([F(10.5); 4]));
         let esurface_pairs_massive = EsurfacePairs::new(
-            &box4e_massive.lmb,
+            &overlap_input,
             &box4e_massive.existing_esurfaces,
-            &box4e_massive.esurfaces,
-            &box4e_massive.edge_masses,
             &box4e_massive.external_momenta,
         );
 
@@ -1026,11 +1059,24 @@ mod tests {
     fn test_subset_generator() {
         let box4e = HelperBoxStructure::new(None);
 
+        let overlap_input = OverlapInput {
+            graph_data: ti_vec![SingleGraphOverlapData {
+                lmb: &box4e.lmb,
+                esurfaces: &box4e.esurfaces,
+                edge_masses: &box4e.edge_masses,
+            }],
+            settings: &RuntimeSettings::default(),
+            group_esurface_map: ti_vec![ti_vec![
+                Some(Into::<EsurfaceID>::into(0)),
+                Some(Into::<EsurfaceID>::into(1)),
+                Some(Into::<EsurfaceID>::into(2)),
+                Some(Into::<EsurfaceID>::into(3))
+            ]],
+        };
+
         let esurface_pairs = EsurfacePairs::new(
-            &box4e.lmb,
+            &overlap_input,
             &box4e.existing_esurfaces,
-            &box4e.esurfaces,
-            &box4e.edge_masses,
             &box4e.external_momenta,
         );
 
@@ -1053,14 +1099,27 @@ mod tests {
         // massless variant
         let box4e = HelperBoxStructure::new(None);
 
+        let overlap_input = OverlapInput {
+            graph_data: ti_vec![SingleGraphOverlapData {
+                lmb: &box4e.lmb,
+                esurfaces: &box4e.esurfaces,
+                edge_masses: &box4e.edge_masses,
+            }],
+            settings: &RuntimeSettings::default(),
+            group_esurface_map: ti_vec![ti_vec![
+                Some(Into::<EsurfaceID>::into(0)),
+                Some(Into::<EsurfaceID>::into(1)),
+                Some(Into::<EsurfaceID>::into(2)),
+                Some(Into::<EsurfaceID>::into(3))
+            ]],
+        };
+
         let maximal_overlap = find_maximal_overlap(
-            &box4e.lmb,
+            &overlap_input,
             &box4e.existing_esurfaces,
-            &box4e.esurfaces,
-            &box4e.edge_masses,
             &box4e.external_momenta,
-            &RuntimeSettings::default(),
-        );
+        )
+        .unwrap();
 
         assert_eq!(maximal_overlap.overlap_groups.len(), 4);
 
@@ -1072,13 +1131,15 @@ mod tests {
             assert_eq!(overlap_group.complement.len(), 2);
 
             for esurface in esurfaces.iter() {
-                let esurfaec_val = box4e.esurfaces[box4e.existing_esurfaces[*esurface]]
-                    .compute_from_momenta(
-                        &box4e.lmb,
-                        &to_real_mass_vector(&box4e.edge_masses),
-                        center,
-                        &box4e.external_momenta,
-                    );
+                let esurfaec_val = box4e.esurfaces[overlap_input.group_esurface_map
+                    [box4e.existing_esurfaces[*esurface]][GraphGroupPosition::from(0)]
+                .unwrap()]
+                .compute_from_momenta(
+                    &box4e.lmb,
+                    &box4e.edge_masses,
+                    center,
+                    &box4e.external_momenta,
+                );
 
                 assert!(esurfaec_val.0 < 0.0);
             }
@@ -1090,14 +1151,27 @@ mod tests {
     fn test_disconnected_box_4e() {
         let box4e = HelperBoxStructure::new(Some([F(10.5); 4]));
 
+        let overlap_input = OverlapInput {
+            graph_data: ti_vec![SingleGraphOverlapData {
+                lmb: &box4e.lmb,
+                esurfaces: &box4e.esurfaces,
+                edge_masses: &box4e.edge_masses,
+            }],
+            settings: &RuntimeSettings::default(),
+            group_esurface_map: ti_vec![ti_vec![
+                Some(Into::<EsurfaceID>::into(0)),
+                Some(Into::<EsurfaceID>::into(1)),
+                Some(Into::<EsurfaceID>::into(2)),
+                Some(Into::<EsurfaceID>::into(3))
+            ]],
+        };
+
         let maximal_overlap = find_maximal_overlap(
-            &box4e.lmb,
+            &overlap_input,
             &box4e.existing_esurfaces,
-            &box4e.esurfaces,
-            &box4e.edge_masses,
             &box4e.external_momenta,
-            &RuntimeSettings::default(),
-        );
+        )
+        .unwrap();
 
         assert_eq!(maximal_overlap.overlap_groups.len(), 4);
 
@@ -1108,13 +1182,15 @@ mod tests {
             assert_eq!(esurfaces.len(), 1);
 
             for esurface in esurfaces.iter() {
-                let esurfaec_val = box4e.esurfaces[box4e.existing_esurfaces[*esurface]]
-                    .compute_from_momenta(
-                        &box4e.lmb,
-                        &to_real_mass_vector(&box4e.edge_masses),
-                        center,
-                        &box4e.external_momenta,
-                    );
+                let esurfaec_val = box4e.esurfaces[overlap_input.group_esurface_map
+                    [box4e.existing_esurfaces[*esurface]][GraphGroupPosition::from(0)]
+                .unwrap()]
+                .compute_from_momenta(
+                    &box4e.lmb,
+                    &box4e.edge_masses,
+                    center,
+                    &box4e.external_momenta,
+                );
 
                 assert!(esurfaec_val < F(0.0));
             }
@@ -1127,19 +1203,22 @@ mod tests {
     fn test_banana() {
         let banana = HelperBananaStructure::new();
 
-        println!(
-            "{}",
-            banana.esurfaces[Into::<EsurfaceID>::into(0)].string_format_in_lmb(&banana.lmb)
-        );
+        let overlap_input = OverlapInput {
+            graph_data: ti_vec![SingleGraphOverlapData {
+                lmb: &banana.lmb,
+                esurfaces: &banana.esurfaces,
+                edge_masses: &banana.edge_masses,
+            }],
+            settings: &RuntimeSettings::default(),
+            group_esurface_map: ti_vec![ti_vec![Some(Into::<EsurfaceID>::into(0)),]],
+        };
 
         let maximal_overlap = find_maximal_overlap(
-            &banana.lmb,
+            &overlap_input,
             &banana.existing_esurfaces,
-            &banana.esurfaces,
-            &banana.edge_masses,
             &banana.external_momenta,
-            &RuntimeSettings::default(),
-        );
+        )
+        .unwrap();
 
         println!("center: {:#?}", maximal_overlap);
 
