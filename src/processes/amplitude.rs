@@ -213,7 +213,15 @@ impl Amplitude {
         let terms: Result<Vec<_>> = self
             .graphs
             .iter()
-            .map(|graph| graph.generate_term_for_graph(model, global_settings))
+            .enumerate()
+            .map(|(graph_id, graph)| {
+                let group_id = graph.graph.group_id.unwrap(); // should always be set
+                let group_pos = self.graph_group_structure[group_id]
+                    .find_position(graph_id)
+                    .unwrap();
+
+                graph.generate_term_for_graph(model, group_pos, global_settings)
+            })
             .collect();
 
         let amplitude_integrand = AmplitudeIntegrand {
@@ -892,9 +900,10 @@ impl AmplitudeGraph {
     fn generate_term_for_graph(
         &self,
         model: &Model,
+        own_group_position: GraphGroupPosition,
         global_settings: &GlobalSettings,
     ) -> Result<AmplitudeGraphTerm> {
-        AmplitudeGraphTerm::from_amplitude_graph(self, model, global_settings)
+        AmplitudeGraphTerm::from_amplitude_graph(self, own_group_position, model, global_settings)
     }
 }
 

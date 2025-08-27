@@ -268,6 +268,12 @@ impl GraphGroup {
             .enumerate()
             .map(|(i, graph_id)| (GraphGroupPosition(i), graph_id))
     }
+
+    pub(crate) fn find_position(&self, graph_id: usize) -> Option<GraphGroupPosition> {
+        self.into_iter()
+            .position(|id| id == graph_id)
+            .map(GraphGroupPosition)
+    }
 }
 
 impl<'a> IntoIterator for &'a GraphGroup {

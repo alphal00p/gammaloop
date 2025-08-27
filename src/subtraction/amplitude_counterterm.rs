@@ -13,14 +13,16 @@ use typed_index_collections::TiVec;
 
 use crate::{
     cff::{
-        esurface::{Esurface, EsurfaceCollection, EsurfaceID, ExistingEsurfaceId},
+        esurface::{
+            self, Esurface, EsurfaceCollection, EsurfaceID, ExistingEsurfaceId, GroupEsurfaceId,
+        },
         expression::AmplitudeOrientationID,
     },
     gammaloop_integrand::{
         evaluators::SingleOrAllOrientations, GenericEvaluator, GenericEvaluatorFloat, ParamBuilder,
         ThresholdParams,
     },
-    graph::{FeynmanGraph, Graph, LoopMomentumBasis},
+    graph::{FeynmanGraph, Graph, GraphGroupPosition, LoopMomentumBasis},
     momentum::Rotation,
     momentum_sample::{LoopMomenta, MomentumSample},
     settings::{
@@ -46,6 +48,8 @@ const TOLERANCE: f64 = 1.0;
 pub struct AmplitudeCountertermData {
     pub overlap: OverlapStructure,
     pub evaluators: TiVec<EsurfaceID, AmplitudeCountertermEvaluator>,
+    pub esurface_map: TiVec<GroupEsurfaceId, TiVec<GraphGroupPosition, Option<EsurfaceID>>>,
+    pub own_group_position: GraphGroupPosition,
 }
 
 #[derive(Clone, Encode, Decode)]
@@ -88,10 +92,12 @@ pub struct AmplitudeCountertermEvaluator {
 }
 
 impl AmplitudeCountertermData {
-    pub fn new_empty() -> Self {
+    pub fn new_empty(own_group_position: GraphGroupPosition) -> Self {
         Self {
             overlap: OverlapStructure::new_empty(),
             evaluators: TiVec::new(),
+            esurface_map: TiVec::new(),
+            own_group_position,
         }
     }
 
@@ -139,6 +145,8 @@ impl AmplitudeCountertermData {
             momentum_sample,
             &self.overlap,
             &self.evaluators,
+            self.own_group_position,
+            &self.esurface_map,
         );
 
         let mut result = Complex::new_re(momentum_sample.zero());
@@ -149,9 +157,13 @@ impl AmplitudeCountertermData {
             for existing_esurface_id in group.existing_esurfaces.iter() {
                 let single_result = overlap_builder
                     .new_esurface_builder(*existing_esurface_id)
-                    .solve_rstar()
-                    .rstar_samples()
-                    .evaluate(param_builder, orientation);
+                    .map(|esurface_builder| {
+                        esurface_builder
+                            .solve_rstar()
+                            .rstar_samples()
+                            .evaluate(param_builder, orientation)
+                    })
+                    .unwrap_or_else(|| Complex::new_re(momentum_sample.zero()));
 
                 debug!(
                     "Param Builder for {}:\n{}",
@@ -169,6 +181,8 @@ impl AmplitudeCountertermData {
 struct CounterTermBuilder<'a, T: FloatLike> {
     overlap_structure: &'a OverlapStructure,
     evaluators: &'a TiVec<EsurfaceID, AmplitudeCountertermEvaluator>,
+    own_group_position: GraphGroupPosition,
+    esurface_map: &'a TiVec<GroupEsurfaceId, TiVec<GraphGroupPosition, Option<EsurfaceID>>>,
     real_mass_vector: EdgeVec<F<T>>,
     e_cm: F<T>,
     graph: &'a Graph,
@@ -187,6 +201,8 @@ impl<'a, T: FloatLike> CounterTermBuilder<'a, T> {
         sample: &'a MomentumSample<T>,
         overlap_structure: &'a OverlapStructure,
         evaluators: &'a TiVec<EsurfaceID, AmplitudeCountertermEvaluator>,
+        own_group_position: GraphGroupPosition,
+        esurface_map: &'a TiVec<GroupEsurfaceId, TiVec<GraphGroupPosition, Option<EsurfaceID>>>,
     ) -> Self {
         let real_mass_vector = graph.underlying.get_real_mass_vector();
         let e_cm = F::from_ff64(settings.kinematics.e_cm);
@@ -201,6 +217,8 @@ impl<'a, T: FloatLike> CounterTermBuilder<'a, T> {
             overlap_structure,
             sample,
             evaluators,
+            own_group_position,
+            esurface_map,
         }
     }
 
@@ -240,17 +258,21 @@ impl<'a, T: FloatLike> OverlapBuilder<'a, T> {
     fn new_esurface_builder(
         &'a self,
         existing_esurface_id: ExistingEsurfaceId,
-    ) -> EsurfaceCTBuilder<'a, T> {
-        let esurface_id = self
+    ) -> Option<EsurfaceCTBuilder<'a, T>> {
+        let group_esurface_id = self
             .counterterm_builder
             .overlap_structure
             .existing_esurfaces[existing_esurface_id];
 
-        EsurfaceCTBuilder {
+        let esurface_id = self.counterterm_builder.esurface_map[group_esurface_id]
+            [self.counterterm_builder.own_group_position];
+
+        esurface_id.map(|esurface_id| EsurfaceCTBuilder {
             overlap_builder: self,
             existing_esurface_id,
             esurface: &self.counterterm_builder.esurface_collection[esurface_id],
-        }
+            esurface_id,
+        })
     }
 }
 
@@ -258,6 +280,7 @@ struct EsurfaceCTBuilder<'a, T: FloatLike> {
     overlap_builder: &'a OverlapBuilder<'a, T>,
     existing_esurface_id: ExistingEsurfaceId,
     esurface: &'a Esurface,
+    esurface_id: EsurfaceID,
 }
 
 impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
@@ -382,15 +405,12 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
         param_builder: &mut ParamBuilder<f64>,
         orientations: SingleOrAllOrientations<'a, AmplitudeOrientationID>,
     ) -> Complex<F<T>> {
-        let ct_builder = self
-            .rstar_solution
-            .esurface_ct_builder
-            .overlap_builder
-            .counterterm_builder;
+        let esurface_ct_builder = &self.rstar_solution.esurface_ct_builder;
+        let ct_builder = esurface_ct_builder.overlap_builder.counterterm_builder;
 
         let existing_esurface_id = self.rstar_solution.esurface_ct_builder.existing_esurface_id;
 
-        let esurface_id = ct_builder.overlap_structure.existing_esurfaces[existing_esurface_id];
+        let esurface_id = esurface_ct_builder.esurface_id;
 
         let esurfaces = ct_builder.esurface_collection;
         let masses = &ct_builder.real_mass_vector;
@@ -494,51 +514,13 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
             return momentum_sample.one();
         }
 
-        let denominator = overlap
-            .overlap_groups
-            .iter()
-            .map(|group| {
-                group
-                    .complement
-                    .iter()
-                    .map(|existing_esurface_id| {
-                        let esurface_id = overlap.existing_esurfaces[*existing_esurface_id];
-                        let esurface = &esurfaces[esurface_id];
-                        let esurface_val = esurface.compute_from_momenta(
-                            lmb,
-                            masses,
-                            momentum_sample.loop_moms(),
-                            momentum_sample.external_moms(),
-                        );
-
-                        &esurface_val * &esurface_val
-                    })
-                    .reduce(|product, x| &product * &x)
-                    .unwrap_or_else(|| momentum_sample.one())
-            })
-            .reduce(|sum, x| &sum + &x)
-            .unwrap_or_else(|| momentum_sample.zero());
-
-        let numerator = overlap_builder
+        let evaluator = overlap_builder
             .overlap_group
-            .complement
-            .iter()
-            .map(|existing_esurface_id| {
-                let esurface_id = overlap.existing_esurfaces[*existing_esurface_id];
-                let esurface = &esurfaces[esurface_id];
-                let esurface_val = esurface.compute_from_momenta(
-                    lmb,
-                    masses,
-                    momentum_sample.loop_moms(),
-                    momentum_sample.external_moms(),
-                );
+            .prefactor_evaluator
+            .as_ref()
+            .unwrap();
 
-                &esurface_val * &esurface_val
-            })
-            .reduce(|product, x| &product * &x)
-            .unwrap_or_else(|| momentum_sample.one());
-
-        numerator / denominator
+        todo!()
     }
 }
 

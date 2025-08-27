@@ -28,7 +28,9 @@ use crate::{
     },
     evaluation_result::EvaluationResult,
     gammaloop_integrand::ParamBuilder,
-    graph::{FeynmanGraph, Graph, GraphGroup, GroupId, LmbIndex, LoopMomentumBasis},
+    graph::{
+        FeynmanGraph, Graph, GraphGroup, GraphGroupPosition, GroupId, LmbIndex, LoopMomentumBasis,
+    },
     integrands::HasIntegrand,
     model::Model,
     momentum::{Rotation, RotationMethod},
@@ -69,6 +71,7 @@ pub struct AmplitudeGraphTerm {
 impl AmplitudeGraphTerm {
     pub fn from_amplitude_graph(
         graph: &AmplitudeGraph,
+        own_group_position: GraphGroupPosition,
         model: &Model,
         settings: &GlobalSettings,
     ) -> Result<Self> {
@@ -107,7 +110,7 @@ impl AmplitudeGraphTerm {
             None
         };
 
-        let mut threshold_counterterm = AmplitudeCountertermData::new_empty();
+        let mut threshold_counterterm = AmplitudeCountertermData::new_empty(own_group_position);
 
         threshold_counterterm.evaluators = graph
             .derived_data
