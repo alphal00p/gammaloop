@@ -87,7 +87,7 @@ where
     }
 }
 
-#[derive(Clone, Encode, Decode)]
+#[derive(Clone, Encode, Decode, Debug)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct GenericEvaluator {
     pub exprs: Vec<Atom>,
