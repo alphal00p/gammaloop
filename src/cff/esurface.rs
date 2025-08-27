@@ -408,6 +408,34 @@ impl Esurface {
             .iter()
             .map(|index| {
                 let mass_symbol = graph.underlying[*index].mass_atom();
+                let emr_symbols = (0..3)
+                    .map(|i| function!(GS.emr_mom, usize::from(*index) as i32, i + 1))
+                    .collect_vec();
+
+                let atom = (&emr_symbols[0] * &emr_symbols[0]
+                    + &emr_symbols[1] * &emr_symbols[1]
+                    + &emr_symbols[2] * &emr_symbols[2]
+                    + &mass_symbol * &mass_symbol)
+                    .sqrt();
+                atom
+            })
+            .chain(self.external_shift.iter().map(|(index, sign)| {
+                function!(GS.emr_mom, usize::from(*index) as i32, 0) * Atom::num(*sign)
+            }))
+            .reduce(|sum, atom| sum + atom)
+            .unwrap_or_else(|| Atom::new())
+            .replace_multiple(lmb_reps)
+            .replace(parse!("ZERO"))
+            .with(Atom::new())
+            .expand() // ensure canonical form
+    }
+
+    // more readable version for debugging, because it doesn't write out components
+    pub(crate) fn lmb_atom_simplified(&self, graph: &Graph, lmb_reps: &[Replacement]) -> Atom {
+        self.energies
+            .iter()
+            .map(|index| {
+                let mass_symbol = graph.underlying[*index].mass_atom();
                 let emr_symbol = function!(GS.emr_mom, usize::from(*index) as i32);
                 let atom = (&emr_symbol * &emr_symbol + &mass_symbol * &mass_symbol).sqrt();
                 atom
