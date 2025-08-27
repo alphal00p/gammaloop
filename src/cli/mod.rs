@@ -71,6 +71,17 @@ pub struct Cli {
 }
 
 impl Cli {
+    pub fn new_test(state_folder: PathBuf) -> Self {
+        Cli {
+            run_history: None,
+            state_folder,
+            model_file: None,
+            no_save_state: true,
+            override_state: false,
+            command: None,
+        }
+    }
+
     fn override_settings(&mut self, other: Cli) {
         self.state_folder = other.state_folder;
         self.model_file = other.model_file;

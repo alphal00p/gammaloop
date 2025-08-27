@@ -2,7 +2,7 @@ use std::{env, path::Path};
 
 use crate::model::Model;
 
-pub(crate) fn load_generic_model(name: &str) -> Model {
+pub fn load_generic_model(name: &str) -> Model {
     Model::from_file(String::from(
         Path::new(&output_dir())
             .join(format!("gammaloop_models/{}.yaml", name))

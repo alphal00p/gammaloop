@@ -97,29 +97,33 @@ fn _default_compiler() -> String {
     "g++".to_owned()
 }
 
+pub const fn yes() -> bool {
+    true
+}
+
+pub fn gpp() -> String {
+    "g++".to_owned()
+}
+
+pub fn is_gpp(compiler: &str) -> bool {
+    "g++" == compiler
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq)]
 pub struct GammaloopCompileOptions {
-    #[serde(
-        default = "_default_true",
-        skip_serializing_if = "std::clone::Clone::clone"
-    )]
+    #[serde(default = "yes", skip_serializing_if = "std::clone::Clone::clone")]
     pub inline_asm: bool,
+
     #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub optimization_level: CompilationOptimizationLevel,
-    #[serde(
-        default = "_default_true",
-        skip_serializing_if = "std::clone::Clone::clone"
-    )]
+
+    #[serde(default = "yes", skip_serializing_if = "std::clone::Clone::clone")] // default true
     pub fast_math: bool,
-    #[serde(
-        default = "_default_true",
-        skip_serializing_if = "std::clone::Clone::clone"
-    )]
+
+    #[serde(default = "yes", skip_serializing_if = "std::clone::Clone::clone")] // default true
     pub unsafe_math: bool,
-    #[serde(
-        default = "_default_compiler",
-        skip_serializing_if = "IsDefault::is_default"
-    )]
+
+    #[serde(default = "gpp", skip_serializing_if = "is_gpp")] // default g++
     pub compiler: String,
     #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub custom: Vec<String>,
@@ -132,7 +136,7 @@ impl Default for GammaloopCompileOptions {
             optimization_level: CompilationOptimizationLevel::O3,
             fast_math: true,
             unsafe_math: true,
-            compiler: "g++".to_owned(),
+            compiler: gpp(),
             custom: vec![],
         }
     }

@@ -36,7 +36,7 @@ impl RunHistory {
             self.commands.push(command);
         }
     }
-    pub(crate) fn run(&mut self, cli: &mut Cli, state: &mut State) -> Result<ControlFlow<()>> {
+    pub fn run(&mut self, cli: &mut Cli, state: &mut State) -> Result<ControlFlow<()>> {
         for command in self.commands.clone() {
             if let ControlFlow::Break(_) = cli.run_command(command, self, state)? {
                 return Ok(ControlFlow::Break(()));
@@ -62,7 +62,7 @@ impl RunHistory {
         Ok(toml::from_str(&buf)?)
     }
 
-    pub(crate) fn from_file_yaml(filename: impl AsRef<Path>) -> Result<Self> {
+    pub fn from_file_yaml(filename: impl AsRef<Path>) -> Result<Self> {
         let filename = filename.as_ref();
         let mut f = File::open(filename)
             .wrap_err_with(|| format!("Could not open run history file {}", filename.display()))
@@ -143,6 +143,30 @@ impl State {
             model_path: None,
         };
         a
+    }
+
+    pub fn new_test(state_folder: PathBuf) -> Self {
+        let handle = super::tracing::init_test_tracing();
+
+        let a = Self {
+            save_path: state_folder,
+            log_filter: handle,
+            model: Model::default(),
+            process_list: ProcessList::default(),
+            model_path: None,
+        };
+        a
+    }
+
+    pub fn new_test_cli(&self) -> Cli {
+        Cli {
+            run_history: None,
+            state_folder: self.save_path.clone(),
+            model_file: None,
+            no_save_state: true,
+            override_state: false,
+            command: None,
+        }
     }
 }
 

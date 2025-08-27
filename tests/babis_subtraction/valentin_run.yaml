@@ -1,15 +1,15 @@
 global_settings:
-  debug_level: Info
+  debug_level: Debug
   generation:
-    enable_thresholds: true
-    evaluator_settings:
-      iterative_orientation_optimization: true
-      compile: false
+    enable_thresholds: false
     gammaloop_compile_options:
       inline_asm: true
-      optimization_level: O3
+    evaluator_settings:
+      iterative_orientation_optimization: true
+      compile: true
 default_runtime_settings:
   General:
+    debug: 3
     amplitude_prefactor:
       re: 0.0
       im: 1.0
@@ -21,7 +21,7 @@ default_runtime_settings:
     n_bins: 64
     bin_number_evolution: null
     min_samples_for_update: 1000
-    n_start: 1000
+    n_start: 10
     n_increase: 0
     n_max: 20000000
     integrated_phase: real
@@ -72,16 +72,13 @@ default_runtime_settings:
         escalate_for_large_weight_threshold: -1.0
 commands:
   - Import:
-      Model:
-        path: ../../src/test_resources/gammaloop_models/sm.yaml
-  - Import:
       Amplitude:
-        path: ./qqx_aaa_subtracted.dot
+        path: ./tests/babis_subtraction/qqx_aaa_subtracted.dot
   - Generate: {}
   # Inspect test below with disable_threshold_subtraction: true and enable_thresholds: false, should yield
-  # ( +6.923469780323068e-4, -6.181987787694594e-4 i)
+  # ( 6.923469780323068e-4, -6.181987787694594e-4 i)
   # and with disable_threshold_subtraction: false and enable_thresholds: true, should yield
-  # ( +2.412627583192008e-4, +1.0825818895742815e-4 i)
+  # ( 2.3093021684203047e-3, -1.246947565116003e-3 i)
   - Inspect:
       process_id: 0
       process_name: qqx_aaa_subtracted
@@ -97,7 +94,7 @@ commands:
   # - Integrate:
   #     process_id: 0
   #     process_name: qqx_aaa_subtracted
-  #     result_path: ./integration_workspace/integration_results.txt
+  #     result_path: ./tests/babis_subtraction/state/integration_workspace/integration_results.txt
   #     n_cores: 1
-  #     workspace_path: ./integration_workspace
+  #     workspace_path: ./tests/babis_subtraction/state/integration_workspace
   #     target: null

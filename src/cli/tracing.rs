@@ -139,6 +139,30 @@ pub(super) fn init_tracing(
         .clone()
 }
 
+pub fn init_test_tracing() -> reload::Handle<EnvFilter, Registry> {
+    FILTER_HANDLE
+        .get_or_init(|| {
+            // 2) reloadable filter
+            let spec = std::env::var("RUST_LOG").unwrap_or_else(|_| "debug".to_string());
+
+            let (filter_layer, handle) = reload::Layer::new(EnvFilter::new(spec));
+
+            // 4) pretty status to stderr, opt-in via `target="status"`
+            let status_layer = fmt::layer()
+                .with_target(false)
+                .pretty()
+                .with_writer(std::io::stderr);
+
+            tracing_subscriber::registry()
+                .with(filter_layer)
+                .with(status_layer)
+                .init();
+
+            handle
+        })
+        .clone()
+}
+
 use tracing::{event, Event, Level, Subscriber};
 
 pub enum Target {

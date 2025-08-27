@@ -615,6 +615,8 @@ impl Approximation {
                 continue;
             }
 
+            //TODO: Add orientation localisation prefactor (Sum of valid orientation thetas)/(number of valid orientations)
+
             res /= parse!("(-1i / (4 𝜋)^2 * 1/2 * 1/mUVI^2)");
 
             // multiply CFF triangle
