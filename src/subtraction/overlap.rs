@@ -829,28 +829,12 @@ impl EsurfacePairs {
     }
 }
 
-fn to_real_mass_vector(edge_masses: &EdgeVec<Option<Complex<F<f64>>>>) -> EdgeVec<F<f64>> {
-    edge_masses
-        .iter()
-        .map(|(eid, mass)| {
-            (
-                eid,
-                match mass {
-                    Some(m) => m.re,
-                    None => F::from_f64(0.0),
-                },
-            )
-        })
-        .collect()
-}
-
 #[cfg(test)]
 #[allow(dead_code, unused_variables)]
 mod tests {
     use super::*;
     use itertools::Itertools;
     use linnet::half_edge::involution::EdgeIndex;
-    use spenso::algebra::complex::Complex;
     use typed_index_collections::ti_vec;
 
     use crate::{
@@ -862,7 +846,6 @@ mod tests {
         momentum::FourMomentum,
         settings::RuntimeSettings,
         signature::LoopExtSignature,
-        subtraction::overlap,
         utils::dummy_hedge_graph,
     };
 
@@ -1095,23 +1078,20 @@ mod tests {
     fn test_pair_creator() {
         let box4e = HelperBoxStructure::new(None);
 
-        let overlap_input = OverlapInput {
+        let massless_overlap_input = OverlapInput {
             graph_data: ti_vec![SingleGraphOverlapData {
                 lmb: &box4e.lmb,
                 esurfaces: &box4e.esurfaces,
                 edge_masses: &box4e.edge_masses,
             }],
             settings: &RuntimeSettings::default(),
-            group_esurface_map: ti_vec![ti_vec![
-                Some(Into::<EsurfaceID>::into(0)),
-                Some(Into::<EsurfaceID>::into(1)),
-                Some(Into::<EsurfaceID>::into(2)),
-                Some(Into::<EsurfaceID>::into(3))
-            ]],
+            group_esurface_map: (0..4)
+                .map(|i| ti_vec![Some(Into::<EsurfaceID>::into(i))])
+                .collect(),
         };
 
         let esurface_pairs = EsurfacePairs::new(
-            &overlap_input,
+            &massless_overlap_input,
             &box4e.existing_esurfaces,
             &box4e.external_momenta,
         );
@@ -1119,8 +1099,21 @@ mod tests {
         assert_eq!(esurface_pairs.data.len(), 4);
 
         let box4e_massive = HelperBoxStructure::new(Some([F(10.5); 4]));
+
+        let massive_overlap_input = OverlapInput {
+            graph_data: ti_vec![SingleGraphOverlapData {
+                lmb: &box4e_massive.lmb,
+                esurfaces: &box4e_massive.esurfaces,
+                edge_masses: &box4e_massive.edge_masses,
+            }],
+            settings: &RuntimeSettings::default(),
+            group_esurface_map: (0..4)
+                .map(|i| ti_vec![Some(Into::<EsurfaceID>::into(i))])
+                .collect(),
+        };
+
         let esurface_pairs_massive = EsurfacePairs::new(
-            &overlap_input,
+            &massive_overlap_input,
             &box4e_massive.existing_esurfaces,
             &box4e_massive.external_momenta,
         );
@@ -1139,12 +1132,9 @@ mod tests {
                 edge_masses: &box4e.edge_masses,
             }],
             settings: &RuntimeSettings::default(),
-            group_esurface_map: ti_vec![ti_vec![
-                Some(Into::<EsurfaceID>::into(0)),
-                Some(Into::<EsurfaceID>::into(1)),
-                Some(Into::<EsurfaceID>::into(2)),
-                Some(Into::<EsurfaceID>::into(3))
-            ]],
+            group_esurface_map: (0..4)
+                .map(|i| ti_vec![Some(Into::<EsurfaceID>::into(i))])
+                .collect(),
         };
 
         let esurface_pairs = EsurfacePairs::new(
@@ -1172,23 +1162,20 @@ mod tests {
         // massless variant
         let box4e = HelperBoxStructure::new(None);
 
-        let overlap_input = OverlapInput {
+        let massless_overlap_input = OverlapInput {
             graph_data: ti_vec![SingleGraphOverlapData {
                 lmb: &box4e.lmb,
                 esurfaces: &box4e.esurfaces,
                 edge_masses: &box4e.edge_masses,
             }],
             settings: &RuntimeSettings::default(),
-            group_esurface_map: ti_vec![ti_vec![
-                Some(Into::<EsurfaceID>::into(0)),
-                Some(Into::<EsurfaceID>::into(1)),
-                Some(Into::<EsurfaceID>::into(2)),
-                Some(Into::<EsurfaceID>::into(3))
-            ]],
+            group_esurface_map: (0..4)
+                .map(|i| ti_vec![Some(Into::<EsurfaceID>::into(i))])
+                .collect(),
         };
 
         let maximal_overlap = find_maximal_overlap(
-            &overlap_input,
+            &massless_overlap_input,
             &box4e.existing_esurfaces,
             &box4e.external_momenta,
         )
@@ -1204,7 +1191,7 @@ mod tests {
             assert_eq!(overlap_group.complement.len(), 2);
 
             for esurface in esurfaces.iter() {
-                let esurfaec_val = box4e.esurfaces[overlap_input.group_esurface_map
+                let esurfaec_val = box4e.esurfaces[massless_overlap_input.group_esurface_map
                     [box4e.existing_esurfaces[*esurface]][GraphGroupPosition::from(0)]
                 .unwrap()]
                 .compute_from_momenta(
@@ -1231,12 +1218,9 @@ mod tests {
                 edge_masses: &box4e.edge_masses,
             }],
             settings: &RuntimeSettings::default(),
-            group_esurface_map: ti_vec![ti_vec![
-                Some(Into::<EsurfaceID>::into(0)),
-                Some(Into::<EsurfaceID>::into(1)),
-                Some(Into::<EsurfaceID>::into(2)),
-                Some(Into::<EsurfaceID>::into(3))
-            ]],
+            group_esurface_map: (0..4)
+                .map(|i| ti_vec![Some(Into::<EsurfaceID>::into(i))])
+                .collect(),
         };
 
         let maximal_overlap = find_maximal_overlap(
@@ -1292,8 +1276,6 @@ mod tests {
             &banana.external_momenta,
         )
         .unwrap();
-
-        println!("center: {:#?}", maximal_overlap);
 
         assert_eq!(maximal_overlap.overlap_groups.len(), 1);
         assert_eq!(
