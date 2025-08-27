@@ -126,7 +126,7 @@ pub struct State {
     pub model: Model,
     pub process_list: ProcessList,
     pub model_path: Option<PathBuf>,
-    save_path: PathBuf,
+    pub save_path: PathBuf,
     log_filter: reload::Handle<EnvFilter, Registry>,
 }
 

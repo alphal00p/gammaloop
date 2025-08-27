@@ -561,7 +561,7 @@ impl Graph {
             },
             HedgeParseError::ParseError(i) => color_eyre::Report::from(i),
             _ => {
-                eyre!("hhee")
+                eyre!("Hedge parse error")
             }
         })?;
         Self::from_hedge_graph_set(hedge_graph_set, model)

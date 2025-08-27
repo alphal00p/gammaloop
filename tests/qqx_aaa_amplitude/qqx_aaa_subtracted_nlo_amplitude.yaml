@@ -73,7 +73,7 @@ default_runtime_settings:
 commands:
   - Import:
       Amplitude:
-        path: ./tests/babis_subtraction/qqx_aaa_subtracted.dot
+        path: ./tests/qqx_aaa_amplitude/qqx_aaa_subtracted.dot
   - Generate: {}
   # Inspect test below with disable_threshold_subtraction: true and enable_thresholds: false, should yield
   # ( 6.923469780323068e-4, -6.181987787694594e-4 i)
