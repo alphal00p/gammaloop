@@ -7,14 +7,18 @@ use _gammaloop::{
     utils::test_utils::load_generic_model,
 };
 use color_eyre::Result;
-use std::env;
-use tracing::debug;
+use std::{env, path::Path};
+use tracing::{debug, warn};
 
-fn new_cli_for_test() -> (Cli, State) {
+fn new_cli_for_test(test_path: impl AsRef<Path>) -> (Cli, State) {
     let state_path = if let Ok(user_specified_state_path) = env::var("TESTS_GAMMALOOP_STATE_PATH") {
-        std::path::PathBuf::from(user_specified_state_path)
+        if user_specified_state_path.to_ascii_uppercase() == "AUTO" {
+            env::temp_dir().join("tests_gammaloop_state")
+        } else {
+            std::path::PathBuf::from(user_specified_state_path)
+        }
     } else {
-        env::temp_dir().join("tests_gammaloop_state")
+        test_path.as_ref().join("tests_gammaloop_state")
     };
     debug!("Using gammaloop state path: {}", state_path.display());
 
@@ -25,16 +29,20 @@ fn new_cli_for_test() -> (Cli, State) {
 }
 
 fn clean_test(state: &State) {
-    match std::fs::remove_dir_all(state.save_path.clone()) {
-        Ok(()) => debug!(
-            "Gammaloop state folder '{}' deleted successfully",
-            state.save_path.display()
-        ),
-        Err(e) => debug!(
-            "Error deleting Gammaloop state folder '{}'. Error: {}",
-            state.save_path.display(),
-            e
-        ),
+    if let Err(_) = env::var("GAMMALOOP_TESTS_NO_CLEAN_STATE") {
+        match std::fs::remove_dir_all(state.save_path.clone()) {
+            Ok(()) => debug!(
+                "Gammaloop state folder '{}' deleted successfully",
+                state.save_path.display()
+            ),
+            Err(e) => debug!(
+                "Error deleting Gammaloop state folder '{}'. Error: {}",
+                state.save_path.display(),
+                e
+            ),
+        }
+    } else {
+        warn!("Environment variable 'GAMMALOOP_TESTS_NO_CLEAN_STATE' is set so that the gammaloop state test folder '{}' is not cleaned.",state.save_path.display());
     }
 }
 
@@ -46,7 +54,7 @@ fn qqx_aaa_subtracted_nlo_amplitude_test() -> Result<()> {
         "./tests/qqx_aaa_amplitude/qqx_aaa_subtracted_nlo_amplitude.yaml",
     )?;
 
-    let (mut cli, mut state) = new_cli_for_test();
+    let (mut cli, mut state) = new_cli_for_test("./tests/qqx_aaa_amplitude");
 
     cmds.run(&mut cli, &mut state)?;
 
