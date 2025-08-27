@@ -13,8 +13,10 @@ use crate::momentum::ThreeMomentum;
 use crate::momentum_sample::ExternalFourMomenta;
 use crate::momentum_sample::LoopMomenta;
 use crate::settings::RuntimeSettings;
+use crate::signature::LoopExtSignature;
 use crate::utils::compute_shift_part;
 use crate::utils::F;
+use crate::utils::GS;
 use crate::GammaLoopContext;
 use ahash::HashMap;
 use ahash::HashMapExt;
@@ -23,23 +25,21 @@ use bincode_trait_derive::Decode;
 use bincode_trait_derive::Encode;
 use clarabel::algebra::*;
 use clarabel::solver::*;
-use core::panic;
 use eyre::{eyre, Result};
 use itertools::Itertools;
-use linnet::half_edge::involution::EdgeIndex;
 use linnet::half_edge::involution::EdgeVec;
 use linnet::half_edge::swap::Swap;
-use serde::Deserialize;
 use serde::Serialize;
 use serde_with::serde_as;
 use spenso::algebra::algebraic_traits::IsZero;
 use spenso::algebra::complex::Complex;
 use std::fmt::Display;
-use symbolica::id::Replacement;
+use symbolica::atom::Atom;
+use symbolica::evaluate::FunctionMap;
+use symbolica::evaluate::OptimizationSettings;
+use symbolica::function;
 use tracing::debug;
 use typed_index_collections::TiVec;
-
-use crate::signature::LoopExtSignature;
 
 #[derive(Debug, Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
@@ -94,6 +94,66 @@ impl OverlapStructure {
                 })
                 .collect();
         }
+    }
+
+    pub fn build_evaluators(
+        &mut self,
+        atoms: &TiVec<GroupEsurfaceId, Atom>,
+        optimization_settings: &OptimizationSettings,
+        num_loops: usize,
+        num_externals: usize,
+        mass_atoms: Vec<Atom>,
+    ) -> Result<()> {
+        let group_square_atoms = self
+            .overlap_groups
+            .iter()
+            .map(|group| {
+                group
+                    .existing_esurfaces
+                    .iter()
+                    .map(|&existing_esurface_id| {
+                        let esurface = self.existing_esurfaces[existing_esurface_id];
+                        let atom = &atoms[esurface];
+                        atom * atom
+                    })
+                    .reduce(|prod, atom| prod * atom)
+                    .unwrap_or_else(|| Atom::num(1))
+            })
+            .collect_vec();
+
+        let denominator = group_square_atoms
+            .iter()
+            .fold(Atom::new(), |sum, atom| sum + atom);
+
+        let params = (0..num_loops)
+            .flat_map(|loop_index| {
+                (1..=3).map(move |spatial_index| {
+                    function!(GS.loop_mom, loop_index as i32, spatial_index)
+                })
+            })
+            .chain((0..num_externals).flat_map(|external_index| {
+                (0..=3).map(move |spatial_index| {
+                    function!(GS.external_mom, external_index as i32, spatial_index)
+                })
+            }))
+            .chain(mass_atoms)
+            .collect_vec();
+
+        for (group, square_atom) in self.overlap_groups.iter_mut().zip(group_square_atoms) {
+            let atom = square_atom / &denominator;
+
+            let evalautor = GenericEvaluator::new_from_raw_params(
+                [atom],
+                &params,
+                &FunctionMap::new(),
+                optimization_settings.clone(),
+            )
+            .ok_or_else(|| eyre!("Could not build evaluator for overlap prefactor"))?;
+
+            group.prefactor_evaluator = Some(evalautor);
+        }
+
+        Ok(())
     }
 
     pub fn new_empty() -> Self {
@@ -789,6 +849,7 @@ fn to_real_mass_vector(edge_masses: &EdgeVec<Option<Complex<F<f64>>>>) -> EdgeVe
 mod tests {
     use super::*;
     use itertools::Itertools;
+    use linnet::half_edge::involution::EdgeIndex;
     use spenso::algebra::complex::Complex;
     use typed_index_collections::ti_vec;
 
