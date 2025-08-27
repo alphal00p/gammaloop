@@ -33,7 +33,7 @@ use crate::{
     model::Model,
     momentum::{Rotation, RotationMethod},
     momentum_sample::{ExternalIndex, MomentumSample},
-    processes::{AmplitudeDerivedData, AmplitudeGraph, GroupedEsurfaceMap},
+    processes::{AmplitudeDerivedData, AmplitudeGraph, GroupDerivedData},
     settings::{GlobalSettings, RuntimeSettings},
     signature::SignatureLike,
     status_debug, status_warn,
@@ -366,7 +366,7 @@ pub struct AmplitudeIntegrandData {
     pub graph_terms: Vec<AmplitudeGraphTerm>,
     pub external_signature: SignatureLike<ExternalIndex>,
     pub graph_group_structure: TiVec<GroupId, GraphGroup>,
-    pub esurface_group_map: GroupedEsurfaceMap,
+    pub group_derived_data: TiVec<GroupId, GroupDerivedData>,
 }
 
 impl AmplitudeIntegrand {
@@ -409,9 +409,10 @@ impl AmplitudeIntegrand {
 
     pub(crate) fn get_existing_esurfaces(&self) -> TiVec<GroupId, ExistingEsurfaces> {
         self.data
-            .esurface_group_map
+            .group_derived_data
             .iter_enumerated()
-            .map(|(group_id, group_esurface_map)| {
+            .map(|(group_id, group_derived_data)| {
+                let group_esurface_map = &group_derived_data.esurface_map;
                 let external_moms = self
                     .settings
                     .kinematics

@@ -72,13 +72,17 @@ pub struct Amplitude {
     pub integrand: Option<NewIntegrand>,
     pub graphs: Vec<AmplitudeGraph>,
     pub graph_group_structure: TiVec<GroupId, GraphGroup>,
-    pub grouped_esurface_map: GroupedEsurfaceMap,
     pub external_particles: Vec<ArcParticle>,
     pub external_signature: SignatureLike<ExternalIndex>,
+    pub group_derived_data: TiVec<GroupId, GroupDerivedData>,
 }
 
-pub type GroupedEsurfaceMap =
-    TiVec<GroupId, TiVec<GroupEsurfaceId, TiVec<GraphGroupPosition, Option<EsurfaceID>>>>;
+#[derive(Clone, Encode, Decode)]
+#[trait_decode(trait = GammaLoopContext)]
+pub struct GroupDerivedData {
+    pub esurface_map: TiVec<GroupEsurfaceId, TiVec<GraphGroupPosition, Option<EsurfaceID>>>,
+    pub esurface_atoms: TiVec<GroupEsurfaceId, Atom>,
+}
 
 impl Amplitude {
     #[instrument(
@@ -189,7 +193,7 @@ impl Amplitude {
             amplitude_graph.preprocess(model, settings)?;
         }
 
-        self.generate_grouped_esurface_map()?;
+        self.generate_grouped_derived_data()?;
 
         Ok(())
     }
@@ -220,7 +224,7 @@ impl Amplitude {
                 graph_terms: terms?,
                 external_signature: self.external_signature.clone(),
                 graph_group_structure: self.graph_group_structure.clone(),
-                esurface_group_map: self.grouped_esurface_map.clone(),
+                group_derived_data: self.group_derived_data.clone(),
             },
         };
         self.integrand = Some(NewIntegrand::Amplitude(amplitude_integrand));
@@ -244,10 +248,10 @@ impl Amplitude {
         Ok(())
     }
 
-    pub fn generate_grouped_esurface_map(&mut self) -> Result<()> {
+    pub fn generate_grouped_derived_data(&mut self) -> Result<()> {
         // for each group we must collect all inequivalent esurfaces.
 
-        let group_esurface_map = self
+        let group_derived_data = self
             .graph_group_structure
             .iter()
             .map(|group| {
@@ -279,13 +283,17 @@ impl Amplitude {
                             Some(esurface_id);
                     }
                 }
-                group_esurface_structure
-                    .into_values()
-                    .collect::<TiVec<GroupEsurfaceId, _>>()
+
+                let (surface_atoms, esurface_map) = group_esurface_structure.into_iter().unzip();
+
+                GroupDerivedData {
+                    esurface_map,
+                    esurface_atoms: surface_atoms,
+                }
             })
             .collect::<TiVec<GroupId, _>>();
 
-        Ok(self.grouped_esurface_map = group_esurface_map)
+        Ok(self.group_derived_data = group_derived_data)
     }
 }
 
@@ -950,9 +958,9 @@ impl Amplitude {
             name: name.to_string(),
             graphs: vec![],
             graph_group_structure: TiVec::new(),
-            grouped_esurface_map: TiVec::new(),
             external_particles: vec![],
             external_signature: SignatureLike::from_iter(iter::empty::<i8>()),
+            group_derived_data: TiVec::new(),
         }
     }
 
