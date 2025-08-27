@@ -10,7 +10,7 @@ use spenso::{
 use symbolica::{
     atom::{Atom, AtomCore},
     domains::rational::Rational,
-    evaluate::{CompileOptions, ExpressionEvaluator, InlineASM, OptimizationSettings},
+    evaluate::{CompileOptions, ExpressionEvaluator, FunctionMap, InlineASM, OptimizationSettings},
 };
 use typed_index_collections::TiVec;
 
@@ -202,11 +202,20 @@ impl GenericEvaluator {
     ) -> Option<Self> {
         let params: Vec<Atom> = builder.into_iter().flat_map(|p| p.params.clone()).collect();
 
+        Self::new_from_raw_params(atoms, &params, &builder.fn_map, optimization_settings)
+    }
+
+    pub(crate) fn new_from_raw_params<I: IntoIterator<Item = Atom>>(
+        atoms: I,
+        params: &[Atom],
+        fn_map: &FunctionMap,
+        optimization_settings: OptimizationSettings,
+    ) -> Option<Self> {
         let exprs: Vec<Atom> = atoms.into_iter().collect();
         let tree = exprs
             .iter()
             .map(|n| {
-                n.evaluator(&builder.fn_map, &params, optimization_settings.clone())
+                n.evaluator(fn_map, params, optimization_settings.clone())
                     .unwrap()
             })
             .reduce(|mut acc, n| {
