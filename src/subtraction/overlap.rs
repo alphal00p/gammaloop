@@ -5,6 +5,8 @@ use crate::cff::esurface::ExistingEsurfaceId;
 use crate::cff::esurface::ExistingEsurfaces;
 use crate::cff::esurface::GroupEsurfaceId;
 use crate::cff::esurface::OldExistingEsurfaces;
+use crate::gammaloop_integrand::GenericEvaluator;
+use crate::graph::Graph;
 use crate::graph::GraphGroupPosition;
 use crate::graph::LoopMomentumBasis;
 use crate::momentum::ThreeMomentum;
@@ -13,6 +15,7 @@ use crate::momentum_sample::LoopMomenta;
 use crate::settings::RuntimeSettings;
 use crate::utils::compute_shift_part;
 use crate::utils::F;
+use crate::GammaLoopContext;
 use ahash::HashMap;
 use ahash::HashMapExt;
 use ahash::HashSet;
@@ -32,19 +35,23 @@ use serde_with::serde_as;
 use spenso::algebra::algebraic_traits::IsZero;
 use spenso::algebra::complex::Complex;
 use std::fmt::Display;
+use symbolica::id::Replacement;
 use tracing::debug;
 use typed_index_collections::TiVec;
 
 use crate::signature::LoopExtSignature;
 
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, Encode, Decode)]
+#[trait_decode(trait = GammaLoopContext)]
 pub struct OverlapGroup {
     pub existing_esurfaces: Vec<ExistingEsurfaceId>,
     pub complement: Vec<ExistingEsurfaceId>,
     pub center: LoopMomenta<F<f64>>,
+    pub prefactor_evaluator: Option<GenericEvaluator>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, Encode, Decode)]
+#[trait_decode(trait = GammaLoopContext)]
 pub struct OverlapStructure {
     pub overlap_groups: Vec<OverlapGroup>,
     pub existing_esurfaces: ExistingEsurfaces,
@@ -447,6 +454,7 @@ pub(crate) fn find_maximal_overlap(
             existing_esurfaces: all_existing_esurfaces,
             center: global_center_f,
             complement: vec![],
+            prefactor_evaluator: None,
         };
         res.overlap_groups.push(single_group);
 
@@ -475,6 +483,7 @@ pub(crate) fn find_maximal_overlap(
             existing_esurfaces: all_existing_esurfaces,
             center,
             complement: vec![],
+            prefactor_evaluator: None,
         };
         res.overlap_groups.push(single_group);
         res.fill_in_complements();
@@ -526,6 +535,7 @@ pub(crate) fn find_maximal_overlap(
                 existing_esurfaces: vec![existing_esurface_id],
                 center: center,
                 complement: vec![],
+                prefactor_evaluator: None,
             });
             num_disconnected_surfaces += 1;
         }
@@ -565,6 +575,7 @@ pub(crate) fn find_maximal_overlap(
                     existing_esurfaces: subset.clone(),
                     center,
                     complement: vec![],
+                    prefactor_evaluator: None,
                 });
             }
         }
@@ -998,6 +1009,7 @@ mod tests {
                     existing_esurfaces: group,
                     center,
                     complement: vec![],
+                    prefactor_evaluator: None,
                 })
                 .collect_vec(),
             existing_esurfaces: ti_vec![],
