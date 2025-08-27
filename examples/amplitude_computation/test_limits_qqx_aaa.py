@@ -98,6 +98,10 @@ graph_names = [
     "uv_bubble_B",
     "ir_ct",
     "uv_ir_ct",
+    "int_ir_bare_ct",
+    "int_ir_dressed_ct",
+    "int_uv_ir_ct",
+    "int_uv_ct",
 ]
 
 

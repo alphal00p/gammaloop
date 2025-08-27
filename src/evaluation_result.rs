@@ -8,6 +8,7 @@ use spenso::algebra::complex::Complex;
 use symbolica::domains::float::ConstructibleFloat;
 
 use crate::observables::Event;
+use crate::status_info;
 use crate::{
     settings::runtime::Precision,
     utils::{format_evaluation_time, F},
@@ -197,7 +198,7 @@ impl StatisticsCounter {
         let param_time_formatted = format_evaluation_time(self.get_avg_param_timing());
         let total_time = format_evaluation_time(self.get_avg_total_timing());
 
-        info!(
+        status_info!(
             "|  {}  | {} {} | {} {} | {} {}",
             format!("{:-7}", "timing").blue().bold(),
             format!("{:-7}", "total:"),
@@ -208,7 +209,7 @@ impl StatisticsCounter {
             format!("{:-9}", time_ltd_formatted).green(),
         );
 
-        info!(
+        status_info!(
             "|  {}  | {} {} | {} {} | {} {}",
             format!("{:-7}", "evals").blue().bold(),
             format!("{:-7}", "f64:"),

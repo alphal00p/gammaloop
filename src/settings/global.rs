@@ -10,6 +10,7 @@ use symbolica::{
     function,
 };
 
+use crate::_default_true;
 use crate::{
     cff::expression::GraphOrientation,
     processes::EvaluatorSettings,
@@ -67,23 +68,70 @@ impl Default for GenerationSettings {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, Copy)]
+pub enum CompilationOptimizationLevel {
+    O0,
+    O1,
+    O2,
+    O3,
+}
+
+impl Default for CompilationOptimizationLevel {
+    fn default() -> Self {
+        CompilationOptimizationLevel::O3
+    }
+}
+
+impl From<CompilationOptimizationLevel> for usize {
+    fn from(value: CompilationOptimizationLevel) -> Self {
+        match value {
+            CompilationOptimizationLevel::O0 => 0,
+            CompilationOptimizationLevel::O1 => 1,
+            CompilationOptimizationLevel::O2 => 2,
+            CompilationOptimizationLevel::O3 => 3,
+        }
+    }
+}
+
+fn _default_compiler() -> String {
+    "g++".to_owned()
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq)]
 pub struct GammaloopCompileOptions {
+    #[serde(
+        default = "_default_true",
+        skip_serializing_if = "std::clone::Clone::clone"
+    )]
     pub inline_asm: bool,
-    pub optimization_level: usize,
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    pub optimization_level: CompilationOptimizationLevel,
+    #[serde(
+        default = "_default_true",
+        skip_serializing_if = "std::clone::Clone::clone"
+    )]
     pub fast_math: bool,
+    #[serde(
+        default = "_default_true",
+        skip_serializing_if = "std::clone::Clone::clone"
+    )]
     pub unsafe_math: bool,
+    #[serde(
+        default = "_default_compiler",
+        skip_serializing_if = "IsDefault::is_default"
+    )]
     pub compiler: String,
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub custom: Vec<String>,
 }
 
 impl Default for GammaloopCompileOptions {
     fn default() -> Self {
         Self {
-            inline_asm: false,
-            optimization_level: 3,
+            inline_asm: true,
+            optimization_level: CompilationOptimizationLevel::O3,
             fast_math: true,
-            unsafe_math: false,
+            unsafe_math: true,
             compiler: "g++".to_owned(),
             custom: vec![],
         }
@@ -102,7 +150,7 @@ impl GammaloopCompileOptions {
     #[allow(clippy::needless_update)]
     pub(crate) fn to_symbolica_compile_options(&self) -> CompileOptions {
         CompileOptions {
-            optimization_level: self.optimization_level,
+            optimization_level: self.optimization_level.into(),
             fast_math: self.fast_math,
             unsafe_math: self.unsafe_math,
             compiler: self.compiler.clone(),

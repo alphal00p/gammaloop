@@ -541,7 +541,7 @@ where
             &target,
             settings.integrator.show_max_wgt_info,
         );
-        info!("");
+        status_info!("");
 
         // now write the integration state to disk if a workspace has been provided.
         if let Some(ref workspace_path) = workspace {
@@ -1111,7 +1111,7 @@ pub(crate) fn show_integration_status(
     target: &Option<Complex<F<f64>>>,
     show_max_wgt_info: bool,
 ) {
-    info!(
+    status_info!(
         "/  [ {} ] {}: n_pts={:-6.0}K {} {}",
         format!(
             "{:^7}",
@@ -1179,19 +1179,21 @@ pub(crate) fn show_integration_status(
         );
     }
     if show_max_wgt_info {
-        info!("|  -------------------------------------------------------------------------------------------");
-        info!(
+        status_info!("|  -------------------------------------------------------------------------------------------");
+        status_info!(
             "|  {:<16} | {:<23} | {}",
-            "Integrand", "Max Eval", "Max Eval xs",
+            "Integrand",
+            "Max Eval",
+            "Max Eval xs",
         );
 
         for (i_itg, integral) in integration_state.all_integrals.iter().enumerate() {
             for max_weight_str in integral.format_max_weights(i_itg) {
-                info!("{}", max_weight_str);
+                status_info!("{}", max_weight_str);
             }
         }
 
-        info!("|  -------------------------------------------------------------------------------------------");
+        status_info!("|  -------------------------------------------------------------------------------------------");
     }
 
     integration_state.stats.display_status();
@@ -1204,7 +1206,7 @@ pub(crate) fn print_integral_result(
     tag: &str,
     trgt: Option<F<f64>>,
 ) {
-    info!(
+    status_info!(
         "|  itg #{:-3} {}: {} {} {} {} {}",
         format!("{:<3}", i_itg),
         format!("{:-2}", tag).blue().bold(),

@@ -132,16 +132,16 @@ pub(crate) fn set_interrupted(flag: bool) {
     INTERRUPTED.store(flag, std::sync::atomic::Ordering::Relaxed);
 }
 
-const fn _default_true() -> bool {
+pub const fn _default_true() -> bool {
     true
 }
-const fn _default_false() -> bool {
+pub const fn _default_false() -> bool {
     false
 }
-const fn _default_one() -> f64 {
+pub const fn _default_one() -> f64 {
     1.0
 }
-const fn _default_usize_null() -> Option<usize> {
+pub const fn _default_usize_null() -> Option<usize> {
     None
 }
 

@@ -227,7 +227,8 @@ mod tests {
             NumeratorParseMode, NumeratorSettings, UnInit,
         },
         settings::global::{
-            GammaloopCompileOptions, GenerationSettings, TropicalSubgraphTableSettings,
+            CompilationOptimizationLevel, GammaloopCompileOptions, GenerationSettings,
+            TropicalSubgraphTableSettings,
         },
         signature::LoopExtSignature,
         utils::test_utils::load_generic_model,
@@ -280,7 +281,7 @@ mod tests {
                     gammaloop_compile_options: GammaloopCompileOptions {
                         inline_asm: false,
                         fast_math: false,
-                        optimization_level: 0,
+                        optimization_level: CompilationOptimizationLevel::O0,
                         unsafe_math: false,
                         compiler: "g++".into(),
                         custom: Vec::new(),
