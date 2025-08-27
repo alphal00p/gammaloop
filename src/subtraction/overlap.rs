@@ -442,15 +442,15 @@ pub(crate) fn find_center(
 }
 
 pub struct SingleGraphOverlapData<'a> {
-    lmb: &'a LoopMomentumBasis,
-    esurfaces: &'a EsurfaceCollection,
-    edge_masses: &'a EdgeVec<F<f64>>,
+    pub lmb: &'a LoopMomentumBasis,
+    pub esurfaces: &'a EsurfaceCollection,
+    pub edge_masses: &'a EdgeVec<F<f64>>,
 }
 
 pub struct OverlapInput<'a> {
-    graph_data: TiVec<GraphGroupPosition, SingleGraphOverlapData<'a>>,
-    settings: &'a RuntimeSettings,
-    group_esurface_map: TiVec<GroupEsurfaceId, TiVec<GraphGroupPosition, Option<EsurfaceID>>>,
+    pub graph_data: TiVec<GraphGroupPosition, SingleGraphOverlapData<'a>>,
+    pub settings: &'a RuntimeSettings,
+    pub group_esurface_map: TiVec<GroupEsurfaceId, TiVec<GraphGroupPosition, Option<EsurfaceID>>>,
 }
 
 /// TODO: When this function will be called at runtime, panics should be removed and this function should return result.
