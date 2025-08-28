@@ -55,6 +55,8 @@ pub enum Externals {
     },
     // add different type of pdfs here when needed
 }
+#[comemo::track]
+impl Externals {}
 
 impl Rotatable for Externals {
     fn rotate(&self, rotation: &momentum::Rotation) -> Self {
@@ -202,6 +204,8 @@ impl Externals {
         }
     }
 
+    #[inline(never)]
+    // #[comemo::memoize]
     pub(crate) fn get_dependent_externals<T: FloatLike>(
         &self,
         dependent_momenta_constructor: DependentMomentaConstructor,

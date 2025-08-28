@@ -159,6 +159,7 @@
         packages = with pkgs; [
           tdf
           cargo-flamegraph
+
           # pkgs.ripgrep
           cargo-insta
           cargo-udeps

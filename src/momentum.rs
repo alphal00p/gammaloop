@@ -1090,7 +1090,7 @@ impl<T: FloatLike> FourMomentum<F<T>> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize, Encode, Decode, Hash)]
 // #[trait_decode(trait= GammaLoopContext)]
 #[serde(untagged)]
 pub enum ExternalMomenta<T> {
@@ -1110,7 +1110,7 @@ impl<T: FloatLike> Rotatable for ExternalMomenta<F<T>> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize, Encode, Decode, Hash)]
 pub enum Dep {
     #[serde(rename = "dependent")]
     Dep,

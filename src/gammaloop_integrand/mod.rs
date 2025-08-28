@@ -374,7 +374,7 @@ impl LmbMultiChannelingSetup {
                         all_bases,
                     )
                 }),
-            uuid: momentum_sample.uuid,
+            // uuid: momentum_sample.uuid,
         };
 
         let prefactor =

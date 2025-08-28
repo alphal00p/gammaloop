@@ -696,6 +696,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "comemo"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "649d7b2d867b569729c03c0f6968db10bc95921182a1f2b2012b1b549492f39d"
+dependencies = [
+ "comemo-macros",
+ "parking_lot",
+ "rustc-hash",
+ "siphasher",
+ "slab",
+]
+
+[[package]]
+name = "comemo-macros"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "51c87fc7e85487493ddedae1a3a34b897c77ad8825375b79265a8a162c28d535"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.106",
+]
+
+[[package]]
 name = "compensated-summation"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1341,6 +1365,7 @@ dependencies = [
  "clarabel",
  "color-eyre",
  "colored 3.0.0",
+ "comemo",
  "compensated-summation",
  "console 0.16.0",
  "criterion",
@@ -3451,6 +3476,12 @@ name = "siphasher"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "56199f7ddabf13fe5074ce809e7d3f42b42ae711800501b5b16ea82ad029c39d"
+
+[[package]]
+name = "slab"
+version = "0.4.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7a2ae44ef20feb57a68b23d846850f861394c2e02dc425a50098ae8c90267589"
 
 [[package]]
 name = "slotmap"

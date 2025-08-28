@@ -775,6 +775,7 @@ pub trait PrecisionUpgradable {
 pub trait FloatLike:
     Real
     +R
+    + Clone
     + PartialOrd
     + RealNumberLike
     + for<'a> RefAdd<&'a Self, Output = Self>

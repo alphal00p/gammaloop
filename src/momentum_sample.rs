@@ -10,6 +10,7 @@ use crate::{
 use bincode_trait_derive::{Decode, Encode};
 use bitvec::vec::BitVec;
 use color_eyre::Result;
+use comemo::memoize;
 use derive_more::{From, Into};
 use linnet::half_edge::involution::{EdgeVec, Orientation};
 use serde::{Deserialize, Serialize};
@@ -107,6 +108,9 @@ impl<T> Length for LoopMomenta<T> {
 }
 
 pub type Subspace<'a> = Option<&'a [LoopIndex]>; // None means full space
+
+// #[comemo::track]
+// impl<T> LoopMomenta<T> {}
 
 impl<T> LoopMomenta<T> {
     pub(crate) fn iter(&self) -> std::slice::Iter<'_, ThreeMomentum<T>> {
@@ -229,7 +233,7 @@ pub struct BareMomentumSample<T: FloatLike> {
 pub struct MomentumSample<T: FloatLike> {
     pub sample: BareMomentumSample<T>,
     pub rotated_sample: Option<BareMomentumSample<T>>,
-    pub uuid: Uuid,
+    // pub uuid: Uuid,
 }
 
 impl<T: FloatLike> Display for MomentumSample<T> {
@@ -269,6 +273,7 @@ impl<T: FloatLike> Display for MomentumSample<T> {
 }
 
 impl<T: FloatLike> BareMomentumSample<T> {
+    #[inline(never)]
     pub(crate) fn new(
         loop_moms: LoopMomenta<F<T>>,
         external_moms: &Externals,
@@ -419,24 +424,24 @@ impl<T: FloatLike> MomentumSample<T> {
         }
     }
 
-    pub(crate) fn numerator_sample(
-        &self,
-        settings: &RuntimeSettings,
-    ) -> (&BareMomentumSample<T>, Option<Uuid>) {
-        if settings.stability.rotate_numerator {
-            (self.possibly_rotated_sample(), self.uuid())
-        } else {
-            (&self.sample, self.uuid())
-        }
-    }
+    // pub(crate) fn numerator_sample(
+    //     &self,
+    //     settings: &RuntimeSettings,
+    // ) -> (&BareMomentumSample<T>, Option<Uuid>) {
+    //     if settings.stability.rotate_numerator {
+    //         (self.possibly_rotated_sample(), self.uuid())
+    //     } else {
+    //         (&self.sample, self.uuid())
+    //     }
+    // }
 
-    pub(crate) fn uuid(&self) -> Option<Uuid> {
-        if self.rotated_sample.is_some() {
-            None
-        } else {
-            Some(self.uuid)
-        }
-    }
+    // pub(crate) fn uuid(&self) -> Option<Uuid> {
+    //     if self.rotated_sample.is_some() {
+    //         None
+    //     } else {
+    //         Some(self.uuid)
+    //     }
+    // }
 
     pub(crate) fn loop_moms(&self) -> &LoopMomenta<F<T>> {
         if let Some(rotated_sample) = &self.rotated_sample {
@@ -490,7 +495,6 @@ impl<T: FloatLike> MomentumSample<T> {
         external_moms: &Externals,
         jacobian: F<T>,
         dependent_momenta_constructor: DependentMomentaConstructor,
-
         orientation: Option<usize>,
     ) -> Result<Self> {
         Ok(Self {
@@ -502,7 +506,7 @@ impl<T: FloatLike> MomentumSample<T> {
                 orientation,
             )?,
             rotated_sample: None,
-            uuid: Uuid::new_v4(),
+            // uuid: Uuid::new_v4(),
         })
     }
 
@@ -523,7 +527,7 @@ impl<T: FloatLike> MomentumSample<T> {
         MomentumSample {
             sample: self.sample.cast_sample(),
             rotated_sample: self.rotated_sample.as_ref().map(|s| s.cast_sample()),
-            uuid: self.uuid,
+            // uuid: self.uuid,
         }
     }
 
@@ -534,7 +538,7 @@ impl<T: FloatLike> MomentumSample<T> {
         MomentumSample {
             sample: self.sample.higher_precision(),
             rotated_sample: self.rotated_sample.as_ref().map(|s| s.higher_precision()),
-            uuid: self.uuid,
+            // uuid: self.uuid,
         }
     }
 
@@ -545,7 +549,7 @@ impl<T: FloatLike> MomentumSample<T> {
         MomentumSample {
             sample: self.sample.lower_precision(),
             rotated_sample: self.rotated_sample.as_ref().map(|s| s.lower_precision()),
-            uuid: self.uuid,
+            // uuid: self.uuid,
         }
     }
 
@@ -562,7 +566,7 @@ impl<T: FloatLike> MomentumSample<T> {
                 self.sample
                     .get_rotated_sample_cached(rotation, rotated_externals),
             ),
-            uuid: self.uuid,
+            // uuid: self.uuid,
         }
     }
 
@@ -571,7 +575,7 @@ impl<T: FloatLike> MomentumSample<T> {
         Self {
             sample: self.sample.clone(),
             rotated_sample: Some(self.sample.get_rotated_sample(rotation)),
-            uuid: self.uuid,
+            // uuid: self.uuid,
         }
     }
 
@@ -583,7 +587,7 @@ impl<T: FloatLike> MomentumSample<T> {
                 .rotated_sample
                 .as_ref()
                 .map(|s| s.rescaled_loop_momenta(factor, subspace)),
-            uuid: self.uuid,
+            // uuid: self.uuid,
         }
     }
 }
