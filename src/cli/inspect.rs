@@ -11,30 +11,30 @@ use super::state::State;
 pub struct Inspect {
     /// The process id to inspect
     #[arg(short = 'i', long = "process-id", value_name = "ID")]
-    process_id: usize,
+    pub process_id: usize,
     /// The name of the process to inspect
     #[arg(short = 'n', long = "name", value_name = "NAME")]
-    process_name: String,
+    pub process_name: String,
     /// The point to inspect (x y) or (p0 px ...)
     #[arg(short = 'p', num_args = 2.., value_name = "POINT")]
     // allow >2 for momentum‑space
-    point: Vec<f64>,
+    pub point: Vec<f64>,
 
     /// Evaluate in f128 precision
     #[arg(short = 'f', long = "use_f128")]
-    use_f128: bool,
+    pub use_f128: bool,
 
     /// Force the radius in the parameterisation
     #[arg(long)]
-    force_radius: bool,
+    pub force_radius: bool,
 
     /// Interpret point as momentum‑space coordinates
     #[arg(short = 'm', long)]
-    momentum_space: bool,
+    pub momentum_space: bool,
 
     /// The discrete dimensions of the sample
     #[arg(short = 'd', long = "discrete-dim", value_name = "DIMS")]
-    discrete_dim: Vec<usize>,
+    pub discrete_dim: Vec<usize>,
 }
 
 impl Inspect {

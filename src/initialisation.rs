@@ -18,3 +18,12 @@ pub fn test_initialise() -> Result<()> {
 
     Ok(())
 }
+
+pub fn bench_initialise() -> Result<()> {
+    use crate::cli::tracing::init_bench_tracing;
+
+    init_bench_tracing();
+    crate::initialize_reps();
+
+    Ok(())
+}

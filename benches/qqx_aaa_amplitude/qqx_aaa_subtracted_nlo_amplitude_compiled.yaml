@@ -1,0 +1,100 @@
+global_settings:
+  debug_level: Debug
+  generation:
+    enable_thresholds: false
+    gammaloop_compile_options:
+      inline_asm: true
+    evaluator_settings:
+      iterative_orientation_optimization: false
+      compile: true
+default_runtime_settings:
+  General:
+    debug: 3
+    amplitude_prefactor:
+      re: 0.0
+      im: 1.0
+    m_uv: 1.0
+    mu_r_sq: 8315.251344
+  subtraction:
+    disable_threshold_subtraction: true
+  Integrator:
+    n_bins: 64
+    bin_number_evolution: null
+    min_samples_for_update: 1000
+    n_start: 10
+    n_increase: 0
+    n_max: 20000000
+    integrated_phase: real
+    discrete_dim_learning_rate: 1.5
+    continuous_dim_learning_rate: 1.5
+    train_on_avg: false
+    show_max_wgt_info: true
+    max_prob_ratio: 0.01
+    seed: 69
+  Kinematics:
+    e_cm: 2.0
+    externals:
+      type: constant
+      data:
+        momenta:
+          - dependent
+          - - 1.0
+            - 0.0
+            - 0.0
+            - 1.0
+          - - 1.0
+            - 0.0
+            - 0.0
+            - -1.0
+          - - 0.9903067841547669
+            - 0.3734458315384239
+            - 0.6393671561700484
+            - -0.657613394982612
+          - - 0.2053558277500182
+            - -0.1412408546154445
+            - -0.0869119059139323
+            - 0.121112995127698
+        helicities:
+          - 1
+          - 1
+          - -1
+          - -1
+          - -1
+  Stability:
+    rotations: []
+    levels:
+      - required_precision_for_re: 1e-15
+        required_precision_for_im: 1e-15
+        escalate_for_large_weight_threshold: 0.9
+      - precision: Quad
+        required_precision_for_re: 0.00001
+        required_precision_for_im: 0.00001
+        escalate_for_large_weight_threshold: -1.0
+commands:
+  - Import:
+      Amplitude:
+        path: ./tests/qqx_aaa_amplitude/qqx_aaa_subtracted.dot
+  - Generate: {}
+  # Inspect test below with disable_threshold_subtraction: true and enable_thresholds: false, should yield
+  # ( 6.923469780323068e-4, -6.181987787694594e-4 i)
+  # and with disable_threshold_subtraction: false and enable_thresholds: true, should yield
+  # ( 2.3093021684203047e-3, -1.246947565116003e-3 i)
+  # - Inspect:
+  #     process_id: 0
+  #     process_name: qqx_aaa_subtracted
+  #     point:
+  #       - 0.1
+  #       - 0.2
+  #       - 0.3
+  #     use_f128: false
+  #     force_radius: false
+  #     momentum_space: true
+  #     discrete_dim:
+  #       - 0
+  # - Integrate:
+  #     process_id: 0
+  #     process_name: qqx_aaa_subtracted
+  #     result_path: ./tests/babis_subtraction/state/integration_workspace/integration_results.txt
+  #     n_cores: 1
+  #     workspace_path: ./tests/babis_subtraction/state/integration_workspace
+  #     target: null

@@ -26,7 +26,8 @@ share/python-wheels/
 MANIFEST
 
 examples/**/gammaloop_state/
-tests/**/gammaloop_state/
+tests/**/tests_gammaloop_state/
+benches/**/tests_gammaloop_state/
 out.yaml
 outmap.yaml
 params.yaml

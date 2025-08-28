@@ -158,6 +158,19 @@ impl State {
         a
     }
 
+    pub fn new_bench(state_folder: PathBuf) -> Self {
+        let handle = super::tracing::init_bench_tracing();
+
+        let a = Self {
+            save_path: state_folder,
+            log_filter: handle,
+            model: Model::default(),
+            process_list: ProcessList::default(),
+            model_path: None,
+        };
+        a
+    }
+
     pub fn new_test_cli(&self) -> Cli {
         Cli {
             run_history: None,

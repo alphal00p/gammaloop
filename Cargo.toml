@@ -20,17 +20,7 @@ lto = "fat"
 opt-level = 3
 
 [[bench]]
-name = "cff_scalar"
-
-harness = false
-
-[[bench]]
-name = "three_loop_photon"
-harness = false
-
-[[bench]]
-name = "polarization"
-
+name = "inspect"
 harness = false
 
 [profile.release]
@@ -103,7 +93,7 @@ indexmap = "2.2.2"
 vectorize = "0.2.0"
 ahash = { version = "0.8.8", features = ["serde"] }
 # num = { version = "0.4.1", features = ["serde"] }
-pprof = { version = "0.13.0", features = ["criterion", "flamegraph"] }
+pprof = { version = "0.15.0", features = ["criterion", "flamegraph"] }
 derive_more = "0.99.17"
 serde_json = "1.0.115"
 ctrlc = "3.4.4"
