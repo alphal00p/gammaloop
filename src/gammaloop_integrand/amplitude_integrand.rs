@@ -24,13 +24,16 @@ use typed_index_collections::TiVec;
 
 use crate::{
     cff::{
-        esurface::{self, get_existing_esurfaces, EsurfaceCollection, ExistingEsurfaces},
+        esurface::{
+            self, get_existing_esurfaces, get_representative, EsurfaceCollection, ExistingEsurfaces,
+        },
         expression::{AmplitudeOrientationID, GraphOrientation},
     },
     evaluation_result::EvaluationResult,
     gammaloop_integrand::ParamBuilder,
     graph::{
-        FeynmanGraph, Graph, GraphGroup, GraphGroupPosition, GroupId, LmbIndex, LoopMomentumBasis,
+        FeynmanGraph, Graph, GraphGroup, GraphGroupPosition, GroupId, LMBext, LmbIndex,
+        LoopMomentumBasis,
     },
     integrands::HasIntegrand,
     model::Model,
@@ -44,7 +47,7 @@ use crate::{
         amplitude_counterterm::AmplitudeCountertermData,
         overlap::{find_maximal_overlap, OverlapInput, SingleGraphOverlapData},
     },
-    utils::bitvec_ext::BinVec,
+    utils::{bitvec_ext::BinVec, W_},
     DependentMomentaConstructor, FloatLike, GammaLoopContext, GammaLoopContextContainer, F,
 };
 
@@ -543,27 +546,73 @@ impl GammaloopIntegrand for AmplitudeIntegrand {
                     .expect("could not get externals");
 
                 let mut overlap =
-                    find_maximal_overlap(&overlap_input, existing_esurfaces, &external_moms)?;
+                    find_maximal_overlap(&overlap_input, existing_esurfaces, &external_moms)
+                        .with_context(|| {
+                            let readable_esurfaces = existing_esurfaces
+                                .iter()
+                                .map(|group_esurface_id| {
+                                    let (graph_group_pos, esurface_id) = get_representative(
+                                        &self.data.group_derived_data[group_id].esurface_map
+                                            [*group_esurface_id],
+                                    )
+                                    .unwrap();
+                                    let graph_id =
+                                        self.data.graph_group_structure[group_id][graph_group_pos];
+                                    let graph = &self.data.graph_terms[graph_id].graph;
+                                    let lmb_reps = graph.integrand_replacement(
+                                        &graph.full_filter(),
+                                        &graph.loop_momentum_basis,
+                                        &[W_.x___],
+                                    );
 
-                overlap.build_evaluators(
-                    &self.data.group_derived_data[group_id].esurface_atoms,
-                    &OptimizationSettings::default(),
-                    self.data
-                        .graph_terms
-                        .first()
-                        .unwrap()
-                        .graph
-                        .get_loop_number(),
-                    external_moms.len(),
-                    self.data
-                        .graph_terms
-                        .first()
-                        .unwrap()
-                        .param_builder
-                        .model_parameters
-                        .params
-                        .clone(),
-                )?;
+                                    let esurface =
+                                        &self.data.graph_terms[graph_id].esurfaces[esurface_id];
+                                    let atom = esurface.lmb_atom_simplified(graph, &lmb_reps);
+                                    (esurface_id, atom)
+                                })
+                                .collect_vec();
+
+                            let mut msg = format!(
+                                "finding overlap for group: {}, existing esurfaces:\n",
+                                group_id.0
+                            );
+
+                            for readable_esurface in readable_esurfaces {
+                                msg += &format!(
+                                    "esurface id: {}, atom: {}\n",
+                                    readable_esurface.0 .0, readable_esurface.1
+                                );
+                            }
+
+                            msg
+                        })?;
+
+                overlap
+                    .build_evaluators(
+                        &self.data.group_derived_data[group_id].esurface_atoms,
+                        &OptimizationSettings::default(),
+                        self.data
+                            .graph_terms
+                            .first()
+                            .unwrap()
+                            .graph
+                            .get_loop_number(),
+                        external_moms.len(),
+                        self.data
+                            .graph_terms
+                            .first()
+                            .unwrap()
+                            .param_builder
+                            .model_parameters
+                            .params
+                            .clone(),
+                    )
+                    .with_context(|| {
+                        format!(
+                            "Failed to build multi-channeling evaluators for group {}",
+                            group_id.0
+                        )
+                    })?;
 
                 panic!();
                 status_debug!("number of overlap groups: {}", overlap.overlap_groups.len());
