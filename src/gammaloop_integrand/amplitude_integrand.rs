@@ -125,7 +125,14 @@ impl AmplitudeGraphTerm {
             .derived_data
             .threshold_counterterms
             .iter()
-            .map(|ct| ct.to_evaluator(&param_builder, OptimizationSettings::default()))
+            .map(|ct| {
+                ct.to_evaluator(
+                    &param_builder,
+                    &orientations,
+                    settings,
+                    OptimizationSettings::default(),
+                )
+            })
             .collect();
 
         threshold_counterterm.esurface_map = esurface_map;

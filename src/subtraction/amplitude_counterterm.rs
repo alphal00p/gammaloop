@@ -2,7 +2,10 @@ use core::panic;
 use std::path::Path;
 
 use bincode_trait_derive::{Decode, Encode};
-use linnet::half_edge::involution::EdgeVec;
+use linnet::{
+    half_edge::involution::{EdgeVec, Orientation},
+    parser::global,
+};
 use log::debug;
 use spenso::algebra::complex::Complex;
 use symbolica::{
@@ -17,7 +20,7 @@ use crate::{
         esurface::{
             self, Esurface, EsurfaceCollection, EsurfaceID, ExistingEsurfaceId, GroupEsurfaceId,
         },
-        expression::AmplitudeOrientationID,
+        expression::{AmplitudeOrientationID, GraphOrientation},
     },
     gammaloop_integrand::{
         evaluators::SingleOrAllOrientations, param_builder, GenericEvaluator,
@@ -25,7 +28,7 @@ use crate::{
     },
     graph::{FeynmanGraph, Graph, GraphGroupPosition, LoopMomentumBasis},
     momentum::Rotation,
-    momentum_sample::{LoopMomenta, MomentumSample},
+    momentum_sample::{self, LoopMomenta, MomentumSample},
     settings::{
         runtime::{
             IntegratedCounterTermRange, IntegratedCounterTermSettings, UVLocalisationSettings,
@@ -66,6 +69,8 @@ impl AmplitudeCountertermAtom {
     pub(crate) fn to_evaluator(
         &self,
         param_builder: &ParamBuilder,
+        orientations: &TiVec<AmplitudeOrientationID, EdgeVec<Orientation>>,
+        global_settings: &GlobalSettings,
         optimiation_settings: OptimizationSettings,
     ) -> AmplitudeCountertermEvaluator {
         let parametric = GenericEvaluator::new_from_builder(
@@ -74,13 +79,32 @@ impl AmplitudeCountertermAtom {
                 self.parametric_integrated.clone(),
             ],
             param_builder,
-            optimiation_settings,
+            optimiation_settings.clone(),
         )
         .unwrap();
 
+        let iterative = if global_settings
+            .generation
+            .evaluator_settings
+            .iterative_orientation_optimization
+        {
+            Some(
+                GenericEvaluator::new_from_builder(
+                    orientations
+                        .iter()
+                        .map(|or| or.select(&self.parametric_local + &self.parametric_integrated)),
+                    param_builder,
+                    optimiation_settings,
+                )
+                .unwrap(),
+            )
+        } else {
+            None
+        };
+
         AmplitudeCountertermEvaluator {
             parametric,
-            iterative: None,
+            iterative,
         }
     }
 }
@@ -115,6 +139,15 @@ impl AmplitudeCountertermData {
                 &path.as_ref().join(format!("esurface_{}", i.0)),
                 settings.generation.gammaloop_compile_options.inline_asm(),
             );
+
+            e.iterative.as_mut().map(|iterative| {
+                iterative.compile(
+                    &path.as_ref().join(format!("iterative_esurface_{}", i.0)),
+                    format!("iterative_esurface_{}", i.0),
+                    &path.as_ref().join(format!("iterative_esurface_{}", i.0)),
+                    settings.generation.gammaloop_compile_options.inline_asm(),
+                );
+            });
         }
     }
 
@@ -460,14 +493,10 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
             h_function,
         };
 
-        let evaluator = &ct_builder.evaluators[esurface_id].parametric;
+        let iterative_evaluator = ct_builder.evaluators[esurface_id].iterative.as_ref();
+        let parametric_evaluator = &ct_builder.evaluators[esurface_id].parametric;
 
-        let mut local_ct = Complex::new_re(F::from_f64(0.0));
-        let mut integrated_ct = Complex::new_re(F::from_f64(0.0));
-
-        for (i, orientation) in orientations.iter() {
-            param_builder.orientation_value(orientation);
-
+        let final_result = if let Some(iterative_evaluator) = iterative_evaluator {
             let params = T::get_parameters(
                 param_builder,
                 ct_builder.graph,
@@ -475,26 +504,50 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
                 ct_builder.settings.kinematics.externals.get_helicities(),
                 Some(&threshold_params),
             );
-            let result = <T as GenericEvaluatorFloat>::get_evaluator(evaluator)(&params);
-            local_ct += &result[0];
-            integrated_ct += &result[1];
-        }
+
+            let iterative_result =
+                <T as GenericEvaluatorFloat>::get_evaluator(iterative_evaluator)(&params);
+
+            let mut result = Complex::new_re(self.rstar_sample.zero());
+
+            debug!(
+                "viewing local and integrated ct seperately is not yet available in iterative mode"
+            );
+
+            for (i, _e) in orientations.iter() {
+                result += &iterative_result[i.0];
+            }
+            result
+        } else {
+            let mut local_ct = Complex::new_re(F::from_f64(0.0));
+            let mut integrated_ct = Complex::new_re(F::from_f64(0.0));
+
+            for (_i, orientation) in orientations.iter() {
+                param_builder.orientation_value(orientation);
+
+                let params = T::get_parameters(
+                    param_builder,
+                    ct_builder.graph,
+                    &self.rstar_sample,
+                    ct_builder.settings.kinematics.externals.get_helicities(),
+                    Some(&threshold_params),
+                );
+                let result =
+                    <T as GenericEvaluatorFloat>::get_evaluator(parametric_evaluator)(&params);
+                local_ct += &result[0];
+                integrated_ct += &result[1];
+            }
+
+            debug!(
+                "results\nlocal ct:      {:+16e}\nintegrated ct: {:+16e}\nprefactor:     {:+16e}",
+                local_ct, integrated_ct, prefactor
+            );
+
+            (local_ct + integrated_ct) * prefactor
+        };
 
         debug!(
-            "Evaluating ct for esurface {}\nwith params:\n {}",
-            esurface_id.0,
-            param_builder.clone()
-        );
-
-        debug!(
-            "results\nlocal ct:      {:+16e}\nintegrated ct: {:+16e}\nprefactor:     {:+16e}",
-            local_ct, integrated_ct, prefactor
-        );
-
-        let final_result = (local_ct + integrated_ct) * prefactor;
-
-        debug!(
-            "sum of local and integrated ct (with prefactor): {}",
+            "sum of local and integrated ct (with prefactor): {:+16e}",
             final_result
         );
 
