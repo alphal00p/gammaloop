@@ -8,6 +8,7 @@ use colored::Colorize;
 use derive_more::{From, Into};
 use eyre::eyre;
 use itertools::Itertools;
+use libc::TP_STATUS_SENDING;
 use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Flow, HedgePair};
 use linnet::half_edge::subgraph::{ModifySubgraph, SubGraphOps};
 use linnet::half_edge::HedgeGraph;
@@ -23,8 +24,8 @@ use typed_index_collections::TiVec;
 
 use crate::cff::cff_graph::VertexSet;
 
-use crate::define_index;
 use crate::graph::{Graph, GraphGroupPosition, LmbIndex, LoopMomentumBasis};
+use crate::{define_index, status_debug};
 
 use crate::momentum::FourMomentum;
 use crate::momentum_sample::{
@@ -142,6 +143,7 @@ impl Esurface {
     }
 
     #[inline]
+    /// TODO: upgrade to a status type
     pub(crate) fn exists<T: FloatLike>(
         &self,
         lmb: &LoopMomentumBasis,
@@ -155,34 +157,34 @@ impl Esurface {
 
         let shift_part = self.compute_shift_part_from_momenta(lmb, external_moms);
 
-        if shift_part < F::from_ff64(SHIFT_THRESHOLD) * e_cm {
-            return false;
+        if shift_part < -F::from_ff64(SHIFT_THRESHOLD) * e_cm {
+            let mass_sum: F<T> = self
+                .energies
+                .iter()
+                .map(|index| {
+                    let mass = &real_mass_vector[*index];
+                    mass * mass
+                })
+                .reduce(|acc, x| acc + x)
+                .unwrap_or_else(|| F::from_f64(0.0));
+
+            let shift_vector_sq = self
+                .external_shift
+                .iter()
+                .map(|(index, sign)| {
+                    let external_signature = &lmb.edge_signatures[*index].external;
+                    compute_shift_part(external_signature, external_moms).spatial
+                        * F::from_f64(*sign as f64)
+                })
+                .reduce(|acc, x| acc + x)
+                .map(|v| v.norm_squared())
+                .unwrap_or_else(|| F::from_f64(0.0));
+
+            &shift_part * &shift_part - shift_vector_sq - mass_sum
+                > F::from_ff64(EXISTENCE_THRESHOLD) * e_cm * e_cm
+        } else {
+            false
         }
-
-        let mass_sum: F<T> = self
-            .energies
-            .iter()
-            .map(|index| {
-                let mass = &real_mass_vector[*index];
-                mass * mass
-            })
-            .reduce(|acc, x| acc + x)
-            .unwrap_or_else(|| F::from_f64(0.0));
-
-        let shift_vector_sq = self
-            .external_shift
-            .iter()
-            .map(|(index, sign)| {
-                let external_signature = &lmb.edge_signatures[*index].external;
-                compute_shift_part(external_signature, external_moms).spatial
-                    * F::from_f64(*sign as f64)
-            })
-            .reduce(|acc, x| acc + x)
-            .map(|v| v.norm_squared())
-            .unwrap_or_else(|| F::from_f64(0.0));
-
-        &shift_part * &shift_part - shift_vector_sq - mass_sum
-            > F::from_ff64(EXISTENCE_THRESHOLD) * e_cm * e_cm
     }
 
     /// Only compute the shift part, useful for center finding.
