@@ -408,17 +408,16 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
         let esurface_ct_builder = &self.rstar_solution.esurface_ct_builder;
         let ct_builder = esurface_ct_builder.overlap_builder.counterterm_builder;
 
-        let existing_esurface_id = self.rstar_solution.esurface_ct_builder.existing_esurface_id;
-
         let esurface_id = esurface_ct_builder.esurface_id;
 
-        let esurfaces = ct_builder.esurface_collection;
-        let masses = &ct_builder.real_mass_vector;
-        let lmb = &ct_builder.graph.loop_momentum_basis;
+        let model_params = param_builder
+            .model_parameters
+            .values
+            .iter()
+            .map(|c| Complex::new(F::from_ff64(c.re), F::from_ff64(c.im)))
+            .collect::<Vec<_>>();
 
-        let model_params = todo!();
-
-        let prefactor = self.evaluate_multichanneling_prefactor(&self.rstar_sample, model_params);
+        let prefactor = self.evaluate_multichanneling_prefactor(&self.rstar_sample, &model_params);
 
         let radius = self
             .rstar_solution
