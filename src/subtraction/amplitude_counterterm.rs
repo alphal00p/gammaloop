@@ -80,7 +80,7 @@ impl AmplitudeCountertermAtom {
 
         AmplitudeCountertermEvaluator {
             parametric,
-            concrete: None,
+            iterative: None,
         }
     }
 }
@@ -89,7 +89,7 @@ impl AmplitudeCountertermAtom {
 #[trait_decode(trait = GammaLoopContext)]
 pub struct AmplitudeCountertermEvaluator {
     pub parametric: GenericEvaluator,
-    pub concrete: Option<GenericEvaluator>,
+    pub iterative: Option<GenericEvaluator>,
 }
 
 impl AmplitudeCountertermData {
