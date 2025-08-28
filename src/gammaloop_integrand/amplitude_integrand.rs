@@ -25,7 +25,8 @@ use typed_index_collections::TiVec;
 use crate::{
     cff::{
         esurface::{
-            self, get_existing_esurfaces, get_representative, EsurfaceCollection, ExistingEsurfaces,
+            self, get_existing_esurfaces, get_representative, EsurfaceCollection, EsurfaceID,
+            ExistingEsurfaces, GroupEsurfaceId,
         },
         expression::{AmplitudeOrientationID, GraphOrientation},
     },
@@ -79,6 +80,7 @@ impl AmplitudeGraphTerm {
     pub fn from_amplitude_graph(
         graph: &AmplitudeGraph,
         own_group_position: GraphGroupPosition,
+        esurface_map: TiVec<GroupEsurfaceId, TiVec<GraphGroupPosition, Option<EsurfaceID>>>,
         model: &Model,
         settings: &GlobalSettings,
     ) -> Result<Self> {
@@ -125,6 +127,8 @@ impl AmplitudeGraphTerm {
             .iter()
             .map(|ct| ct.to_evaluator(&param_builder, OptimizationSettings::default()))
             .collect();
+
+        threshold_counterterm.esurface_map = esurface_map;
 
         Ok(AmplitudeGraphTerm {
             orientation_filter: BinVec(BitVec::repeat(true, orientations.len())),
@@ -614,8 +618,11 @@ impl GammaloopIntegrand for AmplitudeIntegrand {
                         )
                     })?;
 
-                panic!();
-                status_debug!("number of overlap groups: {}", overlap.overlap_groups.len());
+                for graph_id in self.data.graph_group_structure[group_id].into_iter() {
+                    self.data.graph_terms[graph_id]
+                        .threshold_counterterm
+                        .overlap = overlap.clone();
+                }
             }
         }
 

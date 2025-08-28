@@ -221,11 +221,17 @@ impl Amplitude {
             .enumerate()
             .map(|(graph_id, graph)| {
                 let group_id = graph.graph.group_id.unwrap(); // should always be set
+                let esurface_map = &self.group_derived_data[group_id].esurface_map;
                 let group_pos = self.graph_group_structure[group_id]
                     .find_position(graph_id)
                     .unwrap();
 
-                graph.generate_term_for_graph(model, group_pos, global_settings)
+                graph.generate_term_for_graph(
+                    model,
+                    group_pos,
+                    esurface_map.clone(),
+                    global_settings,
+                )
             })
             .collect();
 
@@ -906,9 +912,16 @@ impl AmplitudeGraph {
         &self,
         model: &Model,
         own_group_position: GraphGroupPosition,
+        esurface_map: TiVec<GroupEsurfaceId, TiVec<GraphGroupPosition, Option<EsurfaceID>>>,
         global_settings: &GlobalSettings,
     ) -> Result<AmplitudeGraphTerm> {
-        AmplitudeGraphTerm::from_amplitude_graph(self, own_group_position, model, global_settings)
+        AmplitudeGraphTerm::from_amplitude_graph(
+            self,
+            own_group_position,
+            esurface_map,
+            model,
+            global_settings,
+        )
     }
 }
 

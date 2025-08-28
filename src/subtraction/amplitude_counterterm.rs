@@ -1,3 +1,4 @@
+use core::panic;
 use std::path::Path;
 
 use bincode_trait_derive::{Decode, Encode};
