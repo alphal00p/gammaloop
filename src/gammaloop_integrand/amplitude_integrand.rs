@@ -11,6 +11,7 @@ use color_eyre::Result;
 
 use eyre::{eyre, Context};
 use itertools::Itertools;
+use libc::group;
 use linnet::half_edge::involution::{EdgeVec, Orientation};
 use momtrop::SampleGenerator;
 use spenso::algebra::complex::Complex;
@@ -38,8 +39,11 @@ use crate::{
     processes::{AmplitudeDerivedData, AmplitudeGraph, GroupDerivedData},
     settings::{GlobalSettings, RuntimeSettings},
     signature::SignatureLike,
-    status_debug, status_warn,
-    subtraction::{amplitude_counterterm::AmplitudeCountertermData, overlap::find_maximal_overlap},
+    status_debug, status_info, status_warn,
+    subtraction::{
+        amplitude_counterterm::AmplitudeCountertermData,
+        overlap::{find_maximal_overlap, OverlapInput, SingleGraphOverlapData},
+    },
     utils::bitvec_ext::BinVec,
     DependentMomentaConstructor, FloatLike, GammaLoopContext, GammaLoopContextContainer, F,
 };
@@ -503,10 +507,61 @@ impl GammaloopIntegrand for AmplitudeIntegrand {
 
         if !self.settings.subtraction.disable_threshold_subtraction {
             let existing_esurfaces = self.get_existing_esurfaces();
-            todo!(
-                "enable overlap finding across groups: existing esurfaces: {:#?}",
-                existing_esurfaces
-            );
+            for (group_id, existing_esurfaces) in existing_esurfaces.iter_enumerated() {
+                let graph_data = self.data.graph_group_structure[group_id]
+                    .into_iter()
+                    .map(|graph_id| {
+                        let graph = &self.data.graph_terms[graph_id];
+                        SingleGraphOverlapData {
+                            lmb: &graph.graph.loop_momentum_basis,
+                            esurfaces: &graph.esurfaces,
+                            edge_masses: graph.graph.get_real_mass_vector(),
+                        }
+                    })
+                    .collect();
+
+                let overlap_input = OverlapInput {
+                    graph_data,
+                    settings: &self.settings,
+                    group_esurface_map: self.data.group_derived_data[group_id].esurface_map.clone(),
+                };
+
+                let external_moms = self
+                    .settings
+                    .kinematics
+                    .externals
+                    .get_dependent_externals::<f64>(DependentMomentaConstructor::Amplitude(
+                        &self.data.external_signature,
+                    ))
+                    .expect("could not get externals");
+
+                let mut overlap =
+                    find_maximal_overlap(&overlap_input, existing_esurfaces, &external_moms)?;
+
+                overlap.build_evaluators(
+                    &self.data.group_derived_data[group_id].esurface_atoms,
+                    &OptimizationSettings::default(),
+                    self.data
+                        .graph_terms
+                        .first()
+                        .unwrap()
+                        .graph
+                        .get_loop_number(),
+                    external_moms.len(),
+                    self.data
+                        .graph_terms
+                        .first()
+                        .unwrap()
+                        .param_builder
+                        .model_parameters
+                        .params
+                        .clone(),
+                )?;
+
+                status_info!("overlap: {}", overlap);
+            }
+
+            todo!("store overlap,  and fix evaluation")
         }
 
         Ok(())
