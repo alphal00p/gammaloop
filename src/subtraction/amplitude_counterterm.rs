@@ -19,8 +19,8 @@ use crate::{
         expression::AmplitudeOrientationID,
     },
     gammaloop_integrand::{
-        evaluators::SingleOrAllOrientations, GenericEvaluator, GenericEvaluatorFloat, ParamBuilder,
-        ThresholdParams,
+        evaluators::SingleOrAllOrientations, param_builder, GenericEvaluator,
+        GenericEvaluatorFloat, ParamBuilder, ThresholdParams,
     },
     graph::{FeynmanGraph, Graph, GraphGroupPosition, LoopMomentumBasis},
     momentum::Rotation,
@@ -416,8 +416,9 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
         let masses = &ct_builder.real_mass_vector;
         let lmb = &ct_builder.graph.loop_momentum_basis;
 
-        let prefactor =
-            self.evaluate_multichanneling_prefactor(&self.rstar_sample, lmb, masses, esurfaces);
+        let model_params = todo!();
+
+        let prefactor = self.evaluate_multichanneling_prefactor(&self.rstar_sample, model_params);
 
         let radius = self
             .rstar_solution
@@ -503,9 +504,7 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
     fn evaluate_multichanneling_prefactor(
         &self,
         momentum_sample: &MomentumSample<T>,
-        lmb: &LoopMomentumBasis,
-        masses: &EdgeVec<F<T>>,
-        esurfaces: &EsurfaceCollection,
+        model_params: &[Complex<F<T>>],
     ) -> F<T> {
         let overlap_builder = self.rstar_solution.esurface_ct_builder.overlap_builder;
         let overlap = overlap_builder.counterterm_builder.overlap_structure;
