@@ -706,8 +706,6 @@ impl AmplitudeGraph {
             counterterms.push(AmplitudeCountertermAtom {
                 parametric_local: local_counterterm,
                 parametric_integrated: integrated_counterterm,
-                concrete_local: None,
-                concrete_integrated: None,
             });
         }
 
