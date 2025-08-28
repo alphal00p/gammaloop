@@ -308,26 +308,26 @@ impl CrossSectionGraphTerm {
 
                 let mut cut_param_builder = param_builder.clone();
 
-                cut_param_builder.emr_spatial_value(
-                    self.graph
-                        .underlying
-                        .get_emr_vec_cache(
-                            rescaled_sample.loop_moms(),
-                            rescaled_sample.external_moms(),
-                            &self.graph.loop_momentum_basis,
-                        )
-                        .into_iter()
-                        .map(|q| Complex::new_re(q))
-                        .collect(),
-                );
+                // cut_param_builder.emr_spatial_value(
+                //     self.graph
+                //         .underlying
+                //         .get_emr_vec_cache(
+                //             rescaled_sample.loop_moms(),
+                //             rescaled_sample.external_moms(),
+                //             &self.graph.loop_momentum_basis,
+                //         )
+                //         .into_iter()
+                //         .map(|q| Complex::new_re(q))
+                //         .collect(),
+                // );
 
-                cut_param_builder.tstar_value(Complex::new_re(newton_result.solution));
-                cut_param_builder.h_function_value(Complex::new_re(h_function));
-                cut_param_builder.derivative_at_tstar_value(Complex::new_re(
-                    newton_result.derivative_at_solution,
-                ));
+                // cut_param_builder.tstar_value(Complex::new_re(newton_result.solution));
+                // cut_param_builder.h_function_value(Complex::new_re(h_function));
+                // cut_param_builder.derivative_at_tstar_value(Complex::new_re(
+                //     newton_result.derivative_at_solution,
+                // ));
 
-                let params = cut_param_builder.build_values();
+                let params: Vec<_> = cut_param_builder.values;
                 params
             });
 

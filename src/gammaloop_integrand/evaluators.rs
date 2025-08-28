@@ -200,7 +200,10 @@ impl GenericEvaluator {
         builder: &ParamBuilder<f64>,
         optimization_settings: OptimizationSettings,
     ) -> Option<Self> {
-        let params: Vec<Atom> = builder.into_iter().flat_map(|p| p.params.clone()).collect();
+        let params: Vec<Atom> = (&builder.pairs)
+            .into_iter()
+            .flat_map(|p| p.params.clone())
+            .collect();
 
         Self::new_from_raw_params(atoms, &params, &builder.fn_map, optimization_settings)
     }

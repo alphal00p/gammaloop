@@ -1,8 +1,11 @@
-use std::{borrow::Cow, fmt::Display, ops::Deref};
+use std::{
+    borrow::Cow,
+    fmt::Display,
+    ops::{Deref, Range},
+};
 
 use bincode_trait_derive::{Decode, Encode};
 use idenso::color::CS;
-use itertools::Itertools;
 use linnet::half_edge::involution::{HedgePair, Orientation};
 use log::debug;
 use spenso::{
@@ -13,13 +16,11 @@ use spenso::{
     tensors::parametric::AtomViewOrConcrete,
 };
 use symbolica::{
-    atom::{Atom, AtomCore, FunctionBuilder, Symbol},
+    atom::{Atom, AtomCore, AtomOrView, FunctionBuilder, Symbol},
     domains::rational::Rational,
     evaluate::FunctionMap,
-    id::Replacement,
-    symbol,
 };
-use tabled::{settings::Style, Table, Tabled};
+use tabled::{settings::Style, Table};
 
 use crate::{
     cff::expression::GraphOrientation,
@@ -29,69 +30,62 @@ use crate::{
     momentum::{Helicity, PolType},
     momentum_sample::{ExternalFourMomenta, MomentumSample},
     numerator::ParsingNet,
-    utils::{f128, FloatLike, ToCoefficient, F, GS, TENSORLIB},
+    utils::{f128, FloatLike, PrecisionUpgradable, F, GS, TENSORLIB},
     GammaLoopContext,
 };
 
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
-pub struct ParamValuePairs<T: FloatLike> {
-    pub values: Vec<Complex<F<T>>>,
+pub struct ParamValuePairs {
+    pub value_range: Range<usize>,
     pub params: Vec<Atom>,
 }
 
-impl<T: FloatLike> ParamValuePairs<T> {
+impl ParamValuePairs {
     pub fn validate(&self) {
         assert_eq!(
-            self.values.len(),
+            self.value_range.len(),
             self.params.len(),
             "Number of values and parameters must match"
         );
     }
 
-    pub fn map_values<U: FloatLike>(
-        &self,
-        mut map: impl FnMut(&Complex<F<T>>) -> Complex<F<U>>,
-    ) -> ParamValuePairs<U> {
-        let values = self.values.iter().map(&mut map).collect();
-        ParamValuePairs {
-            values,
-            params: self.params.clone(),
-        }
-    }
-    pub fn replacement(&self) -> Vec<Replacement> {
-        let mut replacements = Vec::new();
-        for (p, v) in self.params.iter().zip_eq(self.values.iter()) {
-            println!("{p}");
-            let replacement = Replacement::new(
-                p.clone().to_pattern(),
-                Atom::num(v.clone().to_coefficient()),
-            );
-            replacements.push(replacement);
-        }
-        replacements
-    }
-
-    pub fn extract_and_fill(&mut self, values: &mut Vec<Complex<F<T>>>) {
-        self.values = values.split_off(self.params.len())
-    }
-
-    pub fn default_from_symbol(symbol: Symbol) -> Self {
+    pub fn default_from_symbol(param: Symbol) -> Self {
         Self {
-            values: vec![Complex::new_re(F::from_f64(0.0))],
-            params: vec![Atom::var(symbol)],
+            value_range: 0..1,
+            params: vec![Atom::var(param)],
         }
     }
 
-    pub fn set_zeros(&mut self) {
-        self.values = vec![Complex::new_re(F::from_f64(0.0)); self.params.len()];
+    // pub fn replacement(&self) -> Vec<Replacement> {
+    //     let mut replacements = Vec::new();
+    //     for (p, v) in self.params.iter().zip_eq(self.values.iter()) {
+    //         println!("{p}");
+    //         let replacement = Replacement::new(
+    //             p.clone().to_pattern(),
+    //             Atom::num(v.clone().to_coefficient()),
+    //         );
+    //         replacements.push(replacement);
+    //     }
+    //     replacements
+    // }
+}
+
+impl<'a, A: Into<AtomOrView<'a>>> FromIterator<A> for ParamValuePairs {
+    fn from_iter<T: IntoIterator<Item = A>>(iter: T) -> Self {
+        let params: Vec<Atom> = iter.into_iter().map(|a| a.into().into_owned()).collect();
+        let len = params.len();
+        Self {
+            value_range: 0..len,
+            params,
+        }
     }
 }
 
-impl<T: FloatLike> Default for ParamValuePairs<T> {
+impl Default for ParamValuePairs {
     fn default() -> Self {
         Self {
-            values: Vec::new(),
+            value_range: Range::default(),
             params: Vec::new(),
         }
     }
@@ -103,218 +97,119 @@ impl<T: FloatLike> Default for ParamValuePairs<T> {
 //     }
 // }
 
-impl<T: FloatLike> ParamValuePairs<T>
-where
-    T::Higher: FloatLike,
-    T::Lower: FloatLike,
-{
-    fn higher(&self) -> ParamValuePairs<T::Higher> {
-        ParamValuePairs {
-            values: self
-                .values
-                .iter()
-                .map(|v| v.map_ref(|v| v.higher()))
-                .collect(),
-            params: self.params.clone(),
-        }
-    }
-    fn lower(&self) -> ParamValuePairs<T::Lower> {
-        ParamValuePairs {
-            values: self
-                .values
-                .iter()
-                .map(|v| v.map_ref(|v| v.lower()))
-                .collect(),
-            params: self.params.clone(),
-        }
-    }
-}
-
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
-pub struct ParamBuilder<T: FloatLike = f64> {
-    // values: Vec<Complex<F<T>>
-    m_uv: ParamValuePairs<T>,
-    idenso_vars: ParamValuePairs<T>,
-    mu_r_sq: ParamValuePairs<T>,
-    orientations: ParamValuePairs<T>,
-    pub model_parameters: ParamValuePairs<T>,
-    pub external_energies: ParamValuePairs<T>,
-    pub external_spatial: ParamValuePairs<T>,
-    polarizations: ParamValuePairs<T>,
-    emr_spatial: ParamValuePairs<T>,
-    tstar: ParamValuePairs<T>,
-    h_function: ParamValuePairs<T>,
-    esurface_derivative: ParamValuePairs<T>,
-    uv_damp_plus: ParamValuePairs<T>,
-    uv_damp_minus: ParamValuePairs<T>,
-    radius: ParamValuePairs<T>,
-    radius_star: ParamValuePairs<T>,
-    pub reps: Vec<(Atom, Atom)>,
-    // pub eager_const_map: HashMap<Atom, Complex<F<T>>>,
-    // pub eager_function_map: HashMap<Symbol, EvaluationFn<Atom, Complex<F<T>>>>,
-    // pub eager_fn_map:
-    pub fn_map: FunctionMap,
+pub struct GammaLoopPairs {
+    m_uv: ParamValuePairs,
+    idenso_vars: ParamValuePairs,
+    mu_r_sq: ParamValuePairs,
+    orientations: ParamValuePairs,
+    pub model_parameters: ParamValuePairs,
+    external_energies: ParamValuePairs,
+    external_spatial: ParamValuePairs,
+    polarizations: ParamValuePairs,
+    emr_spatial: ParamValuePairs,
+    tstar: ParamValuePairs,
+    h_function: ParamValuePairs,
+    esurface_derivative: ParamValuePairs,
+    uv_damp_plus: ParamValuePairs,
+    uv_damp_minus: ParamValuePairs,
+    radius: ParamValuePairs,
+    radius_star: ParamValuePairs,
 }
 
-pub struct ThresholdParams<T: FloatLike> {
-    pub radius: F<T>,
-    pub radius_star: F<T>,
-    pub esurface_derivative: F<T>,
-    pub uv_damp_plus: F<T>,
-    pub uv_damp_minus: F<T>,
-    pub h_function: F<T>,
-}
+impl IntoIterator for GammaLoopPairs {
+    type Item = ParamValuePairs;
+    type IntoIter = std::array::IntoIter<Self::Item, 16>;
 
-pub trait UpdateAndGetParams<T: FloatLike> {
-    fn update_emr_and_get_params<'a>(
-        &'a mut self,
-        sample: &'a MomentumSample<T>,
-        graph: &'a Graph,
-        helicities: &[Helicity],
-        threshold_params: Option<&ThresholdParams<T>>,
-    ) -> Cow<'a, Vec<Complex<F<T>>>>;
-}
-
-impl UpdateAndGetParams<f64> for ParamBuilder<f64> {
-    fn update_emr_and_get_params<'a>(
-        &'a mut self,
-        sample: &'a MomentumSample<f64>,
-        graph: &'a Graph,
-        helicities: &[Helicity],
-        threshold_params: Option<&ThresholdParams<f64>>,
-    ) -> Cow<'a, Vec<Complex<F<f64>>>> {
-        let emr_spatial: Vec<_> = graph
-            .iter_edges()
-            .flat_map(|(pair, edge_id, _)| {
-                if let HedgePair::Paired { .. } = pair {
-                    let emr_vec = graph.loop_momentum_basis.edge_signatures[edge_id]
-                        .compute_three_momentum_from_four(
-                            sample.loop_moms(),
-                            sample.external_moms(),
-                        );
-                    // println!("{edge_id}:{emr_vec}");
-                    vec![
-                        Complex::new_re(emr_vec.px),
-                        Complex::new_re(emr_vec.py),
-                        Complex::new_re(emr_vec.pz),
-                    ]
-                } else {
-                    vec![]
-                }
-            })
-            .collect();
-
-        // parse!("s").evaluator(fn_map, params, optimization_settings).unwrap().
-
-        self.external_spatial_value(sample);
-        self.external_energies_value(sample);
-        self.emr_spatial.values = emr_spatial;
-        self.polarizations_values(graph, sample.external_moms(), helicities);
-
-        if let Some(threshold_params) = threshold_params {
-            self.threshold_params(threshold_params);
-        }
-
-        Cow::Owned(self.clone().build_values()) // ideally borrows a single vec
+    fn into_iter(self) -> Self::IntoIter {
+        [
+            self.m_uv,
+            self.mu_r_sq,
+            self.idenso_vars,
+            self.model_parameters,
+            self.external_energies,
+            self.external_spatial,
+            self.polarizations,
+            self.emr_spatial,
+            self.tstar,
+            self.h_function,
+            self.esurface_derivative,
+            self.uv_damp_plus,
+            self.uv_damp_minus,
+            self.radius,
+            self.radius_star,
+            self.orientations,
+        ]
+        .into_iter()
     }
 }
 
-impl UpdateAndGetParams<f128> for ParamBuilder<f64> {
-    fn update_emr_and_get_params(
-        &mut self,
-        sample: &MomentumSample<f128>,
-        graph: &Graph,
-        helicities: &[Helicity],
-        threshold_params: Option<&ThresholdParams<f128>>,
-    ) -> Cow<Vec<Complex<F<f128>>>> {
-        let emr_spatial: Vec<_> = graph
-            .iter_edges()
-            .flat_map(|(pair, edge_id, _)| {
-                if let HedgePair::Paired { .. } = pair {
-                    let emr_vec = graph.loop_momentum_basis.edge_signatures[edge_id]
-                        .compute_three_momentum_from_four(
-                            sample.loop_moms(),
-                            sample.external_moms(),
-                        );
-                    vec![
-                        Complex::new_re(emr_vec.px),
-                        Complex::new_re(emr_vec.py),
-                        Complex::new_re(emr_vec.pz),
-                    ]
-                } else {
-                    vec![]
-                }
-            })
-            .collect();
+impl<'a> IntoIterator for &'a GammaLoopPairs {
+    type Item = &'a ParamValuePairs;
+    type IntoIter = std::array::IntoIter<Self::Item, 16>;
 
-        let mut new_param_builder = self.higher();
-        new_param_builder.emr_spatial.values = emr_spatial;
-        new_param_builder.external_spatial_value(sample);
-        new_param_builder.external_energies_value(sample);
-        new_param_builder.polarizations_values(graph, sample.external_moms(), helicities);
-
-        if let Some(threshold_params) = threshold_params {
-            new_param_builder.threshold_params(threshold_params);
-        }
-
-        // println!("ParamBuilder before eval f128:\n{}", self);
-
-        Cow::Owned(new_param_builder.build_values())
+    fn into_iter(self) -> Self::IntoIter {
+        [
+            &self.m_uv,
+            &self.mu_r_sq,
+            &self.idenso_vars,
+            &self.model_parameters,
+            &self.external_energies,
+            &self.external_spatial,
+            &self.polarizations,
+            &self.emr_spatial,
+            &self.tstar,
+            &self.h_function,
+            &self.esurface_derivative,
+            &self.uv_damp_plus,
+            &self.uv_damp_minus,
+            &self.radius,
+            &self.radius_star,
+            &self.orientations,
+        ]
+        .into_iter()
     }
 }
 
-impl<T: FloatLike> ParamBuilder<T>
-where
-    T::Higher: FloatLike,
-    T::Lower: FloatLike,
-{
-    fn higher(&self) -> ParamBuilder<T::Higher> {
-        ParamBuilder {
-            fn_map: self.fn_map.clone(),
-            reps: self.reps.clone(),
-            m_uv: self.m_uv.higher(),
-            mu_r_sq: self.mu_r_sq.higher(),
-            idenso_vars: self.idenso_vars.higher(),
-            orientations: self.orientations.higher(),
-            model_parameters: self.model_parameters.higher(),
-            external_energies: self.external_energies.higher(),
-            external_spatial: self.external_spatial.higher(),
-            polarizations: self.polarizations.higher(),
-            emr_spatial: self.emr_spatial.higher(),
-            tstar: self.tstar.higher(),
-            h_function: self.h_function.higher(),
-            esurface_derivative: self.esurface_derivative.higher(),
-            uv_damp_plus: self.uv_damp_plus.higher(),
-            uv_damp_minus: self.uv_damp_minus.higher(),
-            radius: self.radius.higher(),
-            radius_star: self.radius_star.higher(),
-        }
-    }
-    fn lower(&self) -> ParamBuilder<T::Lower> {
-        ParamBuilder {
-            orientations: self.orientations.lower(),
-            fn_map: self.fn_map.clone(),
-            reps: self.reps.clone(),
-            m_uv: self.m_uv.lower(),
-            idenso_vars: self.idenso_vars.lower(),
-            mu_r_sq: self.mu_r_sq.lower(),
-            model_parameters: self.model_parameters.lower(),
-            external_energies: self.external_energies.lower(),
-            external_spatial: self.external_spatial.lower(),
-            polarizations: self.polarizations.lower(),
-            emr_spatial: self.emr_spatial.lower(),
-            tstar: self.tstar.lower(),
-            h_function: self.h_function.lower(),
-            esurface_derivative: self.esurface_derivative.lower(),
-            uv_damp_plus: self.uv_damp_plus.lower(),
-            uv_damp_minus: self.uv_damp_minus.lower(),
-            radius: self.radius.lower(),
-            radius_star: self.radius_star.lower(),
-        }
+impl<'a> IntoIterator for &'a mut GammaLoopPairs {
+    type Item = &'a mut ParamValuePairs;
+    type IntoIter = std::array::IntoIter<Self::Item, 16>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        [
+            &mut self.m_uv,
+            &mut self.mu_r_sq,
+            &mut self.idenso_vars,
+            &mut self.model_parameters,
+            &mut self.external_energies,
+            &mut self.external_spatial,
+            &mut self.polarizations,
+            &mut self.emr_spatial,
+            &mut self.tstar,
+            &mut self.h_function,
+            &mut self.esurface_derivative,
+            &mut self.uv_damp_plus,
+            &mut self.uv_damp_minus,
+            &mut self.radius,
+            &mut self.radius_star,
+            &mut self.orientations,
+        ]
+        .into_iter()
     }
 }
-impl<T: FloatLike> ParamBuilder<T> {
+
+impl GammaLoopPairs {
+    pub fn update_ranges(&mut self) -> usize {
+        let mut start = 0;
+        for pair in self {
+            let len = pair.params.len();
+            pair.value_range = start..start + len;
+            start += len;
+        }
+        start
+    }
+
     pub fn validate(&self) {
         debug!("Validating mu_r_sq");
         self.mu_r_sq.validate();
@@ -344,52 +239,348 @@ impl<T: FloatLike> ParamBuilder<T> {
         self.radius_star.validate();
     }
 
-    pub fn fill_in_values(&mut self, mut values: Vec<Complex<F<T>>>) {
-        self.m_uv.extract_and_fill(&mut values);
-        self.mu_r_sq.extract_and_fill(&mut values);
-        self.model_parameters.extract_and_fill(&mut values);
-        self.external_energies.extract_and_fill(&mut values);
-        self.external_spatial.extract_and_fill(&mut values);
-        self.polarizations.extract_and_fill(&mut values);
-        self.emr_spatial.extract_and_fill(&mut values);
-        self.tstar.extract_and_fill(&mut values);
-        self.h_function.extract_and_fill(&mut values);
-        self.esurface_derivative.extract_and_fill(&mut values);
-        self.uv_damp_plus.extract_and_fill(&mut values);
-        self.uv_damp_minus.extract_and_fill(&mut values);
-        self.radius.extract_and_fill(&mut values);
-        self.radius_star.extract_and_fill(&mut values);
+    pub(crate) fn new(model: &Model, graph: &Graph) -> (Self, usize) {
+        let mut pairs: GammaLoopPairs = Default::default();
+
+        pairs.m_uv = ParamValuePairs::default_from_symbol(GS.m_uv);
+
+        pairs.mu_r_sq = ParamValuePairs::default_from_symbol(GS.mu_r_sq);
+        pairs.tstar = ParamValuePairs::default_from_symbol(GS.rescale_star);
+        pairs.radius = ParamValuePairs::default_from_symbol(GS.radius);
+        pairs.radius_star = ParamValuePairs::default_from_symbol(GS.radius_star);
+        pairs.h_function = ParamValuePairs::default_from_symbol(GS.hfunction);
+        pairs.esurface_derivative = ParamValuePairs::default_from_symbol(GS.deta);
+        pairs.uv_damp_plus = ParamValuePairs::default_from_symbol(GS.uv_damp_plus);
+        pairs.uv_damp_minus = ParamValuePairs::default_from_symbol(GS.uv_damp_minus);
+
+        pairs.idenso_vars();
+
+        pairs.update_model(model);
+        pairs.external_energies(graph);
+        pairs.orientations(graph);
+        pairs.polarizations(graph);
+        pairs.external_spatial(graph);
+        pairs.emr_spatial(graph);
+
+        let len = pairs.update_ranges();
+        (pairs, len)
     }
 
-    pub fn replace_non_emr(&self, atom: impl AtomCore) -> Atom {
-        let reps = self
-            .reps
-            .iter()
-            .map(|(a, b)| Replacement::new(a.clone().to_pattern(), b.clone()))
-            .collect_vec();
-        let mut a = atom.replace_multiple(&reps);
+    pub(crate) fn idenso_vars(&mut self) {
+        self.idenso_vars = [CS.tr, CS.nc].into_iter().collect();
+        self.update_ranges();
+    }
 
-        for r in [
-            &self.m_uv,
-            &self.mu_r_sq,
-            &self.model_parameters,
-            &self.external_energies,
-            &self.external_spatial,
-            // &self.polarizations,
-            // &self.emr_spatial,
-            &self.tstar,
-            &self.h_function,
-            &self.esurface_derivative,
-            &self.uv_damp_plus,
-            &self.uv_damp_minus,
-            &self.radius,
-            &self.radius_star,
-        ]
-        .into_iter()
-        {
-            a = a.replace_multiple(&r.replacement());
+    pub(crate) fn update_model(&mut self, model: &Model) {
+        self.model_parameters = model.generate_params().into_iter().collect();
+    }
+
+    pub(crate) fn external_spatial(&mut self, graph: &Graph) {
+        self.external_spatial.params = graph
+            .iter_edges()
+            .flat_map(|(pair, edge_id, _)| {
+                if let HedgePair::Unpaired { .. } = pair {
+                    vec![
+                        GS.emr_mom(edge_id, Atom::from(ExpandedIndex::from_iter([1]))),
+                        GS.emr_mom(edge_id, Atom::from(ExpandedIndex::from_iter([2]))),
+                        GS.emr_mom(edge_id, Atom::from(ExpandedIndex::from_iter([3]))),
+                    ]
+                } else {
+                    vec![]
+                }
+            })
+            .collect();
+    }
+
+    pub(crate) fn emr_spatial(&mut self, graph: &Graph) {
+        self.emr_spatial.params = graph
+            .iter_edges()
+            .flat_map(|(pair, edge_id, _)| {
+                if let HedgePair::Paired { .. } = pair {
+                    vec![
+                        GS.emr_mom(edge_id, Atom::from(ExpandedIndex::from_iter([1]))),
+                        GS.emr_mom(edge_id, Atom::from(ExpandedIndex::from_iter([2]))),
+                        GS.emr_mom(edge_id, Atom::from(ExpandedIndex::from_iter([3]))),
+                    ]
+                } else {
+                    vec![]
+                }
+            })
+            .collect();
+    }
+
+    pub(crate) fn polarizations(&mut self, graph: &Graph) {
+        let mut params = Vec::new();
+
+        for (_, a) in &graph.polarizations {
+            match ParsingNet::try_from_view(a.as_view(), TENSORLIB.read().unwrap().deref())
+                .unwrap()
+                .result_tensor(TENSORLIB.read().unwrap().deref())
+                .unwrap()
+            {
+                ExecutionResult::One => {}
+                ExecutionResult::Zero => {}
+                ExecutionResult::Val(a) => {
+                    for (_, val) in a.iter_flat() {
+                        let AtomViewOrConcrete::Atom(a) = val else {
+                            panic!("SHOULD BE ATOMVIEW")
+                        };
+
+                        params.push(a.to_owned());
+                    }
+                }
+            }
         }
-        a
+
+        self.polarizations = params.into_iter().collect();
+    }
+
+    pub(crate) fn orientations(&mut self, graph: &Graph) {
+        let mut params = Vec::new();
+
+        for (_, i, _) in graph.iter_edges() {
+            params.push(GS.sign(i));
+            params.push(GS.sign_theta(GS.sign(i)));
+            params.push(GS.sign_theta(-GS.sign(i)));
+        }
+
+        self.orientations.params = params;
+    }
+
+    pub(crate) fn external_energies(&mut self, graph: &Graph) {
+        self.external_energies = graph.get_external_energy_atoms().into_iter().collect();
+    }
+
+    pub(crate) fn add_external_four_mom_impl<T: FloatLike>(
+        &self,
+        ext: &ExternalFourMomenta<F<T>>,
+        values: &mut [Complex<F<T>>],
+    ) {
+        let mut e_start = self.external_energies.value_range.start;
+        let mut s_start = self.external_spatial.value_range.start;
+
+        for e in ext {
+            values[e_start] = Complex::new_re(e.temporal.value.clone());
+            e_start += 1;
+            for c in &e.spatial {
+                values[s_start] = Complex::new_re(c.clone());
+                s_start += 1;
+            }
+        }
+
+        debug_assert_eq!(e_start, self.external_energies.value_range.end);
+        debug_assert_eq!(s_start, self.external_spatial.value_range.end);
+    }
+
+    pub(crate) fn polarizations_values<T: FloatLike>(
+        &self,
+        graph: &Graph,
+        ext: &ExternalFourMomenta<F<T>>,
+        helicities: &[Helicity],
+        values: &mut [Complex<F<T>>],
+    ) {
+        let p_start = self.polarizations.value_range.start;
+        let mut p_shift = 0;
+
+        for (p, _) in &graph.polarizations {
+            let extid = graph.loop_momentum_basis.ext_from(p.eid).unwrap();
+            let hel = p.hel.unwrap_or(helicities[extid.0]);
+            let pol = match p.pol_type {
+                PolType::Epsilon => ext[extid].pol(hel),
+                PolType::EpsilonBar => ext[extid].pol(hel).bar(),
+                PolType::Scalar => {
+                    continue;
+                }
+                PolType::U => ext[extid].u(hel.try_into().unwrap()),
+                PolType::V => ext[extid].v(hel.try_into().unwrap()),
+                PolType::UBar => ext[extid].u(hel.try_into().unwrap()).bar(),
+                PolType::VBar => ext[extid].v(hel.try_into().unwrap()).bar(),
+            };
+
+            for val in pol.tensor.data.into_iter() {
+                // info!("{}:{}", self.polarizations.params[p_shift], val);
+                values[p_start + p_shift] = val;
+                p_shift += 1;
+            }
+        }
+    }
+
+    pub(crate) fn threshold_params<T: FloatLike>(
+        &self,
+        threshold_params: &ThresholdParams<T>,
+        values: &mut [Complex<F<T>>],
+    ) {
+        values[self.radius.value_range.start] = Complex::new_re(threshold_params.radius.clone());
+        values[self.radius_star.value_range.start] =
+            Complex::new_re(threshold_params.radius_star.clone());
+        values[self.esurface_derivative.value_range.start] =
+            Complex::new_re(threshold_params.esurface_derivative.clone());
+
+        values[self.uv_damp_plus.value_range.start] =
+            Complex::new_re(threshold_params.uv_damp_plus.clone());
+        values[self.uv_damp_minus.value_range.start] =
+            Complex::new_re(threshold_params.uv_damp_minus.clone());
+        values[self.h_function.value_range.start] =
+            Complex::new_re(threshold_params.h_function.clone());
+    }
+}
+
+impl Default for GammaLoopPairs {
+    fn default() -> Self {
+        Self {
+            idenso_vars: ParamValuePairs::default(),
+            orientations: ParamValuePairs::default(),
+            m_uv: ParamValuePairs::default(),
+            mu_r_sq: ParamValuePairs::default(),
+            model_parameters: ParamValuePairs::default(),
+            external_energies: ParamValuePairs::default(),
+            polarizations: ParamValuePairs::default(),
+            external_spatial: ParamValuePairs::default(),
+            emr_spatial: ParamValuePairs::default(),
+            tstar: ParamValuePairs::default(),
+            h_function: ParamValuePairs::default(),
+            esurface_derivative: ParamValuePairs::default(),
+            uv_damp_plus: ParamValuePairs::default(),
+            uv_damp_minus: ParamValuePairs::default(),
+            radius: ParamValuePairs::default(),
+            radius_star: ParamValuePairs::default(),
+        }
+    }
+}
+
+#[derive(Clone, Encode, Decode)]
+#[trait_decode(trait = GammaLoopContext)]
+pub struct ParamBuilder<T: FloatLike = f64> {
+    pub values: Vec<Complex<F<T>>>,
+    pub pairs: GammaLoopPairs,
+    pub reps: Vec<(Atom, Atom)>,
+    // pub eager_const_map: HashMap<Atom, Complex<F<T>>>,
+    // pub eager_function_map: HashMap<Symbol, EvaluationFn<Atom, Complex<F<T>>>>,
+    // pub eager_fn_map:
+    pub fn_map: FunctionMap,
+}
+
+impl<T: FloatLike> Default for ParamBuilder<T> {
+    fn default() -> Self {
+        Self::new_empty()
+    }
+}
+
+pub struct ThresholdParams<T: FloatLike> {
+    pub radius: F<T>,
+    pub radius_star: F<T>,
+    pub esurface_derivative: F<T>,
+    pub uv_damp_plus: F<T>,
+    pub uv_damp_minus: F<T>,
+    pub h_function: F<T>,
+}
+
+pub trait UpdateAndGetParams<T: FloatLike> {
+    fn update_emr_and_get_params<'a>(
+        &'a mut self,
+        sample: &'a MomentumSample<T>,
+        graph: &'a Graph,
+        helicities: &[Helicity],
+        threshold_params: Option<&ThresholdParams<T>>,
+    ) -> Cow<'a, Vec<Complex<F<T>>>>;
+}
+
+impl UpdateAndGetParams<f64> for ParamBuilder<f64> {
+    fn update_emr_and_get_params<'a>(
+        &'a mut self,
+        sample: &'a MomentumSample<f64>,
+        graph: &'a Graph,
+        helicities: &[Helicity],
+        threshold_params: Option<&ThresholdParams<f64>>,
+    ) -> Cow<'a, Vec<Complex<F<f64>>>> {
+        let emr_start = self.pairs.emr_spatial.value_range.start;
+        let mut shift = 0;
+        graph.iter_edges().for_each(|(pair, edge_id, _)| {
+            if let HedgePair::Paired { .. } = pair {
+                let emr_vec = graph.loop_momentum_basis.edge_signatures[edge_id]
+                    .compute_three_momentum_from_four(sample.loop_moms(), sample.external_moms());
+                // info!("px:{}", self.pairs.emr_spatial.params[shift]);
+                //
+                self.values[emr_start + shift] = Complex::new_re(emr_vec.px);
+                shift += 1;
+                // info!("py:{}", self.pairs.emr_spatial.params[shift]);
+                self.values[emr_start + shift] = Complex::new_re(emr_vec.py);
+                shift += 1;
+                // info!("pz:{}", self.pairs.emr_spatial.params[shift]);
+                self.values[emr_start + shift] = Complex::new_re(emr_vec.pz);
+                shift += 1;
+            }
+        });
+
+        // parse!("s").evaluator(fn_map, params, optimization_settings).unwrap().
+
+        self.add_external_four_mom(sample.external_moms());
+        self.polarizations_values(graph, sample.external_moms(), helicities);
+
+        if let Some(threshold_params) = threshold_params {
+            self.threshold_params(threshold_params);
+        }
+
+        Cow::Borrowed(&self.values)
+    }
+}
+
+impl UpdateAndGetParams<f128> for ParamBuilder<f64> {
+    fn update_emr_and_get_params(
+        &mut self,
+        sample: &MomentumSample<f128>,
+        graph: &Graph,
+        helicities: &[Helicity],
+        threshold_params: Option<&ThresholdParams<f128>>,
+    ) -> Cow<Vec<Complex<F<f128>>>> {
+        let mut emr_start = self.pairs.emr_spatial.value_range.start;
+        let mut values = self.higher();
+        graph.iter_edges().for_each(|(pair, edge_id, _)| {
+            if let HedgePair::Paired { .. } = pair {
+                let emr_vec = graph.loop_momentum_basis.edge_signatures[edge_id]
+                    .compute_three_momentum_from_four(sample.loop_moms(), sample.external_moms());
+                // println!("{edge_id}:{emr_vec}");
+                values[emr_start] = Complex::new_re(emr_vec.px);
+                emr_start += 1;
+                values[emr_start] = Complex::new_re(emr_vec.py);
+                emr_start += 1;
+                values[emr_start] = Complex::new_re(emr_vec.pz);
+                emr_start += 1;
+            }
+        });
+
+        self.pairs
+            .add_external_four_mom_impl(sample.external_moms(), &mut values);
+        self.pairs
+            .polarizations_values(graph, sample.external_moms(), helicities, &mut values);
+
+        if let Some(threshold_params) = threshold_params {
+            self.pairs.threshold_params(threshold_params, &mut values);
+        }
+
+        Cow::Owned(values)
+    }
+}
+
+impl<T: FloatLike> ParamBuilder<T>
+where
+    T::Higher: FloatLike,
+    T::Lower: FloatLike,
+{
+    fn higher(&self) -> Vec<Complex<F<T::Higher>>> {
+        self.values.iter().map(|v| v.higher()).collect()
+    }
+    // fn lower(&self) -> Vec<Complex<F<T::Lower>>> {
+    //     self.values.iter().map(|v| v.lower()).collect()
+    // }
+}
+impl<T: FloatLike> ParamBuilder<T> {
+    pub fn model_values(&self) -> &[Complex<F<T>>] {
+        let range = self.pairs.model_parameters.value_range.clone();
+        &self.values[range]
+    }
+    pub fn validate(&self) {
+        self.pairs.validate();
     }
 
     pub fn add_tagged_function(
@@ -435,74 +626,22 @@ impl<T: FloatLike> ParamBuilder<T> {
         self.fn_map.add_constant(key, value)
     }
 
-    pub(crate) fn build_values(self) -> Vec<Complex<F<T>>> {
-        let mut values = Vec::with_capacity(100);
-        for value in self.into_iter() {
-            values.extend(value.values);
-        }
-        values
-    }
-    pub(crate) fn build_params(self) -> Vec<Atom> {
-        let mut values = Vec::with_capacity(100);
-        for value in self.into_iter() {
-            values.extend(value.params);
-        }
-        values
-    }
-
     pub(crate) fn new_empty() -> Self {
         Self {
             fn_map: FunctionMap::default(),
-            idenso_vars: ParamValuePairs::default(),
-            orientations: ParamValuePairs::default(),
-            m_uv: ParamValuePairs::default(),
-            mu_r_sq: ParamValuePairs::default(),
-            model_parameters: ParamValuePairs::default(),
-            external_energies: ParamValuePairs::default(),
-            polarizations: ParamValuePairs::default(),
-            external_spatial: ParamValuePairs::default(),
-            emr_spatial: ParamValuePairs::default(),
-            tstar: ParamValuePairs::default(),
-            h_function: ParamValuePairs::default(),
-            esurface_derivative: ParamValuePairs::default(),
-            uv_damp_plus: ParamValuePairs::default(),
-            uv_damp_minus: ParamValuePairs::default(),
-            radius: ParamValuePairs::default(),
-            radius_star: ParamValuePairs::default(),
+            pairs: GammaLoopPairs::default(),
+            values: Vec::new(),
             reps: Vec::new(),
         }
     }
 
-    pub(crate) fn idenso_vars(&mut self) {
-        self.idenso_vars.params = [CS.tr, CS.nc].into_iter().map(Atom::var).collect();
-
-        self.idenso_vars.values = vec![
-            Complex::new_re(F(T::from_f64(0.5))),
-            Complex::new_re(F(T::from_f64(3.))),
-        ];
-    }
-
     pub(crate) fn new(graph: &Graph, model: &Model) -> Self {
-        let mut new = Self::new_empty();
+        let (pairs, len) = GammaLoopPairs::new(model, graph);
 
-        new.m_uv = ParamValuePairs::default_from_symbol(GS.m_uv);
-
-        new.mu_r_sq = ParamValuePairs::default_from_symbol(GS.mu_r_sq);
-        new.tstar = ParamValuePairs::default_from_symbol(GS.rescale_star);
-        new.radius = ParamValuePairs::default_from_symbol(GS.radius);
-        new.radius_star = ParamValuePairs::default_from_symbol(GS.radius_star);
-        new.h_function = ParamValuePairs::default_from_symbol(GS.hfunction);
-        new.esurface_derivative = ParamValuePairs::default_from_symbol(GS.deta);
-        new.uv_damp_plus = ParamValuePairs::default_from_symbol(GS.uv_damp_plus);
-        new.uv_damp_minus = ParamValuePairs::default_from_symbol(GS.uv_damp_minus);
-        new.idenso_vars();
-
-        new.update_model_data(model);
-        new.external_energies_atom(graph);
-        new.orientation_params(graph);
-        new.polarization_params(graph);
-        new.external_spatial_atom(graph);
-        new.emr_spatial_atom(graph);
+        let mut new = Self {
+            pairs,
+            ..Default::default()
+        };
 
         let pi_rational = Rational::from(std::f64::consts::PI);
 
@@ -518,109 +657,90 @@ impl<T: FloatLike> ParamBuilder<T> {
         }
         new.add_constant(Atom::PI.into(), pi_rational.into());
 
+        new.values = vec![Complex::new_re(F(T::from_f64(0.))); len];
+        new.update_model_values(model);
+        new.update_idenso_values();
         new
     }
 
+    #[inline]
     pub(crate) fn m_uv_value(&mut self, m_uv: Complex<F<T>>) {
-        self.m_uv.values = vec![m_uv];
+        debug_assert!(self.pairs.m_uv.value_range.len() == 1);
+        self.values[self.pairs.m_uv.value_range.start] = m_uv;
     }
 
     pub(crate) fn mu_r_sq_value(&mut self, mu_r_sq: Complex<F<T>>) {
-        self.mu_r_sq.values = vec![mu_r_sq];
+        debug_assert!(self.pairs.mu_r_sq.value_range.len() == 1);
+        self.values[self.pairs.mu_r_sq.value_range.start] = mu_r_sq;
     }
 
-    pub(crate) fn update_model_data(&mut self, model: &Model) {
-        self.model_parameters.params = model.generate_params();
-        self.model_parameters.values = model.generate_values();
+    pub(crate) fn update_idenso_values(&mut self) {
+        let tr_value = Complex::new_re(F(T::from_f64(0.5)));
+        let nc_value = Complex::new_re(F(T::from_f64(3.)));
+
+        debug_assert!(self.pairs.idenso_vars.value_range.len() == 2);
+        self.values[self.pairs.idenso_vars.value_range.start] = tr_value;
+        self.values[self.pairs.idenso_vars.value_range.start + 1] = nc_value;
     }
 
-    pub(crate) fn external_energies_atom(&mut self, graph: &Graph) {
-        self.external_energies.params = graph.get_external_energy_atoms();
-        self.external_energies.set_zeros();
-    }
-
-    pub(crate) fn add_external_four_mom(&mut self, ext: &ExternalFourMomenta<F<T>>) {
-        self.external_energies.values = ext
-            .iter()
-            .map(|x| Complex::new_re(x.temporal.value.clone()))
-            .collect_vec();
-        self.external_spatial.values = ext
-            .iter()
-            .flat_map(|x| x.spatial.clone().into_iter().map(|c| Complex::new_re(c)))
-            .collect_vec();
-    }
-
-    pub(crate) fn polarization_params(&mut self, graph: &Graph) {
-        // println!("{}");c
-        let mut params = Vec::new();
-
-        for (p, a) in &graph.polarizations {
-            // println!("{a}");
-            match ParsingNet::try_from_view(a.as_view(), TENSORLIB.read().unwrap().deref())
-                .unwrap()
-                .result_tensor(TENSORLIB.read().unwrap().deref())
-                .unwrap()
-            {
-                ExecutionResult::One => {}
-                ExecutionResult::Zero => {}
-                ExecutionResult::Val(a) => {
-                    for (_, val) in a.iter_flat() {
-                        let AtomViewOrConcrete::Atom(a) = val else {
-                            panic!("SHOULD BE ATOMVIEW")
-                        };
-
-                        params.push(a.to_owned());
-                    }
-                }
+    pub(crate) fn update_model_values(&mut self, model: &Model) {
+        let mut pos = self.pairs.model_parameters.value_range.start;
+        for cpl in model.couplings.iter().filter(|c| c.value.is_some()) {
+            if let Some(value) = cpl.value {
+                self.values[pos] = value.map(F::from_f64);
+                pos += 1;
+            }
+        }
+        for param in model.parameters.iter().filter(|p| p.value.is_some()) {
+            if let Some(value) = param.value {
+                let value = Complex::new(F::<T>::from_ff64(value.re), F::<T>::from_ff64(value.im));
+                self.values[pos] = value;
+                pos += 1;
             }
         }
 
-        self.polarizations.params = params;
-        self.polarizations.set_zeros();
-
-        // self.polarizations.params = graph.generate_polarization_params();
+        debug_assert_eq!(pos, self.pairs.model_parameters.value_range.end);
     }
 
-    pub(crate) fn orientation_params(&mut self, graph: &Graph) {
-        let mut params = Vec::new();
-
-        for (p, i, d) in graph.iter_edges() {
-            params.push(GS.sign(i));
-            params.push(GS.sign_theta(GS.sign(i)));
-            params.push(GS.sign_theta(-GS.sign(i)));
-        }
-
-        self.orientations.params = params;
-        self.orientations.set_zeros();
+    pub(crate) fn add_external_four_mom(&mut self, ext: &ExternalFourMomenta<F<T>>) {
+        self.pairs.add_external_four_mom_impl(ext, &mut self.values);
     }
 
     pub(crate) fn orientation_value<O: GraphOrientation>(&mut self, orientation: &O) {
-        let mut values = Vec::new();
         let zero: Complex<F<T>> = Complex::new_re(F(T::from_f64(0.)));
         let one = zero.ref_one();
         let minusone = -(one.clone());
 
+        let mut o_start = self.pairs.orientations.value_range.start;
+
         for (_, i) in orientation.orientation() {
             match i {
                 Orientation::Default => {
-                    values.push(one.clone());
-                    values.push(one.clone());
-                    values.push(zero.clone());
+                    self.values[o_start] = (one.clone());
+                    o_start += 1;
+                    self.values[o_start] = (one.clone());
+                    o_start += 1;
+                    self.values[o_start] = (zero.clone());
+                    o_start += 1;
                 }
                 Orientation::Reversed => {
-                    values.push(minusone.clone());
-                    values.push(zero.clone());
-                    values.push(one.clone());
+                    self.values[o_start] = (minusone.clone());
+                    o_start += 1;
+                    self.values[o_start] = (zero.clone());
+                    o_start += 1;
+                    self.values[o_start] = (one.clone());
+                    o_start += 1;
                 }
                 Orientation::Undirected => {
-                    values.push(zero.clone());
-                    values.push(zero.clone());
-                    values.push(zero.clone());
+                    self.values[o_start] = (zero.clone());
+                    o_start += 1;
+                    self.values[o_start] = (zero.clone());
+                    o_start += 1;
+                    self.values[o_start] = (zero.clone());
+                    o_start += 1;
                 }
             }
         }
-
-        self.orientations.values = values;
     }
 
     pub(crate) fn polarizations_values(
@@ -629,117 +749,13 @@ impl<T: FloatLike> ParamBuilder<T> {
         ext: &ExternalFourMomenta<F<T>>,
         helicities: &[Helicity],
     ) {
-        // let mut pols = graph.global_prefactor.polarizations();
-
-        let mut vals = Vec::new();
-
-        for (p, _) in &graph.polarizations {
-            let extid = graph.loop_momentum_basis.ext_from(p.eid).unwrap();
-            let hel = p.hel.unwrap_or(helicities[extid.0]);
-            // println!("MOM:{}", ext[extid]);
-            // println!("Pol {},{},{:?}", extid, hel, p.pol_type);
-            let pol = match p.pol_type {
-                PolType::Epsilon => ext[extid].pol(hel),
-                PolType::EpsilonBar => ext[extid].pol(hel).bar(),
-                PolType::Scalar => {
-                    continue;
-                }
-                PolType::U => ext[extid].u(hel.try_into().unwrap()),
-                PolType::V => ext[extid].v(hel.try_into().unwrap()),
-                PolType::UBar => ext[extid].u(hel.try_into().unwrap()).bar(),
-                PolType::VBar => ext[extid].v(hel.try_into().unwrap()).bar(),
-            };
-
-            for (_, val) in pol.tensor.iter_flat() {
-                // println!("{val}");
-                vals.push(val.clone());
-            }
-        }
-
-        self.polarizations.values = vals;
-
-        // self.polarizations.params = graph.generate_polarization_params();
-    }
-
-    pub(crate) fn external_energies_value(&mut self, momentum_sample: &MomentumSample<T>) {
-        self.external_energies.values = momentum_sample
-            .external_moms()
-            .iter()
-            .map(|x| Complex::new_re(x.temporal.value.clone()))
-            .collect_vec();
-    }
-
-    pub(crate) fn external_spatial_atom(&mut self, graph: &Graph) {
-        self.external_spatial.params = graph
-            .iter_edges()
-            .flat_map(|(pair, edge_id, _)| {
-                if let HedgePair::Unpaired { .. } = pair {
-                    vec![
-                        GS.emr_mom(edge_id, Atom::from(ExpandedIndex::from_iter([1]))),
-                        GS.emr_mom(edge_id, Atom::from(ExpandedIndex::from_iter([2]))),
-                        GS.emr_mom(edge_id, Atom::from(ExpandedIndex::from_iter([3]))),
-                    ]
-                } else {
-                    vec![]
-                }
-            })
-            .collect();
-    }
-
-    pub(crate) fn external_spatial_value(&mut self, momentum_sample: &MomentumSample<T>) {
-        self.external_spatial.values = momentum_sample
-            .external_moms()
-            .iter()
-            .flat_map(|x| x.spatial.clone().into_iter().map(|c| Complex::new_re(c)))
-            .collect_vec();
-    }
-
-    pub(crate) fn emr_spatial_atom(&mut self, graph: &Graph) {
-        self.emr_spatial.params = graph
-            .iter_edges()
-            .flat_map(|(pair, edge_id, _)| {
-                if let HedgePair::Paired { .. } = pair {
-                    vec![
-                        GS.emr_mom(edge_id, Atom::from(ExpandedIndex::from_iter([1]))),
-                        GS.emr_mom(edge_id, Atom::from(ExpandedIndex::from_iter([2]))),
-                        GS.emr_mom(edge_id, Atom::from(ExpandedIndex::from_iter([3]))),
-                    ]
-                } else {
-                    vec![]
-                }
-            })
-            .collect();
-    }
-
-    pub(crate) fn emr_spatial_value(&mut self, emr_spatial: Vec<Complex<F<T>>>) {
-        self.emr_spatial.values = emr_spatial;
-    }
-
-    pub(crate) fn tstar_value(&mut self, tstar: Complex<F<T>>) {
-        self.tstar.values = vec![tstar];
-    }
-
-    pub(crate) fn h_function_value(&mut self, h_function: Complex<F<T>>) {
-        self.h_function.values = vec![h_function];
-    }
-
-    pub(crate) fn derivative_at_tstar_value(&mut self, derivative_at_tstar: Complex<F<T>>) {
-        self.esurface_derivative.values = vec![derivative_at_tstar];
-    }
-
-    pub(crate) fn radius_star_atom(&mut self, radius_star: Atom) {
-        self.radius_star.params = vec![radius_star];
+        self.pairs
+            .polarizations_values(graph, ext, helicities, &mut self.values);
     }
 
     pub(crate) fn threshold_params(&mut self, threshold_params: &ThresholdParams<T>) {
-        self.radius.values = vec![Complex::new_re(threshold_params.radius.clone())];
-        self.radius_star.values = vec![Complex::new_re(threshold_params.radius_star.clone())];
-        self.esurface_derivative.values = vec![Complex::new_re(
-            threshold_params.esurface_derivative.clone(),
-        )];
-        self.uv_damp_plus.values = vec![Complex::new_re(threshold_params.uv_damp_plus.clone())];
-        self.uv_damp_minus.values = vec![Complex::new_re(threshold_params.uv_damp_minus.clone())];
-        self.h_function.values = vec![Complex::new_re(threshold_params.h_function.clone())];
+        self.pairs
+            .threshold_params(threshold_params, &mut self.values);
     }
 
     pub fn table(&self) -> Table {
@@ -749,15 +765,13 @@ impl<T: FloatLike> ParamBuilder<T> {
             table.push_record(vec![lhs.to_string(), rhs.to_string()]);
         }
 
-        for i in self {
-            if i.values.is_empty() {
-                for p in i.params.iter() {
-                    table.push_record(vec![p.to_string(), "N/A".to_string()]);
-                }
-            } else {
-                for (v, p) in i.values.iter().zip(i.params.iter()) {
-                    table.push_record(vec![p.to_string(), v.to_string()]);
-                }
+        for i in &self.pairs {
+            for (p, v) in i.params.iter().zip(i.value_range.clone().into_iter()) {
+                table.push_record(vec![
+                    p.to_string(),
+                    self.values[v].to_string(),
+                    format!("{}", v),
+                ]);
             }
         }
 
@@ -773,18 +787,16 @@ impl<T: FloatLike> StatusRenderable for ParamBuilder<T> {
             map.insert(lhs.to_canonical_string(), rhs.to_canonical_string().into());
         }
 
-        for pairs in self {
-            if pairs.values.is_empty() {
-                for p in pairs.params.iter() {
-                    map.insert(p.to_canonical_string(), serde_json::Value::Null);
-                }
-            } else {
-                for (param, value) in pairs.params.iter().zip(pairs.values.iter()) {
-                    map.insert(
-                        param.to_canonical_string(),
-                        serde_json::to_value(value).unwrap(),
-                    );
-                }
+        for pairs in &self.pairs {
+            for (param, value) in pairs
+                .params
+                .iter()
+                .zip(pairs.value_range.clone().into_iter())
+            {
+                map.insert(
+                    param.to_canonical_string(),
+                    serde_json::to_value(&self.values[value]).unwrap(),
+                );
             }
         }
 
@@ -801,64 +813,10 @@ impl<T: FloatLike> Display for ParamBuilder<T> {
     }
 }
 
-impl<T: FloatLike> IntoIterator for ParamBuilder<T> {
-    type Item = ParamValuePairs<T>;
-    type IntoIter = std::array::IntoIter<Self::Item, 16>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        [
-            self.m_uv,
-            self.mu_r_sq,
-            self.idenso_vars,
-            self.model_parameters,
-            self.external_energies,
-            self.external_spatial,
-            self.polarizations,
-            self.emr_spatial,
-            self.tstar,
-            self.h_function,
-            self.esurface_derivative,
-            self.uv_damp_plus,
-            self.uv_damp_minus,
-            self.radius,
-            self.radius_star,
-            self.orientations,
-        ]
-        .into_iter()
-    }
-}
-
-impl<'a, T: FloatLike> IntoIterator for &'a ParamBuilder<T> {
-    type Item = &'a ParamValuePairs<T>;
-    type IntoIter = std::array::IntoIter<Self::Item, 16>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        [
-            &self.m_uv,
-            &self.mu_r_sq,
-            &self.idenso_vars,
-            &self.model_parameters,
-            &self.external_energies,
-            &self.external_spatial,
-            &self.polarizations,
-            &self.emr_spatial,
-            &self.tstar,
-            &self.h_function,
-            &self.esurface_derivative,
-            &self.uv_damp_plus,
-            &self.uv_damp_minus,
-            &self.radius,
-            &self.radius_star,
-            &self.orientations,
-        ]
-        .into_iter()
-    }
-}
-
 #[test]
 fn evaltest() {
     use symbolica::evaluate::{FunctionMap, OptimizationSettings};
-    use symbolica::{atom::AtomCore, parse};
+    use symbolica::{atom::AtomCore, parse, symbol};
     let expr = parse!("delta_sigma(1,1,1,1)");
     let args: Vec<_> = ["x1", "x2", "x3", "x4"]
         .into_iter()
@@ -872,7 +830,7 @@ fn evaltest() {
         .iter()
         .map(|a| parse!(a))
         .collect();
-    fn_map.add_function(symbol!("delta_sigma"), "delta_sigma".into(), args, body);
+    let _ = fn_map.add_function(symbol!("delta_sigma"), "delta_sigma".into(), args, body);
     let optimization_settings = OptimizationSettings::default();
     let mut evaluator = expr
         .evaluator(&fn_map, &params, optimization_settings)

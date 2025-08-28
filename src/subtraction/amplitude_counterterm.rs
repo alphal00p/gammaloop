@@ -443,8 +443,7 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
         let esurface_id = esurface_ct_builder.esurface_id;
 
         let model_params = param_builder
-            .model_parameters
-            .values
+            .model_values()
             .iter()
             .map(|c| Complex::new(F::from_ff64(c.re), F::from_ff64(c.im)))
             .collect::<Vec<_>>();

@@ -614,6 +614,7 @@ impl GammaloopIntegrand for AmplitudeIntegrand {
                             .first()
                             .unwrap()
                             .param_builder
+                            .pairs
                             .model_parameters
                             .params
                             .clone(),
