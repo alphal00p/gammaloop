@@ -23,7 +23,7 @@ use typed_index_collections::TiVec;
 use crate::{
     define_index,
     gammaloop_integrand::LmbMultiChannelingSetup,
-    momentum::{Dep, ExternalMomenta},
+    momentum::{Dep, ExternalMomenta, PolDef},
     momentum_sample::ExternalIndex,
     numerator::{symbolica_ext::AtomCoreExt, GlobalPrefactor, ParsingNet},
     settings::runtime::kinematic::Externals,
@@ -47,6 +47,7 @@ pub struct Graph {
     pub underlying: HedgeGraph<Edge, Vertex, NumHedgeData>,
     pub loop_momentum_basis: LoopMomentumBasis,
     pub global_prefactor: GlobalPrefactor,
+    pub polarizations: Vec<(PolDef, Atom)>,
 }
 
 // impl Deref for Graph {
@@ -121,6 +122,7 @@ impl Graph {
             is_group_master: false,
             underlying,
             global_prefactor: GlobalPrefactor::default(),
+            polarizations: vec![],
         })
     }
 

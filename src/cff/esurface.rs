@@ -1,38 +1,31 @@
 use std::fmt::Display;
-use std::ops::Index;
 
 use bincode_trait_derive::{Decode, Encode};
 use bitvec::vec::BitVec;
-use color_eyre::Report;
-use colored::Colorize;
 use derive_more::{From, Into};
 use eyre::eyre;
 use itertools::Itertools;
-use libc::TP_STATUS_SENDING;
 use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Flow, HedgePair};
 use linnet::half_edge::subgraph::{ModifySubgraph, SubGraphOps};
 use linnet::half_edge::HedgeGraph;
-use log::debug;
 use lorentz_vector::LorentzVector;
 use ref_ops::RefNeg;
 use serde::{Deserialize, Serialize};
 use symbolica::atom::{Atom, AtomCore};
 use symbolica::domains::float::{NumericalFloatLike, Real};
 use symbolica::id::Replacement;
-use symbolica::{function, parse, symbol};
+use symbolica::{function, parse};
 use typed_index_collections::TiVec;
 
 use crate::cff::cff_graph::VertexSet;
 
-use crate::graph::{Graph, GraphGroupPosition, LmbIndex, LoopMomentumBasis};
-use crate::{define_index, status_debug};
+use crate::define_index;
+use crate::graph::{Graph, GraphGroupPosition, LoopMomentumBasis};
 
-use crate::momentum::FourMomentum;
 use crate::momentum_sample::{
     ExternalFourMomenta, ExternalIndex, ExternalThreeMomenta, LoopIndex, LoopMomenta,
 };
 use crate::processes::CrossSectionCut;
-use crate::signature::ExternalSignature;
 use crate::utils::{
     compute_loop_part, compute_shift_part, compute_t_part_of_shift_part, cut_energy,
     external_energy_atom_from_index, ose_atom_from_index, FloatLike, F, GS,

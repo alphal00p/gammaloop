@@ -15,10 +15,9 @@ use crate::{
 };
 use bitvec::vec::BitVec;
 use color_eyre::Result;
-use dot_parser::ast::{GraphFromFileError, IOError};
-use eyre::{eyre, Error, Ok};
-use idenso::color;
-use itertools::{Group, Itertools};
+use dot_parser::ast::GraphFromFileError;
+use eyre::{eyre, Ok};
+use itertools::Itertools;
 use linnet::{
     half_edge::{
         involution::{EdgeVec, HedgePair, Orientation},
@@ -39,11 +38,10 @@ use spenso::{
 };
 use symbolica::{
     atom::{Atom, AtomCore, AtomView},
-    parse,
     printer::PrintOptions,
     try_parse,
 };
-use typed_index_collections::{ti_vec, TiVec};
+use typed_index_collections::TiVec;
 
 use super::{
     edge::ParseEdge,
@@ -528,12 +526,15 @@ impl Graph {
             underlying,
             group_id,
             is_group_master,
+            polarizations: vec![],
         };
 
         if add_polarizations {
             let pols = graph.generate_polarizations();
             graph.global_prefactor.projector *= pols;
         }
+
+        graph.polarizations = graph.global_prefactor.polarizations();
         // loop_momentum_basis.loop_edges.iter_enumerated().sorted_by_key(|(i,v)|);
         Ok(graph)
 
@@ -847,7 +848,6 @@ pub mod test {
 
     use super::Graph;
     use crate::{
-        cli::state::State,
         graph::{
             parse::{complete_group_parsing, IntoGraph},
             GraphGroup, LMBext,

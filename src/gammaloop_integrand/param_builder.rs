@@ -552,11 +552,9 @@ impl<T: FloatLike> ParamBuilder<T> {
 
     pub(crate) fn polarization_params(&mut self, graph: &Graph) {
         // println!("{}");c
-        let mut pols = graph.global_prefactor.polarizations();
-        pols.sort_by(|a, b| a.0.cmp(&b.0));
         let mut params = Vec::new();
 
-        for (p, a) in pols {
+        for (p, a) in &graph.polarizations {
             // println!("{a}");
             match ParsingNet::try_from_view(a.as_view(), TENSORLIB.read().unwrap().deref())
                 .unwrap()
@@ -631,12 +629,11 @@ impl<T: FloatLike> ParamBuilder<T> {
         ext: &ExternalFourMomenta<F<T>>,
         helicities: &[Helicity],
     ) {
-        let mut pols = graph.global_prefactor.polarizations();
-        pols.sort_by(|a, b| a.0.cmp(&b.0));
+        // let mut pols = graph.global_prefactor.polarizations();
 
         let mut vals = Vec::new();
 
-        for (p, a) in pols {
+        for (p, _) in &graph.polarizations {
             let extid = graph.loop_momentum_basis.ext_from(p.eid).unwrap();
             let hel = p.hel.unwrap_or(helicities[extid.0]);
             // println!("MOM:{}", ext[extid]);
