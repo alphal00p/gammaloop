@@ -52,7 +52,7 @@ impl Integrate {
             None
         };
 
-        state.process_list.warm_up();
+        state.process_list.warm_up()?;
 
         let gloop_integrand = state
             .process_list
