@@ -60,8 +60,12 @@ impl ProcessList {
         ProcessList { processes: vec![] }
     }
 
-    pub(crate) fn warm_up(&mut self) {
-        self.processes.iter_mut().for_each(|a| a.warm_up());
+    pub(crate) fn warm_up(&mut self) -> Result<()> {
+        for process in &mut self.processes.iter_mut() {
+            process.warm_up()?;
+        }
+
+        Ok(())
     }
 
     pub(crate) fn load(path: impl AsRef<Path>, context: GammaLoopContextContainer) -> Result<Self> {

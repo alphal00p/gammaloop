@@ -39,7 +39,7 @@ pub struct Inspect {
 
 impl Inspect {
     pub fn run(&self, state: &mut State) -> Result<()> {
-        state.process_list.warm_up();
+        state.process_list.warm_up()?;
 
         let integrand = state
             .process_list

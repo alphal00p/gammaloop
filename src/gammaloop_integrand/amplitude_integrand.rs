@@ -506,8 +506,15 @@ impl GammaloopIntegrand for AmplitudeIntegrand {
         }
 
         if !self.settings.subtraction.disable_threshold_subtraction {
+            status_debug!("esurface existence check");
             let existing_esurfaces = self.get_existing_esurfaces();
             for (group_id, existing_esurfaces) in existing_esurfaces.iter_enumerated() {
+                status_debug!(
+                    "solving overlap for group {}, number of thresholds: {}",
+                    group_id.0,
+                    existing_esurfaces.len()
+                );
+
                 let graph_data = self.data.graph_group_structure[group_id]
                     .into_iter()
                     .map(|graph_id| {
@@ -558,10 +565,9 @@ impl GammaloopIntegrand for AmplitudeIntegrand {
                         .clone(),
                 )?;
 
-                status_info!("overlap: {}", overlap);
+                panic!();
+                status_debug!("number of overlap groups: {}", overlap.overlap_groups.len());
             }
-
-            todo!("store overlap,  and fix evaluation")
         }
 
         Ok(())

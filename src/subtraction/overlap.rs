@@ -359,9 +359,6 @@ fn construct_solver(
         }
     }
 
-    debug!(name:"overlap_a_matrix", value = ?a_matrix);
-    debug!(name:"overlap_b_vector", value = ?b_vector);
-
     let a_matrix_sparse = CscMatrix::from(&a_matrix);
 
     let settings = DefaultSettingsBuilder::default()

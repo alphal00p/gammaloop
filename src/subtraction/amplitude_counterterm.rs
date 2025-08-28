@@ -417,7 +417,7 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
             .map(|c| Complex::new(F::from_ff64(c.re), F::from_ff64(c.im)))
             .collect::<Vec<_>>();
 
-        let prefactor = self.evaluate_multichanneling_prefactor(&self.rstar_sample, &model_params);
+        let prefactor = self.evaluate_multichanneling_prefactor(&self.rstar_sample, model_params);
 
         let radius = self
             .rstar_solution
@@ -503,14 +503,27 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
     fn evaluate_multichanneling_prefactor(
         &self,
         momentum_sample: &MomentumSample<T>,
-        model_params: &[Complex<F<T>>],
-    ) -> F<T> {
+        model_params: Vec<Complex<F<T>>>,
+    ) -> Complex<F<T>> {
         let overlap_builder = self.rstar_solution.esurface_ct_builder.overlap_builder;
         let overlap = overlap_builder.counterterm_builder.overlap_structure;
 
         if overlap.overlap_groups.len() < 2 {
-            return momentum_sample.one();
+            return Complex::new_re(momentum_sample.one());
         }
+
+        let params = momentum_sample
+            .loop_moms()
+            .iter()
+            .flat_map(|x| x.into_iter().cloned().map(Complex::new_re))
+            .chain(
+                momentum_sample
+                    .external_moms()
+                    .iter()
+                    .flat_map(|x| x.into_iter().cloned().map(Complex::new_re)),
+            )
+            .chain(model_params.into_iter())
+            .collect::<Vec<_>>();
 
         let evaluator = overlap_builder
             .overlap_group
@@ -518,7 +531,7 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
             .as_ref()
             .unwrap();
 
-        todo!()
+        T::get_evaluator_single(evaluator)(&params)
     }
 }
 

@@ -91,13 +91,18 @@ impl Amplitude {
               amplitude.name = %self.name,
           )
     )]
-    pub(crate) fn warm_up(&mut self) {
+    pub(crate) fn warm_up(&mut self) -> Result<()> {
         let derived_data = &self.graphs.iter().map(|g| &g.derived_data).collect_vec();
         let derived_data_container = DerivedDataContainer::Amplitude(&derived_data);
 
-        self.integrand
-            .as_mut()
-            .map(|a| a.warm_up(derived_data_container));
+        if let Some(integrand) = &mut self.integrand {
+            integrand.warm_up(derived_data_container)
+        } else {
+            Err(eyre!(
+                "Cannot warm up amplitude {} without integrand",
+                self.name
+            ))
+        }
     }
 
     #[instrument(
