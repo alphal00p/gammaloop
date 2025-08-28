@@ -61,8 +61,6 @@ pub struct AmplitudeCountertermData {
 pub struct AmplitudeCountertermAtom {
     pub parametric_local: Atom,
     pub parametric_integrated: Atom,
-    pub concrete_local: Option<Atom>,
-    pub concrete_integrated: Option<Atom>,
 }
 
 impl AmplitudeCountertermAtom {

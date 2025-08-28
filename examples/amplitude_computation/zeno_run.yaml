@@ -3,6 +3,10 @@ global_settings:
   generation:
     evaluator_settings:
       compile: true
+    tropical_subgraph_table_settings:
+      disable_tropical_generation: true
+      panic_on_fail: false 
+      target_omega: 1.0
 default_runtime_settings:
   General:
     amplitude_prefactor:
@@ -71,7 +75,7 @@ commands:
   - Inspect:
       process_id: 0
       process_name: zeno_IR
-      point: []
+      point: [0.1 0.2 0.3]
       use_f128: false
       force_radius: false
       momentum_space: false
