@@ -62,3 +62,20 @@ fn qqx_aaa_subtracted_nlo_amplitude_test() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn test_grouped_subtraction() -> Result<()> {
+    test_initialise()?;
+
+    let mut cmds: RunHistory = RunHistory::from_file_yaml(
+        "./tests/test_grouped_subtraction/test_grouped_subtraction.yaml",
+    )?;
+
+    let (mut cli, mut state) = new_cli_for_test("./tests/test_grouped_subtraction");
+
+    cmds.run(&mut cli, &mut state)?;
+
+    clean_test(&state);
+
+    Ok(())
+}
