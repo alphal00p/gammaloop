@@ -68,6 +68,7 @@ fn criterion_benchmark(c: &mut Criterion) -> Result<()> {
     let _ = qqx_aaa_run.run(&mut cli, &mut state)?;
 
     // state
+    //
 
     inspect_group.bench_function("qqx_aaa_amp", |b| b.iter(|| inspect.run(&mut state)));
     clean_test(&state);

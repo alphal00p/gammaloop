@@ -3,6 +3,7 @@ use std::{fs::File, path::Path};
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::{Result, Section};
 use eyre::Context;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use symbolica::{
     atom::{Atom, AtomCore},
@@ -39,7 +40,7 @@ impl GlobalSettings {
 }
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct GenerationSettings {
     // Generation Time settings
@@ -70,7 +71,7 @@ impl Default for GenerationSettings {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, Copy)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, Copy, JsonSchema)]
 #[cfg_attr(feature = "python_api", pyo3::pyclass)]
 pub enum CompilationOptimizationLevel {
     O0,
@@ -112,7 +113,7 @@ pub fn is_gpp(compiler: &str) -> bool {
     "g++" == compiler
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 #[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 pub struct GammaloopCompileOptions {
     #[serde(default = "yes", skip_serializing_if = "std::clone::Clone::clone")]
@@ -168,7 +169,7 @@ impl GammaloopCompileOptions {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 #[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 pub struct TropicalSubgraphTableSettings {
     pub panic_on_fail: bool,
@@ -187,7 +188,7 @@ impl Default for TropicalSubgraphTableSettings {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, Default, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, Default, PartialEq, JsonSchema)]
 #[trait_decode(trait = GammaLoopContext)]
 #[cfg_attr(feature = "python_api", pyo3::pyclass)]
 pub struct OrientationPattern {

@@ -1,4 +1,5 @@
 use bincode_trait_derive::{Decode, Encode};
+use schemars::{json_schema, JsonSchema};
 use serde::{ser::SerializeStruct, Deserialize, Serialize};
 use symbolica::{
     atom::{Atom, AtomCore},
@@ -15,6 +16,18 @@ use crate::GammaLoopContext;
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Default, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct StringSerializedAtom(pub Atom);
+
+impl JsonSchema for StringSerializedAtom {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "ParseableAtom".into()
+    }
+    fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        json_schema!({
+            "description": "An atom that is serialized as a string. Do not make any assumptions about the state",
+            "type": ["string"]
+        })
+    }
+}
 
 impl Deref for StringSerializedAtom {
     type Target = Atom;

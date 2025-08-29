@@ -46,6 +46,7 @@ use graph::ExternalConnection;
 use idenso::representations::initialize;
 use integrands::*;
 use model::Model;
+use schemars::JsonSchema;
 use signature::ExternalSignature;
 use std::sync::atomic::AtomicBool;
 use symbolica::state::HasStateMap;
@@ -102,7 +103,7 @@ pub const MAX_LOOP: usize = 3;
 pub const MAX_LOOP: usize = 6;
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass)]
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Encode, Decode)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
 // #[trait_decode(trait= GammaLoopContext)]
 pub enum HFunction {
     #[default]
@@ -147,7 +148,7 @@ pub const fn _default_usize_null() -> Option<usize> {
 }
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass)]
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
 // #[trait_decode(trait= GammaLoopContext)]
 pub struct HFunctionSettings {
     pub function: HFunction,

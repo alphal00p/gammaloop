@@ -3,6 +3,7 @@ use std::path::Path;
 use clap::Args;
 use color_eyre::Result;
 use log::{debug, info};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -12,7 +13,7 @@ use crate::{
 
 use super::state::State;
 
-#[derive(Debug, Args, Serialize, Deserialize, Clone)]
+#[derive(Debug, Args, Serialize, Deserialize, Clone, JsonSchema)]
 /// Generate integrands
 pub struct Generate {}
 

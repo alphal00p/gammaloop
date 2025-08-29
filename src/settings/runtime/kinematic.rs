@@ -2,6 +2,7 @@ use bincode_trait_derive::{Decode, Encode};
 use eyre::eyre;
 use itertools::Itertools;
 use log::debug;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
 use tabled::{builder::Builder, settings::Style};
@@ -19,7 +20,7 @@ use crate::{
 use color_eyre::{Result, Section};
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass)]
-#[derive(Debug, Clone, Deserialize, Serialize, Encode, Decode, PartialEq)]
+#[derive(Debug, Clone, Deserialize, Serialize, Encode, Decode, PartialEq, JsonSchema)]
 #[trait_decode(trait= GammaLoopContext)]
 pub struct KinematicsSettings {
     #[serde(default, skip_serializing_if = "IsDefault::is_default")]
@@ -46,7 +47,7 @@ impl Default for KinematicsSettings {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Encode, Decode)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Encode, Decode, JsonSchema)]
 // #[trait_decode(trait= GammaLoopContext)]
 #[serde(tag = "type", content = "data")]
 pub enum Externals {

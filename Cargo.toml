@@ -152,6 +152,8 @@ tracing = { version = "0.1.41", features = ["release_max_level_info"] }
 toml = "0.9.5"
 tracing-appender = "0.2.3"
 comemo = "0.5.0"
+figment = "0.10.19"
+schemars = "1.0.4"
 [dependencies.pyo3]
 features = ["abi3", "abi3-py37", "eyre"]
 optional = true

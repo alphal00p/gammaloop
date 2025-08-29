@@ -16,6 +16,7 @@ use bincode_trait_derive::{Decode, Encode};
 use enum_dispatch::enum_dispatch;
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
 use std::fmt::{Display, Formatter};
@@ -23,7 +24,7 @@ use symbolica::domains::float::{NumericalFloatLike, Real};
 use symbolica::numerical_integration::{ContinuousGrid, Grid, Sample};
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass)]
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 // #[trait_decode(trait= GammaLoopContext)]
 #[allow(non_snake_case)]
 #[serde(tag = "type")]
@@ -191,7 +192,7 @@ pub(crate) fn integrand_factory(settings: &RuntimeSettings) -> Integrand {
 }
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass)]
-#[derive(Debug, Clone, Default, Serialize, Deserialize, Encode, Decode, PartialEq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 // #[trait_decode(trait= GammaLoopContext)]
 pub struct UnitSurfaceSettings {
     pub n_3d_momenta: usize,
@@ -337,7 +338,7 @@ impl HasIntegrand for UnitSurfaceIntegrand {
 }
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass)]
-#[derive(Debug, Clone, Default, Serialize, Deserialize, Encode, Decode, PartialEq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 // #[trait_decode(trait= GammaLoopContext)]
 pub struct UnitVolumeSettings {
     pub n_3d_momenta: usize,

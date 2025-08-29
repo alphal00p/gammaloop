@@ -1,4 +1,5 @@
 use clap::Args;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
 
@@ -7,7 +8,7 @@ use color_eyre::Result;
 
 use super::state::State;
 
-#[derive(Debug, Args, Serialize, Deserialize, Clone)]
+#[derive(Debug, Args, Serialize, Deserialize, Clone, JsonSchema)]
 pub struct Inspect {
     /// The process id to inspect
     #[arg(short = 'i', long = "process-id", value_name = "ID")]

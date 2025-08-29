@@ -23,6 +23,7 @@ use integrate::Integrate;
 use log::LevelFilter;
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
 use state::{current_log_spec, RunHistory, State};
@@ -288,7 +289,7 @@ impl Cli {
     }
 }
 
-#[derive(Subcommand, Debug, Serialize, Deserialize, Clone)]
+#[derive(Subcommand, Debug, Serialize, Deserialize, Clone, JsonSchema)]
 pub enum Import {
     Model {
         // #[arg(short = 'p')]
@@ -302,7 +303,7 @@ pub enum Import {
     },
 }
 
-#[derive(Subcommand, Debug, Serialize, Deserialize, Clone)]
+#[derive(Subcommand, Debug, Serialize, Deserialize, Clone, JsonSchema)]
 pub enum Save {
     Dot {
         path: Option<PathBuf>,
@@ -313,7 +314,7 @@ pub enum Save {
     },
 }
 
-#[derive(Subcommand, Debug, Serialize, Deserialize, Clone)]
+#[derive(Subcommand, Debug, Serialize, Deserialize, Clone, JsonSchema)]
 pub enum Set {
     BaseDir {
         path: PathBuf,
@@ -327,14 +328,14 @@ pub enum Set {
     },
 }
 
-#[derive(Subcommand, Debug, Serialize, Deserialize, Clone)]
+#[derive(Subcommand, Debug, Serialize, Deserialize, Clone, JsonSchema)]
 pub enum Display {
     Model,
     Processes,
     Integrands { process_id: usize },
 }
 
-#[derive(Debug, Args, Serialize, Deserialize, Clone)]
+#[derive(Debug, Args, Serialize, Deserialize, Clone, JsonSchema)]
 pub struct Run {
     /// Path to a run file to execute
     path: PathBuf,
@@ -345,7 +346,7 @@ pub enum Log {
     Format(LogFormat),
 }
 
-#[derive(Subcommand, Debug, Serialize, Deserialize, Clone)]
+#[derive(Subcommand, Debug, Serialize, Deserialize, Clone, JsonSchema)]
 pub enum Commands {
     #[clap(subcommand)]
     Display(Display),

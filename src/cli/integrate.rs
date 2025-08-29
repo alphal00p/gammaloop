@@ -3,6 +3,7 @@ use std::{fs, path::PathBuf};
 use clap::Args;
 use itertools::Itertools;
 use log::{info, warn};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
 
@@ -21,7 +22,7 @@ use super::state::State;
     feature = "python_api",
     pyo3::pyclass(unsendable, name = "IntegrationSettings")
 )]
-#[derive(Debug, Args, Serialize, Deserialize, Clone)]
+#[derive(Debug, Args, Serialize, Deserialize, Clone, JsonSchema)]
 pub struct Integrate {
     /// The process id to inspect
     #[arg(short = 'i', long = "process-id", value_name = "ID")]

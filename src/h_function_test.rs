@@ -12,15 +12,15 @@ use crate::utils::f128;
 use crate::utils::FloatLike;
 use crate::utils::F;
 use bincode_trait_derive::{Decode, Encode};
-use log::debug;
 use log::info;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
 use symbolica::domains::float::NumericalFloatLike;
 use symbolica::numerical_integration::{ContinuousGrid, Grid, Sample};
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass)]
-#[derive(Debug, Clone, Default, Serialize, Deserialize, Encode, Decode, PartialEq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 // #[trait_decode(trait= GammaLoopContext)]
 pub struct HFunctionTestSettings {
     pub h_function: crate::HFunctionSettings,

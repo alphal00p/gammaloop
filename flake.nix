@@ -159,6 +159,7 @@
         packages = with pkgs; [
           tdf
           cargo-flamegraph
+          yaml-language-server
 
           # pkgs.ripgrep
           cargo-insta

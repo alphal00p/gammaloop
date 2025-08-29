@@ -11,6 +11,7 @@ use color_eyre::{Result, Section};
 use colored::{ColoredString, Colorize};
 use eyre::{eyre, Context};
 use log::debug;
+use schemars::{generate::SchemaSettings, schema_for, JsonSchema, Schema, SchemaGenerator};
 use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
 use symbolica::numerical_integration::Sample;
@@ -31,11 +32,12 @@ use crate::{
 
 use super::{tracing::FILTER_HANDLE, Cli, Commands};
 
-#[derive(Debug, Serialize, Deserialize, Default)]
+#[derive(Debug, Serialize, Deserialize, Default, JsonSchema)]
 pub struct RunHistory {
     pub default_runtime_settings: RuntimeSettings,
     pub global_settings: GlobalSettings,
     #[serde(with = "serde_yaml::with::singleton_map_recursive")]
+    #[schemars(with = "Vec<Commands>")]
     pub commands: Vec<Commands>,
 }
 
@@ -44,6 +46,10 @@ impl RunHistory {
         if !matches!(&command, Commands::Quit { .. }) {
             self.commands.push(command);
         }
+    }
+
+    pub fn schema() -> Schema {
+        schema_for!(RunHistory)
     }
     pub fn run(&mut self, cli: &mut Cli, state: &mut State) -> Result<ControlFlow<()>> {
         for command in self.commands.clone() {
@@ -127,6 +133,9 @@ impl RunHistory {
     ) -> Result<()> {
         File::create(root_folder.join("run.yaml"))?
             .write(serde_yaml::to_string(self)?.as_bytes())?;
+
+        File::create(root_folder.join("run_schema.json"))?
+            .write(serde_json::to_string_pretty(&Self::schema())?.as_bytes())?;
         Ok(())
     }
 }

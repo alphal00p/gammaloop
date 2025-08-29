@@ -8,6 +8,7 @@ use bincode_trait_derive::{Decode, Encode};
 use eyre::Context;
 use linnet::half_edge::involution::EdgeIndex;
 use momtrop::vector::Vector;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use spenso::{
@@ -1090,7 +1091,9 @@ impl<T: FloatLike> FourMomentum<F<T>> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize, Encode, Decode, Hash)]
+#[derive(
+    Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize, Encode, Decode, Hash, JsonSchema,
+)]
 // #[trait_decode(trait= GammaLoopContext)]
 #[serde(untagged)]
 pub enum ExternalMomenta<T> {
@@ -1110,7 +1113,9 @@ impl<T: FloatLike> Rotatable for ExternalMomenta<F<T>> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize, Encode, Decode, Hash)]
+#[derive(
+    Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize, Encode, Decode, Hash, JsonSchema,
+)]
 pub enum Dep {
     #[serde(rename = "dependent")]
     Dep,
@@ -2025,6 +2030,7 @@ impl Neg for Sign {
     PartialOrd,
     Ord,
     Hash,
+    JsonSchema,
 )]
 #[repr(i8)]
 pub enum SignOrZero {

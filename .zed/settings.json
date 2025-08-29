@@ -14,9 +14,38 @@
   "languages": {
     "Nickel": {
       "language_servers": ["nls"]
+    },
+    "YAML": {
+      "language_servers": ["yaml-language-server"]
     }
   },
   "lsp": {
+    "yaml-language-server": {
+      "settings": {
+        "yaml": {
+          "schemas": {
+            "./run_schema.json": "./examples/amplitude_computation/gammaloop_state/run.yaml"
+          }
+        }
+      }
+    },
+    "json-language-server": {
+      "settings": {
+        "json": {
+          "schemas": [
+            // {
+            //   "fileMatch": ["example-*.json"],
+            //   "url": "./.config/schema.json"
+            // },
+            // {
+            //   "fileMatch": ["example-*-root.json"],
+            //   "url": "./schema-at-root.json"
+            // }
+          ]
+        }
+      }
+    },
+
     "nls": {
       "enable_lsp_tasks": true,
       "initialization_options": {

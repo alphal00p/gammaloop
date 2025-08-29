@@ -6,6 +6,7 @@ use bincode_trait_derive::{Decode, Encode};
 use chrono::{Datelike, Local, SecondsFormat, Timelike};
 use clap::ValueEnum;
 use momtrop::log::Logger;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::sync::{LazyLock, Mutex, OnceLock};
@@ -33,6 +34,7 @@ use tracing_subscriber::{fmt, prelude::*, registry::Registry, reload, EnvFilter}
     Deserialize,
     Encode,
     Decode,
+    JsonSchema,
 )]
 #[cfg_attr(feature = "python_api", pyo3::pyclass)]
 pub enum LogLevel {

@@ -20,6 +20,7 @@ use ref_ops::{RefAdd, RefDiv, RefMul, RefNeg, RefRem, RefSub};
 use rug::float::{Constant, ParseFloatError};
 use rug::ops::{CompleteRound, Pow};
 use rug::Float;
+use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize};
 use spenso::algebra::algebraic_traits::RefOne;
 use spenso::algebra::algebraic_traits::RefZero;
@@ -874,7 +875,18 @@ pub trait FloatLike:
 }
 
 #[derive(
-    Debug, Clone, PartialEq, PartialOrd, Copy, Default, Serialize, Deserialize, Encode, Decode, Hash,
+    Debug,
+    Clone,
+    PartialEq,
+    PartialOrd,
+    Copy,
+    Default,
+    Serialize,
+    Deserialize,
+    Encode,
+    Decode,
+    Hash,
+    JsonSchema,
 )]
 pub struct F<T: FloatLike>(pub T);
 

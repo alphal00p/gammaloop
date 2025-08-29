@@ -16,7 +16,9 @@ use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::Path;
 
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq)]
+use schemars::JsonSchema;
+
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 #[allow(non_snake_case)]
 #[serde(tag = "type")]
 #[cfg_attr(feature = "python_api", pyo3::pyclass)]
@@ -27,7 +29,7 @@ pub enum PhaseSpaceSelectorSettings {
     RangeFilter(RangeFilterSettings),
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, Encode, Decode, PartialEq)]
+#[derive(Debug, Clone, Deserialize, Serialize, Encode, Decode, PartialEq, JsonSchema)]
 // #[trait_decode(trait= GammaLoopContext)]
 #[allow(non_snake_case)]
 #[serde(tag = "type")]
@@ -42,7 +44,7 @@ pub enum ObservableSettings {
     CrossSection {},
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, Encode, Decode, PartialEq)]
+#[derive(Debug, Clone, Deserialize, Serialize, Encode, Decode, PartialEq, JsonSchema)]
 #[allow(non_snake_case)]
 #[cfg_attr(feature = "python_api", pyo3::pyclass)]
 pub struct RangeFilterSettings {
@@ -52,7 +54,7 @@ pub struct RangeFilterSettings {
     pub max_value: f64,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, Encode, Decode, PartialEq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 #[allow(non_snake_case)]
 #[cfg_attr(feature = "python_api", pyo3::pyclass)]
 pub struct JetSliceSettings {
@@ -65,7 +67,7 @@ pub struct JetSliceSettings {
     pub use_fastjet: bool,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, Encode, Decode, PartialEq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 // #[trait_decode(trait= GammaLoopContext)]
 #[allow(non_snake_case)]
 #[cfg_attr(feature = "python_api", pyo3::pyclass)]
@@ -80,7 +82,7 @@ pub struct Jet1PTSettings {
     pub use_fastjet: bool,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, Encode, Decode, PartialEq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 #[allow(non_snake_case)]
 #[cfg_attr(feature = "python_api", pyo3::pyclass)]
 pub struct AFBSettings {
@@ -91,7 +93,7 @@ pub struct AFBSettings {
     pub filename: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 // #[trait_decode(trait= GammaLoopContext)]
 #[allow(non_snake_case)]
 #[cfg_attr(feature = "python_api", pyo3::pyclass)]
@@ -120,7 +122,7 @@ fn default_false() -> bool {
     false
 }
 
-#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq, Encode, Decode)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
 pub enum FilterQuantity {
     #[serde(rename = "E")]
     Energy,

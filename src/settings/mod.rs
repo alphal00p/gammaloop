@@ -1,5 +1,6 @@
 use bincode_trait_derive::{Decode, Encode};
 use global::GenerationSettings;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -11,7 +12,7 @@ use crate::{
 };
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
-#[derive(Debug, Clone, Default, Deserialize, Serialize, Encode, Decode)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize, Encode, Decode, JsonSchema)]
 #[trait_decode(trait= GammaLoopContext)]
 pub struct GlobalSettings {
     #[serde(default, skip_serializing_if = "IsDefault::is_default")]
@@ -21,7 +22,7 @@ pub struct GlobalSettings {
 }
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
-#[derive(Debug, Clone, Default, Deserialize, Serialize, Encode, Decode)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize, Encode, Decode, JsonSchema)]
 #[trait_decode(trait= GammaLoopContext)]
 pub struct RuntimeSettings {
     // Runtime settings

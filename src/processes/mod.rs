@@ -8,6 +8,7 @@ use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
 use eyre::Context;
 use log::debug;
+use schemars::JsonSchema;
 
 use crate::{
     settings::{runtime::LockedRuntimeSettings, GlobalSettings},
@@ -18,7 +19,7 @@ use serde::{Deserialize, Serialize};
 use crate::model::Model;
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass)]
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 pub struct EvaluatorSettings {
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub iterative_orientation_optimization: bool,
