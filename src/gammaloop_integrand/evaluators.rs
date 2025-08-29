@@ -163,7 +163,7 @@ impl GenericEvaluator {
                     .unwrap()
             })
             .reduce(|mut acc, n| {
-                acc.merge(n, optimization_settings.cpe_iterations);
+                acc.merge(n, optimization_settings.cpe_iterations).unwrap();
                 acc
             })?;
 

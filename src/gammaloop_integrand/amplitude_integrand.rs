@@ -626,6 +626,16 @@ impl GammaloopIntegrand for AmplitudeIntegrand {
                         )
                     })?;
 
+                status_info!(
+                    "overlap structure of group {}: {:?}",
+                    group_id.0,
+                    overlap
+                        .overlap_groups
+                        .iter()
+                        .map(|group| group.existing_esurfaces.len())
+                        .collect_vec()
+                );
+
                 for graph_id in self.data.graph_group_structure[group_id].into_iter() {
                     self.data.graph_terms[graph_id]
                         .threshold_counterterm

@@ -107,7 +107,7 @@ impl OverlapStructure {
             .iter()
             .map(|group| {
                 group
-                    .existing_esurfaces
+                    .complement
                     .iter()
                     .map(|&existing_esurface_id| {
                         let esurface = self.existing_esurfaces[existing_esurface_id];

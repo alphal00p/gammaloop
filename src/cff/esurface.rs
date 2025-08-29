@@ -443,6 +443,7 @@ impl Esurface {
             .replace_multiple(lmb_reps)
             .replace(parse!("ZERO"))
             .with(Atom::new())
+            .expand() // ensure canonical form
     }
 }
 
