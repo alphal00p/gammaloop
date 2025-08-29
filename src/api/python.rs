@@ -674,9 +674,11 @@ impl State {
         }
         .run(self)?;
 
-        Ok(a.into_iter()
-            .map(|c| PyComplex::from_doubles(py, c.re, c.im))
-            .collect())
+        Ok(vec![PyComplex::from_doubles(
+            py,
+            a.result.re.0,
+            a.result.im.0,
+        )])
     }
 
     pub(crate) fn inspect_lmw_integrand(

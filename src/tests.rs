@@ -59,14 +59,14 @@ fn compare_integration(
         IntegratedPhase::Both => {
             settings.integrator.integrated_phase = IntegratedPhase::Real;
             let res = havana_integrate(settings, user_data_generator, Some(target), None, None);
-            if !F::approx_eq(&res.result[0], &target.re, &applied_tolerance)
-                || !validate_error(res.error[0], target.re - res.result[0])
+            if !F::approx_eq(&res.result.re, &target.re, &applied_tolerance)
+                || !validate_error(res.error.re, target.re - res.result.re)
             {
                 println!(
                     "Incorrect real part of result: {:-19} vs {:.16e}",
                     format!(
                         "{:-19}",
-                        utils::format_uncertainty(res.result[0], res.error[0])
+                        utils::format_uncertainty(res.result.re, res.error.re)
                     )
                     .red()
                     .bold(),
@@ -76,14 +76,14 @@ fn compare_integration(
             }
             settings.integrator.integrated_phase = IntegratedPhase::Imag;
             let res = havana_integrate(settings, user_data_generator, Some(target), None, None);
-            if !F::approx_eq(&res.result[1], &target.im, &applied_tolerance)
-                || !validate_error(res.error[1], target.re - res.result[1])
+            if !F::approx_eq(&res.result.im, &target.im, &applied_tolerance)
+                || !validate_error(res.error.im, target.re - res.result.im)
             {
                 println!(
                     "Incorrect imag part of result: {:-19} vs {:.16e}",
                     format!(
                         "{:-19}",
-                        utils::format_uncertainty(res.result[1], res.error[1])
+                        utils::format_uncertainty(res.result.im, res.error.im)
                     )
                     .red()
                     .bold(),
@@ -95,14 +95,14 @@ fn compare_integration(
         IntegratedPhase::Real => {
             settings.integrator.integrated_phase = IntegratedPhase::Real;
             let res = havana_integrate(settings, user_data_generator, Some(target), None, None);
-            if !F::approx_eq(&res.result[0], &target.re, &applied_tolerance)
-                || !validate_error(res.error[0], target.im - res.result[0])
+            if !F::approx_eq(&res.result.re, &target.re, &applied_tolerance)
+                || !validate_error(res.error.re, target.im - res.result.re)
             {
                 println!(
                     "Incorrect real part of result: {:-19} vs {:.16e}",
                     format!(
                         "{:-19}",
-                        utils::format_uncertainty(res.result[0], res.error[0])
+                        utils::format_uncertainty(res.result.re, res.error.re)
                     )
                     .red()
                     .bold(),
@@ -114,14 +114,14 @@ fn compare_integration(
         IntegratedPhase::Imag => {
             settings.integrator.integrated_phase = IntegratedPhase::Imag;
             let res = havana_integrate(settings, user_data_generator, Some(target), None, None);
-            if !F::approx_eq(&res.result[1], &target.im, &applied_tolerance)
-                || !validate_error(res.error[1], target.im - res.result[1])
+            if !F::approx_eq(&res.result.im, &target.im, &applied_tolerance)
+                || !validate_error(res.error.im, target.im - res.result.im)
             {
                 println!(
                     "Incorrect imag part of result: {:-19} vs {:.16e}",
                     format!(
                         "{:-19}",
-                        utils::format_uncertainty(res.result[1], res.error[1])
+                        utils::format_uncertainty(res.result.im, res.error.im)
                     )
                     .red()
                     .bold(),

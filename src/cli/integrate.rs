@@ -9,7 +9,7 @@ use spenso::algebra::complex::Complex;
 
 use crate::{
     integrate::{havana_integrate, print_integral_result, IntegrationState},
-    settings::RuntimeSettings,
+    settings::{runtime::IntegrationResult, RuntimeSettings},
     status_info, status_warn,
     utils::F,
 };
@@ -50,7 +50,7 @@ pub struct Integrate {
 }
 
 impl Integrate {
-    pub fn run(&self, state: &mut State) -> Result<Vec<Complex<f64>>> {
+    pub fn run(&self, state: &mut State) -> Result<IntegrationResult> {
         let target = if let Some(t) = self.target.clone() {
             Some(Complex::new(F(t[0]), F(t[1])))
         } else {
@@ -141,11 +141,6 @@ impl Integrate {
 
         fs::write(&self.result_path, serde_yaml::to_string(&result)?)?;
 
-        Ok(result
-            .result
-            .iter()
-            .tuple_windows()
-            .map(|(re, im)| Complex::new(re.0, im.0))
-            .collect())
+        Ok(result)
     }
 }

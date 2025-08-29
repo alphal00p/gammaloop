@@ -196,11 +196,13 @@ impl Default for ParameterizationSettings {
 
 #[derive(Serialize, Deserialize)]
 pub struct IntegrationResult {
-    pub neval: i64,
-    pub fail: i32,
-    pub result: Vec<F<f64>>,
-    pub error: Vec<F<f64>>,
-    pub prob: Vec<F<f64>>,
+    pub neval: usize,
+    pub real_zero: usize,
+    pub im_zero: usize,
+    pub result: Complex<F<f64>>,
+    pub error: Complex<F<f64>>,
+    pub real_chisq: F<f64>,
+    pub im_chisq: F<f64>,
 }
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
