@@ -1,47 +1,31 @@
 use crate::{
+    cli::{inspect::Inspect, integrate::Integrate, state::State},
     feyngen::{
         self, diagram_generator::FeynGen, FeynGenError, FeynGenFilters, FeynGenOptions,
         NumeratorAwareGraphGroupingOption, SewedFilterOptions,
     },
-    graph::Graph,
-    inspect,
-    integrate::{
-        havana_integrate, print_integral_result, BatchResult, IntegrationState, MasterNode,
-    },
+    initialisation::initialise,
+    integrate::MasterNode,
     model::Model,
     numerator::GlobalPrefactor,
-    processes::{ExportSettings, Process, ProcessDefinition, ProcessList},
+    processes::{Process, ProcessDefinition, ProcessList},
     settings::{GlobalSettings, RuntimeSettings},
     utils::F,
-    GammaLoopContextContainer, HasIntegrand,
 };
 
 use ahash::HashMap;
-use chrono::{Datelike, Local, Timelike};
 use color_eyre::Result;
-use colored::{ColoredString, Colorize};
+use eyre::eyre;
 use feyngen::{
     FeynGenFilter, GenerationType, SelfEnergyFilterOptions, SnailFilterOptions,
     TadpolesFilterOptions,
 };
 use git_version::git_version;
 use itertools::{self, Itertools};
-use log::{info, warn, LevelFilter};
-use pyo3::types::PyDict;
-use spenso::algebra::complex::Complex;
-use std::{
-    fs,
-    path::{Path, PathBuf},
-    str::FromStr,
-    sync::{LazyLock, Mutex},
-};
+use pyo3::types::PyFloat;
+use std::{convert::Infallible, path::PathBuf, str::FromStr};
 
-use symbolica::{
-    atom::{Atom, AtomCore},
-    parse,
-    printer::PrintOptions,
-    state::State,
-};
+use symbolica::{atom::AtomCore, parse};
 const GIT_VERSION: &str = git_version!(fallback = "unavailable");
 
 #[allow(unused)]
@@ -52,88 +36,12 @@ use pyo3::{
     pyclass::CompareOp,
     pyfunction, pymethods, pymodule,
     types::{PyComplex, PyModule, PyTuple, PyType},
-    wrap_pyfunction, FromPyObject, PyObject, PyRef, PyResult, Python,
+    wrap_pyfunction, FromPyObject, PyObject, PyRef, Python,
 };
-
-//use pyo3_log;
-
-pub enum LogFormat {
-    Long,
-    Short,
-    Min,
-    None,
-}
-impl FromStr for LogFormat {
-    type Err = String;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "long" => Ok(LogFormat::Long),
-            "short" => Ok(LogFormat::Short),
-            "min" => Ok(LogFormat::Min),
-            "none" => Ok(LogFormat::None),
-            _ => Err(format!("Unknown log format: {}", s)),
-        }
-    }
-}
-
-pub static LOG_LEVEL: LazyLock<Mutex<Option<LevelFilter>>> = LazyLock::new(|| Mutex::new(None));
-pub static LOG_FORMAT: LazyLock<Mutex<LogFormat>> = LazyLock::new(|| Mutex::new(LogFormat::Long));
-
-#[pyfunction]
-#[pyo3(name = "rust_cli")]
-fn cli_wrapper(py: Python) -> PyResult<()> {
-    /*
-    // This one includes python and the name of the wrapper script itself, e.g.
-    // `["/home/ferris/.venv/bin/python", "/home/ferris/.venv/bin/print_cli_args", "a", "b", "c"]`
-    println!("{:?}", env::args().collect::<Vec<_>>());
-    // This one includes only the name of the wrapper script itself, e.g.
-    // `["/home/ferris/.venv/bin/print_cli_args", "a", "b", "c"])`
-    println!(
-        "{:?}",
-        py.import("sys")?
-            .getattr("argv")?
-            .extract::<Vec<String>>()?
-    );
-    */
-    // crate::set_interrupt_handler();
-    Ok(())
-
-    // match Cli::parse_from(
-    //     &py.import_bound("sys")?
-    //         .getattr("argv")?
-    //         .extract::<Vec<String>>()?,
-    // )
-    // .run()
-    // {
-    //     Err(e) => Err(exceptions::PyException::new_err(e.to_string())),
-    //     Ok(_) => Ok(()),
-    // }
-}
-
-pub(crate) fn format_level(level: log::Level) -> ColoredString {
-    match level {
-        log::Level::Error => format!("{:<8}", "ERROR").red(),
-        log::Level::Warn => format!("{:<8}", "WARNING").yellow(),
-        log::Level::Info => format!("{:<8}", "INFO").into(),
-        log::Level::Debug => format!("{:<8}", "DEBUG").bright_black(),
-        log::Level::Trace => format!("{:<8}", "TRACE").into(),
-    }
-}
-
-pub(crate) fn format_target(target: String, level: log::Level) -> ColoredString {
-    let split_targets = target.split("::").collect::<Vec<_>>();
-    //[-2..].iter().join("::");
-    let start = split_targets.len().saturating_sub(2);
-    let mut shortened_path = split_targets[start..].join("::");
-    if level < log::Level::Debug && shortened_path.len() > 20 {
-        shortened_path = format!("{}...", shortened_path.chars().take(17).collect::<String>());
-    }
-    format!("{:<20}", shortened_path).bright_blue()
-}
 
 #[pyfunction]
 #[pyo3(name = "evaluate_graph_overall_factor")]
-pub(crate) fn evaluate_graph_overall_factor(overall_factor: &str) -> PyResult<String> {
+pub(crate) fn evaluate_graph_overall_factor(overall_factor: &str) -> Result<String> {
     let overall_factor = parse!(overall_factor);
     let overall_factor_evaluated = FeynGen::evaluate_overall_factor(overall_factor.as_view());
     Ok(overall_factor_evaluated.to_canonical_string())
@@ -141,38 +49,8 @@ pub(crate) fn evaluate_graph_overall_factor(overall_factor: &str) -> PyResult<St
 
 #[pyfunction]
 #[pyo3(name = "atom_to_canonical_string")]
-pub(crate) fn atom_to_canonical_string(atom_str: &str) -> PyResult<String> {
+pub(crate) fn atom_to_canonical_string(atom_str: &str) -> Result<String> {
     Ok(parse!(atom_str).to_canonical_string())
-}
-
-pub(crate) fn get_python_log_level() -> Result<String, pyo3::PyErr> {
-    Python::with_gil(|py| {
-        let py_code = r#"
-def get_gamma_loop_log_level():
-    import logging
-    return logging.getLevelName(logging.getLogger('GammaLoop').level)
-"#;
-        let locals = PyDict::new_bound(py);
-        py.run_bound(py_code, None, Some(&locals))?;
-        let log_level: String = locals
-            .get_item("get_gamma_loop_log_level")?
-            .unwrap()
-            .call0()?
-            .extract()?;
-        Ok(log_level)
-    })
-}
-
-pub(crate) fn convert_log_level(level: &str) -> LevelFilter {
-    match level {
-        "DEBUG" => LevelFilter::Debug,
-        "INFO" => LevelFilter::Info,
-        "WARNING" => LevelFilter::Warn,
-        "ERROR" => LevelFilter::Error,
-        "CRITICAL" => LevelFilter::Error, // No direct mapping for CRITICAL, map to ERROR
-        "TRACE" => LevelFilter::Trace,    // Python does not have TRACE, but we allow it
-        _ => LevelFilter::Trace,          // Default to TRACE if unknown
-    }
 }
 
 #[pymodule]
@@ -180,7 +58,10 @@ pub(crate) fn convert_log_level(level: &str) -> LevelFilter {
 fn gammalooprs(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     crate::initialisation::initialise().expect("initialization failed");
     crate::set_interrupt_handler();
-    m.add_class::<PythonWorker>()?;
+    m.add_class::<State>()?;
+    m.add_class::<RuntimeSettings>()?;
+    m.add_class::<GlobalSettings>()?;
+
     m.add_class::<PyFeynGenFilters>()?;
     m.add_class::<PySnailFilterOptions>()?;
     m.add_class::<PySewedFilterOptions>()?;
@@ -189,10 +70,37 @@ fn gammalooprs(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     m.add_class::<PyFeynGenOptions>()?;
     m.add_class::<PyNumeratorAwareGroupingOption>()?;
     m.add("git_version", GIT_VERSION)?;
-    m.add_wrapped(wrap_pyfunction!(cli_wrapper))?;
     m.add_wrapped(wrap_pyfunction!(atom_to_canonical_string))?;
     m.add_wrapped(wrap_pyfunction!(evaluate_graph_overall_factor))?;
     Ok(())
+}
+
+impl<'py> IntoPyObject<'py> for F<f64> {
+    type Target = PyFloat;
+    type Output = Bound<'py, Self::Target>;
+    type Error = Infallible;
+
+    #[inline]
+    fn into_pyobject(self, py: Python<'py>) -> Result<Self::Output, Self::Error> {
+        Ok(PyFloat::new(py, self.0))
+    }
+}
+
+impl<'py> IntoPyObject<'py> for &F<f64> {
+    type Target = PyFloat;
+    type Output = Bound<'py, Self::Target>;
+    type Error = Infallible;
+
+    #[inline]
+    fn into_pyobject(self, py: Python<'py>) -> Result<Self::Output, Self::Error> {
+        (*self).into_pyobject(py)
+    }
+}
+
+impl<'py> FromPyObject<'py> for F<f64> {
+    fn extract_bound(obj: &Bound<'py, PyAny>) -> PyResult<Self> {
+        f64::extract_bound(obj).map(F)
+    }
 }
 
 pub struct OutputOptions {}
@@ -229,7 +137,7 @@ impl PySnailFilterOptions {
         veto_snails_attached_to_massive_lines: Option<bool>,
         veto_snails_attached_to_massless_lines: Option<bool>,
         veto_only_scaleless_snails: Option<bool>,
-    ) -> PyResult<PySnailFilterOptions> {
+    ) -> Result<PySnailFilterOptions> {
         Ok(PySnailFilterOptions {
             filter_options: SnailFilterOptions {
                 veto_snails_attached_to_massive_lines: veto_snails_attached_to_massive_lines
@@ -241,7 +149,7 @@ impl PySnailFilterOptions {
         })
     }
 
-    pub(crate) fn __str__(&self) -> PyResult<String> {
+    pub(crate) fn __str__(&self) -> Result<String> {
         Ok(format!("{}", self.filter_options))
     }
 }
@@ -258,7 +166,7 @@ impl PySelfEnergyFilterOptions {
         veto_self_energy_of_massive_lines: Option<bool>,
         veto_self_energy_of_massless_lines: Option<bool>,
         veto_only_scaleless_self_energy: Option<bool>,
-    ) -> PyResult<PySelfEnergyFilterOptions> {
+    ) -> Result<PySelfEnergyFilterOptions> {
         Ok(PySelfEnergyFilterOptions {
             filter_options: SelfEnergyFilterOptions {
                 veto_self_energy_of_massive_lines: veto_self_energy_of_massive_lines
@@ -270,7 +178,7 @@ impl PySelfEnergyFilterOptions {
         })
     }
 
-    pub(crate) fn __str__(&self) -> PyResult<String> {
+    pub(crate) fn __str__(&self) -> Result<String> {
         Ok(format!("{}", self.filter_options))
     }
 }
@@ -283,7 +191,7 @@ pub struct PySewedFilterOptions {
 #[pymethods]
 impl PySewedFilterOptions {
     #[new]
-    pub(crate) fn __new__(filter_tadpoles: Option<bool>) -> PyResult<PySewedFilterOptions> {
+    pub(crate) fn __new__(filter_tadpoles: Option<bool>) -> Result<PySewedFilterOptions> {
         Ok(PySewedFilterOptions {
             filter_options: SewedFilterOptions {
                 filter_tadpoles: filter_tadpoles.unwrap_or(false),
@@ -304,7 +212,7 @@ impl PyTadpolesFilterOptions {
         veto_tadpoles_attached_to_massive_lines: Option<bool>,
         veto_tadpoles_attached_to_massless_lines: Option<bool>,
         veto_only_scaleless_tadpoles: Option<bool>,
-    ) -> PyResult<PyTadpolesFilterOptions> {
+    ) -> Result<PyTadpolesFilterOptions> {
         Ok(PyTadpolesFilterOptions {
             filter_options: TadpolesFilterOptions {
                 veto_tadpoles_attached_to_massive_lines: veto_tadpoles_attached_to_massive_lines
@@ -316,7 +224,7 @@ impl PyTadpolesFilterOptions {
         })
     }
 
-    pub(crate) fn __str__(&self) -> PyResult<String> {
+    pub(crate) fn __str__(&self) -> Result<String> {
         Ok(format!("{}", self.filter_options))
     }
 }
@@ -339,7 +247,7 @@ impl<'a> FromPyObject<'a> for PyFeynGenFilters {
 
 #[pymethods]
 impl PyFeynGenFilters {
-    pub(crate) fn __str__(&self) -> PyResult<String> {
+    pub(crate) fn __str__(&self) -> Result<String> {
         Ok(self.filters.iter().map(|f| format!(" > {}", f)).join("\n"))
     }
 
@@ -357,7 +265,7 @@ impl PyFeynGenFilters {
         loop_count_range: Option<(usize, usize)>,
         fermion_loop_count_range: Option<(usize, usize)>,
         factorized_loop_topologies_count_range: Option<(usize, usize)>,
-    ) -> PyResult<PyFeynGenFilters> {
+    ) -> Result<PyFeynGenFilters> {
         let mut filters = Vec::new();
         if let Some(sewed_filter) = sewed_filter {
             filters.push(FeynGenFilter::SewedFilter(sewed_filter.filter_options));
@@ -429,7 +337,7 @@ fn feyngen_to_python_error(error: FeynGenError) -> PyErr {
 
 #[pymethods]
 impl PyFeynGenOptions {
-    pub(crate) fn __str__(&self) -> PyResult<String> {
+    pub(crate) fn __str__(&self) -> Result<String> {
         Ok(format!("{}", self.options))
     }
     #[allow(clippy::too_many_arguments)]
@@ -448,7 +356,7 @@ impl PyFeynGenOptions {
         max_multiplicity_for_fast_cut_filter: usize,
         amplitude_filters: Option<PyRef<PyFeynGenFilters>>,
         cross_section_filters: Option<PyRef<PyFeynGenFilters>>,
-    ) -> PyResult<PyFeynGenOptions> {
+    ) -> Result<PyFeynGenOptions> {
         let amplitude_filters = FeynGenFilters(
             amplitude_filters
                 .map(|f| f.filters.clone())
@@ -484,7 +392,7 @@ impl PyFeynGenOptions {
         };
         if feyngen_options.generation_type == GenerationType::Amplitude {
             if feyngen_options.final_pdgs_lists.len() > 1 {
-                return Err(exceptions::PyValueError::new_err(
+                return Err(eyre!(
                     "Multiple set of final states are not allowed for amplitude generation",
                 ));
             }
@@ -494,7 +402,7 @@ impl PyFeynGenOptions {
                 .iter()
                 .any(|l| l.is_empty())
         {
-            return Err(exceptions::PyValueError::new_err(
+            return Err(eyre!(
                     "When specifying multiple set of final states options, each must contain at least one particle",
                 ));
         }
@@ -519,7 +427,7 @@ impl PyNumeratorAwareGroupingOption {
         consider_internal_masses_only_in_numerator_isomorphisms: Option<bool>,
         fully_numerical_substitution_when_comparing_numerators: Option<bool>,
         numerical_samples_seed: Option<u16>,
-    ) -> PyResult<PyNumeratorAwareGroupingOption> {
+    ) -> Result<PyNumeratorAwareGroupingOption> {
         Ok(PyNumeratorAwareGroupingOption {
             grouping_options: NumeratorAwareGraphGroupingOption::new_with_attributes(
                 numerator_aware_grouping_option
@@ -535,77 +443,89 @@ impl PyNumeratorAwareGroupingOption {
         })
     }
 
-    pub(crate) fn __str__(&self) -> PyResult<String> {
+    pub(crate) fn __str__(&self) -> Result<String> {
         Ok(format!("{}", self.grouping_options))
     }
 }
 
 // TODO: Improve error broadcasting to Python so as to show rust backtrace
 #[pymethods]
-impl PythonWorker {
+impl State {
     #[new]
-    pub(crate) fn new() -> PyResult<PythonWorker> {
-        crate::set_interrupt_handler();
-        Ok(PythonWorker {
+    pub fn new_python(state_folder: PathBuf) -> Self {
+        initialise();
+        let handle = crate::cli::tracing::init_tracing(
+            "info,symbolica::poly::gcd=off",
+            &state_folder.join("logs"),
+        );
+
+        let a = Self {
+            save_path: state_folder,
+            log_filter: handle,
             model: Model::default(),
-            process_list: ProcessList::new(),
-            // integrands: HashMap::default(),
-            master_node: None,
-        })
+            process_list: ProcessList::default(),
+            model_path: None,
+        };
+        a
+    }
+
+    pub fn inspect<'py>(
+        &mut self,
+        py: Python<'py>,
+        process_id: usize,
+        process_name: String,
+        point: Vec<f64>,
+        use_f128: bool,
+        force_radius: bool,
+        momentum_space: bool,
+        discrete_dim: Vec<usize>,
+    ) -> Result<Bound<'py, PyComplex>> {
+        let res = Inspect {
+            process_id,
+            process_name,
+            point,
+            use_f128,
+            force_radius,
+            momentum_space,
+            discrete_dim,
+        }
+        .run(self)?;
+        Ok(PyComplex::from_doubles(py, res.re, res.im))
     }
 
     #[pyo3(signature = (path,name=None))]
-    pub(crate) fn import_amplitude(&mut self, path: PathBuf, name: Option<String>) -> PyResult<()> {
-        // println!("")
-        let graphs = Graph::from_file(&path, &self.model)
-            .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
-        let name = name.unwrap_or_else(|| path.file_name().unwrap().to_string_lossy().into_owned());
-        let process = Process::from_graph_list(
-            name,
-            graphs,
-            GenerationType::Amplitude,
-            ProcessDefinition::new_empty(),
-            None,
-        )
-        .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
+    pub(crate) fn import_amplitude_python(
+        &mut self,
+        path: PathBuf,
+        name: Option<String>,
+    ) -> Result<()> {
+        self.import_amplitude(path, name)
+    }
 
-        self.process_list.add_process(process);
+    pub(crate) fn import_model_python(&mut self, file_path: PathBuf) -> Result<()> {
+        self.import_model(file_path)
+    }
+
+    pub(crate) fn load_model_from_yaml_str(&mut self, yaml_str: &str) -> Result<()> {
+        self.model = Model::from_yaml_str(String::from(yaml_str))?;
         Ok(())
     }
 
-    pub(crate) fn load_model(&mut self, file_path: &str) -> PyResult<()> {
-        Model::from_file(String::from(file_path))
-            .map_err(|e| exceptions::PyException::new_err(e.to_string()))
-            .map(|m| self.model = m)
+    pub(crate) fn generate_integrands_python(
+        &mut self,
+        global_settings: &GlobalSettings,
+        runtime_default: &RuntimeSettings,
+    ) -> Result<()> {
+        self.generate_integrands(global_settings, runtime_default.into())
     }
 
-    pub(crate) fn load_model_from_yaml_str(&mut self, yaml_str: &str) -> PyResult<()> {
-        Model::from_yaml_str(String::from(yaml_str))
-            .map_err(|e| exceptions::PyException::new_err(e.root_cause().to_string()))
-            .map(|m| self.model = m)
-    }
-
-    // Note: one could consider returning a PyModel class containing the serialisable model as well,
-    // but since python already has its native class for this, it is better for now to pass a yaml representation
-    // which will be deserialize in said native class.
-    pub(crate) fn get_model(&self) -> PyResult<String> {
-        self.model
-            .to_yaml()
-            .map_err(|e| exceptions::PyException::new_err(e.to_string()))
-    }
-
-    pub(crate) fn preprocess(&mut self, export_yaml_str: &str) -> PyResult<()> {
-        let process_settings: GlobalSettings = serde_yaml::from_str(export_yaml_str)
-            .map_err(|e| exceptions::PyException::new_err(e.to_string()))
-            .unwrap();
-
-        if self.process_list.processes.is_empty() {
-            warn!("No processes to preprocess");
-        }
-
-        self.process_list
-            .preprocess(&self.model, &process_settings)
-            .map_err(|e| exceptions::PyException::new_err(e.to_string()))
+    pub(crate) fn compile_integrands_python(
+        &mut self,
+        folder: PathBuf,
+        override_existing: bool,
+        global_settings: &GlobalSettings,
+    ) -> Result<()> {
+        self.compile_integrands(folder, override_existing, global_settings)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -622,10 +542,10 @@ impl PythonWorker {
         global_prefactor_color: Option<String>,
         global_prefactor_colorless: Option<String>,
         num_threads: Option<usize>,
-    ) -> PyResult<Vec<String>> {
+    ) -> Result<Vec<String>> {
         if self.model.is_empty() {
-            return Err(exceptions::PyException::new_err(
-                "A physics model must be loaded before generating diagrams",
+            return Err(eyre!(
+                "A physics model must be loaded before generating diagrams"
             ));
         }
         let feyngen_options = generation_options.options.clone();
@@ -701,7 +621,7 @@ impl PythonWorker {
     //     amplitued_list: Vec<String>,
     //     format: &str,
     //     export_yaml_str: &str,
-    // ) -> PyResult<String> {
+    // ) -> Result<String> {
     //     let export_settings: ProcessSettings = serde_yaml::from_str(export_yaml_str)
     //         .map_err(|e| exceptions::PyException::new_err(e.to_string()))
     //         .unwrap();
@@ -723,49 +643,40 @@ impl PythonWorker {
     //     Ok("Exported expressions".to_string())
     // }
 
-    pub(crate) fn export_coupling_replacement_rules(
-        &self,
-        export_root: &str,
-        format: &str,
-    ) -> PyResult<String> {
-        self.model
-            .export_coupling_replacement_rules(export_root, Self::printer_options(format))
-            .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
-        Ok("Exported coupling substitutions".to_string())
-    }
+    // pub(crate) fn export_coupling_replacement_rules(
+    //     &self,
+    //     export_root: &str,
+    //     format: &str,
+    // ) -> Result<String> {
+    //     self.model
+    //         .export_coupling_replacement_rules(export_root, Self::printer_options(format))
+    //         .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
+    //     Ok("Exported coupling substitutions".to_string())
+    // }
 
-    pub(crate) fn inspect_integrand(
+    pub fn integrate<'py>(
         &mut self,
-        integrand: &str,
-        pt: Vec<f64>,
-        term: Vec<usize>,
-        force_radius: bool,
-        is_momentum_space: bool,
-        use_f128: bool,
-    ) -> Result<(f64, f64)> {
-        let pt = pt.iter().map(|&x| F(x)).collect::<Vec<F<f64>>>();
-        let integrand = self.process_list.get_integrand_mut(0, integrand)?;
+        py: Python<'py>,
+        process_id: usize,
+        process_name: String,
+        result_path: PathBuf,
+        n_cores: usize,
+        workspace_path: PathBuf,
+        target: Option<Vec<f64>>,
+    ) -> Result<Vec<Bound<'py, PyComplex>>> {
+        let a = Integrate {
+            process_id,
+            process_name,
+            result_path,
+            n_cores,
+            workspace_path,
+            target,
+        }
+        .run(self)?;
 
-        let settings = integrand.get_settings().clone();
-        //  match integrand {
-        //     Integrand::GammaLoopIntegrand(integrand) => {
-        //         integrand.global_data.settings.clone()
-        //     }
-        //     Integrand::NewIntegrand(integrand) => integrand.get_settings().clone(),
-        //     _ => todo!(),
-        // };
-
-        let res = inspect::inspect(
-            &settings,
-            integrand,
-            pt,
-            &term,
-            force_radius,
-            is_momentum_space,
-            use_f128,
-        );
-
-        Ok((res.re.0, res.im.0))
+        Ok(a.into_iter()
+            .map(|c| PyComplex::from_doubles(py, c.re, c.im))
+            .collect())
     }
 
     pub(crate) fn inspect_lmw_integrand(
@@ -840,286 +751,84 @@ impl PythonWorker {
         Ok(())
     }
 
-    pub(crate) fn integrate_integrand(
-        &mut self,
-        integrand_name: &str,
-        num_cores: usize,
-        result_path: &str,
-        workspace_path: &str,
-        target: Option<(f64, f64)>,
-    ) -> Result<Vec<(f64, f64)>> {
-        let target = target.map(|(re, im)| (F(re), F(im)));
+    // pub(crate) fn load_master_node(&mut self, integrand: &str) -> Result<String> {
+    //     let selected_integrand = self.process_list.get_integrand_mut(0, integrand)?;
 
-        let gloop_integrand = self.process_list.get_integrand_mut(0, integrand_name)?;
+    //     let grid = selected_integrand.create_grid();
+    //     let integrator_settings = selected_integrand.get_integrator_settings();
 
-        let target = match target {
-            Some((re, im)) => Some(Complex::new(re, im)),
-            _ => None,
-        };
+    //     let master_node = MasterNode::new(grid, integrator_settings);
+    //     self.master_node = Some(master_node);
 
-        info!("Gammaloop now integrates {}", integrand_name.green().bold());
+    //     Ok(format!("Initialized master grid for {}", integrand))
+    // }
 
-        let workspace_path = PathBuf::from(workspace_path);
+    // pub(crate) fn write_batch_input(
+    //     &mut self,
+    //     num_cores: usize,
+    //     num_samples: usize,
+    //     export_grid: bool,
+    //     output_accumulator: bool,
+    //     workspace_path: &str,
+    //     job_id: usize,
+    // ) -> Result<String> {
+    //     let master_node = self
+    //         .master_node
+    //         .as_mut()
+    //         .expect("Could not get master node");
 
-        let path_to_state = workspace_path.join("integration_state");
+    //     // extract the integrated phase in a hacky way
+    //     match master_node
+    //         .write_batch_input(
+    //             num_cores,
+    //             num_samples,
+    //             export_grid,
+    //             output_accumulator,
+    //             workspace_path,
+    //             job_id,
+    //         )
+    //         .map_err(|e| exceptions::PyException::new_err(e.to_string()))
+    //     {
+    //         Ok(_) => Ok(format!("Wrote batch input for job {}", job_id)),
+    //         Err(e) => Err(e),
+    //     }
+    // }
 
-        let integration_state = match fs::read(path_to_state) {
-            Ok(state_bytes) => {
-                info!(
-                    "{}",
-                    "Found integration state, result of previous integration:".yellow()
-                );
-                info!("");
+    // pub(crate) fn process_batch_output(
+    //     &mut self,
+    //     workspace_path: &str,
+    //     job_id: usize,
+    // ) -> Result<String> {
+    //     let master_node = self
+    //         .master_node
+    //         .as_mut()
+    //         .expect("could not get master node");
 
-                let state: IntegrationState = bincode::decode_from_slice::<IntegrationState, _>(
-                    &state_bytes,
-                    bincode::config::standard(),
-                )
-                .expect("Could not deserialize state")
-                .0;
+    //     let job_out_name = format!("job_{}_out", job_id);
+    //     let job_out_path = Path::new(workspace_path).join(job_out_name);
 
-                let path_to_workspace_settings = workspace_path.join("settings.yaml");
-                let workspace_settings_string = fs::read_to_string(path_to_workspace_settings)
-                    .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
+    //     let output_file = std::fs::read(job_out_path)?;
+    //     let batch_result: BatchResult =
+    //         bincode::decode_from_slice(&output_file, bincode::config::standard())
+    //             .expect("Could not deserialize batch")
+    //             .0;
 
-                let workspace_settings: RuntimeSettings =
-                    serde_yaml::from_str(&workspace_settings_string)
-                        .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
+    //     master_node
+    //         .process_batch_output(batch_result)
+    //         .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
 
-                // force the settings to be the same as the ones used in the previous integration
-                *gloop_integrand.get_mut_settings() = workspace_settings.clone();
+    //     Ok(format!("Processed job {}", job_id))
+    // }
 
-                print_integral_result(
-                    &state.integral.re,
-                    1,
-                    state.iter,
-                    "re",
-                    target.map(|c| c.re),
-                );
+    // pub(crate) fn display_master_node_status(&self) {
+    //     if let Some(master_node) = &self.master_node {
+    //         master_node.display_status();
+    //     }
+    // }
 
-                print_integral_result(
-                    &state.integral.im,
-                    2,
-                    state.iter,
-                    "im",
-                    target.map(|c| c.im),
-                );
-                info!("");
-                warn!("Any changes to the settings will be ignored, integrate with the {} option for changes to take effect","--restart".blue());
-                info!("{}", "Resuming integration".yellow());
-
-                Some(state)
-            }
-
-            Err(_) => {
-                info!("No integration state found, starting new integration");
-                None
-            }
-        };
-
-        let settings = gloop_integrand.get_settings().clone();
-        let result = havana_integrate(
-            &settings,
-            |set| gloop_integrand.user_data_generator(num_cores, set),
-            target,
-            integration_state,
-            Some(workspace_path),
-        );
-
-        fs::write(
-            result_path,
-            serde_yaml::to_string(&result)
-                .map_err(|e| exceptions::PyException::new_err(e.to_string()))?,
-        )?;
-
-        Ok(result
-            .result
-            .iter()
-            .tuple_windows()
-            .map(|(re, im)| (re.0, im.0))
-            .collect())
-    }
-
-    pub(crate) fn load_master_node(&mut self, integrand: &str) -> Result<String> {
-        let selected_integrand = self.process_list.get_integrand_mut(0, integrand)?;
-
-        let grid = selected_integrand.create_grid();
-        let integrator_settings = selected_integrand.get_integrator_settings();
-
-        let master_node = MasterNode::new(grid, integrator_settings);
-        self.master_node = Some(master_node);
-
-        Ok(format!("Initialized master grid for {}", integrand))
-    }
-
-    pub(crate) fn write_batch_input(
-        &mut self,
-        num_cores: usize,
-        num_samples: usize,
-        export_grid: bool,
-        output_accumulator: bool,
-        workspace_path: &str,
-        job_id: usize,
-    ) -> PyResult<String> {
-        let master_node = self
-            .master_node
-            .as_mut()
-            .expect("Could not get master node");
-
-        // extract the integrated phase in a hacky way
-        match master_node
-            .write_batch_input(
-                num_cores,
-                num_samples,
-                export_grid,
-                output_accumulator,
-                workspace_path,
-                job_id,
-            )
-            .map_err(|e| exceptions::PyException::new_err(e.to_string()))
-        {
-            Ok(_) => Ok(format!("Wrote batch input for job {}", job_id)),
-            Err(e) => Err(e),
-        }
-    }
-
-    pub(crate) fn process_batch_output(
-        &mut self,
-        workspace_path: &str,
-        job_id: usize,
-    ) -> PyResult<String> {
-        let master_node = self
-            .master_node
-            .as_mut()
-            .expect("could not get master node");
-
-        let job_out_name = format!("job_{}_out", job_id);
-        let job_out_path = Path::new(workspace_path).join(job_out_name);
-
-        let output_file = std::fs::read(job_out_path)?;
-        let batch_result: BatchResult =
-            bincode::decode_from_slice(&output_file, bincode::config::standard())
-                .expect("Could not deserialize batch")
-                .0;
-
-        master_node
-            .process_batch_output(batch_result)
-            .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
-
-        Ok(format!("Processed job {}", job_id))
-    }
-
-    pub(crate) fn display_master_node_status(&self) {
-        if let Some(master_node) = &self.master_node {
-            master_node.display_status();
-        }
-    }
-
-    pub(crate) fn update_iter(&mut self) {
-        if let Some(master_node) = &mut self.master_node {
-            master_node.update_iter();
-        }
-    }
-
-    pub(crate) fn generate_integrands(&mut self, settings_yaml_str: &str) {
-        let settings = serde_yaml::from_str::<RuntimeSettings>(settings_yaml_str)
-            .expect("Could not parse settings");
-        println!("calling generate_integrands");
-
-        todo!()
-        // let integrands = self
-        //     .process_list
-        //     .generate_integrands(&self.model, (&settings).into());
-    }
-
-    pub(crate) fn export(&mut self, export_root: &str) -> PyResult<()> {
-        let export_settings = ExportSettings {
-            root_folder: PathBuf::from_str(export_root)?,
-        };
-
-        // check if the export root exists, if not create it, if it does return error
-        if !export_settings.root_folder.exists() {
-            fs::create_dir_all(&export_settings.root_folder)
-                .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
-        } else {
-            return Err(exceptions::PyException::new_err(
-            "Export root already exists, please choose a different path or remove the existing directory".to_string(),
-            ));
-        }
-
-        let mut state_file =
-        // info!("Hi");
-            fs::File::create(PathBuf::from(export_root).join("symbolica_state.bin"))?;
-
-        State::export(&mut state_file)?;
-
-        self.process_list
-            .export_dot(&export_settings, &self.model)
-            .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
-
-        let binary = bincode::encode_to_vec(&self.process_list, bincode::config::standard())
-            .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
-
-        fs::write(PathBuf::from(export_root).join("process_list.bin"), binary)
-            .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
-
-        let model_yaml = serde_yaml::to_string(&self.model.to_serializable())
-            .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
-
-        fs::write(PathBuf::from(export_root).join("model.yaml"), model_yaml)
-            .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
-
-        Ok(())
-    }
-
-    pub(crate) fn load(&mut self, import_root: &str) -> PyResult<()> {
-        let import_root = PathBuf::from(import_root);
-
-        let model_dir = import_root.join("model.yaml");
-        self.load_model(model_dir.to_str().unwrap())
-            .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
-
-        let state = State::import(
-            &mut fs::File::open(import_root.join("symbolica_state.bin"))
-                .map_err(|e| exceptions::PyException::new_err(e.to_string()))?,
-            None,
-        )
-        .map_err(|e| {
-            exceptions::PyException::new_err(format!(
-                "Could not load state from {}: {}",
-                import_root.join("symbolica_state.bin").display(),
-                e
-            ))
-        })?;
-
-        let context = GammaLoopContextContainer {
-            state_map: &state,
-            model: &self.model,
-        };
-
-        let process_list_data = fs::read(import_root.join("process_list.bin"))
-            .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
-
-        let (process_list, _) = bincode::decode_from_slice_with_context(
-            &process_list_data,
-            bincode::config::standard(),
-            context,
-        )
-        .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
-
-        self.process_list = process_list;
-
-        Ok(())
-    }
-}
-
-impl PythonWorker {
-    fn printer_options(format: &str) -> PrintOptions {
-        match format {
-            "file" => PrintOptions::file(),
-            "mathematica" => PrintOptions::mathematica(),
-            "latex" => PrintOptions::latex(),
-            _ => PrintOptions::default(),
-        }
-    }
+    // pub(crate) fn update_iter(&mut self) {
+    //     if let Some(master_node) = &mut self.master_node {
+    //         master_node.update_iter();
+    //     }
+    // }
 }

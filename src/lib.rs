@@ -101,6 +101,7 @@ pub const MAX_LOOP: usize = 3;
 #[cfg(feature = "higher_loops")]
 pub const MAX_LOOP: usize = 6;
 
+#[cfg_attr(feature = "python_api", pyo3::pyclass)]
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Encode, Decode)]
 // #[trait_decode(trait= GammaLoopContext)]
 pub enum HFunction {
@@ -145,6 +146,7 @@ pub const fn _default_usize_null() -> Option<usize> {
     None
 }
 
+#[cfg_attr(feature = "python_api", pyo3::pyclass)]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode)]
 // #[trait_decode(trait= GammaLoopContext)]
 pub struct HFunctionSettings {

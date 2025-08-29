@@ -14,6 +14,7 @@ use crate::{
 
 use super::{global::OrientationPattern, RuntimeSettings};
 
+#[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, Encode, Decode)]
 pub struct SubtractionSettings {
     #[serde(default, skip_serializing_if = "IsDefault::is_default")]
@@ -52,6 +53,7 @@ impl RuntimeSettings {
     }
 }
 
+#[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 #[derive(Debug, Clone, Deserialize, Serialize, Encode, Decode, PartialEq)]
 #[trait_decode(trait= GammaLoopContext)]
 pub struct GeneralSettings {
@@ -61,8 +63,8 @@ pub struct GeneralSettings {
     pub orientation_pat: OrientationPattern,
     #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub load_compiled_cff: bool,
-    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
-    pub amplitude_prefactor: Option<Complex<F<f64>>>,
+    // #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    // pub amplitude_prefactor: Option<Complex<F<f64>>>,
     #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub m_uv: F<f64>,
     #[serde(default, skip_serializing_if = "IsDefault::is_default")]
@@ -74,7 +76,7 @@ impl Default for GeneralSettings {
         Self {
             use_ltd: false,
             load_compiled_cff: false,
-            amplitude_prefactor: Some(Complex::new(F(0.0), F(1.0))),
+            // amplitude_prefactor: Some(Complex::new(F(0.0), F(1.0))),
             orientation_pat: OrientationPattern::default(),
             m_uv: F(1000.0),
             mu_r_sq: F(1000.0 * 1000.0),
@@ -82,6 +84,7 @@ impl Default for GeneralSettings {
     }
 }
 
+#[cfg_attr(feature = "python_api", pyo3::pyclass)]
 #[derive(Debug, Copy, Clone, PartialEq, Deserialize, Default, Serialize, Encode, Decode)]
 // #[trait_decode(trait= GammaLoopContext)]
 pub enum IntegratedPhase {
@@ -96,6 +99,7 @@ pub enum IntegratedPhase {
 
 pub mod kinematic;
 
+#[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 #[derive(Debug, Clone, Deserialize, Serialize, Encode, Decode, PartialEq)]
 // #[trait_decode(trait= GammaLoopContext)]
 pub struct IntegratorSettings {
@@ -147,6 +151,7 @@ impl Default for IntegratorSettings {
     }
 }
 
+#[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Encode, Decode)]
 pub struct ParameterizationSettings {
     #[serde(default, skip_serializing_if = "IsDefault::is_default")]
@@ -195,6 +200,7 @@ pub struct IntegrationResult {
     pub prob: Vec<F<f64>>,
 }
 
+#[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 #[derive(Serialize, Deserialize, Debug, Clone, Encode, Decode, PartialEq)]
 pub struct StabilitySettings {
     #[serde(default, skip_serializing_if = "IsDefault::is_default")]
@@ -218,6 +224,7 @@ impl Default for StabilitySettings {
     }
 }
 
+#[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, Encode, Decode, PartialEq)]
 pub struct StabilityLevelSetting {
     #[serde(default, skip_serializing_if = "IsDefault::is_default")]
@@ -250,29 +257,35 @@ impl StabilityLevelSetting {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Default, Copy, PartialEq, Encode, Decode)]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Encode, Decode)]
 #[serde(tag = "type")]
 pub enum RotationSetting {
     #[serde(rename = "x")]
-    #[default]
-    Pi2X,
+    Pi2X {},
     #[serde(rename = "y")]
-    Pi2Y,
+    Pi2Y {},
     #[serde(rename = "z")]
-    Pi2Z,
+    Pi2Z {},
     #[serde(rename = "none")]
-    None,
+    None {},
     #[serde(rename = "euler_angles")]
     EulerAngles { alpha: f64, beta: f64, gamma: f64 },
+}
+
+impl Default for RotationSetting {
+    fn default() -> Self {
+        Self::Pi2Z {}
+    }
 }
 
 impl RotationSetting {
     pub(crate) fn rotation_method(&self) -> RotationMethod {
         match self {
-            Self::Pi2X => RotationMethod::Pi2X,
-            Self::Pi2Y => RotationMethod::Pi2Y,
-            Self::Pi2Z => RotationMethod::Pi2Z,
-            Self::None => RotationMethod::Identity,
+            Self::Pi2X {} => RotationMethod::Pi2X,
+            Self::Pi2Y {} => RotationMethod::Pi2Y,
+            Self::Pi2Z {} => RotationMethod::Pi2Z,
+            Self::None {} => RotationMethod::Identity,
             Self::EulerAngles { alpha, beta, gamma } => {
                 RotationMethod::EulerAngles(*alpha, *beta, *gamma)
             }
@@ -284,10 +297,10 @@ impl RotationSetting {
         &'a self,
     ) -> Box<dyn Fn(&'a ThreeMomentum<F<T>>) -> ThreeMomentum<F<T>> + 'a> {
         match self {
-            Self::Pi2X => Box::new(ThreeMomentum::perform_pi2_rotation_x),
-            Self::Pi2Y => Box::new(ThreeMomentum::perform_pi2_rotation_y),
-            Self::Pi2Z => Box::new(ThreeMomentum::perform_pi2_rotation_z),
-            Self::None => Box::new(|vector: &ThreeMomentum<F<T>>| vector.clone()),
+            Self::Pi2X {} => Box::new(ThreeMomentum::perform_pi2_rotation_x),
+            Self::Pi2Y {} => Box::new(ThreeMomentum::perform_pi2_rotation_y),
+            Self::Pi2Z {} => Box::new(ThreeMomentum::perform_pi2_rotation_z),
+            Self::None {} => Box::new(|vector: &ThreeMomentum<F<T>>| vector.clone()),
             Self::EulerAngles { alpha, beta, gamma } => Box::new(|vector: &ThreeMomentum<F<T>>| {
                 let mut cloned_vector = vector.clone();
                 let alpha_t = F::<T>::from_f64(*alpha);
@@ -301,10 +314,10 @@ impl RotationSetting {
 
     pub(crate) fn as_str(&self) -> String {
         match self {
-            Self::Pi2X => "x".to_owned(),
-            Self::Pi2Y => "y".to_owned(),
-            Self::Pi2Z => "z".to_owned(),
-            Self::None => "none".to_owned(),
+            Self::Pi2X {} => "x".to_owned(),
+            Self::Pi2Y {} => "y".to_owned(),
+            Self::Pi2Z {} => "z".to_owned(),
+            Self::None {} => "none".to_owned(),
             Self::EulerAngles { alpha, beta, gamma } => {
                 format!("euler {} {} {}", alpha, beta, gamma)
             }
@@ -312,6 +325,7 @@ impl RotationSetting {
     }
 }
 
+#[cfg_attr(feature = "python_api", pyo3::pyclass)]
 #[derive(
     Serialize, Deserialize, Debug, Clone, Default, PartialEq, Copy, Hash, Eq, Encode, Decode,
 )]
@@ -332,6 +346,7 @@ impl Display for Precision {
     }
 }
 
+#[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, Encode, Decode)]
 pub enum ParameterizationMode {
     #[serde(rename = "cartesian")]
@@ -345,6 +360,7 @@ pub enum ParameterizationMode {
     HyperSphericalFlat,
 }
 
+#[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OutputMetadata {
     #[serde(default, skip_serializing_if = "IsDefault::is_default")]
@@ -366,6 +382,7 @@ impl Display for ParameterizationMode {
     }
 }
 
+#[cfg_attr(feature = "python_api", pyo3::pyclass)]
 #[derive(Debug, Clone, Deserialize, PartialEq, Default, Serialize, Encode, Decode)]
 pub enum ParameterizationMapping {
     #[serde(rename = "log")]
@@ -377,6 +394,7 @@ pub enum ParameterizationMapping {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode)]
 #[serde(tag = "type")]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 pub enum SamplingSettings {
     #[serde(rename = "default")]
     Default(ParameterizationSettings),
@@ -493,6 +511,7 @@ impl SamplingSettings {
     }
 }
 
+#[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode)]
 pub struct MultiChannelingSettings {
     #[serde(default, skip_serializing_if = "IsDefault::is_default")]
@@ -510,6 +529,7 @@ impl Default for MultiChannelingSettings {
     }
 }
 
+#[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode)]
 pub struct GammaloopTropicalSamplingSettings {
     #[serde(default, skip_serializing_if = "IsDefault::is_default")]
@@ -541,6 +561,7 @@ impl GammaloopTropicalSamplingSettings {
     }
 }
 
+#[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode)]
 #[serde(tag = "subtype")]
 pub enum DiscreteGraphSamplingType {
@@ -560,6 +581,7 @@ impl Default for DiscreteGraphSamplingType {
     }
 }
 
+#[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode)]
 pub struct DiscreteGraphSamplingSettings {
     #[serde(default, skip_serializing_if = "IsDefault::is_default")]
@@ -568,6 +590,7 @@ pub struct DiscreteGraphSamplingSettings {
     pub sampling_type: DiscreteGraphSamplingType,
 }
 
+#[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Encode, Decode)]
 pub struct LocalCounterTermSettings {
     #[serde(default, skip_serializing_if = "IsDefault::is_default")]
@@ -576,18 +599,25 @@ pub struct LocalCounterTermSettings {
     pub uv_localisation: UVLocalisationSettings,
 }
 
-#[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq, Encode, Decode)]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode)]
 #[serde(tag = "type")]
 pub enum IntegrableSingularityDampener {
     #[serde(rename = "none")]
-    None,
-    #[default]
+    None {},
     #[serde(rename = "exponential")]
-    Exponential,
+    Exponential {},
     #[serde(rename = "powerlike")]
     Powerlike { power: f64 },
 }
 
+impl Default for IntegrableSingularityDampener {
+    fn default() -> Self {
+        Self::Exponential {}
+    }
+}
+
+#[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode)]
 pub struct UVLocalisationSettings {
     #[serde(default, skip_serializing_if = "IsDefault::is_default")]
@@ -608,12 +638,14 @@ impl Default for UVLocalisationSettings {
     }
 }
 
+#[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Encode, Decode)]
 pub struct IntegratedCounterTermSettings {
     #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub range: IntegratedCounterTermRange,
 }
 
+#[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode)]
 #[serde(tag = "type")]
 pub enum IntegratedCounterTermRange {
@@ -622,7 +654,7 @@ pub enum IntegratedCounterTermRange {
         h_function_settings: HFunctionSettings,
     },
     #[serde(rename = "compact")]
-    Compact,
+    Compact {},
 }
 
 impl Default for IntegratedCounterTermRange {
@@ -633,6 +665,7 @@ impl Default for IntegratedCounterTermRange {
     }
 }
 
+#[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode)]
 pub struct OverlapSettings {
     #[serde(default, skip_serializing_if = "IsDefault::is_default")]

@@ -46,7 +46,7 @@ const HARD_CODED_M_UV: F<f64> = F(1000.0);
 const HARD_CODED_M_R_SQ: F<f64> = F(1000.0);
 
 pub mod evaluators;
-pub use evaluators::{GenericEvaluate, GenericEvaluator, GenericEvaluatorFloat};
+pub use evaluators::{GenericEvaluator, GenericEvaluatorFloat};
 
 pub mod param_builder;
 pub use param_builder::{ParamBuilder, ParamValuePairs, ThresholdParams, UpdateAndGetParams};

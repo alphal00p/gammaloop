@@ -22,6 +22,7 @@ use std::fmt::{Display, Formatter};
 use symbolica::domains::float::{NumericalFloatLike, Real};
 use symbolica::numerical_integration::{ContinuousGrid, Grid, Sample};
 
+#[cfg_attr(feature = "python_api", pyo3::pyclass)]
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq)]
 // #[trait_decode(trait= GammaLoopContext)]
 #[allow(non_snake_case)]
@@ -33,8 +34,6 @@ pub enum IntegrandSettings {
     UnitVolume(UnitVolumeSettings),
     #[serde(rename = "h_function_test")]
     HFunctionTest(HFunctionTestSettings),
-    #[serde(rename = "gamma_loop")]
-    GammaLoop,
 }
 
 impl Display for IntegrandSettings {
@@ -45,7 +44,6 @@ impl Display for IntegrandSettings {
             IntegrandSettings::HFunctionTest(_) => {
                 write!(f, "h_function_test")
             }
-            IntegrandSettings::GammaLoop => write!(f, "gamma_loop"),
         }
     }
 }
@@ -189,12 +187,10 @@ pub(crate) fn integrand_factory(settings: &RuntimeSettings) -> Integrand {
         IntegrandSettings::HFunctionTest(integrand_settings) => Integrand::HFunctionTest(
             HFunctionTestIntegrand::new(settings.clone(), integrand_settings),
         ),
-        IntegrandSettings::GammaLoop => {
-            unimplemented!("unsupported integrand construction method, please use the exporter to generate the integrand");
-        }
     }
 }
 
+#[cfg_attr(feature = "python_api", pyo3::pyclass)]
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Encode, Decode, PartialEq)]
 // #[trait_decode(trait= GammaLoopContext)]
 pub struct UnitSurfaceSettings {
@@ -340,6 +336,7 @@ impl HasIntegrand for UnitSurfaceIntegrand {
     }
 }
 
+#[cfg_attr(feature = "python_api", pyo3::pyclass)]
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Encode, Decode, PartialEq)]
 // #[trait_decode(trait= GammaLoopContext)]
 pub struct UnitVolumeSettings {

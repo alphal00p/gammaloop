@@ -17,6 +17,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::model::Model;
 
+#[cfg_attr(feature = "python_api", pyo3::pyclass)]
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq)]
 pub struct EvaluatorSettings {
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]

@@ -230,7 +230,7 @@ impl AmplitudeGraphTerm {
         let orientations =
             momentum_sample.orientations(&self.orientation_filter.0, &self.orientations);
 
-        let evaluator = &self.orientation_parametric_integrand;
+        let evaluator = &mut self.orientation_parametric_integrand;
         let mut result = Complex::new_re(F(T::from_f64(0.)));
 
         {
@@ -244,7 +244,7 @@ impl AmplitudeGraphTerm {
 
             let iterative = self
                 .iterative_integrand_evaluator
-                .as_ref()
+                .as_mut()
                 .map(|ev| <T as GenericEvaluatorFloat>::get_evaluator(ev)(&a));
 
             for (i, e) in orientations.iter() {

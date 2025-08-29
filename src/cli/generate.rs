@@ -25,25 +25,13 @@ impl Generate {
         generation_settings: &GlobalSettings,
         runtime_settings: &RuntimeSettings,
     ) -> Result<()> {
-        status_info!("Preprocessing");
-
-        state
-            .process_list
-            .preprocess(&state.model, generation_settings)?;
-        status_info!("Generating integrands");
-        state.process_list.generate_integrands(
-            &state.model,
-            generation_settings,
-            runtime_settings.into(),
-        )?;
+        state.generate_integrands(generation_settings, runtime_settings.into());
 
         if generation_settings.generation.evaluator_settings.compile {
-            status_info!("Compiling integrands");
-            state.process_list.compile(
+            state.compile_integrands(
                 compile_folder,
                 override_existing_compiled,
                 generation_settings,
-                &state.model,
             )?
         }
         Ok(())

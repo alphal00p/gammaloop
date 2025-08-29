@@ -37,6 +37,8 @@ impl GlobalSettings {
             .suggestion("Is it a correct yaml file")
     }
 }
+
+#[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct GenerationSettings {
@@ -69,6 +71,7 @@ impl Default for GenerationSettings {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, Copy)]
+#[cfg_attr(feature = "python_api", pyo3::pyclass)]
 pub enum CompilationOptimizationLevel {
     O0,
     O1,
@@ -110,6 +113,7 @@ pub fn is_gpp(compiler: &str) -> bool {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq)]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 pub struct GammaloopCompileOptions {
     #[serde(default = "yes", skip_serializing_if = "std::clone::Clone::clone")]
     pub inline_asm: bool,
@@ -165,9 +169,11 @@ impl GammaloopCompileOptions {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq)]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 pub struct TropicalSubgraphTableSettings {
     pub panic_on_fail: bool,
     pub target_omega: f64,
+    #[serde(default = "_default_true", skip_serializing_if = "std::ops::Not::not")] // default true
     pub disable_tropical_generation: bool,
 }
 
@@ -183,6 +189,7 @@ impl Default for TropicalSubgraphTableSettings {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, Default, PartialEq)]
 #[trait_decode(trait = GammaLoopContext)]
+#[cfg_attr(feature = "python_api", pyo3::pyclass)]
 pub struct OrientationPattern {
     pub pat: Option<StringSerializedAtom>,
 }

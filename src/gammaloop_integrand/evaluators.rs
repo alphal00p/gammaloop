@@ -1,4 +1,9 @@
-use std::{borrow::Cow, cell::RefCell, path::Path};
+use std::{
+    borrow::Cow,
+    cell::RefCell,
+    path::Path,
+    sync::{Arc, RwLock},
+};
 
 use bincode_trait_derive::{Decode, Encode};
 use bitvec::{order::Lsb0, slice::IterOnes, vec::BitVec};
@@ -91,73 +96,10 @@ where
 #[trait_decode(trait = GammaLoopContext)]
 pub struct GenericEvaluator {
     pub exprs: Vec<Atom>,
-    pub rational:
-        RefCell<Option<ExpressionEvaluator<symbolica::domains::float::Complex<Rational>>>>,
-    pub f64_compiled: Option<RefCell<SerializableCompiledEvaluator>>,
-    pub f64_eager: RefCell<ExpressionEvaluator<Complex<F<f64>>>>,
-    pub f128: RefCell<ExpressionEvaluator<Complex<F<f128>>>>,
-}
-
-pub trait GenericEvaluate<T> {
-    fn evaluate(&self, params: &[T], out: &mut [T]);
-    fn evaluate_single(&self, params: &[T]) -> T;
-}
-
-// impl<T: Real + Default> GenericEvaluate<T> for GenericEvaluator
-// where
-//     T: for<'a> From<&'a symbolica::domains::float::Complex<Rational>>,
-//     symbolica::domains::float::Complex<Rational>: for<'a> From<&'a T>,
-// {
-//     fn evaluate(&self, params: &[T], out: &mut [T]) {
-//         let rational = self.rational.take().unwrap();
-//         let mut t_eval = rational.map_coeff(&|t| T::from(t));
-//         t_eval.evaluate(params, out);
-//         self.rational.replace(Some(t_eval.map_coeff(&|t| t.into())));
-//     }
-
-//     fn evaluate_single(&self, params: &[T]) -> T {
-//         let rational = self.rational.take().unwrap();
-//         let mut t_eval = rational.map_coeff(&|t| T::from(t));
-//         let out = t_eval.evaluate_single(params);
-//         self.rational.replace(Some(t_eval.map_coeff(&|t| t.into())));
-//         out
-//     }
-// }
-
-impl GenericEvaluate<Complex<F<f64>>> for GenericEvaluator {
-    fn evaluate(&self, params: &[Complex<F<f64>>], out: &mut [Complex<F<f64>>]) {
-        if let Some(f64_compiled) = &self.f64_compiled {
-            // status_info!("USING COMPLEX COMPILED MULTIPLE");
-            f64_compiled.borrow_mut().evaluate(params, out);
-        } else {
-            // status_info!("USING COMPLEX COMPILED SINGLE");
-            self.f64_eager.borrow_mut().evaluate(params, out);
-        }
-    }
-
-    fn evaluate_single(&self, params: &[Complex<F<f64>>]) -> Complex<F<f64>> {
-        if let Some(f64_compiled) = &self.f64_compiled {
-            // status_info!("USING COMPLEX COMPILED SINGLE");
-            let mut out = [Complex::default()];
-            f64_compiled.borrow_mut().evaluate(params, &mut out);
-            out[0]
-        } else {
-            // status_info!("USING COMPLEX EAGER SINGLE");
-            self.f64_eager.borrow_mut().evaluate_single(params)
-        }
-    }
-}
-
-impl GenericEvaluate<Complex<F<f128>>> for GenericEvaluator {
-    fn evaluate(&self, params: &[Complex<F<f128>>], out: &mut [Complex<F<f128>>]) {
-        // status_info!("USING COMPLEX F128 MULTIPLE");
-        self.f128.borrow_mut().evaluate(params, out);
-    }
-
-    fn evaluate_single(&self, params: &[Complex<F<f128>>]) -> Complex<F<f128>> {
-        // status_info!("USING COMPLEX F128 SINGLE");
-        self.f128.borrow_mut().evaluate_single(params)
-    }
+    pub rational: Option<ExpressionEvaluator<symbolica::domains::float::Complex<Rational>>>,
+    pub f64_compiled: Option<SerializableCompiledEvaluator>,
+    pub f64_eager: ExpressionEvaluator<Complex<F<f64>>>,
+    pub f128: ExpressionEvaluator<Complex<F<f128>>>,
 }
 
 impl GenericEvaluator {
@@ -170,7 +112,6 @@ impl GenericEvaluator {
     ) {
         let compile = self
             .f64_eager
-            .borrow()
             .export_cpp(
                 &cpp_path.as_ref().to_string_lossy(),
                 function_name.as_ref(),
@@ -186,13 +127,13 @@ impl GenericEvaluator {
             .load()
             .unwrap();
 
-        self.f64_compiled = Some(RefCell::new(SerializableCompiledEvaluator {
+        self.f64_compiled = Some(SerializableCompiledEvaluator {
             evaluator: compile,
             compiled_code: SerializableCompiledCode {
                 library_filename: lib_path.as_ref().to_path_buf(),
                 function_name: function_name.as_ref().to_string(),
             },
-        }));
+        });
     }
 
     pub(crate) fn new_from_builder<I: IntoIterator<Item = Atom>>(
@@ -234,10 +175,10 @@ impl GenericEvaluator {
 
         let evaluator = GenericEvaluator {
             exprs,
-            rational: RefCell::new(Some(rational)),
+            rational: Some(rational),
             f64_compiled: None,
-            f64_eager: RefCell::new(f64_eager),
-            f128: RefCell::new(f128),
+            f64_eager,
+            f128,
         };
 
         Some(evaluator)
@@ -246,12 +187,12 @@ impl GenericEvaluator {
 
 pub trait GenericEvaluatorFloat<T: FloatLike = Self> {
     fn get_evaluator_single(
-        generic_evaluator: &GenericEvaluator,
-    ) -> impl Fn(&[Complex<F<T>>]) -> Complex<F<T>>;
+        generic_evaluator: &mut GenericEvaluator,
+    ) -> impl FnMut(&[Complex<F<T>>]) -> Complex<F<T>>;
 
     fn get_evaluator(
-        generic_evaluator: &GenericEvaluator,
-    ) -> impl Fn(&[Complex<F<T>>]) -> Vec<Complex<F<T>>>;
+        generic_evaluator: &mut GenericEvaluator,
+    ) -> impl FnMut(&[Complex<F<T>>]) -> Vec<Complex<F<T>>>;
 
     fn get_parameters<'a>(
         param_builder: &'a mut ParamBuilder,
@@ -265,40 +206,34 @@ pub trait GenericEvaluatorFloat<T: FloatLike = Self> {
 impl GenericEvaluatorFloat for f64 {
     #[inline(always)]
     fn get_evaluator_single(
-        generic_evaluator: &GenericEvaluator,
-    ) -> impl Fn(&[Complex<F<f64>>]) -> Complex<F<f64>> {
+        generic_evaluator: &mut GenericEvaluator,
+    ) -> impl FnMut(&[Complex<F<f64>>]) -> Complex<F<f64>> {
         #[inline(always)]
         |params: &[Complex<F<f64>>]| {
-            if let Some(compiled) = &generic_evaluator.f64_compiled {
+            if let Some(compiled) = &mut generic_evaluator.f64_compiled {
                 // status_info!("USING COMPILED F64 SINGLE");
                 let mut out = [Complex::default()];
-                compiled.borrow_mut().evaluate(params, &mut out);
+                compiled.evaluate(params, &mut out);
                 out[0]
             } else {
                 // status_info!("USING EAGER F64 SINGLE");
-                generic_evaluator
-                    .f64_eager
-                    .borrow_mut()
-                    .evaluate_single(params)
+                generic_evaluator.f64_eager.evaluate_single(params)
             }
         }
     }
 
     fn get_evaluator(
-        generic_evaluator: &GenericEvaluator,
-    ) -> impl Fn(&[Complex<F<Self>>]) -> Vec<Complex<F<Self>>> {
+        generic_evaluator: &mut GenericEvaluator,
+    ) -> impl FnMut(&[Complex<F<Self>>]) -> Vec<Complex<F<Self>>> {
         |params: &[Complex<F<f64>>]| {
             let mut out = vec![Complex::default(); generic_evaluator.exprs.len()];
-            if let Some(compiled) = &generic_evaluator.f64_compiled {
+            if let Some(compiled) = &mut generic_evaluator.f64_compiled {
                 // status_info!("USING COMPILED COMPLEX SINGLE");
-                compiled.borrow_mut().evaluate(params, &mut out);
+                compiled.evaluate(params, &mut out);
                 out
             } else {
                 // status_info!("USING EAGER COMPLEX SINGLE");
-                generic_evaluator
-                    .f64_eager
-                    .borrow_mut()
-                    .evaluate(params, &mut out);
+                generic_evaluator.f64_eager.evaluate(params, &mut out);
                 out
             }
         }
@@ -361,23 +296,20 @@ impl GenericEvaluatorFloat for f64 {
 impl GenericEvaluatorFloat for f128 {
     #[inline(always)]
     fn get_evaluator_single(
-        generic_evaluator: &GenericEvaluator,
-    ) -> impl Fn(&[Complex<F<f128>>]) -> Complex<F<f128>> {
+        generic_evaluator: &mut GenericEvaluator,
+    ) -> impl FnMut(&[Complex<F<f128>>]) -> Complex<F<f128>> {
         // status_info!("USING COMPLEX F128 SINGLE");
         #[inline(always)]
-        |params: &[Complex<F<f128>>]| generic_evaluator.f128.borrow_mut().evaluate_single(params)
+        |params: &[Complex<F<f128>>]| generic_evaluator.f128.evaluate_single(params)
     }
 
     fn get_evaluator(
-        generic_evaluator: &GenericEvaluator,
-    ) -> impl Fn(&[Complex<F<f128>>]) -> Vec<Complex<F<f128>>> {
+        generic_evaluator: &mut GenericEvaluator,
+    ) -> impl FnMut(&[Complex<F<f128>>]) -> Vec<Complex<F<f128>>> {
         |params: &[Complex<F<f128>>]| {
             // status_info!("USING COMPLEX F128 MULTIPLE");
             let mut out = vec![Complex::default(); generic_evaluator.exprs.len()];
-            generic_evaluator
-                .f128
-                .borrow_mut()
-                .evaluate(params, &mut out);
+            generic_evaluator.f128.evaluate(params, &mut out);
             out
         }
     }

@@ -17,6 +17,8 @@ use crate::{
     DependentMomentaConstructor, GammaLoopContext,
 };
 use color_eyre::{Result, Section};
+
+#[cfg_attr(feature = "python_api", pyo3::pyclass)]
 #[derive(Debug, Clone, Deserialize, Serialize, Encode, Decode, PartialEq)]
 #[trait_decode(trait= GammaLoopContext)]
 pub struct KinematicsSettings {

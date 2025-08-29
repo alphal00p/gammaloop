@@ -34,6 +34,7 @@ use tracing_subscriber::{fmt, prelude::*, registry::Registry, reload, EnvFilter}
     Encode,
     Decode,
 )]
+#[cfg_attr(feature = "python_api", pyo3::pyclass)]
 pub enum LogLevel {
     /// A level lower than all log levels.
     Off,
@@ -85,7 +86,7 @@ impl LogLevel {
 pub(super) static FILTER_HANDLE: OnceLock<reload::Handle<EnvFilter, Registry>> = OnceLock::new();
 pub(super) static LOG_GUARD: OnceLock<WorkerGuard> = OnceLock::new();
 
-pub(super) fn init_tracing(
+pub(crate) fn init_tracing(
     default_spec: impl AsRef<str>,
     dir: impl AsRef<Path>,
 ) -> reload::Handle<EnvFilter, Registry> {

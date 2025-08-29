@@ -19,6 +19,7 @@ use spenso::algebra::complex::Complex;
 use symbolica::domains::float::NumericalFloatLike;
 use symbolica::numerical_integration::{ContinuousGrid, Grid, Sample};
 
+#[cfg_attr(feature = "python_api", pyo3::pyclass)]
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Encode, Decode, PartialEq)]
 // #[trait_decode(trait= GammaLoopContext)]
 pub struct HFunctionTestSettings {

@@ -4,6 +4,7 @@ use std::{
     ops::ControlFlow,
     path::{Path, PathBuf},
     sync::{Mutex, OnceLock},
+    time::Instant,
 };
 
 use color_eyre::{Result, Section};
@@ -11,13 +12,21 @@ use colored::{ColoredString, Colorize};
 use eyre::{eyre, Context};
 use log::debug;
 use serde::{Deserialize, Serialize};
+use spenso::algebra::complex::Complex;
+use symbolica::numerical_integration::Sample;
+use tracing::info;
 use tracing_subscriber::{reload, EnvFilter, Registry};
 
 use crate::{
+    feyngen::GenerationType,
+    graph::Graph,
+    integrands::HasIntegrand,
     model::{Model, SerializableModel},
-    processes::ProcessList,
-    settings::{GlobalSettings, RuntimeSettings},
-    status_debug, status_warn, GammaLoopContextContainer,
+    processes::{ExportSettings, Process, ProcessDefinition, ProcessList},
+    settings::{runtime::LockedRuntimeSettings, GlobalSettings, RuntimeSettings},
+    status_debug, status_warn,
+    utils::F,
+    GammaLoopContextContainer,
 };
 
 use super::{tracing::FILTER_HANDLE, Cli, Commands};
@@ -122,15 +131,120 @@ impl RunHistory {
     }
 }
 
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(unsendable, name = "GammaLoopState")
+)]
+#[derive(Clone)]
 pub struct State {
     pub model: Model,
     pub process_list: ProcessList,
     pub model_path: Option<PathBuf>,
     pub save_path: PathBuf,
-    log_filter: reload::Handle<EnvFilter, Registry>,
+    pub log_filter: reload::Handle<EnvFilter, Registry>,
 }
 
 impl State {
+    pub fn import_model(&mut self, path: impl AsRef<Path>) -> Result<()> {
+        self.model = Model::from_file(path)?;
+        Ok(())
+    }
+
+    pub fn generate_integrands(
+        &mut self,
+        global_settings: &GlobalSettings,
+        runtime_default: LockedRuntimeSettings,
+    ) -> Result<()> {
+        self.process_list.preprocess(&self.model, global_settings)?;
+        self.process_list
+            .generate_integrands(&self.model, global_settings, runtime_default)?;
+        Ok(())
+    }
+
+    pub fn compile_integrands(
+        &mut self,
+        folder: impl AsRef<Path>,
+        override_existing: bool,
+        global_settings: &GlobalSettings,
+    ) -> Result<()> {
+        self.process_list
+            .compile(folder, override_existing, global_settings, &self.model)?;
+        Ok(())
+    }
+
+    pub fn export_dots(&mut self, path: impl AsRef<Path>) -> Result<()> {
+        let exp_set = ExportSettings {
+            root_folder: path.as_ref().to_path_buf(),
+        };
+        self.process_list.export_dot(&exp_set, &self.model)?;
+        Ok(())
+    }
+
+    pub fn import_amplitude(&mut self, path: impl AsRef<Path>, name: Option<String>) -> Result<()> {
+        let graphs = Graph::from_file(&path, &self.model)?;
+        let name = name.unwrap_or(
+            path.as_ref()
+                .file_stem()
+                .unwrap()
+                .to_string_lossy()
+                .into_owned(),
+        );
+        let process = Process::from_graph_list(
+            name,
+            graphs,
+            GenerationType::Amplitude,
+            ProcessDefinition::new_empty(),
+            None,
+        )?;
+
+        self.process_list.add_process(process);
+        Ok(())
+    }
+
+    pub fn bench(
+        &mut self,
+        samples: usize,
+        process_id: usize,
+        process_name: String,
+        n_cores: usize,
+    ) -> Result<()> {
+        let integrand = self
+            .process_list
+            .get_integrand_mut(process_id, process_name)?;
+        let name = integrand.name();
+
+        info!(
+            "\nBenchmarking runtime of integrand '{}' over {} samples...\n",
+            name.green(),
+            samples.to_string().blue()
+        );
+
+        let now = Instant::now();
+        for _ in 0..samples {
+            integrand.evaluate_sample(
+                &Sample::Continuous(
+                    F(1.),
+                    (0..integrand.get_n_dim())
+                        .map(|_| F(rand::random::<f64>()))
+                        .collect(),
+                ),
+                F(1.),
+                1,
+                false,
+                Complex::new_zero(),
+            );
+        }
+        let total_time = now.elapsed().as_secs_f64();
+        info!(
+            "\n> Total time: {} s for {} samples, {} ms per sample\n",
+            format!("{:.1}", total_time).blue(),
+            format!("{}", samples).blue(),
+            format!("{:.5}", total_time * 1000. / (samples as f64)).green(),
+        );
+
+        Ok(())
+    }
+
     pub fn new(save_path: PathBuf) -> Self {
         let handle =
             super::tracing::init_tracing("info,symbolica::poly::gcd=off", &save_path.join("logs"));

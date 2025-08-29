@@ -10,6 +10,7 @@ use crate::{
     GammaLoopContext,
 };
 
+#[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 #[derive(Debug, Clone, Default, Deserialize, Serialize, Encode, Decode)]
 #[trait_decode(trait= GammaLoopContext)]
 pub struct GlobalSettings {
@@ -19,6 +20,7 @@ pub struct GlobalSettings {
     pub generation: GenerationSettings,
 }
 
+#[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 #[derive(Debug, Clone, Default, Deserialize, Serialize, Encode, Decode)]
 #[trait_decode(trait= GammaLoopContext)]
 pub struct RuntimeSettings {

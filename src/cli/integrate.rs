@@ -17,35 +17,39 @@ use colored::Colorize;
 
 use super::state::State;
 
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(unsendable, name = "IntegrationSettings")
+)]
 #[derive(Debug, Args, Serialize, Deserialize, Clone)]
 pub struct Integrate {
     /// The process id to inspect
     #[arg(short = 'i', long = "process-id", value_name = "ID")]
-    process_id: usize,
+    pub process_id: usize,
 
     /// The name of the process to inspect
     #[arg(short = 'n', long = "name", value_name = "NAME")]
-    process_name: String,
+    pub process_name: String,
 
     /// The path to store results in
     #[arg(short = 'p', long)]
-    result_path: PathBuf,
+    pub result_path: PathBuf,
 
     /// Number of cores to parallelize over
     #[arg(short = 'c', long)]
-    n_cores: usize,
+    pub n_cores: usize,
 
     /// The path to run the integrationg within
     #[arg(short = 'w', long)]
-    workspace_path: PathBuf,
+    pub workspace_path: PathBuf,
 
     /// Specify the target integration result to compare against
     #[arg(short = 't', num_args = 2, long)]
-    target: Option<Vec<f64>>,
+    pub target: Option<Vec<f64>>,
 }
 
 impl Integrate {
-    pub fn run(&self, state: &mut State) -> Result<Vec<(f64, f64)>> {
+    pub fn run(&self, state: &mut State) -> Result<Vec<Complex<f64>>> {
         let target = if let Some(t) = self.target.clone() {
             Some(Complex::new(F(t[0]), F(t[1])))
         } else {
@@ -140,7 +144,7 @@ impl Integrate {
             .result
             .iter()
             .tuple_windows()
-            .map(|(re, im)| (re.0, im.0))
+            .map(|(re, im)| Complex::new(re.0, im.0))
             .collect())
     }
 }

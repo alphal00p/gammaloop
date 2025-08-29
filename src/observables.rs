@@ -19,6 +19,7 @@ use std::path::Path;
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq)]
 #[allow(non_snake_case)]
 #[serde(tag = "type")]
+#[cfg_attr(feature = "python_api", pyo3::pyclass)]
 pub enum PhaseSpaceSelectorSettings {
     #[serde(rename = "jet")]
     Jet(JetSliceSettings),
@@ -30,6 +31,7 @@ pub enum PhaseSpaceSelectorSettings {
 // #[trait_decode(trait= GammaLoopContext)]
 #[allow(non_snake_case)]
 #[serde(tag = "type")]
+#[cfg_attr(feature = "python_api", pyo3::pyclass)]
 pub enum ObservableSettings {
     #[serde(rename = "jet1pt")]
     Jet1PT(Jet1PTSettings),
@@ -37,11 +39,12 @@ pub enum ObservableSettings {
     SingleParticleObservable(SingleParticleObservableSettings),
     AFB(AFBSettings),
     #[serde(rename = "cross_section")]
-    CrossSection,
+    CrossSection {},
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, Encode, Decode, PartialEq)]
 #[allow(non_snake_case)]
+#[cfg_attr(feature = "python_api", pyo3::pyclass)]
 pub struct RangeFilterSettings {
     pub pdgs: Vec<isize>,
     pub filter: FilterQuantity,
@@ -51,6 +54,7 @@ pub struct RangeFilterSettings {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Encode, Decode, PartialEq)]
 #[allow(non_snake_case)]
+#[cfg_attr(feature = "python_api", pyo3::pyclass)]
 pub struct JetSliceSettings {
     pub min_jets: usize,
     pub max_jets: usize,
@@ -64,6 +68,7 @@ pub struct JetSliceSettings {
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Encode, Decode, PartialEq)]
 // #[trait_decode(trait= GammaLoopContext)]
 #[allow(non_snake_case)]
+#[cfg_attr(feature = "python_api", pyo3::pyclass)]
 pub struct Jet1PTSettings {
     pub x_min: f64,
     pub x_max: f64,
@@ -77,6 +82,7 @@ pub struct Jet1PTSettings {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Encode, Decode, PartialEq)]
 #[allow(non_snake_case)]
+#[cfg_attr(feature = "python_api", pyo3::pyclass)]
 pub struct AFBSettings {
     pub x_min: f64,
     pub x_max: f64,
@@ -88,6 +94,7 @@ pub struct AFBSettings {
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq)]
 // #[trait_decode(trait= GammaLoopContext)]
 #[allow(non_snake_case)]
+#[cfg_attr(feature = "python_api", pyo3::pyclass)]
 pub struct SingleParticleObservableSettings {
     pub x_min: f64,
     pub x_max: f64,
@@ -278,7 +285,7 @@ impl EventManager {
                         )));
                     }
                 }
-                ObservableSettings::CrossSection => {
+                ObservableSettings::CrossSection {} => {
                     observables.push(Observables::CrossSection(CrossSectionObservable::default()));
                 }
                 ObservableSettings::AFB(settings) => {

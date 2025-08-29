@@ -182,7 +182,8 @@ impl GraphTerm for CrossSectionGraphTerm {
         settings: &RuntimeSettings,
         rotation: &Rotation,
     ) -> Complex<F<T>> {
-        self.evaluate(momentum_sample, settings, rotation)
+        todo!()
+        // self.evaluate_impl(momentum_sample, settings, rotation)
     }
     fn name(&self) -> String {
         self.graph.name.clone()
@@ -228,8 +229,8 @@ impl CrossSectionGraphTerm {
         }
     }
 
-    fn evaluate<T: FloatLike>(
-        &self,
+    fn evaluate_impl<T: FloatLike>(
+        &mut self,
         momentum_sample: &MomentumSample<T>,
         settings: &RuntimeSettings,
         param_builder: ParamBuilder<T>,
@@ -289,7 +290,7 @@ impl CrossSectionGraphTerm {
                     momentum_sample.rescaled_loop_momenta(&newton_result.solution, None);
 
                 let h_function_settings = match &settings.subtraction.integrated_ct_settings.range {
-                    IntegratedCounterTermRange::Compact => panic!(),
+                    IntegratedCounterTermRange::Compact {} => panic!(),
                     IntegratedCounterTermRange::Infinite {
                         h_function_settings,
                     } => h_function_settings,
@@ -334,41 +335,47 @@ impl CrossSectionGraphTerm {
         let result = match momentum_sample.sample.orientation {
             Some(orientation_id) => {
                 let orientation_id = SuperGraphOrientationID::from(orientation_id);
-                let orientation_evaluator = &self.bare_cff_orientation_evaluators[orientation_id];
-                orientation_evaluator
-                    .evaluators
-                    .iter()
-                    .zip(params)
-                    .map(|(evaluator, params)| {
-                        let cut_results =
-                            <T as GenericEvaluatorFloat>::get_evaluator_single(evaluator)(&params);
-                        cut_results
-                    })
-                    .fold(
-                        Complex::new_re(momentum_sample.zero()),
-                        |sum, cut_result| sum + cut_result,
-                    )
+                todo!();
+                // let orientation_evaluator =
+                //     &mut self.bare_cff_orientation_evaluators[orientation_id];
+                // orientation_evaluator
+                //     .evaluators
+                //     .iter_mut()
+                //     .zip(params)
+                //     .map(|(evaluator, params)| {
+                //         let cut_results =
+                //             <T as GenericEvaluatorFloat>::get_evaluator_single(evaluator)(&params);
+                //         cut_results
+                //     })
+                //     .fold(
+                //         Complex::new_re(momentum_sample.zero()),
+                //         |sum, cut_result| sum + cut_result,
+                //     )
+                Complex::new_re(momentum_sample.zero())
             }
-            None => self
-                .bare_cff_evaluators
-                .iter()
-                .zip_eq(params)
-                .enumerate()
-                .map(|(id, (evaluator, params))| {
-                    let cut_results =
-                        <T as GenericEvaluatorFloat>::get_evaluator_single(evaluator)(&params);
-                    info!(
-                        "cut: {}, result: {}",
-                        format!("{}", id).green(),
-                        format!("{:16e}", cut_results).blue()
-                    );
+            None => {
+                // self
+                // .bare_cff_evaluators
+                // .iter_mut()
+                // .zip_eq(params)
+                // .enumerate()
+                // .map(|(id, (evaluator, params))| {
+                //     let cut_results =
+                //         <T as GenericEvaluatorFloat>::get_evaluator_single(evaluator)(&params);
+                //     info!(
+                //         "cut: {}, result: {}",
+                //         format!("{}", id).green(),
+                //         format!("{:16e}", cut_results).blue()
+                //     );
 
-                    cut_results
-                })
-                .fold(
-                    Complex::new_re(momentum_sample.zero()),
-                    |sum, cut_result| sum + cut_result,
-                ),
+                //     cut_results
+                // })
+                // .fold(
+                //     Complex::new_re(momentum_sample.zero()),
+                //     |sum, cut_result| sum + cut_result,
+                // ),
+                Complex::new_re(momentum_sample.zero())
+            }
         };
 
         let final_result = result;

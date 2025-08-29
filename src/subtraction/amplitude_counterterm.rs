@@ -1,5 +1,9 @@
 use core::panic;
-use std::path::Path;
+use std::{
+    cell::RefCell,
+    path::Path,
+    sync::{Arc, Mutex},
+};
 
 use bincode_trait_derive::{Decode, Encode};
 use linnet::{
@@ -71,22 +75,24 @@ impl AmplitudeCountertermAtom {
         global_settings: &GlobalSettings,
         optimiation_settings: OptimizationSettings,
     ) -> AmplitudeCountertermEvaluator {
-        let parametric = GenericEvaluator::new_from_builder(
-            [
-                self.parametric_local.clone(),
-                self.parametric_integrated.clone(),
-            ],
-            param_builder,
-            optimiation_settings.clone(),
-        )
-        .unwrap();
+        let parametric = RefCell::new(
+            GenericEvaluator::new_from_builder(
+                [
+                    self.parametric_local.clone(),
+                    self.parametric_integrated.clone(),
+                ],
+                param_builder,
+                optimiation_settings.clone(),
+            )
+            .unwrap(),
+        );
 
         let iterative = if global_settings
             .generation
             .evaluator_settings
             .iterative_orientation_optimization
         {
-            Some(
+            Some(RefCell::new(
                 GenericEvaluator::new_from_builder(
                     orientations
                         .iter()
@@ -95,7 +101,7 @@ impl AmplitudeCountertermAtom {
                     optimiation_settings,
                 )
                 .unwrap(),
-            )
+            ))
         } else {
             None
         };
@@ -110,8 +116,8 @@ impl AmplitudeCountertermAtom {
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct AmplitudeCountertermEvaluator {
-    pub parametric: GenericEvaluator,
-    pub iterative: Option<GenericEvaluator>,
+    pub parametric: RefCell<GenericEvaluator>,
+    pub iterative: Option<RefCell<GenericEvaluator>>,
 }
 
 impl AmplitudeCountertermData {
@@ -131,7 +137,7 @@ impl AmplitudeCountertermData {
         settings: &GlobalSettings,
     ) {
         for (i, e) in self.evaluators.iter_mut_enumerated() {
-            e.parametric.compile(
+            e.parametric.borrow_mut().compile(
                 &path.as_ref().join(format!("esurface_{}", i.0)),
                 format!("esurface_{}", i.0),
                 &path.as_ref().join(format!("esurface_{}", i.0)),
@@ -139,7 +145,7 @@ impl AmplitudeCountertermData {
             );
 
             e.iterative.as_mut().map(|iterative| {
-                iterative.compile(
+                iterative.borrow_mut().compile(
                     &path.as_ref().join(format!("iterative_esurface_{}", i.0)),
                     format!("iterative_esurface_{}", i.0),
                     &path.as_ref().join(format!("iterative_esurface_{}", i.0)),
@@ -176,7 +182,7 @@ impl AmplitudeCountertermData {
             esurfaces,
             momentum_sample,
             &self.overlap,
-            &self.evaluators,
+            &mut self.evaluators,
             self.own_group_position,
             &self.esurface_map,
         );
@@ -502,8 +508,9 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
                 Some(&threshold_params),
             );
 
-            let iterative_result =
-                <T as GenericEvaluatorFloat>::get_evaluator(iterative_evaluator)(&params);
+            let iterative_result = <T as GenericEvaluatorFloat>::get_evaluator(
+                &mut iterative_evaluator.borrow_mut(),
+            )(&params);
 
             let mut result = Complex::new_re(self.rstar_sample.zero());
 
@@ -529,8 +536,9 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
                     ct_builder.settings.kinematics.externals.get_helicities(),
                     Some(&threshold_params),
                 );
-                let result =
-                    <T as GenericEvaluatorFloat>::get_evaluator(parametric_evaluator)(&params);
+                let result = <T as GenericEvaluatorFloat>::get_evaluator(
+                    &mut parametric_evaluator.borrow_mut(),
+                )(&params);
                 local_ct += &result[0];
                 integrated_ct += &result[1];
             }
@@ -582,7 +590,7 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
             .as_ref()
             .unwrap();
 
-        T::get_evaluator_single(evaluator)(&params)
+        T::get_evaluator_single(&mut evaluator.borrow_mut())(&params)
     }
 }
 
@@ -623,7 +631,7 @@ fn evaluate_integrated_ct_normalisation<T: FloatLike>(
             let h = utils::h(&(radius_star / radius), None, None, h_function_settings);
             h * (radius_star).inv()
         }
-        IntegratedCounterTermRange::Compact => {
+        IntegratedCounterTermRange::Compact {} => {
             todo!();
         }
     }

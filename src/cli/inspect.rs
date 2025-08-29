@@ -1,8 +1,8 @@
 use clap::Args;
-use log::info;
 use serde::{Deserialize, Serialize};
+use spenso::algebra::complex::Complex;
 
-use crate::{settings::RuntimeSettings, status_info, utils::F};
+use crate::{status_info, utils::F};
 use color_eyre::Result;
 
 use super::state::State;
@@ -38,7 +38,7 @@ pub struct Inspect {
 }
 
 impl Inspect {
-    pub fn run(&self, state: &mut State) -> Result<()> {
+    pub fn run(&self, state: &mut State) -> Result<Complex<f64>> {
         state.process_list.warm_up()?;
 
         let integrand = state
@@ -61,6 +61,6 @@ impl Inspect {
 
         status_info!("Result: {}", res);
 
-        Ok(())
+        Ok(res.map(|a| a.0))
     }
 }

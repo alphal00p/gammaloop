@@ -2715,10 +2715,10 @@ impl Rotation {
             RotationMethod::EulerAngles(alpha, beta, gamma) => {
                 RotationSetting::EulerAngles { alpha, beta, gamma }
             }
-            RotationMethod::Pi2X => RotationSetting::Pi2X,
-            RotationMethod::Pi2Y => RotationSetting::Pi2Y,
-            RotationMethod::Pi2Z => RotationSetting::Pi2Z,
-            RotationMethod::Identity => RotationSetting::None,
+            RotationMethod::Pi2X => RotationSetting::Pi2X {},
+            RotationMethod::Pi2Y => RotationSetting::Pi2Y {},
+            RotationMethod::Pi2Z => RotationSetting::Pi2Z {},
+            RotationMethod::Identity => RotationSetting::None {},
         }
     }
     pub(crate) fn new(method: RotationMethod) -> Self {

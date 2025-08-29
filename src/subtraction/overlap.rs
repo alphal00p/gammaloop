@@ -28,17 +28,15 @@ use clarabel::solver::*;
 use eyre::{eyre, Result};
 use itertools::Itertools;
 use linnet::half_edge::involution::EdgeVec;
-use linnet::half_edge::swap::Swap;
 use serde::Serialize;
 use serde_with::serde_as;
 use spenso::algebra::algebraic_traits::IsZero;
-use spenso::algebra::complex::Complex;
+use std::cell::RefCell;
 use std::fmt::Display;
 use symbolica::atom::Atom;
 use symbolica::evaluate::FunctionMap;
 use symbolica::evaluate::OptimizationSettings;
 use symbolica::function;
-use tracing::debug;
 use typed_index_collections::TiVec;
 
 #[derive(Debug, Clone, Encode, Decode)]
@@ -47,7 +45,7 @@ pub struct OverlapGroup {
     pub existing_esurfaces: Vec<ExistingEsurfaceId>,
     pub complement: Vec<ExistingEsurfaceId>,
     pub center: LoopMomenta<F<f64>>,
-    pub prefactor_evaluator: Option<GenericEvaluator>,
+    pub prefactor_evaluator: Option<RefCell<GenericEvaluator>>,
 }
 
 #[derive(Debug, Clone, Encode, Decode)]
@@ -150,7 +148,7 @@ impl OverlapStructure {
             )
             .ok_or_else(|| eyre!("Could not build evaluator for overlap prefactor"))?;
 
-            group.prefactor_evaluator = Some(evalautor);
+            group.prefactor_evaluator = Some(RefCell::new(evalautor));
         }
 
         Ok(())

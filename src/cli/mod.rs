@@ -1,6 +1,7 @@
 use crate::{
     feyngen::GenerationType,
     graph::Graph,
+    initialisation::initialise,
     integrands::{integrand_factory, HasIntegrand},
     model::Model,
     processes::{ExportSettings, Process, ProcessDefinition},
@@ -99,54 +100,20 @@ impl Cli {
             Commands::Quit {} => {
                 return Ok(ControlFlow::Break(()));
             }
-            Commands::Inspect(inspect) => inspect.run(state)?,
-            Commands::Bench { samples } => {
-                info!(
-                    "\nBenchmarking runtime of integrand '{}' over {} samples...\n",
-                    format!(
-                        "{}",
-                        run_history.default_runtime_settings.hard_coded_integrand
-                    )
-                    .green(),
-                    format!("{}", samples).blue()
-                );
-                let mut integrand = integrand_factory(&run_history.default_runtime_settings);
-                let now = Instant::now();
-                for _ in 0..samples {
-                    integrand.evaluate_sample(
-                        &Sample::Continuous(
-                            F(1.),
-                            (0..integrand.get_n_dim())
-                                .map(|_| F(rand::random::<f64>()))
-                                .collect(),
-                        ),
-                        F(1.),
-                        1,
-                        false,
-                        Complex::new_zero(),
-                    );
-                }
-                let total_time = now.elapsed().as_secs_f64();
-                info!(
-                    "\n> Total time: {} s for {} samples, {} ms per sample\n",
-                    format!("{:.1}", total_time).blue(),
-                    format!("{}", samples).blue(),
-                    format!("{:.5}", total_time * 1000. / (samples as f64)).green(),
-                );
+            Commands::Inspect(inspect) => {
+                let _ = inspect.run(state)?;
+            }
+            Commands::Bench {
+                samples,
+                process_id,
+                process_name,
+                n_cores,
+            } => {
+                state.bench(samples, process_id, process_name, n_cores)?;
             }
             Commands::Import(s) => match s {
                 Import::Amplitude { path } => {
-                    let graphs = Graph::from_file(&path, &state.model)?;
-                    let name = path.file_stem().unwrap().to_string_lossy().into_owned();
-                    let process = Process::from_graph_list(
-                        name,
-                        graphs,
-                        GenerationType::Amplitude,
-                        ProcessDefinition::new_empty(),
-                        None,
-                    )?;
-
-                    state.process_list.add_process(process);
+                    state.import_amplitude(path, None)?;
                 }
                 Import::Model { path } => {
                     state.model = Model::from_file(path)?;
@@ -154,13 +121,9 @@ impl Cli {
             },
             Commands::Save(s) => match s {
                 Save::Dot { path } => {
-                    let exp_set = ExportSettings {
-                        root_folder: path.clone().unwrap_or(self.state_folder.clone()),
-                    };
-                    state.process_list.export_dot(&exp_set, &state.model)?
+                    state.export_dots(path.unwrap_or(self.state_folder.clone()))?;
                 }
                 Save::State {} => {
-                    debug!("Saving State, overriding: {}", self.override_state);
                     state.save(&self.state_folder, self.override_state, false)?;
                     run_history.save_yaml(&self.state_folder, self.override_state, false)?;
                 }
@@ -220,7 +183,7 @@ impl Cli {
     }
 
     pub fn run(mut self) -> Result<()> {
-        self.initialize();
+        initialise();
 
         let mut state = match State::load(self.state_folder.clone(), self.model_file.clone()) {
             Ok(state) => state,
@@ -316,19 +279,7 @@ impl Cli {
         Ok(())
     }
 
-    pub fn initialize(&self) {
-        let (panic, eyre) = HookBuilder::default()
-            .capture_span_trace_by_default(cfg!(debug_assertions))
-            .into_hooks();
-        panic.install();
-        eyre.install().unwrap();
-
-        let _ = GS.delta_vec;
-        crate::set_interrupt_handler();
-        // activate_oem_license!("SYMBOLICA_OEM_KEY_23177b25");
-
-        crate::initialize_reps();
-    }
+    // pub fn initialize(&self) {}
 
     fn get_run_history(&self) -> Result<RunHistory> {
         let default_path = self.state_folder.join("run.yaml");
@@ -425,6 +376,16 @@ pub enum Commands {
         /// Number of random samples to evaluate
         #[arg(short = 's', long, value_name = "SAMPLES")]
         samples: usize,
+        /// The process id to inspect
+        #[arg(short = 'i', long = "process-id", value_name = "ID")]
+        process_id: usize,
+
+        /// The name of the process to inspect
+        #[arg(short = 'n', long = "name", value_name = "NAME")]
+        process_name: String,
+        /// Number of cores to parallelize over
+        #[arg(short = 'c', long)]
+        n_cores: usize,
     },
 
     /// HPC batch evaluation branch
