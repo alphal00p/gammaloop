@@ -186,14 +186,14 @@ no_python = []
 [patch.crates-io]
 
 
-# spenso = { git = "https://github.com/alphal00p/spenso", rev = "eb2b73c889e0651cd786c14ba71d28797e518afd" }
-spenso = { path = "../spenso/spenso" }
+spenso = { git = "https://github.com/alphal00p/spenso", rev = "ad75a1b9841a4ede0aef3ee747d7bea67d2f2834" }
+# spenso = { path = "../spenso/spenso" }
 
-spenso-hep-lib = { git = "https://github.com/alphal00p/spenso", rev = "eb2b73c889e0651cd786c14ba71d28797e518afd" }
+spenso-hep-lib = { git = "https://github.com/alphal00p/spenso", rev = "ad75a1b9841a4ede0aef3ee747d7bea67d2f2834" }
 # spenso-hep-lib = { path = "../spenso/spenso-hep-lib" }
-idenso = { git = "https://github.com/alphal00p/spenso", rev = "eb2b73c889e0651cd786c14ba71d28797e518afd" }
+idenso = { git = "https://github.com/alphal00p/spenso", rev = "ad75a1b9841a4ede0aef3ee747d7bea67d2f2834" }
 # idenso = { path = "../spenso/idenso" }
-spenso-macros = { git = "https://github.com/alphal00p/spenso", rev = "eb2b73c889e0651cd786c14ba71d28797e518afd" }
+spenso-macros = { git = "https://github.com/alphal00p/spenso", rev = "ad75a1b9841a4ede0aef3ee747d7bea67d2f2834" }
 # spenso-macros = { path = "../spenso/spenso-macros" }
 # symbolica = { git = "https://github.com/benruijl/symbolica", branch = "optim" }
 # symbolica = { path = "./python/gammaloop/dependencies/symbolica" }
