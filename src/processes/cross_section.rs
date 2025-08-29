@@ -704,7 +704,7 @@ impl<S: CrossSectionState> CrossSectionGraph<S> {
     fn get_function_map(&self) -> FunctionMap {
         let mut fn_map = FunctionMap::new();
         let pi_rational = Rational::from(std::f64::consts::PI);
-        fn_map.add_constant(Atom::PI.into(), pi_rational.into());
+        fn_map.add_constant(GS.pi.into(), pi_rational.into());
         fn_map
     }
 
@@ -739,7 +739,7 @@ impl<S: CrossSectionState> CrossSectionGraph<S> {
                     filename,
                     function_name,
                     lib_name,
-                    symbolica::evaluate::InlineASM::None,
+                    symbolica::evaluate::ExportSettings::default(),
                 );
                 eval
             })

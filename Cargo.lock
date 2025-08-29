@@ -1618,7 +1618,7 @@ dependencies = [
 [[package]]
 name = "idenso"
 version = "0.2.2"
-source = "git+https://github.com/alphal00p/spenso?rev=0136a548b3fba46de853d3e1e0134c55cc461641#0136a548b3fba46de853d3e1e0134c55cc461641"
+source = "git+https://github.com/alphal00p/spenso?rev=eb2b73c889e0651cd786c14ba71d28797e518afd#eb2b73c889e0651cd786c14ba71d28797e518afd"
 dependencies = [
  "anyhow",
  "bincode",
@@ -1904,7 +1904,7 @@ dependencies = [
 [[package]]
 name = "linnet"
 version = "0.12.0"
-source = "git+https://github.com/alphal00p/linnet?rev=5c929e02966164be0ac84a57af4ce29753045520#5c929e02966164be0ac84a57af4ce29753045520"
+source = "git+https://github.com/alphal00p/linnet?rev=896c719d966facfcf1e18eb5d5fa44ca8458931d#896c719d966facfcf1e18eb5d5fa44ca8458931d"
 dependencies = [
  "ahash",
  "argmin",
@@ -3564,7 +3564,6 @@ dependencies = [
 [[package]]
 name = "spenso"
 version = "0.5.3"
-source = "git+https://github.com/alphal00p/spenso?rev=0136a548b3fba46de853d3e1e0134c55cc461641#0136a548b3fba46de853d3e1e0134c55cc461641"
 dependencies = [
  "ahash",
  "anyhow",
@@ -3604,7 +3603,7 @@ dependencies = [
 [[package]]
 name = "spenso-hep-lib"
 version = "0.1.3"
-source = "git+https://github.com/alphal00p/spenso?rev=0136a548b3fba46de853d3e1e0134c55cc461641#0136a548b3fba46de853d3e1e0134c55cc461641"
+source = "git+https://github.com/alphal00p/spenso?rev=eb2b73c889e0651cd786c14ba71d28797e518afd#eb2b73c889e0651cd786c14ba71d28797e518afd"
 dependencies = [
  "ahash",
  "idenso",
@@ -3617,7 +3616,7 @@ dependencies = [
 [[package]]
 name = "spenso-macros"
 version = "0.2.1"
-source = "git+https://github.com/alphal00p/spenso?rev=0136a548b3fba46de853d3e1e0134c55cc461641#0136a548b3fba46de853d3e1e0134c55cc461641"
+source = "git+https://github.com/alphal00p/spenso?rev=eb2b73c889e0651cd786c14ba71d28797e518afd#eb2b73c889e0651cd786c14ba71d28797e518afd"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3763,9 +3762,9 @@ dependencies = [
 
 [[package]]
 name = "symbolica"
-version = "0.17.0"
+version = "0.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bda144440566e5fd07e45ab88ff77723e49f5a840dfcb4c346b4446db6a95600"
+checksum = "69a17722769f6efc9e24d6b881a4e87ac03d8a42b844990fb9e43bf0d84d8e05"
 dependencies = [
  "ahash",
  "append-only-vec",
@@ -4316,7 +4315,7 @@ dependencies = [
 [[package]]
 name = "vakint"
 version = "1.0.0"
-source = "git+https://github.com/alphal00p/vakint?rev=0ed4fa833a2375b107213023b244d6e5e08db6eb#0ed4fa833a2375b107213023b244d6e5e08db6eb"
+source = "git+https://github.com/alphal00p/vakint?rev=e44c210ded3936048615d39872022a0b6ef18454#e44c210ded3936048615d39872022a0b6ef18454"
 dependencies = [
  "ahash",
  "anyhow",

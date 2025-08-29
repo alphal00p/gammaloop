@@ -843,7 +843,7 @@ mod tests_cff {
             tree.common_subexpression_elimination();
 
             let tree_double = tree.map_coeff(&|c| (&c.re).into());
-            tree_double.linearize(None)
+            tree_double.linearize(None, false)
         }
     }
 

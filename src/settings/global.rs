@@ -7,7 +7,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use symbolica::{
     atom::{Atom, AtomCore},
-    evaluate::{CompileOptions, InlineASM},
+    evaluate::{CompileOptions, ExportSettings, InlineASM},
     function,
 };
 
@@ -148,11 +148,14 @@ impl Default for GammaloopCompileOptions {
 }
 
 impl GammaloopCompileOptions {
-    pub(crate) fn inline_asm(&self) -> InlineASM {
-        if self.inline_asm {
-            InlineASM::default()
-        } else {
-            InlineASM::None
+    pub(crate) fn export_settings(&self) -> ExportSettings {
+        ExportSettings {
+            inline_asm: if self.inline_asm {
+                InlineASM::default()
+            } else {
+                InlineASM::None
+            },
+            ..Default::default()
         }
     }
 
@@ -163,7 +166,7 @@ impl GammaloopCompileOptions {
             fast_math: self.fast_math,
             unsafe_math: self.unsafe_math,
             compiler: self.compiler.clone(),
-            custom: self.custom.clone(),
+            // custom: self.custom.clone(),
             ..CompileOptions::default()
         }
     }

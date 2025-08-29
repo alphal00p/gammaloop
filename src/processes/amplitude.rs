@@ -462,7 +462,7 @@ impl AmplitudeGraph {
                 )
                 .unwrap();
         }
-        parambuilder.add_constant(Atom::PI.into(), pi_rational.into());
+        parambuilder.add_constant(GS.pi.into(), pi_rational.into());
         // fn_map
     }
 
@@ -471,7 +471,7 @@ impl AmplitudeGraph {
     fn add_additional_factors_to_cff_atom(&self, cff_atom: &Atom) -> Atom {
         // let inverse_energy_product = self.graph.underlying.get_cff_inverse_energy_product();
         let factors_of_pi =
-            (Atom::var(Atom::PI) * 2).npow(3 * self.graph.underlying.get_loop_number() as i64);
+            (Atom::var(GS.pi) * 2).npow(3 * self.graph.underlying.get_loop_number() as i64);
 
         let result = cff_atom / factors_of_pi;
         // debug!("result: {}", result);

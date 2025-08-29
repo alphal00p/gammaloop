@@ -194,7 +194,7 @@ impl Default for ParameterizationSettings {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Default)]
 pub struct IntegrationResult {
     pub neval: usize,
     pub real_zero: usize,

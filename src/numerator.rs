@@ -25,7 +25,6 @@ use spenso::tensors::parametric::LinearizedEvalTensorSet;
 use spenso::tensors::parametric::MixedTensor;
 use spenso::tensors::parametric::ParamOrConcrete;
 use spenso::tensors::parametric::ParamTensor;
-use spenso::tensors::parametric::SerializableCompiledEvaluator;
 use spenso::tensors::parametric::TensorSet;
 use std::fmt::Debug;
 use std::ops::Deref;
@@ -2031,87 +2030,6 @@ pub enum NumeratorCompileOptions {
 impl NumeratorCompileOptions {
     pub(crate) fn compile(&self) -> bool {
         matches!(self, NumeratorCompileOptions::Compiled)
-    }
-}
-
-#[derive(Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
-#[trait_decode(trait = symbolica::state::HasStateMap)]
-pub struct EvaluatorOrientations {
-    pub eval_double: LinearizedEvalTensorSet<Complex<F<f64>>, ShadowedStructure<Aind>>,
-    pub eval_quad: LinearizedEvalTensorSet<Complex<F<f128>>, ShadowedStructure<Aind>>,
-    pub compiled:
-        CompiledEvaluator<EvalTensorSet<SerializableCompiledEvaluator, ShadowedStructure<Aind>>>,
-    pub positions: Vec<usize>,
-}
-
-impl Debug for EvaluatorOrientations {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("EvaluatorOrientations")
-            .field(
-                "eval_double",
-                &"EvalTensorSet<ExpressionEvaluator<Complex<F<f64>>>, AtomStructure>",
-            )
-            .field(
-                "eval_quad",
-                &"EvalTensorSet<ExpressionEvaluator<Complex<F<f128>>>, AtomStructure>",
-            )
-            .field("compiled", &self.compiled.is_compiled())
-            .finish()
-    }
-}
-
-#[derive(Clone, Serialize, Deserialize, Debug, Encode, Decode)]
-pub struct CompiledEvaluator<E> {
-    pub state: CompiledState,
-    pub evaluator: Option<E>,
-}
-
-#[derive(Clone, Serialize, Deserialize, Debug, Encode, Decode)]
-pub enum CompiledState {
-    Enabled,
-    Disabled,
-}
-
-impl<E> Default for CompiledEvaluator<E> {
-    fn default() -> Self {
-        CompiledEvaluator {
-            state: CompiledState::Disabled,
-            evaluator: None,
-        }
-    }
-}
-
-impl<E> CompiledEvaluator<E> {
-    pub(crate) fn new(evaluator: E) -> Self {
-        CompiledEvaluator {
-            state: CompiledState::Enabled,
-            evaluator: Some(evaluator),
-        }
-    }
-    pub(crate) fn disable(&mut self) -> Result<()> {
-        if self.evaluator.is_some() {
-            self.state = CompiledState::Disabled;
-            Ok(())
-        } else {
-            Err(eyre!("Cannot disable evaluator that is not compiled"))
-        }
-    }
-
-    pub(crate) fn enable(&mut self) -> Result<()> {
-        if self.evaluator.is_some() {
-            self.state = CompiledState::Enabled;
-            Ok(())
-        } else {
-            Err(eyre!("Cannot enable evaluator that is not compiled"))
-        }
-    }
-
-    pub(crate) fn is_compiled(&self) -> bool {
-        self.evaluator.is_some()
-    }
-
-    pub(crate) fn is_enabled(&self) -> bool {
-        matches!(self.state, CompiledState::Enabled)
     }
 }
 

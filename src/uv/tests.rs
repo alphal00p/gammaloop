@@ -16,6 +16,7 @@ use linnet::half_edge::involution::EdgeIndex;
 
 use linnet::half_edge::{builder::HedgeGraphBuilder, involution::Flow};
 use log::debug;
+use symbolica::atom::Symbol;
 use symbolica::{parse_lit, symbol};
 
 use crate::{
@@ -1827,7 +1828,7 @@ fn quick_test() {
         .replace(function!(GS.ose, edge_id, W_.x___))
         .with(function!(GS.ose, edge_id, W_.x___, Atom::var(GS.rescale)))
         .derivative(GS.rescale)
-        .replace(function!(Atom::DERIVATIVE, W_.x___, W_.x_))
+        .replace(function!(Symbol::DERIVATIVE, W_.x___, W_.x_))
         .with(Atom::var(W_.x_).npow(-1) / 2)
         .replace(function!(GS.ose, edge_id, W_.x___, Atom::var(GS.rescale)))
         .with(function!(GS.ose, edge_id, W_.x___));

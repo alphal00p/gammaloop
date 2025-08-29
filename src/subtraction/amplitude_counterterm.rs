@@ -138,18 +138,36 @@ impl AmplitudeCountertermData {
     ) {
         for (i, e) in self.evaluators.iter_mut_enumerated() {
             e.parametric.borrow_mut().compile(
-                &path.as_ref().join(format!("esurface_{}", i.0)),
+                &path
+                    .as_ref()
+                    .join(format!("esurface_{}", i.0))
+                    .with_extension("cpp"),
                 format!("esurface_{}", i.0),
-                &path.as_ref().join(format!("esurface_{}", i.0)),
-                settings.generation.gammaloop_compile_options.inline_asm(),
+                &path
+                    .as_ref()
+                    .join(format!("esurface_{}", i.0))
+                    .with_extension("so"),
+                settings
+                    .generation
+                    .gammaloop_compile_options
+                    .export_settings(),
             );
 
             e.iterative.as_mut().map(|iterative| {
                 iterative.borrow_mut().compile(
-                    &path.as_ref().join(format!("iterative_esurface_{}", i.0)),
+                    &path
+                        .as_ref()
+                        .join(format!("iterative_esurface_{}", i.0))
+                        .with_extension("cpp"),
                     format!("iterative_esurface_{}", i.0),
-                    &path.as_ref().join(format!("iterative_esurface_{}", i.0)),
-                    settings.generation.gammaloop_compile_options.inline_asm(),
+                    &path
+                        .as_ref()
+                        .join(format!("iterative_esurface_{}", i.0))
+                        .with_extension("so"),
+                    settings
+                        .generation
+                        .gammaloop_compile_options
+                        .export_settings(),
                 );
             });
         }

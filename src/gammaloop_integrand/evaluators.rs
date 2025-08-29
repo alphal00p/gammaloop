@@ -1,6 +1,7 @@
 use std::{
     borrow::Cow,
     cell::RefCell,
+    mem::transmute,
     path::Path,
     sync::{Arc, RwLock},
 };
@@ -8,14 +9,14 @@ use std::{
 use bincode_trait_derive::{Decode, Encode};
 use bitvec::{order::Lsb0, slice::IterOnes, vec::BitVec};
 use linnet::half_edge::involution::{EdgeVec, Orientation};
-use spenso::{
-    algebra::complex::Complex,
-    tensors::parametric::{SerializableCompiledCode, SerializableCompiledEvaluator},
-};
+use spenso::algebra::complex::{symbolica_traits::CompiledComplexEvaluatorSpenso, Complex};
 use symbolica::{
     atom::{Atom, AtomCore},
-    domains::rational::Rational,
-    evaluate::{CompileOptions, ExpressionEvaluator, FunctionMap, InlineASM, OptimizationSettings},
+    domains::{float::Complex as SymComplex, rational::Rational},
+    evaluate::{
+        CompileOptions, CompiledComplexEvaluator, CompiledNumber, EvaluatorLoader, ExportSettings,
+        ExpressionEvaluator, FunctionMap, InlineASM, OptimizationSettings,
+    },
 };
 use typed_index_collections::TiVec;
 
@@ -92,12 +93,26 @@ where
     }
 }
 
+#[derive(Clone, Debug, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
+pub struct CompiledComplexEvaluatorGL(CompiledComplexEvaluator);
+
+impl CompiledComplexEvaluatorGL {
+    pub fn evaluate(&mut self, args: &[Complex<F<f64>>], out: &mut [Complex<F<f64>>]) {
+        unsafe {
+            self.0.evaluate(
+                transmute::<&[Complex<F<f64>>], &[SymComplex<f64>]>(args),
+                transmute::<&mut [Complex<F<f64>>], &mut [SymComplex<f64>]>(out),
+            );
+        }
+    }
+}
+
 #[derive(Clone, Encode, Decode, Debug)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct GenericEvaluator {
     pub exprs: Vec<Atom>,
     pub rational: Option<ExpressionEvaluator<symbolica::domains::float::Complex<Rational>>>,
-    pub f64_compiled: Option<SerializableCompiledEvaluator>,
+    pub f64_compiled: Option<CompiledComplexEvaluatorSpenso>,
     pub f64_eager: ExpressionEvaluator<Complex<F<f64>>>,
     pub f128: ExpressionEvaluator<Complex<F<f128>>>,
 }
@@ -108,32 +123,18 @@ impl GenericEvaluator {
         cpp_path: impl AsRef<Path>,
         function_name: impl AsRef<str>,
         lib_path: impl AsRef<Path>,
-        inline_asm: InlineASM,
+        settings: ExportSettings,
     ) {
         let compile = self
             .f64_eager
-            .export_cpp(
-                &cpp_path.as_ref().to_string_lossy(),
-                function_name.as_ref(),
-                true,
-                inline_asm,
-            )
+            .export_cpp::<Complex<f64>>(cpp_path.as_ref(), function_name.as_ref(), settings)
             .unwrap()
-            .compile(
-                &lib_path.as_ref().to_string_lossy(),
-                CompileOptions::default(),
-            )
+            .compile(lib_path.as_ref(), CompileOptions::default())
             .unwrap()
             .load()
             .unwrap();
 
-        self.f64_compiled = Some(SerializableCompiledEvaluator {
-            evaluator: compile,
-            compiled_code: SerializableCompiledCode {
-                library_filename: lib_path.as_ref().to_path_buf(),
-                function_name: function_name.as_ref().to_string(),
-            },
-        });
+        self.f64_compiled = Some(compile);
     }
 
     pub(crate) fn new_from_builder<I: IntoIterator<Item = Atom>>(
@@ -213,7 +214,13 @@ impl GenericEvaluatorFloat for f64 {
             if let Some(compiled) = &mut generic_evaluator.f64_compiled {
                 // status_info!("USING COMPILED F64 SINGLE");
                 let mut out = [Complex::default()];
-                compiled.evaluate(params, &mut out);
+
+                unsafe {
+                    compiled.evaluate(
+                        transmute::<&[Complex<F<f64>>], &[Complex<f64>]>(params),
+                        transmute::<&mut [Complex<F<f64>>], &mut [Complex<f64>]>(&mut out),
+                    );
+                }
                 out[0]
             } else {
                 // status_info!("USING EAGER F64 SINGLE");
@@ -229,7 +236,13 @@ impl GenericEvaluatorFloat for f64 {
             let mut out = vec![Complex::default(); generic_evaluator.exprs.len()];
             if let Some(compiled) = &mut generic_evaluator.f64_compiled {
                 // status_info!("USING COMPILED COMPLEX SINGLE");
-                compiled.evaluate(params, &mut out);
+                //
+                unsafe {
+                    compiled.evaluate(
+                        transmute::<&[Complex<F<f64>>], &[Complex<f64>]>(params),
+                        transmute::<&mut [Complex<F<f64>>], &mut [Complex<f64>]>(&mut out),
+                    );
+                }
                 out
             } else {
                 // status_info!("USING EAGER COMPLEX SINGLE");

@@ -590,7 +590,7 @@ impl<T: FloatLike> ParamBuilder<T> {
         rename: String,
         args: Vec<Symbol>,
         body: Atom,
-    ) -> Result<(), &str> {
+    ) -> Result<(), String> {
         self.reps.push((
             FunctionBuilder::new(name)
                 .add_args(&tags)
@@ -611,7 +611,7 @@ impl<T: FloatLike> ParamBuilder<T> {
         rename: String,
         args: Vec<Symbol>,
         body: Atom,
-    ) -> Result<(), &str> {
+    ) -> Result<(), String> {
         self.reps.push((
             FunctionBuilder::new(name)
                 // .add_args()
@@ -655,7 +655,7 @@ impl<T: FloatLike> ParamBuilder<T> {
             )
             .unwrap();
         }
-        new.add_constant(Atom::PI.into(), pi_rational.into());
+        new.add_constant(GS.pi.into(), pi_rational.into());
 
         new.values = vec![Complex::new_re(F(T::from_f64(0.))); len];
         new.update_model_values(model);

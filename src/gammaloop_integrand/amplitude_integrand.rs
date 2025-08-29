@@ -195,10 +195,17 @@ impl AmplitudeGraphTerm {
             })
             .unwrap();
         self.orientation_parametric_integrand.compile(
-            graph_path.join("orientation_parametric_integrand"),
+            graph_path
+                .join("orientation_parametric_integrand")
+                .with_extension("cpp"),
             format!("{}_orientation_parametric_integrand", &self.graph.name,),
-            graph_path.join("orientation_parametric_integrand"),
-            settings.generation.gammaloop_compile_options.inline_asm(),
+            graph_path
+                .join("orientation_parametric_integrand")
+                .with_extension("so"),
+            settings
+                .generation
+                .gammaloop_compile_options
+                .export_settings(),
         );
 
         self.threshold_counterterm
@@ -206,10 +213,13 @@ impl AmplitudeGraphTerm {
 
         self.iterative_integrand_evaluator.as_mut().map(|e| {
             e.compile(
-                graph_path.join("iterative"),
+                graph_path.join("iterative").with_extension("cpp"),
                 format!("{}_iterative", &self.graph.name,),
-                graph_path.join("iterative"),
-                settings.generation.gammaloop_compile_options.inline_asm(),
+                graph_path.join("iterative").with_extension("so"),
+                settings
+                    .generation
+                    .gammaloop_compile_options
+                    .export_settings(),
             )
         });
     }

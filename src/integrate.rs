@@ -616,13 +616,7 @@ where
                 .collect::<Vec<_>>(),
         }
     }
-    IntegrationResult {
-        neval: 0,
-        fail: 0,
-        result: vec![],
-        error: vec![],
-        prob: vec![],
-    }
+    IntegrationResult::default()
 }
 
 /// Batch integrate function used for distributed runs, used by the worker nodes.
