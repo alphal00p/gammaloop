@@ -11,11 +11,11 @@ use color_eyre::{Result, Section};
 use colored::{ColoredString, Colorize};
 use eyre::{eyre, Context};
 use log::debug;
-use schemars::{generate::SchemaSettings, schema_for, JsonSchema, Schema, SchemaGenerator};
+use schemars::{schema_for, JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
 use symbolica::numerical_integration::Sample;
-use tracing::info;
+use tracing::{info, warn};
 use tracing_subscriber::{reload, EnvFilter, Registry};
 
 use crate::{
@@ -25,8 +25,8 @@ use crate::{
     model::{Model, SerializableModel},
     processes::{ExportSettings, Process, ProcessDefinition, ProcessList},
     settings::{runtime::LockedRuntimeSettings, GlobalSettings, RuntimeSettings},
-    status_debug, status_warn,
-    utils::F,
+    status_debug, status_info, status_warn,
+    utils::{serde_utils::SmartSerde, F},
     GammaLoopContextContainer,
 };
 
@@ -53,6 +53,7 @@ impl RunHistory {
     }
     pub fn run(&mut self, cli: &mut Cli, state: &mut State) -> Result<ControlFlow<()>> {
         for command in self.commands.clone() {
+            status_info!("Running command: {:?}", command);
             if let ControlFlow::Break(_) = cli.run_command(command, self, state)? {
                 return Ok(ControlFlow::Break(()));
             }
@@ -65,31 +66,8 @@ impl RunHistory {
         self.global_settings = other.global_settings;
     }
 
-    pub(crate) fn from_file_toml(filename: impl AsRef<Path>) -> Result<Self> {
-        let filename = filename.as_ref();
-        let mut f = File::open(filename)
-            .wrap_err_with(|| format!("Could not open run history file {}", filename.display()))
-            .suggestion("Does the path exist?")?;
-        let mut buf = String::new();
-        f.read_to_string(&mut buf)
-            .wrap_err("Could not load string history file")?;
-
-        Ok(toml::from_str(&buf)?)
-    }
-
-    pub fn from_file_yaml(filename: impl AsRef<Path>) -> Result<Self> {
-        let filename = filename.as_ref();
-        let mut f = File::open(filename)
-            .wrap_err_with(|| format!("Could not open run history file {}", filename.display()))
-            .suggestion("Does the path exist?")?;
-        let mut buf = String::new();
-        f.read_to_string(&mut buf)
-            .wrap_err("Could not load string history file")?;
-
-        Ok(serde_yaml::from_str(&buf)?)
-    }
     pub fn new(path: impl AsRef<Path>) -> Result<Self> {
-        let runhistory: Self = match Self::from_file_yaml(path.as_ref()) {
+        let runhistory: Self = match Self::from_file(path.as_ref(), "run history") {
             Ok(r) => {
                 status_debug!(
                     "Loaded run history from YAML file {}",
@@ -99,7 +77,7 @@ impl RunHistory {
             }
             Err(e) => {
                 status_warn!(
-                    "Could not load run history from YAML at {}: {}, loading default",
+                    "Could not load run history at {}: {}, loading default",
                     path.as_ref().display(),
                     e
                 );
@@ -120,8 +98,9 @@ impl RunHistory {
         override_state_file: bool,
         strict: bool,
     ) -> Result<()> {
-        File::create(root_folder.join("run.toml"))?
-            .write(toml::to_string_pretty(self)?.as_bytes())?;
+        self.to_file(root_folder.join("run.toml"))?;
+
+        Self::schema().to_file(root_folder.join("run_schema.json"))?;
         Ok(())
     }
 
@@ -131,11 +110,8 @@ impl RunHistory {
         override_state_file: bool,
         strict: bool,
     ) -> Result<()> {
-        File::create(root_folder.join("run.yaml"))?
-            .write(serde_yaml::to_string(self)?.as_bytes())?;
-
-        File::create(root_folder.join("run_schema.json"))?
-            .write(serde_json::to_string_pretty(&Self::schema())?.as_bytes())?;
+        self.to_file(root_folder.join("run.yaml"))?;
+        Self::schema().to_file(root_folder.join("run_schema.json"))?;
         Ok(())
     }
 }
@@ -334,16 +310,15 @@ impl State {
         // let root_folder = root_folder.join("gammaloop_state");
 
         let model = if let Some(model_path) = &model_path {
-            debug!("Loading model from {}", model_path.display());
+            warn!("Loading model from {}", model_path.display());
             Model::from_file(model_path)?
         } else {
-            let model_dir = save_path.join("model.yaml");
-            debug!(
+            let model_dir = save_path.join("model.json");
+            warn!(
                 "Loading model from default location: {}",
                 model_dir.display()
             );
-
-            Model::from_serializable_model(SerializableModel::from_file(model_dir)?)
+            Model::from_file(model_dir)?
         };
 
         debug!("Loaded model: {}", model.name);
@@ -439,9 +414,9 @@ impl State {
 
         // let binary = bincode::encode_to_vec(&self.integrands, bincode::config::standard())?;
         // fs::write(root_folder.join("process_list.bin"), binary)?;?
-        let model_yaml = serde_yaml::to_string(&self.model.to_serializable())?;
-
-        fs::write(selected_root_folder.join("model.yaml"), model_yaml)?;
+        self.model
+            .to_serializable()
+            .to_file(selected_root_folder.join("model.json"))?;
         Ok(())
     }
 }

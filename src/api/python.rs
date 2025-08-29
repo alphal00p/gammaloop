@@ -453,7 +453,7 @@ impl PyNumeratorAwareGroupingOption {
 impl State {
     #[new]
     pub fn new_python(state_folder: PathBuf) -> Self {
-        initialise();
+        initialise().unwrap();
         let handle = crate::cli::tracing::init_tracing(
             "info,symbolica::poly::gcd=off",
             &state_folder.join("logs"),
@@ -567,7 +567,7 @@ impl State {
             global_prefactor.projector = parse!(&global_prefactor_colorless);
         }
 
-        let diagrams = diagram_generator
+        let _diagrams = diagram_generator
             .generate(
                 &self.model,
                 &numerator_aware_isomorphism_grouping
@@ -683,77 +683,77 @@ impl State {
         )])
     }
 
-    pub(crate) fn inspect_lmw_integrand(
-        &mut self,
-        integrand_name: &str,
-        workspace_path: &str,
-        use_f128: bool,
-    ) -> Result<()> {
-        let integrand = self.process_list.get_integrand_mut(0, integrand_name)?;
+    // pub(crate) fn inspect_lmw_integrand(
+    //     &mut self,
+    //     integrand_name: &str,
+    //     workspace_path: &str,
+    //     use_f128: bool,
+    // ) -> Result<()> {
+    //     let integrand = self.process_list.get_integrand_mut(0, integrand_name)?;
 
-        let settings = integrand.get_settings().clone();
-        let workspace_path = PathBuf::from(workspace_path);
-        let path_to_state = workspace_path.join("integration_state");
+    //     let settings = integrand.get_settings().clone();
+    //     let workspace_path = PathBuf::from(workspace_path);
+    //     let path_to_state = workspace_path.join("integration_state");
 
-        // match fs::read(path_to_state) {
-        //     Ok(state_bytes) => {
-        //         let integration_state: IntegrationState =
-        //             bincode::decode_from_slice::<IntegrationState, _>(
-        //                 &state_bytes,
-        //                 bincode::config::standard(),
-        //             )
-        //             .expect("failed to obtain state")
-        //             .0;
-        //         let path_to_workspace_settings = workspace_path.join("settings.yaml");
-        //         let workspace_settings_string = fs::read_to_string(path_to_workspace_settings)
-        //             .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
+    //     // match fs::read(path_to_state) {
+    //     //     Ok(state_bytes) => {
+    //     //         let integration_state: IntegrationState =
+    //     //             bincode::decode_from_slice::<IntegrationState, _>(
+    //     //                 &state_bytes,
+    //     //                 bincode::config::standard(),
+    //     //             )
+    //     //             .expect("failed to obtain state")
+    //     //             .0;
+    //     //         let path_to_workspace_settings = workspace_path.join("settings.yaml");
+    //     //         let workspace_settings_string = fs::read_to_string(path_to_workspace_settings)
+    //     //             .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
 
-        //         let mut workspace_settings: Settings =
-        //             serde_yaml::from_str(&workspace_settings_string)
-        //                 .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
+    //     //         let mut workspace_settings: Settings =
+    //     //             serde_yaml::from_str(&workspace_settings_string)
+    //     //                 .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
 
-        //         workspace_settings.general.debug = new_settings.general.debug;
+    //     //         workspace_settings.general.debug = new_settings.general.debug;
 
-        //         let max_weight_samples = vec![
-        //             integration_state.integral.re.max_eval_positive_xs,
-        //             integration_state.integral.re.max_eval_negative_xs,
-        //             integration_state.integral.im.max_eval_positive_xs,
-        //             integration_state.integral.im.max_eval_negative_xs,
-        //         ];
+    //     //         let max_weight_samples = vec![
+    //     //             integration_state.integral.re.max_eval_positive_xs,
+    //     //             integration_state.integral.re.max_eval_negative_xs,
+    //     //             integration_state.integral.im.max_eval_positive_xs,
+    //     //             integration_state.integral.im.max_eval_negative_xs,
+    //     //         ];
 
-        //         for max_weight_sample in max_weight_samples
-        //             .into_iter()
-        //             .filter_map(std::convert::identity)
-        //         {
-        //             // bypass inspect function as it does not take a symbolica sample as input
-        //             let eval_result = integrand_struct.evaluate_sample(
-        //                 &max_weight_sample,
-        //                 F(0.0),
-        //                 1,
-        //                 use_f128,
-        //                 Complex::new_zero(),
-        //             );
+    //     //         for max_weight_sample in max_weight_samples
+    //     //             .into_iter()
+    //     //             .filter_map(std::convert::identity)
+    //     //         {
+    //     //             // bypass inspect function as it does not take a symbolica sample as input
+    //     //             let eval_result = integrand_struct.evaluate_sample(
+    //     //                 &max_weight_sample,
+    //     //                 F(0.0),
+    //     //                 1,
+    //     //                 use_f128,
+    //     //                 Complex::new_zero(),
+    //     //             );
 
-        //             let eval = eval_result.integrand_result;
+    //     //             let eval = eval_result.integrand_result;
 
-        //             info!(
-        //                     "\nFor input point xs: \n\n{}\n\nThe evaluation of integrand '{}' is:\n\n{}\n",
-        //                     format!(
-        //                         "( {:?} )",
-        //                         max_weight_sample,
-        //                     )
-        //                     .blue(),
-        //                     integrand_name,
-        //                     format!("( {:+.16e}, {:+.16e} i)", eval.re, eval.im).blue(),
-        //                 );
-        //         }
+    //     //             info!(
+    //     //                     "\nFor input point xs: \n\n{}\n\nThe evaluation of integrand '{}' is:\n\n{}\n",
+    //     //                     format!(
+    //     //                         "( {:?} )",
+    //     //                         max_weight_sample,
+    //     //                     )
+    //     //                     .blue(),
+    //     //                     integrand_name,
+    //     //                     format!("( {:+.16e}, {:+.16e} i)", eval.re, eval.im).blue(),
+    //     //                 );
+    //     //         }
 
-        //         Ok(())
-        //     }
-        // }
-        //
-        Ok(())
-    }
+    //     //         Ok(())
+    //     //     }
+    //     // }
+    //     //
+    //     Ok(())
+    // }
 
     // pub(crate) fn load_master_node(&mut self, integrand: &str) -> Result<String> {
     //     let selected_integrand = self.process_list.get_integrand_mut(0, integrand)?;

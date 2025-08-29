@@ -1,22 +1,16 @@
-use std::{env, path::Path};
+use std::{env, path::PathBuf};
 
 use crate::model::Model;
 
 pub fn load_generic_model(name: &str) -> Model {
-    Model::from_file(String::from(
-        Path::new(&output_dir())
-            .join(format!("gammaloop_models/{}.yaml", name))
-            .to_str()
-            .unwrap(),
-    ))
-    .unwrap()
+    Model::from_file(output_dir().join(format!("gammaloop_models/{}.yaml", name))).unwrap()
 }
 
-fn output_dir() -> String {
+pub fn output_dir() -> PathBuf {
     if let Ok(pytest_output_path) = env::var("PYTEST_OUTPUT_PATH_FOR_RUST") {
-        pytest_output_path
+        pytest_output_path.into()
     } else {
-        String::from("./src/test_resources")
+        PathBuf::from("./src/test_resources")
     }
 }
 

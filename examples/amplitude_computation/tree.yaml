@@ -4,12 +4,6 @@ global_settings:
     evaluator_settings:
       compile: true
 default_runtime_settings:
-  General:
-    amplitude_prefactor:
-      re: 0.0
-      im: 1.0
-    m_uv: 1.0
-    mu_r_sq: 1.0
   Kinematics:
     e_cm: 64.0
     externals:

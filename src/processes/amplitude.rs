@@ -1,19 +1,12 @@
-use std::{
-    collections::{BTreeMap, HashMap},
-    default, fs, iter,
-    ops::Deref,
-    path::Path,
-};
+use std::{collections::BTreeMap, fs, iter, ops::Deref, path::Path};
 
 use ahash::AHashSet;
 // use bincode::{Decode, Encode};
 use bincode_trait_derive::{Decode, Encode};
-use brotli::enc::static_dict::Hash;
 use color_eyre::{Result, Section};
 use momtrop::SampleGenerator;
 
 use idenso::color::ColorSimplifier;
-use pathfinding::matrix::directions::W;
 use spenso::network::{Sequential, SmallestDegree};
 use tracing::instrument;
 use vakint::{EvaluationOrder, LoopNormalizationFactor, Vakint, VakintSettings};

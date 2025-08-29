@@ -1,6 +1,6 @@
 use bincode_trait_derive::{Decode, Encode};
 use schemars::{json_schema, JsonSchema};
-use serde::{ser::SerializeStruct, Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 use symbolica::{
     atom::{Atom, AtomCore},
     parse,
@@ -21,7 +21,7 @@ impl JsonSchema for StringSerializedAtom {
     fn schema_name() -> std::borrow::Cow<'static, str> {
         "ParseableAtom".into()
     }
-    fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+    fn json_schema(_generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
         json_schema!({
             "description": "An atom that is serialized as a string. Do not make any assumptions about the state",
             "type": ["string"]

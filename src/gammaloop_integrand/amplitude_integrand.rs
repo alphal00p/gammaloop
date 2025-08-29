@@ -1,5 +1,6 @@
 use std::{
     fs::{self, File},
+    io::{Read, Write},
     path::Path,
 };
 
@@ -9,9 +10,8 @@ use bitvec::vec::BitVec;
 
 use color_eyre::Result;
 
-use eyre::{eyre, Context};
+use eyre::Context;
 use itertools::Itertools;
-use libc::group;
 use linnet::half_edge::involution::{EdgeVec, Orientation};
 use momtrop::SampleGenerator;
 use spenso::algebra::complex::Complex;
@@ -25,8 +25,7 @@ use typed_index_collections::TiVec;
 use crate::{
     cff::{
         esurface::{
-            self, get_existing_esurfaces, get_representative, EsurfaceCollection, EsurfaceID,
-            ExistingEsurfaces, GroupEsurfaceId,
+            get_representative, EsurfaceCollection, EsurfaceID, ExistingEsurfaces, GroupEsurfaceId,
         },
         expression::{AmplitudeOrientationID, GraphOrientation},
     },
@@ -48,7 +47,7 @@ use crate::{
         amplitude_counterterm::AmplitudeCountertermData,
         overlap::{find_maximal_overlap, OverlapInput, SingleGraphOverlapData},
     },
-    utils::{bitvec_ext::BinVec, W_},
+    utils::{bitvec_ext::BinVec, serde_utils::SmartSerde, W_},
     DependentMomentaConstructor, FloatLike, GammaLoopContext, GammaLoopContextContainer, F,
 };
 
@@ -419,10 +418,10 @@ impl AmplitudeIntegrand {
         fs::write(path.as_ref().join("integrand.bin"), binary)?;
 
         // debug!("HE3");
-        serde_yaml::to_writer(
-            File::create(path.as_ref().join("settings.yaml"))?,
-            &self.settings,
-        )?;
+        //
+        self.settings
+            .to_file(path.as_ref().join("settings.toml"))
+            .with_context(|| "Error saving settings.toml file for amplitude integrand")?;
         // debug!("HE");
 
         Ok(())
@@ -433,7 +432,10 @@ impl AmplitudeIntegrand {
         let (data, _) =
             bincode::decode_from_slice_with_context(&binary, bincode::config::standard(), context)?;
 
-        let settings = serde_yaml::from_reader(File::open(path.as_ref().join("settings.yaml"))?)?;
+        let settings = SmartSerde::from_file(
+            path.as_ref().join("settings.toml"),
+            "runtime settings for amplitude integrand",
+        )?;
 
         Ok(AmplitudeIntegrand { settings, data })
     }

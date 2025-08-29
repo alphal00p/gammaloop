@@ -45,18 +45,6 @@ impl<'a> From<LockedRuntimeSettings<'a>> for RuntimeSettings {
     }
 }
 
-impl RuntimeSettings {
-    pub(crate) fn from_file(filename: impl AsRef<Path>) -> Result<RuntimeSettings> {
-        let filename = filename.as_ref();
-        let f = File::open(filename)
-            .wrap_err_with(|| format!("Could not open settings file {}", filename.display()))
-            .suggestion("Does the path exist?")?;
-        serde_yaml::from_reader(f)
-            .wrap_err("Could not parse settings file")
-            .suggestion("Is it a correct yaml file")
-    }
-}
-
 #[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 #[derive(Debug, Clone, Deserialize, Serialize, Encode, Decode, PartialEq, JsonSchema)]
 #[trait_decode(trait= GammaLoopContext)]

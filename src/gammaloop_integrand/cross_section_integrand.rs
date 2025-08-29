@@ -7,6 +7,7 @@ use log::{debug, info};
 use spenso::algebra::complex::Complex;
 use std::{
     fs::{self, File},
+    io::{Read, Write},
     path::Path,
 };
 use symbolica::numerical_integration::{Grid, Sample};
@@ -60,10 +61,8 @@ impl CrossSectionIntegrand {
     pub(crate) fn save(&self, path: impl AsRef<Path>, override_existing: bool) -> Result<()> {
         let binary = bincode::encode_to_vec(&self, bincode::config::standard())?;
         fs::write(path.as_ref().join("integrand.bin"), binary)?;
-        serde_yaml::to_writer(
-            File::create(path.as_ref().join("settings.yaml"))?,
-            &self.settings,
-        )?;
+        File::create(path.as_ref().join("settings.toml"))?
+            .write(toml::to_string_pretty(&self.settings)?.as_bytes())?;
         Ok(())
     }
 
@@ -71,7 +70,9 @@ impl CrossSectionIntegrand {
         let binary = fs::read(path.as_ref().join("integrand.bin"))?;
         let (data, _) =
             bincode::decode_from_slice_with_context(&binary, bincode::config::standard(), context)?;
-        let settings = serde_yaml::from_reader(File::open(path.as_ref().join("settings.yaml"))?)?;
+        let mut buf = vec![];
+        File::open(path.as_ref().join("settings.toml"))?.read(&mut buf)?;
+        let settings = toml::from_slice(&buf)?;
 
         Ok(CrossSectionIntegrand { settings, data })
     }

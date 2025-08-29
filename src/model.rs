@@ -1,5 +1,6 @@
 use crate::momentum::{FourMomentum, Helicity, Polarization};
 use crate::numerator::aind::Aind;
+use crate::utils::serde_utils::SmartSerde;
 use crate::utils::{self, FloatLike, F, W_};
 use crate::HasModel;
 use ahash::{AHashMap, HashSet, RandomState};
@@ -1552,17 +1553,7 @@ pub struct SerializableModel {
 
 impl SerializableModel {
     pub(crate) fn from_file(file_path: impl AsRef<Path>) -> Result<SerializableModel, Report> {
-        let f = File::open(file_path.as_ref())
-            .wrap_err_with(|| {
-                format!(
-                    "Could not open model yaml file {}",
-                    file_path.as_ref().display()
-                )
-            })
-            .suggestion("Does the path exist?")?;
-        serde_yaml::from_reader(f)
-            .map_err(|e| eyre!(format!("Error parsing model yaml: {}", e)))
-            .suggestion("Is it a correct yaml file")
+        SmartSerde::from_file(file_path, "model")
     }
 
     pub(crate) fn from_yaml_str(yaml_str: String) -> Result<SerializableModel, Report> {
@@ -2148,10 +2139,6 @@ impl Model {
 
     pub(crate) fn to_serializable(&self) -> SerializableModel {
         SerializableModel::from_model(self)
-    }
-
-    pub(crate) fn to_yaml(&self) -> Result<String, Error> {
-        serde_yaml::to_string(&self.to_serializable())
     }
 
     pub(crate) fn from_file(file_path: impl AsRef<Path>) -> Result<Model, Report> {

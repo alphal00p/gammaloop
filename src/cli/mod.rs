@@ -1,44 +1,32 @@
 use crate::{
-    feyngen::GenerationType,
-    graph::Graph,
-    initialisation::initialise,
-    integrands::{integrand_factory, HasIntegrand},
-    model::Model,
-    processes::{ExportSettings, Process, ProcessDefinition},
-    status_info,
-    utils::{F, GIT_VERSION, GS},
+    initialisation::initialise, integrands::HasIntegrand, model::Model, status_info,
+    utils::GIT_VERSION,
 };
-use bincode_trait_derive::{Decode, Encode};
-use chrono::{Datelike, Local, Timelike};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use clap_repl::{
     reedline::{DefaultPrompt, DefaultPromptSegment, FileBackedHistory},
     ClapEditor, ReadCommandOutput,
 };
+use color_eyre::Report;
 use color_eyre::Result;
-use color_eyre::{config::HookBuilder, Report};
 use colored::Colorize;
 use console::style;
 use dirs::home_dir;
-use eyre::{eyre, Context};
+use eyre::eyre;
 use integrate::Integrate;
 use log::LevelFilter;
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use spenso::algebra::complex::Complex;
 use state::{current_log_spec, RunHistory, State};
+use std::ops::ControlFlow;
 use std::{fs, path::PathBuf};
-use std::{io, time::Instant};
-use std::{ops::ControlFlow, path::Path};
-use symbolica::numerical_integration::Sample;
-use tracing::{init_tracing, LogLevel};
+use tracing::LogLevel;
 
 pub mod generate;
 pub mod inspect;
 pub mod integrate;
-pub mod settings;
 pub mod state;
 pub mod tracing;
 
@@ -127,7 +115,7 @@ impl Cli {
                     state.export_dots(path.unwrap_or(self.state_folder.clone()))?;
                 }
                 Save::State { path } => {
-                    self.save_cli(state, run_history, path, false)?;
+                    self.save(state, run_history, path, false)?;
                 }
             },
             Commands::Set(s) => match s {
@@ -275,7 +263,7 @@ impl Cli {
 
         if !self.no_save_state {
             debug!("Saving State, override: {}", self.override_state);
-            self.save_cli(&mut state, &run_history, None, false)?;
+            self.save(&mut state, &run_history, None, false)?;
         }
         Ok(())
     }
@@ -283,12 +271,12 @@ impl Cli {
     // pub fn initialize(&self) {}
 
     fn get_run_history(&self) -> Result<RunHistory> {
-        let default_path = self.state_folder.join("run.yaml");
+        let default_path = self.state_folder.join("run.toml");
         let path = self.run_history.as_ref().unwrap_or(&default_path);
         RunHistory::new(path)
     }
 
-    pub fn save_cli(
+    pub fn save(
         &self,
         state: &mut State,
         run_history: &RunHistory,
@@ -313,12 +301,12 @@ impl Cli {
                     eprint!(
                         "Gammaloop export root {} already exists. Specify '{}' for overwriting, '{}' for not saving, or '{}' to specify where to save current state to:\n > ",
                         selected_root_folder.display().to_string().green(),
-                        "n".blue().bold(),
                         "o".red().bold(),
+                        "n".blue().bold(),
                         "<NEW_PATH>".green().bold()
                     );
                     let mut user_input = String::new();
-                    io::stdin()
+                    std::io::stdin()
                         .read_line(&mut user_input)
                         .expect("Could not read user-specified gammaloop state export destination");
                     //user_input = user_input.trim().into();
@@ -343,7 +331,7 @@ impl Cli {
         }
 
         state.save(&selected_root_folder, true, false)?;
-        run_history.save_yaml(&selected_root_folder, true, false)?;
+        run_history.save_toml(&selected_root_folder, true, false)?;
 
         Ok(())
     }

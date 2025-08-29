@@ -1,6 +1,7 @@
 use std::{
     collections::{BTreeMap, HashSet},
     fs::{self, File},
+    io::Write,
     path::Path,
 };
 
@@ -195,10 +196,8 @@ impl Process {
                 fs::write(p.join("def.bin"), binary)?;
 
                 if let Some(a) = &self.settings_history {
-                    serde_yaml::to_writer(
-                        File::create(path.as_ref().join("settings_history.yaml"))?,
-                        a,
-                    )?;
+                    File::create(path.as_ref().join("settings_history.toml"))?
+                        .write(&toml::to_string_pretty(a)?.into_bytes())?;
                 }
 
                 for (_, amp) in a {
