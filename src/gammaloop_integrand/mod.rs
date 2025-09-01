@@ -237,7 +237,6 @@ fn stability_check(
 
     if let Some(unstable_index) = unstable_sample {
         let unstable_point = results[unstable_index];
-        let rotation_axis = format!("{:?}", settings.stability.rotation_axis[unstable_index]);
 
         let ((real_formatted, rotated_real_formatted), (imag_formatted, rotated_imag_formatted)) = (
             format_for_compare_digits(average.re, unstable_point.re),
@@ -245,7 +244,6 @@ fn stability_check(
         );
 
         debug!("{}", "\nUnstable point detected:".red());
-        debug!("Rotation axis: {}", rotation_axis);
         debug!("\taverage result: {} + {}i", real_formatted, imag_formatted,);
         debug!(
             "\trotated result: {} + {}i",
@@ -267,6 +265,66 @@ fn stability_check(
     };
 
     (average, stable && below_wgt_threshold)
+}
+
+#[inline]
+fn stability_check_on_norm(
+    settings: &RuntimeSettings,
+    results: &[Complex<F<f64>>],
+    stability_settings: &StabilityLevelSetting,
+    max_eval: Complex<F<f64>>,
+    wgt: F<f64>,
+) -> (Complex<F<f64>>, bool) {
+    if results.len() == 1 {
+        return (results[0], true);
+    }
+
+    let average = results
+        .iter()
+        .fold(F(0.0), |acc, x| acc + x.norm_squared().sqrt())
+        / F(results.len() as f64);
+
+    let mut errors = results.iter().map(|res| {
+        let res = res.norm_squared().sqrt();
+
+        let error = if IsZero::is_zero(&res) && IsZero::is_zero(&average) {
+            F(0.)
+        } else {
+            ((res - average) / average).abs()
+        };
+
+        error
+    });
+
+    let unstable_sample =
+        errors.position(|error| error > stability_settings.required_precision_for_re);
+
+    if let Some(unstable_index) = unstable_sample {
+        let unstable_point = results[unstable_index];
+        let rotation_axis = format!("{:?}", settings.stability.rotation_axis[unstable_index]);
+
+        let (real_formatted, rotated_real_formatted) =
+            format_for_compare_digits(average, unstable_point.re);
+
+        debug!("{}", "\nUnstable point detected:".red());
+        debug!("Rotation axis: {}", rotation_axis);
+        debug!("\tnormed average result: {}", real_formatted,);
+        debug!("\tnormed rotated result: {}", rotated_real_formatted,);
+    }
+
+    let stable = unstable_sample.is_none();
+
+    let below_wgt_threshold = if stability_settings.escalate_for_large_weight_threshold > F(0.)
+        && max_eval.is_non_zero()
+    {
+        average.abs() * wgt
+            < stability_settings.escalate_for_large_weight_threshold
+                * max_eval.norm_squared().sqrt()
+    } else {
+        true
+    };
+
+    (results[0], stable && below_wgt_threshold)
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -839,13 +897,23 @@ fn evaluate_sample<I: GammaloopIntegrand>(
                 }
             };
 
-        let (average_result, is_stable) = stability_check(
-            integrand.get_settings(),
-            &results,
-            &stability_level,
-            max_eval,
-            wgt,
-        );
+        let (average_result, is_stable) = if integrand.get_settings().stability.check_on_norm {
+            stability_check_on_norm(
+                integrand.get_settings(),
+                &results,
+                &stability_level,
+                max_eval,
+                wgt,
+            )
+        } else {
+            stability_check(
+                integrand.get_settings(),
+                &results,
+                &stability_level,
+                max_eval,
+                wgt,
+            )
+        };
 
         let result_of_level = StabilityLevelResult {
             result: average_result,

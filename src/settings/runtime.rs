@@ -214,6 +214,8 @@ pub struct StabilitySettings {
     pub rotate_numerator: bool,
     #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub levels: Vec<StabilityLevelSetting>,
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    pub check_on_norm: bool,
 }
 
 impl Default for StabilitySettings {
@@ -225,6 +227,7 @@ impl Default for StabilitySettings {
                 StabilityLevelSetting::default_quad(),
             ],
             rotate_numerator: false,
+            check_on_norm: false,
         }
     }
 }
