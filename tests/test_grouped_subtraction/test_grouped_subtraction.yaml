@@ -3,7 +3,7 @@ global_settings:
   generation:
     enable_thresholds: true
     evaluator_settings:
-      iterative_orientation_optimization: false
+      iterative_orientation_optimization: true
       compile: true
     gammaloop_compile_options:
       inline_asm: true
@@ -84,15 +84,17 @@ commands:
   - Integrate:
       process_id: 0
       process_name: no_group
-      result_path: ./tests/test_grouped_subtraction/integration_workspace_no_group/integration_results.txt
+      result_path: ./tests/test_grouped_subtraction/integration_workspace_no_group/integration_results.yaml
       n_cores: 1
       workspace_path: ./tests/test_grouped_subtraction/integration_workspace_no_group/
       target: null
+      restart: true
   - Integrate:
       process_id: 1
       process_name: group
-      result_path: ./tests/test_grouped_subtraction/integration_workspace_group/integration_results.txt
+      result_path: ./tests/test_grouped_subtraction/integration_workspace_group/integration_results.yaml
       n_cores: 1
       workspace_path: ./tests/test_grouped_subtraction/integration_workspace_group/
       target: null
+      restart: true
 

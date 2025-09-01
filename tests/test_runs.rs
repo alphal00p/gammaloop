@@ -4,9 +4,12 @@ use _gammaloop::{
         Cli,
     },
     initialisation::test_initialise,
-    utils::test_utils::load_generic_model,
+    settings::runtime::IntegrationResult,
+    status_info,
+    utils::{test_utils::load_generic_model, F},
 };
 use color_eyre::Result;
+use momtrop::assert_approx_eq;
 use std::{env, path::Path};
 use tracing::{debug, warn};
 
@@ -56,7 +59,7 @@ fn qqx_aaa_subtracted_nlo_amplitude_test() -> Result<()> {
 
     let (mut cli, mut state) = new_cli_for_test("./tests/qqx_aaa_amplitude");
 
-    cmds.run(&mut cli, &mut state)?;
+    let _ = cmds.run(&mut cli, &mut state)?;
 
     clean_test(&state);
 
@@ -73,7 +76,36 @@ fn test_grouped_subtraction() -> Result<()> {
 
     let (mut cli, mut state) = new_cli_for_test("./tests/test_grouped_subtraction");
 
-    cmds.run(&mut cli, &mut state)?;
+    let _ = cmds.run(&mut cli, &mut state)?;
+
+    let integration_results_no_group: IntegrationResult = serde_yaml::from_str(
+        &std::fs::read_to_string(
+            "./tests/test_grouped_subtraction/integration_workspace_no_group/integration_results.yaml",
+        )
+        .unwrap(),
+    ).unwrap();
+
+    let integration_results_group: IntegrationResult = serde_yaml::from_str(
+        &std::fs::read_to_string(
+            "./tests/test_grouped_subtraction/integration_workspace_group/integration_results.yaml",
+        )
+        .unwrap(),
+    )
+    .unwrap();
+
+    status_info!("No group result: {:#?}", integration_results_no_group);
+    status_info!("Group result: {:#?}", integration_results_group);
+
+    assert_approx_eq(
+        &integration_results_group.result.re,
+        &integration_results_no_group.result.re,
+        &F(1e-1),
+    );
+    assert_approx_eq(
+        &integration_results_group.result.im,
+        &integration_results_no_group.result.im,
+        &F(1e-1),
+    );
 
     clean_test(&state);
 
