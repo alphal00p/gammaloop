@@ -9,7 +9,7 @@ use color_eyre::Report;
 use colored::Colorize;
 use itertools::izip;
 use itertools::Itertools;
-use rayon::iter::repeatn;
+use rayon::iter::repeat_n;
 use serde::Deserialize;
 use serde::Serialize;
 use spenso::algebra::algebraic_traits::IsZero;
@@ -340,13 +340,13 @@ where
 
         // the number of points per core is the same for all cores, except for the last one
         let target_points_per_core = (cur_points - 1) / cores + 1;
-        let n_points_per_core = repeatn(target_points_per_core, cores - 1).chain(
+        let n_points_per_core = repeat_n(target_points_per_core, cores - 1).chain(
             rayon::iter::once(cur_points - target_points_per_core * (cores - 1)),
         );
 
         let current_max_evals = integration_state.integral.get_worst_case();
 
-        let grids = repeatn(integration_state.grid.clone(), cores);
+        let grids = repeat_n(integration_state.grid.clone(), cores);
 
         let core_results: Vec<CoreResult> = user_data
             .integrand
@@ -595,28 +595,21 @@ where
 
     integration_state.display_orientation_results(settings);
 
-    disable! {
-        crate::IntegrationResult {
-            neval: integration_state.integral.processed_samples as i64,
-            fail: integration_state.integral.num_zero_evaluations as i32,
-            result: integration_state
-                .all_integrals
-                .iter()
-                .map(|res| res.avg)
-                .collect::<Vec<_>>(),
-            error: integration_state
-                .all_integrals
-                .iter()
-                .map(|res| res.err)
-                .collect::<Vec<_>>(),
-            prob: integration_state
-                .all_integrals
-                .iter()
-                .map(|res| res.chi_sq)
-                .collect::<Vec<_>>(),
-        }
+    IntegrationResult {
+        neval: integration_state.integral.re.processed_samples,
+        real_zero: integration_state.integral.re.num_zero_evaluations,
+        im_zero: integration_state.integral.im.num_zero_evaluations,
+        result: Complex::new(
+            integration_state.integral.re.avg,
+            integration_state.integral.im.avg,
+        ),
+        error: Complex::new(
+            integration_state.integral.re.err,
+            integration_state.integral.im.err,
+        ),
+        real_chisq: integration_state.integral.re.chi_sq,
+        im_chisq: integration_state.integral.im.chi_sq,
     }
-    IntegrationResult::default()
 }
 
 /// Batch integrate function used for distributed runs, used by the worker nodes.
