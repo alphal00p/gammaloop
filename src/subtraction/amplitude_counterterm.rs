@@ -539,7 +539,7 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
             for (i, _e) in orientations.iter() {
                 result += &iterative_result[i.0];
             }
-            result
+            result * prefactor
         } else {
             let mut local_ct = Complex::new_re(F::from_f64(0.0));
             let mut integrated_ct = Complex::new_re(F::from_f64(0.0));
