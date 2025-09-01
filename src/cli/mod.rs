@@ -5,6 +5,7 @@ use crate::{
     integrands::{integrand_factory, HasIntegrand},
     model::Model,
     processes::{ExportSettings, Process, ProcessDefinition},
+    status_info,
     utils::{F, GIT_VERSION, GS},
 };
 use bincode_trait_derive::{Decode, Encode};
@@ -19,6 +20,7 @@ use color_eyre::{config::HookBuilder, Report};
 use colored::Colorize;
 use console::style;
 use dirs::home_dir;
+use eyre::{eyre, Context};
 use integrate::Integrate;
 use log::LevelFilter;
 #[allow(unused_imports)]
@@ -27,9 +29,9 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
 use state::{current_log_spec, RunHistory, State};
-use std::ops::ControlFlow;
-use std::path::PathBuf;
-use std::time::Instant;
+use std::{fs, path::PathBuf};
+use std::{io, time::Instant};
+use std::{ops::ControlFlow, path::Path};
 use symbolica::numerical_integration::Sample;
 use tracing::{init_tracing, LogLevel};
 
@@ -124,9 +126,8 @@ impl Cli {
                 Save::Dot { path } => {
                     state.export_dots(path.unwrap_or(self.state_folder.clone()))?;
                 }
-                Save::State {} => {
-                    state.save(&self.state_folder, self.override_state, false)?;
-                    run_history.save_yaml(&self.state_folder, self.override_state, false)?;
+                Save::State { path } => {
+                    self.save_cli(state, run_history, path, false)?;
                 }
             },
             Commands::Set(s) => match s {
@@ -212,7 +213,7 @@ impl Cli {
             print_banner();
             let prompt = DefaultPrompt {
                 left_prompt: DefaultPromptSegment::Basic(format!(
-                    "{}:γloop",
+                    "{} | γloop ",
                     self.state_folder.display()
                 )),
                 ..DefaultPrompt::default()
@@ -274,8 +275,7 @@ impl Cli {
 
         if !self.no_save_state {
             debug!("Saving State, override: {}", self.override_state);
-            state.save(&self.state_folder, self.override_state, false)?;
-            run_history.save_yaml(&self.state_folder, self.override_state, false)?;
+            self.save_cli(&mut state, &run_history, None, false)?;
         }
         Ok(())
     }
@@ -286,6 +286,66 @@ impl Cli {
         let default_path = self.state_folder.join("run.yaml");
         let path = self.run_history.as_ref().unwrap_or(&default_path);
         RunHistory::new(path)
+    }
+
+    pub fn save_cli(
+        &self,
+        state: &mut State,
+        run_history: &RunHistory,
+        root_folder: Option<PathBuf>,
+        strict: bool,
+    ) -> Result<()> {
+        // let root_folder = root_folder.join("gammaloop_state");
+
+        // check if the export root exists, if not create it, if it does return error
+        let mut selected_root_folder = root_folder.unwrap_or(self.state_folder.clone());
+        if !selected_root_folder.exists() {
+            fs::create_dir_all(&selected_root_folder)?;
+        } else {
+            if strict {
+                return Err(eyre!(
+                    "Export root already exists, please choose a different path or remove the existing directory",
+                ));
+            }
+
+            if !self.override_state {
+                while selected_root_folder.clone().exists() {
+                    eprint!(
+                        "Gammaloop export root {} already exists. Specify '{}' for overwriting, '{}' for not saving, or '{}' to specify where to save current state to:\n > ",
+                        selected_root_folder.display().to_string().green(),
+                        "n".blue().bold(),
+                        "o".red().bold(),
+                        "<NEW_PATH>".green().bold()
+                    );
+                    let mut user_input = String::new();
+                    io::stdin()
+                        .read_line(&mut user_input)
+                        .expect("Could not read user-specified gammaloop state export destination");
+                    //user_input = user_input.trim().into();
+                    match user_input.trim() {
+                        "o" => {
+                            status_info!(
+                                "Overwriting existing gammaloop state at {}",
+                                selected_root_folder.display().to_string().green()
+                            );
+                            break;
+                        }
+                        "n" => {
+                            return Ok(());
+                        }
+                        new_path => {
+                            selected_root_folder = new_path.into();
+                            continue;
+                        }
+                    }
+                }
+            }
+        }
+
+        state.save(&selected_root_folder, true, false)?;
+        run_history.save_yaml(&selected_root_folder, true, false)?;
+
+        Ok(())
     }
 }
 
@@ -309,8 +369,9 @@ pub enum Save {
         path: Option<PathBuf>,
     },
     State {
-        // #[arg(short = 'o', long, default_value_t = false)]
-        // override_state: bool,
+        /// Path to save the state to, by default is the current state folder
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
     },
 }
 

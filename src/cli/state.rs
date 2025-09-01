@@ -1,6 +1,6 @@
 use std::{
     fs::{self, File},
-    io::{Read, Write},
+    io::{self, Read, Write},
     ops::ControlFlow,
     path::{Path, PathBuf},
     sync::{Mutex, OnceLock},
@@ -393,6 +393,7 @@ impl State {
         // let root_folder = root_folder.join("gammaloop_state");
 
         // check if the export root exists, if not create it, if it does return error
+        let mut selected_root_folder = root_folder;
         if !root_folder.exists() {
             fs::create_dir_all(root_folder)?;
         } else {
@@ -403,6 +404,27 @@ impl State {
             }
 
             if !override_state_file {
+                while selected_root_folder.exists() {
+                    println!(
+                        "Gammaloop export root {} already exists. Specify 'o' for overwriting, 'n' for not saving, or '<NEW_PATH>' to specify where to save current state to:",
+                        selected_root_folder.display()
+                    );
+                    let mut user_input = String::new();
+                    io::stdin()
+                        .read_line(&mut user_input)
+                        .expect("Could not read user-specified gammaloop state export destination");
+                    //user_input = user_input.trim().into();
+                    match user_input.trim() {
+                        "o" => break,
+                        "n" => {
+                            return Ok(());
+                        }
+                        new_path => {
+                            selected_root_folder = root_folder.into();
+                            continue;
+                        }
+                    }
+                }
                 return Err(eyre!(
                     "Export root already exists, please choose a different path or remove the existing directory",
                 ));
@@ -415,13 +437,13 @@ impl State {
 
         symbolica::state::State::export(&mut state_file)?;
         self.process_list
-            .save(root_folder, override_state_file, &self.model)?;
+            .save(selected_root_folder, override_state_file, &self.model)?;
 
         // let binary = bincode::encode_to_vec(&self.integrands, bincode::config::standard())?;
         // fs::write(root_folder.join("process_list.bin"), binary)?;?
         let model_yaml = serde_yaml::to_string(&self.model.to_serializable())?;
 
-        fs::write(root_folder.join("model.yaml"), model_yaml)?;
+        fs::write(selected_root_folder.join("model.yaml"), model_yaml)?;
         Ok(())
     }
 }

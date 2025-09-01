@@ -13,14 +13,12 @@ pub(crate) fn initialise() -> Result<()> {
         panic.install();
         eyre.install().unwrap();
 
-        let _ = GS.delta_vec;
-        crate::set_interrupt_handler();
-        // activate_oem_license!("SYMBOLICA_OEM_KEY_23177b25");
-
-        crate::initialize_reps();
-        if option_env!("SYMBOLICA_OEM_LICENSE").is_some() {
+        if option_env!("NO_SYMBOLICA_OEM_LICENSE").is_none() {
             activate_oem_license!("SYMBOLICA_OEM_KEY_23177b25");
         };
+
+        let _ = GS.delta_vec;
+        crate::set_interrupt_handler();
         crate::initialize_reps();
     });
     Ok(())

@@ -9,6 +9,7 @@ keywords = ["loop", "cross-section", "perturbative", "physics"]
 license-file = "LICENSE.md"
 readme = "README.md"
 repository = "https://github.com/alphal00p/gammaloop"
+build = "build.rs"
 
 [profile.dev-optim]
 inherits = "dev"
@@ -168,9 +169,11 @@ name = "_gammaloop"
 # required-features = ["python_api"]
 bench = false
 [[bin]]
-name = "cli"
+name = "gammaloop"
+path = "src/bin/cli.rs"
 # required-features = ["binary"]
 bench = false
+
 [features]
 default = []
 extension-module = ["pyo3/extension-module"]
