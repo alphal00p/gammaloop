@@ -663,6 +663,7 @@ impl State {
         n_cores: usize,
         workspace_path: PathBuf,
         target: Option<Vec<f64>>,
+        restart: bool,
     ) -> Result<Vec<Bound<'py, PyComplex>>> {
         let a = Integrate {
             process_id,
@@ -671,6 +672,7 @@ impl State {
             n_cores,
             workspace_path,
             target,
+            restart,
         }
         .run(self)?;
 
