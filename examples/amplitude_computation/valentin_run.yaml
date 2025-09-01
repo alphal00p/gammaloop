@@ -101,3 +101,4 @@ commands:
   #     n_cores: 1
   #     workspace_path: ./integration_workspace
   #     target: null
+  #     restart: true
