@@ -154,12 +154,8 @@ impl Esurface {
             let mass_sum: F<T> = self
                 .energies
                 .iter()
-                .map(|index| {
-                    let mass = &real_mass_vector[*index];
-                    mass * mass
-                })
-                .reduce(|acc, x| acc + x)
-                .unwrap_or_else(|| F::from_f64(0.0));
+                .map(|index| &real_mass_vector[*index])
+                .fold(F::from_f64(0.0), |acc, x| acc + x);
 
             let shift_vector_sq = self
                 .external_shift
@@ -173,7 +169,7 @@ impl Esurface {
                 .map(|v| v.norm_squared())
                 .unwrap_or_else(|| F::from_f64(0.0));
 
-            &shift_part * &shift_part - shift_vector_sq - mass_sum
+            &shift_part * &shift_part - shift_vector_sq - &mass_sum * &mass_sum
                 > F::from_ff64(EXISTENCE_THRESHOLD) * e_cm * e_cm
         } else {
             false
