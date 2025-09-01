@@ -47,6 +47,10 @@ pub struct Integrate {
     /// Specify the target integration result to compare against
     #[arg(short = 't', num_args = 2, long)]
     pub target: Option<Vec<f64>>,
+
+    /// Whether to restart the integration from scratch, or continue from a previous run if possible
+    #[arg(short = 'r', long)]
+    pub restart: bool,
 }
 
 impl Integrate {
@@ -58,6 +62,10 @@ impl Integrate {
         };
 
         state.process_list.warm_up()?;
+
+        if self.restart && self.workspace_path.exists() {
+            fs::remove_dir_all(&self.workspace_path)?;
+        }
 
         let gloop_integrand = state
             .process_list
