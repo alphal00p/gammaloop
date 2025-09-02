@@ -14,6 +14,7 @@ use crate::{
 #[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 #[derive(Debug, Clone, Default, Deserialize, Serialize, Encode, Decode, JsonSchema)]
 #[trait_decode(trait= GammaLoopContext)]
+#[serde(deny_unknown_fields)]
 pub struct GlobalSettings {
     #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub debug_level: LogLevel,
@@ -24,6 +25,7 @@ pub struct GlobalSettings {
 #[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 #[derive(Debug, Clone, Default, Deserialize, Serialize, Encode, Decode, JsonSchema)]
 #[trait_decode(trait= GammaLoopContext)]
+#[serde(deny_unknown_fields)]
 pub struct RuntimeSettings {
     // Runtime settings
     #[serde(
@@ -85,3 +87,16 @@ pub use runtime::{
     StabilitySettings, SubtractionSettings,
 };
 pub mod runtime;
+
+pub const fn _default_true() -> bool {
+    true
+}
+pub const fn _default_false() -> bool {
+    false
+}
+pub const fn _default_one() -> f64 {
+    1.0
+}
+pub const fn _default_usize_null() -> Option<usize> {
+    None
+}
