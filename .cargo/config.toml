@@ -1,2 +1,5 @@
 [target.x86_64-unknown-linux-gnu]
 linker = "clang"
+[env]
+# Visible to every rustc and every build script in the workspace build.
+SYMBOLICA_OEM_LICENSE = { value = "SYMBOLICA_OEM_GAMMALOOP", force = false }

@@ -393,7 +393,8 @@ impl State {
         // let root_folder = root_folder.join("gammaloop_state");
 
         // check if the export root exists, if not create it, if it does return error
-        let mut selected_root_folder = root_folder;
+        let mut selected_root_folder = PathBuf::from(root_folder);
+        let mut user_input = String::new();
         if !root_folder.exists() {
             fs::create_dir_all(root_folder)?;
         } else {
@@ -409,7 +410,7 @@ impl State {
                         "Gammaloop export root {} already exists. Specify 'o' for overwriting, 'n' for not saving, or '<NEW_PATH>' to specify where to save current state to:",
                         selected_root_folder.display()
                     );
-                    let mut user_input = String::new();
+                    user_input.clear();
                     io::stdin()
                         .read_line(&mut user_input)
                         .expect("Could not read user-specified gammaloop state export destination");
@@ -420,14 +421,11 @@ impl State {
                             return Ok(());
                         }
                         new_path => {
-                            selected_root_folder = root_folder.into();
+                            selected_root_folder = PathBuf::from(new_path);
                             continue;
                         }
                     }
                 }
-                return Err(eyre!(
-                    "Export root already exists, please choose a different path or remove the existing directory",
-                ));
             }
         }
 
@@ -437,7 +435,7 @@ impl State {
 
         symbolica::state::State::export(&mut state_file)?;
         self.process_list
-            .save(selected_root_folder, override_state_file, &self.model)?;
+            .save(&selected_root_folder, override_state_file, &self.model)?;
 
         // let binary = bincode::encode_to_vec(&self.integrands, bincode::config::standard())?;
         // fs::write(root_folder.join("process_list.bin"), binary)?;?

@@ -4,7 +4,7 @@ global_settings:
     enable_thresholds: true
     evaluator_settings:
       iterative_orientation_optimization: true
-      compile: false
+      compile: true
     gammaloop_compile_options:
       inline_asm: true
       optimization_level: O3

@@ -185,7 +185,7 @@ impl Cli {
     }
 
     pub fn run(mut self) -> Result<()> {
-        initialise();
+        initialise()?;
 
         let mut state = match State::load(self.state_folder.clone(), self.model_file.clone()) {
             Ok(state) => state,
