@@ -11,7 +11,7 @@ use symbolica::{
     function,
 };
 
-use crate::_default_true;
+use crate::settings::_default_true;
 use crate::{
     cff::expression::GraphOrientation,
     processes::EvaluatorSettings,
@@ -42,6 +42,7 @@ impl GlobalSettings {
 #[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 #[trait_decode(trait = GammaLoopContext)]
+#[serde(deny_unknown_fields)]
 pub struct GenerationSettings {
     // Generation Time settings
     #[serde(default, skip_serializing_if = "IsDefault::is_default")]
@@ -73,6 +74,7 @@ impl Default for GenerationSettings {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, Copy, JsonSchema)]
 #[cfg_attr(feature = "python_api", pyo3::pyclass)]
+#[serde(deny_unknown_fields)]
 pub enum CompilationOptimizationLevel {
     O0,
     O1,
@@ -115,6 +117,7 @@ pub fn is_gpp(compiler: &str) -> bool {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 #[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
+#[serde(deny_unknown_fields)]
 pub struct GammaloopCompileOptions {
     #[serde(default = "yes", skip_serializing_if = "std::clone::Clone::clone")]
     pub inline_asm: bool,
@@ -174,6 +177,7 @@ impl GammaloopCompileOptions {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 #[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
+#[serde(deny_unknown_fields)]
 pub struct TropicalSubgraphTableSettings {
     pub panic_on_fail: bool,
     pub target_omega: f64,
@@ -194,6 +198,7 @@ impl Default for TropicalSubgraphTableSettings {
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, Default, PartialEq, JsonSchema)]
 #[trait_decode(trait = GammaLoopContext)]
 #[cfg_attr(feature = "python_api", pyo3::pyclass)]
+#[serde(deny_unknown_fields)]
 pub struct OrientationPattern {
     pub pat: Option<StringSerializedAtom>,
 }

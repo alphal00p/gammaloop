@@ -204,8 +204,9 @@ mod tests_integral {
     use symbolica::domains::float::ConstructibleFloat;
 
     use crate::{
-        settings::runtime::ParameterizationMode, settings::runtime::ParameterizationSettings,
-        settings::runtime::SamplingSettings, HFunction, HFunctionSettings,
+        settings::runtime::ParameterizationMode,
+        settings::runtime::ParameterizationSettings,
+        settings::runtime::{HFunction, HFunctionSettings, SamplingSettings},
     };
 
     use super::*;
@@ -321,8 +322,9 @@ mod tests_integral {
 #[cfg(test)]
 mod tests_inspect {
     use crate::{
-        settings::runtime::ParameterizationMode, settings::runtime::ParameterizationSettings,
-        settings::runtime::SamplingSettings, HFunction, HFunctionSettings,
+        settings::runtime::ParameterizationMode,
+        settings::runtime::ParameterizationSettings,
+        settings::runtime::{HFunction, HFunctionSettings, SamplingSettings},
     };
 
     use super::*;

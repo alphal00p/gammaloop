@@ -3,6 +3,7 @@ use std::time::Duration;
 use crate::evaluation_result::EvaluationMetaData;
 use crate::evaluation_result::EvaluationResult;
 use crate::integrands::*;
+use crate::settings::runtime::HFunctionSettings;
 use crate::settings::runtime::ParameterizationMapping;
 use crate::settings::runtime::Precision;
 use crate::settings::runtime::SamplingSettings;
@@ -23,7 +24,7 @@ use symbolica::numerical_integration::{ContinuousGrid, Grid, Sample};
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 // #[trait_decode(trait= GammaLoopContext)]
 pub struct HFunctionTestSettings {
-    pub h_function: crate::HFunctionSettings,
+    pub h_function: HFunctionSettings,
 }
 
 #[derive(Clone)]

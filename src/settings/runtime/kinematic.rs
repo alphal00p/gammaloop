@@ -22,6 +22,7 @@ use color_eyre::{Result, Section};
 #[cfg_attr(feature = "python_api", pyo3::pyclass)]
 #[derive(Debug, Clone, Deserialize, Serialize, Encode, Decode, PartialEq, JsonSchema)]
 #[trait_decode(trait= GammaLoopContext)]
+#[serde(deny_unknown_fields)]
 pub struct KinematicsSettings {
     #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub e_cm: F<f64>,
@@ -50,6 +51,7 @@ impl Default for KinematicsSettings {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Encode, Decode, JsonSchema)]
 // #[trait_decode(trait= GammaLoopContext)]
 #[serde(tag = "type", content = "data")]
+#[serde(deny_unknown_fields)]
 pub enum Externals {
     #[serde(rename = "constant")]
     Constant {

@@ -10,13 +10,16 @@ use spenso::algebra::complex::Complex;
 use crate::{
     momentum::{RotationMethod, ThreeMomentum},
     utils::{serde_utils::IsDefault, FloatLike, F},
-    GammaLoopContext, HFunctionSettings,
+    GammaLoopContext,
 };
+
+use crate::settings::{_default_one, _default_true, _default_usize_null};
 
 use super::{global::OrientationPattern, RuntimeSettings};
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, Encode, Decode, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct SubtractionSettings {
     #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub local_ct_settings: LocalCounterTermSettings,
@@ -57,6 +60,7 @@ impl RuntimeSettings {
 #[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 #[derive(Debug, Clone, Deserialize, Serialize, Encode, Decode, PartialEq, JsonSchema)]
 #[trait_decode(trait= GammaLoopContext)]
+#[serde(deny_unknown_fields)]
 pub struct GeneralSettings {
     #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub use_ltd: bool,
@@ -90,6 +94,7 @@ impl Default for GeneralSettings {
     Debug, Copy, Clone, PartialEq, Deserialize, Default, Serialize, Encode, Decode, JsonSchema,
 )]
 // #[trait_decode(trait= GammaLoopContext)]
+#[serde(deny_unknown_fields)]
 pub enum IntegratedPhase {
     #[serde(rename = "real")]
     #[default]
@@ -104,6 +109,7 @@ pub mod kinematic;
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 #[derive(Debug, Clone, Deserialize, Serialize, Encode, Decode, PartialEq, JsonSchema)]
+#[serde(deny_unknown_fields)]
 // #[trait_decode(trait= GammaLoopContext)]
 pub struct IntegratorSettings {
     #[serde(default, skip_serializing_if = "IsDefault::is_default")]
@@ -156,6 +162,7 @@ impl Default for IntegratorSettings {
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Encode, Decode, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct ParameterizationSettings {
     #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub mode: ParameterizationMode,
@@ -195,6 +202,7 @@ impl Default for ParameterizationSettings {
 }
 
 #[derive(Serialize, Deserialize, Default, Debug)]
+#[serde(deny_unknown_fields)]
 pub struct IntegrationResult {
     pub neval: usize,
     pub real_zero: usize,
@@ -207,6 +215,7 @@ pub struct IntegrationResult {
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 #[derive(Serialize, Deserialize, Debug, Clone, Encode, Decode, PartialEq, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct StabilitySettings {
     #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub rotation_axis: Vec<RotationSetting>,
@@ -234,6 +243,7 @@ impl Default for StabilitySettings {
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, Encode, Decode, PartialEq, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct StabilityLevelSetting {
     #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub precision: Precision,
@@ -268,6 +278,7 @@ impl StabilityLevelSetting {
 #[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Encode, Decode, JsonSchema)]
 #[serde(tag = "type")]
+#[serde(deny_unknown_fields)]
 pub enum RotationSetting {
     #[serde(rename = "x")]
     Pi2X {},
@@ -348,6 +359,7 @@ impl RotationSetting {
     Decode,
     JsonSchema,
 )]
+#[serde(deny_unknown_fields)]
 pub enum Precision {
     #[default]
     Double,
@@ -367,6 +379,7 @@ impl Display for Precision {
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, Encode, Decode, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub enum ParameterizationMode {
     #[serde(rename = "cartesian")]
     Cartesian,
@@ -381,6 +394,7 @@ pub enum ParameterizationMode {
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct OutputMetadata {
     #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub model_name: String,
@@ -403,6 +417,7 @@ impl Display for ParameterizationMode {
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass)]
 #[derive(Debug, Clone, Deserialize, PartialEq, Default, Serialize, Encode, Decode, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub enum ParameterizationMapping {
     #[serde(rename = "log")]
     #[default]
@@ -414,6 +429,7 @@ pub enum ParameterizationMapping {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
 #[serde(tag = "type")]
 #[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
+#[serde(deny_unknown_fields)]
 pub enum SamplingSettings {
     #[serde(rename = "default")]
     Default(ParameterizationSettings),
@@ -532,6 +548,7 @@ impl SamplingSettings {
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct MultiChannelingSettings {
     #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub alpha: f64,
@@ -550,6 +567,7 @@ impl Default for MultiChannelingSettings {
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct GammaloopTropicalSamplingSettings {
     #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub upcast_on_failure: bool,
@@ -583,6 +601,7 @@ impl GammaloopTropicalSamplingSettings {
 #[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
 #[serde(tag = "subtype")]
+#[serde(deny_unknown_fields)]
 pub enum DiscreteGraphSamplingType {
     #[serde(rename = "default")]
     Default(ParameterizationSettings),
@@ -602,6 +621,7 @@ impl Default for DiscreteGraphSamplingType {
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct DiscreteGraphSamplingSettings {
     #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub sample_orientations: bool,
@@ -611,6 +631,7 @@ pub struct DiscreteGraphSamplingSettings {
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct LocalCounterTermSettings {
     #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub dampen_integrable_singularity: IntegrableSingularityDampener,
@@ -621,6 +642,7 @@ pub struct LocalCounterTermSettings {
 #[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
 #[serde(tag = "type")]
+#[serde(deny_unknown_fields)]
 pub enum IntegrableSingularityDampener {
     #[serde(rename = "none")]
     None {},
@@ -638,6 +660,7 @@ impl Default for IntegrableSingularityDampener {
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct UVLocalisationSettings {
     #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub sliver_width: f64,
@@ -659,6 +682,7 @@ impl Default for UVLocalisationSettings {
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct IntegratedCounterTermSettings {
     #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub range: IntegratedCounterTermRange,
@@ -667,6 +691,7 @@ pub struct IntegratedCounterTermSettings {
 #[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
 #[serde(tag = "type")]
+#[serde(deny_unknown_fields)]
 pub enum IntegratedCounterTermRange {
     #[serde(rename = "infinite")]
     Infinite {
@@ -686,6 +711,7 @@ impl Default for IntegratedCounterTermRange {
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct OverlapSettings {
     #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub force_global_center: Option<Vec<[f64; 3]>>,
@@ -704,6 +730,46 @@ impl Default for OverlapSettings {
             check_global_center: true,
             try_origin: false,
             try_origin_all_lmbs: false,
+        }
+    }
+}
+
+#[cfg_attr(feature = "python_api", pyo3::pyclass)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
+#[serde(deny_unknown_fields)]
+// #[trait_decode(trait= GammaLoopContext)]
+pub enum HFunction {
+    #[default]
+    #[serde(rename = "poly_exponential")]
+    PolyExponential,
+    #[serde(rename = "exponential")]
+    Exponential,
+    #[serde(rename = "poly_left_right_exponential")]
+    PolyLeftRightExponential,
+    #[serde(rename = "exponential_ct")]
+    ExponentialCT,
+}
+
+#[cfg_attr(feature = "python_api", pyo3::pyclass)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct HFunctionSettings {
+    pub function: HFunction,
+    #[serde(default = "_default_one")]
+    pub sigma: f64,
+    #[serde(default = "_default_true")]
+    pub enabled_dampening: bool,
+    #[serde(default = "_default_usize_null")]
+    pub power: Option<usize>,
+}
+
+impl Default for HFunctionSettings {
+    fn default() -> Self {
+        Self {
+            sigma: 1.0,
+            function: HFunction::default(),
+            enabled_dampening: true,
+            power: None,
         }
     }
 }

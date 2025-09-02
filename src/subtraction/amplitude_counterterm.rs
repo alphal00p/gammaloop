@@ -10,13 +10,13 @@ use linnet::{
     half_edge::involution::{EdgeVec, Orientation},
     parser::global,
 };
-use log::debug;
 use spenso::algebra::complex::Complex;
 use symbolica::{
     atom::Atom,
     domains::float::{NumericalFloatLike, Real},
     evaluate::OptimizationSettings,
 };
+use tracing::debug;
 use typed_index_collections::TiVec;
 
 use crate::{
@@ -532,10 +532,6 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
 
             let mut result = Complex::new_re(self.rstar_sample.zero());
 
-            debug!(
-                "viewing local and integrated ct seperately is not yet available in iterative mode"
-            );
-
             for (i, _e) in orientations.iter() {
                 result += &iterative_result[i.0];
             }
@@ -569,10 +565,7 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
             (local_ct + integrated_ct) * prefactor
         };
 
-        debug!(
-            "sum of local and integrated ct (with prefactor): {:+16e}",
-            final_result
-        );
+        debug!(ct_eval = format!("{:+16e}", final_result), "ct evaluation");
 
         final_result
     }

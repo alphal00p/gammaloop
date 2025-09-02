@@ -1975,7 +1975,7 @@ pub(crate) fn h<T: FloatLike>(
     t: &F<T>,
     tstar: Option<F<T>>,
     sigma: Option<F<T>>,
-    h_function_settings: &crate::HFunctionSettings,
+    h_function_settings: &crate::settings::runtime::HFunctionSettings,
 ) -> F<T> {
     let sqrt_pi = t.PI().sqrt();
     let sig = if let Some(s) = sigma {
@@ -1985,10 +1985,10 @@ pub(crate) fn h<T: FloatLike>(
     };
     let power = h_function_settings.power;
     match h_function_settings.function {
-        crate::HFunction::Exponential => {
+        crate::settings::runtime::HFunction::Exponential => {
             (-(t.square()) / (sig.square())).exp() * F::<T>::from_f64(2_f64) / (sqrt_pi * &sig)
         }
-        crate::HFunction::PolyExponential => {
+        crate::settings::runtime::HFunction::PolyExponential => {
             // Result of \int_0^{\infty} dt (t/sigma)^{-p} exp(2-t^2/sigma^2-sigma^2/t^2)
             let normalisation = match power {
                 None | Some(0) => sqrt_pi * &sig / F::<T>::from_f64(2_f64),
@@ -2018,7 +2018,7 @@ pub(crate) fn h<T: FloatLike>(
                     - (sig.square()) / (t.square()))
                 .exp()
         }
-        crate::HFunction::PolyLeftRightExponential => {
+        crate::settings::runtime::HFunction::PolyLeftRightExponential => {
             // Result of \int_0^{\infty} dt (t/sigma)^{-p} exp( -((t^2/sigma^2 +1)/ (t/sigma) -2) )
             let normalisation = match power {
                 None | Some(0) => F::<T>::from_f64(2.066_953_694_137_377) * &sig,
@@ -2054,7 +2054,7 @@ pub(crate) fn h<T: FloatLike>(
                 * (F::<T>::from_f64(2_f64) - ((t.square()) / (sig.square()) + t.one()) / (t / sig))
                     .exp()
         }
-        crate::HFunction::ExponentialCT => {
+        crate::settings::runtime::HFunction::ExponentialCT => {
             let delta_t_sq = (tstar.clone().unwrap() - t).square();
             let tstar_sq = tstar.unwrap().square();
             // info!("dampener: {}", dampener);

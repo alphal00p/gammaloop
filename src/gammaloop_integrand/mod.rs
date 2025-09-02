@@ -18,13 +18,13 @@ use enum_dispatch::enum_dispatch;
 use eyre::{eyre, Context};
 use gammaloop_sample::{parameterize, DiscreteGraphSample, GammaLoopSample};
 use itertools::Itertools;
-use log::debug;
 use momtrop::float::MomTropFloat;
 use momtrop::SampleGenerator;
 use serde::{Deserialize, Serialize};
 use spenso::algebra::algebraic_traits::IsZero;
 use spenso::algebra::complex::Complex;
 use std::time::Duration;
+use tracing::debug;
 
 use symbolica::numerical_integration::{ContinuousGrid, DiscreteGrid, Grid, Sample};
 use typed_index_collections::TiVec;
@@ -851,51 +851,42 @@ fn evaluate_sample<I: GammaloopIntegrand>(
     for stability_level in stability_iterator.into_iter() {
         let before_parameterization = std::time::Instant::now();
 
-        let ((results, ltd_evaluation_time), parameterization_time) =
-            match stability_level.precision {
-                Precision::Double => {
-                    // let mut param_builder = integrand.get_builder_cache().clone();
-
-                    // param_builder.m_uv_value(Complex::new_re(HARD_CODED_M_UV));
-                    // param_builder.m_uv_atom(Atom::var(GS.m_uv));
-                    // param_builder.mu_r_sq_value(Complex::new_re(HARD_CODED_M_R_SQ));
-                    // param_builder.mu_r_sq_atom(Atom::var(GS.mu_r_sq));
-                    // param_builder.model_parameters_atom(model);
-                    // param_builder.model_parameters.values =
-                    //     integrand.get_model_parameter_cache::<f64>();
-
-                    if let Ok(gammaloop_sample) = parameterize::<f64, I>(sample, integrand) {
-                        let parameterization_time = before_parameterization.elapsed();
-                        (
-                            evaluate_all_rotations(integrand, &gammaloop_sample),
-                            parameterization_time,
-                        )
-                    } else {
-                        continue;
-                    }
+        let ((results, ltd_evaluation_time), parameterization_time) = match stability_level
+            .precision
+        {
+            Precision::Double => {
+                if let Ok(gammaloop_sample) = parameterize::<f64, I>(sample, integrand) {
+                    debug!(
+                        jacobian =
+                            format!("{:+16e}", gammaloop_sample.get_default_sample().jacobian())
+                    );
+                    let parameterization_time = before_parameterization.elapsed();
+                    (
+                        evaluate_all_rotations(integrand, &gammaloop_sample),
+                        parameterization_time,
+                    )
+                } else {
+                    continue;
                 }
-                Precision::Quad => {
-                    // let mut param_builder = ParamBuilder::<f128>::new();
-
-                    // param_builder.m_uv_value(Complex::new_re(F::from_ff64(HARD_CODED_M_UV)));
-                    // param_builder.mu_r_sq_value(Complex::new_re(F::from_ff64(HARD_CODED_M_R_SQ)));
-                    // // param_builder.model_parameters.values =
-                    //     integrand.get_model_parameter_cache::<f128>();
-
-                    if let Ok(gammaloop_sample) = parameterize::<f128, I>(sample, integrand) {
-                        let parameterization_time = before_parameterization.elapsed();
-                        (
-                            evaluate_all_rotations(integrand, &gammaloop_sample),
-                            parameterization_time,
-                        )
-                    } else {
-                        continue;
-                    }
+            }
+            Precision::Quad => {
+                if let Ok(gammaloop_sample) = parameterize::<f128, I>(sample, integrand) {
+                    debug!(
+                        jacobian = format!("{}", gammaloop_sample.get_default_sample().jacobian())
+                    );
+                    let parameterization_time = before_parameterization.elapsed();
+                    (
+                        evaluate_all_rotations(integrand, &gammaloop_sample),
+                        parameterization_time,
+                    )
+                } else {
+                    continue;
                 }
-                Precision::Arb => {
-                    todo!()
-                }
-            };
+            }
+            Precision::Arb => {
+                todo!()
+            }
+        };
 
         let (average_result, is_stable) = if integrand.get_settings().stability.check_on_norm {
             stability_check_on_norm(

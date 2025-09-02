@@ -102,21 +102,6 @@ pub const MAX_LOOP: usize = 3;
 #[cfg(feature = "higher_loops")]
 pub const MAX_LOOP: usize = 6;
 
-#[cfg_attr(feature = "python_api", pyo3::pyclass)]
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
-// #[trait_decode(trait= GammaLoopContext)]
-pub enum HFunction {
-    #[default]
-    #[serde(rename = "poly_exponential")]
-    PolyExponential,
-    #[serde(rename = "exponential")]
-    Exponential,
-    #[serde(rename = "poly_left_right_exponential")]
-    PolyLeftRightExponential,
-    #[serde(rename = "exponential_ct")]
-    ExponentialCT,
-}
-
 pub(crate) fn set_interrupt_handler() {
     INTERRUPTED.store(false, std::sync::atomic::Ordering::Relaxed);
     let _ = ctrlc::set_handler(|| {
@@ -132,43 +117,6 @@ pub(crate) fn is_interrupted() -> bool {
 #[inline]
 pub(crate) fn set_interrupted(flag: bool) {
     INTERRUPTED.store(flag, std::sync::atomic::Ordering::Relaxed);
-}
-
-pub const fn _default_true() -> bool {
-    true
-}
-pub const fn _default_false() -> bool {
-    false
-}
-pub const fn _default_one() -> f64 {
-    1.0
-}
-pub const fn _default_usize_null() -> Option<usize> {
-    None
-}
-
-#[cfg_attr(feature = "python_api", pyo3::pyclass)]
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
-// #[trait_decode(trait= GammaLoopContext)]
-pub struct HFunctionSettings {
-    pub function: HFunction,
-    #[serde(default = "_default_one")]
-    pub sigma: f64,
-    #[serde(default = "_default_true")]
-    pub enabled_dampening: bool,
-    #[serde(default = "_default_usize_null")]
-    pub power: Option<usize>,
-}
-
-impl Default for HFunctionSettings {
-    fn default() -> Self {
-        Self {
-            sigma: 1.0,
-            function: HFunction::default(),
-            enabled_dampening: true,
-            power: None,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Copy)]
