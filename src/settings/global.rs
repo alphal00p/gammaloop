@@ -11,7 +11,6 @@ use symbolica::{
     function,
 };
 
-use crate::settings::_default_true;
 use crate::{
     cff::expression::GraphOrientation,
     processes::EvaluatorSettings,
@@ -42,20 +41,20 @@ impl GlobalSettings {
 #[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 #[trait_decode(trait = GammaLoopContext)]
-#[serde(deny_unknown_fields)]
+#[serde(default, deny_unknown_fields)]
 pub struct GenerationSettings {
     // Generation Time settings
-    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub evaluator_settings: EvaluatorSettings,
-    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub orientation_pattern: OrientationPattern,
-    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub gammaloop_compile_options: GammaloopCompileOptions,
-    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub tropical_subgraph_table_settings: TropicalSubgraphTableSettings,
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")] // default false
+    #[serde(skip_serializing_if = "std::ops::Not::not")] // default false
     pub enable_thresholds: bool,
-    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub uv_settings: UVgenerationSettings,
 }
 
@@ -117,23 +116,23 @@ pub fn is_gpp(compiler: &str) -> bool {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 #[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
-#[serde(deny_unknown_fields)]
+#[serde(default, deny_unknown_fields)]
 pub struct GammaloopCompileOptions {
-    #[serde(default = "yes", skip_serializing_if = "std::clone::Clone::clone")]
+    #[serde(skip_serializing_if = "std::clone::Clone::clone")]
     pub inline_asm: bool,
 
-    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub optimization_level: CompilationOptimizationLevel,
 
-    #[serde(default = "yes", skip_serializing_if = "std::clone::Clone::clone")] // default true
+    #[serde(skip_serializing_if = "std::clone::Clone::clone")] // default true
     pub fast_math: bool,
 
-    #[serde(default = "yes", skip_serializing_if = "std::clone::Clone::clone")] // default true
+    #[serde(skip_serializing_if = "std::clone::Clone::clone")] // default true
     pub unsafe_math: bool,
 
-    #[serde(default = "gpp", skip_serializing_if = "is_gpp")] // default g++
+    #[serde(skip_serializing_if = "is_gpp")] // default g++
     pub compiler: String,
-    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub custom: Vec<String>,
 }
 
@@ -177,11 +176,11 @@ impl GammaloopCompileOptions {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 #[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
-#[serde(deny_unknown_fields)]
+#[serde(default, deny_unknown_fields)]
 pub struct TropicalSubgraphTableSettings {
     pub panic_on_fail: bool,
     pub target_omega: f64,
-    #[serde(default = "_default_true", skip_serializing_if = "std::ops::Not::not")] // default true
+    #[serde(skip_serializing_if = "std::ops::Not::not")] // default true
     pub disable_tropical_generation: bool,
 }
 
@@ -198,7 +197,7 @@ impl Default for TropicalSubgraphTableSettings {
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, Default, PartialEq, JsonSchema)]
 #[trait_decode(trait = GammaLoopContext)]
 #[cfg_attr(feature = "python_api", pyo3::pyclass)]
-#[serde(deny_unknown_fields)]
+#[serde(default, deny_unknown_fields)]
 pub struct OrientationPattern {
     pub pat: Option<StringSerializedAtom>,
 }

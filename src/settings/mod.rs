@@ -18,70 +18,38 @@ use crate::{
 #[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 #[derive(Debug, Clone, Default, Deserialize, Serialize, Encode, Decode, JsonSchema)]
 #[trait_decode(trait= GammaLoopContext)]
-#[serde(deny_unknown_fields)]
+#[serde(default, deny_unknown_fields)]
 pub struct GlobalSettings {
-    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub debug_level: LogLevel,
-    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub generation: GenerationSettings,
 }
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 #[derive(Debug, Clone, Default, Deserialize, Serialize, Encode, Decode, JsonSchema)]
 #[trait_decode(trait= GammaLoopContext)]
-#[serde(deny_unknown_fields)]
+#[serde(default, deny_unknown_fields)]
 pub struct RuntimeSettings {
     // Runtime settings
-    #[serde(
-        rename = "General",
-        default,
-        skip_serializing_if = "IsDefault::is_default"
-    )]
+    #[serde(rename = "General", skip_serializing_if = "IsDefault::is_default")]
     pub general: GeneralSettings,
-    #[serde(
-        rename = "Integrand",
-        default,
-        skip_serializing_if = "IsDefault::is_default"
-    )]
+    #[serde(rename = "Integrand", skip_serializing_if = "IsDefault::is_default")]
     pub hard_coded_integrand: IntegrandSettings,
-    #[serde(
-        rename = "Kinematics",
-        default,
-        skip_serializing_if = "IsDefault::is_default"
-    )]
+    #[serde(rename = "Kinematics", skip_serializing_if = "IsDefault::is_default")]
     pub kinematics: KinematicsSettings,
-    #[serde(
-        rename = "Integrator",
-        default,
-        skip_serializing_if = "IsDefault::is_default"
-    )]
+    #[serde(rename = "Integrator", skip_serializing_if = "IsDefault::is_default")]
     pub integrator: IntegratorSettings,
-    #[serde(
-        rename = "Observables",
-        default,
-        skip_serializing_if = "IsDefault::is_default"
-    )]
+    #[serde(rename = "Observables", skip_serializing_if = "IsDefault::is_default")]
     pub observables: Vec<ObservableSettings>,
-    #[serde(
-        rename = "Selectors",
-        default,
-        skip_serializing_if = "IsDefault::is_default"
-    )]
+    #[serde(rename = "Selectors", skip_serializing_if = "IsDefault::is_default")]
     pub selectors: Vec<PhaseSpaceSelectorSettings>,
     #[serde(rename = "Stability")]
-    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub stability: StabilitySettings,
-    #[serde(
-        rename = "sampling",
-        default,
-        skip_serializing_if = "IsDefault::is_default"
-    )]
+    #[serde(rename = "sampling", skip_serializing_if = "IsDefault::is_default")]
     pub sampling: SamplingSettings,
-    #[serde(
-        rename = "subtraction",
-        default,
-        skip_serializing_if = "IsDefault::is_default"
-    )]
+    #[serde(rename = "subtraction", skip_serializing_if = "IsDefault::is_default")]
     pub subtraction: SubtractionSettings,
 }
 
@@ -139,16 +107,3 @@ pub use runtime::{
     StabilitySettings, SubtractionSettings,
 };
 pub mod runtime;
-
-pub const fn _default_true() -> bool {
-    true
-}
-pub const fn _default_false() -> bool {
-    false
-}
-pub const fn _default_one() -> f64 {
-    1.0
-}
-pub const fn _default_usize_null() -> Option<usize> {
-    None
-}

@@ -532,6 +532,10 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
 
             let mut result = Complex::new_re(self.rstar_sample.zero());
 
+            debug!(
+                "viewing local and integrated ct seperately is not yet available in iterative mode"
+            );
+
             for (i, _e) in orientations.iter() {
                 result += &iterative_result[i.0];
             }

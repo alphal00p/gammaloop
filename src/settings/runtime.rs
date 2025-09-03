@@ -13,21 +13,19 @@ use crate::{
     GammaLoopContext,
 };
 
-use crate::settings::{_default_one, _default_true, _default_usize_null};
-
 use super::{global::OrientationPattern, RuntimeSettings};
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, Encode, Decode, JsonSchema)]
-#[serde(deny_unknown_fields)]
+#[serde(default, deny_unknown_fields)]
 pub struct SubtractionSettings {
-    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub local_ct_settings: LocalCounterTermSettings,
-    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub integrated_ct_settings: IntegratedCounterTermSettings,
-    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub overlap_settings: OverlapSettings,
-    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub disable_threshold_subtraction: bool,
 }
 
@@ -48,19 +46,19 @@ impl<'a> From<LockedRuntimeSettings<'a>> for RuntimeSettings {
 #[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 #[derive(Debug, Clone, Deserialize, Serialize, Encode, Decode, PartialEq, JsonSchema)]
 #[trait_decode(trait= GammaLoopContext)]
-#[serde(deny_unknown_fields)]
+#[serde(default, deny_unknown_fields)]
 pub struct GeneralSettings {
-    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub use_ltd: bool,
-    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub orientation_pat: OrientationPattern,
-    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub load_compiled_cff: bool,
     // #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     // pub amplitude_prefactor: Option<Complex<F<f64>>>,
-    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub m_uv: F<f64>,
-    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub mu_r_sq: F<f64>,
 }
 #[allow(clippy::derivable_impls)] // we might not want the standard defaults in the future
@@ -97,34 +95,33 @@ pub mod kinematic;
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 #[derive(Debug, Clone, Deserialize, Serialize, Encode, Decode, PartialEq, JsonSchema)]
-#[serde(deny_unknown_fields)]
-// #[trait_decode(trait= GammaLoopContext)]
+#[serde(default, deny_unknown_fields)]
 pub struct IntegratorSettings {
-    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub n_bins: usize,
-    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub bin_number_evolution: Option<Vec<usize>>,
-    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub min_samples_for_update: usize,
-    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub n_start: usize,
-    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub n_increase: usize,
-    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub n_max: usize,
-    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub integrated_phase: IntegratedPhase,
-    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub discrete_dim_learning_rate: F<f64>,
-    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub continuous_dim_learning_rate: F<f64>,
-    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub train_on_avg: bool,
-    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub show_max_wgt_info: bool,
-    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub max_prob_ratio: F<f64>,
-    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub seed: u64,
 }
 
@@ -150,24 +147,18 @@ impl Default for IntegratorSettings {
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Encode, Decode, JsonSchema)]
-#[serde(deny_unknown_fields)]
+#[serde(default, deny_unknown_fields)]
 pub struct ParameterizationSettings {
-    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub mode: ParameterizationMode,
-    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub mapping: ParameterizationMapping,
-    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub b: f64,
 
-    #[serde(
-        default = "_default_input_rescaling",
-        skip_serializing_if = "IsDefault::is_default"
-    )]
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub input_rescaling: Vec<Vec<(f64, f64)>>,
-    #[serde(
-        default = "_default_shifts",
-        skip_serializing_if = "IsDefault::is_default"
-    )]
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub shifts: Vec<(f64, f64, f64, f64)>,
 }
 
@@ -190,7 +181,7 @@ impl Default for ParameterizationSettings {
 }
 
 #[derive(Serialize, Deserialize, Default, Debug)]
-#[serde(deny_unknown_fields)]
+#[serde(default, deny_unknown_fields)]
 pub struct IntegrationResult {
     pub neval: usize,
     pub real_zero: usize,
@@ -203,15 +194,15 @@ pub struct IntegrationResult {
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 #[derive(Serialize, Deserialize, Debug, Clone, Encode, Decode, PartialEq, JsonSchema)]
-#[serde(deny_unknown_fields)]
+#[serde(default, deny_unknown_fields)]
 pub struct StabilitySettings {
-    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub rotation_axis: Vec<RotationSetting>,
-    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub rotate_numerator: bool,
-    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub levels: Vec<StabilityLevelSetting>,
-    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub check_on_norm: bool,
 }
 
@@ -233,13 +224,13 @@ impl Default for StabilitySettings {
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, Encode, Decode, PartialEq, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct StabilityLevelSetting {
-    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub precision: Precision,
-    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub required_precision_for_re: F<f64>,
-    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub required_precision_for_im: F<f64>,
-    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub escalate_for_large_weight_threshold: F<f64>,
 }
 
@@ -381,14 +372,14 @@ pub enum ParameterizationMode {
 }
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default, deny_unknown_fields)]
 pub struct OutputMetadata {
-    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub model_name: String,
-    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub output_type: String,
-    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub contents: Vec<String>,
 }
 
@@ -536,11 +527,11 @@ impl SamplingSettings {
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
-#[serde(deny_unknown_fields)]
+#[serde(deny_unknown_fields, default)]
 pub struct MultiChannelingSettings {
-    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub alpha: f64,
-    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub parameterization_settings: ParameterizationSettings,
 }
 
@@ -555,11 +546,11 @@ impl Default for MultiChannelingSettings {
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
-#[serde(deny_unknown_fields)]
+#[serde(deny_unknown_fields, default)]
 pub struct GammaloopTropicalSamplingSettings {
-    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub upcast_on_failure: bool,
-    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub matrix_stability_test: Option<f64>,
 }
 
@@ -588,8 +579,7 @@ impl GammaloopTropicalSamplingSettings {
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
-#[serde(tag = "subtype")]
-#[serde(deny_unknown_fields)]
+#[serde(tag = "subtype", deny_unknown_fields)]
 pub enum DiscreteGraphSamplingType {
     #[serde(rename = "default")]
     Default(ParameterizationSettings),
@@ -608,29 +598,28 @@ impl Default for DiscreteGraphSamplingType {
 }
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
-#[serde(deny_unknown_fields)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema, Default)]
+#[serde(deny_unknown_fields, default)]
 pub struct DiscreteGraphSamplingSettings {
-    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub sample_orientations: bool,
-    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub sampling_type: DiscreteGraphSamplingType,
 }
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
-#[serde(deny_unknown_fields)]
+#[serde(deny_unknown_fields, default)]
 pub struct LocalCounterTermSettings {
-    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub dampen_integrable_singularity: IntegrableSingularityDampener,
-    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub uv_localisation: UVLocalisationSettings,
 }
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
-#[serde(tag = "type")]
-#[serde(deny_unknown_fields)]
+#[serde(tag = "type", deny_unknown_fields)]
 pub enum IntegrableSingularityDampener {
     #[serde(rename = "none")]
     None {},
@@ -648,13 +637,13 @@ impl Default for IntegrableSingularityDampener {
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
-#[serde(deny_unknown_fields)]
+#[serde(default, deny_unknown_fields)]
 pub struct UVLocalisationSettings {
-    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub sliver_width: f64,
-    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub dynamic_width: bool,
-    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub gaussian_width: f64,
 }
 
@@ -670,9 +659,9 @@ impl Default for UVLocalisationSettings {
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
-#[serde(deny_unknown_fields)]
+#[serde(deny_unknown_fields, default)]
 pub struct IntegratedCounterTermSettings {
-    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub range: IntegratedCounterTermRange,
 }
 
@@ -700,14 +689,16 @@ impl Default for IntegratedCounterTermRange {
 #[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
 #[serde(deny_unknown_fields)]
+#[serde(default)]
 pub struct OverlapSettings {
-    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    //v
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub force_global_center: Option<Vec<[f64; 3]>>,
-    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub check_global_center: bool,
-    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub try_origin: bool,
-    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub try_origin_all_lmbs: bool,
 }
 
@@ -741,13 +732,11 @@ pub enum HFunction {
 #[cfg_attr(feature = "python_api", pyo3::pyclass)]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
 #[serde(deny_unknown_fields)]
+#[serde(default)]
 pub struct HFunctionSettings {
     pub function: HFunction,
-    #[serde(default = "_default_one")]
     pub sigma: f64,
-    #[serde(default = "_default_true")]
     pub enabled_dampening: bool,
-    #[serde(default = "_default_usize_null")]
     pub power: Option<usize>,
 }
 
@@ -759,5 +748,54 @@ impl Default for HFunctionSettings {
             enabled_dampening: true,
             power: None,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde::{Deserialize, Serialize};
+
+    #[test]
+    fn test_serde() {
+        #[derive(Serialize, Deserialize, Debug)]
+        #[serde(deny_unknown_fields, default)]
+        struct SS {
+            a: f64,
+            b: f64,
+            sss: SSS,
+        }
+
+        #[derive(Serialize, Deserialize, Debug)]
+        #[serde(deny_unknown_fields, default)]
+        struct SSS {
+            g: f64,
+            f: f64,
+        }
+
+        impl Default for SS {
+            fn default() -> Self {
+                Self {
+                    a: 1.0,
+                    b: 2.0,
+                    sss: SSS { g: 8.0, f: 9.0 },
+                }
+            }
+        }
+
+        impl Default for SSS {
+            fn default() -> Self {
+                Self { g: 5.0, f: 6.0 }
+            }
+        }
+
+        let test = "
+a: 3.0
+sss:
+    g: 66.0
+";
+
+        let s: SS = serde_yaml::from_str(test).unwrap();
+
+        println!("{:?}", s);
     }
 }
