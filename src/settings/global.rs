@@ -14,7 +14,11 @@ use symbolica::{
 use crate::{
     cff::expression::GraphOrientation,
     processes::EvaluatorSettings,
-    utils::{serde_utils::IsDefault, symbolica_ext::StringSerializedAtom, GS, W_},
+    utils::{
+        serde_utils::{is_false, is_float, is_true, IsDefault},
+        symbolica_ext::StringSerializedAtom,
+        F, GS, W_,
+    },
     uv::UVgenerationSettings,
     GammaLoopContext,
 };
@@ -52,7 +56,7 @@ pub struct GenerationSettings {
     pub gammaloop_compile_options: GammaloopCompileOptions,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub tropical_subgraph_table_settings: TropicalSubgraphTableSettings,
-    #[serde(skip_serializing_if = "std::ops::Not::not")] // default false
+    #[serde(skip_serializing_if = "is_true")]
     pub enable_thresholds: bool,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub uv_settings: UVgenerationSettings,
@@ -65,7 +69,7 @@ impl Default for GenerationSettings {
             orientation_pattern: OrientationPattern::default(),
             gammaloop_compile_options: GammaloopCompileOptions::default(),
             tropical_subgraph_table_settings: TropicalSubgraphTableSettings::default(),
-            enable_thresholds: false,
+            enable_thresholds: true,
             uv_settings: UVgenerationSettings::default(),
         }
     }
@@ -118,16 +122,16 @@ pub fn is_gpp(compiler: &str) -> bool {
 #[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 #[serde(default, deny_unknown_fields)]
 pub struct GammaloopCompileOptions {
-    #[serde(skip_serializing_if = "std::clone::Clone::clone")]
+    #[serde(skip_serializing_if = "is_true")]
     pub inline_asm: bool,
 
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub optimization_level: CompilationOptimizationLevel,
 
-    #[serde(skip_serializing_if = "std::clone::Clone::clone")] // default true
+    #[serde(skip_serializing_if = "is_true")]
     pub fast_math: bool,
 
-    #[serde(skip_serializing_if = "std::clone::Clone::clone")] // default true
+    #[serde(skip_serializing_if = "is_true")] // default true
     pub unsafe_math: bool,
 
     #[serde(skip_serializing_if = "is_gpp")] // default g++
@@ -178,9 +182,11 @@ impl GammaloopCompileOptions {
 #[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 #[serde(default, deny_unknown_fields)]
 pub struct TropicalSubgraphTableSettings {
+    #[serde(skip_serializing_if = "is_false")]
     pub panic_on_fail: bool,
-    pub target_omega: f64,
-    #[serde(skip_serializing_if = "std::ops::Not::not")] // default true
+    #[serde(skip_serializing_if = "is_float::<1>")] // default 1.0
+    pub target_omega: F<f64>,
+    #[serde(skip_serializing_if = "is_false")]
     pub disable_tropical_generation: bool,
 }
 
@@ -188,7 +194,7 @@ impl Default for TropicalSubgraphTableSettings {
     fn default() -> Self {
         Self {
             panic_on_fail: false,
-            target_omega: 1.0,
+            target_omega: F(1.0),
             disable_tropical_generation: false,
         }
     }
@@ -199,6 +205,7 @@ impl Default for TropicalSubgraphTableSettings {
 #[cfg_attr(feature = "python_api", pyo3::pyclass)]
 #[serde(default, deny_unknown_fields)]
 pub struct OrientationPattern {
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub pat: Option<StringSerializedAtom>,
 }
 

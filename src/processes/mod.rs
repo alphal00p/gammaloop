@@ -237,7 +237,7 @@ mod tests {
             TropicalSubgraphTableSettings,
         },
         signature::LoopExtSignature,
-        utils::test_utils::load_generic_model,
+        utils::{test_utils::load_generic_model, F},
         GammaLoopContextContainer,
     };
 
@@ -294,7 +294,7 @@ mod tests {
                     },
                     tropical_subgraph_table_settings: TropicalSubgraphTableSettings {
                         panic_on_fail: false,
-                        target_omega: 1.0,
+                        target_omega: F(1.0),
                         ..Default::default()
                     },
                     ..Default::default()

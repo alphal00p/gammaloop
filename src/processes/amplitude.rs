@@ -804,7 +804,7 @@ impl AmplitudeGraph {
             .tropical_subgraph_table_settings
             .target_omega;
 
-        let weight = (target_omega + (3 * num_loops) as f64 / 2.) / num_virtual_loop_edges as f64;
+        let weight = (target_omega.0 + (3 * num_loops) as f64 / 2.) / num_virtual_loop_edges as f64;
 
         debug!(
             "Building tropical subgraph table with all edge weights set to: {}",
