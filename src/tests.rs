@@ -305,7 +305,7 @@ mod tests_integral {
 
         itg.h_function = HFunctionSettings {
             function: HFunction::PolyLeftRightExponential,
-            sigma: 0.01,
+            sigma: F(0.01),
             power: Some(12),
             enabled_dampening: true,
         };
@@ -383,7 +383,7 @@ mod tests_inspect {
 
         itg.h_function = HFunctionSettings {
             function: HFunction::PolyLeftRightExponential,
-            sigma: 0.01,
+            sigma: F(0.01),
             power: Some(12),
             enabled_dampening: true,
         };
@@ -398,7 +398,7 @@ mod tests_inspect {
 
         itg.h_function = HFunctionSettings {
             function: HFunction::PolyLeftRightExponential,
-            sigma: 0.3,
+            sigma: F(0.3),
             power: Some(9),
             enabled_dampening: false,
         };

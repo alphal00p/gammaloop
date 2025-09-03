@@ -16,7 +16,7 @@ use crate::{
 };
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
-#[derive(Debug, Clone, Default, Deserialize, Serialize, Encode, Decode, JsonSchema)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize, Encode, Decode, JsonSchema, PartialEq)]
 #[trait_decode(trait= GammaLoopContext)]
 #[serde(default, deny_unknown_fields)]
 pub struct GlobalSettings {
@@ -27,7 +27,7 @@ pub struct GlobalSettings {
 }
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
-#[derive(Debug, Clone, Default, Deserialize, Serialize, Encode, Decode, JsonSchema)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize, Encode, Decode, JsonSchema, PartialEq)]
 #[trait_decode(trait= GammaLoopContext)]
 #[serde(default, deny_unknown_fields)]
 pub struct RuntimeSettings {
@@ -107,3 +107,134 @@ pub use runtime::{
     StabilitySettings, SubtractionSettings,
 };
 pub mod runtime;
+
+#[cfg(test)]
+mod tests {
+    use serde::{Deserialize, Serialize};
+
+    use crate::settings::{global::GenerationSettings, GlobalSettings, RuntimeSettings};
+    use std::fmt::Debug;
+
+    fn generic_test_settings<T>()
+    where
+        T: Serialize + for<'de> Deserialize<'de> + Default + PartialEq + Debug,
+    {
+        let default = T::default();
+        let serialized = serde_yaml::to_string(&default).unwrap();
+        assert_eq!(serialized, "{}\n");
+        let deserialized: T = serde_yaml::from_str(&serialized).unwrap();
+        assert_eq!(default, deserialized);
+
+        let deserialized_from_empty: T = serde_yaml::from_str("").unwrap();
+        assert_eq!(default, deserialized_from_empty);
+    }
+
+    #[test]
+    fn global_test_serialize_deserialize() {
+        generic_test_settings::<GlobalSettings>();
+    }
+
+    #[test]
+    fn generation_test_serialize_deserialize() {
+        generic_test_settings::<GenerationSettings>();
+    }
+
+    #[test]
+    fn gammaloop_compile_options_test_serialize_deserialize() {
+        use crate::settings::global::GammaloopCompileOptions;
+        generic_test_settings::<GammaloopCompileOptions>();
+    }
+
+    #[test]
+    fn tropical_subgraph_table_settings_test_serialize_deserialize() {
+        use crate::settings::global::TropicalSubgraphTableSettings;
+        generic_test_settings::<TropicalSubgraphTableSettings>();
+    }
+
+    #[test]
+    fn runtime_test_serialize_deserialize() {
+        generic_test_settings::<RuntimeSettings>();
+    }
+
+    #[test]
+    fn subtraction_settings_test_serialize_deserialize() {
+        use crate::settings::runtime::SubtractionSettings;
+        generic_test_settings::<SubtractionSettings>();
+    }
+
+    #[test]
+    fn test_general_settings_serialize_deserialize() {
+        use crate::settings::runtime::GeneralSettings;
+        generic_test_settings::<GeneralSettings>();
+    }
+
+    #[test]
+    fn test_integrator_settings_serialize_deserialize() {
+        use crate::settings::runtime::IntegratorSettings;
+        generic_test_settings::<IntegratorSettings>();
+    }
+
+    #[test]
+    fn test_parameterization_settings_serialize_deserialize() {
+        use crate::settings::runtime::ParameterizationSettings;
+        generic_test_settings::<ParameterizationSettings>();
+    }
+
+    #[test]
+    fn test_stability_settings_serialize_deserialize() {
+        use crate::settings::runtime::StabilitySettings;
+        generic_test_settings::<StabilitySettings>();
+    }
+
+    #[test]
+    fn test_multi_channeling_settings_serialize_deserialize() {
+        use crate::settings::runtime::MultiChannelingSettings;
+        generic_test_settings::<MultiChannelingSettings>();
+    }
+
+    #[test]
+    fn test_gammaloop_tropical_sampling_settings_serialize_deserialize() {
+        use crate::settings::runtime::GammaloopTropicalSamplingSettings;
+        generic_test_settings::<GammaloopTropicalSamplingSettings>();
+    }
+
+    #[test]
+    fn test_discrete_graph_sampling_settings_serialize_deserialize() {
+        use crate::settings::runtime::DiscreteGraphSamplingSettings;
+        generic_test_settings::<DiscreteGraphSamplingSettings>();
+    }
+
+    #[test]
+    fn test_local_counter_term_settings_serialize_deserialize() {
+        use crate::settings::runtime::LocalCounterTermSettings;
+        generic_test_settings::<LocalCounterTermSettings>();
+    }
+
+    #[test]
+    fn test_uv_localisation_settings_serialize_deserialize() {
+        use crate::settings::runtime::UVLocalisationSettings;
+        generic_test_settings::<UVLocalisationSettings>();
+    }
+
+    #[test]
+    fn test_integrated_counterterm_settings_serialize_deserialize() {
+        use crate::settings::runtime::IntegratedCounterTermSettings;
+        generic_test_settings::<IntegratedCounterTermSettings>();
+    }
+
+    #[test]
+    fn test_overlap_settings_serialize_deserialize() {
+        use crate::settings::runtime::OverlapSettings;
+        generic_test_settings::<OverlapSettings>();
+    }
+    #[test]
+    fn test_h_function_settings_serialize_deserialize() {
+        use crate::settings::runtime::HFunctionSettings;
+        generic_test_settings::<HFunctionSettings>();
+    }
+    #[test]
+    fn test_kinematics_settings_serialize_deserialize() {
+        use crate::settings::KinematicsSettings;
+        generic_test_settings::<KinematicsSettings>();
+    }
+}

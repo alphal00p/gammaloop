@@ -9,7 +9,15 @@ use spenso::algebra::complex::Complex;
 
 use crate::{
     momentum::{RotationMethod, ThreeMomentum},
-    utils::{serde_utils::IsDefault, FloatLike, F},
+    utils::{
+        serde_utils::{
+            is_false, is_float, is_true, is_u64, is_usize, IsDefault, _default_input_rescaling,
+            _default_rotation_axis, _default_shifts, _default_stability_levels,
+            is_default_input_rescaling, is_default_rotation_axis, is_default_shifts,
+            is_default_stability_levels,
+        },
+        FloatLike, F,
+    },
     GammaLoopContext,
 };
 
@@ -25,7 +33,7 @@ pub struct SubtractionSettings {
     pub integrated_ct_settings: IntegratedCounterTermSettings,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub overlap_settings: OverlapSettings,
-    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "is_false")]
     pub disable_threshold_subtraction: bool,
 }
 
@@ -48,26 +56,23 @@ impl<'a> From<LockedRuntimeSettings<'a>> for RuntimeSettings {
 #[trait_decode(trait= GammaLoopContext)]
 #[serde(default, deny_unknown_fields)]
 pub struct GeneralSettings {
-    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "is_false")]
     pub use_ltd: bool,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub orientation_pat: OrientationPattern,
-    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "is_false")]
     pub load_compiled_cff: bool,
-    // #[serde(default, skip_serializing_if = "IsDefault::is_default")]
-    // pub amplitude_prefactor: Option<Complex<F<f64>>>,
-    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "is_float::<1000>")]
     pub m_uv: F<f64>,
-    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "is_float::<1000_000>")]
     pub mu_r_sq: F<f64>,
 }
-#[allow(clippy::derivable_impls)] // we might not want the standard defaults in the future
+
 impl Default for GeneralSettings {
     fn default() -> Self {
         Self {
             use_ltd: false,
             load_compiled_cff: false,
-            // amplitude_prefactor: Some(Complex::new(F(0.0), F(1.0))),
             orientation_pat: OrientationPattern::default(),
             m_uv: F(1000.0),
             mu_r_sq: F(1000.0 * 1000.0),
@@ -97,31 +102,31 @@ pub mod kinematic;
 #[derive(Debug, Clone, Deserialize, Serialize, Encode, Decode, PartialEq, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct IntegratorSettings {
-    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "is_usize::<64>")]
     pub n_bins: usize,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub bin_number_evolution: Option<Vec<usize>>,
-    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "is_usize::<1000>")]
     pub min_samples_for_update: usize,
-    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "is_usize::<100000>")]
     pub n_start: usize,
-    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "is_usize::<10000>")]
     pub n_increase: usize,
-    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "is_usize::<10000000000>")]
     pub n_max: usize,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub integrated_phase: IntegratedPhase,
-    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "is_float::<1>")]
     pub discrete_dim_learning_rate: F<f64>,
-    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "is_float::<1>")]
     pub continuous_dim_learning_rate: F<f64>,
-    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "is_false")]
     pub train_on_avg: bool,
-    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "is_true")]
     pub show_max_wgt_info: bool,
-    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "is_float::<1000>")]
     pub max_prob_ratio: F<f64>,
-    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "is_u64::<69>")]
     pub seed: u64,
 }
 
@@ -134,12 +139,12 @@ impl Default for IntegratorSettings {
             n_start: 100000,
             n_increase: 10000,
             n_max: 10000000000,
-            integrated_phase: IntegratedPhase::Real,
-            discrete_dim_learning_rate: F(1.5),
-            continuous_dim_learning_rate: F(1.5),
+            integrated_phase: IntegratedPhase::default(),
+            discrete_dim_learning_rate: F(1.0),
+            continuous_dim_learning_rate: F(1.0),
             train_on_avg: false,
             show_max_wgt_info: true,
-            max_prob_ratio: F(0.01),
+            max_prob_ratio: F(1000.0),
             seed: 69,
         }
     }
@@ -153,29 +158,24 @@ pub struct ParameterizationSettings {
     pub mode: ParameterizationMode,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub mapping: ParameterizationMapping,
-    #[serde(skip_serializing_if = "IsDefault::is_default")]
-    pub b: f64,
-
-    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "is_float::<1>")]
+    pub b: F<f64>,
+    #[serde(skip_serializing_if = "is_default_input_rescaling")]
+    /// todo make proper type for this object
     pub input_rescaling: Vec<Vec<(f64, f64)>>,
-    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "is_default_shifts")]
+    /// todo make proper type for this object
     pub shifts: Vec<(f64, f64, f64, f64)>,
 }
 
-fn _default_input_rescaling() -> Vec<Vec<(f64, f64)>> {
-    vec![vec![(0.0, 1.0); 3]; 15]
-}
-fn _default_shifts() -> Vec<(f64, f64, f64, f64)> {
-    vec![(1.0, 0.0, 0.0, 0.0); 15]
-}
 impl Default for ParameterizationSettings {
     fn default() -> Self {
         Self {
-            b: 1.0,
-            mode: ParameterizationMode::Spherical,
-            mapping: ParameterizationMapping::Linear,
-            input_rescaling: vec![vec![(0.0, 1.0); 3]; 15],
-            shifts: vec![(1.0, 0.0, 0.0, 0.0); 15],
+            b: F(1.0),
+            mode: ParameterizationMode::default(),
+            mapping: ParameterizationMapping::default(),
+            input_rescaling: _default_input_rescaling(),
+            shifts: _default_shifts(),
         }
     }
 }
@@ -196,24 +196,21 @@ pub struct IntegrationResult {
 #[derive(Serialize, Deserialize, Debug, Clone, Encode, Decode, PartialEq, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct StabilitySettings {
-    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "is_default_rotation_axis")]
     pub rotation_axis: Vec<RotationSetting>,
-    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "is_false")]
     pub rotate_numerator: bool,
-    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "is_default_stability_levels")]
     pub levels: Vec<StabilityLevelSetting>,
-    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "is_false")]
     pub check_on_norm: bool,
 }
 
 impl Default for StabilitySettings {
     fn default() -> Self {
         Self {
-            rotation_axis: vec![RotationSetting::default()],
-            levels: vec![
-                StabilityLevelSetting::default_double(),
-                StabilityLevelSetting::default_quad(),
-            ],
+            rotation_axis: _default_rotation_axis(),
+            levels: _default_stability_levels(),
             rotate_numerator: false,
             check_on_norm: false,
         }
@@ -235,16 +232,16 @@ pub struct StabilityLevelSetting {
 }
 
 impl StabilityLevelSetting {
-    fn default_double() -> Self {
+    pub fn default_double() -> Self {
         Self {
             precision: Precision::Double,
-            required_precision_for_re: F(1e-15),
-            required_precision_for_im: F(1e-15),
+            required_precision_for_re: F(1e-10),
+            required_precision_for_im: F(1e-10),
             escalate_for_large_weight_threshold: F(0.9),
         }
     }
 
-    fn default_quad() -> Self {
+    pub fn default_quad() -> Self {
         Self {
             precision: Precision::Quad,
             required_precision_for_re: F(1e-5),
@@ -399,9 +396,9 @@ impl Display for ParameterizationMode {
 #[serde(deny_unknown_fields)]
 pub enum ParameterizationMapping {
     #[serde(rename = "log")]
-    #[default]
     Log,
     #[serde(rename = "linear")]
+    #[default]
     Linear,
 }
 
@@ -529,8 +526,8 @@ impl SamplingSettings {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
 #[serde(deny_unknown_fields, default)]
 pub struct MultiChannelingSettings {
-    #[serde(skip_serializing_if = "IsDefault::is_default")]
-    pub alpha: f64,
+    #[serde(skip_serializing_if = "is_float::<3>")]
+    pub alpha: F<f64>,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub parameterization_settings: ParameterizationSettings,
 }
@@ -538,7 +535,7 @@ pub struct MultiChannelingSettings {
 impl Default for MultiChannelingSettings {
     fn default() -> Self {
         Self {
-            alpha: 3.0,
+            alpha: F(3.0),
             parameterization_settings: ParameterizationSettings::default(),
         }
     }
@@ -548,7 +545,7 @@ impl Default for MultiChannelingSettings {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
 #[serde(deny_unknown_fields, default)]
 pub struct GammaloopTropicalSamplingSettings {
-    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "is_true")]
     pub upcast_on_failure: bool,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub matrix_stability_test: Option<f64>,
@@ -558,20 +555,16 @@ impl Default for GammaloopTropicalSamplingSettings {
     fn default() -> Self {
         Self {
             upcast_on_failure: true,
-            matrix_stability_test: Some(1.0e-5),
+            matrix_stability_test: None,
         }
     }
 }
 
 impl GammaloopTropicalSamplingSettings {
     pub(crate) fn into_tropical_sampling_settings(&self) -> momtrop::TropicalSamplingSettings {
-        if self.upcast_on_failure {
-            unimplemented!("upcast_on_failure removed from momtrop, implement automatic upcast of parameterization in gammaloop and then remove this crash")
-        }
-
         momtrop::TropicalSamplingSettings {
             matrix_stability_test: self.matrix_stability_test,
-            print_debug_info: true,
+            print_debug_info: false,
             return_metadata: false,
         }
     }
@@ -601,7 +594,7 @@ impl Default for DiscreteGraphSamplingType {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema, Default)]
 #[serde(deny_unknown_fields, default)]
 pub struct DiscreteGraphSamplingSettings {
-    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "is_false")]
     pub sample_orientations: bool,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub sampling_type: DiscreteGraphSamplingType,
@@ -612,47 +605,27 @@ pub struct DiscreteGraphSamplingSettings {
 #[serde(deny_unknown_fields, default)]
 pub struct LocalCounterTermSettings {
     #[serde(skip_serializing_if = "IsDefault::is_default")]
-    pub dampen_integrable_singularity: IntegrableSingularityDampener,
-    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub uv_localisation: UVLocalisationSettings,
-}
-
-#[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
-#[serde(tag = "type", deny_unknown_fields)]
-pub enum IntegrableSingularityDampener {
-    #[serde(rename = "none")]
-    None {},
-    #[serde(rename = "exponential")]
-    Exponential {},
-    #[serde(rename = "powerlike")]
-    Powerlike { power: f64 },
-}
-
-impl Default for IntegrableSingularityDampener {
-    fn default() -> Self {
-        Self::Exponential {}
-    }
 }
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct UVLocalisationSettings {
-    #[serde(skip_serializing_if = "IsDefault::is_default")]
-    pub sliver_width: f64,
-    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "is_float::<10>")]
+    pub sliver_width: F<f64>,
+    #[serde(skip_serializing_if = "is_false")]
     pub dynamic_width: bool,
-    #[serde(skip_serializing_if = "IsDefault::is_default")]
-    pub gaussian_width: f64,
+    #[serde(skip_serializing_if = "is_float::<1>")]
+    pub gaussian_width: F<f64>,
 }
 
 impl Default for UVLocalisationSettings {
     fn default() -> Self {
         Self {
-            sliver_width: 10.0,
+            sliver_width: F(10.0),
             dynamic_width: false,
-            gaussian_width: 1.0,
+            gaussian_width: F(1.0),
         }
     }
 }
@@ -694,11 +667,11 @@ pub struct OverlapSettings {
     //v
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub force_global_center: Option<Vec<[f64; 3]>>,
-    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "is_true")]
     pub check_global_center: bool,
-    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "is_false")]
     pub try_origin: bool,
-    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "is_false")]
     pub try_origin_all_lmbs: bool,
 }
 
@@ -734,68 +707,23 @@ pub enum HFunction {
 #[serde(deny_unknown_fields)]
 #[serde(default)]
 pub struct HFunctionSettings {
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub function: HFunction,
-    pub sigma: f64,
+    #[serde(skip_serializing_if = "is_float::<1>")]
+    pub sigma: F<f64>,
+    #[serde(skip_serializing_if = "is_true")]
     pub enabled_dampening: bool,
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub power: Option<usize>,
 }
 
 impl Default for HFunctionSettings {
     fn default() -> Self {
         Self {
-            sigma: 1.0,
+            sigma: F(1.0),
             function: HFunction::default(),
             enabled_dampening: true,
             power: None,
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use serde::{Deserialize, Serialize};
-
-    #[test]
-    fn test_serde() {
-        #[derive(Serialize, Deserialize, Debug)]
-        #[serde(deny_unknown_fields, default)]
-        struct SS {
-            a: f64,
-            b: f64,
-            sss: SSS,
-        }
-
-        #[derive(Serialize, Deserialize, Debug)]
-        #[serde(deny_unknown_fields, default)]
-        struct SSS {
-            g: f64,
-            f: f64,
-        }
-
-        impl Default for SS {
-            fn default() -> Self {
-                Self {
-                    a: 1.0,
-                    b: 2.0,
-                    sss: SSS { g: 8.0, f: 9.0 },
-                }
-            }
-        }
-
-        impl Default for SSS {
-            fn default() -> Self {
-                Self { g: 5.0, f: 6.0 }
-            }
-        }
-
-        let test = "
-a: 3.0
-sss:
-    g: 66.0
-";
-
-        let s: SS = serde_yaml::from_str(test).unwrap();
-
-        println!("{:?}", s);
     }
 }

@@ -64,7 +64,7 @@ impl HFunctionTestIntegrand {
                     ParameterizationMapping::Log => {
                         // r = e_cm * ln(1 + b*x/(1-x))
                         let x = xs[0].clone();
-                        let b: F<T> = F::<T>::from_f64(parameterization_settings.b);
+                        let b: F<T> = F::<T>::from_ff64(parameterization_settings.b);
                         let r = &e_cm * (&one + &b * &x / (&one - &x)).ln();
                         jac *= &e_cm * &b / (&one - &x) / (&one + &x * (&b - &one));
 
@@ -72,7 +72,7 @@ impl HFunctionTestIntegrand {
                     }
                     ParameterizationMapping::Linear => {
                         // r = e_cm * b * x/(1-x)
-                        let b: F<T> = F::<T>::from_f64(parameterization_settings.b);
+                        let b: F<T> = F::<T>::from_ff64(parameterization_settings.b);
                         let radius = &e_cm * &b * &xs[0] / (&one - &xs[0]);
                         jac *= (&e_cm * &b + &radius).powi(2) / &e_cm / &b;
                         radius

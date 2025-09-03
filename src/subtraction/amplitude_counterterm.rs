@@ -622,12 +622,12 @@ fn evaluate_uv_damper<T: FloatLike>(
 
     let delta_r = radius - radius_star;
 
-    if delta_r.abs() > F::from_f64(settings.sliver_width) * normalizing_scale {
+    if delta_r.abs() > F::from_ff64(settings.sliver_width) * normalizing_scale {
         return radius.zero();
     }
 
     let delta_r_sq = &delta_r * &delta_r;
-    let width = F::from_f64(settings.gaussian_width) * normalizing_scale;
+    let width = F::from_ff64(settings.gaussian_width) * normalizing_scale;
     let width_sq = &width * &width;
 
     (-delta_r_sq / width_sq).exp()

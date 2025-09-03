@@ -1981,7 +1981,7 @@ pub(crate) fn h<T: FloatLike>(
     let sig = if let Some(s) = sigma {
         s
     } else {
-        F::<T>::from_f64(h_function_settings.sigma)
+        F::<T>::from_ff64(h_function_settings.sigma)
     };
     let power = h_function_settings.power;
     match h_function_settings.function {
@@ -2629,14 +2629,14 @@ pub(crate) fn global_parameterize<T: FloatLike>(
                 match settings.mapping {
                     ParameterizationMapping::Log => {
                         // r = e_cm * ln(1 + b*x/(1-x))
-                        let b = F::<T>::from_f64(settings.b);
+                        let b = F::<T>::from_ff64(settings.b);
                         let radius = &e_cm * (&one + &b * &x_r[0] / (&one - &x_r[0])).log();
                         jac *= &e_cm * &b / (&one - &x_r[0]) / (&one + &x_r[0] * (&b - &one));
                         radius
                     }
                     ParameterizationMapping::Linear => {
                         // r = e_cm * b * x/(1-x)
-                        let b = F::<T>::from_f64(settings.b);
+                        let b = F::<T>::from_ff64(settings.b);
                         let radius = &e_cm * &b * &x_r[0] / (&one - &x_r[0]);
                         jac *= (&e_cm * &b + &radius).powi(2) / &e_cm / &b;
                         radius
@@ -2774,13 +2774,13 @@ pub(crate) fn global_inv_parameterize<T: FloatLike>(
             } else {
                 match settings.mapping {
                     ParameterizationMapping::Log => {
-                        let b = F::<T>::from_f64(settings.b);
+                        let b = F::<T>::from_ff64(settings.b);
                         let x1 = &one - &b / (-&one + &b + (&k_r / &e_cm).exp());
                         inv_jac /= e_cm * &b / (&one - &x1) / (&one + &x1 * (&b - &one));
                         xs.push(x1);
                     }
                     ParameterizationMapping::Linear => {
-                        let b = F::<T>::from_f64(settings.b);
+                        let b = F::<T>::from_ff64(settings.b);
                         inv_jac /= (&e_cm * &b + &k_r).powi(2) / &e_cm / &b;
                         xs.push(&k_r / (&e_cm * &b + &k_r));
                     }
@@ -2890,7 +2890,7 @@ pub(crate) fn parameterize3d<T: FloatLike>(
                 ParameterizationMapping::Log => {
                     // r = &e_cm * ln(1 + b*&x/(1-&x))
                     let x = x_r[0].clone();
-                    let b = F::<T>::from_f64(settings.b);
+                    let b = F::<T>::from_ff64(settings.b);
                     let radius = &e_cm * (&one + &b * &x / (&one - &x)).log();
                     jac *= &e_cm * &b / (&one - &x) / (&one + &x * (&b - &one));
 
@@ -2898,7 +2898,7 @@ pub(crate) fn parameterize3d<T: FloatLike>(
                 }
                 ParameterizationMapping::Linear => {
                     // r = &e_cm * b * x/(1-x)
-                    let b = F::<T>::from_f64(settings.b);
+                    let b = F::<T>::from_ff64(settings.b);
                     let radius = &e_cm * &b * &x_r[0] / (&one - &x_r[0]);
                     jac *= (&e_cm * &b + &radius).powi(2) / &e_cm / &b;
                     radius
@@ -2968,13 +2968,13 @@ pub(crate) fn inv_parametrize3d<T: FloatLike>(
 
     let x1 = match settings.mapping {
         ParameterizationMapping::Log => {
-            let b = F::<T>::from_f64(settings.b);
+            let b = F::<T>::from_ff64(settings.b);
             let x1 = &one - &b / (-&one + &b + (&k_r / &e_cm).exp());
             jac /= &e_cm * &b / (&one - &x1) / (&one + &x1 * (&b - &one));
             x1
         }
         ParameterizationMapping::Linear => {
-            let b = F::<T>::from_f64(settings.b);
+            let b = F::<T>::from_ff64(settings.b);
             jac /= (&e_cm * &b + &k_r).powi(2) / &e_cm / &b;
             &k_r / (&e_cm * &b + &k_r)
         }

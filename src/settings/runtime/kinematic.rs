@@ -14,7 +14,11 @@ use crate::{
     },
     momentum_sample::ExternalFourMomenta,
     signature::ExternalSignature,
-    utils::{f128, serde_utils::IsDefault, FloatLike, F},
+    utils::{
+        f128,
+        serde_utils::{is_float, IsDefault},
+        FloatLike, F,
+    },
     DependentMomentaConstructor, GammaLoopContext,
 };
 use color_eyre::{Result, Section};
@@ -24,7 +28,7 @@ use color_eyre::{Result, Section};
 #[trait_decode(trait= GammaLoopContext)]
 #[serde(default, deny_unknown_fields)]
 pub struct KinematicsSettings {
-    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "is_float::<64>")]
     pub e_cm: F<f64>,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub externals: Externals,

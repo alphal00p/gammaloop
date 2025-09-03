@@ -119,12 +119,54 @@ pub fn is_usize<const D: usize>(val: &usize) -> bool {
     show_defaults_helper(*val == D)
 }
 
+pub fn is_u64<const D: u64>(val: &u64) -> bool {
+    show_defaults_helper(*val == D)
+}
+
 pub fn is_false(val: &bool) -> bool {
     show_defaults_helper(*val == false)
 }
 
 pub fn is_true(val: &bool) -> bool {
     show_defaults_helper(*val == true)
+}
+
+pub fn is_default_input_rescaling(input_rescaling: &Vec<Vec<(f64, f64)>>) -> bool {
+    show_defaults_helper(input_rescaling == &_default_input_rescaling())
+}
+
+pub fn is_default_shifts(shifts: &Vec<(f64, f64, f64, f64)>) -> bool {
+    show_defaults_helper(shifts == &_default_shifts())
+}
+
+pub fn _default_input_rescaling() -> Vec<Vec<(f64, f64)>> {
+    vec![vec![(0.0, 1.0); 3]; 15]
+}
+pub fn _default_shifts() -> Vec<(f64, f64, f64, f64)> {
+    vec![(1.0, 0.0, 0.0, 0.0); 15]
+}
+
+pub fn _default_stability_levels() -> Vec<crate::settings::runtime::StabilityLevelSetting> {
+    vec![
+        crate::settings::runtime::StabilityLevelSetting::default_double(),
+        crate::settings::runtime::StabilityLevelSetting::default_quad(),
+    ]
+}
+
+pub fn is_default_stability_levels(
+    levels: &Vec<crate::settings::runtime::StabilityLevelSetting>,
+) -> bool {
+    show_defaults_helper(levels == &_default_stability_levels())
+}
+
+pub fn _default_rotation_axis() -> Vec<crate::settings::runtime::RotationSetting> {
+    vec![crate::settings::runtime::RotationSetting::default()]
+}
+
+pub fn is_default_rotation_axis(
+    rotation_axis: &Vec<crate::settings::runtime::RotationSetting>,
+) -> bool {
+    show_defaults_helper(rotation_axis == &_default_rotation_axis())
 }
 
 #[cfg(test)]
