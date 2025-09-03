@@ -89,21 +89,42 @@ pub trait SmartSerde: Serialize + DeserializeOwned {
 
 impl<T: Serialize + DeserializeOwned> SmartSerde for T {}
 
+use crate::utils::F;
+
 pub trait IsDefault {
     fn is_default(&self) -> bool;
 }
 
 pub static SHOWDEFAULTS: AtomicBool = AtomicBool::new(false);
 
+fn show_defaults_helper(condition: bool) -> bool {
+    if SHOWDEFAULTS.load(Ordering::Relaxed) {
+        false
+    } else {
+        condition
+    }
+}
+
 impl<T: Default + PartialEq> IsDefault for T {
     fn is_default(&self) -> bool {
-        // println!("HHHHIII {}", std::any::type_name::<T>());
-        if SHOWDEFAULTS.load(Ordering::Relaxed) {
-            false
-        } else {
-            self == &T::default()
-        }
+        show_defaults_helper(self == &T::default())
     }
+}
+
+pub fn is_float<const D: i64>(val: &F<f64>) -> bool {
+    show_defaults_helper(*val == F(D as f64))
+}
+
+pub fn is_usize<const D: usize>(val: &usize) -> bool {
+    show_defaults_helper(*val == D)
+}
+
+pub fn is_false(val: &bool) -> bool {
+    show_defaults_helper(*val == false)
+}
+
+pub fn is_true(val: &bool) -> bool {
+    show_defaults_helper(*val == true)
 }
 
 #[cfg(test)]
