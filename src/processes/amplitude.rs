@@ -32,7 +32,7 @@ use crate::{
     signature::SignatureLike,
     status_debug,
     subtraction::amplitude_counterterm::AmplitudeCountertermAtom,
-    utils::{Length, GS, TENSORLIB, W_},
+    utils::{symbolica_ext::LOGPRINTOPTS, Length, GS, TENSORLIB, W_},
     uv::UltravioletGraph,
     GammaLoopContext, GammaLoopContextContainer,
 };
@@ -763,12 +763,18 @@ impl AmplitudeGraph {
             .with_context(|| format!("Failed to get scalar from network when building original paramteric integrand.")).with_note(||format!("Network: \n{}\nGraph:\n{}", full.dot_pretty(),DotGraph::from(&self.graph).debug_dot()))?
             .into();
 
-        debug!("All parametric before color atom:{:>}", scalar);
+        debug!(
+            "All parametric before color atom:{}",
+            scalar.printer(LOGPRINTOPTS)
+        );
         scalar = scalar.unwrap_function(GS.color_wrap).simplify_color();
 
         scalar = self.add_additional_factors_to_cff_atom(&scalar);
 
-        debug!("All parametric integrand atom:{:>}", scalar);
+        debug!(
+            "All parametric integrand atom:{}",
+            scalar.printer(LOGPRINTOPTS)
+        );
 
         Ok(scalar)
     }

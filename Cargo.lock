@@ -1422,6 +1422,7 @@ dependencies = [
  "rand 0.9.2",
  "rayon",
  "ref-ops",
+ "ringbuffer",
  "rug",
  "rustyline",
  "schemars 1.0.4",
@@ -3091,6 +3092,12 @@ checksum = "0c6a884d2998352bb4daf0183589aec883f16a6da1f4dde84d8e2e9a5409a1ce"
 dependencies = [
  "bytemuck",
 ]
+
+[[package]]
+name = "ringbuffer"
+version = "0.16.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "57b0b88a509053cbfd535726dcaaceee631313cef981266119527a1d110f6d2b"
 
 [[package]]
 name = "ron"

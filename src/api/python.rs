@@ -454,10 +454,7 @@ impl State {
     #[new]
     pub fn new_python(state_folder: PathBuf) -> Self {
         initialise().unwrap();
-        let handle = crate::cli::tracing::init_tracing(
-            "info,symbolica::poly::gcd=off",
-            &state_folder.join("logs"),
-        );
+        let handle = crate::cli::tracing::init_tracing("info", &state_folder.join("logs"));
 
         let a = Self {
             save_path: state_folder,

@@ -2,14 +2,10 @@ use std::path::Path;
 
 use clap::Args;
 use color_eyre::Result;
-use log::{debug, info};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    settings::{runtime, GlobalSettings, RuntimeSettings},
-    status_info,
-};
+use crate::settings::{GlobalSettings, RuntimeSettings};
 
 use super::state::State;
 
@@ -26,7 +22,7 @@ impl Generate {
         generation_settings: &GlobalSettings,
         runtime_settings: &RuntimeSettings,
     ) -> Result<()> {
-        state.generate_integrands(generation_settings, runtime_settings.into());
+        state.generate_integrands(generation_settings, runtime_settings.into())?;
 
         if generation_settings.generation.evaluator_settings.compile {
             state.compile_integrands(

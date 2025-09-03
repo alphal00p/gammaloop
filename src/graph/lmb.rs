@@ -138,11 +138,9 @@ pub trait LMBext {
         self.replacement_impl(
             |e, a, b| {
                 Replacement::new(
-                    GS.emr_mom
-                        .f(([usize::from(e) as i32], rep_args))
-                        .to_pattern(),
+                    GS.emr_mom.f(([usize::from(e)], rep_args)).to_pattern(),
                     (FunctionBuilder::new(GS.emr_mom)
-                        .add_arg(usize::from(e) as i32)
+                        .add_arg(usize::from(e))
                         .add_arg(a)
                         .add_args(rep_args)
                         .finish()
@@ -173,9 +171,7 @@ pub trait LMBext {
         self.replacement_impl(
             |e, a, b| {
                 Replacement::new(
-                    GS.emr_vec
-                        .f(([usize::from(e) as i32], rep_args))
-                        .to_pattern(),
+                    GS.emr_vec.f(([usize::from(e)], rep_args)).to_pattern(),
                     (a.replace(function!(GS.emr_vec, W_.x_))
                         .allow_new_wildcards_on_rhs(true)
                         .with(
@@ -212,9 +208,7 @@ pub trait LMBext {
         self.replacement_impl(
             |e, a, b| {
                 Replacement::new(
-                    GS.emr_mom
-                        .f(([usize::from(e) as i32], rep_args))
-                        .to_pattern(),
+                    GS.emr_mom.f(([usize::from(e)], rep_args)).to_pattern(),
                     (a + b).to_pattern(),
                 )
             },
@@ -241,9 +235,7 @@ pub trait LMBext {
         self.replacement_impl(
             |e, a, b| {
                 Replacement::new(
-                    GS.emr_mom
-                        .f(([usize::from(e) as i32], rep_args))
-                        .to_pattern(),
+                    GS.emr_mom.f(([usize::from(e)], rep_args)).to_pattern(),
                     (a + b).to_pattern(),
                 )
             },
@@ -337,7 +329,7 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
             |_, e, _, _| {
                 EdgeData::new(
                     GS.emr_mom
-                        .f([usize::from(e) as i32])
+                        .f([usize::from(e)])
                         .replace_multiple(&reps)
                         .printer(PrintOptions {
                             color_builtin_symbols: false,

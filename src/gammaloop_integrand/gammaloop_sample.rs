@@ -55,22 +55,32 @@ pub enum GammaLoopSample<T: FloatLike> {
 }
 
 impl<T: FloatLike> GammaLoopSample<T> {
-    pub(crate) fn rotate(&self, rotation: &Rotation) -> Self {
+    pub(crate) fn rotate(
+        &self,
+        rotation: &Rotation,
+        loop_mom_cache_id: usize,
+        external_mom_cache_id: usize,
+    ) -> Self {
         if rotation.is_identity() {
             return self.clone();
         }
 
         match self {
-            GammaLoopSample::Default(sample) => GammaLoopSample::Default(sample.rotate(rotation)),
+            GammaLoopSample::Default(sample) => GammaLoopSample::Default(sample.rotate(
+                rotation,
+                loop_mom_cache_id,
+                external_mom_cache_id,
+            )),
             GammaLoopSample::MultiChanneling { alpha, sample } => {
                 GammaLoopSample::MultiChanneling {
                     alpha: alpha.clone(),
-                    sample: sample.rotate(rotation),
+
+                    sample: sample.rotate(rotation, loop_mom_cache_id, external_mom_cache_id),
                 }
             }
             GammaLoopSample::DiscreteGraph { group_id, sample } => GammaLoopSample::DiscreteGraph {
                 group_id: *group_id,
-                sample: sample.rotate(rotation),
+                sample: sample.rotate(rotation, loop_mom_cache_id, external_mom_cache_id),
             },
         }
     }
@@ -203,20 +213,29 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
 
     /// Rotation for stability checks
     #[inline]
-    fn rotate(&self, rotation: &Rotation) -> Self {
+    fn rotate(
+        &self,
+        rotation: &Rotation,
+        loop_mom_cache_id: usize,
+        external_mom_cache_id: usize,
+    ) -> Self {
         match self {
-            DiscreteGraphSample::Default(sample) => {
-                DiscreteGraphSample::Default(sample.rotate(rotation))
-            }
+            DiscreteGraphSample::Default(sample) => DiscreteGraphSample::Default(sample.rotate(
+                rotation,
+                loop_mom_cache_id,
+                external_mom_cache_id,
+            )),
             DiscreteGraphSample::MultiChanneling { alpha, sample } => {
                 DiscreteGraphSample::MultiChanneling {
                     alpha: alpha.clone(),
-                    sample: sample.rotate(rotation),
+                    sample: sample.rotate(rotation, loop_mom_cache_id, external_mom_cache_id),
                 }
             }
-            DiscreteGraphSample::Tropical(sample) => {
-                DiscreteGraphSample::Tropical(sample.rotate(rotation))
-            }
+            DiscreteGraphSample::Tropical(sample) => DiscreteGraphSample::Tropical(sample.rotate(
+                rotation,
+                loop_mom_cache_id,
+                external_mom_cache_id,
+            )),
             DiscreteGraphSample::DiscreteMultiChanneling {
                 alpha,
                 channel_id,
@@ -224,7 +243,7 @@ impl<T: FloatLike> DiscreteGraphSample<T> {
             } => DiscreteGraphSample::DiscreteMultiChanneling {
                 alpha: alpha.clone(),
                 channel_id: *channel_id,
-                sample: sample.rotate(rotation),
+                sample: sample.rotate(rotation, loop_mom_cache_id, external_mom_cache_id),
             },
         }
     }

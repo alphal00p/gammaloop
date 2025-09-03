@@ -1,6 +1,5 @@
 use crate::{
     initialisation::initialise,
-    integrands::HasIntegrand,
     model::Model,
     settings::{GlobalSettings, RuntimeSettings},
     status_info,
@@ -519,19 +518,19 @@ pub(crate) fn print_banner() {
     let spec = current_log_spec();
     println!(
         "\n{}{}\n",
-        r"                                        _
-                                       | |
-   __ _  __ _ _ __ ___  _ __ ___   __ _| |     ___   ___  _ __
-  / _` |/ _` | '_ ` _ \| '_ ` _ \ / _` | |    / _ \ / _ \| '_ \
- | (_| | (_| | | | | | | | | | | | (_| | |___| (_) | (_) | |_) |
-  \__, |\__,_|_| |_| |_|_| |_| |_|\__,_|______\___/ \___/| .__/
-   __/ |                                                 | |
+        r"              ██         ▄████████▄  ▄████████▄  ██████████▄
+  ██          ▀▀         ▀▀      ▀▀  ▀▀      ▀▀  ▀▀       ██
+    ██  ▄██████████████████████████████████████████████████▀
+     ▀██▀     ▄▄         ▄▄      ▄▄  ▄▄      ▄▄  ▄▄
+    ██  ██    █████████  ▀████████▀  ▀████████▀  ██
+   ██    ██
+   ██    ██
 "
         .to_string()
         .bold()
         .blue(),
         format!(
-            r#"  |___/    version:{:<15} {:>10}          |_|    "#,
+            r#"   ▀██████▀   version:{:<15} log level:{}         "#,
             GIT_VERSION.green(),
             spec.green(),
         )

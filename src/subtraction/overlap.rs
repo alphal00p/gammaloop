@@ -125,13 +125,11 @@ impl OverlapStructure {
 
         let params = (0..num_loops)
             .flat_map(|loop_index| {
-                (1..=3).map(move |spatial_index| {
-                    function!(GS.loop_mom, loop_index as i32, spatial_index)
-                })
+                (1..=3).map(move |spatial_index| function!(GS.loop_mom, loop_index, spatial_index))
             })
             .chain((0..num_externals).flat_map(|external_index| {
                 (0..=3).map(move |spatial_index| {
-                    function!(GS.external_mom, external_index as i32, spatial_index)
+                    function!(GS.external_mom, external_index, spatial_index)
                 })
             }))
             .chain(model_params)

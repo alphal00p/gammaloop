@@ -4,10 +4,11 @@ use std::{
     ops::{Deref, Range},
 };
 
-use bincode_trait_derive::{Decode, Encode};
+use bincode::{Decode, Encode};
 use idenso::color::CS;
 use linnet::half_edge::involution::{HedgePair, Orientation};
 use log::debug;
+use ringbuffer::{ConstGenericRingBuffer, RingBuffer};
 use spenso::{
     algebra::{algebraic_traits::RefOne, complex::Complex},
     iterators::IteratableTensor,
@@ -34,7 +35,7 @@ use crate::{
     GammaLoopContext,
 };
 
-#[derive(Clone, Encode, Decode)]
+#[derive(Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct ParamValuePairs {
     pub value_range: Range<usize>,
@@ -97,7 +98,7 @@ impl Default for ParamValuePairs {
 //     }
 // }
 
-#[derive(Clone, Encode, Decode)]
+#[derive(Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct GammaLoopPairs {
     m_uv: ParamValuePairs,
@@ -107,7 +108,7 @@ pub struct GammaLoopPairs {
     pub model_parameters: ParamValuePairs,
     external_energies: ParamValuePairs,
     external_spatial: ParamValuePairs,
-    polarizations: ParamValuePairs,
+    pub polarizations: ParamValuePairs,
     emr_spatial: ParamValuePairs,
     tstar: ParamValuePairs,
     h_function: ParamValuePairs,
@@ -377,10 +378,11 @@ impl GammaLoopPairs {
         graph: &Graph,
         ext: &ExternalFourMomenta<F<T>>,
         helicities: &[Helicity],
-        values: &mut [Complex<F<T>>],
-    ) {
-        let p_start = self.polarizations.value_range.start;
-        let mut p_shift = 0;
+        // values: &mut [Complex<F<T>>],
+    ) -> Vec<Complex<F<T>>> {
+        // let p_start = self.polarizations.value_range.start;
+        // let mut p_shift = 0;
+        let mut values = Vec::with_capacity(self.polarizations.value_range.len());
 
         for (p, _) in &graph.polarizations {
             let extid = graph.loop_momentum_basis.ext_from(p.eid).unwrap();
@@ -399,10 +401,10 @@ impl GammaLoopPairs {
 
             for val in pol.tensor.data.into_iter() {
                 // info!("{}:{}", self.polarizations.params[p_shift], val);
-                values[p_start + p_shift] = val;
-                p_shift += 1;
+                values.push(val);
             }
         }
+        values
     }
 
     pub(crate) fn threshold_params<T: FloatLike>(
@@ -448,11 +450,65 @@ impl Default for GammaLoopPairs {
     }
 }
 
-#[derive(Clone, Encode, Decode)]
+#[derive(Clone)]
+pub struct ParamCache<T: FloatLike> {
+    cache: ConstGenericRingBuffer<Vec<Complex<F<T>>>, 64>,
+    len: usize,
+}
+impl<T: FloatLike> ParamCache<T> {
+    pub fn get(&self, key: usize) -> Option<&Vec<Complex<F<T>>>> {
+        if self.len <= key || key + 64 < self.len {
+            None
+        } else if self.len < 64 {
+            Some(&self.cache[key])
+        } else {
+            println!("Cache hit for key {}", key);
+            println!("{}", self.len);
+            let cachekey = (64 + key) - self.len;
+            Some(&self.cache[cachekey])
+        }
+    }
+
+    pub fn checked_push(&mut self, key: usize, value: Vec<Complex<F<T>>>) {
+        println!("Pushing at {key}");
+        debug_assert_eq!(self.len, key);
+        self.len += 1;
+        self.cache.enqueue(value);
+    }
+}
+
+impl<T: FloatLike> Default for ParamCache<T> {
+    fn default() -> Self {
+        Self {
+            cache: ConstGenericRingBuffer::new(),
+            len: 0,
+        }
+    }
+}
+
+impl<T: FloatLike + Encode> Encode for ParamCache<T> {
+    fn encode<E: bincode::enc::Encoder>(
+        &self,
+        _encoder: &mut E,
+    ) -> Result<(), bincode::error::EncodeError> {
+        Ok(())
+    }
+}
+
+impl<C, T: FloatLike + Decode<C>> Decode<C> for ParamCache<T> {
+    fn decode<D: bincode::de::Decoder>(
+        _decoder: &mut D,
+    ) -> Result<Self, bincode::error::DecodeError> {
+        Ok(Self::default())
+    }
+}
+
+#[derive(Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct ParamBuilder<T: FloatLike = f64> {
     pub values: Vec<Complex<F<T>>>,
     pub pairs: GammaLoopPairs,
+    pub polarization_cache: ParamCache<T>,
     pub reps: Vec<(Atom, Atom)>,
     // pub eager_const_map: HashMap<Atom, Complex<F<T>>>,
     // pub eager_function_map: HashMap<Symbol, EvaluationFn<Atom, Complex<F<T>>>>,
@@ -478,6 +534,7 @@ pub struct ThresholdParams<T: FloatLike> {
 pub trait UpdateAndGetParams<T: FloatLike> {
     fn update_emr_and_get_params<'a>(
         &'a mut self,
+        cache: bool,
         sample: &'a MomentumSample<T>,
         graph: &'a Graph,
         helicities: &[Helicity],
@@ -488,6 +545,7 @@ pub trait UpdateAndGetParams<T: FloatLike> {
 impl UpdateAndGetParams<f64> for ParamBuilder<f64> {
     fn update_emr_and_get_params<'a>(
         &'a mut self,
+        cache: bool,
         sample: &'a MomentumSample<f64>,
         graph: &'a Graph,
         helicities: &[Helicity],
@@ -515,7 +573,7 @@ impl UpdateAndGetParams<f64> for ParamBuilder<f64> {
         // parse!("s").evaluator(fn_map, params, optimization_settings).unwrap().
 
         self.add_external_four_mom(sample.external_moms());
-        self.polarizations_values(graph, sample.external_moms(), helicities);
+        self.polarizations_values(cache, graph, sample, helicities);
 
         if let Some(threshold_params) = threshold_params {
             self.threshold_params(threshold_params);
@@ -528,6 +586,7 @@ impl UpdateAndGetParams<f64> for ParamBuilder<f64> {
 impl UpdateAndGetParams<f128> for ParamBuilder<f64> {
     fn update_emr_and_get_params(
         &mut self,
+        cache: bool,
         sample: &MomentumSample<f128>,
         graph: &Graph,
         helicities: &[Helicity],
@@ -551,8 +610,11 @@ impl UpdateAndGetParams<f128> for ParamBuilder<f64> {
 
         self.pairs
             .add_external_four_mom_impl(sample.external_moms(), &mut values);
-        self.pairs
-            .polarizations_values(graph, sample.external_moms(), helicities, &mut values);
+        values[self.pairs.polarizations.value_range.clone()].clone_from_slice(
+            &self
+                .pairs
+                .polarizations_values(graph, sample.external_moms(), helicities),
+        );
 
         if let Some(threshold_params) = threshold_params {
             self.pairs.threshold_params(threshold_params, &mut values);
@@ -628,9 +690,11 @@ impl<T: FloatLike> ParamBuilder<T> {
 
     pub(crate) fn new_empty() -> Self {
         Self {
+            polarization_cache: ParamCache::default(),
             fn_map: FunctionMap::default(),
             pairs: GammaLoopPairs::default(),
             values: Vec::new(),
+
             reps: Vec::new(),
         }
     }
@@ -716,27 +780,27 @@ impl<T: FloatLike> ParamBuilder<T> {
         for (_, i) in orientation.orientation() {
             match i {
                 Orientation::Default => {
-                    self.values[o_start] = (one.clone());
+                    self.values[o_start] = one.clone();
                     o_start += 1;
-                    self.values[o_start] = (one.clone());
+                    self.values[o_start] = one.clone();
                     o_start += 1;
-                    self.values[o_start] = (zero.clone());
+                    self.values[o_start] = zero.clone();
                     o_start += 1;
                 }
                 Orientation::Reversed => {
-                    self.values[o_start] = (minusone.clone());
+                    self.values[o_start] = minusone.clone();
                     o_start += 1;
-                    self.values[o_start] = (zero.clone());
+                    self.values[o_start] = zero.clone();
                     o_start += 1;
-                    self.values[o_start] = (one.clone());
+                    self.values[o_start] = one.clone();
                     o_start += 1;
                 }
                 Orientation::Undirected => {
-                    self.values[o_start] = (zero.clone());
+                    self.values[o_start] = zero.clone();
                     o_start += 1;
-                    self.values[o_start] = (zero.clone());
+                    self.values[o_start] = zero.clone();
                     o_start += 1;
-                    self.values[o_start] = (zero.clone());
+                    self.values[o_start] = zero.clone();
                     o_start += 1;
                 }
             }
@@ -745,12 +809,44 @@ impl<T: FloatLike> ParamBuilder<T> {
 
     pub(crate) fn polarizations_values(
         &mut self,
+        cache: bool,
         graph: &Graph,
-        ext: &ExternalFourMomenta<F<T>>,
+        sample: &MomentumSample<T>,
         helicities: &[Helicity],
     ) {
-        self.pairs
-            .polarizations_values(graph, ext, helicities, &mut self.values);
+        let pols = if let Some(v) = self
+            .polarization_cache
+            .get(sample.sample.external_mom_cache_id)
+        {
+            debug_assert_eq!(
+                v,
+                &self
+                    .pairs
+                    .polarizations_values(graph, sample.external_moms(), helicities)
+            );
+
+            if !cache {
+                self.values[self.pairs.polarizations.value_range.clone()].clone_from_slice(
+                    &self
+                        .pairs
+                        .polarizations_values(graph, sample.external_moms(), helicities),
+                );
+                return;
+            }
+            v
+        } else {
+            self.polarization_cache.checked_push(
+                sample.sample.external_mom_cache_id,
+                self.pairs
+                    .polarizations_values(graph, sample.external_moms(), helicities),
+            );
+
+            self.polarization_cache
+                .get(sample.sample.external_mom_cache_id)
+                .unwrap()
+        };
+
+        self.values[self.pairs.polarizations.value_range.clone()].clone_from_slice(pols);
     }
 
     pub(crate) fn threshold_params(&mut self, threshold_params: &ThresholdParams<T>) {

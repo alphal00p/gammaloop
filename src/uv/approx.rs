@@ -7,30 +7,23 @@ use crate::{
     },
     graph::{Edge, Graph, LMBext, LoopMomentumBasis, Vertex},
     momentum::Sign,
-    numerator::{symbolica_ext::AtomCoreExt, Network, ParsingNet},
+    numerator::{symbolica_ext::AtomCoreExt, ParsingNet},
     symbolica_ext::CallSymbol,
-    utils::{external_energy_atom_from_index, ose_atom_from_index, GS, W_},
+    utils::{symbolica_ext::LOGPRINTOPTS, GS, W_},
 };
 use ahash::AHashSet;
 use bitvec::vec::BitVec;
 use idenso::{gamma::GammaSimplifier, metric::MS};
 use log::debug;
-use spenso::{
-    structure::{abstract_index::AIND_SYMBOLS, concrete_index::ExpandedIndex},
-    tensors::parametric::atomcore::PatternReplacement,
-};
+
 use symbolica::{
     atom::{Atom, AtomCore, FunctionBuilder, Symbol},
-    function,
-    id::Replacement,
-    parse,
-    printer::PrintOptions,
-    symbol,
+    function, parse, symbol,
 };
 
 use linnet::half_edge::{
-    involution::{EdgeIndex, EdgeVec, HedgePair, Orientation},
-    subgraph::{Inclusion, InternalSubGraph, ModifySubgraph, SubGraph, SubGraphOps},
+    involution::{EdgeIndex, HedgePair},
+    subgraph::{Inclusion, InternalSubGraph, SubGraph, SubGraphOps},
     HedgeGraph,
 };
 
@@ -247,16 +240,6 @@ impl Approximation {
         self.final_integrand =
             self.final_integrand(graph, amplitude, canonize_esurface, orientations, cut_edges)
     }
-    pub(crate) fn simplify_notation(expr: &Atom) -> Atom {
-        let replacements = [(function!(GS.den, W_.a_, W_.x_), Atom::var(W_.x_))];
-
-        let reps: Vec<_> = replacements
-            .into_iter()
-            .map(|(a, b)| Replacement::new(a.to_pattern(), b))
-            .collect();
-
-        expr.replace_multiple_repeat(&reps)
-    }
 
     pub(crate) fn new<G, E, V, H>(
         spinney: InternalSubGraph,
@@ -277,18 +260,6 @@ impl Approximation {
             local_3d: CFFapprox::NotComputed,
             integrated_4d: ApproxOp::NotComputed,
         }
-    }
-
-    pub(crate) fn reduced_graph(&self, subgraph: &InternalSubGraph) -> InternalSubGraph {
-        self.subgraph.subtract(subgraph)
-    }
-
-    pub(crate) fn structure_approximate(&self, dependent: &Self) -> SimpleApprox {
-        dependent
-            .simple_approx
-            .as_ref()
-            .unwrap()
-            .dependent(self.subgraph.clone())
     }
 
     pub(crate) fn integrated_4d<
@@ -708,11 +679,7 @@ impl Approximation {
 
         debug!(
             "Integrated 4d finite part: {:#}",
-            finite.printer(PrintOptions {
-                hide_all_namespaces: false,
-                hide_namespace: Some("_gammaloop"),
-                ..Default::default()
-            })
+            finite.printer(LOGPRINTOPTS)
         );
 
         // TODO: multiply by the number of orientations or only apply the counterterm to
@@ -950,17 +917,13 @@ impl Approximation {
 
         debug!(
             "Integrated 4d finite part: {:#}",
-            finite.printer(PrintOptions {
-                hide_all_namespaces: false,
-                hide_namespace: Some("_gammaloop"),
-                ..Default::default()
-            })
+            finite.printer(LOGPRINTOPTS)
         );
         let reduced = amplitude.included().subtract(&self.subgraph.included());
 
         let mut cff = s * t - s * finite * t_arg.integrand;
 
-        for (p, eid, e) in graph.as_ref().iter_edges_of(&reduced) {
+        for (p, eid, _) in graph.as_ref().iter_edges_of(&reduced) {
             let eid = usize::from(eid) as i64;
             if p.is_paired() {
                 cff = cff
@@ -984,15 +947,7 @@ impl Approximation {
         resnum *= cff;
         resnum = resnum.wrap_color(GS.color_wrap);
 
-        debug!(
-            "Integrand before parsing:{}",
-            resnum.printer(PrintOptions {
-                terms_on_new_line: true,
-                hide_all_namespaces: false,
-                hide_namespace: Some("_gammaloop"),
-                ..Default::default()
-            })
-        );
+        debug!("Integrand before parsing:{}", resnum.printer(LOGPRINTOPTS));
         let mut res = resnum.parse_into_net().unwrap();
         // println!("Final Integrand Net:{}", res.net.dot_pretty());
         res = res.replace_multiple(&reps);
@@ -1035,283 +990,6 @@ impl Approximation {
 
     //     Some((simple_approx.sign * simple_approx.expr(&amplitude.filter)).into())
     // }
-}
-
-pub(crate) fn do_replacement_rules<H, G: UltravioletGraph + AsRef<HedgeGraph<Edge, Vertex, H>>>(
-    mut orientation_expr: Atom,
-    graph: &G,
-    cut_edges: &[EdgeIndex],
-    orientation: &EdgeVec<Orientation>,
-) -> Atom {
-    let g = graph.as_ref();
-    let mut cut_edges_subgraph: BitVec = g.empty_subgraph();
-
-    for edge_id in cut_edges.iter() {
-        let (_, pair) = g[edge_id];
-        cut_edges_subgraph.add(pair);
-    }
-
-    let cut_edges_subgraph = if cut_edges_subgraph.is_empty() {
-        None
-    } else {
-        Some(cut_edges_subgraph)
-    };
-
-    for (p, eid, _) in g.iter_edges() {
-        if p.is_paired() {
-            orientation_expr = orientation_expr
-                .replace(GS.emr_mom(eid, function!(AIND_SYMBOLS.cind, 0)))
-                .with(GS.ose(eid));
-        }
-    }
-
-    let spenso_mink = symbol!("spenso::mink");
-
-    // substitute all OSEs from subgraphs, they are in the form OSE(edge_id, momentum, mass^2, mom.mom + mass^2)
-    // the sqrt has already been applied
-    // should simplify the expression
-    orientation_expr = orientation_expr
-        .replace(function!(GS.ose, W_.x_, W_.y_, W_.z_, W_.prop_, W_.a___))
-        .with(function!(GS.ose, 100, W_.prop_, W_.a___));
-
-    // debug!("sta");
-    // contract all dot products, set all cross terms ose.q3 to 0
-    // MS.dot is a 4d dot product
-    orientation_expr = orientation_expr
-        .replace(
-            function!(GS.emr_vec, W_.x__, function!(spenso_mink, W_.z__))
-                * function!(GS.ose, W_.y__, function!(spenso_mink, W_.z__)),
-        )
-        .with(Atom::Zero)
-        .replace(
-            function!(GS.emr_vec, W_.x__, function!(spenso_mink, W_.z__))
-                * function!(GS.energy, W_.y__, function!(spenso_mink, W_.z__)),
-        )
-        .with(Atom::Zero)
-        .replace(
-            function!(GS.emr_vec, W_.x__, function!(spenso_mink, W_.z__))
-                * function!(GS.ose, W_.y__, function!(spenso_mink, W_.z__)).pow(Atom::var(W_.b_)),
-        )
-        .with(Atom::Zero);
-    // debug!("expanding");
-    // orientation_expr=orientation_expr.expand() // TODO: prevent expansion
-    // debug!("inter");
-    orientation_expr = orientation_expr
-        .replace(
-            function!(GS.emr_vec, W_.x__, function!(spenso_mink, W_.z__))
-                * function!(GS.ose, W_.y__, function!(spenso_mink, W_.z__)),
-        )
-        .with(Atom::Zero)
-        .replace(
-            function!(GS.emr_vec, W_.x__, function!(spenso_mink, W_.z__))
-                * function!(GS.energy, W_.y__, function!(spenso_mink, W_.z__)),
-        )
-        .with(Atom::Zero)
-        .replace(
-            function!(GS.emr_vec, W_.x__, function!(spenso_mink, W_.z__))
-                * function!(GS.ose, W_.y__, function!(spenso_mink, W_.z__)).pow(Atom::var(W_.b_)),
-        )
-        .with(Atom::Zero)
-        .replace(function!(
-            MS.dot,
-            function!(GS.emr_vec, W_.x_),
-            function!(GS.ose, W_.y_)
-        ))
-        .with(Atom::Zero)
-        .replace(function!(
-            MS.dot,
-            function!(GS.emr_vec, W_.x_),
-            function!(GS.energy, W_.y_)
-        ))
-        .with(Atom::Zero)
-        .replace(function!(GS.emr_vec, W_.x__, W_.y_).npow(2))
-        .with(function!(
-            MS.dot,
-            function!(GS.emr_vec, W_.x__),
-            function!(GS.emr_vec, W_.x__)
-        ))
-        .replace(function!(GS.emr_vec, W_.x__, W_.a_) * function!(GS.emr_vec, W_.y__, W_.a_))
-        .repeat()
-        .with(function!(
-            MS.dot,
-            function!(GS.emr_vec, W_.x__),
-            function!(GS.emr_vec, W_.y__)
-        ))
-        .replace(function!(GS.ose, W_.y__, function!(spenso_mink, W_.z__)).npow(2))
-        .with(function!(GS.ose, W_.y__).npow(2))
-        .replace(function!(GS.energy, W_.y__, function!(spenso_mink, W_.z__)).npow(2))
-        .with(function!(GS.energy, W_.y__).npow(2))
-        .replace(
-            function!(GS.ose, W_.x__, function!(spenso_mink, W_.z__))
-                * function!(GS.ose, W_.y__, function!(spenso_mink, W_.z__)),
-        )
-        .repeat()
-        .with(function!(GS.ose, W_.x__) * function!(GS.ose, W_.y__))
-        .replace(
-            function!(GS.energy, W_.x__, function!(spenso_mink, W_.z__))
-                * function!(GS.energy, W_.y__, function!(spenso_mink, W_.z__)),
-        )
-        .repeat()
-        .with(function!(GS.energy, W_.x__) * function!(GS.energy, W_.y__))
-        .replace(
-            function!(GS.energy, W_.x__, function!(spenso_mink, W_.z__))
-                * function!(GS.ose, W_.y__, function!(spenso_mink, W_.z__)),
-        )
-        .repeat()
-        .with(function!(GS.energy, W_.x__) * function!(GS.ose, W_.y__))
-        .replace(
-            function!(GS.ose, W_.x__, function!(spenso_mink, W_.z__)).pow(Atom::var(W_.a_))
-                * function!(GS.ose, W_.y__, function!(spenso_mink, W_.z__)),
-        )
-        .repeat()
-        .with(function!(GS.ose, W_.x__).pow(Atom::var(W_.a_)) * function!(GS.ose, W_.y__))
-        .replace(
-            function!(GS.ose, W_.x__, function!(spenso_mink, W_.z__)).pow(Atom::var(W_.a_))
-                * function!(GS.ose, W_.y__, function!(spenso_mink, W_.z__)).pow(Atom::var(W_.b_)),
-        )
-        .repeat()
-        .with(
-            function!(GS.ose, W_.x__).pow(Atom::var(W_.a_))
-                * function!(GS.ose, W_.y__).pow(Atom::var(W_.b_)),
-        )
-        .replace(
-            function!(GS.ose, W_.x__, function!(spenso_mink, W_.z__)).pow(Atom::var(W_.a_))
-                * function!(GS.energy, W_.y__, function!(spenso_mink, W_.z__)),
-        )
-        .repeat()
-        .with(function!(GS.ose, W_.x__).pow(Atom::var(W_.a_)) * function!(GS.energy, W_.y__))
-        .replace(
-            function!(GS.ose, W_.x__, function!(spenso_mink, W_.z__)).pow(Atom::var(W_.a_))
-                * function!(GS.ose, W_.y__, function!(spenso_mink, W_.z__)).pow(Atom::var(W_.b_)),
-        )
-        .repeat()
-        .with(
-            function!(GS.ose, W_.x__).pow(Atom::var(W_.a_))
-                * function!(GS.ose, W_.y__).pow(Atom::var(W_.b_)),
-        )
-        .replace(function!(
-            MS.dot,
-            function!(GS.ose, W_.x__),
-            function!(GS.ose, W_.y__)
-        ))
-        .with(function!(GS.ose, W_.x__) * function!(GS.ose, W_.y__))
-        .replace(function!(
-            MS.dot,
-            function!(GS.emr_mom, W_.x__),
-            function!(GS.emr_vec, W_.y__)
-        ))
-        .with(function!(GS.emr_vec, W_.x__) * function!(GS.emr_vec, W_.y__));
-
-    // debug!("do first reps");
-
-    // substitute all OSEs from subgraphs, they are in the form OSE(edge_id, momentum, mass^2, mom.mom + mass^2)
-    // the sqrt has already been applied
-    orientation_expr = orientation_expr
-        .replace(function!(GS.ose, W_.x_, W_.y_, W_.z_, W_.prop_))
-        .with(function!(GS.ose, 100, W_.prop_)) // do in two steps to get slightly nicer output
-        .replace(function!(GS.ose, 100, W_.prop_))
-        .with(Atom::var(W_.prop_).sqrt().npow(2))
-        .replace(function!(GS.ose, 100, W_.prop_, W_.x_))
-        .with(Atom::var(W_.prop_).sqrt().npow(2)); // it could be that GS.ose(mu)^1/2 fused into GS.ose(mu)^1 which leaves a fake dummy index
-
-    // simplify nested exponents
-    orientation_expr = orientation_expr
-        .replace(Atom::var(W_.x_).pow(Atom::var(W_.a_)).pow(Atom::var(W_.b_)))
-        .repeat()
-        .with(Atom::var(W_.x_).pow(Atom::var(W_.a_) * Atom::var(W_.b_)));
-
-    //orientation_expr = orientation_expr
-    //   .replace(function!(GS.external_mom, W_.x_, W_.y_))
-    //   .with(function!(GS.energy, W_.x_));
-
-    if let Some(cut) = &cut_edges_subgraph {
-        let inverse_energy_product = Atom::num(1)
-            / g.iter_edges_of(cut)
-                .map(|(_, edge_id, _)| Atom::num(2) * ose_atom_from_index(edge_id))
-                .fold(Atom::num(1), |product, factor| product * factor);
-
-        orientation_expr = orientation_expr * inverse_energy_product;
-    }
-
-    // set the external energies
-    for (_p, edge_index, _d) in g.iter_edges_of(&g.external_filter()) {
-        let edge_id = usize::from(edge_index) as i64;
-        orientation_expr = orientation_expr
-            .replace(function!(GS.energy, edge_id, W_.x_))
-            .with(external_energy_atom_from_index(edge_index));
-    }
-
-    if let Some(cut) = &cut_edges_subgraph {
-        for (_p, edge_id, d) in g.iter_edges_of(cut) {
-            let e = usize::from(edge_id) as i64;
-            let mass2 = d.data.mass_atom().npow(2);
-
-            orientation_expr = orientation_expr
-                .replace(function!(GS.energy, e))
-                .with(function!(GS.ose, e))
-                .replace(function!(GS.energy, e, W_.x_))
-                .with(function!(GS.ose, e) * W_.x_);
-
-            orientation_expr = orientation_expr.replace(function!(GS.ose, e)).with(
-                (-function!(
-                    MS.dot,
-                    function!(GS.emr_vec, function!(GS.emr_mom, e)),
-                    function!(GS.emr_vec, function!(GS.emr_mom, e))
-                ) + mass2)
-                    .sqrt(),
-            );
-        }
-    }
-
-    orientation_expr = orientation_expr
-        .replace(function!(GS.emr_vec, W_.x_ + W_.y__))
-        .repeat()
-        .with(function!(GS.emr_vec, W_.x_) + function!(GS.emr_vec, W_.y__));
-    orientation_expr = orientation_expr
-        .replace(function!(GS.emr_vec, -function!(GS.emr_mom, W_.x_)))
-        .with(-function!(GS.emr_vec, W_.x_));
-
-    orientation_expr = orientation_expr
-        .replace(function!(GS.emr_vec, function!(GS.emr_mom, W_.x_)))
-        .with(function!(GS.emr_vec, W_.x_));
-
-    orientation_expr = orientation_expr.replace(parse!("ZERO")).with(Atom::new());
-
-    let replacements = graph.get_ose_replacements();
-    orientation_expr = orientation_expr.replace_multiple(&replacements);
-
-    orientation_expr = orientation_expr
-        .replace(function!(
-            MS.dot,
-            function!(GS.emr_vec, W_.x_),
-            function!(GS.emr_vec, W_.y_)
-        ))
-        .with(
-            -(function!(GS.emr_vec, W_.x_, Atom::from(ExpandedIndex::from_iter([1])))
-                * function!(GS.emr_vec, W_.y_, Atom::from(ExpandedIndex::from_iter([1])))
-                + function!(GS.emr_vec, W_.x_, Atom::from(ExpandedIndex::from_iter([2])))
-                    * function!(GS.emr_vec, W_.y_, Atom::from(ExpandedIndex::from_iter([2])))
-                + function!(GS.emr_vec, W_.x_, Atom::from(ExpandedIndex::from_iter([3])))
-                    * function!(GS.emr_vec, W_.y_, Atom::from(ExpandedIndex::from_iter([3])))),
-        )
-        .replace(parse!("ZERO"))
-        .with(Atom::new());
-
-    // set the external spatial parts
-    for (_p, edge_index, _d) in g.iter_edges_of(&g.external_filter()) {
-        let edge_id = usize::from(edge_index) as i64;
-
-        orientation_expr = orientation_expr
-            .replace(function!(GS.emr_vec, edge_id, W_.x_))
-            .with(function!(GS.emr_vec, edge_id, W_.x_));
-    }
-
-    // now it should be safe to replace Q3 by Q
-    orientation_expr = orientation_expr
-        .replace(function!(GS.emr_vec, W_.x___))
-        .with(function!(GS.emr_mom, W_.x___));
-
-    orientation_expr
 }
 
 impl ApproxOp {

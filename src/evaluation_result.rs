@@ -2,7 +2,6 @@ use std::time::Duration;
 
 use bincode::{Decode, Encode};
 use colored::Colorize;
-use log::info;
 use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
 use symbolica::domains::float::ConstructibleFloat;

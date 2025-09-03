@@ -197,6 +197,7 @@ pub trait GenericEvaluatorFloat<T: FloatLike = Self> {
 
     fn get_parameters<'a>(
         param_builder: &'a mut ParamBuilder,
+        cache: bool,
         graph: &'a Graph,
         sample: &'a MomentumSample<T>,
         helicities: &[Helicity],
@@ -254,13 +255,19 @@ impl GenericEvaluatorFloat for f64 {
 
     fn get_parameters<'a>(
         param_builder: &'a mut ParamBuilder,
+        cache: bool,
         graph: &'a Graph,
         sample: &'a MomentumSample<Self>,
         helicities: &[Helicity],
         threshold_params: Option<&ThresholdParams<f64>>,
     ) -> Cow<'a, Vec<Complex<F<Self>>>> {
-        let params =
-            param_builder.update_emr_and_get_params(sample, graph, helicities, threshold_params);
+        let params = param_builder.update_emr_and_get_params(
+            cache,
+            sample,
+            graph,
+            helicities,
+            threshold_params,
+        );
 
         params
     }
@@ -329,11 +336,12 @@ impl GenericEvaluatorFloat for f128 {
 
     fn get_parameters<'a>(
         param_builder: &'a mut ParamBuilder,
+        cache: bool,
         graph: &'a Graph,
         sample: &'a MomentumSample<Self>,
         helicities: &[Helicity],
         threshold_params: Option<&ThresholdParams<f128>>,
     ) -> Cow<'a, Vec<Complex<F<Self>>>> {
-        param_builder.update_emr_and_get_params(sample, graph, helicities, threshold_params)
+        param_builder.update_emr_and_get_params(cache, sample, graph, helicities, threshold_params)
     }
 }

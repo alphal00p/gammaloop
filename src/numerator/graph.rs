@@ -27,7 +27,7 @@ impl Graph {
         for h in subgraph.included_iter() {
             let eid = self.underlying[&h];
             pols *= self.underlying.get_edge_data_full(h).polarization(
-                &[Atom::num(eid.0 as i32)],
+                &[Atom::num(eid.0)],
                 &self.underlying[h],
                 self.underlying.flow(h),
             );
@@ -49,7 +49,7 @@ impl Graph {
                 .underlying
                 .get_edge_data_full(h)
                 .polarization_structure(
-                    &[Atom::num(eid.0 as i32)],
+                    &[Atom::num(eid.0)],
                     &self.underlying[h],
                     self.underlying.flow(h),
                 )

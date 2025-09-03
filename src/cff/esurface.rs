@@ -400,7 +400,7 @@ impl Esurface {
             .map(|index| {
                 let mass_symbol = graph.underlying[*index].mass_atom();
                 let emr_symbols = (0..3)
-                    .map(|i| function!(GS.emr_mom, usize::from(*index) as i32, i + 1))
+                    .map(|i| function!(GS.emr_mom, usize::from(*index), i + 1))
                     .collect_vec();
 
                 let atom = (&emr_symbols[0] * &emr_symbols[0]
@@ -411,7 +411,7 @@ impl Esurface {
                 atom
             })
             .chain(self.external_shift.iter().map(|(index, sign)| {
-                function!(GS.emr_mom, usize::from(*index) as i32, 0) * Atom::num(*sign)
+                function!(GS.emr_mom, usize::from(*index), 0) * Atom::num(*sign)
             }))
             .reduce(|sum, atom| sum + atom)
             .unwrap_or_else(|| Atom::new())
@@ -427,12 +427,12 @@ impl Esurface {
             .iter()
             .map(|index| {
                 let mass_symbol = graph.underlying[*index].mass_atom();
-                let emr_symbol = function!(GS.emr_mom, usize::from(*index) as i32);
+                let emr_symbol = function!(GS.emr_mom, usize::from(*index));
                 let atom = (&emr_symbol * &emr_symbol + &mass_symbol * &mass_symbol).sqrt();
                 atom
             })
             .chain(self.external_shift.iter().map(|(index, sign)| {
-                function!(GS.emr_mom, usize::from(*index) as i32, 0) * Atom::num(*sign)
+                function!(GS.emr_mom, usize::from(*index), 0) * Atom::num(*sign)
             }))
             .reduce(|sum, atom| sum + atom)
             .unwrap_or_else(|| Atom::new())

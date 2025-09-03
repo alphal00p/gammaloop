@@ -489,6 +489,7 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
         let final_result = if let Some(iterative_evaluator) = iterative_evaluator {
             let params = T::get_parameters(
                 param_builder,
+                false,
                 ct_builder.graph,
                 &self.rstar_sample,
                 ct_builder.settings.kinematics.externals.get_helicities(),
@@ -518,6 +519,7 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
 
                 let params = T::get_parameters(
                     param_builder,
+                    false,
                     ct_builder.graph,
                     &self.rstar_sample,
                     ct_builder.settings.kinematics.externals.get_helicities(),

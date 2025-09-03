@@ -33,7 +33,7 @@ use tracing::debug;
 // use crate::feyngen::dis::{DisEdge, DisVertex};
 
 use crate::momentum::{PolDef, PolType};
-use crate::utils::{f128, GS, TENSORLIB, W_};
+use crate::utils::{GS, TENSORLIB, W_};
 use crate::{
     model::Model,
     utils::{serde_utils::IsDefault, F},
@@ -76,8 +76,7 @@ use symbolica::state::Workspace;
 
 use crate::numerator::ufo::UFO;
 use symbolica::atom::{AtomCore, AtomOrView, AtomView};
-use symbolica::evaluate::{CompileOptions, ExpressionEvaluator, InlineASM};
-use symbolica::id::MatchSettings;
+use symbolica::evaluate::{CompileOptions, InlineASM};
 use symbolica::{
     atom::{Atom, FunctionBuilder},
     function, parse, symbol,
@@ -1032,14 +1031,16 @@ pub struct PolySplit {
 impl Encode for PolySplit {
     fn encode<E: bincode::enc::Encoder>(
         &self,
-        encoder: &mut E,
+        _encoder: &mut E,
     ) -> std::result::Result<(), bincode::error::EncodeError> {
         todo!()
     }
 }
 
 impl PolySplit {
-    pub(crate) fn from_color_out(color_simplified: Numerator<ColorSimplified>) -> DataTensor<Atom> {
+    pub(crate) fn from_color_out(
+        _color_simplified: Numerator<ColorSimplified>,
+    ) -> DataTensor<Atom> {
         disable!(
 
         let colorless_parsed = color_simplified
@@ -1459,7 +1460,7 @@ impl TypedNumeratorState for Network {
 }
 
 impl<T: Copy + Default> Numerator<SymbolicExpression<T>> {
-    pub(crate) fn apply_reps(&self, rep_atoms: Vec<(AtomView, AtomView)>) -> Self {
+    pub(crate) fn apply_reps(&self, _rep_atoms: Vec<(AtomView, AtomView)>) -> Self {
         todo!()
     }
 }
@@ -1630,8 +1631,8 @@ impl Numerator<Network> {
 
     pub(crate) fn random_concretize_reps(
         &self,
-        sample_iterator: Option<&mut PrimeIteratorU64>,
-        fully_numerical_substitution: bool,
+        _sample_iterator: Option<&mut PrimeIteratorU64>,
+        _fully_numerical_substitution: bool,
     ) -> Vec<(Atom, Atom)> {
         // let prime_iterator = if let Some(iterator) = sample_iterator {
         //     iterator

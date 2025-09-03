@@ -88,7 +88,7 @@ impl Graph {
         let mut helicities = vec![];
         let ext = self.external_filter();
 
-        for (p, i, d) in self.iter_edges_of(&ext) {
+        for (_, _, d) in self.iter_edges_of(&ext) {
             let hel = d.data.random_helicity(seed);
             helicities.push(hel);
             if helicities.len() == 2 {

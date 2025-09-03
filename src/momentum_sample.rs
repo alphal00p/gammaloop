@@ -278,7 +278,7 @@ impl<T: FloatLike> BareMomentumSample<T> {
         orientation: Option<usize>,
     ) -> Result<Self> {
         let external_moms = external_moms.get_dependent_externals(dependent_momenta_constructor)?;
-
+        println!("New l{loop_mom_cache_id}e{external_mom_cache_id}");
         Ok(Self {
             loop_moms,
             loop_mom_cache_id,
@@ -352,13 +352,20 @@ impl<T: FloatLike> BareMomentumSample<T> {
             external_moms: self.external_moms.iter().map(FourMomentum::lower).collect(),
             jacobian: self.jacobian.lower(),
             orientation: self.orientation,
+
             loop_mom_cache_id: self.loop_mom_cache_id,
             external_mom_cache_id: self.external_mom_cache_id,
         }
     }
 
     #[inline]
-    pub(crate) fn rotate(&self, rotation: &Rotation) -> Self {
+
+    pub(crate) fn rotate(
+        &self,
+        rotation: &Rotation,
+        loop_mom_cache_id: usize,
+        external_mom_cache_id: usize,
+    ) -> Self {
         Self {
             loop_moms: self.loop_moms.iter().map(|l| l.rotate(rotation)).collect(),
             external_moms: self
@@ -366,8 +373,8 @@ impl<T: FloatLike> BareMomentumSample<T> {
                 .iter()
                 .map(|l| l.rotate(rotation))
                 .collect(),
-            loop_mom_cache_id: self.loop_mom_cache_id + 1,
-            external_mom_cache_id: self.external_mom_cache_id + 1,
+            loop_mom_cache_id,
+            external_mom_cache_id,
             jacobian: self.jacobian.clone(),
             orientation: self.orientation,
         }
@@ -501,10 +508,16 @@ impl<T: FloatLike> MomentumSample<T> {
     }
 
     #[inline]
-    /// Rotation for stability checks
-    pub(crate) fn rotate(&self, rotation: &Rotation) -> Self {
+    pub(crate) fn rotate(
+        &self,
+        rotation: &Rotation,
+        loop_mom_cache_id: usize,
+        external_mom_cache_id: usize,
+    ) -> Self {
         Self {
-            sample: self.sample.rotate(rotation),
+            sample: self
+                .sample
+                .rotate(rotation, loop_mom_cache_id, external_mom_cache_id),
         }
     }
 

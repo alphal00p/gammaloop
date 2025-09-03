@@ -185,7 +185,7 @@ impl AmplitudeGraphTerm {
     ) {
         let graph_path = path.as_ref().join(&self.graph.name);
 
-        let r = fs::create_dir_all(&graph_path)
+        let _ = fs::create_dir_all(&graph_path)
             .with_context(|| {
                 format!(
                     "Trying to create directory to save amplitude {}",
@@ -245,6 +245,7 @@ impl AmplitudeGraphTerm {
         {
             let a = T::get_parameters(
                 &mut self.param_builder,
+                settings.general.cache_polarizations,
                 &self.graph,
                 momentum_sample,
                 hel,
@@ -263,6 +264,7 @@ impl AmplitudeGraphTerm {
                     self.param_builder.orientation_value(e);
                     let a = T::get_parameters(
                         &mut self.param_builder,
+                        settings.general.cache_polarizations,
                         &self.graph,
                         momentum_sample,
                         hel,
@@ -329,11 +331,13 @@ impl GraphTerm for AmplitudeGraphTerm {
             })?;
 
         self.param_builder.add_external_four_mom(&externals);
-        self.param_builder.polarizations_values(
-            &self.graph,
-            &externals,
-            settings.kinematics.externals.get_helicities(),
-        );
+
+        self.param_builder.values[self.param_builder.pairs.polarizations.value_range.clone()]
+            .clone_from_slice(&self.param_builder.pairs.polarizations_values(
+                &self.graph,
+                &externals,
+                settings.kinematics.externals.get_helicities(),
+            ));
 
         self.param_builder
             .m_uv_value(Complex::new_re(settings.general.m_uv));

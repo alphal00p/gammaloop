@@ -220,7 +220,7 @@ where
     T: From<usize> + Copy,
     usize: From<T>,
 {
-    fn add_assign(&mut self, rhs: ()) {
+    fn add_assign(&mut self, _rhs: ()) {
         self.0.push(SignOrZero::Plus);
     }
 }

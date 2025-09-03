@@ -62,6 +62,8 @@ pub struct GeneralSettings {
     pub orientation_pat: OrientationPattern,
     #[serde(skip_serializing_if = "is_false")]
     pub load_compiled_cff: bool,
+    #[serde(skip_serializing_if = "is_false")]
+    pub cache_polarizations: bool,
     #[serde(skip_serializing_if = "is_float::<1000>")]
     pub m_uv: F<f64>,
     #[serde(skip_serializing_if = "is_float::<1000_000>")]
@@ -73,6 +75,7 @@ impl Default for GeneralSettings {
         Self {
             use_ltd: false,
             load_compiled_cff: false,
+            cache_polarizations: false,
             orientation_pat: OrientationPattern::default(),
             m_uv: F(1000.0),
             mu_r_sq: F(1000.0 * 1000.0),

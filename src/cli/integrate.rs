@@ -1,8 +1,7 @@
 use std::{fs, path::PathBuf};
 
 use clap::Args;
-use itertools::Itertools;
-use log::{info, warn};
+use log::info;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;

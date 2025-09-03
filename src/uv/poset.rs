@@ -114,12 +114,12 @@ impl<T, R: Key> SlotNode<T, R> {
         }
     }
 
-    pub(crate) fn compare_data(&self, other: &Self) -> Option<std::cmp::Ordering>
-    where
-        T: PartialOrd,
-    {
-        self.data.partial_cmp(&other.data)
-    }
+    // pub(crate) fn compare_data(&self, other: &Self) -> Option<std::cmp::Ordering>
+    // where
+    //     T: PartialOrd,
+    // {
+    //     self.data.partial_cmp(&other.data)
+    // }
 }
 
 /// A partially ordered set (poset) that can be built from an iterator and a slotmap.

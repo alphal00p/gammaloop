@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use symbolica::{
     atom::{Atom, AtomCore},
     parse,
+    printer::{PrintMode, PrintOptions},
 };
 
 use std::{
@@ -12,6 +13,28 @@ use std::{
 };
 
 use crate::GammaLoopContext;
+
+pub static LOGPRINTOPTS: PrintOptions = PrintOptions {
+    hide_all_namespaces: false,
+    color_namespace: false,
+    color_builtin_symbols: false,
+    color_top_level_sum: false,
+    terms_on_new_line: false,
+    print_finite_field: true,
+    symmetric_representation_for_finite_field: false,
+    explicit_rational_polynomial: false,
+    number_thousands_separator: None,
+    multiplication_operator: '*',
+    double_star_for_exponentiation: false,
+    square_brackets_for_function: false,
+    num_exp_as_superscript: false,
+    mode: PrintMode::Symbolica,
+    precision: None,
+    pretty_matrix: false,
+    max_terms: None,
+    custom_print_mode: None,
+    hide_namespace: Some("_gammaloop"),
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Default, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]

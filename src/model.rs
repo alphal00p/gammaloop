@@ -6,7 +6,7 @@ use crate::HasModel;
 use ahash::{AHashMap, HashSet, RandomState};
 use bincode::{Decode, Encode};
 use color_eyre::{Help, Report};
-use eyre::{eyre, Context};
+use eyre::eyre;
 use itertools::Itertools;
 use linnet::half_edge::drawing::Decoration;
 use linnet::half_edge::involution::Flow;
@@ -17,7 +17,6 @@ use spenso::structure::{IndexLess, PermutedStructure};
 // use log::{info, trace};
 use idenso::representations::{Bispinor, ColorAdjoint, ColorFundamental, ColorSextet};
 use serde::{Deserialize, Serialize};
-use serde_yaml::Error;
 use smartstring::{LazyCompact, SmartString};
 use spenso::algebra::algebraic_traits::IsZero;
 use spenso::algebra::complex::Complex;
@@ -38,10 +37,10 @@ use symbolica::coefficient::CoefficientView;
 use symbolica::evaluate::FunctionMap;
 
 use color_eyre::Result;
+use std::collections::HashMap;
 use std::ops::Deref;
 use std::path::Path;
 use std::sync::Arc;
-use std::{collections::HashMap, fs::File};
 use symbolica::atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol};
 use symbolica::id::{Pattern, Replacement};
 
@@ -662,7 +661,7 @@ impl Particle {
                 Helicity::Minus
             }
         } else if self.is_vector() {
-            Helicity::try_from(rng.gen_range(1..=1)).unwrap()
+            Helicity::try_from(rng.random_range(1..=1)).unwrap()
         } else {
             Helicity::Zero
         }
@@ -2297,7 +2296,7 @@ mod tests {
 
     use crate::{
         model::{ArcPropagator, ArcVertexRule},
-        momentum::{FourMomentum, Helicity, ThreeMomentum},
+        momentum::{Helicity, ThreeMomentum},
         utils::{test_utils::load_generic_model, ApproxEq, F},
     };
 

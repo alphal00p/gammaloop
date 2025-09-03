@@ -352,6 +352,7 @@ impl LmbMultiChannelingSetup {
         &self,
         channel_index: ChannelIndex,
         momentum_sample: &BareMomentumSample<T>,
+        loop_mom_cache_id: usize,
         base_lmb: &LoopMomentumBasis,
         all_bases: &TiVec<LmbIndex, LoopMomentumBasis>,
     ) -> BareMomentumSample<T> {
@@ -374,14 +375,17 @@ impl LmbMultiChannelingSetup {
 
         BareMomentumSample {
             loop_moms: new_loop_moms,
-            loop_mom_cache_id: momentum_sample.loop_mom_cache_id + 1,
+
+            loop_mom_cache_id,
             external_mom_cache_id: momentum_sample.external_mom_cache_id,
+
             external_moms: momentum_sample.external_moms.clone(),
             jacobian: momentum_sample.jacobian.clone(),
             orientation: momentum_sample.orientation,
         }
     }
 
+    /// Note this increments the loop_mom_cache_id of all of the returned BareMomentumSample
     pub(crate) fn reinterpret_loop_momenta_and_compute_prefactor_all_channels<T: FloatLike>(
         &self,
         momentum_sample: &MomentumSample<T>,
@@ -389,12 +393,15 @@ impl LmbMultiChannelingSetup {
         all_bases: &TiVec<LmbIndex, LoopMomentumBasis>,
         alpha: &F<T>,
     ) -> TiVec<ChannelIndex, (MomentumSample<T>, F<T>)> {
+        let mut loop_mom_cache_id = momentum_sample.sample.loop_mom_cache_id;
         self.channels
             .iter_enumerated()
             .map(|(channel_index, _)| {
+                loop_mom_cache_id += 1;
                 self.reinterpret_loop_momenta_and_compute_prefactor(
                     channel_index,
                     momentum_sample,
+                    loop_mom_cache_id,
                     graph,
                     all_bases,
                     alpha,
@@ -406,10 +413,13 @@ impl LmbMultiChannelingSetup {
     /// This function is used to do do LMB multi-channeling without fully switching to a different lmb
     /// for each channel. The momenta provided are reinterpreted as loop momenta of the lmb corresponding to the channel_index.
     /// Then we transform these loop momenta to the fixed lmb of the graph. The prefactor is immediately computed for the requested channel
+    ///
+    /// Note this increments the loop_mom_cache_id of the returned BareMomentumSample
     pub(crate) fn reinterpret_loop_momenta_and_compute_prefactor<T: FloatLike>(
         &self,
         channel_index: ChannelIndex,
         momentum_sample: &MomentumSample<T>,
+        loop_mom_cache_id: usize,
         graph: &Graph,
         all_bases: &TiVec<LmbIndex, LoopMomentumBasis>,
         alpha: &F<T>,
@@ -420,6 +430,7 @@ impl LmbMultiChannelingSetup {
             sample: self.reinterpret_loop_momenta_impl(
                 channel_index,
                 &momentum_sample.sample,
+                loop_mom_cache_id,
                 base_lmb,
                 all_bases,
             ), // uuid: momentum_sample.uuid,
@@ -548,13 +559,21 @@ fn evaluate_all_rotations<T: FloatLike, I: GammaloopIntegrand>(
 ) -> (Vec<Complex<F<f64>>>, Duration) {
     let rotations = integrand.get_rotations().cloned().collect_vec();
 
-    let mut loop_cache_shift = rotations.len();
-    let mut external_cache_shift = rotations.len();
+    let mut loop_mom_cache_id = integrand.loop_cache_id();
+    let mut external_mom_cache_id = integrand.external_cache_id();
 
     // rotate the momenta for the stability tests.
     let gammaloop_samples: Vec<_> = rotations
         .iter()
-        .map(|rotation| gammaloop_sample.rotate(rotation))
+        .map(|rotation| {
+            if rotation.is_identity() {
+                return gammaloop_sample.clone();
+            }
+            loop_mom_cache_id += 1;
+            external_mom_cache_id += 1;
+            println!("l{loop_mom_cache_id}e{external_mom_cache_id}");
+            gammaloop_sample.rotate(rotation, loop_mom_cache_id, external_mom_cache_id)
+        })
         .collect();
 
     let start_time = std::time::Instant::now();
@@ -564,8 +583,9 @@ fn evaluate_all_rotations<T: FloatLike, I: GammaloopIntegrand>(
         .map(|(gammaloop_sample, rotation)| evaluate_single(integrand, gammaloop_sample, rotation))
         .collect_vec();
 
-    integrand.increment_loop_cache_id(loop_cache_shift);
-    integrand.increment_external_cache_id(external_cache_shift);
+    integrand.increment_loop_cache_id(rotations.len());
+    integrand.increment_external_cache_id(rotations.len());
+
     let duration = start_time.elapsed() / gammaloop_samples.len() as u32;
 
     (evaluation_results, duration)
@@ -623,11 +643,13 @@ fn evaluate_single<T: FloatLike, I: GammaloopIntegrand>(
                         channel_id,
                         sample,
                     } => {
+                        loop_cache_shift += 1;
                         let (reparameterized_sample, prefactor) = graph_term
                             .get_multi_channeling_setup()
                             .reinterpret_loop_momenta_and_compute_prefactor(
                                 *channel_id,
                                 sample,
+                                loop_cache_shift,
                                 graph_term.get_graph(),
                                 graph_term.get_lmbs(),
                                 alpha,
@@ -916,10 +938,24 @@ fn evaluate_sample<I: GammaloopIntegrand>(
         } else {
             debug!("unstable at level: {}", stability_level.precision);
             if let Ok(gammaloop_sample) = parameterize::<f64, I>(sample, integrand) {
+                let mut loop_mom_cache_id = integrand.loop_cache_id();
+                let mut external_mom_cache_id = integrand.external_cache_id();
+                let mut shift = 0;
+
                 let rotated_samples: Vec<_> = integrand
                     .get_rotations()
-                    .map(|rotation| gammaloop_sample.rotate(rotation))
+                    .map(|rotation| {
+                        if rotation.is_identity() {
+                            return gammaloop_sample.clone();
+                        }
+                        loop_mom_cache_id += 1;
+                        shift += 1;
+                        external_mom_cache_id += 1;
+                        gammaloop_sample.rotate(rotation, loop_mom_cache_id, external_mom_cache_id)
+                    })
                     .collect();
+                integrand.increment_external_cache_id(shift);
+                integrand.increment_loop_cache_id(shift);
 
                 for (sample, result) in rotated_samples.iter().zip(&results) {
                     let default_sample = sample.get_default_sample();

@@ -11,7 +11,6 @@ use crate::{
     uv::approx::CFFapprox,
 };
 use bitvec::vec::BitVec;
-use slotmap::Key;
 use spenso::{
     network::store::TensorScalarStoreMapping,
     structure::abstract_index::AIND_SYMBOLS,

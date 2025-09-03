@@ -94,11 +94,17 @@ pub(crate) fn init_tracing(
 ) -> reload::Handle<EnvFilter, Registry> {
     FILTER_HANDLE
         .get_or_init(|| {
-            // 2) reloadable filter
+            // 2) reloadable filter - only allow gammaloop and status targets
             let spec =
                 std::env::var("RUST_LOG").unwrap_or_else(|_| default_spec.as_ref().to_string());
             LOG_SPEC.set(Mutex::new(spec.clone())).ok();
-            let (filter_layer, handle) = reload::Layer::new(EnvFilter::new(spec));
+
+            // Use EnvFilter for reload compatibility, but add per-layer filtering
+            let env_filter = EnvFilter::new(&format!(
+                "_gammaloop={},status=trace,status_data=trace",
+                spec
+            ));
+            let (filter_layer, handle) = reload::Layer::new(env_filter);
 
             let _ = std::fs::create_dir_all(dir.as_ref());
 
@@ -117,12 +123,19 @@ pub(crate) fn init_tracing(
                 .finish(file);
             LOG_GUARD.set(guard).ok();
 
+            // Add strict filtering to JSON layer
+            let json_filter = filter_fn(|metadata| {
+                let target = metadata.target();
+                target.starts_with("_gammaloop") || target == "status" || target == "status_data"
+            });
+
             let json = fmt::layer()
                 .json()
                 .flatten_event(true)
                 .with_current_span(true)
                 .with_span_list(true)
-                .with_writer(nb);
+                .with_writer(nb)
+                .with_filter(json_filter);
 
             // 4) pretty status to stderr, opt-in via `target="status"`
             let status_layer = fmt::layer()
@@ -145,16 +158,25 @@ pub(crate) fn init_tracing(
 pub fn init_test_tracing() -> reload::Handle<EnvFilter, Registry> {
     FILTER_HANDLE
         .get_or_init(|| {
-            // 2) reloadable filter
-            let spec = std::env::var("RUST_LOG").unwrap_or_else(|_| "debug".to_string());
+            // 2) reloadable filter - only allow gammaloop crate logs
+            let _spec = std::env::var("RUST_LOG").unwrap_or_else(|_| "debug".to_string());
 
-            let (filter_layer, handle) = reload::Layer::new(EnvFilter::new(spec));
+            // Use EnvFilter for reload compatibility
+            let env_filter = EnvFilter::new("_gammaloop=debug,status=trace,status_data=trace");
+            let (filter_layer, handle) = reload::Layer::new(env_filter);
 
             // 4) pretty status to stderr, opt-in via `target="status"`
+            // Add strict filtering to status layer
+            let test_status_filter = filter_fn(|metadata| {
+                let target = metadata.target();
+                target.starts_with("_gammaloop") || target == "status" || target == "status_data"
+            });
+
             let status_layer = fmt::layer()
                 .with_target(false)
                 .pretty()
-                .with_writer(std::io::stderr);
+                .with_writer(std::io::stderr)
+                .with_filter(test_status_filter);
 
             tracing_subscriber::registry()
                 .with(filter_layer)
@@ -169,13 +191,22 @@ pub fn init_test_tracing() -> reload::Handle<EnvFilter, Registry> {
 pub fn init_bench_tracing() -> reload::Handle<EnvFilter, Registry> {
     FILTER_HANDLE
         .get_or_init(|| {
-            let (filter_layer, handle) = reload::Layer::new(EnvFilter::new("warn"));
+            // Use EnvFilter for reload compatibility
+            let env_filter = EnvFilter::new("_gammaloop=warn,status=trace,status_data=trace");
+            let (filter_layer, handle) = reload::Layer::new(env_filter);
 
             // 4) pretty status to stderr, opt-in via `target="status"`
+            // Add strict filtering to status layer
+            let bench_status_filter = filter_fn(|metadata| {
+                let target = metadata.target();
+                target.starts_with("_gammaloop") || target == "status" || target == "status_data"
+            });
+
             let status_layer = fmt::layer()
                 .with_target(false)
                 .pretty()
-                .with_writer(std::io::stderr);
+                .with_writer(std::io::stderr)
+                .with_filter(bench_status_filter);
 
             tracing_subscriber::registry()
                 .with(filter_layer)

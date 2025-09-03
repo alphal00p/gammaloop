@@ -1,13 +1,13 @@
 use std::{
-    fs::{self, File},
-    io::{self, Read, Write},
+    fs::{self},
+    io::{self},
     ops::ControlFlow,
     path::{Path, PathBuf},
     sync::{Mutex, OnceLock},
     time::Instant,
 };
 
-use color_eyre::{Result, Section};
+use color_eyre::Result;
 use colored::{ColoredString, Colorize};
 use eyre::{eyre, Context};
 use log::debug;
@@ -22,7 +22,7 @@ use crate::{
     feyngen::GenerationType,
     graph::Graph,
     integrands::HasIntegrand,
-    model::{Model, SerializableModel},
+    model::Model,
     processes::{ExportSettings, Process, ProcessDefinition, ProcessList},
     settings::{runtime::LockedRuntimeSettings, GlobalSettings, RuntimeSettings},
     status_debug, status_info, status_warn,
@@ -231,8 +231,7 @@ impl State {
     }
 
     pub fn new(save_path: PathBuf) -> Self {
-        let handle =
-            super::tracing::init_tracing("info,symbolica::poly::gcd=off", &save_path.join("logs"));
+        let handle = super::tracing::init_tracing("info", &save_path.join("logs"));
 
         let a = Self {
             save_path,

@@ -1,4 +1,4 @@
-use crate::cff::expression::{AmplitudeOrientationID, GraphOrientation};
+use crate::cff::expression::AmplitudeOrientationID;
 use crate::graph::edge::ParseEdge;
 use crate::graph::global::ParseData;
 use crate::graph::hedge_data::ParseHedge;
@@ -8,14 +8,13 @@ use crate::graph::{LMBext, LoopMomentumBasis};
 use crate::initialisation::{initialise, test_initialise};
 use crate::momentum_sample::LoopIndex;
 use crate::numerator::symbolica_ext::AtomCoreExt;
-use crate::processes::{Amplitude, AmplitudeGraph};
+use crate::processes::AmplitudeGraph;
 use crate::settings::global::OrientationPattern;
 use crate::utils::W_;
 use idenso::IndexTooling;
 use linnet::half_edge::involution::EdgeIndex;
 
 use linnet::half_edge::{builder::HedgeGraphBuilder, involution::Flow};
-use log::debug;
 use symbolica::atom::Symbol;
 use symbolica::{parse_lit, symbol};
 
