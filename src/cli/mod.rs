@@ -1,6 +1,13 @@
 use crate::{
-    initialisation::initialise, integrands::HasIntegrand, model::Model, status_info,
-    utils::GIT_VERSION,
+    initialisation::initialise,
+    integrands::HasIntegrand,
+    model::Model,
+    settings::{GlobalSettings, RuntimeSettings},
+    status_info,
+    utils::{
+        serde_utils::{SmartSerde, SHOWDEFAULTS},
+        GIT_VERSION,
+    },
 };
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use clap_repl::{
@@ -116,6 +123,23 @@ impl Cli {
                 }
                 Save::State { path } => {
                     self.save(state, run_history, path, false)?;
+                }
+                Save::DefaultRuntimeSettings { path } => {
+                    SHOWDEFAULTS.store(true, std::sync::atomic::Ordering::Relaxed);
+                    let path = path.unwrap_or(self.state_folder.clone().join("run_settings.toml"));
+                    let settings = RuntimeSettings::default();
+                    let succes = settings.to_file(path);
+                    SHOWDEFAULTS.store(false, std::sync::atomic::Ordering::Relaxed);
+                    succes?;
+                }
+                Save::DefaultGlobalSettings { path } => {
+                    SHOWDEFAULTS.store(true, std::sync::atomic::Ordering::Relaxed);
+                    let path =
+                        path.unwrap_or(self.state_folder.clone().join("global_settings.toml"));
+                    let settings = GlobalSettings::default();
+                    let succes = settings.to_file(path);
+                    SHOWDEFAULTS.store(false, std::sync::atomic::Ordering::Relaxed);
+                    succes?;
                 }
             },
             Commands::Set(s) => match s {
@@ -358,6 +382,16 @@ pub enum Save {
     },
     State {
         /// Path to save the state to, by default is the current state folder
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+    DefaultRuntimeSettings {
+        /// Path to save the default runtime settings to, by default is the current state folder
+        #[arg(short = 'p', long)]
+        path: Option<PathBuf>,
+    },
+    DefaultGlobalSettings {
+        /// Path to save the default global settings to, by default is the current state folder
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
     },
