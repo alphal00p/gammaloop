@@ -233,6 +233,8 @@ impl Amplitude {
             data: AmplitudeIntegrandData {
                 name: self.name.clone(),
                 rotations: None,
+                loop_cache_id: 0,
+                external_cache_id: 0,
                 graph_terms: terms?,
                 external_signature: self.external_signature.clone(),
                 graph_group_structure: self.graph_group_structure.clone(),

@@ -150,6 +150,8 @@ impl<S: CrossSectionState> CrossSection<S> {
         let cross_section_integrand = CrossSectionIntegrand {
             settings: runtime_default.into(),
             data: CrossSectionIntegrandData {
+                loop_cache_id: 0,
+                external_cache_id: 0,
                 rotations: None,
                 name: self.name.clone(),
                 external_connections: self.external_connections.clone(),

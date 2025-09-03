@@ -49,6 +49,8 @@ pub struct CrossSectionIntegrand {
 #[trait_decode(trait = GammaLoopContext)]
 pub struct CrossSectionIntegrandData {
     pub name: String,
+    pub loop_cache_id: usize,
+    pub external_cache_id: usize,
     // pub polarizations: Vec<Polarizations>,
     pub rotations: Option<Vec<Rotation>>,
     pub graph_terms: Vec<CrossSectionGraphTerm>,
@@ -80,6 +82,22 @@ impl CrossSectionIntegrand {
 
 impl GammaloopIntegrand for CrossSectionIntegrand {
     type G = CrossSectionGraphTerm;
+
+    fn external_cache_id(&self) -> usize {
+        self.data.external_cache_id
+    }
+
+    fn increment_external_cache_id(&mut self, val: usize) {
+        self.data.external_cache_id += val
+    }
+
+    fn increment_loop_cache_id(&mut self, val: usize) {
+        self.data.loop_cache_id += val
+    }
+
+    fn loop_cache_id(&self) -> usize {
+        self.data.loop_cache_id
+    }
     fn get_rotations(&self) -> impl Iterator<Item = &Rotation> {
         self.data.rotations.as_ref().expect("forgot warmup").iter()
     }

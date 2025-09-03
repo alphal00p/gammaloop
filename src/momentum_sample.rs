@@ -3,14 +3,10 @@ use std::fmt::Display;
 use crate::gammaloop_integrand::evaluators::SingleOrAllOrientations;
 use crate::momentum::{FourMomentum, Polarization, Rotatable, Rotation, ThreeMomentum};
 use crate::utils::{FloatLike, Length, F};
-use crate::{
-    define_index, settings::runtime::kinematic::Externals, settings::RuntimeSettings,
-    DependentMomentaConstructor,
-};
+use crate::{define_index, settings::runtime::kinematic::Externals, DependentMomentaConstructor};
 use bincode_trait_derive::{Decode, Encode};
 use bitvec::vec::BitVec;
 use color_eyre::Result;
-use comemo::memoize;
 use derive_more::{From, Into};
 use linnet::half_edge::involution::{EdgeVec, Orientation};
 use serde::{Deserialize, Serialize};
@@ -18,7 +14,6 @@ use std::ops::{Add, Index, IndexMut, Sub};
 use symbolica::domains::float::NumericalFloatLike;
 use tabled::settings::Style;
 use typed_index_collections::TiVec;
-use uuid::Uuid;
 
 #[derive(
     From,
@@ -224,7 +219,9 @@ pub type PolarizationVectors<T> = TiVec<ExternalIndex, Polarization<T>>; // shou
 #[derive(Debug, Clone)]
 pub struct BareMomentumSample<T: FloatLike> {
     pub loop_moms: LoopMomenta<F<T>>,
+    pub loop_mom_cache_id: usize,
     pub external_moms: ExternalFourMomenta<F<T>>,
+    pub external_mom_cache_id: usize,
     pub jacobian: F<T>,
     pub orientation: Option<usize>,
 }
@@ -232,18 +229,15 @@ pub struct BareMomentumSample<T: FloatLike> {
 #[derive(Debug, Clone)]
 pub struct MomentumSample<T: FloatLike> {
     pub sample: BareMomentumSample<T>,
-    pub rotated_sample: Option<BareMomentumSample<T>>,
     // pub uuid: Uuid,
 }
 
 impl<T: FloatLike> Display for MomentumSample<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut table = tabled::builder::Builder::new();
-        if self.rotated_sample.is_some() {
-            table.push_record(["Rotated Sample"]);
-        } else {
-            table.push_record(["Sample"]);
-        }
+
+        table.push_record(["Sample"]);
+
         table.push_record(["Loop Momenta", "p_x", "p_y", "p_z"]);
         // table
 
@@ -276,7 +270,9 @@ impl<T: FloatLike> BareMomentumSample<T> {
     #[inline(never)]
     pub(crate) fn new(
         loop_moms: LoopMomenta<F<T>>,
+        loop_mom_cache_id: usize,
         external_moms: &Externals,
+        external_mom_cache_id: usize,
         jacobian: F<T>,
         dependent_momenta_constructor: DependentMomentaConstructor,
         orientation: Option<usize>,
@@ -285,6 +281,8 @@ impl<T: FloatLike> BareMomentumSample<T> {
 
         Ok(Self {
             loop_moms,
+            loop_mom_cache_id,
+            external_mom_cache_id,
             external_moms,
             jacobian,
             orientation,
@@ -318,6 +316,8 @@ impl<T: FloatLike> BareMomentumSample<T> {
         F<T2>: From<F<T>>,
     {
         BareMomentumSample {
+            loop_mom_cache_id: self.loop_mom_cache_id,
+            external_mom_cache_id: self.external_mom_cache_id,
             loop_moms: self.loop_moms.iter().map(ThreeMomentum::cast).collect(),
             external_moms: self.external_moms.iter().map(FourMomentum::cast).collect(),
             jacobian: self.jacobian.clone().into(),
@@ -338,6 +338,8 @@ impl<T: FloatLike> BareMomentumSample<T> {
                 .collect(),
             jacobian: self.jacobian.higher(),
             orientation: self.orientation,
+            loop_mom_cache_id: self.loop_mom_cache_id,
+            external_mom_cache_id: self.external_mom_cache_id,
         }
     }
 
@@ -350,26 +352,13 @@ impl<T: FloatLike> BareMomentumSample<T> {
             external_moms: self.external_moms.iter().map(FourMomentum::lower).collect(),
             jacobian: self.jacobian.lower(),
             orientation: self.orientation,
+            loop_mom_cache_id: self.loop_mom_cache_id,
+            external_mom_cache_id: self.external_mom_cache_id,
         }
     }
 
     #[inline]
-    /// Rotation for stability checks
-    pub(crate) fn get_rotated_sample_cached(
-        &self,
-        rotation: &Rotation,
-        rotated_externals: ExternalFourMomenta<F<T>>,
-    ) -> Self {
-        Self {
-            loop_moms: self.loop_moms.iter().map(|l| l.rotate(rotation)).collect(),
-            external_moms: rotated_externals,
-            jacobian: self.jacobian.clone(),
-            orientation: self.orientation,
-        }
-    }
-
-    #[inline]
-    pub(crate) fn get_rotated_sample(&self, rotation: &Rotation) -> Self {
+    pub(crate) fn rotate(&self, rotation: &Rotation) -> Self {
         Self {
             loop_moms: self.loop_moms.iter().map(|l| l.rotate(rotation)).collect(),
             external_moms: self
@@ -377,6 +366,8 @@ impl<T: FloatLike> BareMomentumSample<T> {
                 .iter()
                 .map(|l| l.rotate(rotation))
                 .collect(),
+            loop_mom_cache_id: self.loop_mom_cache_id + 1,
+            external_mom_cache_id: self.external_mom_cache_id + 1,
             jacobian: self.jacobian.clone(),
             orientation: self.orientation,
         }
@@ -386,7 +377,9 @@ impl<T: FloatLike> BareMomentumSample<T> {
     pub(crate) fn rescaled_loop_momenta(&self, factor: &F<T>, subspace: Subspace) -> Self {
         Self {
             loop_moms: self.loop_moms.rescale(factor, subspace),
+            loop_mom_cache_id: self.loop_mom_cache_id + 1,
             external_moms: self.external_moms.clone(),
+            external_mom_cache_id: self.external_mom_cache_id,
             jacobian: self.jacobian.clone(),
             orientation: self.orientation,
         }
@@ -416,14 +409,6 @@ impl<T: FloatLike> MomentumSample<T> {
         }
     }
 
-    pub(crate) fn possibly_rotated_sample(&self) -> &BareMomentumSample<T> {
-        if let Some(rot) = self.rotated_sample.as_ref() {
-            rot
-        } else {
-            &self.sample
-        }
-    }
-
     // pub(crate) fn numerator_sample(
     //     &self,
     //     settings: &RuntimeSettings,
@@ -444,55 +429,22 @@ impl<T: FloatLike> MomentumSample<T> {
     // }
 
     pub(crate) fn loop_moms(&self) -> &LoopMomenta<F<T>> {
-        if let Some(rotated_sample) = &self.rotated_sample {
-            &rotated_sample.loop_moms
-        } else {
-            &self.sample.loop_moms
-        }
-    }
-
-    #[allow(clippy::type_complexity)]
-    pub(crate) fn loop_mom_pair(&self) -> (&LoopMomenta<F<T>>, Option<&LoopMomenta<F<T>>>) {
-        (
-            &self.sample.loop_moms,
-            self.rotated_sample.as_ref().map(|s| &s.loop_moms),
-        )
+        &self.sample.loop_moms
     }
 
     pub(crate) fn external_moms(&self) -> &ExternalFourMomenta<F<T>> {
-        if let Some(rotated_sample) = &self.rotated_sample {
-            &rotated_sample.external_moms
-        } else {
-            &self.sample.external_moms
-        }
-    }
-
-    #[allow(clippy::type_complexity)]
-    pub(crate) fn external_mom_pair(
-        &self,
-    ) -> (
-        &ExternalFourMomenta<F<T>>,
-        Option<&ExternalFourMomenta<F<T>>>,
-    ) {
-        (
-            self.sample.external_moms.as_ref(),
-            self.rotated_sample
-                .as_ref()
-                .map(|s| s.external_moms.as_ref()),
-        )
+        &self.sample.external_moms
     }
 
     pub(crate) fn jacobian(&self) -> F<T> {
-        if let Some(rotated_sample) = &self.rotated_sample {
-            rotated_sample.jacobian.clone()
-        } else {
-            self.sample.jacobian.clone()
-        }
+        self.sample.jacobian.clone()
     }
 
     pub(crate) fn new(
         loop_moms: LoopMomenta<F<T>>,
+        loop_mom_cache_id: usize,
         external_moms: &Externals,
+        external_mom_cache_id: usize,
         jacobian: F<T>,
         dependent_momenta_constructor: DependentMomentaConstructor,
         orientation: Option<usize>,
@@ -500,12 +452,13 @@ impl<T: FloatLike> MomentumSample<T> {
         Ok(Self {
             sample: BareMomentumSample::new(
                 loop_moms,
+                loop_mom_cache_id,
                 external_moms,
+                external_mom_cache_id,
                 jacobian,
                 dependent_momenta_constructor,
                 orientation,
             )?,
-            rotated_sample: None,
             // uuid: Uuid::new_v4(),
         })
     }
@@ -526,8 +479,6 @@ impl<T: FloatLike> MomentumSample<T> {
     {
         MomentumSample {
             sample: self.sample.cast_sample(),
-            rotated_sample: self.rotated_sample.as_ref().map(|s| s.cast_sample()),
-            // uuid: self.uuid,
         }
     }
 
@@ -537,8 +488,6 @@ impl<T: FloatLike> MomentumSample<T> {
     {
         MomentumSample {
             sample: self.sample.higher_precision(),
-            rotated_sample: self.rotated_sample.as_ref().map(|s| s.higher_precision()),
-            // uuid: self.uuid,
         }
     }
 
@@ -548,34 +497,14 @@ impl<T: FloatLike> MomentumSample<T> {
     {
         MomentumSample {
             sample: self.sample.lower_precision(),
-            rotated_sample: self.rotated_sample.as_ref().map(|s| s.lower_precision()),
-            // uuid: self.uuid,
         }
     }
 
     #[inline]
     /// Rotation for stability checks
-    pub(crate) fn get_rotated_sample_cached(
-        &self,
-        rotation: &Rotation,
-        rotated_externals: ExternalFourMomenta<F<T>>,
-    ) -> Self {
+    pub(crate) fn rotate(&self, rotation: &Rotation) -> Self {
         Self {
-            sample: self.sample.clone(),
-            rotated_sample: Some(
-                self.sample
-                    .get_rotated_sample_cached(rotation, rotated_externals),
-            ),
-            // uuid: self.uuid,
-        }
-    }
-
-    #[inline]
-    pub(crate) fn get_rotated_sample(&self, rotation: &Rotation) -> Self {
-        Self {
-            sample: self.sample.clone(),
-            rotated_sample: Some(self.sample.get_rotated_sample(rotation)),
-            // uuid: self.uuid,
+            sample: self.sample.rotate(rotation),
         }
     }
 
@@ -583,11 +512,6 @@ impl<T: FloatLike> MomentumSample<T> {
     pub(crate) fn rescaled_loop_momenta(&self, factor: &F<T>, subspace: Subspace) -> Self {
         Self {
             sample: self.sample.rescaled_loop_momenta(factor, subspace),
-            rotated_sample: self
-                .rotated_sample
-                .as_ref()
-                .map(|s| s.rescaled_loop_momenta(factor, subspace)),
-            // uuid: self.uuid,
         }
     }
 }

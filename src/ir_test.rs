@@ -187,6 +187,7 @@ impl CrossSectionGraphTerm {
 
         let loop_number = lmb.loop_edges.len();
         let external_particles = self.graph.underlying.get_external_partcles();
+        let mut loop_mom_id = 0;
 
         let limit_data: Result<Vec<_>> = momenta
             .into_iter()
@@ -216,11 +217,15 @@ impl CrossSectionGraphTerm {
 
                 let sample = MomentumSample::new(
                     loop_moms,
+                    loop_mom_id,
                     &settings.kinematics.externals,
+                    0,
                     F::from_f64(1.0),
                     dependent_momenta_constructor,
                     None,
                 )?;
+
+                loop_mom_id += 1;
 
                 Ok(LambdaPointEval {
                     lambda_point,

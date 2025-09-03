@@ -403,49 +403,18 @@ impl<'a, T: FloatLike> RstarSolution<'a, T> {
             .rescale(&self.solution.solution, None)
             + &self.esurface_ct_builder.overlap_builder.rotated_center;
 
-        // some gymnastics to get the sample right
-        // do not touch!
-        let mut sample_to_modify = self
+        let mut rstar_sample = self
             .esurface_ct_builder
             .overlap_builder
             .counterterm_builder
             .sample
             .clone();
 
-        let new_sample = match self
-            .esurface_ct_builder
-            .overlap_builder
-            .counterterm_builder
-            .sample
-            .rotated_sample
-        {
-            None => {
-                sample_to_modify.sample.loop_moms = rstar_loop_momenta;
-                sample_to_modify
-            }
-            Some(_) => {
-                sample_to_modify.rotated_sample.as_mut().unwrap().loop_moms = rstar_loop_momenta;
-
-                let new_unrotated_momenta = &(&self
-                    .esurface_ct_builder
-                    .overlap_builder
-                    .counterterm_builder
-                    .sample
-                    .sample
-                    .loop_moms
-                    - &self.esurface_ct_builder.overlap_builder.unrotated_center)
-                    .rescale(&self.esurface_ct_builder.overlap_builder.radius.inv(), None)
-                    .rescale(&self.solution.solution, None)
-                    + &self.esurface_ct_builder.overlap_builder.unrotated_center;
-
-                sample_to_modify.sample.loop_moms = new_unrotated_momenta;
-                sample_to_modify
-            }
-        };
+        rstar_sample.sample.loop_moms = rstar_loop_momenta;
 
         RstarSample {
             rstar_solution: self,
-            rstar_sample: new_sample,
+            rstar_sample,
         }
     }
 }

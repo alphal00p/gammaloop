@@ -6,7 +6,7 @@ use _gammaloop::{
     initialisation::test_initialise,
     settings::runtime::IntegrationResult,
     status_info,
-    utils::{test_utils::load_generic_model, F},
+    utils::{serde_utils::SmartSerde, test_utils::load_generic_model, F},
 };
 use color_eyre::Result;
 use momtrop::assert_approx_eq;

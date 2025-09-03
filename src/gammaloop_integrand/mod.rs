@@ -374,6 +374,8 @@ impl LmbMultiChannelingSetup {
 
         BareMomentumSample {
             loop_moms: new_loop_moms,
+            loop_mom_cache_id: momentum_sample.loop_mom_cache_id + 1,
+            external_mom_cache_id: momentum_sample.external_mom_cache_id,
             external_moms: momentum_sample.external_moms.clone(),
             jacobian: momentum_sample.jacobian.clone(),
             orientation: momentum_sample.orientation,
@@ -420,19 +422,7 @@ impl LmbMultiChannelingSetup {
                 &momentum_sample.sample,
                 base_lmb,
                 all_bases,
-            ),
-            rotated_sample: momentum_sample
-                .rotated_sample
-                .as_ref()
-                .map(|rotated_sample| {
-                    self.reinterpret_loop_momenta_impl(
-                        channel_index,
-                        rotated_sample,
-                        base_lmb,
-                        all_bases,
-                    )
-                }),
-            // uuid: momentum_sample.uuid,
+            ), // uuid: momentum_sample.uuid,
         };
 
         let prefactor =
@@ -489,6 +479,12 @@ pub trait GammaloopIntegrand {
         derived_data: &[&<<Self as GammaloopIntegrand>::G as GraphTerm>::DerivedData],
     ) -> Result<()>;
     fn get_rotations(&self) -> impl Iterator<Item = &Rotation>;
+
+    fn increment_loop_cache_id(&mut self, val: usize);
+    fn loop_cache_id(&self) -> usize;
+
+    fn increment_external_cache_id(&mut self, val: usize);
+    fn external_cache_id(&self) -> usize;
 
     fn get_group_masters(&self) -> impl Iterator<Item = &Self::G>;
 
@@ -552,43 +548,43 @@ fn evaluate_all_rotations<T: FloatLike, I: GammaloopIntegrand>(
 ) -> (Vec<Complex<F<f64>>>, Duration) {
     let rotations = integrand.get_rotations().cloned().collect_vec();
 
+    let mut loop_cache_shift = rotations.len();
+    let mut external_cache_shift = rotations.len();
+
     // rotate the momenta for the stability tests.
     let gammaloop_samples: Vec<_> = rotations
         .iter()
-        .map(|rotation| gammaloop_sample.get_rotated_sample(rotation))
+        .map(|rotation| gammaloop_sample.rotate(rotation))
         .collect();
 
     let start_time = std::time::Instant::now();
     let evaluation_results = gammaloop_samples
         .iter()
         .zip(rotations.iter())
-        .map(|(gammaloop_sample, rotation)| {
-            evaluate_single_rotation(integrand, gammaloop_sample, rotation)
-        })
+        .map(|(gammaloop_sample, rotation)| evaluate_single(integrand, gammaloop_sample, rotation))
         .collect_vec();
+
+    integrand.increment_loop_cache_id(loop_cache_shift);
+    integrand.increment_external_cache_id(external_cache_shift);
     let duration = start_time.elapsed() / gammaloop_samples.len() as u32;
 
     (evaluation_results, duration)
 }
 
-fn evaluate_single_rotation<T: FloatLike, I: GammaloopIntegrand>(
+fn evaluate_single<T: FloatLike, I: GammaloopIntegrand>(
     integrand: &mut I,
     gammaloop_sample: &GammaLoopSample<T>,
     rotation: &Rotation,
 ) -> Complex<F<f64>> {
-    // this is the earliest point where we can set the external momenta
-    // param_builder.external_energies_value(&gammaloop_sample.get_default_sample());
-    // param_builder.external_spatial_value(&gammaloop_sample.get_default_sample());
-
     let settings = integrand.get_settings().clone();
+    let zero = Complex::new_re(gammaloop_sample.get_default_sample().zero());
+    let mut loop_cache_shift = 0;
+
     let result = match &gammaloop_sample {
         GammaLoopSample::Default(sample) => integrand
             .get_terms_mut()
             .map(|term: &mut I::G| term.evaluate(sample, &settings, rotation))
-            .fold(
-                Complex::new_re(gammaloop_sample.get_default_sample().zero()),
-                |sum, term| sum + term,
-            ),
+            .fold(zero.clone(), |sum, term| sum + term),
         GammaLoopSample::MultiChanneling { alpha, sample } => integrand
             .get_terms_mut()
             .map(|term: &mut I::G| {
@@ -601,24 +597,20 @@ fn evaluate_single_rotation<T: FloatLike, I: GammaloopIntegrand>(
                         alpha,
                     );
 
+                loop_cache_shift += channels_samples.len();
+
                 channels_samples
                     .into_iter()
                     .map(|(reparameterized_sample, prefactor)| {
                         Complex::new_re(prefactor)
                             * term.evaluate(&reparameterized_sample, &settings, rotation)
                     })
-                    .fold(
-                        Complex::new_re(gammaloop_sample.get_default_sample().zero()),
-                        |sum, term| sum + term,
-                    )
+                    .fold(zero.clone(), |sum, term| sum + term)
             })
-            .fold(
-                Complex::new_re(gammaloop_sample.get_default_sample().zero()),
-                |sum, term| sum + term,
-            ),
+            .fold(zero.clone(), |sum, term| sum + term),
         GammaLoopSample::DiscreteGraph { group_id, sample } => {
             let group = integrand.get_group(*group_id).into_iter().collect_vec(); // collect to avoid borrowing issues
-            let mut res = Complex::new_re(gammaloop_sample.get_default_sample().zero());
+            let mut res = zero.clone();
 
             for graph_id in group.into_iter() {
                 let graph_term = integrand.get_graph_mut(graph_id);
@@ -641,6 +633,8 @@ fn evaluate_single_rotation<T: FloatLike, I: GammaloopIntegrand>(
                                 alpha,
                             );
 
+                        loop_cache_shift += 1;
+
                         Complex::new_re(prefactor)
                             * graph_term.evaluate(&reparameterized_sample, &settings, rotation)
                     }
@@ -654,6 +648,8 @@ fn evaluate_single_rotation<T: FloatLike, I: GammaloopIntegrand>(
                                 alpha,
                             );
 
+                        loop_cache_shift += channel_samples.len();
+
                         channel_samples
                             .into_iter()
                             .map(|(reparameterized_sample, prefactor)| {
@@ -664,10 +660,7 @@ fn evaluate_single_rotation<T: FloatLike, I: GammaloopIntegrand>(
                                         rotation,
                                     )
                             })
-                            .fold(
-                                Complex::new_re(gammaloop_sample.get_default_sample().zero()),
-                                |sum, term| sum + term,
-                            )
+                            .fold(zero.clone(), |sum, term| sum + term)
                     }
                     DiscreteGraphSample::Tropical(sample) => {
                         let energy_cache = graph_term.get_graph().underlying.get_energy_cache(
@@ -698,6 +691,8 @@ fn evaluate_single_rotation<T: FloatLike, I: GammaloopIntegrand>(
             res
         }
     };
+
+    integrand.increment_loop_cache_id(loop_cache_shift);
 
     let f_t_result = result * gammaloop_sample.get_default_sample().jacobian();
     Complex::new(f_t_result.re.into_ff64(), f_t_result.im.into_ff64())
@@ -923,7 +918,7 @@ fn evaluate_sample<I: GammaloopIntegrand>(
             if let Ok(gammaloop_sample) = parameterize::<f64, I>(sample, integrand) {
                 let rotated_samples: Vec<_> = integrand
                     .get_rotations()
-                    .map(|rotation| gammaloop_sample.get_rotated_sample(rotation))
+                    .map(|rotation| gammaloop_sample.rotate(rotation))
                     .collect();
 
                 for (sample, result) in rotated_samples.iter().zip(&results) {

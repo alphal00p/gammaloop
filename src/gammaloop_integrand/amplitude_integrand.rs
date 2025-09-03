@@ -392,7 +392,8 @@ pub struct AmplitudeIntegrand {
 pub struct AmplitudeIntegrandData {
     pub rotations: Option<Vec<Rotation>>,
     pub name: String,
-
+    pub loop_cache_id: usize,
+    pub external_cache_id: usize,
     pub graph_terms: Vec<AmplitudeGraphTerm>,
     pub external_signature: SignatureLike<ExternalIndex>,
     pub graph_group_structure: TiVec<GroupId, GraphGroup>,
@@ -495,6 +496,22 @@ impl AmplitudeIntegrand {
 
 impl GammaloopIntegrand for AmplitudeIntegrand {
     type G = AmplitudeGraphTerm;
+
+    fn external_cache_id(&self) -> usize {
+        self.data.external_cache_id
+    }
+
+    fn increment_external_cache_id(&mut self, val: usize) {
+        self.data.external_cache_id += val
+    }
+
+    fn increment_loop_cache_id(&mut self, val: usize) {
+        self.data.loop_cache_id += val
+    }
+
+    fn loop_cache_id(&self) -> usize {
+        self.data.loop_cache_id
+    }
 
     #[instrument(
           skip_all,

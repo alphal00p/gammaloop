@@ -4,7 +4,7 @@ use _gammaloop::{
         state::{RunHistory, State},
         Cli,
     },
-    utils::test_utils::load_generic_model,
+    utils::{serde_utils::SmartSerde, test_utils::load_generic_model},
 };
 use color_eyre::Result;
 use criterion::{criterion_group, criterion_main, Criterion};
@@ -61,8 +61,9 @@ fn criterion_benchmark(c: &mut Criterion) -> Result<()> {
         momentum_space: true,
         discrete_dim: vec![0],
     };
-    let mut qqx_aaa_run: RunHistory = RunHistory::from_file_yaml(
+    let mut qqx_aaa_run: RunHistory = RunHistory::from_file(
         "./benches/qqx_aaa_amplitude/qqx_aaa_subtracted_nlo_amplitude_iterative_compiled.yaml",
+        "run history",
     )?;
     let (mut cli, mut state) = new_cli_for_bench("./benches/qqx_aaa_amplitude");
     let _ = qqx_aaa_run.run(&mut cli, &mut state)?;

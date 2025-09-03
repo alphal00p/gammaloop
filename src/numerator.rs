@@ -20,8 +20,6 @@ use spenso::tensors::data::DataTensor;
 use spenso::tensors::data::GetTensorData;
 use spenso::tensors::data::StorageTensor;
 use spenso::tensors::parametric::atomcore::TensorAtomMaps;
-use spenso::tensors::parametric::EvalTensorSet;
-use spenso::tensors::parametric::LinearizedEvalTensorSet;
 use spenso::tensors::parametric::MixedTensor;
 use spenso::tensors::parametric::ParamOrConcrete;
 use spenso::tensors::parametric::ParamTensor;

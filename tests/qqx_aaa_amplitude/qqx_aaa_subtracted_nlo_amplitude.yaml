@@ -9,10 +9,6 @@ global_settings:
       compile: true
 default_runtime_settings:
   General:
-    debug: 3
-    amplitude_prefactor:
-      re: 0.0
-      im: 1.0
     m_uv: 1.0
     mu_r_sq: 8315.251344
   subtraction:
@@ -60,16 +56,6 @@ default_runtime_settings:
           - -1
           - -1
           - -1
-  Stability:
-    rotations: []
-    levels:
-      - required_precision_for_re: 1e-15
-        required_precision_for_im: 1e-15
-        escalate_for_large_weight_threshold: 0.9
-      - precision: Quad
-        required_precision_for_re: 0.00001
-        required_precision_for_im: 0.00001
-        escalate_for_large_weight_threshold: -1.0
 commands:
   - Import:
       Amplitude:

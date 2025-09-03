@@ -1,5 +1,5 @@
 global_settings:
-  debug_level: Info
+  debug_level: Debug
   generation:
     evaluator_settings:
       compile: true
@@ -34,14 +34,7 @@ default_runtime_settings:
           - -1
           - -1
   Stability:
-    levels:
-      - required_precision_for_re: 1e-15
-        required_precision_for_im: 1e-15
-        escalate_for_large_weight_threshold: 0.9
-      - precision: Quad
-        required_precision_for_re: 0.00001
-        required_precision_for_im: 0.00001
-        escalate_for_large_weight_threshold: -1.0
+    check_on_norm: true
   subtraction:
     disable_threshold_subtraction: true
 
