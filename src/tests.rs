@@ -230,7 +230,7 @@ mod tests_integral {
 
         itg.n_3d_momenta = 11;
 
-        settings.hard_coded_integrand = IntegrandSettings::UnitVolume(itg.clone());
+        settings.hard_coded_integrand = Some(IntegrandSettings::UnitVolume(itg.clone()));
         assert!(compare_integration(
             &mut settings,
             IntegratedPhase::Real,
@@ -258,7 +258,7 @@ mod tests_integral {
 
         settings.sampling = sampling_settings;
 
-        settings.hard_coded_integrand = IntegrandSettings::UnitVolume(itg.clone());
+        settings.hard_coded_integrand = Some(IntegrandSettings::UnitVolume(itg.clone()));
         assert!(compare_integration(
             &mut settings,
             IntegratedPhase::Real,
@@ -284,7 +284,7 @@ mod tests_integral {
             ..Default::default()
         });
         settings.sampling = sampling_settings;
-        settings.hard_coded_integrand = IntegrandSettings::UnitVolume(itg.clone());
+        settings.hard_coded_integrand = Some(IntegrandSettings::UnitVolume(itg.clone()));
         assert!(compare_integration(
             &mut settings,
             IntegratedPhase::Real,
@@ -309,7 +309,7 @@ mod tests_integral {
             power: Some(12),
             enabled_dampening: true,
         };
-        settings.hard_coded_integrand = IntegrandSettings::HFunctionTest(itg.clone());
+        settings.hard_coded_integrand = Some(IntegrandSettings::HFunctionTest(itg.clone()));
         assert!(compare_integration(
             &mut settings,
             IntegratedPhase::Real,
@@ -347,7 +347,7 @@ mod tests_inspect {
         });
         settings.sampling = sampling_settings;
 
-        settings.hard_coded_integrand = IntegrandSettings::UnitVolume(itg.clone());
+        settings.hard_coded_integrand = Some(IntegrandSettings::UnitVolume(itg.clone()));
         assert!(compare_inspect(
             &mut settings,
             vec![0.1, 0.2, 0.3, 0.4, 0.5, 0.6],
@@ -365,7 +365,7 @@ mod tests_inspect {
         });
 
         settings.sampling = sampling_settings;
-        settings.hard_coded_integrand = IntegrandSettings::UnitVolume(itg.clone());
+        settings.hard_coded_integrand = Some(IntegrandSettings::UnitVolume(itg.clone()));
         assert!(compare_inspect(
             &mut settings,
             vec![0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
@@ -387,7 +387,7 @@ mod tests_inspect {
             power: Some(12),
             enabled_dampening: true,
         };
-        settings.hard_coded_integrand = IntegrandSettings::HFunctionTest(itg.clone());
+        settings.hard_coded_integrand = Some(IntegrandSettings::HFunctionTest(itg.clone()));
         assert!(compare_inspect(
             &mut settings,
             vec![0.2188450233532342,],
@@ -402,7 +402,7 @@ mod tests_inspect {
             power: Some(9),
             enabled_dampening: false,
         };
-        settings.hard_coded_integrand = IntegrandSettings::HFunctionTest(itg.clone());
+        settings.hard_coded_integrand = Some(IntegrandSettings::HFunctionTest(itg.clone()));
         assert!(compare_inspect(
             &mut settings,
             vec![0.2188450233532342,],

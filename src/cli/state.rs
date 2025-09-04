@@ -100,7 +100,7 @@ impl RunHistory {
     ) -> Result<()> {
         self.to_file(root_folder.join("run.toml"))?;
 
-        Self::schema().to_file(root_folder.join("run_schema.json"))?;
+        //Self::schema().to_file(root_folder.join("run_schema.json"))?;
         Ok(())
     }
 
@@ -111,7 +111,7 @@ impl RunHistory {
         strict: bool,
     ) -> Result<()> {
         self.to_file(root_folder.join("run.yaml"))?;
-        Self::schema().to_file(root_folder.join("run_schema.json"))?;
+        //Self::schema().to_file(root_folder.join("run_schema.json"))?;
         Ok(())
     }
 }

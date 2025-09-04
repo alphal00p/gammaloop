@@ -178,7 +178,7 @@ impl HasIntegrand for Integrand {
 }
 
 pub(crate) fn integrand_factory(settings: &RuntimeSettings) -> Integrand {
-    match settings.hard_coded_integrand.clone() {
+    match settings.hard_coded_integrand.as_ref().unwrap().clone() {
         IntegrandSettings::UnitSurface(integrand_settings) => Integrand::UnitSurface(
             UnitSurfaceIntegrand::new(settings.clone(), integrand_settings),
         ),

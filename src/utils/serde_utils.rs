@@ -1,8 +1,14 @@
+use dirs::home_dir;
+use schemars::{schema_for, JsonSchema, Schema};
 use serde::{de::DeserializeOwned, Serialize};
 use std::{
+    env,
+    fs::OpenOptions,
     io::Write,
+    path::PathBuf,
     sync::atomic::{AtomicBool, Ordering},
 };
+use toml::{ser::Buffer, Serializer};
 
 use color_eyre::{Result, Section};
 use eyre::{eyre, Context};
@@ -21,7 +27,16 @@ pub trait SmartSerde: Serialize + DeserializeOwned {
                     "yaml" | "yml" => serde_yaml::to_writer(f, self)
                         .map_err(|e| eyre!(format!("Error serializing yaml: {}", e)))?,
                     "toml" => {
-                        f.write(toml::to_string_pretty(&self)?.as_bytes())?;
+                        let mut toml_string = if let Some(schema_path) = self.has_schema_path() {
+                            let schema_path = schema_path?;
+                            format!("#:schema {}\n", schema_path.display())
+                        } else {
+                            String::new()
+                        };
+
+                        toml_string.push_str(&toml::to_string_pretty(&self)?);
+
+                        f.write(toml_string.as_bytes())?;
                     }
                     _ => return Err(eyre!(format!("Unknown file extension: {}", ext))),
                 }
@@ -40,6 +55,7 @@ pub trait SmartSerde: Serialize + DeserializeOwned {
 
         Ok(())
     }
+
     fn from_file(file_path: impl AsRef<Path>, name: &str) -> Result<Self> {
         let mut f = File::open(file_path.as_ref())
             .wrap_err_with(|| {
@@ -85,11 +101,37 @@ pub trait SmartSerde: Serialize + DeserializeOwned {
             .suggestion("Does the path exist?")
         }
     }
+
+    fn has_schema_path(&self) -> Option<Result<PathBuf>> {
+        Option::None
+    }
 }
 
-impl<T: Serialize + DeserializeOwned> SmartSerde for T {}
+impl SmartSerde for SerializableModel {}
+// impl SmartSerde for Schema {}
 
-use crate::utils::F;
+impl SmartSerde for RunHistory {
+    fn has_schema_path(&self) -> Option<Result<PathBuf>> {
+        Some(get_schema_folder().map(|f| f.join("runhistory.json")))
+    }
+}
+impl SmartSerde for GlobalSettings {
+    fn has_schema_path(&self) -> Option<Result<PathBuf>> {
+        Some(get_schema_folder().map(|f| f.join("global.json")))
+    }
+}
+impl SmartSerde for RuntimeSettings {
+    fn has_schema_path(&self) -> Option<Result<PathBuf>> {
+        Some(get_schema_folder().map(|f| f.join("runtime.json")))
+    }
+}
+
+use crate::{
+    cli::state::RunHistory,
+    model::{Model, SerializableModel},
+    settings::{GlobalSettings, RuntimeSettings},
+    utils::F,
+};
 
 pub trait IsDefault {
     fn is_default(&self) -> bool;
@@ -167,6 +209,50 @@ pub fn is_default_rotation_axis(
     rotation_axis: &Vec<crate::settings::runtime::RotationSetting>,
 ) -> bool {
     show_defaults_helper(rotation_axis == &_default_rotation_axis())
+}
+
+fn get_schema_folder() -> Result<PathBuf> {
+    let folder = match env::var("GAMMALOOP_SCHEMA_PATH") {
+        Ok(path) => PathBuf::try_from(path)?,
+        Err(_) => match home_dir() {
+            Some(home) => home.join(".config").join("gammaloop").join("schemas"),
+            None => {
+                return Err(eyre!("Could not determine home directory"))
+                    .with_suggestion(|| "Set the GAMMALOOP_SCHEMA_PATH environment variable");
+            }
+        },
+    };
+
+    if !folder.exists() {
+        std::fs::create_dir_all(&folder).wrap_err_with(|| {
+            format!(
+                "Could not create schema folder at {}",
+                folder.to_string_lossy()
+            )
+        })?;
+    }
+
+    Ok(folder)
+}
+
+pub fn write_schemas() -> Result<()> {
+    let global_schema = schema_for!(GlobalSettings);
+    let runtime_schema = schema_for!(RuntimeSettings);
+    let runhistory_schema = schema_for!(RunHistory);
+    let folder = get_schema_folder()?;
+
+    let mut global_file = File::create(folder.join("global.json"))?;
+    let mut runtime_file = File::create(folder.join("runtime.json"))?;
+    let mut runhistory_file = File::create(folder.join("runhistory.json"))?;
+
+    serde_json::to_writer_pretty(&mut global_file, &global_schema)
+        .wrap_err("Could not write global schema")?;
+    serde_json::to_writer_pretty(&mut runtime_file, &runtime_schema)
+        .wrap_err("Could not write runtime schema")?;
+    serde_json::to_writer_pretty(&mut runhistory_file, &runhistory_schema)
+        .wrap_err("Could not write runhistory schema")?;
+
+    Ok(())
 }
 
 #[cfg(test)]

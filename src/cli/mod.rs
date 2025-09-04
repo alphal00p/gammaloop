@@ -5,7 +5,7 @@ use crate::{
     settings::{GlobalSettings, RuntimeSettings},
     status_info,
     utils::{
-        serde_utils::{SmartSerde, SHOWDEFAULTS},
+        serde_utils::{self, SmartSerde, SHOWDEFAULTS},
         GIT_VERSION,
     },
 };
@@ -126,7 +126,7 @@ impl Cli {
                 }
                 Save::DefaultRuntimeSettings { path } => {
                     SHOWDEFAULTS.store(true, std::sync::atomic::Ordering::Relaxed);
-                    let path = path.unwrap_or(self.state_folder.clone().join("run_settings.toml"));
+                    let path = path.unwrap_or(PathBuf::from("run_settings.toml"));
                     let settings = RuntimeSettings::default();
                     let succes = settings.to_file(path);
                     SHOWDEFAULTS.store(false, std::sync::atomic::Ordering::Relaxed);
@@ -134,12 +134,14 @@ impl Cli {
                 }
                 Save::DefaultGlobalSettings { path } => {
                     SHOWDEFAULTS.store(true, std::sync::atomic::Ordering::Relaxed);
-                    let path =
-                        path.unwrap_or(self.state_folder.clone().join("global_settings.toml"));
+                    let path = path.unwrap_or(PathBuf::from("global_settings.toml"));
                     let settings = GlobalSettings::default();
                     let succes = settings.to_file(path);
                     SHOWDEFAULTS.store(false, std::sync::atomic::Ordering::Relaxed);
                     succes?;
+                }
+                Save::Schema {} => {
+                    serde_utils::write_schemas()?;
                 }
             },
             Commands::Set(s) => match s {
@@ -395,6 +397,8 @@ pub enum Save {
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
     },
+    /// regenerate the schema files
+    Schema {},
 }
 
 #[derive(Subcommand, Debug, Serialize, Deserialize, Clone, JsonSchema)]
