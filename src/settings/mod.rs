@@ -216,6 +216,13 @@ mod tests {
         use crate::settings::runtime::HFunctionSettings;
         generic_test_settings::<HFunctionSettings>();
     }
+
+    #[test]
+    fn test_stability_level_settings_serialize_deserialize() {
+        use crate::settings::runtime::StabilitySettings;
+        generic_test_settings::<StabilitySettings>();
+    }
+
     #[test]
     fn test_kinematics_settings_serialize_deserialize() {
         use crate::settings::KinematicsSettings;

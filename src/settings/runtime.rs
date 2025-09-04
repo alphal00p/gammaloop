@@ -224,13 +224,9 @@ impl Default for StabilitySettings {
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, Encode, Decode, PartialEq, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct StabilityLevelSetting {
-    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub precision: Precision,
-    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub required_precision_for_re: F<f64>,
-    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub required_precision_for_im: F<f64>,
-    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub escalate_for_large_weight_threshold: F<f64>,
 }
 
@@ -325,22 +321,10 @@ impl RotationSetting {
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass)]
 #[derive(
-    Serialize,
-    Deserialize,
-    Debug,
-    Clone,
-    Default,
-    PartialEq,
-    Copy,
-    Hash,
-    Eq,
-    Encode,
-    Decode,
-    JsonSchema,
+    Serialize, Deserialize, Debug, Clone, PartialEq, Copy, Hash, Eq, Encode, Decode, JsonSchema,
 )]
 #[serde(deny_unknown_fields)]
 pub enum Precision {
-    #[default]
     Double,
     Quad,
     Arb,
