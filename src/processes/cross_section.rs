@@ -15,7 +15,7 @@ use crate::{
     cff::cut_expression::SuperGraphOrientationID,
     gammaloop_integrand::{
         cross_section_integrand::{CrossSectionIntegrandData, OrientationEvaluator},
-        DerivedDataContainer, GenericEvaluator, LmbMultiChannelingSetup, ParamBuilder,
+        GenericEvaluator, LmbMultiChannelingSetup, ParamBuilder,
     },
     graph::{get_cff_inverse_energy_product_impl, LMBext, LmbIndex, LoopMomentumBasis},
     model::ArcParticle,

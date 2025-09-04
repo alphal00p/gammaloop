@@ -59,38 +59,11 @@ pub enum NewIntegrand {
     CrossSection(cross_section_integrand::CrossSectionIntegrand),
 }
 
-pub enum DerivedDataContainer<'a> {
-    Amplitude(&'a [&'a AmplitudeDerivedData]),
-    CrossSection(&'a [&'a CrossSectionDerivedData]),
-}
-
-impl<'a> DerivedDataContainer<'a> {
-    pub fn amplitude(&self) -> Result<&'a [&'a AmplitudeDerivedData]> {
-        if let Self::Amplitude(data) = self {
-            Ok(data)
-        } else {
-            Err(eyre!(
-                "wrong derived data type, expected AmplitudeDerivedData"
-            ))
-        }
-    }
-
-    pub fn cross_section(&self) -> Result<&'a [&'a CrossSectionDerivedData]> {
-        if let Self::CrossSection(data) = self {
-            Ok(data)
-        } else {
-            Err(eyre!(
-                "wrong derived data type, expected CrossSectionDerivedData"
-            ))
-        }
-    }
-}
-
 impl NewIntegrand {
-    pub(crate) fn warm_up(&mut self, derived_data: DerivedDataContainer) -> Result<()> {
+    pub(crate) fn warm_up(&mut self) -> Result<()> {
         match self {
-            Self::Amplitude(a) => a.warm_up(derived_data.amplitude()?),
-            Self::CrossSection(a) => a.warm_up(derived_data.cross_section()?),
+            Self::Amplitude(a) => a.warm_up(),
+            Self::CrossSection(a) => a.warm_up(),
         }
     }
 
@@ -485,10 +458,7 @@ impl LmbMultiChannelingSetup {
 pub trait GammaloopIntegrand {
     type G: GraphTerm;
 
-    fn warm_up(
-        &mut self,
-        derived_data: &[&<<Self as GammaloopIntegrand>::G as GraphTerm>::DerivedData],
-    ) -> Result<()>;
+    fn warm_up(&mut self) -> Result<()>;
     fn get_rotations(&self) -> impl Iterator<Item = &Rotation>;
 
     fn increment_loop_cache_id(&mut self, val: usize);
@@ -530,8 +500,6 @@ fn get_global_dimension_if_exists<I: GammaloopIntegrand>(integrand: &I) -> Optio
 }
 
 pub trait GraphTerm {
-    type DerivedData;
-
     fn evaluate<T: FloatLike>(
         &mut self,
         sample: &MomentumSample<T>,
@@ -541,11 +509,7 @@ pub trait GraphTerm {
 
     fn name(&self) -> String;
 
-    fn warm_up(
-        &mut self,
-        derived_data: &Self::DerivedData,
-        settings: &RuntimeSettings,
-    ) -> Result<()>;
+    fn warm_up(&mut self, settings: &RuntimeSettings) -> Result<()>;
     fn get_multi_channeling_setup(&self) -> &LmbMultiChannelingSetup;
     fn get_graph(&self) -> &Graph;
     fn get_lmbs(&self) -> &TiVec<LmbIndex, LoopMomentumBasis>;

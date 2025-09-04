@@ -293,8 +293,6 @@ impl AmplitudeGraphTerm {
 }
 
 impl GraphTerm for AmplitudeGraphTerm {
-    type DerivedData = AmplitudeDerivedData;
-
     #[instrument(
           skip_all,
           fields(
@@ -302,11 +300,7 @@ impl GraphTerm for AmplitudeGraphTerm {
           ),
           err
     )]
-    fn warm_up(
-        &mut self,
-        derived_data: &AmplitudeDerivedData,
-        settings: &RuntimeSettings,
-    ) -> Result<()> {
+    fn warm_up(&mut self, settings: &RuntimeSettings) -> Result<()> {
         let a: BitVec = self
             .orientations
             .iter()
@@ -523,7 +517,7 @@ impl GammaloopIntegrand for AmplitudeIntegrand {
               integrand.name = %self.name(),
           )
     )]
-    fn warm_up(&mut self, derived_data: &[&AmplitudeDerivedData]) -> Result<()> {
+    fn warm_up(&mut self) -> Result<()> {
         self.data.rotations = Some(
             Some(Rotation::new(RotationMethod::Identity))
                 .into_iter()
@@ -537,8 +531,8 @@ impl GammaloopIntegrand for AmplitudeIntegrand {
                 .collect(),
         );
 
-        for (a, derived_data) in self.data.graph_terms.iter_mut().zip(derived_data) {
-            a.warm_up(derived_data, &self.settings)?;
+        for a in self.data.graph_terms.iter_mut() {
+            a.warm_up(&self.settings)?;
         }
 
         let thresholds_generated = self

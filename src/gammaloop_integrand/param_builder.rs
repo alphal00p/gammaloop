@@ -832,6 +832,14 @@ impl<T: FloatLike> ParamBuilder<T> {
             }
             v
         } else {
+            if !cache {
+                self.values[self.pairs.polarizations.value_range.clone()].clone_from_slice(
+                    &self
+                        .pairs
+                        .polarizations_values(graph, sample.external_moms(), helicities),
+                );
+                return;
+            }
             self.polarization_cache.checked_push(
                 sample.sample.external_mom_cache_id,
                 self.pairs

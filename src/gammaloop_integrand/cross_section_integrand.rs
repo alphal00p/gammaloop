@@ -102,7 +102,7 @@ impl GammaloopIntegrand for CrossSectionIntegrand {
         self.data.rotations.as_ref().expect("forgot warmup").iter()
     }
 
-    fn warm_up(&mut self, derived_data: &[&CrossSectionDerivedData]) -> Result<()> {
+    fn warm_up(&mut self) -> Result<()> {
         self.data.rotations = Some(
             Some(Rotation::new(RotationMethod::Identity))
                 .into_iter()
@@ -116,8 +116,8 @@ impl GammaloopIntegrand for CrossSectionIntegrand {
                 .collect(),
         );
 
-        for (a, derived_data) in self.data.graph_terms.iter_mut().zip(derived_data) {
-            a.warm_up(derived_data, &self.settings)?;
+        for a in self.data.graph_terms.iter_mut() {
+            a.warm_up(&self.settings)?;
         }
         Ok(())
     }
@@ -180,13 +180,7 @@ pub struct CrossSectionGraphTerm {
 }
 
 impl GraphTerm for CrossSectionGraphTerm {
-    type DerivedData = CrossSectionDerivedData;
-
-    fn warm_up(
-        &mut self,
-        derived_data: &CrossSectionDerivedData,
-        settings: &RuntimeSettings,
-    ) -> Result<()> {
+    fn warm_up(&mut self, settings: &RuntimeSettings) -> Result<()> {
         self.estimated_scale = Some(
             self.graph
                 .underlying

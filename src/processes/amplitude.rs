@@ -22,7 +22,7 @@ use crate::{
     },
     gammaloop_integrand::{
         amplitude_integrand::{AmplitudeGraphTerm, AmplitudeIntegrand, AmplitudeIntegrandData},
-        DerivedDataContainer, LmbMultiChannelingSetup, ParamBuilder,
+        LmbMultiChannelingSetup, ParamBuilder,
     },
     graph::{GraphGroup, GraphGroupPosition, GroupId, LMBext, LmbIndex, LoopMomentumBasis},
     model::ArcParticle,
@@ -85,11 +85,8 @@ impl Amplitude {
           )
     )]
     pub(crate) fn warm_up(&mut self) -> Result<()> {
-        let derived_data = &self.graphs.iter().map(|g| &g.derived_data).collect_vec();
-        let derived_data_container = DerivedDataContainer::Amplitude(&derived_data);
-
         if let Some(integrand) = &mut self.integrand {
-            integrand.warm_up(derived_data_container)
+            integrand.warm_up()
         } else {
             Err(eyre!(
                 "Cannot warm up amplitude {} without integrand",
