@@ -60,7 +60,7 @@ impl Integrate {
             None
         };
 
-        state.process_list.warm_up()?;
+        state.process_list.warm_up(&state.model)?;
 
         if self.restart && self.workspace_path.exists() {
             fs::remove_dir_all(&self.workspace_path)?;

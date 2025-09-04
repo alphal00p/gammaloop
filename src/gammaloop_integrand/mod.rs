@@ -5,6 +5,7 @@ use crate::evaluation_result::{EvaluationMetaData, EvaluationResult};
 use crate::graph::{FeynmanGraph, Graph, GraphGroup, GroupId, LmbIndex, LoopMomentumBasis};
 use crate::integrands::{HasIntegrand, Integrand};
 use crate::integrate::UserData;
+use crate::model::Model;
 use crate::momentum::Rotation;
 use crate::momentum_sample::{BareMomentumSample, LoopMomenta, MomentumSample};
 use crate::processes::{AmplitudeDerivedData, CrossSectionDerivedData};
@@ -60,10 +61,10 @@ pub enum NewIntegrand {
 }
 
 impl NewIntegrand {
-    pub(crate) fn warm_up(&mut self) -> Result<()> {
+    pub(crate) fn warm_up(&mut self, model: &Model) -> Result<()> {
         match self {
-            Self::Amplitude(a) => a.warm_up(),
-            Self::CrossSection(a) => a.warm_up(),
+            Self::Amplitude(a) => a.warm_up(model),
+            Self::CrossSection(a) => a.warm_up(model),
         }
     }
 
@@ -458,7 +459,7 @@ impl LmbMultiChannelingSetup {
 pub trait GammaloopIntegrand {
     type G: GraphTerm;
 
-    fn warm_up(&mut self) -> Result<()>;
+    fn warm_up(&mut self, model: &Model) -> Result<()>;
     fn get_rotations(&self) -> impl Iterator<Item = &Rotation>;
 
     fn increment_loop_cache_id(&mut self, val: usize);
@@ -509,7 +510,7 @@ pub trait GraphTerm {
 
     fn name(&self) -> String;
 
-    fn warm_up(&mut self, settings: &RuntimeSettings) -> Result<()>;
+    fn warm_up(&mut self, settings: &RuntimeSettings, model: &Model) -> Result<()>;
     fn get_multi_channeling_setup(&self) -> &LmbMultiChannelingSetup;
     fn get_graph(&self) -> &Graph;
     fn get_lmbs(&self) -> &TiVec<LmbIndex, LoopMomentumBasis>;

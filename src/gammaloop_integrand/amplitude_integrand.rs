@@ -300,7 +300,7 @@ impl GraphTerm for AmplitudeGraphTerm {
           ),
           err
     )]
-    fn warm_up(&mut self, settings: &RuntimeSettings) -> Result<()> {
+    fn warm_up(&mut self, settings: &RuntimeSettings, model: &Model) -> Result<()> {
         let a: BitVec = self
             .orientations
             .iter()
@@ -337,6 +337,7 @@ impl GraphTerm for AmplitudeGraphTerm {
             .m_uv_value(Complex::new_re(settings.general.m_uv));
         self.param_builder
             .mu_r_sq_value(Complex::new_re(settings.general.mu_r_sq));
+        self.param_builder.update_model_values(model);
 
         Ok(())
     }
@@ -517,7 +518,7 @@ impl GammaloopIntegrand for AmplitudeIntegrand {
               integrand.name = %self.name(),
           )
     )]
-    fn warm_up(&mut self) -> Result<()> {
+    fn warm_up(&mut self, model: &Model) -> Result<()> {
         self.data.rotations = Some(
             Some(Rotation::new(RotationMethod::Identity))
                 .into_iter()
@@ -532,7 +533,7 @@ impl GammaloopIntegrand for AmplitudeIntegrand {
         );
 
         for a in self.data.graph_terms.iter_mut() {
-            a.warm_up(&self.settings)?;
+            a.warm_up(&self.settings, model)?;
         }
 
         let thresholds_generated = self

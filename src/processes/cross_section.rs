@@ -87,7 +87,7 @@ impl<S: CrossSectionState> CrossSection<S> {
         }
     }
 
-    pub(crate) fn warm_up(&mut self) {
+    pub(crate) fn warm_up(&mut self, model: &Model) -> Result<()> {
         let derived_data = self
             .supergraphs
             .iter()

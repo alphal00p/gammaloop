@@ -84,9 +84,9 @@ impl Amplitude {
               amplitude.name = %self.name,
           )
     )]
-    pub(crate) fn warm_up(&mut self) -> Result<()> {
+    pub(crate) fn warm_up(&mut self, model: &Model) -> Result<()> {
         if let Some(integrand) = &mut self.integrand {
-            integrand.warm_up()
+            integrand.warm_up(model)
         } else {
             Err(eyre!(
                 "Cannot warm up amplitude {} without integrand",
