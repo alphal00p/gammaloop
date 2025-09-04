@@ -1,6 +1,7 @@
 use crate::momentum::{FourMomentum, Helicity, Polarization};
 use crate::numerator::aind::Aind;
 use crate::utils::serde_utils::SmartSerde;
+use crate::utils::symbolica_ext::StringSerializedAtom;
 use crate::utils::{self, FloatLike, F, W_};
 use crate::HasModel;
 use ahash::{AHashMap, HashSet, RandomState};
@@ -40,7 +41,7 @@ use color_eyre::Result;
 use std::collections::HashMap;
 use std::ops::Deref;
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use symbolica::atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol};
 use symbolica::id::{Pattern, Replacement};
 
@@ -49,6 +50,50 @@ use crate::utils::GS;
 use symbolica::domains::float::NumericalFloatLike;
 use symbolica::printer::{AtomPrinter, PrintOptions};
 use symbolica::{function, parse, symbol};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct UFOSymbol(Symbol);
+
+impl Display for UFOSymbol {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl From<UFOSymbol> for Atom {
+    fn from(value: UFOSymbol) -> Self {
+        Atom::var(value.0)
+    }
+}
+
+impl UFOSymbol {
+    pub fn zero() -> Self {
+        UFOSymbol(symbol!(
+            "UFO::ZERO",
+            norm = |f, out| {
+                *out = Atom::Zero;
+                true
+            }
+        ))
+    }
+
+    pub fn is_zero(&self) -> bool {
+        self.0 == Self::zero().0
+    }
+
+    pub fn namespaceless_string(&self) -> &str {
+        self.0.get_stripped_name()
+    }
+}
+
+impl<T> From<T> for UFOSymbol
+where
+    T: AsRef<str>,
+{
+    fn from(s: T) -> Self {
+        UFOSymbol(symbol!(format!("UFO::{}", s.as_ref())))
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct ArcPropagator(pub Arc<Propagator>);
@@ -212,7 +257,11 @@ impl SerializableVertexRule {
                 .map(|couplings| {
                     couplings
                         .iter()
-                        .map(|coupling| coupling.as_ref().map(|cpl| cpl.name.clone()))
+                        .map(|coupling| {
+                            coupling
+                                .as_ref()
+                                .map(|cpl| cpl.namespaceless_string().into())
+                        })
                         .collect()
                 })
                 .collect(),
@@ -286,7 +335,7 @@ pub struct VertexRule {
     pub particles: Vec<ArcParticle>,
     pub color_structures: ColorStructure,
     pub lorentz_structures: Vec<Arc<LorentzStructure>>,
-    pub couplings: Vec<Vec<Option<Arc<Coupling>>>>,
+    pub couplings: Vec<Vec<Option<CouplingName>>>,
 }
 
 impl Eq for VertexRule {}
@@ -355,7 +404,7 @@ impl VertexRule {
         for (i, row) in self.couplings.iter().enumerate() {
             for (j, col) in row.iter().enumerate() {
                 if let Some(atom) = col {
-                    couplings.set(&[i, j], atom.expression.clone()).unwrap();
+                    couplings.set(&[i, j], atom.0.into()).unwrap();
                 }
             }
         }
@@ -363,35 +412,41 @@ impl VertexRule {
         [color_structure, couplings, spin_structure]
     }
 
-    #[allow(clippy::complexity)]
-    pub(crate) fn get_coupling_orders(
-        &self,
-    ) -> Vec<Vec<Option<BTreeMap<SmartString<LazyCompact>, usize>>>> {
-        self.couplings
-            .iter()
-            .map(|row| {
-                row.iter()
-                    .map(|co| co.clone().map(|c| c.orders.clone()))
-                    .collect::<Vec<_>>()
-            })
-            .collect::<Vec<_>>()
-    }
+    // #[allow(clippy::complexity)]
+    // pub(crate) fn get_coupling_orders(
+    //     &self,
+    // ) -> Vec<Vec<Option<BTreeMap<SmartString<LazyCompact>, usize>>>> {
+    //     self.couplings
+    //         .iter()
+    //         .map(|row| {
+    //             row.iter()
+    //                 .map(|co| co.clone().map(|c| c.orders.clone()))
+    //                 .collect::<Vec<_>>()
+    //         })
+    //         .collect::<Vec<_>>()
+    // }
 }
 
 impl VertexRule {
-    pub(crate) fn coupling_orders(&self) -> AHashMap<SmartString<LazyCompact>, usize> {
+    pub(crate) fn coupling_orders(
+        &self,
+        model: &Model,
+    ) -> AHashMap<SmartString<LazyCompact>, usize> {
         let mut node_coupling_orders = AHashMap::default();
         self.couplings.iter().for_each(|cs| {
             cs.iter().for_each(|c_opt| {
                 if let Some(c) = c_opt {
-                    c.orders.iter().for_each(|(coupling_order, &weight)| {
-                        let w = node_coupling_orders
-                            .entry(coupling_order.clone())
-                            .or_insert(weight);
-                        if *w < weight {
-                            *w = weight;
-                        }
-                    });
+                    model.couplings[c]
+                        .orders
+                        .iter()
+                        .for_each(|(coupling_order, &weight)| {
+                            let w = node_coupling_orders
+                                .entry(coupling_order.clone())
+                                .or_insert(weight);
+                            if *w < weight {
+                                *w = weight;
+                            }
+                        });
                 }
             })
         });
@@ -499,7 +554,7 @@ impl VertexRule {
                         .map(|coupling_name| {
                             coupling_name
                                 .as_ref()
-                                .map(|cpl_name| model.get_coupling(cpl_name))
+                                .map(|cpl_name| CouplingName(UFOSymbol::from(cpl_name)))
                         })
                         .collect()
                 })
@@ -562,7 +617,7 @@ pub struct SerializableCoupling {
 impl SerializableCoupling {
     pub(crate) fn from_coupling(coupling: &Coupling) -> SerializableCoupling {
         SerializableCoupling {
-            name: coupling.name.clone(),
+            name: coupling.name.namespaceless_string().into(),
             expression: coupling.expression.to_canonical_string().into(),
             orders: coupling.orders.clone(),
             value: coupling.value.map(|value| (value.re, value.im)),
@@ -570,9 +625,19 @@ impl SerializableCoupling {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct CouplingName(pub UFOSymbol);
+
+impl Deref for CouplingName {
+    type Target = UFOSymbol;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Coupling {
-    pub name: SmartString<LazyCompact>,
+    pub name: UFOSymbol,
     pub expression: Atom,
     pub orders: BTreeMap<SmartString<LazyCompact>, usize>,
     pub value: Option<Complex<f64>>,
@@ -581,7 +646,7 @@ pub struct Coupling {
 impl Coupling {
     pub(crate) fn from_serializable_coupling(coupling: &SerializableCoupling) -> Coupling {
         Coupling {
-            name: coupling.name.clone(),
+            name: (&coupling.name).into(),
             expression: utils::parse_python_expression(coupling.expression.as_str()),
             orders: coupling.orders.clone(),
             value: coupling.value.map(|value| Complex::new(value.0, value.1)),
@@ -589,7 +654,7 @@ impl Coupling {
     }
 
     pub(crate) fn rep_rule(&self) -> [Atom; 2] {
-        let lhs = parse!(&self.name);
+        let lhs = self.name.into();
         //let rhs = normalise_complex(&self.expression);
         let rhs = self.expression.clone();
 
@@ -622,8 +687,8 @@ impl SerializableParticle {
             antiname: particle.antiname.clone(),
             spin: particle.spin,
             color: particle.color,
-            mass: particle.mass.name.clone(),
-            width: particle.width.name.clone(),
+            mass: particle.mass.namespaceless_string().into(),
+            width: particle.width.namespaceless_string().into(),
             texname: particle.texname.clone(),
             antitexname: particle.antitexname.clone(),
             charge: particle.charge,
@@ -641,8 +706,8 @@ pub struct Particle {
     pub antiname: SmartString<LazyCompact>,
     pub spin: isize,
     pub color: isize,
-    pub mass: Arc<Parameter>,
-    pub width: Arc<Parameter>,
+    pub mass: ParameterName,
+    pub width: ParameterName,
     pub texname: SmartString<LazyCompact>,
     pub antitexname: SmartString<LazyCompact>,
     pub charge: f64,
@@ -707,16 +772,7 @@ impl Particle {
     }
 
     pub(crate) fn symbolic_mass(&self) -> Atom {
-        match self.mass.value {
-            Some(value) => {
-                if value.is_non_zero() {
-                    parse!(self.mass.name)
-                } else {
-                    Atom::new()
-                }
-            }
-            None => Atom::new(),
-        }
+        self.mass.0.into()
     }
 }
 
@@ -1029,11 +1085,7 @@ impl Particle {
     }
 
     pub(crate) fn is_massive(&self) -> bool {
-        if let Some(v) = self.mass.value {
-            v.norm_squared().abs().positive()
-        } else {
-            true
-        }
+        !self.mass.is_zero()
     }
 
     pub(crate) fn color_reps(&self, flow: Flow) -> IndexLess {
@@ -1072,18 +1124,15 @@ impl Particle {
         (vec![rep.slot(shift)], shift + 1)
     }
 
-    pub(crate) fn from_serializable_particle(
-        model: &Model,
-        particle: &SerializableParticle,
-    ) -> Particle {
+    pub(crate) fn from_serializable_particle(particle: &SerializableParticle) -> Particle {
         Particle {
             pdg_code: particle.pdg_code,
             name: particle.name.clone(),
             antiname: particle.antiname.clone(),
             spin: particle.spin,
             color: particle.color,
-            mass: model.get_parameter(&particle.mass),
-            width: model.get_parameter(&particle.width),
+            mass: ParameterName((&particle.mass).into()),
+            width: ParameterName((&particle.width).into()),
             texname: particle.texname.clone(),
             antitexname: particle.antitexname.clone(),
             charge: particle.charge,
@@ -1460,7 +1509,7 @@ pub struct SerializableParameter {
 impl SerializableParameter {
     pub(crate) fn from_parameter(param: &Parameter) -> SerializableParameter {
         SerializableParameter {
-            name: param.name.clone(),
+            name: param.name.namespaceless_string().into(),
             lhablock: param.lhablock.clone(),
             lhacode: param.lhacode.clone(),
             nature: param.nature.clone(),
@@ -1475,9 +1524,20 @@ impl SerializableParameter {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct ParameterName(pub UFOSymbol);
+
+impl Deref for ParameterName {
+    type Target = UFOSymbol;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Parameter {
-    pub name: SmartString<LazyCompact>,
+    pub name: UFOSymbol,
     pub lhablock: Option<SmartString<LazyCompact>>,
     pub lhacode: Option<Vec<usize>>,
     pub nature: ParameterNature,
@@ -1509,7 +1569,7 @@ impl Eq for Parameter {}
 impl Parameter {
     pub(crate) fn from_serializable_parameter(param: &SerializableParameter) -> Parameter {
         Parameter {
-            name: param.name.clone(),
+            name: (&param.name).into(),
             lhablock: param.lhablock.clone(),
             lhacode: param.lhacode.clone(),
             nature: param.nature.clone(),
@@ -1523,7 +1583,7 @@ impl Parameter {
     }
 
     pub(crate) fn rep_rule(&self) -> Option<[Atom; 2]> {
-        let lhs = parse!(&self.name);
+        let lhs = self.name.into();
         let rhs = self.expression.clone();
 
         //Some([lhs, normalise_complex(&rhs?)])
@@ -1572,8 +1632,8 @@ impl SerializableModel {
                 .collect(),
             parameters: model
                 .parameters
-                .iter()
-                .map(|parameter| SerializableParameter::from_parameter(parameter.as_ref()))
+                .values()
+                .map(|parameter| SerializableParameter::from_parameter(parameter))
                 .collect(),
             particles: model
                 .particles
@@ -1594,8 +1654,8 @@ impl SerializableModel {
                 .collect(),
             couplings: model
                 .couplings
-                .iter()
-                .map(|coupling| SerializableCoupling::from_coupling(coupling.as_ref()))
+                .values()
+                .map(|coupling| SerializableCoupling::from_coupling(coupling))
                 .collect(),
             vertex_rules: model
                 .vertex_rules
@@ -1611,21 +1671,19 @@ pub struct Model {
     pub name: SmartString<LazyCompact>,
     pub restriction: Option<SmartString<LazyCompact>>,
     pub orders: Vec<Arc<Order>>,
-    pub parameters: Vec<Arc<Parameter>>,
+    pub parameters: BTreeMap<ParameterName, Parameter>,
     pub particles: Vec<ArcParticle>,
     pub propagators: Vec<Arc<Propagator>>,
     pub lorentz_structures: Vec<Arc<LorentzStructure>>,
-    pub couplings: Vec<Arc<Coupling>>,
+    pub couplings: BTreeMap<CouplingName, Coupling>,
     pub vertex_rules: Vec<ArcVertexRule>,
     pub unresolved_particles: HashMap<SmartString<LazyCompact>, HashSet<ArcParticle>>,
     pub particle_set_to_vertex_rules_map: HashMap<Vec<ArcParticle>, Vec<ArcVertexRule>>,
     pub order_name_to_position: HashMap<SmartString<LazyCompact>, usize, RandomState>,
-    pub parameter_name_to_position: HashMap<SmartString<LazyCompact>, usize, RandomState>,
     pub lorentz_structure_name_to_position: HashMap<SmartString<LazyCompact>, usize, RandomState>,
     pub particle_name_to_position: HashMap<SmartString<LazyCompact>, usize, RandomState>,
     pub particle_pdg_to_position: HashMap<isize, usize, RandomState>,
     pub propagator_name_to_position: HashMap<SmartString<LazyCompact>, usize, RandomState>,
-    pub coupling_name_to_position: HashMap<SmartString<LazyCompact>, usize, RandomState>,
     pub vertex_rule_name_to_position: HashMap<SmartString<LazyCompact>, usize, RandomState>,
     pub particle_name_to_propagator_position: HashMap<SmartString<LazyCompact>, usize, RandomState>,
 }
@@ -1636,15 +1694,13 @@ impl Default for Model {
             name: SmartString::<LazyCompact>::from("ModelNotLoaded"),
             restriction: None,
             orders: vec![],
-            parameters: vec![],
+            parameters: BTreeMap::new(),
             particles: vec![],
             propagators: vec![],
             lorentz_structures: vec![],
-            couplings: vec![],
+            couplings: BTreeMap::new(),
             vertex_rules: vec![],
             order_name_to_position:
-                HashMap::<SmartString<LazyCompact>, usize, RandomState>::default(),
-            parameter_name_to_position:
                 HashMap::<SmartString<LazyCompact>, usize, RandomState>::default(),
             lorentz_structure_name_to_position: HashMap::<
                 SmartString<LazyCompact>,
@@ -1657,8 +1713,6 @@ impl Default for Model {
                 HashMap::<SmartString<LazyCompact>, usize, RandomState>::default(),
             particle_pdg_to_position: HashMap::<isize, usize, RandomState>::default(),
             propagator_name_to_position:
-                HashMap::<SmartString<LazyCompact>, usize, RandomState>::default(),
-            coupling_name_to_position:
                 HashMap::<SmartString<LazyCompact>, usize, RandomState>::default(),
             vertex_rule_name_to_position:
                 HashMap::<SmartString<LazyCompact>, usize, RandomState>::default(),
@@ -1677,11 +1731,16 @@ impl Model {
         let mut expr = vec![];
         let mut new_values_len = 0;
 
-        for c in &self.couplings {
-            let key = symbol!(&c.name);
-            expr.push(c.expression.as_view());
+        for (n, c) in &self.couplings {
+            let key = n.0 .0;
+            expr.push(Atom::var(key));
             fn_map
-                .add_function(key, c.name.clone().into(), vec![], c.expression.clone())
+                .add_function(
+                    key,
+                    c.name.namespaceless_string().into(),
+                    vec![],
+                    c.expression.clone(),
+                )
                 .unwrap();
             new_values_len += 1;
         }
@@ -1689,8 +1748,8 @@ impl Model {
         let mut params = vec![];
         let mut param_values = vec![];
 
-        for p in &self.parameters {
-            let key = parse!(&p.name);
+        for (n, p) in &self.parameters {
+            let key = n.0.into();
             match p.nature {
                 ParameterNature::External => {
                     params.push(key);
@@ -1702,12 +1761,12 @@ impl Model {
                 }
                 ParameterNature::Internal => {
                     new_values_len += 1;
-                    let key = symbol!(&p.name);
-                    expr.push(p.expression.as_ref().unwrap().as_view());
+                    let key = n.0 .0;
+                    expr.push(Atom::var(key));
                     fn_map
                         .add_function(
                             key,
-                            p.name.clone().into(),
+                            p.name.namespaceless_string().into(),
                             vec![],
                             p.expression.clone().unwrap(),
                         )
@@ -1724,117 +1783,31 @@ impl Model {
         let mut new_values = vec![Complex::new(F(0.0), F(0.0)); new_values_len];
         evaluator.evaluate(&param_values, &mut new_values);
 
-        // for (i, c) in self.couplings.iter_mut().enumerate() {
-        //     c.value = Some(new_values[i].map(|f| f.0));
-        // }
-    }
-
-    pub(crate) fn substitute_model_params(&self, atom: &Atom) -> Atom {
-        let mut sub_atom = atom.clone();
-        for cpl in self.couplings.iter() {
-            let [pattern, rhs] = cpl.rep_rule();
-
-            sub_atom = sub_atom
-                .replace(&pattern.to_pattern())
-                .with(rhs.to_pattern());
+        for (i, c) in self.couplings.values_mut().enumerate() {
+            c.value = Some(new_values[i].map(|f| f.0));
         }
+        let mut i = self.couplings.len();
 
-        for para in self.parameters.iter() {
-            if let Some([pattern, rhs]) = para.rep_rule() {
-                sub_atom = sub_atom
-                    .replace(&pattern.to_pattern())
-                    .with(rhs.to_pattern());
+        for c in self.parameters.values_mut() {
+            if c.nature == ParameterNature::External {
+                continue;
             }
+            c.value = Some(new_values[i]);
+            i += 1;
         }
-        sub_atom
-    }
-
-    pub(crate) fn dependent_coupling_replacements(&self) -> Vec<(Pattern, Pattern)> {
-        let mut reps = vec![];
-        for cpl in self.couplings.iter().filter(|c| c.value.is_none()) {
-            let [pattern, rhs] = cpl.rep_rule();
-            reps.push((pattern.to_pattern(), rhs.to_pattern()));
-        }
-        reps
-    }
-
-    pub(crate) fn internal_parameter_replacements(&self) -> Vec<(Pattern, Pattern)> {
-        let mut reps = vec![];
-        for para in self
-            .parameters
-            .iter()
-            .filter(|p| matches!(p.nature, ParameterNature::Internal))
-        {
-            if let Some([pattern, rhs]) = para.rep_rule() {
-                reps.push((pattern.to_pattern(), rhs.to_pattern()));
-            }
-        }
-        reps
-    }
-
-    pub(crate) fn valued_coupling_re_im_split(&self) -> Vec<(Pattern, Pattern)> {
-        let mut reps = vec![];
-        for cpl in self.couplings.iter().filter(|c| c.value.is_some()) {
-            let lhs = parse!(&cpl.name).to_pattern();
-            if let Some(value) = cpl.value {
-                let rhs = if value.im == 0.0 {
-                    let name = Atom::var(symbol!(format!("{}_re", cpl.name)));
-
-                    name.to_pattern()
-                } else if value.re == 0.0 {
-                    let name = Atom::var(symbol!(format!("{}_im", cpl.name)));
-
-                    name.to_pattern()
-                } else {
-                    let name_re = Atom::var(symbol!(cpl.name.clone() + "_re"));
-
-                    let name_im = Atom::var(symbol!(cpl.name.clone() + "_im"));
-
-                    let i = Atom::i();
-                    (&name_re + i * &name_im).to_pattern()
-                };
-                reps.push((lhs, rhs));
-            }
-        }
-        reps
-    }
-
-    pub(crate) fn generate_values<T: FloatLike>(&self) -> Vec<Complex<F<T>>> {
-        let mut values = vec![];
-
-        for cpl in self.couplings.iter().filter(|c| c.value.is_some()) {
-            if let Some(value) = cpl.value {
-                values.push(value.map(F::from_f64));
-            }
-        }
-        for param in self.parameters.iter().filter(|p| p.value.is_some()) {
-            if let Some(value) = param.value {
-                let value = Complex::new(F::<T>::from_ff64(value.re), F::<T>::from_ff64(value.im));
-                match param.parameter_type {
-                    ParameterType::Imaginary => {
-                        values.push(value);
-                    }
-                    ParameterType::Real => {
-                        values.push(value);
-                    }
-                };
-            }
-        }
-
-        values
     }
 
     pub(crate) fn generate_params(&self) -> Vec<Atom> {
         let mut params = vec![];
 
-        for cpl in self.couplings.iter().filter(|c| c.value.is_some()) {
+        for cpl in self.couplings.values().filter(|c| c.value.is_some()) {
             if cpl.value.is_some() {
-                params.push(parse!(&cpl.name));
+                params.push(cpl.name.into());
             }
         }
-        for param in self.parameters.iter().filter(|p| p.value.is_some()) {
+        for param in self.parameters.values().filter(|p| p.value.is_some()) {
             if param.value.is_some() {
-                let name = parse!(&param.name);
+                let name = param.name.into();
                 params.push(name);
             }
         }
@@ -1842,79 +1815,6 @@ impl Model {
         params
     }
 
-    pub(crate) fn substitute_split_model_params(&self, atom: &Atom) -> Atom {
-        atom.clone()
-    }
-
-    pub(crate) fn valued_parameter_re_im_split(&self) -> Vec<(Pattern, Pattern)> {
-        let mut reps = vec![];
-        for param in self.parameters.iter().filter(|p| p.value.is_some()) {
-            let lhs = parse!(&param.name).to_pattern();
-            if let Some(value) = param.value {
-                let rhs = match param.parameter_type {
-                    ParameterType::Imaginary => {
-                        if value.re.is_zero() {
-                            let name = Atom::var(symbol!(format!("{}_im", param.name)));
-
-                            name.to_pattern()
-                        } else {
-                            let name_re = Atom::var(symbol!(param.name.clone() + "_re"));
-
-                            let name_im = Atom::var(symbol!(param.name.clone() + "_im"));
-
-                            let i = Atom::i();
-                            (&name_re + i * &name_im).to_pattern()
-                        }
-                    }
-                    ParameterType::Real => {
-                        let name = Atom::var(symbol!(format!("{}_re", param.name)));
-
-                        name.to_pattern()
-                    }
-                };
-                reps.push((lhs, rhs));
-            }
-        }
-        reps
-    }
-
-    pub(crate) fn evaluate_couplings(&self, atom: Atom) -> Atom {
-        // let mut atom = atom;
-        // for cpl in self.couplings.iter() {
-        //     if let Some(value) = cpl.value {
-        //         let pat = parse!(&cpl.name).unwrap().to_pattern();
-
-        //         let re = Atom::num(value);
-        //         atom = atom.replace_all(&pattern.to_pattern(), &rhs.to_pattern(), None, None);
-        //     }
-        //     let [pattern, rhs] = cpl.rep_rule();
-        //     atom = atom.replace_all(&pattern.to_pattern(), &rhs.to_pattern(), None, None);
-        // }
-        atom
-    }
-
-    pub(crate) fn append_coupling_eval<'a, T: FloatLike>(
-        &'a self,
-        const_map: &mut HashMap<AtomView<'a>, Complex<F<T>>>,
-    ) {
-        // let mut atom = atom;
-        for cpl in self.couplings.iter() {
-            if let Some(value) = cpl.value {
-                let val = Complex::new(F::<T>::from_f64(value.re), F::<T>::from_f64(value.im));
-                const_map.insert(cpl.expression.as_view(), val);
-            }
-        }
-    }
-
-    pub(crate) fn append_parameter_map(&self, const_map: &mut AHashMap<Atom, Complex<F<f64>>>) {
-        // let mut atom = atom;
-        for cpl in self.parameters.iter() {
-            if let Some(value) = cpl.value {
-                let key = parse!(&cpl.name);
-                const_map.insert(key, value);
-            }
-        }
-    }
     pub(crate) fn is_empty(&self) -> bool {
         self.name == "ModelNotLoaded" || self.particles.is_empty()
     }
@@ -1931,14 +1831,14 @@ impl Model {
         }
         let mut reps = Vec::new();
 
-        for cpl in self.couplings.iter() {
+        for cpl in self.couplings.values() {
             reps.push(
                 cpl.rep_rule()
                     .map(|a| format!("{}", AtomPrinter::new_with_options(a.as_view(), print_ops))),
             );
         }
 
-        for para in self.parameters.iter() {
+        for para in self.parameters.values() {
             if let Some(rule) = para.rep_rule() {
                 reps.push(
                     rule.map(|a| {
@@ -1979,7 +1879,7 @@ impl Model {
                     set.insert(p.clone());
                 }
             }
-            for (k, _) in v.0.coupling_orders() {
+            for (k, _) in v.0.coupling_orders(&self) {
                 let current_set = map.entry(k).or_insert(HashSet::<ArcParticle>::default());
 
                 set.iter().for_each(|d| {
@@ -2023,14 +1923,10 @@ impl Model {
         model.parameters = serializable_model
             .parameters
             .iter()
-            .enumerate()
-            .map(|(i_param, serializable_param)| {
-                let parameter =
-                    Arc::new(Parameter::from_serializable_parameter(serializable_param));
-                model
-                    .parameter_name_to_position
-                    .insert(parameter.name.clone(), i_param);
-                parameter
+            .map(|serializable_param| {
+                let parameter = Parameter::from_serializable_parameter(serializable_param);
+
+                (ParameterName(parameter.name), parameter)
             })
             .collect();
 
@@ -2040,10 +1936,8 @@ impl Model {
             .iter()
             .enumerate()
             .map(|(i_part, serializable_particle)| {
-                let particle = Arc::new(Particle::from_serializable_particle(
-                    &model,
-                    serializable_particle,
-                ));
+                let particle =
+                    Arc::new(Particle::from_serializable_particle(serializable_particle));
                 model
                     .particle_name_to_position
                     .insert(particle.name.clone(), i_part);
@@ -2093,14 +1987,10 @@ impl Model {
         model.couplings = serializable_model
             .couplings
             .iter()
-            .enumerate()
-            .map(|(i_coupl, serializable_coupling)| {
-                let coupling =
-                    Arc::new(Coupling::from_serializable_coupling(serializable_coupling));
-                model
-                    .coupling_name_to_position
-                    .insert(coupling.name.clone(), i_coupl);
-                coupling
+            .map(|serializable_coupling| {
+                let coupling = Coupling::from_serializable_coupling(serializable_coupling);
+
+                (CouplingName(coupling.name), coupling)
             })
             .collect();
 
@@ -2228,9 +2118,12 @@ impl Model {
     }
 
     #[inline]
-    pub(crate) fn get_parameter<S: AsRef<str>>(&self, name: S) -> Arc<Parameter> {
-        if let Some(position) = self.parameter_name_to_position.get(name.as_ref()) {
-            self.parameters[*position].clone()
+    pub(crate) fn get_parameter<S: AsRef<str>>(&self, name: S) -> &Parameter {
+        if let Some(position) = self
+            .parameters
+            .get(&ParameterName(UFOSymbol::from(name.as_ref())))
+        {
+            &position
         } else {
             panic!(
                 "Parameter '{}' not found in model '{}'.",
@@ -2264,9 +2157,12 @@ impl Model {
         }
     }
     #[inline]
-    pub(crate) fn get_coupling<S: AsRef<str>>(&self, name: S) -> Arc<Coupling> {
-        if let Some(position) = self.coupling_name_to_position.get(name.as_ref()) {
-            self.couplings[*position].clone()
+    pub(crate) fn get_coupling<S: AsRef<str>>(&self, name: S) -> &Coupling {
+        if let Some(coupling) = self
+            .couplings
+            .get(&CouplingName(UFOSymbol::from(name.as_ref())))
+        {
+            coupling
         } else {
             panic!(
                 "Coupling '{}' not found in model '{}'.",

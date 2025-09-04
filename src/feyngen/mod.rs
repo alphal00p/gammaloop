@@ -15,6 +15,8 @@ use symbolica::atom::Atom;
 use symbolica::graph::Graph as SymbolicaGraph;
 use thiserror::Error;
 
+use crate::model::Model;
+
 #[derive(Error, Debug)]
 pub enum FeynGenError {
     #[error("{0}")]
@@ -207,10 +209,11 @@ impl FromStr for GenerationType {
 
 pub(crate) fn get_coupling_orders<NodeColor: diagram_generator::NodeColorFunctions>(
     graph: &SymbolicaGraph<NodeColor, EdgeColor>,
+    model: &Model,
 ) -> AHashMap<SmartString<LazyCompact>, usize> {
     let mut coupling_orders = AHashMap::default();
     for node in graph.nodes() {
-        for (k, v) in node.data.coupling_orders() {
+        for (k, v) in node.data.coupling_orders(model) {
             *coupling_orders.entry(k).or_insert(0) += v;
         }
     }
@@ -323,6 +326,7 @@ impl FeynGenFilters {
     >(
         &self,
         graphs: &mut Vec<(SymbolicaGraph<NodeColor, EdgeColor>, Atom)>,
+        model: &Model,
         pool: &rayon::ThreadPool,
         progress_bar_style: &ProgressStyle,
     ) -> Result<(), FeynGenError> {
@@ -337,7 +341,7 @@ impl FeynGenFilters {
                             .par_iter_mut()
                             .progress_with(bar.clone())
                             .filter(|(g, _)| {
-                                let graph_coupling_orders = get_coupling_orders(g);
+                                let graph_coupling_orders = get_coupling_orders(g, model);
                                 let a = orders.iter().all(|(k, (v_min, v_max))| {
                                     graph_coupling_orders
                                         .get(&SmartString::from(k))

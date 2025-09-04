@@ -133,7 +133,7 @@ pub trait NodeColorFunctions: Sized + std::fmt::Display {
         }
     }
 
-    fn coupling_orders(&self) -> AHashMap<SmartString<LazyCompact>, usize> {
+    fn coupling_orders(&self, model: &Model) -> AHashMap<SmartString<LazyCompact>, usize> {
         AHashMap::default()
     }
 
@@ -151,6 +151,7 @@ pub trait NodeColorFunctions: Sized + std::fmt::Display {
 
     #[allow(clippy::type_complexity)]
     fn passes_amplitude_filter(
+        _model: &Model,
         _amplitude_subgraph: &BitVec,
         _graph: &HedgeGraph<ArcParticle, Self>,
         _amp_couplings: Option<
@@ -168,20 +169,21 @@ impl NodeColorFunctions for NodeColorWithVertexRule {
         self.external_tag = external_tag;
     }
 
-    fn coupling_orders(&self) -> AHashMap<SmartString<LazyCompact>, usize> {
+    fn coupling_orders(&self, model: &Model) -> AHashMap<SmartString<LazyCompact>, usize> {
         // info!("looking at :{}", self.vertex_rule.name);
         let mut coupling_orders = AHashMap::default();
         let vr = self.vertex_rule.clone();
         if vr.0.name == "external" {
             return coupling_orders;
         }
-        for (k, v) in vr.0.coupling_orders() {
+        for (k, v) in vr.0.coupling_orders(model) {
             *coupling_orders.entry(k).or_insert(0) += v;
         }
         coupling_orders
     }
 
     fn passes_amplitude_filter(
+        model: &Model,
         amplitude_subgraph: &BitVec,
         graph: &HedgeGraph<ArcParticle, Self>,
         amp_couplings: Option<
@@ -202,7 +204,7 @@ impl NodeColorFunctions for NodeColorWithVertexRule {
             for (_, _, s) in graph.iter_nodes_of(amplitude_subgraph) {
                 // println!("node {}:{}", s.vertex_rule.name, s.get_external_tag());
                 if !s.is_external() {
-                    for (k, v) in s.coupling_orders() {
+                    for (k, v) in s.coupling_orders(model) {
                         *coupling_orders.entry(k).or_insert(0) += v;
                     }
                 }
@@ -237,6 +239,7 @@ impl NodeColorFunctions for NodeColorWithoutVertexRule {
     }
 
     fn passes_amplitude_filter(
+        _model: &Model,
         _amplitude_subgraph: &BitVec,
         _graph: &HedgeGraph<ArcParticle, Self>,
         _amp_couplings: Option<
@@ -1007,9 +1010,9 @@ impl FeynGen {
                         return false;
                     }
                 }
-                let left = NodeColor::passes_amplitude_filter(&cut.0, graph, amp_couplings);
+                let left = NodeColor::passes_amplitude_filter(model, &cut.0, graph, amp_couplings);
 
-                let right = NodeColor::passes_amplitude_filter(&cut.2, graph, amp_couplings);
+                let right = NodeColor::passes_amplitude_filter(model, &cut.2, graph, amp_couplings);
 
                 if !left {
                     // info!("Left node color not valid");
@@ -1847,7 +1850,7 @@ impl FeynGen {
                         remapped_edge_vertices.1,
                         is_edge_external, //edge.directed && is_edge_external,
                         if color_according_to_mass && !is_edge_external {
-                            format!("{} | {}", particle.0.mass, particle.0.spin)
+                            format!("{} | {}", particle.0.mass.0, particle.0.spin)
                         } else {
                             particle.0.name.to_string()
                         },
@@ -2871,7 +2874,7 @@ impl FeynGen {
         );
         last_step = step;
 
-        filters.apply_filters(&mut processed_graphs, &pool, &progress_bar_style)?;
+        filters.apply_filters(&mut processed_graphs, model, &pool, &progress_bar_style)?;
 
         step = Instant::now();
         info!(

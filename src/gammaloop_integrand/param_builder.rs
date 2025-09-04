@@ -746,13 +746,13 @@ impl<T: FloatLike> ParamBuilder<T> {
 
     pub(crate) fn update_model_values(&mut self, model: &Model) {
         let mut pos = self.pairs.model_parameters.value_range.start;
-        for cpl in model.couplings.iter().filter(|c| c.value.is_some()) {
+        for cpl in model.couplings.values().filter(|c| c.value.is_some()) {
             if let Some(value) = cpl.value {
                 self.values[pos] = value.map(F::from_f64);
                 pos += 1;
             }
         }
-        for param in model.parameters.iter().filter(|p| p.value.is_some()) {
+        for param in model.parameters.values().filter(|p| p.value.is_some()) {
             if let Some(value) = param.value {
                 let value = Complex::new(F::<T>::from_ff64(value.re), F::<T>::from_ff64(value.im));
                 self.values[pos] = value;

@@ -161,7 +161,7 @@ impl CrossSectionGraphTerm {
                 ir_limit
             ))?;
 
-        let model_parameter_cache = model.generate_values::<f128>();
+        // let model_parameter_cache = model.generate_values::<f128>();
 
         let momenta = ir_limit.get_momenta(rng, settings, approach_settings);
         let non_limit_loops = lmb

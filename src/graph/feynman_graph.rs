@@ -265,10 +265,11 @@ impl FeynmanGraph for HedgeGraph<Edge, Vertex, NumHedgeData> {
     }
 
     fn get_real_mass_vector<T: FloatLike>(&self) -> EdgeVec<F<T>> {
-        self.new_edgevec(|edge, _edge_id, _| match edge.mass_value() {
-            Some(mass) => F::from_ff64(mass.re),
-            None => F::from_f64(0.0),
-        })
+        todo!()
+        // self.new_edgevec(|edge, _edge_id, _| match edge.mass_value() {
+        //     Some(mass) => F::from_ff64(mass.re),
+        //     None => F::from_f64(0.0),
+        // })
     }
 
     fn get_energy_cache<T: FloatLike>(
@@ -277,29 +278,30 @@ impl FeynmanGraph for HedgeGraph<Edge, Vertex, NumHedgeData> {
         external_moms: &ExternalFourMomenta<F<T>>,
         lmb: &LoopMomentumBasis,
     ) -> EdgeVec<F<T>> {
-        self.new_edgevec_from_iter(
-            lmb.edge_signatures
-                .borrow()
-                .into_iter()
-                .map(|(_, sig)| sig.compute_four_momentum_from_three(loop_moms, external_moms))
-                .zip(self.iter_edges())
-                .map(|(emr_mom, (p, _, edge))| {
-                    if p.is_paired() {
-                        emr_mom
-                            .spatial
-                            .on_shell_energy(edge.data.mass_value().map(|m| {
-                                if m.im.is_non_zero() {
-                                    panic!("Complex masses not yet supported in gammaLoop")
-                                }
-                                F::<T>::from_ff64(m.re)
-                            }))
-                            .value
-                    } else {
-                        emr_mom.temporal.value // a wierd way of just obtaining the energy of the external particles
-                    }
-                }),
-        )
-        .unwrap()
+        todo!()
+        // self.new_edgevec_from_iter(
+        //     lmb.edge_signatures
+        //         .borrow()
+        //         .into_iter()
+        //         .map(|(_, sig)| sig.compute_four_momentum_from_three(loop_moms, external_moms))
+        //         .zip(self.iter_edges())
+        //         .map(|(emr_mom, (p, _, edge))| {
+        //             if p.is_paired() {
+        //                 emr_mom
+        //                     .spatial
+        //                     .on_shell_energy(edge.data.mass_value().map(|m| {
+        //                         if m.im.is_non_zero() {
+        //                             panic!("Complex masses not yet supported in gammaLoop")
+        //                         }
+        //                         F::<T>::from_ff64(m.re)
+        //                     }))
+        //                     .value
+        //             } else {
+        //                 emr_mom.temporal.value // a wierd way of just obtaining the energy of the external particles
+        //             }
+        //         }),
+        // )
+        // .unwrap()
     }
 
     fn get_emr_vec_cache<T: FloatLike>(
@@ -429,42 +431,43 @@ impl FeynmanGraph for HedgeGraph<Edge, Vertex, NumHedgeData> {
     }
 
     fn expected_scale(&self, e_cm: F<f64>) -> F<f64> {
-        let mut scale = Complex::new_re(F(1.0));
-        for (_, _, vertex) in self.iter_nodes() {
-            // include the values of all couplings
-            let coupling_value = vertex
-                .vertex_rule
-                .as_ref()
-                .map(|r| {
-                    r.couplings
-                        .iter()
-                        .flat_map(|couplings| {
-                            couplings.iter().map(|coupling| {
-                                coupling
-                                    .as_ref()
-                                    .map(|coupling| {
-                                        coupling
-                                            .value
-                                            .map(|x| Complex::new(F(x.re), F(x.im)))
-                                            .unwrap_or(Complex::new_re(F(1.0)))
-                                    })
-                                    .unwrap_or(Complex::new_re(F(1.0)))
-                            })
-                        })
-                        .fold(Complex::new_re(F(1.0)), |product, term| product * term)
-                })
-                .unwrap_or(Complex::new_re(F(1.0)));
+        todo!()
+        // let mut scale = Complex::new_re(F(1.0));
+        // for (_, _, vertex) in self.iter_nodes() {
+        //     // include the values of all couplings
+        //     let coupling_value = vertex
+        //         .vertex_rule
+        //         .as_ref()
+        //         .map(|r| {
+        //             r.couplings
+        //                 .iter()
+        //                 .flat_map(|couplings| {
+        //                     couplings.iter().map(|coupling| {
+        //                         coupling
+        //                             .as_ref()
+        //                             .map(|coupling| {
+        //                                 coupling
+        //                                     .value
+        //                                     .map(|x| Complex::new(F(x.re), F(x.im)))
+        //                                     .unwrap_or(Complex::new_re(F(1.0)))
+        //                             })
+        //                             .unwrap_or(Complex::new_re(F(1.0)))
+        //                     })
+        //                 })
+        //                 .fold(Complex::new_re(F(1.0)), |product, term| product * term)
+        //         })
+        //         .unwrap_or(Complex::new_re(F(1.0)));
 
-            scale *= Complex::new_re(e_cm.powi(vertex.dod)) * coupling_value;
-        }
+        //     scale *= Complex::new_re(e_cm.powi(vertex.dod)) * coupling_value;
+        // }
 
-        for (_, _, edge_data) in
-            self.iter_edges_of(&self.full_filter().subtract(&self.external_filter()))
-        {
-            scale *= Complex::new_re(e_cm.powi(edge_data.data.dod))
-        }
+        // for (_, _, edge_data) in
+        //     self.iter_edges_of(&self.full_filter().subtract(&self.external_filter()))
+        // {
+        //     scale *= Complex::new_re(e_cm.powi(edge_data.data.dod))
+        // }
 
-        scale.norm_squared().sqrt()
+        // scale.norm_squared().sqrt()
     }
 
     fn no_dummy(&self) -> BitVec {

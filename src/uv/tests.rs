@@ -303,16 +303,8 @@ fn tri_box_tri_LU() {
     let hprop = model.get_propagator("H_propFeynman");
     let hp = model.get_particle("H");
 
-    if is_massless {
-        assert!(hp.0.mass.value.unwrap().is_zero());
-    }
-
     let tprop = model.get_propagator("t_propFeynman");
     let tp = model.get_particle("t");
-
-    if is_massless {
-        assert!(tp.0.mass.value.unwrap().is_zero());
-    }
 
     let n1 = underlying.add_node(ParseVertex::from(hhh.clone()).with_num(Atom::num(1)));
     let n2 = underlying.add_node(ParseVertex::from(hhh.clone()).with_num(Atom::num(1)));

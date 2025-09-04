@@ -151,14 +151,6 @@ impl Edge {
     pub(crate) fn particle(&self) -> Option<ArcParticle> {
         self.particle.particle()
     }
-
-    pub(crate) fn mass_value(&self) -> Option<Complex<F<f64>>> {
-        match &self.particle {
-            PossibleParticle::JustMass { value, .. } => value.clone(),
-            PossibleParticle::Particle(p) => p.mass.value,
-            PossibleParticle::MassOverriddenParticle { mass_value, .. } => mass_value.clone(),
-        }
-    }
 }
 
 impl From<&Edge> for DotEdgeData {

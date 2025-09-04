@@ -10,7 +10,6 @@ use symbolica::{
     atom::{Atom, AtomCore, Symbol},
     function,
     id::Replacement,
-    parse,
 };
 
 use crate::{
@@ -303,7 +302,7 @@ impl UVE for Edge {
     fn mass_atom(&self) -> Atom {
         match &self.particle {
             PossibleParticle::JustMass { expr, .. } => expr.clone(),
-            PossibleParticle::Particle(p) => parse!(&p.mass.name),
+            PossibleParticle::Particle(p) => p.mass.0.into(),
             PossibleParticle::MassOverriddenParticle { mass, .. } => mass.clone(),
         }
     }
