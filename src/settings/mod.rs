@@ -53,54 +53,6 @@ pub struct RuntimeSettings {
     pub subtraction: SubtractionSettings,
 }
 
-impl RuntimeSettings {
-    pub(crate) fn from_file(file_path: impl AsRef<Path>) -> Result<Self> {
-        let mut f = File::open(file_path.as_ref())
-            .wrap_err_with(|| {
-                format!(
-                    "Could not open runtime settings file {}",
-                    file_path.as_ref().display()
-                )
-            })
-            .suggestion("Does the path exist?")?;
-
-        if let Some(ext) = file_path.as_ref().extension() {
-            if let Some(ext) = ext.to_str() {
-                match ext {
-                    "json" => serde_json::from_reader(f)
-                        .map_err(|e| eyre!(format!("Error parsing model json: {}", e)))
-                        .suggestion("Is it a correct json file"),
-                    "yaml" | "yml" => serde_yaml::from_reader(f)
-                        .map_err(|e| eyre!(format!("Error parsing model yaml: {}", e)))
-                        .suggestion("Is it a correct yaml file"),
-                    "toml" => {
-                        let mut buf = vec![];
-                        f.read(&mut buf)?;
-                        toml::from_slice(&buf)
-                            .map_err(|e| eyre!(format!("Error parsing model toml: {}", e)))
-                            .suggestion("Is it a correct toml file")
-                    }
-
-                    _ => Err(eyre!(format!("Unknown model file extension: {}", ext)))
-                        .suggestion("Is it a .json or .yaml file?"),
-                }
-            } else {
-                Err(eyre!(format!(
-                    "Could not determine file extension of runtime settings file {}",
-                    file_path.as_ref().display()
-                )))
-                .suggestion("Does the path exist?")
-            }
-        } else {
-            Err(eyre!(format!(
-                "Could not determine file extension of runtime settings file {}",
-                file_path.as_ref().display()
-            )))
-            .suggestion("Does the path exist?")
-        }
-    }
-}
-
 pub mod global;
 pub use runtime::{
     kinematic::KinematicsSettings, GeneralSettings, IntegratorSettings, SamplingSettings,
@@ -112,21 +64,53 @@ pub mod runtime;
 mod tests {
     use serde::{Deserialize, Serialize};
 
-    use crate::settings::{global::GenerationSettings, GlobalSettings, RuntimeSettings};
+    use crate::{
+        momentum::{Dep, ExternalMomenta, SignOrZero},
+        settings::{
+            global::GenerationSettings, runtime::kinematic::Externals, GlobalSettings,
+            KinematicsSettings, RuntimeSettings,
+        },
+        utils::{
+            serde_utils::{SmartSerde, SHOWDEFAULTS},
+            F,
+        },
+    };
     use std::fmt::Debug;
 
     fn generic_test_settings<T>()
     where
         T: Serialize + for<'de> Deserialize<'de> + Default + PartialEq + Debug,
     {
-        let default = T::default();
-        let serialized = serde_yaml::to_string(&default).unwrap();
-        assert_eq!(serialized, "{}\n");
-        let deserialized: T = serde_yaml::from_str(&serialized).unwrap();
-        assert_eq!(default, deserialized);
+        {
+            let default = T::default();
+            let serialized = serde_yaml::to_string(&default).unwrap();
+            assert_eq!(serialized, "{}\n");
+            let deserialized: T = serde_yaml::from_str(&serialized).unwrap();
+            assert_eq!(default, deserialized);
 
-        let deserialized_from_empty: T = serde_yaml::from_str("").unwrap();
-        assert_eq!(default, deserialized_from_empty);
+            let deserialized_from_empty: T = serde_yaml::from_str("").unwrap();
+            assert_eq!(default, deserialized_from_empty);
+        }
+        {
+            let default = T::default();
+            let serialized = toml::to_string_pretty(&default).unwrap();
+            assert_eq!(serialized, "");
+            let deserialized: T = toml::from_str(&serialized).unwrap();
+            assert_eq!(default, deserialized);
+
+            let deserialized_from_empty: T = toml::from_str("").unwrap();
+            assert_eq!(default, deserialized_from_empty);
+        }
+        {
+            let default = T::default();
+            let serialized = serde_json::to_string(&default).unwrap();
+            assert_eq!(serialized, "{}");
+            let deserialized: T = serde_json::from_str(&serialized).unwrap();
+            assert_eq!(default, deserialized);
+
+            let deserialized_from_empty: T = serde_yaml::from_str("").unwrap();
+            assert_eq!(default, deserialized_from_empty);
+        }
     }
 
     #[test]
@@ -236,5 +220,48 @@ mod tests {
     fn test_kinematics_settings_serialize_deserialize() {
         use crate::settings::KinematicsSettings;
         generic_test_settings::<KinematicsSettings>();
+
+        let kinematics_settings = KinematicsSettings {
+            e_cm: F(100.0),
+            externals: Externals::Constant {
+                momenta: vec![
+                    ExternalMomenta::Independent([F(1.), F(2.), F(3.), F(4.)]),
+                    ExternalMomenta::Dependent(Dep::Dep),
+                ],
+                helicities: vec![SignOrZero::Plus, SignOrZero::Minus],
+            },
+        };
+
+        let toml = toml::to_string_pretty(&kinematics_settings).unwrap();
+        let deserialized: KinematicsSettings = toml::from_str(&toml).unwrap();
+        assert_eq!(kinematics_settings, deserialized);
+    }
+
+    #[test]
+    fn test_run_history() {
+        use crate::cli::state::RunHistory;
+        //SHOWDEFAULTS.store(true, std::sync::atomic::Ordering::Relaxed);
+        let mut run_history: RunHistory = Default::default();
+        let kinematics_settings = KinematicsSettings {
+            e_cm: F(100.0),
+            externals: Externals::Constant {
+                momenta: vec![
+                    ExternalMomenta::Independent([F(1.), F(2.), F(3.), F(4.)]),
+                    ExternalMomenta::Dependent(Dep::Dep),
+                ],
+                helicities: vec![SignOrZero::Plus, SignOrZero::Minus],
+            },
+        };
+
+        run_history.default_runtime_settings.kinematics = kinematics_settings;
+        let toml = toml::to_string_pretty(&run_history).unwrap();
+        println!("{}", toml);
+        let deserialized: RunHistory = toml::from_str(&toml).unwrap();
+        assert_eq!(run_history, deserialized);
+        SHOWDEFAULTS.store(false, std::sync::atomic::Ordering::Relaxed);
+
+        run_history.to_file("test_path.toml").unwrap();
+        let deserialized_from_file = RunHistory::from_file("test_path.toml", " ").unwrap();
+        assert_eq!(run_history, deserialized_from_file);
     }
 }
