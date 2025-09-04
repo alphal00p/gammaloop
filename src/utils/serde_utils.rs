@@ -76,9 +76,9 @@ pub trait SmartSerde: Serialize + DeserializeOwned {
                         .map_err(|e| eyre!(format!("Error parsing {name} yaml: {}", e)))
                         .suggestion("Is it a correct yaml file"),
                     "toml" => {
-                        let mut buf = vec![];
-                        f.read(&mut buf)?;
-                        toml::from_slice(&buf)
+                        let mut buf = String::new();
+                        let bytes = f.read_to_string(&mut buf)?;
+                        toml::from_str(&buf)
                             .map_err(|e| eyre!(format!("Error parsing {name} toml: {}", e)))
                             .suggestion("Is it a correct toml file")
                     }
