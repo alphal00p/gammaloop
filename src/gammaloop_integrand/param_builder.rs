@@ -462,15 +462,12 @@ impl<T: FloatLike> ParamCache<T> {
         } else if self.len < 64 {
             Some(&self.cache[key])
         } else {
-            println!("Cache hit for key {}", key);
-            println!("{}", self.len);
             let cachekey = (64 + key) - self.len;
             Some(&self.cache[cachekey])
         }
     }
 
     pub fn checked_push(&mut self, key: usize, value: Vec<Complex<F<T>>>) {
-        println!("Pushing at {key}");
         debug_assert_eq!(self.len, key);
         self.len += 1;
         self.cache.enqueue(value);

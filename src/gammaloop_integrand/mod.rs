@@ -571,7 +571,6 @@ fn evaluate_all_rotations<T: FloatLike, I: GammaloopIntegrand>(
             }
             loop_mom_cache_id += 1;
             external_mom_cache_id += 1;
-            println!("l{loop_mom_cache_id}e{external_mom_cache_id}");
             gammaloop_sample.rotate(rotation, loop_mom_cache_id, external_mom_cache_id)
         })
         .collect();

@@ -278,7 +278,6 @@ impl<T: FloatLike> BareMomentumSample<T> {
         orientation: Option<usize>,
     ) -> Result<Self> {
         let external_moms = external_moms.get_dependent_externals(dependent_momenta_constructor)?;
-        println!("New l{loop_mom_cache_id}e{external_mom_cache_id}");
         Ok(Self {
             loop_moms,
             loop_mom_cache_id,
