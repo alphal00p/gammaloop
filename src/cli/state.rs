@@ -32,7 +32,7 @@ use crate::{
 
 use super::{tracing::FILTER_HANDLE, Cli, Commands};
 
-#[derive(Debug, Serialize, Deserialize, Default, JsonSchema)]
+#[derive(Debug, Serialize, Deserialize, Default, JsonSchema, PartialEq)]
 pub struct RunHistory {
     pub default_runtime_settings: RuntimeSettings,
     pub global_settings: GlobalSettings,

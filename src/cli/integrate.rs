@@ -21,7 +21,7 @@ use super::state::State;
     feature = "python_api",
     pyo3::pyclass(unsendable, name = "IntegrationSettings")
 )]
-#[derive(Debug, Args, Serialize, Deserialize, Clone, JsonSchema)]
+#[derive(Debug, Args, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
 pub struct Integrate {
     /// The process id to inspect
     #[arg(short = 'i', long = "process-id", value_name = "ID")]

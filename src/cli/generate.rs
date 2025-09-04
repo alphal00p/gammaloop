@@ -9,7 +9,7 @@ use crate::settings::{GlobalSettings, RuntimeSettings};
 
 use super::state::State;
 
-#[derive(Debug, Args, Serialize, Deserialize, Clone, JsonSchema)]
+#[derive(Debug, Args, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
 /// Generate integrands
 pub struct Generate {}
 

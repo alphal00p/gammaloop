@@ -8,7 +8,7 @@ use color_eyre::Result;
 
 use super::state::State;
 
-#[derive(Debug, Args, Serialize, Deserialize, Clone, JsonSchema)]
+#[derive(Debug, Args, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
 pub struct Inspect {
     /// The process id to inspect
     #[arg(short = 'i', long = "process-id", value_name = "ID")]

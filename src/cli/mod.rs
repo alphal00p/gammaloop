@@ -362,7 +362,7 @@ impl Cli {
     }
 }
 
-#[derive(Subcommand, Debug, Serialize, Deserialize, Clone, JsonSchema)]
+#[derive(Subcommand, Debug, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
 pub enum Import {
     Model {
         // #[arg(short = 'p')]
@@ -376,7 +376,7 @@ pub enum Import {
     },
 }
 
-#[derive(Subcommand, Debug, Serialize, Deserialize, Clone, JsonSchema)]
+#[derive(Subcommand, Debug, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
 pub enum Save {
     Dot {
         path: Option<PathBuf>,
@@ -400,7 +400,7 @@ pub enum Save {
     Schema {},
 }
 
-#[derive(Subcommand, Debug, Serialize, Deserialize, Clone, JsonSchema)]
+#[derive(Subcommand, Debug, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
 pub enum Set {
     BaseDir {
         path: PathBuf,
@@ -414,14 +414,14 @@ pub enum Set {
     },
 }
 
-#[derive(Subcommand, Debug, Serialize, Deserialize, Clone, JsonSchema)]
+#[derive(Subcommand, Debug, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
 pub enum Display {
     Model,
     Processes,
     Integrands { process_id: usize },
 }
 
-#[derive(Debug, Args, Serialize, Deserialize, Clone, JsonSchema)]
+#[derive(Debug, Args, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
 pub struct Run {
     /// Path to a run file to execute
     path: PathBuf,
@@ -432,7 +432,7 @@ pub enum Log {
     Format(LogFormat),
 }
 
-#[derive(Subcommand, Debug, Serialize, Deserialize, Clone, JsonSchema)]
+#[derive(Subcommand, Debug, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
 pub enum Commands {
     #[clap(subcommand)]
     Display(Display),
