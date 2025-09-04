@@ -35,7 +35,7 @@ pub struct RuntimeSettings {
     #[serde(rename = "General", skip_serializing_if = "IsDefault::is_default")]
     pub general: GeneralSettings,
     #[serde(rename = "Integrand", skip_serializing_if = "IsDefault::is_default")]
-    pub hard_coded_integrand: IntegrandSettings,
+    pub hard_coded_integrand: Option<IntegrandSettings>,
     #[serde(rename = "Kinematics", skip_serializing_if = "IsDefault::is_default")]
     pub kinematics: KinematicsSettings,
     #[serde(rename = "Integrator", skip_serializing_if = "IsDefault::is_default")]
