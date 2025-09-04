@@ -62,9 +62,9 @@ impl ProcessList {
         ProcessList { processes: vec![] }
     }
 
-    pub(crate) fn warm_up(&mut self) -> Result<()> {
+    pub(crate) fn warm_up(&mut self, model: &Model) -> Result<()> {
         for process in &mut self.processes.iter_mut() {
-            process.warm_up()?;
+            process.warm_up(model)?;
         }
 
         Ok(())
