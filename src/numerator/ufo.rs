@@ -52,26 +52,26 @@ pub struct UFOSymbols {
 
 #[allow(dead_code)]
 pub static UFO: LazyLock<UFOSymbols> = LazyLock::new(|| UFOSymbols {
-    identity: symbol!("Identity"),
-    identityl: symbol!("IdentityL"),
-    gamma: symbol!("Gamma"),
-    gamma5: symbol!("Gamma5"),
-    projm: symbol!("ProjM"),
-    projp: symbol!("ProjP"),
-    sigma: symbol!("Sigma"),
-    charge_conj: symbol!("C"),
-    metric: symbol!("Metric"),
-    momentum: symbol!("P"),
-    levicivita: symbol!("Epsilon"),
-    t: symbol!("T"),
-    f: symbol!("f"),
-    d: symbol!("d"),
-    antilevicivita: symbol!("EpsilonBar"),
-    t6: symbol!("T6"),
-    k6: symbol!("K6"),
-    k6bar: symbol!("K6Bar"),
-    pslash: symbol!("PSlash"),
-    complex: symbol!("complex"),
+    identity: symbol!("UFO::Identity"),
+    identityl: symbol!("UFO::IdentityL"),
+    gamma: symbol!("UFO::Gamma"),
+    gamma5: symbol!("UFO::Gamma5"),
+    projm: symbol!("UFO::ProjM"),
+    projp: symbol!("UFO::ProjP"),
+    sigma: symbol!("UFO::Sigma"),
+    charge_conj: symbol!("UFO::C"),
+    metric: symbol!("UFO::Metric"),
+    momentum: symbol!("UFO::P"),
+    levicivita: symbol!("UFO::Epsilon"),
+    t: symbol!("UFO::T"),
+    f: symbol!("UFO::f"),
+    d: symbol!("UFO::d"),
+    antilevicivita: symbol!("UFO::EpsilonBar"),
+    t6: symbol!("UFO::T6"),
+    k6: symbol!("UFO::K6"),
+    k6bar: symbol!("UFO::K6Bar"),
+    pslash: symbol!("UFO::PSlash"),
+    complex: symbol!("UFO::complex"),
 });
 
 impl UFOSymbols {
@@ -129,7 +129,7 @@ impl UFOSymbols {
         // for s in slots {
         //     println!("{}", s);
         // }
-        // println!("in:{atom}");
+        println!("in:{atom:#}");
         //
         atom = self.normalize_complex(atom);
         for (i, s) in slots.iter().enumerate() {
@@ -477,7 +477,7 @@ impl UFOSymbols {
                 .with(GS.emr_mom(*e, W_.a_));
         }
 
-        // println!("out:{atom}");
+        println!("out:{atom:#}");
         atom
     }
 

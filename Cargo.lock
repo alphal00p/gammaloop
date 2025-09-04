@@ -566,9 +566,9 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "4.5.45"
+version = "4.5.47"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1fc0e74a703892159f5ae7d3aac52c8e6c392f5ae5f359c70b5881d60aaac318"
+checksum = "7eac00902d9d136acd712710d71823fb8ac8004ca445a89e73a41d45aa712931"
 dependencies = [
  "clap_builder",
  "clap_derive",
@@ -590,9 +590,9 @@ dependencies = [
 
 [[package]]
 name = "clap_builder"
-version = "4.5.44"
+version = "4.5.47"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b3e7f4214277f3c7aa526a59dd3fbe306a370daee1f8b7b8c987069cd8e888a8"
+checksum = "2ad9bbf750e73b5884fb8a211a9424a1906c1e156724260fdae972f31d70e1d6"
 dependencies = [
  "anstream",
  "anstyle",
@@ -619,9 +619,9 @@ dependencies = [
 
 [[package]]
 name = "clap_derive"
-version = "4.5.45"
+version = "4.5.47"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "14cb31bb0a7d536caef2639baa7fad459e15c3144efefa6dbd1c84562c4739f6"
+checksum = "bbfd7eae0b0f1a6e63d4b13c9c478de77c2eb546fba158ad50b4203dc24b9f9c"
 dependencies = [
  "heck 0.5.0",
  "proc-macro2",
@@ -673,10 +673,24 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e5920befb47832a6d61ee3a3a846565cfa39b331331e68a3b1d1116630f2f26d"
 dependencies = [
  "backtrace",
+ "color-spantrace",
  "eyre",
  "indenter",
  "once_cell",
  "owo-colors",
+ "tracing-error",
+]
+
+[[package]]
+name = "color-spantrace"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b8b88ea9df13354b55bc7234ebcce36e6ef896aca2e42a15de9e10edce01b427"
+dependencies = [
+ "once_cell",
+ "owo-colors",
+ "tracing-core",
+ "tracing-error",
 ]
 
 [[package]]
@@ -1093,7 +1107,16 @@ version = "5.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "44c45a9d03d6676652bcb5e724c7e988de1acad23a711b5217ab9cbecbec2225"
 dependencies = [
- "dirs-sys",
+ "dirs-sys 0.4.1",
+]
+
+[[package]]
+name = "dirs"
+version = "6.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c3e8aa94d75141228480295a7d0e7feb620b1a5ad9f12bc40be62411e38cce4e"
+dependencies = [
+ "dirs-sys 0.5.0",
 ]
 
 [[package]]
@@ -1104,8 +1127,20 @@ checksum = "520f05a5cbd335fae5a99ff7a6ab8627577660ee5cfd6a94a6a929b52ff0321c"
 dependencies = [
  "libc",
  "option-ext",
- "redox_users",
+ "redox_users 0.4.6",
  "windows-sys 0.48.0",
+]
+
+[[package]]
+name = "dirs-sys"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e01a3366d27ee9890022452ee61b2b63a67e6f13f58900b651ff5665f0bb1fab"
+dependencies = [
+ "libc",
+ "option-ext",
+ "redox_users 0.5.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -1371,6 +1406,35 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e6d5a32815ae3f33302d95fdcb2ce17862f8c65363dcfd29360480ba1001fc9c"
 
 [[package]]
+name = "gammaloop-api"
+version = "0.1.0"
+dependencies = [
+ "bincode",
+ "bincode-trait-derive",
+ "chrono",
+ "clap",
+ "clap-repl",
+ "color-eyre",
+ "colored 3.0.0",
+ "console 0.16.0",
+ "dirs 6.0.0",
+ "eyre",
+ "gammalooprs",
+ "pyo3-build-config 0.26.0",
+ "rand 0.9.2",
+ "schemars 1.0.4",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "spenso",
+ "symbolica",
+ "toml 0.9.5",
+ "tracing",
+ "tracing-appender",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "gammalooprs"
 version = "0.3.3"
 dependencies = [
@@ -1393,11 +1457,12 @@ dependencies = [
  "ctrlc",
  "delegate",
  "derive_more",
- "dirs",
+ "dirs 5.0.1",
  "dot-parser",
  "enum_dispatch",
  "eyre",
  "figment",
+ "gammaloop-api",
  "gat-lending-iterator",
  "git-version",
  "hyperdual",
@@ -1418,7 +1483,6 @@ dependencies = [
  "pathfinding",
  "pprof",
  "pyo3",
- "pyo3-build-config 0.25.1",
  "rand 0.9.2",
  "rayon",
  "ref-ops",
@@ -1618,8 +1682,9 @@ dependencies = [
 
 [[package]]
 name = "idenso"
-version = "0.2.2"
-source = "git+https://github.com/alphal00p/spenso?rev=ad75a1b9841a4ede0aef3ee747d7bea67d2f2834#ad75a1b9841a4ede0aef3ee747d7bea67d2f2834"
+version = "0.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1478f42f1bcf3d5e1833d5535056e491a425a5391e85605222dfc6d2cd41949d"
 dependencies = [
  "anyhow",
  "bincode",
@@ -2763,11 +2828,10 @@ dependencies = [
 
 [[package]]
 name = "pyo3-build-config"
-version = "0.25.1"
+version = "0.26.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "458eb0c55e7ece017adeba38f2248ff3ac615e53660d7c71a238d7d2a01c7598"
+checksum = "4fc6ddaf24947d12a9aa31ac65431fb1b851b8f4365426e182901eabfb87df5f"
 dependencies = [
- "once_cell",
  "target-lexicon",
 ]
 
@@ -2992,6 +3056,17 @@ dependencies = [
  "getrandom 0.2.16",
  "libredox",
  "thiserror 1.0.69",
+]
+
+[[package]]
+name = "redox_users"
+version = "0.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a4e608c6638b9c18977b00b475ac1f28d14e84b27d8d42f70e0bf1e3dec127ac"
+dependencies = [
+ "getrandom 0.2.16",
+ "libredox",
+ "thiserror 2.0.16",
 ]
 
 [[package]]
@@ -3570,8 +3645,9 @@ dependencies = [
 
 [[package]]
 name = "spenso"
-version = "0.5.3"
-source = "git+https://github.com/alphal00p/spenso?rev=ad75a1b9841a4ede0aef3ee747d7bea67d2f2834#ad75a1b9841a4ede0aef3ee747d7bea67d2f2834"
+version = "0.5.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d2d75eb9bffa8a44bc6930ebc4881db468a134d2b7041ea43b1b3d0a4848a335"
 dependencies = [
  "ahash",
  "anyhow",
@@ -3610,8 +3686,9 @@ dependencies = [
 
 [[package]]
 name = "spenso-hep-lib"
-version = "0.1.3"
-source = "git+https://github.com/alphal00p/spenso?rev=ad75a1b9841a4ede0aef3ee747d7bea67d2f2834#ad75a1b9841a4ede0aef3ee747d7bea67d2f2834"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "03e2b8f73e53bfeed1ef00fec8183de737dd10dc45ba00888ae23fb4fa53cea9"
 dependencies = [
  "ahash",
  "idenso",
@@ -3623,8 +3700,9 @@ dependencies = [
 
 [[package]]
 name = "spenso-macros"
-version = "0.2.1"
-source = "git+https://github.com/alphal00p/spenso?rev=ad75a1b9841a4ede0aef3ee747d7bea67d2f2834#ad75a1b9841a4ede0aef3ee747d7bea67d2f2834"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7d7d63dea4f3d09ba2d03e67bb186f9cd8904e881ccc67bdd204b6d888c7a2d6"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -4105,6 +4183,16 @@ checksum = "b9d12581f227e93f094d3af2ae690a574abb8a2b9b7a96e7cfe9647b2b617678"
 dependencies = [
  "once_cell",
  "valuable",
+]
+
+[[package]]
+name = "tracing-error"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8b1581020d7a273442f5b45074a6a57d5757ad0a47dac0e9f0bd57b81936f3db"
+dependencies = [
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

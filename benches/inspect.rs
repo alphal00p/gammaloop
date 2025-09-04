@@ -1,13 +1,12 @@
-use _gammaloop::{
-    cli::{
-        inspect::Inspect,
-        state::{RunHistory, State},
-        Cli,
-    },
-    utils::{serde_utils::SmartSerde, test_utils::load_generic_model},
-};
 use color_eyre::Result;
 use criterion::{criterion_group, criterion_main, Criterion};
+use gammaloop_api::{
+    inspect::Inspect,
+    state::{RunHistory, State},
+    Cli,
+};
+use gammalooprs::utils::serde_utils::SmartSerde;
+use gammalooprs::utils::test_utils::load_generic_model;
 use pprof::criterion::{Output, PProfProfiler};
 use std::{env, path::Path, time::Duration};
 use tracing::{debug, warn};

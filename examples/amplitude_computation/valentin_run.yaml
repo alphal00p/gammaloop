@@ -1,7 +1,7 @@
 global_settings:
   debug_level: Debug
   generation:
-    enable_thresholds: true
+    enable_thresholds: false
     evaluator_settings:
       iterative_orientation_optimization: true
       compile: true
@@ -13,7 +13,7 @@ default_runtime_settings:
     m_uv: 1.0
     mu_r_sq: 8315.251344
   subtraction:
-    disable_threshold_subtraction: false
+    disable_threshold_subtraction: true
   Integrator:
     n_bins: 64
     bin_number_evolution: null
@@ -63,7 +63,7 @@ default_runtime_settings:
 commands:
   - Import:
       Model:
-        path: ../../src/test_resources/gammaloop_models/sm.yaml
+        path: ../../src/test_resources/gammaloop_models/sm.json
   - Import:
       Amplitude:
         path: ./qqx_aaa_subtracted.dot

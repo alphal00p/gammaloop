@@ -1,11 +1,13 @@
 use std::{collections::BTreeMap, ops::Deref, path::Path};
 
 use crate::{
+    gammaloop_integrand::ParamBuilder,
     graph::{GraphGroup, GroupId},
     model::Model,
     momentum_sample::LoopIndex,
     numerator::{
         aind::{Aind, NewAind},
+        graph::GeneratePolarizations,
         ufo::UFO,
         GlobalPrefactor,
     },
@@ -44,7 +46,7 @@ use symbolica::{
 use typed_index_collections::TiVec;
 
 use super::{
-    edge::ParseEdge,
+    edge::{EdgeMass, ParseEdge},
     global::ParseData,
     hedge_data::{NumIndices, ParseHedge},
     vertex::ParseVertex,
@@ -309,7 +311,7 @@ impl Graph {
         let overall_factor = graph.global_data.overall_factor.clone();
         let add_polarizations = graph.global_data.projectors.is_none();
         let projector = graph.global_data.projectors.clone().unwrap_or(Atom::one());
-        let global_prefactor = GlobalPrefactor {
+        let mut global_prefactor = GlobalPrefactor {
             num: graph.global_data.num.clone(),
             projector,
         };
@@ -333,6 +335,15 @@ impl Graph {
                 node_order: hedge_order[h.0],
             },
         );
+
+        if add_polarizations {
+            let pols = graph.generate_polarizations();
+            global_prefactor.projector *= pols;
+        }
+
+        let polarizations = global_prefactor.polarizations();
+
+        let parambuilder: ParamBuilder = ParamBuilder::new(&(&polarizations, &graph), model);
 
         let mut color_num_e: EdgeVec<_> = vec![Atom::num(1); graph.n_edges()].into();
         let mut spin_num_e: EdgeVec<_> = vec![Atom::i(); graph.n_edges()].into();
@@ -421,7 +432,7 @@ impl Graph {
             v_color_num[ni.0] = Some(color_structure);
         }
 
-        let underlying = graph.map(
+        let underlying = graph.map_result(
             |_, i, v| {
                 let num = if let Some(num) = v.num {
                     num
@@ -438,15 +449,15 @@ impl Graph {
 
                 let dod = if let Some(d) = v.dod { d } else { num.dod() };
 
-                Vertex {
+                Ok(Vertex {
                     name: v.name.unwrap_or(i.to_string()),
                     num,
                     dod,
                     vertex_rule: v.vertex_rule,
-                }
+                })
             },
             |_, _, _, eid, e| {
-                e.map(|e| {
+                e.map_result(|e| {
                     let num = e.num.unwrap_or(&color_num_e[eid] * &spin_num_e[eid]);
 
                     let dod = if let Some(d) = e.dod {
@@ -455,17 +466,18 @@ impl Graph {
                         num.dod() - 2
                     };
 
-                    Edge {
+                    Ok(Edge {
+                        mass: EdgeMass::from_atom(e.particle.mass_atom(), model, &parambuilder)?,
                         is_dummy: e.is_dummy,
                         name: e.label.unwrap_or(eid.to_string()),
                         particle: e.particle,
                         num,
                         dod,
-                    }
+                    })
                 })
             },
-            |_, h| h,
-        );
+            |_, h| Ok(h),
+        )?;
 
         let mut loop_momentum_basis = if let Some(i) = full_cut.included_iter().next() {
             let tree = SimpleTraversalTree::depth_first_traverse(
@@ -518,7 +530,7 @@ impl Graph {
             i += 1;
         }
 
-        let mut graph = Graph {
+        let graph = Graph {
             overall_factor,
             global_prefactor,
             name,
@@ -526,15 +538,10 @@ impl Graph {
             underlying,
             group_id,
             is_group_master,
-            polarizations: vec![],
+            polarizations,
+            param_builder: parambuilder,
         };
 
-        if add_polarizations {
-            let pols = graph.generate_polarizations();
-            graph.global_prefactor.projector *= pols;
-        }
-
-        graph.polarizations = graph.global_prefactor.polarizations();
         // loop_momentum_basis.loop_edges.iter_enumerated().sorted_by_key(|(i,v)|);
         Ok(graph)
 
@@ -544,7 +551,7 @@ impl Graph {
     pub(crate) fn from_dot(graph: DotGraph, model: &Model) -> Result<Self> {
         Self::from_parsed(ParseGraph::from_parsed(graph, model)?, model)
     }
-    pub(crate) fn from_file<P>(p: P, model: &Model) -> Result<Vec<Self>>
+    pub fn from_file<P>(p: P, model: &Model) -> Result<Vec<Self>>
     where
         P: AsRef<Path>,
     {
@@ -852,6 +859,7 @@ pub mod test {
             parse::{complete_group_parsing, IntoGraph},
             GraphGroup, LMBext,
         },
+        initialisation::test_initialise,
         numerator::{aind::Aind, Numerator, UnInit},
     };
 
@@ -965,6 +973,7 @@ pub mod test {
 
     #[test]
     fn parse() {
+        test_initialise().unwrap();
         let g: Graph = dot!(
             digraph G{
                 ext    [style=invis]

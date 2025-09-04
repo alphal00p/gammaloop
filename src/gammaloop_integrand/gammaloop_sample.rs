@@ -374,7 +374,7 @@ pub(crate) fn parameterize<T: FloatLike, I: GammaloopIntegrand>(
         }
         SamplingSettings::MultiChanneling(multichanneling_settings) => {
             Ok(GammaLoopSample::MultiChanneling {
-                alpha: F::from_ff64(multichanneling_settings.alpha),
+                alpha: F::from_f64(multichanneling_settings.alpha),
                 sample: default_parametrize(
                     &xs,
                     dependent_momenta_constructor,
@@ -413,7 +413,7 @@ pub(crate) fn parameterize<T: FloatLike, I: GammaloopIntegrand>(
                     Ok(GammaLoopSample::DiscreteGraph {
                         group_id,
                         sample: DiscreteGraphSample::MultiChanneling {
-                            alpha: F::from_ff64(multichanneling_settings.alpha),
+                            alpha: F::from_f64(multichanneling_settings.alpha),
                             sample: default_parametrize(
                                 &xs,
                                 dependent_momenta_constructor,
@@ -496,7 +496,7 @@ pub(crate) fn parameterize<T: FloatLike, I: GammaloopIntegrand>(
                     Ok(GammaLoopSample::DiscreteGraph {
                         group_id,
                         sample: DiscreteGraphSample::DiscreteMultiChanneling {
-                            alpha: F::from_ff64(multichanneling_settings.alpha),
+                            alpha: F::from_f64(multichanneling_settings.alpha),
                             channel_id: channel_id.into(),
                             sample: default_parametrize(
                                 &xs,
@@ -530,7 +530,7 @@ fn default_parametrize<T: FloatLike>(
 
     let (loop_moms_vec, param_jacobian) = global_parameterize(
         xs,
-        F::from_ff64(kinematics.e_cm.square()),
+        F::from_f64(kinematics.e_cm.square()),
         parameterization_settings,
         false,
     );

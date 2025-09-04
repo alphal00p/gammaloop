@@ -185,7 +185,7 @@ pub struct TropicalSubgraphTableSettings {
     #[serde(skip_serializing_if = "is_false")]
     pub panic_on_fail: bool,
     #[serde(skip_serializing_if = "is_float::<1>")] // default 1.0
-    pub target_omega: F<f64>,
+    pub target_omega: f64,
     #[serde(skip_serializing_if = "is_false")]
     pub disable_tropical_generation: bool,
 }
@@ -194,7 +194,7 @@ impl Default for TropicalSubgraphTableSettings {
     fn default() -> Self {
         Self {
             panic_on_fail: false,
-            target_omega: F(1.0),
+            target_omega: 1.0,
             disable_tropical_generation: false,
         }
     }
@@ -248,5 +248,3 @@ impl OrientationPattern {
         }
     }
 }
-
-

@@ -3,6 +3,7 @@ use std::time::Duration;
 use crate::evaluation_result::EvaluationMetaData;
 use crate::evaluation_result::EvaluationResult;
 use crate::integrands::*;
+use crate::model::Model;
 use crate::settings::runtime::HFunctionSettings;
 use crate::settings::runtime::ParameterizationMapping;
 use crate::settings::runtime::Precision;
@@ -52,7 +53,7 @@ impl HFunctionTestIntegrand {
         &self,
         xs: &[F<T>],
     ) -> (Complex<F<T>>, Duration, Duration) {
-        let e_cm: F<T> = F::<T>::from_ff64(self.settings.kinematics.e_cm);
+        let e_cm: F<T> = F::<T>::from_f64(self.settings.kinematics.e_cm);
         let one = e_cm.one();
         let mut jac = e_cm.one();
 
@@ -64,7 +65,7 @@ impl HFunctionTestIntegrand {
                     ParameterizationMapping::Log => {
                         // r = e_cm * ln(1 + b*x/(1-x))
                         let x = xs[0].clone();
-                        let b: F<T> = F::<T>::from_ff64(parameterization_settings.b);
+                        let b: F<T> = F::<T>::from_f64(parameterization_settings.b);
                         let r = &e_cm * (&one + &b * &x / (&one - &x)).ln();
                         jac *= &e_cm * &b / (&one - &x) / (&one + &x * (&b - &one));
 
@@ -72,7 +73,7 @@ impl HFunctionTestIntegrand {
                     }
                     ParameterizationMapping::Linear => {
                         // r = e_cm * b * x/(1-x)
-                        let b: F<T> = F::<T>::from_ff64(parameterization_settings.b);
+                        let b: F<T> = F::<T>::from_f64(parameterization_settings.b);
                         let radius = &e_cm * &b * &xs[0] / (&one - &xs[0]);
                         jac *= (&e_cm * &b + &radius).powi(2) / &e_cm / &b;
                         radius
@@ -116,6 +117,7 @@ impl HasIntegrand for HFunctionTestIntegrand {
     fn evaluate_sample(
         &mut self,
         sample: &Sample<F<f64>>,
+        _model: &Model,
         wgt: F<f64>,
         iter: usize,
         use_f128: bool,

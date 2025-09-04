@@ -111,7 +111,7 @@ impl NewIntegrand {
         }
     }
 
-    pub(crate) fn get_settings(&self) -> &RuntimeSettings {
+    pub fn get_settings(&self) -> &RuntimeSettings {
         match self {
             NewIntegrand::Amplitude(integrand) => &integrand.settings,
             NewIntegrand::CrossSection(integrand) => &integrand.settings,
@@ -119,17 +119,13 @@ impl NewIntegrand {
     }
 
     /// Used to create the use_data_generator closure for havana_integrate
-    pub(crate) fn user_data_generator(
-        &self,
-        num_cores: usize,
-        _settings: &RuntimeSettings,
-    ) -> UserData {
+    pub fn user_data_generator(&self, num_cores: usize, _settings: &RuntimeSettings) -> UserData {
         UserData {
             integrand: vec![Integrand::NewIntegrand(self.clone()); num_cores],
         }
     }
 
-    pub(crate) fn get_mut_settings(&mut self) -> &mut RuntimeSettings {
+    pub fn get_mut_settings(&mut self) -> &mut RuntimeSettings {
         match self {
             NewIntegrand::Amplitude(integrand) => &mut integrand.settings,
             NewIntegrand::CrossSection(integrand) => &mut integrand.settings,
@@ -158,9 +154,9 @@ fn create_stability_iterator(
         } else {
             vec![StabilityLevelSetting {
                 precision: Precision::Quad,
-                required_precision_for_re: F(1e-5),
-                required_precision_for_im: F(1e-5),
-                escalate_for_large_weight_threshold: F(-1.),
+                required_precision_for_re: 1e-5,
+                required_precision_for_im: 1e-5,
+                escalate_for_large_weight_threshold: -1.,
             }]
         }
     } else {
@@ -205,8 +201,8 @@ fn stability_check(
     });
 
     let unstable_sample = errors.position(|error| {
-        error.re > stability_settings.required_precision_for_re
-            || error.im > stability_settings.required_precision_for_im
+        error.re > F(stability_settings.required_precision_for_re)
+            || error.im > F(stability_settings.required_precision_for_im)
     });
 
     if let Some(unstable_index) = unstable_sample {
@@ -227,16 +223,15 @@ fn stability_check(
 
     let stable = unstable_sample.is_none();
 
-    let below_wgt_threshold = if stability_settings.escalate_for_large_weight_threshold > F(0.)
-        && max_eval.is_non_zero()
-    {
-        average.re.abs() * wgt
-            < stability_settings.escalate_for_large_weight_threshold * max_eval.re
-            || average.im.abs() * wgt
-                < stability_settings.escalate_for_large_weight_threshold * max_eval.im
-    } else {
-        true
-    };
+    let below_wgt_threshold =
+        if stability_settings.escalate_for_large_weight_threshold > 0. && max_eval.is_non_zero() {
+            average.re.abs() * wgt
+                < F(stability_settings.escalate_for_large_weight_threshold) * max_eval.re
+                || average.im.abs() * wgt
+                    < F(stability_settings.escalate_for_large_weight_threshold) * max_eval.im
+        } else {
+            true
+        };
 
     (average, stable && below_wgt_threshold)
 }
@@ -271,7 +266,7 @@ fn stability_check_on_norm(
     });
 
     let unstable_sample =
-        errors.position(|error| error > stability_settings.required_precision_for_re);
+        errors.position(|error| error > F(stability_settings.required_precision_for_re));
 
     if let Some(unstable_index) = unstable_sample {
         let unstable_point = results[unstable_index];
@@ -288,15 +283,14 @@ fn stability_check_on_norm(
 
     let stable = unstable_sample.is_none();
 
-    let below_wgt_threshold = if stability_settings.escalate_for_large_weight_threshold > F(0.)
-        && max_eval.is_non_zero()
-    {
-        average.abs() * wgt
-            < stability_settings.escalate_for_large_weight_threshold
-                * max_eval.norm_squared().sqrt()
-    } else {
-        true
-    };
+    let below_wgt_threshold =
+        if stability_settings.escalate_for_large_weight_threshold > 0. && max_eval.is_non_zero() {
+            average.abs() * wgt
+                < F(stability_settings.escalate_for_large_weight_threshold)
+                    * max_eval.norm_squared().sqrt()
+        } else {
+            true
+        };
 
     (results[0], stable && below_wgt_threshold)
 }
@@ -364,6 +358,7 @@ impl LmbMultiChannelingSetup {
         &self,
         momentum_sample: &MomentumSample<T>,
         graph: &Graph,
+        model: &Model,
         all_bases: &TiVec<LmbIndex, LoopMomentumBasis>,
         alpha: &F<T>,
     ) -> TiVec<ChannelIndex, (MomentumSample<T>, F<T>)> {
@@ -377,6 +372,7 @@ impl LmbMultiChannelingSetup {
                     momentum_sample,
                     loop_mom_cache_id,
                     graph,
+                    model,
                     all_bases,
                     alpha,
                 )
@@ -395,6 +391,7 @@ impl LmbMultiChannelingSetup {
         momentum_sample: &MomentumSample<T>,
         loop_mom_cache_id: usize,
         graph: &Graph,
+        model: &Model,
         all_bases: &TiVec<LmbIndex, LoopMomentumBasis>,
         alpha: &F<T>,
     ) -> (MomentumSample<T>, F<T>) {
@@ -411,7 +408,7 @@ impl LmbMultiChannelingSetup {
         };
 
         let prefactor =
-            self.compute_prefactor_impl(channel_index, &sample, graph, all_bases, alpha);
+            self.compute_prefactor_impl(channel_index, &sample, graph, model, all_bases, alpha);
 
         (sample, prefactor)
     }
@@ -422,10 +419,12 @@ impl LmbMultiChannelingSetup {
         channel_index: ChannelIndex,
         momentum_sample: &MomentumSample<T>,
         graph: &Graph,
+        model: &Model,
         all_bases: &TiVec<LmbIndex, LoopMomentumBasis>,
         alpha: &F<T>,
     ) -> F<T> {
-        let all_energies = graph.underlying.get_energy_cache(
+        let all_energies = graph.get_energy_cache(
+            model,
             &momentum_sample.sample.loop_moms,
             &momentum_sample.sample.external_moms,
             &graph.loop_momentum_basis,
@@ -493,7 +492,6 @@ fn get_global_dimension_if_exists<I: GammaloopIntegrand>(integrand: &I) -> Optio
             integrand
                 .get_master_graph(GroupId(0))
                 .get_graph()
-                .underlying
                 .get_loop_number()
                 * 3,
         )
@@ -504,6 +502,7 @@ pub trait GraphTerm {
     fn evaluate<T: FloatLike>(
         &mut self,
         sample: &MomentumSample<T>,
+        model: &Model,
         settings: &RuntimeSettings,
         rotation: &Rotation,
     ) -> Complex<F<T>>;
@@ -520,6 +519,7 @@ pub trait GraphTerm {
 
 fn evaluate_all_rotations<T: FloatLike, I: GammaloopIntegrand>(
     integrand: &mut I,
+    model: &Model,
     gammaloop_sample: &GammaLoopSample<T>,
 ) -> (Vec<Complex<F<f64>>>, Duration) {
     let rotations = integrand.get_rotations().cloned().collect_vec();
@@ -544,7 +544,9 @@ fn evaluate_all_rotations<T: FloatLike, I: GammaloopIntegrand>(
     let evaluation_results = gammaloop_samples
         .iter()
         .zip(rotations.iter())
-        .map(|(gammaloop_sample, rotation)| evaluate_single(integrand, gammaloop_sample, rotation))
+        .map(|(gammaloop_sample, rotation)| {
+            evaluate_single(integrand, model, gammaloop_sample, rotation)
+        })
         .collect_vec();
 
     integrand.increment_loop_cache_id(rotations.len());
@@ -557,6 +559,7 @@ fn evaluate_all_rotations<T: FloatLike, I: GammaloopIntegrand>(
 
 fn evaluate_single<T: FloatLike, I: GammaloopIntegrand>(
     integrand: &mut I,
+    model: &Model,
     gammaloop_sample: &GammaLoopSample<T>,
     rotation: &Rotation,
 ) -> Complex<F<f64>> {
@@ -567,7 +570,7 @@ fn evaluate_single<T: FloatLike, I: GammaloopIntegrand>(
     let result = match &gammaloop_sample {
         GammaLoopSample::Default(sample) => integrand
             .get_terms_mut()
-            .map(|term: &mut I::G| term.evaluate(sample, &settings, rotation))
+            .map(|term: &mut I::G| term.evaluate(sample, model, &settings, rotation))
             .fold(zero.clone(), |sum, term| sum + term),
         GammaLoopSample::MultiChanneling { alpha, sample } => integrand
             .get_terms_mut()
@@ -577,6 +580,7 @@ fn evaluate_single<T: FloatLike, I: GammaloopIntegrand>(
                     .reinterpret_loop_momenta_and_compute_prefactor_all_channels(
                         sample,
                         term.get_graph(),
+                        model,
                         term.get_lmbs(),
                         alpha,
                     );
@@ -587,7 +591,7 @@ fn evaluate_single<T: FloatLike, I: GammaloopIntegrand>(
                     .into_iter()
                     .map(|(reparameterized_sample, prefactor)| {
                         Complex::new_re(prefactor)
-                            * term.evaluate(&reparameterized_sample, &settings, rotation)
+                            * term.evaluate(&reparameterized_sample, model, &settings, rotation)
                     })
                     .fold(zero.clone(), |sum, term| sum + term)
             })
@@ -600,7 +604,7 @@ fn evaluate_single<T: FloatLike, I: GammaloopIntegrand>(
                 let graph_term = integrand.get_graph_mut(graph_id);
                 let graph_term_res = match sample {
                     DiscreteGraphSample::Default(sample) => {
-                        graph_term.evaluate(sample, &settings, rotation)
+                        graph_term.evaluate(sample, model, &settings, rotation)
                     }
                     DiscreteGraphSample::DiscreteMultiChanneling {
                         alpha,
@@ -615,6 +619,7 @@ fn evaluate_single<T: FloatLike, I: GammaloopIntegrand>(
                                 sample,
                                 loop_cache_shift,
                                 graph_term.get_graph(),
+                                model,
                                 graph_term.get_lmbs(),
                                 alpha,
                             );
@@ -622,7 +627,12 @@ fn evaluate_single<T: FloatLike, I: GammaloopIntegrand>(
                         loop_cache_shift += 1;
 
                         Complex::new_re(prefactor)
-                            * graph_term.evaluate(&reparameterized_sample, &settings, rotation)
+                            * graph_term.evaluate(
+                                &reparameterized_sample,
+                                model,
+                                &settings,
+                                rotation,
+                            )
                     }
                     DiscreteGraphSample::MultiChanneling { alpha, sample } => {
                         let channel_samples = graph_term
@@ -630,6 +640,7 @@ fn evaluate_single<T: FloatLike, I: GammaloopIntegrand>(
                             .reinterpret_loop_momenta_and_compute_prefactor_all_channels(
                                 sample,
                                 graph_term.get_graph(),
+                                model,
                                 graph_term.get_lmbs(),
                                 alpha,
                             );
@@ -642,6 +653,7 @@ fn evaluate_single<T: FloatLike, I: GammaloopIntegrand>(
                                 Complex::new_re(prefactor)
                                     * graph_term.evaluate(
                                         &reparameterized_sample,
+                                        model,
                                         &settings,
                                         rotation,
                                     )
@@ -649,7 +661,8 @@ fn evaluate_single<T: FloatLike, I: GammaloopIntegrand>(
                             .fold(zero.clone(), |sum, term| sum + term)
                     }
                     DiscreteGraphSample::Tropical(sample) => {
-                        let energy_cache = graph_term.get_graph().underlying.get_energy_cache(
+                        let energy_cache = graph_term.get_graph().get_energy_cache(
+                            model,
                             &sample.loop_moms(),
                             &sample.external_moms(),
                             &graph_term.get_graph().loop_momentum_basis,
@@ -667,7 +680,7 @@ fn evaluate_single<T: FloatLike, I: GammaloopIntegrand>(
                             });
 
                         Complex::new_re(prefactor)
-                            * graph_term.evaluate(sample, &settings, rotation)
+                            * graph_term.evaluate(sample, model, &settings, rotation)
                     }
                 };
 
@@ -700,7 +713,7 @@ fn create_grid_for_graph<G: GraphTerm>(
 
                 Grid::Discrete(DiscreteGrid::new(
                     continuous_grids,
-                    integrator_settings.max_prob_ratio,
+                    F(integrator_settings.max_prob_ratio),
                     integrator_settings.train_on_avg,
                 ))
             } else {
@@ -716,7 +729,7 @@ fn create_grid_for_graph<G: GraphTerm>(
                     .iter()
                     .map(|_| Some(continuous_grid.clone()))
                     .collect_vec(),
-                integrator_settings.max_prob_ratio,
+                F(integrator_settings.max_prob_ratio),
                 integrator_settings.train_on_avg,
             ));
 
@@ -725,7 +738,7 @@ fn create_grid_for_graph<G: GraphTerm>(
                     (0..graph_term.get_num_orientations())
                         .map(|_| Some(lmb_channel_grid.clone()))
                         .collect(),
-                    integrator_settings.max_prob_ratio,
+                    F(integrator_settings.max_prob_ratio),
                     integrator_settings.train_on_avg,
                 ))
             } else {
@@ -736,7 +749,7 @@ fn create_grid_for_graph<G: GraphTerm>(
         DiscreteGraphSamplingType::TropicalSampling(_) => {
             let dimension = get_n_dim_for_n_loop_momenta(
                 &SamplingSettings::DiscreteGraphs(settings.clone()),
-                graph_term.get_graph().underlying.get_loop_number(),
+                graph_term.get_graph().get_loop_number(),
                 false,
                 Some(graph_term.get_graph().iter_loop_edges().count()),
             );
@@ -756,7 +769,7 @@ fn create_grid_for_graph<G: GraphTerm>(
 
                 Grid::Discrete(DiscreteGrid::new(
                     continuous_grids,
-                    integrator_settings.max_prob_ratio,
+                    F(integrator_settings.max_prob_ratio),
                     integrator_settings.train_on_avg,
                 ))
             } else {
@@ -771,7 +784,7 @@ fn create_default_continous_grid<G: GraphTerm>(
     integrator_settings: &IntegratorSettings,
 ) -> Grid<F<f64>> {
     Grid::Continuous(ContinuousGrid::new(
-        graph_term.get_graph().underlying.get_loop_number() * 3,
+        graph_term.get_graph().get_loop_number() * 3,
         integrator_settings.n_bins,
         integrator_settings.min_samples_for_update,
         integrator_settings.bin_number_evolution.clone(),
@@ -808,7 +821,7 @@ fn create_grid<I: GammaloopIntegrand>(integrand: &I) -> Grid<F<f64>> {
                         ))
                     })
                     .collect(),
-                settings.integrator.max_prob_ratio,
+                F(settings.integrator.max_prob_ratio),
                 settings.integrator.train_on_avg,
             ))
         }
@@ -817,6 +830,7 @@ fn create_grid<I: GammaloopIntegrand>(integrand: &I) -> Grid<F<f64>> {
 
 fn evaluate_sample<I: GammaloopIntegrand>(
     integrand: &mut I,
+    model: &Model,
     sample: &Sample<F<f64>>,
     wgt: F<f64>,
     _iter: usize,
@@ -843,7 +857,7 @@ fn evaluate_sample<I: GammaloopIntegrand>(
                     );
                     let parameterization_time = before_parameterization.elapsed();
                     (
-                        evaluate_all_rotations(integrand, &gammaloop_sample),
+                        evaluate_all_rotations(integrand, model, &gammaloop_sample),
                         parameterization_time,
                     )
                 } else {
@@ -857,7 +871,7 @@ fn evaluate_sample<I: GammaloopIntegrand>(
                     );
                     let parameterization_time = before_parameterization.elapsed();
                     (
-                        evaluate_all_rotations(integrand, &gammaloop_sample),
+                        evaluate_all_rotations(integrand, model, &gammaloop_sample),
                         parameterization_time,
                     )
                 } else {

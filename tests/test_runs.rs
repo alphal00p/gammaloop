@@ -1,14 +1,14 @@
-use _gammaloop::{
-    cli::{
-        state::{RunHistory, State},
-        Cli,
-    },
+use color_eyre::Result;
+use gammaloop_api::{
+    state::{RunHistory, State},
+    Cli,
+};
+use gammalooprs::{
     initialisation::test_initialise,
     settings::runtime::IntegrationResult,
     status_info,
     utils::{serde_utils::SmartSerde, test_utils::load_generic_model, F},
 };
-use color_eyre::Result;
 use momtrop::assert_approx_eq;
 use std::{env, path::Path};
 use tracing::{debug, warn};

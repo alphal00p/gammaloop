@@ -1,3 +1,5 @@
+use std::cell::RefCell;
+
 use eyre::Context;
 use linnet::{
     half_edge::{
@@ -10,33 +12,32 @@ use spenso::{
     algebra::complex::Complex,
     structure::{IndexLess, ScalarStructure},
 };
-use symbolica::atom::{Atom, AtomCore, AtomView};
+use symbolica::{
+    atom::{Atom, AtomCore, AtomView, Symbol, VarView},
+    domains::float::{Complex as SymComplex, Float, NumericalFloatLike},
+    evaluate::{ExpressionEvaluator, OptimizationSettings},
+};
 
 use crate::{
-    model::{ArcParticle, Model},
+    gammaloop_integrand::{GenericEvaluator, ParamBuilder},
+    model::{ArcParticle, CouplingName, Model, ParameterName, UFOSymbol},
     momentum::Helicity,
     momentum_sample::LoopIndex,
     numerator::aind::NewAind,
-    utils::{F, GS},
+    utils::{FloatLike, F, GS},
+    uv::uv_graph::UVE,
 };
 
-use color_eyre::Result;
-
 use super::parse::{StripParse, ToQuoted};
+use color_eyre::Result;
+use eyre::eyre;
 
 #[derive(Debug, Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
 #[trait_decode(trait = crate::GammaLoopContext)]
 pub enum PossibleParticle {
     Particle(ArcParticle),
-    MassOverriddenParticle {
-        particle: ArcParticle,
-        mass: Atom,
-        mass_value: Option<Complex<F<f64>>>,
-    },
-    JustMass {
-        expr: Atom,
-        value: Option<Complex<F<f64>>>,
-    },
+    MassOverriddenParticle { particle: ArcParticle, mass: Atom },
+    JustMass { expr: Atom },
 }
 
 impl From<ArcParticle> for PossibleParticle {
@@ -47,23 +48,24 @@ impl From<ArcParticle> for PossibleParticle {
 
 impl From<Atom> for PossibleParticle {
     fn from(atom: Atom) -> Self {
-        PossibleParticle::JustMass {
-            expr: atom,
-            value: None,
-        }
+        PossibleParticle::JustMass { expr: atom }
     }
 }
 
 impl From<()> for PossibleParticle {
     fn from(_: ()) -> Self {
-        PossibleParticle::JustMass {
-            expr: Atom::Zero,
-            value: None,
-        }
+        PossibleParticle::JustMass { expr: Atom::Zero }
     }
 }
 
 impl PossibleParticle {
+    pub fn mass_atom(&self) -> Atom {
+        match &self {
+            PossibleParticle::JustMass { expr, .. } => expr.clone(),
+            PossibleParticle::Particle(p) => p.mass.0.into(),
+            PossibleParticle::MassOverriddenParticle { mass, .. } => mass.clone(),
+        }
+    }
     // pub fn just_mass(mass:Atom,)
 
     pub(crate) fn zero() -> Self {
@@ -76,16 +78,11 @@ impl PossibleParticle {
         };
 
         match self {
-            PossibleParticle::JustMass { .. } => PossibleParticle::JustMass {
-                expr: mass,
-                value: None,
-            },
+            PossibleParticle::JustMass { .. } => PossibleParticle::JustMass { expr: mass },
             PossibleParticle::MassOverriddenParticle { particle, .. }
-            | PossibleParticle::Particle(particle) => PossibleParticle::MassOverriddenParticle {
-                particle,
-                mass,
-                mass_value: None,
-            },
+            | PossibleParticle::Particle(particle) => {
+                PossibleParticle::MassOverriddenParticle { particle, mass }
+            }
         }
     }
 
@@ -113,9 +110,9 @@ impl PossibleParticle {
 
     pub(crate) fn is_massless(&self) -> bool {
         match self {
-            PossibleParticle::JustMass { value, .. } => value.is_none(),
+            PossibleParticle::JustMass { expr } => expr.is_zero(),
             PossibleParticle::Particle(p) => p.is_massless(),
-            PossibleParticle::MassOverriddenParticle { mass_value, .. } => mass_value.is_none(),
+            PossibleParticle::MassOverriddenParticle { mass, .. } => mass.is_zero(),
         }
     }
 
@@ -132,11 +129,75 @@ pub struct Edge {
     // pub edge_type: EdgeType,
     // pub propagator: ArcPropagator,
     pub particle: PossibleParticle,
+    pub mass: EdgeMass,
     pub num: Atom,
     // pub spin_num: Atom,
     pub dod: i32,
     pub is_dummy: bool, // #[bincode(with_serde)]
                         // pub internal_index: Vec<AbstractIndex>,
+}
+
+#[derive(Debug, Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
+#[trait_decode(trait = crate::GammaLoopContext)]
+pub enum EdgeMass {
+    Zero,
+    Value(Complex<F<f64>>),
+    ModelVar(Symbol),
+    Evaluator(RefCell<ExpressionEvaluator<Complex<F<f64>>>>),
+}
+
+impl EdgeMass {
+    pub fn from_atom(atom: Atom, model: &Model, paramb: &ParamBuilder) -> Result<Self> {
+        if atom.is_zero() {
+            return Ok(EdgeMass::Zero);
+        } else if let AtomView::Var(v) = atom.as_view() {
+            if model.contains_symbol(&UFOSymbol(v.get_symbol())) {
+                return Ok(EdgeMass::ModelVar(v.get_symbol()));
+            }
+        } else if let Ok(a) = SymComplex::<Float>::try_from(&atom) {
+            return Ok(EdgeMass::Value(Complex {
+                re: F(a.re.into_inner().to_f64()),
+                im: F(a.im.into_inner().to_f64()),
+            }));
+        }
+
+        let params: Vec<Atom> = (&paramb.pairs)
+            .into_iter()
+            .flat_map(|p| p.params.clone())
+            .collect();
+
+        let a = atom
+            .evaluator(&paramb.fn_map, &params, OptimizationSettings::default())
+            .map_err(|a| eyre!(a))?;
+
+        Ok(EdgeMass::Evaluator(RefCell::new(a.map_coeff(&|r| {
+            Complex::new(F::from(&r.re), F::from(&r.im))
+        }))))
+    }
+
+    pub fn value<T: FloatLike>(
+        &self,
+        model: &Model,
+        paramb: &ParamBuilder,
+    ) -> Option<Complex<F<T>>> {
+        match self {
+            EdgeMass::Zero => None,
+            EdgeMass::Value(v) => Some(*v),
+            EdgeMass::ModelVar(s) => model.get_symbol_value(UFOSymbol(*s)),
+            EdgeMass::Evaluator(a) => Some(a.borrow_mut().evaluate_single(&paramb.values)),
+        }
+        .map(|a| a.map_ref(|a| F::from_ff64(*a)))
+    }
+}
+
+impl UVE for Edge {
+    fn mass_atom(&self) -> Atom {
+        match &self.particle {
+            PossibleParticle::JustMass { expr, .. } => expr.clone(),
+            PossibleParticle::Particle(p) => p.mass.0.into(),
+            PossibleParticle::MassOverriddenParticle { mass, .. } => mass.clone(),
+        }
+    }
 }
 
 impl Edge {
@@ -151,6 +212,14 @@ impl Edge {
     pub(crate) fn particle(&self) -> Option<ArcParticle> {
         self.particle.particle()
     }
+
+    pub(crate) fn mass_value<T: FloatLike>(
+        &self,
+        model: &Model,
+        paramb: &ParamBuilder,
+    ) -> Option<Complex<F<T>>> {
+        self.mass.value(model, paramb)
+    }
 }
 
 impl From<&Edge> for DotEdgeData {
@@ -161,7 +230,7 @@ impl From<&Edge> for DotEdgeData {
             PossibleParticle::Particle(p) => {
                 e.add_statement("particle", format!("\"{}\"", p.name));
             }
-            PossibleParticle::JustMass { expr, value } => {
+            PossibleParticle::JustMass { expr, .. } => {
                 e.add_statement("mass", expr.to_quoted());
             }
             PossibleParticle::MassOverriddenParticle { mass, particle, .. } => {
@@ -186,6 +255,16 @@ pub struct ParseEdge {
     pub lmb_id: Option<LoopIndex>,
     pub num: Option<Atom>,
     // pub color_num: Option<sAtom>,
+}
+
+impl UVE for ParseEdge {
+    fn mass_atom(&self) -> Atom {
+        match &self.particle {
+            PossibleParticle::JustMass { expr, .. } => expr.clone(),
+            PossibleParticle::Particle(p) => p.mass.0.into(),
+            PossibleParticle::MassOverriddenParticle { mass, .. } => mass.clone(),
+        }
+    }
 }
 
 impl ParseEdge {

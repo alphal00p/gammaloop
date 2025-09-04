@@ -20,6 +20,7 @@ use crate::disable;
 use crate::evaluation_result::EvaluationResult;
 use crate::evaluation_result::StatisticsCounter;
 use crate::integrands::HasIntegrand;
+use crate::model::Model;
 use crate::observables::Event;
 use crate::settings::runtime::{IntegratedPhase, IntegrationResult};
 use crate::settings::IntegratorSettings;
@@ -262,8 +263,9 @@ pub struct CoreResult {
 }
 
 /// Integrate function used for local runs
-pub(crate) fn havana_integrate<T>(
+pub fn havana_integrate<T>(
     settings: &RuntimeSettings,
+    model: &Model,
     user_data_generator: T,
     target: Option<Complex<F<f64>>>,
     state: Option<IntegrationState>,
@@ -376,6 +378,7 @@ where
                     .map(|s| {
                         let result = integrand.evaluate_sample(
                             s,
+                            model,
                             s.get_weight(),
                             integration_state.iter,
                             false,
@@ -437,8 +440,8 @@ where
         integration_state.grid = first_grid;
 
         integration_state.grid.update(
-            settings.integrator.discrete_dim_learning_rate,
-            settings.integrator.continuous_dim_learning_rate,
+            F(settings.integrator.discrete_dim_learning_rate),
+            F(settings.integrator.continuous_dim_learning_rate),
         );
 
         integration_state.update_iter(false);
@@ -616,6 +619,7 @@ where
 /// Evaluates a batch of points and returns the results in a manner specified by the user.
 pub(crate) fn batch_integrate(
     integrand: &mut Integrand,
+    model: &Model,
     input: BatchIntegrateInput,
 ) -> BatchResult {
     let samples = match input.samples {
@@ -641,6 +645,7 @@ pub(crate) fn batch_integrate(
     let (evaluation_results, metadata_statistics) = evaluate_sample_list(
         integrand,
         &samples,
+        model,
         input.num_cores,
         input.iter,
         input.max_eval,
@@ -743,6 +748,7 @@ fn generate_event_output(
 fn evaluate_sample_list(
     integrand: &mut Integrand,
     samples: &[Sample<F<f64>>],
+    model: &Model,
     num_cores: usize,
     iter: usize,
     max_eval: Complex<F<f64>>,
@@ -765,7 +771,14 @@ fn evaluate_sample_list(
             let cor_evals = chunk
                 .iter()
                 .map(|sample| {
-                    integrand.evaluate_sample(sample, sample.get_weight(), iter, false, max_eval)
+                    integrand.evaluate_sample(
+                        sample,
+                        model,
+                        sample.get_weight(),
+                        iter,
+                        false,
+                        max_eval,
+                    )
                 })
                 .collect_vec();
 
@@ -971,8 +984,8 @@ impl MasterNode {
     /// Finish the current iteration. This should be called after all jobs have been processed.
     pub(crate) fn update_iter(&mut self) {
         self.grid.update(
-            self.integrator_settings.discrete_dim_learning_rate,
-            self.integrator_settings.continuous_dim_learning_rate,
+            F(self.integrator_settings.discrete_dim_learning_rate),
+            F(self.integrator_settings.continuous_dim_learning_rate),
         );
         self.master_accumulator_re.update_iter(false);
         self.master_accumulator_im.update_iter(false);
@@ -1186,7 +1199,7 @@ pub(crate) fn show_integration_status(
     integration_state.stats.display_status();
 }
 
-pub(crate) fn print_integral_result(
+pub fn print_integral_result(
     itg: &StatisticsAccumulator<F<f64>>,
     i_itg: usize,
     i_iter: usize,

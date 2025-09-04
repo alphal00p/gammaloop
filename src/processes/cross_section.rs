@@ -15,6 +15,7 @@ use crate::{
     cff::cut_expression::SuperGraphOrientationID,
     gammaloop_integrand::{
         cross_section_integrand::{CrossSectionIntegrandData, OrientationEvaluator},
+        param_builder::ParamBuilderGraph,
         GenericEvaluator, LmbMultiChannelingSetup, ParamBuilder,
     },
     graph::{get_cff_inverse_energy_product_impl, LMBext, LmbIndex, LoopMomentumBasis},
@@ -104,7 +105,7 @@ impl<S: CrossSectionState> CrossSection<S> {
 
     pub(crate) fn add_supergraph(&mut self, supergraph: Graph) -> Result<()> {
         if self.external_particles.is_empty() {
-            let external_particles = supergraph.underlying.get_external_partcles();
+            let external_particles = supergraph.get_external_partcles();
             if external_particles.len() % 2 != 0 {
                 return Err(eyre!(
                     "expected even number of externals for forward scattering graph"
@@ -112,7 +113,7 @@ impl<S: CrossSectionState> CrossSection<S> {
             }
             self.external_particles = external_particles;
             self.n_incmoming = self.external_particles.len() / 2;
-        } else if self.external_particles != supergraph.underlying.get_external_partcles() {
+        } else if self.external_particles != supergraph.get_external_partcles() {
             return Err(eyre!(
                 "attempt to add supergraph with differnt external particles"
             ));
@@ -421,7 +422,6 @@ impl<S: CrossSectionState> CrossSectionGraph<S> {
 
         let shift_rewrite = self
             .graph
-            .underlying
             .get_esurface_canonization(&self.graph.loop_momentum_basis);
 
         let cff_cut_expression =
@@ -630,7 +630,7 @@ impl<S: CrossSectionState> CrossSectionGraph<S> {
         cut_atom: &Atom,
         cut_id: CutId,
     ) -> Atom {
-        let loop_3 = self.graph.underlying.get_loop_number() as i64 * 3;
+        let loop_3 = self.graph.get_loop_number() as i64 * 3;
         let t_star_factor = Atom::var(GS.rescale_star).npow(loop_3);
 
         let h_function = Atom::var(GS.hfunction);

@@ -2,6 +2,7 @@ use crate::evaluation_result::{EvaluationMetaData, EvaluationResult};
 // use crate::gammaloop_integrand::GammaLoopIntegrand;
 use crate::gammaloop_integrand::NewIntegrand;
 use crate::h_function_test::{HFunctionTestIntegrand, HFunctionTestSettings};
+use crate::model::Model;
 use crate::momentum::FourMomentum;
 use crate::observables::EventManager;
 use crate::utils::{FloatLike, F};
@@ -64,6 +65,7 @@ pub trait HasIntegrand {
     fn evaluate_sample(
         &mut self,
         sample: &Sample<F<f64>>,
+        model: &Model,
         wgt: F<f64>,
         iter: usize,
         use_f128: bool,
@@ -122,6 +124,7 @@ impl HasIntegrand for Integrand {
     fn evaluate_sample(
         &mut self,
         sample: &Sample<F<f64>>,
+        model: &Model,
         wgt: F<f64>,
         iter: usize,
         use_f128: bool,
@@ -129,19 +132,19 @@ impl HasIntegrand for Integrand {
     ) -> EvaluationResult {
         match self {
             Integrand::UnitSurface(integrand) => {
-                integrand.evaluate_sample(sample, wgt, iter, use_f128, max_eval)
+                integrand.evaluate_sample(sample, model, wgt, iter, use_f128, max_eval)
             }
             Integrand::UnitVolume(integrand) => {
-                integrand.evaluate_sample(sample, wgt, iter, use_f128, max_eval)
+                integrand.evaluate_sample(sample, model, wgt, iter, use_f128, max_eval)
             }
             Integrand::HFunctionTest(integrand) => {
-                integrand.evaluate_sample(sample, wgt, iter, use_f128, max_eval)
+                integrand.evaluate_sample(sample, model, wgt, iter, use_f128, max_eval)
             }
             // Integrand::GammaLoopIntegrand(integrand) => {
-            //     integrand.evaluate_sample(sample, wgt, iter, use_f128, max_eval)
+            //     integrand.evaluate_sample(sample,model, wgt, iter, use_f128, max_eval)
             // }
             Integrand::NewIntegrand(integrand) => {
-                integrand.evaluate_sample(sample, wgt, iter, use_f128, max_eval)
+                integrand.evaluate_sample(sample, model, wgt, iter, use_f128, max_eval)
             }
         }
     }
@@ -220,7 +223,7 @@ impl UnitSurfaceIntegrand {
         );
         let surface = utils::compute_surface_and_volume(
             integrand_settings.n_3d_momenta * 3 - 1,
-            settings.kinematics.e_cm,
+            F(settings.kinematics.e_cm),
         )
         .0;
         UnitSurfaceIntegrand {
@@ -239,7 +242,7 @@ impl UnitSurfaceIntegrand {
         let zero = xs[0].zero();
         utils::global_parameterize(
             xs,
-            F::<T>::from_ff64(self.settings.kinematics.e_cm * self.settings.kinematics.e_cm),
+            F::<T>::from_f64(self.settings.kinematics.e_cm * self.settings.kinematics.e_cm),
             &self
                 .settings
                 .sampling
@@ -273,6 +276,7 @@ impl HasIntegrand for UnitSurfaceIntegrand {
     fn evaluate_sample(
         &mut self,
         sample: &Sample<F<f64>>,
+        model: &Model,
         wgt: F<f64>,
         iter: usize,
         use_f128: bool,
@@ -284,7 +288,7 @@ impl HasIntegrand for UnitSurfaceIntegrand {
             Sample::Continuous(_w, v) => v,
             _ => panic!("Wrong sample type"),
         };
-        let mut sample_xs = vec![self.settings.kinematics.e_cm];
+        let mut sample_xs = vec![F(self.settings.kinematics.e_cm)];
         sample_xs.extend(xs);
 
         let before_parameterization = std::time::Instant::now();
@@ -366,7 +370,7 @@ impl UnitVolumeIntegrand {
         );
         let volume = utils::compute_surface_and_volume(
             integrand_settings.n_3d_momenta * 3,
-            settings.kinematics.e_cm,
+            F(settings.kinematics.e_cm),
         )
         .1;
         UnitVolumeIntegrand {
@@ -385,7 +389,7 @@ impl UnitVolumeIntegrand {
             .reduce(|acc, e| acc + &e)
             .unwrap_or(zero.clone())
             .sqrt()
-            > F::<T>::from_ff64(self.settings.kinematics.e_cm)
+            > F::<T>::from_f64(self.settings.kinematics.e_cm)
         {
             zero
         } else {
@@ -397,7 +401,7 @@ impl UnitVolumeIntegrand {
         let zero = xs[0].zero();
         utils::global_parameterize(
             xs,
-            F::<T>::from_ff64(self.settings.kinematics.e_cm * self.settings.kinematics.e_cm),
+            F::<T>::from_f64(self.settings.kinematics.e_cm * self.settings.kinematics.e_cm),
             &self
                 .settings
                 .sampling
@@ -430,6 +434,7 @@ impl HasIntegrand for UnitVolumeIntegrand {
     fn evaluate_sample(
         &mut self,
         sample: &Sample<F<f64>>,
+        model: &Model,
         wgt: F<f64>,
         iter: usize,
         use_f128: bool,

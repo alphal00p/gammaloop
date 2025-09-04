@@ -3,7 +3,7 @@ use std::{env, path::PathBuf};
 use crate::model::Model;
 
 pub fn load_generic_model(name: &str) -> Model {
-    Model::from_file(output_dir().join(format!("gammaloop_models/{}.yaml", name))).unwrap()
+    Model::from_file(output_dir().join(format!("gammaloop_models/{}.json", name))).unwrap()
 }
 
 pub fn output_dir() -> PathBuf {

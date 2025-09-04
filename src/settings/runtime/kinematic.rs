@@ -29,7 +29,7 @@ use color_eyre::{Result, Section};
 #[serde(default, deny_unknown_fields)]
 pub struct KinematicsSettings {
     #[serde(skip_serializing_if = "is_float::<64>")]
-    pub e_cm: F<f64>,
+    pub e_cm: f64,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub externals: Externals,
 }
@@ -37,7 +37,7 @@ pub struct KinematicsSettings {
 impl KinematicsSettings {
     pub(crate) fn random(graph: &Graph, seed: u64) -> Self {
         Self {
-            e_cm: F(64.),
+            e_cm: 64.,
             externals: graph.random_externals(seed),
         }
     }
@@ -46,7 +46,7 @@ impl KinematicsSettings {
 impl Default for KinematicsSettings {
     fn default() -> Self {
         Self {
-            e_cm: F(64.),
+            e_cm: 64.,
             externals: Externals::default(),
         }
     }

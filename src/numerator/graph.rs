@@ -1,6 +1,7 @@
 use linnet::half_edge::{
     involution::{EdgeData, Flow, Orientation},
     subgraph::SubGraph,
+    HedgeGraph,
 };
 use spenso::{
     iterators::IteratableTensor,
@@ -12,48 +13,74 @@ use spenso::{
 use symbolica::atom::{Atom, AtomOrView, FunctionBuilder, Symbol};
 
 use crate::{
-    graph::{Edge, Graph, NumHedgeData},
+    graph::{edge::ParseEdge, parse::ParseGraph, vertex::ParseVertex, Edge, Graph, NumHedgeData},
     utils::GS,
 };
 
 use super::aind::Aind;
 
-impl Graph {
+pub trait GeneratePolarizations {
     /// Returns the polarizations of the given subgraph. One polarization per half-edge.
     /// If you only want those that are dangling first get the crown of the subgraph.
-    pub(crate) fn generate_polarizations_of<S: SubGraph>(&self, subgraph: &S) -> Atom {
+
+    fn generate_polarizations_of<S: SubGraph>(&self, subgraph: &S) -> Atom;
+    fn generate_polarization_parameters_of<S: SubGraph>(&self, subgraph: &S) -> Vec<Atom>;
+    fn generate_polarizations(&self) -> Atom;
+    fn generate_polarization_params(&self) -> Vec<Atom>;
+}
+
+impl GeneratePolarizations for Graph {
+    fn generate_polarizations_of<S: SubGraph>(&self, subgraph: &S) -> Atom {
+        self.underlying.generate_polarizations_of(subgraph)
+    }
+
+    fn generate_polarization_parameters_of<S: SubGraph>(&self, subgraph: &S) -> Vec<Atom> {
+        self.underlying
+            .generate_polarization_parameters_of(subgraph)
+    }
+
+    fn generate_polarizations(&self) -> Atom {
+        self.generate_polarizations_of(&self.underlying.external_filter())
+    }
+    fn generate_polarization_params(&self) -> Vec<Atom> {
+        self.generate_polarization_parameters_of(&self.underlying.external_filter())
+    }
+
+    // pub(crate) fn polarizations_values(&self) -> Vec<Atom> {
+    //     self.polarizations_of(&self.underlying.external_filter())
+    // }
+}
+
+impl<V, E> GeneratePolarizations for HedgeGraph<E, V, NumHedgeData>
+where
+    for<'a> EdgeData<&'a E>: ReversibleEdge,
+{
+    fn generate_polarizations_of<S: SubGraph>(&self, subgraph: &S) -> Atom {
         let mut pols = Atom::num(1);
 
         for h in subgraph.included_iter() {
-            let eid = self.underlying[&h];
-            pols *= self.underlying.get_edge_data_full(h).polarization(
+            let eid = self[&h];
+            pols *= self.get_edge_data_full(h).polarization(
                 &[Atom::num(eid.0)],
-                &self.underlying[h],
-                self.underlying.flow(h),
+                &self[h],
+                self.flow(h),
             );
         }
 
         pols
     }
 
-    pub(crate) fn generate_polarization_parameters_of<S: SubGraph>(
-        &self,
-        subgraph: &S,
-    ) -> Vec<Atom> {
+    fn generate_polarization_parameters_of<S: SubGraph>(&self, subgraph: &S) -> Vec<Atom> {
         let mut pols = Vec::new();
 
         for h in subgraph.included_iter() {
-            let eid = self.underlying[&h];
+            let eid = self[&h];
 
-            let Some(pol) = self
-                .underlying
-                .get_edge_data_full(h)
-                .polarization_structure(
-                    &[Atom::num(eid.0)],
-                    &self.underlying[h],
-                    self.underlying.flow(h),
-                )
-            else {
+            let Some(pol) = self.get_edge_data_full(h).polarization_structure(
+                &[Atom::num(eid.0)],
+                &self[h],
+                self.flow(h),
+            ) else {
                 continue;
             };
 
@@ -70,11 +97,11 @@ impl Graph {
         pols
     }
 
-    pub(crate) fn generate_polarizations(&self) -> Atom {
-        self.generate_polarizations_of(&self.underlying.external_filter())
+    fn generate_polarizations(&self) -> Atom {
+        self.generate_polarizations_of(&self.external_filter())
     }
-    pub(crate) fn generate_polarization_params(&self) -> Vec<Atom> {
-        self.generate_polarization_parameters_of(&self.underlying.external_filter())
+    fn generate_polarization_params(&self) -> Vec<Atom> {
+        self.generate_polarization_parameters_of(&self.external_filter())
     }
 
     // pub(crate) fn polarizations_values(&self) -> Vec<Atom> {
@@ -169,6 +196,74 @@ impl ReversibleEdge for EdgeData<&Edge> {
     }
 }
 
+impl ReversibleEdge for EdgeData<&ParseEdge> {
+    fn pdg(&self) -> isize {
+        if let Some(p) = self.data.particle.particle() {
+            match self.orientation {
+                Orientation::Default | Orientation::Undirected => p.pdg_code,
+                Orientation::Reversed => -p.pdg_code,
+            }
+        } else {
+            0
+        }
+    }
+
+    fn pol_symbol(&self, flow: Flow) -> Option<Symbol> {
+        if let Some(p) = self.data.particle.particle() {
+            match (p.spin, flow) {
+                (2, Flow::Sink) => {
+                    if self.pdg() > 0 {
+                        Some(GS.u)
+                    } else {
+                        Some(GS.vbar)
+                    }
+                }
+                (2, Flow::Source) => {
+                    if self.pdg() > 0 {
+                        Some(GS.ubar)
+                    } else {
+                        Some(GS.v)
+                    }
+                }
+                (3, Flow::Sink) => Some(GS.epsilon),
+                (3, Flow::Source) => Some(GS.epsilonbar),
+                _ => None,
+            }
+        } else {
+            None
+        }
+    }
+
+    fn polarization<'a, T>(&self, add_args: &'a [T], hedge_data: &NumHedgeData, flow: Flow) -> Atom
+    where
+        &'a T: Into<AtomOrView<'a>>,
+    {
+        if let Some(name) = self.pol_symbol(flow) {
+            hedge_data.polarization(FunctionBuilder::new(name).add_args(add_args))
+        } else {
+            Atom::num(1)
+        }
+    }
+
+    fn polarization_structure<'a, T>(
+        &self,
+        add_args: &'a [T],
+        hedge_data: &NumHedgeData,
+        flow: Flow,
+    ) -> Option<PermutedStructure<ShadowedStructure<Aind>>>
+    where
+        &'a T: Into<AtomOrView<'a>>,
+    {
+        self.pol_symbol(flow).map(|name| {
+            ShadowedStructure::from_iter(
+                hedge_data.edge_spin_slots(),
+                name,
+                Some(add_args.iter().map(|arg| arg.into().into_owned()).collect()),
+            )
+        })
+    }
+}
+
 #[cfg(test)]
 mod test {
 
@@ -179,7 +274,9 @@ mod test {
 
     use crate::{
         dot,
+        gammaloop_integrand::param_builder::ParamBuilderGraph,
         graph::{parse::IntoGraph, FeynmanGraph, Graph},
+        numerator::graph::GeneratePolarizations,
         processes::{Amplitude, AmplitudeGraph},
         settings::{
             global::GenerationSettings, runtime::kinematic::KinematicsSettings, GlobalSettings,

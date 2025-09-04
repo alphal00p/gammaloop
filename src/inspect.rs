@@ -6,15 +6,17 @@ use symbolica::domains::float::NumericalFloatLike;
 use symbolica::numerical_integration::Sample;
 
 use crate::integrands::HasIntegrand;
+use crate::model::Model;
 use crate::momentum::ThreeMomentum;
 use crate::settings::RuntimeSettings;
 use crate::utils;
 use crate::utils::f128;
 use crate::utils::F;
 
-pub(crate) fn inspect<I: HasIntegrand>(
+pub fn inspect<I: HasIntegrand>(
     settings: &RuntimeSettings,
     integrand: &mut I,
+    model: &Model,
     mut pt: Vec<F<f64>>,
     discrete_dimensions: &[usize],
     mut force_radius: bool,
@@ -30,7 +32,7 @@ pub(crate) fn inspect<I: HasIntegrand>(
             &pt.chunks_exact_mut(3)
                 .map(|x| ThreeMomentum::new(x[0], x[1], x[2]).higher())
                 .collect::<Vec<ThreeMomentum<F<f128>>>>(),
-            settings.kinematics.e_cm.square().higher(),
+            F(settings.kinematics.e_cm).square().higher(),
             &settings.sampling.get_parameterization_settings().unwrap(),
             force_radius,
         );
@@ -57,7 +59,8 @@ pub(crate) fn inspect<I: HasIntegrand>(
         havana_sample(cont_sample, discrete_dimensions)
     };
 
-    let eval_result = integrand.evaluate_sample(&sample, F(0.), 1, use_f128, Complex::new_zero());
+    let eval_result =
+        integrand.evaluate_sample(&sample, model, F(0.), 1, use_f128, Complex::new_zero());
     let eval = eval_result.integrand_result;
 
     info!(

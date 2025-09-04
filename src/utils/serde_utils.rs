@@ -1,14 +1,12 @@
 use dirs::home_dir;
-use schemars::{schema_for, JsonSchema, Schema};
+use schemars::schema_for;
 use serde::{de::DeserializeOwned, Serialize};
 use std::{
     env,
-    fs::OpenOptions,
     io::Write,
     path::PathBuf,
     sync::atomic::{AtomicBool, Ordering},
 };
-use toml::{ser::Buffer, Serializer};
 
 use color_eyre::{Result, Section};
 use eyre::{eyre, Context};
@@ -16,8 +14,12 @@ use eyre::{eyre, Context};
 use std::{fs::File, io::Read, path::Path};
 
 pub trait SmartSerde: Serialize + DeserializeOwned {
-    fn to_file(&self, file_path: impl AsRef<Path>) -> Result<()> {
-        let mut f = File::create(file_path.as_ref())?;
+    fn to_file(&self, file_path: impl AsRef<Path>, override_existing: bool) -> Result<()> {
+        let mut f = if override_existing {
+            File::create(file_path.as_ref())?
+        } else {
+            File::create_new(file_path.as_ref())?
+        };
 
         if let Some(ext) = file_path.as_ref().extension() {
             if let Some(ext) = ext.to_str() {
@@ -77,7 +79,7 @@ pub trait SmartSerde: Serialize + DeserializeOwned {
                         .suggestion("Is it a correct yaml file"),
                     "toml" => {
                         let mut buf = String::new();
-                        let bytes = f.read_to_string(&mut buf)?;
+                        let _bytes = f.read_to_string(&mut buf)?;
                         toml::from_str(&buf)
                             .map_err(|e| eyre!(format!("Error parsing {name} toml: {}", e)))
                             .suggestion("Is it a correct toml file")
@@ -110,11 +112,6 @@ pub trait SmartSerde: Serialize + DeserializeOwned {
 impl SmartSerde for SerializableModel {}
 // impl SmartSerde for Schema {}
 
-impl SmartSerde for RunHistory {
-    fn has_schema_path(&self) -> Option<Result<PathBuf>> {
-        Some(get_schema_folder().map(|f| f.join("runhistory.json")))
-    }
-}
 impl SmartSerde for GlobalSettings {
     fn has_schema_path(&self) -> Option<Result<PathBuf>> {
         Some(get_schema_folder().map(|f| f.join("global.json")))
@@ -126,9 +123,32 @@ impl SmartSerde for RuntimeSettings {
     }
 }
 
+pub fn get_schema_folder() -> Result<PathBuf> {
+    let folder = match env::var("GAMMALOOP_SCHEMA_PATH") {
+        Ok(path) => PathBuf::try_from(path)?,
+        Err(_) => match home_dir() {
+            Some(home) => home.join(".config").join("gammaloop").join("schemas"),
+            None => {
+                return Err(eyre!("Could not determine home directory"))
+                    .with_suggestion(|| "Set the GAMMALOOP_SCHEMA_PATH environment variable");
+            }
+        },
+    };
+
+    if !folder.exists() {
+        std::fs::create_dir_all(&folder).wrap_err_with(|| {
+            format!(
+                "Could not create schema folder at {}",
+                folder.to_string_lossy()
+            )
+        })?;
+    }
+
+    Ok(folder)
+}
+
 use crate::{
-    cli::state::RunHistory,
-    model::{Model, SerializableModel},
+    model::SerializableModel,
     settings::{GlobalSettings, RuntimeSettings},
     utils::F,
 };
@@ -153,7 +173,10 @@ impl<T: Default + PartialEq> IsDefault for T {
     }
 }
 
-pub fn is_float<const D: i64>(val: &F<f64>) -> bool {
+pub fn is_float<const D: i64>(val: &f64) -> bool {
+    show_defaults_helper(*val == D as f64)
+}
+pub fn is_ffloat<const D: i64>(val: &F<f64>) -> bool {
     show_defaults_helper(*val == F(D as f64))
 }
 
@@ -211,50 +234,6 @@ pub fn is_default_rotation_axis(
     show_defaults_helper(rotation_axis == &_default_rotation_axis())
 }
 
-fn get_schema_folder() -> Result<PathBuf> {
-    let folder = match env::var("GAMMALOOP_SCHEMA_PATH") {
-        Ok(path) => PathBuf::try_from(path)?,
-        Err(_) => match home_dir() {
-            Some(home) => home.join(".config").join("gammaloop").join("schemas"),
-            None => {
-                return Err(eyre!("Could not determine home directory"))
-                    .with_suggestion(|| "Set the GAMMALOOP_SCHEMA_PATH environment variable");
-            }
-        },
-    };
-
-    if !folder.exists() {
-        std::fs::create_dir_all(&folder).wrap_err_with(|| {
-            format!(
-                "Could not create schema folder at {}",
-                folder.to_string_lossy()
-            )
-        })?;
-    }
-
-    Ok(folder)
-}
-
-pub fn write_schemas() -> Result<()> {
-    let global_schema = schema_for!(GlobalSettings);
-    let runtime_schema = schema_for!(RuntimeSettings);
-    let runhistory_schema = schema_for!(RunHistory);
-    let folder = get_schema_folder()?;
-
-    let mut global_file = File::create(folder.join("global.json"))?;
-    let mut runtime_file = File::create(folder.join("runtime.json"))?;
-    let mut runhistory_file = File::create(folder.join("runhistory.json"))?;
-
-    serde_json::to_writer_pretty(&mut global_file, &global_schema)
-        .wrap_err("Could not write global schema")?;
-    serde_json::to_writer_pretty(&mut runtime_file, &runtime_schema)
-        .wrap_err("Could not write runtime schema")?;
-    serde_json::to_writer_pretty(&mut runhistory_file, &runhistory_schema)
-        .wrap_err("Could not write runhistory schema")?;
-
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use crate::utils::test_utils::{load_generic_model, output_dir};
@@ -266,7 +245,10 @@ mod tests {
         let name = "scalars";
         load_generic_model(name)
             .to_serializable()
-            .to_file(output_dir().join(format!("gammaloop_models/{name}.json")))
+            .to_file(
+                output_dir().join(format!("gammaloop_models/{name}.json")),
+                true,
+            )
             .unwrap();
     }
 }

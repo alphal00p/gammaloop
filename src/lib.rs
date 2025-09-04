@@ -7,11 +7,8 @@
 // #![warn(clippy::cargo)]
 // #![feature(min_specialization)]
 //
-#[cfg(feature = "python_api")]
-pub mod api;
 
 pub mod cff;
-pub mod cli;
 pub mod debug_info;
 pub mod evaluation_result;
 pub mod feyngen;

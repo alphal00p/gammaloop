@@ -22,7 +22,7 @@ use typed_index_collections::TiVec;
 
 use crate::{
     define_index,
-    gammaloop_integrand::LmbMultiChannelingSetup,
+    gammaloop_integrand::{LmbMultiChannelingSetup, ParamBuilder},
     momentum::{Dep, ExternalMomenta, PolDef},
     momentum_sample::ExternalIndex,
     numerator::{symbolica_ext::AtomCoreExt, GlobalPrefactor, ParsingNet},
@@ -46,6 +46,7 @@ pub struct Graph {
     pub is_group_master: bool,
     pub underlying: HedgeGraph<Edge, Vertex, NumHedgeData>,
     pub loop_momentum_basis: LoopMomentumBasis,
+    pub param_builder: ParamBuilder,
     pub global_prefactor: GlobalPrefactor,
     pub polarizations: Vec<(PolDef, Atom)>,
 }
@@ -109,22 +110,22 @@ impl Graph {
         }
     }
 
-    pub(crate) fn new(
-        name: SmartString<LazyCompact>,
-        multiplicity: Atom,
-        underlying: HedgeGraph<Edge, Vertex, NumHedgeData>,
-    ) -> Result<Self> {
-        Ok(Self {
-            name: name.to_string(),
-            overall_factor: multiplicity,
-            loop_momentum_basis: underlying.lmb(&underlying.full_filter()),
-            group_id: None,
-            is_group_master: false,
-            underlying,
-            global_prefactor: GlobalPrefactor::default(),
-            polarizations: vec![],
-        })
-    }
+    // pub(crate) fn new(
+    //     name: SmartString<LazyCompact>,
+    //     multiplicity: Atom,
+    //     underlying: HedgeGraph<Edge, Vertex, NumHedgeData>,
+    // ) -> Result<Self> {
+    //     Ok(Self {
+    //         name: name.to_string(),
+    //         overall_factor: multiplicity,
+    //         loop_momentum_basis: underlying.lmb(&underlying.full_filter()),
+    //         group_id: None,
+    //         is_group_master: false,
+    //         underlying,
+    //         global_prefactor: GlobalPrefactor::default(),
+    //         polarizations: vec![],
+    //     })
+    // }
 
     pub(crate) fn build_multi_channeling_channels(
         &self,

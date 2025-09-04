@@ -1,6 +1,5 @@
 use std::{
-    fs::{self, File},
-    io::{Read, Write},
+    fs::{self},
     path::Path,
 };
 
@@ -39,7 +38,7 @@ use crate::{
     model::Model,
     momentum::{Rotation, RotationMethod},
     momentum_sample::{ExternalIndex, MomentumSample},
-    processes::{AmplitudeDerivedData, AmplitudeGraph, GroupDerivedData},
+    processes::{AmplitudeGraph, GroupDerivedData},
     settings::{GlobalSettings, RuntimeSettings},
     signature::SignatureLike,
     status_debug, status_info, status_warn,
@@ -83,8 +82,6 @@ impl AmplitudeGraphTerm {
         model: &Model,
         settings: &GlobalSettings,
     ) -> Result<Self> {
-        let param_builder = ParamBuilder::new(&graph.graph, model);
-
         let orientations: TiVec<AmplitudeOrientationID, EdgeVec<Orientation>> = graph
             .derived_data
             .cff_expression
@@ -97,7 +94,7 @@ impl AmplitudeGraphTerm {
 
         let orientation_parametric_integrand = GenericEvaluator::new_from_builder(
             [graph.derived_data.all_mighty_integrand.clone()],
-            &param_builder,
+            &graph.graph.param_builder,
             OptimizationSettings::default(),
         )
         .unwrap();
@@ -111,7 +108,7 @@ impl AmplitudeGraphTerm {
                 orientations
                     .iter()
                     .map(|a| a.select(&graph.derived_data.all_mighty_integrand)),
-                &param_builder,
+                &graph.graph.param_builder,
                 OptimizationSettings::default(),
             )
         } else {
@@ -126,7 +123,7 @@ impl AmplitudeGraphTerm {
             .iter()
             .map(|ct| {
                 ct.to_evaluator(
-                    &param_builder,
+                    &graph.graph.param_builder,
                     &orientations,
                     settings,
                     OptimizationSettings::default(),
@@ -163,8 +160,7 @@ impl AmplitudeGraphTerm {
                 .surfaces
                 .esurface_cache
                 .clone(),
-
-            param_builder,
+            param_builder: graph.graph.param_builder.clone(),
         })
     }
 
@@ -232,6 +228,7 @@ impl AmplitudeGraphTerm {
     fn evaluate_impl<T: FloatLike>(
         &mut self,
         momentum_sample: &MomentumSample<T>,
+        model: &Model,
         settings: &RuntimeSettings,
         rotation: &Rotation,
     ) -> Complex<F<T>> {
@@ -261,7 +258,7 @@ impl AmplitudeGraphTerm {
                 if let Some(iterative) = &iterative {
                     result += &iterative[i.0]
                 } else {
-                    self.param_builder.orientation_value(e);
+                    self.graph.param_builder.orientation_value(e);
                     let a = T::get_parameters(
                         &mut self.param_builder,
                         settings.general.cache_polarizations,
@@ -274,12 +271,13 @@ impl AmplitudeGraphTerm {
                 }
             }
         }
-        // status_debug!("last_params"; data = self.param_builder);
+        status_debug!("last_params"; data = self.param_builder);
         debug!("evaluated integrand: {:16e}", result);
 
         let sum_of_cts = self.threshold_counterterm.evaluate(
             momentum_sample,
             &self.graph,
+            model,
             &self.esurfaces,
             rotation,
             settings,
@@ -310,8 +308,7 @@ impl GraphTerm for AmplitudeGraphTerm {
         self.orientation_filter = BinVec(a);
         self.estimated_scale = Some(
             self.graph
-                .underlying
-                .expected_scale(settings.kinematics.e_cm),
+                .expected_scale(F(settings.kinematics.e_cm), model),
         );
 
         let externals = settings
@@ -324,20 +321,31 @@ impl GraphTerm for AmplitudeGraphTerm {
                 format!("when getting externals to build amplitude graph term for integrand for graph: {}", self.graph.name)
             })?;
 
-        self.param_builder.add_external_four_mom(&externals);
+        self.graph.param_builder.add_external_four_mom(&externals);
+        let pols = self.graph.param_builder.pairs.polarizations_values(
+            &self.graph,
+            &externals,
+            settings.kinematics.externals.get_helicities(),
+        );
 
-        self.param_builder.values[self.param_builder.pairs.polarizations.value_range.clone()]
-            .clone_from_slice(&self.param_builder.pairs.polarizations_values(
-                &self.graph,
-                &externals,
-                settings.kinematics.externals.get_helicities(),
-            ));
+        self.graph.param_builder.values[self
+            .graph
+            .param_builder
+            .pairs
+            .polarizations
+            .value_range
+            .clone()]
+        .clone_from_slice(&pols);
 
-        self.param_builder
-            .m_uv_value(Complex::new_re(settings.general.m_uv));
-        self.param_builder
-            .mu_r_sq_value(Complex::new_re(settings.general.mu_r_sq));
-        self.param_builder.update_model_values(model);
+        self.graph
+            .param_builder
+            .m_uv_value(Complex::new_re(F(settings.general.m_uv)));
+        self.graph
+            .param_builder
+            .mu_r_sq_value(Complex::new_re(F(settings.general.mu_r_sq)));
+        self.graph.param_builder.update_model_values(model);
+
+        self.param_builder = self.graph.param_builder.clone();
 
         Ok(())
     }
@@ -361,10 +369,11 @@ impl GraphTerm for AmplitudeGraphTerm {
     fn evaluate<T: FloatLike>(
         &mut self,
         momentum_sample: &MomentumSample<T>,
+        model: &Model,
         settings: &RuntimeSettings,
         rotation: &Rotation,
     ) -> Complex<F<T>> {
-        self.evaluate_impl(momentum_sample, settings, rotation)
+        self.evaluate_impl(momentum_sample, model, settings, rotation)
     }
 
     fn get_num_orientations(&self) -> usize {
@@ -420,7 +429,7 @@ impl AmplitudeIntegrand {
         // debug!("HE3");
         //
         self.settings
-            .to_file(path.as_ref().join("settings.toml"))
+            .to_file(path.as_ref().join("settings.toml"), override_existing)
             .with_context(|| "Error saving settings.toml file for amplitude integrand")?;
         // debug!("HE");
 
@@ -440,7 +449,10 @@ impl AmplitudeIntegrand {
         Ok(AmplitudeIntegrand { settings, data })
     }
 
-    pub(crate) fn get_existing_esurfaces(&self) -> TiVec<GroupId, ExistingEsurfaces> {
+    pub(crate) fn get_existing_esurfaces(
+        &self,
+        model: &Model,
+    ) -> TiVec<GroupId, ExistingEsurfaces> {
         self.data
             .group_derived_data
             .iter_enumerated()
@@ -473,9 +485,9 @@ impl AmplitudeIntegrand {
 
                                     esurface.exists(
                                         &graph.graph.loop_momentum_basis,
-                                        &graph.graph.get_real_mass_vector(),
+                                        &graph.graph.get_real_mass_vector(model),
                                         &external_moms,
-                                        &e_cm,
+                                        &F(e_cm),
                                     )
                                 })
                             })
@@ -549,7 +561,7 @@ impl GammaloopIntegrand for AmplitudeIntegrand {
 
         if !self.settings.subtraction.disable_threshold_subtraction {
             status_debug!("esurface existence check");
-            let existing_esurfaces = self.get_existing_esurfaces();
+            let existing_esurfaces = self.get_existing_esurfaces(model);
             for (group_id, existing_esurfaces) in existing_esurfaces.iter_enumerated() {
                 status_debug!(
                     "solving overlap for group {}, number of thresholds: {}",
@@ -564,7 +576,7 @@ impl GammaloopIntegrand for AmplitudeIntegrand {
                         SingleGraphOverlapData {
                             lmb: &graph.graph.loop_momentum_basis,
                             esurfaces: &graph.esurfaces,
-                            edge_masses: graph.graph.get_real_mass_vector(),
+                            edge_masses: graph.graph.get_real_mass_vector::<f64>(model),
                         }
                     })
                     .collect();
@@ -728,12 +740,13 @@ impl HasIntegrand for AmplitudeIntegrand {
     fn evaluate_sample(
         &mut self,
         sample: &Sample<F<f64>>,
+        model: &Model,
         wgt: F<f64>,
         iter: usize,
         use_f128: bool,
         max_eval: Complex<F<f64>>,
     ) -> EvaluationResult {
-        evaluate_sample(self, sample, wgt, iter, use_f128, max_eval)
+        evaluate_sample(self, model, sample, wgt, iter, use_f128, max_eval)
     }
 
     fn get_n_dim(&self) -> usize {
@@ -743,7 +756,7 @@ impl HasIntegrand for AmplitudeIntegrand {
             .get_parameterization_settings()
             .is_some()
         {
-            self.data.graph_terms[0].graph.underlying.get_loop_number() * 3
+            self.data.graph_terms[0].graph.get_loop_number() * 3
         } else {
             let dimensions = self
                 .data

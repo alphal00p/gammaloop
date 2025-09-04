@@ -6,7 +6,10 @@ use std::{
 
 use bincode::{Decode, Encode};
 use idenso::color::CS;
-use linnet::half_edge::involution::{HedgePair, Orientation};
+use linnet::half_edge::{
+    involution::{EdgeIndex, HedgePair, Orientation},
+    HedgeGraph,
+};
 use log::debug;
 use ringbuffer::{ConstGenericRingBuffer, RingBuffer};
 use spenso::{
@@ -20,17 +23,18 @@ use symbolica::{
     atom::{Atom, AtomCore, AtomOrView, FunctionBuilder, Symbol},
     domains::rational::Rational,
     evaluate::FunctionMap,
+    id::Replacement,
 };
 use tabled::{settings::Style, Table};
 
 use crate::{
     cff::expression::GraphOrientation,
-    cli::tracing::StatusRenderable,
     graph::{FeynmanGraph, Graph},
     model::Model,
     momentum::{Helicity, PolType},
     momentum_sample::{ExternalFourMomenta, MomentumSample},
     numerator::ParsingNet,
+    utils::tracing::StatusRenderable,
     utils::{f128, FloatLike, PrecisionUpgradable, F, GS, TENSORLIB},
     GammaLoopContext,
 };
@@ -92,11 +96,18 @@ impl Default for ParamValuePairs {
     }
 }
 
-// impl<T:FloatLike> ParamValuePairs<T>{
-//     pub fn map_values<U:FloatLike>(&self,map:impl FnMut(&Complex<F<T>>)->Complex<F<U>>)->ParamValuePairs<U>{
+pub trait SplitPolarizations {
+    fn polarizations(&self) -> Vec<Atom>;
+}
 
-//     }
-// }
+pub trait ParamBuilderGraph {
+    fn get_external_energy_atoms(&self) -> Vec<Atom>;
+    fn iter_edge_ids(&self) -> impl Iterator<Item = EdgeIndex> + '_;
+    fn external_spatial_params(&self) -> Vec<Atom>;
+    fn emr_spatial_params(&self) -> Vec<Atom>;
+    fn explicit_ose_atom(&self, edge: EdgeIndex) -> Atom;
+    fn get_ose_replacements(&self) -> Vec<Replacement>;
+}
 
 #[derive(Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
 #[trait_decode(trait = GammaLoopContext)]
@@ -240,7 +251,10 @@ impl GammaLoopPairs {
         self.radius_star.validate();
     }
 
-    pub(crate) fn new(model: &Model, graph: &Graph) -> (Self, usize) {
+    pub(crate) fn new<G: ParamBuilderGraph + SplitPolarizations>(
+        model: &Model,
+        graph: &G,
+    ) -> (Self, usize) {
         let mut pairs: GammaLoopPairs = Default::default();
 
         pairs.m_uv = ParamValuePairs::default_from_symbol(GS.m_uv);
@@ -276,44 +290,18 @@ impl GammaLoopPairs {
         self.model_parameters = model.generate_params().into_iter().collect();
     }
 
-    pub(crate) fn external_spatial(&mut self, graph: &Graph) {
-        self.external_spatial.params = graph
-            .iter_edges()
-            .flat_map(|(pair, edge_id, _)| {
-                if let HedgePair::Unpaired { .. } = pair {
-                    vec![
-                        GS.emr_mom(edge_id, Atom::from(ExpandedIndex::from_iter([1]))),
-                        GS.emr_mom(edge_id, Atom::from(ExpandedIndex::from_iter([2]))),
-                        GS.emr_mom(edge_id, Atom::from(ExpandedIndex::from_iter([3]))),
-                    ]
-                } else {
-                    vec![]
-                }
-            })
-            .collect();
+    pub(crate) fn external_spatial<G: ParamBuilderGraph>(&mut self, graph: &G) {
+        self.external_spatial.params = graph.external_spatial_params();
     }
 
-    pub(crate) fn emr_spatial(&mut self, graph: &Graph) {
-        self.emr_spatial.params = graph
-            .iter_edges()
-            .flat_map(|(pair, edge_id, _)| {
-                if let HedgePair::Paired { .. } = pair {
-                    vec![
-                        GS.emr_mom(edge_id, Atom::from(ExpandedIndex::from_iter([1]))),
-                        GS.emr_mom(edge_id, Atom::from(ExpandedIndex::from_iter([2]))),
-                        GS.emr_mom(edge_id, Atom::from(ExpandedIndex::from_iter([3]))),
-                    ]
-                } else {
-                    vec![]
-                }
-            })
-            .collect();
+    pub(crate) fn emr_spatial<G: ParamBuilderGraph>(&mut self, graph: &G) {
+        self.emr_spatial.params = graph.emr_spatial_params();
     }
 
-    pub(crate) fn polarizations(&mut self, graph: &Graph) {
+    pub(crate) fn polarizations<G: ParamBuilderGraph + SplitPolarizations>(&mut self, graph: &G) {
         let mut params = Vec::new();
 
-        for (_, a) in &graph.polarizations {
+        for a in graph.polarizations() {
             match ParsingNet::try_from_view(a.as_view(), TENSORLIB.read().unwrap().deref())
                 .unwrap()
                 .result_tensor(TENSORLIB.read().unwrap().deref())
@@ -336,10 +324,10 @@ impl GammaLoopPairs {
         self.polarizations = params.into_iter().collect();
     }
 
-    pub(crate) fn orientations(&mut self, graph: &Graph) {
+    pub(crate) fn orientations<G: ParamBuilderGraph>(&mut self, graph: &G) {
         let mut params = Vec::new();
 
-        for (_, i, _) in graph.iter_edges() {
+        for i in graph.iter_edge_ids() {
             params.push(GS.sign(i));
             params.push(GS.sign_theta(GS.sign(i)));
             params.push(GS.sign_theta(-GS.sign(i)));
@@ -348,7 +336,7 @@ impl GammaLoopPairs {
         self.orientations.params = params;
     }
 
-    pub(crate) fn external_energies(&mut self, graph: &Graph) {
+    pub(crate) fn external_energies<G: ParamBuilderGraph>(&mut self, graph: &G) {
         self.external_energies = graph.get_external_energy_atoms().into_iter().collect();
     }
 
@@ -696,7 +684,7 @@ impl<T: FloatLike> ParamBuilder<T> {
         }
     }
 
-    pub(crate) fn new(graph: &Graph, model: &Model) -> Self {
+    pub(crate) fn new<G: ParamBuilderGraph + SplitPolarizations>(graph: &G, model: &Model) -> Self {
         let (pairs, len) = GammaLoopPairs::new(model, graph);
 
         let mut new = Self {
@@ -706,7 +694,7 @@ impl<T: FloatLike> ParamBuilder<T> {
 
         let pi_rational = Rational::from(std::f64::consts::PI);
 
-        for (_, e, _) in graph.iter_edges() {
+        for e in graph.iter_edge_ids() {
             new.add_tagged_function(
                 GS.ose,
                 vec![Atom::num(e.0 as i64)],

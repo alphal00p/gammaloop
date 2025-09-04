@@ -1,4 +1,11 @@
-use std::{collections::BTreeMap, fs, iter, ops::Deref, path::Path};
+use std::{
+    collections::BTreeMap,
+    fs::{self, File},
+    io::Write,
+    iter,
+    ops::Deref,
+    path::Path,
+};
 
 use ahash::AHashSet;
 // use bincode::{Decode, Encode};
@@ -22,6 +29,7 @@ use crate::{
     },
     gammaloop_integrand::{
         amplitude_integrand::{AmplitudeGraphTerm, AmplitudeIntegrand, AmplitudeIntegrandData},
+        param_builder::ParamBuilderGraph,
         LmbMultiChannelingSetup, ParamBuilder,
     },
     graph::{GraphGroup, GraphGroupPosition, GroupId, LMBext, LmbIndex, LoopMomentumBasis},
@@ -168,7 +176,12 @@ impl Amplitude {
         };
 
         let binary = bincode::encode_to_vec(&(*self), bincode::config::standard())?;
-        fs::write(p.join("amp.bin"), binary)?;
+        if override_existing {
+            fs::write(p.join("amp.bin"), binary)?;
+        } else {
+            let mut file = File::create_new(p.join("amp.bin"))?;
+            file.write(&binary)?;
+        }
         Ok(())
     }
 
@@ -343,13 +356,12 @@ impl AmplitudeGraph {
     pub(crate) fn generate_cff(&mut self) -> Result<()> {
         let shift_rewrite = self
             .graph
-            .underlying
             .get_esurface_canonization(&self.graph.loop_momentum_basis);
 
         let cff_expression = generate_cff_expression(
             &self.graph.underlying,
             &shift_rewrite,
-            &self.graph.underlying.dummy_list(),
+            &self.graph.dummy_list(),
         )?;
         self.derived_data.cff_expression = Some(cff_expression);
 
@@ -462,8 +474,7 @@ impl AmplitudeGraph {
 
     fn add_additional_factors_to_cff_atom(&self, cff_atom: &Atom) -> Atom {
         // let inverse_energy_product = self.graph.underlying.get_cff_inverse_energy_product();
-        let factors_of_pi =
-            (Atom::var(GS.pi) * 2).npow(3 * self.graph.underlying.get_loop_number() as i64);
+        let factors_of_pi = (Atom::var(GS.pi) * 2).npow(3 * self.graph.get_loop_number() as i64);
 
         let result = cff_atom / factors_of_pi;
         // debug!("result: {}", result);
@@ -476,10 +487,7 @@ impl AmplitudeGraph {
             evaluation_order: EvaluationOrder::alphaloop_only(),
             integral_normalization_factor: LoopNormalizationFactor::MSbar,
             run_time_decimal_precision: 32,
-            number_of_terms_in_epsilon_expansion: self
-                .graph
-                .n_loops(&self.graph.underlying.no_dummy())
-                as i64
+            number_of_terms_in_epsilon_expansion: self.graph.n_loops(&self.graph.no_dummy()) as i64
                 + 1,
             // temporary_directory: Some("./form".into()),
             mu_r_sq_symbol: GS.mu_r_sq.get_name().to_string(),
@@ -506,7 +514,6 @@ impl AmplitudeGraph {
         let mut counterterms: TiVec<EsurfaceID, AmplitudeCountertermAtom> = TiVec::new();
         let canonize_esurface = self
             .graph
-            .underlying
             .get_esurface_canonization(&self.graph.loop_momentum_basis);
 
         for (esurface_id, esurface) in self
@@ -668,7 +675,7 @@ impl AmplitudeGraph {
                 .replace(function!(GS.energy, W_.x_))
                 .with(function!(GS.ose, W_.x_));
 
-            let loop_3 = self.graph.underlying.get_loop_number() as i64 * 3;
+            let loop_3 = self.graph.get_loop_number() as i64 * 3;
 
             let grad_eta = Atom::var(GS.deta);
             let factors_of_pi = (Atom::num(2) * Atom::var(GS.pi)).npow(loop_3);
@@ -708,7 +715,7 @@ impl AmplitudeGraph {
     }
 
     fn build_original_parametric_integrand(&self, settings: &GenerationSettings) -> Result<Atom> {
-        let wood = self.graph.wood(&self.graph.underlying.no_dummy());
+        let wood = self.graph.wood(&self.graph.no_dummy());
         debug!(
             "Wood for {}{}",
             self.graph.name,
@@ -721,7 +728,6 @@ impl AmplitudeGraph {
 
         let canonize_esurface = self
             .graph
-            .underlying
             .get_esurface_canonization(&self.graph.loop_momentum_basis);
 
         let orientations: TiVec<AmplitudeOrientationID, OrientationData> = self
@@ -739,7 +745,7 @@ impl AmplitudeGraph {
 
         forest.compute(
             &self.graph,
-            &self.graph.underlying.no_dummy(),
+            &self.graph.no_dummy(),
             &vakint,
             &orientations,
             &canonize_esurface,
@@ -790,7 +796,7 @@ impl AmplitudeGraph {
     fn build_lmbs(&mut self) {
         let lmbs = self
             .graph
-            .generate_loop_momentum_bases(&self.graph.underlying.no_dummy());
+            .generate_loop_momentum_bases(&self.graph.no_dummy());
 
         self.derived_data.lmbs = Some(lmbs)
     }
@@ -809,7 +815,7 @@ impl AmplitudeGraph {
             .tropical_subgraph_table_settings
             .target_omega;
 
-        let weight = (target_omega.0 + (3 * num_loops) as f64 / 2.) / num_virtual_loop_edges as f64;
+        let weight = (target_omega + (3 * num_loops) as f64 / 2.) / num_virtual_loop_edges as f64;
 
         debug!(
             "Building tropical subgraph table with all edge weights set to: {}",
@@ -1028,12 +1034,14 @@ pub mod test {
         dot,
         gammaloop_integrand::{GenericEvaluator, ParamBuilder},
         graph::parse::IntoGraph,
+        initialisation::test_initialise,
         processes::AmplitudeGraph,
         settings::global::GenerationSettings,
         utils::{test_utils::load_generic_model, GS},
     };
     #[test]
     fn amplitude_tree() {
+        test_initialise();
         let mut graph: AmplitudeGraph = dot!(digraph qqx_aaa_tree_1 {
                 num="spenso::g(spenso::dind(spenso::cof(3, hedge(1))), spenso::cof(3, hedge(2)))/3"
                 ext    [style=invis]

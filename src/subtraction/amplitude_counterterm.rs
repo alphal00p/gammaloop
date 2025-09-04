@@ -31,6 +31,7 @@ use crate::{
         GenericEvaluatorFloat, ParamBuilder, ThresholdParams,
     },
     graph::{FeynmanGraph, Graph, GraphGroupPosition, LoopMomentumBasis},
+    model::Model,
     momentum::Rotation,
     momentum_sample::{self, LoopMomenta, MomentumSample},
     settings::{
@@ -177,6 +178,7 @@ impl AmplitudeCountertermData {
         &mut self,
         momentum_sample: &MomentumSample<T>,
         graph: &Graph,
+        model: &Model,
         esurfaces: &EsurfaceCollection,
         rotation: &Rotation,
         settings: &RuntimeSettings,
@@ -195,6 +197,7 @@ impl AmplitudeCountertermData {
 
         let counter_term_builder = CounterTermBuilder::new(
             graph,
+            model,
             rotation,
             settings,
             esurfaces,
@@ -251,6 +254,7 @@ struct CounterTermBuilder<'a, T: FloatLike> {
 impl<'a, T: FloatLike> CounterTermBuilder<'a, T> {
     fn new(
         graph: &'a Graph,
+        model: &'a Model,
         rotation_for_overlap: &'a Rotation,
         settings: &'a RuntimeSettings,
         esurface_collection: &'a EsurfaceCollection,
@@ -260,8 +264,8 @@ impl<'a, T: FloatLike> CounterTermBuilder<'a, T> {
         own_group_position: GraphGroupPosition,
         esurface_map: &'a TiVec<GroupEsurfaceId, TiVec<GraphGroupPosition, Option<EsurfaceID>>>,
     ) -> Self {
-        let real_mass_vector = graph.underlying.get_real_mass_vector();
-        let e_cm = F::from_ff64(settings.kinematics.e_cm);
+        let real_mass_vector = graph.get_real_mass_vector(model);
+        let e_cm = F::from_f64(settings.kinematics.e_cm);
 
         Self {
             real_mass_vector,
@@ -593,12 +597,12 @@ fn evaluate_uv_damper<T: FloatLike>(
 
     let delta_r = radius - radius_star;
 
-    if delta_r.abs() > F::from_ff64(settings.sliver_width) * normalizing_scale {
+    if delta_r.abs() > F::from_f64(settings.sliver_width) * normalizing_scale {
         return radius.zero();
     }
 
     let delta_r_sq = &delta_r * &delta_r;
-    let width = F::from_ff64(settings.gaussian_width) * normalizing_scale;
+    let width = F::from_f64(settings.gaussian_width) * normalizing_scale;
     let width_sq = &width * &width;
 
     (-delta_r_sq / width_sq).exp()

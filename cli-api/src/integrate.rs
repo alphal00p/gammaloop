@@ -1,0 +1,154 @@
+use std::{fs, path::PathBuf};
+
+use clap::Args;
+use gammalooprs::{status_warn, utils::serde_utils::SmartSerde};
+
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
+use spenso::algebra::complex::Complex;
+
+use color_eyre::Result;
+use colored::Colorize;
+use gammalooprs::{
+    integrate::{havana_integrate, print_integral_result, IntegrationState},
+    settings::{runtime::IntegrationResult, RuntimeSettings},
+    status_info,
+    utils::F,
+};
+use tracing::info;
+
+use super::state::State;
+
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(unsendable, name = "IntegrationSettings")
+)]
+#[derive(Debug, Args, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
+pub struct Integrate {
+    /// The process id to inspect
+    #[arg(short = 'i', long = "process-id", value_name = "ID")]
+    pub process_id: usize,
+
+    /// The name of the process to inspect
+    #[arg(short = 'n', long = "name", value_name = "NAME")]
+    pub process_name: String,
+
+    /// The path to store results in
+    #[arg(short = 'p', long)]
+    pub result_path: PathBuf,
+
+    /// Number of cores to parallelize over
+    #[arg(short = 'c', long)]
+    pub n_cores: usize,
+
+    /// The path to run the integrationg within
+    #[arg(short = 'w', long)]
+    pub workspace_path: PathBuf,
+
+    /// Specify the target integration result to compare against
+    #[arg(short = 't', num_args = 2, long)]
+    pub target: Option<Vec<f64>>,
+
+    /// Whether to restart the integration from scratch, or continue from a previous run if possible
+    #[arg(short = 'r', long)]
+    pub restart: bool,
+}
+
+impl Integrate {
+    pub fn run(&self, state: &mut State) -> Result<IntegrationResult> {
+        let target = if let Some(t) = self.target.clone() {
+            Some(Complex::new(F(t[0]), F(t[1])))
+        } else {
+            None
+        };
+
+        state.process_list.warm_up(&state.model)?;
+
+        if self.restart && self.workspace_path.exists() {
+            fs::remove_dir_all(&self.workspace_path)?;
+        }
+
+        let gloop_integrand = state
+            .process_list
+            .get_integrand_mut(self.process_id, &self.process_name)?;
+
+        status_info!(
+            "Gammaloop now integrates {}",
+            self.process_name.green().bold()
+        );
+
+        let path_to_state = self.workspace_path.join("integration_state");
+
+        let integration_state = match fs::read(path_to_state) {
+            Ok(state_bytes) => {
+                status_info!(
+                    "{}",
+                    "Found integration state, result of previous integration:".yellow()
+                );
+                info!("");
+
+                let state: IntegrationState = bincode::decode_from_slice::<IntegrationState, _>(
+                    &state_bytes,
+                    bincode::config::standard(),
+                )
+                .expect("Could not deserialize state")
+                .0;
+
+                let path_to_workspace_settings = self.workspace_path.join("settings.toml");
+
+                let workspace_settings: RuntimeSettings =
+                    RuntimeSettings::from_file(path_to_workspace_settings, "workspace settings")?;
+                // force the settings to be the same as the ones used in the previous integration
+                *gloop_integrand.get_mut_settings() = workspace_settings.clone();
+
+                print_integral_result(
+                    &state.integral.re,
+                    1,
+                    state.iter,
+                    "re",
+                    target.map(|c| c.re),
+                );
+
+                print_integral_result(
+                    &state.integral.im,
+                    2,
+                    state.iter,
+                    "im",
+                    target.map(|c| c.im),
+                );
+                status_info!("");
+                status_warn!("Any changes to the settings will be ignored, integrate with the {} option for changes to take effect","--restart".blue());
+                status_info!("{}", "Resuming integration".yellow());
+
+                Some(state)
+            }
+
+            Err(_) => {
+                status_info!("No integration state found, starting new integration");
+                None
+            }
+        };
+
+        if !self.workspace_path.exists() {
+            fs::create_dir_all(&self.workspace_path)?;
+            info!(
+                "Created workspace directory at {}",
+                self.workspace_path.display()
+            );
+        }
+        let settings = gloop_integrand.get_settings().clone();
+
+        let result = havana_integrate(
+            &settings,
+            &state.model,
+            |set| gloop_integrand.user_data_generator(self.n_cores, set),
+            target,
+            integration_state,
+            Some(self.workspace_path.clone()),
+        );
+
+        fs::write(&self.result_path, serde_json::to_string(&result)?)?;
+
+        Ok(result)
+    }
+}

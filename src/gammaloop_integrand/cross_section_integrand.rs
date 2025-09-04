@@ -184,8 +184,7 @@ impl GraphTerm for CrossSectionGraphTerm {
     fn warm_up(&mut self, settings: &RuntimeSettings, model: &Model) -> Result<()> {
         self.estimated_scale = Some(
             self.graph
-                .underlying
-                .expected_scale(settings.kinematics.e_cm),
+                .expected_scale(F(settings.kinematics.e_cm), model),
         );
 
         Ok(())
@@ -193,6 +192,7 @@ impl GraphTerm for CrossSectionGraphTerm {
     fn evaluate<T: FloatLike>(
         &mut self,
         momentum_sample: &MomentumSample<T>,
+        model: &Model,
         settings: &RuntimeSettings,
         rotation: &Rotation,
     ) -> Complex<F<T>> {
@@ -245,6 +245,7 @@ impl CrossSectionGraphTerm {
 
     fn evaluate_impl<T: FloatLike>(
         &mut self,
+        model: &Model,
         momentum_sample: &MomentumSample<T>,
         settings: &RuntimeSettings,
         param_builder: ParamBuilder<T>,
@@ -260,7 +261,7 @@ impl CrossSectionGraphTerm {
                 momentum_sample.zero(),
                 momentum_sample.zero()
             ]);
-            self.graph.underlying.get_loop_number()
+            self.graph.get_loop_number()
         ]);
 
         let params = self
@@ -285,11 +286,11 @@ impl CrossSectionGraphTerm {
                         &center,
                         momentum_sample.external_moms(),
                         &self.graph.loop_momentum_basis,
-                        &self.graph.underlying.get_real_mass_vector(),
+                        &self.graph.get_real_mass_vector(model),
                     )
                 };
 
-                let e_cm = F::from_ff64(settings.kinematics.e_cm);
+                let e_cm = F::from_f64(settings.kinematics.e_cm);
                 let tolerance = F::from_ff64(TOLERANCE);
 
                 let newton_result = newton_iteration_and_derivative(
@@ -414,12 +415,13 @@ impl HasIntegrand for CrossSectionIntegrand {
     fn evaluate_sample(
         &mut self,
         sample: &Sample<F<f64>>,
+        model: &Model,
         wgt: F<f64>,
         _iter: usize,
         use_f128: bool,
         max_eval: Complex<F<f64>>,
     ) -> EvaluationResult {
-        let result = evaluate_sample(self, sample, wgt, _iter, use_f128, max_eval);
+        let result = evaluate_sample(self, model, sample, wgt, _iter, use_f128, max_eval);
         info!("result: {:?}", result.integrand_result);
 
         result
@@ -438,9 +440,9 @@ impl HasIntegrand for CrossSectionIntegrand {
             .data
             .graph_terms
             .iter()
-            .map(|term| term.graph.underlying.get_loop_number())
+            .map(|term| term.graph.get_loop_number())
             .all_equal());
 
-        self.data.graph_terms[0].graph.underlying.get_loop_number() * 3
+        self.data.graph_terms[0].graph.get_loop_number() * 3
     }
 }

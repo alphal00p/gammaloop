@@ -40,7 +40,7 @@ impl CrossSectionGraphTerm {
         let rng = MonteCarloRng::new(settings.integrator.seed, 0);
 
         for (cut_id, esurface) in self.cut_esurface.iter_enumerated() {
-            let supergraph_loop_count = self.graph.underlying.get_loop_number();
+            let supergraph_loop_count = self.graph.get_loop_number();
             let cut_cardinality = esurface.get_positive_energies().count();
 
             let massless_edges_in_cut = esurface
@@ -186,7 +186,7 @@ impl CrossSectionGraphTerm {
         };
 
         let loop_number = lmb.loop_edges.len();
-        let external_particles = self.graph.underlying.get_external_partcles();
+        let external_particles = self.graph.get_external_partcles();
         let mut loop_mom_id = 0;
 
         let limit_data: Result<Vec<_>> = momenta
@@ -230,7 +230,12 @@ impl CrossSectionGraphTerm {
                 Ok(LambdaPointEval {
                     lambda_point,
                     value: self
-                        .evaluate(&sample, settings, &Rotation::new(RotationMethod::Identity))
+                        .evaluate(
+                            &sample,
+                            model,
+                            settings,
+                            &Rotation::new(RotationMethod::Identity),
+                        )
                         .norm_squared()
                         .sqrt(),
                 })
@@ -604,11 +609,11 @@ impl IrLimit {
                         } => {
                             let momentum = if *is_soft {
                                 (colinear_direction * x + perpendicular_direction * &lambda)
-                                    * F::from_ff64(settings.kinematics.e_cm)
+                                    * F::from_f64(settings.kinematics.e_cm)
                                     * &lambda
                             } else {
                                 (colinear_direction * x + perpendicular_direction * &lambda)
-                                    * F::from_ff64(settings.kinematics.e_cm)
+                                    * F::from_f64(settings.kinematics.e_cm)
                             };
                             TaggedMomenta {
                                 momentum,
@@ -617,7 +622,7 @@ impl IrLimit {
                         }
                         MomentumBuilder::Soft { edge_id, direction } => {
                             let momentum =
-                                direction * &lambda * F::from_ff64(settings.kinematics.e_cm);
+                                direction * &lambda * F::from_f64(settings.kinematics.e_cm);
                             TaggedMomenta {
                                 momentum,
                                 tag: *edge_id,

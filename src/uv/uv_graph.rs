@@ -297,13 +297,3 @@ impl UltravioletGraph for Graph {
 pub trait UVE {
     fn mass_atom(&self) -> Atom;
 }
-
-impl UVE for Edge {
-    fn mass_atom(&self) -> Atom {
-        match &self.particle {
-            PossibleParticle::JustMass { expr, .. } => expr.clone(),
-            PossibleParticle::Particle(p) => p.mass.0.into(),
-            PossibleParticle::MassOverriddenParticle { mass, .. } => mass.clone(),
-        }
-    }
-}

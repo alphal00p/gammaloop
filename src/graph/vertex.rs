@@ -151,7 +151,12 @@ impl ParseVertex {
                     dod,
                     name,
                     vertex_rule: None,
-                    num: Some(num.strip_parse()?),
+                    num: Some(num.strip_parse().with_context(|| {
+                        format!(
+                            "Error parsing vertex num {num} of graph {}",
+                            parse_data.name
+                        )
+                    })?),
                 })
             } else if let Some(n) = v.get::<_, String>("int_id") {
                 let vertex_rule = Some(model.get_vertex_rule(n.unwrap()));

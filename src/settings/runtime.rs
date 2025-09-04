@@ -1,8 +1,6 @@
-use std::{fmt::Display, fs::File, path::Path};
+use std::fmt::Display;
 
 use bincode_trait_derive::{Decode, Encode};
-use color_eyre::{Result, Section};
-use eyre::Context;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
@@ -65,9 +63,9 @@ pub struct GeneralSettings {
     #[serde(skip_serializing_if = "is_false")]
     pub cache_polarizations: bool,
     #[serde(skip_serializing_if = "is_float::<1000>")]
-    pub m_uv: F<f64>,
+    pub m_uv: f64,
     #[serde(skip_serializing_if = "is_float::<1000_000>")]
-    pub mu_r_sq: F<f64>,
+    pub mu_r_sq: f64,
 }
 
 impl Default for GeneralSettings {
@@ -77,8 +75,8 @@ impl Default for GeneralSettings {
             load_compiled_cff: false,
             cache_polarizations: false,
             orientation_pat: OrientationPattern::default(),
-            m_uv: F(1000.0),
-            mu_r_sq: F(1000.0 * 1000.0),
+            m_uv: 1000.0,
+            mu_r_sq: 1000.0 * 1000.0,
         }
     }
 }
@@ -120,15 +118,15 @@ pub struct IntegratorSettings {
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub integrated_phase: IntegratedPhase,
     #[serde(skip_serializing_if = "is_float::<1>")]
-    pub discrete_dim_learning_rate: F<f64>,
+    pub discrete_dim_learning_rate: f64,
     #[serde(skip_serializing_if = "is_float::<1>")]
-    pub continuous_dim_learning_rate: F<f64>,
+    pub continuous_dim_learning_rate: f64,
     #[serde(skip_serializing_if = "is_false")]
     pub train_on_avg: bool,
     #[serde(skip_serializing_if = "is_true")]
     pub show_max_wgt_info: bool,
     #[serde(skip_serializing_if = "is_float::<1000>")]
-    pub max_prob_ratio: F<f64>,
+    pub max_prob_ratio: f64,
     #[serde(skip_serializing_if = "is_u64::<69>")]
     pub seed: u64,
 }
@@ -143,11 +141,11 @@ impl Default for IntegratorSettings {
             n_increase: 10000,
             n_max: 10000000000,
             integrated_phase: IntegratedPhase::default(),
-            discrete_dim_learning_rate: F(1.0),
-            continuous_dim_learning_rate: F(1.0),
+            discrete_dim_learning_rate: 1.0,
+            continuous_dim_learning_rate: 1.0,
             train_on_avg: false,
             show_max_wgt_info: true,
-            max_prob_ratio: F(1000.0),
+            max_prob_ratio: 1000.0,
             seed: 69,
         }
     }
@@ -162,7 +160,7 @@ pub struct ParameterizationSettings {
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub mapping: ParameterizationMapping,
     #[serde(skip_serializing_if = "is_float::<1>")]
-    pub b: F<f64>,
+    pub b: f64,
     #[serde(skip_serializing_if = "is_default_input_rescaling")]
     /// todo make proper type for this object
     pub input_rescaling: Vec<Vec<(f64, f64)>>,
@@ -174,7 +172,7 @@ pub struct ParameterizationSettings {
 impl Default for ParameterizationSettings {
     fn default() -> Self {
         Self {
-            b: F(1.0),
+            b: 1.0,
             mode: ParameterizationMode::default(),
             mapping: ParameterizationMapping::default(),
             input_rescaling: _default_input_rescaling(),
@@ -225,27 +223,27 @@ impl Default for StabilitySettings {
 #[serde(deny_unknown_fields)]
 pub struct StabilityLevelSetting {
     pub precision: Precision,
-    pub required_precision_for_re: F<f64>,
-    pub required_precision_for_im: F<f64>,
-    pub escalate_for_large_weight_threshold: F<f64>,
+    pub required_precision_for_re: f64,
+    pub required_precision_for_im: f64,
+    pub escalate_for_large_weight_threshold: f64,
 }
 
 impl StabilityLevelSetting {
     pub fn default_double() -> Self {
         Self {
             precision: Precision::Double,
-            required_precision_for_re: F(1e-10),
-            required_precision_for_im: F(1e-10),
-            escalate_for_large_weight_threshold: F(0.9),
+            required_precision_for_re: 1e-10,
+            required_precision_for_im: 1e-10,
+            escalate_for_large_weight_threshold: 0.9,
         }
     }
 
     pub fn default_quad() -> Self {
         Self {
             precision: Precision::Quad,
-            required_precision_for_re: F(1e-5),
-            required_precision_for_im: F(1e-5),
-            escalate_for_large_weight_threshold: F(-1.0),
+            required_precision_for_re: 1e-5,
+            required_precision_for_im: 1e-5,
+            escalate_for_large_weight_threshold: -1.0,
         }
     }
 }
@@ -514,7 +512,7 @@ impl SamplingSettings {
 #[serde(deny_unknown_fields, default)]
 pub struct MultiChannelingSettings {
     #[serde(skip_serializing_if = "is_float::<3>")]
-    pub alpha: F<f64>,
+    pub alpha: f64,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub parameterization_settings: ParameterizationSettings,
 }
@@ -522,7 +520,7 @@ pub struct MultiChannelingSettings {
 impl Default for MultiChannelingSettings {
     fn default() -> Self {
         Self {
-            alpha: F(3.0),
+            alpha: 3.0,
             parameterization_settings: ParameterizationSettings::default(),
         }
     }
@@ -600,19 +598,19 @@ pub struct LocalCounterTermSettings {
 #[serde(default, deny_unknown_fields)]
 pub struct UVLocalisationSettings {
     #[serde(skip_serializing_if = "is_float::<10>")]
-    pub sliver_width: F<f64>,
+    pub sliver_width: f64,
     #[serde(skip_serializing_if = "is_false")]
     pub dynamic_width: bool,
     #[serde(skip_serializing_if = "is_float::<1>")]
-    pub gaussian_width: F<f64>,
+    pub gaussian_width: f64,
 }
 
 impl Default for UVLocalisationSettings {
     fn default() -> Self {
         Self {
-            sliver_width: F(10.0),
+            sliver_width: 10.0,
             dynamic_width: false,
-            gaussian_width: F(1.0),
+            gaussian_width: 1.0,
         }
     }
 }
@@ -697,7 +695,7 @@ pub struct HFunctionSettings {
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub function: HFunction,
     #[serde(skip_serializing_if = "is_float::<1>")]
-    pub sigma: F<f64>,
+    pub sigma: f64,
     #[serde(skip_serializing_if = "is_true")]
     pub enabled_dampening: bool,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
@@ -707,7 +705,7 @@ pub struct HFunctionSettings {
 impl Default for HFunctionSettings {
     fn default() -> Self {
         Self {
-            sigma: F(1.0),
+            sigma: 1.0,
             function: HFunction::default(),
             enabled_dampening: true,
             power: None,

@@ -41,7 +41,7 @@ pub struct ProcessDefinition {
 }
 
 impl ProcessDefinition {
-    pub(crate) fn new_empty() -> Self {
+    pub fn new_empty() -> Self {
         Self {
             initial_pdgs: vec![],
             final_pdgs_lists: vec![],
@@ -52,7 +52,7 @@ impl ProcessDefinition {
         }
     }
 
-    pub(crate) fn folder_name(&self, model: &Model, id: usize) -> String {
+    pub fn folder_name(&self, model: &Model, id: usize) -> String {
         let mut filename = String::new();
         filename.push_str(&id.to_string());
         filename.push_str(&model.name);

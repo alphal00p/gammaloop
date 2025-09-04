@@ -58,11 +58,11 @@ impl Default for ProcessList {
 // Python Api
 impl ProcessList {
     /// Generates a new empty process list
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         ProcessList { processes: vec![] }
     }
 
-    pub(crate) fn warm_up(&mut self, model: &Model) -> Result<()> {
+    pub fn warm_up(&mut self, model: &Model) -> Result<()> {
         for process in &mut self.processes.iter_mut() {
             process.warm_up(model)?;
         }
@@ -70,7 +70,7 @@ impl ProcessList {
         Ok(())
     }
 
-    pub(crate) fn load(path: impl AsRef<Path>, context: GammaLoopContextContainer) -> Result<Self> {
+    pub fn load(path: impl AsRef<Path>, context: GammaLoopContextContainer) -> Result<Self> {
         let mut process_list = Self::new();
 
         let path = path.as_ref().join("processes");
@@ -294,7 +294,7 @@ mod tests {
                     },
                     tropical_subgraph_table_settings: TropicalSubgraphTableSettings {
                         panic_on_fail: false,
-                        target_omega: F(1.0),
+                        target_omega: 1.0,
                         ..Default::default()
                     },
                     ..Default::default()

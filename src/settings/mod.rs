@@ -1,14 +1,10 @@
-use std::{fs::File, io::Read, path::Path};
-
 use bincode_trait_derive::{Decode, Encode};
-use color_eyre::{Result, Section};
-use eyre::{eyre, Context};
 use global::GenerationSettings;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    cli::tracing::LogLevel,
+    // cli::tracing::LogLevel,
     integrands::IntegrandSettings,
     observables::{ObservableSettings, PhaseSpaceSelectorSettings},
     utils::serde_utils::IsDefault,
@@ -21,7 +17,7 @@ use crate::{
 #[serde(default, deny_unknown_fields)]
 pub struct GlobalSettings {
     #[serde(skip_serializing_if = "IsDefault::is_default")]
-    pub debug_level: LogLevel,
+    pub debug_level: String,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub generation: GenerationSettings,
 }
@@ -229,7 +225,7 @@ mod tests {
         generic_test_settings::<KinematicsSettings>();
 
         let kinematics_settings = KinematicsSettings {
-            e_cm: F(100.0),
+            e_cm: 100.0,
             externals: Externals::Constant {
                 momenta: vec![
                     ExternalMomenta::Independent([F(1.), F(2.), F(3.), F(4.)]),
@@ -242,33 +238,5 @@ mod tests {
         let toml = toml::to_string_pretty(&kinematics_settings).unwrap();
         let deserialized: KinematicsSettings = toml::from_str(&toml).unwrap();
         assert_eq!(kinematics_settings, deserialized);
-    }
-
-    #[test]
-    fn test_run_history() {
-        use crate::cli::state::RunHistory;
-        //SHOWDEFAULTS.store(true, std::sync::atomic::Ordering::Relaxed);
-        let mut run_history: RunHistory = Default::default();
-        let kinematics_settings = KinematicsSettings {
-            e_cm: F(100.0),
-            externals: Externals::Constant {
-                momenta: vec![
-                    ExternalMomenta::Independent([F(1.), F(2.), F(3.), F(4.)]),
-                    ExternalMomenta::Dependent(Dep::Dep),
-                ],
-                helicities: vec![SignOrZero::Plus, SignOrZero::Minus],
-            },
-        };
-
-        run_history.default_runtime_settings.kinematics = kinematics_settings;
-        let toml = toml::to_string_pretty(&run_history).unwrap();
-        println!("{}", toml);
-        let deserialized: RunHistory = toml::from_str(&toml).unwrap();
-        assert_eq!(run_history, deserialized);
-        SHOWDEFAULTS.store(false, std::sync::atomic::Ordering::Relaxed);
-
-        run_history.to_file("test_path.toml").unwrap();
-        let deserialized_from_file = RunHistory::from_file("test_path.toml", " ").unwrap();
-        assert_eq!(run_history, deserialized_from_file);
     }
 }

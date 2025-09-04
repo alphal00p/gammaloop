@@ -1,5 +1,6 @@
 #![allow(unused)]
 use crate::integrands::IntegrandSettings;
+use crate::model::Model;
 use crate::utils::{self, ApproxEq, F};
 use crate::{
     h_function_test::HFunctionTestSettings, integrand_factory, integrands::UnitVolumeSettings,
@@ -36,6 +37,7 @@ fn validate_error(error: F<f64>, target_diff: F<f64>) -> bool {
 
 fn compare_integration(
     settings: &mut RuntimeSettings,
+    model: &Model,
     phase: IntegratedPhase,
     target: Complex<F<f64>>,
     tolerance: Option<F<f64>>,
@@ -58,7 +60,14 @@ fn compare_integration(
     match phase {
         IntegratedPhase::Both => {
             settings.integrator.integrated_phase = IntegratedPhase::Real;
-            let res = havana_integrate(settings, user_data_generator, Some(target), None, None);
+            let res = havana_integrate(
+                settings,
+                model,
+                user_data_generator,
+                Some(target),
+                None,
+                None,
+            );
             if !F::approx_eq(&res.result.re, &target.re, &applied_tolerance)
                 || !validate_error(res.error.re, target.re - res.result.re)
             {
@@ -75,7 +84,14 @@ fn compare_integration(
                 return false;
             }
             settings.integrator.integrated_phase = IntegratedPhase::Imag;
-            let res = havana_integrate(settings, user_data_generator, Some(target), None, None);
+            let res = havana_integrate(
+                settings,
+                model,
+                user_data_generator,
+                Some(target),
+                None,
+                None,
+            );
             if !F::approx_eq(&res.result.im, &target.im, &applied_tolerance)
                 || !validate_error(res.error.im, target.re - res.result.im)
             {
@@ -94,7 +110,14 @@ fn compare_integration(
         }
         IntegratedPhase::Real => {
             settings.integrator.integrated_phase = IntegratedPhase::Real;
-            let res = havana_integrate(settings, user_data_generator, Some(target), None, None);
+            let res = havana_integrate(
+                settings,
+                model,
+                user_data_generator,
+                Some(target),
+                None,
+                None,
+            );
             if !F::approx_eq(&res.result.re, &target.re, &applied_tolerance)
                 || !validate_error(res.error.re, target.im - res.result.re)
             {
@@ -113,7 +136,14 @@ fn compare_integration(
         }
         IntegratedPhase::Imag => {
             settings.integrator.integrated_phase = IntegratedPhase::Imag;
-            let res = havana_integrate(settings, user_data_generator, Some(target), None, None);
+            let res = havana_integrate(
+                settings,
+                model,
+                user_data_generator,
+                Some(target),
+                None,
+                None,
+            );
             if !F::approx_eq(&res.result.im, &target.im, &applied_tolerance)
                 || !validate_error(res.error.im, target.im - res.result.im)
             {
@@ -136,6 +166,7 @@ fn compare_integration(
 
 fn compare_inspect(
     settings: &mut RuntimeSettings,
+    model: &Model,
     pt: Vec<f64>,
     term: &[usize],
     is_momentum_space: bool,
@@ -147,6 +178,7 @@ fn compare_inspect(
     let res = inspect(
         settings,
         &mut integrand,
+        model,
         pt,
         term,
         false,
@@ -204,9 +236,11 @@ mod tests_integral {
     use symbolica::domains::float::ConstructibleFloat;
 
     use crate::{
-        settings::runtime::ParameterizationMode,
-        settings::runtime::ParameterizationSettings,
-        settings::runtime::{HFunction, HFunctionSettings, SamplingSettings},
+        model::Model,
+        settings::runtime::{
+            HFunction, HFunctionSettings, ParameterizationMode, ParameterizationSettings,
+            SamplingSettings,
+        },
     };
 
     use super::*;
@@ -219,7 +253,7 @@ mod tests_integral {
         settings.integrator.n_max = 10 * BASE_N_START_SAMPLE;
         settings.integrator.n_increase = 0;
         settings.integrator.n_increase = 0;
-        settings.kinematics.e_cm = F(1.);
+        settings.kinematics.e_cm = 1.;
 
         let sampling_settings = SamplingSettings::Default(ParameterizationSettings {
             mode: ParameterizationMode::HyperSphericalFlat,
@@ -233,6 +267,7 @@ mod tests_integral {
         settings.hard_coded_integrand = Some(IntegrandSettings::UnitVolume(itg.clone()));
         assert!(compare_integration(
             &mut settings,
+            &Model::default(),
             IntegratedPhase::Real,
             SymComplex::new_one().into(),
             None
@@ -247,7 +282,7 @@ mod tests_integral {
         settings.integrator.n_max = 10 * BASE_N_START_SAMPLE;
         settings.integrator.n_increase = 0;
         settings.integrator.n_increase = 0;
-        settings.kinematics.e_cm = F(1.);
+        settings.kinematics.e_cm = 1.;
 
         itg.n_3d_momenta = 3;
 
@@ -261,6 +296,7 @@ mod tests_integral {
         settings.hard_coded_integrand = Some(IntegrandSettings::UnitVolume(itg.clone()));
         assert!(compare_integration(
             &mut settings,
+            &Model::default(),
             IntegratedPhase::Real,
             SymComplex::new_one().into(),
             None
@@ -275,7 +311,7 @@ mod tests_integral {
         settings.integrator.n_max = 10 * BASE_N_START_SAMPLE;
         settings.integrator.n_increase = 0;
         settings.integrator.n_increase = 0;
-        settings.kinematics.e_cm = F(1.);
+        settings.kinematics.e_cm = 1.;
 
         itg.n_3d_momenta = 3;
 
@@ -287,6 +323,7 @@ mod tests_integral {
         settings.hard_coded_integrand = Some(IntegrandSettings::UnitVolume(itg.clone()));
         assert!(compare_integration(
             &mut settings,
+            &Model::default(),
             IntegratedPhase::Real,
             SymComplex::new_one().into(),
             None
@@ -301,17 +338,18 @@ mod tests_integral {
         settings.integrator.n_max = 20 * BASE_N_START_SAMPLE;
         settings.integrator.n_increase = 0;
         settings.integrator.n_increase = 0;
-        settings.kinematics.e_cm = F(1.);
+        settings.kinematics.e_cm = 1.;
 
         itg.h_function = HFunctionSettings {
             function: HFunction::PolyLeftRightExponential,
-            sigma: F(0.01),
+            sigma: 0.01,
             power: Some(12),
             enabled_dampening: true,
         };
         settings.hard_coded_integrand = Some(IntegrandSettings::HFunctionTest(itg.clone()));
         assert!(compare_integration(
             &mut settings,
+            &Model::default(),
             IntegratedPhase::Real,
             SymComplex::new_one().into(),
             None
@@ -340,7 +378,7 @@ mod tests_inspect {
         let mut settings = load_default_settings();
         let mut itg = get_unit_volume_integrand();
         itg.n_3d_momenta = 6;
-        settings.kinematics.e_cm = F(1.);
+        settings.kinematics.e_cm = 1.;
         let sampling_settings = SamplingSettings::Default(ParameterizationSettings {
             mode: ParameterizationMode::Spherical,
             ..Default::default()
@@ -350,6 +388,7 @@ mod tests_inspect {
         settings.hard_coded_integrand = Some(IntegrandSettings::UnitVolume(itg.clone()));
         assert!(compare_inspect(
             &mut settings,
+            &Model::default(),
             vec![0.1, 0.2, 0.3, 0.4, 0.5, 0.6],
             &[0],
             true,
@@ -357,7 +396,7 @@ mod tests_inspect {
         ));
 
         itg.n_3d_momenta = 9;
-        settings.kinematics.e_cm = F(100.);
+        settings.kinematics.e_cm = 100.;
 
         let sampling_settings = SamplingSettings::Default(ParameterizationSettings {
             mode: ParameterizationMode::HyperSpherical,
@@ -368,6 +407,7 @@ mod tests_inspect {
         settings.hard_coded_integrand = Some(IntegrandSettings::UnitVolume(itg.clone()));
         assert!(compare_inspect(
             &mut settings,
+            &Model::default(),
             vec![0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
             &[0],
             true,
@@ -379,17 +419,18 @@ mod tests_inspect {
     fn inspect_h_function_test() {
         let mut settings = load_default_settings();
         let mut itg = get_h_function_test_integrand();
-        settings.kinematics.e_cm = F(1.);
+        settings.kinematics.e_cm = 1.;
 
         itg.h_function = HFunctionSettings {
             function: HFunction::PolyLeftRightExponential,
-            sigma: F(0.01),
+            sigma: 0.01,
             power: Some(12),
             enabled_dampening: true,
         };
         settings.hard_coded_integrand = Some(IntegrandSettings::HFunctionTest(itg.clone()));
         assert!(compare_inspect(
             &mut settings,
+            &Model::default(),
             vec![0.2188450233532342,],
             &[0],
             false,
@@ -398,13 +439,14 @@ mod tests_inspect {
 
         itg.h_function = HFunctionSettings {
             function: HFunction::PolyLeftRightExponential,
-            sigma: F(0.3),
+            sigma: 0.3,
             power: Some(9),
             enabled_dampening: false,
         };
         settings.hard_coded_integrand = Some(IntegrandSettings::HFunctionTest(itg.clone()));
         assert!(compare_inspect(
             &mut settings,
+            &Model::default(),
             vec![0.2188450233532342,],
             &[0],
             false,
