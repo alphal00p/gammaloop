@@ -430,8 +430,6 @@ impl FeynmanGraph for Graph {
                     im: F::from_f64(0.0),
                 });
 
-            println!("Mass::{}:{}", edge.mass_atom(), c);
-
             if c.im.is_zero() {
                 c.re
             } else {
