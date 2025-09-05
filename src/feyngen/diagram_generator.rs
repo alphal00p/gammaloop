@@ -342,7 +342,9 @@ impl FeynGen {
                 couplings: vec![],
                 lorentz_structures: vec![],
                 particles: vec![],
-                color_structures: ColorStructure::new(vec![]),
+                color_structures: ColorStructure {
+                    color_structure: vec![],
+                },
             }));
             let colors = if node_edges.len() == 1 {
                 &vec![dummy_external_vertex_rule]

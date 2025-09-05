@@ -24,7 +24,6 @@ use crate::{
     graph::Graph,
     model::Model,
     settings::global::GenerationSettings,
-    settings::RuntimeSettings,
 };
 
 use super::{Amplitude, CrossSection};
@@ -179,7 +178,7 @@ impl Process {
         match &mut self.collection {
             ProcessCollection::Amplitudes(a) => {
                 let p = path.as_ref().join("amplitudes");
-                fs::create_dir_all(&p);
+                fs::create_dir_all(&p)?;
                 let p = p.join(self.definition.folder_name(model, id));
 
                 let r = fs::create_dir_all(&p).with_context(|| {
@@ -204,7 +203,9 @@ impl Process {
                     amp.save(&p, override_existing)?;
                 }
             }
-            ProcessCollection::CrossSections(a) => {}
+            ProcessCollection::CrossSections(_a) => {
+                todo!("Implement save for cross sections");
+            }
         }
 
         Ok(())
@@ -238,7 +239,9 @@ impl Process {
                     amp.compile(&p, override_existing, settings)?;
                 }
             }
-            ProcessCollection::CrossSections(a) => {}
+            ProcessCollection::CrossSections(_a) => {
+                todo!("Implement compile for cross sections");
+            }
         }
 
         Ok(())
@@ -282,7 +285,9 @@ impl Process {
                     amp.write_dot(&mut dot)?;
                 }
             }
-            ProcessCollection::CrossSections(a) => {}
+            ProcessCollection::CrossSections(_a) => {
+                todo!("Implement export_dot for cross sections");
+            }
         }
         Ok(())
     }

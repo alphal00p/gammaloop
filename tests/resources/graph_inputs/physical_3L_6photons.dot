@@ -1,0 +1,38 @@
+digraph physical_3L_6photons_0 {
+overall_factor=1;
+multiplicity_factor=1;
+v1;
+v2;
+v3;
+v4;
+v5;
+v6;
+v7 [int_id="V_134"];
+v8 [int_id="V_134"];
+v9 [int_id="V_134"];
+v10 [int_id="V_134"];
+v11 [int_id="V_134"];
+v12 [int_id="V_134"];
+v13 [int_id="V_137"];
+v14 [int_id="V_137"];
+v15 [int_id="V_137"];
+v16 [int_id="V_137"];
+v1 -> v7 [pdg=22, name=p1, mom=p1];
+v2 -> v8 [pdg=22, name=p2, mom=p2];
+v9 -> v3 [pdg=22, name=p3, mom=p3];
+v10 -> v4 [pdg=22, name=p4, mom=p4];
+v11 -> v5 [pdg=22, name=p5, mom=p5];
+v12 -> v6 [pdg=22, name=p6, mom=p6];
+v7 -> v8 [pdg=6, name=q1];
+v13 -> v10 [pdg=6, name=q7, lmb_index=0];
+v13 -> v14 [pdg=21, name=q9];
+v14 -> v7 [pdg=6, name=q8];
+v8 -> v15 [pdg=6, name=q2];
+v15 -> v9 [pdg=6, name=q10, lmb_index=1];
+v15 -> v16 [pdg=21, name=q12, lmb_index=2];
+v16 -> v12 [pdg=6, name=q11];
+v9 -> v13 [pdg=6, name=q3];
+v10 -> v11 [pdg=6, name=q4];
+v11 -> v16 [pdg=6, name=q5];
+v12 -> v14 [pdg=6, name=q6];
+}

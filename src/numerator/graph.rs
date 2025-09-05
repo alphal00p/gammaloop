@@ -13,7 +13,7 @@ use spenso::{
 use symbolica::atom::{Atom, AtomOrView, FunctionBuilder, Symbol};
 
 use crate::{
-    graph::{edge::ParseEdge, parse::ParseGraph, vertex::ParseVertex, Edge, Graph, NumHedgeData},
+    graph::{edge::ParseEdge, Edge, Graph, NumHedgeData},
     utils::GS,
 };
 
@@ -269,13 +269,13 @@ mod test {
 
     // use env_logger::WriteStyle;
     use idenso::color::ColorSimplifier;
-    use log::LevelFilter;
+
     use symbolica::atom::{Atom, AtomCore};
 
     use crate::{
         dot,
         gammaloop_integrand::param_builder::ParamBuilderGraph,
-        graph::{parse::IntoGraph, FeynmanGraph, Graph},
+        graph::{parse::IntoGraph, Graph},
         numerator::graph::GeneratePolarizations,
         processes::{Amplitude, AmplitudeGraph},
         settings::{
@@ -324,12 +324,13 @@ mod test {
 
         let proc_set = GenerationSettings::default();
 
-        amp.preprocess(&model, &proc_set);
-        let integrand = amp.build_integrand(
+        amp.preprocess(&model, &proc_set).unwrap();
+        amp.build_integrand(
             &model,
             &GlobalSettings::default(),
             (&RuntimeSettings::default()).into(),
-        );
+        )
+        .unwrap();
 
         // println!("{}", a.factor());
 
@@ -402,12 +403,13 @@ mod test {
         // debug!("Building Evaluator");
         // amp.graphs[0].build_evaluator(&model);
 
-        amp.preprocess(&model, &proc_set);
-        let integrand = amp.build_integrand(
+        amp.preprocess(&model, &proc_set).unwrap();
+        amp.build_integrand(
             &model,
             &GlobalSettings::default(),
             (&RuntimeSettings::default()).into(),
-        );
+        )
+        .unwrap();
 
         // println!("{}", a.factor());
 
@@ -458,11 +460,12 @@ mod test {
 
         amp.preprocess(&model, &proc_set).unwrap();
 
-        let integrand = amp.build_integrand(
+        amp.build_integrand(
             &model,
             &GlobalSettings::default(),
             (&RuntimeSettings::default()).into(),
-        );
+        )
+        .unwrap();
 
         // integrand.evaluate_sample(sample, wgt, iter, use_f128, max_eval);
     }
@@ -551,7 +554,7 @@ mod test {
 
         for g in &mut graphs {
             let mut out = String::new();
-            g.dot_serialize_fmt(&mut out);
+            g.dot_serialize_fmt(&mut out).unwrap();
             println!("{}", out);
 
             assert!(g.iter_nodes().all(|(_, _, v)| {
@@ -576,7 +579,7 @@ mod test {
 
         for g in &mut graphs {
             let mut out = String::new();
-            g.dot_serialize_fmt(&mut out);
+            g.dot_serialize_fmt(&mut out).unwrap();
             println!("{}", out);
         }
     }
@@ -597,8 +600,10 @@ mod test {
 
         // let model = crate::utils::test_utils::load_generic_model("sm");
 
-        graph.generate_cff();
-        graph.build_parametric_integrand(&GenerationSettings::default());
+        graph.generate_cff().unwrap();
+        graph
+            .build_parametric_integrand(&GenerationSettings::default())
+            .unwrap();
 
         println!("{}", graph.derived_data.all_mighty_integrand);
     }
@@ -692,14 +697,14 @@ mod test {
             } else {
                 a = Some(new_a);
             }
-            g.dot_serialize_fmt(&mut out);
+            g.dot_serialize_fmt(&mut out).unwrap();
             println!("{}", out);
         }
 
         let mut a = Amplitude::new("test");
 
         for g in graphs {
-            a.add_graph(g);
+            a.add_graph(g).unwrap();
         }
         let model = crate::utils::test_utils::load_generic_model("sm");
 
@@ -709,7 +714,7 @@ mod test {
 
     #[test]
     fn dod_override() {
-        let gr:Vec<Graph> = dot!(digraph g{
+        let _gr:Vec<Graph> = dot!(digraph g{
             node [num=1]
             edge [num=1]
             a->b[dod=-100]

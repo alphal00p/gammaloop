@@ -172,8 +172,7 @@ impl ProcessList {
 
     pub fn export_dot(&self, settings: &ExportSettings, model: &Model) -> Result<()> {
         let path = settings.root_folder.join("processes");
-
-        let r = fs::create_dir_all(&path);
+        fs::create_dir_all(&path)?;
         for (i, p) in self.processes.iter().enumerate() {
             p.export_dot(&path, model, i)?;
         }
@@ -182,11 +181,6 @@ impl ProcessList {
 
     pub fn add_process(&mut self, process: Process) {
         self.processes.push(process);
-    }
-
-    /// imports a process list from a folder
-    pub(crate) fn import(_settings: ExportSettings) -> Result<Self> {
-        Ok(Self::new())
     }
 
     ///preprocesses the process list according to the settings
@@ -222,22 +216,18 @@ mod tests {
     use std::fs::OpenOptions;
 
     use linnet::half_edge::involution::EdgeIndex;
-    use spenso::network::library::TensorLibraryData;
-    use symbolica::{atom::Atom, state::State};
+
+    use symbolica::state::State;
 
     use crate::{
         dot,
         graph::{parse::IntoGraph, Graph, LoopMomentumBasis},
-        numerator::{
-            EvaluatorOptions, GammaAlgebraMode, GlobalPrefactor, NumeratorEvaluatorOptions,
-            NumeratorParseMode, NumeratorSettings, UnInit,
-        },
         settings::global::{
             CompilationOptimizationLevel, GammaloopCompileOptions, GenerationSettings,
             TropicalSubgraphTableSettings,
         },
         signature::LoopExtSignature,
-        utils::{test_utils::load_generic_model, F},
+        utils::test_utils::load_generic_model,
         GammaLoopContextContainer,
     };
 
@@ -263,7 +253,7 @@ mod tests {
             }
         )
         .unwrap();
-        let mut loop_momentum_basis = LoopMomentumBasis {
+        let loop_momentum_basis = LoopMomentumBasis {
             tree: None,
             loop_edges: vec![EdgeIndex::from(0), EdgeIndex::from(4)].into(),
             ext_edges: vec![EdgeIndex::from(5), EdgeIndex::from(6)].into(),

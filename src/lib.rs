@@ -9,7 +9,6 @@
 //
 
 pub mod cff;
-pub mod debug_info;
 pub mod evaluation_result;
 pub mod feyngen;
 // pub mod gammaloop_integrand;

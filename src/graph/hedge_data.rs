@@ -44,7 +44,7 @@ pub struct NumIndices {
 
 impl NumIndices {
     pub(crate) fn parse<'a>(graph: &'a ParseGraph) -> impl FnMut(Hedge, &'a ParseHedge) -> Self {
-        |h, _| {
+        |h, a| {
             let eid = graph[&h];
             let flow = graph.flow(h);
             let orientation = graph.orientation(h);
@@ -112,9 +112,9 @@ pub struct NumHedgeData {
 }
 
 impl NumHedgeData {
-    pub(crate) fn edge_slots<'a>(&'a self) -> impl Iterator<Item = LibrarySlot<Aind>> + 'a {
-        self.edge_color_slots().chain(self.edge_spin_slots())
-    }
+    // pub(crate) fn edge_slots<'a>(&'a self) -> impl Iterator<Item = LibrarySlot<Aind>> + 'a {
+    //     self.edge_color_slots().chain(self.edge_spin_slots())
+    // }
 
     pub(crate) fn edge_color_slots<'a>(&'a self) -> impl Iterator<Item = LibrarySlot<Aind>> + 'a {
         self.num_indices
@@ -130,23 +130,23 @@ impl NumHedgeData {
             .external_structure_iter()
     }
 
-    pub(crate) fn vertex_slots<'a>(&'a self) -> impl Iterator<Item = LibrarySlot<Aind>> + 'a {
-        self.vertex_color_slots().chain(self.vertex_spin_slots())
-    }
+    // pub(crate) fn vertex_slots<'a>(&'a self) -> impl Iterator<Item = LibrarySlot<Aind>> + 'a {
+    //     self.vertex_color_slots().chain(self.vertex_spin_slots())
+    // }
 
-    pub(crate) fn vertex_color_slots<'a>(&'a self) -> impl Iterator<Item = LibrarySlot<Aind>> + 'a {
-        self.num_indices
-            .color_indices
-            .vertex_indices
-            .external_structure_iter()
-    }
+    // pub(crate) fn vertex_color_slots<'a>(&'a self) -> impl Iterator<Item = LibrarySlot<Aind>> + 'a {
+    //     self.num_indices
+    //         .color_indices
+    //         .vertex_indices
+    //         .external_structure_iter()
+    // }
 
-    pub(crate) fn vertex_spin_slots<'a>(&'a self) -> impl Iterator<Item = LibrarySlot<Aind>> + 'a {
-        self.num_indices
-            .spin_indices
-            .edge_indices
-            .external_structure_iter()
-    }
+    // pub(crate) fn vertex_spin_slots<'a>(&'a self) -> impl Iterator<Item = LibrarySlot<Aind>> + 'a {
+    //     self.num_indices
+    //         .spin_indices
+    //         .edge_indices
+    //         .external_structure_iter()
+    // }
 
     pub(crate) fn polarization(&self, mut builder: FunctionBuilder) -> Atom {
         for s in self.edge_spin_slots() {

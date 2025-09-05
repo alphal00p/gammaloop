@@ -1,5 +1,4 @@
 use color_eyre::{config::HookBuilder, Result};
-use symbolica::activate_oem_license;
 
 use crate::{model::UFOSymbol, utils::GS};
 
@@ -26,7 +25,7 @@ pub fn test_initialise() -> Result<()> {
     use crate::utils::tracing::init_test_tracing;
 
     init_test_tracing();
-    initialise();
+    initialise()?;
 
     Ok(())
 }
@@ -35,7 +34,7 @@ pub fn bench_initialise() -> Result<()> {
     use crate::utils::tracing::init_bench_tracing;
 
     init_bench_tracing();
-    initialise();
+    initialise()?;
 
     Ok(())
 }

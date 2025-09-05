@@ -35,7 +35,7 @@ pub struct KinematicsSettings {
 }
 
 impl KinematicsSettings {
-    pub(crate) fn random(graph: &Graph, seed: u64) -> Self {
+    pub fn random(graph: &Graph, seed: u64) -> Self {
         Self {
             e_cm: 64.,
             externals: graph.random_externals(seed),
@@ -126,7 +126,7 @@ pub enum ExternalsValidationError {
 }
 
 impl Externals {
-    pub(crate) fn validate_helicities(
+    pub fn validate_helicities(
         &self,
         spins: &[(isize, bool)],
     ) -> Result<(), ExternalsValidationError> {

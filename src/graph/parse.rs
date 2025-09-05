@@ -284,7 +284,7 @@ impl DOD for AtomView<'_> {
 }
 
 impl Graph {
-    pub(crate) fn dot_serialize(&self) -> String {
+    pub fn dot_serialize(&self) -> String {
         let mut out = String::new();
         self.dot_serialize_fmt(&mut out).unwrap();
         out
@@ -298,7 +298,7 @@ impl Graph {
         g.write_io(writer)
     }
 
-    pub(crate) fn dot_serialize_fmt(
+    pub fn dot_serialize_fmt(
         &self,
         writer: &mut impl std::fmt::Write,
     ) -> Result<(), std::fmt::Error> {
@@ -548,7 +548,7 @@ impl Graph {
         // Ok(NumGraph { graph })
     }
 
-    pub(crate) fn from_dot(graph: DotGraph, model: &Model) -> Result<Self> {
+    pub fn from_dot(graph: DotGraph, model: &Model) -> Result<Self> {
         Self::from_parsed(ParseGraph::from_parsed(graph, model)?, model)
     }
     pub fn from_file<P>(p: P, model: &Model) -> Result<Vec<Self>>
@@ -575,7 +575,7 @@ impl Graph {
         Self::from_hedge_graph_set(hedge_graph_set, model)
     }
 
-    pub(crate) fn from_string<Str: AsRef<str>>(s: Str, model: &Model) -> Result<Vec<Self>> {
+    pub fn from_string<Str: AsRef<str>>(s: Str, model: &Model) -> Result<Vec<Self>> {
         let hedge_graph_set: GraphSet<
             DotEdgeData,
             DotVertexData,

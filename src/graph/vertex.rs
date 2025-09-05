@@ -65,12 +65,12 @@ pub struct ParseVertex {
 }
 
 impl ParseVertex {
-    pub(crate) fn with_num(mut self, num: Atom) -> Self {
+    pub fn with_num(mut self, num: Atom) -> Self {
         self.num = Some(num);
         self
     }
 
-    pub(crate) fn with_label(mut self, label: String) -> Self {
+    pub fn with_label(mut self, label: String) -> Self {
         self.name = Some(label);
         self
     }

@@ -22,10 +22,7 @@ use symbolica::{
 
 use crate::{
     cff::generation::ShiftRewrite,
-    gammaloop_integrand::{
-        param_builder::{ParamBuilderGraph, SplitPolarizations},
-        ParamBuilder,
-    },
+    gammaloop_integrand::param_builder::{ParamBuilderGraph, SplitPolarizations},
     model::{ArcParticle, Model},
     momentum::{PolDef, SignOrZero},
     momentum_sample::{ExternalFourMomenta, ExternalIndex, LoopMomenta},

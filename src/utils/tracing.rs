@@ -152,7 +152,7 @@ pub fn init_bench_tracing() -> reload::Handle<EnvFilter, Registry> {
         .clone()
 }
 
-use tracing::{event, Event, Level, Subscriber};
+use tracing::{event, Level};
 
 pub enum Target {
     Lib,
@@ -267,16 +267,4 @@ macro_rules! status_debug { ($($x:tt)*) => { $crate::status_event!(DEBUG, $($x)*
 use std::io::IsTerminal;
 pub fn stderr_is_tty() -> bool {
     std::io::stderr().is_terminal()
-}
-
-/// Collect the event's formatted "message" field.
-struct MessageVisitor {
-    message: Option<String>,
-}
-impl tracing::field::Visit for MessageVisitor {
-    fn record_debug(&mut self, f: &tracing::field::Field, v: &dyn std::fmt::Debug) {
-        if f.name() == "message" {
-            self.message = Some(format!("{v:?}"));
-        }
-    }
 }

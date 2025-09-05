@@ -1,5 +1,4 @@
 use dirs::home_dir;
-use schemars::schema_for;
 use serde::{de::DeserializeOwned, Serialize};
 use std::{
     env,

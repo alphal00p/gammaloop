@@ -1,10 +1,4 @@
-use std::{
-    borrow::Cow,
-    cell::RefCell,
-    mem::transmute,
-    path::Path,
-    sync::{Arc, RwLock},
-};
+use std::{borrow::Cow, mem::transmute, path::Path};
 
 use bincode_trait_derive::{Decode, Encode};
 use bitvec::{order::Lsb0, slice::IterOnes, vec::BitVec};
@@ -14,8 +8,8 @@ use symbolica::{
     atom::{Atom, AtomCore},
     domains::{float::Complex as SymComplex, rational::Rational},
     evaluate::{
-        CompileOptions, CompiledComplexEvaluator, CompiledNumber, EvaluatorLoader, ExportSettings,
-        ExpressionEvaluator, FunctionMap, InlineASM, OptimizationSettings,
+        CompileOptions, CompiledComplexEvaluator, ExportSettings, ExpressionEvaluator, FunctionMap,
+        OptimizationSettings,
     },
 };
 use typed_index_collections::TiVec;
@@ -24,7 +18,6 @@ use crate::{
     graph::Graph,
     momentum::Helicity,
     momentum_sample::MomentumSample,
-    status_info,
     utils::{f128, FloatLike, F},
     GammaLoopContext,
 };

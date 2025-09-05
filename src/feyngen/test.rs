@@ -92,7 +92,9 @@ fn cut_content() {
         couplings: vec![],
         lorentz_structures: vec![],
         particles: vec![],
-        color_structures: ColorStructure::new(vec![]),
+        color_structures: ColorStructure {
+            color_structure: vec![],
+        },
     }));
 
     let v0 = graph.add_node(bbH.clone());

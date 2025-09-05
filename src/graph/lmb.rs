@@ -1,4 +1,4 @@
-use std::{borrow::Borrow, fmt::Display};
+use std::fmt::Display;
 
 use bincode_trait_derive::{Decode, Encode};
 use bitvec::vec::BitVec;
@@ -10,7 +10,6 @@ use linnet::half_edge::{
     tree::SimpleTraversalTree,
     HedgeGraph, NoData,
 };
-use log::warn;
 use serde::{Deserialize, Serialize};
 use symbolica::{
     atom::{Atom, AtomCore, AtomOrView, FunctionBuilder, Symbol},
@@ -23,12 +22,11 @@ use tabled::{builder::Builder, settings::Style};
 use typed_index_collections::TiVec;
 
 use crate::{
-    graph,
-    momentum::{FourMomentum, SignOrZero, ThreeMomentum},
-    momentum_sample::{BareMomentumSample, ExternalIndex, ExternalThreeMomenta, LoopIndex},
+    momentum::SignOrZero,
+    momentum_sample::{ExternalIndex, LoopIndex},
     signature::{LoopExtSignature, SignatureLike},
     symbolica_ext::CallSymbol,
-    utils::{FloatLike, F, GS, W_},
+    utils::{GS, W_},
     GAMMALOOP_NAMESPACE,
 };
 
@@ -101,18 +99,18 @@ impl LoopMomentumBasis {
             })
             .collect();
     }
-    pub(crate) fn swap_external(&mut self, i: ExternalIndex, j: ExternalIndex) {
-        self.ext_edges.swap(i, j);
-        self.edge_signatures = self
-            .edge_signatures
-            .iter()
-            .map(|(eid, a)| {
-                let mut a = a.clone();
-                a.swap_external(i, j);
-                (eid, a)
-            })
-            .collect();
-    }
+    // pub(crate) fn swap_external(&mut self, i: ExternalIndex, j: ExternalIndex) {
+    //     self.ext_edges.swap(i, j);
+    //     self.edge_signatures = self
+    //         .edge_signatures
+    //         .iter()
+    //         .map(|(eid, a)| {
+    //             let mut a = a.clone();
+    //             a.swap_external(i, j);
+    //             (eid, a)
+    //         })
+    //         .collect();
+    // }
 }
 
 pub trait LMBext {
@@ -757,21 +755,21 @@ impl LMBext for Graph {
 }
 
 impl LoopMomentumBasis {
-    pub(crate) fn spatial_emr<T: FloatLike>(
-        &self,
-        sample: &BareMomentumSample<T>,
-    ) -> Vec<ThreeMomentum<F<T>>> {
-        let three_externals: ExternalThreeMomenta<F<T>> = sample
-            .external_moms
-            .iter()
-            .map(|m| m.spatial.clone())
-            .collect();
-        self.edge_signatures
-            .borrow()
-            .into_iter()
-            .map(|(_, sig)| sig.compute_momentum(&sample.loop_moms, &three_externals))
-            .collect()
-    }
+    // pub(crate) fn spatial_emr<T: FloatLike>(
+    //     &self,
+    //     sample: &BareMomentumSample<T>,
+    // ) -> Vec<ThreeMomentum<F<T>>> {
+    //     let three_externals: ExternalThreeMomenta<F<T>> = sample
+    //         .external_moms
+    //         .iter()
+    //         .map(|m| m.spatial.clone())
+    //         .collect();
+    //     self.edge_signatures
+    //         .borrow()
+    //         .into_iter()
+    //         .map(|(_, sig)| sig.compute_momentum(&sample.loop_moms, &three_externals))
+    //         .collect()
+    // }
 
     pub(crate) fn loop_atom<'a, I>(
         &self,
@@ -811,18 +809,18 @@ impl LoopMomentumBasis {
         })
     }
 
-    pub(crate) fn to_massless_emr<T: FloatLike>(
-        &self,
-        sample: &BareMomentumSample<T>,
-    ) -> Vec<FourMomentum<F<T>>> {
-        self.edge_signatures
-            .borrow()
-            .into_iter()
-            .map(|(_, sig)| {
-                sig.compute_four_momentum_from_three(&sample.loop_moms, &sample.external_moms)
-            })
-            .collect()
-    }
+    // pub(crate) fn to_massless_emr<T: FloatLike>(
+    //     &self,
+    //     sample: &BareMomentumSample<T>,
+    // ) -> Vec<FourMomentum<F<T>>> {
+    //     self.edge_signatures
+    //         .borrow()
+    //         .into_iter()
+    //         .map(|(_, sig)| {
+    //             sig.compute_four_momentum_from_three(&sample.loop_moms, &sample.external_moms)
+    //         })
+    //         .collect()
+    // }
 
     pub(crate) fn pattern(&self, edge_id: EdgeIndex) -> Pattern {
         let signature = self.edge_signatures[edge_id].clone();

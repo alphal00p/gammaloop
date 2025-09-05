@@ -6,17 +6,13 @@ use std::{
 
 use bincode::{Decode, Encode};
 use idenso::color::CS;
-use linnet::half_edge::{
-    involution::{EdgeIndex, HedgePair, Orientation},
-    HedgeGraph,
-};
+use linnet::half_edge::involution::{EdgeIndex, HedgePair, Orientation};
 use log::debug;
 use ringbuffer::{ConstGenericRingBuffer, RingBuffer};
 use spenso::{
     algebra::{algebraic_traits::RefOne, complex::Complex},
     iterators::IteratableTensor,
     network::ExecutionResult,
-    structure::concrete_index::ExpandedIndex,
     tensors::parametric::AtomViewOrConcrete,
 };
 use symbolica::{
@@ -29,7 +25,7 @@ use tabled::{settings::Style, Table};
 
 use crate::{
     cff::expression::GraphOrientation,
-    graph::{FeynmanGraph, Graph},
+    graph::Graph,
     model::Model,
     momentum::{Helicity, PolType},
     momentum_sample::{ExternalFourMomenta, MomentumSample},
@@ -571,7 +567,7 @@ impl UpdateAndGetParams<f64> for ParamBuilder<f64> {
 impl UpdateAndGetParams<f128> for ParamBuilder<f64> {
     fn update_emr_and_get_params(
         &mut self,
-        cache: bool,
+        _cache: bool,
         sample: &MomentumSample<f128>,
         graph: &Graph,
         helicities: &[Helicity],

@@ -1,12 +1,11 @@
-use crate::momentum::{FourMomentum, Helicity, Polarization};
+use crate::momentum::Helicity;
 use crate::numerator::aind::Aind;
 use crate::utils::serde_utils::SmartSerde;
-use crate::utils::symbolica_ext::StringSerializedAtom;
-use crate::utils::{self, FloatLike, F, W_};
+use crate::utils::{self, F};
 use crate::HasModel;
 use ahash::{AHashMap, HashSet, RandomState};
 use bincode::{Decode, Encode};
-use color_eyre::{Help, Report};
+use color_eyre::Report;
 use eyre::eyre;
 use itertools::Itertools;
 use linnet::half_edge::drawing::Decoration;
@@ -19,35 +18,31 @@ use spenso::structure::{IndexLess, PermutedStructure};
 use idenso::representations::{Bispinor, ColorAdjoint, ColorFundamental, ColorSextet};
 use serde::{Deserialize, Serialize};
 use smartstring::{LazyCompact, SmartString};
-use spenso::algebra::algebraic_traits::IsZero;
 use spenso::algebra::complex::Complex;
 use spenso::network::library::symbolic::ETS;
 use spenso::structure::representation::Euclidean;
 use spenso::structure::representation::{LibraryRep, Minkowski};
+use spenso::structure::OrderedStructure;
 use spenso::structure::{
     representation::BaseRepName, representation::Lorentz, representation::RepName,
-    representation::Representation, slot::DualSlotTo, slot::IsAbstractSlot, slot::Slot,
+    slot::IsAbstractSlot, slot::Slot,
 };
-use spenso::structure::{OrderedStructure, TensorStructure, ToSymbolic};
 use spenso::tensors::data::{DataTensor, DenseTensor, SetTensorData, SparseTensor};
-use spenso::tensors::parametric::{ExpandedCoefficent, ParamTensor};
+use spenso::tensors::parametric::ParamTensor;
 use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
 use std::fs;
-use symbolica::coefficient::CoefficientView;
 use symbolica::evaluate::FunctionMap;
 
 use color_eyre::Result;
 use std::collections::HashMap;
 use std::ops::Deref;
 use std::path::Path;
-use std::sync::{Arc, Mutex};
-use symbolica::atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol};
-use symbolica::id::{Pattern, Replacement};
+use std::sync::Arc;
+use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
 
 use crate::utils::GS;
 
-use symbolica::domains::float::NumericalFloatLike;
 use symbolica::printer::{AtomPrinter, PrintOptions};
 use symbolica::{function, parse, symbol};
 
@@ -272,22 +267,10 @@ impl SerializableVertexRule {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ColorStructure {
-    color_structure: Vec<Atom>,
+    pub color_structure: Vec<Atom>,
 }
 
 impl ColorStructure {
-    pub(crate) fn new(color_structure: Vec<Atom>) -> Self {
-        ColorStructure { color_structure }
-    }
-
-    pub(crate) fn len(&self) -> usize {
-        self.color_structure.len()
-    }
-
-    pub(crate) fn is_empty(&self) -> bool {
-        self.color_structure.is_empty()
-    }
-
     pub(crate) fn iter(&self) -> std::slice::Iter<Atom> {
         self.color_structure.iter()
     }
@@ -640,7 +623,7 @@ impl Particle {
     pub(crate) fn is_massless(&self) -> bool {
         !self.is_massive()
     }
-    pub(crate) fn decoration(&self) -> Decoration {
+    pub fn decoration(&self) -> Decoration {
         match self.spin {
             0 => Decoration::Dashed,
             1 => Decoration::None,
@@ -656,27 +639,27 @@ impl Particle {
         }
     }
 
-    pub(crate) fn is_fermion(&self) -> bool {
+    pub fn is_fermion(&self) -> bool {
         self.spin % 2 == 0
     }
 
-    pub(crate) fn is_vector(&self) -> bool {
+    pub fn is_vector(&self) -> bool {
         self.spin == 3
     }
 
-    pub(crate) fn is_scalar(&self) -> bool {
+    pub fn is_scalar(&self) -> bool {
         self.spin == 1
     }
 
-    pub(crate) fn is_spinor(&self) -> bool {
+    pub fn is_spinor(&self) -> bool {
         self.spin == 2
     }
 
-    pub(crate) fn is_ghost(&self) -> bool {
+    pub fn is_ghost(&self) -> bool {
         self.ghost_number != 0
     }
 
-    pub(crate) fn symbolic_mass(&self) -> Atom {
+    pub fn symbolic_mass(&self) -> Atom {
         self.mass.0.into()
     }
 }
@@ -839,7 +822,7 @@ impl From<EdgeSlots<Lorentz>> for OrderedStructure {
 }
 
 impl Particle {
-    pub(crate) fn is_antiparticle(&self) -> bool {
+    pub fn is_antiparticle(&self) -> bool {
         self.pdg_code < 0
     }
 
@@ -847,7 +830,7 @@ impl Particle {
         model.get_particle(&self.antiname)
     }
 
-    pub(crate) fn is_self_antiparticle(&self) -> bool {
+    pub fn is_self_antiparticle(&self) -> bool {
         self.name == self.antiname
     }
 
@@ -885,19 +868,6 @@ impl Particle {
             },
         };
         PermutedStructure::<IndexLess>::from_iter(reps).structure
-    }
-
-    fn color_slots(&self, shift: usize) -> (Vec<Slot<LibraryRep>>, usize) {
-        let rep: Representation<LibraryRep> = match self.color {
-            3 => ColorFundamental {}.new_rep(3).cast(),
-            -3 => ColorFundamental {}.dual().new_rep(3).cast(),
-            6 => ColorSextet {}.new_rep(6).cast(),
-            -6 => ColorSextet {}.dual().new_rep(6).cast(),
-            8 => ColorAdjoint {}.new_rep(8).cast(),
-            _ => return (vec![], shift),
-        };
-
-        (vec![rep.slot(shift)], shift + 1)
     }
 
     pub(crate) fn from_serializable_particle(particle: &SerializableParticle) -> Particle {
@@ -1073,12 +1043,6 @@ pub struct SerializableModel {
 impl SerializableModel {
     pub(crate) fn from_file(file_path: impl AsRef<Path>) -> Result<SerializableModel, Report> {
         SmartSerde::from_file(file_path, "model")
-    }
-
-    pub(crate) fn from_yaml_str(yaml_str: String) -> Result<SerializableModel, Report> {
-        serde_yaml::from_str(yaml_str.as_str())
-            .map_err(|e| eyre!(format!("Error parsing model yaml: {}", e)))
-            .suggestion("Is it a correct yaml file")
     }
 
     pub(crate) fn from_model(model: &Model) -> SerializableModel {
@@ -1291,11 +1255,11 @@ impl Model {
         params
     }
 
-    pub(crate) fn is_empty(&self) -> bool {
+    pub fn is_empty(&self) -> bool {
         self.name == "ModelNotLoaded" || self.particles.is_empty()
     }
 
-    pub(crate) fn export_coupling_replacement_rules(
+    pub fn export_coupling_replacement_rules(
         &self,
         export_root: &str,
         print_ops: PrintOptions,
@@ -1507,11 +1471,12 @@ impl Model {
     }
 
     pub fn from_file(file_path: impl AsRef<Path>) -> Result<Model, Report> {
-        SerializableModel::from_file(file_path).map(Model::from_serializable_model)
-    }
-
-    pub(crate) fn from_yaml_str(yaml_str: String) -> Result<Model, Report> {
-        SerializableModel::from_yaml_str(yaml_str).map(Model::from_serializable_model)
+        SerializableModel::from_file(file_path)
+            .map(Model::from_serializable_model)
+            .map(|mut a| {
+                a.recompute_dependents();
+                a
+            })
     }
 
     #[inline]
@@ -1581,7 +1546,7 @@ impl Model {
     }
 
     #[inline]
-    pub(crate) fn get_propagator<S: AsRef<str>>(&self, name: S) -> ArcPropagator {
+    pub fn get_propagator<S: AsRef<str>>(&self, name: S) -> ArcPropagator {
         if let Some(position) = self.propagator_name_to_position.get(name.as_ref()) {
             ArcPropagator(self.propagators[*position].clone())
         } else {
@@ -1594,7 +1559,7 @@ impl Model {
     }
 
     #[inline]
-    pub(crate) fn get_parameter<S: AsRef<str>>(&self, name: S) -> &Parameter {
+    pub fn get_parameter<S: AsRef<str>>(&self, name: S) -> &Parameter {
         if let Some(position) = self
             .parameters
             .get(&ParameterName(UFOSymbol::from(name.as_ref())))
@@ -1609,7 +1574,7 @@ impl Model {
         }
     }
     #[inline]
-    pub(crate) fn get_order<S: AsRef<str>>(&self, name: S) -> Arc<Order> {
+    pub fn get_order<S: AsRef<str>>(&self, name: S) -> Arc<Order> {
         if let Some(position) = self.order_name_to_position.get(name.as_ref()) {
             self.orders[*position].clone()
         } else {
@@ -1621,7 +1586,7 @@ impl Model {
         }
     }
     #[inline]
-    pub(crate) fn get_lorentz_structure<S: AsRef<str>>(&self, name: S) -> Arc<LorentzStructure> {
+    pub fn get_lorentz_structure<S: AsRef<str>>(&self, name: S) -> Arc<LorentzStructure> {
         if let Some(position) = self.lorentz_structure_name_to_position.get(name.as_ref()) {
             self.lorentz_structures[*position].clone()
         } else {
@@ -1633,7 +1598,7 @@ impl Model {
         }
     }
     #[inline]
-    pub(crate) fn get_coupling<S: AsRef<str>>(&self, name: S) -> &Coupling {
+    pub fn get_coupling<S: AsRef<str>>(&self, name: S) -> &Coupling {
         if let Some(coupling) = self
             .couplings
             .get(&CouplingName(UFOSymbol::from(name.as_ref())))
@@ -1648,7 +1613,7 @@ impl Model {
         }
     }
     #[inline]
-    pub(crate) fn get_vertex_rule<S: AsRef<str>>(&self, name: S) -> ArcVertexRule {
+    pub fn get_vertex_rule<S: AsRef<str>>(&self, name: S) -> ArcVertexRule {
         if let Some(position) = self.vertex_rule_name_to_position.get(name.as_ref()) {
             self.vertex_rules[*position].clone()
         } else {
@@ -1663,8 +1628,6 @@ impl Model {
 
 #[cfg(test)]
 mod tests {
-    use spenso::algebra::algebraic_traits::IsZero;
-    use symbolica::domains::float::Real;
 
     use crate::{
         model::{ArcPropagator, ArcVertexRule},

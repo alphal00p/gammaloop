@@ -22,18 +22,18 @@ use crate::{
     gammaloop_integrand::ParamBuilder,
     graph::{ExternalConnection, FeynmanGraph, Graph, GroupId, LmbIndex, LoopMomentumBasis},
     integrands::HasIntegrand,
-    model::{self, Model},
+    model::Model,
     momentum::{Rotation, RotationMethod, ThreeMomentum},
     momentum_sample::{LoopMomenta, MomentumSample},
-    processes::{CrossSectionCut, CrossSectionDerivedData, CutId},
+    processes::{CrossSectionCut, CutId},
     settings::{runtime::IntegratedCounterTermRange, RuntimeSettings},
     utils::{self, newton_solver::newton_iteration_and_derivative, FloatLike, F},
     DependentMomentaConstructor, GammaLoopContext, GammaLoopContextContainer,
 };
 
 use super::{
-    create_grid, evaluate_sample, GammaloopIntegrand, GenericEvaluator, GenericEvaluatorFloat,
-    GraphTerm, LmbMultiChannelingSetup,
+    create_grid, evaluate_sample, GammaloopIntegrand, GenericEvaluator, GraphTerm,
+    LmbMultiChannelingSetup,
 };
 
 const TOLERANCE: F<f64> = F(2.0);

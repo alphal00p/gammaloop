@@ -2,7 +2,6 @@ use std::ops::Index;
 
 use ahash::HashSet;
 use bincode_trait_derive::{Decode, Encode};
-use color_eyre::Result;
 use itertools::Itertools;
 use linnet::{
     half_edge::{
@@ -16,7 +15,6 @@ use log::debug;
 
 use rand::{rngs::SmallRng, Rng, SeedableRng};
 // use petgraph::Direction::Outgoing;
-use smartstring::{LazyCompact, SmartString};
 use symbolica::atom::Atom;
 use typed_index_collections::TiVec;
 
@@ -59,7 +57,7 @@ pub mod feynman_graph;
 pub use feynman_graph::FeynmanGraph;
 pub mod ext;
 impl Graph {
-    pub(crate) fn debug_dot(&self) -> String {
+    pub fn debug_dot(&self) -> String {
         DotGraph::from(self).debug_dot()
     }
 

@@ -100,33 +100,6 @@ impl From<Side> for usize {
 pub mod bitvec_ext;
 pub mod symbolica_ext;
 pub mod tracing;
-pub mod sorted_vectorize {
-    use serde::{Deserialize, Deserializer, Serialize, Serializer};
-    use std::iter::FromIterator;
-
-    pub(crate) fn serialize<'a, T, K, V, S>(target: T, ser: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-        T: IntoIterator<Item = (&'a K, &'a V)>,
-        K: Serialize + PartialOrd + 'a,
-        V: Serialize + PartialOrd + 'a,
-    {
-        let mut container: Vec<_> = target.into_iter().collect::<Vec<_>>();
-        container.sort_by(|(a, _), (b, _)| a.partial_cmp(b).unwrap());
-        serde::Serialize::serialize(&container, ser)
-    }
-
-    pub(crate) fn deserialize<'de, T, K, V, D>(des: D) -> Result<T, D::Error>
-    where
-        D: Deserializer<'de>,
-        T: FromIterator<(K, V)>,
-        K: Deserialize<'de>,
-        V: Deserialize<'de>,
-    {
-        let container: Vec<_> = serde::Deserialize::deserialize(des)?;
-        Ok(T::from_iter(container))
-    }
-}
 
 pub trait FloatConvertFrom<U> {
     fn convert_from(x: &U) -> Self;
@@ -505,7 +478,7 @@ impl<const N: u32> NumericalFloatLike for VarFloat<N> {
     }
 
     fn sample_unit<R: Rng + ?Sized>(&self, rng: &mut R) -> Self {
-        let f: f64 = rng.gen();
+        let f: f64 = rng.random();
         Float::with_val(N, f).into()
     }
 
@@ -1246,7 +1219,7 @@ impl<T: FloatLike> F<T> {
         }
     }
 
-    pub(crate) fn negate(&mut self) {
+    pub fn negate(&mut self) {
         self.0 = -self.0.clone();
     }
 
@@ -1305,23 +1278,23 @@ impl<T: FloatLike> F<T> {
         F(self.0.PI())
     }
     #[allow(non_snake_case)]
-    pub(crate) fn E(&self) -> Self {
+    pub fn E(&self) -> Self {
         F(self.0.E())
     }
     #[allow(non_snake_case)]
-    pub(crate) fn TAU(&self) -> Self {
+    pub fn TAU(&self) -> Self {
         F(self.0.TAU())
     }
     #[allow(non_snake_case)]
-    pub(crate) fn PIHALF(&self) -> Self {
+    pub fn PIHALF(&self) -> Self {
         F(self.0.PIHALF())
     }
     #[allow(non_snake_case)]
-    pub(crate) fn SQRT_2(&self) -> Self {
+    pub fn SQRT_2(&self) -> Self {
         F(self.0.SQRT_2())
     }
     #[allow(non_snake_case)]
-    pub(crate) fn SQRT_2_HALF(&self) -> Self {
+    pub fn SQRT_2_HALF(&self) -> Self {
         F(self.0.SQRT_2_HALF())
     }
     #[allow(non_snake_case)]
@@ -1361,7 +1334,7 @@ impl<T: FloatLike> F<T> {
     pub(crate) fn is_infinite(&self) -> bool {
         self.0.is_infinite()
     }
-    pub(crate) fn floor(&self) -> Self {
+    pub fn floor(&self) -> Self {
         F(self.0.floor())
     }
 }

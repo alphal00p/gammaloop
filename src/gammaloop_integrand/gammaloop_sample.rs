@@ -1,19 +1,16 @@
 use crate::graph::GroupId;
 use crate::momentum::{Rotation, ThreeMomentum};
 use crate::momentum_sample::MomentumSample;
-use crate::utils::{self, global_parameterize, FloatLike, F};
+use crate::utils::{global_parameterize, FloatLike, F};
 use crate::{
     settings::runtime::kinematic::KinematicsSettings, settings::runtime::DiscreteGraphSamplingType,
     settings::runtime::ParameterizationSettings, settings::runtime::SamplingSettings,
     DependentMomentaConstructor,
 };
 use color_eyre::Result;
-use eyre::eyre;
-use itertools::Itertools;
-use momtrop::vector::Vector;
 use symbolica::numerical_integration::Sample;
 
-use super::{ChannelIndex, GammaloopIntegrand, GraphTerm};
+use super::{ChannelIndex, GammaloopIntegrand};
 
 // discrete dimensions, continious dimensions
 fn unwrap_sample<T: FloatLike>(sample: &Sample<F<f64>>) -> (Vec<usize>, Vec<F<T>>) {
@@ -426,7 +423,7 @@ pub(crate) fn parameterize<T: FloatLike, I: GammaloopIntegrand>(
                         },
                     })
                 }
-                DiscreteGraphSamplingType::TropicalSampling(tropical_sampling_settings) => {
+                DiscreteGraphSamplingType::TropicalSampling(_tropical_sampling_settings) => {
                     todo!()
                     // let graph = integrand.get_master_graph(group_id);
                     // let externals = &settings

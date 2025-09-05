@@ -1,8 +1,4 @@
-use std::{fs::File, path::Path};
-
 use bincode_trait_derive::{Decode, Encode};
-use color_eyre::{Result, Section};
-use eyre::Context;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use symbolica::{
@@ -17,30 +13,11 @@ use crate::{
     utils::{
         serde_utils::{is_false, is_float, is_true, IsDefault},
         symbolica_ext::StringSerializedAtom,
-        F, GS, W_,
+        GS, W_,
     },
     uv::UVgenerationSettings,
     GammaLoopContext,
 };
-
-use super::GlobalSettings;
-
-impl GlobalSettings {
-    pub(crate) fn from_file(filename: impl AsRef<Path>) -> Result<Self> {
-        let filename = filename.as_ref();
-        let f = File::open(filename)
-            .wrap_err_with(|| {
-                format!(
-                    "Could not open generation settings file {}",
-                    filename.display()
-                )
-            })
-            .suggestion("Does the path exist?")?;
-        serde_yaml::from_reader(f)
-            .wrap_err("Could not parse generation  settings file")
-            .suggestion("Is it a correct yaml file")
-    }
-}
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
@@ -166,7 +143,7 @@ impl GammaloopCompileOptions {
     }
 
     #[allow(clippy::needless_update)]
-    pub(crate) fn to_symbolica_compile_options(&self) -> CompileOptions {
+    pub fn to_symbolica_compile_options(&self) -> CompileOptions {
         CompileOptions {
             optimization_level: self.optimization_level.into(),
             fast_math: self.fast_math,

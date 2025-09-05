@@ -12,7 +12,7 @@ repository = "https://github.com/alphal00p/gammaloop"
 build = "build.rs"
 
 [workspace]
-members = ["cli-api"]
+members = ["gammaloop-api"]
 
 [profile.dev-optim]
 inherits = "dev"
@@ -38,7 +38,7 @@ lto = "fat"
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
-gammaloop_api = { path = "./cli-api", package = "gammaloop-api" }
+gammaloop_api = { path = "./gammaloop-api", package = "gammaloop-api" }
 
 [profile.dev.package]
 insta.opt-level = 3

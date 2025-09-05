@@ -13,14 +13,14 @@ use spenso::{
     structure::{IndexLess, ScalarStructure},
 };
 use symbolica::{
-    atom::{Atom, AtomCore, AtomView, Symbol, VarView},
-    domains::float::{Complex as SymComplex, Float, NumericalFloatLike},
+    atom::{Atom, AtomCore, AtomView, Symbol},
+    domains::float::{Complex as SymComplex, Float},
     evaluate::{ExpressionEvaluator, OptimizationSettings},
 };
 
 use crate::{
-    gammaloop_integrand::{GenericEvaluator, ParamBuilder},
-    model::{ArcParticle, CouplingName, Model, ParameterName, UFOSymbol},
+    gammaloop_integrand::ParamBuilder,
+    model::{ArcParticle, Model, UFOSymbol},
     momentum::Helicity,
     momentum_sample::LoopIndex,
     numerator::aind::NewAind,
@@ -68,7 +68,7 @@ impl PossibleParticle {
     }
     // pub fn just_mass(mass:Atom,)
 
-    pub(crate) fn zero() -> Self {
+    pub fn zero() -> Self {
         ().into()
     }
 
@@ -201,7 +201,7 @@ impl UVE for Edge {
 }
 
 impl Edge {
-    pub(crate) fn random_helicity(&self, seed: u64) -> Helicity {
+    pub fn random_helicity(&self, seed: u64) -> Helicity {
         if let PossibleParticle::Particle(p) = &self.particle {
             p.random_helicity(seed)
         } else {
@@ -268,7 +268,7 @@ impl UVE for ParseEdge {
 }
 
 impl ParseEdge {
-    pub(crate) fn new(particle: impl Into<PossibleParticle>) -> Self {
+    pub fn new(particle: impl Into<PossibleParticle>) -> Self {
         ParseEdge {
             is_dummy: false,
             label: None,
@@ -279,27 +279,27 @@ impl ParseEdge {
         }
     }
 
-    pub(crate) fn is_dummy(mut self) -> Self {
+    pub fn is_dummy(mut self) -> Self {
         self.is_dummy = true;
         self
     }
 
-    pub(crate) fn with_label(mut self, label: String) -> Self {
+    pub fn with_label(mut self, label: String) -> Self {
         self.label = Some(label);
         self
     }
 
-    pub(crate) fn with_dod(mut self, dod: i32) -> Self {
+    pub fn with_dod(mut self, dod: i32) -> Self {
         self.dod = Some(dod);
         self
     }
 
-    pub(crate) fn with_lmb_id(mut self, lmb_id: LoopIndex) -> Self {
+    pub fn with_lmb_id(mut self, lmb_id: LoopIndex) -> Self {
         self.lmb_id = Some(lmb_id);
         self
     }
 
-    pub(crate) fn with_num(mut self, num: Atom) -> Self {
+    pub fn with_num(mut self, num: Atom) -> Self {
         self.num = Some(num);
         self
     }

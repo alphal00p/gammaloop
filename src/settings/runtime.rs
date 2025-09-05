@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
 
 use crate::{
-    momentum::{RotationMethod, ThreeMomentum},
+    momentum::RotationMethod,
     utils::{
         serde_utils::{
             is_false, is_float, is_true, is_u64, is_usize, IsDefault, _default_input_rescaling,
@@ -14,7 +14,7 @@ use crate::{
             is_default_input_rescaling, is_default_rotation_axis, is_default_shifts,
             is_default_stability_levels,
         },
-        FloatLike, F,
+        F,
     },
     GammaLoopContext,
 };
@@ -284,26 +284,6 @@ impl RotationSetting {
         }
     }
 
-    #[allow(clippy::type_complexity)]
-    pub(crate) fn rotation_function<'a, T: FloatLike + 'a>(
-        &'a self,
-    ) -> Box<dyn Fn(&'a ThreeMomentum<F<T>>) -> ThreeMomentum<F<T>> + 'a> {
-        match self {
-            Self::Pi2X {} => Box::new(ThreeMomentum::perform_pi2_rotation_x),
-            Self::Pi2Y {} => Box::new(ThreeMomentum::perform_pi2_rotation_y),
-            Self::Pi2Z {} => Box::new(ThreeMomentum::perform_pi2_rotation_z),
-            Self::None {} => Box::new(|vector: &ThreeMomentum<F<T>>| vector.clone()),
-            Self::EulerAngles { alpha, beta, gamma } => Box::new(|vector: &ThreeMomentum<F<T>>| {
-                let mut cloned_vector = vector.clone();
-                let alpha_t = F::<T>::from_f64(*alpha);
-                let beta_t = F::<T>::from_f64(*beta);
-                let gamma_t = F::<T>::from_f64(*gamma);
-                cloned_vector.rotate_mut(&alpha_t, &beta_t, &gamma_t);
-                cloned_vector
-            }),
-        }
-    }
-
     pub(crate) fn as_str(&self) -> String {
         match self {
             Self::Pi2X {} => "x".to_owned(),
@@ -546,7 +526,7 @@ impl Default for GammaloopTropicalSamplingSettings {
 }
 
 impl GammaloopTropicalSamplingSettings {
-    pub(crate) fn into_tropical_sampling_settings(&self) -> momtrop::TropicalSamplingSettings {
+    pub fn into_tropical_sampling_settings(&self) -> momtrop::TropicalSamplingSettings {
         momtrop::TropicalSamplingSettings {
             matrix_stability_test: self.matrix_stability_test,
             print_debug_info: false,

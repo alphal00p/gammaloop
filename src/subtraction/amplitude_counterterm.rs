@@ -1,15 +1,7 @@
-use core::panic;
-use std::{
-    cell::RefCell,
-    path::Path,
-    sync::{Arc, Mutex},
-};
+use std::{cell::RefCell, path::Path};
 
 use bincode_trait_derive::{Decode, Encode};
-use linnet::{
-    half_edge::involution::{EdgeVec, Orientation},
-    parser::global,
-};
+use linnet::half_edge::involution::{EdgeVec, Orientation};
 use spenso::algebra::complex::Complex;
 use symbolica::{
     atom::Atom,
@@ -21,19 +13,17 @@ use typed_index_collections::TiVec;
 
 use crate::{
     cff::{
-        esurface::{
-            self, Esurface, EsurfaceCollection, EsurfaceID, ExistingEsurfaceId, GroupEsurfaceId,
-        },
+        esurface::{Esurface, EsurfaceCollection, EsurfaceID, ExistingEsurfaceId, GroupEsurfaceId},
         expression::{AmplitudeOrientationID, GraphOrientation},
     },
     gammaloop_integrand::{
-        evaluators::SingleOrAllOrientations, param_builder, GenericEvaluator,
-        GenericEvaluatorFloat, ParamBuilder, ThresholdParams,
+        evaluators::SingleOrAllOrientations, GenericEvaluator, GenericEvaluatorFloat, ParamBuilder,
+        ThresholdParams,
     },
-    graph::{FeynmanGraph, Graph, GraphGroupPosition, LoopMomentumBasis},
+    graph::{FeynmanGraph, Graph, GraphGroupPosition},
     model::Model,
     momentum::Rotation,
-    momentum_sample::{self, LoopMomenta, MomentumSample},
+    momentum_sample::{LoopMomenta, MomentumSample},
     settings::{
         runtime::{
             IntegratedCounterTermRange, IntegratedCounterTermSettings, UVLocalisationSettings,
@@ -134,7 +124,7 @@ impl AmplitudeCountertermData {
     pub fn compile(
         &mut self,
         path: impl AsRef<Path>,
-        override_existing: bool,
+        _override_existing: bool,
         settings: &GlobalSettings,
     ) {
         for (i, e) in self.evaluators.iter_mut_enumerated() {

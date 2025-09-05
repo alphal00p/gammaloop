@@ -1,0 +1,16 @@
+digraph boxes_3L4P_0 {
+v1 -> v5 [pdg=1000, name=p1, mom=p1];
+v2 -> v6 [pdg=1000, name=p2, mom=p2];
+v12 -> v3 [pdg=1000, name=p3, mom=p3];
+v11 -> v4 [pdg=1000, name=p4, mom=p4];
+v5 -> v6 [pdg=1000, name=q1];
+v6 -> v8 [pdg=1000, name=q2, lmb_index=0];
+v8 -> v7 [pdg=1000, name=q3];
+v7 -> v5 [pdg=1000, name=q4];
+v8 -> v10 [pdg=1000, name=q5, lmb_index=1];
+v10 -> v9 [pdg=1000, name=q6];
+v9 -> v7 [pdg=1000, name=q7];
+v10 -> v12 [pdg=1000, name=q8, lmb_index=2];
+v12 -> v11 [pdg=1000, name=q9];
+v11 -> v9 [pdg=1000, name=q10];
+}

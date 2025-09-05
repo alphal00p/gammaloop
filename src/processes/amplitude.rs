@@ -22,15 +22,13 @@ use crate::{
     cff::{
         esurface::GroupEsurfaceId,
         expression::{
-            AmplitudeOrientationID, CFFExpression, GraphOrientation, OrientationData,
-            SubgraphOrientationID,
+            AmplitudeOrientationID, CFFExpression, OrientationData, SubgraphOrientationID,
         },
         generation::{generate_cff_expression, get_orientations_from_subgraph},
     },
     gammaloop_integrand::{
         amplitude_integrand::{AmplitudeGraphTerm, AmplitudeIntegrand, AmplitudeIntegrandData},
-        param_builder::ParamBuilderGraph,
-        LmbMultiChannelingSetup, ParamBuilder,
+        LmbMultiChannelingSetup,
     },
     graph::{GraphGroup, GraphGroupPosition, GroupId, LMBext, LmbIndex, LoopMomentumBasis},
     model::ArcParticle,
@@ -53,7 +51,6 @@ use linnet::{
 use log::{debug, info};
 use symbolica::{
     atom::{Atom, AtomCore},
-    domains::rational::Rational,
     function,
 };
 use typed_index_collections::{ti_vec, TiVec};
@@ -371,7 +368,7 @@ impl AmplitudeGraph {
     //Stage 1
     pub(crate) fn preprocess(
         &mut self,
-        model: &Model,
+        _model: &Model,
         settings: &GenerationSettings,
     ) -> Result<()> {
         status_debug!("Generating Cff");
@@ -451,24 +448,6 @@ impl AmplitudeGraph {
     // ) {
     //     param_builder.external_energies_value(momentum_sample);
     // }
-
-    fn add_function_map(&self, parambuilder: &mut ParamBuilder) {
-        let pi_rational = Rational::from(std::f64::consts::PI);
-
-        for (_, e, _) in self.graph.iter_edges() {
-            parambuilder
-                .add_tagged_function(
-                    GS.ose,
-                    vec![Atom::num(e.0 as i64)],
-                    format!("OSE{e}"),
-                    vec![],
-                    self.graph.explicit_ose_atom(e),
-                )
-                .unwrap();
-        }
-        parambuilder.add_constant(GS.pi.into(), pi_rational.into());
-        // fn_map
-    }
 
     // fn get_eager_const_map(&self)->HashM
 
@@ -782,17 +761,6 @@ impl AmplitudeGraph {
         Ok(scalar)
     }
 
-    fn orientation_atoms(&self) -> TiVec<AmplitudeOrientationID, Atom> {
-        self.derived_data
-            .cff_expression
-            .as_ref()
-            .unwrap()
-            .orientations
-            .iter()
-            .map(|o| o.data.select(&self.derived_data.all_mighty_integrand))
-            .collect()
-    }
-
     fn build_lmbs(&mut self) {
         let lmbs = self
             .graph
@@ -952,11 +920,7 @@ impl AmplitudeState for Processed {}
 // impl AmplitudeState for ReadyForTerm {}
 
 impl Amplitude {
-    pub(crate) fn from_dot_string<Str: AsRef<str>>(
-        s: Str,
-        name: String,
-        model: &Model,
-    ) -> Result<Self> {
+    pub fn from_dot_string<Str: AsRef<str>>(s: Str, name: String, model: &Model) -> Result<Self> {
         let graphs = Graph::from_string(s, model)?;
 
         let mut amp = Amplitude::new(name);
@@ -966,7 +930,7 @@ impl Amplitude {
         Ok(amp)
     }
 
-    pub(crate) fn from_dot_file<'a, P>(p: P, name: String, model: &Model) -> Result<Self>
+    pub fn from_dot_file<'a, P>(p: P, name: String, model: &Model) -> Result<Self>
     where
         P: AsRef<Path>,
     {
@@ -1036,12 +1000,11 @@ pub mod test {
         graph::parse::IntoGraph,
         initialisation::test_initialise,
         processes::AmplitudeGraph,
-        settings::global::GenerationSettings,
         utils::{test_utils::load_generic_model, GS},
     };
     #[test]
     fn amplitude_tree() {
-        test_initialise();
+        test_initialise().unwrap();
         let mut graph: AmplitudeGraph = dot!(digraph qqx_aaa_tree_1 {
                 num="spenso::g(spenso::dind(spenso::cof(3, hedge(1))), spenso::cof(3, hedge(2)))/3"
                 ext    [style=invis]
@@ -1057,10 +1020,10 @@ pub mod test {
 
         let model = load_generic_model("sm");
 
-        graph.generate_cff();
+        graph.generate_cff().unwrap();
         // graph.build_parametric_integrand(&GenerationSettings::default());
 
-        let mut param_builder = ParamBuilder::new(&graph.graph, &model);
+        let param_builder = ParamBuilder::new(&graph.graph, &model);
         println!("{param_builder}");
 
         GenericEvaluator::new_from_builder(
