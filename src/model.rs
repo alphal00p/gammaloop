@@ -32,6 +32,8 @@ use spenso::tensors::parametric::ParamTensor;
 use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
 use std::fs;
+use symbolica::domains::integer::IntegerRing;
+use symbolica::domains::rational::Fraction;
 use symbolica::evaluate::FunctionMap;
 
 use color_eyre::Result;
@@ -1203,16 +1205,21 @@ impl Model {
                     new_values_len += 1;
                     let key = n.0 .0;
                     expr.push(Atom::var(key));
-                    fn_map
-                        .add_function(
-                            key,
-                            p.name.namespaceless_string().into(),
-                            vec![],
-                            p.expression
-                                .clone()
-                                .ok_or(eyre!("Internal param {} has no expression", key))?,
+                    if let Some(body) = p.expression.clone() {
+                        fn_map
+                            .add_function(key, p.name.namespaceless_string().into(), vec![], body)
+                            .map_err(|e| eyre!(" {}", e))?;
+                    } else {
+                        let value = p
+                            .value
+                            .ok_or(eyre!("internal param {} has no expression or value", key))?;
+                        let value_rat = (
+                            Fraction::<IntegerRing>::from(value.re.0),
+                            Fraction::<IntegerRing>::from(value.im.0),
                         )
-                        .map_err(|e| eyre!(" {}", e))?;
+                            .into();
+                        fn_map.add_constant(Atom::var(key), value_rat);
+                    }
                 }
             }
         }
