@@ -1165,7 +1165,7 @@ impl Model {
         None
     }
 
-    pub(crate) fn recompute_dependents(&mut self) {
+    pub(crate) fn recompute_dependents(&mut self) -> Result<()> {
         let mut fn_map = FunctionMap::new();
 
         let mut expr = vec![];
@@ -1181,7 +1181,7 @@ impl Model {
                     vec![],
                     c.expression.clone(),
                 )
-                .unwrap();
+                .map_err(|e| eyre!(" {}", e))?;
             new_values_len += 1;
         }
 
@@ -1196,7 +1196,7 @@ impl Model {
                     if let Some(value) = p.value {
                         param_values.push(value);
                     } else {
-                        panic!("External parameter {} has no value", p.name);
+                        return Err(eyre!("External parameter {} has no value", p.name));
                     }
                 }
                 ParameterNature::Internal => {
@@ -1208,9 +1208,11 @@ impl Model {
                             key,
                             p.name.namespaceless_string().into(),
                             vec![],
-                            p.expression.clone().unwrap(),
+                            p.expression
+                                .clone()
+                                .ok_or(eyre!("Internal param {} has no expression", key))?,
                         )
-                        .unwrap();
+                        .map_err(|e| eyre!(" {}", e))?;
                 }
             }
         }
@@ -1235,6 +1237,8 @@ impl Model {
             c.value = Some(new_values[i]);
             i += 1;
         }
+
+        Ok(())
     }
 
     pub(crate) fn generate_params(&self) -> Vec<Atom> {
@@ -1471,12 +1475,11 @@ impl Model {
     }
 
     pub fn from_file(file_path: impl AsRef<Path>) -> Result<Model, Report> {
-        SerializableModel::from_file(file_path)
-            .map(Model::from_serializable_model)
-            .map(|mut a| {
-                a.recompute_dependents();
-                a
-            })
+        let mut model =
+            SerializableModel::from_file(file_path).map(Model::from_serializable_model)?;
+
+        model.recompute_dependents()?;
+        Ok(model)
     }
 
     #[inline]
