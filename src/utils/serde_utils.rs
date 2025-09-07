@@ -9,6 +9,7 @@ use std::{
 
 use color_eyre::{Result, Section};
 use eyre::{eyre, Context};
+use std::collections::HashMap;
 
 use std::{fs::File, io::Read, path::Path};
 
@@ -103,9 +104,31 @@ pub trait SmartSerde: Serialize + DeserializeOwned {
         }
     }
 
+    fn from_str(contents: String, format: &str, name: &str) -> Result<Self> {
+        match format {
+            "json" => serde_json::from_str(&contents)
+                .map_err(|e| eyre!(format!("Error parsing {name} json: {}", e)))
+                .suggestion("Is it a correct json file"),
+            "yaml" | "yml" => serde_yaml::from_str(&contents)
+                .map_err(|e| eyre!(format!("Error parsing {name} yaml: {}", e)))
+                .suggestion("Is it a correct yaml file"),
+            "toml" => toml::from_str(&contents)
+                .map_err(|e| eyre!(format!("Error parsing {name} toml: {}", e)))
+                .suggestion("Is it a correct toml file"),
+
+            _ => Err(eyre!(format!("Unknown {name} file extension: {}", format)))
+                .suggestion("Is it a .json or .yaml file?"),
+        }
+    }
+
     fn has_schema_path(&self) -> Option<Result<PathBuf>> {
         Option::None
     }
+}
+
+impl<T> SmartSerde for HashMap<String, (T, T)> where
+    T: Clone + From<f64> + Serialize + DeserializeOwned
+{
 }
 
 impl SmartSerde for SerializableModel {}
@@ -147,7 +170,7 @@ pub fn get_schema_folder() -> Result<PathBuf> {
 }
 
 use crate::{
-    model::SerializableModel,
+    model::{SerializableInputParamCard, SerializableModel},
     settings::{GlobalSettings, RuntimeSettings},
     utils::F,
 };

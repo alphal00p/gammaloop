@@ -22,7 +22,7 @@ use gammalooprs::{
     feyngen::GenerationType,
     graph::Graph,
     integrands::HasIntegrand,
-    model::Model,
+    model::{InputParamCard, Model},
     processes::{ExportSettings, Process, ProcessDefinition, ProcessList},
     settings::{runtime::LockedRuntimeSettings, GlobalSettings, RuntimeSettings},
     status_debug, status_info, status_warn,
@@ -133,6 +133,7 @@ impl RunHistory {
 #[derive(Clone)]
 pub struct State {
     pub model: Model,
+    pub model_parameters: InputParamCard<F<f64>>,
     pub process_list: ProcessList,
     pub model_path: Option<PathBuf>,
     pub save_path: PathBuf,
@@ -250,6 +251,7 @@ impl State {
             model: Model::default(),
             process_list: ProcessList::default(),
             model_path: None,
+            model_parameters: InputParamCard::default(),
         };
         a
     }
@@ -263,6 +265,7 @@ impl State {
             model: Model::default(),
             process_list: ProcessList::default(),
             model_path: None,
+            model_parameters: InputParamCard::default(),
         };
         a
     }
@@ -276,6 +279,7 @@ impl State {
             model: Model::default(),
             process_list: ProcessList::default(),
             model_path: None,
+            model_parameters: InputParamCard::default(),
         };
         a
     }
@@ -288,6 +292,8 @@ impl State {
             no_save_state: true,
             override_state: false,
             command: None,
+            level: None,
+            debug: false,
         }
     }
 }
@@ -333,15 +339,22 @@ impl State {
 
         debug!("Loaded model: {}", model.name);
 
+        let input_param_card = if save_path.join("model_parameters.json").exists() {
+            InputParamCard::from_file(save_path.join("model_parameters.json"))?
+        } else {
+            InputParamCard::default_from_model(&model)
+        };
+
         let state = symbolica::state::State::import(
             &mut fs::File::open(save_path.join("symbolica_state.bin"))
                 .context("Trying to open symbolica state binary")?,
             None,
         )?;
 
-        let context = GammaLoopContextContainer {
+        let context: GammaLoopContextContainer<'_> = GammaLoopContextContainer {
             state_map: &state,
             model: &model,
+            model_parameters: &input_param_card,
         };
 
         let process_list = ProcessList::load(&save_path, context)
@@ -352,6 +365,7 @@ impl State {
 
         state.process_list = process_list;
         state.model = model;
+        state.model_parameters = input_param_card;
         state.model_path = model_path;
         Ok(state)
     }
@@ -427,6 +441,10 @@ impl State {
         self.model
             .to_serializable()
             .to_file(selected_root_folder.join("model.json"), override_state_file)?;
+        self.model_parameters.to_file(
+            selected_root_folder.join("model_parameters.json"),
+            override_state_file,
+        )?;
         Ok(())
     }
 }

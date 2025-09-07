@@ -308,6 +308,7 @@ mod tests {
         let context = GammaLoopContextContainer {
             model: &model,
             state_map: &state_map,
+            model_parameters: &model.default_param_card(),
         };
 
         println!("context created");

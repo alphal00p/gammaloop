@@ -6,12 +6,14 @@ use crate::HasModel;
 use ahash::{AHashMap, HashSet, RandomState};
 use bincode::{Decode, Encode};
 use color_eyre::Report;
-use eyre::eyre;
+use eyre::{eyre, Context};
 use itertools::Itertools;
 use linnet::half_edge::drawing::Decoration;
 use linnet::half_edge::involution::Flow;
 use rand::rngs::SmallRng;
 use rand::{Rng, SeedableRng};
+use schemars::json_schema;
+use serde::de::DeserializeOwned;
 use spenso::structure::{IndexLess, PermutedStructure};
 
 // use log::{info, trace};
@@ -32,6 +34,7 @@ use spenso::tensors::parametric::ParamTensor;
 use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
 use std::fs;
+use std::io::Write;
 use symbolica::domains::integer::IntegerRing;
 use symbolica::domains::rational::Fraction;
 use symbolica::evaluate::FunctionMap;
@@ -39,7 +42,7 @@ use symbolica::evaluate::FunctionMap;
 use color_eyre::Result;
 use std::collections::HashMap;
 use std::ops::Deref;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
 
@@ -47,6 +50,186 @@ use crate::utils::GS;
 
 use symbolica::printer::{AtomPrinter, PrintOptions};
 use symbolica::{function, parse, symbol};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SerializableInputParamCard<T> {
+    pub data: HashMap<String, (T, T)>,
+}
+
+impl<T> SerializableInputParamCard<T>
+where
+    T: From<f64> + Clone + Serialize + DeserializeOwned,
+{
+    pub(crate) fn from_file(file_path: impl AsRef<Path>) -> Result<Self, Report> {
+        let hashmap_card: HashMap<String, (T, T)> = SmartSerde::from_file(file_path, "model")?;
+        Ok(SerializableInputParamCard { data: hashmap_card })
+    }
+
+    pub fn from_str(s: String, format: &str) -> Result<Self, Report> {
+        let hashmap_card: HashMap<String, (T, T)> =
+            SmartSerde::from_str(s, format, "model_parameters")?;
+        Ok(SerializableInputParamCard { data: hashmap_card })
+    }
+
+    pub fn from_input_param_card(card: &InputParamCard<T>) -> Self {
+        let serializeable_card: HashMap<String, (T, T)> = card
+            .data
+            .iter()
+            .map(|(k, v)| {
+                (
+                    k.namespaceless_string().to_string(),
+                    (v.re.clone(), v.im.clone()),
+                )
+            })
+            .collect();
+        SerializableInputParamCard {
+            data: serializeable_card,
+        }
+    }
+
+    pub fn to_file<P: AsRef<Path>>(&self, path: P, overwrite: bool) -> Result<(), Report> {
+        SmartSerde::to_file(&self.data, path, overwrite)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct InputParamCard<T>
+where
+    T: From<f64> + Clone + Serialize + DeserializeOwned,
+{
+    data: HashMap<UFOSymbol, Complex<T>>,
+}
+
+impl<T> Default for InputParamCard<T>
+where
+    T: From<f64> + Clone + Serialize + DeserializeOwned,
+{
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<T> InputParamCard<T>
+where
+    T: From<f64> + Clone + Serialize + DeserializeOwned,
+{
+    /// Create empty card
+    pub fn new() -> Self {
+        Self {
+            data: HashMap::new(),
+        }
+    }
+
+    /// Insert a parameter
+    pub fn insert(&mut self, sym: UFOSymbol, value: Complex<T>) -> Option<Complex<T>> {
+        self.data.insert(sym, value)
+    }
+
+    /// Get immutable reference
+    pub fn get(&self, sym: &UFOSymbol) -> Option<&Complex<T>> {
+        self.data.get(sym)
+    }
+
+    /// Get mutable reference
+    pub fn get_mut(&mut self, sym: &UFOSymbol) -> Option<&mut Complex<T>> {
+        self.data.get_mut(sym)
+    }
+
+    /// Remove a parameter
+    pub fn remove(&mut self, sym: &UFOSymbol) -> Option<Complex<T>> {
+        self.data.remove(sym)
+    }
+
+    /// Iterate over all parameters
+    pub fn iter(&self) -> impl Iterator<Item = (&UFOSymbol, &Complex<T>)> {
+        self.data.iter()
+    }
+
+    pub fn to_serializable(&self) -> SerializableInputParamCard<T> {
+        SerializableInputParamCard::from_input_param_card(self)
+    }
+
+    pub fn from_serializable(
+        serializable_input_param_card: &SerializableInputParamCard<T>,
+    ) -> Self {
+        let data: HashMap<UFOSymbol, Complex<T>> = serializable_input_param_card
+            .data
+            .iter()
+            .map(|(k, v)| {
+                (
+                    UFOSymbol::from(k.as_str()),
+                    Complex::new(v.0.clone(), v.1.clone()),
+                )
+            })
+            .collect();
+        InputParamCard { data }
+    }
+
+    pub fn from_file(file_path: impl AsRef<Path>) -> Result<Self, Report> {
+        let serializable_input_param_card = SerializableInputParamCard::from_file(file_path)?;
+        Ok(Self::from_serializable(&serializable_input_param_card))
+    }
+    pub fn from_str(s: String, format: &str) -> Result<Self, Report> {
+        let serializable_input_param_card = SerializableInputParamCard::from_str(s, format)?;
+        Ok(Self::from_serializable(&serializable_input_param_card))
+    }
+
+    pub fn to_file<P: AsRef<Path>>(&self, path: P, overwrite: bool) -> Result<(), Report> {
+        let serializable_card = self.to_serializable();
+        serializable_card.to_file(path, overwrite)?;
+        Ok(())
+    }
+}
+
+impl InputParamCard<F<f64>> {
+    pub fn apply_to_model(&self, model: &mut Model) -> Result<(), Report> {
+        for (param, value) in &self.data {
+            if let Some(model_param) = model.get_parameter_mut_opt(param.namespaceless_string()) {
+                model_param.value = Some(*value);
+            } else {
+                return Err(eyre!(
+                    "Parameter {} not found in model when applying input parameter card",
+                    param
+                ));
+            }
+        }
+        model.recompute_dependents();
+        Ok(())
+    }
+}
+
+impl InputParamCard<F<f64>> {
+    pub fn default_from_model(model: &Model) -> Self {
+        let mut card = InputParamCard::new();
+        for param in model.parameters.values() {
+            if param.nature == ParameterNature::External && !param.name.is_zero() {
+                if let Some(value) = param.value {
+                    card.insert(param.name, value);
+                }
+            }
+        }
+        card
+    }
+}
+
+/// Let it behave like a map if desired
+impl<T> std::ops::Deref for InputParamCard<T>
+where
+    T: From<f64> + Clone + Serialize + DeserializeOwned,
+{
+    type Target = HashMap<UFOSymbol, Complex<T>>;
+    fn deref(&self) -> &Self::Target {
+        &self.data
+    }
+}
+impl<T> std::ops::DerefMut for InputParamCard<T>
+where
+    T: From<f64> + Clone + Serialize + DeserializeOwned,
+{
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.data
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct UFOSymbol(pub Symbol);
@@ -1046,6 +1229,9 @@ impl SerializableModel {
     pub(crate) fn from_file(file_path: impl AsRef<Path>) -> Result<SerializableModel, Report> {
         SmartSerde::from_file(file_path, "model")
     }
+    pub(crate) fn from_str(s: String, format: &str) -> Result<SerializableModel, Report> {
+        SmartSerde::from_str(s, format, "model")
+    }
 
     pub(crate) fn from_model(model: &Model) -> SerializableModel {
         SerializableModel {
@@ -1151,6 +1337,18 @@ impl Default for Model {
     }
 }
 impl Model {
+    pub fn apply_param_card(
+        &mut self,
+        input_param_card: &InputParamCard<F<f64>>,
+    ) -> Result<(), Report> {
+        input_param_card.apply_to_model(self)?;
+        Ok(())
+    }
+
+    pub fn default_param_card(&self) -> InputParamCard<F<f64>> {
+        InputParamCard::default_from_model(self)
+    }
+
     pub fn contains_symbol(&self, symbol: &UFOSymbol) -> bool {
         self.couplings.contains_key(&CouplingName(symbol.clone()))
             || self.parameters.contains_key(&ParameterName(symbol.clone()))
@@ -1489,6 +1687,14 @@ impl Model {
         Ok(model)
     }
 
+    pub fn from_str(s: String, format: &str) -> Result<Model, Report> {
+        let mut model =
+            SerializableModel::from_str(s, format).map(Model::from_serializable_model)?;
+
+        model.recompute_dependents()?;
+        Ok(model)
+    }
+
     #[inline]
     pub(crate) fn get_propagator_for_particle<S: AsRef<str>>(&self, name: S) -> Arc<Propagator> {
         if let Some(position) = self.particle_name_to_propagator_position.get(name.as_ref()) {
@@ -1569,6 +1775,18 @@ impl Model {
     }
 
     #[inline]
+    pub fn get_parameter_opt<S: AsRef<str>>(&self, name: S) -> Option<&Parameter> {
+        if let Some(position) = self
+            .parameters
+            .get(&ParameterName(UFOSymbol::from(name.as_ref())))
+        {
+            Some(&position)
+        } else {
+            None
+        }
+    }
+
+    #[inline]
     pub fn get_parameter<S: AsRef<str>>(&self, name: S) -> &Parameter {
         if let Some(position) = self
             .parameters
@@ -1583,6 +1801,35 @@ impl Model {
             );
         }
     }
+
+    #[inline]
+    pub fn get_parameter_mut_opt<S: AsRef<str>>(&mut self, name: S) -> Option<&mut Parameter> {
+        if let Some(position) = self
+            .parameters
+            .get_mut(&ParameterName(UFOSymbol::from(name.as_ref())))
+        {
+            Some(position)
+        } else {
+            None
+        }
+    }
+
+    #[inline]
+    pub fn get_parameter_mut<S: AsRef<str>>(&mut self, name: S) -> &mut Parameter {
+        if let Some(position) = self
+            .parameters
+            .get_mut(&ParameterName(UFOSymbol::from(name.as_ref())))
+        {
+            position
+        } else {
+            panic!(
+                "Parameter '{}' not found in model '{}'.",
+                name.as_ref(),
+                self.name
+            );
+        }
+    }
+
     #[inline]
     pub fn get_order<S: AsRef<str>>(&self, name: S) -> Arc<Order> {
         if let Some(position) = self.order_name_to_position.get(name.as_ref()) {

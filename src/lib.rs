@@ -46,6 +46,8 @@ use symbolica::state::StateMap;
 use utils::FloatLike;
 use utils::F;
 
+use crate::model::InputParamCard;
+
 pub static INTERRUPTED: AtomicBool = AtomicBool::new(false);
 
 pub const GAMMALOOP_NAMESPACE: &str = "GL";
@@ -77,6 +79,7 @@ impl HasModel for GammaLoopContextContainer<'_> {
 pub struct GammaLoopContextContainer<'a> {
     pub state_map: &'a StateMap,
     pub model: &'a Model,
+    pub model_parameters: &'a InputParamCard<F<f64>>,
 }
 
 impl<'a> HasStateMap for GammaLoopContextContainer<'a> {

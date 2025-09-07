@@ -13,7 +13,6 @@ keywords = ["loop", "cross-section", "perturbative", "physics"]
 repository = "https://github.com/alphal00p/gammaloop"
 build = "build.rs"
 
-
 [lib]
 name = "_gammaloop"
 path = "src/lib.rs"
@@ -22,12 +21,18 @@ crate-type = ["cdylib", "rlib"]
 [[bin]]
 name = "gammaloop"
 path = "src/cli.rs"
-# required-features = ["binary"]
 bench = false
 
+[features]
+# Keep Python optional unless explicitly enabled.
+default = []
+ufo_support = ["dep:pyo3", "pyo3/auto-initialize"]
+python_api = ["ufo_support"]
+python_stubgen = ["python_api", "dep:pyo3-stub-gen"]
 
 [dependencies]
-
+include_dir = "0.7"
+pyo3-stub-gen = { version = "0.13", optional = true, default-features = false }
 spenso = { version = "0.5.4", features = ["shadowing"] }
 clap = "4.5.47"
 clap-repl = "0.3.2"
@@ -37,7 +42,6 @@ console = "0.16.0"
 dirs = "6.0.0"
 eyre = { version = "0.6.12" }
 gammalooprs = { path = "../", version = "0.3.3" }
-pyo3-build-config = "0.26.0"
 schemars = "1.0.4"
 serde = "1.0.219"
 tracing-subscriber = { version = "0.3.19", features = [
@@ -46,14 +50,25 @@ tracing-subscriber = { version = "0.3.19", features = [
     "time",
     "json",
 ] }
-tracing = { version = "0.1.41" }
+tracing = "0.1.41"
 symbolica = { version = "0.18.0", default-features = false }
 bincode-trait-derive = { version = "0.1.1" }
 bincode = { version = "2.0.0", features = ["serde"] }
-# tracing-log = "0.2.0"
 serde_json = "1"
 toml = "0.9.5"
 rand = { version = "0.9", features = ["small_rng"] }
 chrono = { version = "0.4", features = ["serde"] }
 tracing-appender = "0.2.3"
 serde_yaml = "*"
+
+# PyO3: optional for embedding. Auto-init at runtime.
+[dependencies.pyo3]
+version = "0.25"
+optional = true
+# If you ALSO ship a stable-ABI extension, keep abi3 flags.
+# If you only embed, you may drop "abi3" and "abi3-py37".
+features = ["auto-initialize", "abi3", "abi3-py37"]
+
+[build-dependencies]
+pyo3-build-config = "0.25"
+walkdir = "2"

@@ -31,6 +31,7 @@ use symbolica::activate_oem_license;
 // use tracing::LogLevel;
 
 pub mod generate;
+pub mod import_model;
 pub mod inspect;
 pub mod integrate;
 pub mod state;
@@ -60,6 +61,13 @@ pub struct Cli {
     #[arg(short = 'o', long, default_value_t = false, group = "saving")]
     override_state: bool,
 
+    /// Set log level for current session
+    #[arg(short = 'l')]
+    level: Option<LogLevel>,
+
+    #[arg(short = 'd', default_value_t = false)]
+    debug: bool,
+
     // /// Debug level
     // #[arg(short = 'd', long, value_enum, default_value_t = LogLevel::Info)]
     // debug_level: LogLevel,
@@ -77,6 +85,8 @@ impl Cli {
             no_save_state: true,
             override_state: false,
             command: None,
+            level: Some(LogLevel::Info),
+            debug: false,
         }
     }
 
@@ -93,6 +103,13 @@ impl Cli {
         run_history: &mut RunHistory,
         state: &mut State,
     ) -> Result<ControlFlow<()>, Report> {
+        if let Some(level) = self.level {
+            let spec = level.to_env_spec();
+            state.set_log_spec(spec)?;
+        }
+        if self.debug {
+            state.set_log_spec(LogLevel::Debug.to_env_spec())?;
+        }
         match command {
             Commands::Quit {} => {
                 return Ok(ControlFlow::Break(()));
@@ -112,8 +129,8 @@ impl Cli {
                 Import::Amplitude { path } => {
                     state.import_amplitude(path, None)?;
                 }
-                Import::Model { path } => {
-                    state.model = Model::from_file(path)?;
+                Import::Model(im) => {
+                    im.run(state)?;
                 }
             },
             Commands::Save(s) => match s {
@@ -367,11 +384,7 @@ impl Cli {
 
 #[derive(Subcommand, Debug, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
 pub enum Import {
-    Model {
-        // #[arg(short = 'p')]
-        path: PathBuf,
-        // format: String,
-    },
+    Model(import_model::ImportModel),
     Amplitude {
         // #[arg(short = 'p')]
         path: PathBuf,
