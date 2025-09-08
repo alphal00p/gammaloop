@@ -79,7 +79,6 @@ impl HasModel for GammaLoopContextContainer<'_> {
 pub struct GammaLoopContextContainer<'a> {
     pub state_map: &'a StateMap,
     pub model: &'a Model,
-    pub model_parameters: &'a InputParamCard<F<f64>>,
 }
 
 impl<'a> HasStateMap for GammaLoopContextContainer<'a> {

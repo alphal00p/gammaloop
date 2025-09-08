@@ -87,12 +87,12 @@ fn bridge_py_logging(py: Python<'_>) -> PyResult<()> {
         .getattr("StreamHandler")?
         .call1((stream.clone_ref(py),))?;
     handler.call_method1("setLevel", ("DEBUG",))?;
-    handler.call_method1(
-        "setFormatter",
-        (logging
-            .getattr("Formatter")?
-            .call1(("%(levelname)s %(name)s: %(message)s",))?,),
-    )?;
+    // handler.call_method1(
+    //     "setFormatter",
+    //     (logging
+    //         .getattr("Formatter")?
+    //         .call1(("%(levelname)s %(name)s: %(message)s",))?,),
+    // )?;
 
     let root = logging.call_method0("getLogger")?;
     root.call_method1("addHandler", (handler,))?;

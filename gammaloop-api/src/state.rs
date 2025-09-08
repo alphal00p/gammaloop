@@ -325,7 +325,7 @@ impl State {
     pub fn load(save_path: PathBuf, model_path: Option<PathBuf>) -> Result<Self> {
         // let root_folder = root_folder.join("gammaloop_state");
 
-        let model = if let Some(model_path) = &model_path {
+        let mut model = if let Some(model_path) = &model_path {
             warn!("Loading model from {}", model_path.display());
             Model::from_file(model_path)?
         } else {
@@ -340,7 +340,10 @@ impl State {
         debug!("Loaded model: {}", model.name);
 
         let input_param_card = if save_path.join("model_parameters.json").exists() {
-            InputParamCard::from_file(save_path.join("model_parameters.json"))?
+            let a = InputParamCard::from_file(save_path.join("model_parameters.json"))?;
+
+            model.apply_param_card(&a);
+            a
         } else {
             InputParamCard::default_from_model(&model)
         };
@@ -354,7 +357,6 @@ impl State {
         let context: GammaLoopContextContainer<'_> = GammaLoopContextContainer {
             state_map: &state,
             model: &model,
-            model_parameters: &input_param_card,
         };
 
         let process_list = ProcessList::load(&save_path, context)

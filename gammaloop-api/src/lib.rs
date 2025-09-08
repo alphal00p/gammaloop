@@ -235,6 +235,7 @@ impl Cli {
             }
         };
         let mut run_history = self.get_run_history()?;
+        // let mut global_settings = run_history.
 
         // let mut state = State::load(&cli.state_file,);
 

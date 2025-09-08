@@ -6,13 +6,12 @@ use crate::HasModel;
 use ahash::{AHashMap, HashSet, RandomState};
 use bincode::{Decode, Encode};
 use color_eyre::Report;
-use eyre::{eyre, Context};
+use eyre::eyre;
 use itertools::Itertools;
 use linnet::half_edge::drawing::Decoration;
 use linnet::half_edge::involution::Flow;
 use rand::rngs::SmallRng;
 use rand::{Rng, SeedableRng};
-use schemars::json_schema;
 use serde::de::DeserializeOwned;
 use spenso::structure::{IndexLess, PermutedStructure};
 
@@ -34,15 +33,16 @@ use spenso::tensors::parametric::ParamTensor;
 use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
 use std::fs;
-use std::io::Write;
+use symbolica::domains::float::{Float, Real};
 use symbolica::domains::integer::IntegerRing;
-use symbolica::domains::rational::Fraction;
+use symbolica::domains::rational::{Fraction, Rational};
 use symbolica::evaluate::FunctionMap;
+use symbolica::id::Replacement;
 
 use color_eyre::Result;
 use std::collections::HashMap;
 use std::ops::Deref;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
 
@@ -1365,21 +1365,41 @@ impl Model {
         None
     }
 
+    fn parameters_to_empty_fns(&self) -> Vec<Replacement> {
+        let mut reps = vec![];
+        for (n, _) in &self.couplings {
+            reps.push(Replacement::new(
+                Atom::from(n.0).to_pattern(),
+                function!(n.0 .0),
+            ))
+        }
+        for (n, _) in &self.parameters {
+            reps.push(Replacement::new(
+                Atom::from(n.0).to_pattern(),
+                function!(n.0 .0),
+            ))
+        }
+
+        reps
+    }
+
     pub(crate) fn recompute_dependents(&mut self) -> Result<()> {
         let mut fn_map = FunctionMap::new();
+        let reps = self.parameters_to_empty_fns();
 
         let mut expr = vec![];
         let mut new_values_len = 0;
 
         for (n, c) in &self.couplings {
             let key = n.0 .0;
-            expr.push(Atom::var(key));
+            expr.push(function!(key));
+
             fn_map
                 .add_function(
                     key,
                     c.name.namespaceless_string().into(),
                     vec![],
-                    c.expression.clone(),
+                    c.expression.replace_multiple(&reps),
                 )
                 .map_err(|e| eyre!(" {}", e))?;
             new_values_len += 1;
@@ -1389,7 +1409,7 @@ impl Model {
         let mut param_values = vec![];
 
         for (n, p) in &self.parameters {
-            let key = n.0.into();
+            let key = function!(n.0 .0);
             match p.nature {
                 ParameterNature::External => {
                     params.push(key);
@@ -1401,11 +1421,15 @@ impl Model {
                 }
                 ParameterNature::Internal => {
                     new_values_len += 1;
-                    let key = n.0 .0;
-                    expr.push(Atom::var(key));
+                    expr.push(key.clone());
                     if let Some(body) = p.expression.clone() {
                         fn_map
-                            .add_function(key, p.name.namespaceless_string().into(), vec![], body)
+                            .add_function(
+                                n.0 .0,
+                                p.name.namespaceless_string().into(),
+                                vec![],
+                                body.replace_multiple(&reps),
+                            )
                             .map_err(|e| eyre!(" {}", e))?;
                     } else {
                         let value = p
@@ -1416,16 +1440,48 @@ impl Model {
                             Fraction::<IntegerRing>::from(value.im.0),
                         )
                             .into();
-                        fn_map.add_constant(Atom::var(key), value_rat);
+                        fn_map.add_constant(key, value_rat);
                     }
                 }
             }
         }
 
-        let evaluator = AtomView::to_eval_tree_multiple(&expr, &fn_map, &params).unwrap();
+        fn_map
+            .add_external_function(
+                UFOSymbol::from("complexconjugate").0,
+                "complexconjugate".into(),
+            )
+            .unwrap();
 
-        let mut evaluator =
-            evaluator.map_coeff(&|f| Complex::new(F(f.re.to_f64()), F(f.im.to_f64())));
+        // fn_map.add_external_function(name, rename)
+
+        fn_map.add_constant(
+            Atom::var(Symbol::PI),
+            (Rational::from(0.0.pi()), Rational::zero()).into(),
+        );
+
+        let evaluator = AtomView::to_eval_tree_multiple(&expr, &fn_map, &params)
+            .unwrap()
+            .linearize(Some(1), false);
+
+        let mut ext: HashMap<
+            String,
+            Box<dyn Fn(&[Complex<F<f64>>]) -> Complex<F<f64>> + Send + Sync>,
+            ahash::RandomState,
+        > = HashMap::default();
+        ext.insert(
+            "complexconjugate".to_string(),
+            Box::new(|a| {
+                if a.len() > 1 {
+                    panic!("complex_conjugate takes one argument, got {}", a.len());
+                };
+                a[0].conj()
+            }),
+        );
+        let mut evaluator = evaluator
+            .map_coeff(&|f| Complex::new(F(f.re.to_f64()), F(f.im.to_f64())))
+            .with_external_functions(ext)
+            .unwrap();
 
         let mut new_values = vec![Complex::new(F(0.0), F(0.0)); new_values_len];
         evaluator.evaluate(&param_values, &mut new_values);
