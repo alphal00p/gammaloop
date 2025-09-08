@@ -1,4 +1,4 @@
-use ::tracing::{debug, level_filters::LevelFilter, warn};
+use ::tracing::{debug, info, level_filters::LevelFilter, warn};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use clap_repl::{
     reedline::{DefaultPrompt, DefaultPromptSegment, FileBackedHistory},
@@ -61,6 +61,10 @@ pub struct Cli {
     #[arg(short = 'o', long, default_value_t = false, group = "saving")]
     override_state: bool,
 
+    /// Set the name of the file containing all traces from gammaloop (logs) for current session
+    #[arg(short = 't')]
+    trace_logs_filename: Option<String>,
+
     /// Set log level for current session
     #[arg(short = 'l')]
     level: Option<LogLevel>,
@@ -87,6 +91,7 @@ impl Cli {
             command: None,
             level: Some(LogLevel::Info),
             debug: false,
+            trace_logs_filename: None,
         }
     }
 
@@ -220,18 +225,22 @@ impl Cli {
         };
         initialise()?;
 
-        let mut state = match State::load(self.state_folder.clone(), self.model_file.clone()) {
+        let mut state = match State::load(
+            self.state_folder.clone(),
+            self.model_file.clone(),
+            self.trace_logs_filename.clone(),
+        ) {
             Ok(state) => state,
             Err(e) => {
-                warn!(
-                    "{e} state folder:{} model_file:{} loading default state",
+                info!(
+                    "No valid state folder found ({e}) :{} model_file:{}. Creating new default state.",
                     self.state_folder.display(),
                     self.model_file
                         .as_ref()
                         .map(|p| p.display().to_string())
                         .unwrap_or("None".to_string())
                 );
-                State::new(self.state_folder.clone())
+                State::new(self.state_folder.clone(), self.trace_logs_filename.clone())
             }
         };
         let mut run_history = self.get_run_history()?;

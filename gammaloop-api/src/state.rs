@@ -242,8 +242,8 @@ impl State {
         Ok(())
     }
 
-    pub fn new(save_path: PathBuf) -> Self {
-        let handle = super::tracing::init_tracing("info", &save_path.join("logs"));
+    pub fn new(save_path: PathBuf, log_file_name: Option<String>) -> Self {
+        let handle = super::tracing::init_tracing("info", &save_path.join("logs"), log_file_name);
 
         let a = Self {
             save_path,
@@ -294,6 +294,7 @@ impl State {
             command: None,
             level: None,
             debug: false,
+            trace_logs_filename: None,
         }
     }
 }
@@ -322,7 +323,11 @@ impl State {
         set_log_spec(spec)
     }
 
-    pub fn load(save_path: PathBuf, model_path: Option<PathBuf>) -> Result<Self> {
+    pub fn load(
+        save_path: PathBuf,
+        model_path: Option<PathBuf>,
+        trace_logs_filename: Option<String>,
+    ) -> Result<Self> {
         // let root_folder = root_folder.join("gammaloop_state");
 
         let mut model = if let Some(model_path) = &model_path {
@@ -363,7 +368,7 @@ impl State {
             .context("Trying to load processList")
             .unwrap();
 
-        let mut state = State::new(save_path);
+        let mut state = State::new(save_path, trace_logs_filename);
 
         state.process_list = process_list;
         state.model = model;

@@ -25,6 +25,7 @@ use crate::state::LOG_SPEC;
 pub(crate) fn init_tracing(
     default_spec: impl AsRef<str>,
     dir: impl AsRef<Path>,
+    log_file_name: Option<String>,
 ) -> reload::Handle<EnvFilter, Registry> {
     FILTER_HANDLE
         .get_or_init(|| {
@@ -48,7 +49,12 @@ pub(crate) fn init_tracing(
                 .replace(':', "-")
                 .replace('+', "-"); // keep it filename-friendly
 
-            let filename = format!("gammalog-{ts}.jsonl");
+            let filename = if let Some(log_name) = log_file_name {
+                format!("gammalog-{log_name}.jsonl")
+            } else {
+                format!("gammalog-{ts}.jsonl")
+            };
+
             // One file per state (per process), no rotation
             let file = RollingFileAppender::new(Rotation::NEVER, dir.as_ref(), &filename);
             let (nb, guard) = NonBlockingBuilder::default()

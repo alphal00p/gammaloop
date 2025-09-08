@@ -1,5 +1,5 @@
 global_settings:
-  debug_level: Debug
+  debug_level: Info
   generation:
     enable_thresholds: false
     evaluator_settings:
@@ -18,7 +18,7 @@ default_runtime_settings:
     n_bins: 64
     bin_number_evolution: null
     min_samples_for_update: 1000
-    n_start: 1000
+    n_start: 100000
     n_increase: 0
     n_max: 20000000
     integrated_phase: real
@@ -63,7 +63,8 @@ default_runtime_settings:
 commands:
   - Import:
       Model:
-        path: ../../src/test_resources/gammaloop_models/sm.json
+        path: sm-default
+        simplify_model: false
   - Import:
       Amplitude:
         path: ./qqx_aaa_subtracted.dot
