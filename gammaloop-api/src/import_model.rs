@@ -117,7 +117,7 @@ pub(crate) fn load_ufo_model(
     Python::with_gil(|py| {
         // helpful diag if import fails
         let sys = py.import("sys")?;
-        let exe: String = sys.getattr("executable")?.extract()?;
+        let exe: String = sys.getattr("prefix")?.extract()?;
         let ver: String = sys.getattr("version")?.extract()?;
 
         ensure_py_log_bridge(py)
