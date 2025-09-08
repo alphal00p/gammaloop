@@ -9,7 +9,7 @@ use std::{
 
 use color_eyre::{Result, Section};
 use eyre::{eyre, Context};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use std::{fs::File, io::Read, path::Path};
 
@@ -126,7 +126,7 @@ pub trait SmartSerde: Serialize + DeserializeOwned {
     }
 }
 
-impl<T> SmartSerde for HashMap<String, (T, T)> where
+impl<T> SmartSerde for BTreeMap<String, (T, T)> where
     T: Clone + From<f64> + Serialize + DeserializeOwned
 {
 }

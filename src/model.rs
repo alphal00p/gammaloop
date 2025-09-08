@@ -53,7 +53,7 @@ use symbolica::{function, parse, symbol};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SerializableInputParamCard<T> {
-    pub data: HashMap<String, (T, T)>,
+    pub data: BTreeMap<String, (T, T)>,
 }
 
 impl<T> SerializableInputParamCard<T>
@@ -61,18 +61,18 @@ where
     T: From<f64> + Clone + Serialize + DeserializeOwned,
 {
     pub(crate) fn from_file(file_path: impl AsRef<Path>) -> Result<Self, Report> {
-        let hashmap_card: HashMap<String, (T, T)> = SmartSerde::from_file(file_path, "model")?;
+        let hashmap_card: BTreeMap<String, (T, T)> = SmartSerde::from_file(file_path, "model")?;
         Ok(SerializableInputParamCard { data: hashmap_card })
     }
 
     pub fn from_str(s: String, format: &str) -> Result<Self, Report> {
-        let hashmap_card: HashMap<String, (T, T)> =
+        let hashmap_card: BTreeMap<String, (T, T)> =
             SmartSerde::from_str(s, format, "model_parameters")?;
         Ok(SerializableInputParamCard { data: hashmap_card })
     }
 
     pub fn from_input_param_card(card: &InputParamCard<T>) -> Self {
-        let serializeable_card: HashMap<String, (T, T)> = card
+        let serializeable_card: BTreeMap<String, (T, T)> = card
             .data
             .iter()
             .map(|(k, v)| {
