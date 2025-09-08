@@ -3,7 +3,7 @@ use std::{
     io::{self},
     ops::ControlFlow,
     path::{Path, PathBuf},
-    sync::{Mutex, OnceLock},
+    sync::{atomic::AtomicBool, Mutex, OnceLock},
     time::Instant,
 };
 
@@ -39,13 +39,127 @@ use crate::generate::ProcessArgs;
 
 use super::{Cli, Commands};
 
+// Static flag to control serialization behavior
+static SERIALIZE_COMMANDS_AS_STRINGS: AtomicBool = AtomicBool::new(false);
+
+/// Set whether CommandHistory should serialize as strings when the raw_string is available
+pub fn set_serialize_commands_as_strings(value: bool) {
+    SERIALIZE_COMMANDS_AS_STRINGS.store(value, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Get the current setting for CommandHistory serialization behavior
+pub fn get_serialize_commands_as_strings() -> bool {
+    SERIALIZE_COMMANDS_AS_STRINGS.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// Represents a command with optional raw string representation
+///
+/// This struct stores both the parsed command and optionally the original
+/// string that was used to create it. This allows for preserving the exact
+/// user input while still having access to the structured command data.
+#[derive(Debug, Clone, JsonSchema, PartialEq)]
+pub struct CommandHistory {
+    /// The parsed command
+    pub command: Commands,
+    /// The original string representation of the command, if available
+    pub raw_string: Option<String>,
+}
+
+impl Serialize for CommandHistory {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        if get_serialize_commands_as_strings() {
+            if let Some(ref raw_string) = self.raw_string {
+                raw_string.serialize(serializer)
+            } else {
+                self.command.serialize(serializer)
+            }
+        } else {
+            self.command.serialize(serializer)
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for CommandHistory {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        use serde::de::Error;
+
+        // First try to deserialize as a string
+        let value = serde_yaml::Value::deserialize(deserializer)?;
+
+        if let serde_yaml::Value::String(s) = &value {
+            if let Ok(a) = Self::from_raw_string(s) {
+                return Ok(a);
+            }
+        }
+
+        // Fall back to deserializing as Commands directly
+        match Commands::deserialize(value) {
+            Ok(command) => Ok(CommandHistory {
+                command,
+                raw_string: None,
+            }),
+            Err(e) => Err(D::Error::custom(format!(
+                "Failed to deserialize as both string and Commands: {}",
+                e
+            ))),
+        }
+    }
+}
+
+impl CommandHistory {
+    /// Create a new CommandHistory with just a command (no raw string)
+    pub fn new(command: Commands) -> Self {
+        Self {
+            command,
+            raw_string: None,
+        }
+    }
+
+    /// Create a new CommandHistory with both command and raw string
+    pub fn new_with_raw(command: Commands, raw_string: String) -> Self {
+        Self {
+            command,
+            raw_string: Some(raw_string),
+        }
+    }
+
+    /// Create a CommandHistory from a command (alias for new)
+    pub fn from_command(command: Commands) -> Self {
+        Self::new(command)
+    }
+
+    /// Parse a raw string into a CommandHistory
+    ///
+    /// This function attempts to parse the raw string using clap, and if successful,
+    /// creates a CommandHistory with both the parsed command and the original string.
+    pub fn from_raw_string(raw_string: &str) -> Result<Self, clap::Error> {
+        use crate::Cli;
+        use clap::Parser;
+
+        let args: Vec<&str> = raw_string.split_whitespace().collect();
+        let cli = Cli::try_parse_from(std::iter::once("gammaloop").chain(args.iter().copied()))?;
+
+        if let Some(command) = cli.command {
+            Ok(Self::new_with_raw(command, raw_string.into()))
+        } else {
+            Err(clap::Error::new(clap::error::ErrorKind::MissingSubcommand))
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Default, JsonSchema, PartialEq)]
 pub struct RunHistory {
     pub default_runtime_settings: RuntimeSettings,
     pub global_settings: GlobalSettings,
     #[serde(with = "serde_yaml::with::singleton_map_recursive")]
-    #[schemars(with = "Vec<Commands>")]
-    pub commands: Vec<Commands>,
+    #[schemars(with = "Vec<CommandHistory>")]
+    pub commands: Vec<CommandHistory>,
 }
 
 impl SmartSerde for RunHistory {
@@ -55,9 +169,21 @@ impl SmartSerde for RunHistory {
 }
 
 impl RunHistory {
+    /// Add a command to the run history
     pub fn push(&mut self, command: Commands) {
+        self.push_with_raw(command, None);
+    }
+
+    /// Add a command with optional raw string to the run history
+    ///
+    /// If raw_string is provided, it will be stored alongside the command
+    /// for potential later serialization as a string.
+    pub fn push_with_raw(&mut self, command: Commands, raw_string: Option<String>) {
         if !matches!(&command, Commands::Quit { .. }) {
-            self.commands.push(command);
+            self.commands.push(CommandHistory {
+                command,
+                raw_string,
+            });
         }
     }
 
@@ -71,10 +197,10 @@ impl RunHistory {
         global_settings: &mut GlobalSettings,
         default_runtime_settings: &mut RuntimeSettings,
     ) -> Result<ControlFlow<()>> {
-        for command in self.commands.clone() {
-            status_info!("Running command: {:?}", command);
+        for command_history in self.commands.clone() {
+            status_info!("Running command: {:?}", command_history.command);
             if let ControlFlow::Break(_) = cli.run_command(
-                command,
+                command_history.command,
                 state,
                 self,
                 global_settings,
@@ -343,6 +469,8 @@ impl State {
             level: None,
             debug: false,
             trace_logs_filename: None,
+            no_skip_default: false,
+            try_strings: false,
         }
     }
 }
@@ -540,6 +668,35 @@ mod tests {
         run_history.to_file("test_path.toml", true).unwrap();
         let deserialized_from_file = RunHistory::from_file("test_path.toml", " ").unwrap();
         assert_eq!(run_history, deserialized_from_file);
+    }
+
+    #[test]
+    fn test_command_history_serialization() {
+        use super::{set_serialize_commands_as_strings, CommandHistory};
+        use crate::Commands;
+
+        // Test basic construction
+        let cmd_history = CommandHistory::new(Commands::Quit {});
+        assert_eq!(cmd_history.raw_string, None);
+
+        // Test with raw string
+        let cmd_history_with_raw =
+            CommandHistory::new_with_raw(Commands::Quit {}, "quit".to_string());
+        assert_eq!(cmd_history_with_raw.raw_string, Some("quit".to_string()));
+
+        // Test serialization as Commands (default behavior)
+        set_serialize_commands_as_strings(false);
+        let yaml = serde_yaml::to_string(&cmd_history).unwrap();
+        let deserialized: CommandHistory = serde_yaml::from_str(&yaml).unwrap();
+        assert_eq!(cmd_history, deserialized);
+
+        // Test serialization as string
+        set_serialize_commands_as_strings(true);
+        let yaml_string = serde_yaml::to_string(&cmd_history_with_raw).unwrap();
+        assert!(yaml_string.contains("quit"));
+
+        // Reset flag
+        set_serialize_commands_as_strings(false);
     }
 }
 

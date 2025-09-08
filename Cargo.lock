@@ -576,20 +576,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "clap-repl"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4ffd4e57297ee7a10fb637964a79fd4bf5c8d22fd4ceaac5d3964d55df9e9e38"
-dependencies = [
- "clap",
- "clap_complete",
- "console 0.15.11",
- "nu-ansi-term",
- "reedline",
- "shlex",
-]
-
-[[package]]
 name = "clap_builder"
 version = "4.5.47"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -606,16 +592,14 @@ dependencies = [
 
 [[package]]
 name = "clap_complete"
-version = "4.5.16"
+version = "4.5.57"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9c677cd0126f3026d8b093fa29eae5d812fde5c05bc66dbb29d0374eea95113a"
+checksum = "4d9501bd3f5f09f7bbee01da9a511073ed30a80cd7a509f1214bb74eadea71ad"
 dependencies = [
  "clap",
  "clap_lex",
  "is_executable",
- "pathdiff",
  "shlex",
- "unicode-xid",
 ]
 
 [[package]]
@@ -1423,7 +1407,7 @@ dependencies = [
  "bincode-trait-derive",
  "chrono",
  "clap",
- "clap-repl",
+ "clap_complete",
  "color-eyre",
  "colored 3.0.0",
  "console 0.16.0",
@@ -1432,14 +1416,17 @@ dependencies = [
  "figment",
  "gammalooprs",
  "include_dir",
+ "nu-ansi-term",
  "pyo3",
  "pyo3-build-config",
  "pyo3-stub-gen",
  "rand 0.9.2",
+ "reedline",
  "schemars 1.0.4",
  "serde",
  "serde_json",
  "serde_yaml",
+ "shlex",
  "spenso",
  "symbolica",
  "thiserror 2.0.16",
@@ -1462,7 +1449,6 @@ dependencies = [
  "brotli 7.0.0",
  "chrono",
  "clap",
- "clap-repl",
  "clarabel",
  "color-eyre",
  "colored 3.0.0",
@@ -2541,12 +2527,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
 
 [[package]]
-name = "pathdiff"
-version = "0.2.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "df94ce210e5bc13cb6651479fa48d14f601d9858cfe0467f43ae157023b938d3"
-
-[[package]]
 name = "pathfinding"
 version = "4.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3137,22 +3117,22 @@ dependencies = [
 
 [[package]]
 name = "reedline"
-version = "0.38.0"
+version = "0.42.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9bfa8cb0ad84c396c936d8abb814703d7042a433d2da75a0c7060cbdc89109f3"
+checksum = "0f9152b55a7af872d1ea9ac81c619fd02368d3e3b27ff195c56ab3fc300f4fd0"
 dependencies = [
  "chrono",
  "crossterm",
  "fd-lock 4.0.4",
- "itertools 0.12.1",
+ "itertools 0.13.0",
  "nu-ansi-term",
  "serde",
  "strip-ansi-escapes",
  "strum",
  "strum_macros",
- "thiserror 1.0.69",
+ "thiserror 2.0.16",
  "unicode-segmentation",
- "unicode-width 0.1.14",
+ "unicode-width 0.2.1",
 ]
 
 [[package]]
@@ -4448,12 +4428,6 @@ name = "unicode-width"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4a1a07cc7db3810833284e8d372ccdc6da29741639ecc70c9ec107df0fa6154c"
-
-[[package]]
-name = "unicode-xid"
-version = "0.2.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ebc1c04c71510c7f702b52b7c350734c9ff1295c464a03335b00bb84fc54f853"
 
 [[package]]
 name = "unindent"

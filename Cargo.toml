@@ -81,7 +81,7 @@ hyperdual = { git = "https://gitlab.com/benruijl/hyperdual.git" }
 rand = { version = "0.9", features = ["small_rng"] }
 rayon = "1.5"
 dirs = "5"
-clap-repl = "0.3.2"
+# clap-repl = "0.3.2"
 indicatif = { version = "0.17.9", features = ["improved_unicode", "rayon"] }
 # bincode-trait-derive = {path="../bincode-trait-derive"}
 bincode-trait-derive = { version = "0.1.1" }

@@ -1,10 +1,16 @@
 use ::tracing::{debug, info, level_filters::LevelFilter};
 use clap::{Args, CommandFactory, FromArgMatches, Parser, Subcommand};
+use reedline::DefaultPrompt;
+use reedline::DefaultPromptSegment;
+use reedline::FileBackedHistory;
+use repl::ClapEditor;
+use repl::ReadCommandOutput;
+use state::set_serialize_commands_as_strings;
 
-use clap_repl::{
-    reedline::{DefaultPrompt, DefaultPromptSegment, FileBackedHistory},
-    ClapEditor, ReadCommandOutput,
-};
+// use clap_repl::{
+//     reedline::{DefaultPrompt, DefaultPromptSegment, FileBackedHistory},
+//     ClapEditor, ReadCommandOutput,
+// };
 use color_eyre::Report;
 use color_eyre::Result;
 use colored::Colorize;
@@ -35,6 +41,7 @@ pub mod generate;
 pub mod import_model;
 pub mod inspect;
 pub mod integrate;
+pub mod repl;
 pub mod state;
 pub mod tracing;
 
@@ -73,6 +80,14 @@ pub struct Cli {
     #[arg(short = 'd', default_value_t = false)]
     debug: bool,
 
+    /// Do not skip fields that are default when saving state
+    #[arg(long)]
+    no_skip_default: bool,
+
+    /// Try to serialize using strings when saving run history
+    #[arg(long)]
+    try_strings: bool,
+
     // /// Debug level
     // #[arg(short = 'd', long, value_enum, default_value_t = LogLevel::Info)]
     // debug_level: LogLevel,
@@ -82,9 +97,9 @@ pub struct Cli {
 }
 
 pub struct Parsed {
-    pub argv: Vec<OsString>, // raw argv from the OS (including program name)
-    pub matches: clap::ArgMatches, // only what the user actually supplied
-    pub cli: Cli,            // your typed struct, built from matches
+    pub cli: Cli,
+    pub input_string: String,
+    pub matches: clap::ArgMatches,
 }
 impl Cli {
     pub fn new_test(state_folder: PathBuf) -> Self {
@@ -97,6 +112,8 @@ impl Cli {
             command: None,
             level: Some(LogLevel::Info),
             debug: false,
+            no_skip_default: false,
+            try_strings: false,
             trace_logs_filename: None,
         }
     }
@@ -110,10 +127,19 @@ impl Cli {
         let matches = cmd.clone().try_get_matches_from(&argv)?;
 
         // Recreate the typed struct from matches (don’t lose info)
+        // Recreate the typed struct from matches (don't lose info)
         let cli =
             <Cli as FromArgMatches>::from_arg_matches(&matches).map_err(|e| e.format(&mut cmd))?;
 
-        Ok(Parsed { argv, matches, cli })
+        Ok(Parsed {
+            input_string: argv
+                .into_iter()
+                .map(|s| s.to_string_lossy().into_owned()) // handles non-UTF8 gracefully
+                .collect::<Vec<_>>()
+                .join(" "),
+            matches,
+            cli,
+        })
     }
 
     fn override_settings(&mut self, other: Cli) {
@@ -165,10 +191,7 @@ impl Cli {
                 Save::Dot { path } => {
                     state.export_dots(path.unwrap_or(self.state_folder.clone()))?;
                 }
-                Save::State {
-                    path,
-                    no_skip_default,
-                } => {
+                Save::State { path, .. } => {
                     self.save(
                         state,
                         run_history,
@@ -176,7 +199,6 @@ impl Cli {
                         &global_settings,
                         path,
                         false,
-                        no_skip_default,
                     )?;
                 }
                 Save::Schema {} => {
@@ -233,7 +255,7 @@ impl Cli {
         Ok(ControlFlow::Continue(()))
     }
 
-    pub fn run(mut self) -> Result<()> {
+    pub fn run(mut self, raw: String) -> Result<()> {
         if option_env!("NO_SYMBOLICA_OEM_LICENSE").is_none() {
             activate_oem_license!("SYMBOLICA_OEM_KEY_23177b25");
         };
@@ -272,7 +294,7 @@ impl Cli {
                 &mut default_runtime_settings,
             )?;
 
-            run_history.push(a);
+            run_history.push_with_raw(a, Some(raw));
         } else {
             print_banner();
             let prompt = DefaultPrompt {
@@ -299,7 +321,7 @@ impl Cli {
 
             loop {
                 match r.read_command() {
-                    ReadCommandOutput::Command(mut cli) => {
+                    ReadCommandOutput::Command(mut cli, raw_input) => {
                         if let Some(c) = cli.command.take() {
                             match cli.run_command(
                                 c.clone(),
@@ -313,12 +335,12 @@ impl Cli {
                                     self.override_settings(cli);
                                 }
                                 Ok(ControlFlow::Break(())) => {
-                                    run_history.push(c);
+                                    run_history.push_with_raw(c, Some(raw_input.clone()));
                                     self.override_settings(cli);
                                     break;
                                 }
                                 _ => {
-                                    run_history.push(c);
+                                    run_history.push_with_raw(c, Some(raw_input));
                                     self.override_settings(cli);
                                 }
                             }
@@ -352,7 +374,6 @@ impl Cli {
                 &global_settings,
                 None,
                 false,
-                false,
             )?;
         }
         Ok(())
@@ -374,7 +395,6 @@ impl Cli {
         global_settings: &GlobalSettings,
         root_folder: Option<PathBuf>,
         strict: bool,
-        no_skip_default: bool,
     ) -> Result<()> {
         // let root_folder = root_folder.join("gammaloop_state");
 
@@ -424,10 +444,13 @@ impl Cli {
         }
 
         state.save(&selected_root_folder, true, false)?;
-        run_history.save_toml(&selected_root_folder, true, false)?;
-        if no_skip_default {
+        if self.no_skip_default {
             SHOWDEFAULTS.store(true, std::sync::atomic::Ordering::Relaxed);
         }
+
+        set_serialize_commands_as_strings(self.try_strings);
+        run_history.save_toml(&selected_root_folder, true, false)?;
+        set_serialize_commands_as_strings(false);
 
         default_runtime_settings.to_file(
             &selected_root_folder.join("default_runtime_settings.toml"),
@@ -435,7 +458,7 @@ impl Cli {
         )?;
         global_settings.to_file(&selected_root_folder.join("global_settings.toml"), true)?;
 
-        if no_skip_default {
+        if self.no_skip_default {
             SHOWDEFAULTS.store(false, std::sync::atomic::Ordering::Relaxed);
         }
 
