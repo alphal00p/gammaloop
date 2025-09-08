@@ -287,7 +287,10 @@ impl AmplitudeGraphTerm {
             orientations,
         );
 
-        debug!("evaluated threshold counterterm: {:16e}", sum_of_cts);
+        debug!(
+            value = format!("{sum_of_cts:16e}"),
+            "evaluated sum of threshold counterterms"
+        );
         result - sum_of_cts
     }
 }

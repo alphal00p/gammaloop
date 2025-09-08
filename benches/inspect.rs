@@ -5,6 +5,7 @@ use gammaloop_api::{
     state::{RunHistory, State},
     Cli,
 };
+use gammalooprs::settings::{GlobalSettings, RuntimeSettings};
 use gammalooprs::utils::serde_utils::SmartSerde;
 use gammalooprs::utils::test_utils::load_generic_model;
 use pprof::criterion::{Output, PProfProfiler};
@@ -65,7 +66,14 @@ fn criterion_benchmark(c: &mut Criterion) -> Result<()> {
         "run history",
     )?;
     let (mut cli, mut state) = new_cli_for_bench("./benches/qqx_aaa_amplitude");
-    let _ = qqx_aaa_run.run(&mut cli, &mut state)?;
+    let mut global_settings = GlobalSettings::default();
+    let mut default_runtime_settings = RuntimeSettings::default();
+    let _ = qqx_aaa_run.run(
+        &mut cli,
+        &mut state,
+        &mut global_settings,
+        &mut default_runtime_settings,
+    )?;
 
     // state
     //
