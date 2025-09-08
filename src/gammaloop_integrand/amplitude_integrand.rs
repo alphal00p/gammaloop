@@ -271,10 +271,12 @@ impl AmplitudeGraphTerm {
                 }
             }
 
-            debug!(value = format!("{result:16e}"), "Original integrand value");
+            debug!(
+                bare_eval = format!("{result:16e}"),
+                "Original integrand value"
+            );
         }
         // status_debug!("last_params"; data = self.param_builder);
-        // debug!("evaluated integrand: {:16e}", result);
 
         let sum_of_cts = self.threshold_counterterm.evaluate(
             momentum_sample,
@@ -286,6 +288,9 @@ impl AmplitudeGraphTerm {
             &mut self.param_builder,
             orientations,
         );
+
+        debug!(bare_cff = format!("{result:16e}"), "{}", self.graph.name);
+        debug!(cts = format!("{sum_of_cts:16e}"), "{}", self.graph.name);
 
         debug!(
             value = format!("{sum_of_cts:16e}"),

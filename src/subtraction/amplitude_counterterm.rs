@@ -534,7 +534,10 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
             (local_ct + integrated_ct) * prefactor
         };
 
-        debug!(ct_eval = format!("{:+16e}", final_result), "ct evaluation");
+        debug!(
+            ct_eval = format!("{:+16e}", final_result),
+            "esurface {}", esurface_id.0
+        );
 
         final_result
     }
