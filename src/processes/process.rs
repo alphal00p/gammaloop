@@ -87,7 +87,7 @@ impl Process {
     pub(crate) fn warm_up(&mut self, model: &Model) -> Result<()> {
         self.collection.warm_up(model)
     }
-    pub(crate) fn preprocess(&mut self, model: &Model, settings: &GlobalSettings) -> Result<()> {
+    pub fn preprocess(&mut self, model: &Model, settings: &GlobalSettings) -> Result<()> {
         self.collection
             .preprocess(model, &self.definition, &settings.generation)?;
         self.settings_history = Some(settings.clone());
@@ -344,7 +344,7 @@ impl Process {
         }
     }
 
-    pub(super) fn generate_integrands(
+    pub fn generate_integrands(
         &mut self,
         model: &Model,
         global_settings: &GlobalSettings,

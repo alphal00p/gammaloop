@@ -188,11 +188,7 @@ impl Amplitude {
              amplitude.name = %self.name,
         )
     )]
-    pub(crate) fn preprocess(
-        &mut self,
-        model: &Model,
-        settings: &GenerationSettings,
-    ) -> Result<()> {
+    pub fn preprocess(&mut self, model: &Model, settings: &GenerationSettings) -> Result<()> {
         // preprocess each graph individually
         for amplitude_graph in self.graphs.iter_mut() {
             amplitude_graph.preprocess(model, settings)?;
@@ -209,7 +205,7 @@ impl Amplitude {
               amplitude.name = %self.name,
           )
       )]
-    pub(crate) fn build_integrand(
+    pub fn build_integrand(
         &mut self,
         model: &Model,
         global_settings: &GlobalSettings,

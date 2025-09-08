@@ -1,5 +1,6 @@
-use ::tracing::{debug, info, level_filters::LevelFilter, warn};
-use clap::{Args, Parser, Subcommand, ValueEnum};
+use ::tracing::{debug, info, level_filters::LevelFilter};
+use clap::{Args, CommandFactory, FromArgMatches, Parser, Subcommand};
+
 use clap_repl::{
     reedline::{DefaultPrompt, DefaultPromptSegment, FileBackedHistory},
     ClapEditor, ReadCommandOutput,
@@ -12,11 +13,10 @@ use dirs::home_dir;
 use eyre::{eyre, Context};
 use gammalooprs::{
     initialisation::initialise,
-    model::Model,
     settings::{GlobalSettings, RuntimeSettings},
     status_info,
     utils::{
-        serde_utils::{self, get_schema_folder, SmartSerde, SHOWDEFAULTS},
+        serde_utils::{get_schema_folder, SmartSerde, SHOWDEFAULTS},
         tracing::{LogFormat, LogLevel},
         GIT_VERSION,
     },
@@ -24,8 +24,9 @@ use gammalooprs::{
 use integrate::Integrate;
 use schemars::{schema_for, JsonSchema};
 use serde::{Deserialize, Serialize};
+use set::Set;
 use state::{current_log_spec, RunHistory, State};
-use std::{fs, path::PathBuf};
+use std::{ffi::OsString, fs, path::PathBuf};
 use std::{fs::File, ops::ControlFlow};
 use symbolica::activate_oem_license;
 // use tracing::LogLevel;
@@ -80,6 +81,11 @@ pub struct Cli {
     pub command: Option<Commands>,
 }
 
+pub struct Parsed {
+    pub argv: Vec<OsString>, // raw argv from the OS (including program name)
+    pub matches: clap::ArgMatches, // only what the user actually supplied
+    pub cli: Cli,            // your typed struct, built from matches
+}
 impl Cli {
     pub fn new_test(state_folder: PathBuf) -> Self {
         Cli {
@@ -95,6 +101,21 @@ impl Cli {
         }
     }
 
+    /// Parse from env args *and* capture ArgMatches (explicit vs defaults).
+    pub fn parse_env_with_capture() -> Result<Parsed, clap::Error> {
+        let argv: Vec<OsString> = std::env::args_os().collect();
+
+        // Build a Command (same as derive(Parser)) and get matches
+        let mut cmd = <Cli as CommandFactory>::command();
+        let matches = cmd.clone().try_get_matches_from(&argv)?;
+
+        // Recreate the typed struct from matches (don’t lose info)
+        let cli =
+            <Cli as FromArgMatches>::from_arg_matches(&matches).map_err(|e| e.format(&mut cmd))?;
+
+        Ok(Parsed { argv, matches, cli })
+    }
+
     fn override_settings(&mut self, other: Cli) {
         self.state_folder = other.state_folder;
         self.model_file = other.model_file;
@@ -105,8 +126,10 @@ impl Cli {
     fn run_command(
         &mut self,
         command: Commands,
-        run_history: &mut RunHistory,
         state: &mut State,
+        run_history: &mut RunHistory,
+        global_settings: &mut GlobalSettings,
+        default_runtime_settings: &mut RuntimeSettings,
     ) -> Result<ControlFlow<()>, Report> {
         if let Some(level) = self.level {
             let spec = level.to_env_spec();
@@ -142,47 +165,37 @@ impl Cli {
                 Save::Dot { path } => {
                     state.export_dots(path.unwrap_or(self.state_folder.clone()))?;
                 }
-                Save::State { path } => {
-                    self.save(state, run_history, path, false)?;
-                }
-                Save::DefaultRuntimeSettings { path } => {
-                    SHOWDEFAULTS.store(true, std::sync::atomic::Ordering::Relaxed);
-                    let path = path.unwrap_or(PathBuf::from("run_settings.toml"));
-                    let settings = RuntimeSettings::default();
-                    let succes = settings.to_file(path, false);
-                    SHOWDEFAULTS.store(false, std::sync::atomic::Ordering::Relaxed);
-                    succes?;
-                }
-                Save::DefaultGlobalSettings { path } => {
-                    SHOWDEFAULTS.store(true, std::sync::atomic::Ordering::Relaxed);
-                    let path = path.unwrap_or(PathBuf::from("global_settings.toml"));
-                    let settings = GlobalSettings::default();
-                    let succes = settings.to_file(path, false);
-                    SHOWDEFAULTS.store(false, std::sync::atomic::Ordering::Relaxed);
-                    succes?;
+                Save::State {
+                    path,
+                    no_skip_default,
+                } => {
+                    self.save(
+                        state,
+                        run_history,
+                        &default_runtime_settings,
+                        &global_settings,
+                        path,
+                        false,
+                        no_skip_default,
+                    )?;
                 }
                 Save::Schema {} => {
                     write_schemas()?;
                 }
             },
-            Commands::Set(s) => match s {
-                Set::Log { level, .. } => {
-                    if let Some(level) = level {
-                        let spec = level.to_env_spec();
-                        state.set_log_spec(spec)?;
-                    }
-                }
-                Set::BaseDir { path } => {
-                    self.state_folder = path.clone();
-                }
-            },
+            Commands::Set(s) => s.run(
+                state,
+                global_settings,
+                default_runtime_settings,
+                &mut self.state_folder,
+            )?,
 
             Commands::Generate(g) => g.run(
                 state,
                 &self.state_folder,
                 self.override_state,
-                &run_history.global_settings,
-                &run_history.default_runtime_settings,
+                &global_settings,
+                &default_runtime_settings,
             )?,
 
             Commands::Integrate(g) => {
@@ -209,7 +222,8 @@ impl Cli {
             },
             Commands::Run(Run { path }) => {
                 let mut new_run_history = RunHistory::new(path)?;
-                let res = new_run_history.run(self, state);
+                let res =
+                    new_run_history.run(self, state, global_settings, default_runtime_settings);
 
                 run_history.merge(new_run_history);
                 return res;
@@ -244,12 +258,19 @@ impl Cli {
             }
         };
         let mut run_history = self.get_run_history()?;
-        // let mut global_settings = run_history.
+        let mut global_settings = run_history.global_settings.clone();
+        let mut default_runtime_settings = run_history.default_runtime_settings.clone();
 
         // let mut state = State::load(&cli.state_file,);
 
         if let Some(a) = self.command.take() {
-            let _ = self.run_command(a.clone(), &mut run_history, &mut state)?;
+            let _ = self.run_command(
+                a.clone(),
+                &mut state,
+                &mut run_history,
+                &mut global_settings,
+                &mut default_runtime_settings,
+            )?;
 
             run_history.push(a);
         } else {
@@ -280,7 +301,13 @@ impl Cli {
                 match r.read_command() {
                     ReadCommandOutput::Command(mut cli) => {
                         if let Some(c) = cli.command.take() {
-                            match cli.run_command(c.clone(), &mut run_history, &mut state) {
+                            match cli.run_command(
+                                c.clone(),
+                                &mut state,
+                                &mut run_history,
+                                &mut global_settings,
+                                &mut default_runtime_settings,
+                            ) {
                                 Err(e) => {
                                     eprintln!("{e:?}");
                                     self.override_settings(cli);
@@ -318,7 +345,15 @@ impl Cli {
 
         if !self.no_save_state {
             debug!("Saving State, override: {}", self.override_state);
-            self.save(&mut state, &run_history, None, false)?;
+            self.save(
+                &mut state,
+                &run_history,
+                &default_runtime_settings,
+                &global_settings,
+                None,
+                false,
+                false,
+            )?;
         }
         Ok(())
     }
@@ -335,8 +370,11 @@ impl Cli {
         &self,
         state: &mut State,
         run_history: &RunHistory,
+        default_runtime_settings: &RuntimeSettings,
+        global_settings: &GlobalSettings,
         root_folder: Option<PathBuf>,
         strict: bool,
+        no_skip_default: bool,
     ) -> Result<()> {
         // let root_folder = root_folder.join("gammaloop_state");
 
@@ -387,6 +425,19 @@ impl Cli {
 
         state.save(&selected_root_folder, true, false)?;
         run_history.save_toml(&selected_root_folder, true, false)?;
+        if no_skip_default {
+            SHOWDEFAULTS.store(true, std::sync::atomic::Ordering::Relaxed);
+        }
+
+        default_runtime_settings.to_file(
+            &selected_root_folder.join("default_runtime_settings.toml"),
+            true,
+        )?;
+        global_settings.to_file(&selected_root_folder.join("global_settings.toml"), true)?;
+
+        if no_skip_default {
+            SHOWDEFAULTS.store(false, std::sync::atomic::Ordering::Relaxed);
+        }
 
         Ok(())
     }
@@ -411,34 +462,16 @@ pub enum Save {
         /// Path to save the state to, by default is the current state folder
         #[arg(short = 'p', long)]
         path: Option<PathBuf>,
-    },
-    DefaultRuntimeSettings {
-        /// Path to save the default runtime settings to, by default is the current state folder
-        #[arg(short = 'p', long)]
-        path: Option<PathBuf>,
-    },
-    DefaultGlobalSettings {
-        /// Path to save the default global settings to, by default is the current state folder
-        #[arg(short = 'p', long)]
-        path: Option<PathBuf>,
+
+        /// Do not skip fields that are default
+        #[arg(short = 'd', long)]
+        no_skip_default: bool,
     },
     /// regenerate the schema files
     Schema {},
 }
 
-#[derive(Subcommand, Debug, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
-pub enum Set {
-    BaseDir {
-        path: PathBuf,
-    },
-    Log {
-        #[arg(short = 'l')]
-        level: Option<LogLevel>,
-        // // #[clap(subcommand)]
-        // #[arg(short, long, value_enum, default_value_t = LogFormat::Long)]
-        // format: LogFormat,
-    },
-}
+pub mod set;
 
 #[derive(Subcommand, Debug, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
 pub enum Display {

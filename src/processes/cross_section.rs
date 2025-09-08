@@ -124,7 +124,7 @@ impl<S: CrossSectionState> CrossSection<S> {
         Ok(())
     }
 
-    pub(crate) fn preprocess(
+    pub fn preprocess(
         &mut self,
         model: &Model,
         process_definition: &ProcessDefinition,
@@ -135,7 +135,7 @@ impl<S: CrossSectionState> CrossSection<S> {
         Ok(())
     }
 
-    pub(crate) fn build_integrand(
+    pub fn build_integrand(
         &mut self,
         model: &Model,
         runtime_default: LockedRuntimeSettings,

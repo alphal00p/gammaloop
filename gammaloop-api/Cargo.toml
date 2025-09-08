@@ -60,6 +60,8 @@ rand = { version = "0.9", features = ["small_rng"] }
 chrono = { version = "0.4", features = ["serde"] }
 tracing-appender = "0.2.3"
 serde_yaml = "*"
+thiserror = "2.0.16"
+figment = {version="0.10.19",features=["yaml","json","toml"]}
 
 # PyO3: optional for embedding. Auto-init at runtime.
 [dependencies.pyo3]

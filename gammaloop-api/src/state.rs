@@ -7,8 +7,9 @@ use std::{
     time::Instant,
 };
 
+use clap::Args;
 use color_eyre::Result;
-use colored::{ColoredString, Colorize};
+use colored::Colorize;
 use eyre::{eyre, Context};
 use schemars::{schema_for, JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
@@ -23,7 +24,7 @@ use gammalooprs::{
     graph::Graph,
     integrands::HasIntegrand,
     model::{InputParamCard, Model},
-    processes::{ExportSettings, Process, ProcessDefinition, ProcessList},
+    processes::{ExportSettings, Process, ProcessCollection, ProcessDefinition, ProcessList},
     settings::{runtime::LockedRuntimeSettings, GlobalSettings, RuntimeSettings},
     status_debug, status_info, status_warn,
     utils::{
@@ -33,6 +34,8 @@ use gammalooprs::{
     },
     GammaLoopContextContainer,
 };
+
+use crate::generate::ProcessArgs;
 
 use super::{Cli, Commands};
 
@@ -61,10 +64,22 @@ impl RunHistory {
     pub fn schema() -> Schema {
         schema_for!(RunHistory)
     }
-    pub fn run(&mut self, cli: &mut Cli, state: &mut State) -> Result<ControlFlow<()>> {
+    pub fn run(
+        &mut self,
+        cli: &mut Cli,
+        state: &mut State,
+        global_settings: &mut GlobalSettings,
+        default_runtime_settings: &mut RuntimeSettings,
+    ) -> Result<ControlFlow<()>> {
         for command in self.commands.clone() {
             status_info!("Running command: {:?}", command);
-            if let ControlFlow::Break(_) = cli.run_command(command, self, state)? {
+            if let ControlFlow::Break(_) = cli.run_command(
+                command,
+                state,
+                self,
+                global_settings,
+                default_runtime_settings,
+            )? {
                 return Ok(ControlFlow::Break(()));
             }
         }
@@ -154,6 +169,39 @@ impl State {
         self.process_list.preprocess(&self.model, global_settings)?;
         self.process_list
             .generate_integrands(&self.model, global_settings, runtime_default)?;
+        Ok(())
+    }
+
+    pub fn generate_integrand(
+        &mut self,
+        global_settings: &GlobalSettings,
+        runtime_default: LockedRuntimeSettings,
+        process: &ProcessArgs,
+    ) -> Result<()> {
+        let p = &mut self.process_list.processes[process.process_id];
+        if let Some(name) = &process.name {
+            match &mut p.collection {
+                ProcessCollection::Amplitudes(a) => {
+                    if let Some(a) = a.get_mut(name) {
+                        a.preprocess(&self.model, &global_settings.generation)?;
+                        a.build_integrand(&self.model, global_settings, runtime_default)?;
+                    } else {
+                        return Err(eyre!(
+                            "No amplitude named '{}' in process id {}",
+                            name,
+                            process.process_id
+                        ));
+                    }
+                }
+                ProcessCollection::CrossSections(a) => {
+                    // a[name].preprocess(&self.model, &global_settings.generation)?;
+                }
+            }
+        } else {
+            p.preprocess(&self.model, global_settings)?;
+            p.generate_integrands(&self.model, global_settings, runtime_default)?;
+        }
+
         Ok(())
     }
 
@@ -493,4 +541,10 @@ mod tests {
         let deserialized_from_file = RunHistory::from_file("test_path.toml", " ").unwrap();
         assert_eq!(run_history, deserialized_from_file);
     }
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct ExistingArgs {
+    pub process_id: u32,
+    pub name: Option<String>,
 }
