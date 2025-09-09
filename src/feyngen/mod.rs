@@ -8,6 +8,8 @@ use indicatif::{ParallelProgressIterator, ProgressBar, ProgressStyle};
 use itertools::Itertools;
 use rayon::iter::IntoParallelRefMutIterator;
 use rayon::iter::ParallelIterator;
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
 use smartstring::{LazyCompact, SmartString};
 use std::ops::RangeInclusive;
 use std::{fmt, str::FromStr};
@@ -29,7 +31,7 @@ pub enum FeynGenError {
     NumeratorEvaluationError(String),
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 
 pub struct GraphGroupingOptions {
     pub numerical_sample_seed: u16,
@@ -64,7 +66,7 @@ impl fmt::Display for GraphGroupingOptions {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub enum NumeratorAwareGraphGroupingOption {
     NoGrouping,
     OnlyDetectZeroes,
@@ -137,7 +139,7 @@ impl NumeratorAwareGraphGroupingOption {
         )
     }
 
-    pub(crate) fn new_with_attributes(
+    pub fn new_with_attributes(
         strategy: &str,
         seed: Option<u16>,
         num_samples: Option<usize>,
@@ -173,7 +175,7 @@ impl NumeratorAwareGraphGroupingOption {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub enum GenerationType {
     Amplitude,
     CrossSection,
@@ -220,7 +222,7 @@ pub(crate) fn get_coupling_orders<NodeColor: diagram_generator::NodeColorFunctio
     coupling_orders
 }
 
-#[derive(Debug, Clone, Encode, Decode)]
+#[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize, JsonSchema, PartialEq)]
 pub struct FeynGenFilters(pub Vec<FeynGenFilter>);
 
 impl FeynGenFilters {
@@ -386,7 +388,7 @@ impl FeynGenFilters {
     }
 }
 
-#[derive(Debug, Clone, Copy, Encode, Decode)]
+#[derive(Debug, Clone, Copy, Encode, Decode, Serialize, Deserialize, JsonSchema, PartialEq)]
 pub struct SelfEnergyFilterOptions {
     pub veto_self_energy_of_massive_lines: bool,
     pub veto_self_energy_of_massless_lines: bool,
@@ -419,7 +421,7 @@ impl fmt::Display for SelfEnergyFilterOptions {
     }
 }
 
-#[derive(Debug, Clone, Copy, Encode, Decode)]
+#[derive(Debug, Clone, Copy, Encode, Decode, Serialize, Deserialize, JsonSchema, PartialEq)]
 pub struct SnailFilterOptions {
     pub veto_snails_attached_to_massive_lines: bool,
     pub veto_snails_attached_to_massless_lines: bool,
@@ -455,7 +457,7 @@ impl fmt::Display for SnailFilterOptions {
     }
 }
 
-#[derive(Debug, Clone, Copy, Encode, Decode)]
+#[derive(Debug, Clone, Copy, Encode, Decode, Serialize, Deserialize, JsonSchema, PartialEq)]
 pub struct TadpolesFilterOptions {
     pub veto_tadpoles_attached_to_massive_lines: bool,
     pub veto_tadpoles_attached_to_massless_lines: bool,
@@ -491,12 +493,12 @@ impl fmt::Display for TadpolesFilterOptions {
     }
 }
 
-#[derive(Debug, Clone, Copy, Encode, Decode)]
+#[derive(Debug, Clone, Copy, Encode, Decode, Serialize, Deserialize, JsonSchema, PartialEq)]
 pub struct SewedFilterOptions {
     pub filter_tadpoles: bool,
 }
 
-#[derive(Debug, Clone, Encode, Decode)]
+#[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize, JsonSchema, PartialEq)]
 pub enum FeynGenFilter {
     SelfEnergyFilter(SelfEnergyFilterOptions),
     TadpolesFilter(TadpolesFilterOptions),
@@ -581,8 +583,7 @@ impl fmt::Display for FeynGenFilter {
         )
     }
 }
-
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
 pub struct FeynGenOptions {
     pub generation_type: GenerationType,
     pub initial_pdgs: Vec<i64>,
@@ -638,6 +639,24 @@ impl fmt::Display for FeynGenOptions {
                 .join("\n")
             }
         )
+    }
+}
+
+impl Default for FeynGenOptions {
+    fn default() -> Self {
+        Self {
+            generation_type: GenerationType::Amplitude,
+            initial_pdgs: vec![],
+            final_pdgs_lists: vec![],
+            loop_count_range: (1, 1),
+            symmetrize_initial_states: false,
+            symmetrize_final_states: false,
+            symmetrize_left_right_states: false,
+            allow_symmetrization_of_external_fermions_in_amplitudes: false,
+            max_multiplicity_for_fast_cut_filter: 6,
+            amplitude_filters: FeynGenFilters(vec![]),
+            cross_section_filters: FeynGenFilters(vec![]),
+        }
     }
 }
 

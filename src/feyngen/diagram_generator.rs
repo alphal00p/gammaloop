@@ -273,7 +273,7 @@ pub struct FeynGen {
 }
 
 impl FeynGen {
-    pub(crate) fn new(options: FeynGenOptions) -> Self {
+    pub fn new(options: FeynGenOptions) -> Self {
         Self { options }
     }
 
@@ -2379,7 +2379,7 @@ impl FeynGen {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn generate(
+    pub fn generate(
         &self,
         model: &Model,
         numerator_aware_isomorphism_grouping: &NumeratorAwareGraphGroupingOption,

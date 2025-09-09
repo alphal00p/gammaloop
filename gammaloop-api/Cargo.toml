@@ -61,11 +61,13 @@ chrono = { version = "0.4", features = ["serde"] }
 tracing-appender = "0.2.3"
 serde_yaml = "*"
 thiserror = "2.0.16"
-figment = {version="0.10.19",features=["yaml","json","toml"]}
+figment = { version = "0.10.19", features = ["yaml", "json", "toml"] }
 reedline = "0.42.0"
 shlex = "1.3.0"
 nu-ansi-term = "0.50.1"
-clap_complete = {version="4.5.57",features=["unstable-dynamic"]}
+clap_complete = { version = "4.5.57", features = ["unstable-dynamic"] }
+regex = "1.11.2"
+ahash = { version = "0.8.8", features = ["serde"] }
 
 # PyO3: optional for embedding. Auto-init at runtime.
 [dependencies.pyo3]

@@ -1766,7 +1766,7 @@ impl Model {
     }
 
     #[inline]
-    pub(crate) fn get_particle<S: AsRef<str>>(&self, name: S) -> ArcParticle {
+    pub fn get_particle<S: AsRef<str>>(&self, name: S) -> ArcParticle {
         if let Some(position) = self.particle_name_to_position.get(name.as_ref()) {
             self.particles[*position].clone()
         } else {
@@ -1780,7 +1780,7 @@ impl Model {
     }
 
     #[inline]
-    pub(crate) fn try_get_particle<S: AsRef<str>>(&self, name: S) -> Result<ArcParticle> {
+    pub fn try_get_particle<S: AsRef<str>>(&self, name: S) -> Result<ArcParticle> {
         if let Some(position) = self.particle_name_to_position.get(name.as_ref()) {
             Ok(self.particles[*position].clone())
         } else {

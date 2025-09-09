@@ -2,8 +2,16 @@ use std::{env, path::PathBuf};
 
 use crate::model::Model;
 
+use include_dir::{include_dir, Dir, File};
+
+static BUILTIN_MODELS: Dir = include_dir!("$CARGO_MANIFEST_DIR/models/json");
+
 pub fn load_generic_model(name: &str) -> Model {
-    Model::from_file(output_dir().join(format!("gammaloop_models/{}.json", name))).unwrap()
+    if let Some(file) = BUILTIN_MODELS.get_file(format!("{}/{}.json", name, name)) {
+        Model::from_str(file.contents_utf8().unwrap().into(), "json").unwrap()
+    } else {
+        panic!("Model {} not found in built-in models.", name);
+    }
 }
 
 pub fn output_dir() -> PathBuf {

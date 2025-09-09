@@ -1403,6 +1403,7 @@ checksum = "e6d5a32815ae3f33302d95fdcb2ce17862f8c65363dcfd29360480ba1001fc9c"
 name = "gammaloop-api"
 version = "0.1.0"
 dependencies = [
+ "ahash",
  "bincode",
  "bincode-trait-derive",
  "chrono",
@@ -1422,6 +1423,7 @@ dependencies = [
  "pyo3-stub-gen",
  "rand 0.9.2",
  "reedline",
+ "regex",
  "schemars 1.0.4",
  "serde",
  "serde_json",
@@ -1469,6 +1471,7 @@ dependencies = [
  "git-version",
  "hyperdual",
  "idenso",
+ "include_dir",
  "indexmap 2.11.0",
  "indicatif",
  "insta",
