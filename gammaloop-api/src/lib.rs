@@ -248,6 +248,8 @@ impl Cli {
             },
             Commands::Run(Run { path }) => {
                 let mut new_run_history = RunHistory::new(path)?;
+                *global_settings = new_run_history.global_settings.clone();
+                *default_runtime_settings = new_run_history.default_runtime_settings.clone();
                 let res =
                     new_run_history.run(self, state, global_settings, default_runtime_settings);
 
