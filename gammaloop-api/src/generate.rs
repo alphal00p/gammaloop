@@ -1133,7 +1133,7 @@ fn parse_loop_momentum_bases(s: &String) -> Option<HashMap<String, Vec<String>>>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gammalooprs::feyngen::GenerationType;
+    use gammalooprs::{feyngen::GenerationType, initialisation::test_initialise};
 
     fn base_args(tokens: &str) -> SpecArgs {
         SpecArgs {
@@ -1177,6 +1177,7 @@ mod tests {
 
     #[test]
     fn basic_process_list_arrow() {
+        test_initialise().unwrap();
         let ps = parse_ok_amp("e+ e- > d d~ g");
         assert_eq!(ps.initial, vec!["e+", "e-"]);
         assert_eq!(ps.final_, vec!["d", "d~", "g"]);
@@ -1185,6 +1186,7 @@ mod tests {
 
     #[test]
     fn basic_process_list_to() {
+        test_initialise().unwrap();
         let ps = parse_ok_amp("e+ e- to d d~ g");
         assert_eq!(ps.initial, vec!["e+", "e-"]);
         assert_eq!(ps.final_, vec!["d", "d~", "g"]);
@@ -1192,6 +1194,7 @@ mod tests {
 
     #[test]
     fn empty_sets_allowed() {
+        test_initialise().unwrap();
         let ps = parse_ok_xs("{} to {}");
         assert!(ps.empty_initial);
         assert!(ps.empty_final);
@@ -1199,6 +1202,7 @@ mod tests {
 
     #[test]
     fn alternatives_in_final_states() {
+        test_initialise().unwrap();
         let ps = parse_ok_xs("e+ e- > { z z, a a }");
         assert!(ps.final_.is_empty());
         assert_eq!(ps.final_sets.len(), 2);
@@ -1208,6 +1212,7 @@ mod tests {
 
     #[test]
     fn veto_and_only() {
+        test_initialise().unwrap();
         let ps = parse_ok_xs("e+ e- > mu+ mu- / u d c g ghG e- | u g ghG");
         assert!(ps.veto.contains("u"));
         assert!(ps.veto.contains("e-"));
@@ -1219,6 +1224,7 @@ mod tests {
 
     #[test]
     fn amp_order_constraints() {
+        test_initialise().unwrap();
         let ps = parse_ok_amp("e+ e- > mu+ mu- QED==2 QCD>=2 QCD<=4");
         let qcd = ps.amp_couplings.get("QCD").unwrap();
         assert_eq!(qcd.min, Some(2));
@@ -1229,6 +1235,7 @@ mod tests {
 
     #[test]
     fn xs_order_constraints_powered() {
+        test_initialise().unwrap();
         let ps = parse_ok_xs("e+ e- > mu+ mu- QED^2==2 QCD^2>=2 QCD^2<=4");
         let key = CouplingKey {
             name: "QCD".into(),
@@ -1247,6 +1254,7 @@ mod tests {
 
     #[test]
     fn perturbative_block_all_forms() {
+        test_initialise().unwrap();
         let ps = parse_ok_xs("e+ e- > z [ {1} {{2}} QCD=2 QED=1 ]");
         assert_eq!(ps.pert.loops_sum_amp_or_sum, Some(1));
         assert_eq!(ps.pert.loops_forward_graph, Some(2));
@@ -1256,18 +1264,21 @@ mod tests {
 
     #[test]
     fn perturbative_block_shorthand() {
+        test_initialise().unwrap();
         let ps = parse_ok_xs("e+ e- > z [ QCD ]");
         assert_eq!(ps.pert.orders.get("QCD"), Some(&1));
     }
 
     #[test]
     fn amplitude_generation_type_is_set() {
+        test_initialise().unwrap();
         let ps = parse_ok_amp("e+ e- > mu+ mu-");
         assert_eq!(ps.feyngen.generation_type, GenerationType::Amplitude);
     }
 
     #[test]
     fn rejects_malformed_tokens() {
+        test_initialise().unwrap();
         let model = &load_generic_model("sm");
 
         let args = base_args("e+ > z [ {{}} ]");
@@ -1277,6 +1288,7 @@ mod tests {
 
     #[test]
     fn missing_arrow_detected() {
+        test_initialise().unwrap();
         let model = &load_generic_model("sm");
 
         let args = base_args("e+ e-  z z");
