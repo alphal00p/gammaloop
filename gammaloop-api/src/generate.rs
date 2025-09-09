@@ -1,7 +1,9 @@
+// file: src/cmd/generate.rs
 #![allow(clippy::too_many_arguments)]
 
 use ahash::HashMap;
 use std::collections::{BTreeMap, BTreeSet};
+use std::ops::RangeInclusive;
 use std::path::Path;
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
@@ -87,14 +89,20 @@ pub struct SpecArgs {
     #[arg(value_name = "TOKENS", num_args = 1..)]
     pub tokens: Vec<String>,
 
+    // --------- High-level switch ---------
+    /// Treat the process as an amplitude (otherwise as cross-section/forward).
+    #[arg(long = "amplitude", short = 'a', default_value_t = false)]
+    pub amplitude: bool,
+
     // --------- Generation options that influence FeynGenOptions ---------
     /// Number of threads
-    #[arg(short = 'n', long = "num-threads", default_value_t = 1)]
-    pub num_threads: u32,
+    #[arg(short = 'n', long = "num-threads")]
+    pub num_threads: Option<u32>,
 
     /// Clear pre-existing processes
     #[arg(
         long = "clear-existing-processes",
+        short = 'c',
         alias = "clear",
         default_value_t = false
     )]
@@ -108,31 +116,70 @@ pub struct SpecArgs {
     #[arg(long = "filter-tadpoles")]
     pub filter_tadpoles: Option<bool>,
 
-    /// Extra filters / constraints
-    #[arg(long = "max-n-bridges")]
-    pub max_n_bridges: Option<i32>,
-    #[arg(long = "number-of-factorized-loop-subtopologies", alias = "nfactl")]
-    pub number_of_factorized_loop_subtopologies: Option<i32>,
-    /// Number of closed loops of anticommutating fields; -1 disables
-    #[arg(long = "number-of-anticommutating-loops")]
-    pub number_of_anticommutating_loops: Option<i32>,
+    /// Cross-section tadpole filtering when sewing
+    #[arg(long = "filter-cross-section-tadpoles")]
+    pub filter_cross_section_tadpoles: Option<bool>,
 
-    /// Symmetrization
+    /// Tadpole veto details
+    #[arg(long = "veto-tadpoles-attached-to-massive-lines")]
+    pub veto_tadpoles_attached_to_massive_lines: Option<bool>,
+    #[arg(long = "veto-tadpoles-attached-to-massless-lines")]
+    pub veto_tadpoles_attached_to_massless_lines: Option<bool>,
+    #[arg(long = "veto-only-scaleless-tadpoles")]
+    pub veto_only_scaleless_tadpoles: Option<bool>,
+
+    /// Snail veto details
+    #[arg(long = "veto-snails-attached-to-massive-lines")]
+    pub veto_snails_attached_to_massive_lines: Option<bool>,
+    #[arg(long = "veto-snails-attached-to-massless-lines")]
+    pub veto_snails_attached_to_massless_lines: Option<bool>,
+    #[arg(long = "veto-only-scaleless-snails")]
+    pub veto_only_scaleless_snails: Option<bool>,
+
+    /// Self-energy veto details
+    #[arg(long = "veto-self-energy-of-massive-lines")]
+    pub veto_self_energy_of_massive_lines: Option<bool>,
+    #[arg(long = "veto-self-energy-of-massless-lines")]
+    pub veto_self_energy_of_massless_lines: Option<bool>,
+    #[arg(long = "veto-only-scaleless-self-energy")]
+    pub veto_only_scaleless_self_energy: Option<bool>,
+
+    /// Extra filters / constraints
+    #[arg(long = "max-n-bridges", short = 'b')]
+    pub max_n_bridges: Option<i32>,
+    #[arg(
+        long = "number-of-factorized-loop-subtopologies",
+        short = 'f',
+        alias = "nfactl"
+    )]
+    pub number_of_factorized_loop_subtopologies: Option<i32>,
+    /// Number of closed fermion loops; negative disables
+    #[arg(long = "number-of-fermion-loops", short = 'L')]
+    pub number_of_fermion_loops: Option<i32>,
+
+    /// Cut options (cross-section)
+    /// Range of cut blobs on either side of the cut
+    #[arg(long = "n-cut-blobs", short = 'B', num_args = 2)]
+    pub n_cut_blobs: Option<Vec<usize>>,
+    /// Range of cut spectators on either side of the cut
+    #[arg(long = "n-cut-spectators", short = 'S', num_args = 2)]
+    pub n_cut_spectators: Option<Vec<usize>>,
+
+    /// Symmetrization (Option<bool> for smart defaults depending on generation type)
     #[arg(
         long = "allow-symmetrization-of-external-fermions-in-amplitudes",
-        alias = "symferm",
-        default_value_t = false
+        alias = "symferm"
     )]
-    pub allow_symmetrization_of_external_fermions_in_amplitudes: bool,
-    #[arg(long = "symmetrize-initial-states", default_value_t = false)]
-    pub symmetrize_initial_states: bool,
-    #[arg(long = "symmetrize-final-states", default_value_t = false)]
-    pub symmetrize_final_states: bool,
-    #[arg(long = "symmetrize-left-right-states", default_value_t = false)]
-    pub symmetrize_left_right_states: bool,
+    pub allow_symmetrization_of_external_fermions_in_amplitudes: Option<bool>,
+    #[arg(long = "symmetrize-initial-states")]
+    pub symmetrize_initial_states: Option<bool>,
+    #[arg(long = "symmetrize-final-states")]
+    pub symmetrize_final_states: Option<bool>,
+    #[arg(long = "symmetrize-left-right-states")]
+    pub symmetrize_left_right_states: Option<bool>,
 
-    /// Numerator-aware grouping choice (restricted)
-    #[arg(long = "numerator-aware-isomorphism-grouping", value_enum)]
+    /// Numerator-aware grouping choice
+    #[arg(long = "numerator-aware-isomorphism-grouping", short = 'G', value_enum)]
     pub numerator_aware_isomorphism_grouping: Option<GroupingChoice>,
 
     /// Grouping attributes
@@ -140,33 +187,36 @@ pub struct SpecArgs {
     pub numerical_samples_seed: Option<u16>,
     #[arg(long = "number-of-samples-for-numerator-comparisons")]
     pub number_of_samples_for_numerator_comparisons: Option<usize>,
-    #[arg(
-        long = "consider-internal-masses-only-in-numerator-isomorphisms",
-        default_value_t = false
-    )]
-    pub consider_internal_masses_only_in_numerator_isomorphisms: bool,
-    #[arg(
-        long = "fully-numerical-substitution-when-comparing-numerators",
-        default_value_t = true
-    )]
-    pub fully_numerical_substitution_when_comparing_numerators: bool,
-    #[arg(long = "compare-canonized-numerator", default_value_t = false)]
-    pub compare_canonized_numerator: bool,
+    #[arg(long = "consider-internal-masses-only-in-numerator-isomorphisms")]
+    pub consider_internal_masses_only_in_numerator_isomorphisms: Option<bool>,
+    #[arg(long = "fully-numerical-substitution-when-comparing-numerators")]
+    pub fully_numerical_substitution_when_comparing_numerators: Option<bool>,
+    #[arg(long = "compare-canonized-numerator")]
+    pub compare_canonized_numerator: Option<bool>,
 
     /// Graph processing toggles
     ///
     /// Format:
-    ///   --loop-momentum-bases "B1=p1,p2;B2=q1,q2"
-    ///   --select-graphs "g1,g2,g3"
-    ///   --veto-graphs "h1,h2"
+    ///   --loop-momentum-bases "GL_12=p1,p2;GL_77=q1,q2"
+    ///   --select-graphs "GL_12,GL_13"
+    ///   --veto-graphs "GL_11,GL_15"
     #[arg(long = "loop-momentum-bases")]
     pub loop_momentum_bases: Option<String>,
     #[arg(long = "select-graphs")]
     pub select_graphs: Option<String>,
     #[arg(long = "veto-graphs")]
     pub veto_graphs: Option<String>,
-    #[arg(long = "graph-prefix")]
+    /// Graph name prefix
+    #[arg(long = "graph-prefix", short = 'g')]
     pub graph_prefix: Option<String>,
+
+    /// Fast cut filter switch multiplicity
+    #[arg(
+        long = "max-multiplicity-for-fast-cut-filter",
+        short = 'M',
+        default_value_t = 6usize
+    )]
+    pub max_multiplicity_for_fast_cut_filter: usize,
 
     /// Filter self-loop (explicit; default false)
     #[arg(long = "filter-self-loop")]
@@ -246,6 +296,7 @@ pub struct ProcessSpec {
     /// Parsed numerator-aware grouping mode (not part of FeynGenOptions)
     pub numerator_grouping: Option<NumeratorAwareGraphGroupingOption>,
 }
+
 impl ProcessSpec {
     /// Canonical shell-friendly name. Deterministic and lexicographically ordered.
     pub fn process_shell_name(&self, short: bool) -> String {
@@ -509,16 +560,28 @@ impl Generate {
         match &self.mode {
             Some(GenerateCmd::Xs(args)) => {
                 let model: &Model = &state.model;
+                let mut args = args.clone();
+                args.amplitude = false; // force XS
                 let spec = must(parse_spec_with_model(
-                    args, /*amplitude=*/ false, model,
+                    &args, /*preferred*/ false, model,
                 ));
                 // Try a generation call; report count.
-                let grouping = spec
-                    .numerator_grouping
-                    .clone()
-                    .unwrap_or(NumeratorAwareGraphGroupingOption::NoGrouping);
+                let grouping = spec.numerator_grouping.clone().unwrap_or_else(|| {
+                    NumeratorAwareGraphGroupingOption::new_with_attributes(
+                        "group_identical_graphs_up_to_scalar_rescaling",
+                        args.numerical_samples_seed,
+                        args.number_of_samples_for_numerator_comparisons,
+                        args.consider_internal_masses_only_in_numerator_isomorphisms,
+                        args.fully_numerical_substitution_when_comparing_numerators,
+                        args.compare_canonized_numerator,
+                    )
+                    .unwrap_or(NumeratorAwareGraphGroupingOption::NoGrouping)
+                });
                 let filter_self_loop = args.filter_self_loop.unwrap_or(false);
-                let graph_prefix = args.graph_prefix.clone().unwrap_or_default();
+                let graph_prefix = args
+                    .graph_prefix
+                    .clone()
+                    .unwrap_or_else(|| "GL".to_string());
                 let selected_graphs = args.select_graphs.as_ref().map(|s| parse_csv_list(s));
                 let vetoed_graphs = args.veto_graphs.as_ref().map(|s| parse_csv_list(s));
                 let loop_momentum_bases = args
@@ -540,19 +603,31 @@ impl Generate {
                     vetoed_graphs,
                     loop_momentum_bases,
                     pref,
-                    Some(args.num_threads as usize),
+                    args.num_threads.map(|n| n as usize),
                 )?;
                 println!("Generated {} forward scattering graphs.", graphs.len());
             }
             Some(GenerateCmd::Amp(args)) => {
                 let model: &Model = &state.model;
-                let spec = must(parse_spec_with_model(args, /*amplitude=*/ true, model));
-                let grouping = spec
-                    .numerator_grouping
-                    .clone()
-                    .unwrap_or(NumeratorAwareGraphGroupingOption::NoGrouping);
+                let mut args = args.clone();
+                args.amplitude = true; // force AMP
+                let spec = must(parse_spec_with_model(&args, /*preferred*/ true, model));
+                let grouping = spec.numerator_grouping.clone().unwrap_or_else(|| {
+                    NumeratorAwareGraphGroupingOption::new_with_attributes(
+                        "group_identical_graphs_up_to_scalar_rescaling",
+                        args.numerical_samples_seed,
+                        args.number_of_samples_for_numerator_comparisons,
+                        args.consider_internal_masses_only_in_numerator_isomorphisms,
+                        args.fully_numerical_substitution_when_comparing_numerators,
+                        args.compare_canonized_numerator,
+                    )
+                    .unwrap_or(NumeratorAwareGraphGroupingOption::NoGrouping)
+                });
                 let filter_self_loop = args.filter_self_loop.unwrap_or(false);
-                let graph_prefix = args.graph_prefix.clone().unwrap_or_default();
+                let graph_prefix = args
+                    .graph_prefix
+                    .clone()
+                    .unwrap_or_else(|| "GL".to_string());
                 let selected_graphs = args.select_graphs.as_ref().map(|s| parse_csv_list(s));
                 let vetoed_graphs = args.veto_graphs.as_ref().map(|s| parse_csv_list(s));
                 let loop_momentum_bases = args
@@ -573,7 +648,7 @@ impl Generate {
                     vetoed_graphs,
                     loop_momentum_bases,
                     pref,
-                    Some(args.num_threads as usize),
+                    args.num_threads.map(|n| n as usize),
                 )?;
                 println!("Generated {} amplitude graphs.", graphs.len());
             }
@@ -628,7 +703,7 @@ fn must<T, E: std::fmt::Display>(r: std::result::Result<T, E>) -> T {
 
 pub fn parse_spec_with_model(
     args: &SpecArgs,
-    amplitude: bool,
+    preferred_amplitude: bool,
     model: &Model,
 ) -> std::result::Result<ProcessSpec, ParseError> {
     let raw = args.tokens.join(" ");
@@ -664,11 +739,18 @@ pub fn parse_spec_with_model(
     // Resolve vetoed particles to PDGs and validate they exist
     let veto_pdgs = resolve_pdgs(model, &veto_names.iter().cloned().collect::<Vec<_>>())?;
 
+    // Determine generation type
+    let is_amp = if args.amplitude {
+        true
+    } else {
+        preferred_amplitude
+    };
+
     // Build FeynGenOptions with filters and PDGs
     let numerator_grouping = build_grouping_option(args);
     let feyngen = feyngen_from_spec_args(
         args,
-        amplitude,
+        is_amp,
         &pert,
         &amp_couplings,
         &xs_couplings,
@@ -973,10 +1055,10 @@ fn parse_process_options(
                         let e = xs.entry(key).or_default();
                         e.set(op, val);
                     }
-                    i += 1;
                 } else {
                     return Err(ParseError::InvalidToken(other.to_string()));
                 }
+                i += 1;
             }
         }
     }
@@ -1063,8 +1145,48 @@ fn feyngen_from_spec_args(
         .and_then(|n| if n < 0 { None } else { Some(n as usize) });
 
     let number_of_fermion_loops =
-        a.number_of_anticommutating_loops
+        a.number_of_fermion_loops
             .and_then(|n| if n < 0 { None } else { Some(n as usize) });
+
+    // Cut ranges (XS)
+    let blob_range: RangeInclusive<usize> = {
+        let (lo, hi) = a
+            .n_cut_blobs
+            .as_ref()
+            .and_then(|v| v.first().zip(v.get(1)).map(|(x, y)| (*x, *y)))
+            .unwrap_or((1, 1));
+        lo..=hi
+    };
+    let spectator_range: RangeInclusive<usize> = {
+        let (lo, hi) = a
+            .n_cut_spectators
+            .as_ref()
+            .and_then(|v| v.first().zip(v.get(1)).map(|(x, y)| (*x, *y)))
+            .unwrap_or((0, 0));
+        lo..=hi
+    };
+
+    // Symmetrization defaults depend on generation type (mirror python logic)
+    let sym_left_right = a.symmetrize_left_right_states.unwrap_or(false);
+    let (sym_init, sym_final) = match generation_type {
+        GenerationType::Amplitude => {
+            let s_init = a
+                .symmetrize_initial_states
+                .unwrap_or(sym_left_right /* default equal to LR */);
+            let s_final = a
+                .symmetrize_final_states
+                .unwrap_or(sym_left_right /* default equal to LR */);
+            (s_init, s_final)
+        }
+        GenerationType::CrossSection => {
+            let s_init = a.symmetrize_initial_states.unwrap_or(false);
+            let s_final = a.symmetrize_final_states.unwrap_or(true);
+            (s_init, s_final)
+        }
+    };
+    let allow_symferm = a
+        .allow_symmetrization_of_external_fermions_in_amplitudes
+        .unwrap_or(false);
 
     // Base options
     let mut fg = FeynGenOptions {
@@ -1080,12 +1202,12 @@ fn feyngen_from_spec_args(
             final_sets_pdgs.to_vec()
         },
         loop_count_range: (1, 1), // may be overridden below
-        symmetrize_initial_states: a.symmetrize_initial_states,
-        symmetrize_final_states: a.symmetrize_final_states,
-        symmetrize_left_right_states: a.symmetrize_left_right_states,
-        allow_symmetrization_of_external_fermions_in_amplitudes: a
-            .allow_symmetrization_of_external_fermions_in_amplitudes,
-        max_multiplicity_for_fast_cut_filter: 6,
+        // (Blob/Spectator ranges are expressed through filters below)
+        symmetrize_initial_states: sym_init,
+        symmetrize_final_states: sym_final,
+        symmetrize_left_right_states: sym_left_right,
+        allow_symmetrization_of_external_fermions_in_amplitudes: allow_symferm,
+        max_multiplicity_for_fast_cut_filter: a.max_multiplicity_for_fast_cut_filter,
         amplitude_filters: FeynGenFilters(vec![]),
         cross_section_filters: FeynGenFilters(vec![]),
     };
@@ -1172,9 +1294,22 @@ fn feyngen_from_spec_args(
         }
     }
 
-    // Self-energy / snails / tadpoles:
+    // XS cut ranges
+    if fg.generation_type == GenerationType::CrossSection {
+        xs_filters.push(FeynGenFilter::BlobRange(blob_range));
+        xs_filters.push(FeynGenFilter::SpectatorRange(spectator_range));
+    }
+
+    // Self-energy / snails / tadpoles with detailed veto flags:
     if filter_selfenergies {
-        let filt = FeynGenFilter::SelfEnergyFilter(SelfEnergyFilterOptions::default());
+        let se = SelfEnergyFilterOptions {
+            veto_self_energy_of_massive_lines: a.veto_self_energy_of_massive_lines.unwrap_or(false),
+            veto_self_energy_of_massless_lines: a
+                .veto_self_energy_of_massless_lines
+                .unwrap_or(false),
+            veto_only_scaleless_self_energy: a.veto_only_scaleless_self_energy.unwrap_or(false),
+        };
+        let filt = FeynGenFilter::SelfEnergyFilter(se);
         if fg.generation_type == GenerationType::Amplitude {
             amp_filters.push(filt);
         } else {
@@ -1182,7 +1317,16 @@ fn feyngen_from_spec_args(
         }
     }
     if filter_snails {
-        let filt = FeynGenFilter::ZeroSnailsFilter(SnailFilterOptions::default());
+        let sn = SnailFilterOptions {
+            veto_snails_attached_to_massive_lines: a
+                .veto_snails_attached_to_massive_lines
+                .unwrap_or(false),
+            veto_snails_attached_to_massless_lines: a
+                .veto_snails_attached_to_massless_lines
+                .unwrap_or(false),
+            veto_only_scaleless_snails: a.veto_only_scaleless_snails.unwrap_or(false),
+        };
+        let filt = FeynGenFilter::ZeroSnailsFilter(sn);
         if fg.generation_type == GenerationType::Amplitude {
             amp_filters.push(filt);
         } else {
@@ -1190,16 +1334,30 @@ fn feyngen_from_spec_args(
         }
     }
     if filter_tadpoles {
-        let filt = FeynGenFilter::TadpolesFilter(TadpolesFilterOptions::default());
+        let td = TadpolesFilterOptions {
+            veto_tadpoles_attached_to_massive_lines: a
+                .veto_tadpoles_attached_to_massive_lines
+                .unwrap_or(false),
+            veto_tadpoles_attached_to_massless_lines: a
+                .veto_tadpoles_attached_to_massless_lines
+                .unwrap_or(false),
+            veto_only_scaleless_tadpoles: a.veto_only_scaleless_tadpoles.unwrap_or(false),
+        };
+        let filt = FeynGenFilter::TadpolesFilter(td);
         if fg.generation_type == GenerationType::Amplitude {
             amp_filters.push(filt);
         } else {
             xs_filters.push(filt);
-            // XS-specific sewed filter for tadpoles
-            xs_filters.push(FeynGenFilter::SewedFilter(SewedFilterOptions {
-                filter_tadpoles: true,
-            }));
         }
+    }
+
+    // XS-only: sewed filter controlled separately
+    if fg.generation_type == GenerationType::CrossSection
+        && a.filter_cross_section_tadpoles.unwrap_or(false)
+    {
+        xs_filters.push(FeynGenFilter::SewedFilter(SewedFilterOptions {
+            filter_tadpoles: true,
+        }));
     }
 
     fg.amplitude_filters = FeynGenFilters(amp_filters);
@@ -1245,15 +1403,17 @@ fn coupling_orders_from_order_ranges_xs(
 }
 
 fn build_grouping_option(a: &SpecArgs) -> Option<NumeratorAwareGraphGroupingOption> {
-    let choice = a.numerator_aware_isomorphism_grouping?;
-    let strategy = choice.as_strategy_str();
+    let strategy = a
+        .numerator_aware_isomorphism_grouping
+        .map(|c| c.as_strategy_str().to_string())
+        .unwrap_or_else(|| "group_identical_graphs_up_to_scalar_rescaling".to_string());
     let opt = NumeratorAwareGraphGroupingOption::new_with_attributes(
-        strategy,
+        &strategy,
         a.numerical_samples_seed,
         a.number_of_samples_for_numerator_comparisons,
-        Some(a.consider_internal_masses_only_in_numerator_isomorphisms),
-        Some(a.fully_numerical_substitution_when_comparing_numerators),
-        Some(a.compare_canonized_numerator),
+        a.consider_internal_masses_only_in_numerator_isomorphisms,
+        a.fully_numerical_substitution_when_comparing_numerators,
+        a.compare_canonized_numerator,
     );
     match opt {
         Ok(v) => Some(v),
@@ -1308,10 +1468,9 @@ fn validate_coupling_names(
     pert: &Perturbative,
 ) -> Result<(), ParseError> {
     // If the model has no coupling metadata, skip validation entirely.
-    // (Some generic models omit coupling-order names.)
-    let has_couplings_info = !model.couplings.is_empty();
+    let has_orders_info = !model.orders.is_empty();
 
-    if !has_couplings_info {
+    if !has_orders_info {
         return Ok(());
     }
 
@@ -1400,28 +1559,42 @@ mod tests {
     fn base_args(tokens: &str) -> SpecArgs {
         SpecArgs {
             tokens: tokens.split_whitespace().map(|x| x.to_string()).collect(),
-            num_threads: 1,
+            amplitude: false,
+            num_threads: None,
             clear_existing_processes: false,
             filter_selfenergies: None,
             filter_snails: None,
             filter_tadpoles: None,
+            filter_cross_section_tadpoles: None,
+            veto_tadpoles_attached_to_massive_lines: None,
+            veto_tadpoles_attached_to_massless_lines: None,
+            veto_only_scaleless_tadpoles: None,
+            veto_snails_attached_to_massive_lines: None,
+            veto_snails_attached_to_massless_lines: None,
+            veto_only_scaleless_snails: None,
+            veto_self_energy_of_massive_lines: None,
+            veto_self_energy_of_massless_lines: None,
+            veto_only_scaleless_self_energy: None,
             max_n_bridges: None,
             number_of_factorized_loop_subtopologies: None,
-            number_of_anticommutating_loops: None,
-            allow_symmetrization_of_external_fermions_in_amplitudes: false,
-            symmetrize_initial_states: false,
-            symmetrize_final_states: false,
-            symmetrize_left_right_states: false,
+            number_of_fermion_loops: None,
+            n_cut_blobs: None,
+            n_cut_spectators: None,
+            allow_symmetrization_of_external_fermions_in_amplitudes: None,
+            symmetrize_initial_states: None,
+            symmetrize_final_states: None,
+            symmetrize_left_right_states: None,
             numerator_aware_isomorphism_grouping: None,
             numerical_samples_seed: None,
             number_of_samples_for_numerator_comparisons: None,
-            consider_internal_masses_only_in_numerator_isomorphisms: false,
-            fully_numerical_substitution_when_comparing_numerators: true,
-            compare_canonized_numerator: false,
-            graph_prefix: None,
+            consider_internal_masses_only_in_numerator_isomorphisms: None,
+            fully_numerical_substitution_when_comparing_numerators: None,
+            compare_canonized_numerator: None,
             loop_momentum_bases: None,
             select_graphs: None,
             veto_graphs: None,
+            graph_prefix: None,
+            max_multiplicity_for_fast_cut_filter: 6,
             filter_self_loop: None,
         }
     }
@@ -1429,12 +1602,16 @@ mod tests {
     // Test helpers using a real generic model shipped with the crate
     fn parse_ok_amp(s: &str) -> ProcessSpec {
         let model = &load_generic_model("sm");
-        parse_spec_with_model(&base_args(s), true, model).unwrap()
+        let mut a = base_args(s);
+        a.amplitude = true;
+        parse_spec_with_model(&a, true, model).unwrap()
     }
 
     fn parse_ok_xs(s: &str) -> ProcessSpec {
         let model = &load_generic_model("sm");
-        parse_spec_with_model(&base_args(s), false, model).unwrap()
+        let mut a = base_args(s);
+        a.amplitude = false;
+        parse_spec_with_model(&a, false, model).unwrap()
     }
 
     #[test]
@@ -1574,16 +1751,13 @@ mod tests {
             .iter()
             .any(|f| matches!(f, FeynGenFilter::FactorizedLoopTopologiesCountRange((1, 1)))));
 
-        // No tadpoles/snails/self-energies by default for vacuum
-        assert!(!xs_filters
+        // Default cut ranges present
+        assert!(xs_filters
             .iter()
-            .any(|f| matches!(f, FeynGenFilter::TadpolesFilter(_))));
-        assert!(!xs_filters
+            .any(|f| matches!(f, FeynGenFilter::BlobRange(r) if r.clone()==(1..=1))));
+        assert!(xs_filters
             .iter()
-            .any(|f| matches!(f, FeynGenFilter::ZeroSnailsFilter(_))));
-        assert!(!xs_filters
-            .iter()
-            .any(|f| matches!(f, FeynGenFilter::SelfEnergyFilter(_))));
+            .any(|f| matches!(f, FeynGenFilter::SpectatorRange(r) if r.clone()==(0..=0))));
     }
 
     #[test]
@@ -1693,18 +1867,13 @@ mod tests {
         let model = &load_generic_model("sm");
 
         // Intentionally scrambled input order; output must be canonical.
-        let args =
+        let mut args =
             base_args("e+ e- > { Z Z, a a } / u d QED==2 QCD>=1 QED^2<=4 QCD^2>=2 [ QED=1 QCD=2 ]");
+        args.amplitude = true;
         let ps = parse_spec_with_model(&args, true, model).unwrap();
 
         let long = ps.process_shell_name(false);
 
-        // Canonical expectations:
-        // - init/final slugs: "epem_zz_or_aa"
-        // - veto sorted lexicographically: d, u -> "no__d_u"
-        // - amp orders sorted by key: QCD then QED
-        // - xs orders sorted by key, power^2 -> "sq" suffix
-        // - pert orders sorted by key
         let expected = "epem_zz_or_aa-\
                     no__d_u-\
                     QCD_ge_1__QED_eq_2-\
@@ -1720,18 +1889,14 @@ mod tests {
         let model = &load_generic_model("sm");
 
         // Mixed options with non-canonical input ordering.
-        let args = base_args(
+        let mut args = base_args(
             "mu+ mu- > g g / ghg gha QED==1 QCD<=3 [ {2} QED=0 QCD=1 ] QED^2==0 QCD^2>=2",
         );
+        args.amplitude = true;
         let ps = parse_spec_with_model(&args, true, model).unwrap();
 
         let r = ps.repr_str();
 
-        // Canonical expectations:
-        // - veto sorted: ghA ghG
-        // - amp orders sorted: QCD<=3 QED==1
-        // - [ {2} QCD ] since QED=0 is omitted and QCD=1 prints as "QCD"
-        // - xs orders sorted: QCD^2>=2 QED^2==0
         let expected = "mu+ mu- > g g / gha ghg QCD<=3 QED==1 [ {2} QCD ] QCD^2>=2 QED^2==0";
 
         assert_eq!(r, expected);
@@ -1742,14 +1907,12 @@ mod tests {
         test_initialise().unwrap();
         let model = &load_generic_model("sm");
 
-        let args = base_args("e+ e- > z z [ {{2}} QED=2 QCD=1 {1} ]");
+        let mut args = base_args("e+ e- > z z [ {{2}} QED=2 QCD=1 {1} ]");
+        args.amplitude = true;
         let ps = parse_spec_with_model(&args, true, model).unwrap();
 
         let r = ps.repr_str();
 
-        // Canonical expectations inside […]:
-        // - {1} then {{2}} appear as given by fields order in repr
-        // - orders sorted by key: QCD then QED=2
         let expected = "e+ e- > z z [ {1} {{2}} QCD QED=2 ]";
 
         assert_eq!(r, expected);
@@ -1760,7 +1923,8 @@ mod tests {
         test_initialise().unwrap();
         let model = &load_generic_model("sm");
 
-        let args = base_args("W+ W- > {}");
+        let mut args = base_args("W+ W- > {}");
+        args.amplitude = true;
         let ps = parse_spec_with_model(&args, true, model).unwrap();
 
         // Short form uses only the base slug and sanitizes +/- and ~.
