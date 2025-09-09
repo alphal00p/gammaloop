@@ -3,7 +3,7 @@ use std::{
     io::{self},
     ops::ControlFlow,
     path::{Path, PathBuf},
-    sync::{atomic::AtomicBool, Mutex, OnceLock},
+    sync::{atomic::AtomicBool, Mutex},
     time::Instant,
 };
 
@@ -29,15 +29,29 @@ use gammalooprs::{
     status_debug, status_info, status_warn,
     utils::{
         serde_utils::{get_schema_folder, SmartSerde},
-        tracing::{init_bench_tracing, init_test_tracing, FILTER_HANDLE},
+        tracing::{init_bench_tracing, init_test_tracing},
         F,
     },
     GammaLoopContextContainer,
 };
 
-use crate::generate::ProcessArgs;
+use crate::{
+    generate::ProcessArgs,
+    tracing::{set_file_log_filter, set_stderr_log_filter},
+};
 
 use super::{Cli, Commands};
+
+pub trait SyncSettings {
+    fn sync_settings(&self) -> Result<()>;
+}
+
+impl SyncSettings for GlobalSettings {
+    fn sync_settings(&self) -> Result<()> {
+        set_file_log_filter(&self.log_file_directive)?;
+        set_stderr_log_filter(&self.stderr_directive)
+    }
+}
 
 // Static flag to control serialization behavior
 static SERIALIZE_COMMANDS_AS_STRINGS: AtomicBool = AtomicBool::new(false);
@@ -87,28 +101,60 @@ impl<'de> Deserialize<'de> for CommandHistory {
     where
         D: serde::Deserializer<'de>,
     {
-        use serde::de::Error;
+        use serde::de::{self, Visitor};
+        use std::fmt;
 
-        // First try to deserialize as a string
-        let value = serde_yaml::Value::deserialize(deserializer)?;
+        struct CommandHistoryVisitor;
 
-        if let serde_yaml::Value::String(s) = &value {
-            if let Ok(a) = Self::from_raw_string(s) {
-                return Ok(a);
+        impl<'de> Visitor<'de> for CommandHistoryVisitor {
+            type Value = CommandHistory;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("a string or a Commands structure")
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                CommandHistory::from_raw_string(value)
+                    .map_err(|_| E::custom(format!("Failed to parse command string: '{}'", value)))
+            }
+
+            fn visit_string<E>(self, value: String) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                self.visit_str(&value)
+            }
+
+            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+            where
+                A: de::SeqAccess<'de>,
+            {
+                // Handle TOML array format for enums like [Quit]
+                let command =
+                    Commands::deserialize(de::value::SeqAccessDeserializer::new(&mut seq))?;
+                Ok(CommandHistory {
+                    command,
+                    raw_string: None,
+                })
+            }
+
+            fn visit_map<A>(self, map: A) -> Result<Self::Value, A::Error>
+            where
+                A: de::MapAccess<'de>,
+            {
+                // Handle map format for enums
+                let command = Commands::deserialize(de::value::MapAccessDeserializer::new(map))?;
+                Ok(CommandHistory {
+                    command,
+                    raw_string: None,
+                })
             }
         }
 
-        // Fall back to deserializing as Commands directly
-        match Commands::deserialize(value) {
-            Ok(command) => Ok(CommandHistory {
-                command,
-                raw_string: None,
-            }),
-            Err(e) => Err(D::Error::custom(format!(
-                "Failed to deserialize as both string and Commands: {}",
-                e
-            ))),
-        }
+        deserializer.deserialize_any(CommandHistoryVisitor)
     }
 }
 
@@ -157,8 +203,8 @@ impl CommandHistory {
 pub struct RunHistory {
     pub default_runtime_settings: RuntimeSettings,
     pub global_settings: GlobalSettings,
-    #[serde(with = "serde_yaml::with::singleton_map_recursive")]
-    #[schemars(with = "Vec<CommandHistory>")]
+    // #[serde(with = "serde_yaml::with::singleton_map_recursive")]
+    // #[schemars(with = "Vec<CommandHistory>")]
     pub commands: Vec<CommandHistory>,
 }
 
@@ -236,9 +282,7 @@ impl RunHistory {
                 Default::default()
             }
         };
-
-        let spec = runhistory.global_settings.debug_level.as_str();
-        let _ = set_log_spec(spec)?;
+        runhistory.global_settings.sync_settings()?;
 
         Ok(runhistory)
     }
@@ -417,7 +461,7 @@ impl State {
     }
 
     pub fn new(save_path: PathBuf, log_file_name: Option<String>) -> Self {
-        let handle = super::tracing::init_tracing("info", &save_path.join("logs"), log_file_name);
+        let handle = super::tracing::init_tracing(&save_path.join("logs"), log_file_name);
 
         let a = Self {
             save_path,
@@ -475,30 +519,7 @@ impl State {
     }
 }
 
-// just so you can show it in the banner etc.
-pub(super) static LOG_SPEC: OnceLock<Mutex<String>> = OnceLock::new();
-
-pub fn set_log_spec(spec: &str) -> color_eyre::Result<()> {
-    let handle = FILTER_HANDLE.get().expect("tracing not initialized");
-    handle.modify(|f| *f = EnvFilter::new(spec))?;
-    if let Some(s) = LOG_SPEC.get() {
-        *s.lock().unwrap() = spec.to_string();
-    }
-    Ok(())
-}
-
-pub fn current_log_spec() -> String {
-    LOG_SPEC
-        .get()
-        .map(|s| s.lock().unwrap().clone())
-        .unwrap_or_else(|| "info".into())
-}
-
 impl State {
-    pub fn set_log_spec(&self, spec: &str) -> Result<()> {
-        set_log_spec(spec)
-    }
-
     pub fn load(
         save_path: PathBuf,
         model_path: Option<PathBuf>,
@@ -640,6 +661,8 @@ mod tests {
         utils::serde_utils::SHOWDEFAULTS,
     };
 
+    use crate::set::{Set, SetArgs};
+
     use super::*;
 
     #[test]
@@ -658,7 +681,12 @@ mod tests {
             },
         };
 
+        run_history.push(Commands::Set(Set::Global {
+            input: SetArgs::Stored,
+        }));
+
         run_history.default_runtime_settings.kinematics = kinematics_settings;
+        set_serialize_commands_as_strings(true);
         let toml = toml::to_string_pretty(&run_history).unwrap();
         println!("{}", toml);
         let deserialized: RunHistory = toml::from_str(&toml).unwrap();
@@ -686,25 +714,86 @@ mod tests {
 
         // Test serialization as Commands (default behavior)
         set_serialize_commands_as_strings(false);
-        let yaml = serde_yaml::to_string(&cmd_history).unwrap();
-        let deserialized_yaml: CommandHistory = serde_yaml::from_str(&yaml).unwrap();
+
         let json = serde_json::to_string(&cmd_history).unwrap();
         let deserialized_json: CommandHistory = serde_json::from_str(&json).unwrap();
         let toml = toml::to_string(&cmd_history).unwrap();
         let deserialized_toml: CommandHistory = toml::from_str(&toml).unwrap();
-        assert_eq!(cmd_history, deserialized_yaml);
         assert_eq!(cmd_history, deserialized_json);
         assert_eq!(cmd_history, deserialized_toml);
 
         // Test serialization as string
         set_serialize_commands_as_strings(true);
-        let yaml_string = serde_yaml::to_string(&cmd_history_with_raw).unwrap();
-        let json_string = serde_json::to_string(&cmd_history_with_raw).unwrap();
-        let toml_string = toml::to_string(&cmd_history_with_raw).unwrap();
-        assert!(yaml_string.contains("quit"));
-        assert!(json_string.contains("quit"));
-        assert!(toml_string.contains("quit"));
 
+        let json_string = serde_json::to_string_pretty(&cmd_history_with_raw).unwrap();
+        assert!(json_string.contains("quit"));
+
+        // Reset flag
+        set_serialize_commands_as_strings(false);
+    }
+
+    #[test]
+    fn test_command_history_toml_and_json_formats() {
+        use super::{set_serialize_commands_as_strings, CommandHistory};
+        use crate::Commands;
+
+        // Test different command types
+        let quit_cmd = CommandHistory::new(Commands::Quit {});
+        let quit_with_raw = CommandHistory::new_with_raw(Commands::Quit {}, "quit".to_string());
+
+        // Test JSON serialization/deserialization
+        {
+            // Test Commands format in JSON
+            set_serialize_commands_as_strings(false);
+            let json = serde_json::to_string_pretty(&quit_cmd).unwrap();
+            let deserialized: CommandHistory = serde_json::from_str(&json).unwrap();
+            assert_eq!(quit_cmd, deserialized);
+
+            // Test string format in JSON
+            set_serialize_commands_as_strings(true);
+            let json_string = serde_json::to_string_pretty(&quit_with_raw).unwrap();
+            assert!(json_string.contains("quit"));
+            let deserialized_string: CommandHistory = serde_json::from_str(&json_string).unwrap();
+            assert_eq!(quit_with_raw, deserialized_string);
+        }
+
+        // Test TOML serialization/deserialization with wrapper struct
+        {
+            #[derive(serde::Serialize, serde::Deserialize)]
+            struct CommandWrapper {
+                command: CommandHistory,
+            }
+
+            // Test Commands format in TOML
+            set_serialize_commands_as_strings(false);
+            let wrapper = CommandWrapper {
+                command: quit_cmd.clone(),
+            };
+            let toml = toml::to_string_pretty(&wrapper).unwrap();
+            let deserialized_wrapper: CommandWrapper = toml::from_str(&toml).unwrap();
+            assert_eq!(quit_cmd, deserialized_wrapper.command);
+
+            // Test string format in TOML
+            set_serialize_commands_as_strings(true);
+            let wrapper_string = CommandWrapper {
+                command: quit_with_raw.clone(),
+            };
+            let toml_string = toml::to_string_pretty(&wrapper_string).unwrap();
+            assert!(toml_string.contains("quit"));
+            let deserialized_string_wrapper: CommandWrapper = toml::from_str(&toml_string).unwrap();
+            assert_eq!(quit_with_raw, deserialized_string_wrapper.command);
+        }
+
+        // Test cross-format compatibility: serialize in one format, deserialize in another
+        {
+            set_serialize_commands_as_strings(false);
+
+            // Serialize as JSON, deserialize the Commands directly from JSON Value
+            let json = serde_json::to_string(&quit_cmd).unwrap();
+            let json_value: serde_json::Value = serde_json::from_str(&json).unwrap();
+            let from_json: CommandHistory = serde_json::from_value(json_value).unwrap();
+            assert_eq!(quit_cmd, from_json);
+        }
         // Reset flag
         set_serialize_commands_as_strings(false);
     }

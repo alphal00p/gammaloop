@@ -75,12 +75,12 @@ impl From<LogLevel> for LevelFilter {
 impl LogLevel {
     pub fn to_env_spec(self) -> &'static str {
         match self {
-            LogLevel::Off => "off",
-            LogLevel::Error => "error",
-            LogLevel::Warn => "warn",
-            LogLevel::Info => "info",
-            LogLevel::Debug => "debug",
-            LogLevel::Trace => "trace",
+            LogLevel::Off => "gammalooprs=off",
+            LogLevel::Error => "gammalooprs=error",
+            LogLevel::Warn => "gammalooprs=warn",
+            LogLevel::Info => "gammalooprs=info",
+            LogLevel::Debug => "gammalooprs=debug",
+            LogLevel::Trace => "gammalooprs=trace",
         }
     }
 }

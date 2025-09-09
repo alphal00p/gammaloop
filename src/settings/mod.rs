@@ -17,7 +17,9 @@ use crate::{
 #[serde(default, deny_unknown_fields)]
 pub struct GlobalSettings {
     #[serde(skip_serializing_if = "IsDefault::is_default")]
-    pub debug_level: String,
+    pub log_file_directive: String,
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    pub stderr_directive: String,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub generation: GenerationSettings,
 }

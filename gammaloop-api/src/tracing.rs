@@ -1,98 +1,182 @@
 use std::{
     path::Path,
-    sync::{LazyLock, Mutex},
+    sync::{LazyLock, Mutex, OnceLock},
 };
 
 use chrono::{Datelike, Local, SecondsFormat, Timelike};
 use colored::{ColoredString, Colorize};
-use gammalooprs::utils::tracing::{LogFormat, FILTER_HANDLE, LOG_GUARD};
-use tracing::{Event, Subscriber};
+use gammalooprs::utils::tracing::{LogFormat, LOG_GUARD};
+use tracing::{level_filters::LevelFilter, Event, Subscriber};
 use tracing_appender::{
     non_blocking::NonBlockingBuilder,
     rolling::{RollingFileAppender, Rotation},
 };
 use tracing_subscriber::{
+    filter::{FilterExt, Filtered},
     fmt::{self, format::Writer, FmtContext, FormatEvent, FormatFields},
     layer::SubscriberExt,
     registry::LookupSpan,
     reload,
     util::SubscriberInitExt,
-    EnvFilter, Registry,
+    EnvFilter, Layer, Registry,
 };
 
-use crate::state::LOG_SPEC;
+use color_eyre::Result;
+use eyre::{eyre, Context};
+
+fn file_filter_from(user_spec: &str) -> Result<EnvFilter> {
+    // Start from a strict global default…
+    let mut filter = EnvFilter::builder()
+        .with_default_directive(LevelFilter::WARN.into()) // global floor
+        .parse_lossy(""); // no user rules yet
+
+    for req in ["gammalooprs=debug", "_gammaloop=info", "symbolica=off"] {
+        let Ok(d) = req.parse() else {
+            continue;
+        };
+        filter = filter.add_directive(d);
+    }
+    if !user_spec.trim().is_empty() {
+        filter = filter.add_directive(user_spec.parse()?);
+    }
+    Ok(filter)
+}
+
+fn stderr_filter_from(user_spec: &str) -> Result<EnvFilter> {
+    // Default: only show `status` target, everything else OFF.
+    // Users can override/expand with their spec.
+    let mut f = EnvFilter::builder()
+        .with_default_directive(LevelFilter::OFF.into())
+        .parse_lossy("status=trace");
+
+    if !user_spec.trim().is_empty() {
+        f = f.add_directive(user_spec.parse()?);
+    }
+    Ok(f)
+}
+
+// Statics to hold the current log specifications
+static FILE_LOG_SPEC: LazyLock<Mutex<String>> = LazyLock::new(|| Mutex::new("".to_string()));
+static STDERR_LOG_SPEC: LazyLock<Mutex<String>> = LazyLock::new(|| Mutex::new("".to_string()));
+
+struct FilterHandles {
+    file_handle: reload::Handle<EnvFilter, Registry>,
+    stderr_handle: reload::Handle<
+        EnvFilter,
+        tracing_subscriber::layer::Layered<
+            Filtered<
+                fmt::Layer<
+                    Registry,
+                    fmt::format::JsonFields,
+                    fmt::format::Format<fmt::format::Json>,
+                    tracing_appender::non_blocking::NonBlocking,
+                >,
+                reload::Layer<EnvFilter, Registry>,
+                Registry,
+            >,
+            Registry,
+        >,
+    >,
+}
+
+static FILTER_HANDLES: OnceLock<FilterHandles> = OnceLock::new();
+
+/// Set the file log filter at runtime while preserving required targets.
+pub fn set_file_log_filter(user_spec: impl AsRef<str>) -> Result<()> {
+    let handles = FILTER_HANDLES
+        .get()
+        .ok_or_else(|| eyre!("Tracing not initialized. Call init_tracing first."))?;
+
+    let user_spec = user_spec.as_ref();
+    *FILE_LOG_SPEC.lock().unwrap() = user_spec.to_string();
+    let full_spec = file_filter_from(user_spec)?;
+    handles.file_handle.modify(|f| *f = full_spec)?;
+    Ok(())
+}
+
+/// Set the stderr log filter at runtime.
+pub fn set_stderr_log_filter(user_spec: impl AsRef<str>) -> Result<()> {
+    let handles = FILTER_HANDLES
+        .get()
+        .ok_or_else(|| eyre!("Tracing not initialized. Call init_tracing first."))?;
+
+    let user_spec = user_spec.as_ref();
+    *STDERR_LOG_SPEC.lock().unwrap() = user_spec.to_string();
+    let full_spec = file_filter_from(user_spec)?;
+    handles.stderr_handle.modify(|f| *f = full_spec)?;
+    Ok(())
+}
+
+/// Get the current file log filter specification.
+pub fn get_file_log_filter() -> String {
+    FILE_LOG_SPEC.lock().unwrap().clone()
+}
+
+/// Get the current stderr log filter specification.
+pub fn get_stderr_log_filter() -> String {
+    STDERR_LOG_SPEC.lock().unwrap().clone()
+}
 
 pub(crate) fn init_tracing(
-    default_spec: impl AsRef<str>,
     dir: impl AsRef<Path>,
     log_file_name: Option<String>,
 ) -> reload::Handle<EnvFilter, Registry> {
-    FILTER_HANDLE
-        .get_or_init(|| {
-            // 2) reloadable filter - only allow gammaloop and status targets
-            let spec =
-                std::env::var("RUST_LOG").unwrap_or_else(|_| default_spec.as_ref().to_string());
-            LOG_SPEC.set(Mutex::new(spec.clone())).ok();
+    let handles = FILTER_HANDLES.get_or_init(|| {
+        let file_filter = EnvFilter::new(FILE_LOG_SPEC.lock().unwrap().as_str());
+        let stderr_filter = EnvFilter::new(STDERR_LOG_SPEC.lock().unwrap().as_str());
 
-            // Use EnvFilter for reload compatibility, but add per-layer filtering
-            let env_filter = EnvFilter::new(&format!(
-                "_gammaloop={},status=trace,status_data=trace",
-                spec
-            ));
-            let (filter_layer, handle) = reload::Layer::new(env_filter);
+        let (file_filter_layer, file_handle) = reload::Layer::new(file_filter);
+        let (stderr_filter_layer, stderr_handle) = reload::Layer::new(stderr_filter);
 
-            let _ = std::fs::create_dir_all(dir.as_ref());
+        let _ = std::fs::create_dir_all(dir.as_ref());
 
-            // e.g. "2025-08-26T21-05-33.123"
-            let ts = Local::now()
-                .to_rfc3339_opts(SecondsFormat::Millis, true)
-                .replace(':', "-")
-                .replace('+', "-"); // keep it filename-friendly
+        // e.g. "2025-08-26T21-05-33.123"
+        let ts = Local::now()
+            .to_rfc3339_opts(SecondsFormat::Millis, true)
+            .replace(':', "-")
+            .replace('+', "-"); // keep it filename-friendly
 
-            let filename = if let Some(log_name) = log_file_name {
-                format!("gammalog-{log_name}.jsonl")
-            } else {
-                format!("gammalog-{ts}.jsonl")
-            };
+        let filename = if let Some(log_name) = log_file_name {
+            format!("gammalog-{log_name}.jsonl")
+        } else {
+            format!("gammalog-{ts}.jsonl")
+        };
 
-            // One file per state (per process), no rotation
-            let file = RollingFileAppender::new(Rotation::NEVER, dir.as_ref(), &filename);
-            let (nb, guard) = NonBlockingBuilder::default()
-                .buffered_lines_limit(200_000)
-                .lossy(false)
-                .finish(file);
-            LOG_GUARD.set(guard).ok();
+        // One file per state (per process), no rotation
+        let file = RollingFileAppender::new(Rotation::NEVER, dir.as_ref(), &filename);
+        let (nb, guard) = NonBlockingBuilder::default()
+            .buffered_lines_limit(200_000)
+            .lossy(false)
+            .finish(file);
+        LOG_GUARD.set(guard).ok();
 
-            // Add strict filtering to JSON layer
-            // let json_filter = filter_fn(|metadata| {
-            //     let target = metadata.target();
-            //     target.starts_with("_gammaloop") || target == "status" || target == "status_data"
-            // });
+        // JSON layer for file output with its own filter
+        let json = fmt::layer()
+            .json()
+            .flatten_event(true)
+            .with_current_span(true)
+            // .with_span_list(true)
+            .with_writer(nb);
 
-            let json = fmt::layer()
-                .json()
-                .flatten_event(true)
-                .with_current_span(true)
-                .with_span_list(true)
-                .with_writer(nb);
-            // .with_filter(json_filter);
+        // Pretty status layer for stderr - only show status events
+        let status_layer = fmt::layer()
+            .with_target(false)
+            .event_format(StatusFmt::default())
+            .with_writer(std::io::stderr);
 
-            // 4) pretty status to stderr, opt-in via `target="status"`
-            let status_layer = fmt::layer()
-                .with_target(false)
-                .event_format(StatusFmt::default())
-                .with_writer(std::io::stderr);
-            // .with_filter(filter_fn(|m| m.target() == "status"));
+        tracing_subscriber::registry()
+            .with(Filtered::new(json, file_filter_layer))
+            .with(Filtered::new(status_layer, stderr_filter_layer))
+            .init();
 
-            tracing_subscriber::registry()
-                .with(filter_layer)
-                .with(json)
-                .with(status_layer)
-                .init();
+        FilterHandles {
+            file_handle,
+            stderr_handle,
+        }
+    });
 
-            handle
-        })
-        .clone()
+    // Return the file handle for backward compatibility
+    handles.file_handle.clone()
 }
 
 pub static LOG_FORMAT: LazyLock<Mutex<LogFormat>> = LazyLock::new(|| Mutex::new(LogFormat::Long));

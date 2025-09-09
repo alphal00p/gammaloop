@@ -10,25 +10,19 @@ use figment::{
 use gammalooprs::{
     processes::ProcessCollection,
     settings::{GlobalSettings, RuntimeSettings},
-    utils::tracing::LogLevel,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::{generate::ProcessArgs, state::State};
+use crate::{
+    generate::ProcessArgs,
+    state::{State, SyncSettings},
+};
 
 #[derive(Subcommand, Debug, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
 pub enum Set {
     /// Set the base directory for gammaloop state and logs
     BaseDir { path: PathBuf },
-    /// Set the logging level
-    Log {
-        #[arg(short = 'l')]
-        level: Option<LogLevel>,
-        // // #[clap(subcommand)]
-        // #[arg(short, long, value_enum, default_value_t = LogFormat::Long)]
-        // format: LogFormat,
-    },
     /// Set GLOBAL settings
     Global {
         #[command(subcommand)]
@@ -59,12 +53,6 @@ impl Set {
         state_folder: &mut PathBuf,
     ) -> Result<()> {
         match self {
-            Set::Log { level, .. } => {
-                if let Some(level) = level {
-                    let spec = level.to_env_spec();
-                    state.set_log_spec(spec)?;
-                }
-            }
             Set::BaseDir { path } => {
                 *state_folder = path.clone();
             }
@@ -72,6 +60,7 @@ impl Set {
                 let fig = Figment::from(Serialized::defaults(&global_settings));
 
                 *global_settings = input.merge_figment(fig)?.extract()?;
+                global_settings.sync_settings()?;
             }
             Self::DefaultRuntime { input } => {
                 let fig = Figment::from(Serialized::defaults(&default_runtime_settings));

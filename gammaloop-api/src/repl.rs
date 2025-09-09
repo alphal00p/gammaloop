@@ -113,23 +113,91 @@ impl<C: Parser + Send + Sync + 'static> reedline::Completer for ReedCompleter<C>
             args.push(OsString::new());
         }
 
-        let arg_index = args.len() - 1;
-        let current_arg = if arg_index > 0 && arg_index < args.len() {
-            &args[arg_index]
+        let mut suggestions = Vec::new();
+        let root_cmd = C::command();
+        let mut cmd = &root_cmd;
+
+        // Navigate through completed subcommands to find current context
+        let mut cmd_args = &args[1..]; // Skip the program name
+
+        // Process all completed arguments (not including the one we're currently typing)
+        while cmd_args.len() > 1 {
+            let arg = &cmd_args[0];
+            let arg_str = arg.to_string_lossy();
+
+            // Check if this completed argument is a subcommand
+            if let Some(subcmd) = cmd.get_subcommands().find(|sc| sc.get_name() == arg_str) {
+                cmd = subcmd;
+                cmd_args = &cmd_args[1..];
+            } else {
+                // This argument is not a subcommand, so we stop navigating
+                break;
+            }
+        }
+
+        // Handle the special case where we just completed a subcommand and added a space
+        if line.ends_with(' ') && cmd_args.len() == 1 {
+            let arg = &cmd_args[0];
+            let arg_str = arg.to_string_lossy();
+
+            // If the last completed argument is a subcommand, navigate into it
+            if let Some(subcmd) = cmd.get_subcommands().find(|sc| sc.get_name() == arg_str) {
+                cmd = subcmd;
+                cmd_args = &[]; // Now we're starting fresh in the new subcommand
+            }
+        }
+
+        // Determine what we're currently completing
+        let (current_arg, start_pos) = if cmd_args.is_empty() {
+            // We're starting a new argument
+            (&OsString::new(), pos)
         } else {
-            &OsString::new()
+            // We're completing the last argument
+            let current_arg = &cmd_args[cmd_args.len() - 1];
+            let start_pos = pos.saturating_sub(current_arg.len());
+            (current_arg, start_pos)
         };
 
-        // Use basic completion for subcommands and flags
-        let mut suggestions = Vec::new();
-        let cmd = C::command();
+        let current_arg_str = current_arg.to_string_lossy();
 
-        // Simple completion: suggest subcommands if no args yet
-        if args.len() <= 1 || line.trim().is_empty() {
+        // If current argument starts with '-', suggest flags
+        if current_arg_str.starts_with('-') {
+            for arg in cmd.get_arguments() {
+                // Short flags
+                if let Some(short) = arg.get_short() {
+                    let flag = format!("-{}", short);
+                    if flag.starts_with(current_arg_str.as_ref()) {
+                        suggestions.push(reedline::Suggestion {
+                            value: flag,
+                            description: arg.get_help().map(|s| s.to_string()),
+                            style: None,
+                            extra: None,
+                            span: Span::new(start_pos, pos),
+                            append_whitespace: true,
+                        });
+                    }
+                }
+
+                // Long flags
+                if let Some(long) = arg.get_long() {
+                    let flag = format!("--{}", long);
+                    if flag.starts_with(current_arg_str.as_ref()) {
+                        suggestions.push(reedline::Suggestion {
+                            value: flag,
+                            description: arg.get_help().map(|s| s.to_string()),
+                            style: None,
+                            extra: None,
+                            span: Span::new(start_pos, pos),
+                            append_whitespace: true,
+                        });
+                    }
+                }
+            }
+        } else {
+            // Suggest subcommands from the current command context
             for subcommand in cmd.get_subcommands() {
                 let name = subcommand.get_name();
-                if name.starts_with(current_arg.to_string_lossy().as_ref()) {
-                    let start_pos = pos.saturating_sub(current_arg.len());
+                if name.starts_with(current_arg_str.as_ref()) {
                     suggestions.push(reedline::Suggestion {
                         value: name.to_string(),
                         description: subcommand.get_about().map(|s| s.to_string()),
@@ -148,46 +216,6 @@ impl<C: Parser + Send + Sync + 'static> reedline::Completer for ReedCompleter<C>
 
 /// Result of reading a command from the REPL.
 ///
-/// # Example
-///
-/// ```rust
-/// use clap::Parser;
-/// use gammaloop_api::repl::ClapEditor;
-///
-/// #[derive(Parser)]
-/// struct MyCli {
-///     #[arg(short, long)]
-///     verbose: bool,
-///     command: String,
-/// }
-///
-/// let editor = ClapEditor::<MyCli>::builder().build();
-///
-/// // Option 1: Handle both parsed command and raw input
-/// editor.repl(|parsed_cmd, raw_input| {
-///     println!("User typed: '{}'", raw_input);
-///     println!("Parsed verbose flag: {}", parsed_cmd.verbose);
-///     println!("Command: {}", parsed_cmd.command);
-/// });
-///
-/// // Option 2: Handle only parsed command (backward compatibility)
-/// editor.repl_simple(|parsed_cmd| {
-///     println!("Command: {}", parsed_cmd.command);
-/// });
-///
-/// // Option 3: Manual handling with ReadCommandOutput
-/// loop {
-///     match editor.read_command() {
-///         ReadCommandOutput::Command(cmd, raw) => {
-///             // Do something with both cmd and raw
-///         },
-///         ReadCommandOutput::EmptyLine => continue,
-///         ReadCommandOutput::CtrlD => break,
-///         // ... handle other cases
-///         _ => {}
-///     }
-/// }
-/// ```
 pub enum ReadCommandOutput<C> {
     /// Input parsed successfully. Contains the parsed command and the raw input string.
     Command(C, String),

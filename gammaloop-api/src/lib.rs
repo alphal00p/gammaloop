@@ -6,6 +6,8 @@ use reedline::FileBackedHistory;
 use repl::ClapEditor;
 use repl::ReadCommandOutput;
 use state::set_serialize_commands_as_strings;
+use tracing::get_stderr_log_filter;
+use tracing::set_stderr_log_filter;
 
 // use clap_repl::{
 //     reedline::{DefaultPrompt, DefaultPromptSegment, FileBackedHistory},
@@ -31,7 +33,7 @@ use integrate::Integrate;
 use schemars::{schema_for, JsonSchema};
 use serde::{Deserialize, Serialize};
 use set::Set;
-use state::{current_log_spec, RunHistory, State};
+use state::{RunHistory, State};
 use std::{ffi::OsString, fs, path::PathBuf};
 use std::{fs::File, ops::ControlFlow};
 use symbolica::activate_oem_license;
@@ -159,10 +161,10 @@ impl Cli {
     ) -> Result<ControlFlow<()>, Report> {
         if let Some(level) = self.level {
             let spec = level.to_env_spec();
-            state.set_log_spec(spec)?;
+            set_stderr_log_filter(spec)?;
         }
         if self.debug {
-            state.set_log_spec(LogLevel::Debug.to_env_spec())?;
+            set_stderr_log_filter(LogLevel::Debug.to_env_spec())?;
         }
         match command {
             Commands::Quit {} => {
@@ -586,7 +588,7 @@ pub enum Commands {
 impl Commands {}
 
 pub(crate) fn print_banner() {
-    let spec = current_log_spec();
+    let spec = get_stderr_log_filter();
     println!(
         "\n{}{}\n",
         r"              ██         ▄████████▄  ▄████████▄  ██████████▄
