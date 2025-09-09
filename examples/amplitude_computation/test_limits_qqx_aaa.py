@@ -135,7 +135,7 @@ def get_integrand_results(log_file_path):
         if g_original_integrand.height > 1:
             raise ValueError(
                 f"Multiple original integrand entries found for graph '{g_name}', expected only one")
-        eval_str = g_original_integrand[0, "value"]
+        eval_str = g_original_integrand[0, "bare_eval"]
         all_evals[g_name]['I'] = extract_complex(eval_str)
 
 
@@ -150,8 +150,9 @@ def get_integrand_results(log_file_path):
         all_evals[g_name]['threshold_CT'] = extract_complex(eval_str)
 
 
-    status_df = df.filter(pl.col("target") == "status")
-    total_df = status_df.filter(pl.col("message").str.contains("Result"))
+    inspect_df = df.filter(pl.col("target") == "gammalooprs::inspect")
+
+    total_df = inspect_df.filter(pl.col("message").str.contains("The evaluation of integrand"))
     if total_df.is_empty():
         raise ValueError("No entries found for total integrand")
     if total_df.height > 1:
@@ -174,7 +175,7 @@ def get_integrand_results(log_file_path):
     return all_evals, total, jac
 
 
-def eval_integrand(k_input, debug=False, gammaloop_state='./GL_QQX_AAA', gammaloop_executable='../../target/dev-optim/gammaloop'):
+def eval_integrand(k_input, debug=False, gammaloop_state='./GL_QQX_AAA_euclidean', gammaloop_executable='../../target/dev-optim/gammaloop'):
     if os.path.exists(f'{gammaloop_state}/logs/gammalog-inspect.jsonl'):
         os.remove(f'{gammaloop_state}/logs/gammalog-inspect.jsonl')
     cmd = f'{gammaloop_executable} -s {gammaloop_state} -n -t inspect inspect --process-id 0 --name qqx_aaa_subtracted --discrete-dim 0 -m -p {
@@ -201,7 +202,7 @@ def eval_integrand(k_input, debug=False, gammaloop_state='./GL_QQX_AAA', gammalo
     return all_res, jac, total, reconstructed_total
 
 
-def run_limit_test(elements_to_display=None, tests_to_run=None, gammaloop_state='./GL_QQX_AAA', gammaloop_executable='../../target/dev-optim/gammaloop', debug=False):
+def run_limit_test(elements_to_display=None, tests_to_run=None, gammaloop_state='./GL_QQX_AAA_euclidean', gammaloop_executable='../../target/dev-optim/gammaloop', debug=False):
     
     if elements_to_display is None:
         elements_to_display = ['I', 'th.CT', 'tot']
@@ -282,7 +283,7 @@ parser.add_argument('--display_elements','-d', nargs='*', choices=['I', 'th.CT',
 parser.add_argument('--tests', '-t', nargs='+', choices=['IR', 'UV'],
                     help="Which limits to test", default=['IR', 'UV'])
 parser.add_argument('--gammaloop_state', '-s', type=str,
-                    help="Path to the GammaLoop state directory. Default=%(default)s", default='./GL_QQX_AAA')
+                    help="Path to the GammaLoop state directory. Default=%(default)s", default='./GL_QQX_AAA_euclidean')
 parser.add_argument('--gammaloop_executable', '-e', type=str,
                     help="Path to the GammaLoop executable. Default=%(default)s", default='../../target/dev-optim/gammaloop')
 parser.add_argument('--debug', action='store_true',

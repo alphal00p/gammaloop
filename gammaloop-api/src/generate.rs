@@ -1203,10 +1203,10 @@ mod tests {
     #[test]
     fn alternatives_in_final_states() {
         test_initialise().unwrap();
-        let ps = parse_ok_xs("e+ e- > { z z, a a }");
+        let ps = parse_ok_xs("e+ e- > { Z Z, a a }");
         assert!(ps.final_.is_empty());
         assert_eq!(ps.final_sets.len(), 2);
-        assert_eq!(ps.final_sets[0], vec!["z", "z"]);
+        assert_eq!(ps.final_sets[0], vec!["Z", "Z"]);
         assert_eq!(ps.final_sets[1], vec!["a", "a"]);
     }
 
