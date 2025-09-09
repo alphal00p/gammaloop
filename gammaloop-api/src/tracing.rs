@@ -12,17 +12,17 @@ use tracing_appender::{
     rolling::{RollingFileAppender, Rotation},
 };
 use tracing_subscriber::{
-    filter::{FilterExt, Filtered},
+    filter::Filtered,
     fmt::{self, format::Writer, FmtContext, FormatEvent, FormatFields},
     layer::SubscriberExt,
     registry::LookupSpan,
     reload,
     util::SubscriberInitExt,
-    EnvFilter, Layer, Registry,
+    EnvFilter, Registry,
 };
 
 use color_eyre::Result;
-use eyre::{eyre, Context};
+use eyre::eyre;
 
 fn file_filter_from(user_spec: &str) -> Result<EnvFilter> {
     // Start from a strict global default…
@@ -90,10 +90,9 @@ static FILTER_HANDLES: OnceLock<FilterHandles> = OnceLock::new();
 
 /// Set the file log filter at runtime while preserving required targets.
 pub fn set_file_log_filter(user_spec: impl AsRef<str>) -> Result<()> {
-    let handles = FILTER_HANDLES
-        .get()
-        .ok_or_else(|| eyre!("Tracing not initialized. Call init_tracing first."))?;
-
+    let Some(handles) = FILTER_HANDLES.get() else {
+        return Ok(());
+    };
     let user_spec = user_spec.as_ref();
     *FILE_LOG_SPEC.lock().unwrap() = user_spec.to_string();
     let full_spec = file_filter_from(user_spec)?;
@@ -104,10 +103,9 @@ pub fn set_file_log_filter(user_spec: impl AsRef<str>) -> Result<()> {
 
 /// Set the stderr log filter at runtime.
 pub fn set_stderr_log_filter(user_spec: impl AsRef<str>) -> Result<()> {
-    let handles = FILTER_HANDLES
-        .get()
-        .ok_or_else(|| eyre!("Tracing not initialized. Call init_tracing first."))?;
-
+    let Some(handles) = FILTER_HANDLES.get() else {
+        return Ok(());
+    };
     let user_spec = user_spec.as_ref();
     *STDERR_LOG_SPEC.lock().unwrap() = user_spec.to_string();
     let full_spec = stderr_filter_from(user_spec)?;

@@ -54,11 +54,19 @@ fn qqx_aaa_subtracted_nlo_amplitude_test() -> Result<()> {
     test_initialise()?;
 
     let mut cmds: RunHistory =
-        RunHistory::new("./tests/qqx_aaa_amplitude/qqx_aaa_subtracted_nlo_amplitude.yaml")?;
+        RunHistory::new("./tests/qqx_aaa_amplitude/qqx_aaa_subtracted_nlo_amplitude.toml")?;
+
+    let mut global_settings = cmds.global_settings.clone();
+    let mut default_runtime_settings = cmds.default_runtime_settings.clone();
 
     let (mut cli, mut state) = new_cli_for_test("./tests/qqx_aaa_amplitude");
 
-    let _ = cmds.run(&mut cli, &mut state)?;
+    let _ = cmds.run(
+        &mut cli,
+        &mut state,
+        &mut global_settings,
+        &mut default_runtime_settings,
+    )?;
 
     clean_test(&state);
 
@@ -71,10 +79,17 @@ fn test_grouped_subtraction() -> Result<()> {
 
     let mut cmds: RunHistory =
         RunHistory::new("./tests/test_grouped_subtraction/test_grouped_subtraction.yaml")?;
+    let mut global_settings = cmds.global_settings.clone();
+    let mut default_runtime_settings = cmds.default_runtime_settings.clone();
 
     let (mut cli, mut state) = new_cli_for_test("./tests/test_grouped_subtraction");
 
-    let _ = cmds.run(&mut cli, &mut state)?;
+    let _ = cmds.run(
+        &mut cli,
+        &mut state,
+        &mut global_settings,
+        &mut default_runtime_settings,
+    )?;
 
     let integration_results_no_group: IntegrationResult = serde_yaml::from_str(
         &std::fs::read_to_string(
