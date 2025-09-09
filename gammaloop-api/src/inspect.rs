@@ -39,6 +39,20 @@ pub struct Inspect {
     pub discrete_dim: Vec<usize>,
 }
 
+impl Default for Inspect {
+    fn default() -> Self {
+        Self {
+            process_id: 0,
+            process_name: "default".to_string(),
+            point: vec![],
+            use_f128: false,
+            force_radius: false,
+            momentum_space: false,
+            discrete_dim: vec![],
+        }
+    }
+}
+
 impl Inspect {
     pub fn run(&self, state: &mut State) -> Result<Complex<f64>> {
         state.process_list.warm_up(&state.model)?;

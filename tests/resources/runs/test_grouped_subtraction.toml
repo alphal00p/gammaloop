@@ -1,0 +1,76 @@
+#:schema /Users/lcnbr/.config/gammaloop/schemas/runhistory.json
+commands = [
+"import model scalars-default",
+"import amplitude ./tests/resources/graphs/grouped_subtraction/no_group.dot",
+"import amplitude ./tests/resources/graphs/grouped_subtraction/group.dot",
+"generate",
+]
+
+
+[default_runtime_settings.General]
+m_uv = 1.0
+mu_r_sq = 8315.251344
+
+[default_runtime_settings.Kinematics]
+e_cm = 2.0
+
+[default_runtime_settings.Kinematics.externals]
+type = "constant"
+
+[default_runtime_settings.Kinematics.externals.data]
+momenta = [
+"dependent",
+[
+-0.29166666667,
+0.0,
+0.0,
+-0.4061164310337068,
+],
+[
+0.70833333333,
+0.0,
+0.0,
+0.4061164310337068,
+],
+[
+0.3200,
+0.0,
+0.0,
+0.6400,
+],
+]
+helicities = [
+1,
+1,
+1,
+1,
+]
+
+[default_runtime_settings.Integrator]
+n_bins= 64
+min_samples_for_update= 1000
+n_start = 1000000
+n_increase = 0
+n_max = 10000000
+integrated_phase = "real"
+discrete_dim_learning_rate = 1.5
+continuous_dim_learning_rate = 0.5
+train_on_avg = false
+show_max_wgt_info = true
+max_prob_ratio = 0.01
+seed = 69
+[default_runtime_settings.Stability]
+check_on_norm = true
+
+[default_runtime_settings.subtraction]
+disable_threshold_subtraction = false
+
+[global_settings]
+stderr_directive = "debug"
+
+[global_settings.generation]
+enable_thresholds = true
+
+[global_settings.generation.evaluator_settings]
+iterative_orientation_optimization = true
+compile = true

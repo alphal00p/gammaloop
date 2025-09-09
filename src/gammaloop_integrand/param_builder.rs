@@ -6,6 +6,7 @@ use std::{
 
 use bincode::{Decode, Encode};
 use idenso::color::CS;
+use libc::ENOPROTOOPT;
 use linnet::half_edge::involution::{EdgeIndex, HedgePair, Orientation};
 use log::debug;
 use ringbuffer::{ConstGenericRingBuffer, RingBuffer};
@@ -30,8 +31,10 @@ use crate::{
     momentum::{Helicity, PolType},
     momentum_sample::{ExternalFourMomenta, MomentumSample},
     numerator::ParsingNet,
-    utils::tracing::StatusRenderable,
-    utils::{f128, FloatLike, PrecisionUpgradable, F, GS, TENSORLIB},
+    utils::{
+        f128, symbolica_ext::LOGPRINTOPTS, tracing::StatusRenderable, FloatLike,
+        PrecisionUpgradable, F, GS, TENSORLIB,
+    },
     GammaLoopContext,
 };
 
@@ -847,13 +850,16 @@ impl<T: FloatLike> ParamBuilder<T> {
         let mut table = tabled::builder::Builder::new();
 
         for (lhs, rhs) in &self.reps {
-            table.push_record(vec![lhs.to_string(), rhs.to_string()]);
+            table.push_record(vec![
+                lhs.printer(LOGPRINTOPTS).to_string(),
+                rhs.printer(LOGPRINTOPTS).to_string(),
+            ]);
         }
 
         for i in &self.pairs {
             for (p, v) in i.params.iter().zip(i.value_range.clone().into_iter()) {
                 table.push_record(vec![
-                    p.to_string(),
+                    p.printer(LOGPRINTOPTS).to_string().to_string(),
                     self.values[v].to_string(),
                     format!("{}", v),
                 ]);

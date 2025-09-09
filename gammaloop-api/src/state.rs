@@ -22,6 +22,7 @@ use tracing_subscriber::{reload, EnvFilter, Registry};
 use gammalooprs::{
     feyngen::GenerationType,
     graph::Graph,
+    initialisation::initialise,
     integrands::HasIntegrand,
     model::{InputParamCard, Model},
     processes::{ExportSettings, Process, ProcessCollection, ProcessDefinition, ProcessList},
@@ -461,6 +462,7 @@ impl State {
     }
 
     pub fn new(save_path: PathBuf, log_file_name: Option<String>) -> Self {
+        initialise();
         let handle = super::tracing::init_tracing(&save_path.join("logs"), log_file_name);
 
         let a = Self {
@@ -508,7 +510,7 @@ impl State {
             state_folder: self.save_path.clone(),
             model_file: None,
             no_save_state: true,
-            override_state: false,
+            override_state: true,
             command: None,
             level: None,
             debug: false,

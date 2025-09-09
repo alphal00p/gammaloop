@@ -15,6 +15,7 @@ use linnet::half_edge::involution::{EdgeVec, Orientation};
 use momtrop::SampleGenerator;
 use spenso::algebra::complex::Complex;
 use symbolica::{
+    atom::AtomCore,
     evaluate::OptimizationSettings,
     numerical_integration::{Grid, Sample},
 };
@@ -46,7 +47,7 @@ use crate::{
         amplitude_counterterm::AmplitudeCountertermData,
         overlap::{find_maximal_overlap, OverlapInput, SingleGraphOverlapData},
     },
-    utils::{bitvec_ext::BinVec, serde_utils::SmartSerde, W_},
+    utils::{bitvec_ext::BinVec, serde_utils::SmartSerde, symbolica_ext::LOGPRINTOPTS, W_},
     DependentMomentaConstructor, FloatLike, GammaLoopContext, GammaLoopContextContainer, F,
 };
 
@@ -92,6 +93,7 @@ impl AmplitudeGraphTerm {
             .map(|a| a.data.orientation.clone())
             .collect();
 
+        debug!(orientation_parametric_integrand = %graph.derived_data.all_mighty_integrand.printer(LOGPRINTOPTS), "Building evaluator for all orientations");
         let orientation_parametric_integrand = GenericEvaluator::new_from_builder(
             [graph.derived_data.all_mighty_integrand.clone()],
             &graph.graph.param_builder,
@@ -105,9 +107,11 @@ impl AmplitudeGraphTerm {
             .iterative_orientation_optimization
         {
             GenericEvaluator::new_from_builder(
-                orientations
-                    .iter()
-                    .map(|a| a.select(&graph.derived_data.all_mighty_integrand)),
+                orientations.iter().map(|a| {
+                    let selected = a.select(&graph.derived_data.all_mighty_integrand);
+                    debug!(selected_expr = %selected.printer(LOGPRINTOPTS), "Iterative");
+                    selected
+                }),
                 &graph.graph.param_builder,
                 OptimizationSettings::default(),
             )
@@ -258,7 +262,7 @@ impl AmplitudeGraphTerm {
                 if let Some(iterative) = &iterative {
                     result += &iterative[i.0]
                 } else {
-                    self.graph.param_builder.orientation_value(e);
+                    self.param_builder.orientation_value(e);
                     let a = T::get_parameters(
                         &mut self.param_builder,
                         settings.general.cache_polarizations,
@@ -276,7 +280,7 @@ impl AmplitudeGraphTerm {
                 "Original integrand value"
             );
         }
-        // status_debug!("last_params"; data = self.param_builder);
+        status_debug!("last_params"; data = self.param_builder);
 
         let sum_of_cts = self.threshold_counterterm.evaluate(
             momentum_sample,

@@ -168,7 +168,9 @@ impl Amplitude {
         if override_existing {
             r?;
         }
-        if let Some(integrand) = self.integrand.take() {
+
+        let integrand = self.integrand.take();
+        if let Some(integrand) = &integrand {
             integrand.save(&p, override_existing)?;
         };
 
@@ -179,6 +181,8 @@ impl Amplitude {
             let mut file = File::create_new(p.join("amp.bin"))?;
             file.write(&binary)?;
         }
+
+        self.integrand = integrand;
         Ok(())
     }
 
