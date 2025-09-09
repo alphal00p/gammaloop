@@ -246,6 +246,254 @@ pub struct ProcessSpec {
     /// Parsed numerator-aware grouping mode (not part of FeynGenOptions)
     pub numerator_grouping: Option<NumeratorAwareGraphGroupingOption>,
 }
+impl ProcessSpec {
+    /// Canonical shell-friendly name. Deterministic and lexicographically ordered.
+    pub fn process_shell_name(&self, short: bool) -> String {
+        // sanitize within a piece so '-' separators between pieces are preserved
+        let sanitize_piece = |s: &str| s.replace('~', "x").replace('+', "p").replace('-', "m");
+        let lower = |s: &str| s.to_ascii_lowercase();
+
+        // base slug: "<init>_<final or sets joined by _or_>"
+        let init_slug = if self.initial.is_empty() {
+            "empty".to_string()
+        } else {
+            self.initial.iter().map(|p| lower(p)).collect::<String>()
+        };
+
+        let finals_lists: Vec<Vec<String>> = if self.final_sets.is_empty() {
+            vec![self.final_.clone()]
+        } else {
+            self.final_sets.clone()
+        };
+        let finals_slugs: Vec<String> = finals_lists
+            .iter()
+            .map(|lst| {
+                if lst.is_empty() {
+                    "empty".to_string()
+                } else {
+                    lst.iter().map(|p| lower(p)).collect::<String>()
+                }
+            })
+            .collect();
+
+        let mut pieces: Vec<String> = vec![sanitize_piece(&format!(
+            "{}_{}",
+            init_slug,
+            finals_slugs.join("_or_")
+        ))];
+
+        if !short {
+            // particle vetoes (sorted)
+            if !self.veto.is_empty() {
+                let mut veto_list: Vec<String> = self.veto.iter().map(|v| lower(v)).collect();
+                veto_list.sort();
+                pieces.push(sanitize_piece(&format!("no__{}", veto_list.join("_"))));
+            }
+
+            // amplitude coupling orders (sorted by coupling name)
+            if !self.amp_couplings.is_empty() {
+                let mut keys: Vec<&String> = self.amp_couplings.keys().collect();
+                keys.sort();
+                let mut parts: Vec<String> = Vec::new();
+                for k in keys {
+                    let r = &self.amp_couplings[k];
+                    if let Some(eq) = r.eq {
+                        parts.push(format!("{}_eq_{}", k, eq));
+                    } else {
+                        if let Some(min) = r.min {
+                            if min > 0 {
+                                parts.push(format!("{}_ge_{}", k, min));
+                            }
+                        }
+                        if let Some(max) = r.max {
+                            parts.push(format!("{}_le_{}", k, max));
+                        }
+                    }
+                }
+                if !parts.is_empty() {
+                    pieces.push(parts.join("__"));
+                }
+            }
+
+            // cross-section coupling orders (sorted by name, then power)
+            if !self.xs_couplings.is_empty() {
+                let mut entries: Vec<(&CouplingKey, &OrderRange)> =
+                    self.xs_couplings.iter().collect();
+                entries.sort_by(|(ka, _), (kb, _)| {
+                    use std::cmp::Ordering;
+                    match ka.name.cmp(&kb.name) {
+                        Ordering::Equal => ka.power.cmp(&kb.power),
+                        other => other,
+                    }
+                });
+                let mut parts: Vec<String> = Vec::new();
+                for (k, r) in entries {
+                    let base = format!("{}sq", k.name);
+                    if let Some(eq) = r.eq {
+                        parts.push(format!("{}_eq_{}", base, eq));
+                    } else {
+                        if let Some(min) = r.min {
+                            if min > 0 {
+                                parts.push(format!("{}_ge_{}", base, min));
+                            }
+                        }
+                        if let Some(max) = r.max {
+                            parts.push(format!("{}_le_{}", base, max));
+                        }
+                    }
+                }
+                if !parts.is_empty() {
+                    pieces.push(parts.join("__"));
+                }
+            }
+
+            // perturbative coupling orders (sorted by key)
+            if !self.pert.orders.is_empty() {
+                let mut ords: Vec<(&String, &u32)> = self.pert.orders.iter().collect();
+                ords.sort_by(|a, b| a.0.cmp(b.0));
+                let parts: Vec<String> = ords
+                    .into_iter()
+                    .map(|(k, v)| format!("{}loop_eq_{}", k, v))
+                    .collect();
+                if !parts.is_empty() {
+                    pieces.push(parts.join("__"));
+                }
+            }
+        }
+
+        pieces.join("-")
+    }
+
+    /// Canonical human-readable representation. Deterministic and lexicographically ordered.
+    pub fn repr_str(&self) -> String {
+        let lower = |s: &str| s.to_ascii_lowercase();
+
+        let mut out: Vec<String> = Vec::new();
+
+        // initial states
+        if self.initial.is_empty() {
+            out.push("{}".to_string());
+        } else {
+            for p in &self.initial {
+                out.push(lower(p));
+            }
+        }
+
+        // arrow
+        out.push(">".to_string());
+
+        // final states or sets
+        if self.final_sets.is_empty() {
+            if self.final_.is_empty() {
+                out.push("{}".to_string());
+            } else {
+                for p in &self.final_ {
+                    out.push(lower(p));
+                }
+            }
+        } else {
+            // sets with deterministic inner ordering as given; outer order is as parsed
+            let sets_str = self
+                .final_sets
+                .iter()
+                .map(|set| {
+                    if set.is_empty() {
+                        "empty".to_string()
+                    } else {
+                        set.iter().map(|p| lower(p)).collect::<Vec<_>>().join(" ")
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join(", ");
+            out.push(format!("{{ {} }}", sets_str));
+        }
+
+        // particle vetoes (sorted)
+        if !self.veto.is_empty() {
+            out.push("/".to_string());
+            let mut veto_list: Vec<String> = self.veto.iter().map(|v| lower(v)).collect();
+            veto_list.sort();
+            out.extend(veto_list);
+        }
+
+        // amplitude coupling orders (sorted by coupling name)
+        if !self.amp_couplings.is_empty() {
+            let mut keys: Vec<&String> = self.amp_couplings.keys().collect();
+            keys.sort();
+            for k in keys {
+                let r = &self.amp_couplings[k];
+                if let Some(eq) = r.eq {
+                    out.push(format!("{}=={}", k, eq));
+                } else {
+                    if let Some(min) = r.min {
+                        if min > 0 {
+                            out.push(format!("{}>={}", k, min));
+                        }
+                    }
+                    if let Some(max) = r.max {
+                        out.push(format!("{}<={}", k, max));
+                    }
+                }
+            }
+        }
+
+        // perturbative block if any
+        let has_pert_block = self.pert.loops_sum_amp_or_sum.is_some()
+            || self.pert.loops_forward_graph.is_some()
+            || !self.pert.orders.is_empty();
+        if has_pert_block {
+            out.push("[".to_string());
+            if let Some(n) = self.pert.loops_sum_amp_or_sum {
+                out.push(format!("{{{}}}", n));
+            }
+            if let Some(n) = self.pert.loops_forward_graph {
+                out.push(format!("{{{{{}}}}}", n));
+            }
+            if !self.pert.orders.is_empty() {
+                let mut ords: Vec<(&String, &u32)> = self.pert.orders.iter().collect();
+                ords.sort_by(|a, b| a.0.cmp(b.0));
+                for (k, v) in ords {
+                    if *v > 0 {
+                        if *v == 1 {
+                            out.push(k.clone());
+                        } else {
+                            out.push(format!("{}={}", k, v));
+                        }
+                    }
+                }
+            }
+            out.push("]".to_string());
+        }
+
+        // cross-section coupling orders (sorted by name, then power)
+        if !self.xs_couplings.is_empty() {
+            let mut entries: Vec<(&CouplingKey, &OrderRange)> = self.xs_couplings.iter().collect();
+            entries.sort_by(|(ka, _), (kb, _)| {
+                use std::cmp::Ordering;
+                match ka.name.cmp(&kb.name) {
+                    Ordering::Equal => ka.power.cmp(&kb.power),
+                    other => other,
+                }
+            });
+            for (k, r) in entries {
+                if let Some(eq) = r.eq {
+                    out.push(format!("{}^{}=={}", k.name, k.power, eq));
+                } else {
+                    if let Some(min) = r.min {
+                        if min > 0 {
+                            out.push(format!("{}^{}>={}", k.name, k.power, min));
+                        }
+                    }
+                    if let Some(max) = r.max {
+                        out.push(format!("{}^{}<={}", k.name, k.power, max));
+                    }
+                }
+            }
+        }
+
+        out.join(" ")
+    }
+}
 
 // =================== Runner ===================
 
@@ -280,7 +528,6 @@ impl Generate {
 
                 let pref = GlobalPrefactor::default();
 
-                println!("MODE: XS\nSPEC: {:#?}", spec.clone());
                 let feyngen = FeynGen::new(spec.feyngen);
 
                 let graphs = FeynGen::generate(
@@ -295,7 +542,7 @@ impl Generate {
                     pref,
                     Some(args.num_threads as usize),
                 )?;
-                println!("Generated {} graphs.", graphs.len());
+                println!("Generated {} forward scattering graphs.", graphs.len());
             }
             Some(GenerateCmd::Amp(args)) => {
                 let model: &Model = &state.model;
@@ -314,7 +561,6 @@ impl Generate {
                     .and_then(parse_loop_momentum_bases);
                 let pref = GlobalPrefactor::default();
 
-                println!("MODE: AMP\nSPEC: {:#?}", spec.clone());
                 let feyngen = FeynGen::new(spec.feyngen);
 
                 let graphs = FeynGen::generate(
@@ -329,7 +575,7 @@ impl Generate {
                     pref,
                     Some(args.num_threads as usize),
                 )?;
-                println!("Generated {} graphs.", graphs.len());
+                println!("Generated {} amplitude graphs.", graphs.len());
             }
             Some(GenerateCmd::Existing(process)) => {
                 return state.generate_integrand(
@@ -1439,5 +1685,88 @@ mod tests {
         for pdg in [-2_i64, -1_i64, 22_i64] {
             assert!(set.contains(&pdg), "missing PDG {pdg} in AMP veto");
         }
+    }
+
+    #[test]
+    fn shell_name_long_with_sets_veto_orders_pert_and_xs() {
+        test_initialise().unwrap();
+        let model = &load_generic_model("sm");
+
+        // Intentionally scrambled input order; output must be canonical.
+        let args =
+            base_args("e+ e- > { Z Z, a a } / u d QED==2 QCD>=1 QED^2<=4 QCD^2>=2 [ QED=1 QCD=2 ]");
+        let ps = parse_spec_with_model(&args, true, model).unwrap();
+
+        let long = ps.process_shell_name(false);
+
+        // Canonical expectations:
+        // - init/final slugs: "epem_zz_or_aa"
+        // - veto sorted lexicographically: d, u -> "no__d_u"
+        // - amp orders sorted by key: QCD then QED
+        // - xs orders sorted by key, power^2 -> "sq" suffix
+        // - pert orders sorted by key
+        let expected = "epem_zz_or_aa-\
+                    no__d_u-\
+                    QCD_ge_1__QED_eq_2-\
+                    QCDsq_ge_2__QEDsq_le_4-\
+                    QCDloop_eq_2__QEDloop_eq_1";
+
+        assert_eq!(long, expected);
+    }
+
+    #[test]
+    fn repr_str_canonical_with_amp_xs_veto_loops_orders() {
+        test_initialise().unwrap();
+        let model = &load_generic_model("sm");
+
+        // Mixed options with non-canonical input ordering.
+        let args = base_args(
+            "mu+ mu- > g g / ghg gha QED==1 QCD<=3 [ {2} QED=0 QCD=1 ] QED^2==0 QCD^2>=2",
+        );
+        let ps = parse_spec_with_model(&args, true, model).unwrap();
+
+        let r = ps.repr_str();
+
+        // Canonical expectations:
+        // - veto sorted: ghA ghG
+        // - amp orders sorted: QCD<=3 QED==1
+        // - [ {2} QCD ] since QED=0 is omitted and QCD=1 prints as "QCD"
+        // - xs orders sorted: QCD^2>=2 QED^2==0
+        let expected = "mu+ mu- > g g / gha ghg QCD<=3 QED==1 [ {2} QCD ] QCD^2>=2 QED^2==0";
+
+        assert_eq!(r, expected);
+    }
+
+    #[test]
+    fn repr_str_with_both_loop_counts_and_sorted_orders() {
+        test_initialise().unwrap();
+        let model = &load_generic_model("sm");
+
+        let args = base_args("e+ e- > z z [ {{2}} QED=2 QCD=1 {1} ]");
+        let ps = parse_spec_with_model(&args, true, model).unwrap();
+
+        let r = ps.repr_str();
+
+        // Canonical expectations inside […]:
+        // - {1} then {{2}} appear as given by fields order in repr
+        // - orders sorted by key: QCD then QED=2
+        let expected = "e+ e- > z z [ {1} {{2}} QCD QED=2 ]";
+
+        assert_eq!(r, expected);
+    }
+
+    #[test]
+    fn shell_name_short_canonical_and_sanitization() {
+        test_initialise().unwrap();
+        let model = &load_generic_model("sm");
+
+        let args = base_args("W+ W- > {}");
+        let ps = parse_spec_with_model(&args, true, model).unwrap();
+
+        // Short form uses only the base slug and sanitizes +/- and ~.
+        let short = ps.process_shell_name(true);
+        let expected = "wpwm_empty";
+
+        assert_eq!(short, expected);
     }
 }
