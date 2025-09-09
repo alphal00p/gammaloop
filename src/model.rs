@@ -553,14 +553,12 @@ impl VertexRule {
     }
 
     // #[allow(clippy::complexity)]
-    // pub(crate) fn get_coupling_orders(
-    //     &self,
-    // ) -> Vec<Vec<Option<BTreeMap<SmartString<LazyCompact>, usize>>>> {
+    // pub fn get_coupling_orders(&self) -> Vec<Vec<Option<CouplingName>>> {
     //     self.couplings
     //         .iter()
     //         .map(|row| {
     //             row.iter()
-    //                 .map(|co| co.clone().map(|c| c.orders.clone()))
+    //                 .map(|co| co.clone().map(|c| c.clone()))
     //                 .collect::<Vec<_>>()
     //         })
     //         .collect::<Vec<_>>()

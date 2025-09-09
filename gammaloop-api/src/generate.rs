@@ -1,10 +1,7 @@
-// file: src/cmd/generate.rs
 #![allow(clippy::too_many_arguments)]
 
-use ahash::{AHashMap, HashMap};
-use gammalooprs::feyngen;
-use std::collections::{BTreeMap, BTreeSet, HashMap as StdHashMap};
-use std::ops::RangeInclusive;
+use ahash::HashMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
@@ -15,14 +12,13 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use gammalooprs::feyngen::{
-    diagram_generator::FeynGen, FeynGenError, FeynGenFilter, FeynGenFilters, FeynGenOptions,
-    GenerationType, GraphGroupingOptions, NumeratorAwareGraphGroupingOption,
-    SelfEnergyFilterOptions, SewedFilterOptions, SnailFilterOptions, TadpolesFilterOptions,
+    diagram_generator::FeynGen, FeynGenFilter, FeynGenFilters, FeynGenOptions, GenerationType,
+    NumeratorAwareGraphGroupingOption, SelfEnergyFilterOptions, SewedFilterOptions,
+    SnailFilterOptions, TadpolesFilterOptions,
 };
 use gammalooprs::model::Model;
 use gammalooprs::numerator::GlobalPrefactor;
 use gammalooprs::settings::{GlobalSettings, RuntimeSettings};
-use gammalooprs::utils::test_utils::load_generic_model;
 
 use super::state::State;
 
@@ -279,7 +275,7 @@ impl Generate {
                 let vetoed_graphs = args.veto_graphs.as_ref().map(|s| parse_csv_list(s));
                 let loop_momentum_bases = args
                     .loop_momentum_bases
-                    .as_ref()
+                    .as_deref()
                     .and_then(parse_loop_momentum_bases);
 
                 let pref = GlobalPrefactor::default();
@@ -314,7 +310,7 @@ impl Generate {
                 let vetoed_graphs = args.veto_graphs.as_ref().map(|s| parse_csv_list(s));
                 let loop_momentum_bases = args
                     .loop_momentum_bases
-                    .as_ref()
+                    .as_deref()
                     .and_then(parse_loop_momentum_bases);
                 let pref = GlobalPrefactor::default();
 
@@ -368,10 +364,10 @@ pub enum ParseError {
     Unbalanced,
     #[error("invalid token '{0}'")]
     InvalidToken(String),
-    #[error("unknown particle '{0}'")]
-    UnknownParticle(String),
-    #[error("unknown coupling '{0}'")]
-    UnknownCoupling(String),
+    #[error("unknown particle '{name}'. Valid choices: {choices}")]
+    UnknownParticle { name: String, choices: String },
+    #[error("unknown coupling '{name}'. Valid choices: {choices}")]
+    UnknownCoupling { name: String, choices: String },
 }
 
 fn must<T, E: std::fmt::Display>(r: std::result::Result<T, E>) -> T {
@@ -436,7 +432,7 @@ pub fn parse_spec_with_model(
         &veto_pdgs,
     );
 
-    let mut spec = ProcessSpec {
+    let spec = ProcessSpec {
         initial: initial_names,
         final_: final_spec.primary.clone(),
         empty_initial,
@@ -450,20 +446,10 @@ pub fn parse_spec_with_model(
         feyngen,
         numerator_grouping,
     };
-    if !spec.final_sets.is_empty() && spec.final_.is_empty() {
-        if let Some(first) = spec.final_sets.first() {
-            spec.final_ = first.clone();
-        }
-    }
     Ok(spec)
 }
 
 // ---- helpers ----
-
-struct FinalParsed {
-    primary: Vec<String>,
-    sets: Vec<Vec<String>>,
-}
 
 fn split_top_level_arrow(s: &str) -> Option<(&str, &str)> {
     // Accept either "to" token or '>' outside any [...] or {...}
@@ -482,24 +468,24 @@ fn split_top_level_arrow(s: &str) -> Option<(&str, &str)> {
                 return Some((&s[..i], &s[i + 1..]));
             }
             _ => {
-                if depth_brace == 0 && depth_bracket == 0 {
-                    if i + 2 < bytes.len()
-                        && (c == 't' || c == 'T')
-                        && &s[i..].to_ascii_lowercase().as_str()[..2] == "to"
-                    {
-                        let before = if i == 0 {
-                            ' '
-                        } else {
-                            s.as_bytes()[i - 1] as char
-                        };
-                        let after = if i + 2 >= s.len() {
-                            ' '
-                        } else {
-                            s.as_bytes()[i + 2] as char
-                        };
-                        if before.is_whitespace() && after.is_whitespace() {
-                            return Some((&s[..i], &s[i + 2..]));
-                        }
+                if depth_brace == 0
+                    && depth_bracket == 0
+                    && i + 2 < bytes.len()
+                    && (c == 't' || c == 'T')
+                    && &s[i..].to_ascii_lowercase().as_str()[..2] == "to"
+                {
+                    let before = if i == 0 {
+                        ' '
+                    } else {
+                        s.as_bytes()[i - 1] as char
+                    };
+                    let after = if i + 2 >= s.len() {
+                        ' '
+                    } else {
+                        s.as_bytes()[i + 2] as char
+                    };
+                    if before.is_whitespace() && after.is_whitespace() {
+                        return Some((&s[..i], &s[i + 2..]));
                     }
                 }
             }
@@ -686,8 +672,9 @@ fn is_option_token(tok: &str) -> bool {
             .is_match(tok)
 }
 
+#[allow(clippy::type_complexity)]
 fn parse_process_options(
-    mut tokens: Vec<String>,
+    tokens: Vec<String>,
 ) -> Result<
     (
         BTreeSet<String>,
@@ -821,12 +808,12 @@ fn feyngen_from_spec_args(
     // Normalize numeric toggles with the vacuum defaults
     let number_of_factorized_loop_subtopologies = a
         .number_of_factorized_loop_subtopologies
-        .or_else(|| if is_vacuum { Some(1) } else { None })
+        .or(if is_vacuum { Some(1) } else { None })
         .and_then(|n| if n < 0 { None } else { Some(n as usize) });
 
     let max_n_bridges = a
         .max_n_bridges
-        .or_else(|| if is_vacuum { Some(0) } else { None })
+        .or(if is_vacuum { Some(0) } else { None })
         .and_then(|n| if n < 0 { None } else { Some(n as usize) });
 
     let number_of_fermion_loops =
@@ -839,14 +826,12 @@ fn feyngen_from_spec_args(
         initial_pdgs: initial_pdgs.to_vec(),
         final_pdgs_lists: if final_sets_pdgs.is_empty() {
             vec![primary_final_pdgs.to_vec()]
+        } else if !primary_final_pdgs.is_empty() {
+            let mut sets = vec![primary_final_pdgs.to_vec()];
+            sets.extend_from_slice(final_sets_pdgs);
+            sets
         } else {
-            if !primary_final_pdgs.is_empty() {
-                let mut sets = vec![primary_final_pdgs.to_vec()];
-                sets.extend_from_slice(final_sets_pdgs);
-                sets
-            } else {
-                final_sets_pdgs.to_vec()
-            }
+            final_sets_pdgs.to_vec()
         },
         loop_count_range: (1, 1), // may be overridden below
         symmetrize_initial_states: a.symmetrize_initial_states,
@@ -1014,9 +999,7 @@ fn coupling_orders_from_order_ranges_xs(
 }
 
 fn build_grouping_option(a: &SpecArgs) -> Option<NumeratorAwareGraphGroupingOption> {
-    let Some(choice) = a.numerator_aware_isomorphism_grouping else {
-        return None;
-    };
+    let choice = a.numerator_aware_isomorphism_grouping?;
     let strategy = choice.as_strategy_str();
     let opt = NumeratorAwareGraphGroupingOption::new_with_attributes(
         strategy,
@@ -1034,9 +1017,18 @@ fn build_grouping_option(a: &SpecArgs) -> Option<NumeratorAwareGraphGroupingOpti
 
 // ---- Model-backed validation and resolution ----
 
+fn all_particle_names(model: &Model) -> Vec<String> {
+    model
+        .particles
+        .iter()
+        .map(|p| p.name.clone().to_string())
+        .collect::<Vec<_>>()
+}
+
 fn resolve_pdgs(model: &Model, names: &[String]) -> Result<Vec<i64>, ParseError> {
+    let all_particles = all_particle_names(model);
     let mut out = Vec::with_capacity(names.len());
-    for n in names {
+    'outer: for n in names {
         // Accept numeric PDG directly
         if let Ok(p) = n.parse::<i64>() {
             out.push(p);
@@ -1047,7 +1039,18 @@ fn resolve_pdgs(model: &Model, names: &[String]) -> Result<Vec<i64>, ParseError>
             out.push(p.pdg_code as i64);
             continue;
         }
-        return Err(ParseError::UnknownParticle(n.clone()));
+        // Case-insensitive fallback against both names and antinames
+        for part in model.particles.iter() {
+            if part.name.eq_ignore_ascii_case(n) || part.antiname.eq_ignore_ascii_case(n) {
+                out.push(part.pdg_code as i64);
+                continue 'outer;
+            }
+        }
+        // Unknown
+        return Err(ParseError::UnknownParticle {
+            name: n.clone(),
+            choices: all_particles.join(", "),
+        });
     }
     Ok(out)
 }
@@ -1058,6 +1061,14 @@ fn validate_coupling_names(
     xs: &BTreeMap<CouplingKey, OrderRange>,
     pert: &Perturbative,
 ) -> Result<(), ParseError> {
+    // If the model has no coupling metadata, skip validation entirely.
+    // (Some generic models omit coupling-order names.)
+    let has_couplings_info = !model.couplings.is_empty();
+
+    if !has_couplings_info {
+        return Ok(());
+    }
+
     // Collect all mentioned coupling names
     let mut names = BTreeSet::<String>::new();
     for k in amp.keys() {
@@ -1074,16 +1085,20 @@ fn validate_coupling_names(
         return Ok(());
     }
 
-    // Query model known couplings
-    let known = model
-        .couplings
+    // Known couplings (case-insensitive compare)
+    let known: Vec<String> = model
+        .orders
         .iter()
-        .map(|c| c.0.to_string())
+        .map(|o| o.name.to_string())
         .collect::<Vec<_>>();
+    let known_lower: BTreeSet<String> = known.iter().map(|s| s.to_ascii_lowercase()).collect();
 
     for n in names {
-        if !known.contains(&n) {
-            return Err(ParseError::UnknownCoupling(n));
+        if !known_lower.contains(&n.to_ascii_lowercase()) {
+            return Err(ParseError::UnknownCoupling {
+                name: n,
+                choices: known.join(", "),
+            });
         }
     }
     Ok(())
@@ -1099,7 +1114,7 @@ fn parse_csv_list(s: &str) -> Vec<String> {
         .collect()
 }
 
-fn parse_loop_momentum_bases(s: &String) -> Option<HashMap<String, Vec<String>>> {
+fn parse_loop_momentum_bases(s: &str) -> Option<HashMap<String, Vec<String>>> {
     // Format: "B1=p1,p2;B2=q1,q2"
     let mut out: HashMap<String, Vec<String>> = HashMap::default();
     for kv in s.split(';') {
@@ -1133,6 +1148,7 @@ fn parse_loop_momentum_bases(s: &String) -> Option<HashMap<String, Vec<String>>>
 #[cfg(test)]
 mod tests {
     use super::*;
+    use gammalooprs::utils::test_utils::load_generic_model;
     use gammalooprs::{feyngen::GenerationType, initialisation::test_initialise};
 
     fn base_args(tokens: &str) -> SpecArgs {
@@ -1294,5 +1310,134 @@ mod tests {
         let args = base_args("e+ e-  z z");
         let err = parse_spec_with_model(&args, false, model).unwrap_err();
         assert!(matches!(err, ParseError::MissingArrow));
+    }
+
+    #[test]
+    fn vacuum_defaults_and_filters_xs() {
+        test_initialise().unwrap();
+        let ps = parse_ok_xs("{} to {}");
+        assert_eq!(ps.feyngen.generation_type, GenerationType::CrossSection);
+
+        let xs_filters = &ps.feyngen.cross_section_filters.0;
+
+        // Smart defaults for vacuum-like graphs
+        assert!(xs_filters
+            .iter()
+            .any(|f| matches!(f, FeynGenFilter::MaxNumberOfBridges(0))));
+        assert!(xs_filters
+            .iter()
+            .any(|f| matches!(f, FeynGenFilter::FactorizedLoopTopologiesCountRange((1, 1)))));
+
+        // No tadpoles/snails/self-energies by default for vacuum
+        assert!(!xs_filters
+            .iter()
+            .any(|f| matches!(f, FeynGenFilter::TadpolesFilter(_))));
+        assert!(!xs_filters
+            .iter()
+            .any(|f| matches!(f, FeynGenFilter::ZeroSnailsFilter(_))));
+        assert!(!xs_filters
+            .iter()
+            .any(|f| matches!(f, FeynGenFilter::SelfEnergyFilter(_))));
+    }
+
+    #[test]
+    fn particle_veto_resolution_cross_section() {
+        use std::collections::BTreeSet;
+        test_initialise().unwrap();
+        // Veto both particles and anti-particles, plus a charged lepton
+        let ps = parse_ok_xs("e+ e- > mu+ mu- / u d u~ e+");
+        let xs_filters = &ps.feyngen.cross_section_filters.0;
+
+        let veto_pdgs = xs_filters
+            .iter()
+            .find_map(|f| match f {
+                FeynGenFilter::ParticleVeto(v) => Some(v.clone()),
+                _ => None,
+            })
+            .expect("ParticleVeto filter not found");
+        let set: BTreeSet<i64> = veto_pdgs.into_iter().collect();
+
+        // u=2, d=1, u~=-2, e+=-11
+        for pdg in [2_i64, 1_i64, -2_i64, -11_i64] {
+            assert!(set.contains(&pdg), "missing PDG {pdg} in veto");
+        }
+    }
+
+    #[test]
+    fn final_sets_and_orders_and_loops_cross_section() {
+        test_initialise().unwrap();
+        // Cross-section with final-state alternatives and perturbative block
+        let ps = parse_ok_xs("e+ e- > { Z Z, a a, H H } [ {{3}} QCD=2 QED=1 ]");
+
+        // Final-state alternatives captured
+        assert_eq!(ps.final_sets.len(), 3);
+        assert_eq!(ps.feyngen.generation_type, GenerationType::CrossSection);
+
+        // XS loop count from {{3}}
+        assert_eq!(ps.feyngen.loop_count_range, (3, 3));
+
+        // Perturbative orders end up in XS filters
+        let xs_filters = &ps.feyngen.cross_section_filters.0;
+        assert!(xs_filters.iter().any(|f| {
+            if let FeynGenFilter::PerturbativeOrders(m) = f {
+                m.get("QCD") == Some(&2usize) && m.get("QED") == Some(&1usize)
+            } else {
+                false
+            }
+        }));
+    }
+
+    #[test]
+    fn amplitude_with_powered_xs_constraints_and_only() {
+        test_initialise().unwrap();
+        // AMP spec including "only" and XS-style powered coupling constraints
+        let ps = parse_ok_amp("e+ e- > mu+ mu- | g ghG QED^2==2 QCD^2>=2 QCD^2<=4 [ {1} QCD ]");
+
+        // AMP-side perturbative bits
+        assert_eq!(ps.pert.loops_sum_amp_or_sum, Some(1));
+        assert_eq!(ps.pert.orders.get("QCD"), Some(&1));
+
+        // XS-style powered constraints recorded
+        let key_qed2 = CouplingKey {
+            name: "QED".into(),
+            power: 2,
+        };
+        let key_qcd2 = CouplingKey {
+            name: "QCD".into(),
+            power: 2,
+        };
+        let qed2 = ps.xs_couplings.get(&key_qed2).unwrap();
+        assert_eq!(qed2.eq, Some(2));
+        let qcd2 = ps.xs_couplings.get(&key_qcd2).unwrap();
+        assert_eq!(qcd2.min, Some(2));
+        assert_eq!(qcd2.max, Some(4));
+
+        // "only" selection recorded
+        let only = ps.only.as_ref().expect("missing only-set");
+        assert!(only.contains("g"));
+        assert!(only.contains("ghG"));
+    }
+
+    #[test]
+    fn amplitude_case_insensitive_and_anti_in_veto() {
+        use std::collections::BTreeSet;
+        test_initialise().unwrap();
+        // Mixed case names and anti-particles in veto; ensure AMP-side veto filter present
+        let ps = parse_ok_amp("E+ e- to Z Z / u~ d~ A");
+
+        let amp_filters = &ps.feyngen.amplitude_filters.0;
+        let veto_pdgs = amp_filters
+            .iter()
+            .find_map(|f| match f {
+                FeynGenFilter::ParticleVeto(v) => Some(v.clone()),
+                _ => None,
+            })
+            .expect("AMP ParticleVeto filter not found");
+
+        let set: BTreeSet<i64> = veto_pdgs.into_iter().collect();
+        // u~=-2, d~=-1, A(=a)=22
+        for pdg in [-2_i64, -1_i64, 22_i64] {
+            assert!(set.contains(&pdg), "missing PDG {pdg} in AMP veto");
+        }
     }
 }
