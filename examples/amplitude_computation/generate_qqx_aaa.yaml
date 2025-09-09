@@ -1,5 +1,5 @@
 global_settings:
-  debug_level: Info
+  stderr_directive: Info
   generation:
     enable_thresholds: false
     evaluator_settings:
@@ -61,30 +61,30 @@ default_runtime_settings:
     check_on_norm: true
 
 commands:
-  - Import:
-      Model:
-        path: sm-default
-        simplify_model: false
-  - Import:
-      Amplitude:
-        path: ./qqx_aaa_subtracted.dot
-  - Generate: {}
-  # Inspect test below with disable_threshold_subtraction: true and enable_thresholds: false, should yield
-  # ( +6.923469780323068e-4, -6.181987787694594e-4 i)
-  # and with disable_threshold_subtraction: false and enable_thresholds: true, should yield
-  # ( +2.412627583192008e-4, +1.0825818895742815e-4 i)
-  - Inspect:
-      process_id: 0
-      process_name: qqx_aaa_subtracted
-      point:
-        - 0.1
-        - 0.2
-        - 0.3
-      use_f128: false
-      force_radius: false
-      momentum_space: true
-      discrete_dim:
-        - 0
+  # - Import:
+  #     Model:
+  #       path: sm-default
+  #       simplify_model: false
+  # - Import:
+  #     Amplitude:
+  #       path: ./qqx_aaa_subtracted.dot
+  # - Generate: {}
+  # # Inspect test below with disable_threshold_subtraction: true and enable_thresholds: false, should yield
+  # # ( +6.923469780323068e-4, -6.181987787694594e-4 i)
+  # # and with disable_threshold_subtraction: false and enable_thresholds: true, should yield
+  # # ( +2.412627583192008e-4, +1.0825818895742815e-4 i)
+  # - Inspect:
+  #     process_id: 0
+  #     process_name: qqx_aaa_subtracted
+  #     point:
+  #       - 0.1
+  #       - 0.2
+  #       - 0.3
+  #     use_f128: false
+  #     force_radius: false
+  #     momentum_space: true
+  #     discrete_dim:
+  #       - 0
   # - Integrate:
   #     process_id: 0
   #     process_name: qqx_aaa_subtracted

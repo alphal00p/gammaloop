@@ -1,17 +1,14 @@
 global_settings:
-  debug_level: Debug
+  stderr_directive: Debug
   generation:
     evaluator_settings:
       compile: true
     tropical_subgraph_table_settings:
       disable_tropical_generation: true
-      panic_on_fail: false 
+      panic_on_fail: false
       target_omega: 1.0
 default_runtime_settings:
   General:
-    amplitude_prefactor:
-      re: 0.0
-      im: 1.0
     m_uv: 1.0
     mu_r_sq: 1.0
   Kinematics:
@@ -53,31 +50,22 @@ default_runtime_settings:
           - -1
           - 1
           - 1
-  Stability:
-    levels:
-      - required_precision_for_re: 1e-15
-        required_precision_for_im: 1e-15
-        escalate_for_large_weight_threshold: 0.9
-      - precision: Quad
-        required_precision_for_re: 0.00001
-        required_precision_for_im: 0.00001
-        escalate_for_large_weight_threshold: -1.0
   subtraction:
     disable_threshold_subtraction: true
 commands:
-  - Import:
-      Model:
-        path: ../../src/test_resources/gammaloop_models/sm.yaml
-  - Import:
-      Amplitude:
-        path: ./zeno_IR.dot
-  - Generate: {}
-  - Inspect:
-      process_id: 0
-      process_name: zeno_IR
-      point: [0.1 0.2 0.3]
-      use_f128: false
-      force_radius: false
-      momentum_space: false
-      discrete_dim:
-        - 0
+  # - Import:
+  #     Model:
+  #       path: ../../src/test_resources/gammaloop_models/sm.yaml
+  # - Import:
+  #     Amplitude:
+  #       path: ./zeno_IR.dot
+  # - Generate: {}
+  # - Inspect:
+  #     process_id: 0
+  #     process_name: zeno_IR
+  #     point: [0.1 0.2 0.3]
+  #     use_f128: false
+  #     force_radius: false
+  #     momentum_space: false
+  #     discrete_dim:
+  #       - 0

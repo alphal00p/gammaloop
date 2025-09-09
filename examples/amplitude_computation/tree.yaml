@@ -1,5 +1,5 @@
 global_settings:
-  debug_level: Debug
+  stderr_directive: Debug
   generation:
     evaluator_settings:
       compile: true
@@ -37,21 +37,21 @@ default_runtime_settings:
     check_on_norm: true
   subtraction:
     disable_threshold_subtraction: true
-
 commands:
-  - Import:
-      Model:
-        path: ../../src/test_resources/gammaloop_models/sm.yaml
-  - Import:
-      Amplitude:
-        path: ./qqx_aaa_tree_user_numerator.dot
-  - Generate: {}
-  - Inspect:
-      process_id: 0
-      process_name: qqx_aaa_tree_user_numerator
-      point: []
-      use_f128: false
-      force_radius: false
-      momentum_space: false
-      discrete_dim:
-        - 0
+#   - Import:
+#       Model:
+#         path: ../../src/test_resources/gammaloop_models/sm.yaml
+
+#   - Import:
+#       Amplitude:
+#         path: ./qqx_aaa_tree_user_numerator.dot
+#   - Generate: {}
+#   - Inspect:
+#       process_id: 0
+#       process_name: qqx_aaa_tree_user_numerator
+#       point: []
+#       use_f128: false
+#       force_radius: false
+#       momentum_space: false
+#       discrete_dim:
+#         - 0

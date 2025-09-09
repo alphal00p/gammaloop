@@ -36,8 +36,11 @@ fn file_filter_from(user_spec: &str) -> Result<EnvFilter> {
         };
         filter = filter.add_directive(d);
     }
-    if !user_spec.trim().is_empty() {
-        filter = filter.add_directive(user_spec.parse()?);
+    for a in user_spec.split(",") {
+        if a.trim().is_empty() {
+            continue;
+        }
+        filter = filter.add_directive(a.trim().parse()?);
     }
     Ok(filter)
 }
@@ -49,9 +52,13 @@ fn stderr_filter_from(user_spec: &str) -> Result<EnvFilter> {
         .with_default_directive(LevelFilter::OFF.into())
         .parse_lossy("status=trace");
 
-    if !user_spec.trim().is_empty() {
-        f = f.add_directive(user_spec.parse()?);
+    for a in user_spec.split(",") {
+        if a.trim().is_empty() {
+            continue;
+        }
+        f = f.add_directive(a.trim().parse()?);
     }
+
     Ok(f)
 }
 
@@ -90,6 +97,7 @@ pub fn set_file_log_filter(user_spec: impl AsRef<str>) -> Result<()> {
     let user_spec = user_spec.as_ref();
     *FILE_LOG_SPEC.lock().unwrap() = user_spec.to_string();
     let full_spec = file_filter_from(user_spec)?;
+    // println!("Modifying env filter to: {}", full_spec);
     handles.file_handle.modify(|f| *f = full_spec)?;
     Ok(())
 }
@@ -102,7 +110,8 @@ pub fn set_stderr_log_filter(user_spec: impl AsRef<str>) -> Result<()> {
 
     let user_spec = user_spec.as_ref();
     *STDERR_LOG_SPEC.lock().unwrap() = user_spec.to_string();
-    let full_spec = file_filter_from(user_spec)?;
+    let full_spec = stderr_filter_from(user_spec)?;
+    // println!("Modifying env filter to: {}", full_spec);
     handles.stderr_handle.modify(|f| *f = full_spec)?;
     Ok(())
 }

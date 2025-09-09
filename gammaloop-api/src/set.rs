@@ -22,7 +22,10 @@ use crate::{
 #[derive(Subcommand, Debug, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
 pub enum Set {
     /// Set the base directory for gammaloop state and logs
-    BaseDir { path: PathBuf },
+    BaseDir {
+        #[arg(value_hint = clap::ValueHint::DirPath)]
+        path: PathBuf,
+    },
     /// Set GLOBAL settings
     Global {
         #[command(subcommand)]
@@ -123,7 +126,10 @@ impl Set {
 #[derive(Subcommand, Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
 pub enum SetArgs {
     /// Load from a settings file
-    File { file: PathBuf },
+    File {
+        #[arg(value_hint = clap::ValueHint::FilePath)]
+        file: PathBuf,
+    },
 
     /// Set one or more dotted key-paths
     Kv {

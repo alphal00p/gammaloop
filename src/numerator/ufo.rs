@@ -129,7 +129,7 @@ impl UFOSymbols {
         // for s in slots {
         //     println!("{}", s);
         // }
-        println!("in:{atom:#}");
+        // println!("in:{atom:#}");
         //
         atom = self.normalize_complex(atom);
         for (i, s) in slots.iter().enumerate() {
@@ -477,7 +477,7 @@ impl UFOSymbols {
                 .with(GS.emr_mom(*e, W_.a_));
         }
 
-        println!("out:{atom:#}");
+        // println!("out:{atom:#}");
         atom
     }
 

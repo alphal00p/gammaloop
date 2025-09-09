@@ -34,7 +34,7 @@ pub struct Integrate {
     pub process_name: String,
 
     /// The path to store results in
-    #[arg(short = 'p', long)]
+    #[arg(short = 'p', long, value_hint = clap::ValueHint::FilePath)]
     pub result_path: PathBuf,
 
     /// Number of cores to parallelize over
@@ -42,7 +42,7 @@ pub struct Integrate {
     pub n_cores: usize,
 
     /// The path to run the integrationg within
-    #[arg(short = 'w', long)]
+    #[arg(short = 'w', long, value_hint = clap::ValueHint::DirPath)]
     pub workspace_path: PathBuf,
 
     /// Specify the target integration result to compare against

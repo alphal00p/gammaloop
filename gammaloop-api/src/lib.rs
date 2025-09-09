@@ -52,15 +52,15 @@ pub mod tracing;
 #[command(next_line_help = true)]
 pub struct Cli {
     /// Path to the a run file as history, and as settings, by default is: `./gammaloop_state/run.yaml`
-    #[arg(short = 'r', long)]
+    #[arg(short = 'r', long, value_hint = clap::ValueHint::FilePath)]
     run_history: Option<PathBuf>,
 
     /// Path to the state folder
-    #[arg(short = 's', long, default_value = "./gammaloop_state")]
+    #[arg(short = 's', long, default_value = "./gammaloop_state", value_hint = clap::ValueHint::DirPath)]
     pub state_folder: PathBuf,
 
     /// Path to the model file
-    #[arg(short = 'm', long)]
+    #[arg(short = 'm', long, value_hint = clap::ValueHint::FilePath)]
     pub model_file: Option<PathBuf>,
 
     /// Skip saving state on exit
@@ -149,6 +149,8 @@ impl Cli {
         self.model_file = other.model_file;
         self.override_state = other.override_state;
         self.no_save_state = other.no_save_state;
+        self.try_strings = other.try_strings;
+        self.no_skip_default = other.no_skip_default;
     }
 
     fn run_command(
@@ -473,6 +475,7 @@ pub enum Import {
     Model(import_model::ImportModel),
     Amplitude {
         // #[arg(short = 'p')]
+        #[arg(value_hint = clap::ValueHint::FilePath)]
         path: PathBuf,
         // format: String,
     },
@@ -481,11 +484,12 @@ pub enum Import {
 #[derive(Subcommand, Debug, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
 pub enum Save {
     Dot {
+        #[arg(value_hint = clap::ValueHint::FilePath)]
         path: Option<PathBuf>,
     },
     State {
         /// Path to save the state to, by default is the current state folder
-        #[arg(short = 'p', long)]
+        #[arg(short = 'p', long, value_hint = clap::ValueHint::FilePath)]
         path: Option<PathBuf>,
 
         /// Do not skip fields that are default
@@ -508,6 +512,7 @@ pub enum Display {
 #[derive(Debug, Args, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
 pub struct Run {
     /// Path to a run file to execute
+    #[arg(value_hint = clap::ValueHint::FilePath)]
     path: PathBuf,
 }
 
@@ -561,9 +566,9 @@ pub enum Commands {
 
     /// HPC batch evaluation branch
     Batch {
-        #[arg(value_name = "PROCESS_FILE")]
+        #[arg(value_name = "PROCESS_FILE", value_hint = clap::ValueHint::FilePath)]
         process_file: PathBuf,
-        #[arg(value_name = "BATCH_INPUT_FILE")]
+        #[arg(value_name = "BATCH_INPUT_FILE", value_hint = clap::ValueHint::FilePath)]
         batch_input_file: PathBuf,
         #[arg(short = 'n', long, value_name = "NAME")]
         name: String,

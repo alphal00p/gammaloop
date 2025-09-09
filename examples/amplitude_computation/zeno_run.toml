@@ -1,0 +1,79 @@
+#:schema /Users/lcnbr/.config/gammaloop/schemas/runhistory.json
+commands = [
+    "set global kv stderr_directive=gammalooprs=info,info",
+    "import model sm-default",
+    "set global kv stderr_directive=gammalooprs=info,info",
+    "import amplitude ./zeno_IR.dot",
+    "generate",
+    "set global kv stderr_directive=gammalooprs=info",
+    "inspect --process-id 0 --name zeno_IR -p 0.1 0.2 0.3 -m",
+]
+
+[default_runtime_settings.General]
+m_uv = 1.0
+mu_r_sq = 1.0
+
+[default_runtime_settings.Kinematics.externals]
+type = "constant"
+
+[default_runtime_settings.Kinematics.externals.data]
+momenta = [
+    "dependent",
+    [
+    1.0,
+    0.0,
+    0.0,
+    1.0,
+],
+    [
+    1.0,
+    0.0,
+    0.0,
+    -1.0,
+],
+    [
+    0.9903067841547669,
+    0.3734458315384239,
+    0.6393671561700484,
+    -0.657613394982612,
+],
+    [
+    0.2053558277500182,
+    -0.1412408546154445,
+    -0.0869119059139323,
+    0.121112995127698,
+],
+    [
+    5.0,
+    1.0,
+    1.0,
+    1.0,
+],
+    [
+    5.0,
+    1.0,
+    1.0,
+    1.0,
+],
+]
+helicities = [
+    1,
+    1,
+    -1,
+    -1,
+    -1,
+    1,
+    1,
+]
+
+[default_runtime_settings.subtraction]
+disable_threshold_subtraction = true
+
+[global_settings]
+stderr_directive = "Debug"
+
+[global_settings.generation.evaluator_settings]
+compile = true
+
+[global_settings.generation.tropical_subgraph_table_settings]
+disable_tropical_generation = true

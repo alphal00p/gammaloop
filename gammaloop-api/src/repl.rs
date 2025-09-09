@@ -1,4 +1,4 @@
-use std::{ffi::OsString, marker::PhantomData};
+use std::{ffi::OsString, marker::PhantomData, path::Path};
 
 use clap::Parser;
 use console::style;
@@ -119,6 +119,7 @@ impl<C: Parser + Send + Sync + 'static> reedline::Completer for ReedCompleter<C>
 
         // Navigate through completed subcommands to find current context
         let mut cmd_args = &args[1..]; // Skip the program name
+        let mut remaining_args = cmd_args; // Track remaining arguments for current command context
 
         // Process all completed arguments (not including the one we're currently typing)
         while cmd_args.len() > 1 {
@@ -129,6 +130,7 @@ impl<C: Parser + Send + Sync + 'static> reedline::Completer for ReedCompleter<C>
             if let Some(subcmd) = cmd.get_subcommands().find(|sc| sc.get_name() == arg_str) {
                 cmd = subcmd;
                 cmd_args = &cmd_args[1..];
+                remaining_args = cmd_args; // Update remaining args for the new command context
             } else {
                 // This argument is not a subcommand, so we stop navigating
                 break;
@@ -144,6 +146,7 @@ impl<C: Parser + Send + Sync + 'static> reedline::Completer for ReedCompleter<C>
             if let Some(subcmd) = cmd.get_subcommands().find(|sc| sc.get_name() == arg_str) {
                 cmd = subcmd;
                 cmd_args = &[]; // Now we're starting fresh in the new subcommand
+                remaining_args = &[]; // No remaining args in the new context
             }
         }
 
@@ -194,23 +197,220 @@ impl<C: Parser + Send + Sync + 'static> reedline::Completer for ReedCompleter<C>
                 }
             }
         } else {
-            // Suggest subcommands from the current command context
-            for subcommand in cmd.get_subcommands() {
-                let name = subcommand.get_name();
-                if name.starts_with(current_arg_str.as_ref()) {
-                    suggestions.push(reedline::Suggestion {
-                        value: name.to_string(),
-                        description: subcommand.get_about().map(|s| s.to_string()),
-                        style: None,
-                        extra: None,
-                        span: Span::new(start_pos, pos),
-                        append_whitespace: true,
-                    });
+            // Check if we should complete paths first
+            if should_complete_paths(cmd, remaining_args) {
+                if let Some(path_suggestions) = complete_path(&current_arg_str, start_pos, pos) {
+                    suggestions.extend(path_suggestions);
+                }
+            } else {
+                // Only suggest subcommands if we're not completing a flag value
+                for subcommand in cmd.get_subcommands() {
+                    let name = subcommand.get_name();
+                    if name.starts_with(current_arg_str.as_ref()) {
+                        suggestions.push(reedline::Suggestion {
+                            value: name.to_string(),
+                            description: subcommand.get_about().map(|s| s.to_string()),
+                            style: None,
+                            extra: None,
+                            span: Span::new(start_pos, pos),
+                            append_whitespace: true,
+                        });
+                    }
                 }
             }
         }
 
         suggestions
+    }
+}
+
+/// Check if we should complete paths based on the current argument position
+fn should_complete_paths(cmd: &clap::Command, cmd_args: &[std::ffi::OsString]) -> bool {
+    // If we're currently completing after a flag that expects a path value
+    if cmd_args.len() >= 2 {
+        // Check if the second-to-last argument was a flag that expects a path
+        let flag_arg = &cmd_args[cmd_args.len() - 2];
+        let flag_arg_str = flag_arg.to_string_lossy();
+
+        if flag_arg_str.starts_with('-') {
+            // We're completing the value after a flag
+            let flag_expects_path = cmd
+                .get_arguments()
+                .find(|a| {
+                    // Check long flag
+                    let long_matches = if let Some(long) = a.get_long() {
+                        let long_flag = format!("--{}", long);
+                        flag_arg_str == long_flag
+                    } else {
+                        false
+                    };
+
+                    // Check short flag
+                    let short_matches = if let Some(short) = a.get_short() {
+                        let short_flag = format!("-{}", short);
+                        flag_arg_str == short_flag
+                    } else {
+                        false
+                    };
+
+                    long_matches || short_matches
+                })
+                .map(|arg| is_path_argument(arg))
+                .unwrap_or(false);
+            if flag_expects_path {
+                return true;
+            }
+        }
+    }
+
+    // Count non-flag positional arguments to determine which positional argument we're completing
+    let mut positional_count: usize = 0;
+    for arg in cmd_args {
+        let arg_str = arg.to_string_lossy();
+        if !arg_str.starts_with('-') {
+            positional_count += 1;
+        }
+    }
+
+    // Get the positional argument definition for this position (0-based)
+    let positional_args: Vec<_> = cmd
+        .get_arguments()
+        .filter(|arg| !arg.get_long().is_some() && !arg.get_short().is_some())
+        .collect();
+
+    if let Some(positional_arg) = positional_args.get(positional_count.saturating_sub(1)) {
+        is_path_argument(positional_arg)
+    } else {
+        false
+    }
+}
+
+/// Determine if an argument expects a path based on its type and hints
+fn is_path_argument(arg: &clap::Arg) -> bool {
+    // Check value hint for path-related hints
+    match arg.get_value_hint() {
+        clap::ValueHint::FilePath
+        | clap::ValueHint::DirPath
+        | clap::ValueHint::AnyPath
+        | clap::ValueHint::ExecutablePath => true,
+        _ => {
+            // Check if the argument name suggests it's a path
+            let name = arg.get_id().as_str().to_lowercase();
+            name.contains("path")
+                || name.contains("file")
+                || name.contains("dir")
+                || name.contains("directory")
+                || name == "input"
+                || name == "output"
+        }
+    }
+}
+
+/// Complete file and directory paths
+fn complete_path(
+    partial_path: &str,
+    start_pos: usize,
+    pos: usize,
+) -> Option<Vec<reedline::Suggestion>> {
+    let mut suggestions = Vec::new();
+
+    // Determine the directory to search and the prefix to match
+    let path = Path::new(partial_path);
+    let (search_dir, file_prefix) = if partial_path.ends_with('/') || partial_path.ends_with('\\') {
+        // Complete from the specified directory
+        (path.to_path_buf(), String::new())
+    } else if let Some(parent) = path.parent() {
+        // Complete from parent directory with filename prefix
+        if parent.as_os_str().is_empty() {
+            (
+                std::path::PathBuf::from("."),
+                path.file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .to_string(),
+            )
+        } else {
+            (
+                parent.to_path_buf(),
+                path.file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .to_string(),
+            )
+        }
+    } else {
+        // Complete from current directory
+        (std::path::PathBuf::from("."), partial_path.to_string())
+    };
+
+    // Try to read the directory
+    match std::fs::read_dir(&search_dir) {
+        Ok(entries) => {
+            for entry in entries.flatten() {
+                let file_name = entry.file_name();
+                let file_name_str = file_name.to_string_lossy();
+
+                // Skip hidden files unless we're explicitly typing them
+                if file_name_str.starts_with('.') && !file_prefix.starts_with('.') {
+                    continue;
+                }
+
+                // Check if this entry matches our prefix
+                if file_name_str.starts_with(&file_prefix) {
+                    let is_dir = entry.file_type().map(|ft| ft.is_dir()).unwrap_or(false);
+                    let mut full_path = if search_dir.to_string_lossy() == "." {
+                        file_name_str.to_string()
+                    } else {
+                        search_dir.join(&file_name).to_string_lossy().to_string()
+                    };
+
+                    // Add trailing slash for directories
+                    if is_dir {
+                        full_path.push('/');
+                    }
+
+                    let description = if is_dir {
+                        Some("Directory".to_string())
+                    } else {
+                        // Try to get file size for description
+                        entry
+                            .metadata()
+                            .ok()
+                            .map(|meta| format!("File ({} bytes)", meta.len()))
+                    };
+
+                    suggestions.push(reedline::Suggestion {
+                        value: full_path,
+                        description,
+                        style: None,
+                        extra: None,
+                        span: Span::new(start_pos, pos),
+                        append_whitespace: !is_dir, // Don't add space after directories
+                    });
+                }
+            }
+        }
+        Err(_e) => {
+            // Directory doesn't exist or can't be read - this is normal
+        }
+    }
+
+    if suggestions.is_empty() {
+        None
+    } else {
+        // Sort suggestions: directories first, then files, both alphabetically
+        suggestions.sort_by(|a, b| {
+            let a_is_dir = a.value.ends_with('/');
+            let b_is_dir = b.value.ends_with('/');
+
+            match (a_is_dir, b_is_dir) {
+                (true, false) => std::cmp::Ordering::Less,
+                (false, true) => std::cmp::Ordering::Greater,
+                _ => a.value.cmp(&b.value),
+            }
+        });
+
+        Some(suggestions)
     }
 }
 

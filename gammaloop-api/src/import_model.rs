@@ -27,6 +27,7 @@ static BUILTIN_MODELS: Dir = include_dir!("$CARGO_MANIFEST_DIR/../models/json");
 #[derive(Debug, Args, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
 /// Generate integrands
 pub struct ImportModel {
+    #[arg(value_hint = clap::ValueHint::AnyPath)]
     path: PathBuf,
     #[arg(short = 's', long,
           action = clap::ArgAction::Set,     // take an optional bool value
