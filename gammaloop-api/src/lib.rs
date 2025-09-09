@@ -454,6 +454,7 @@ impl Cli {
             SHOWDEFAULTS.store(true, std::sync::atomic::Ordering::Relaxed);
         }
 
+        print!("{}", self.no_skip_default);
         set_serialize_commands_as_strings(self.try_strings);
         run_history.save_toml(&selected_root_folder, true, false)?;
         set_serialize_commands_as_strings(false);

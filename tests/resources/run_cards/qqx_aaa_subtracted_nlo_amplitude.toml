@@ -1,8 +1,8 @@
 #:schema /Users/lcnbr/.config/gammaloop/schemas/runhistory.json
 commands = [
-"set global kv stderr_directive=gammalooprs=info,info",
+"set global kv stderr_directive=gammalooprs=info|info",
 "import model sm-default",
-"set global kv stderr_directive=gammalooprs=info,info",
+"set global kv stderr_directive=gammalooprs=info|info",
 "import amplitude ./tests/resources/graphs/qqx_aaa_subtracted.dot",
 "generate",
 "set global kv stderr_directive=gammalooprs=info",

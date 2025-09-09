@@ -5,6 +5,7 @@ use std::{
 
 use chrono::{Datelike, Local, SecondsFormat, Timelike};
 use colored::{ColoredString, Colorize};
+use eyre::Context;
 use gammalooprs::utils::tracing::{LogFormat, LOG_GUARD};
 use tracing::{level_filters::LevelFilter, Event, Subscriber};
 use tracing_appender::{
@@ -22,7 +23,6 @@ use tracing_subscriber::{
 };
 
 use color_eyre::Result;
-use eyre::eyre;
 
 fn file_filter_from(user_spec: &str) -> Result<EnvFilter> {
     // Start from a strict global default…
@@ -30,13 +30,13 @@ fn file_filter_from(user_spec: &str) -> Result<EnvFilter> {
         .with_default_directive(LevelFilter::WARN.into()) // global floor
         .parse_lossy(""); // no user rules yet
 
-    for req in ["gammalooprs=debug", "_gammaloop=info", "symbolica=off"] {
-        let Ok(d) = req.parse() else {
-            continue;
-        };
-        filter = filter.add_directive(d);
-    }
-    for a in user_spec.split(",") {
+    // for req in ["gammalooprs=debug", "_gammaloop=info", "symbolica=off"] {
+    //     let Ok(d) = req.parse() else {
+    //         continue;
+    //     };
+    //     filter = filter.add_directive(d);
+    // }
+    for a in user_spec.split("|") {
         if a.trim().is_empty() {
             continue;
         }
@@ -52,19 +52,36 @@ fn stderr_filter_from(user_spec: &str) -> Result<EnvFilter> {
         .with_default_directive(LevelFilter::OFF.into())
         .parse_lossy("status=trace");
 
-    for a in user_spec.split(",") {
+    for a in user_spec.split("|") {
         if a.trim().is_empty() {
             continue;
         }
-        f = f.add_directive(a.trim().parse()?);
+        f = f.add_directive(
+            a.trim()
+                .parse()
+                .context(format!("Trying to get directive from :{}", a))?,
+        );
     }
 
     Ok(f)
 }
 
+const ENV_FILE_LOG_FILTER: &'static str = "GL_FILE_LOG_FILTER";
+const ENV_DISPLAY_LOG_FILTER: &'static str = "GL_DISPLAY_LOG_FILTER";
+
 // Statics to hold the current log specifications
-static FILE_LOG_SPEC: LazyLock<Mutex<String>> = LazyLock::new(|| Mutex::new("".to_string()));
-static STDERR_LOG_SPEC: LazyLock<Mutex<String>> = LazyLock::new(|| Mutex::new("".to_string()));
+static FILE_LOG_SPEC: LazyLock<Mutex<String>> = LazyLock::new(|| {
+    let directive = std::env::var(ENV_FILE_LOG_FILTER)
+        .ok()
+        .unwrap_or("".to_string());
+    Mutex::new(directive)
+});
+static STDERR_LOG_SPEC: LazyLock<Mutex<String>> = LazyLock::new(|| {
+    let directive = std::env::var(ENV_DISPLAY_LOG_FILTER)
+        .ok()
+        .unwrap_or("".to_string());
+    Mutex::new(directive)
+});
 
 struct FilterHandles {
     file_handle: reload::Handle<EnvFilter, Registry>,
@@ -93,9 +110,18 @@ pub fn set_file_log_filter(user_spec: impl AsRef<str>) -> Result<()> {
     let Some(handles) = FILTER_HANDLES.get() else {
         return Ok(());
     };
-    let user_spec = user_spec.as_ref();
+    let user_spec = if let Some(file) = std::env::var(ENV_FILE_LOG_FILTER).ok() {
+        println!(
+            "WARNING, {ENV_FILE_LOG_FILTER} is set to {file}, will override settings {}",
+            user_spec.as_ref()
+        );
+        file
+    } else {
+        user_spec.as_ref().to_string()
+    };
     *FILE_LOG_SPEC.lock().unwrap() = user_spec.to_string();
-    let full_spec = file_filter_from(user_spec)?;
+
+    let full_spec = file_filter_from(&user_spec)?;
     // println!("Modifying env filter to: {}", full_spec);
     handles.file_handle.modify(|f| *f = full_spec)?;
     Ok(())
@@ -106,9 +132,17 @@ pub fn set_stderr_log_filter(user_spec: impl AsRef<str>) -> Result<()> {
     let Some(handles) = FILTER_HANDLES.get() else {
         return Ok(());
     };
-    let user_spec = user_spec.as_ref();
-    *STDERR_LOG_SPEC.lock().unwrap() = user_spec.to_string();
-    let full_spec = stderr_filter_from(user_spec)?;
+    let user_spec = if let Some(display) = std::env::var(ENV_DISPLAY_LOG_FILTER).ok() {
+        println!(
+            "WARNING, {ENV_DISPLAY_LOG_FILTER} is set to {display}, will override settings {}",
+            user_spec.as_ref()
+        );
+        display
+    } else {
+        user_spec.as_ref().to_string()
+    };
+    let full_spec = stderr_filter_from(&user_spec)?;
+    *STDERR_LOG_SPEC.lock().unwrap() = user_spec;
     // println!("Modifying env filter to: {}", full_spec);
     handles.stderr_handle.modify(|f| *f = full_spec)?;
     Ok(())

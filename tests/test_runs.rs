@@ -127,6 +127,7 @@ fn trees() -> Result<()> {
         "trees/qqx_aaa.toml",
         get_tests_workspace_path().join("qqx_aaa_tree"),
     )?;
+
     let a = Inspect {
         process_id: 0,
         process_name: "qqx_aaa".to_string(),
