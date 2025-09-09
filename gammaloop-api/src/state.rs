@@ -687,13 +687,23 @@ mod tests {
         // Test serialization as Commands (default behavior)
         set_serialize_commands_as_strings(false);
         let yaml = serde_yaml::to_string(&cmd_history).unwrap();
-        let deserialized: CommandHistory = serde_yaml::from_str(&yaml).unwrap();
-        assert_eq!(cmd_history, deserialized);
+        let deserialized_yaml: CommandHistory = serde_yaml::from_str(&yaml).unwrap();
+        let json = serde_json::to_string(&cmd_history).unwrap();
+        let deserialized_json: CommandHistory = serde_json::from_str(&json).unwrap();
+        let toml = toml::to_string(&cmd_history).unwrap();
+        let deserialized_toml: CommandHistory = toml::from_str(&toml).unwrap();
+        assert_eq!(cmd_history, deserialized_yaml);
+        assert_eq!(cmd_history, deserialized_json);
+        assert_eq!(cmd_history, deserialized_toml);
 
         // Test serialization as string
         set_serialize_commands_as_strings(true);
         let yaml_string = serde_yaml::to_string(&cmd_history_with_raw).unwrap();
+        let json_string = serde_json::to_string(&cmd_history_with_raw).unwrap();
+        let toml_string = toml::to_string(&cmd_history_with_raw).unwrap();
         assert!(yaml_string.contains("quit"));
+        assert!(json_string.contains("quit"));
+        assert!(toml_string.contains("quit"));
 
         // Reset flag
         set_serialize_commands_as_strings(false);
