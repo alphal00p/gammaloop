@@ -95,10 +95,21 @@ fn clean_test(state: &State) {
 
 #[test]
 fn qqx_aaa_subtracted_nlo_amplitude_test() -> Result<()> {
-    let (state, _, _, _) = run_run_card(
+    let (mut state, _, _, _) = run_run_card(
         "qqx_aaa_subtracted_nlo_amplitude.toml",
         "./tests/qqx_aaa_subtracted_nlo_amplitude",
     )?;
+
+    let a = Inspect {
+        process_id: 0,
+        process_name: "qqx_aaa_subtracted".to_string(),
+        point: vec![0.1, 0.2, 0.3],
+        momentum_space: true,
+        ..Default::default()
+    }
+    .run(&mut state)?;
+
+    assert_snapshot!(format!("{a:.8e}"),@"(6.923469780323106e-4+-6.181987787694587e-4i)");
 
     Ok(())
 }
@@ -106,7 +117,6 @@ fn qqx_aaa_subtracted_nlo_amplitude_test() -> Result<()> {
 #[test]
 fn trees() -> Result<()> {
     let (mut state, _, _, _) = run_run_card("trees/qqx_aaa.toml", "./tests/qqx_aaa_tree")?;
-    state.process_list.warm_up(&state.model)?;
     let a = Inspect {
         process_id: 0,
         process_name: "qqx_aaa".to_string(),
