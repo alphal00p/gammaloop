@@ -2,7 +2,7 @@ use std::{collections::HashMap, path::PathBuf, str::FromStr};
 
 use clap::{command, ArgGroup, Args, Subcommand};
 use color_eyre::Result;
-use eyre::{eyre, Context};
+use eyre::{eyre, Context, Report};
 use figment::{
     providers::{Format, Serialized},
     Figment,
@@ -17,7 +17,19 @@ use serde::{Deserialize, Serialize};
 use crate::{
     generate::ProcessArgs,
     state::{State, SyncSettings},
+    Commands,
 };
+
+impl FromStr for Set {
+    type Err = Report;
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        if let Commands::Set(cmd) = Commands::from_str(s)? {
+            Ok(cmd)
+        } else {
+            Err(eyre!("Not a 'set' command"))
+        }
+    }
+}
 
 #[derive(Subcommand, Debug, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
 pub enum Set {

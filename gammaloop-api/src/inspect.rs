@@ -16,7 +16,7 @@ pub struct Inspect {
     pub process_id: usize,
     /// The name of the process to inspect
     #[arg(short = 'n', long = "name", value_name = "NAME")]
-    pub process_name: String,
+    pub integrand_name: String,
     /// The point to inspect (x y) or (p0 px ...)
     #[arg(short = 'p', num_args = 2.., value_name = "POINT")]
     // allow >2 for momentum‑space
@@ -43,7 +43,7 @@ impl Default for Inspect {
     fn default() -> Self {
         Self {
             process_id: 0,
-            process_name: "default".to_string(),
+            integrand_name: "default".to_string(),
             point: vec![],
             use_f128: false,
             force_radius: false,
@@ -59,7 +59,7 @@ impl Inspect {
 
         let integrand = state
             .process_list
-            .get_integrand_mut(self.process_id, &self.process_name)?;
+            .get_integrand_mut(self.process_id, &self.integrand_name)?;
 
         let pt = self.point.iter().map(|&x| F(x)).collect::<Vec<F<f64>>>();
 

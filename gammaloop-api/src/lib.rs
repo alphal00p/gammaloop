@@ -34,9 +34,12 @@ use schemars::{schema_for, JsonSchema};
 use serde::{Deserialize, Serialize};
 use set::Set;
 use state::{RunHistory, State};
+use std::str::FromStr;
 use std::{ffi::OsString, fs, path::PathBuf};
 use std::{fs::File, ops::ControlFlow};
 use symbolica::activate_oem_license;
+
+use crate::state::CommandHistory;
 // use tracing::LogLevel;
 
 pub mod generate;
@@ -44,6 +47,7 @@ pub mod import_model;
 pub mod inspect;
 pub mod integrate;
 pub mod repl;
+pub mod set;
 pub mod state;
 pub mod tracing;
 
@@ -53,7 +57,7 @@ pub mod tracing;
 pub struct Cli {
     /// Path to the a run file as history, and as settings, by default is: `./gammaloop_state/run.yaml`
     #[arg(short = 'r', long, value_hint = clap::ValueHint::FilePath)]
-    run_history: Option<PathBuf>,
+    pub run_history: Option<PathBuf>,
 
     /// Path to the state folder
     #[arg(short = 's', long, default_value = "./gammaloop_state", value_hint = clap::ValueHint::DirPath)]
@@ -96,6 +100,13 @@ pub struct Cli {
     /// Optional sub‑command
     #[command(subcommand)]
     pub command: Option<Commands>,
+}
+
+impl FromStr for Commands {
+    type Err = Report;
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        Ok(CommandHistory::from_raw_string(s)?.command)
+    }
 }
 
 pub struct Parsed {
@@ -153,7 +164,7 @@ impl Cli {
         self.no_skip_default = other.no_skip_default;
     }
 
-    fn run_command(
+    pub fn run_command(
         &mut self,
         command: Commands,
         state: &mut State,
@@ -199,8 +210,8 @@ impl Cli {
                     self.save(
                         state,
                         run_history,
-                        &default_runtime_settings,
-                        &global_settings,
+                        default_runtime_settings,
+                        global_settings,
                         path,
                         false,
                     )?;
@@ -502,8 +513,6 @@ pub enum Save {
     /// regenerate the schema files
     Schema {},
 }
-
-pub mod set;
 
 #[derive(Subcommand, Debug, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
 pub enum Display {

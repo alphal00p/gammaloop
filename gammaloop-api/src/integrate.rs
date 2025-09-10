@@ -31,7 +31,7 @@ pub struct Integrate {
 
     /// The name of the process to inspect
     #[arg(short = 'n', long = "name", value_name = "NAME")]
-    pub process_name: String,
+    pub integrand_name: String,
 
     /// The path to store results in
     #[arg(short = 'p', long, value_hint = clap::ValueHint::FilePath)]
@@ -70,11 +70,11 @@ impl Integrate {
 
         let gloop_integrand = state
             .process_list
-            .get_integrand_mut(self.process_id, &self.process_name)?;
+            .get_integrand_mut(self.process_id, &self.integrand_name)?;
 
         status_info!(
             "Gammaloop now integrates {}",
-            self.process_name.green().bold()
+            self.integrand_name.green().bold()
         );
 
         let path_to_state = self.workspace_path.join("integration_state");

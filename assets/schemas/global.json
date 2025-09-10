@@ -1,0 +1,137 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "GlobalSettings",
+  "type": "object",
+  "properties": {
+    "generation": {
+      "$ref": "#/$defs/GenerationSettings"
+    },
+    "log_file_directive": {
+      "type": "string"
+    },
+    "stderr_directive": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "CompilationOptimizationLevel": {
+      "type": "string",
+      "enum": [
+        "O0",
+        "O1",
+        "O2",
+        "O3"
+      ]
+    },
+    "EvaluatorSettings": {
+      "type": "object",
+      "properties": {
+        "compile": {
+          "type": "boolean"
+        },
+        "iterative_orientation_optimization": {
+          "type": "boolean"
+        }
+      }
+    },
+    "GammaloopCompileOptions": {
+      "type": "object",
+      "properties": {
+        "compiler": {
+          "type": "string"
+        },
+        "custom": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "fast_math": {
+          "type": "boolean"
+        },
+        "inline_asm": {
+          "type": "boolean"
+        },
+        "optimization_level": {
+          "$ref": "#/$defs/CompilationOptimizationLevel"
+        },
+        "unsafe_math": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "GenerationSettings": {
+      "type": "object",
+      "properties": {
+        "enable_thresholds": {
+          "type": "boolean"
+        },
+        "evaluator_settings": {
+          "$ref": "#/$defs/EvaluatorSettings"
+        },
+        "gammaloop_compile_options": {
+          "$ref": "#/$defs/GammaloopCompileOptions"
+        },
+        "orientation_pattern": {
+          "$ref": "#/$defs/OrientationPattern"
+        },
+        "tropical_subgraph_table_settings": {
+          "$ref": "#/$defs/TropicalSubgraphTableSettings"
+        },
+        "uv_settings": {
+          "$ref": "#/$defs/UVgenerationSettings"
+        }
+      },
+      "additionalProperties": false
+    },
+    "OrientationPattern": {
+      "type": "object",
+      "properties": {
+        "pat": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ParseableAtom"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "ParseableAtom": {
+      "description": "An atom that is serialized as a string. Do not make any assumptions about the state",
+      "type": [
+        "string"
+      ]
+    },
+    "TropicalSubgraphTableSettings": {
+      "type": "object",
+      "properties": {
+        "disable_tropical_generation": {
+          "type": "boolean"
+        },
+        "panic_on_fail": {
+          "type": "boolean"
+        },
+        "target_omega": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "additionalProperties": false
+    },
+    "UVgenerationSettings": {
+      "type": "object",
+      "properties": {
+        "generate_integrated": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

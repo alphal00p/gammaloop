@@ -54,7 +54,7 @@ fn criterion_benchmark(c: &mut Criterion) -> Result<()> {
 
     let inspect = Inspect {
         process_id: 0,
-        process_name: "qqx_aaa_subtracted".into(),
+        integrand_name: "qqx_aaa_subtracted".into(),
         point: vec![0.1, 0.2, 0.3],
         use_f128: false,
         force_radius: false,
