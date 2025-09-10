@@ -210,8 +210,8 @@ pub struct RunHistory {
 }
 
 impl SmartSerde for RunHistory {
-    fn has_schema_path(&self) -> Option<Result<PathBuf>> {
-        Some(get_schema_folder().map(|f| f.join("runhistory.json")))
+    fn has_schema_path(&self, online: bool) -> Option<Result<PathBuf>> {
+        Some(get_schema_folder(online).map(|f| f.join("runhistory.json")))
     }
 }
 

@@ -170,6 +170,8 @@ version = "0.25"
 
 [build-dependencies]
 # pyo3-build-config = "*"
+vergen = { version = "9", default-features = false }
+vergen-gitcl = "1"
 
 [lib]
 # required-features = ["python_api"]

@@ -1,7 +1,17 @@
 use std::{env, path::PathBuf};
+use vergen::Emitter;
+use vergen_gitcl::GitclBuilder;
 use walkdir::WalkDir;
 
-fn main() {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let git = GitclBuilder::default().branch(true).build()?;
+
+    Emitter::default().add_instructions(&git)?.emit()?;
+
+    // Help Cargo know when to rerun
+    println!("cargo:rerun-if-changed=.git/HEAD");
+    println!("cargo:rerun-if-changed=.git/refs/heads");
+
     if cfg!(feature = "python_api") {
         pyo3_build_config::add_extension_module_link_args();
     }
@@ -29,4 +39,6 @@ fn main() {
             println!("cargo:rerun-if-changed={}", entry.path().display());
         }
     }
+
+    Ok(())
 }

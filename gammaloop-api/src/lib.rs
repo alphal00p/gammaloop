@@ -633,7 +633,7 @@ pub fn write_schemas() -> Result<()> {
     let global_schema = schema_for!(GlobalSettings);
     let runtime_schema = schema_for!(RuntimeSettings);
     let runhistory_schema = schema_for!(RunHistory);
-    let folder = get_schema_folder()?;
+    let folder = get_schema_folder(false)?;
 
     let mut global_file = File::create(folder.join("global.json"))?;
     let mut runtime_file = File::create(folder.join("runtime.json"))?;

@@ -13,6 +13,8 @@ use std::collections::BTreeMap;
 
 use std::{fs::File, io::Read, path::Path};
 
+const BRANCH: &str = env!("VERGEN_GIT_BRANCH"); // e.g., "main" or "feature-x"
+
 pub trait SmartSerde: Serialize + DeserializeOwned {
     fn to_file(&self, file_path: impl AsRef<Path>, override_existing: bool) -> Result<()> {
         let mut f = if override_existing {
@@ -29,7 +31,8 @@ pub trait SmartSerde: Serialize + DeserializeOwned {
                     "yaml" | "yml" => serde_yaml::to_writer(f, self)
                         .map_err(|e| eyre!(format!("Error serializing yaml: {}", e)))?,
                     "toml" => {
-                        let mut toml_string = if let Some(schema_path) = self.has_schema_path() {
+                        let mut toml_string = if let Some(schema_path) = self.has_schema_path(true)
+                        {
                             let schema_path = schema_path?;
                             format!("#:schema {}\n", schema_path.display())
                         } else {
@@ -38,7 +41,7 @@ pub trait SmartSerde: Serialize + DeserializeOwned {
 
                         toml_string.push_str(&toml::to_string_pretty(&self)?);
 
-                        f.write(toml_string.as_bytes())?;
+                        f.write_all(toml_string.as_bytes())?;
                     }
                     _ => return Err(eyre!(format!("Unknown file extension: {}", ext))),
                 }
@@ -121,7 +124,7 @@ pub trait SmartSerde: Serialize + DeserializeOwned {
         }
     }
 
-    fn has_schema_path(&self) -> Option<Result<PathBuf>> {
+    fn has_schema_path(&self, _online: bool) -> Option<Result<PathBuf>> {
         Option::None
     }
 }
@@ -135,29 +138,36 @@ impl SmartSerde for SerializableModel {}
 // impl SmartSerde for Schema {}
 
 impl SmartSerde for GlobalSettings {
-    fn has_schema_path(&self) -> Option<Result<PathBuf>> {
-        Some(get_schema_folder().map(|f| f.join("global.json")))
+    fn has_schema_path(&self, online: bool) -> Option<Result<PathBuf>> {
+        Some(get_schema_folder(online).map(|f| f.join("global.json")))
     }
 }
 impl SmartSerde for RuntimeSettings {
-    fn has_schema_path(&self) -> Option<Result<PathBuf>> {
-        Some(get_schema_folder().map(|f| f.join("runtime.json")))
+    fn has_schema_path(&self, online: bool) -> Option<Result<PathBuf>> {
+        Some(get_schema_folder(online).map(|f| f.join("runtime.json")))
     }
 }
 
-pub fn get_schema_folder() -> Result<PathBuf> {
+pub fn get_schema_folder(online: bool) -> Result<PathBuf> {
     let folder = match env::var("GAMMALOOP_SCHEMA_PATH") {
         Ok(path) => PathBuf::try_from(path)?,
-        Err(_) => match home_dir() {
-            Some(home) => home.join(".config").join("gammaloop").join("schemas"),
-            None => {
-                return Err(eyre!("Could not determine home directory"))
-                    .with_suggestion(|| "Set the GAMMALOOP_SCHEMA_PATH environment variable");
+        Err(_) => {
+            if online {
+                PathBuf::try_from(format!("https://raw.githubusercontent.com/alphal00p/gammaloop/refs/heads/{}/assets/schemas",BRANCH))?
+            } else {
+                match home_dir() {
+                    Some(home) => home.join(".config").join("gammaloop").join("schemas"),
+                    None => {
+                        return Err(eyre!("Could not determine home directory")).with_suggestion(
+                            || "Set the GAMMALOOP_SCHEMA_PATH environment variable",
+                        );
+                    }
+                }
             }
-        },
+        }
     };
 
-    if !folder.exists() {
+    if !online && !folder.exists() {
         std::fs::create_dir_all(&folder).wrap_err_with(|| {
             format!(
                 "Could not create schema folder at {}",

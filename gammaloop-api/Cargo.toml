@@ -80,3 +80,5 @@ features = ["auto-initialize", "abi3", "abi3-py37"]
 [build-dependencies]
 pyo3-build-config = "0.25"
 walkdir = "2"
+vergen = { version = "9", default-features = false }
+vergen-gitcl = "1"
