@@ -6,8 +6,7 @@ use gammaloop_api::{
     Cli,
 };
 use gammalooprs::{
-    initialisation::{initialise, test_initialise},
-    settings::runtime::IntegrationResult,
+    initialisation::initialise,
     status_info,
     utils::{test_utils::load_generic_model, F},
 };
@@ -21,8 +20,10 @@ use tracing::{debug, warn};
 
 fn run_card(resource_path: impl AsRef<Path>) -> Result<RunHistory> {
     initialise()?;
-    RunHistory::new(PathBuf::from("./tests/resources/runs/").join(resource_path))
+    RunHistory::new(PathBuf::from("./tests/resources/run_cards").join(resource_path))
 }
+
+const TESTS_WORKSPACE: &str = "./tests/workspace";
 
 fn run_run_card(
     run_card_path: impl AsRef<Path>,
@@ -47,9 +48,9 @@ fn run_run_card(
 
     cli.save(
         &mut state,
-        &mut cmds,
-        &mut default_runtime_settings,
-        &mut global_settings,
+        &cmds,
+        &default_runtime_settings,
+        &global_settings,
         None,
         false,
     )?;
@@ -57,26 +58,20 @@ fn run_run_card(
     Ok((state, cli, global_settings, default_runtime_settings))
 }
 
-fn new_cli_for_test(test_path: impl AsRef<Path>) -> (Cli, State) {
-    let state_path = if let Ok(user_specified_state_path) = env::var("TESTS_GAMMALOOP_STATE_PATH") {
-        if user_specified_state_path.to_ascii_uppercase() == "AUTO" {
-            env::temp_dir().join("tests_gammaloop_state")
-        } else {
-            std::path::PathBuf::from(user_specified_state_path)
-        }
-    } else {
-        test_path.as_ref().join("tests_gammaloop_state")
-    };
-    debug!("Using gammaloop state path: {}", state_path.display());
+fn new_cli_for_test(state_path: impl AsRef<Path>) -> (Cli, State) {
+    debug!(
+        "Using gammaloop state path: {}",
+        state_path.as_ref().display()
+    );
 
-    let mut state = State::new(state_path.clone(), None);
+    let mut state = State::new(state_path.as_ref().to_path_buf(), None);
     state.model = load_generic_model("sm");
 
     (state.new_test_cli(), state)
 }
 
 fn clean_test(state: &State) {
-    if let Err(_) = env::var("GAMMALOOP_TESTS_NO_CLEAN_STATE") {
+    if env::var("GAMMALOOP_TESTS_NO_CLEAN_STATE").is_err() {
         match std::fs::remove_dir_all(state.save_path.clone()) {
             Ok(()) => debug!(
                 "Gammaloop state folder '{}' deleted successfully",
@@ -93,11 +88,23 @@ fn clean_test(state: &State) {
     }
 }
 
+fn get_tests_workspace_path() -> PathBuf {
+    if let Ok(user_specified_state_path) = env::var("TESTS_GAMMALOOP_STATE_PATH") {
+        if user_specified_state_path.eq_ignore_ascii_case("AUTO") {
+            env::temp_dir().join("gammaloop_tests_workspace")
+        } else {
+            std::path::PathBuf::from(user_specified_state_path)
+        }
+    } else {
+        PathBuf::from(TESTS_WORKSPACE)
+    }
+}
+
 #[test]
 fn qqx_aaa_subtracted_nlo_amplitude_test() -> Result<()> {
     let (mut state, _, _, _) = run_run_card(
         "qqx_aaa_subtracted_nlo_amplitude.toml",
-        "./tests/qqx_aaa_subtracted_nlo_amplitude",
+        get_tests_workspace_path().join("qqx_aaa_subtracted_nlo_amplitude"),
     )?;
 
     let a = Inspect {
@@ -116,7 +123,10 @@ fn qqx_aaa_subtracted_nlo_amplitude_test() -> Result<()> {
 
 #[test]
 fn trees() -> Result<()> {
-    let (mut state, _, _, _) = run_run_card("trees/qqx_aaa.toml", "./tests/qqx_aaa_tree")?;
+    let (mut state, _, _, _) = run_run_card(
+        "trees/qqx_aaa.toml",
+        get_tests_workspace_path().join("qqx_aaa_tree"),
+    )?;
     let a = Inspect {
         process_id: 0,
         process_name: "qqx_aaa".to_string(),
@@ -132,27 +142,30 @@ fn trees() -> Result<()> {
 #[test]
 fn test_grouped_subtraction() -> Result<()> {
     let (mut state, _, _, _) = run_run_card(
-        "trees/test_grouped_subtraction.toml",
-        "./tests/test_grouped_subtraction",
+        "test_grouped_subtraction.toml",
+        get_tests_workspace_path().join("test_grouped_subtraction"),
     )?;
 
-    let int1 = Integrate{
+    let int1 = Integrate {
         process_id: 0,
         process_name: "no_group".to_string(),
-        result_path: "./tests/test_grouped_subtraction/integration_workspace_no_group/integration_results.yaml".into(),
+        result_path: get_tests_workspace_path().join(
+            "test_grouped_subtraction/integration_workspace_no_group/integration_results.yaml",
+        ),
         n_cores: 1,
-        workspace_path: "./tests/test_grouped_subtraction/integration_workspace_no_group/".into(),
+        workspace_path: get_tests_workspace_path()
+            .join("test_grouped_subtraction/integration_workspace_no_group/"),
         target: None,
         restart: true,
     };
     let int2 = Integrate {
         process_id: 1,
         process_name: "group".to_string(),
-        result_path:
-            "./tests/test_grouped_subtraction/integration_workspace_group/integration_results.yaml"
-                .into(),
+        result_path: get_tests_workspace_path()
+            .join("test_grouped_subtraction/integration_workspace_group/integration_results.yaml"),
         n_cores: 1,
-        workspace_path: "./tests/test_grouped_subtraction/integration_workspace_group/".into(),
+        workspace_path: get_tests_workspace_path()
+            .join("test_grouped_subtraction/integration_workspace_group/"),
         target: None,
         restart: true,
     };

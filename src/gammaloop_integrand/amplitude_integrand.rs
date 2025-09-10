@@ -246,7 +246,7 @@ impl AmplitudeGraphTerm {
         {
             let a = T::get_parameters(
                 &mut self.param_builder,
-                settings.general.cache_polarizations,
+                settings.general.enable_cache,
                 &self.graph,
                 momentum_sample,
                 hel,
@@ -265,7 +265,7 @@ impl AmplitudeGraphTerm {
                     self.param_builder.orientation_value(e);
                     let a = T::get_parameters(
                         &mut self.param_builder,
-                        settings.general.cache_polarizations,
+                        settings.general.enable_cache,
                         &self.graph,
                         momentum_sample,
                         hel,
