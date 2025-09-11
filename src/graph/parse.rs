@@ -16,7 +16,7 @@ use crate::{
     utils::{GS, W_},
 };
 use bitvec::vec::BitVec;
-use color_eyre::Result;
+use color_eyre::{Result, Section};
 use dot_parser::ast::GraphFromFileError;
 use eyre::{eyre, Ok};
 use itertools::Itertools;
@@ -561,9 +561,10 @@ impl Graph {
             DotHedgeData,
             linnet::parser::GlobalData,
             NodeStorageVec<DotVertexData>,
-        > = GraphSet::from_file(p).map_err(|a| match a {
+        > = GraphSet::from_file(p.as_ref()).map_err(|a| match a {
             HedgeParseError::GraphFromFile(e) => match e {
-                GraphFromFileError::FileError(e) => color_eyre::Report::from(e),
+                GraphFromFileError::FileError(e) => color_eyre::Report::from(e)
+                    .with_note(|| format!("Tried to access the file at:{}", p.as_ref().display())),
                 GraphFromFileError::ParseError(e) => eyre!("Dot parsing error: {}", e),
                 GraphFromFileError::PestParseError(e) => color_eyre::Report::from(e),
             },

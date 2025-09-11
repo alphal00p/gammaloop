@@ -1,6 +1,5 @@
 #:schema https://raw.githubusercontent.com/alphal00p/gammaloop/refs/heads/hedge_numerator/assets/schemas/runhistory.json
 commands = [
-    "set global kv stderr_directive=gammalooprs=info,info",
     "import model scalars-default.json",
     "import amplitude ./tests/resources/graphs/scalar_box.dot",
     "generate",

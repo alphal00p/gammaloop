@@ -83,6 +83,9 @@
           "onSave": true,
           "features": ["python_api"],
           "command": "check"
+        },
+        "runnables": {
+          "extraArgs": ["--profile dev-optim"]
         }
       }
     }

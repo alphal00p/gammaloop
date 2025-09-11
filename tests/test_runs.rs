@@ -182,6 +182,7 @@ fn trees() -> Result<()> {
 
     assert_snapshot!(format!("{a:.8e}"),@"(1.4727604164105595e-4+-1.1503139369130214e-3i)");
 
+    clean_test(&cli);
     Ok(())
 }
 

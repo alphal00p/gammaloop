@@ -10,8 +10,25 @@ use std::{
 use color_eyre::{Result, Section};
 use eyre::{eyre, Context};
 use std::collections::BTreeMap;
+use thiserror::Error;
 
 use std::{fs::File, io::Read, path::Path};
+
+#[derive(Error, Debug)]
+pub enum SerdeFileError {
+    #[error("File error: {0}")]
+    FileError(#[from] std::io::Error),
+    #[error("JSON parse error: {0}")]
+    JsonParseError(#[from] serde_json::Error),
+    #[error("YAML parse error: {0}")]
+    YamlParseError(#[from] serde_yaml::Error),
+    #[error("TOML parse error: {0}")]
+    TomlParseError(#[from] toml::de::Error),
+    #[error("Unknown file extension: {0}")]
+    UnknownExtension(String),
+    #[error("Could not determine file extension of file {0}")]
+    NoExtension(String),
+}
 
 const BRANCH: &str = env!("VERGEN_GIT_BRANCH"); // e.g., "main" or "feature-x"
 
@@ -61,50 +78,74 @@ pub trait SmartSerde: Serialize + DeserializeOwned {
         Ok(())
     }
 
-    fn from_file(file_path: impl AsRef<Path>, name: &str) -> Result<Self> {
-        let mut f = File::open(file_path.as_ref())
-            .wrap_err_with(|| {
-                format!(
-                    "Could not open {name} file {}",
-                    file_path.as_ref().display()
-                )
-            })
-            .suggestion("Does the path exist?")?;
+    /// Loads and deserializes data from a file with typed error handling.
+    ///
+    /// This function differentiates between file errors (e.g., file not found)
+    /// and parse errors (e.g., invalid JSON/YAML/TOML syntax) using `SerdeFileError`.
+    ///
+    /// # Arguments
+    /// * `file_path` - Path to the file to load
+    /// * `_name` - Name of the data type being loaded (for error messages, currently unused)
+    ///
+    /// # Returns
+    /// * `Ok(Self)` - Successfully loaded and parsed data
+    /// * `Err(SerdeFileError)` - Typed error indicating whether it was a file or parse error
+    fn from_file_typed(file_path: impl AsRef<Path>) -> std::result::Result<Self, SerdeFileError> {
+        let mut f = File::open(file_path.as_ref())?;
 
         if let Some(ext) = file_path.as_ref().extension() {
             if let Some(ext) = ext.to_str() {
                 match ext {
-                    "json" => serde_json::from_reader(f)
-                        .map_err(|e| eyre!(format!("Error parsing {name} json: {}", e)))
-                        .suggestion("Is it a correct json file"),
-                    "yaml" | "yml" => serde_yaml::from_reader(f)
-                        .map_err(|e| eyre!(format!("Error parsing {name} yaml: {}", e)))
-                        .suggestion("Is it a correct yaml file"),
+                    "json" => Ok(serde_json::from_reader(f)?),
+                    "yaml" | "yml" => Ok(serde_yaml::from_reader(f)?),
                     "toml" => {
                         let mut buf = String::new();
                         let _bytes = f.read_to_string(&mut buf)?;
-                        toml::from_str(&buf)
-                            .map_err(|e| eyre!(format!("Error parsing {name} toml: {}", e)))
-                            .suggestion("Is it a correct toml file")
+                        Ok(toml::from_str(&buf)?)
                     }
-
-                    _ => Err(eyre!(format!("Unknown {name} file extension: {}", ext)))
-                        .suggestion("Is it a .json or .yaml file?"),
+                    _ => Err(SerdeFileError::UnknownExtension(ext.to_string())),
                 }
             } else {
-                Err(eyre!(format!(
-                    "Could not determine file extension of {name} file {}",
-                    file_path.as_ref().display()
-                )))
-                .suggestion("Does the path exist?")
+                Err(SerdeFileError::NoExtension(
+                    file_path.as_ref().display().to_string(),
+                ))
             }
         } else {
-            Err(eyre!(format!(
-                "Could not determine file extension of {name} file {}",
-                file_path.as_ref().display()
-            )))
-            .suggestion("Does the path exist?")
+            Err(SerdeFileError::NoExtension(
+                file_path.as_ref().display().to_string(),
+            ))
         }
+    }
+
+    fn from_file(file_path: impl AsRef<Path>, name: &str) -> Result<Self> {
+        Self::from_file_typed(file_path.as_ref()).map_err(|e| match e {
+            SerdeFileError::FileError(io_err) => eyre::Report::from(io_err)
+                .wrap_err(format!(
+                    "Could not open {} file {}",
+                    name,
+                    file_path.as_ref().display()
+                ))
+                .suggestion("Does the path exist?"),
+            SerdeFileError::JsonParseError(json_err) => eyre::Report::from(json_err)
+                .wrap_err(format!("Error parsing {} json", name))
+                .suggestion("Is it a correct json file?"),
+            SerdeFileError::YamlParseError(yaml_err) => eyre::Report::from(yaml_err)
+                .wrap_err(format!("Error parsing {} yaml", name))
+                .suggestion("Is it a correct yaml file?"),
+            SerdeFileError::TomlParseError(toml_err) => eyre::Report::from(toml_err)
+                .wrap_err(format!("Error parsing {} toml", name))
+                .suggestion("Is it a correct toml file?"),
+            SerdeFileError::UnknownExtension(ext) => {
+                eyre::eyre!("Unknown {} file extension: {}", name, ext)
+                    .suggestion("Is it a .json, .yaml, or .toml file?")
+            }
+            SerdeFileError::NoExtension(path) => eyre::eyre!(
+                "Could not determine file extension of {} file {}",
+                name,
+                path
+            )
+            .suggestion("Does the path exist?"),
+        })
     }
 
     fn from_str(contents: String, format: &str, name: &str) -> Result<Self> {
@@ -180,7 +221,7 @@ pub fn get_schema_folder(online: bool) -> Result<PathBuf> {
 }
 
 use crate::{
-    model::{SerializableInputParamCard, SerializableModel},
+    model::SerializableModel,
     settings::{GlobalSettings, RuntimeSettings},
     utils::F,
 };
@@ -269,8 +310,9 @@ pub fn is_default_rotation_axis(
 #[cfg(test)]
 mod tests {
     use crate::utils::test_utils::{load_generic_model, output_dir};
+    use std::fs;
 
-    use super::SmartSerde;
+    use super::{SerdeFileError, SmartSerde};
 
     #[test]
     fn convert_models() {
@@ -282,5 +324,71 @@ mod tests {
                 true,
             )
             .unwrap();
+    }
+
+    #[test]
+    fn test_file_vs_parse_errors() {
+        use std::collections::BTreeMap;
+
+        // Test file not found error
+        let result: Result<BTreeMap<String, (f64, f64)>, SerdeFileError> =
+            SmartSerde::from_file_typed("/nonexistent/file.json");
+
+        match result {
+            Err(SerdeFileError::FileError(_)) => {
+                // This is the expected file error
+            }
+            other => panic!("Expected FileError, got: {:?}", other),
+        }
+
+        // Test parse error with invalid JSON
+        let temp_path = std::env::temp_dir().join("test_invalid.json");
+        fs::write(&temp_path, "{ invalid json content").unwrap();
+
+        let result: Result<BTreeMap<String, (f64, f64)>, SerdeFileError> =
+            SmartSerde::from_file_typed(&temp_path);
+
+        match result {
+            Err(SerdeFileError::JsonParseError(_)) => {
+                // This is the expected parse error
+            }
+            other => panic!("Expected JsonParseError, got: {:?}", other),
+        }
+
+        // Clean up
+        let _ = fs::remove_file(&temp_path);
+
+        // Test successful parsing
+        let temp_path = std::env::temp_dir().join("test_valid.json");
+        fs::write(&temp_path, r#"{"key": [1.0, 2.0]}"#).unwrap();
+
+        let result: Result<BTreeMap<String, (f64, f64)>, SerdeFileError> =
+            SmartSerde::from_file_typed(&temp_path);
+
+        assert!(result.is_ok());
+        let data = result.unwrap();
+        assert_eq!(data.get("key"), Some(&(1.0, 2.0)));
+
+        // Clean up
+        let _ = fs::remove_file(&temp_path);
+    }
+
+    #[test]
+    fn test_from_file_backward_compatibility() {
+        use std::collections::BTreeMap;
+
+        // Test that the regular from_file function still works and returns color_eyre::Result
+        let temp_path = std::env::temp_dir().join("test_compat.json");
+        fs::write(&temp_path, r#"{"test": [1.0, 2.0]}"#).unwrap();
+
+        let result: color_eyre::Result<BTreeMap<String, (f64, f64)>> =
+            SmartSerde::from_file(&temp_path, "test");
+
+        assert!(result.is_ok());
+        let data = result.unwrap();
+        assert_eq!(data.get("test"), Some(&(1.0, 2.0)));
+
+        // Clean up
+        let _ = fs::remove_file(&temp_path);
     }
 }
