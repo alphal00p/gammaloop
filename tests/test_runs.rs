@@ -9,17 +9,21 @@ use gammaloop_api::{
 
 use gammalooprs::{
     initialisation::initialise,
+    model::UFOSymbol,
+    numerator::ufo::UFOSymbols,
     status_info,
     utils::{test_utils::load_generic_model, F},
 };
 use insta::assert_snapshot;
 use momtrop::assert_approx_eq;
+use spenso::algebra::complex::Complex;
 use std::{
     env,
     ops::{ControlFlow, Deref, DerefMut},
     path::{Path, PathBuf},
     str::FromStr,
 };
+use symbolica::symbol;
 use tracing::{debug, warn};
 
 fn run_card(resource_path: impl AsRef<Path>) -> Result<RunHistory> {
@@ -188,30 +192,50 @@ fn trees() -> Result<()> {
 
 #[test]
 fn photons_1l() -> Result<()> {
-    let (mut state, _, _, _) = run_run_card("photons.toml", "./tests/photons")?;
-    let inspect = Inspect {
-        process_id: 0,
-        process_name: "physical_1L_6photons".to_string(),
-        point: vec![0.1, 0.2, 0.3],
-        momentum_space: true,
-        ..Default::default()
-    }
-    .run(&mut state)?;
+    let mut cli = run_run_card("photons.toml", "./tests/photons", None)?;
 
-    assert_snapshot!(format!("{inspect:.8e}"),@"(-1.1779656944253678e-15+9.093348564643939e-16i)");
+    // this can be moved to the run card once we have a set model param command
+
+    cli.state
+        .model_parameters
+        .insert(UFOSymbol(symbol!("UFO::MT")), Complex::new_re(F(1500.0)));
+
+    cli.state
+        .model_parameters
+        .insert(UFOSymbol(symbol!("UFO::aEWM1")), Complex::new_re(F(128.93)));
+
+    cli.state
+        .model
+        .apply_param_card(&cli.state.model_parameters)?;
+
+    //let inspect = Inspect {
+    //    process_id: 0,
+    //    integrand_name: "physical_1L_6photons".to_string(),
+    //    point: vec![0.1, 0.2, 0.3],
+    //    momentum_space: true,
+    //    ..Default::default()
+    //}
+    //.run(&mut cli)?;
+
+    //assert_snapshot!(format!("{inspect:.8e}"),@"(-1.1779656944253678e-15+9.093348564643939e-16i)");
+
+    let target = Complex::new(F(-1.22898408452706e-13), F(-3.94362534040412e-13));
 
     let integrate = Integrate {
         process_id: 0,
-        process_name: "physical_1L_6photons".to_string(),
+        integrand_name: "physical_1L_6photons".to_string(),
         result_path: "./tests/photons/integration_workspace/integration_results.yaml".into(),
         workspace_path: "./tests/photons/integration_workspace/".into(),
         n_cores: 6,
-        target: None,
+        target: Some(vec![target.re.0, target.im.0]),
         restart: true,
     };
 
-    let integration_result = integrate.run(&mut state)?;
-    Ok((()))
+    let integration_result = integrate.run(&mut cli)?;
+
+    assert_approx_eq(&integration_result.result.re, &target.re, &F(10e-2));
+    assert_approx_eq(&integration_result.result.im, &target.im, &F(10e-2));
+    Ok(())
 }
 
 #[test]

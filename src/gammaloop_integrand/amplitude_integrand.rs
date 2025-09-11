@@ -293,16 +293,6 @@ impl AmplitudeGraphTerm {
             orientations,
         );
 
-        let energy_cache = self.graph.get_energy_cache(
-            model,
-            momentum_sample.loop_moms(),
-            momentum_sample.external_moms(),
-            &self.graph.loop_momentum_basis,
-        );
-
-        status_debug!("oses: {:?}", energy_cache);
-        status_debug!("lmb: {:#?}", &self.graph.loop_momentum_basis,);
-
         debug!(bare_cff = format!("{result:16e}"), "{}", self.graph.name);
         debug!(cts = format!("{sum_of_cts:16e}"), "{}", self.graph.name);
 
