@@ -1,19 +1,25 @@
+use ahash::HashMap;
 use std::{
     collections::{BTreeMap, HashSet},
     fs::{self, File},
     io::Write,
-    path::Path,
+    path::{Path, PathBuf},
 };
-
 // use bincode::{Decode, Encode};
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::{Help, Result};
+use itertools::Itertools;
 use log::debug;
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
+use std::fmt;
 
 use crate::{
+    feyngen::NumeratorAwareGraphGroupingOption,
     gammaloop_integrand::NewIntegrand,
-    graph::parse::complete_group_parsing,
+    graph::{parse::complete_group_parsing, FeynmanGraph},
     model::ArcParticle,
+    numerator::GlobalPrefactor,
     settings::{runtime::LockedRuntimeSettings, GlobalSettings},
     GammaLoopContext, GammaLoopContextContainer,
 };
@@ -28,53 +34,104 @@ use crate::{
 
 use super::{Amplitude, CrossSection};
 
-#[derive(Debug, Clone, Encode, Decode)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct ProcessDefinition {
-    pub initial_pdgs: Vec<i64>, // Do we want a pub type Pdg = i64;?
+    pub generation_type: GenerationType,
+    pub initial_pdgs: Vec<i64>,
     pub final_pdgs_lists: Vec<Vec<i64>>,
-    pub n_unresolved: usize, // we need al this information to know what cuts are considered at runtime
-    pub unresolved_cut_content: HashSet<ArcParticle>,
+    pub loop_count_range: (usize, usize),
+    pub symmetrize_initial_states: bool,
+    pub symmetrize_final_states: bool,
+    pub symmetrize_left_right_states: bool,
+    pub allow_symmetrization_of_external_fermions_in_amplitudes: bool,
+    pub max_multiplicity_for_fast_cut_filter: usize,
     pub amplitude_filters: FeynGenFilters,
     pub cross_section_filters: FeynGenFilters,
+    pub folder_name: String,
+    pub process_id: usize,
+    pub numerator_grouping: NumeratorAwareGraphGroupingOption,
+    pub filter_self_loop: bool,
+    pub graph_prefix: String,
+    pub selected_graphs: Option<Vec<String>>,
+    pub vetoed_graphs: Option<Vec<String>>,
+    pub loop_momentum_bases: Option<HashMap<String, Vec<String>>>,
+    pub prefactor: GlobalPrefactor,
 }
 
-impl ProcessDefinition {
-    pub fn new_empty() -> Self {
+impl fmt::Display for ProcessDefinition {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Process #{}: '{}'\nGeneration type: {}{}{}\nInitial PDGs: {:?}{}\nFinal PDGs: {}{}\nLoop count: {}\nAmplitude filters:{}{}\nCross-section filters:{}{}",
+            self.process_id,
+            self.folder_name,
+            self.generation_type,
+            if self.symmetrize_left_right_states { " (left-right symmetrized)" } else { "" },
+            if self.allow_symmetrization_of_external_fermions_in_amplitudes
+                && self.generation_type == GenerationType::Amplitude
+                && (self.symmetrize_initial_states  || self.symmetrize_final_states || self.symmetrize_left_right_states)
+                { " (allowing fermion symmetrization)" } else { "" },
+            self.initial_pdgs,
+            if self.symmetrize_initial_states { " (symmetrized)" } else { "" },
+            if self.final_pdgs_lists.len() == 1 {
+                format!("{:?}",self.final_pdgs_lists[0])
+            } else {
+                format!("[ {} ]", self.final_pdgs_lists.iter().map(|pdgs| format!("{:?}", pdgs)).join(" | "))
+            },
+            if self.symmetrize_final_states { " (symmetrized)" } else { "" },
+            if self.loop_count_range.0 == self.loop_count_range.1 {
+                format!("{}", self.loop_count_range.0)
+            } else {
+                format!("{:?}", self.loop_count_range)
+            },
+            if self.amplitude_filters.0.is_empty() { " None" } else {"\n"},
+            if self.amplitude_filters.0.is_empty() { "".into() } else { self.amplitude_filters
+                .0
+                .iter()
+                .map(|f| format!(" > {}", f))
+                .collect::<Vec<String>>()
+                .join("\n")
+            },
+            if self.cross_section_filters.0.is_empty() { " None" } else {"\n"},
+            if self.cross_section_filters.0.is_empty() { "".into() } else { self.cross_section_filters
+                .0
+                .iter()
+                .map(|f| format!(" > {}", f))
+                .collect::<Vec<String>>()
+                .join("\n")
+            }
+        )
+    }
+}
+
+impl Default for ProcessDefinition {
+    fn default() -> Self {
         Self {
+            generation_type: GenerationType::Amplitude,
             initial_pdgs: vec![],
             final_pdgs_lists: vec![],
-            n_unresolved: 0,
-            unresolved_cut_content: HashSet::new(),
+            loop_count_range: (1, 1),
+            symmetrize_initial_states: false,
+            symmetrize_final_states: false,
+            symmetrize_left_right_states: false,
+            allow_symmetrization_of_external_fermions_in_amplitudes: false,
+            max_multiplicity_for_fast_cut_filter: 6,
             amplitude_filters: FeynGenFilters(vec![]),
             cross_section_filters: FeynGenFilters(vec![]),
+            folder_name: "undefined_process".to_string(),
+            process_id: 0,
+            numerator_grouping: NumeratorAwareGraphGroupingOption::NoGrouping,
+            filter_self_loop: true,
+            graph_prefix: "GL".to_string(),
+            selected_graphs: None,
+            vetoed_graphs: None,
+            loop_momentum_bases: None,
+            prefactor: GlobalPrefactor::default(),
         }
-    }
-
-    pub fn folder_name(&self, model: &Model, id: usize) -> String {
-        let mut filename = String::new();
-        filename.push_str(&id.to_string());
-        filename.push_str(&model.name);
-        filename.push('_');
-        for p in self.initial_pdgs.iter() {
-            filename.push_str(&model.get_particle_from_pdg(*p as isize).name);
-            filename.push('_');
-        }
-        filename.push_str("_to_");
-        let n = self.final_pdgs_lists.len();
-
-        for (i, list) in self.final_pdgs_lists.iter().enumerate() {
-            for p in list {
-                filename.push_str(&model.get_particle_from_pdg(*p as isize).name);
-                filename.push('_');
-            }
-            if i < n - 1 {
-                filename.push_str("_or_");
-            }
-        }
-        filename
     }
 }
+
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct Process {
@@ -179,7 +236,7 @@ impl Process {
             ProcessCollection::Amplitudes(a) => {
                 let p = path.as_ref().join("amplitudes");
                 fs::create_dir_all(&p)?;
-                let p = p.join(self.definition.folder_name(model, id));
+                let p = p.join(PathBuf::from(self.definition.folder_name.clone()));
 
                 let r = fs::create_dir_all(&p).with_context(|| {
                     format!(
@@ -215,15 +272,13 @@ impl Process {
         &mut self,
         path: impl AsRef<Path>,
         override_existing: bool,
-        id: usize,
-        model: &Model,
         settings: &GlobalSettings,
     ) -> Result<()> {
         match &mut self.collection {
             ProcessCollection::Amplitudes(a) => {
                 let p = path.as_ref().join("amplitudes");
                 fs::create_dir_all(&p)?;
-                let p = p.join(self.definition.folder_name(model, id));
+                let p = p.join(PathBuf::from(self.definition.folder_name.clone()));
 
                 let r = fs::create_dir_all(&p).with_context(|| {
                     format!(
@@ -262,14 +317,9 @@ impl Process {
         self.collection.get_integrand_mut(integrand_name)
     }
 
-    pub(crate) fn export_dot(
-        &self,
-        path: impl AsRef<Path>,
-        model: &Model,
-        id: usize,
-    ) -> Result<()> {
+    pub(crate) fn export_dot(&self, path: impl AsRef<Path>) -> Result<()> {
         let p = path.as_ref().join("amplitudes");
-        let path = p.join(self.definition.folder_name(model, id));
+        let path = p.join(PathBuf::from(self.definition.folder_name.clone()));
         fs::create_dir_all(&path)?;
 
         match &self.collection {
@@ -296,7 +346,7 @@ impl Process {
         name: String,
         mut graphs: Vec<Graph>,
         generation_type: GenerationType,
-        definition: ProcessDefinition,
+        definition: Option<ProcessDefinition>,
         sub_classes: Option<Vec<Vec<String>>>,
     ) -> Result<Self> {
         match generation_type {
@@ -314,9 +364,11 @@ impl Process {
                     }
 
                     collection.add_amplitude(amplitude);
+
+                    // TODO: construct a better default definition from graph (i.e. at least the external IDs)
                     Ok(Self {
                         settings_history: None,
-                        definition,
+                        definition: definition.unwrap_or_default(),
                         collection,
                     })
                 }
@@ -334,9 +386,10 @@ impl Process {
                     }
 
                     collection.add_cross_section(cross_section);
+                    // TODO: construct a better default definition from graph (i.e. at least the external IDs)
                     Ok(Self {
                         settings_history: None,
-                        definition,
+                        definition: definition.unwrap_or_default(),
                         collection,
                     })
                 }

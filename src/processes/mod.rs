@@ -136,7 +136,6 @@ impl ProcessList {
         folder: impl AsRef<Path>,
         override_existing: bool,
         settings: &GlobalSettings,
-        model: &Model,
     ) -> Result<()> {
         let path = folder.as_ref().join("processes");
 
@@ -145,8 +144,8 @@ impl ProcessList {
             r?;
         }
 
-        for (i, p) in self.processes.iter_mut().enumerate() {
-            p.compile(&path, override_existing, i, model, settings)?;
+        for p in self.processes.iter_mut() {
+            p.compile(&path, override_existing, settings)?;
         }
 
         Ok(())
@@ -170,11 +169,11 @@ impl ProcessList {
         process.get_integrand_mut(integrand_name)
     }
 
-    pub fn export_dot(&self, settings: &ExportSettings, model: &Model) -> Result<()> {
+    pub fn export_dot(&self, settings: &ExportSettings) -> Result<()> {
         let path = settings.root_folder.join("processes");
         fs::create_dir_all(&path)?;
-        for (i, p) in self.processes.iter().enumerate() {
-            p.export_dot(&path, model, i)?;
+        for p in self.processes.iter() {
+            p.export_dot(&path)?;
         }
         Ok(())
     }

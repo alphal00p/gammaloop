@@ -54,7 +54,7 @@ use crate::{
     model::Model,
 };
 
-use super::ProcessDefinition;
+use crate::processes::ProcessDefinition;
 
 pub trait CrossSectionState:
     Clone + std::fmt::Debug + bincode::Encode + for<'a> bincode::Decode<GammaLoopContextContainer<'a>>
@@ -242,14 +242,17 @@ impl CrossSectionCut {
                         }
                     }
 
-                    if cut_content.len() > process.n_unresolved {
+                    let (n_unresolved, unresolved_cut_content) =
+                        process.unresolved_cut_content(model);
+
+                    if cut_content.len() > n_unresolved {
                         debug!(" too many unresolved particles");
                         return false;
                     }
 
                     if !cut_content
                         .iter()
-                        .all(|particle| process.unresolved_cut_content.contains(particle))
+                        .all(|particle| unresolved_cut_content.contains(particle))
                     {
                         debug!("wrong unresolved particles");
                         return false;

@@ -1,11 +1,6 @@
 use color_eyre::Result;
 
-use gammaloop_api::{
-    inspect::Inspect,
-    integrate::Integrate,
-    state::{RunHistory, State},
-    Cli, Commands,
-};
+use gammaloop_api::{inspect::Inspect, integrate::Integrate};
 
 use gammalooprs::{
     initialisation::initialise,
@@ -26,126 +21,8 @@ use std::{
 use symbolica::symbol;
 use tracing::{debug, warn};
 
-fn run_card(resource_path: impl AsRef<Path>) -> Result<RunHistory> {
-    initialise()?;
-
-    RunHistory::load(PathBuf::from("./tests/resources/run_cards").join(resource_path))
-}
-
-const TESTS_WORKSPACE: &str = "./tests/workspace";
-
-struct CLIState {
-    state: State,
-    cli: Cli,
-    global_settings: gammalooprs::settings::GlobalSettings,
-    default_runtime_settings: gammalooprs::settings::RuntimeSettings,
-    run_history: RunHistory,
-}
-
-impl Deref for CLIState {
-    type Target = State;
-
-    fn deref(&self) -> &Self::Target {
-        &self.state
-    }
-}
-
-impl DerefMut for CLIState {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.state
-    }
-}
-
-impl CLIState {
-    fn run_command(&mut self, command: &str) -> Result<()> {
-        let cmd = Commands::from_str(command)?;
-        self.cli
-            .run_command(
-                cmd,
-                &mut self.state,
-                &mut self.run_history,
-                &mut self.global_settings,
-                &mut self.default_runtime_settings,
-            )
-            .map(|_| ())
-    }
-}
-
-fn run_run_card(
-    run_card_path: impl AsRef<Path>,
-    state_path: impl AsRef<Path>,
-    log_file_name: Option<String>,
-) -> Result<CLIState> {
-    let (mut cli, mut state) = new_cli_for_test(state_path, log_file_name);
-    let mut cmds: RunHistory = run_card(run_card_path)?;
-    let mut global_settings = cmds.global_settings.clone();
-    let mut default_runtime_settings = cmds.default_runtime_settings.clone();
-
-    _ = cmds.run(
-        &mut cli,
-        &mut state,
-        &mut global_settings,
-        &mut default_runtime_settings,
-    )?;
-
-    cli.save(
-        &mut state,
-        &cmds,
-        &default_runtime_settings,
-        &global_settings,
-        None,
-        false,
-    )?;
-
-    Ok(CLIState {
-        state,
-        cli,
-        global_settings,
-        default_runtime_settings,
-        run_history: cmds,
-    })
-}
-
-fn new_cli_for_test(state_path: impl AsRef<Path>, log_file_name: Option<String>) -> (Cli, State) {
-    debug!(
-        "Using gammaloop state path: {}",
-        state_path.as_ref().display()
-    );
-    let mut state = State::new(state_path.as_ref().to_path_buf(), log_file_name);
-    state.model = load_generic_model("sm");
-
-    (state.new_test_cli(), state)
-}
-
-fn clean_test(state: &State) {
-    if env::var("GAMMALOOP_TESTS_NO_CLEAN_STATE").is_err() {
-        match std::fs::remove_dir_all(state.save_path.clone()) {
-            Ok(()) => debug!(
-                "Gammaloop state folder '{}' deleted successfully",
-                state.save_path.display()
-            ),
-            Err(e) => debug!(
-                "Error deleting Gammaloop state folder '{}'. Error: {}",
-                state.save_path.display(),
-                e
-            ),
-        }
-    } else {
-        warn!("Environment variable 'GAMMALOOP_TESTS_NO_CLEAN_STATE' is set so that the gammaloop state test folder '{}' is not cleaned.",state.save_path.display());
-    }
-}
-
-fn get_tests_workspace_path() -> PathBuf {
-    if let Ok(user_specified_state_path) = env::var("TESTS_GAMMALOOP_STATE_PATH") {
-        if user_specified_state_path.eq_ignore_ascii_case("AUTO") {
-            env::temp_dir().join("gammaloop_tests_workspace")
-        } else {
-            std::path::PathBuf::from(user_specified_state_path)
-        }
-    } else {
-        PathBuf::from(TESTS_WORKSPACE)
-    }
-}
+mod test_utils;
+use test_utils::{clean_test, get_tests_workspace_path, run_run_card};
 
 #[test]
 fn qqx_aaa_subtracted_nlo_amplitude_test() -> Result<()> {
@@ -354,21 +231,6 @@ fn scalar_box() -> Result<()> {
         &integral_with_cache.result.im,
         &F(1e-4),
     );
-
-    clean_test(&cli);
-
-    Ok(())
-}
-
-#[test]
-fn scalar_epem_ddx_generation() -> Result<()> {
-    let mut cli = run_run_card(
-        "sm_load.toml",
-        get_tests_workspace_path().join("epem_ddx_generation"),
-        Some("epem_ddx_generation".to_string()),
-    )?;
-
-    cli.run_command("generate amp e+ e- > d d~")?;
 
     clean_test(&cli);
 

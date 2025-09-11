@@ -26,8 +26,6 @@ v3:9 -> vl2:10 [id=8, source=0, sink=1, dod=-100, is_dummy=false, lmb_rep="-P(2,
 vl1:13 -> vl2:14 [id=9, source=2, sink=2, dod=-100, is_dummy=false, lmb_id=0, lmb_rep="K(0,a___)", name=e9, num="-1*spenso::g(spenso::coad(8,hedge_13),spenso::coad(8,hedge_14))*spenso::g(spenso::mink(4,hedge_13),spenso::mink(4,hedge_14))", particle="g"];
 }
 
-
-
 digraph qqx_aaa_box_A {
 num=1;
 overall_factor=1;

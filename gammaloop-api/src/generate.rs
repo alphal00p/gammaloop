@@ -2,6 +2,7 @@
 #![allow(clippy::too_many_arguments)]
 
 use ahash::HashMap;
+use gammalooprs::status_info;
 use std::collections::{BTreeMap, BTreeSet};
 use std::ops::RangeInclusive;
 use std::path::Path;
@@ -13,13 +14,14 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use eyre::eyre;
 use gammalooprs::feyngen::{
-    diagram_generator::FeynGen, FeynGenFilter, FeynGenFilters, FeynGenOptions, GenerationType,
-    NumeratorAwareGraphGroupingOption, SelfEnergyFilterOptions, SewedFilterOptions,
-    SnailFilterOptions, TadpolesFilterOptions,
+    FeynGenFilter, FeynGenFilters, GenerationType, NumeratorAwareGraphGroupingOption,
+    SelfEnergyFilterOptions, SewedFilterOptions, SnailFilterOptions, TadpolesFilterOptions,
 };
 use gammalooprs::model::Model;
 use gammalooprs::numerator::GlobalPrefactor;
+use gammalooprs::processes::ProcessDefinition;
 use gammalooprs::settings::{GlobalSettings, RuntimeSettings};
 
 use super::state::State;
@@ -94,6 +96,9 @@ pub struct SpecArgs {
     #[arg(short = 'n', long = "num-threads")]
     pub num_threads: Option<u32>,
 
+    #[arg(short = 'a', default_value_t = false)]
+    pub append: bool,
+
     /// Clear pre-existing processes
     #[arg(
         long = "clear-existing-processes",
@@ -102,6 +107,10 @@ pub struct SpecArgs {
         default_value_t = false
     )]
     pub clear_existing_processes: bool,
+
+    /// Optional human-readable process name
+    #[arg(long = "process-name", short = 'p')]
+    pub process_name: Option<String>,
 
     /// Topology filters (Option<bool> to enable smart defaults)
     #[arg(long = "filter-selfenergies")]
@@ -218,6 +227,87 @@ pub struct SpecArgs {
     pub filter_self_loop: Option<bool>,
 }
 
+// =================== Runner ===================
+
+impl Generate {
+    pub fn run(
+        &self,
+        state: &mut State,
+        compile_folder: impl AsRef<Path>,
+        override_existing_compiled: bool,
+        generation_settings: &GlobalSettings,
+        runtime_settings: &RuntimeSettings,
+    ) -> Result<()> {
+        let generation_mode = match &self.mode {
+            Some(GenerateCmd::Xs(a)) => Some((GenerationType::CrossSection, a)),
+            Some(GenerateCmd::Amp(a)) => Some((GenerationType::Amplitude, a)),
+            _ => None,
+        };
+        let generation_info = if let Some((gen_mode, args)) = generation_mode {
+            let mut spec = parse_spec_with_model(&args, gen_mode, &state.model)?;
+            spec.process_definition.process_id = state.process_list.processes.len();
+
+            let mut existing_process = None;
+            if let Some(ep) = state
+                .process_list
+                .processes
+                .iter_mut()
+                .find(|p| p.definition.folder_name == spec.process_definition.folder_name)
+            {
+                if ep.definition != spec.process_definition {
+                    if !args.append {
+                        return Err(eyre!(
+                            "Process with name '{}' already exists.\n> Use 'existing' subcommand to continue generation of this process.\n> Use '--clear-existing-processes' to remove all existing ones.\n> Or specify a different process name with '--process-name <chosen_process_name>'.",
+                            spec.process_definition.folder_name
+                        ));
+                    }
+                } else {
+                    status_info!(
+                        "Identical process with name '{}' already exists. Reusing it.",
+                        spec.process_definition.folder_name
+                    );
+                    return Ok(());
+                }
+                spec.process_definition.process_id = ep.definition.process_id;
+                existing_process = Some(ep);
+            }
+            Some((spec, existing_process))
+        } else {
+            None
+        };
+        match &self.mode {
+            Some(GenerateCmd::Amp(args)) | Some(GenerateCmd::Xs(args)) => {
+                let model: &Model = &state.model;
+                let (spec, existing_process) = generation_info.unwrap();
+                // TODO handle existing process and continue
+                let graphs = spec
+                    .process_definition
+                    .generate(model, args.num_threads.map(|n| n as usize))?;
+                println!("Generated {} amplitude graphs.", graphs.len());
+            }
+            Some(GenerateCmd::Existing(process)) => {
+                return state.generate_integrand(
+                    generation_settings,
+                    runtime_settings.into(),
+                    process,
+                )
+            }
+            None => {
+                state.generate_integrands(generation_settings, runtime_settings.into())?;
+                if generation_settings.generation.evaluator_settings.compile {
+                    state.compile_integrands(
+                        compile_folder,
+                        override_existing_compiled,
+                        generation_settings,
+                    )?
+                }
+                return Ok(());
+            }
+        }
+        Ok(())
+    }
+}
+
 #[derive(Args, Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
 pub struct ProcessArgs {
     /// Stored process ID
@@ -286,7 +376,7 @@ pub struct ProcessSpec {
     pub final_sets: Vec<Vec<String>>,
 
     /// Generation options captured alongside the spec
-    pub feyngen: FeynGenOptions,
+    pub process_definition: ProcessDefinition,
 
     /// Parsed numerator-aware grouping mode (not part of FeynGenOptions)
     pub numerator_grouping: Option<NumeratorAwareGraphGroupingOption>,
@@ -541,139 +631,6 @@ impl ProcessSpec {
     }
 }
 
-// =================== Runner ===================
-
-impl Generate {
-    pub fn run(
-        &self,
-        state: &mut State,
-        compile_folder: impl AsRef<Path>,
-        override_existing_compiled: bool,
-        generation_settings: &GlobalSettings,
-        runtime_settings: &RuntimeSettings,
-    ) -> Result<()> {
-        match &self.mode {
-            Some(GenerateCmd::Xs(args)) => {
-                let model: &Model = &state.model;
-                let mut args = args.clone();
-                let spec = must(parse_spec_with_model(
-                    &args,
-                    GenerationType::CrossSection,
-                    model,
-                ));
-                // Try a generation call; report count.
-                let grouping = spec.numerator_grouping.clone().unwrap_or_else(|| {
-                    NumeratorAwareGraphGroupingOption::new_with_attributes(
-                        "group_identical_graphs_up_to_scalar_rescaling",
-                        args.numerical_samples_seed,
-                        args.number_of_samples_for_numerator_comparisons,
-                        args.consider_internal_masses_only_in_numerator_isomorphisms,
-                        args.fully_numerical_substitution_when_comparing_numerators,
-                        args.compare_canonized_numerator,
-                    )
-                    .unwrap_or(NumeratorAwareGraphGroupingOption::NoGrouping)
-                });
-                let filter_self_loop = args.filter_self_loop.unwrap_or(false);
-                let graph_prefix = args
-                    .graph_prefix
-                    .clone()
-                    .unwrap_or_else(|| "GL".to_string());
-                let selected_graphs = args.select_graphs.as_ref().map(|s| parse_csv_list(s));
-                let vetoed_graphs = args.veto_graphs.as_ref().map(|s| parse_csv_list(s));
-                let loop_momentum_bases = args
-                    .loop_momentum_bases
-                    .as_deref()
-                    .and_then(parse_loop_momentum_bases);
-
-                let pref = GlobalPrefactor::default();
-
-                let feyngen = FeynGen::new(spec.feyngen);
-
-                let graphs = FeynGen::generate(
-                    &feyngen,
-                    model,
-                    &grouping,
-                    filter_self_loop,
-                    graph_prefix,
-                    selected_graphs,
-                    vetoed_graphs,
-                    loop_momentum_bases,
-                    pref,
-                    args.num_threads.map(|n| n as usize),
-                )?;
-                println!("Generated {} forward scattering graphs.", graphs.len());
-            }
-            Some(GenerateCmd::Amp(args)) => {
-                let model: &Model = &state.model;
-                let mut args = args.clone();
-                let spec = must(parse_spec_with_model(
-                    &args,
-                    GenerationType::Amplitude,
-                    model,
-                ));
-                let grouping = spec.numerator_grouping.clone().unwrap_or_else(|| {
-                    NumeratorAwareGraphGroupingOption::new_with_attributes(
-                        "group_identical_graphs_up_to_scalar_rescaling",
-                        args.numerical_samples_seed,
-                        args.number_of_samples_for_numerator_comparisons,
-                        args.consider_internal_masses_only_in_numerator_isomorphisms,
-                        args.fully_numerical_substitution_when_comparing_numerators,
-                        args.compare_canonized_numerator,
-                    )
-                    .unwrap_or(NumeratorAwareGraphGroupingOption::NoGrouping)
-                });
-                let filter_self_loop = args.filter_self_loop.unwrap_or(false);
-                let graph_prefix = args
-                    .graph_prefix
-                    .clone()
-                    .unwrap_or_else(|| "GL".to_string());
-                let selected_graphs = args.select_graphs.as_ref().map(|s| parse_csv_list(s));
-                let vetoed_graphs = args.veto_graphs.as_ref().map(|s| parse_csv_list(s));
-                let loop_momentum_bases = args
-                    .loop_momentum_bases
-                    .as_deref()
-                    .and_then(parse_loop_momentum_bases);
-                let pref = GlobalPrefactor::default();
-
-                let feyngen = FeynGen::new(spec.feyngen);
-
-                let graphs = FeynGen::generate(
-                    &feyngen,
-                    model,
-                    &grouping,
-                    filter_self_loop,
-                    graph_prefix,
-                    selected_graphs,
-                    vetoed_graphs,
-                    loop_momentum_bases,
-                    pref,
-                    args.num_threads.map(|n| n as usize),
-                )?;
-                println!("Generated {} amplitude graphs.", graphs.len());
-            }
-            Some(GenerateCmd::Existing(process)) => {
-                return state.generate_integrand(
-                    generation_settings,
-                    runtime_settings.into(),
-                    process,
-                )
-            }
-            None => {
-                state.generate_integrands(generation_settings, runtime_settings.into())?;
-                if generation_settings.generation.evaluator_settings.compile {
-                    state.compile_integrands(
-                        compile_folder,
-                        override_existing_compiled,
-                        generation_settings,
-                    )?
-                }
-                return Ok(());
-            }
-        }
-        Ok(())
-    }
-}
-
 // =================== Parsing ===================
 
 #[derive(Debug, Error, PartialEq, Eq)]
@@ -688,16 +645,6 @@ pub enum ParseError {
     UnknownParticle { name: String, choices: String },
     #[error("unknown coupling '{name}'. Valid choices: {choices}")]
     UnknownCoupling { name: String, choices: String },
-}
-
-fn must<T, E: std::fmt::Display>(r: std::result::Result<T, E>) -> T {
-    match r {
-        Ok(v) => v,
-        Err(e) => {
-            eprintln!("parse error: {e}");
-            std::process::exit(2);
-        }
-    }
 }
 
 pub fn parse_spec_with_model(
@@ -740,7 +687,7 @@ pub fn parse_spec_with_model(
 
     // Build FeynGenOptions with filters and PDGs
     let numerator_grouping = build_grouping_option(args);
-    let feyngen = feyngen_from_spec_args(
+    let process_definition = feyngen_from_spec_args(
         args,
         generation_type,
         &pert,
@@ -752,7 +699,7 @@ pub fn parse_spec_with_model(
         &veto_pdgs,
     );
 
-    let spec = ProcessSpec {
+    let mut spec = ProcessSpec {
         initial: initial_names,
         final_: final_spec.primary.clone(),
         empty_initial,
@@ -763,9 +710,42 @@ pub fn parse_spec_with_model(
         xs_couplings,
         pert,
         final_sets: final_spec.sets,
-        feyngen,
+        process_definition,
         numerator_grouping,
     };
+
+    if let Some(process_name) = &args.process_name {
+        spec.process_definition.folder_name = process_name.clone();
+    } else {
+        spec.process_definition.folder_name = spec.process_shell_name(true);
+    }
+    spec.process_definition.numerator_grouping =
+        spec.numerator_grouping.clone().unwrap_or_else(|| {
+            NumeratorAwareGraphGroupingOption::new_with_attributes(
+                "group_identical_graphs_up_to_scalar_rescaling",
+                args.numerical_samples_seed,
+                args.number_of_samples_for_numerator_comparisons,
+                args.consider_internal_masses_only_in_numerator_isomorphisms,
+                args.fully_numerical_substitution_when_comparing_numerators,
+                args.compare_canonized_numerator,
+            )
+            .unwrap_or(NumeratorAwareGraphGroupingOption::NoGrouping)
+        });
+    spec.process_definition.filter_self_loop = args.filter_self_loop.unwrap_or(false);
+    spec.process_definition.graph_prefix = args
+        .graph_prefix
+        .clone()
+        .unwrap_or_else(|| "GL".to_string());
+    spec.process_definition.selected_graphs =
+        args.select_graphs.as_ref().map(|s| parse_csv_list(s));
+    spec.process_definition.vetoed_graphs = args.veto_graphs.as_ref().map(|s| parse_csv_list(s));
+    spec.process_definition.loop_momentum_bases = args
+        .loop_momentum_bases
+        .as_deref()
+        .and_then(parse_loop_momentum_bases);
+
+    spec.process_definition.prefactor = GlobalPrefactor::default();
+
     Ok(spec)
 }
 
@@ -1092,7 +1072,7 @@ fn feyngen_from_spec_args(
     primary_final_pdgs: &[i64],
     final_sets_pdgs: &[Vec<i64>],
     veto_pdgs: &[i64],
-) -> FeynGenOptions {
+) -> ProcessDefinition {
     // Decide vacuum-like topology from PDGs
     let is_vacuum = if initial_pdgs.is_empty() {
         match generation_type {
@@ -1175,7 +1155,7 @@ fn feyngen_from_spec_args(
         .unwrap_or(false);
 
     // Base options
-    let mut fg = FeynGenOptions {
+    let mut fg = ProcessDefinition {
         generation_type,
         initial_pdgs: initial_pdgs.to_vec(),
         final_pdgs_lists: if final_sets_pdgs.is_empty() {
@@ -1196,6 +1176,7 @@ fn feyngen_from_spec_args(
         max_multiplicity_for_fast_cut_filter: a.max_multiplicity_for_fast_cut_filter,
         amplitude_filters: FeynGenFilters(vec![]),
         cross_section_filters: FeynGenFilters(vec![]),
+        ..Default::default()
     };
 
     // Build filters
@@ -1581,6 +1562,8 @@ mod tests {
             graph_prefix: None,
             max_multiplicity_for_fast_cut_filter: 6,
             filter_self_loop: None,
+            process_name: None,
+            append: false,
         }
     }
 
@@ -1695,7 +1678,10 @@ mod tests {
     fn amplitude_generation_type_is_set() {
         test_initialise().unwrap();
         let ps = parse_ok_amp("e+ e- > mu+ mu-");
-        assert_eq!(ps.feyngen.generation_type, GenerationType::Amplitude);
+        assert_eq!(
+            ps.process_definition.generation_type,
+            GenerationType::Amplitude
+        );
     }
 
     #[test]
@@ -1722,9 +1708,12 @@ mod tests {
     fn vacuum_defaults_and_filters_xs() {
         test_initialise().unwrap();
         let ps = parse_ok_xs("{} to {}");
-        assert_eq!(ps.feyngen.generation_type, GenerationType::CrossSection);
+        assert_eq!(
+            ps.process_definition.generation_type,
+            GenerationType::CrossSection
+        );
 
-        let xs_filters = &ps.feyngen.cross_section_filters.0;
+        let xs_filters = &ps.process_definition.cross_section_filters.0;
 
         // Smart defaults for vacuum-like graphs
         assert!(xs_filters
@@ -1749,7 +1738,7 @@ mod tests {
         test_initialise().unwrap();
         // Veto both particles and anti-particles, plus a charged lepton
         let ps = parse_ok_xs("e+ e- > mu+ mu- / u d u~ e+");
-        let xs_filters = &ps.feyngen.cross_section_filters.0;
+        let xs_filters = &ps.process_definition.cross_section_filters.0;
 
         let veto_pdgs = xs_filters
             .iter()
@@ -1774,13 +1763,16 @@ mod tests {
 
         // Final-state alternatives captured
         assert_eq!(ps.final_sets.len(), 3);
-        assert_eq!(ps.feyngen.generation_type, GenerationType::CrossSection);
+        assert_eq!(
+            ps.process_definition.generation_type,
+            GenerationType::CrossSection
+        );
 
         // XS loop count from {{3}}
-        assert_eq!(ps.feyngen.loop_count_range, (3, 3));
+        assert_eq!(ps.process_definition.loop_count_range, (3, 3));
 
         // Perturbative orders end up in XS filters
-        let xs_filters = &ps.feyngen.cross_section_filters.0;
+        let xs_filters = &ps.process_definition.cross_section_filters.0;
         assert!(xs_filters.iter().any(|f| {
             if let FeynGenFilter::PerturbativeOrders(m) = f {
                 m.get("QCD") == Some(&2usize) && m.get("QED") == Some(&1usize)
@@ -1828,7 +1820,7 @@ mod tests {
         // Mixed case names and anti-particles in veto; ensure AMP-side veto filter present
         let ps = parse_ok_amp("E+ e- to Z Z / u~ d~ A");
 
-        let amp_filters = &ps.feyngen.amplitude_filters.0;
+        let amp_filters = &ps.process_definition.amplitude_filters.0;
         let veto_pdgs = amp_filters
             .iter()
             .find_map(|f| match f {

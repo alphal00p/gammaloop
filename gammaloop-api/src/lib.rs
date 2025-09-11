@@ -249,8 +249,11 @@ impl Cli {
                 }
                 Display::Processes => {
                     println!("Processes:");
-                    for (index, process) in state.process_list.processes.iter().enumerate() {
-                        println!("  {}", process.definition.folder_name(&state.model, index));
+                    for process in state.process_list.processes.iter() {
+                        println!(
+                            "#{:-10}  {}",
+                            process.definition.process_id, process.definition.folder_name
+                        );
                     }
                 }
                 Display::Model => {

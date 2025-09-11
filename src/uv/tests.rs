@@ -464,10 +464,9 @@ fn tri_box_tri_LU() {
                 vec![hpdg, hpdg, hpdg],
                 vec![tpdg, -tpdg, hpdg, hpdg],
             ],
-            n_unresolved: 0,
-            unresolved_cut_content: HashSet::new(),
             amplitude_filters: FeynGenFilters(vec![]),
             cross_section_filters: FeynGenFilters(vec![]),
+            ..Default::default()
         },
     )
     .unwrap();
@@ -589,10 +588,9 @@ fn double_triangle_LU() {
         &ProcessDefinition {
             initial_pdgs: vec![hpdg],
             final_pdgs_lists: vec![vec![tpdg, -tpdg], vec![tpdg, -tpdg, hpdg], vec![hpdg, hpdg]],
-            n_unresolved: 0,
-            unresolved_cut_content: HashSet::new(),
             amplitude_filters: FeynGenFilters(vec![]),
             cross_section_filters: FeynGenFilters(vec![]),
+            ..Default::default()
         },
     )
     .unwrap();

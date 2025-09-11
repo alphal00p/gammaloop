@@ -9,21 +9,21 @@ use symbolica::graph::Graph as SymbolicaGraph;
 
 use crate::feyngen::diagram_generator::EdgeColor;
 // use crate::graph::BareGraph;
-use crate::graph::Graph;
-use crate::model::ArcVertexRule;
-use crate::model::ColorStructure;
-use crate::model::Model;
-use crate::model::VertexRule;
-use crate::numerator::GlobalPrefactor;
-use crate::utils::test_utils::load_generic_model;
-
 use super::diagram_generator::NodeColorWithVertexRule;
 use super::GenerationType;
 use super::NumeratorAwareGraphGroupingOption;
 use super::SewedFilterOptions;
 use super::SnailFilterOptions;
 use super::TadpolesFilterOptions;
-use super::{diagram_generator::FeynGen, FeynGenFilter, FeynGenFilters, FeynGenOptions};
+use super::{FeynGenFilter, FeynGenFilters};
+use crate::graph::Graph;
+use crate::model::ArcVertexRule;
+use crate::model::ColorStructure;
+use crate::model::Model;
+use crate::model::VertexRule;
+use crate::numerator::GlobalPrefactor;
+use crate::processes::ProcessDefinition;
+use crate::utils::test_utils::load_generic_model;
 
 #[test]
 fn cut_content() {
@@ -33,7 +33,7 @@ fn cut_content() {
     coupling.insert("QED".into(), (6, Some(6)));
     let mut pert = HashMap::new();
     pert.insert("QCD".into(), 1);
-    let filters = FeynGen::new(FeynGenOptions {
+    let process_definition = ProcessDefinition {
         generation_type: GenerationType::CrossSection,
         initial_pdgs: vec![-11, 11],
         final_pdgs_lists: vec![vec![5, -5, 25]],
@@ -66,7 +66,16 @@ fn cut_content() {
             FeynGenFilter::BlobRange(1..=1),
             FeynGenFilter::SpectatorRange(0..=0),
         ]),
-    });
+        filter_self_loop: true,
+        folder_name: "N/A".into(),
+        process_id: 0,
+        graph_prefix: "GL".into(),
+        loop_momentum_bases: None,
+        numerator_grouping: NumeratorAwareGraphGroupingOption::NoGrouping,
+        prefactor: GlobalPrefactor::default(),
+        selected_graphs: None,
+        vetoed_graphs: None,
+    };
 
     let mut graph = SymbolicaGraph::new();
     #[allow(non_snake_case)]
@@ -144,8 +153,14 @@ fn cut_content() {
     graph.add_edge(v8, v7, false, eplus).unwrap();
     graph.add_edge(v9, v7, false, eminus).unwrap();
 
-    let (n_unresolved, unresolved_type) = filters.unresolved_cut_content(&model);
-    assert!(!filters.half_edge_filters(&model, &graph, &[], n_unresolved, &unresolved_type));
+    let (n_unresolved, unresolved_type) = process_definition.unresolved_cut_content(&model);
+    assert!(!process_definition.half_edge_filters(
+        &model,
+        &graph,
+        &[],
+        n_unresolved,
+        &unresolved_type
+    ));
 
     let mut double_double_triangle = SymbolicaGraph::new();
     let v0 = double_double_triangle.add_node(e1.clone());
@@ -198,7 +213,7 @@ fn cut_content() {
     coupling.insert("QED".into(), (6, Some(6)));
     let mut pert = HashMap::new();
     pert.insert("QCD".into(), 2);
-    let filters = FeynGen::new(FeynGenOptions {
+    let process_definition = ProcessDefinition {
         generation_type: GenerationType::CrossSection,
         initial_pdgs: vec![-11, 11],
         final_pdgs_lists: vec![vec![5, -5, 25]],
@@ -231,10 +246,19 @@ fn cut_content() {
             FeynGenFilter::BlobRange(1..=1),
             FeynGenFilter::SpectatorRange(0..=0),
         ]),
-    });
+        filter_self_loop: true,
+        folder_name: "N/A".into(),
+        process_id: 0,
+        graph_prefix: "GL".into(),
+        loop_momentum_bases: None,
+        numerator_grouping: NumeratorAwareGraphGroupingOption::NoGrouping,
+        prefactor: GlobalPrefactor::default(),
+        selected_graphs: None,
+        vetoed_graphs: None,
+    };
 
-    let (n_unresolved, unresolved_type) = filters.unresolved_cut_content(&model);
-    assert!(!filters.half_edge_filters(
+    let (n_unresolved, unresolved_type) = process_definition.unresolved_cut_content(&model);
+    assert!(!process_definition.half_edge_filters(
         &model,
         &double_double_triangle,
         &[],
@@ -256,7 +280,7 @@ pub(crate) fn dis_options_impl(
     pert: usize,
     loop_count: usize,
     coupling: usize,
-) -> FeynGen {
+) -> ProcessDefinition {
     let mut amp_coupling = HashMap::new();
     amp_coupling.insert("QED".into(), (2, Some(2)));
     amp_coupling.insert("LT".into(), (1, Some(1)));
@@ -265,62 +289,69 @@ pub(crate) fn dis_options_impl(
 
     let mut xs_pert = HashMap::new();
     xs_pert.insert("QCD".into(), pert);
-    FeynGen {
-        options: FeynGenOptions {
-            generation_type: GenerationType::CrossSection,
-            initial_pdgs: init.iter().map(|a| *a as i64).collect(),
-            final_pdgs_lists: final_states
-                .iter()
-                .map(|f| f.iter().map(|a| *a as i64).collect())
-                .collect(),
-            loop_count_range: (loop_count, loop_count),
-            symmetrize_initial_states: true,
-            symmetrize_final_states: true,
-            symmetrize_left_right_states: false,
-            allow_symmetrization_of_external_fermions_in_amplitudes: false,
-            max_multiplicity_for_fast_cut_filter: 0,
-            amplitude_filters: FeynGenFilters(vec![
-                FeynGenFilter::ParticleVeto(vec![
-                    23, 24, 9000001, 9000002, 9000003, 9000004, 9000005, -9000005, 12, 14, 16, 2,
-                    4, 6, 3, 5, 25, 250, 251, 13, 15,
-                ]),
-                FeynGenFilter::TadpolesFilter(TadpolesFilterOptions {
-                    veto_tadpoles_attached_to_massive_lines: true,
-                    veto_tadpoles_attached_to_massless_lines: true,
-                    veto_only_scaleless_tadpoles: false,
-                }),
-                FeynGenFilter::ZeroSnailsFilter(SnailFilterOptions {
-                    veto_snails_attached_to_massive_lines: false,
-                    veto_snails_attached_to_massless_lines: true,
-                    veto_only_scaleless_snails: false,
-                }),
-                FeynGenFilter::CouplingOrders(amp_coupling),
+    ProcessDefinition {
+        generation_type: GenerationType::CrossSection,
+        initial_pdgs: init.iter().map(|a| *a as i64).collect(),
+        final_pdgs_lists: final_states
+            .iter()
+            .map(|f| f.iter().map(|a| *a as i64).collect())
+            .collect(),
+        loop_count_range: (loop_count, loop_count),
+        symmetrize_initial_states: true,
+        symmetrize_final_states: true,
+        symmetrize_left_right_states: false,
+        allow_symmetrization_of_external_fermions_in_amplitudes: false,
+        max_multiplicity_for_fast_cut_filter: 0,
+        amplitude_filters: FeynGenFilters(vec![
+            FeynGenFilter::ParticleVeto(vec![
+                23, 24, 9000001, 9000002, 9000003, 9000004, 9000005, -9000005, 12, 14, 16, 2, 4, 6,
+                3, 5, 25, 250, 251, 13, 15,
             ]),
-            cross_section_filters: FeynGenFilters(vec![
-                FeynGenFilter::SewedFilter(SewedFilterOptions {
-                    filter_tadpoles: true,
-                }),
-                FeynGenFilter::ParticleVeto(vec![
-                    23, 24, 9000001, 9000002, 9000003, 9000004, 9000005, -9000005, 12, 14, 16, 2,
-                    4, 6, 3, 5, 25, 250, 251, 13, 15,
-                ]),
-                FeynGenFilter::TadpolesFilter(TadpolesFilterOptions {
-                    veto_tadpoles_attached_to_massive_lines: true,
-                    veto_tadpoles_attached_to_massless_lines: true,
-                    veto_only_scaleless_tadpoles: false,
-                }),
-                FeynGenFilter::ZeroSnailsFilter(SnailFilterOptions {
-                    veto_snails_attached_to_massive_lines: false,
-                    veto_snails_attached_to_massless_lines: true,
-                    veto_only_scaleless_snails: false,
-                }),
-                FeynGenFilter::PerturbativeOrders(xs_pert),
-                FeynGenFilter::CouplingOrders(xs_coupling),
-                FeynGenFilter::LoopCountRange((loop_count, loop_count)),
-                FeynGenFilter::BlobRange(1..=1),
-                FeynGenFilter::SpectatorRange(0..=1),
+            FeynGenFilter::TadpolesFilter(TadpolesFilterOptions {
+                veto_tadpoles_attached_to_massive_lines: true,
+                veto_tadpoles_attached_to_massless_lines: true,
+                veto_only_scaleless_tadpoles: false,
+            }),
+            FeynGenFilter::ZeroSnailsFilter(SnailFilterOptions {
+                veto_snails_attached_to_massive_lines: false,
+                veto_snails_attached_to_massless_lines: true,
+                veto_only_scaleless_snails: false,
+            }),
+            FeynGenFilter::CouplingOrders(amp_coupling),
+        ]),
+        cross_section_filters: FeynGenFilters(vec![
+            FeynGenFilter::SewedFilter(SewedFilterOptions {
+                filter_tadpoles: true,
+            }),
+            FeynGenFilter::ParticleVeto(vec![
+                23, 24, 9000001, 9000002, 9000003, 9000004, 9000005, -9000005, 12, 14, 16, 2, 4, 6,
+                3, 5, 25, 250, 251, 13, 15,
             ]),
-        },
+            FeynGenFilter::TadpolesFilter(TadpolesFilterOptions {
+                veto_tadpoles_attached_to_massive_lines: true,
+                veto_tadpoles_attached_to_massless_lines: true,
+                veto_only_scaleless_tadpoles: false,
+            }),
+            FeynGenFilter::ZeroSnailsFilter(SnailFilterOptions {
+                veto_snails_attached_to_massive_lines: false,
+                veto_snails_attached_to_massless_lines: true,
+                veto_only_scaleless_snails: false,
+            }),
+            FeynGenFilter::PerturbativeOrders(xs_pert),
+            FeynGenFilter::CouplingOrders(xs_coupling),
+            FeynGenFilter::LoopCountRange((loop_count, loop_count)),
+            FeynGenFilter::BlobRange(1..=1),
+            FeynGenFilter::SpectatorRange(0..=1),
+        ]),
+        filter_self_loop: true,
+        folder_name: "N/A".into(),
+        process_id: 0,
+        graph_prefix: "DIS".into(),
+        loop_momentum_bases: None,
+        numerator_grouping: NumeratorAwareGraphGroupingOption::OnlyDetectZeroes,
+        prefactor: GlobalPrefactor::default(),
+        selected_graphs: None,
+        vetoed_graphs: None,
     }
 }
 
@@ -329,7 +360,7 @@ pub(crate) fn dis_options(
     final_states: &[Vec<&'static str>],
     pert: usize,
     model: &Model,
-) -> FeynGen {
+) -> ProcessDefinition {
     let initial_pdgs: Vec<_> = init
         .iter()
         .map(|a| model.get_particle(a).0.pdg_code)
@@ -397,7 +428,10 @@ impl<T: Clone> Iterator for CombinationsWithRepetition<T> {
     }
 }
 
-pub(crate) fn dis_cart_prod_impl(initial_states: &[isize], loop_count: usize) -> Vec<FeynGen> {
+pub(crate) fn dis_cart_prod_impl(
+    initial_states: &[isize],
+    loop_count: usize,
+) -> Vec<ProcessDefinition> {
     let mut options = vec![];
 
     let initial_states: HashSet<isize> = initial_states.iter().cloned().collect();
@@ -444,7 +478,7 @@ pub(crate) fn dis_cart_prod(
     initial_states: &[&'static str],
     loop_count: usize,
     model: &Model,
-) -> Vec<FeynGen> {
+) -> Vec<ProcessDefinition> {
     let initial_states: Vec<_> = initial_states
         .iter()
         .map(|a| model.get_particle(a).0.pdg_code)
@@ -452,23 +486,10 @@ pub(crate) fn dis_cart_prod(
     dis_cart_prod_impl(&initial_states, loop_count)
 }
 
-pub(crate) fn chain_dis_generate(options: &[FeynGen], model: &Model) -> Vec<Graph> {
+pub(crate) fn chain_dis_generate(options: &[ProcessDefinition], model: &Model) -> Vec<Graph> {
     options
         .iter()
-        .flat_map(|a| {
-            a.generate(
-                model,
-                &NumeratorAwareGraphGroupingOption::OnlyDetectZeroes,
-                true,
-                "DIS".into(),
-                None,
-                None,
-                None,
-                GlobalPrefactor::default(),
-                Some(10),
-            )
-            .unwrap()
-        })
+        .flat_map(|a| a.generate(model, Some(10)).unwrap())
         .collect()
 }
 
@@ -483,7 +504,6 @@ fn nlo_fs_dis() {
         let diagrams = chain_dis_generate(&[option.clone()], &model);
 
         let process_name = option
-            .options
             .initial_pdgs
             .iter()
             .map(|a| model.get_particle_from_pdg(*a as isize).0.name.clone())

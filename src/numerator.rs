@@ -5,6 +5,7 @@ use idenso::gamma::GammaSimplifier;
 use idenso::representations::Bispinor;
 use linnet::half_edge::involution::EdgeIndex;
 use log::warn;
+use schemars::JsonSchema;
 use spenso::algebra::complex::Complex;
 use spenso::algebra::upgrading_arithmetic::FallibleSub;
 use spenso::network::library::{DummyLibrary, TensorLibraryData};
@@ -348,11 +349,27 @@ impl TypedNumeratorState for UnInit {
     }
 }
 
-#[derive(Debug, Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
+#[allow(dead_code)]
+#[derive(JsonSchema)]
+struct _GlobalPrefactorAny {
+    projector: serde_json::Value,
+    num: serde_json::Value,
+}
+
+#[derive(Debug, Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode, PartialEq)]
 #[trait_decode(trait = crate::GammaLoopContext)]
 pub struct GlobalPrefactor {
     pub projector: Atom,
     pub num: Atom,
+}
+
+impl JsonSchema for GlobalPrefactor {
+    fn json_schema(gen: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        gen.subschema_for::<_GlobalPrefactorAny>()
+    }
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "GlobalPrefactor".into()
+    }
 }
 
 impl GlobalPrefactor {

@@ -18,6 +18,7 @@ use symbolica::graph::Graph as SymbolicaGraph;
 use thiserror::Error;
 
 use crate::model::Model;
+use crate::GammaLoopContext;
 
 #[derive(Error, Debug)]
 pub enum FeynGenError {
@@ -33,7 +34,7 @@ pub enum FeynGenError {
     Eyre(#[from] color_eyre::Report),
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, JsonSchema, Encode, Decode)]
 
 pub struct GraphGroupingOptions {
     pub numerical_sample_seed: u16,
@@ -68,7 +69,7 @@ impl fmt::Display for GraphGroupingOptions {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, JsonSchema, Encode, Decode)]
 pub enum NumeratorAwareGraphGroupingOption {
     NoGrouping,
     OnlyDetectZeroes,
@@ -177,7 +178,7 @@ impl NumeratorAwareGraphGroupingOption {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, JsonSchema, Encode, Decode)]
 pub enum GenerationType {
     Amplitude,
     CrossSection,
@@ -583,82 +584,6 @@ impl fmt::Display for FeynGenFilter {
                 ),
             }
         )
-    }
-}
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
-pub struct FeynGenOptions {
-    pub generation_type: GenerationType,
-    pub initial_pdgs: Vec<i64>,
-    pub final_pdgs_lists: Vec<Vec<i64>>,
-    pub loop_count_range: (usize, usize),
-    pub symmetrize_initial_states: bool,
-    pub symmetrize_final_states: bool,
-    pub symmetrize_left_right_states: bool,
-    pub allow_symmetrization_of_external_fermions_in_amplitudes: bool,
-    pub max_multiplicity_for_fast_cut_filter: usize,
-    pub amplitude_filters: FeynGenFilters,
-    pub cross_section_filters: FeynGenFilters,
-}
-
-impl fmt::Display for FeynGenOptions {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "Generation type: {}{}{}\nInitial PDGs: {:?}{}\nFinal PDGs: {}{}\nLoop count: {}\nAmplitude filters:{}{}\nCross-section filters:{}{}",
-            self.generation_type,
-            if self.symmetrize_left_right_states { " (left-right symmetrized)" } else { "" },
-            if self.allow_symmetrization_of_external_fermions_in_amplitudes
-                && self.generation_type == GenerationType::Amplitude
-                && (self.symmetrize_initial_states  || self.symmetrize_final_states || self.symmetrize_left_right_states)
-                { " (allowing fermion symmetrization)" } else { "" },
-            self.initial_pdgs,
-            if self.symmetrize_initial_states { " (symmetrized)" } else { "" },
-            if self.final_pdgs_lists.len() == 1 {
-                format!("{:?}",self.final_pdgs_lists[0])
-            } else {
-                format!("[ {} ]", self.final_pdgs_lists.iter().map(|pdgs| format!("{:?}", pdgs)).join(" | "))
-            },
-            if self.symmetrize_final_states { " (symmetrized)" } else { "" },
-            if self.loop_count_range.0 == self.loop_count_range.1 {
-                format!("{}", self.loop_count_range.0)
-            } else {
-                format!("{:?}", self.loop_count_range)
-            },
-            if self.amplitude_filters.0.is_empty() { " None" } else {"\n"},
-            if self.amplitude_filters.0.is_empty() { "".into() } else { self.amplitude_filters
-                .0
-                .iter()
-                .map(|f| format!(" > {}", f))
-                .collect::<Vec<String>>()
-                .join("\n")
-            },
-            if self.cross_section_filters.0.is_empty() { " None" } else {"\n"},
-            if self.cross_section_filters.0.is_empty() { "".into() } else { self.cross_section_filters
-                .0
-                .iter()
-                .map(|f| format!(" > {}", f))
-                .collect::<Vec<String>>()
-                .join("\n")
-            }
-        )
-    }
-}
-
-impl Default for FeynGenOptions {
-    fn default() -> Self {
-        Self {
-            generation_type: GenerationType::Amplitude,
-            initial_pdgs: vec![],
-            final_pdgs_lists: vec![],
-            loop_count_range: (1, 1),
-            symmetrize_initial_states: false,
-            symmetrize_final_states: false,
-            symmetrize_left_right_states: false,
-            allow_symmetrization_of_external_fermions_in_amplitudes: false,
-            max_multiplicity_for_fast_cut_filter: 6,
-            amplitude_filters: FeynGenFilters(vec![]),
-            cross_section_filters: FeynGenFilters(vec![]),
-        }
     }
 }
 

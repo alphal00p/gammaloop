@@ -373,7 +373,7 @@ impl State {
         global_settings: &GlobalSettings,
     ) -> Result<()> {
         self.process_list
-            .compile(folder, override_existing, global_settings, &self.model)?;
+            .compile(folder, override_existing, global_settings)?;
         Ok(())
     }
 
@@ -381,7 +381,7 @@ impl State {
         let exp_set = ExportSettings {
             root_folder: path.as_ref().to_path_buf(),
         };
-        self.process_list.export_dot(&exp_set, &self.model)?;
+        self.process_list.export_dot(&exp_set)?;
         Ok(())
     }
 
@@ -394,13 +394,8 @@ impl State {
                 .to_string_lossy()
                 .into_owned(),
         );
-        let process = Process::from_graph_list(
-            name,
-            graphs,
-            GenerationType::Amplitude,
-            ProcessDefinition::new_empty(),
-            None,
-        )?;
+        let process =
+            Process::from_graph_list(name, graphs, GenerationType::Amplitude, None, None)?;
 
         self.process_list.add_process(process);
         Ok(())
@@ -575,7 +570,7 @@ impl State {
         fs::create_dir_all(root_folder)?;
 
         self.process_list
-            .compile(root_folder, override_compiled, settings, &self.model)?;
+            .compile(root_folder, override_compiled, settings)?;
         Ok(())
     }
 
