@@ -72,6 +72,24 @@ pub struct NodeColorWithVertexRule {
     pub vertex_rule: ArcVertexRule,
 }
 
+impl NodeColorWithVertexRule {
+    pub fn from_particles<B: AsRef<str>, A: IntoIterator<Item = B>>(
+        iter: A,
+        model: &Model,
+    ) -> Self {
+        let mut particles: Vec<ArcParticle> = iter
+            .into_iter()
+            .map(|p| model.get_particle(p.as_ref()))
+            .collect();
+        particles.sort_by_key(|p| p.0.pdg_code);
+        let vertex_rule = model.particle_set_to_vertex_rules_map[&particles][0].clone();
+        Self {
+            external_tag: 0,
+            vertex_rule,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Default, Copy)]
 pub struct NodeColorWithoutVertexRule {
     pub external_tag: i32,

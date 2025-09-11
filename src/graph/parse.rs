@@ -734,6 +734,11 @@ impl From<&Graph> for DotGraph {
             graph[i].add_statement("lmb_rep", (loop_expr + external_expr).to_quoted());
         }
 
+        for i in value.initial_state_cut.left.included_iter() {
+            let eid = graph[&i];
+            graph[eid].add_statement("is_cut", i);
+        }
+
         for (l, i) in value.loop_momentum_basis.loop_edges.iter_enumerated() {
             graph[i].0.add_statement("lmb_id", l);
         }
@@ -901,19 +906,9 @@ pub mod test {
 
         let mut a = symbolica::graph::Graph::new();
 
-        let dda = NodeColorWithVertexRule {
-            external_tag: 0,
-            vertex_rule: model
-                .particle_set_to_vertex_rules_map
-                .get(&vec![
-                    model.get_particle("d~"),
-                    model.get_particle("d"),
-                    model.get_particle("a"),
-                ])
-                .unwrap()[0]
-                .clone()
-                .into(),
-        };
+        let udw = NodeColorWithVertexRule::from_particles(["d", "W+", "u~"], &model);
+
+        let csw = NodeColorWithVertexRule::from_particles(["s", "W+", "c~"], &model);
 
         let ext = NodeColorWithVertexRule {
             external_tag: 1,
@@ -924,26 +919,29 @@ pub mod test {
         let e2 = a.add_node(ext.clone());
         let e3 = a.add_node(ext.clone());
         let e4 = a.add_node(ext.clone());
-        let v1 = a.add_node(dda.clone());
-        let v2 = a.add_node(dda.clone());
-        let v3 = a.add_node(dda.clone());
-        let v4 = a.add_node(dda.clone());
+        let v1 = a.add_node(udw.clone());
+        let v2 = a.add_node(csw.clone());
+        let v3 = a.add_node(udw.clone());
+        let v4 = a.add_node(csw.clone());
 
         let ed = EdgeColor::from_particle(model.get_particle("d"));
-        let ea = EdgeColor::from_particle(model.get_particle("a"));
+        let es = EdgeColor::from_particle(model.get_particle("s"));
+        let ec = EdgeColor::from_particle(model.get_particle("c~"));
+        let ew = EdgeColor::from_particle(model.get_particle("W+"));
+        let eu = EdgeColor::from_particle(model.get_particle("u"));
 
-        a.add_edge(e1, v1, true, ed).unwrap();
+        a.add_edge(e1, v1, true, eu).unwrap();
 
-        a.add_edge(e2, v2, true, ed).unwrap();
+        a.add_edge(e2, v2, true, ec).unwrap();
 
-        a.add_edge(v3, e3, true, ed).unwrap();
+        a.add_edge(v3, e3, true, eu).unwrap();
 
-        a.add_edge(v4, e4, true, ed).unwrap();
+        a.add_edge(v4, e4, true, ec).unwrap();
 
         a.add_edge(v1, v3, true, ed).unwrap();
-        a.add_edge(v2, v4, true, ed).unwrap();
-        a.add_edge(v1, v2, false, ea).unwrap();
-        a.add_edge(v3, v4, false, ea).unwrap();
+        a.add_edge(v2, v4, true, es).unwrap();
+        a.add_edge(v1, v2, false, ew).unwrap();
+        a.add_edge(v3, v4, false, ew).unwrap();
 
         let g = Graph::from_symbolica_graph(
             &model,
@@ -955,6 +953,22 @@ pub mod test {
                 (Some(1), None),
                 (None, Some(2)),
                 (None, Some(3)),
+            ],
+        )
+        .unwrap();
+
+        println!("{}", g.dot_serialize());
+
+        let g = Graph::from_symbolica_graph(
+            &model,
+            "test",
+            &a,
+            Atom::num(1),
+            &[
+                (Some(2), None),
+                (Some(3), None),
+                (None, Some(1)),
+                (None, Some(0)),
             ],
         )
         .unwrap();

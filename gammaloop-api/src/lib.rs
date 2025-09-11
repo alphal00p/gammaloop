@@ -257,15 +257,41 @@ impl Cli {
                     println!("{}", state.model.name)
                 }
             },
-            Commands::Run(Run { path }) => {
-                let mut new_run_history = RunHistory::load(path)?;
-                *global_settings = new_run_history.global_settings.clone();
-                *default_runtime_settings = new_run_history.default_runtime_settings.clone();
-                let res =
-                    new_run_history.run(self, state, global_settings, default_runtime_settings);
+            Commands::Run(Run { path, commands }) => {
+                let mut a = ControlFlow::Continue(());
+                if let Some(mut new_run_history) = path.map(|p| RunHistory::load(p)).transpose()? {
+                    *global_settings = new_run_history.global_settings.clone();
+                    *default_runtime_settings = new_run_history.default_runtime_settings.clone();
+                    let res =
+                        new_run_history.run(self, state, global_settings, default_runtime_settings);
 
-                run_history.merge(new_run_history);
-                return res;
+                    run_history.merge(new_run_history);
+                    a = res?;
+                };
+
+                if let Some(c) = commands {
+                    for c in c.split(';') {
+                        if c.trim().is_empty() {
+                            continue;
+                        }
+                        info!("Running command from --commands: {}", c);
+                        let cmd = CommandHistory::from_raw_string(c)?;
+                        let res = self.run_command(
+                            cmd.command,
+                            state,
+                            run_history,
+                            global_settings,
+                            default_runtime_settings,
+                        )?;
+                        a = res;
+
+                        if let ControlFlow::Break(()) = res {
+                            return Ok(res);
+                        }
+                    }
+                }
+
+                return Ok(a);
             }
             _ => {}
         }
@@ -547,7 +573,10 @@ pub enum Display {
 pub struct Run {
     /// Path to a run file to execute
     #[arg(value_hint = clap::ValueHint::FilePath)]
-    path: PathBuf,
+    path: Option<PathBuf>,
+
+    #[arg(short = 'c', long)]
+    commands: Option<String>,
 }
 
 pub enum Log {
