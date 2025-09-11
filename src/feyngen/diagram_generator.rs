@@ -52,7 +52,7 @@ use crate::numerator::Numerator;
 use crate::numerator::SymbolicExpression;
 use crate::processes::ProcessDefinition;
 use crate::utils::{self, W_};
-use crate::{disable, status_info};
+use crate::{disable, status_error, status_info, status_warn};
 use crate::{
     feyngen::{FeynGenFilter, GenerationType},
     model::Model,
@@ -2590,12 +2590,20 @@ impl ProcessDefinition {
         .max_loops(self.loop_count_range.1)
         .allow_self_loops(!self.filter_self_loop);
 
-        let mut graphs = SymbolicaGraph::generate(
+        let mut graphs = match SymbolicaGraph::generate(
             external_edges_for_generation.as_slice(),
             vertex_signatures_for_generation.as_slice(),
             &symbolica_generation_settings,
-        )
-        .map_err(|_| FeynGenError::GenericError("graph generation aborted".to_owned()))?;
+        ) {
+            Ok(gs) => gs,
+            Err(gs_thus_far) => {
+                status_error!(
+                    "Symbolica graph generation was aborted by the user after generating {} graphs. Generation will continue with these only, BUT THE RESULT WILL BE INCOMPLETE",
+                    gs_thus_far.len()
+                );
+                gs_thus_far
+            }
+        };
 
         // Immediately drop lower loop count contributions
         graphs.retain(|g, _| g.num_loops() >= self.loop_count_range.0);

@@ -132,6 +132,17 @@ impl Default for ProcessDefinition {
     }
 }
 
+impl ProcessDefinition {
+    // Best attempt at creating what process definition matches the given graphs
+    pub fn from_graph_list(graphs: &[Graph], generation_type: GenerationType) -> Result<Self> {
+        // TODO: At least set correctly things like loop count range and initial/final states
+        Ok(Self {
+            generation_type,
+            ..Self::default()
+        })
+    }
+}
+
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct Process {
@@ -225,13 +236,7 @@ impl Process {
         })
     }
 
-    pub fn save(
-        &mut self,
-        path: impl AsRef<Path>,
-        override_existing: bool,
-        id: usize,
-        model: &Model,
-    ) -> Result<()> {
+    pub fn save(&mut self, path: impl AsRef<Path>, override_existing: bool) -> Result<()> {
         match &mut self.collection {
             ProcessCollection::Amplitudes(a) => {
                 let p = path.as_ref().join("amplitudes");
@@ -273,6 +278,7 @@ impl Process {
         path: impl AsRef<Path>,
         override_existing: bool,
         settings: &GlobalSettings,
+        integrand_name: Option<String>,
     ) -> Result<()> {
         match &mut self.collection {
             ProcessCollection::Amplitudes(a) => {
@@ -291,6 +297,12 @@ impl Process {
                 }
 
                 for (_, amp) in a {
+                    if let Some(int_name) = integrand_name.clone() {
+                        if amp.name != int_name {
+                            continue;
+                        }
+                    }
+
                     amp.compile(&p, override_existing, settings)?;
                 }
             }
@@ -343,12 +355,15 @@ impl Process {
     }
 
     pub fn from_graph_list(
-        name: String,
-        mut graphs: Vec<Graph>,
+        process_name: String,
+        integrand_name: String,
+        graphs: Vec<Graph>,
         generation_type: GenerationType,
         definition: Option<ProcessDefinition>,
         sub_classes: Option<Vec<Vec<String>>>,
     ) -> Result<Self> {
+        let mut proc_definition = definition.unwrap_or_default();
+        proc_definition.folder_name = process_name;
         match generation_type {
             GenerationType::Amplitude => {
                 let mut collection: ProcessCollection = ProcessCollection::new_amplitude();
@@ -356,19 +371,12 @@ impl Process {
                 if let Some(_sub_classes) = sub_classes {
                     todo!("implement seperation of processes into user defined sub classes");
                 } else {
-                    let mut amplitude: Amplitude = Amplitude::new(name);
-                    amplitude.graph_group_structure = complete_group_parsing(&mut graphs)?;
-
-                    for amplitude_graph in graphs {
-                        amplitude.add_graph(amplitude_graph)?;
-                    }
-
-                    collection.add_amplitude(amplitude);
+                    collection.add_amplitude(Amplitude::from_graph_list(integrand_name, graphs)?);
 
                     // TODO: construct a better default definition from graph (i.e. at least the external IDs)
                     Ok(Self {
                         settings_history: None,
-                        definition: definition.unwrap_or_default(),
+                        definition: proc_definition,
                         collection,
                     })
                 }
@@ -379,17 +387,12 @@ impl Process {
                 if let Some(_sub_classes) = sub_classes {
                     todo!("implement seperation of processes into user defined sub classes");
                 } else {
-                    let mut cross_section: CrossSection = CrossSection::new(name);
-
-                    for cross_section_graph in graphs {
-                        cross_section.add_supergraph(cross_section_graph)?;
-                    }
-
-                    collection.add_cross_section(cross_section);
+                    collection
+                        .add_cross_section(CrossSection::from_graph_list(integrand_name, graphs)?);
                     // TODO: construct a better default definition from graph (i.e. at least the external IDs)
                     Ok(Self {
                         settings_history: None,
-                        definition: definition.unwrap_or_default(),
+                        definition: proc_definition,
                         collection,
                     })
                 }
@@ -420,7 +423,7 @@ impl ProcessCollection {
         Self::Amplitudes(BTreeMap::new())
     }
 
-    fn get_integrand_names(&self) -> Vec<&str> {
+    pub fn get_integrand_names(&self) -> Vec<&str> {
         match self {
             Self::Amplitudes(amplitudes) => amplitudes.keys().map(|a| a.as_str()).collect(),
             Self::CrossSections(cross_sections) => {
@@ -521,14 +524,14 @@ impl ProcessCollection {
         Self::CrossSections(BTreeMap::new())
     }
 
-    pub(crate) fn add_amplitude(&mut self, amplitude: Amplitude) {
+    pub fn add_amplitude(&mut self, amplitude: Amplitude) {
         match self {
             Self::Amplitudes(amplitudes) => amplitudes.insert(amplitude.name.clone(), amplitude),
             _ => panic!("Cannot add amplitude to a cross section collection"),
         };
     }
 
-    pub(crate) fn add_cross_section(&mut self, cross_section: CrossSection) {
+    pub fn add_cross_section(&mut self, cross_section: CrossSection) {
         match self {
             Self::CrossSections(cross_sections) => {
                 cross_sections.insert(cross_section.name.clone(), cross_section);

@@ -2,6 +2,7 @@
 #![allow(clippy::too_many_arguments)]
 
 use ahash::HashMap;
+use color_eyre::owo_colors::OwoColorize;
 use gammalooprs::status_info;
 use std::collections::{BTreeMap, BTreeSet};
 use std::ops::RangeInclusive;
@@ -21,7 +22,8 @@ use gammalooprs::feyngen::{
 };
 use gammalooprs::model::Model;
 use gammalooprs::numerator::GlobalPrefactor;
-use gammalooprs::processes::ProcessDefinition;
+use gammalooprs::processes::amplitude::Amplitude;
+use gammalooprs::processes::{CrossSection, Process, ProcessDefinition, ProcessList};
 use gammalooprs::settings::{GlobalSettings, RuntimeSettings};
 
 use super::state::State;
@@ -111,6 +113,12 @@ pub struct SpecArgs {
     /// Optional human-readable process name
     #[arg(long = "process-name", short = 'p')]
     pub process_name: Option<String>,
+
+    #[arg(long = "integrand-name", short = 'i')]
+    pub integrand_name: Option<String>,
+
+    #[arg(long = "only-diagrams", short = 'o', default_value_t = false)]
+    pub only_diagrams: bool,
 
     /// Topology filters (Option<bool> to enable smart defaults)
     #[arg(long = "filter-selfenergies")]
@@ -243,7 +251,16 @@ impl Generate {
             Some(GenerateCmd::Amp(a)) => Some((GenerationType::Amplitude, a)),
             _ => None,
         };
-        let generation_info = if let Some((gen_mode, args)) = generation_mode {
+        if let Some((_, args)) = generation_mode.as_ref() {
+            if !state.process_list.processes.is_empty() && args.clear_existing_processes {
+                status_info!(
+                    "Clearing all {} existing processes as requested.",
+                    state.process_list.processes.len()
+                );
+                state.process_list = ProcessList::default();
+            }
+        }
+        let generation_info = if let Some((gen_mode, args)) = generation_mode.clone() {
             let mut spec = parse_spec_with_model(&args, gen_mode, &state.model)?;
             spec.process_definition.process_id = state.process_list.processes.len();
 
@@ -263,7 +280,7 @@ impl Generate {
                     }
                 } else {
                     status_info!(
-                        "Identical process with name '{}' already exists. Reusing it.",
+                        "Identical process definition, with name '{}', already exists. Gammaloop will recycle it.",
                         spec.process_definition.folder_name
                     );
                     return Ok(());
@@ -277,20 +294,125 @@ impl Generate {
         };
         match &self.mode {
             Some(GenerateCmd::Amp(args)) | Some(GenerateCmd::Xs(args)) => {
+                let generation_type = generation_mode.as_ref().unwrap().clone().0;
                 let model: &Model = &state.model;
                 let (spec, existing_process) = generation_info.unwrap();
+                let this_process_id = spec.process_definition.process_id;
                 // TODO handle existing process and continue
                 let graphs = spec
                     .process_definition
                     .generate(model, args.num_threads.map(|n| n as usize))?;
-                println!("Generated {} amplitude graphs.", graphs.len());
+                println!(
+                    "Generated {} {} graphs.",
+                    if matches!(self.mode, Some(GenerateCmd::Amp(_))) {
+                        "amplitude"
+                    } else {
+                        "cross-section"
+                    },
+                    graphs.len()
+                );
+                // Keep the possibility of changing default name for the two modes
+                let integrand_base_name = matches!(self.mode, Some(GenerateCmd::Amp(_)))
+                    .then(|| args.integrand_name.clone().unwrap_or("default".to_string()))
+                    .unwrap_or_else(|| {
+                        args.integrand_name.clone().unwrap_or("default".to_string())
+                    });
+                let generated_integrand_name = if let Some(p) = existing_process {
+                    let existing_names = p.collection.get_integrand_names();
+                    let integrand_name = if existing_names.contains(&integrand_base_name.as_str()) {
+                        let mut integrand_i = 0;
+                        while existing_names
+                            .iter()
+                            .any(|ce| *ce == format!("{}_{}", integrand_base_name, integrand_i))
+                        {
+                            integrand_i += 1;
+                        }
+                        format!("{}_{}", integrand_base_name, integrand_i)
+                    } else {
+                        integrand_base_name
+                    };
+                    match &self.mode {
+                        Some(GenerateCmd::Amp(_)) => {
+                            p.collection.add_amplitude(Amplitude::from_graph_list(
+                                integrand_name.clone(),
+                                graphs,
+                            )?);
+                        }
+                        Some(GenerateCmd::Xs(_)) => {
+                            p.collection
+                                .add_cross_section(CrossSection::from_graph_list(
+                                    integrand_name.clone(),
+                                    graphs,
+                                )?);
+                        }
+                        _ => unreachable!(),
+                    }
+                    integrand_name
+                } else {
+                    let process = Process::from_graph_list(
+                        spec.process_definition.folder_name.clone(),
+                        integrand_base_name.clone(),
+                        graphs,
+                        generation_type,
+                        Some(spec.process_definition),
+                        None,
+                    )?;
+                    state.process_list.add_process(process);
+                    integrand_base_name
+                };
+                if !args.only_diagrams {
+                    return state.generate_integrand(
+                        generation_settings,
+                        runtime_settings.into(),
+                        this_process_id,
+                        Some(generated_integrand_name),
+                    );
+                } else {
+                    status_info!(
+                        "Only diagram generation was requested, skipping integrand generation. You can generate integrands later using the '{}' command.",
+                        "generate existing <options>".green()
+                    );
+                    Ok(())
+                }
             }
-            Some(GenerateCmd::Existing(process)) => {
-                return state.generate_integrand(
+            Some(GenerateCmd::Existing(process_args)) => {
+                if process_args.process_id >= state.process_list.processes.len() {
+                    return Err(eyre!(
+                        "No process with ID {}. Existing processes have IDs in range 0..{}",
+                        process_args.process_id,
+                        state.process_list.processes.len()
+                    ));
+                }
+                if let Some(integrand_name) = process_args.integrand_name.as_ref() {
+                    if !state.process_list.processes[process_args.process_id]
+                        .collection
+                        .get_integrand_names()
+                        .contains(&integrand_name.as_str())
+                    {
+                        return Err(eyre!(
+                            "Process ID {} exists, but has no integrand named '{}'. Existing integrands: {:?}",
+                            process_args.process_id,
+                            integrand_name,
+                            state.process_list.processes[process_args.process_id].collection.get_integrand_names()
+                        ));
+                    }
+                }
+                state.generate_integrand(
                     generation_settings,
                     runtime_settings.into(),
-                    process,
-                )
+                    process_args.process_id,
+                    process_args.integrand_name.clone(),
+                )?;
+                if generation_settings.generation.evaluator_settings.compile {
+                    state.compile_integrands(
+                        compile_folder,
+                        override_existing_compiled,
+                        generation_settings,
+                        Some(process_args.process_id),
+                        process_args.integrand_name.clone(),
+                    )?;
+                }
+                Ok(())
             }
             None => {
                 state.generate_integrands(generation_settings, runtime_settings.into())?;
@@ -299,22 +421,25 @@ impl Generate {
                         compile_folder,
                         override_existing_compiled,
                         generation_settings,
+                        None,
+                        None,
                     )?
                 }
                 return Ok(());
             }
         }
-        Ok(())
     }
 }
 
 #[derive(Args, Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
 pub struct ProcessArgs {
     /// Stored process ID
+    #[arg(long = "process-id", short = 'p')]
     pub process_id: usize,
 
     /// Optional human name
-    pub name: Option<String>,
+    #[arg(long = "integrand-name", short = 'i')]
+    pub integrand_name: Option<String>,
 }
 
 // =================== Domain structs ===================
@@ -1564,19 +1689,21 @@ mod tests {
             filter_self_loop: None,
             process_name: None,
             append: false,
+            integrand_name: None,
+            only_diagrams: true,
         }
     }
 
     // Test helpers using a real generic model shipped with the crate
     fn parse_ok_amp(s: &str) -> ProcessSpec {
         let model = &load_generic_model("sm");
-        let mut a = base_args(s);
+        let a = base_args(s);
         parse_spec_with_model(&a, GenerationType::Amplitude, model).unwrap()
     }
 
     fn parse_ok_xs(s: &str) -> ProcessSpec {
         let model = &load_generic_model("sm");
-        let mut a = base_args(s);
+        let a = base_args(s);
         parse_spec_with_model(&a, GenerationType::CrossSection, model).unwrap()
     }
 
@@ -1880,7 +2007,7 @@ mod tests {
         test_initialise().unwrap();
         let model = &load_generic_model("sm");
 
-        let mut args = base_args("e+ e- > z z [ {{2}} QED=2 QCD=1 {1} ]");
+        let args = base_args("e+ e- > z z [ {{2}} QED=2 QCD=1 {1} ]");
         let ps = parse_spec_with_model(&args, GenerationType::CrossSection, model).unwrap();
 
         let r = ps.repr_str();
@@ -1895,7 +2022,7 @@ mod tests {
         test_initialise().unwrap();
         let model = &load_generic_model("sm");
 
-        let mut args = base_args("W+ W- > {}");
+        let args = base_args("W+ W- > {}");
         let ps = parse_spec_with_model(&args, GenerationType::CrossSection, model).unwrap();
 
         // Short form uses only the base slug and sanitizes +/- and ~.

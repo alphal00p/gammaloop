@@ -53,8 +53,8 @@ fn criterion_benchmark(c: &mut Criterion) -> Result<()> {
     inspect_group.measurement_time(Duration::from_secs(10));
 
     let inspect = Inspect {
-        process_id: 0,
-        integrand_name: "qqx_aaa_subtracted".into(),
+        process_id: Some(0),
+        integrand_name: Some("qqx_aaa_subtracted".into()),
         point: vec![0.1, 0.2, 0.3],
         use_f128: false,
         force_radius: false,

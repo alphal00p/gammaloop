@@ -84,7 +84,7 @@ impl Set {
             }
             Self::Process { input, process } => {
                 let p = &mut state.process_list.processes[process.process_id];
-                if let Some(name) = &process.name {
+                if let Some(name) = &process.integrand_name {
                     match &mut p.collection {
                         ProcessCollection::Amplitudes(a) => {
                             let Some(a) = a.get_mut(name) else {

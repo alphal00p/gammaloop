@@ -1,4 +1,5 @@
 commands = [
+    "set global kv stderr_directive=gammalooprs=info,info",
     "import model sm-default",
     "import amplitude ./qqx_aaa_subtracted.dot",
     "generate",
@@ -58,13 +59,13 @@ check_on_norm = true
 rotation_axis = []
 
 [default_runtime_settings.subtraction]
-disable_threshold_subtraction = true
+disable_threshold_subtraction = false
 
 [global_settings]
 stderr_directive = "debug"
 
 [global_settings.generation]
-enable_thresholds = false
+enable_thresholds = true
 
 [global_settings.generation.evaluator_settings]
 iterative_orientation_optimization = true

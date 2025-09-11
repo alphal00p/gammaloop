@@ -11,7 +11,7 @@ use clap::Args;
 use color_eyre::Result;
 use colored::Colorize;
 use eyre::{eyre, Context};
-use gammalooprs::utils::serde_utils::IsDefault;
+use gammalooprs::{processes::Amplitude, utils::serde_utils::IsDefault};
 use schemars::{schema_for, JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
@@ -337,10 +337,11 @@ impl State {
         &mut self,
         global_settings: &GlobalSettings,
         runtime_default: LockedRuntimeSettings,
-        process: &ProcessArgs,
+        process_id: usize,
+        integrand_name: Option<String>,
     ) -> Result<()> {
-        let p = &mut self.process_list.processes[process.process_id];
-        if let Some(name) = &process.name {
+        let p = &mut self.process_list.processes[process_id];
+        if let Some(name) = &integrand_name {
             match &mut p.collection {
                 ProcessCollection::Amplitudes(a) => {
                     if let Some(a) = a.get_mut(name) {
@@ -350,11 +351,11 @@ impl State {
                         return Err(eyre!(
                             "No amplitude named '{}' in process id {}",
                             name,
-                            process.process_id
+                            process_id
                         ));
                     }
                 }
-                ProcessCollection::CrossSections(a) => {
+                ProcessCollection::CrossSections(_) => {
                     // a[name].preprocess(&self.model, &global_settings.generation)?;
                 }
             }
@@ -371,9 +372,16 @@ impl State {
         folder: impl AsRef<Path>,
         override_existing: bool,
         global_settings: &GlobalSettings,
+        process_id: Option<usize>,
+        integrand_name: Option<String>,
     ) -> Result<()> {
-        self.process_list
-            .compile(folder, override_existing, global_settings)?;
+        self.process_list.compile(
+            folder,
+            override_existing,
+            global_settings,
+            process_id,
+            integrand_name,
+        )?;
         Ok(())
     }
 
@@ -385,19 +393,62 @@ impl State {
         Ok(())
     }
 
-    pub fn import_amplitude(&mut self, path: impl AsRef<Path>, name: Option<String>) -> Result<()> {
+    pub fn import_amplitude(
+        &mut self,
+        path: impl AsRef<Path>,
+        process_name: Option<String>,
+        process_id: Option<usize>,
+        integrand_name: Option<String>,
+    ) -> Result<()> {
         let graphs = Graph::from_file(&path, &self.model)?;
-        let name = name.unwrap_or(
-            path.as_ref()
-                .file_stem()
-                .unwrap()
-                .to_string_lossy()
-                .into_owned(),
-        );
-        let process =
-            Process::from_graph_list(name, graphs, GenerationType::Amplitude, None, None)?;
+        let integrand_base_name = integrand_name.clone().unwrap_or("default".to_string());
+        if let Some(proc_id) = process_id {
+            if proc_id >= self.process_list.processes.len() {
+                return Err(eyre!(
+                    "Process ID {} invalid, only {} processes available",
+                    proc_id,
+                    self.process_list.processes.len()
+                ));
+            }
+            let existing_names = self.process_list.processes[proc_id]
+                .collection
+                .get_integrand_names();
+            let integrand_name = if existing_names.contains(&integrand_base_name.as_str()) {
+                let mut integrand_i = 0;
+                while existing_names
+                    .iter()
+                    .any(|ce| *ce == format!("{}_{}", integrand_base_name, integrand_i))
+                {
+                    integrand_i += 1;
+                }
+                format!("{}_{}", integrand_base_name, integrand_i)
+            } else {
+                integrand_base_name.clone()
+            };
+            self.process_list.processes[proc_id]
+                .collection
+                .add_amplitude(Amplitude::from_graph_list(integrand_name.clone(), graphs)?);
+        } else {
+            let process_name = process_name.unwrap_or(
+                path.as_ref()
+                    .file_stem()
+                    .unwrap()
+                    .to_string_lossy()
+                    .into_owned(),
+            );
+            let process_defintion =
+                ProcessDefinition::from_graph_list(&graphs, GenerationType::Amplitude)?;
+            let process = Process::from_graph_list(
+                process_name,
+                integrand_base_name,
+                graphs,
+                GenerationType::Amplitude,
+                Some(process_defintion),
+                None,
+            )?;
 
-        self.process_list.add_process(process);
+            self.process_list.add_process(process);
+        };
         Ok(())
     }
 
@@ -570,7 +621,7 @@ impl State {
         fs::create_dir_all(root_folder)?;
 
         self.process_list
-            .compile(root_folder, override_compiled, settings)?;
+            .compile(root_folder, override_compiled, settings, None, None)?;
         Ok(())
     }
 
@@ -625,7 +676,7 @@ impl State {
 
         symbolica::state::State::export(&mut state_file)?;
         self.process_list
-            .save(&selected_root_folder, override_state_file, &self.model)?;
+            .save(&selected_root_folder, override_state_file)?;
 
         // let binary = bincode::encode_to_vec(&self.integrands, bincode::config::standard())?;
         // fs::write(root_folder.join("process_list.bin"), binary)?;?

@@ -262,6 +262,8 @@ macro_rules! status_info  { ($($x:tt)*) => { $crate::status_event!(INFO,  $($x)*
 #[macro_export]
 macro_rules! status_warn  { ($($x:tt)*) => { $crate::status_event!(WARN,  $($x)*); }; }
 #[macro_export]
+macro_rules! status_error  { ($($x:tt)*) => { $crate::status_event!(ERROR,  $($x)*); }; }
+#[macro_export]
 macro_rules! status_debug { ($($x:tt)*) => { $crate::status_event!(DEBUG, $($x)*); }; }
 
 use std::io::IsTerminal;

@@ -13,10 +13,10 @@ use super::state::State;
 pub struct Inspect {
     /// The process id to inspect
     #[arg(short = 'i', long = "process-id", value_name = "ID")]
-    pub process_id: usize,
+    pub process_id: Option<usize>,
     /// The name of the process to inspect
     #[arg(short = 'n', long = "name", value_name = "NAME")]
-    pub integrand_name: String,
+    pub integrand_name: Option<String>,
     /// The point to inspect (x y) or (p0 px ...)
     #[arg(short = 'p', num_args = 2.., value_name = "POINT")]
     // allow >2 for momentum‑space
@@ -42,8 +42,8 @@ pub struct Inspect {
 impl Default for Inspect {
     fn default() -> Self {
         Self {
-            process_id: 0,
-            integrand_name: "default".to_string(),
+            process_id: None,
+            integrand_name: None,
             point: vec![],
             use_f128: false,
             force_radius: false,
@@ -57,9 +57,54 @@ impl Inspect {
     pub fn run(&self, state: &mut State) -> Result<Complex<f64>> {
         state.process_list.warm_up(&state.model)?;
 
+        let process_id = if let Some(id) = self.process_id {
+            if id >= state.process_list.processes.len() {
+                return Err(color_eyre::eyre::eyre!(
+                    "Invalid process id {}. Number of processes: {}",
+                    id,
+                    state.process_list.processes.len()
+                ));
+            }
+            id
+        } else {
+            if state.process_list.processes.is_empty() {
+                return Err(color_eyre::eyre::eyre!("No processes generated yet."));
+            } else if state.process_list.processes.len() > 1 {
+                return Err(color_eyre::eyre::eyre!(
+                    "There are {} processes available. Please specify a process id.",
+                    state.process_list.processes.len()
+                ));
+            } else {
+                0
+            }
+        };
+        let all_integrand_names = state.process_list.processes[process_id]
+            .collection
+            .get_integrand_names();
+        let integrand_name = if let Some(name) = self.integrand_name.clone() {
+            if !all_integrand_names.contains(&name.as_str()) {
+                return Err(color_eyre::eyre::eyre!(
+                    "No integrand named '{}' in process id {}. Available integrands: {:?}",
+                    name,
+                    process_id,
+                    all_integrand_names
+                ));
+            }
+            name
+        } else {
+            if all_integrand_names.len() != 1 {
+                return Err(color_eyre::eyre::eyre!(
+                    "Multiple integrands in process id {}. Please specify one of: {:?}",
+                    process_id,
+                    all_integrand_names
+                ));
+            }
+            all_integrand_names[0].to_string()
+        };
+
         let integrand = state
             .process_list
-            .get_integrand_mut(self.process_id, &self.integrand_name)?;
+            .get_integrand_mut(process_id, &integrand_name)?;
 
         let pt = self.point.iter().map(|&x| F(x)).collect::<Vec<F<f64>>>();
 

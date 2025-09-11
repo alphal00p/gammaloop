@@ -86,6 +86,15 @@ impl<S: CrossSectionState> CrossSection<S> {
         }
     }
 
+    pub fn from_graph_list(name: String, graphs: Vec<Graph>) -> Result<Self> {
+        let mut cross_section = CrossSection::new(name);
+
+        for cross_section_graph in graphs {
+            cross_section.add_supergraph(cross_section_graph)?;
+        }
+        Ok(cross_section)
+    }
+
     pub(crate) fn warm_up(&mut self, _model: &Model) -> Result<()> {
         let _derived_data = self
             .supergraphs

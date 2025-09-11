@@ -33,8 +33,8 @@ fn qqx_aaa_subtracted_nlo_amplitude_test() -> Result<()> {
     )?;
 
     let a = Inspect {
-        process_id: 0,
-        integrand_name: "qqx_aaa_subtracted".to_string(),
+        process_id: Some(0),
+        integrand_name: Some("qqx_aaa_subtracted".to_string()),
         point: vec![0.1, 0.2, 0.3],
         momentum_space: true,
         ..Default::default()
@@ -55,8 +55,8 @@ fn trees() -> Result<()> {
     )?;
 
     let a = Inspect {
-        process_id: 0,
-        integrand_name: "qqx_aaa".to_string(),
+        process_id: Some(0),
+        integrand_name: Some("qqx_aaa".to_string()),
         ..Default::default()
     }
     .run(&mut cli)?;
@@ -99,10 +99,10 @@ fn photons_1l() -> Result<()> {
     let target = Complex::new(F(-1.22898408452706e-13), F(-3.94362534040412e-13));
 
     let integrate = Integrate {
-        process_id: 0,
-        integrand_name: "physical_1L_6photons".to_string(),
-        result_path: "./tests/photons/integration_workspace/integration_results.yaml".into(),
-        workspace_path: "./tests/photons/integration_workspace/".into(),
+        process_id: Some(0),
+        integrand_name: Some("physical_1L_6photons".to_string()),
+        result_path: Some("./tests/photons/integration_workspace/integration_results.yaml".into()),
+        workspace_path: Some("./tests/photons/integration_workspace/".into()),
         n_cores: 6,
         target: Some(vec![target.re.0, target.im.0]),
         restart: true,
@@ -124,28 +124,34 @@ fn test_grouped_subtraction() -> Result<()> {
     )?;
 
     let int1 = Integrate {
-        process_id: 0,
-        integrand_name: "no_group".to_string(),
-        result_path: get_tests_workspace_path().join(
+        process_id: Some(0),
+        integrand_name: Some("no_group".to_string()),
+        result_path: Some(get_tests_workspace_path().join(
             "test_grouped_subtraction/integration_workspace_no_group/integration_results.yaml",
+        )),
+        n_cores: 1,
+        workspace_path: Some(
+            get_tests_workspace_path()
+                .join("test_grouped_subtraction/integration_workspace_no_group/"),
         ),
-        n_cores: 1,
-        workspace_path: get_tests_workspace_path()
-            .join("test_grouped_subtraction/integration_workspace_no_group/"),
         target: None,
         restart: true,
     };
-    let int2 = Integrate {
-        process_id: 1,
-        integrand_name: "group".to_string(),
-        result_path: get_tests_workspace_path()
-            .join("test_grouped_subtraction/integration_workspace_group/integration_results.yaml"),
-        n_cores: 1,
-        workspace_path: get_tests_workspace_path()
-            .join("test_grouped_subtraction/integration_workspace_group/"),
-        target: None,
-        restart: true,
-    };
+    let int2 =
+        Integrate {
+            process_id: Some(1),
+            integrand_name: Some("group".to_string()),
+            result_path: Some(get_tests_workspace_path().join(
+                "test_grouped_subtraction/integration_workspace_group/integration_results.yaml",
+            )),
+            n_cores: 1,
+            workspace_path: Some(
+                get_tests_workspace_path()
+                    .join("test_grouped_subtraction/integration_workspace_group/"),
+            ),
+            target: None,
+            restart: true,
+        };
 
     let integration_results_no_group = int1.run(&mut cli)?;
     let integration_results_group = int2.run(&mut cli)?;
@@ -178,8 +184,8 @@ fn scalar_box() -> Result<()> {
     )?;
 
     let a = Inspect {
-        process_id: 0,
-        integrand_name: "scalar_box".to_string(),
+        process_id: Some(0),
+        integrand_name: Some("scalar_box".to_string()),
         point: vec![0.1, 0.2, 0.3],
         momentum_space: true,
         discrete_dim: vec![0],
@@ -191,12 +197,14 @@ fn scalar_box() -> Result<()> {
 
     cli.run_command("set process 0 scalar_box kv General.enable_cache=false")?;
     let integral_no_cache = Integrate {
-        process_id: 0,
-        integrand_name: "scalar_box".to_string(),
-        result_path: get_tests_workspace_path()
-            .join("scalar_box/integration_workspace/integration_results.toml"),
+        process_id: Some(0),
+        integrand_name: Some("scalar_box".to_string()),
+        result_path: Some(
+            get_tests_workspace_path()
+                .join("scalar_box/integration_workspace/integration_results.toml"),
+        ),
         n_cores: 1,
-        workspace_path: get_tests_workspace_path().join("scalar_box/integration_workspace"),
+        workspace_path: Some(get_tests_workspace_path().join("scalar_box/integration_workspace")),
         target: None,
         restart: true,
     }
@@ -204,12 +212,14 @@ fn scalar_box() -> Result<()> {
 
     cli.run_command("set process 0 scalar_box kv General.enable_cache=true")?;
     let integral_with_cache = Integrate {
-        process_id: 0,
-        integrand_name: "scalar_box".to_string(),
-        result_path: get_tests_workspace_path()
-            .join("scalar_box/integration_workspace/integration_results.toml"),
+        process_id: Some(0),
+        integrand_name: Some("scalar_box".to_string()),
+        result_path: Some(
+            get_tests_workspace_path()
+                .join("scalar_box/integration_workspace/integration_results.toml"),
+        ),
         n_cores: 1,
-        workspace_path: get_tests_workspace_path().join("scalar_box/integration_workspace"),
+        workspace_path: Some(get_tests_workspace_path().join("scalar_box/integration_workspace")),
         target: None,
         restart: true,
     }

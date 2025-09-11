@@ -107,16 +107,14 @@ impl ProcessList {
                     .push(Process::load_cross_section(path, context.clone())?);
             }
         }
+        process_list
+            .processes
+            .sort_by_key(|p| p.definition.process_id);
 
         Ok(process_list)
     }
 
-    pub fn save(
-        &mut self,
-        folder: impl AsRef<Path>,
-        override_existing: bool,
-        model: &Model,
-    ) -> Result<()> {
+    pub fn save(&mut self, folder: impl AsRef<Path>, override_existing: bool) -> Result<()> {
         let path = folder.as_ref().join("processes");
 
         let r = fs::create_dir_all(&path);
@@ -124,8 +122,8 @@ impl ProcessList {
             r?;
         }
 
-        for (i, p) in self.processes.iter_mut().enumerate() {
-            p.save(&path, override_existing, i, model)?;
+        for p in self.processes.iter_mut() {
+            p.save(&path, override_existing)?;
         }
 
         Ok(())
@@ -136,6 +134,8 @@ impl ProcessList {
         folder: impl AsRef<Path>,
         override_existing: bool,
         settings: &GlobalSettings,
+        process_id: Option<usize>,
+        integrand_name: Option<String>,
     ) -> Result<()> {
         let path = folder.as_ref().join("processes");
 
@@ -145,7 +145,12 @@ impl ProcessList {
         }
 
         for p in self.processes.iter_mut() {
-            p.compile(&path, override_existing, settings)?;
+            if let Some(id) = process_id {
+                if p.definition.process_id != id {
+                    continue;
+                }
+            }
+            p.compile(&path, override_existing, settings, integrand_name.clone())?;
         }
 
         Ok(())

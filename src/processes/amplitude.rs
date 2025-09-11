@@ -63,6 +63,8 @@ use crate::{
     settings::global::GenerationSettings,
 };
 
+use crate::graph::parse::complete_group_parsing;
+
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct Amplitude {
@@ -941,6 +943,16 @@ impl Amplitude {
             amp.add_graph(g)?;
         }
         Ok(amp)
+    }
+
+    pub fn from_graph_list(name: impl ToString, mut graphs: Vec<Graph>) -> Result<Self> {
+        let mut amplitude: Amplitude = Amplitude::new(name);
+        amplitude.graph_group_structure = complete_group_parsing(&mut graphs)?;
+
+        for amplitude_graph in graphs {
+            amplitude.add_graph(amplitude_graph)?;
+        }
+        Ok(amplitude)
     }
 
     pub(crate) fn new(name: impl ToString) -> Self {

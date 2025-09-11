@@ -3,6 +3,7 @@ use std::{fs, path::PathBuf};
 use clap::Args;
 use gammalooprs::{status_warn, utils::serde_utils::SmartSerde};
 
+use rand::rand_core::le;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
@@ -27,15 +28,15 @@ use super::state::State;
 pub struct Integrate {
     /// The process id to inspect
     #[arg(short = 'i', long = "process-id", value_name = "ID")]
-    pub process_id: usize,
+    pub process_id: Option<usize>,
 
     /// The name of the process to inspect
     #[arg(short = 'n', long = "name", value_name = "NAME")]
-    pub integrand_name: String,
+    pub integrand_name: Option<String>,
 
     /// The path to store results in
     #[arg(short = 'p', long, value_hint = clap::ValueHint::FilePath)]
-    pub result_path: PathBuf,
+    pub result_path: Option<PathBuf>,
 
     /// Number of cores to parallelize over
     #[arg(short = 'c', long)]
@@ -43,7 +44,7 @@ pub struct Integrate {
 
     /// The path to run the integrationg within
     #[arg(short = 'w', long, value_hint = clap::ValueHint::DirPath)]
-    pub workspace_path: PathBuf,
+    pub workspace_path: Option<PathBuf>,
 
     /// Specify the target integration result to compare against
     #[arg(short = 't', num_args = 2, long)]
@@ -56,28 +57,94 @@ pub struct Integrate {
 
 impl Integrate {
     pub fn run(&self, state: &mut State) -> Result<IntegrationResult> {
+        let state_name: String = state
+            .save_path
+            .file_stem()
+            .unwrap()
+            .to_string_lossy()
+            .into_owned();
+        let workspace_path = if let Some(p) = self.workspace_path.clone() {
+            p
+        } else {
+            PathBuf::from(format!("./{}_integration_workspace", state_name))
+        };
+
+        let result_path = if let Some(p) = self.result_path.clone() {
+            p
+        } else {
+            PathBuf::from(format!(
+                "./{}_integration_workspace/integration_result.json",
+                state_name
+            ))
+        };
+
         let target = if let Some(t) = self.target.clone() {
             Some(Complex::new(F(t[0]), F(t[1])))
         } else {
             None
         };
 
+        let process_id = if let Some(id) = self.process_id {
+            if id >= state.process_list.processes.len() {
+                return Err(color_eyre::eyre::eyre!(
+                    "Invalid process id {}. Number of processes: {}",
+                    id,
+                    state.process_list.processes.len()
+                ));
+            }
+            id
+        } else {
+            if state.process_list.processes.is_empty() {
+                return Err(color_eyre::eyre::eyre!("No processes generated yet."));
+            }
+            if state.process_list.processes.is_empty() {
+                return Err(color_eyre::eyre::eyre!("No processes generated yet."));
+            } else if state.process_list.processes.len() > 1 {
+                return Err(color_eyre::eyre::eyre!(
+                    "There are {} processes available. Please specify a process id.",
+                    state.process_list.processes.len()
+                ));
+            } else {
+                0
+            }
+        };
+        let all_integrand_names = state.process_list.processes[process_id]
+            .collection
+            .get_integrand_names();
+        let integrand_name = if let Some(name) = self.integrand_name.clone() {
+            if !all_integrand_names.contains(&name.as_str()) {
+                return Err(color_eyre::eyre::eyre!(
+                    "No integrand named '{}' in process id {}. Available integrands: {:?}",
+                    name,
+                    process_id,
+                    all_integrand_names
+                ));
+            }
+            name
+        } else {
+            if all_integrand_names.len() != 1 {
+                return Err(color_eyre::eyre::eyre!(
+                    "Multiple integrands in process id {}. Please specify one of: {:?}",
+                    process_id,
+                    all_integrand_names
+                ));
+            }
+            all_integrand_names[0].to_string()
+        };
+
         state.process_list.warm_up(&state.model)?;
 
-        if self.restart && self.workspace_path.exists() {
-            fs::remove_dir_all(&self.workspace_path)?;
+        if self.restart && workspace_path.exists() {
+            fs::remove_dir_all(&workspace_path)?;
         }
 
         let gloop_integrand = state
             .process_list
-            .get_integrand_mut(self.process_id, &self.integrand_name)?;
+            .get_integrand_mut(process_id, &integrand_name)?;
 
-        status_info!(
-            "Gammaloop now integrates {}",
-            self.integrand_name.green().bold()
-        );
+        status_info!("Gammaloop now integrates {}", integrand_name.green().bold());
 
-        let path_to_state = self.workspace_path.join("integration_state");
+        let path_to_state = workspace_path.join("integration_state");
 
         let integration_state = match fs::read(path_to_state) {
             Ok(state_bytes) => {
@@ -94,7 +161,7 @@ impl Integrate {
                 .expect("Could not deserialize state")
                 .0;
 
-                let path_to_workspace_settings = self.workspace_path.join("settings.toml");
+                let path_to_workspace_settings = workspace_path.join("settings.toml");
 
                 let workspace_settings: RuntimeSettings =
                     RuntimeSettings::from_file(path_to_workspace_settings, "workspace settings")?;
@@ -129,11 +196,11 @@ impl Integrate {
             }
         };
 
-        if !self.workspace_path.exists() {
-            fs::create_dir_all(&self.workspace_path)?;
+        if !workspace_path.exists() {
+            fs::create_dir_all(&workspace_path)?;
             info!(
                 "Created workspace directory at {}",
-                self.workspace_path.display()
+                workspace_path.display()
             );
         }
         let settings = gloop_integrand.get_settings().clone();
@@ -144,10 +211,10 @@ impl Integrate {
             |set| gloop_integrand.user_data_generator(self.n_cores, set),
             target,
             integration_state,
-            Some(self.workspace_path.clone()),
+            Some(workspace_path.clone()),
         );
 
-        fs::write(&self.result_path, serde_json::to_string(&result)?)?;
+        fs::write(&result_path, serde_json::to_string(&result)?)?;
 
         Ok(result)
     }

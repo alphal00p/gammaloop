@@ -1,5 +1,8 @@
-use ::tracing::{debug, info, level_filters::LevelFilter};
+use ::tracing::debug;
+use ::tracing::info;
+use ::tracing::level_filters::LevelFilter;
 use clap::{Args, CommandFactory, FromArgMatches, Parser, Subcommand};
+use gammalooprs::processes::ProcessList;
 use reedline::DefaultPrompt;
 use reedline::DefaultPromptSegment;
 use reedline::FileBackedHistory;
@@ -195,8 +198,12 @@ impl Cli {
                 state.bench(samples, process_id, process_name, n_cores)?;
             }
             Commands::Import(s) => match s {
-                Import::Amplitude { path } => {
-                    state.import_amplitude(path, None)?;
+                Import::Amplitude {
+                    path,
+                    process_id,
+                    integrand_name,
+                } => {
+                    state.import_amplitude(path, None, process_id, integrand_name)?;
                 }
                 Import::Model(im) => {
                     im.run(state)?;
@@ -293,10 +300,24 @@ impl Cli {
                         }
                     }
                 }
-
                 return Ok(a);
             }
-            _ => {}
+            Commands::Reset(Reset::Processes {}) => {
+                let n_processes = state.process_list.processes.len();
+                state.process_list = ProcessList::default();
+                status_info!(
+                    "All {} processes have been cleared from the current state.",
+                    n_processes
+                );
+            }
+            Commands::Batch {
+                process_file: _process_file,
+                batch_input_file: _batch_input_file,
+                name: _name,
+                output_name: _output_name,
+            } => {
+                todo!("Batch command not implemented yet");
+            }
         }
         Ok(ControlFlow::Continue(()))
     }
@@ -542,7 +563,12 @@ pub enum Import {
         // #[arg(short = 'p')]
         #[arg(value_hint = clap::ValueHint::FilePath)]
         path: PathBuf,
-        // format: String,
+
+        #[arg(short = 'i')]
+        process_id: Option<usize>,
+
+        #[arg(short = 'n')]
+        integrand_name: Option<String>,
     },
 }
 
@@ -563,6 +589,11 @@ pub enum Save {
     },
     /// regenerate the schema files
     Schema {},
+}
+
+#[derive(Subcommand, Debug, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
+pub enum Reset {
+    Processes {},
 }
 
 #[derive(Subcommand, Debug, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
@@ -599,6 +630,9 @@ pub enum Commands {
     Save(Save),
 
     Run(Run),
+
+    #[clap(subcommand)]
+    Reset(Reset),
 
     Integrate(Integrate),
 
