@@ -11,6 +11,7 @@ use clap::Args;
 use color_eyre::Result;
 use colored::Colorize;
 use eyre::{eyre, Context};
+use gammalooprs::utils::serde_utils::IsDefault;
 use schemars::{schema_for, JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
@@ -201,8 +202,12 @@ impl CommandHistory {
 }
 
 #[derive(Debug, Serialize, Deserialize, Default, JsonSchema, PartialEq)]
+#[serde(default, deny_unknown_fields)]
 pub struct RunHistory {
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub default_runtime_settings: RuntimeSettings,
+
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub global_settings: GlobalSettings,
     // #[serde(with = "serde_yaml::with::singleton_map_recursive")]
     // #[schemars(with = "Vec<CommandHistory>")]
@@ -264,25 +269,10 @@ impl RunHistory {
         self.global_settings = other.global_settings;
     }
 
-    pub fn new(path: impl AsRef<Path>) -> Result<Self> {
-        let runhistory: Self = match Self::from_file(path.as_ref(), "run history") {
-            Ok(r) => {
-                status_debug!(
-                    "Loaded run history from YAML file {}",
-                    path.as_ref().display()
-                );
-                r
-            }
-            Err(e) => {
-                status_warn!(
-                    "Could not load run history at {}: {}, loading default",
-                    path.as_ref().display(),
-                    e
-                );
+    pub fn load(path: impl AsRef<Path>) -> Result<Self> {
+        status_debug!("Loaded run history from file {}", path.as_ref().display());
 
-                Default::default()
-            }
-        };
+        let runhistory = Self::from_file(path.as_ref(), "run history")?;
         runhistory.global_settings.sync_settings()?;
 
         Ok(runhistory)

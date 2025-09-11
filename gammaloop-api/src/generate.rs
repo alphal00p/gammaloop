@@ -89,11 +89,6 @@ pub struct SpecArgs {
     #[arg(value_name = "TOKENS", num_args = 1..)]
     pub tokens: Vec<String>,
 
-    // --------- High-level switch ---------
-    /// Treat the process as an amplitude (otherwise as cross-section/forward).
-    #[arg(long = "amplitude", short = 'a', default_value_t = false)]
-    pub amplitude: bool,
-
     // --------- Generation options that influence FeynGenOptions ---------
     /// Number of threads
     #[arg(short = 'n', long = "num-threads")]
@@ -561,9 +556,10 @@ impl Generate {
             Some(GenerateCmd::Xs(args)) => {
                 let model: &Model = &state.model;
                 let mut args = args.clone();
-                args.amplitude = false; // force XS
                 let spec = must(parse_spec_with_model(
-                    &args, /*preferred*/ false, model,
+                    &args,
+                    GenerationType::CrossSection,
+                    model,
                 ));
                 // Try a generation call; report count.
                 let grouping = spec.numerator_grouping.clone().unwrap_or_else(|| {
@@ -610,8 +606,11 @@ impl Generate {
             Some(GenerateCmd::Amp(args)) => {
                 let model: &Model = &state.model;
                 let mut args = args.clone();
-                args.amplitude = true; // force AMP
-                let spec = must(parse_spec_with_model(&args, /*preferred*/ true, model));
+                let spec = must(parse_spec_with_model(
+                    &args,
+                    GenerationType::Amplitude,
+                    model,
+                ));
                 let grouping = spec.numerator_grouping.clone().unwrap_or_else(|| {
                     NumeratorAwareGraphGroupingOption::new_with_attributes(
                         "group_identical_graphs_up_to_scalar_rescaling",
@@ -703,7 +702,7 @@ fn must<T, E: std::fmt::Display>(r: std::result::Result<T, E>) -> T {
 
 pub fn parse_spec_with_model(
     args: &SpecArgs,
-    preferred_amplitude: bool,
+    generation_type: GenerationType,
     model: &Model,
 ) -> std::result::Result<ProcessSpec, ParseError> {
     let raw = args.tokens.join(" ");
@@ -739,18 +738,11 @@ pub fn parse_spec_with_model(
     // Resolve vetoed particles to PDGs and validate they exist
     let veto_pdgs = resolve_pdgs(model, &veto_names.iter().cloned().collect::<Vec<_>>())?;
 
-    // Determine generation type
-    let is_amp = if args.amplitude {
-        true
-    } else {
-        preferred_amplitude
-    };
-
     // Build FeynGenOptions with filters and PDGs
     let numerator_grouping = build_grouping_option(args);
     let feyngen = feyngen_from_spec_args(
         args,
-        is_amp,
+        generation_type,
         &pert,
         &amp_couplings,
         &xs_couplings,
@@ -1092,7 +1084,7 @@ fn split_ws(s: &str) -> Vec<String> {
 
 fn feyngen_from_spec_args(
     a: &SpecArgs,
-    amplitude: bool,
+    generation_type: GenerationType,
     pert: &Perturbative,
     amp_couplings: &BTreeMap<String, OrderRange>,
     xs_couplings: &BTreeMap<CouplingKey, OrderRange>,
@@ -1101,12 +1093,6 @@ fn feyngen_from_spec_args(
     final_sets_pdgs: &[Vec<i64>],
     veto_pdgs: &[i64],
 ) -> FeynGenOptions {
-    let generation_type = if amplitude {
-        GenerationType::Amplitude
-    } else {
-        GenerationType::CrossSection
-    };
-
     // Decide vacuum-like topology from PDGs
     let is_vacuum = if initial_pdgs.is_empty() {
         match generation_type {
@@ -1559,7 +1545,6 @@ mod tests {
     fn base_args(tokens: &str) -> SpecArgs {
         SpecArgs {
             tokens: tokens.split_whitespace().map(|x| x.to_string()).collect(),
-            amplitude: false,
             num_threads: None,
             clear_existing_processes: false,
             filter_selfenergies: None,
@@ -1603,15 +1588,13 @@ mod tests {
     fn parse_ok_amp(s: &str) -> ProcessSpec {
         let model = &load_generic_model("sm");
         let mut a = base_args(s);
-        a.amplitude = true;
-        parse_spec_with_model(&a, true, model).unwrap()
+        parse_spec_with_model(&a, GenerationType::Amplitude, model).unwrap()
     }
 
     fn parse_ok_xs(s: &str) -> ProcessSpec {
         let model = &load_generic_model("sm");
         let mut a = base_args(s);
-        a.amplitude = false;
-        parse_spec_with_model(&a, false, model).unwrap()
+        parse_spec_with_model(&a, GenerationType::CrossSection, model).unwrap()
     }
 
     #[test]
@@ -1721,7 +1704,7 @@ mod tests {
         let model = &load_generic_model("sm");
 
         let args = base_args("e+ > z [ {{}} ]");
-        let err = parse_spec_with_model(&args, false, model).unwrap_err();
+        let err = parse_spec_with_model(&args, GenerationType::CrossSection, model).unwrap_err();
         assert_eq!(err, ParseError::InvalidToken("{{}}".into()));
     }
 
@@ -1731,7 +1714,7 @@ mod tests {
         let model = &load_generic_model("sm");
 
         let args = base_args("e+ e-  z z");
-        let err = parse_spec_with_model(&args, false, model).unwrap_err();
+        let err = parse_spec_with_model(&args, GenerationType::CrossSection, model).unwrap_err();
         assert!(matches!(err, ParseError::MissingArrow));
     }
 
@@ -1867,10 +1850,9 @@ mod tests {
         let model = &load_generic_model("sm");
 
         // Intentionally scrambled input order; output must be canonical.
-        let mut args =
+        let args =
             base_args("e+ e- > { Z Z, a a } / u d QED==2 QCD>=1 QED^2<=4 QCD^2>=2 [ QED=1 QCD=2 ]");
-        args.amplitude = true;
-        let ps = parse_spec_with_model(&args, true, model).unwrap();
+        let ps = parse_spec_with_model(&args, GenerationType::Amplitude, model).unwrap();
 
         let long = ps.process_shell_name(false);
 
@@ -1889,11 +1871,10 @@ mod tests {
         let model = &load_generic_model("sm");
 
         // Mixed options with non-canonical input ordering.
-        let mut args = base_args(
+        let args = base_args(
             "mu+ mu- > g g / ghg gha QED==1 QCD<=3 [ {2} QED=0 QCD=1 ] QED^2==0 QCD^2>=2",
         );
-        args.amplitude = true;
-        let ps = parse_spec_with_model(&args, true, model).unwrap();
+        let ps = parse_spec_with_model(&args, GenerationType::Amplitude, model).unwrap();
 
         let r = ps.repr_str();
 
@@ -1908,8 +1889,7 @@ mod tests {
         let model = &load_generic_model("sm");
 
         let mut args = base_args("e+ e- > z z [ {{2}} QED=2 QCD=1 {1} ]");
-        args.amplitude = true;
-        let ps = parse_spec_with_model(&args, true, model).unwrap();
+        let ps = parse_spec_with_model(&args, GenerationType::CrossSection, model).unwrap();
 
         let r = ps.repr_str();
 
@@ -1924,8 +1904,7 @@ mod tests {
         let model = &load_generic_model("sm");
 
         let mut args = base_args("W+ W- > {}");
-        args.amplitude = true;
-        let ps = parse_spec_with_model(&args, true, model).unwrap();
+        let ps = parse_spec_with_model(&args, GenerationType::CrossSection, model).unwrap();
 
         // Short form uses only the base slug and sanitizes +/- and ~.
         let short = ps.process_shell_name(true);

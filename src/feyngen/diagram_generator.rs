@@ -21,6 +21,7 @@ use symbolica::domains::finite_field::PrimeIteratorU64;
 use symbolica::function;
 use symbolica::graph::GenerationSettings;
 use symbolica::id::Context;
+use tracing::instrument;
 
 use ahash::AHashMap;
 use ahash::AHashSet;
@@ -38,7 +39,6 @@ use super::SnailFilterOptions;
 use super::TadpolesFilterOptions;
 use super::{FeynGenError, FeynGenOptions};
 
-use crate::disable;
 use crate::feyngen::half_edge_filters::FeynGenHedgeGraph;
 use crate::graph::ext::HedgeGraphExt;
 use crate::graph::Graph;
@@ -52,6 +52,7 @@ use crate::numerator::Numerator;
 use crate::numerator::SymbolicExpression;
 use crate::numerator::{ExpressionState, GlobalPrefactor};
 use crate::utils::{self, W_};
+use crate::{disable, status_info};
 use crate::{
     feyngen::{FeynGenFilter, GenerationType},
     model::Model,
@@ -96,11 +97,11 @@ impl EdgeColor {
 }
 
 #[derive(Clone)]
-struct CanonizedGraphInfo {
-    canonized_graph: SymbolicaGraph<NodeColorWithoutVertexRule, String>,
-    graph: SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>,
-    graph_with_canonized_flow: SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>,
-    symmetry_factor: Atom,
+pub(crate) struct CanonizedGraphInfo {
+    pub canonized_graph: SymbolicaGraph<NodeColorWithoutVertexRule, String>,
+    pub graph: SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>,
+    pub graph_with_canonized_flow: SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>,
+    pub symmetry_factor: Atom,
 }
 
 pub trait NodeColorFunctions: Sized + std::fmt::Display {
@@ -277,6 +278,7 @@ impl FeynGen {
         Self { options }
     }
 
+    #[instrument(skip_all)]
     pub(crate) fn evaluate_overall_factor(factor: AtomView) -> Atom {
         let mut res = factor.to_owned();
         for header in [
@@ -439,6 +441,8 @@ impl FeynGen {
         }
         None
     }
+
+    #[instrument(skip_all)]
     pub(crate) fn veto_special_topologies(
         model: &Model,
         graph: &SymbolicaGraph<NodeColorWithoutVertexRule, EdgeColor>,
@@ -477,11 +481,11 @@ impl FeynGen {
                 .iter()
                 .position(|n| n.data.external_tag == ((max_external - shift as usize) as i32))
                 .unwrap();
-            debug!(
-                "Spanning tree root position: external_tag={},node_position={}",
-                max_external - shift as usize,
-                spanning_tree_root_node_position
-            );
+            // println!(
+            //     "Spanning tree root position: external_tag={},node_position={}",
+            //     max_external - shift as usize,
+            //     spanning_tree_root_node_position
+            // );
 
             FeynGen::veto_special_topologies_with_spanning_tree_root(
                 model,
@@ -2379,6 +2383,7 @@ impl FeynGen {
     }
 
     #[allow(clippy::too_many_arguments)]
+    #[instrument(skip_all)]
     pub fn generate(
         &self,
         model: &Model,
@@ -2601,7 +2606,7 @@ impl FeynGen {
         // Record the start time
         let start = Instant::now();
         let mut last_step = start;
-        info!(
+        status_info!(
             "{} | Δ={} | {:<95}",
             format!("{:<6}", utils::format_wdhms(0)).blue().bold(),
             format!("{:<6}", utils::format_wdhms(0)).blue(),
@@ -2626,7 +2631,7 @@ impl FeynGen {
         // Immediately drop lower loop count contributions
         graphs.retain(|g, _| g.num_loops() >= self.options.loop_count_range.0);
         let mut step = Instant::now();
-        info!(
+        status_info!(
             "{} | Δ={} | {:<95}{}",
             format!("{:<6}", utils::format_wdhms_from_duration(step - start))
                 .blue()
@@ -2697,7 +2702,7 @@ impl FeynGen {
                 bar.finish_and_clear();
 
                 step = Instant::now();
-                info!(
+                status_info!(
                     "{} | Δ={} | {:<95}{}",
                     format!("{:<6}", utils::format_wdhms_from_duration(step - start))
                         .blue()
@@ -2795,7 +2800,7 @@ impl FeynGen {
             .collect::<HashMap<_, _>>();
 
         step = Instant::now();
-        info!(
+        status_info!(
             "{} | Δ={} | {:<95}{}",
             format!("{:<6}", utils::format_wdhms_from_duration(step - start))
                 .blue()
@@ -2865,7 +2870,7 @@ impl FeynGen {
         processed_graphs.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
 
         step = Instant::now();
-        info!(
+        status_info!(
             "{} | Δ={} | {:<95}{}",
             format!("{:<6}", utils::format_wdhms_from_duration(step - start))
                 .blue()
@@ -2879,7 +2884,7 @@ impl FeynGen {
         filters.apply_filters(&mut processed_graphs, model, &pool, &progress_bar_style)?;
 
         step = Instant::now();
-        info!(
+        status_info!(
             "{} | Δ={} | {:<95}{}",
             format!("{:<6}", utils::format_wdhms_from_duration(step - start))
                 .blue()
@@ -2928,7 +2933,7 @@ impl FeynGen {
         })?;
         bar.finish_and_clear();
         step = Instant::now();
-        info!(
+        status_info!(
             "{} | Δ={} | {:<95}{}",
             format!("{:<6}", utils::format_wdhms_from_duration(step - start))
                 .blue()
@@ -2983,7 +2988,7 @@ impl FeynGen {
             bar.finish_and_clear();
 
             step = Instant::now();
-            info!(
+            status_info!(
                 "{} | Δ={} | {:<95}{}",
                 format!("{:<6}", utils::format_wdhms_from_duration(step - start))
                     .blue()
@@ -3037,7 +3042,7 @@ impl FeynGen {
             bar.finish_and_clear();
 
             step = Instant::now();
-            info!(
+            status_info!(
                 "{} | Δ={} | {:<95}{}",
                 format!("{:<6}", utils::format_wdhms_from_duration(step - start))
                     .blue()
@@ -3226,7 +3231,7 @@ impl FeynGen {
         }
 
         step = Instant::now();
-        info!(
+        status_info!(
             "{} | Δ={} | {:<95}{}",
             format!("{:<6}", utils::format_wdhms_from_duration(step - start))
                 .blue()
@@ -3401,7 +3406,7 @@ impl FeynGen {
         });
 
         step = Instant::now();
-        info!(
+        status_info!(
             "{} | Δ={} | {:<95}{}",
             format!("{:<6}", utils::format_wdhms_from_duration(step - start))
                 .blue()
@@ -3453,6 +3458,13 @@ impl FeynGen {
                             return Ok(())
                         }
                     }
+                    let bare_graph = Graph::from_symbolica_graph(
+                        model,
+                        graph_name.clone(),
+                        &canonical_graph.graph_with_canonized_flow,
+                        canonical_graph.symmetry_factor.clone(),
+                        external_connections.clone(),
+                    )?;
                     // let bare_graph = BareGraph::from_symbolica_graph(
                     //     model,
                     //     graph_name.clone(),
@@ -3741,7 +3753,7 @@ impl FeynGen {
             )
         };
         step = Instant::now();
-        info!(
+        status_info!(
             "{} | Δ={} | {:<95}{} ({} isomorphically unique graph{}, {} color zero{}, {} lorentz zero{}, {} grouped and {} cancellation{})",
             format!("{:<6}", utils::format_wdhms_from_duration(step - start)).blue().bold(),
             format!(
@@ -3799,7 +3811,7 @@ impl FeynGen {
             total_sym_factor =
                 total_sym_factor + FeynGen::evaluate_overall_factor(g.overall_factor.as_view());
         }
-        info!(
+        status_info!(
             "( Sum of the symmetry factors from each graph generated = {} ) ",
             format!("{}", total_sym_factor).green()
         );

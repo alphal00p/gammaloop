@@ -258,7 +258,7 @@ impl Cli {
                 }
             },
             Commands::Run(Run { path }) => {
-                let mut new_run_history = RunHistory::new(path)?;
+                let mut new_run_history = RunHistory::load(path)?;
                 *global_settings = new_run_history.global_settings.clone();
                 *default_runtime_settings = new_run_history.default_runtime_settings.clone();
                 let res =
@@ -401,7 +401,29 @@ impl Cli {
     fn get_run_history(&self) -> Result<RunHistory> {
         let default_path = self.state_folder.join("run.toml");
         let path = self.run_history.as_ref().unwrap_or(&default_path);
-        RunHistory::new(path)
+        if !path.exists() {
+            status_info!("Loading default state at {}", path.display());
+            Ok(RunHistory::default())
+        } else {
+            match RunHistory::load(path) {
+                Ok(r) => Ok(r),
+                Err(e) => {
+                    if path != &default_path {
+                        Err(eyre!(
+                            "Could not load run history from {}: {}",
+                            path.display(),
+                            e
+                        ))
+                    } else {
+                        info!(
+                            "No valid run history found at {}, creating new default run history",
+                            path.display()
+                        );
+                        Ok(RunHistory::default())
+                    }
+                }
+            }
+        }
     }
 
     pub fn save(

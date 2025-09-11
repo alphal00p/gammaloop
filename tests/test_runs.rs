@@ -25,7 +25,7 @@ use tracing::{debug, warn};
 fn run_card(resource_path: impl AsRef<Path>) -> Result<RunHistory> {
     initialise()?;
 
-    RunHistory::new(PathBuf::from("./tests/resources/run_cards").join(resource_path))
+    RunHistory::load(PathBuf::from("./tests/resources/run_cards").join(resource_path))
 }
 
 const TESTS_WORKSPACE: &str = "./tests/workspace";
@@ -301,6 +301,21 @@ fn scalar_box() -> Result<()> {
         &integral_with_cache.result.im,
         &F(1e-4),
     );
+
+    clean_test(&cli);
+
+    Ok(())
+}
+
+#[test]
+fn scalar_epem_ddx_generation() -> Result<()> {
+    let mut cli = run_run_card(
+        "sm_load.toml",
+        get_tests_workspace_path().join("epem_ddx_generation"),
+        Some("epem_ddx_generation".to_string()),
+    )?;
+
+    cli.run_command("generate amp e+ e- > d d~")?;
 
     clean_test(&cli);
 

@@ -56,7 +56,12 @@ symbolica = { version = "0.18.0", default-features = false, features = [
 idenso = { version = "0.2.3", features = ["bincode"] }
 spenso-hep-lib = { version = "0.1.4" }
 spenso = { version = "0.5.4", features = ["shadowing"] }
-linnet = { version = "0.12.0", features = ["drawing", "serde", "bincode"] }
+linnet = { version = "0.12.0", features = [
+    "drawing",
+    "serde",
+    "bincode",
+    "symbolica",
+] }
 
 vakint = { git = "https://github.com/alphal00p/vakint", rev = "e44c210ded3936048615d39872022a0b6ef18454" }
 momtrop = { git = "https://github.com/alphal00p/momtrop", features = ["log"] }

@@ -2072,6 +2072,7 @@ dependencies = [
  "ref-ops",
  "serde",
  "similar-asserts",
+ "symbolica",
  "thiserror 2.0.16",
 ]
 

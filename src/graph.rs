@@ -2,6 +2,7 @@ use std::ops::Index;
 
 use ahash::HashSet;
 use bincode_trait_derive::{Decode, Encode};
+use color_eyre::Result;
 use itertools::Itertools;
 use linnet::{
     half_edge::{
@@ -15,12 +16,15 @@ use log::debug;
 
 use rand::{rngs::SmallRng, Rng, SeedableRng};
 // use petgraph::Direction::Outgoing;
-use symbolica::atom::Atom;
+use symbolica::{atom::Atom, graph::Graph as SymbolicaGraph};
 use typed_index_collections::TiVec;
 
 use crate::{
     define_index,
+    feyngen::diagram_generator::{EdgeColor, NodeColorWithVertexRule},
     gammaloop_integrand::{LmbMultiChannelingSetup, ParamBuilder},
+    graph::{edge::ParseEdge, vertex::ParseVertex},
+    model::Model,
     momentum::{Dep, ExternalMomenta, PolDef},
     momentum_sample::ExternalIndex,
     numerator::{symbolica_ext::AtomCoreExt, GlobalPrefactor, ParsingNet},
@@ -229,6 +233,35 @@ impl Graph {
                 .iter()
                 .all(|sign| sign.is_zero())
         })
+    }
+
+    pub(crate) fn from_symbolica_graph(
+        model: &Model,
+        graph_name: impl AsRef<str>,
+        graph: &SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>,
+        symmetry_factor: Atom,
+        external_connections: Vec<(Option<usize>, Option<usize>)>,
+    ) -> Result<Self> {
+        //let builder = HedgeGraphBuilder::new();
+
+        let input_graph: HedgeGraph<_, _, ()> = graph.clone().into();
+
+        // Now build a parseGraph
+
+        todo!()
+    }
+}
+
+impl ParseEdge {
+    pub fn from_symbolica_edge(model: &Model, edge_color: &EdgeColor) -> Self {
+        let particle = model.get_particle_from_pdg(edge_color.pdg);
+        ParseEdge::new(particle)
+    }
+}
+
+impl From<&NodeColorWithVertexRule> for ParseVertex {
+    fn from(value: &NodeColorWithVertexRule) -> Self {
+        value.vertex_rule.clone().into()
     }
 }
 

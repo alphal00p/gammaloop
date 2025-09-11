@@ -29,6 +29,8 @@ pub enum FeynGenError {
     SymmetryFactorError(String),
     #[error("Could not numerically evaluate numerator: {0}")]
     NumeratorEvaluationError(String),
+    #[error(transparent)]
+    Eyre(#[from] color_eyre::Report),
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
