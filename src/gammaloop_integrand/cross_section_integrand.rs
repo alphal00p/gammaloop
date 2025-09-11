@@ -3,6 +3,7 @@ use bincode_trait_derive::Decode;
 use color_eyre::Result;
 use colored::Colorize;
 use itertools::Itertools;
+use linnet::half_edge::involution::EdgeVec;
 use log::{debug, info};
 use spenso::algebra::complex::Complex;
 use std::{
@@ -181,6 +182,10 @@ pub struct CrossSectionGraphTerm {
 }
 
 impl GraphTerm for CrossSectionGraphTerm {
+    fn get_mut_param_builder(&mut self) -> &mut ParamBuilder<f64> {
+        todo!()
+    }
+
     fn warm_up(&mut self, settings: &RuntimeSettings, model: &Model) -> Result<()> {
         self.estimated_scale = Some(
             self.graph
@@ -223,6 +228,10 @@ impl GraphTerm for CrossSectionGraphTerm {
         unimplemented!(
             "Don't know how to generate subgraph table for forward scattering graphs yet"
         )
+    }
+
+    fn get_real_mass_vector(&self) -> EdgeVec<Option<F<f64>>> {
+        todo!()
     }
 }
 

@@ -71,6 +71,7 @@ pub struct AmplitudeGraphTerm {
     pub graph: Graph,
     pub estimated_scale: Option<F<f64>>,
     pub param_builder: ParamBuilder,
+    pub real_mass_vec: Option<EdgeVec<Option<F<f64>>>>,
 }
 
 /// Num(sigma_1,sigma_2,...)*(CFF_1 delta(edge(1),1) delta_(1,1,1,-1,1)+CFF_3 delta_(1,1,1,-1,1)+CFF_2 delta_(1,1,1,-1,1))
@@ -165,6 +166,7 @@ impl AmplitudeGraphTerm {
                 .esurface_cache
                 .clone(),
             param_builder: graph.graph.param_builder.clone(),
+            real_mass_vec: None,
         })
     }
 
@@ -295,6 +297,8 @@ impl AmplitudeGraphTerm {
 
         debug!(bare_cff = format!("{result:16e}"), "{}", self.graph.name);
         debug!(cts = format!("{sum_of_cts:16e}"), "{}", self.graph.name);
+        status_debug!("result: {result:16e}");
+        status_debug!("sum_of_cts: {sum_of_cts:16e}");
 
         debug!(
             value = format!("{sum_of_cts:16e}"),
@@ -361,6 +365,12 @@ impl GraphTerm for AmplitudeGraphTerm {
 
         self.param_builder = self.graph.param_builder.clone();
 
+        let masses = self
+            .graph
+            .new_edgevec(|e, _, _| e.mass_value(model, &self.param_builder).map(|c| c.re));
+
+        self.real_mass_vec = Some(masses);
+
         Ok(())
     }
 
@@ -399,6 +409,17 @@ impl GraphTerm for AmplitudeGraphTerm {
             .tropical_sampler
             .as_ref()
             .expect("Tropical sampler should be set.")
+    }
+
+    fn get_mut_param_builder(&mut self) -> &mut ParamBuilder<f64> {
+        &mut self.param_builder
+    }
+
+    fn get_real_mass_vector(&self) -> EdgeVec<Option<F<f64>>> {
+        self.real_mass_vec
+            .as_ref()
+            .expect("real mass vector should be set")
+            .clone()
     }
 }
 

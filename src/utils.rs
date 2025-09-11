@@ -60,7 +60,7 @@ use symbolica::domains::rational::Rational;
 // };
 // use symbolica_community::physics::tensors::structure::SpensoStucture;
 // use symbolica::domains::Field;
-use crate::MAX_LOOP;
+use crate::{status_debug, MAX_LOOP};
 #[allow(unused_imports)]
 use log::{debug, info};
 use symbolica::atom::Atom;
@@ -2570,6 +2570,7 @@ pub(crate) fn global_parameterize<T: FloatLike>(
     settings: &ParameterizationSettings,
     force_radius: bool,
 ) -> (Vec<[F<T>; 3]>, F<T>) {
+    status_debug!("b: {}", settings.b);
     let zero = e_cm_squared.zero();
     let one = zero.one();
     match settings.mode {

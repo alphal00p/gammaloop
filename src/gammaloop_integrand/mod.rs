@@ -9,6 +9,7 @@ use crate::model::Model;
 use crate::momentum::Rotation;
 use crate::momentum_sample::{BareMomentumSample, LoopMomenta, MomentumSample};
 use crate::settings::GlobalSettings;
+use crate::status_debug;
 use crate::utils::{format_for_compare_digits, get_n_dim_for_n_loop_momenta, FloatLike, F};
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::owo_colors::OwoColorize;
@@ -18,6 +19,7 @@ use enum_dispatch::enum_dispatch;
 use eyre::Context;
 use gammaloop_sample::{parameterize, DiscreteGraphSample, GammaLoopSample};
 use itertools::Itertools;
+use linnet::half_edge::involution::EdgeVec;
 use momtrop::float::MomTropFloat;
 use momtrop::SampleGenerator;
 use serde::{Deserialize, Serialize};
@@ -514,6 +516,8 @@ pub trait GraphTerm {
     fn get_lmbs(&self) -> &TiVec<LmbIndex, LoopMomentumBasis>;
     fn get_num_orientations(&self) -> usize;
     fn get_tropical_sampler(&self) -> &SampleGenerator<3>;
+    fn get_mut_param_builder(&mut self) -> &mut ParamBuilder<f64>;
+    fn get_real_mass_vector(&self) -> EdgeVec<Option<F<f64>>>;
 }
 
 fn evaluate_all_rotations<T: FloatLike, I: GammaloopIntegrand>(
@@ -845,42 +849,42 @@ fn evaluate_sample<I: GammaloopIntegrand>(
     for stability_level in stability_iterator.into_iter() {
         let before_parameterization = std::time::Instant::now();
 
-        let ((results, ltd_evaluation_time), parameterization_time) = match stability_level
-            .precision
-        {
-            Precision::Double => {
-                if let Ok(gammaloop_sample) = parameterize::<f64, I>(sample, integrand) {
-                    debug!(
-                        jacobian =
-                            format!("{:+16e}", gammaloop_sample.get_default_sample().jacobian())
-                    );
-                    let parameterization_time = before_parameterization.elapsed();
-                    (
-                        evaluate_all_rotations(integrand, model, &gammaloop_sample),
-                        parameterization_time,
-                    )
-                } else {
-                    continue;
+        let ((results, ltd_evaluation_time), parameterization_time) =
+            match stability_level.precision {
+                Precision::Double => {
+                    if let Ok(gammaloop_sample) = parameterize::<f64, I>(sample, integrand) {
+                        status_debug!(
+                            "jacobian: {:+16e}",
+                            gammaloop_sample.get_default_sample().jacobian()
+                        );
+                        let parameterization_time = before_parameterization.elapsed();
+                        (
+                            evaluate_all_rotations(integrand, model, &gammaloop_sample),
+                            parameterization_time,
+                        )
+                    } else {
+                        continue;
+                    }
                 }
-            }
-            Precision::Quad => {
-                if let Ok(gammaloop_sample) = parameterize::<f128, I>(sample, integrand) {
-                    debug!(
-                        jacobian = format!("{}", gammaloop_sample.get_default_sample().jacobian())
-                    );
-                    let parameterization_time = before_parameterization.elapsed();
-                    (
-                        evaluate_all_rotations(integrand, model, &gammaloop_sample),
-                        parameterization_time,
-                    )
-                } else {
-                    continue;
+                Precision::Quad => {
+                    if let Ok(gammaloop_sample) = parameterize::<f128, I>(sample, integrand) {
+                        status_debug!(
+                            "jacobian: {:+16e}",
+                            gammaloop_sample.get_default_sample().jacobian()
+                        );
+                        let parameterization_time = before_parameterization.elapsed();
+                        (
+                            evaluate_all_rotations(integrand, model, &gammaloop_sample),
+                            parameterization_time,
+                        )
+                    } else {
+                        continue;
+                    }
                 }
-            }
-            Precision::Arb => {
-                todo!()
-            }
-        };
+                Precision::Arb => {
+                    todo!()
+                }
+            };
 
         let (average_result, is_stable) = if integrand.get_settings().stability.check_on_norm {
             stability_check_on_norm(

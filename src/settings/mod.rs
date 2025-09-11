@@ -65,8 +65,12 @@ mod tests {
     use crate::{
         momentum::{Dep, ExternalMomenta, SignOrZero},
         settings::{
-            global::GenerationSettings, runtime::kinematic::Externals, GlobalSettings,
-            KinematicsSettings, RuntimeSettings,
+            global::GenerationSettings,
+            runtime::{
+                kinematic::Externals, DiscreteGraphSamplingSettings, DiscreteGraphSamplingType,
+                GammaloopTropicalSamplingSettings,
+            },
+            GlobalSettings, KinematicsSettings, RuntimeSettings, SamplingSettings,
         },
         utils::{
             serde_utils::{SmartSerde, SHOWDEFAULTS},
@@ -240,5 +244,22 @@ mod tests {
         let toml = toml::to_string_pretty(&kinematics_settings).unwrap();
         let deserialized: KinematicsSettings = toml::from_str(&toml).unwrap();
         assert_eq!(kinematics_settings, deserialized);
+    }
+
+    #[test]
+    fn how_does_tropical_look() {
+        SHOWDEFAULTS.store(true, std::sync::atomic::Ordering::Relaxed);
+        let sampling_settings = SamplingSettings::DiscreteGraphs(DiscreteGraphSamplingSettings {
+            sample_orientations: false,
+            sampling_type: DiscreteGraphSamplingType::TropicalSampling(
+                GammaloopTropicalSamplingSettings {
+                    upcast_on_failure: false,
+                    matrix_stability_test: Some(1e-5),
+                },
+            ),
+        });
+        let toml = toml::to_string_pretty(&sampling_settings).unwrap();
+        println!("{toml}");
+        SHOWDEFAULTS.store(false, std::sync::atomic::Ordering::Relaxed);
     }
 }
