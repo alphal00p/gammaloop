@@ -187,6 +187,34 @@ fn trees() -> Result<()> {
 }
 
 #[test]
+fn photons_1l() -> Result<()> {
+    let (mut state, _, _, _) = run_run_card("photons.toml", "./tests/photons")?;
+    let inspect = Inspect {
+        process_id: 0,
+        process_name: "physical_1L_6photons".to_string(),
+        point: vec![0.1, 0.2, 0.3],
+        momentum_space: true,
+        ..Default::default()
+    }
+    .run(&mut state)?;
+
+    assert_snapshot!(format!("{inspect:.8e}"),@"(-1.1779656944253678e-15+9.093348564643939e-16i)");
+
+    let integrate = Integrate {
+        process_id: 0,
+        process_name: "physical_1L_6photons".to_string(),
+        result_path: "./tests/photons/integration_workspace/integration_results.yaml".into(),
+        workspace_path: "./tests/photons/integration_workspace/".into(),
+        n_cores: 6,
+        target: None,
+        restart: true,
+    };
+
+    let integration_result = integrate.run(&mut state)?;
+    Ok((()))
+}
+
+#[test]
 fn test_grouped_subtraction() -> Result<()> {
     let mut cli = run_run_card(
         "test_grouped_subtraction.toml",
