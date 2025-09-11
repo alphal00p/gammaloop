@@ -3463,7 +3463,7 @@ impl FeynGen {
                         graph_name.clone(),
                         &canonical_graph.graph_with_canonized_flow,
                         canonical_graph.symmetry_factor.clone(),
-                        external_connections.clone(),
+                        &external_connections,
                     )?;
                     // let bare_graph = BareGraph::from_symbolica_graph(
                     //     model,

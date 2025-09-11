@@ -22,9 +22,9 @@ use eyre::{eyre, Ok};
 use itertools::Itertools;
 use linnet::{
     half_edge::{
-        involution::{EdgeVec, HedgePair, Orientation},
+        involution::{EdgeVec, Flow, HedgePair, Orientation},
         nodestore::NodeStorageVec,
-        subgraph::{ModifySubgraph, SubGraph},
+        subgraph::{ModifySubgraph, OrientedCut, SubGraph},
         tree::SimpleTraversalTree,
         EdgeAccessors, HedgeGraph,
     },
@@ -327,7 +327,7 @@ impl Graph {
 
         let mut full_cut: BitVec = graph.full_filter();
 
-        let graph = graph.map(
+        let mut graph = graph.map(
             |_, _, v| v,
             |_, _, _, _, e| e,
             |h, num_indices| NumHedgeData {
@@ -335,6 +335,33 @@ impl Graph {
                 node_order: hedge_order[h.0],
             },
         );
+
+        graph.sew(
+            |_, ae, _, be| {
+                if let (Some(a), Some(b)) = (ae.data.is_cut, be.data.is_cut) {
+                    a == b
+                } else {
+                    false
+                }
+            },
+            |af, ae, bf, _| match (af, bf) {
+                (Flow::Sink, Flow::Source) | (Flow::Source, Flow::Sink) => (Flow::Source, ae),
+                _ => panic!("Cannot sew hedges with flow {:?} and {:?}", af, bf),
+            },
+        )?;
+
+        let mut initial_hedges: BitVec = graph.empty_subgraph();
+
+        for (p, _, d) in graph.iter_edges() {
+            let Some(_) = d.data.is_cut else {
+                continue;
+            };
+            let HedgePair::Paired { sink, .. } = p else {
+                return Err(eyre!("Cut edge must be paired"));
+            };
+
+            initial_hedges.add(sink);
+        }
 
         if add_polarizations {
             let pols = graph.generate_polarizations();
@@ -535,6 +562,7 @@ impl Graph {
             global_prefactor,
             name,
             loop_momentum_basis,
+            initial_state_cut: OrientedCut::from_underlying_strict(initial_hedges, &underlying)?,
             underlying,
             group_id,
             is_group_master,
@@ -856,13 +884,94 @@ pub mod test {
 
     use super::Graph;
     use crate::{
+        feyngen::diagram_generator::{EdgeColor, NodeColorWithVertexRule},
         graph::{
             parse::{complete_group_parsing, IntoGraph},
             GraphGroup, LMBext,
         },
         initialisation::test_initialise,
         numerator::{aind::Aind, Numerator, UnInit},
+        utils::test_utils::load_generic_model,
     };
+
+    #[test]
+    fn symbolica_parse() {
+        test_initialise().unwrap();
+        let model = load_generic_model("sm");
+
+        let mut a = symbolica::graph::Graph::new();
+
+        let dda = NodeColorWithVertexRule {
+            external_tag: 0,
+            vertex_rule: model
+                .particle_set_to_vertex_rules_map
+                .get(&vec![
+                    model.get_particle("d~"),
+                    model.get_particle("d"),
+                    model.get_particle("a"),
+                ])
+                .unwrap()[0]
+                .clone()
+                .into(),
+        };
+
+        let ext = NodeColorWithVertexRule {
+            external_tag: 1,
+            vertex_rule: model.vertex_rules[0].clone(),
+        };
+
+        let e1 = a.add_node(ext.clone());
+        let e2 = a.add_node(ext.clone());
+        let e3 = a.add_node(ext.clone());
+        let e4 = a.add_node(ext.clone());
+        let v1 = a.add_node(dda.clone());
+        let v2 = a.add_node(dda.clone());
+        let v3 = a.add_node(dda.clone());
+        let v4 = a.add_node(dda.clone());
+
+        let ed = EdgeColor::from_particle(model.get_particle("d"));
+        let ea = EdgeColor::from_particle(model.get_particle("a"));
+
+        a.add_edge(e1, v1, true, ed).unwrap();
+
+        a.add_edge(e2, v2, true, ed).unwrap();
+
+        a.add_edge(v3, e3, true, ed).unwrap();
+
+        a.add_edge(v4, e4, true, ed).unwrap();
+
+        a.add_edge(v1, v3, true, ed).unwrap();
+        a.add_edge(v2, v4, true, ed).unwrap();
+        a.add_edge(v1, v2, false, ea).unwrap();
+        a.add_edge(v3, v4, false, ea).unwrap();
+
+        let g = Graph::from_symbolica_graph(
+            &model,
+            "test",
+            &a,
+            Atom::num(1),
+            &[
+                (Some(0), None),
+                (Some(1), None),
+                (None, Some(2)),
+                (None, Some(3)),
+            ],
+        )
+        .unwrap();
+
+        println!("{}", g.dot_serialize());
+
+        let g = Graph::from_symbolica_graph(
+            &model,
+            "test",
+            &a,
+            Atom::num(1),
+            &[(Some(0), Some(3)), (Some(1), Some(2))],
+        )
+        .unwrap();
+
+        println!("{}", g.dot_serialize());
+    }
 
     #[test]
     fn test_load() {

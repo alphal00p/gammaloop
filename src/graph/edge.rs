@@ -3,7 +3,7 @@ use std::cell::RefCell;
 use eyre::Context;
 use linnet::{
     half_edge::{
-        involution::{EdgeData, EdgeIndex, Flow, HedgePair},
+        involution::{EdgeData, EdgeIndex, Flow, Hedge, HedgePair},
         HedgeGraph,
     },
     parser::{DotEdgeData, DotHedgeData, DotVertexData},
@@ -134,7 +134,6 @@ pub struct Edge {
     // pub spin_num: Atom,
     pub dod: i32,
     pub is_dummy: bool, // #[bincode(with_serde)]
-                        // pub internal_index: Vec<AbstractIndex>,
 }
 
 #[derive(Debug, Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
@@ -253,8 +252,10 @@ pub struct ParseEdge {
     pub dod: Option<i32>,
     pub is_dummy: bool,
     pub lmb_id: Option<LoopIndex>,
+    /// User provided numerator
     pub num: Option<Atom>,
-    // pub color_num: Option<sAtom>,
+    /// Specifies the incoming initial state hedge
+    pub is_cut: Option<Hedge>,
 }
 
 impl UVE for ParseEdge {
@@ -276,6 +277,7 @@ impl ParseEdge {
             dod: None,
             lmb_id: None,
             num: None,
+            is_cut: None,
         }
     }
 
@@ -426,6 +428,8 @@ impl ParseEdge {
                     .transpose()?
                     .map(LoopIndex::from);
 
+                let is_cut: Option<Hedge> = e.get::<_, usize>("cut").transpose()?.map(Hedge::from);
+
                 let dod = e
                     .get::<_, String>("dod")
                     .transpose()
@@ -463,6 +467,7 @@ impl ParseEdge {
                     lmb_id,
                     particle: particle.override_mass(mass),
                     num,
+                    is_cut,
                     label,
                 })
             })
