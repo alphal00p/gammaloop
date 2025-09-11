@@ -1,0 +1,69 @@
+#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/refs/heads/hedge_numerator/assets/schemas/runhistory.json
+commands = [
+    "set global kv stderr_directive=gammalooprs=info,info",
+    "import model scalars-default.json",
+    "import amplitude ./tests/resources/graphs/scalar_box.dot",
+    "generate",
+    # "inspect --process-id 0 --name box -m -p 0.1 0.2 0.3",
+]
+
+[default_runtime_settings.Kinematics.externals]
+type = "constant"
+
+[default_runtime_settings.Kinematics]
+e_cm = 0.2
+
+[default_runtime_settings.Kinematics.externals.data]
+momenta = [
+    [
+        0.1,
+        0.0,
+        0.0,
+        0.1,
+    ],
+    [
+        0.1,
+        0.0,
+        0.0,
+        -0.1,
+    ],
+    [
+        0.09903067841547669,
+        0.03734458315384239,
+        0.06393671561700484,
+        -0.0657613394982612,
+    ],
+    "dependent",
+]
+helicities = [1, 1, 1, 1]
+
+[default_runtime_settings.Stability]
+rotation_axis = []
+check_on_norm = true
+
+[default_runtime_settings.subtraction]
+disable_threshold_subtraction = true
+
+[default_runtime_settings.sampling]
+type = "default"
+mode = "spherical"
+mapping = "linear"
+
+[global_settings.generation]
+enable_thresholds = false
+
+# [global_settings]
+# stderr_directive = "Debug"
+
+[global_settings.generation.evaluator_settings]
+iterative_orientation_optimization = true
+compile = false
+
+[default_runtime_settings.Integrator]
+seed = 42
+n_increase = 0
+n_start = 100
+n_max = 1000
+discrete_dim_learning_rate = 1.5
+continuous_dim_learning_rate = 1.5
+max_prob_ratio = 0.01
