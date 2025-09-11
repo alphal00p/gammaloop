@@ -193,8 +193,7 @@ impl InputParamCard<F<f64>> {
                 ));
             }
         }
-        model.recompute_dependents();
-        Ok(())
+        model.recompute_dependents()
     }
 }
 
