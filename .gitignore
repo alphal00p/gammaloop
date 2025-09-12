@@ -25,6 +25,8 @@ share/python-wheels/
 *.egg
 MANIFEST
 
+examples/amplitude_computation/GL_*
+gammaloop_state/
 examples/**/gammaloop_state/
 tests/workspace/
 benches/**/tests_gammaloop_state/

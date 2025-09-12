@@ -63,7 +63,7 @@ impl CLIState {
 }
 
 pub(crate) fn get_test_cli(
-    run_card_path: Option<impl AsRef<Path>>,
+    run_card_path: Option<PathBuf>,
     state_path: impl AsRef<Path>,
     log_file_name: Option<String>,
 ) -> Result<CLIState> {

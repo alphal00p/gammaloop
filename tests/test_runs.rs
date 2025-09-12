@@ -27,7 +27,7 @@ use test_utils::{clean_test, get_test_cli, get_tests_workspace_path};
 #[test]
 fn qqx_aaa_subtracted_nlo_amplitude_test() -> Result<()> {
     let mut state = get_test_cli(
-        Some("qqx_aaa_subtracted_nlo_amplitude.toml"),
+        Some("qqx_aaa_subtracted_nlo_amplitude.toml".into()),
         get_tests_workspace_path().join("qqx_aaa_subtracted_nlo_amplitude"),
         None,
     )?;
@@ -49,7 +49,7 @@ fn qqx_aaa_subtracted_nlo_amplitude_test() -> Result<()> {
 #[test]
 fn trees() -> Result<()> {
     let mut cli = get_test_cli(
-        Some("trees/qqx_aaa.toml"),
+        Some("trees/qqx_aaa.toml".into()),
         get_tests_workspace_path().join("qqx_aaa_tree"),
         None,
     )?;
@@ -69,7 +69,7 @@ fn trees() -> Result<()> {
 
 #[test]
 fn photons_1l() -> Result<()> {
-    let mut cli = get_test_cli(Some("photons.toml"), "./tests/photons", None)?;
+    let mut cli = get_test_cli(Some("photons.toml".into()), "./tests/photons", None)?;
 
     // this can be moved to the run card once we have a set model param command
 
@@ -118,7 +118,7 @@ fn photons_1l() -> Result<()> {
 #[test]
 fn test_grouped_subtraction() -> Result<()> {
     let mut cli = get_test_cli(
-        Some("test_grouped_subtraction.toml"),
+        Some("test_grouped_subtraction.toml".into()),
         get_tests_workspace_path().join("test_grouped_subtraction"),
         None,
     )?;
@@ -178,7 +178,7 @@ fn test_grouped_subtraction() -> Result<()> {
 #[test]
 fn scalar_box() -> Result<()> {
     let mut cli = get_test_cli(
-        Some("scalar_box.toml"),
+        Some("scalar_box.toml".into()),
         get_tests_workspace_path().join("scalar_box"),
         Some("scalar_box".to_string()),
     )?;
