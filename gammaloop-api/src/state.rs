@@ -402,7 +402,7 @@ impl State {
     ) -> Result<()> {
         let graphs = Graph::from_file(&path, &self.model)?;
         let integrand_base_name = integrand_name.clone().unwrap_or("default".to_string());
-        if let Some(proc_id) = process_id {
+        let process = if let Some(proc_id) = process_id {
             if proc_id >= self.process_list.processes.len() {
                 return Err(eyre!(
                     "Process ID {} invalid, only {} processes available",
@@ -410,9 +410,41 @@ impl State {
                     self.process_list.processes.len()
                 ));
             }
-            let existing_names = self.process_list.processes[proc_id]
-                .collection
-                .get_integrand_names();
+            Some(&mut self.process_list.processes[proc_id])
+        } else {
+            let process_name = process_name.unwrap_or(
+                path.as_ref()
+                    .file_stem()
+                    .unwrap()
+                    .to_string_lossy()
+                    .into_owned(),
+            );
+            if let Some(existing_proc) = self
+                .process_list
+                .processes
+                .iter_mut()
+                .find(|p| p.definition.folder_name == process_name)
+            {
+                Some(existing_proc)
+            } else {
+                let process_defintion =
+                    ProcessDefinition::from_graph_list(&graphs, GenerationType::Amplitude)?;
+                let process = Process::from_graph_list(
+                    process_name,
+                    integrand_base_name.clone(),
+                    // TODO: avoid clone here
+                    graphs.clone(),
+                    GenerationType::Amplitude,
+                    Some(process_defintion),
+                    None,
+                )?;
+
+                self.process_list.add_process(process);
+                None
+            }
+        };
+        if let Some(p) = process {
+            let existing_names = p.get_integrand_names();
             let integrand_name = if existing_names.contains(&integrand_base_name.as_str()) {
                 let mut integrand_i = 0;
                 while existing_names
@@ -425,30 +457,10 @@ impl State {
             } else {
                 integrand_base_name.clone()
             };
-            self.process_list.processes[proc_id]
-                .collection
+            p.collection
                 .add_amplitude(Amplitude::from_graph_list(integrand_name.clone(), graphs)?);
-        } else {
-            let process_name = process_name.unwrap_or(
-                path.as_ref()
-                    .file_stem()
-                    .unwrap()
-                    .to_string_lossy()
-                    .into_owned(),
-            );
-            let process_defintion =
-                ProcessDefinition::from_graph_list(&graphs, GenerationType::Amplitude)?;
-            let process = Process::from_graph_list(
-                process_name,
-                integrand_base_name,
-                graphs,
-                GenerationType::Amplitude,
-                Some(process_defintion),
-                None,
-            )?;
+        }
 
-            self.process_list.add_process(process);
-        };
         Ok(())
     }
 

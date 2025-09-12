@@ -248,8 +248,26 @@ impl Cli {
 
             Commands::Display(l) => match l {
                 Display::Integrands { process_id } => {
-                    let process = &state.process_list.processes[process_id];
-                    println!("Integrands for process {}:", process_id);
+                    let process = if let Some(proc_id) = process_id {
+                        if proc_id >= state.process_list.processes.len() {
+                            return Err(eyre!(
+                                "Process ID {} invalid, only {} processes available",
+                                proc_id,
+                                state.process_list.processes.len()
+                            ));
+                        }
+                        &state.process_list.processes[proc_id]
+                    } else {
+                        if state.process_list.processes.len() == 1 {
+                            &state.process_list.processes[0]
+                        } else {
+                            return Err(eyre!(
+                                "Multiple processes available, please specify the process."
+                            ));
+                        }
+                    };
+
+                    println!("Integrands for process {}:", process.definition.process_id);
                     for integrand in process.get_integrand_names() {
                         println!("  {}", integrand);
                     }
@@ -600,7 +618,7 @@ pub enum Reset {
 pub enum Display {
     Model,
     Processes,
-    Integrands { process_id: usize },
+    Integrands { process_id: Option<usize> },
 }
 
 #[derive(Debug, Args, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]

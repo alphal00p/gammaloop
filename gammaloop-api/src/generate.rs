@@ -54,7 +54,6 @@ pub enum GenerateCmd {
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, JsonSchema, PartialEq, Eq, ValueEnum)]
-#[clap(rename_all = "kebab-case")]
 pub enum GroupingChoice {
     #[clap(name = "no_grouping")]
     NoGrouping,
@@ -194,7 +193,7 @@ pub struct SpecArgs {
     pub symmetrize_left_right_states: Option<bool>,
 
     /// Numerator-aware grouping choice
-    #[arg(long = "numerator-aware-isomorphism-grouping", short = 'G', value_enum)]
+    #[arg(long = "numerator-grouping", short = 'G', value_enum)]
     pub numerator_aware_isomorphism_grouping: Option<GroupingChoice>,
 
     /// Grouping attributes

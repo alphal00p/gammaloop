@@ -976,7 +976,7 @@ pub(crate) fn veto_special_topologies_with_spanning_tree_root(
     false
 }
 
-pub(crate) fn evaluate_overall_factor(factor: AtomView) -> Atom {
+pub fn evaluate_overall_factor(factor: AtomView) -> Atom {
     let mut res = factor.to_owned();
     for header in [
         "AutG",
