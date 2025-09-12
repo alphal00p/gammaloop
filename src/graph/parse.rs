@@ -194,6 +194,12 @@ impl ParseGraph {
                     other_order += 1;
                     continue;
                 };
+
+                // println!(
+                //     "Looking at {} with orientation {:?}",
+                //     particle.name,
+                //     self.orientation(h).reverse().relative_to(self.flow(h))
+                // );
                 let particle = Some(
                     match self.orientation(h).reverse().relative_to(self.flow(h)) {
                         Orientation::Reversed => particle.get_anti_particle(model),
@@ -336,6 +342,28 @@ impl Graph {
             },
         );
 
+        // println!(
+        //     "//Graph before sewing:\n{}",
+        //     graph.dot_impl(
+        //         &graph.full_filter(),
+        //         "",
+        //         &|h| None,
+        //         &|e| Some(format!(
+        //             "label=\"{}{}\"",
+        //             e.particle.particle().unwrap().name,
+        //             if let Some(h) = e.is_cut {
+        //                 format!(" : {h}")
+        //             } else {
+        //                 "".into()
+        //             }
+        //         )),
+        //         &|n| Some(format!(
+        //             "label=\"{}\"",
+        //             n.vertex_rule.as_ref().unwrap().name
+        //         ))
+        //     )
+        // );
+
         graph.sew(
             |_, ae, _, be| {
                 if let (Some(a), Some(b)) = (ae.data.is_cut, be.data.is_cut) {
@@ -344,11 +372,35 @@ impl Graph {
                     false
                 }
             },
-            |af, ae, bf, _| match (af, bf) {
-                (Flow::Sink, Flow::Source) | (Flow::Source, Flow::Sink) => (Flow::Source, ae),
-                _ => panic!("Cannot sew hedges with flow {:?} and {:?}", af, bf),
+            |af, ae, bf, be| {
+                // println!(
+                //     "a{:?}b{:?}\nan{}bn{}",
+                //     ae.orientation,
+                //     be.orientation,
+                //     ae.data.particle.particle().unwrap().name,
+                //     be.data.particle.particle().unwrap().name
+                // );
+                match (af, bf) {
+                    (Flow::Sink, Flow::Source) => (Flow::Sink, ae),
+                    (Flow::Source, Flow::Sink) => (Flow::Source, be),
+                    _ => panic!("Cannot sew hedges with flow {:?} and {:?}", af, bf),
+                }
             },
         )?;
+
+        // println!(
+        //     "//Graph after sewing:\n{}",
+        //     graph.dot_impl(
+        //         &graph.full_filter(),
+        //         "",
+        //         &|h| None,
+        //         &|e| Some(format!("label=\"{}\"", e.particle.particle().unwrap().name)),
+        //         &|n| Some(format!(
+        //             "label=\"{}\"",
+        //             n.vertex_rule.as_ref().unwrap().name
+        //         ))
+        //     )
+        // );
 
         let mut initial_hedges: BitVec = graph.empty_subgraph();
 
@@ -906,9 +958,10 @@ pub mod test {
 
         let mut a = symbolica::graph::Graph::new();
 
-        let udw = NodeColorWithVertexRule::from_particles(["d", "W+", "u~"], &model);
-
-        let csw = NodeColorWithVertexRule::from_particles(["s", "W+", "c~"], &model);
+        let udwm = NodeColorWithVertexRule::from_particles(["d~", "W-", "u"], &model);
+        let udwp = NodeColorWithVertexRule::from_particles(["d", "W+", "u~"], &model);
+        let cswp = NodeColorWithVertexRule::from_particles(["s", "W+", "c~"], &model);
+        let cswm = NodeColorWithVertexRule::from_particles(["s~", "W-", "c"], &model);
 
         let ext = NodeColorWithVertexRule {
             external_tag: 1,
@@ -919,29 +972,28 @@ pub mod test {
         let e2 = a.add_node(ext.clone());
         let e3 = a.add_node(ext.clone());
         let e4 = a.add_node(ext.clone());
-        let v1 = a.add_node(udw.clone());
-        let v2 = a.add_node(csw.clone());
-        let v3 = a.add_node(udw.clone());
-        let v4 = a.add_node(csw.clone());
+        let v1 = a.add_node(udwm.clone());
+        let v2 = a.add_node(cswm.clone());
+        let v3 = a.add_node(udwp.clone());
+        let v4 = a.add_node(cswp.clone());
 
         let ed = EdgeColor::from_particle(model.get_particle("d"));
         let es = EdgeColor::from_particle(model.get_particle("s"));
-        let ec = EdgeColor::from_particle(model.get_particle("c~"));
-        let ew = EdgeColor::from_particle(model.get_particle("W+"));
+        let ec = EdgeColor::from_particle(model.get_particle("c"));
+        let ewp = EdgeColor::from_particle(model.get_particle("W+"));
+        let ewm = EdgeColor::from_particle(model.get_particle("W-"));
         let eu = EdgeColor::from_particle(model.get_particle("u"));
 
         a.add_edge(e1, v1, true, eu).unwrap();
-
         a.add_edge(e2, v2, true, ec).unwrap();
 
         a.add_edge(v3, e3, true, eu).unwrap();
-
         a.add_edge(v4, e4, true, ec).unwrap();
 
         a.add_edge(v1, v3, true, ed).unwrap();
         a.add_edge(v2, v4, true, es).unwrap();
-        a.add_edge(v1, v2, false, ew).unwrap();
-        a.add_edge(v3, v4, false, ew).unwrap();
+        a.add_edge(v1, v2, false, ewm).unwrap();
+        a.add_edge(v3, v4, false, ewp).unwrap();
 
         let g = Graph::from_symbolica_graph(
             &model,
@@ -970,6 +1022,50 @@ pub mod test {
                 (None, Some(1)),
                 (None, Some(0)),
             ],
+        )
+        .unwrap();
+
+        println!("{}", g.dot_serialize());
+
+        let g = Graph::from_symbolica_graph(
+            &model,
+            "test",
+            &a,
+            Atom::num(1),
+            &[(Some(0), Some(2)), (Some(1), Some(3))],
+        )
+        .unwrap();
+
+        println!("{}", g.dot_serialize());
+
+        let mut a = symbolica::graph::Graph::new();
+
+        let e1 = a.add_node(ext.clone());
+        let e2 = a.add_node(ext.clone());
+        let e3 = a.add_node(ext.clone());
+        let e4 = a.add_node(ext.clone());
+        let v1 = a.add_node(udwm.clone());
+        let v2 = a.add_node(udwm.clone());
+        let v3 = a.add_node(udwp.clone());
+        let v4 = a.add_node(udwp.clone());
+
+        a.add_edge(e1, v1, true, eu).unwrap();
+        a.add_edge(e2, v2, true, eu).unwrap();
+
+        a.add_edge(v3, e3, true, eu).unwrap();
+        a.add_edge(v4, e4, true, eu).unwrap();
+
+        a.add_edge(v1, v3, true, ed).unwrap();
+        a.add_edge(v2, v4, true, ed).unwrap();
+        a.add_edge(v1, v2, false, ewm).unwrap();
+        a.add_edge(v3, v4, false, ewp).unwrap();
+
+        let g = Graph::from_symbolica_graph(
+            &model,
+            "test",
+            &a,
+            Atom::num(1),
+            &[(Some(0), Some(2)), (Some(1), Some(3))],
         )
         .unwrap();
 

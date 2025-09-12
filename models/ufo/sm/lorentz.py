@@ -48,7 +48,7 @@ FFV1 = Lorentz(name='FFV1',
 
 FFV2 = Lorentz(name='FFV2',
                spins=[2, 2, 3],
-               structure='Gamma(3,1,-1)*ProjM(-1,2®)')
+               structure='Gamma(3,1,-1)*ProjM(-1,2)')
 
 FFV3 = Lorentz(name='FFV3',
                spins=[2, 2, 3],

@@ -130,7 +130,7 @@ impl UFOSymbols {
         //     println!("{}", s);
         // }
         // println!("in:{atom:#}");
-        //
+
         atom = self.normalize_complex(atom);
         for (i, s) in slots.iter().enumerate() {
             let i = (i + 1) as i64;
@@ -153,8 +153,8 @@ impl UFOSymbols {
                             .replace(self.metric.f((&[W_.a_], &[i])))
                             .with(self.metric.f((&[W_.a_], &[r.to_atom()])))
                             // Fill in momentum
-                            .replace(self.momentum.f((&[i], &[W_.i_])))
-                            .with(self.momentum.f((&[r.to_atom()], &[W_.i_])))
+                            .replace(self.momentum.f((&[i], &[W_.i___])))
+                            .with(self.momentum.f((&[r.to_atom()], &[W_.i___])))
                             // Fill in sigma
                             .replace(self.sigma.f((&[i], &[W_.j_, W_.a_, W_.b_])))
                             .with(self.sigma.f((&[r.to_atom()], &[W_.j_, W_.a_, W_.b_])))
@@ -474,8 +474,12 @@ impl UFOSymbols {
         for (i, e) in momenta.iter().enumerate() {
             atom = atom
                 .replace(function!(UFO.momentum, i as i64, W_.a_))
-                .with(GS.emr_mom(*e, W_.a_));
+                .with(GS.emr_mom(*e, W_.a_))
         }
+
+        atom = atom
+            .replace(function!(UFO.momentum, W_.a_))
+            .with(GS.emr_mom(momenta[0], W_.a_));
 
         // println!("out:{atom:#}");
         atom
