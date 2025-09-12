@@ -2,21 +2,14 @@ use color_eyre::Result;
 
 mod test_utils;
 use gammalooprs::processes::ProcessCollection;
-use symbolica::atom::Atom;
+use symbolica::atom::{Atom, AtomCore};
 use symbolica::parse_lit;
 use test_utils::{clean_test, get_test_cli, get_tests_workspace_path};
 
-fn generate_graphs_and_count(process: String, model: String) -> Result<(usize, Atom)> {
-    let mut cli = get_test_cli(
-        None,
-        get_tests_workspace_path().join("feyn_gen_generation_test"),
-        Some("feyngen".to_string()),
-    )?;
-    cli.run_command(&format!("import model {}", model))?;
-    cli.run_command(&format!(
-        "generate graphs \"{}\" --clear-processes",
-        process
-    ))?;
+use crate::test_utils::CLIState;
+use insta::assert_snapshot;
+
+fn count_graphs_in_processes(cli: &CLIState) -> (usize, Atom) {
     assert_eq!(cli.state.process_list.processes.len(), 1);
     let process = &cli.state.process_list.processes[0];
     let integrand_names = process.collection.get_integrand_names();
@@ -38,7 +31,21 @@ fn generate_graphs_and_count(process: String, model: String) -> Result<(usize, A
     for g in graphs {
         overall_factor_sum += &g.overall_factor;
     }
-    Ok((n_graphs, overall_factor_sum))
+    (n_graphs, overall_factor_sum)
+}
+
+fn generate_graphs_and_count(process: String, model: String) -> Result<(usize, Atom)> {
+    let mut cli = get_test_cli(
+        None,
+        get_tests_workspace_path().join("feyn_gen_generation_test"),
+        Some("feyngen".to_string()),
+    )?;
+    cli.run_command(&format!("import model {}", model))?;
+    cli.run_command(&format!(
+        "generate \"{}\" --clear-processes --only-graphs",
+        process
+    ))?;
+    Ok(count_graphs_in_processes(&cli))
 }
 
 #[test]
@@ -57,13 +64,31 @@ fn simple_epem_ddx_generation() -> Result<()> {
 }
 
 #[test]
+fn graph_count_from_amplitude_load() -> Result<()> {
+    let mut cli = get_test_cli(
+        None,
+        get_tests_workspace_path().join("feyn_gen_generation_test"),
+        Some("feyngen".to_string()),
+    )?;
+    cli.run_command(&format!("import model sm.json"))?;
+    cli.run_command(&format!(
+        "import amplitude ./tests/resources/graphs/qqx_aaa_subtracted.dot",
+    ))?;
+    let (n_graphs, overall_factor_sum) = count_graphs_in_processes(&cli);
+
+    assert_snapshot!(format!("{n_graphs}"),@"19");
+    assert_snapshot!(overall_factor_sum.to_canonical_string(),@"8-11𝑖");
+
+    Ok(())
+}
+
+#[test]
 fn example_graph_count() -> Result<()> {
-    assert_eq!(
-        generate_graphs_and_count(
-            "e+ e- > d d~ / Z QED^2==4 [{{1}} QCD]".to_string(),
-            "sm.json".to_string(),
-        )?,
-        (2, parse_lit!(1))
-    );
+    let (n_graphs, overall_factor_sum) = generate_graphs_and_count(
+        "xs e+ e- > d d~ / Z QED^2==4 [{{1}} QCD]".to_string(),
+        "sm.json".to_string(),
+    )?;
+    assert_snapshot!(format!("{n_graphs}"),@"0");
+    assert_snapshot!(overall_factor_sum.to_canonical_string(),@"TBD");
     Ok(())
 }
