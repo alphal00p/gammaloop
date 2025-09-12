@@ -7,6 +7,7 @@ use gammalooprs::status_info;
 use std::collections::{BTreeMap, BTreeSet};
 use std::ops::RangeInclusive;
 use std::path::Path;
+use std::str::FromStr;
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use color_eyre::Result;
@@ -25,6 +26,8 @@ use gammalooprs::numerator::GlobalPrefactor;
 use gammalooprs::processes::amplitude::Amplitude;
 use gammalooprs::processes::{CrossSection, Process, ProcessDefinition, ProcessList};
 use gammalooprs::settings::{GlobalSettings, RuntimeSettings};
+
+use crate::set::KvPair;
 
 use super::state::State;
 
@@ -209,15 +212,15 @@ pub struct SpecArgs {
     /// Graph processing toggles
     ///
     /// Format:
-    ///   --loop-momentum-bases "GL_12=p1,p2;GL_77=q1,q2"
-    ///   --select-graphs "GL_12,GL_13"
-    ///   --veto-graphs "GL_11,GL_15"
-    #[arg(long = "loop-momentum-bases")]
-    pub loop_momentum_bases: Option<String>,
-    #[arg(long = "select-graphs")]
-    pub select_graphs: Option<String>,
-    #[arg(long = "veto-graphs")]
-    pub veto_graphs: Option<String>,
+    ///   --loop-momentum-bases "GL_12=q7,q10 GL_77=q4,q2"
+    ///   --select-graphs "GL_12 GL_13"
+    ///   --veto-graphs "GL_11 GL_15"
+    #[arg(long = "loop-momentum-bases", value_name = "KEY=VALUE", num_args = 0.., value_parser = KvPair::from_str)]
+    pub loop_momentum_bases: Option<Vec<KvPair>>,
+    #[arg(long = "select-graphs", num_args = 0..)]
+    pub select_graphs: Option<Vec<String>>,
+    #[arg(long = "veto-graphs", num_args = 0..)]
+    pub veto_graphs: Option<Vec<String>>,
     /// Graph name prefix
     #[arg(long = "graph-prefix", short = 'g')]
     pub graph_prefix: Option<String>,
@@ -861,14 +864,16 @@ pub fn parse_spec_with_model(
         .graph_prefix
         .clone()
         .unwrap_or_else(|| "GL".to_string());
-    spec.process_definition.selected_graphs =
-        args.select_graphs.as_ref().map(|s| parse_csv_list(s));
-    spec.process_definition.vetoed_graphs = args.veto_graphs.as_ref().map(|s| parse_csv_list(s));
-    spec.process_definition.loop_momentum_bases = args
-        .loop_momentum_bases
-        .as_deref()
-        .and_then(parse_loop_momentum_bases);
-
+    // spec.process_definition.selected_graphs =
+    //     args.select_graphs.as_ref().map(|s| parse_csv_list(s));
+    // spec.process_definition.vetoed_graphs = args.veto_graphs.as_ref().map(|s| parse_csv_list(s));
+    spec.process_definition.selected_graphs = args.select_graphs.clone();
+    spec.process_definition.vetoed_graphs = args.veto_graphs.clone();
+    spec.process_definition.loop_momentum_bases = args.loop_momentum_bases.as_deref().map(|kvs| {
+        kvs.iter()
+            .map(|kv| (kv.key.clone(), parse_csv_list(&kv.value)))
+            .collect::<HashMap<_, _>>()
+    });
     spec.process_definition.prefactor = GlobalPrefactor::default();
 
     Ok(spec)

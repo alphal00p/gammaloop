@@ -34,7 +34,11 @@ fn count_graphs_in_processes(cli: &CLIState) -> (usize, Atom) {
     (n_graphs, overall_factor_sum)
 }
 
-fn generate_graphs_and_count(process: String, model: String) -> Result<(usize, Atom)> {
+fn generate_graphs_and_count(
+    generation_type: &str,
+    process: &str,
+    model: &str,
+) -> Result<(usize, Atom)> {
     let mut cli = get_test_cli(
         None,
         get_tests_workspace_path().join("feyn_gen_generation_test"),
@@ -42,8 +46,8 @@ fn generate_graphs_and_count(process: String, model: String) -> Result<(usize, A
     )?;
     cli.run_command(&format!("import model {}", model))?;
     cli.run_command(&format!(
-        "generate \"{}\" --clear-processes --only-graphs",
-        process
+        "generate {} \"{}\" --clear-existing-processes --only-diagrams",
+        generation_type, process
     ))?;
     Ok(count_graphs_in_processes(&cli))
 }
@@ -84,11 +88,9 @@ fn graph_count_from_amplitude_load() -> Result<()> {
 
 #[test]
 fn example_graph_count() -> Result<()> {
-    let (n_graphs, overall_factor_sum) = generate_graphs_and_count(
-        "xs e+ e- > d d~ / Z QED^2==4 [{{1}} QCD]".to_string(),
-        "sm.json".to_string(),
-    )?;
+    let (n_graphs, overall_factor_sum) =
+        generate_graphs_and_count("xs", "e+ e- > d d~ / Z QED^2==4 [{{1}} QCD]", "sm.json")?;
     assert_snapshot!(format!("{n_graphs}"),@"0");
-    assert_snapshot!(overall_factor_sum.to_canonical_string(),@"TBD");
+    assert_snapshot!(overall_factor_sum.to_canonical_string(),@"expr");
     Ok(())
 }
