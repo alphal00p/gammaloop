@@ -62,23 +62,29 @@ impl CLIState {
     }
 }
 
-pub(crate) fn run_run_card(
-    run_card_path: impl AsRef<Path>,
+pub(crate) fn get_test_cli(
+    run_card_path: Option<impl AsRef<Path>>,
     state_path: impl AsRef<Path>,
     log_file_name: Option<String>,
 ) -> Result<CLIState> {
     let (mut cli, mut state) = new_cli_for_test(state_path, log_file_name);
-    let mut cmds: RunHistory = run_card(run_card_path)?;
-    let mut global_settings = cmds.global_settings.clone();
-    let mut default_runtime_settings = cmds.default_runtime_settings.clone();
-
-    _ = cmds.run(
-        &mut cli,
-        &mut state,
-        &mut global_settings,
-        &mut default_runtime_settings,
-    )?;
-
+    let cmds = if let Some(rc_path) = run_card_path {
+        let mut run_card_cmds = run_card(rc_path)?;
+        let mut global_settings_for_running_cms = run_card_cmds.global_settings.clone();
+        let mut default_runtime_settings_for_running_cms =
+            run_card_cmds.default_runtime_settings.clone();
+        _ = run_card_cmds.run(
+            &mut cli,
+            &mut state,
+            &mut global_settings_for_running_cms,
+            &mut default_runtime_settings_for_running_cms,
+        )?;
+        run_card_cmds
+    } else {
+        RunHistory::default()
+    };
+    let global_settings = cmds.global_settings.clone();
+    let default_runtime_settings = cmds.default_runtime_settings.clone();
     cli.save(
         &mut state,
         &cmds,

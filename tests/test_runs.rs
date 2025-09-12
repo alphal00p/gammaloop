@@ -22,12 +22,12 @@ use symbolica::symbol;
 use tracing::{debug, warn};
 
 mod test_utils;
-use test_utils::{clean_test, get_tests_workspace_path, run_run_card};
+use test_utils::{clean_test, get_test_cli, get_tests_workspace_path};
 
 #[test]
 fn qqx_aaa_subtracted_nlo_amplitude_test() -> Result<()> {
-    let mut state = run_run_card(
-        "qqx_aaa_subtracted_nlo_amplitude.toml",
+    let mut state = get_test_cli(
+        Some("qqx_aaa_subtracted_nlo_amplitude.toml"),
         get_tests_workspace_path().join("qqx_aaa_subtracted_nlo_amplitude"),
         None,
     )?;
@@ -48,8 +48,8 @@ fn qqx_aaa_subtracted_nlo_amplitude_test() -> Result<()> {
 
 #[test]
 fn trees() -> Result<()> {
-    let mut cli = run_run_card(
-        "trees/qqx_aaa.toml",
+    let mut cli = get_test_cli(
+        Some("trees/qqx_aaa.toml"),
         get_tests_workspace_path().join("qqx_aaa_tree"),
         None,
     )?;
@@ -69,7 +69,7 @@ fn trees() -> Result<()> {
 
 #[test]
 fn photons_1l() -> Result<()> {
-    let mut cli = run_run_card("photons.toml", "./tests/photons", None)?;
+    let mut cli = get_test_cli(Some("photons.toml"), "./tests/photons", None)?;
 
     // this can be moved to the run card once we have a set model param command
 
@@ -117,8 +117,8 @@ fn photons_1l() -> Result<()> {
 
 #[test]
 fn test_grouped_subtraction() -> Result<()> {
-    let mut cli = run_run_card(
-        "test_grouped_subtraction.toml",
+    let mut cli = get_test_cli(
+        Some("test_grouped_subtraction.toml"),
         get_tests_workspace_path().join("test_grouped_subtraction"),
         None,
     )?;
@@ -177,8 +177,8 @@ fn test_grouped_subtraction() -> Result<()> {
 
 #[test]
 fn scalar_box() -> Result<()> {
-    let mut cli = run_run_card(
-        "scalar_box.toml",
+    let mut cli = get_test_cli(
+        Some("scalar_box.toml"),
         get_tests_workspace_path().join("scalar_box"),
         Some("scalar_box".to_string()),
     )?;
