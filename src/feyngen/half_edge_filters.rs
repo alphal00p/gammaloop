@@ -60,6 +60,8 @@ impl<E, V> FeynGenHedgeGraph<E, V> {
     pub(crate) fn only_default_orientations(&mut self) {
         let cut = self.graph.cut();
 
+        println!("//Left: \n{}", self.graph.dot(&cut.left));
+        println!("//Right: \n{}", self.graph.dot(&cut.right));
         for l in cut.iter_left_hedges() {
             let orientation = self.graph.orientation(l);
             let flow = self.graph.flow(l);
@@ -125,9 +127,14 @@ impl<E, V> FeynGenHedgeGraph<E, V> {
             |_, h| *h,
         );
 
+        // println!("After Excision: {}", excised.dot(&excised.full_filter()));
+
         excised.align_underlying_to_superficial();
+
+        // println!("After Aligning: {}", excised.dot(&excised.full_filter()));
         self.graph = excised;
-        self.only_default_orientations();
+        // self.only_default_orientations();
+
         self.state = CutState::Cut;
     }
 }
@@ -167,10 +174,12 @@ impl<V> FeynGenHedgeGraph<ArcParticle, V> {
         V: Clone,
     {
         self.remove_external_nodes();
+        // println!("Before:\n{}", self);
         let internal = self.number_of_fermion_loops();
-        // println!("{}", self);
 
         self.glue_external_hedges();
+
+        // println!("Glued:\n{}", self);
 
         let all_fermion_loops = self.number_of_fermion_loops();
 
@@ -252,7 +261,7 @@ impl<V> FeynGenHedgeGraph<ArcParticle, V> {
     }
 }
 
-impl<V> Display for FeynGenHedgeGraph<Arc<Particle>, V> {
+impl<V> Display for FeynGenHedgeGraph<ArcParticle, V> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -292,6 +301,7 @@ pub mod test {
 
     use crate::{
         feyngen::diagram_generator::{EdgeColor, NodeColorWithoutVertexRule},
+        initialisation::test_initialise,
         utils::test_utils::load_generic_model,
     };
 
@@ -299,6 +309,7 @@ pub mod test {
 
     #[test]
     fn fermion_loop_count() {
+        test_initialise().unwrap();
         let mut graph = SymbolicaGraph::new();
 
         let ext1 = graph.add_node(NodeColorWithoutVertexRule { external_tag: 1 });
@@ -400,6 +411,7 @@ pub mod test {
 
     #[test]
     fn external_gluon() {
+        test_initialise().unwrap();
         let mut graph = SymbolicaGraph::new();
 
         let ext1 = graph.add_node(NodeColorWithoutVertexRule { external_tag: 1 });
@@ -444,7 +456,9 @@ pub mod test {
 
         let model = load_generic_model("sm");
         let mut he_graph = FeynGenHedgeGraph::from_feyn_gen_symbolica(graph, &model, 2);
-        he_graph.number_of_external_fermion_loops();
+
+        // println!("{}", he_graph.graph.dot(&he_graph.graph.full_filter()));
+        insta::assert_snapshot!(he_graph.number_of_external_fermion_loops(),@"1");
         // SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>,
     }
 }

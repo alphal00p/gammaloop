@@ -251,6 +251,8 @@ impl Graph {
         symmetry_factor: Atom,
         external_connections: &[(Option<usize>, Option<usize>)],
     ) -> Result<Self> {
+        println!("Input:{}", graph.to_dot());
+
         //let builder = HedgeGraphBuilder::new();
 
         // let input_graph: HedgeGraph<_, _, ()> = graph.clone().into();
@@ -259,38 +261,73 @@ impl Graph {
         let mut builder = HedgeGraphBuilder::new();
         let mut map = AHashMap::new();
 
+        let mut external_tags = Vec::new();
+
         for (i, node) in graph.nodes().iter().enumerate() {
             if node.edges.len() == 1 {
+                external_tags.push((i, node.edges[0]));
                 continue;
             }
             map.insert(i, builder.add_node(ParseVertex::from(&node.data)));
         }
 
+        external_tags.sort_by_key(|&(i, _)| i);
+
         let mut seen = AHashSet::new();
         let mut gen_type = None;
 
         for (i, (in_id, out_id)) in external_connections.iter().enumerate() {
+            println!(
+                "External connection {}: in_id={:?}, out_id={:?}",
+                i + 1,
+                in_id,
+                out_id
+            );
             match (in_id, out_id) {
                 (Some(in_id), Some(out_id)) => {
-                    if !seen.insert(*in_id) || !seen.insert(*out_id) {
-                        return Err(eyre::eyre!("External connections must be unique {in_id} or {out_id} have been seen before"));
+                    let out_ind = external_tags[*out_id - 1].1;
+                    let in_ind = external_tags[*in_id - 1].1;
+                    if !seen.insert(in_ind) || !seen.insert(out_ind) {
+                        return Err(eyre::eyre!("External connections must be unique {in_ind} or {out_ind} have been seen before"));
                     }
                     if let Some(GenerationType::Amplitude) = gen_type {
                         return Err(eyre::eyre!("Cannot have both incoming and outgoing external connections for amplitudes"));
                     }
                     gen_type = Some(GenerationType::CrossSection);
 
-                    let out_edge = &graph.edges()[*out_id];
+                    let out_edge = &graph.edges()[out_ind];
                     let (out_out_v, out_in_v) = out_edge.vertices;
                     let orientation = Orientation::from(out_edge.directed);
+
+                    if out_edge.data.pdg < 0 {
+                        orientation.reverse();
+                    }
 
                     let edata =
                         ParseEdge::from_symbolica_edge(model, &out_edge.data, Some(Hedge(i)));
 
-                    let in_edge = &graph.edges()[*in_id];
+                    let in_edge = &graph.edges()[in_ind];
                     let (in_out_v, in_in_v) = in_edge.vertices;
-                    assert_eq!(in_edge.directed, out_edge.directed);
-                    assert_eq!(in_edge.data, out_edge.data);
+                    assert_eq!(in_edge.directed, out_edge.directed, "External edges must have the same directedness, for edge ids {in_id} and {out_id} found {in_edge:?} and {out_edge:?}");
+                    assert_eq!(in_edge.data.pdg.abs(), out_edge.data.pdg.abs(), "External edges must have the same pdg in abs, for edge ids {in_id} and {out_id} found {in_edge:?} and {out_edge:?}");
+
+                    if let Some(sink) = map.get(&out_in_v) {
+                        builder.add_external_edge(
+                            *sink,
+                            edata.clone(),
+                            orientation.reverse(),
+                            Flow::Source,
+                        );
+                    } else if let Some(source) = map.get(&out_out_v) {
+                        builder.add_external_edge(
+                            *source,
+                            edata.clone(),
+                            orientation,
+                            Flow::Source,
+                        );
+                    } else {
+                        return Err(eyre::eyre!("Outgoing external edges must be attached to an external node (degree 1)"));
+                    }
 
                     if let Some(sink) = map.get(&in_in_v) {
                         builder.add_external_edge(*sink, edata.clone(), orientation, Flow::Sink);
@@ -304,27 +341,16 @@ impl Graph {
                     } else {
                         return Err(eyre::eyre!("Incoming external edges must be attached to an external node (degree 1)"));
                     }
-                    if let Some(sink) = map.get(&out_in_v) {
-                        builder.add_external_edge(
-                            *sink,
-                            edata,
-                            orientation.reverse(),
-                            Flow::Source,
-                        );
-                    } else if let Some(source) = map.get(&out_out_v) {
-                        builder.add_external_edge(*source, edata, orientation, Flow::Source);
-                    } else {
-                        return Err(eyre::eyre!("Outgoing external edges must be attached to an external node (degree 1)"));
-                    }
                 }
                 (None, None) => {
                     return Err(eyre::eyre!("External connections must have at least one of incoming or outgoing defined"));
                 }
                 //Incoming external edge, needs to have incoming momentum
                 (Some(in_id), None) => {
-                    if !seen.insert(*in_id) {
+                    let in_ind = external_tags[*in_id - 1].1;
+                    if !seen.insert(in_ind) {
                         return Err(eyre::eyre!(
-                            "External connections must be unique {in_id} has been seen before"
+                            "External connections must be unique {in_ind} has been seen before"
                         ));
                     }
                     if let Some(GenerationType::CrossSection) = gen_type {
@@ -332,7 +358,7 @@ impl Graph {
                     }
                     gen_type = Some(GenerationType::Amplitude);
 
-                    let edge = &graph.edges()[*in_id];
+                    let edge = &graph.edges()[in_ind];
                     let edata = ParseEdge::from_symbolica_edge(model, &edge.data, None);
                     let (out_v, in_v) = edge.vertices;
                     let orientation = Orientation::from(edge.directed);
@@ -352,9 +378,10 @@ impl Graph {
                 }
                 //Outgoing  external edge, needs to have outgoing momentum
                 (None, Some(out_id)) => {
-                    if !seen.insert(*out_id) {
+                    let out_ind = external_tags[*out_id - 1].1;
+                    if !seen.insert(out_ind) {
                         return Err(eyre::eyre!(
-                            "External connections must be unique {out_id} has been seen before"
+                            "External connections must be unique {out_ind} has been seen before"
                         ));
                     }
                     if let Some(GenerationType::CrossSection) = gen_type {
@@ -362,7 +389,7 @@ impl Graph {
                     }
                     gen_type = Some(GenerationType::Amplitude);
 
-                    let edge = &graph.edges()[*out_id];
+                    let edge = &graph.edges()[out_ind];
                     let edata = ParseEdge::from_symbolica_edge(model, &edge.data, None);
                     let (out_v, in_v) = edge.vertices;
                     let orientation = Orientation::from(edge.directed);

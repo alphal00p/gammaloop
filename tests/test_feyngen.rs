@@ -100,13 +100,13 @@ fn graph_count_from_amplitude_load() -> Result<()> {
 #[test]
 #[rustfmt::skip]
 fn example_graph_count() -> Result<()> {
-    let mut cli = get_test_cli(None,get_tests_workspace_path().join("feyn_gen_generation_test"),Some("feyngen".to_string()),)?; 
-    
+    let mut cli = get_test_cli(None,get_tests_workspace_path().join("feyn_gen_generation_test"),Some("feyngen".to_string()),)?;
+
     // Choose the model to consider
     cli.run_command("import model sm.json")?;
-    
+
     // A first process
-    assert_snapshot!(feyngen_str(&mut cli, "xs", "e+ e- > d d~ / Z QED^2==4 [{{1}} QCD]")?,@"TBD | TBD");
+    assert_snapshot!(feyngen_str(&mut cli, "xs", "e+ e- > d d~ / Z QED^2==4 [{{1}} QCD] --numerator-grouping no_grouping")?,@"TBD | TBD");
 
     // Another process, etc...
     // ...
@@ -535,8 +535,8 @@ fn test_slow_generate_amplitude_1l_sm_jets_with_grouping() -> Result<()> {
 #[test]
 #[rustfmt::skip]
 fn test_vaccuum_amplitude_generation_full_sm() -> Result<()> {
-    let mut cli = get_test_cli(None,get_tests_workspace_path().join("feyn_gen_generation_test"),Some("feyngen".to_string()))?; 
-    
+    let mut cli = get_test_cli(None,get_tests_workspace_path().join("feyn_gen_generation_test"),Some("feyngen".to_string()))?;
+
     // Choose the model to consider
     cli.run_command(&format!("import model sm-full.json"))?;
 

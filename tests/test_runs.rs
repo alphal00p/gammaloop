@@ -185,7 +185,7 @@ fn scalar_box() -> Result<()> {
 
     let a = Inspect {
         process_id: Some(0),
-        integrand_name: Some("scalar_box".to_string()),
+        integrand_name: Some("default".to_string()),
         point: vec![0.1, 0.2, 0.3],
         momentum_space: true,
         discrete_dim: vec![0],
@@ -195,10 +195,10 @@ fn scalar_box() -> Result<()> {
 
     assert_snapshot!(format!("{a:.8e}"),@"(1.3485885914334373e-3+0e0i)");
 
-    cli.run_command("set process 0 scalar_box kv General.enable_cache=false")?;
+    cli.run_command("set process -p 0 -i default kv General.enable_cache=false")?;
     let integral_no_cache = Integrate {
         process_id: Some(0),
-        integrand_name: Some("scalar_box".to_string()),
+        integrand_name: Some("default".to_string()),
         result_path: Some(
             get_tests_workspace_path()
                 .join("scalar_box/integration_workspace/integration_results.toml"),
@@ -210,10 +210,10 @@ fn scalar_box() -> Result<()> {
     }
     .run(&mut cli)?;
 
-    cli.run_command("set process 0 scalar_box kv General.enable_cache=true")?;
+    cli.run_command("set process -p 0 -i default kv General.enable_cache=true")?;
     let integral_with_cache = Integrate {
         process_id: Some(0),
-        integrand_name: Some("scalar_box".to_string()),
+        integrand_name: Some("default".to_string()),
         result_path: Some(
             get_tests_workspace_path()
                 .join("scalar_box/integration_workspace/integration_results.toml"),
