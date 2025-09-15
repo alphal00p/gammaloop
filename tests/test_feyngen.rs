@@ -106,7 +106,7 @@ fn example_graph_count() -> Result<()> {
     cli.run_command("import model sm.json")?;
 
     // A first process
-    assert_snapshot!(feyngen_str(&mut cli, "xs", "e+ e- > d d~ / Z QED^2==4 [{{1}} QCD] --numerator-grouping no_grouping")?,@"TBD | TBD");
+    assert_snapshot!(feyngen_str(&mut cli, "xs", "e+ e- > d d~ / Z QED^2==4 [{{1}} QCD] --numerator-grouping no_grouping")?,@"1 | -1");
 
     // Another process, etc...
     // ...

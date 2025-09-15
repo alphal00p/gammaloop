@@ -12,6 +12,7 @@ use spenso::tensors::data::DataTensor;
 
 use spenso::structure::representation::{Euclidean, LibraryRep, RepName};
 use spenso::structure::OrderedStructure;
+use std::collections::hash_map::Entry;
 use std::collections::HashSet;
 use std::ops::RangeInclusive;
 use std::sync::{Arc, Mutex};
@@ -40,7 +41,7 @@ use super::SnailFilterOptions;
 use super::TadpolesFilterOptions;
 use crate::feyngen::half_edge_filters::FeynGenHedgeGraph;
 use crate::graph::ext::HedgeGraphExt;
-use crate::graph::Graph;
+use crate::graph::{FeynmanGraph, Graph};
 use crate::model::ArcVertexRule;
 use crate::model::VertexRule;
 use crate::model::{ArcParticle, ColorStructure};
@@ -52,6 +53,7 @@ use crate::numerator::Numerator;
 use crate::numerator::SymbolicExpression;
 use crate::processes::ProcessDefinition;
 use crate::utils::{self, W_};
+use crate::uv::UltravioletGraph;
 use crate::{disable, status_error, status_info, status_warn};
 use crate::{
     feyngen::{FeynGenFilter, GenerationType},
@@ -3410,7 +3412,7 @@ impl ProcessDefinition {
                     let bare_graph = Graph::from_symbolica_graph(
                         model,
                         graph_name.clone(),
-                        &canonical_graph.graph_with_canonized_flow,
+                        &canonical_graph.graph,
                         canonical_graph.symmetry_factor.clone(),
                         &external_connections,
                     )?;
@@ -3428,33 +3430,33 @@ impl ProcessDefinition {
                     // it induces a misalignment of the LMB (w.r.t to their sign/orientation) due to the flip of the edges.
                     // In principle this could be fixed by forcing to pick an LMB for edges that have not been flipped and allowing closed loops
                     // of antiparticles as well, but I prefer to leave this a post-re-processing option instead.
-                    // let canonized_fermion_flow_bare_graph = if CANONIZE_GRAPH_FLOWS {
-                    //     BareGraph::from_symbolica_graph(
-                    //         model,
-                    //         graph_name,
-                    //         &canonical_graph.graph_with_canonized_flow,
-                    //         canonical_graph.symmetry_factor.clone(),
-                    //         external_connections.clone(),
-                    //         None,
-                    //     )?
-                    // } else {
-                    //     bare_graph.clone()
-                    // };
+                    let canonized_fermion_flow_bare_graph = if CANONIZE_GRAPH_FLOWS {
+                        Graph::from_symbolica_graph(
+                            model,
+                            graph_name,
+                            &canonical_graph.graph_with_canonized_flow,
+                            canonical_graph.symmetry_factor.clone(),
+                            &external_connections,
+                            // None,
+                        )?
+                    } else {
+                        bare_graph.clone()
+                    };
 
                     // println!(
                     //     "bare_graph:\n{}",
                     //     bare_graph.dot()
                     // );
                     // When disabling numerator-aware graph isomorphism, each graph is added separately
-                    disable!(
+
                     let pooled_graph = PooledGraphData {
                         graph_id: i_g,
                         numerator_data: None,
                         ratio: Atom::num(1),
-                        bare_graph: canonized_fermion_flow_bare_graph.clone(),
+                        bare_graph:bare_graph.clone(),
                     };
                     if matches!(
-                        numerator_aware_isomorphism_grouping,
+                        self.numerator_grouping,
                         NumeratorAwareGraphGroupingOption::NoGrouping
                     ) {
                         {
@@ -3471,26 +3473,26 @@ impl ProcessDefinition {
                     } else {
                         // println!("Processing graph #{}...", i_g);
                         // println!("Bare graph: {}",bare_graph.dot());
-                        let numerator =
-                            Numerator::default().from_graph(&bare_graph, &numerator_global_prefactor);
+                        let numerator = bare_graph.numerator(&bare_graph.no_dummy());
+                            // Numerator::default().from_graph(&bare_graph, &numerator_global_prefactor);
                         // println!("Num single atom: {}",numerator.get_single_atom().unwrap());
-                        for connection in bare_graph.external_connections.iter() {
-                            if let (Some(left_external_node_pos), Some(right_external_node_pos)) =
-                                connection
-                            {
-                                let color_a = &bare_graph.vertex_slots[*left_external_node_pos].edge_slots[0].color;
-                                let color_b = &bare_graph.vertex_slots[*right_external_node_pos].edge_slots[0].color;
+                        // for connection in bare_graph.external_connections.iter() {
+                        //     if let (Some(left_external_node_pos), Some(right_external_node_pos)) =
+                        //         connection
+                        //     {
+                        //         let color_a = &bare_graph.vertex_slots[*left_external_node_pos].edge_slots[0].color;
+                        //         let color_b = &bare_graph.vertex_slots[*right_external_node_pos].edge_slots[0].color;
 
-                                let color = color_a
-                                    .iter()
-                                    .zip(color_b.iter())
-                                    .map(|(a, b)| a.dual().rep().id(Atom::from(a.aind), Atom::from(b.aind)))
-                                    .fold(Atom::num(1), |acc, x| acc * x);
+                        //         let color = color_a
+                        //             .iter()
+                        //             .zip(color_b.iter())
+                        //             .map(|(a, b)| a.dual().rep().id(Atom::from(a.aind), Atom::from(b.aind)))
+                        //             .fold(Atom::num(1), |acc, x| acc * x);
 
-                                // numerator.state.color.map_data_mut(|a|{*a *=&color});
+                        //         // numerator.state.color.map_data_mut(|a|{*a *=&color});
 
-                            }
-                        }
+                        //     }
+                        // }
 
                         let numerator_color_simplified =
                             numerator.clone().color_simplify().canonize_color().unwrap();
@@ -3516,7 +3518,7 @@ impl ProcessDefinition {
                             return Ok(())
                         }
                         if matches!(
-                            numerator_aware_isomorphism_grouping,
+                            self.numerator_grouping,
                             NumeratorAwareGraphGroupingOption::OnlyDetectZeroes
                         ) {
                             {
@@ -3531,7 +3533,7 @@ impl ProcessDefinition {
                                 }
                             }
                         } else {
-                            disable!(
+
 
 
                             // println!(
@@ -3554,7 +3556,7 @@ impl ProcessDefinition {
                                     i_g,
                                     &bare_graph,
                                     numerator_color_simplified,
-                                    numerator_aware_isomorphism_grouping,
+                                    &self.numerator_grouping,
                                 )?,
                             );
 
@@ -3596,8 +3598,8 @@ impl ProcessDefinition {
 
                                         let match_found = entry.get().iter().enumerate().find_map(|(i_entry, pooled_graphs_lists_for_this_topology)| {
                                             let reference_pooled_graph_data = &pooled_graphs_lists_for_this_topology[0];
-                                            FeynGen::compare_numerator_tensors(
-                                                numerator_aware_isomorphism_grouping,
+                                            Self::compare_numerator_tensors(
+                                                &self.numerator_grouping,
                                                 numerator_data.as_ref().unwrap(),
                                                 reference_pooled_graph_data.numerator_data.as_ref().unwrap(),
                                             ).map(|ratio| {
@@ -3636,11 +3638,10 @@ impl ProcessDefinition {
                                         }
                                     }
                                 }
-                            });
+                            }
 
                         }
                     }
-                    );
                     Ok(())
 
                 }).collect::<Result<Vec<()>, FeynGenError>>()
