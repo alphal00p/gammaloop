@@ -600,3 +600,33 @@ impl ProcessCollection {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        feyngen::diagram_generator::symbolica_symm_factors_bug,
+        utils::test_utils::load_generic_model, GammaLoopContextContainer,
+    };
+
+    #[test]
+    fn test_proc_definition_encode() {
+        let def = super::ProcessDefinition::default();
+        let encoded = bincode::encode_to_vec(&def, bincode::config::standard()).unwrap();
+        let model_sm = load_generic_model("sm");
+
+        let mut state_file = std::fs::File::create("state_map.bin").unwrap();
+
+        let exported = symbolica::state::State::export(&mut state_file).unwrap();
+        let state_map = symbolica::state::State::import(&mut state_file, None).unwrap();
+
+        let context = GammaLoopContextContainer {
+            model: &model_sm,
+            state_map: &state_map,
+        };
+
+        let (decoded, _): (super::ProcessDefinition, _) =
+            bincode::decode_from_slice_with_context(&encoded, bincode::config::standard(), context)
+                .unwrap();
+        assert_eq!(def, decoded);
+    }
+}

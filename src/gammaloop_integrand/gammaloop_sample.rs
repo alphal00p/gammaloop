@@ -527,12 +527,8 @@ fn default_parametrize<T: FloatLike>(
 ) -> MomentumSample<T> {
     let externals = &kinematics.externals;
 
-    let (loop_moms_vec, param_jacobian) = global_parameterize(
-        xs,
-        F::from_f64(kinematics.e_cm.square()),
-        parameterization_settings,
-        false,
-    );
+    let (loop_moms_vec, param_jacobian) =
+        global_parameterize(xs, F::from_f64(kinematics.e_cm), parameterization_settings);
 
     let loop_moms = loop_moms_vec.into_iter().map(ThreeMomentum::from).collect();
 

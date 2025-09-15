@@ -161,12 +161,6 @@ pub struct ParameterizationSettings {
     pub mapping: ParameterizationMapping,
     #[serde(skip_serializing_if = "is_float::<1>")]
     pub b: f64,
-    #[serde(skip_serializing_if = "is_default_input_rescaling")]
-    /// todo make proper type for this object
-    pub input_rescaling: Vec<Vec<(f64, f64)>>,
-    #[serde(skip_serializing_if = "is_default_shifts")]
-    /// todo make proper type for this object
-    pub shifts: Vec<(f64, f64, f64, f64)>,
 }
 
 impl Default for ParameterizationSettings {
@@ -175,8 +169,6 @@ impl Default for ParameterizationSettings {
             b: 1.0,
             mode: ParameterizationMode::default(),
             mapping: ParameterizationMapping::default(),
-            input_rescaling: _default_input_rescaling(),
-            shifts: _default_shifts(),
         }
     }
 }

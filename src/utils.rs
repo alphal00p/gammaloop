@@ -2566,67 +2566,41 @@ pub(crate) fn get_n_dim_for_n_loop_momenta(
 
 pub(crate) fn global_parameterize<T: FloatLike>(
     x: &[F<T>],
-    e_cm_squared: F<T>,
+    e_cm: F<T>,
     settings: &ParameterizationSettings,
-    force_radius: bool,
 ) -> (Vec<[F<T>; 3]>, F<T>) {
     status_debug!("b: {}", settings.b);
-    let zero = e_cm_squared.zero();
+    let zero = e_cm.zero();
     let one = zero.one();
     match settings.mode {
         ParameterizationMode::HyperSpherical | ParameterizationMode::HyperSphericalFlat => {
-            let e_cm = e_cm_squared.sqrt() * F::<T>::from_f64(settings.shifts[0].0);
             let mut jac = one.clone();
-            // rescale the input to the desired range
-            let mut x_r = Vec::with_capacity(x.len());
-            if !force_radius {
-                x_r.push(x[0].clone());
-            } else {
-                let lo = F::<T>::from_f64(settings.input_rescaling[0][0].0);
-                let hi = F::<T>::from_f64(settings.input_rescaling[0][0].1);
-                x_r.push(&lo + &x[0] * (&hi - &lo));
-                jac *= &hi - &lo;
-            }
-            let lo = F::<T>::from_f64(settings.input_rescaling[0][1].0);
-            let hi = F::<T>::from_f64(settings.input_rescaling[0][1].1);
-            x_r.push(&lo + &x[1] * (&hi - &lo));
-            jac *= &hi - &lo;
-            for xi in &x[2..] {
-                let lo = F::<T>::from_f64(settings.input_rescaling[0][2].0);
-                let hi = F::<T>::from_f64(settings.input_rescaling[0][2].1);
-                x_r.push(&lo + xi * (&hi - &lo));
-                jac *= &hi - &lo;
-            }
 
-            let radius: F<T> = if force_radius {
-                x[0].clone()
-            } else {
-                match settings.mapping {
-                    ParameterizationMapping::Log => {
-                        // r = e_cm * ln(1 + b*x/(1-x))
-                        let b = F::<T>::from_f64(settings.b);
-                        let radius = &e_cm * (&one + &b * &x_r[0] / (&one - &x_r[0])).log();
-                        jac *= &e_cm * &b / (&one - &x_r[0]) / (&one + &x_r[0] * (&b - &one));
-                        radius
-                    }
-                    ParameterizationMapping::Linear => {
-                        // r = e_cm * b * x/(1-x)
-                        let b = F::<T>::from_f64(settings.b);
-                        let radius = &e_cm * &b * &x_r[0] / (&one - &x_r[0]);
-                        jac *= (&e_cm * &b + &radius).powi(2) / &e_cm / &b;
-                        radius
-                    }
+            let radius: F<T> = match settings.mapping {
+                ParameterizationMapping::Log => {
+                    // r = e_cm * ln(1 + b*x/(1-x))
+                    let b = F::<T>::from_f64(settings.b);
+                    let radius = &e_cm * (&one + &b * &x[0] / (&one - &x[0])).log();
+                    jac *= &e_cm * &b / (&one - &x[0]) / (&one + &x[0] * (&b - &one));
+                    radius
+                }
+                ParameterizationMapping::Linear => {
+                    // r = e_cm * b * x/(1-x)
+                    let b = F::<T>::from_f64(settings.b);
+                    let radius = &e_cm * &b * &x[0] / (&one - &x[0]);
+                    jac *= (&e_cm * &b + &radius).powi(2) / &e_cm / &b;
+                    radius
                 }
             };
             match settings.mode {
                 ParameterizationMode::HyperSpherical => {
-                    let phi = zero.from_i64(2) * zero.PI() * &x_r[1];
+                    let phi = zero.from_i64(2) * zero.PI() * &x[1];
                     jac *= zero.from_i64(2) * zero.PI();
 
                     let mut cos_thetas = Vec::with_capacity(x.len() - 2);
                     let mut sin_thetas = Vec::with_capacity(x.len() - 2);
 
-                    for (i, xi) in x_r[2..].iter().enumerate() {
+                    for (i, xi) in x[2..].iter().enumerate() {
                         let cos_theta = -&one + zero.from_i64(2) * xi;
                         jac *= zero.from_i64(2);
                         let sin_theta = (&one - cos_theta.square()).sqrt();
@@ -2658,9 +2632,9 @@ pub(crate) fn global_parameterize<T: FloatLike>(
                 }
                 ParameterizationMode::HyperSphericalFlat => {
                     // As we will use Box Muller we expect an even number of random variables
-                    assert!(x_r[1..].len() % 2 == 0);
+                    assert!(x[1..].len() % 2 == 0);
                     let mut normal_distributed_xs = vec![];
-                    for x_pair in x_r[1..].chunks(2) {
+                    for x_pair in x[1..].chunks(2) {
                         let (z1, z2) = box_muller(x_pair[0].clone(), x_pair[1].clone());
                         normal_distributed_xs.push(z1);
                         normal_distributed_xs.push(z2);
@@ -2698,13 +2672,10 @@ pub(crate) fn global_parameterize<T: FloatLike>(
             }
         }
         ParameterizationMode::Cartesian | ParameterizationMode::Spherical => {
-            if force_radius {
-                panic!("Cannot force radius for non-hyperspherical parameterization.");
-            }
             let mut jac = one.clone();
             let mut vecs = Vec::with_capacity(x.len() / 3);
             for (i, xi) in x.chunks(3).enumerate() {
-                let (vec_i, jac_i) = parameterize3d(xi, e_cm_squared.clone(), i, settings);
+                let (vec_i, jac_i) = parameterize3d(xi, e_cm.clone(), settings);
                 vecs.push(vec_i);
                 jac *= jac_i;
             }
@@ -2716,16 +2687,15 @@ pub(crate) fn global_parameterize<T: FloatLike>(
 #[allow(unused)]
 pub(crate) fn global_inv_parameterize<T: FloatLike>(
     moms: &[ThreeMomentum<F<T>>],
-    e_cm_squared: F<T>,
+    e_cm: F<T>,
     settings: &ParameterizationSettings,
     force_radius: bool,
 ) -> (Vec<F<T>>, F<T>) {
-    let one = e_cm_squared.one();
+    let one = e_cm.one();
     let zero = one.zero();
 
     match settings.mode {
         ParameterizationMode::HyperSpherical => {
-            let e_cm = e_cm_squared.sqrt() * F::<T>::from_f64(settings.shifts[0].0);
             let mut inv_jac = one.clone();
             let mut xs = Vec::with_capacity(moms.len() * 3);
 
@@ -2783,22 +2753,6 @@ pub(crate) fn global_inv_parameterize<T: FloatLike>(
 
             inv_jac /= k_r.powi((cartesian_xs.len() - 1) as i32);
 
-            let lo = F::<T>::from_f64(settings.input_rescaling[0][0].0);
-            let hi = F::<T>::from_f64(settings.input_rescaling[0][0].1);
-            xs[0] = (&xs[0] - &lo) / (&hi - &lo);
-            inv_jac /= (&hi - &lo);
-
-            let lo = F::<T>::from_f64(settings.input_rescaling[0][1].0);
-            let hi = F::<T>::from_f64(settings.input_rescaling[0][1].1);
-            xs[1] = (&xs[1] - &lo) / (&hi - &lo);
-            inv_jac /= &hi - &lo;
-
-            let lo = F::<T>::from_f64(settings.input_rescaling[0][2].0);
-            let hi = F::<T>::from_f64(settings.input_rescaling[0][2].1);
-            for x in &mut xs[2..] {
-                *x -= &lo / &hi - &lo;
-                inv_jac /= (&hi - &lo);
-            }
             (xs, inv_jac)
         }
         ParameterizationMode::HyperSphericalFlat => {
@@ -2811,7 +2765,8 @@ pub(crate) fn global_inv_parameterize<T: FloatLike>(
             let mut inv_jac = one;
             let mut xs = Vec::with_capacity(moms.len() * 3);
             for (i, mom) in moms.iter().enumerate() {
-                let (xs_i, inv_jac_i) = inv_parametrize3d(mom, e_cm_squared.clone(), i, settings);
+                let (xs_i, inv_jac_i) = inv_parametrize3d(mom, e_cm.clone(), settings);
+
                 xs.extend(xs_i);
                 inv_jac *= inv_jac_i;
             }
@@ -2824,37 +2779,26 @@ pub(crate) fn global_inv_parameterize<T: FloatLike>(
 /// Also compute the Jacobian.
 pub(crate) fn parameterize3d<T: FloatLike>(
     x: &[F<T>],
-    e_cm_squared: F<T>,
-    loop_index: usize,
+    e_cm: F<T>,
     settings: &ParameterizationSettings,
 ) -> ([F<T>; 3], F<T>) {
-    let zero = e_cm_squared.zero();
+    let zero = e_cm.zero();
     let one = zero.one();
-    let e_cm = e_cm_squared.sqrt() * F::<T>::from_f64(settings.shifts[loop_index].0);
     let mut l_space = [zero.clone(), zero.clone(), zero.clone()];
     let mut jac = one.clone();
-
-    // rescale the input to the desired range
-    let mut x_r = [zero.clone(), zero.clone(), zero.clone()];
-    for (xd, xi, &(lo, hi)) in izip!(&mut x_r, x, &settings.input_rescaling[loop_index]) {
-        let lo = F::<T>::from_f64(lo);
-        let hi = F::<T>::from_f64(hi);
-        *xd = &lo + xi * (&hi - &lo);
-        jac *= &hi - &lo;
-    }
 
     match settings.mode {
         ParameterizationMode::Cartesian => match settings.mapping {
             ParameterizationMapping::Log => {
                 for i in 0..3 {
-                    let x = x_r[i].clone();
+                    let x = x[i].clone();
                     l_space[i] = &e_cm * (&x / (&one - &x)).log();
                     jac *= &e_cm / (&x - &x * &x);
                 }
             }
             ParameterizationMapping::Linear => {
                 for i in 0..3 {
-                    let x = x_r[i].clone();
+                    let x = x[i].clone();
                     l_space[i] = &e_cm * (&one / (&one - &x) - &one / &x);
                     jac *= &e_cm * (&one / (&x * &x) + &one / ((&one - &x) * (&one - &x)));
                 }
@@ -2864,7 +2808,7 @@ pub(crate) fn parameterize3d<T: FloatLike>(
             let radius = match settings.mapping {
                 ParameterizationMapping::Log => {
                     // r = &e_cm * ln(1 + b*&x/(1-&x))
-                    let x = x_r[0].clone();
+                    let x = x[0].clone();
                     let b = F::<T>::from_f64(settings.b);
                     let radius = &e_cm * (&one + &b * &x / (&one - &x)).log();
                     jac *= &e_cm * &b / (&one - &x) / (&one + &x * (&b - &one));
@@ -2874,15 +2818,15 @@ pub(crate) fn parameterize3d<T: FloatLike>(
                 ParameterizationMapping::Linear => {
                     // r = &e_cm * b * x/(1-x)
                     let b = F::<T>::from_f64(settings.b);
-                    let radius = &e_cm * &b * &x_r[0] / (&one - &x_r[0]);
+                    let radius = &e_cm * &b * &x[0] / (&one - &x[0]);
                     jac *= (&e_cm * &b + &radius).powi(2) / &e_cm / &b;
                     radius
                 }
             };
-            let phi = F::<T>::from_f64(2.) * zero.PI() * &x_r[1];
+            let phi = F::<T>::from_f64(2.) * zero.PI() * &x[1];
             jac *= F::<T>::from_f64(2.) * zero.PI();
 
-            let cos_theta = -&one + F::<T>::from_f64(2.) * &x_r[2]; // out of range
+            let cos_theta = -&one + F::<T>::from_f64(2.) * &x[2]; // out of range
             jac *= F::<T>::from_f64(2.);
             let sin_theta = (&one - cos_theta.square()).sqrt();
 
@@ -2900,37 +2844,30 @@ pub(crate) fn parameterize3d<T: FloatLike>(
         }
     }
 
-    // add a shift such that k=l is harder to be picked up by integrators such as cuhre
-    l_space[0] += &e_cm * F::<T>::from_f64(settings.shifts[loop_index].1);
-    l_space[1] += &e_cm * F::<T>::from_f64(settings.shifts[loop_index].2);
-    l_space[2] += &e_cm * F::<T>::from_f64(settings.shifts[loop_index].3);
-
     (l_space, jac)
 }
 
 pub(crate) fn inv_parametrize3d<T: FloatLike>(
     mom: &ThreeMomentum<F<T>>,
-    e_cm_squared: F<T>,
-    loop_index: usize,
+    e_cm: F<T>,
     settings: &ParameterizationSettings,
 ) -> ([F<T>; 3], F<T>) {
-    let one = e_cm_squared.one();
+    let one = e_cm.one();
     let zero = one.zero();
     if settings.mode != ParameterizationMode::Spherical {
         panic!("Inverse mapping is only implemented for spherical coordinates");
     }
 
     let mut jac = one.clone();
-    let e_cm = e_cm_squared.sqrt() * F::<T>::from_f64(settings.shifts[loop_index].0);
 
-    let x = &mom.px - &e_cm * F::<T>::from_f64(settings.shifts[loop_index].1);
-    let y = &mom.py - &e_cm * F::<T>::from_f64(settings.shifts[loop_index].2);
-    let z = &mom.pz - &e_cm * F::<T>::from_f64(settings.shifts[loop_index].3);
+    let x = &mom.px;
+    let y = &mom.py;
+    let z = &mom.pz;
 
     let k_r_sq = x.square() + y.square() + z.square();
     let k_r = k_r_sq.sqrt();
 
-    let x2 = if y < zero {
+    let x2 = if y < &zero {
         &one + F::<T>::from_f64(0.5) * zero.FRAC_1_PI() * y.atan2(&x)
     } else {
         F::<T>::from_f64(0.5) * zero.FRAC_1_PI() * y.atan2(&x)
@@ -2955,17 +2892,13 @@ pub(crate) fn inv_parametrize3d<T: FloatLike>(
         }
     };
 
-    let x3 = F::<T>::from_f64(0.5) * (&one + &z / &k_r);
+    let x3 = F::<T>::from_f64(0.5) * (&one + z / &k_r);
 
     jac /= F::<T>::from_f64(2.) * zero.PI();
     jac /= F::<T>::from_f64(2.);
     jac /= k_r.square();
 
     let mut x = [x1, x2, x3];
-    for (xi, &(lo, hi)) in x.iter_mut().zip_eq(&settings.input_rescaling[loop_index]) {
-        *xi = (xi.clone() - F::<T>::from_f64(lo)) / F::<T>::from_f64(hi - lo);
-        jac /= F::<T>::from_f64(hi - lo);
-    }
 
     (x, jac)
 }

@@ -248,7 +248,6 @@ impl UnitSurfaceIntegrand {
                 .sampling
                 .get_parameterization_settings()
                 .unwrap(),
-            true,
         )
     }
 }
@@ -407,7 +406,6 @@ impl UnitVolumeIntegrand {
                 .sampling
                 .get_parameterization_settings()
                 .unwrap(),
-            false,
         )
     }
 }
