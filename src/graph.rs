@@ -251,7 +251,7 @@ impl Graph {
         symmetry_factor: Atom,
         external_connections: &[(Option<usize>, Option<usize>)],
     ) -> Result<Self> {
-        println!("Input:{}", graph.to_dot());
+        // println!("Input:{}", graph.to_dot());
 
         //let builder = HedgeGraphBuilder::new();
 
@@ -277,12 +277,12 @@ impl Graph {
         let mut gen_type = None;
 
         for (i, (in_id, out_id)) in external_connections.iter().enumerate() {
-            println!(
-                "External connection {}: in_id={:?}, out_id={:?}",
-                i + 1,
-                in_id,
-                out_id
-            );
+            // println!(
+            //     "External connection {}: in_id={:?}, out_id={:?}",
+            //     i + 1,
+            //     in_id,
+            //     out_id
+            // );
             match (in_id, out_id) {
                 (Some(in_id), Some(out_id)) => {
                     let out_ind = external_tags[*out_id - 1].1;
