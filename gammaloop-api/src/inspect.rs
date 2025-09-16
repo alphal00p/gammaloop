@@ -18,7 +18,10 @@ pub struct Inspect {
     #[arg(short = 'n', long = "name", value_name = "NAME")]
     pub integrand_name: Option<String>,
     /// The point to inspect (x y) or (p0 px ...)
-    #[arg(short = 'p', num_args = 2.., value_name = "POINT")]
+    #[arg(short = 'p', num_args = 2.., value_name = "POINT",
+          value_delimiter = ',',          // allow --vals 1,-2,3
+          allow_negative_numbers = true,  // treat -2 as a value, not a flag
+    )]
     // allow >2 for momentum‑space
     pub point: Vec<f64>,
 

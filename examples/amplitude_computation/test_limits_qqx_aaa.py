@@ -111,12 +111,13 @@ graph_names = [
 def get_integrand_results(log_file_path):
     df = pl.read_ndjson(log_file_path)
 
-    has_span  = "span"  in df.columns
+    has_span = "span" in df.columns
     has_spans = "spans" in df.columns
 
     all_evals = {}
     for g_name in graph_names:
-        all_evals[g_name] = {'I': complex(0.0, 0.0), 'threshold_CT': complex(0.0, 0.0)}
+        all_evals[g_name] = {'I': complex(
+            0.0, 0.0), 'threshold_CT': complex(0.0, 0.0)}
         pred_span = (
             pl.col("span").struct.field("term.name") == g_name
         ) if has_span else pl.lit(False)
@@ -129,30 +130,34 @@ def get_integrand_results(log_file_path):
 
         g_df = df.filter(pred_span | pred_spans)
 
-        g_original_integrand = g_df.filter(pl.col("message") == "Original integrand value")
+        g_original_integrand = g_df.filter(
+            pl.col("message") == "Original integrand value")
         if g_original_integrand.is_empty():
-            raise ValueError(f"No original integrand entries found for graph '{g_name}'")
+            raise ValueError(
+                f"No original integrand entries found for graph '{g_name}'")
         if g_original_integrand.height > 1:
             raise ValueError(
                 f"Multiple original integrand entries found for graph '{g_name}', expected only one")
         eval_str = g_original_integrand[0, "bare_eval"]
         all_evals[g_name]['I'] = extract_complex(eval_str)
 
-
-        g_ct_eval = g_df.filter(pl.col("message") == "evaluated sum of threshold counterterms")
+        g_ct_eval = g_df.filter(pl.col("message") ==
+                                "evaluated sum of threshold counterterms")
 
         if g_ct_eval.is_empty():
-            raise ValueError(f"No evaluated threshold counterterm entries found for graph '{g_name}'")
+            raise ValueError(
+                f"No evaluated threshold counterterm entries found for graph '{g_name}'")
         if g_ct_eval.height > 1:
             raise ValueError(
                 f"Multiple evaluated threshold counterterm entries found for graph '{g_name}', expected only one")
         eval_str = g_ct_eval[0, "value"]
-        all_evals[g_name]['threshold_CT'] = extract_complex(eval_str)
+        all_evals[g_name]['threshold_CT'] = -extract_complex(eval_str)
 
+    # inspect_df = df.filter(pl.col("target") == "gammalooprs::inspect")
+    inspect_df = df.filter(pl.col("target") == "status")
 
-    inspect_df = df.filter(pl.col("target") == "gammalooprs::inspect")
-
-    total_df = inspect_df.filter(pl.col("message").str.contains("The evaluation of integrand"))
+    total_df = inspect_df.filter(
+        pl.col("message").str.contains("The evaluation of integrand"))
     if total_df.is_empty():
         raise ValueError("No entries found for total integrand")
     if total_df.height > 1:
@@ -161,7 +166,9 @@ def get_integrand_results(log_file_path):
     total_str = total_df[0, "message"]
     total = extract_complex(total_str)
 
-    inspect_df = df.filter(pl.col("target") == "gammalooprs::inspect")
+    # inspect_df = df.filter(pl.col("target") == "gammalooprs::inspect")
+    inspect_df = df.filter(pl.col("target") == "status")
+
     jac_df = inspect_df.filter(pl.col("message").str.contains(
         "f128 sampling jacobian for this point"))
     if jac_df.is_empty():
@@ -171,6 +178,8 @@ def get_integrand_results(log_file_path):
             "Multiple entries found for Jacobian, expected only one")
     jac_str = jac_df[0, "message"]
     jac = extract_complex(jac_str)
+    # print("jac ", jac)
+    # print("total ", total)
 
     return all_evals, total, jac
 
@@ -178,22 +187,28 @@ def get_integrand_results(log_file_path):
 def eval_integrand(k_input, debug=False, gammaloop_state='./GL_QQX_AAA_euclidean', gammaloop_executable='../../target/dev-optim/gammaloop'):
     if os.path.exists(f'{gammaloop_state}/logs/gammalog-inspect.jsonl'):
         os.remove(f'{gammaloop_state}/logs/gammalog-inspect.jsonl')
-    cmd = f'{gammaloop_executable} -s {gammaloop_state} -n -t inspect inspect --process-id 0 --name qqx_aaa_subtracted --discrete-dim 0 -m -p {
+    cmd = f'{gammaloop_executable} -s {gammaloop_state} -n -t inspect inspect --process-id 0 --name default --discrete-dim 0 -m -p {
         k_input[0]:.16f} {k_input[1]:.16f} {k_input[2]:.16f}'
     if debug:
         print(f"Running command:\n{cmd}")
-    r = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, shell=True)
+    tmp_env = os.environ.copy()
+    tmp_env['GL_FILE_LOG_FILTER'] = 'debug'
+    r = subprocess.run(cmd, stdout=subprocess.PIPE,
+                       stderr=subprocess.STDOUT, text=True, shell=True, env=tmp_env)
     if debug:
         print(f"Output:\n{r.stdout}")
     all_res, total, jac = get_integrand_results(
         f'{gammaloop_state}/logs/gammalog-inspect.jsonl')
 
-    reconstructed_total = sum(v['I']+v['threshold_CT'] for v in all_res.values())*jac
+    reconstructed_total = sum(v['I']+v['threshold_CT']
+                              for v in all_res.values())*jac
     if debug:
         for g_name in graph_names:
             res = all_res[g_name]['I'] + all_res[g_name]['threshold_CT']
-            print(f"{g_name+' [I]':30s}: {all_res[g_name]['I'].real:+.16e} {all_res[g_name]['I'].imag:+.16e}")
-            print(f"{g_name+' [th.CT]':30s}: {all_res[g_name]['threshold_CT'].real:+.16e} {all_res[g_name]['threshold_CT'].imag:+.16e}")
+            print(f"{g_name+' [I]':30s}: {all_res[g_name]
+                  ['I'].real:+.16e} {all_res[g_name]['I'].imag:+.16e}")
+            print(f"{g_name+' [th.CT]':30s}: {all_res[g_name]['threshold_CT'].real:+.16e} {
+                  all_res[g_name]['threshold_CT'].imag:+.16e}")
             print(f"{g_name+' [tot]':30s}: {res.real:+.16e} {res.imag:+.16e}")
         print(f"{'Jacobian':30s}: {jac.real:+.16e} {jac.imag:+.16e}")
 
@@ -202,8 +217,25 @@ def eval_integrand(k_input, debug=False, gammaloop_state='./GL_QQX_AAA_euclidean
     return all_res, jac, total, reconstructed_total
 
 
-def run_limit_test(elements_to_display=None, tests_to_run=None, gammaloop_state='./GL_QQX_AAA_euclidean', gammaloop_executable='../../target/dev-optim/gammaloop', debug=False):
-    
+def run_limit_test(elements_to_display=None, tests_to_run=None, gammaloop_state='./GL_QQX_AAA_euclidean', gammaloop_executable='../../target/dev-optim/gammaloop', debug=False, threshold_to_study='A'):
+
+    p1: list[float] = [1.0, 0.0, 0.0, 1.0]
+    p2: list[float] = [1.0, 0.0, 0.0, -1.0]
+    p3: list[float] = [
+        0.9903067841547669,
+        0.3734458315384239,
+        0.6393671561700484,
+        -0.657613394982612,
+    ]
+    p4: list[float] = [
+        0.2053558277500182,
+        -0.1412408546154445,
+        -0.0869119059139323,
+        0.121112995127698,
+    ]
+    p5: list[float] = [
+        p1[i]+p2[i]-p3[i]-p4[i] for i in range(4)
+    ]
     if elements_to_display is None:
         elements_to_display = ['I', 'th.CT', 'tot']
     if tests_to_run is None:
@@ -211,10 +243,23 @@ def run_limit_test(elements_to_display=None, tests_to_run=None, gammaloop_state=
 
     scaling_factor = 0.1
 
+    match threshold_to_study:
+        case 'A':
+            on_threshold_point = [0.0, 1.0, 0.0]
+            # Add the -p1 shift since the LMB locates the defining is between p1 and p2
+            on_threshold_point = [
+                on_threshold_point[i] + p1[i+1] for i in range(3)]
+            # WTF why multiply by 2?? ecm issue in inspect?
+            on_threshold_point = [on_threshold_point[i] * 2. for i in range(3)]
+        case _:
+            raise ValueError(
+                f"Unknown threshold to study '{threshold_to_study}'")
+
     x = 0.1
     for test_name, k_base, scaling, pref_power in [
         ('IR', [0.0001, 0.0001, 1.0*x], 0.1, 0.0),
         ('UV', [100.0, 100.0, 100.0], 10.0, 0.0),
+        ('THRES', on_threshold_point, 0.1, 0.0),
     ]:
         if test_name not in tests_to_run:
             continue
@@ -224,45 +269,66 @@ def run_limit_test(elements_to_display=None, tests_to_run=None, gammaloop_state=
         running_sum_ct_scaled = complex(0.0, 0.0)
         print('')
         print(f'Investigating {test_name}...')
-        k = k_base
         scaling_factor = scaling
-        all_res, jac, total, reconstructed_total = eval_integrand(k, debug, gammaloop_state, gammaloop_executable)
         if test_name == 'IR':
+            k = k_base
             scaled_k = [k[0]*scaling_factor,
                         k[1]*scaling_factor, k[2]]
         elif test_name == 'UV':
-            scaled_k = [k[0]*scaling_factor,
+            k = k_base
+            scaled_k = [k[0]+scaling_factor,
                         k[1]*scaling_factor, k[2]*scaling_factor]
+        elif test_name == 'THRES':
+            eps = 0.001
+            shift = [eps, eps, eps]
+            k = [k_base[0] + shift[0],
+                 k_base[1] + shift[1], k_base[2] + shift[2]]
+            scaled_k = [k_base[0] + shift[0]*scaling_factor,
+                        k_base[1] + shift[1]*scaling_factor, k_base[2] + shift[2]*scaling_factor]
+            # print(k)
+            # print(scaled_k)
         else:
             raise ValueError(f"Unknown limit type to approach '{test_name}'")
+        all_res, jac, total, reconstructed_total = eval_integrand(
+            k, debug, gammaloop_state, gammaloop_executable)
         scaled_all_res, scaled_jac, scaled_total, scaled_reconstructed_total = eval_integrand(
             scaled_k, debug, gammaloop_state, gammaloop_executable)
         for i_g, g_name in enumerate(graph_names):
             eval_res = all_res[g_name]
             eval_res_scaled = scaled_all_res[g_name]
 
-            eval_res_scaled = {k: v*(scaling_factor**pref_power) for k, v in eval_res_scaled.items()}
+            eval_res_scaled = {k: v*(scaling_factor**pref_power)
+                               for k, v in eval_res_scaled.items()}
 
-            if g_name in ['ir_ct', 'uv_triangle_A', 'uv_triangle_B', 'uv_triangle_C', 'uv_bubble_A', 'uv_bubble_B', 'uv_ir_ct']:
-                running_sum_ct += eval_res['I'] + eval_res['threshold_CT']
-                running_sum_ct_scaled += eval_res_scaled['I'] + eval_res_scaled['threshold_CT']
+            if test_name == 'THRES':
+                running_sum_ct += eval_res['I']
+                running_sum_ct_scaled += eval_res_scaled['I']
+                running_sum_non_ct += eval_res['threshold_CT']
+                running_sum_non_ct_scaled += eval_res_scaled['threshold_CT']
             else:
-                running_sum_non_ct += eval_res['I'] + eval_res['threshold_CT']
-                running_sum_non_ct_scaled += eval_res_scaled['I'] + eval_res_scaled['threshold_CT']
+                if g_name in ['ir_ct', 'uv_triangle_A', 'uv_triangle_B', 'uv_triangle_C', 'uv_bubble_A', 'uv_bubble_B', 'uv_ir_ct']:
+                    running_sum_ct += eval_res['I'] + eval_res['threshold_CT']
+                    running_sum_ct_scaled += eval_res_scaled['I'] + \
+                        eval_res_scaled['threshold_CT']
+                else:
+                    running_sum_non_ct += eval_res['I'] + \
+                        eval_res['threshold_CT']
+                    running_sum_non_ct_scaled += eval_res_scaled['I'] + \
+                        eval_res_scaled['threshold_CT']
             res = eval_res['I']
             res_scaled = eval_res_scaled['I']
             if 'I' in elements_to_display:
-                print(f"{'Evaluation result for graph "'+g_name+'" [I]':60s}: {res_scaled:50.16e} | scaled: {
+                print(f"{'Evaluation result for graph "'+g_name+'" [I]':60s}: {res:50.16e} | scaled: {
                     res_scaled:50.16e} | log10(abs(scaled / orig)) = {log10(abs(res_scaled / res)) if res != 0. else float('nan'):.3f} ")
             res = eval_res['threshold_CT']
             res_scaled = eval_res_scaled['threshold_CT']
             if 'th.CT' in elements_to_display:
-                print(f"{'Evaluation result for graph "'+g_name+'" [th.CT]':60s}: {res_scaled:50.16e} | scaled: {
+                print(f"{'Evaluation result for graph "'+g_name+'" [th.CT]':60s}: {res:50.16e} | scaled: {
                     res_scaled:50.16e} | log10(abs(scaled / orig)) = {log10(abs(res_scaled / res)) if res != 0. else float('nan'):.3f} ")
             res = eval_res['I'] + eval_res['threshold_CT']
             res_scaled = eval_res_scaled['I'] + eval_res_scaled['threshold_CT']
             if 'tot' in elements_to_display:
-                print(f"{'Evaluation result for graph "'+g_name+'" [tot]':60s}: {res_scaled:50.16e} | scaled: {
+                print(f"{'Evaluation result for graph "'+g_name+'" [tot]':60s}: {res:50.16e} | scaled: {
                     res_scaled:50.16e} | log10(abs(scaled / orig)) = {log10(abs(res_scaled / res)) if res != 0. else float('nan'):.3f} ")
 
         print('-'*100)
@@ -278,10 +344,12 @@ def run_limit_test(elements_to_display=None, tests_to_run=None, gammaloop_state=
 
 
 parser = argparse.ArgumentParser("Run limit tests for qqx_aaa process")
-parser.add_argument('--display_elements','-d', nargs='*', choices=['I', 'th.CT', 'tot'],
+parser.add_argument('--display_elements', '-d', nargs='*', choices=['I', 'th.CT', 'tot'],
                     help="Which elements to display per graph", default=['tot'])
-parser.add_argument('--tests', '-t', nargs='+', choices=['IR', 'UV'],
-                    help="Which limits to test", default=['IR', 'UV'])
+parser.add_argument('--tests', '-t', nargs='+', choices=['IR', 'UV', 'THRES'],
+                    help="Which limits to test", default=['IR', 'UV', 'THRES'])
+parser.add_argument('--threshold_to_study', '-thres', type=str, choices=['A'],
+                    help="Which threshold to study", default='A')
 parser.add_argument('--gammaloop_state', '-s', type=str,
                     help="Path to the GammaLoop state directory. Default=%(default)s", default='./GL_QQX_AAA_euclidean')
 parser.add_argument('--gammaloop_executable', '-e', type=str,
@@ -290,4 +358,5 @@ parser.add_argument('--debug', action='store_true',
                     help="Enable debug output", default=False)
 if __name__ == "__main__":
     args = parser.parse_args()
-    run_limit_test(args.display_elements, args.tests, args.gammaloop_state, args.gammaloop_executable, args.debug)
+    run_limit_test(args.display_elements, args.tests,
+                   args.gammaloop_state, args.gammaloop_executable, args.debug, args.threshold_to_study)
