@@ -242,6 +242,8 @@ impl AmplitudeGraphTerm {
         let orientations =
             momentum_sample.orientations(&self.orientation_filter.0, &self.orientations);
 
+        status_debug!("loop moms: {:?}", momentum_sample.sample.loop_moms);
+
         let evaluator = &mut self.orientation_parametric_integrand;
         let mut result = Complex::new_re(F(T::from_f64(0.)));
 
@@ -282,7 +284,24 @@ impl AmplitudeGraphTerm {
                 "Original integrand value"
             );
         }
+
+        let masses = self
+            .real_mass_vec
+            .as_ref()
+            .unwrap()
+            .into_iter()
+            .map(|(_, o)| o.map(|f| F::from_ff64(f)))
+            .collect();
+
         status_debug!("last_params"; data = self.param_builder);
+        status_debug!(
+            "oses: {:#?}",
+            self.graph.get_energy_cache_with_known_masses(
+                momentum_sample,
+                &self.graph.loop_momentum_basis,
+                &masses,
+            )
+        );
 
         let sum_of_cts = self.threshold_counterterm.evaluate(
             momentum_sample,

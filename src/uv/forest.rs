@@ -6,13 +6,14 @@ use crate::{
     graph::{Edge, Graph, Vertex},
     momentum::SignOrZero,
     numerator::{symbolica_ext::AtomCoreExt, ParsingNet},
+    status_debug,
     symbolica_ext::CallSymbol,
-    utils::{ose_atom_from_index, GS},
+    utils::{ose_atom_from_index, GS, TENSORLIB},
     uv::approx::CFFapprox,
 };
 use bitvec::vec::BitVec;
 use spenso::{
-    network::store::TensorScalarStoreMapping,
+    network::{store::TensorScalarStoreMapping, ExecutionResult, Sequential, SmallestDegree},
     structure::abstract_index::AIND_SYMBOLS,
     tensors::{data::StorageTensor, parametric::ParamOrConcrete},
 };
@@ -23,7 +24,7 @@ use symbolica::{
 };
 
 use linnet::half_edge::{involution::EdgeIndex, subgraph::SubGraph, HedgeGraph};
-use std::fmt::Write;
+use std::{fmt::Write, ops::Deref};
 
 use typed_index_collections::TiVec;
 use vakint::Vakint;
@@ -142,6 +143,7 @@ impl Forest {
         &self,
         cut_edges: Option<&BitVec>,
         graph: &Graph,
+        print_debug_info: bool,
     ) -> ParsingNet {
         let mut sum: Option<ParsingNet> = None;
 
@@ -159,6 +161,8 @@ impl Forest {
         };
         if let Some(cut) = cut_edges {
             // add Feynman rules of cut edges
+            //let mut collected = graph.iter_edges_of(cut).collect::<Vec<_>>();
+            // collected.reverse();
             for (_p, edge_index, d) in graph.iter_edges_of(cut) {
                 s = s
                     * (&d.data.num / (Atom::num(2) * ose_atom_from_index(edge_index)))
@@ -166,7 +170,30 @@ impl Forest {
                         .parse_into_net()
                         .unwrap();
 
-                s = s.replace_multiple(&[GS.add_parametric_sign(edge_index)]);
+                if print_debug_info {
+                    status_debug!("adding num: {}", d.data.num);
+                    status_debug!("s: {}", s.dot_pretty());
+                    let mut new_s = s.clone();
+                    new_s
+                        .execute::<Sequential, SmallestDegree, _, _>(
+                            TENSORLIB.read().unwrap().deref(),
+                        )
+                        .unwrap();
+                    // println!("{}", product.dot_pretty());
+
+                    if let ExecutionResult::Val(tensor) = new_s
+                        .result_tensor(TENSORLIB.read().unwrap().deref())
+                        .unwrap()
+                    {
+                        status_debug!("resulting tensor: {}", tensor);
+                    }
+                }
+
+                if print_debug_info {
+                    status_debug!("rule: {}", GS.add_parametric_sign(edge_index));
+                }
+
+                // s = s.replace_multiple(&[GS.add_parametric_sign(edge_index)]);
             }
         }
         s

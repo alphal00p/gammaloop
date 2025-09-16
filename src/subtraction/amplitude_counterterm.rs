@@ -4,9 +4,10 @@ use bincode_trait_derive::{Decode, Encode};
 use linnet::half_edge::involution::{EdgeVec, Orientation};
 use spenso::algebra::complex::Complex;
 use symbolica::{
-    atom::Atom,
+    atom::{Atom, AtomCore},
     domains::float::{NumericalFloatLike, Real},
     evaluate::OptimizationSettings,
+    function,
 };
 use tracing::debug;
 use typed_index_collections::TiVec;
@@ -30,11 +31,12 @@ use crate::{
         },
         GlobalSettings, RuntimeSettings,
     },
+    status_debug,
     subtraction::overlap::{OverlapGroup, OverlapStructure},
     utils::{
         self,
         newton_solver::{newton_iteration_and_derivative, NewtonIterationResult},
-        FloatLike, F,
+        FloatLike, F, GS, W_,
     },
     GammaLoopContext,
 };
@@ -201,6 +203,7 @@ impl AmplitudeCountertermData {
         let mut result = Complex::new_re(momentum_sample.zero());
 
         for group in self.overlap.overlap_groups.iter() {
+            status_debug!("center: \n{}", group.center);
             let overlap_builder = counter_term_builder.new_overlap_builder(group);
 
             for existing_esurface_id in group.existing_esurfaces.iter() {
@@ -280,9 +283,19 @@ impl<'a, T: FloatLike> CounterTermBuilder<'a, T> {
             center.rotate(self.rotation_for_overlap).cast(),
         );
 
+        status_debug!("unrotated center:\n{}", unrotated_center);
+        status_debug!("rotated center:\n{}", rotated_center);
+
         let shifted_loop_momenta = self.sample.loop_moms() - &rotated_center;
+
+        status_debug!("shifted loop momenta:\n{}", shifted_loop_momenta);
+
         let radius = shifted_loop_momenta.hyper_radius_squared(None).sqrt();
+
+        status_debug!("radius: {}", radius);
         let unit_shifted_momenta = shifted_loop_momenta.rescale(&radius.inv(), None);
+
+        status_debug!("unit shifted loop momenta:\n{}", unit_shifted_momenta);
 
         OverlapBuilder {
             counterterm_builder: self,
@@ -405,6 +418,7 @@ impl<'a, T: FloatLike> RstarSolution<'a, T> {
             .clone();
 
         rstar_sample.sample.loop_moms = rstar_loop_momenta;
+        rstar_sample.sample.loop_mom_cache_id += 1;
 
         RstarSample {
             rstar_solution: self,
@@ -428,6 +442,8 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
         let ct_builder = esurface_ct_builder.overlap_builder.counterterm_builder;
 
         let esurface_id = esurface_ct_builder.esurface_id;
+
+        status_debug!("evaluating counterterm for esurface {}", esurface_id.0);
 
         let model_params = param_builder
             .model_values()
@@ -467,6 +483,7 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
             &integrated_settings,
         );
 
+        let delta_r = &radius - &radius_star;
         let threshold_params = ThresholdParams {
             radius,
             radius_star,
@@ -538,6 +555,9 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
             ct_eval = format!("{:+16e}", final_result),
             "esurface {}", esurface_id.0
         );
+
+        status_debug!("ct params:\n {}", param_builder);
+        status_debug!("eval of ct {:+16e} ", final_result);
 
         final_result
     }

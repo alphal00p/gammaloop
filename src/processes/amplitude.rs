@@ -6,15 +6,18 @@ use std::{
     ops::Deref,
     path::Path,
 };
+use symbolica::{id::Pattern, parse};
 
 use ahash::AHashSet;
 // use bincode::{Decode, Encode};
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::{Result, Section};
+use dot_parser::canonical::Edge;
 use momtrop::SampleGenerator;
 
 use idenso::color::ColorSimplifier;
 use spenso::network::{Sequential, SmallestDegree};
+use statrs::function;
 use tracing::instrument;
 use vakint::{EvaluationOrder, LoopNormalizationFactor, Vakint, VakintSettings};
 
@@ -45,7 +48,7 @@ use crate::{
 use eyre::{eyre, Context};
 use itertools::Itertools;
 use linnet::{
-    half_edge::involution::{HedgePair, Orientation},
+    half_edge::involution::{EdgeIndex, HedgePair, Orientation},
     parser::DotGraph,
 };
 use log::{debug, info};
@@ -497,6 +500,18 @@ impl AmplitudeGraph {
             .graph
             .get_esurface_canonization(&self.graph.loop_momentum_basis);
 
+        status_debug!(
+            "number of orientations in bare cff: {}",
+            self.derived_data
+                .cff_expression
+                .as_ref()
+                .unwrap()
+                .orientations
+                .len()
+        );
+
+        let esurfaces_to_debug = [10];
+
         for (esurface_id, esurface) in self
             .derived_data
             .cff_expression
@@ -627,10 +642,15 @@ impl AmplitudeGraph {
                 &settings.uv_settings,
             );
 
-            let circled_expr =
-                circled_forest.orientation_parametric_expr(Some(&edges_in_cut), &self.graph);
+            let print_debug_info = esurfaces_to_debug.contains(&esurface_id.0);
+            let circled_expr = circled_forest.orientation_parametric_expr(
+                Some(&edges_in_cut),
+                &self.graph,
+                print_debug_info,
+            );
 
-            let complement_expr = complement_forest.orientation_parametric_expr(None, &self.graph);
+            let complement_expr =
+                complement_forest.orientation_parametric_expr(None, &self.graph, print_debug_info);
 
             // println!("Circled Expression Network:");
             // println!("{}", circled_expr.dot_pretty());
@@ -640,10 +660,12 @@ impl AmplitudeGraph {
 
             let mut product = circled_expr * complement_expr * global_num.clone();
 
+            if esurfaces_to_debug.contains(&esurface_id.0) {
+                println!("product: {}", product.dot_pretty());
+            }
             product
                 .execute::<Sequential, SmallestDegree, _, _>(TENSORLIB.read().unwrap().deref())
                 .unwrap();
-            // println!("{}", product.dot_pretty());
 
             let scalar: Atom = product
                 .result_scalar()
@@ -682,6 +704,37 @@ impl AmplitudeGraph {
             let local_counterterm = local_prefactor * &counterterm;
             let integrated_counterterm = integrated_prefactor * &counterterm;
 
+            if esurfaces_to_debug.contains(&esurface_id.0) {
+                status_debug!(
+                    "total number of orientations with this esurface: {}",
+                    orientations.len()
+                );
+
+                for orientation in orientations {
+                    status_debug!("energies in esurface: {:? }", esurface.energies);
+
+                    status_debug!(
+                        "orientation {} with this esurface: {:?}",
+                        orientation.0,
+                        self.derived_data
+                            .cff_expression
+                            .as_ref()
+                            .unwrap()
+                            .orientations[orientation]
+                            .data
+                            .orientation
+                    );
+                }
+
+                status_debug!(
+                    "local ct: {}",
+                    local_counterterm
+                        .replace(function!(GS.theta, W_.y___) * function!(GS.theta, W_.x___))
+                        .repeat()
+                        .with(function!(GS.theta, W_.y___, W_.x___))
+                );
+            }
+
             // println!("CounterTerm{}", counterterm);
             counterterms.push(AmplitudeCountertermAtom {
                 parametric_local: local_counterterm,
@@ -697,6 +750,7 @@ impl AmplitudeGraph {
 
     fn build_original_parametric_integrand(&self, settings: &GenerationSettings) -> Result<Atom> {
         let wood = self.graph.wood(&self.graph.no_dummy());
+        status_debug!("obtained wood");
         debug!(
             "Wood for {}{}",
             self.graph.name,
@@ -704,6 +758,7 @@ impl AmplitudeGraph {
         );
         // debug!("{}", wood.dot(&self.graph));
         let mut forest = wood.unfold(&self.graph, &self.graph.loop_momentum_basis);
+        status_debug!("obtained forest");
 
         debug!("Forest: {}", forest.graphs(&self.graph));
 
@@ -734,24 +789,33 @@ impl AmplitudeGraph {
             &settings.uv_settings,
         );
 
+        status_debug!("compute forest");
+
         let global_num = self.graph.global_network();
-        let mut full = forest.orientation_parametric_expr(None, &self.graph);
+        let mut full = forest.orientation_parametric_expr(None, &self.graph, false);
+        status_debug!("obtained parametric expression");
 
         full *= global_num;
 
         full.execute::<Sequential, SmallestDegree, _, _>(TENSORLIB.read().unwrap().deref())
             .unwrap();
 
+        status_debug!("executed network");
+
         let mut scalar: Atom = full
             .result_scalar()
             .with_context(|| format!("Failed to get scalar from network when building original paramteric integrand.")).with_note(||format!("Network: \n{}\nGraph:\n{}", full.dot_pretty(),DotGraph::from(&self.graph).debug_dot()))?
             .into();
+
+        status_debug!("parsed parametric expression to scalar");
 
         debug!(
             "All parametric before color atom:{}",
             scalar.printer(LOGPRINTOPTS)
         );
         scalar = scalar.unwrap_function(GS.color_wrap).simplify_color();
+
+        status_debug!("unwrapped color");
 
         scalar = self.add_additional_factors_to_cff_atom(&scalar);
 

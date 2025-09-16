@@ -125,7 +125,7 @@ fn test_grouped_subtraction() -> Result<()> {
 
     let int1 = Integrate {
         process_id: Some(0),
-        integrand_name: Some("no_group".to_string()),
+        integrand_name: None,
         result_path: Some(get_tests_workspace_path().join(
             "test_grouped_subtraction/integration_workspace_no_group/integration_results.yaml",
         )),
@@ -140,7 +140,7 @@ fn test_grouped_subtraction() -> Result<()> {
     let int2 =
         Integrate {
             process_id: Some(1),
-            integrand_name: Some("group".to_string()),
+            integrand_name: None,
             result_path: Some(get_tests_workspace_path().join(
                 "test_grouped_subtraction/integration_workspace_group/integration_results.yaml",
             )),

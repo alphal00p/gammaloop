@@ -25,7 +25,7 @@ use crate::{
     gammaloop_integrand::param_builder::{ParamBuilderGraph, SplitPolarizations},
     model::{ArcParticle, Model},
     momentum::{PolDef, SignOrZero},
-    momentum_sample::{ExternalFourMomenta, ExternalIndex, LoopMomenta},
+    momentum_sample::{ExternalFourMomenta, ExternalIndex, LoopMomenta, MomentumSample},
     numerator::graph::ReversibleEdge,
     signature::{ExternalSignature, SignatureLike},
     utils::{external_energy_atom_from_index, ose_atom_from_index, FloatLike, F, GS},
@@ -66,6 +66,12 @@ pub trait FeynmanGraph {
         loop_moms: &LoopMomenta<F<T>>,
         external_moms: &ExternalFourMomenta<F<T>>,
         lmb: &LoopMomentumBasis,
+    ) -> EdgeVec<F<T>>;
+    fn get_energy_cache_with_known_masses<T: FloatLike>(
+        &self,
+        momentum_sample: &MomentumSample<T>,
+        lmb: &LoopMomentumBasis,
+        masses: &EdgeVec<Option<F<T>>>,
     ) -> EdgeVec<F<T>>;
     fn get_esurface_canonization(&self, lmb: &LoopMomentumBasis) -> Option<ShiftRewrite>;
     fn external_in_or_out_signature(&self) -> ExternalSignature;
@@ -468,6 +474,34 @@ impl FeynmanGraph for Graph {
                                 },
                             ))
                             .value
+                    } else {
+                        emr_mom.temporal.value // a wierd way of just obtaining the energy of the external particles
+                    }
+                }),
+        )
+        .unwrap()
+    }
+
+    fn get_energy_cache_with_known_masses<T: FloatLike>(
+        &self,
+        momentum_sample: &MomentumSample<T>,
+        lmb: &LoopMomentumBasis,
+        masses: &EdgeVec<Option<F<T>>>,
+    ) -> EdgeVec<F<T>> {
+        self.new_edgevec_from_iter(
+            lmb.edge_signatures
+                .borrow()
+                .into_iter()
+                .map(|(_, sig)| {
+                    sig.compute_four_momentum_from_three(
+                        &momentum_sample.sample.loop_moms,
+                        &momentum_sample.sample.external_moms,
+                    )
+                })
+                .zip(self.iter_edges())
+                .map(|(emr_mom, (p, id, edge))| {
+                    if p.is_paired() {
+                        emr_mom.spatial.on_shell_energy(masses[id].clone()).value
                     } else {
                         emr_mom.temporal.value // a wierd way of just obtaining the energy of the external particles
                     }

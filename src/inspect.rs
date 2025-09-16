@@ -33,7 +33,7 @@ pub fn inspect<I: HasIntegrand>(
             &pt.chunks_exact_mut(3)
                 .map(|x| ThreeMomentum::new(x[0], x[1], x[2]).higher())
                 .collect::<Vec<ThreeMomentum<F<f128>>>>(),
-            F(settings.kinematics.e_cm).square().higher(),
+            F(settings.kinematics.e_cm).higher(),
             &settings.sampling.get_parameterization_settings().unwrap(),
             force_radius,
         );
