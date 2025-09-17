@@ -21,11 +21,15 @@ use spenso::tensors::parametric::{ConcreteOrParam, MixedTensor, ParamOrConcrete,
 use spenso_hep_lib::hep_lib;
 use std::collections::hash_map::Entry;
 use std::collections::HashSet;
+use std::num;
 use std::ops::RangeInclusive;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
-use symbolica::atom::AtomView;
+use symbolica::atom::{AtomView, Num};
+use symbolica::coefficient::Coefficient;
+use symbolica::domains::algebraic_number::AlgebraicExtension;
 use symbolica::domains::finite_field::PrimeIteratorU64;
+use symbolica::domains::float::Complex as SymbolicaComplex;
 use symbolica::function;
 use symbolica::graph::GenerationSettings;
 use symbolica::id::{Context, Replacement};
@@ -124,6 +128,72 @@ impl EdgeColor {
             pdg: particle.0.pdg_code,
         }
     }
+}
+
+fn polyrat_to_atom(
+    polyrat: &symbolica::domains::rational::Fraction<
+        symbolica::poly::polynomial::PolynomialRing<
+            AlgebraicExtension<
+                symbolica::domains::rational::FractionField<
+                    symbolica::domains::integer::IntegerRing,
+                >,
+            >,
+            u16,
+        >,
+    >,
+) -> Atom {
+    let polyrat_numerator = polyrat.numerator();
+    let num = polyrat_numerator.to_expression_with_coeff_map(|_x, a, b| {
+        let a_poly = a.clone().into_poly();
+        *b = Atom::num(match a_poly.coefficients.len() {
+            0 => Coefficient::Complex(SymbolicaComplex::new(0.into(), 0.into())),
+            1 => {
+                if a_poly.exponents[0] == 1 {
+                    Coefficient::Complex(SymbolicaComplex::new(
+                        a_poly.coefficients[0].clone(),
+                        0.into(),
+                    ))
+                } else {
+                    Coefficient::Complex(SymbolicaComplex::new(
+                        0.into(),
+                        a_poly.coefficients[0].clone(),
+                    ))
+                }
+            }
+            2 => Coefficient::Complex(SymbolicaComplex::new(
+                a_poly.coefficients[0].clone(),
+                a_poly.coefficients[1].clone(),
+            )),
+            _ => unreachable!(),
+        });
+    });
+    let polyrat_denominator = polyrat.denominator();
+    let den = polyrat_denominator.to_expression_with_coeff_map(|_x, a, b| {
+        let a_poly = a.clone().into_poly();
+
+        *b = Atom::num(match a_poly.coefficients.len() {
+            0 => Coefficient::Complex(SymbolicaComplex::new(0.into(), 0.into())),
+            1 => {
+                if a_poly.exponents[0] == 1 {
+                    Coefficient::Complex(SymbolicaComplex::new(
+                        a_poly.coefficients[0].clone(),
+                        0.into(),
+                    ))
+                } else {
+                    Coefficient::Complex(SymbolicaComplex::new(
+                        0.into(),
+                        a_poly.coefficients[0].clone(),
+                    ))
+                }
+            }
+            2 => Coefficient::Complex(SymbolicaComplex::new(
+                a_poly.coefficients[0].clone(),
+                a_poly.coefficients[1].clone(),
+            )),
+            _ => unreachable!(),
+        });
+    });
+    num / den
 }
 
 #[derive(Clone)]
@@ -3714,8 +3784,8 @@ impl ProcessDefinition {
                             );
 
                             // Test if Lorentz evaluations are zero
-                            if let Some(all_evals) = numerator_data.as_ref().unwrap().sample_evaluations.as_ref() {
-                                if all_evals.iter().all(|eval| eval.is_zero()) {
+                            if !numerator_data.as_ref().unwrap().sample_evaluations.is_empty() {
+                                if numerator_data.as_ref().unwrap().sample_evaluations.iter().all(|eval| eval.is_zero()) {
                                     {
                                         let n_zeroes_color_value = n_zeroes_color.lock().unwrap();
                                         let mut n_zeroes_lorentz_value = n_zeroes_lorentz.lock().unwrap();
@@ -3730,6 +3800,7 @@ impl ProcessDefinition {
                                     }
                                     return Ok(())
                                 }
+
                             }
 
                             // println!("Skeletton G#{}:\n{}", i_g, canonical_repr.to_dot());
@@ -3962,197 +4033,201 @@ impl ProcessDefinition {
             None
         }
 
+        if numerator_a.canonized_numerator.is_none() && numerator_a.canonized_numerator.is_some()
+            || numerator_a.canonized_numerator.is_some()
+                && numerator_a.canonized_numerator.is_none()
+        {
+            panic!("Inconsistent state: one sample has canonalized numerator while the other does not.");
+        }
+
+        if numerator_a.sample_evaluations.len() != numerator_b.sample_evaluations.len() {
+            panic!("Inconsistent state: the two samples have different number of numerical evaluations.");
+        }
+
         match numerator_aware_isomorphism_grouping {
-            NumeratorAwareGraphGroupingOption::NoGrouping
-            | NumeratorAwareGraphGroupingOption::OnlyDetectZeroes => None,
-            NumeratorAwareGraphGroupingOption::GroupIdenticalGraphUpToScalarRescaling(
-                grouping_options,
-            ) => {
-                if grouping_options.test_canonized_numerator {
-                    if let (Some(canonized_num_a), Some(canonized_num_b)) = (
-                        numerator_a.canonized_numerator.as_ref(),
-                        numerator_b.canonized_numerator.as_ref(),
-                    ) {
-                        let mut ratios = HashSet::<Option<Atom>>::default();
-                        let r = if canonized_num_a == canonized_num_b {
-                            Some(Atom::num(1))
-                        } else if *canonized_num_a == canonized_num_b * Atom::num(-1) {
-                            Some(Atom::num(-1))
-                        } else if canonized_num_b.is_zero() {
-                            None
-                        } else {
-                            Some(
-                                (canonized_num_a.as_view() / canonized_num_b.as_view())
-                                    .expand_num()
-                                    .collect_num(),
-                            )
-                        };
-                        ratios.insert(r);
-                        // println!(
-                        //     "Canonalized numerator of diagiaram #{}: {}",
-                        //     numerator_a.diagram_id,
-                        //     numerator_a.canonized_numerator.as_ref().unwrap()
-                        // );
-                        // println!(
-                        //     "Canonalized numerator of diagiaram #{}: {}",
-                        //     numerator_b.diagram_id,
-                        //     numerator_b.canonized_numerator.as_ref().unwrap().clone()
-                        // );
-                        // println!(
-                        //     "ratio from canonalized numerators:\n{}",
-                        //     ratios
-                        //         .iter()
-                        //         .map(|av| av
-                        //             .as_ref()
-                        //             .map(|ra| ra.to_canonical_string())
-                        //             .unwrap_or("None".into()))
-                        //         .collect::<Vec<_>>()
-                        //         .join("\n")
-                        // );
-                        if let Some(ratio) = analyze_ratios(&ratios) {
-                            // debug!(
-                            //     "Combining graph #{} with #{} using canonized numerators, with ratio #{}/#{}={}",
-                            //     numerator_b.diagram_id,
-                            //     numerator_a.diagram_id,
-                            //     numerator_a.diagram_id,
-                            //     numerator_b.diagram_id,
-                            //     ratio
-                            // );
-                            return Some(ratio);
-                        }
-                    }
-                }
-                if grouping_options.number_of_numerical_samples > 1 {
-                    if let (Some(evaluations_a), Some(evaluations_b)) = (
-                        numerator_a.sample_evaluations.as_ref(),
-                        numerator_b.sample_evaluations.as_ref(),
-                    ) {
-                        let ratios = evaluations_a
-                            .iter()
-                            .zip(evaluations_b.iter())
-                            .map(|(a, b)| {
-                                if a == b {
-                                    Some(Atom::num(1))
-                                } else if *a == b * Atom::num(-1) {
-                                    Some(Atom::num(-1))
-                                } else if b.is_zero() {
-                                    None
-                                } else {
-                                    if ANALYZE_RATIO_AS_RATIONAL_POLYNOMIAL {
-                                        let element = COMPLEXRATPOLYFIELD.to_element(
-                                            a.to_polynomial(&Q_I, None),
-                                            b.to_polynomial(&Q_I, None),
-                                            true,
-                                        );
-                                        // Some(element.to_expression())
-                                        Some((a / b).expand())
-                                    } else {
-                                        Some((a / b).expand())
-                                    }
-                                }
-                            })
-                            .collect::<HashSet<_>>();
-                        // println!(
-                        //     "ratios from numerical evaluations when comparing diagram #{} and #{}:\n{}",
-                        //     numerator_b.diagram_id,
-                        //     numerator_a.diagram_id,
-                        //     ratios
-                        //         .iter()
-                        //         .map(|av| av.as_ref().unwrap().to_canonical_string())
-                        //         .collect::<Vec<_>>()
-                        //         .join("\n")
-                        // );
-                        // println!(
-                        //     "ratios from numerical evaluations when comparing diagram #{} and #{}:\n{}",
-                        //         numerator_b.diagram_id,
-                        //         numerator_a.diagram_id,
-                        //         ratios
-                        //             .iter()
-                        //             .map(|av| av
-                        //                 .as_ref()
-                        //                 .map(|ra| ra.to_canonical_string())
-                        //                 .unwrap_or("None".into()))
-                        //             .collect::<Vec<_>>()
-                        //             .join("\n")
-                        // );
-                        if let Some(ratio) = analyze_ratios(&ratios) {
-                            //     debug!(
-                            //     "Combining graph #{} with #{} using numerical evaluation, with ratio #{}/#{}={}",
-                            //     numerator_b.diagram_id,
-                            //     numerator_a.diagram_id,
-                            //     numerator_a.diagram_id,
-                            //     numerator_b.diagram_id,
-                            //     ratio
-                            // );
-                            return Some(ratio);
-                        }
-                    }
-                }
-                None
+            NumeratorAwareGraphGroupingOption::NoGrouping => {
+                return None;
             }
-            NumeratorAwareGraphGroupingOption::GroupIdenticalGraphUpToSign(grouping_options) => {
-                if grouping_options.test_canonized_numerator {
-                    if let (Some(canonized_num_a), Some(canonized_num_b)) = (
-                        numerator_a.canonized_numerator.as_ref(),
-                        numerator_b.canonized_numerator.as_ref(),
-                    ) {
-                        if let Some(ratio) = analyze_diff_and_sum(
-                            canonized_num_a.as_view(),
-                            canonized_num_b.as_view(),
-                        ) {
-                            //     debug!(
-                            //     "Combining graph #{} with #{} using canonized numerators, with ratio #{}/#{}={}",
-                            //     numerator_b.diagram_id,
-                            //     numerator_a.diagram_id,
-                            //     numerator_a.diagram_id,
-                            //     numerator_b.diagram_id,
-                            //     ratio
-                            // );
+            NumeratorAwareGraphGroupingOption::OnlyDetectZeroes => {
+                return None;
+            }
+
+            NumeratorAwareGraphGroupingOption::GroupIdenticalGraphUpToSign(_) => {
+                if let (Some(canonized_num_a), Some(canonized_num_b)) = (
+                    numerator_a.canonized_numerator.as_ref(),
+                    numerator_b.canonized_numerator.as_ref(),
+                ) {
+                    if let Some(ratio) =
+                        analyze_diff_and_sum(canonized_num_a.as_view(), canonized_num_b.as_view())
+                    {
+                        //     debug!(
+                        //     "Combining graph #{} with #{} using canonized numerators, with ratio #{}/#{}={}",
+                        //     numerator_b.diagram_id,
+                        //     numerator_a.diagram_id,
+                        //     numerator_a.diagram_id,
+                        //     numerator_b.diagram_id,
+                        //     ratio
+                        // );
+                        return Some(ratio);
+                    }
+                }
+
+                if !numerator_a.sample_evaluations.is_empty() {
+                    let evaluations_a = &numerator_a.sample_evaluations;
+                    let evaluations_b = &numerator_b.sample_evaluations;
+
+                    let ratios = evaluations_a
+                        .iter()
+                        .zip(evaluations_b.iter())
+                        .map(|(a, b)| analyze_diff_and_sum(a.as_view(), b.as_view()))
+                        .collect::<HashSet<_>>();
+
+                    // println!(
+                    //     "ratios from numerical evaluations when comparing diagram #{} and #{}:\n{}",
+                    //     numerator_b.diagram_id,
+                    //     numerator_a.diagram_id,
+                    //     ratios
+                    //         .iter()
+                    //         .map(|av| av.as_ref().unwrap().to_canonical_string())
+                    //         .collect::<Vec<_>>()
+                    //         .join("\n")
+                    // );
+
+                    if ratios.len() == 1 {
+                        if let Some(ratio) = ratios.iter().next().unwrap().to_owned() {
+                            debug!(
+                            "Combining graph #{} with #{} using numerical evaluation, with ratio = {}",
+                            numerator_b.diagram_id,
+                            numerator_a.diagram_id,
+                            ratio
+                        );
                             return Some(ratio);
                         }
                     }
                 }
-                if grouping_options.number_of_numerical_samples > 1 {
-                    if let ((Some(evaluations_a), Some(evaluations_b)),) = ((
-                        numerator_a.sample_evaluations.as_ref(),
-                        numerator_b.sample_evaluations.as_ref(),
-                    ),)
-                    {
-                        let ratios = evaluations_a
-                            .iter()
-                            .zip(evaluations_b.iter())
-                            .map(|(a, b)| analyze_diff_and_sum(a.as_view(), b.as_view()))
-                            .collect::<HashSet<_>>();
-
-                        // println!(
-                        //     "ratios from numerical evaluations when comparing diagram #{} and #{}:\n{}",
+            }
+            NumeratorAwareGraphGroupingOption::GroupIdenticalGraphUpToScalarRescaling(_) => {
+                if let (Some(canonized_num_a), Some(canonized_num_b)) = (
+                    numerator_a.canonized_numerator.as_ref(),
+                    numerator_b.canonized_numerator.as_ref(),
+                ) {
+                    let mut ratios = HashSet::<Option<Atom>>::default();
+                    let r = if canonized_num_a == canonized_num_b {
+                        Some(Atom::num(1))
+                    } else if *canonized_num_a == canonized_num_b * Atom::num(-1) {
+                        Some(Atom::num(-1))
+                    } else if canonized_num_b.is_zero() {
+                        None
+                    } else {
+                        Some(canonized_num_a / canonized_num_b)
+                    };
+                    // println!(
+                    //     "Canonalized numerator of diagiaram #{}: {}",
+                    //     numerator_a.diagram_id,
+                    //     numerator_a.canonized_numerator.as_ref().unwrap()
+                    // );
+                    // println!(
+                    //     "Canonalized numerator of diagiaram #{}: {}",
+                    //     numerator_b.diagram_id,
+                    //     numerator_b.canonized_numerator.as_ref().unwrap().clone()
+                    // );
+                    // println!(
+                    //     "ratio from canonalized numerators:\n{}",
+                    //     ratios
+                    //         .iter()
+                    //         .map(|av| av
+                    //             .as_ref()
+                    //             .map(|ra| ra.to_canonical_string())
+                    //             .unwrap_or("None".into()))
+                    //         .collect::<Vec<_>>()
+                    //         .join("\n")
+                    // );
+                    ratios.insert(r);
+                    if let Some(ratio) = analyze_ratios(&ratios) {
+                        // debug!(
+                        //     "Combining graph #{} with #{} using canonized numerators, with ratio #{}/#{}={}",
                         //     numerator_b.diagram_id,
                         //     numerator_a.diagram_id,
-                        //     ratios
-                        //         .iter()
-                        //         .map(|av| av.as_ref().unwrap().to_canonical_string())
-                        //         .collect::<Vec<_>>()
-                        //         .join("\n")
+                        //     numerator_a.diagram_id,
+                        //     numerator_b.diagram_id,
+                        //     ratio
                         // );
-
-                        if ratios.len() == 1 {
-                            if let Some(ratio) = ratios.iter().next().unwrap().to_owned() {
-                                debug!(
-                                    "Combining graph #{} with #{} using numerical evaluation, with ratio = {}",
-                                    numerator_b.diagram_id,
-                                    numerator_a.diagram_id,
-                                    ratio
-                                );
-                                return Some(ratio);
-                            }
-                        }
-                    } else {
-                        //println!("Skipping comparison of numerical samples between diagrams #{} and #{} because their variables differ", numerator_b.diagram_id, numerator_a.diagram_id);
+                        return Some(ratio);
                     }
                 }
-                None
+
+                if !numerator_a.sample_evaluations.is_empty() {
+                    let evaluations_a = &numerator_a.sample_evaluations;
+                    let evaluations_b = &numerator_b.sample_evaluations;
+                    if evaluations_a.is_empty() {
+                        return None;
+                    }
+
+                    let ratios = evaluations_a
+                        .iter()
+                        .zip(evaluations_b.iter())
+                        .map(|(a, b)| {
+                            if a == b {
+                                Some(Atom::num(1))
+                            } else if *a == b * Atom::num(-1) {
+                                Some(Atom::num(-1))
+                            } else if b.is_zero() || a.is_zero() {
+                                None
+                            } else {
+                                if ANALYZE_RATIO_AS_RATIONAL_POLYNOMIAL {
+                                    let element = COMPLEXRATPOLYFIELD.to_element(
+                                        a.to_polynomial(&Q_I, None),
+                                        b.to_polynomial(&Q_I, None),
+                                        true,
+                                    );
+                                    Some(polyrat_to_atom(&element))
+                                } else {
+                                    // Make sure that collect_factor() has been called already when creating the samples
+                                    Some(a / b)
+                                }
+                            }
+                        })
+                        .collect::<HashSet<_>>();
+
+                    // println!(
+                    //     "ratios from numerical evaluations when comparing diagram #{} and #{}:\n{}",
+                    //     numerator_b.diagram_id,
+                    //     numerator_a.diagram_id,
+                    //     ratios
+                    //         .iter()
+                    //         .map(|av| av.as_ref().unwrap().to_canonical_string())
+                    //         .collect::<Vec<_>>()
+                    //         .join("\n")
+                    // );
+                    // println!(
+                    //     "ratios from numerical evaluations when comparing diagram #{} and #{}:\n{}",
+                    //         numerator_b.diagram_id,
+                    //         numerator_a.diagram_id,
+                    //         ratios
+                    //             .iter()
+                    //             .map(|av| av
+                    //                 .as_ref()
+                    //                 .map(|ra| ra.to_canonical_string())
+                    //                 .unwrap_or("None".into()))
+                    //             .collect::<Vec<_>>()
+                    //             .join("\n")
+                    // );
+                    if let Some(ratio) = analyze_ratios(&ratios) {
+                        //     debug!(
+                        //     "Combining graph #{} with #{} using numerical evaluation, with ratio #{}/#{}={}",
+                        //     numerator_b.diagram_id,
+                        //     numerator_a.diagram_id,
+                        //     numerator_a.diagram_id,
+                        //     numerator_b.diagram_id,
+                        //     ratio
+                        // );
+                        return Some(ratio);
+                    }
+                }
             }
         }
+
+        None
     }
 
     pub(crate) fn substitute_color_factors(expr: AtomView) -> Atom {
@@ -4220,7 +4295,7 @@ struct PooledGraphData {
 struct ProcessedNumeratorForComparison {
     diagram_id: usize,
     canonized_numerator: Option<Atom>,
-    sample_evaluations: Option<Vec<Atom>>,
+    sample_evaluations: Vec<Atom>,
 }
 
 impl ProcessedNumeratorForComparison {
@@ -4237,7 +4312,7 @@ impl ProcessedNumeratorForComparison {
         let default_processed_data = ProcessedNumeratorForComparison {
             diagram_id,
             canonized_numerator: None,
-            sample_evaluations: None,
+            sample_evaluations: vec![],
         };
         let res = if let Some(group_options) = numerator_aware_isomorphism_grouping.get_options() {
             if group_options.test_canonized_numerator
@@ -4251,24 +4326,46 @@ impl ProcessedNumeratorForComparison {
 
                 numerator = numerator.replace_multiple(&lmb_reps);
 
-                let canonized_numerator = if group_options.test_canonized_numerator
-                    && group_options.fully_numerical_substitution_when_comparing_numerators
-                {
-                    Some(ProcessDefinition::substitute_color_factors(
-                        numerator.as_atom_view(),
-                    ))
+                let canonized_numerator = if group_options.test_canonized_numerator {
+                    // let mut canonized_numerator_to_consider = numerator
+                    //     .canonize_lorentz()
+                    //     .unwrap()
+                    //     .get_single_atom()
+                    //     .unwrap()
+                    //     .0;
+                    // TODO: FIXME: What to replace the above with?
+                    let mut canonized_numerator_to_consider = numerator.clone();
+                    if group_options.fully_numerical_substitution_when_comparing_numerators {
+                        canonized_numerator_to_consider =
+                            ProcessDefinition::substitute_color_factors(
+                                canonized_numerator_to_consider.as_atom_view(),
+                            )
+                    };
+                    // IMPORTANT: we must make sure to collect all common coefficients first
+                    // with `collect_factors()` to ensure that common factors get simplified when looking at ratios.
+                    if matches!(
+                        numerator_aware_isomorphism_grouping,
+                        NumeratorAwareGraphGroupingOption::GroupIdenticalGraphUpToScalarRescaling(
+                            _
+                        )
+                    ) {
+                        canonized_numerator_to_consider =
+                            canonized_numerator_to_consider.collect_factors();
+                    }
+                    Some(canonized_numerator_to_consider)
                 } else {
                     None
                 };
+
                 let expanded = numerator.expand_color();
 
                 let sample_evaluations = samples
                     .iter()
                     .map(|(reps, lib)| {
-                        expanded
+                        let sample_evaluation = expanded
                             .iter()
                             .map(|(c, l)| {
-                                debug!("c:{c},l:{l}");
+                                debug!("Sample evaluation inputs c:{c},l:{l}");
                                 let mut net = ParsingNet::try_from_view(l.as_view(), lib).unwrap();
                                 net.store
                                     .scalar
@@ -4286,14 +4383,22 @@ impl ProcessedNumeratorForComparison {
 
                                 c * scalar
                             })
-                            .fold(Atom::Zero, |acc, l| acc + l)
+                            .fold(Atom::Zero, |acc, l| acc + l);
+                        if ANALYZE_RATIO_AS_RATIONAL_POLYNOMIAL || !matches!(numerator_aware_isomorphism_grouping,NumeratorAwareGraphGroupingOption::GroupIdenticalGraphUpToScalarRescaling(_))
+                        {
+                            sample_evaluation
+                        } else {
+                            // When not looking at the ratio of samples as a rational polynomial, we must make sure to collect all common coefficients first
+                            // with `collect_factors()` to ensure that common factors get simplified when looking at ratios.
+                            sample_evaluation.collect_factors()
+                        }
                     })
                     .collect();
 
                 ProcessedNumeratorForComparison {
                     diagram_id,
                     canonized_numerator,
-                    sample_evaluations: Some(sample_evaluations),
+                    sample_evaluations: sample_evaluations,
                 }
             } else {
                 default_processed_data
