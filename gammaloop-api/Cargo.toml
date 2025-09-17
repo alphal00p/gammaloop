@@ -68,6 +68,8 @@ nu-ansi-term = "0.50.1"
 clap_complete = { version = "4.5.57", features = ["unstable-dynamic"] }
 regex = "1.11.2"
 ahash = { version = "0.8.8", features = ["serde"] }
+indicatif = { version = "0.17.9", features = ["improved_unicode", "rayon"] }
+tracing-indicatif = "0.3.13"
 
 # PyO3: optional for embedding. Auto-init at runtime.
 [dependencies.pyo3]

@@ -167,6 +167,7 @@ comemo = "0.5.0"
 figment = "0.10.19"
 schemars = "1.0.4"
 ringbuffer = "0.16.0"
+tracing-indicatif = "0.3.13"
 
 [dependencies.pyo3]
 features = ["abi3", "abi3-py37", "eyre"]

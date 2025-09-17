@@ -19,7 +19,8 @@ use rayon::iter::{
     IndexedParallelIterator, IntoParallelRefIterator, IntoParallelRefMutIterator, ParallelIterator,
 };
 use spenso::network::{Sequential, SmallestDegree};
-use tracing::instrument;
+use tracing::{info_span, instrument, Span};
+use tracing_indicatif::{span_ext::IndicatifSpanExt, style::ProgressStyle};
 use vakint::{EvaluationOrder, LoopNormalizationFactor, Vakint, VakintSettings};
 
 use crate::{
@@ -201,11 +202,25 @@ impl Amplitude {
     pub fn preprocess(&mut self, model: &Model, settings: &GenerationSettings) -> Result<()> {
         // preprocess each graph individually
 
+        let preprocess_span = info_span!("Preprocessing graphs", indicatif.pb_show = true);
+        preprocess_span.pb_set_style(&ProgressStyle::with_template(
+            "{wide_bar} {pos}/{len} {msg}",
+        )?);
+        preprocess_span.pb_set_length(self.graphs.len() as u64);
+        preprocess_span.pb_set_message("Preprocessing graphs");
+        preprocess_span.pb_set_finish_message("all graphs preprocessed");
+
+        let preprocess_span_enter = preprocess_span.enter();
+
         self.graphs.par_iter_mut().try_for_each(|amplitude_graph| {
             let ok = amplitude_graph.preprocess(model, settings);
+            preprocess_span.pb_inc(1);
 
             ok
         })?;
+
+        drop(preprocess_span_enter);
+        drop(preprocess_span);
 
         self.generate_grouped_derived_data()?;
 

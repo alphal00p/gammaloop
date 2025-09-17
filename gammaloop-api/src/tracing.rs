@@ -12,14 +12,22 @@ use tracing_appender::{
     non_blocking::NonBlockingBuilder,
     rolling::{RollingFileAppender, Rotation},
 };
+use tracing_indicatif::{
+    filter::{hide_indicatif_span_fields, IndicatifFilter},
+    IndicatifLayer,
+};
 use tracing_subscriber::{
     filter::Filtered,
-    fmt::{self, format::Writer, FmtContext, FormatEvent, FormatFields},
+    fmt::{
+        self,
+        format::{DefaultFields, Writer},
+        FmtContext, FormatEvent, FormatFields,
+    },
     layer::SubscriberExt,
     registry::LookupSpan,
     reload,
     util::SubscriberInitExt,
-    EnvFilter, Registry,
+    EnvFilter, Layer, Registry,
 };
 
 use color_eyre::Result;
@@ -173,8 +181,8 @@ pub(crate) fn init_tracing(
         let file_filter = EnvFilter::new(FILE_LOG_SPEC.lock().unwrap().as_str());
         let stderr_filter = EnvFilter::new(STDERR_LOG_SPEC.lock().unwrap().as_str());
 
-        let (file_filter_layer, file_handle) = reload::Layer::new(file_filter);
-        let (stderr_filter_layer, stderr_handle) = reload::Layer::new(stderr_filter);
+        let (file_filter_layer, file_handle) = reload::Layer::new(file_filter.clone());
+        let (stderr_filter_layer, stderr_handle) = reload::Layer::new(stderr_filter.clone());
 
         let _ = std::fs::create_dir_all(dir.as_ref());
 
@@ -212,9 +220,24 @@ pub(crate) fn init_tracing(
             .event_format(StatusFmt::default())
             .with_writer(std::io::stderr);
 
+        let indicatif_layer = IndicatifLayer::new()
+            .with_span_field_formatter(hide_indicatif_span_fields(DefaultFields::new()));
+
         tracing_subscriber::registry()
             .with(Filtered::new(json, file_filter_layer))
             .with(Filtered::new(status_layer, stderr_filter_layer))
+            .with(
+                tracing_subscriber::fmt::layer()
+                    .with_writer(indicatif_layer.get_stderr_writer())
+                    .with_filter(file_filter.clone())
+                    .with_filter(stderr_filter.clone()),
+            )
+            .with(
+                indicatif_layer
+                    .with_filter(file_filter)
+                    .with_filter(stderr_filter)
+                    .with_filter(IndicatifFilter::new(false)),
+            )
             .init();
 
         FilterHandles {
