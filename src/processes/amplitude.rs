@@ -12,7 +12,6 @@ use ahash::AHashSet;
 // use bincode::{Decode, Encode};
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::{Result, Section};
-use linya::{Bar, Progress};
 use momtrop::SampleGenerator;
 
 use idenso::color::ColorSimplifier;
