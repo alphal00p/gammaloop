@@ -1,5 +1,6 @@
 use bitvec::vec::BitVec;
 use idenso::color::SelectiveExpand;
+use idenso::metric::PermuteWithMetric;
 use indicatif::ProgressBar;
 use indicatif::{ParallelProgressIterator, ProgressStyle};
 
@@ -15,8 +16,8 @@ use spenso::tensors::data::DataTensor;
 // use spenso::network::Network;
 
 use spenso::structure::representation::{Euclidean, LibraryRep, Minkowski, RepName};
-use spenso::structure::{OrderedStructure, PermutedStructure, TensorStructure};
-use spenso::tensors::parametric::{ConcreteOrParam, MixedTensor, ParamTensor};
+use spenso::structure::{OrderedStructure, PermutedStructure, TensorStructure, ToSymbolic};
+use spenso::tensors::parametric::{ConcreteOrParam, MixedTensor, ParamOrConcrete, ParamTensor};
 use spenso_hep_lib::hep_lib;
 use std::collections::hash_map::Entry;
 use std::collections::HashSet;
@@ -34,11 +35,11 @@ use ahash::AHashMap;
 use ahash::AHashSet;
 use ahash::HashMap;
 use colored::Colorize;
-use log::debug;
-use log::warn;
 use smartstring::{LazyCompact, SmartString};
 use symbolica::atom::AtomCore;
 use symbolica::{parse, symbol};
+use tracing::debug;
+use tracing::warn;
 
 use super::FeynGenError;
 use super::NumeratorAwareGraphGroupingOption;
@@ -60,6 +61,7 @@ use crate::numerator::Numerator;
 use crate::numerator::SymbolicExpression;
 use crate::numerator::{ExpressionState, ParsingNet};
 use crate::processes::ProcessDefinition;
+use crate::utils::symbolica_ext::{COMPLEXRATPOLYFIELD, Q_I};
 use crate::utils::{self, F, GS, TENSORLIB, W_};
 use crate::uv::UltravioletGraph;
 use crate::{disable, status_error, status_info, status_warn};
@@ -1036,13 +1038,19 @@ impl ProcessDefinition {
                 Some(vec![Atom::num(i)]),
             );
 
-            lib.insert_explicit_dense(
-                key,
-                (0..4)
-                    .into_iter()
-                    .map(|_| ConcreteOrParam::Param(Atom::num(sample_iterator.next().unwrap())))
-                    .collect(),
+            debug!("lib_loop:{}", key.clone().permute_with_metric());
+            let key = ParamOrConcrete::Param(
+                ParamTensor::from_dense(
+                    key.structure,
+                    (0..4)
+                        .into_iter()
+                        .map(|_| Atom::num(sample_iterator.next().unwrap()))
+                        .collect(),
+                )
+                .unwrap(),
             );
+
+            lib.insert_explicit(PermutedStructure::identity(key));
         }
 
         for (i, pdg) in self.initial_pdgs.iter().enumerate() {
@@ -1053,13 +1061,20 @@ impl ProcessDefinition {
                 additional_args.clone(),
             );
 
-            lib.insert_explicit_dense(
-                key,
-                (0..4)
-                    .into_iter()
-                    .map(|_| ConcreteOrParam::Param(Atom::num(sample_iterator.next().unwrap())))
-                    .collect(),
+            debug!("lib_ext:{}", key.clone().permute_with_metric());
+
+            let key = ParamOrConcrete::Param(
+                ParamTensor::from_dense(
+                    key.structure,
+                    (0..4)
+                        .into_iter()
+                        .map(|_| Atom::num(sample_iterator.next().unwrap()))
+                        .collect(),
+                )
+                .unwrap(),
             );
+
+            lib.insert_explicit(PermutedStructure::identity(key));
 
             let p = model.get_particle_from_pdg(*pdg as isize);
 
@@ -1074,13 +1089,19 @@ impl ProcessDefinition {
                 additional_args,
             });
 
-            lib.insert_explicit_dense(
-                key,
-                (0..len)
-                    .into_iter()
-                    .map(|_| ConcreteOrParam::Param(Atom::num(sample_iterator.next().unwrap())))
-                    .collect(),
+            debug!("lib_pol:{}", key.clone().permute_with_metric());
+            let key = ParamOrConcrete::Param(
+                ParamTensor::from_dense(
+                    key.structure,
+                    (0..len)
+                        .into_iter()
+                        .map(|_| Atom::num(sample_iterator.next().unwrap()))
+                        .collect(),
+                )
+                .unwrap(),
             );
+
+            lib.insert_explicit(PermutedStructure::identity(key));
         }
         match self.generation_type {
             GenerationType::Amplitude => {
@@ -1093,15 +1114,18 @@ impl ProcessDefinition {
                         additional_args.clone(),
                     );
 
-                    lib.insert_explicit_dense(
-                        key,
-                        (0..4)
-                            .into_iter()
-                            .map(|_| {
-                                ConcreteOrParam::Param(Atom::num(sample_iterator.next().unwrap()))
-                            })
-                            .collect(),
+                    let key = ParamOrConcrete::Param(
+                        ParamTensor::from_dense(
+                            key.structure,
+                            (0..4)
+                                .into_iter()
+                                .map(|_| Atom::num(sample_iterator.next().unwrap()))
+                                .collect(),
+                        )
+                        .unwrap(),
                     );
+
+                    lib.insert_explicit(PermutedStructure::identity(key));
 
                     let p = model.get_particle_from_pdg(*pdg as isize);
 
@@ -1110,21 +1134,24 @@ impl ProcessDefinition {
 
                     let len = structure.size().unwrap();
 
-                    let key = PermutedStructure::identity(ExplicitKey {
+                    let key = ExplicitKey {
                         structure,
                         global_name,
                         additional_args,
-                    });
+                    };
 
-                    lib.insert_explicit_dense(
-                        key,
-                        (0..len)
-                            .into_iter()
-                            .map(|_| {
-                                ConcreteOrParam::Param(Atom::num(sample_iterator.next().unwrap()))
-                            })
-                            .collect(),
+                    let key = ParamOrConcrete::Param(
+                        ParamTensor::from_dense(
+                            key,
+                            (0..len)
+                                .into_iter()
+                                .map(|_| Atom::num(sample_iterator.next().unwrap()))
+                                .collect(),
+                        )
+                        .unwrap(),
                     );
+
+                    lib.insert_explicit(PermutedStructure::identity(key));
                 }
             }
             GenerationType::CrossSection => {}
@@ -3935,17 +3962,6 @@ impl ProcessDefinition {
             None
         }
 
-        fn compare_sample_points(
-            sample_points_a: &[Vec<(Atom, Atom)>],
-            sample_points_b: &[Vec<(Atom, Atom)>],
-        ) -> bool {
-            sample_points_a
-                .iter()
-                .zip(sample_points_b.iter())
-                .all(|(sp_a, sp_b)| {
-                    sp_a.len() == sp_b.len() && sp_a.iter().zip(sp_b.iter()).all(|(a, b)| a == b)
-                })
-        }
         match numerator_aware_isomorphism_grouping {
             NumeratorAwareGraphGroupingOption::NoGrouping
             | NumeratorAwareGraphGroupingOption::OnlyDetectZeroes => None,
@@ -4022,19 +4038,17 @@ impl ProcessDefinition {
                                 } else if b.is_zero() {
                                     None
                                 } else {
-                                    let mut ratio = a / b;
                                     if ANALYZE_RATIO_AS_RATIONAL_POLYNOMIAL {
-                                        ratio = ratio
-                                            .to_rational_polynomial::<_, _, u8>(
-                                                &symbolica::domains::rational::Q,
-                                                &symbolica::domains::integer::Z,
-                                                None,
-                                            )
-                                            .to_expression();
+                                        let element = COMPLEXRATPOLYFIELD.to_element(
+                                            a.to_polynomial(&Q_I, None),
+                                            b.to_polynomial(&Q_I, None),
+                                            true,
+                                        );
+                                        // Some(element.to_expression())
+                                        Some((a / b).expand())
                                     } else {
-                                        ratio = ratio.expand();
+                                        Some((a / b).expand())
                                     }
-                                    Some(ratio)
                                 }
                             })
                             .collect::<HashSet<_>>();
@@ -4254,12 +4268,14 @@ impl ProcessedNumeratorForComparison {
                         expanded
                             .iter()
                             .map(|(c, l)| {
-                                // println!("c:{c},l:{l}");
+                                debug!("c:{c},l:{l}");
                                 let mut net = ParsingNet::try_from_view(l.as_view(), lib).unwrap();
                                 net.store
                                     .scalar
                                     .iter_mut()
                                     .for_each(|a| *a = a.replace_multiple(reps));
+
+                                debug!(net=?net.dot_pretty());
                                 net.execute::<Sequential, SmallestDegree, _, _>(lib)
                                     .unwrap();
 

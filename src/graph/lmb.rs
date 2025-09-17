@@ -99,6 +99,15 @@ impl LoopMomentumBasis {
             })
             .collect();
     }
+
+    pub(crate) fn put_loop_to_ext(&mut self, i: LoopIndex) {
+        let a = self.loop_edges.remove(i);
+        // let ext_id = ExternalIndex::from(self.ext_edges.len());
+        self.ext_edges.push(a);
+        self.edge_signatures
+            .iter_mut()
+            .for_each(|(_, s)| s.put_loop_to_ext(i));
+    }
     // pub(crate) fn swap_external(&mut self, i: ExternalIndex, j: ExternalIndex) {
     //     self.ext_edges.swap(i, j);
     //     self.edge_signatures = self

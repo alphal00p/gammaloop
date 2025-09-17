@@ -3,16 +3,30 @@ use schemars::{json_schema, JsonSchema};
 use serde::{Deserialize, Serialize};
 use symbolica::{
     atom::{Atom, AtomCore},
+    domains::{
+        algebraic_number::AlgebraicExtension,
+        integer::IntegerRing,
+        rational::{FractionField, Q},
+    },
     parse,
+    poly::polynomial::PolynomialRing,
     printer::{PrintMode, PrintOptions},
 };
 
 use std::{
     fmt::Display,
     ops::{Deref, DerefMut},
+    sync::LazyLock,
 };
 
 use crate::GammaLoopContext;
+
+pub static Q_I: LazyLock<AlgebraicExtension<FractionField<IntegerRing>>> =
+    LazyLock::new(|| AlgebraicExtension::new_complex(Q));
+
+pub static COMPLEXRATPOLYFIELD: LazyLock<
+    FractionField<PolynomialRing<AlgebraicExtension<FractionField<IntegerRing>>, u16>>,
+> = LazyLock::new(|| FractionField::new(PolynomialRing::<_, u16>::new(Q_I.clone())));
 
 pub static LOGPRINTOPTS: PrintOptions = PrintOptions {
     hide_all_namespaces: false,

@@ -20,6 +20,7 @@ use color_eyre::{Result, Section};
 use dot_parser::ast::GraphFromFileError;
 use eyre::{eyre, Ok};
 use itertools::Itertools;
+use libc::iconv_t;
 use linnet::{
     half_edge::{
         involution::{EdgeVec, Flow, HedgePair, Orientation},
@@ -69,7 +70,7 @@ where
 {
     fn to_quoted(&self) -> String {
         let mut opts = PrintOptions::file();
-        opts.hide_namespace = Some("_gammaloop");
+        opts.hide_namespace = Some("gammalooprs");
         format!("\"{}\"", self.printer(opts))
     }
 }
@@ -437,6 +438,8 @@ impl Graph {
 
         let mut lmb_ids = BTreeMap::new();
 
+        let mut xs_ext_id = BTreeMap::new();
+
         // Generate edge numerators
         for (p, eid, e) in graph.iter_edges() {
             match p {
@@ -446,6 +449,11 @@ impl Graph {
                             return Err(eyre!(
                                 "lmb_id {lmb_id:?} already exists with value {old_value:?}",
                             ));
+                        }
+                        full_cut.sub(p);
+                    } else if let Some(h) = e.data.is_cut {
+                        if let Some(old_value) = xs_ext_id.insert(h, eid) {
+                            return Err(eyre!("h {h:?} already exists with value {old_value:?}",));
                         }
                         full_cut.sub(p);
                     }
@@ -571,6 +579,8 @@ impl Graph {
             |_, h| Ok(h),
         )?;
 
+        // println!("{}", underlying.dot(&full_cut));
+
         let mut loop_momentum_basis = if let Some(i) = full_cut.included_iter().next() {
             let tree = SimpleTraversalTree::depth_first_traverse(
                 &underlying,
@@ -607,6 +617,17 @@ impl Graph {
         // println!("{:#?}", loop_momentum_basis);
 
         let inv_lmb_ids: BTreeMap<_, _> = lmb_ids.iter().map(|(k, v)| (*v, *k)).collect();
+
+        for (_, e) in xs_ext_id {
+            // println!("{e}");
+            let (l, _) = loop_momentum_basis
+                .loop_edges
+                .iter()
+                .find_position(|a| *a == &e)
+                .unwrap();
+
+            loop_momentum_basis.put_loop_to_ext(LoopIndex(l));
+        }
 
         let mut i = 0;
 
@@ -940,6 +961,7 @@ macro_rules! dot {
 
 #[cfg(test)]
 pub mod test {
+    use insta::assert_snapshot;
     use linnet::half_edge::involution::HedgePair;
     use log::info;
     use spenso::{
@@ -1388,6 +1410,61 @@ pub mod test {
     }
 
     #[test]
+    fn parse_lmbsetting_crossection() {
+        test_initialise().unwrap();
+        let g: Graph = dot!(
+            digraph G{
+                num = "1/2"
+                overall_factor = "2*x"
+                projector = "spenso::t"
+
+                edge [num="1" pdg=1000]
+                ext1 [style=invis cut=2]
+                ext2 [style=invis cut=1]
+                A [num="1" color_num="a"]
+                B [num="1"]
+                C [num="1"]
+                D [num="1"]
+                E [num="1"]
+                ext1 -> A
+                ext2 -> C
+                C -> A    [ num="P(eid,spenso::mink(4,0))"]
+                A -> D    [ num="P(eid,spenso::mink(4,0))"]
+                D -> B    [ num="1"]
+                B -> ext1
+                E -> B    [lmb_id=0]
+                E -> A    [lmb_id=1]
+                E -> C
+                C -> D    [ num="1"]
+                B -> ext2
+            },"scalars"
+        )
+        .unwrap();
+
+        assert_snapshot!(g.debug_dot(),@r#"
+        digraph G{
+          num = "1/2";
+          overall_factor = "2*x";
+          projector = "spenso::t";
+          A[dod=0 num="1"];
+          B[dod=0 num="1"];
+          C[dod=0 num="1"];
+          D[dod=0 num="1"];
+          E[dod=0 num="1"];
+
+          A:0	-> D:1	 [id=0 source=0 sink=0  dod=-2 is_dummy=false lmb_id=2 lmb_rep="K(2,a___)" name=e0 num="P(0,spenso::mink(4,0))" particle="scalar_0"];
+          B:3	-> C:17	 [id=1 source=1 sink=3  dod=-2 is_cut=17 is_dummy=false lmb_rep="P(0,a___)" name=e1 num="1" particle="scalar_0"];
+          E:14	-> C:15	 [id=2 source=2 sink=2  dod=-2 is_dummy=false lmb_rep="-K(0,a___)-K(1,a___)" name=e2 num="1" particle="scalar_0"];
+          C:4	-> A:5	 [id=3 source=0 sink=1  dod=-2 is_dummy=false lmb_rep="-P(1,a___)-K(1,a___)+K(2,a___)" name=e3 num="P(3,spenso::mink(4,0))" particle="scalar_0"];
+          C:6	-> D:7	 [id=4 source=1 sink=1  dod=-2 is_dummy=false lmb_rep="P(0,a___)+P(1,a___)-K(0,a___)-K(2,a___)" name=e4 num="1" particle="scalar_0"];
+          D:8	-> B:9	 [id=5 source=2 sink=2  dod=-2 is_dummy=false lmb_rep="P(0,a___)+P(1,a___)-K(0,a___)" name=e5 num="1" particle="scalar_0"];
+          E:10	-> A:11	 [id=6 source=0 sink=2  dod=-2 is_dummy=false lmb_id=1 lmb_rep="K(1,a___)" name=e6 num="1" particle="scalar_0"];
+          E:12	-> B:13	 [id=7 source=1 sink=3  dod=-2 is_dummy=false lmb_id=0 lmb_rep="K(0,a___)" name=e7 num="1" particle="scalar_0"];
+          B:2	-> A:16	 [id=8 source=0 sink=3  dod=-2 is_cut=16 is_dummy=false lmb_rep="P(1,a___)" name=e8 num="1" particle="scalar_0"];
+        }
+        "#);
+    }
+    #[test]
     fn parse_lmbsetting() {
         test_initialise().unwrap();
         let g: Graph = dot!(
@@ -1418,6 +1495,35 @@ pub mod test {
             },"scalars"
         )
         .unwrap();
+
+        assert_snapshot!(g.debug_dot(),@r#"
+        digraph G{
+          num = "1";
+          overall_factor = "2*x";
+          projector = "1";
+          A[dod=0 num="1"];
+          B[dod=0 num="1"];
+          C[dod=0 num="1"];
+          D[dod=0 num="1"];
+          E[dod=0 num="1"];
+
+          A:0	-> D:1	 [id=0 source=0 sink=0  dod=-2 is_dummy=false lmb_id=2 lmb_rep="K(2,a___)" name=e0 num="P(0,spenso::mink(4,0))" particle="scalar_0"];
+          ext1	 [style=invis];
+          B:2	-> ext1	 [id=1 source=0 dod=-2 is_dummy=false lmb_rep="-P(1,a___)+P(2,a___)+P(3,a___)" name=e1 num="1𝑖" particle="scalar_0"];
+          ext2	 [style=invis];
+          B:3	-> ext2	 [id=2 source=1 dod=-2 is_dummy=false lmb_rep="P(1,a___)" name=e2 num="1𝑖" particle="scalar_0"];
+          C:4	-> A:5	 [id=3 source=0 sink=1  dod=-2 is_dummy=false lmb_rep="-P(2,a___)-K(1,a___)+K(2,a___)" name=e3 num="P(3,spenso::mink(4,0))" particle="scalar_0"];
+          C:6	-> D:7	 [id=4 source=1 sink=1  dod=-2 is_dummy=false lmb_rep="P(2,a___)+P(3,a___)-K(0,a___)-K(2,a___)" name=e4 num="1" particle="scalar_0"];
+          D:8	-> B:9	 [id=5 source=2 sink=2  dod=-2 is_dummy=false lmb_rep="P(2,a___)+P(3,a___)-K(0,a___)" name=e5 num="1" particle="scalar_0"];
+          E:10	-> A:11	 [id=6 source=0 sink=2  dod=-2 is_dummy=false lmb_id=1 lmb_rep="K(1,a___)" name=e6 num="1" particle="scalar_0"];
+          E:12	-> B:13	 [id=7 source=1 sink=3  dod=-2 is_dummy=false lmb_id=0 lmb_rep="K(0,a___)" name=e7 num="1" particle="scalar_0"];
+          E:14	-> C:15	 [id=8 source=2 sink=2  dod=-2 is_dummy=false lmb_rep="-K(0,a___)-K(1,a___)" name=e8 num="1" particle="scalar_0"];
+          ext9	 [style=invis];
+          ext9	-> A:16	 [id=9 sink=3 dod=-2 is_dummy=false lmb_rep="P(2,a___)" name=e9 num="1𝑖" particle="scalar_0"];
+          ext10	 [style=invis];
+          ext10	-> C:17	 [id=10 sink=3 dod=-2 is_dummy=false lmb_rep="P(3,a___)" name=e10 num="1𝑖" particle="scalar_0"];
+        }
+        "#);
 
         println!(
             "{}",

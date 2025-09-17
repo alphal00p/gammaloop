@@ -59,6 +59,11 @@ impl LoopExtSignature {
             self.internal.0.swap(i, j);
         }
     }
+
+    pub(crate) fn put_loop_to_ext(&mut self, l: LoopIndex) {
+        let a = self.internal.0.remove(l);
+        self.external.0.push(a);
+    }
     pub(crate) fn swap_external(&mut self, i: ExternalIndex, j: ExternalIndex) {
         self.external.0.swap(i, j);
     }
