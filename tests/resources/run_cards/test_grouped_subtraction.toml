@@ -1,9 +1,9 @@
 #:schema /Users/lcnbr/.config/gammaloop/schemas/runhistory.json
 commands = [
-"import model scalars-default",
-"import amplitude ./tests/resources/graphs/grouped_subtraction/no_group.dot",
-"import amplitude ./tests/resources/graphs/grouped_subtraction/group.dot",
-"generate",
+    "import model scalars-default",
+    "import amplitude ./tests/resources/graphs/grouped_subtraction/no_group.dot",
+    "import amplitude ./tests/resources/graphs/grouped_subtraction/group.dot",
+    "generate",
 ]
 
 
@@ -19,36 +19,31 @@ type = "constant"
 
 [default_runtime_settings.Kinematics.externals.data]
 momenta = [
-"dependent",
-[
--0.29166666667,
-0.0,
-0.0,
--0.4061164310337068,
-],
-[
-0.70833333333,
-0.0,
-0.0,
-0.4061164310337068,
-],
-[
-0.3200,
-0.0,
-0.0,
-0.6400,
-],
+    "dependent",
+    [
+        -0.29166666667,
+        0.0,
+        0.0,
+        -0.4061164310337068,
+    ],
+    [
+        0.70833333333,
+        0.0,
+        0.0,
+        0.4061164310337068,
+    ],
+    [
+        0.3200,
+        0.0,
+        0.0,
+        0.6400,
+    ],
 ]
-helicities = [
-1,
-1,
-1,
-1,
-]
+helicities = [1, 1, 1, 1]
 
 [default_runtime_settings.Integrator]
-n_bins= 64
-min_samples_for_update= 1000
+n_bins = 64
+min_samples_for_update = 1000
 n_start = 1000000
 n_increase = 0
 n_max = 10000000
@@ -64,9 +59,6 @@ check_on_norm = true
 
 [default_runtime_settings.subtraction]
 disable_threshold_subtraction = false
-
-[global_settings]
-stderr_directive = "debug"
 
 [global_settings.generation]
 enable_thresholds = true

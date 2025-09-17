@@ -34,7 +34,7 @@ fn qqx_aaa_subtracted_nlo_amplitude_test() -> Result<()> {
 
     let a = Inspect {
         process_id: Some(0),
-        integrand_name: Some("qqx_aaa_subtracted".to_string()),
+        integrand_name: Some("default".to_string()),
         point: vec![0.1, 0.2, 0.3],
         momentum_space: true,
         ..Default::default()
@@ -56,7 +56,7 @@ fn trees() -> Result<()> {
 
     let a = Inspect {
         process_id: Some(0),
-        integrand_name: Some("qqx_aaa".to_string()),
+        integrand_name: Some("default".to_string()),
         ..Default::default()
     }
     .run(&mut cli)?;
@@ -100,7 +100,7 @@ fn photons_1l() -> Result<()> {
 
     let integrate = Integrate {
         process_id: Some(0),
-        integrand_name: Some("physical_1L_6photons".to_string()),
+        integrand_name: Some("default".to_string()),
         result_path: Some("./tests/photons/integration_workspace/integration_results.yaml".into()),
         workspace_path: Some("./tests/photons/integration_workspace/".into()),
         n_cores: 6,
@@ -125,7 +125,7 @@ fn test_grouped_subtraction() -> Result<()> {
 
     let int1 = Integrate {
         process_id: Some(0),
-        integrand_name: Some("no_group".to_string()),
+        integrand_name: Some("default".to_string()),
         result_path: Some(get_tests_workspace_path().join(
             "test_grouped_subtraction/integration_workspace_no_group/integration_results.yaml",
         )),
@@ -140,7 +140,7 @@ fn test_grouped_subtraction() -> Result<()> {
     let int2 =
         Integrate {
             process_id: Some(1),
-            integrand_name: Some("group".to_string()),
+            integrand_name: Some("default".to_string()),
             result_path: Some(get_tests_workspace_path().join(
                 "test_grouped_subtraction/integration_workspace_group/integration_results.yaml",
             )),

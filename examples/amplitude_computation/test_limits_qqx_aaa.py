@@ -253,7 +253,6 @@ def run_limit_test(elements_to_display=None, tests_to_run=None, gammaloop_state=
             # Add the -p1 shift since the LMB locates the defining is between p1 and p2
             on_threshold_point = [
                 on_threshold_point[i] + p1[i+1] for i in range(3)]
-            # # WTF why multiply by 2?? ecm issue in inspect?
             # on_threshold_point = [on_threshold_point[i] * 2. for i in range(3)]
         case _:
             raise ValueError(
@@ -262,7 +261,7 @@ def run_limit_test(elements_to_display=None, tests_to_run=None, gammaloop_state=
     x = 0.1
     for test_name, k_base, scaling, pref_power in [
         ('IR', [0.0001, 0.0001, 1.0*x], 0.1, 0.0),
-        ('UV', [1.0e2, 1.0e2, 1.0e2], 10.0, 0.0),
+        ('UV', [1.0e3, 1.0e3, 1.0e3], 10.0, 1./2.),
         ('THRES', on_threshold_point, 0.1, 0.0),
     ]:
         if test_name not in tests_to_run:

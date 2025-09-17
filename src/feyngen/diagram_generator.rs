@@ -81,7 +81,7 @@ use linnet::half_edge::NodeIndex;
 use symbolica::{atom::Atom, graph::Graph as SymbolicaGraph};
 
 const CANONIZE_GRAPH_FLOWS: bool = true;
-const ANALYZE_RATIO_AS_RATIONAL_POLYNOMIAL: bool = true;
+const ANALYZE_RATIO_AS_RATIONAL_POLYNOMIAL: bool = false;
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct NodeColorWithVertexRule {
     pub external_tag: i32,
