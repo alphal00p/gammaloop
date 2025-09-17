@@ -61,7 +61,8 @@ rotation_axis = []
 disable_threshold_subtraction = true
 
 [global_settings]
-stderr_directive = "debug"
+display_directive = "debug"
+logfile_directive = "debug"
 
 [global_settings.generation]
 enable_thresholds = false

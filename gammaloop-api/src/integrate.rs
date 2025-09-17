@@ -47,7 +47,11 @@ pub struct Integrate {
     pub workspace_path: Option<PathBuf>,
 
     /// Specify the target integration result to compare against
-    #[arg(short = 't', num_args = 2, long)]
+    #[arg(short = 't', num_args = 2, long,
+          value_delimiter = ',',          // allow --vals 1,-2,3
+          allow_negative_numbers = true,  // treat -2 as a value, not a flag
+          allow_hyphen_values=true
+    )]
     pub target: Option<Vec<f64>>,
 
     /// Whether to restart the integration from scratch, or continue from a previous run if possible

@@ -1,5 +1,5 @@
 commands = [
-    "set global kv stderr_directive=gammalooprs=info,info",
+    "set global kv display_directive=gammalooprs=info,info",
     "import model sm-default",
     "import amplitude ./qqx_aaa_subtracted.dot",
     "generate",
@@ -62,7 +62,8 @@ rotation_axis = []
 disable_threshold_subtraction = false
 
 [global_settings]
-stderr_directive = "debug"
+display_directive = "debug"
+logfile_directive = "debug"
 
 [global_settings.generation]
 enable_thresholds = true

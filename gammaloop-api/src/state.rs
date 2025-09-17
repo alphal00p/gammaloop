@@ -50,8 +50,8 @@ pub trait SyncSettings {
 
 impl SyncSettings for GlobalSettings {
     fn sync_settings(&self) -> Result<()> {
-        set_file_log_filter(&self.log_file_directive)?;
-        set_stderr_log_filter(&self.stderr_directive)
+        set_file_log_filter(&self.logfile_directive)?;
+        set_stderr_log_filter(&self.display_directive)
     }
 }
 

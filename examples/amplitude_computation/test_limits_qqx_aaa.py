@@ -192,7 +192,11 @@ def eval_integrand(k_input, debug=False, gammaloop_state='./GL_QQX_AAA_euclidean
     if debug:
         print(f"Running command:\n{cmd}")
     tmp_env = os.environ.copy()
-    tmp_env['GL_FILE_LOG_FILTER'] = 'debug'
+    tmp_env['GL_LOGFILE_FILTER'] = 'debug'
+    if debug:
+        tmp_env['GL_DISPLAY_FILTER'] = 'debug'
+    else:
+        tmp_env['GL_DISPLAY_FILTER'] = 'info'
     r = subprocess.run(cmd, stdout=subprocess.PIPE,
                        stderr=subprocess.STDOUT, text=True, shell=True, env=tmp_env)
     if debug:
@@ -249,8 +253,8 @@ def run_limit_test(elements_to_display=None, tests_to_run=None, gammaloop_state=
             # Add the -p1 shift since the LMB locates the defining is between p1 and p2
             on_threshold_point = [
                 on_threshold_point[i] + p1[i+1] for i in range(3)]
-            # WTF why multiply by 2?? ecm issue in inspect?
-            on_threshold_point = [on_threshold_point[i] * 2. for i in range(3)]
+            # # WTF why multiply by 2?? ecm issue in inspect?
+            # on_threshold_point = [on_threshold_point[i] * 2. for i in range(3)]
         case _:
             raise ValueError(
                 f"Unknown threshold to study '{threshold_to_study}'")

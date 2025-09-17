@@ -45,14 +45,14 @@ fn file_filter_from(user_spec: &str) -> Result<EnvFilter> {
     Ok(filter)
 }
 
-fn stderr_filter_from(user_spec: &str) -> Result<EnvFilter> {
+fn display_filter_from(user_spec: &str) -> Result<EnvFilter> {
     // Default: only show `status` target, everything else OFF.
     // Users can override/expand with their spec.
     let mut f = EnvFilter::builder()
         .with_default_directive(LevelFilter::OFF.into())
-        .parse_lossy("status=trace");
+        .parse_lossy("status=info");
 
-    for a in user_spec.split("|") {
+    for a in user_spec.split(",") {
         if a.trim().is_empty() {
             continue;
         }
@@ -66,17 +66,24 @@ fn stderr_filter_from(user_spec: &str) -> Result<EnvFilter> {
     Ok(f)
 }
 
-const ENV_FILE_LOG_FILTER: &'static str = "GL_FILE_LOG_FILTER";
-const ENV_DISPLAY_LOG_FILTER: &'static str = "GL_DISPLAY_LOG_FILTER";
+const ENV_FILE_LOG_FILTER: &'static str = "GL_LOGFILE_FILTER";
+const ENV_DISPLAY_LOG_FILTER: &'static str = "GL_DISPLAY_FILTER";
+const ENV_ALL_LOG_FILTER: &'static str = "GL_ALL_LOG_FILTER";
 
 // Statics to hold the current log specifications
 static FILE_LOG_SPEC: LazyLock<Mutex<String>> = LazyLock::new(|| {
+    if let Ok(all) = std::env::var(ENV_ALL_LOG_FILTER) {
+        return Mutex::new(all);
+    }
     let directive = std::env::var(ENV_FILE_LOG_FILTER)
         .ok()
         .unwrap_or("".to_string());
     Mutex::new(directive)
 });
 static STDERR_LOG_SPEC: LazyLock<Mutex<String>> = LazyLock::new(|| {
+    if let Ok(all) = std::env::var(ENV_ALL_LOG_FILTER) {
+        return Mutex::new(all);
+    }
     let directive = std::env::var(ENV_DISPLAY_LOG_FILTER)
         .ok()
         .unwrap_or("".to_string());
@@ -112,7 +119,7 @@ pub fn set_file_log_filter(user_spec: impl AsRef<str>) -> Result<()> {
     };
     let user_spec = if let Some(file) = std::env::var(ENV_FILE_LOG_FILTER).ok() {
         println!(
-            "WARNING, {ENV_FILE_LOG_FILTER} is set to {file}, will override settings {}",
+            "WARNING, file log filter is set to {file}, will override settings {}",
             user_spec.as_ref()
         );
         file
@@ -134,14 +141,14 @@ pub fn set_stderr_log_filter(user_spec: impl AsRef<str>) -> Result<()> {
     };
     let user_spec = if let Some(display) = std::env::var(ENV_DISPLAY_LOG_FILTER).ok() {
         println!(
-            "WARNING, {ENV_DISPLAY_LOG_FILTER} is set to {display}, will override settings {}",
+            "WARNING, display log filter is set to {display}, will override settings {}",
             user_spec.as_ref()
         );
         display
     } else {
         user_spec.as_ref().to_string()
     };
-    let full_spec = stderr_filter_from(&user_spec)?;
+    let full_spec = display_filter_from(&user_spec)?;
     *STDERR_LOG_SPEC.lock().unwrap() = user_spec;
     // println!("Modifying env filter to: {}", full_spec);
     handles.stderr_handle.modify(|f| *f = full_spec)?;
