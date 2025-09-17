@@ -14,6 +14,7 @@ use symbolica::atom::{Atom, AtomOrView, FunctionBuilder, Symbol};
 
 use crate::{
     graph::{edge::ParseEdge, Edge, Graph, NumHedgeData},
+    model::{ArcParticle, Particle},
     utils::GS,
 };
 
@@ -25,8 +26,17 @@ pub trait GeneratePolarizations {
 
     fn generate_polarizations_of<S: SubGraph>(&self, subgraph: &S) -> Atom;
     fn generate_polarization_parameters_of<S: SubGraph>(&self, subgraph: &S) -> Vec<Atom>;
-    fn generate_polarizations(&self) -> Atom;
-    fn generate_polarization_params(&self) -> Vec<Atom>;
+    // fn generate_polarizations(&self) -> Atom;
+    // fn generate_polarization_params(&self) -> Vec<Atom>;
+}
+
+impl Graph {
+    pub fn generate_polarizations(&self) -> Atom {
+        self.generate_polarizations_of(&self.underlying.external_filter())
+    }
+    pub fn generate_polarization_params(&self) -> Vec<Atom> {
+        self.generate_polarization_parameters_of(&self.underlying.external_filter())
+    }
 }
 
 impl GeneratePolarizations for Graph {
@@ -39,12 +49,12 @@ impl GeneratePolarizations for Graph {
             .generate_polarization_parameters_of(subgraph)
     }
 
-    fn generate_polarizations(&self) -> Atom {
-        self.generate_polarizations_of(&self.underlying.external_filter())
-    }
-    fn generate_polarization_params(&self) -> Vec<Atom> {
-        self.generate_polarization_parameters_of(&self.underlying.external_filter())
-    }
+    // fn generate_polarizations(&self) -> Atom {
+    //     self.generate_polarizations_of(&self.underlying.external_filter())
+    // }
+    // fn generate_polarization_params(&self) -> Vec<Atom> {
+    //     self.generate_polarization_parameters_of(&self.underlying.external_filter())
+    // }
 
     // pub(crate) fn polarizations_values(&self) -> Vec<Atom> {
     //     self.polarizations_of(&self.underlying.external_filter())
@@ -97,12 +107,12 @@ where
         pols
     }
 
-    fn generate_polarizations(&self) -> Atom {
-        self.generate_polarizations_of(&self.external_filter())
-    }
-    fn generate_polarization_params(&self) -> Vec<Atom> {
-        self.generate_polarization_parameters_of(&self.external_filter())
-    }
+    // fn generate_polarizations(&self) -> Atom {
+    //     self.generate_polarizations_of(&self.external_filter())
+    // }
+    // fn generate_polarization_params(&self) -> Vec<Atom> {
+    //     self.generate_polarization_parameters_of(&self.external_filter())
+    // }
 
     // pub(crate) fn polarizations_values(&self) -> Vec<Atom> {
     //     self.polarizations_of(&self.underlying.external_filter())
@@ -231,6 +241,126 @@ impl ReversibleEdge for EdgeData<&ParseEdge> {
             }
         } else {
             None
+        }
+    }
+
+    fn polarization<'a, T>(&self, add_args: &'a [T], hedge_data: &NumHedgeData, flow: Flow) -> Atom
+    where
+        &'a T: Into<AtomOrView<'a>>,
+    {
+        if let Some(name) = self.pol_symbol(flow) {
+            hedge_data.polarization(FunctionBuilder::new(name).add_args(add_args))
+        } else {
+            Atom::num(1)
+        }
+    }
+
+    fn polarization_structure<'a, T>(
+        &self,
+        add_args: &'a [T],
+        hedge_data: &NumHedgeData,
+        flow: Flow,
+    ) -> Option<PermutedStructure<ShadowedStructure<Aind>>>
+    where
+        &'a T: Into<AtomOrView<'a>>,
+    {
+        self.pol_symbol(flow).map(|name| {
+            ShadowedStructure::from_iter(
+                hedge_data.edge_spin_slots(),
+                name,
+                Some(add_args.iter().map(|arg| arg.into().into_owned()).collect()),
+            )
+        })
+    }
+}
+
+impl ReversibleEdge for EdgeData<(usize, isize)> {
+    fn pdg(&self) -> isize {
+        match self.orientation {
+            Orientation::Default | Orientation::Undirected => self.data.1,
+            Orientation::Reversed => -self.data.1,
+        }
+    }
+
+    fn pol_symbol(&self, flow: Flow) -> Option<Symbol> {
+        match (self.data.0, flow) {
+            (2, Flow::Sink) => {
+                if self.pdg() > 0 {
+                    Some(GS.u)
+                } else {
+                    Some(GS.vbar)
+                }
+            }
+            (2, Flow::Source) => {
+                if self.pdg() > 0 {
+                    Some(GS.ubar)
+                } else {
+                    Some(GS.v)
+                }
+            }
+            (3, Flow::Sink) => Some(GS.epsilon),
+            (3, Flow::Source) => Some(GS.epsilonbar),
+            _ => None,
+        }
+    }
+
+    fn polarization<'a, T>(&self, add_args: &'a [T], hedge_data: &NumHedgeData, flow: Flow) -> Atom
+    where
+        &'a T: Into<AtomOrView<'a>>,
+    {
+        if let Some(name) = self.pol_symbol(flow) {
+            hedge_data.polarization(FunctionBuilder::new(name).add_args(add_args))
+        } else {
+            Atom::num(1)
+        }
+    }
+
+    fn polarization_structure<'a, T>(
+        &self,
+        add_args: &'a [T],
+        hedge_data: &NumHedgeData,
+        flow: Flow,
+    ) -> Option<PermutedStructure<ShadowedStructure<Aind>>>
+    where
+        &'a T: Into<AtomOrView<'a>>,
+    {
+        self.pol_symbol(flow).map(|name| {
+            ShadowedStructure::from_iter(
+                hedge_data.edge_spin_slots(),
+                name,
+                Some(add_args.iter().map(|arg| arg.into().into_owned()).collect()),
+            )
+        })
+    }
+}
+
+impl ReversibleEdge for EdgeData<ArcParticle> {
+    fn pdg(&self) -> isize {
+        match self.orientation {
+            Orientation::Default | Orientation::Undirected => self.data.pdg_code,
+            Orientation::Reversed => -self.data.pdg_code,
+        }
+    }
+
+    fn pol_symbol(&self, flow: Flow) -> Option<Symbol> {
+        match (self.data.spin, flow) {
+            (2, Flow::Sink) => {
+                if self.pdg() > 0 {
+                    Some(GS.u)
+                } else {
+                    Some(GS.vbar)
+                }
+            }
+            (2, Flow::Source) => {
+                if self.pdg() > 0 {
+                    Some(GS.ubar)
+                } else {
+                    Some(GS.v)
+                }
+            }
+            (3, Flow::Sink) => Some(GS.epsilon),
+            (3, Flow::Source) => Some(GS.epsilonbar),
+            _ => None,
         }
     }
 

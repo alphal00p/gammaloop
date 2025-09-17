@@ -860,61 +860,58 @@ impl<T: Copy + Default> Numerator<SymbolicExpression<T>> {
         })
     }
 
-    pub(crate) fn canonize_color(&self) -> Result<Self, String> {
-        disable!(
-        let pats: Vec<_> = vec![ColorAdjoint{}];
-        let dualizablepats: Vec<_> = vec![
-            ColorFundamental::selfless_symbol(),
-            ColorSextet::selfless_symbol(),
-        ];
+    // pub(crate) fn canonize_color(&self) -> Result<Self, String> {
 
-        let mut color = self.state.color.map_data_ref(|a| {
-            SerializableAtom::from(
-                a.0.replace(&function!(symbol!(DOWNIND), GS.x__).to_pattern())
-                    .with(Atom::var(GS.x__).to_pattern()),
-            )
-        });
+    //     let pats: Vec<_> = vec![ColorAdjoint{}];
+    //     let dualizablepats: Vec<_> = vec![
+    //         ColorFundamental::selfless_symbol(),
+    //         ColorSextet::selfless_symbol(),
+    //     ];
 
-        let mut indices_map = AHashMap::new();
+    //     let mut color = self.state.expr.replace(&function!(symbol!(DOWNIND), GS.x__).to_pattern())
+    //                 .with(Atom::var(GS.x__).to_pattern())
+    //     ;
 
-        color.iter_flat().for_each(|(_, v)| {
-            for p in pats.iter().chain(&dualizablepats) {
-                for a in
-                    v.0.pattern_match(&function!(*p, GS.x_, GS.y_).to_pattern(), None, None)
-                {
-                    indices_map.insert(
-                        function!(*p, a[&GS.x_], a[&GS.y_]),
-                        function!(*p, a[&GS.x_]),
-                    );
-                }
-            }
-        });
+    //     let mut indices_map = AHashMap::new();
 
-        let sorted = indices_map.into_iter().sorted().collect::<Vec<_>>();
-        // println!(
-        //     "indices sorted [{}]",
-        //     sorted
-        //         .iter()
-        //         .map(|(a, b)| format!(
-        //             "(Atom::parse(\"{}\").unwrap(),Atom::parse(\"{}\").unwrap())",
-        //             a, b
-        //         ))
-        //         .collect::<Vec<_>>()
-        //         .join(", ")
-        // );
+    //     color.iter_flat().for_each(|(_, v)| {
+    //         for p in pats.iter().chain(&dualizablepats) {
+    //             for a in
+    //                 v.0.pattern_match(&function!(*p, GS.x_, GS.y_).to_pattern(), None, None)
+    //             {
+    //                 indices_map.insert(
+    //                     function!(*p, a[&GS.x_], a[&GS.y_]),
+    //                     function!(*p, a[&GS.x_]),
+    //                 );
+    //             }
+    //         }
+    //     });
 
-        color = color.map_data_ref_result(|a| a.0.canonize_tensors(&sorted).map(|a| a.into()))?;
+    //     let sorted = indices_map.into_iter().sorted().collect::<Vec<_>>();
+    //     // println!(
+    //     //     "indices sorted [{}]",
+    //     //     sorted
+    //     //         .iter()
+    //     //         .map(|(a, b)| format!(
+    //     //             "(Atom::parse(\"{}\").unwrap(),Atom::parse(\"{}\").unwrap())",
+    //     //             a, b
+    //     //         ))
+    //     //         .collect::<Vec<_>>()
+    //     //         .join(", ")
+    //     // );
 
-        let colorless = self.state.colorless.clone();
-        Ok(Self {
-            state: SymbolicExpression {
-                colorless,
-                color,
-                state: T::default(),
-            },
-        }));
-        todo!()
-    }
+    //     color = color.map_data_ref_result(|a| a.0.canonize_tensors(&sorted).map(|a| a.into()))?;
+
+    //     let colorless = self.state.colorless.clone();
+    //     Ok(Self {
+    //         state: SymbolicExpression {
+    //             colorless,
+    //             color,
+    //             state: T::default(),
+    //         },
+    //     }));
+    //     todo!()
+    // }
 }
 
 impl Numerator<AppliedFeynmanRule> {
@@ -942,98 +939,21 @@ impl Numerator<AppliedFeynmanRule> {
 //     NotFully(SerializableAtom),
 // }
 
-impl ColorSimplified {
-    /// Parses the color simplified numerator into a network,
-    /// If the color hasn't been fully simplified,
-    pub(crate) fn parse(self) -> Result<Network> {
-        let a = match self.state {
-            Color::Fully => self.get_single_atom().unwrap(),
-            Color::Partially => {
-                unreachable!()
-                // warn!(
-                //     "Not fully simplified, taking the colorless part associated to {}",
-                //     self.color.get_owned_linear(FlatIndex::from(0)).unwrap()
-                // );
-                // self.colorless.get_owned_linear(FlatIndex::from(0)).unwrap()
-            }
-        };
-
-        // disable!(
-
-        // println!("net scalar{}", net.scalar.as_ref().unwrap());
-        Ok(Network {
-            net: ParsingNet::try_from_view(a.as_view(), TENSORLIB.read().unwrap().deref())?,
-        })
-    }
-}
-
-pub type Gloopoly =
-    symbolica::poly::polynomial::MultivariatePolynomial<symbolica::domains::atom::AtomField, u8>;
 impl Numerator<ColorSimplified> {
-    pub(crate) fn validate_against_branches(&self, seed: usize) -> bool {
-        let gamma = self.clone().gamma_simplify().parse();
-        let nogamma = self.clone().parse().unwrap();
-        let mut iter = PrimeIteratorU64::new(seed as u64);
-        let reps = nogamma.random_concretize_reps(Some(&mut iter), false);
-
-        let reps_view = reps
-            .iter()
-            .map(|(a, b)| (a.as_view(), b.as_view()))
-            .collect::<Vec<_>>();
-        let gammat = gamma
-            .unwrap()
-            // .apply_reps(&reps_view)
-            .contract(())
-            .unwrap()
-            .state
-            .tensor;
-
-        let nogammat = nogamma
-            .apply_reps(&reps_view)
-            .contract(())
-            .unwrap()
-            .state
-            .tensor;
-
-        // println!("{gammat}\n{nogammat}");
-
-        gammat
-            .tensor
-            .sub_fallible(&nogammat.tensor)
-            .unwrap()
-            .iter_flat()
-            .all(|(_, a)| {
-                let a = a.expand();
-                // println!("{a}");
-                a.is_zero()
-            })
-    }
-
     pub(crate) fn gamma_simplify(self) -> Numerator<GammaSimplified> {
         debug!("Gamma simplifying color symplified numerator");
 
         Numerator {
             state: GammaSimplified {
-                // colorless: gamma_simplified,
-                // color: self.state.color,
                 expr: self.state.expr.simplify_gamma(),
                 state: Default::default(),
             },
         }
     }
-
-    pub(crate) fn parse(self) -> Result<Numerator<Network>> {
-        debug!("Parsing color simplified numerator into network");
-
-        debug!("Expression: {:>}", self.state.expr);
-
-        // debug!("color: {}", self.state.color);
-        let state = self.state.parse()?;
-
-        // debug!("");
-        Ok(Numerator { state })
-    }
 }
+
+pub type Gloopoly =
+    symbolica::poly::polynomial::MultivariatePolynomial<symbolica::domains::atom::AtomField, u8>;
 
 #[derive(Debug, Clone)]
 // #[trait_decode(trait = symbolica::state::HasStateMap)]
@@ -1473,272 +1393,6 @@ impl TypedNumeratorState for Network {
             }
         }
         Err(NumeratorStateError::NotNetwork)
-    }
-}
-
-impl<T: Copy + Default> Numerator<SymbolicExpression<T>> {
-    pub(crate) fn apply_reps(&self, _rep_atoms: Vec<(AtomView, AtomView)>) -> Self {
-        todo!()
-    }
-}
-
-impl Numerator<Network> {
-    pub(crate) fn evaluate_with_replacements(
-        &self,
-        replacements: &[(AtomView, AtomView)],
-        fully_numerical_substitutions: bool,
-    ) -> Result<Atom, FeynGenError> {
-        fn evaluate_atom_with_reps(
-            atom: AtomView,
-            replacements: &[(AtomView, AtomView)],
-        ) -> Result<Complex<Rational>, FeynGenError> {
-            let mut b = atom.to_owned();
-            for (src, trgt) in replacements.iter() {
-                b = b.replace(&src.to_pattern()).with(trgt.to_pattern());
-            }
-            b = b.expand();
-            let mut re = Rational::zero();
-            let mut im = Rational::zero();
-            for (var, coeff) in b.coefficient_list::<u8>(&[Atom::i()]).iter() {
-                let c = coeff.try_into().map_err(|e| {
-                    FeynGenError::NumeratorEvaluationError(format!(
-                        "Could not convert tensor coefficient to integer: error: {}, expresssion: {}",
-                        e, coeff
-                    ))
-                })?;
-                if *var == Atom::i() {
-                    re = c;
-                } else if *var == Atom::num(1) {
-                    im = c;
-                } else {
-                    return Err(FeynGenError::NumeratorEvaluationError(format!(
-                        "Could not convert the following tensor coefficient to a complex integer: {}",
-                        b
-                    )));
-                }
-            }
-            Ok(Complex::<Rational>::new(re, im))
-        }
-
-        if !fully_numerical_substitutions {
-            let mut t = self.apply_reps(replacements).state.net;
-
-            t.execute::<Sequential, SmallestDegree, _, _>(TENSORLIB.read().unwrap().deref());
-
-            let r = match t
-                .result_scalar()
-                .map_err(|e| FeynGenError::NumeratorEvaluationError(e.to_string()))?
-            {
-                ExecutionResult::One => Atom::num(1),
-                ExecutionResult::Zero => Atom::Zero,
-                ExecutionResult::Val(v) => v.into_owned(),
-            };
-
-            Ok(r)
-        } else {
-            let mut g = self
-                .state
-                .net
-                .map_ref_result(
-                    |s| evaluate_atom_with_reps(s.as_view(), &replacements),
-                    |d| match d {
-                        ParamOrConcrete::Param(a) => {
-                            Ok(RealOrComplexTensor::Complex(a.map_data_ref_result(
-                                |a| evaluate_atom_with_reps(a.as_view(), &replacements),
-                            )?))
-                        }
-                        ParamOrConcrete::Concrete(r) => match r {
-                            RealOrComplexTensor::Real(r) => Ok(RealOrComplexTensor::Real(
-                                r.map_data_ref(|f| Rational::from(f.0)),
-                            )),
-                            RealOrComplexTensor::Complex(c) => Ok(RealOrComplexTensor::Complex(
-                                c.map_data_ref(|c| c.map_ref(|r| Rational::from(r.0))),
-                            )),
-                        },
-                    },
-                )
-                .unwrap();
-
-            g.execute::<Sequential, SmallestDegree, _, _>(&DummyLibrary::default());
-
-            let r = match g
-                .result_scalar()
-                .map_err(|e| FeynGenError::NumeratorEvaluationError(e.to_string()))?
-            {
-                ExecutionResult::One => Atom::num(1),
-                ExecutionResult::Zero => Atom::Zero,
-                ExecutionResult::Val(r) => {
-                    Atom::num(r.re.clone()) + Atom::num(r.im.clone()) * Atom::i()
-                }
-            };
-
-            Ok(r)
-        }
-    }
-
-    pub(crate) fn apply_reps(&self, replacements: &[(AtomView, AtomView)]) -> Self {
-        fn evaluate_atom_with_reps(atom: AtomView, replacements: &[(AtomView, AtomView)]) -> Atom {
-            let mut b = atom.to_owned();
-            for (src, trgt) in replacements.iter() {
-                b = b.replace(&src.to_pattern()).with(trgt.to_pattern());
-            }
-            b
-        }
-
-        Self {
-            state: Network {
-                net: self.state.net.map_ref(
-                    |s| evaluate_atom_with_reps(s.as_view(), &replacements),
-                    |d| match d {
-                        ParamOrConcrete::Param(a) => {
-                            ParamOrConcrete::composite(a.map_data_ref(|a| {
-                                evaluate_atom_with_reps(a.as_view(), &replacements)
-                            }))
-                        }
-                        ParamOrConcrete::Concrete(r) => match r {
-                            RealOrComplexTensor::Real(r) => ParamOrConcrete::Concrete(
-                                RealOrComplexTensor::Real(r.map_data_ref(|f| *f)),
-                            ),
-                            RealOrComplexTensor::Complex(c) => ParamOrConcrete::Concrete(
-                                RealOrComplexTensor::Complex(c.map_data_ref(|c| *c)),
-                            ),
-                        },
-                    },
-                ),
-            },
-        }
-    }
-    // pub(crate) fn random_concretize_reps(&mut self, seed: usize) -> Vec<Replacement> {
-    //     let mut prime = PrimeIteratorU64::new(1)
-    //         .skip(seed)
-    //         .map(|u| Atom::num(symbolica::domains::integer::Integer::new(u as i64)));
-
-    //     let mut reps = vec![];
-
-    //     let pat = function!(
-    //         GS.f_,
-    //         Atom::var(GS.y___),
-    //         function!(symbol!("cind"), Atom::var(GS.x_))
-    //     )
-    //     .to_pattern();
-
-    //     for (n, d) in self.state.net.graph.nodes.iter() {
-    //         for (_, a) in d.tensor.iter_flat() {
-    //             for m in a.pattern_match(&pat, None, None) {
-    //                 if let Atom::Var(f) = m[&GS.f_].to_atom() {
-    //                     let mat = function!(
-    //                         f.get_symbol(),
-    //                         m[&GS.y___].to_atom(),
-    //                         function!(symbol!("cind"), m[&GS.x_].to_atom())
-    //                     );
-    //                     // println!("{mat}");
-
-    //                     reps.push(Replacement::new(
-    //                         mat.to_pattern(),
-    //                         prime.next().unwrap().to_pattern(),
-    //                     ));
-    //                 } else {
-    //                     println!("{}", m[&GS.f_].to_atom());
-    //                 }
-    //             }
-    //         }
-    //     }
-    //     reps
-    // }
-
-    pub(crate) fn random_concretize_reps(
-        &self,
-        _sample_iterator: Option<&mut PrimeIteratorU64>,
-        _fully_numerical_substitution: bool,
-    ) -> Vec<(Atom, Atom)> {
-        // let prime_iterator = if let Some(iterator) = sample_iterator {
-        //     iterator
-        // } else {
-        //     &mut PrimeIteratorU64::new(1)
-        // };
-
-        // let mut prime = prime_iterator
-        //     .map(|u| Atom::num(symbolica::domains::integer::Integer::new(u as i64)));
-        // let mut reps = vec![];
-
-        // if !fully_numerical_substitution {
-        //     let variable = function!(
-        //         GS.f_,
-        //         Atom::var(GS.y_),
-        //         function!(symbol!("cind"), Atom::var(GS.x_))
-        //     );
-        //     let pat = variable.to_pattern();
-
-        //     for (_n, d) in self.state.net.graph.nodes.iter() {
-        //         for (_, a) in d.tensor.iter_flat() {
-        //             for m in a.pattern_match(&pat, None, None) {
-        //                 reps.push(pat.replace_wildcards(&m));
-        //             }
-        //         }
-        //     }
-        // } else {
-        //     for (_n, d) in self.state.net.graph.nodes.iter() {
-        //         for (_, a) in d.tensor.iter_flat() {
-        //             let all_symbols = a.get_all_symbols(true);
-        //             for s in all_symbols {
-        //                 if s == Atom::I {
-        //                     continue;
-        //                 }
-        //                 let mut found_it = false;
-        //                 let pat = function!(s, symbol!("x__")).to_pattern();
-        //                 for m in a.pattern_match(&pat, None, None) {
-        //                     reps.push(pat.replace_wildcards(&m));
-        //                     found_it = true;
-        //                 }
-        //                 if !found_it {
-        //                     reps.push(Atom::var(s));
-        //                 }
-        //             }
-        //         }
-        //     }
-        // }
-
-        // reps = reps
-        //     .iter()
-        //     .collect::<HashSet<_>>()
-        //     .iter()
-        //     .map(|&a| a.to_owned())
-        //     .collect::<Vec<_>>();
-        // reps.sort();
-        // reps.iter()
-        //     .map(|a: &Atom| (a.clone(), prime.next().unwrap()))
-        //     .collect()
-        //
-        todo!()
-    }
-
-    pub(crate) fn contract(
-        mut self,
-        settings: impl Into<ContractionSettings>,
-    ) -> Result<Numerator<Contracted>> {
-        self.state.contract(settings)?;
-
-        debug!("contracted");
-        Ok(Numerator {
-            state: match self
-                .state
-                .net
-                .result_tensor(TENSORLIB.read().unwrap().deref())?
-            {
-                ExecutionResult::One => Contracted::one(),
-
-                ExecutionResult::Zero => Contracted::zero(),
-
-                ExecutionResult::Val(v) => {
-                    let mut v = v.into_owned();
-                    v.to_param();
-
-                    Contracted {
-                        tensor: v.try_into_parametric().unwrap(),
-                    }
-                }
-            },
-        })
     }
 }
 

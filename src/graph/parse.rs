@@ -24,7 +24,7 @@ use linnet::{
     half_edge::{
         involution::{EdgeVec, Flow, HedgePair, Orientation},
         nodestore::NodeStorageVec,
-        subgraph::{ModifySubgraph, OrientedCut, SubGraph},
+        subgraph::{Inclusion, ModifySubgraph, OrientedCut, SubGraph, SubGraphOps},
         tree::SimpleTraversalTree,
         EdgeAccessors, HedgeGraph,
     },
@@ -415,8 +415,16 @@ impl Graph {
             initial_hedges.add(sink);
         }
 
+        let initial_state_cut = OrientedCut::from_underlying_strict(initial_hedges, &graph)?;
+
+        // println!("{}", graph.dot(&initial_state_cut.left));
+
         if add_polarizations {
-            let pols = graph.generate_polarizations();
+            let ext = initial_state_cut
+                .left
+                .union(&initial_state_cut.right)
+                .union(&graph.external_filter());
+            let pols = graph.generate_polarizations_of(&ext);
             global_prefactor.projector *= pols;
         }
 
@@ -535,9 +543,14 @@ impl Graph {
                     vertex_rule: v.vertex_rule,
                 })
             },
-            |_, _, _, eid, e| {
+            |_, _, p, eid, e| {
                 e.map_result(|e| {
-                    let num = e.num.unwrap_or(&color_num_e[eid] * &spin_num_e[eid]);
+                    let num = e.num.unwrap_or(if initial_state_cut.left.intersects(&p) {
+                        // is in the cut, we just take the color part, and count on the user/ polarizations to be generated
+                        color_num_e[eid].clone()
+                    } else {
+                        &color_num_e[eid] * &spin_num_e[eid]
+                    });
 
                     let dod = if let Some(d) = e.dod {
                         d
@@ -614,7 +627,7 @@ impl Graph {
             global_prefactor,
             name,
             loop_momentum_basis,
-            initial_state_cut: OrientedCut::from_underlying_strict(initial_hedges, &underlying)?,
+            initial_state_cut,
             underlying,
             group_id,
             is_group_master,
@@ -963,15 +976,27 @@ pub mod test {
         let cswp = NodeColorWithVertexRule::from_particles(["s", "W+", "c~"], &model);
         let cswm = NodeColorWithVertexRule::from_particles(["s~", "W-", "c"], &model);
 
-        let ext = NodeColorWithVertexRule {
+        let ext1 = NodeColorWithVertexRule {
             external_tag: 1,
             vertex_rule: model.vertex_rules[0].clone(),
         };
+        let ext2 = NodeColorWithVertexRule {
+            external_tag: 2,
+            vertex_rule: model.vertex_rules[0].clone(),
+        };
+        let ext3 = NodeColorWithVertexRule {
+            external_tag: 3,
+            vertex_rule: model.vertex_rules[0].clone(),
+        };
+        let ext4 = NodeColorWithVertexRule {
+            external_tag: 4,
+            vertex_rule: model.vertex_rules[0].clone(),
+        };
 
-        let e1 = a.add_node(ext.clone());
-        let e2 = a.add_node(ext.clone());
-        let e3 = a.add_node(ext.clone());
-        let e4 = a.add_node(ext.clone());
+        let e1 = a.add_node(ext1.clone());
+        let e2 = a.add_node(ext2.clone());
+        let e3 = a.add_node(ext3.clone());
+        let e4 = a.add_node(ext4.clone());
         let v1 = a.add_node(udwm.clone());
         let v2 = a.add_node(cswm.clone());
         let v3 = a.add_node(udwp.clone());
@@ -1001,10 +1026,10 @@ pub mod test {
             &a,
             Atom::num(1),
             &[
-                (Some(0), None),
                 (Some(1), None),
-                (None, Some(2)),
+                (Some(2), None),
                 (None, Some(3)),
+                (None, Some(4)),
             ],
         )
         .unwrap();
@@ -1020,7 +1045,7 @@ pub mod test {
                 (Some(2), None),
                 (Some(3), None),
                 (None, Some(1)),
-                (None, Some(0)),
+                (None, Some(4)),
             ],
         )
         .unwrap();
@@ -1032,7 +1057,7 @@ pub mod test {
             "test",
             &a,
             Atom::num(1),
-            &[(Some(0), Some(2)), (Some(1), Some(3))],
+            &[(Some(1), Some(3)), (Some(2), Some(4))],
         )
         .unwrap();
 
@@ -1040,10 +1065,10 @@ pub mod test {
 
         let mut a = symbolica::graph::Graph::new();
 
-        let e1 = a.add_node(ext.clone());
-        let e2 = a.add_node(ext.clone());
-        let e3 = a.add_node(ext.clone());
-        let e4 = a.add_node(ext.clone());
+        let e1 = a.add_node(ext1.clone());
+        let e2 = a.add_node(ext2.clone());
+        let e3 = a.add_node(ext3.clone());
+        let e4 = a.add_node(ext4.clone());
         let v1 = a.add_node(udwm.clone());
         let v2 = a.add_node(udwm.clone());
         let v3 = a.add_node(udwp.clone());
@@ -1065,7 +1090,7 @@ pub mod test {
             "test",
             &a,
             Atom::num(1),
-            &[(Some(0), Some(2)), (Some(1), Some(3))],
+            &[(Some(1), Some(3)), (Some(2), Some(4))],
         )
         .unwrap();
 
@@ -1076,7 +1101,7 @@ pub mod test {
             "test",
             &a,
             Atom::num(1),
-            &[(Some(0), Some(3)), (Some(1), Some(2))],
+            &[(Some(1), Some(4)), (Some(2), Some(3))],
         )
         .unwrap();
 
@@ -1364,6 +1389,7 @@ pub mod test {
 
     #[test]
     fn parse_lmbsetting() {
+        test_initialise().unwrap();
         let g: Graph = dot!(
             digraph G{
                 graph [

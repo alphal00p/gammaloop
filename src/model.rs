@@ -1016,8 +1016,8 @@ impl Particle {
         self.name == self.antiname
     }
 
-    pub(crate) fn spin_reps(&self) -> IndexLess {
-        PermutedStructure::<IndexLess>::from_iter(match self.spin {
+    pub(crate) fn spin_reps(&self) -> IndexLess<LibraryRep, Aind> {
+        PermutedStructure::<IndexLess<LibraryRep, Aind>>::from_iter(match self.spin {
             3 => vec![Minkowski {}.new_rep(4).cast()],
             2 => vec![Bispinor {}.new_rep(4).cast()],
             _ => vec![],

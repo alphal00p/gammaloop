@@ -1,4 +1,5 @@
 use bitvec::vec::BitVec;
+use idenso::color::SelectiveExpand;
 use indicatif::ProgressBar;
 use indicatif::{ParallelProgressIterator, ProgressStyle};
 
@@ -7,11 +8,16 @@ use rayon::iter::ParallelIterator;
 use rayon::prelude::*;
 use rayon::ThreadPoolBuilder;
 use spenso::iterators::IteratableTensor;
+use spenso::network::library::symbolic::{ExplicitKey, TensorLibrary};
+use spenso::network::library::LibraryTensor;
+use spenso::network::{Sequential, SmallestDegree};
 use spenso::tensors::data::DataTensor;
 // use spenso::network::Network;
 
-use spenso::structure::representation::{Euclidean, LibraryRep, RepName};
-use spenso::structure::OrderedStructure;
+use spenso::structure::representation::{Euclidean, LibraryRep, Minkowski, RepName};
+use spenso::structure::{OrderedStructure, PermutedStructure, TensorStructure};
+use spenso::tensors::parametric::{ConcreteOrParam, MixedTensor, ParamTensor};
+use spenso_hep_lib::hep_lib;
 use std::collections::hash_map::Entry;
 use std::collections::HashSet;
 use std::ops::RangeInclusive;
@@ -21,7 +27,7 @@ use symbolica::atom::AtomView;
 use symbolica::domains::finite_field::PrimeIteratorU64;
 use symbolica::function;
 use symbolica::graph::GenerationSettings;
-use symbolica::id::Context;
+use symbolica::id::{Context, Replacement};
 use tracing::instrument;
 
 use ahash::AHashMap;
@@ -41,18 +47,20 @@ use super::SnailFilterOptions;
 use super::TadpolesFilterOptions;
 use crate::feyngen::half_edge_filters::FeynGenHedgeGraph;
 use crate::graph::ext::HedgeGraphExt;
-use crate::graph::{FeynmanGraph, Graph};
+use crate::graph::{FeynmanGraph, Graph, LMBext};
 use crate::model::ArcVertexRule;
 use crate::model::VertexRule;
 use crate::model::{ArcParticle, ColorStructure};
 use crate::momentum::{Pow, Sign, SignOrZero};
 use crate::numerator::aind::Aind;
-use crate::numerator::ExpressionState;
+use crate::numerator::graph::ReversibleEdge;
+use crate::numerator::symbolica_ext::{AtomCoreExt, ParsingNetError};
 use crate::numerator::Network;
 use crate::numerator::Numerator;
 use crate::numerator::SymbolicExpression;
+use crate::numerator::{ExpressionState, ParsingNet};
 use crate::processes::ProcessDefinition;
-use crate::utils::{self, W_};
+use crate::utils::{self, F, GS, TENSORLIB, W_};
 use crate::uv::UltravioletGraph;
 use crate::{disable, status_error, status_info, status_warn};
 use crate::{
@@ -60,7 +68,7 @@ use crate::{
     model::Model,
 };
 use itertools::Itertools;
-use linnet::half_edge::involution::Flow;
+use linnet::half_edge::involution::{EdgeData, Flow, Orientation};
 use linnet::half_edge::subgraph::{InternalSubGraph, OrientedCut, SubGraph};
 use linnet::half_edge::HedgeGraph;
 use linnet::half_edge::NodeIndex;
@@ -1010,6 +1018,133 @@ pub fn evaluate_overall_factor(factor: AtomView) -> Atom {
 }
 
 impl ProcessDefinition {
+    pub fn sample_lib(
+        &self,
+        sample_iterator: &mut PrimeIteratorU64,
+        add_model_params: bool,
+        model: &Model,
+    ) -> (
+        Vec<Replacement>,
+        TensorLibrary<MixedTensor<F<f64>, ExplicitKey<Aind>>, Aind>,
+    ) {
+        let mut lib = hep_lib(F(1.), F(0.));
+
+        for i in 0..self.loop_count_range.1 {
+            let key = ExplicitKey::from_iter(
+                [Minkowski {}.new_rep(4)],
+                GS.loop_mom,
+                Some(vec![Atom::num(i)]),
+            );
+
+            lib.insert_explicit_dense(
+                key,
+                (0..4)
+                    .into_iter()
+                    .map(|_| ConcreteOrParam::Param(Atom::num(sample_iterator.next().unwrap())))
+                    .collect(),
+            );
+        }
+
+        for (i, pdg) in self.initial_pdgs.iter().enumerate() {
+            let additional_args = Some(vec![Atom::num(i)]);
+            let key = ExplicitKey::from_iter(
+                [Minkowski {}.new_rep(4)],
+                GS.external_mom,
+                additional_args.clone(),
+            );
+
+            lib.insert_explicit_dense(
+                key,
+                (0..4)
+                    .into_iter()
+                    .map(|_| ConcreteOrParam::Param(Atom::num(sample_iterator.next().unwrap())))
+                    .collect(),
+            );
+
+            let p = model.get_particle_from_pdg(*pdg as isize);
+
+            let structure = p.spin_reps();
+            let global_name = EdgeData::new(p, Orientation::Default).pol_symbol(Flow::Sink);
+
+            let len = structure.size().unwrap();
+
+            let key = PermutedStructure::identity(ExplicitKey {
+                structure,
+                global_name,
+                additional_args,
+            });
+
+            lib.insert_explicit_dense(
+                key,
+                (0..len)
+                    .into_iter()
+                    .map(|_| ConcreteOrParam::Param(Atom::num(sample_iterator.next().unwrap())))
+                    .collect(),
+            );
+        }
+        match self.generation_type {
+            GenerationType::Amplitude => {
+                let ext_shift = self.initial_pdgs.len();
+                for (i, pdg) in self.final_pdgs_lists[0].iter().enumerate() {
+                    let additional_args = Some(vec![Atom::num(i + ext_shift)]);
+                    let key = ExplicitKey::from_iter(
+                        [Minkowski {}.new_rep(4)],
+                        GS.external_mom,
+                        additional_args.clone(),
+                    );
+
+                    lib.insert_explicit_dense(
+                        key,
+                        (0..4)
+                            .into_iter()
+                            .map(|_| {
+                                ConcreteOrParam::Param(Atom::num(sample_iterator.next().unwrap()))
+                            })
+                            .collect(),
+                    );
+
+                    let p = model.get_particle_from_pdg(*pdg as isize);
+
+                    let structure = p.spin_reps();
+                    let global_name = EdgeData::new(p, Orientation::Default).pol_symbol(Flow::Sink);
+
+                    let len = structure.size().unwrap();
+
+                    let key = PermutedStructure::identity(ExplicitKey {
+                        structure,
+                        global_name,
+                        additional_args,
+                    });
+
+                    lib.insert_explicit_dense(
+                        key,
+                        (0..len)
+                            .into_iter()
+                            .map(|_| {
+                                ConcreteOrParam::Param(Atom::num(sample_iterator.next().unwrap()))
+                            })
+                            .collect(),
+                    );
+                }
+            }
+            GenerationType::CrossSection => {}
+        }
+
+        let reps = if add_model_params {
+            model
+                .generate_params()
+                .into_iter()
+                .map(|a| {
+                    Replacement::new(a.to_pattern(), Atom::num(sample_iterator.next().unwrap()))
+                })
+                .collect()
+        } else {
+            vec![]
+        };
+
+        (reps, lib)
+    }
+
     #[instrument(skip_all)]
 
     pub(crate) fn unresolved_cut_content(&self, model: &Model) -> (usize, AHashSet<ArcParticle>) {
@@ -3392,6 +3527,23 @@ impl ProcessDefinition {
             "#groupings".green(),
             format!("{}", 0).green().bold(),
         ));
+
+        let samples: Vec<_> = if let Some(opts) = self.numerator_grouping.get_options() {
+            let mut sample_iterator = PrimeIteratorU64::new(1);
+            sample_iterator.nth(opts.numerical_sample_seed as usize);
+            (0..opts.number_of_numerical_samples)
+                .into_iter()
+                .map(|_| {
+                    self.sample_lib(
+                        &mut sample_iterator,
+                        opts.fully_numerical_substitution_when_comparing_numerators,
+                        model,
+                    )
+                })
+                .collect()
+        } else {
+            vec![]
+        };
         pool.install(|| {
             canonized_processed_graphs
                 .par_iter()
@@ -3416,14 +3568,6 @@ impl ProcessDefinition {
                         canonical_graph.symmetry_factor.clone(),
                         &external_connections,
                     )?;
-                    // let bare_graph = BareGraph::from_symbolica_graph(
-                    //     model,
-                    //     graph_name.clone(),
-                    //     &canonical_graph.graph,
-                    //     canonical_graph.symmetry_factor.clone(),
-                    //     external_connections.clone(),
-                    //     None,
-                    // )?;
 
                     // The step below is optional, but it is nice to have all internal fermion edges canonized as particles.
                     // Notice that we cannot do this on the bare graph used for numerator local comparisons and diagram grouping because
@@ -3437,7 +3581,6 @@ impl ProcessDefinition {
                             &canonical_graph.graph_with_canonized_flow,
                             canonical_graph.symmetry_factor.clone(),
                             &external_connections,
-                            // None,
                         )?
                     } else {
                         bare_graph.clone()
@@ -3473,34 +3616,16 @@ impl ProcessDefinition {
                     } else {
                         // println!("Processing graph #{}...", i_g);
                         // println!("Bare graph: {}",bare_graph.dot());
-                        let numerator = bare_graph.numerator(&bare_graph.no_dummy());
-                            // Numerator::default().from_graph(&bare_graph, &numerator_global_prefactor);
-                        // println!("Num single atom: {}",numerator.get_single_atom().unwrap());
-                        // for connection in bare_graph.external_connections.iter() {
-                        //     if let (Some(left_external_node_pos), Some(right_external_node_pos)) =
-                        //         connection
-                        //     {
-                        //         let color_a = &bare_graph.vertex_slots[*left_external_node_pos].edge_slots[0].color;
-                        //         let color_b = &bare_graph.vertex_slots[*right_external_node_pos].edge_slots[0].color;
+                        let mut numerator = bare_graph.numerator(&bare_graph.no_dummy());
 
-                        //         let color = color_a
-                        //             .iter()
-                        //             .zip(color_b.iter())
-                        //             .map(|(a, b)| a.dual().rep().id(Atom::from(a.aind), Atom::from(b.aind)))
-                        //             .fold(Atom::num(1), |acc, x| acc * x);
 
-                        //         // numerator.state.color.map_data_mut(|a|{*a *=&color});
+                        numerator.state.expr *=&bare_graph.global_prefactor.num * &bare_graph.global_prefactor.projector * &bare_graph.overall_factor;
 
-                        //     }
-                        // }
 
                         let numerator_color_simplified =
-                            numerator.clone().color_simplify().canonize_color().unwrap();
-                        // let numerator_color_simplified: Numerator<SymbolicExpression<Color>> =
-                        //     numerator.color_simplify();
+                            numerator.clone().color_simplify().get_single_atom().unwrap().canonize_spenso();
+
                         if numerator_color_simplified
-                            .get_single_atom()
-                            .unwrap()
                             .is_zero()
                         {
                             {
@@ -3556,6 +3681,7 @@ impl ProcessDefinition {
                                     i_g,
                                     &bare_graph,
                                     numerator_color_simplified,
+                                    &samples,
                                     &self.numerator_grouping,
                                 )?,
                             );
@@ -3881,118 +4007,70 @@ impl ProcessDefinition {
                     }
                 }
                 if grouping_options.number_of_numerical_samples > 1 {
-                    if let (
-                        (Some(sample_points_a), Some(evaluations_a)),
-                        (Some(sample_points_b), Some(evaluations_b)),
-                    ) = (
-                        (
-                            numerator_a.sample_points.as_ref(),
-                            numerator_a.sample_evaluations.as_ref(),
-                        ),
-                        (
-                            numerator_b.sample_points.as_ref(),
-                            numerator_b.sample_evaluations.as_ref(),
-                        ),
+                    if let (Some(evaluations_a), Some(evaluations_b)) = (
+                        numerator_a.sample_evaluations.as_ref(),
+                        numerator_b.sample_evaluations.as_ref(),
                     ) {
-                        // Make sure the variables detected are the same to begin with
-                        if compare_sample_points(sample_points_a, sample_points_b) {
-                            // println!(
-                            //     "Sample evaluations a:\n{}",
-                            //     evaluations_a
-                            //         .iter()
-                            //         .map(|av| av.to_canonical_string())
-                            //         .collect::<Vec<_>>()
-                            //         .join("\n")
-                            // );
-                            // println!(
-                            //     "Sample evaluations b:\n{}",
-                            //     evaluations_b
-                            //         .iter()
-                            //         .map(|av| av.to_canonical_string())
-                            //         .collect::<Vec<_>>()
-                            //         .join("\n")
-                            // );
-                            let ratios = evaluations_a
-                                .iter()
-                                .zip(evaluations_b.iter())
-                                .map(|(a, b)| {
-                                    if a == b {
-                                        Some(Atom::num(1))
-                                    } else if *a == b * Atom::num(-1) {
-                                        Some(Atom::num(-1))
-                                    } else if b.is_zero() {
-                                        None
+                        let ratios = evaluations_a
+                            .iter()
+                            .zip(evaluations_b.iter())
+                            .map(|(a, b)| {
+                                if a == b {
+                                    Some(Atom::num(1))
+                                } else if *a == b * Atom::num(-1) {
+                                    Some(Atom::num(-1))
+                                } else if b.is_zero() {
+                                    None
+                                } else {
+                                    let mut ratio = a / b;
+                                    if ANALYZE_RATIO_AS_RATIONAL_POLYNOMIAL {
+                                        ratio = ratio
+                                            .to_rational_polynomial::<_, _, u8>(
+                                                &symbolica::domains::rational::Q,
+                                                &symbolica::domains::integer::Z,
+                                                None,
+                                            )
+                                            .to_expression();
                                     } else {
-                                        let mut ratio = a / b;
-                                        if ANALYZE_RATIO_AS_RATIONAL_POLYNOMIAL {
-                                            ratio = ratio
-                                                .to_rational_polynomial::<_, _, u8>(
-                                                    &symbolica::domains::rational::Q,
-                                                    &symbolica::domains::integer::Z,
-                                                    None,
-                                                )
-                                                .to_expression();
-                                        } else {
-                                            ratio = ratio.expand();
-                                        }
-                                        Some(ratio)
+                                        ratio = ratio.expand();
                                     }
-                                })
-                                .collect::<HashSet<_>>();
-                            // println!(
-                            //     "ratios from numerical evaluations when comparing diagram #{} and #{}:\n{}",
+                                    Some(ratio)
+                                }
+                            })
+                            .collect::<HashSet<_>>();
+                        // println!(
+                        //     "ratios from numerical evaluations when comparing diagram #{} and #{}:\n{}",
+                        //     numerator_b.diagram_id,
+                        //     numerator_a.diagram_id,
+                        //     ratios
+                        //         .iter()
+                        //         .map(|av| av.as_ref().unwrap().to_canonical_string())
+                        //         .collect::<Vec<_>>()
+                        //         .join("\n")
+                        // );
+                        // println!(
+                        //     "ratios from numerical evaluations when comparing diagram #{} and #{}:\n{}",
+                        //         numerator_b.diagram_id,
+                        //         numerator_a.diagram_id,
+                        //         ratios
+                        //             .iter()
+                        //             .map(|av| av
+                        //                 .as_ref()
+                        //                 .map(|ra| ra.to_canonical_string())
+                        //                 .unwrap_or("None".into()))
+                        //             .collect::<Vec<_>>()
+                        //             .join("\n")
+                        // );
+                        if let Some(ratio) = analyze_ratios(&ratios) {
+                            //     debug!(
+                            //     "Combining graph #{} with #{} using numerical evaluation, with ratio #{}/#{}={}",
                             //     numerator_b.diagram_id,
                             //     numerator_a.diagram_id,
-                            //     ratios
-                            //         .iter()
-                            //         .map(|av| av.as_ref().unwrap().to_canonical_string())
-                            //         .collect::<Vec<_>>()
-                            //         .join("\n")
+                            //     numerator_a.diagram_id,
+                            //     numerator_b.diagram_id,
+                            //     ratio
                             // );
-                            // println!(
-                            //     "ratios from numerical evaluations when comparing diagram #{} and #{}:\n{}",
-                            //         numerator_b.diagram_id,
-                            //         numerator_a.diagram_id,
-                            //         ratios
-                            //             .iter()
-                            //             .map(|av| av
-                            //                 .as_ref()
-                            //                 .map(|ra| ra.to_canonical_string())
-                            //                 .unwrap_or("None".into()))
-                            //             .collect::<Vec<_>>()
-                            //             .join("\n")
-                            // );
-                            if let Some(ratio) = analyze_ratios(&ratios) {
-                                //     debug!(
-                                //     "Combining graph #{} with #{} using numerical evaluation, with ratio #{}/#{}={}",
-                                //     numerator_b.diagram_id,
-                                //     numerator_a.diagram_id,
-                                //     numerator_a.diagram_id,
-                                //     numerator_b.diagram_id,
-                                //     ratio
-                                // );
-                                return Some(ratio);
-                            }
-                        } else {
-                            debug!("Skipping comparison of numerical samples between diagrams #{} and #{} because their variables differ", numerator_b.diagram_id, numerator_a.diagram_id);
-                            debug!(
-                                "Sample points A:\n{}",
-                                sample_points_a
-                                    .first()
-                                    .unwrap()
-                                    .iter()
-                                    .map(|(a, b)| format!("{} -> {}", a, b))
-                                    .join("\n")
-                            );
-                            debug!(
-                                "Sample points B:\n{}",
-                                sample_points_b
-                                    .first()
-                                    .unwrap()
-                                    .iter()
-                                    .map(|(a, b)| format!("{} -> {}", a, b))
-                                    .join("\n")
-                            );
+                            return Some(ratio);
                         }
                     }
                 }
@@ -4021,68 +4099,41 @@ impl ProcessDefinition {
                     }
                 }
                 if grouping_options.number_of_numerical_samples > 1 {
-                    if let (
-                        (Some(sample_points_a), Some(evaluations_a)),
-                        (Some(sample_points_b), Some(evaluations_b)),
-                    ) = (
-                        (
-                            numerator_a.sample_points.as_ref(),
-                            numerator_a.sample_evaluations.as_ref(),
-                        ),
-                        (
-                            numerator_b.sample_points.as_ref(),
-                            numerator_b.sample_evaluations.as_ref(),
-                        ),
-                    ) {
-                        if compare_sample_points(sample_points_a, sample_points_b) {
-                            // println!(
-                            //     "Sample evaluations a:\n{}",
-                            //     evaluations_a
-                            //         .iter()
-                            //         .map(|av| av.to_canonical_string())
-                            //         .collect::<Vec<_>>()
-                            //         .join("\n")
-                            // );
-                            // println!(
-                            //     "Sample evaluations b:\n{}",
-                            //     evaluations_b
-                            //         .iter()
-                            //         .map(|av| av.to_canonical_string())
-                            //         .collect::<Vec<_>>()
-                            //         .join("\n")
-                            // );
+                    if let ((Some(evaluations_a), Some(evaluations_b)),) = ((
+                        numerator_a.sample_evaluations.as_ref(),
+                        numerator_b.sample_evaluations.as_ref(),
+                    ),)
+                    {
+                        let ratios = evaluations_a
+                            .iter()
+                            .zip(evaluations_b.iter())
+                            .map(|(a, b)| analyze_diff_and_sum(a.as_view(), b.as_view()))
+                            .collect::<HashSet<_>>();
 
-                            let ratios = evaluations_a
-                                .iter()
-                                .zip(evaluations_b.iter())
-                                .map(|(a, b)| analyze_diff_and_sum(a.as_view(), b.as_view()))
-                                .collect::<HashSet<_>>();
+                        // println!(
+                        //     "ratios from numerical evaluations when comparing diagram #{} and #{}:\n{}",
+                        //     numerator_b.diagram_id,
+                        //     numerator_a.diagram_id,
+                        //     ratios
+                        //         .iter()
+                        //         .map(|av| av.as_ref().unwrap().to_canonical_string())
+                        //         .collect::<Vec<_>>()
+                        //         .join("\n")
+                        // );
 
-                            // println!(
-                            //     "ratios from numerical evaluations when comparing diagram #{} and #{}:\n{}",
-                            //     numerator_b.diagram_id,
-                            //     numerator_a.diagram_id,
-                            //     ratios
-                            //         .iter()
-                            //         .map(|av| av.as_ref().unwrap().to_canonical_string())
-                            //         .collect::<Vec<_>>()
-                            //         .join("\n")
-                            // );
-
-                            if ratios.len() == 1 {
-                                if let Some(ratio) = ratios.iter().next().unwrap().to_owned() {
-                                    debug!(
+                        if ratios.len() == 1 {
+                            if let Some(ratio) = ratios.iter().next().unwrap().to_owned() {
+                                debug!(
                                     "Combining graph #{} with #{} using numerical evaluation, with ratio = {}",
                                     numerator_b.diagram_id,
                                     numerator_a.diagram_id,
                                     ratio
                                 );
-                                    return Some(ratio);
-                                }
+                                return Some(ratio);
                             }
-                        } else {
-                            //println!("Skipping comparison of numerical samples between diagrams #{} and #{} because their variables differ", numerator_b.diagram_id, numerator_a.diagram_id);
                         }
+                    } else {
+                        //println!("Skipping comparison of numerical samples between diagrams #{} and #{} because their variables differ", numerator_b.diagram_id, numerator_a.diagram_id);
                     }
                 }
                 None
@@ -4155,280 +4206,78 @@ struct PooledGraphData {
 struct ProcessedNumeratorForComparison {
     diagram_id: usize,
     canonized_numerator: Option<Atom>,
-    sample_points: Option<Vec<Vec<(Atom, Atom)>>>,
     sample_evaluations: Option<Vec<Atom>>,
 }
 
 impl ProcessedNumeratorForComparison {
-    fn from_numerator_symbolic_expression<T: Copy + Default + ExpressionState>(
+    fn from_numerator_symbolic_expression(
         diagram_id: usize,
-        bare_graph: &Graph,
-        numerator: Numerator<SymbolicExpression<T>>,
+        graph: &Graph,
+        mut numerator: Atom,
+        samples: &[(
+            Vec<Replacement>,
+            TensorLibrary<MixedTensor<F<f64>, ExplicitKey<Aind>>, Aind>,
+        )],
         numerator_aware_isomorphism_grouping: &NumeratorAwareGraphGroupingOption,
     ) -> Result<Self, FeynGenError> {
-        disable!(
-        // println!("----");
-        // println!(
-        //     "Numerator input for diagram        #{}: {}",
-        //     diagram_id,
-        //     numerator.get_single_atom().0
-        // );
-
         let default_processed_data = ProcessedNumeratorForComparison {
             diagram_id,
             canonized_numerator: None,
-            sample_points: None,
             sample_evaluations: None,
         };
         let res = if let Some(group_options) = numerator_aware_isomorphism_grouping.get_options() {
             if group_options.test_canonized_numerator
-                || group_options.number_of_numerical_samples > 1
+                || group_options.number_of_numerical_samples > 0
             {
-                let mut processed_numerator = numerator.clone();
-                let mut lmb_replacements = bare_graph.generate_lmb_replacement_rules(
-                    "Q(<i>,x<j>__)",
-                    "K(<i>,x<j>__)",
-                    "P(<i>,x<j>__)",
+                let lmb_reps = graph.integrand_replacement(
+                    &graph.full_filter(),
+                    &graph.loop_momentum_basis,
+                    &[W_.x___],
                 );
-                // // Flip the momentum direction of all antiparticle
-                // for (i_edge, edge) in bare_graph.edges.iter().enumerate() {
-                //     if edge.particle.is_antiparticle() {
-                //         'find_rep: for rep in lmb_replacements.iter_mut() {
-                //             if rep
-                //                 .0
-                //                 .pattern_match(
-                //                     &Atom::parse(&format!("Q({},x__)", i_edge))
-                //                         .unwrap()
-                //                         .to_pattern(),
-                //                     None,
-                //                     None,
-                //                 )
-                //                 .next()
-                //                 .is_some()
-                //             {
-                //                 rep.1 = (rep.1.clone() * -1).expand();
-                //                 break 'find_rep;
-                //             }
-                //         }
-                //     }
-                // }
-                // Force "final-state" momenta and pol vectors to be identical to external momenta
-                // for (i_ext, connection) in bare_graph.external_connections.iter().enumerate() {
-                //     if let (Some(left_external_node_pos), Some(right_external_node_pos)) =
-                //         connection
-                //     {
-                //         let left_edge = &bare_graph.edges
-                //             [bare_graph.vertices[*left_external_node_pos].edges[0]];
 
-                //         let right_edge = &bare_graph.edges
-                //             [bare_graph.vertices[*right_external_node_pos].edges[0]];
-                //         let connected_external_id = bare_graph.external_connections.len() + i_ext;
-                //         for rep in lmb_replacements.iter_mut() {
-                //             rep.1 = rep
-                //                 .1
-                //                 .replace(
-                //                     &parse!(&format!("P({},x__)", connected_external_id))
-                //                         .to_pattern(),
-                //                 )
-                //                 .with(parse!(&format!("P({},x__)", i_ext)).to_pattern());
-                //         }
-                //         let left_edge_pol = match left_edge.edge_type {
-                //             EdgeType::Incoming => left_edge.particle.0.in_pol_symbol(),
-                //             EdgeType::Outgoing => left_edge.particle.0.out_pol_symbol(),
-                //             _ => unreachable!(),
-                //         };
-                //         let right_edge_pol = match right_edge.edge_type {
-                //             EdgeType::Incoming => right_edge.particle.0.in_pol_symbol(),
-                //             EdgeType::Outgoing => right_edge.particle.0.out_pol_symbol(),
-                //             _ => unreachable!(),
-                //         };
-                //         if let (Some(left_edge_pol), Some(right_edge_pol)) =
-                //             (left_edge_pol, right_edge_pol)
-                //         {
-                //             lmb_replacements.push((
-                //                 parse!(&format!(
-                //                     "{}({},x__)",
-                //                     right_edge_pol, connected_external_id
-                //                 )),
-                //                 parse!(&format!("{}({},x__)", left_edge_pol, i_ext)),
-                //             ));
-                //             // lmb_replacements.push((
-                //             //     parse!(&format!(
-                //             //         "{}({},xA__)*{}({},xB__)",
-                //             //         left_edge_pol, i_ext, right_edge_pol, connected_external_id,
-                //             //     ))
-                //             //     .unwrap(),
-                //             //     parse!("Metric(xA__,xB__)").unwrap(),
-                //             // ));
-                //         }
-                //     }
-                // }
+                numerator = numerator.replace_multiple(&lmb_reps);
 
-                // Make sure to normalize the replacements
-                // lmb_replacements = lmb_replacements
-                //     .iter()
-                //     .map(|(src, trgt)| (src.expand(), trgt.expand()))
-                //     .collect::<Vec<_>>();
-
-                //lmb_replacements.push((Atom::parse("MB").unwrap(), Atom::Zero));
-                // println!(
-                //     "BEFORE: {}",
-                //     processed_numerator.get_single_atom().unwrap().0
-                // );
-                // println!(
-                //     "REPLACEMENTS:\n{}",
-                //     lmb_replacements
-                //         .iter()
-                //         .map(|(a, b)| format!("{} -> {}", a, b))
-                //         .collect::<Vec<_>>()
-                //         .join("\n")
-                // );
-                // processed_numerator = processed_numerator.apply_reps(
-                //     lmb_replacements
-                //         .iter()
-                //         .map(|(a, b)| (a.as_view(), b.as_view()))
-                //         .collect::<Vec<_>>(),
-                // );
-                // println!(
-                //     "AFTER: {}",
-                //     processed_numerator.get_single_atom().unwrap().0
-                // );
-                // processed_numerator = processed_numerator.apply_reps2(&lmb_replacements);
-                // println!(
-                //     "processed_numerator A:\n{}",
-                //     processed_numerator.state.colorless
-                // );
-                // println!(
-                //     "processed_numerator:\n{}",
-                //     processed_numerator.get_single_atom().unwrap().0
-                // );
-                let canonized_numerator = if group_options.test_canonized_numerator {
-                    let mut canonized_numerator_to_consider = processed_numerator
-                        .canonize_lorentz()
-                        .unwrap()
-                        .get_single_atom()
-                        .unwrap();
-                    if group_options.fully_numerical_substitution_when_comparing_numerators {
-                        canonized_numerator_to_consider = FeynGen::substitute_color_factors(
-                            canonized_numerator_to_consider.as_atom_view(),
-                        )
-                    };
-                    Some(canonized_numerator_to_consider)
+                let canonized_numerator = if group_options.test_canonized_numerator
+                    && group_options.fully_numerical_substitution_when_comparing_numerators
+                {
+                    Some(ProcessDefinition::substitute_color_factors(
+                        numerator.as_atom_view(),
+                    ))
                 } else {
                     None
                 };
+                let expanded = numerator.expand_color();
 
-                let (sample_points, sample_evaluations) = if group_options
-                    .number_of_numerical_samples
-                    > 0
-                {
-                    // TODO: Once symbolica supports `collect_factors()`, substitute `collect_num()` below with it.
-                    let decomposed_net =
-                        // processed_numerator
-                        //     .state
-                        //     .colorless
-                        //     .map_data_ref(|data| Numerator {
-                        //         state: Network {
-                        //             net: {
-                        //                 StandardTensorNet::try_from_view(
-                        //                     data.collect_num().as_atom_view(),
-                        //                     TENSORLIB.deref(),
-                        //                 )
-                        //                 .unwrap()
-                        //             },
-                        //         },
-                        //     });
-                        todo!();
-                    // println!(
-                    //     "Scalar part: {}",
-                    //     decomposed_net
-                    //         .iter_flat()
-                    //         .map(|tn| format!("{}", tn.1.scalar.as_ref().unwrap().0))
-                    //         .collect::<Vec<_>>()
-                    //         .join(", ")
-                    // );
-                    // println!(
-                    //     "NUMERATOR DOTs:\n{}",
-                    //     decomposed_net
-                    //         .iter_flat()
-                    //         .map(|tn| format!("graph: {}", tn.1.rich_graph().dot()))
-                    //         .collect::<Vec<_>>()
-                    //         .join("\n ")
-                    // );
-                    // panic!("stop");
-
-                    // println!("----");
-                    if let Some(grouping_options) =
-                        numerator_aware_isomorphism_grouping.get_options()
-                    {
-                        let mut prime_iterator = PrimeIteratorU64::new(1);
-                        prime_iterator.nth(grouping_options.numerical_sample_seed as usize);
-
-                        let sample_points_decomposed = (0..grouping_options
-                            .number_of_numerical_samples)
-                            .map(|_| {
-                                Self::random_concretize_reps(
-                                    &decomposed_net,
-                                    Some(&mut prime_iterator),
-                                    grouping_options
-                                        .fully_numerical_substitution_when_comparing_numerators,
-                                )
-                            })
-                            .collect::<Vec<_>>();
-
-                        let colored_tensor: DataTensor<Atom, OrderedStructure<Euclidean, Aind>> =
-                            todo!();
-                        // processed_numerator.state.color.map_data_ref(|a| {
-                        //     if grouping_options
-                        //         .fully_numerical_substitution_when_comparing_numerators
-                        //     {
-                        //         FeynGen::substitute_color_factors(a.as_atom_view()).expand()
-                        //     } else {
-                        //         a.to_owned()
-                        //     }
-                        // });
-                        let sample_evaluations = sample_points_decomposed
+                let sample_evaluations = samples
+                    .iter()
+                    .map(|(reps, lib)| {
+                        expanded
                             .iter()
-                            .map(|sp| {
-                                let reps = sp
-                                    .iter()
-                                    .map(|(a, b)| (a.as_view(), b.as_view()))
-                                    .collect::<Vec<_>>();
-                                let res = decomposed_net.map_data_ref_result(|n| {
-                                    n.evaluate_with_replacements(
-                                        &reps,
-                                        grouping_options
-                                            .fully_numerical_substitution_when_comparing_numerators,
-                                    )
-                                });
+                            .map(|(c, l)| {
+                                // println!("c:{c},l:{l}");
+                                let mut net = ParsingNet::try_from_view(l.as_view(), lib).unwrap();
+                                net.store
+                                    .scalar
+                                    .iter_mut()
+                                    .for_each(|a| *a = a.replace_multiple(reps));
+                                net.execute::<Sequential, SmallestDegree, _, _>(lib)
+                                    .unwrap();
 
-                                res.map(|a| a.contract(&colored_tensor).unwrap().scalar().unwrap())
+                                let c = ProcessDefinition::substitute_color_factors(c.as_view())
+                                    .expand();
+
+                                let scalar: Atom = net.result_scalar().unwrap().into();
+
+                                c * scalar
                             })
-                            .collect::<Result<Vec<_>, _>>()?;
-
-                        // debug!(
-                        //     "Sample evaluation for diagram #{}:\n{}",
-                        //     diagram_id,
-                        //     sample_evaluations
-                        //         .iter()
-                        //         .map(|av| av.to_string())
-                        //         .collect::<Vec<_>>()
-                        //         .join("\n")
-                        // );
-
-                        (Some(sample_points_decomposed), Some(sample_evaluations))
-                    } else {
-                        (None, None)
-                    }
-                } else {
-                    (None, None)
-                };
+                            .fold(Atom::Zero, |acc, l| acc + l)
+                    })
+                    .collect();
 
                 ProcessedNumeratorForComparison {
                     diagram_id,
                     canonized_numerator,
-                    sample_points,
-                    sample_evaluations,
+                    sample_evaluations: Some(sample_evaluations),
                 }
             } else {
                 default_processed_data
@@ -4436,107 +4285,7 @@ impl ProcessedNumeratorForComparison {
         } else {
             default_processed_data
         };
-        Ok(res));
-        todo!()
-    }
-
-    #[allow(clippy::type_complexity)]
-    fn random_concretize_reps(
-        decomposed_net: &DataTensor<Numerator<Network>, OrderedStructure<Euclidean, Aind>>,
-        sample_iterator: Option<&mut PrimeIteratorU64>,
-        fully_numerical_substitution: bool,
-    ) -> Vec<(Atom, Atom)> {
-        let prime_iterator = if let Some(iterator) = sample_iterator {
-            iterator
-        } else {
-            &mut PrimeIteratorU64::new(1)
-        };
-
-        let mut prime =
-            prime_iterator.map(|u| Atom::num(symbolica::domains::integer::Integer::new(u as i64)));
-
-        let mut reps = HashSet::<_>::default();
-
-        if !fully_numerical_substitution {
-            let variable = function!(
-                W_.f_,
-                Atom::var(W_.y_),
-                function!(symbol!("cind"), Atom::var(W_.x_))
-            );
-            let pat = variable.to_pattern();
-
-            decomposed_net.iter_flat().for_each(|(_, tn)| {
-                for d in tn.state.net.store.tensors.iter() {
-                    if let Ok(param_tn) = d.clone().try_into_parametric() {
-                        for (_, a) in param_tn.iter_flat() {
-                            for m in a.pattern_match(&pat, None, None) {
-                                {
-                                    reps.insert(pat.replace_wildcards(&m));
-                                }
-                            }
-                        }
-                    }
-                }
-            });
-        } else {
-            for (_, tn) in decomposed_net.iter_flat() {
-                for d in tn.state.net.store.tensors.iter() {
-                    if let Ok(param_tn) = d.clone().try_into_parametric().to_owned() {
-                        for (_, a) in param_tn.tensor.iter_flat() {
-                            let res = a.replace_map(
-                                &|view: AtomView, context: &Context, term: &mut Atom| {
-                                    assert!(context.function_level == 0);
-                                    match view {
-                                        AtomView::Var(s) => {
-                                            *term = function!(
-                                                symbol!("MARKER_TO_REPLACE"),
-                                                s.as_view().to_owned()
-                                            );
-                                            true
-                                        }
-                                        AtomView::Fun(f) => {
-                                            *term = function!(
-                                                symbol!("MARKER_TO_REPLACE"),
-                                                f.as_view().to_owned()
-                                            );
-                                            true
-                                        }
-                                        AtomView::Pow(p) => {
-                                            let (_, exp) = p.get_base_exp();
-                                            match exp.to_owned() {
-                                                Atom::Num(_) => false,
-                                                _ => {
-                                                    *term = function!(
-                                                        symbol!("MARKER_TO_REPLACE"),
-                                                        p.as_view().to_owned()
-                                                    );
-                                                    true
-                                                }
-                                            }
-                                        }
-                                        _ => false,
-                                    }
-                                },
-                            );
-                            for m in res.pattern_match(
-                                &function!(symbol!("MARKER_TO_REPLACE"), Atom::var(W_.x_))
-                                    .to_pattern(),
-                                None,
-                                None,
-                            ) {
-                                reps.insert(m.get(&W_.x_).unwrap().to_owned());
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        let mut reps = reps.iter().map(|a| a.to_owned()).collect::<Vec<_>>();
-        reps.sort();
-        reps.iter()
-            .map(|a: &Atom| (a.clone(), prime.next().unwrap()))
-            .collect()
+        Ok(res)
     }
 }
 

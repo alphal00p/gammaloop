@@ -1,7 +1,11 @@
 use std::sync::atomic::AtomicUsize;
 
 use bitvec::vec::BitVec;
-use linnet::half_edge::{involution::HedgePair, subgraph::SubGraph, NodeIndex};
+use linnet::half_edge::{
+    involution::{HedgePair, Orientation},
+    subgraph::SubGraph,
+    NodeIndex,
+};
 use log::debug;
 use spenso::network::library::TensorLibraryData;
 use symbolica::atom::Atom;
@@ -52,6 +56,7 @@ impl Numerator<UnInit> {
                     seen.set(sink_n.0, true);
                     num *= graph[sink_n].get_num();
                 }
+
                 num *= &e.data.num;
             }
         }

@@ -10,7 +10,7 @@ use linnet::{
 };
 use spenso::{
     algebra::complex::Complex,
-    structure::{IndexLess, ScalarStructure},
+    structure::{representation::LibraryRep, IndexLess, ScalarStructure},
 };
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, Symbol},
@@ -23,7 +23,7 @@ use crate::{
     model::{ArcParticle, Model, UFOSymbol},
     momentum::Helicity,
     momentum_sample::LoopIndex,
-    numerator::aind::NewAind,
+    numerator::aind::{Aind, NewAind},
     utils::{FloatLike, F, GS},
     uv::uv_graph::UVE,
 };
@@ -93,7 +93,7 @@ impl PossibleParticle {
         }
     }
 
-    pub(crate) fn spin_reps(&self) -> IndexLess {
+    pub(crate) fn spin_reps(&self) -> IndexLess<LibraryRep, Aind> {
         match self {
             PossibleParticle::Particle(p) => p.spin_reps(),
             _ => IndexLess::scalar_structure(),

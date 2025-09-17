@@ -107,6 +107,7 @@ fn example_graph_count() -> Result<()> {
 
     // A first process
     assert_snapshot!(feyngen_str(&mut cli, "xs", "e+ e- > d d~ / Z QED^2==4 [{{1}} QCD] --numerator-grouping no_grouping")?,@"1 | -1");
+    assert_snapshot!(feyngen_str(&mut cli, "xs", "e+ e- > d d~ / Z QED^2==4 [{{1}} QCD]")?,@"1 | -1");
 
     // Another process, etc...
     // ...
