@@ -176,6 +176,11 @@ impl Esurface {
         }
     }
 
+    #[inline]
+    pub(crate) fn could_exist<T: FloatLike>(&self, graph: &Graph, assumptions: ()) -> bool {
+        true
+    }
+
     /// Only compute the shift part, useful for center finding.
     #[inline]
     pub(crate) fn compute_shift_part_from_momenta<T: FloatLike>(

@@ -13,6 +13,7 @@ use eyre::Context;
 use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeVec, Orientation};
 use momtrop::SampleGenerator;
+use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 use spenso::algebra::complex::Complex;
 use symbolica::{
     atom::AtomCore,
@@ -184,17 +185,16 @@ impl AmplitudeGraphTerm {
         path: impl AsRef<Path>,
         override_existing: bool,
         settings: &GlobalSettings,
-    ) {
+    ) -> Result<()> {
         let graph_path = path.as_ref().join(&self.graph.name);
 
-        let _ = fs::create_dir_all(&graph_path)
-            .with_context(|| {
-                format!(
-                    "Trying to create directory to save amplitude {}",
-                    graph_path.display()
-                )
-            })
-            .unwrap();
+        let _ = fs::create_dir_all(&graph_path).with_context(|| {
+            format!(
+                "Trying to create directory to save amplitude {}",
+                graph_path.display()
+            )
+        })?;
+
         self.orientation_parametric_integrand.compile(
             graph_path
                 .join("orientation_parametric_integrand")
@@ -223,6 +223,8 @@ impl AmplitudeGraphTerm {
                     .export_settings(),
             )
         });
+
+        Ok(())
     }
 
     #[instrument(
@@ -446,13 +448,14 @@ pub struct AmplitudeIntegrandData {
 impl AmplitudeIntegrand {
     pub(crate) fn compile(
         &mut self,
-        path: impl AsRef<Path>,
+        path: impl AsRef<Path> + Sync,
         override_existing: bool,
         settings: &GlobalSettings,
     ) -> Result<()> {
-        for a in &mut self.data.graph_terms {
-            a.compile(path.as_ref(), override_existing, settings);
-        }
+        self.data
+            .graph_terms
+            .par_iter_mut()
+            .try_for_each(|a| a.compile(path.as_ref(), override_existing, settings))?;
 
         Ok(())
     }

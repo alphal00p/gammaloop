@@ -5,15 +5,20 @@ use std::{
     iter,
     ops::Deref,
     path::Path,
+    sync::Mutex,
 };
 
 use ahash::AHashSet;
 // use bincode::{Decode, Encode};
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::{Result, Section};
+use linya::{Bar, Progress};
 use momtrop::SampleGenerator;
 
 use idenso::color::ColorSimplifier;
+use rayon::iter::{
+    IndexedParallelIterator, IntoParallelRefIterator, IntoParallelRefMutIterator, ParallelIterator,
+};
 use spenso::network::{Sequential, SmallestDegree};
 use tracing::instrument;
 use vakint::{EvaluationOrder, LoopNormalizationFactor, Vakint, VakintSettings};
@@ -36,7 +41,7 @@ use crate::{
     numerator::symbolica_ext::AtomCoreExt,
     settings::{runtime::LockedRuntimeSettings, GlobalSettings},
     signature::SignatureLike,
-    status_debug,
+    status_debug, status_info,
     subtraction::amplitude_counterterm::AmplitudeCountertermAtom,
     utils::{symbolica_ext::LOGPRINTOPTS, Length, GS, TENSORLIB, W_},
     uv::UltravioletGraph,
@@ -196,9 +201,12 @@ impl Amplitude {
     )]
     pub fn preprocess(&mut self, model: &Model, settings: &GenerationSettings) -> Result<()> {
         // preprocess each graph individually
-        for amplitude_graph in self.graphs.iter_mut() {
-            amplitude_graph.preprocess(model, settings)?;
-        }
+
+        self.graphs.par_iter_mut().try_for_each(|amplitude_graph| {
+            let ok = amplitude_graph.preprocess(model, settings);
+
+            ok
+        })?;
 
         self.generate_grouped_derived_data()?;
 
@@ -219,7 +227,7 @@ impl Amplitude {
     ) -> Result<()> {
         let terms: Result<Vec<_>> = self
             .graphs
-            .iter()
+            .par_iter_mut()
             .enumerate()
             .map(|(graph_id, graph)| {
                 let group_id = graph.graph.group_id.unwrap(); // should always be set
