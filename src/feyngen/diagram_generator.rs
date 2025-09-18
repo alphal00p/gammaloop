@@ -2685,6 +2685,11 @@ impl ProcessDefinition {
             GenerationType::CrossSection => &self.cross_section_filters,
         };
 
+        const SB_INCOMING: bool = true;
+        const SB_OUTGOING: bool = false;
+        // const SB_INCOMING: bool = false;
+        // const SB_OUTGOING: bool = true;
+
         #[allow(clippy::type_complexity)]
         let mut vertex_signatures: HashMap<
             Vec<(Option<bool>, SmartString<LazyCompact>)>,
@@ -2696,10 +2701,17 @@ impl ProcessDefinition {
                 if p.0.is_self_antiparticle() {
                     oriented_particles.push((None, p.0.name.clone()));
                 } else if p.0.is_antiparticle() {
-                    oriented_particles
-                        .push((Some(true), p.0.get_anti_particle(model).0.name.clone()));
+                    oriented_particles.push((
+                        Some(SB_INCOMING),
+                        // Some(SB_OUTGOING),
+                        p.0.get_anti_particle(model).0.name.clone(),
+                    ));
                 } else {
-                    oriented_particles.push((Some(false), p.0.name.clone()));
+                    oriented_particles.push((
+                        Some(SB_OUTGOING),
+                        // Some(SB_INCOMING),
+                        p.0.name.clone(),
+                    ));
                 }
                 if let Some(vetoed_particles) = filters.get_particle_vetos() {
                     if vetoed_particles.contains(&(p.0.pdg_code as i64))
@@ -2730,11 +2742,11 @@ impl ProcessDefinition {
                         (None, EdgeColor::from_particle(p))
                     } else if p.0.is_antiparticle() {
                         (
-                            Some(false),
+                            Some(SB_OUTGOING),
                             EdgeColor::from_particle(p.0.get_anti_particle(model)),
                         )
                     } else {
-                        (Some(true), EdgeColor::from_particle(p))
+                        (Some(SB_INCOMING), EdgeColor::from_particle(p))
                     },
                 )
             })
@@ -2765,11 +2777,11 @@ impl ProcessDefinition {
                                     (None, EdgeColor::from_particle(p))
                                 } else if p.0.is_antiparticle() {
                                     (
-                                        Some(true),
+                                        Some(SB_INCOMING),
                                         EdgeColor::from_particle(p.0.get_anti_particle(model)),
                                     )
                                 } else {
-                                    (Some(false), EdgeColor::from_particle(p))
+                                    (Some(SB_OUTGOING), EdgeColor::from_particle(p))
                                 },
                             )
                         })
@@ -2790,11 +2802,11 @@ impl ProcessDefinition {
                             (None, EdgeColor::from_particle(p))
                         } else if p.0.is_antiparticle() {
                             (
-                                Some(true),
+                                Some(SB_INCOMING),
                                 EdgeColor::from_particle(p.0.get_anti_particle(model)),
                             )
                         } else {
-                            (Some(false), EdgeColor::from_particle(p))
+                            (Some(SB_OUTGOING), EdgeColor::from_particle(p))
                         },
                     ));
                 }
