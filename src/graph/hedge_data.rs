@@ -193,3 +193,10 @@ impl From<&NumHedgeData> for DotHedgeData {
         h
     }
 }
+
+impl From<&ParseHedge> for DotHedgeData {
+    fn from(value: &ParseHedge) -> Self {
+        let h = DotHedgeData::from(value.hedge_id.map(|i| i.to_string()));
+        h
+    }
+}

@@ -20,8 +20,10 @@ use symbolica::{
     function,
     id::Replacement,
 };
+use tracing::debug;
 
 use crate::symbolica_ext::CallSymbol;
+use crate::utils::symbolica_ext::LOGPRINTOPTS;
 use crate::utils::{GS, W_};
 
 use super::aind::Aind;
@@ -129,7 +131,7 @@ impl UFOSymbols {
         // for s in slots {
         //     println!("{}", s);
         // }
-        // println!("in:{atom:#}");
+        // debug!(in = atom.printer(LOGPRINTOPTS).to_string());
 
         atom = self.normalize_complex(atom);
         for (i, s) in slots.iter().enumerate() {
@@ -254,6 +256,8 @@ impl UFOSymbols {
 
         let mut max_dummy = 0;
 
+        // debug!(before_dummies = atom.printer(LOGPRINTOPTS).to_string());
+
         atom = atom.replace_map(|term, _, out| {
             if let AtomView::Fun(f) = term {
                 let name = f.get_symbol();
@@ -269,10 +273,16 @@ impl UFOSymbols {
                                     if a > max_dummy {
                                         max_dummy = a;
                                     }
-                                    first = false;
                                     fbuilder =
                                         fbuilder.add_arg(mink.slot::<Aind, _>(dummy(a)).to_atom());
                                 } else {
+                                    // debug!(
+                                    //     bisslot = bis
+                                    //         .slot::<Aind, _>(dummy(a))
+                                    //         .to_atom()
+                                    //         .printer(LOGPRINTOPTS)
+                                    //         .to_string()
+                                    // );
                                     fbuilder =
                                         fbuilder.add_arg(bis.slot::<Aind, _>(dummy(a)).to_atom());
                                 }
@@ -281,6 +291,9 @@ impl UFOSymbols {
                             }
                         } else {
                             fbuilder = fbuilder.add_arg(a);
+                        }
+                        if first {
+                            first = false;
                         }
                     }
 
@@ -346,7 +359,6 @@ impl UFOSymbols {
                                 let a = (-a) as usize;
 
                                 if count < 2 {
-                                    count += 1;
                                     if a > max_dummy {
                                         max_dummy = a;
                                     }
@@ -362,6 +374,7 @@ impl UFOSymbols {
                         } else {
                             fbuilder = fbuilder.add_arg(a);
                         }
+                        count += 1;
                     }
 
                     *out = fbuilder.finish();
@@ -373,6 +386,9 @@ impl UFOSymbols {
                 false
             }
         });
+
+        // debug!(after_dummies = atom.printer(LOGPRINTOPTS).to_string());
+        // debug!("After dummies{}", atom);
 
         let reps: Vec<_> = [
             (
@@ -481,6 +497,7 @@ impl UFOSymbols {
             .replace(function!(UFO.momentum, W_.a_))
             .with(GS.emr_mom(momenta[0], W_.a_));
 
+        // debug!(out = atom.printer(LOGPRINTOPTS).to_string());
         // println!("out:{atom:#}");
         atom
     }

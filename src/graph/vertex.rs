@@ -64,6 +64,25 @@ pub struct ParseVertex {
     pub dod: Option<i32>,
 }
 
+impl From<&ParseVertex> for DotVertexData {
+    fn from(value: &ParseVertex) -> Self {
+        let mut v = DotVertexData::empty();
+        if let Some(name) = &value.name {
+            v.name = Some(name.clone());
+        }
+        if let Some(vertex_rule) = &value.vertex_rule {
+            v.add_statement("int_id", vertex_rule.name.as_str());
+        }
+        if let Some(dod) = value.dod {
+            v.add_statement("dod", dod);
+        }
+        if let Some(num) = &value.num {
+            v.add_statement("num", num.to_quoted());
+        }
+        v
+    }
+}
+
 impl ParseVertex {
     pub fn with_num(mut self, num: Atom) -> Self {
         self.num = Some(num);

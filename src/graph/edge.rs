@@ -247,7 +247,7 @@ impl From<&Edge> for DotEdgeData {
 
 #[derive(Debug, Clone)]
 pub struct ParseEdge {
-    pub label: Option<String>,
+    pub name: Option<String>,
     pub particle: PossibleParticle,
     pub dod: Option<i32>,
     pub is_dummy: bool,
@@ -256,6 +256,43 @@ pub struct ParseEdge {
     pub num: Option<Atom>,
     /// Specifies the incoming initial state hedge
     pub is_cut: Option<Hedge>,
+}
+
+impl From<&ParseEdge> for DotEdgeData {
+    fn from(value: &ParseEdge) -> Self {
+        let mut e = DotEdgeData::empty();
+        if let Some(name) = &value.name {
+            e.add_statement("name", name.clone());
+        }
+        match &value.particle {
+            PossibleParticle::Particle(p) => {
+                e.add_statement("particle", format!("\"{}\"", p.name));
+            }
+            PossibleParticle::JustMass { expr, .. } => {
+                e.add_statement("mass", expr.to_quoted());
+            }
+            PossibleParticle::MassOverriddenParticle { mass, particle, .. } => {
+                e.add_statement("mass", mass.to_quoted());
+                e.add_statement("particle", format!("\"{}\"", particle.name));
+            }
+        }
+        if let Some(lmb_id) = &value.lmb_id {
+            e.add_statement("lmb_id", usize::from(*lmb_id));
+        }
+        if let Some(cut) = &value.is_cut {
+            e.add_statement("is_cut", usize::from(*cut));
+        }
+        if let Some(dod) = &value.dod {
+            e.add_statement("dod", *dod);
+        }
+        if let Some(num) = &value.num {
+            e.add_statement("num", num.to_quoted());
+        }
+
+        // e.add_statement("color_num", value.color_num.to_quoted());
+        e.add_statement("is_dummy", value.is_dummy);
+        e
+    }
 }
 
 impl UVE for ParseEdge {
@@ -272,7 +309,7 @@ impl ParseEdge {
     pub fn new(particle: impl Into<PossibleParticle>) -> Self {
         ParseEdge {
             is_dummy: false,
-            label: None,
+            name: None,
             particle: particle.into(),
             dod: None,
             lmb_id: None,
@@ -287,7 +324,7 @@ impl ParseEdge {
     }
 
     pub fn with_label(mut self, label: String) -> Self {
-        self.label = Some(label);
+        self.name = Some(label);
         self
     }
 
@@ -421,14 +458,15 @@ impl ParseEdge {
          p: HedgePair,
          e_data: EdgeData<&'a DotEdgeData>| {
             e_data.map_result(|e| {
-                let label = e.get::<_, String>("label").transpose()?;
+                let label = e.get::<_, String>("name").transpose()?;
 
                 let lmb_id: Option<LoopIndex> = e
                     .get::<_, usize>("lmb_id")
                     .transpose()?
                     .map(LoopIndex::from);
 
-                let is_cut: Option<Hedge> = e.get::<_, usize>("cut").transpose()?.map(Hedge::from);
+                let is_cut: Option<Hedge> =
+                    e.get::<_, usize>("is_cut").transpose()?.map(Hedge::from);
 
                 let dod = e
                     .get::<_, String>("dod")
@@ -468,7 +506,7 @@ impl ParseEdge {
                     particle: particle.override_mass(mass),
                     num,
                     is_cut,
-                    label,
+                    name: label,
                 })
             })
         }

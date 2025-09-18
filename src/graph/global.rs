@@ -6,7 +6,7 @@ use symbolica::atom::Atom;
 use crate::graph::GroupId;
 
 use super::{
-    parse::{StripParse, ToQuoted},
+    parse::{ParseGraph, StripParse, ToQuoted},
     Graph,
 };
 
@@ -124,6 +124,33 @@ impl Graph {
         g.statements.insert(
             "overall_factor".to_string(),
             self.overall_factor.to_quoted(),
+        );
+
+        g
+    }
+}
+
+impl ParseGraph {
+    pub(crate) fn global_data(&self) -> GlobalData {
+        let mut g = GlobalData::from(());
+
+        // println!("Name: {}", self.name);
+        g.add_name(self.global_data.name.clone());
+
+        g.statements
+            .insert("num".to_string(), self.global_data.num.to_quoted());
+        if let Some(proj) = &self.global_data.projectors {
+            g.statements
+                .insert("projector".to_string(), proj.to_quoted());
+        }
+
+        // g.statements.insert(
+        //     "overall_factor".to_string(),
+        //     self.global_prefactor.color.to_canonical_string(),
+        // );
+        g.statements.insert(
+            "overall_factor".to_string(),
+            self.global_data.overall_factor.to_quoted(),
         );
 
         g

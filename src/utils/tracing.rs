@@ -96,14 +96,14 @@ pub fn init_test_tracing() -> reload::Handle<EnvFilter, Registry> {
             let _spec = std::env::var("RUST_LOG").unwrap_or_else(|_| "debug".to_string());
 
             // Use EnvFilter for reload compatibility
-            let env_filter = EnvFilter::new("_gammaloop=debug,status=trace,status_data=trace");
+            let env_filter = EnvFilter::new("gammalooprs=debug,status=trace,status_data=trace");
             let (filter_layer, handle) = reload::Layer::new(env_filter);
 
             // 4) pretty status to stderr, opt-in via `target="status"`
             // Add strict filtering to status layer
             let test_status_filter = filter_fn(|metadata| {
                 let target = metadata.target();
-                target.starts_with("_gammaloop") || target == "status" || target == "status_data"
+                target.starts_with("gammalooprs") || target == "status" || target == "status_data"
             });
 
             let status_layer = fmt::layer()

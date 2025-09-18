@@ -44,7 +44,7 @@ fn file_filter_from(user_spec: &str) -> Result<EnvFilter> {
     //     };
     //     filter = filter.add_directive(d);
     // }
-    for a in user_spec.split("|") {
+    for a in user_spec.split(",") {
         if a.trim().is_empty() {
             continue;
         }

@@ -47,7 +47,7 @@ pub static LOGPRINTOPTS: PrintOptions = PrintOptions {
     pretty_matrix: false,
     max_terms: None,
     custom_print_mode: None,
-    hide_namespace: Some("_gammaloop"),
+    hide_namespace: Some("gammalooprs"),
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Default, Encode, Decode)]

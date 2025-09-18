@@ -424,18 +424,18 @@ impl Graph {
                 edge.directed,
             );
         }
-
-        Graph::from_parsed(
-            ParseGraph {
-                global_data: ParseData {
-                    name: graph_name.as_ref().into(),
-                    overall_factor: symmetry_factor,
-                    ..Default::default()
-                },
-                graph: builder.into(),
+        let parsed = ParseGraph {
+            global_data: ParseData {
+                name: graph_name.as_ref().into(),
+                overall_factor: symmetry_factor,
+                ..Default::default()
             },
-            model,
-        )
+            graph: builder.into(),
+        };
+
+        debug!("Parsing {}", parsed.debug_dot());
+
+        Graph::from_parsed(parsed, model)
     }
 }
 

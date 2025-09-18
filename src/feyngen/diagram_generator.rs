@@ -1,5 +1,5 @@
 use bitvec::vec::BitVec;
-use idenso::color::SelectiveExpand;
+use idenso::color::{SelectiveExpand, CS};
 use idenso::metric::PermuteWithMetric;
 use indicatif::ProgressBar;
 use indicatif::{ParallelProgressIterator, ProgressStyle};
@@ -1224,7 +1224,39 @@ impl ProcessDefinition {
                     lib.insert_explicit(PermutedStructure::identity(key));
                 }
             }
-            GenerationType::CrossSection => {}
+            GenerationType::CrossSection => {
+                for (i, pdg) in self.initial_pdgs.iter().enumerate() {
+                    let additional_args = Some(vec![Atom::num(i)]);
+
+                    let p = model.get_particle_from_pdg(*pdg as isize);
+
+                    let structure = p.spin_reps();
+                    let global_name =
+                        EdgeData::new(p, Orientation::Default).pol_symbol(Flow::Source);
+
+                    let len = structure.size().unwrap();
+
+                    let key = PermutedStructure::identity(ExplicitKey {
+                        structure,
+                        global_name,
+                        additional_args,
+                    });
+
+                    debug!("lib_pol:{}", key.clone().permute_with_metric());
+                    let key = ParamOrConcrete::Param(
+                        ParamTensor::from_dense(
+                            key.structure,
+                            (0..len)
+                                .into_iter()
+                                .map(|_| Atom::num(sample_iterator.next().unwrap()))
+                                .collect(),
+                        )
+                        .unwrap(),
+                    );
+
+                    lib.insert_explicit(PermutedStructure::identity(key));
+                }
+            }
         }
 
         let reps = if add_model_params {
@@ -4232,10 +4264,10 @@ impl ProcessDefinition {
 
     pub(crate) fn substitute_color_factors(expr: AtomView) -> Atom {
         let replacements = vec![
-            (parse!("Nc"), Atom::num(3)),
-            (parse!("TR"), parse!("1/2")),
-            (parse!("CA"), parse!("3")),
-            (parse!("CF"), parse!("4/3")),
+            (Atom::var(CS.nc), Atom::num(3)),
+            (Atom::var(CS.tr), parse!("1/2")),
+            // (parse!("CA"), parse!("3")),
+            // (parse!("CF"), parse!("4/3")),
         ];
         let mut res = expr.to_owned();
         for (src, trgt) in replacements {
@@ -4372,16 +4404,25 @@ impl ProcessedNumeratorForComparison {
                                     .iter_mut()
                                     .for_each(|a| *a = a.replace_multiple(reps));
 
-                                debug!(net=?net.dot_pretty());
+                                // debug!(net=?net.dot_pretty());
                                 net.execute::<Sequential, SmallestDegree, _, _>(lib)
-                                    .unwrap();
+                                    .expect(&format!("failed to execute net:{}", net.dot_pretty()));
 
-                                let c = ProcessDefinition::substitute_color_factors(c.as_view())
-                                    .expand();
+                                // let c = ProcessDefinition::substitute_color_factors(c.as_view())
+                                //     .expand();
 
-                                let scalar: Atom = net.result_scalar().unwrap().into();
-
-                                c * scalar
+                                let scalar: Atom = net
+                                    .result_scalar()
+                                    .expect(&format!(
+                                        "Expected scalar for c:{c} l:{l} that yields net:{}",
+                                        net.dot_pretty()
+                                    ))
+                                    .into();
+                                let a = ProcessDefinition::substitute_color_factors(
+                                    (c * scalar).as_view(),
+                                );
+                                debug!(evaluated=%a);
+                                a
                             })
                             .fold(Atom::Zero, |acc, l| acc + l);
                         if ANALYZE_RATIO_AS_RATIONAL_POLYNOMIAL || !matches!(numerator_aware_isomorphism_grouping,NumeratorAwareGraphGroupingOption::GroupIdenticalGraphUpToScalarRescaling(_))
