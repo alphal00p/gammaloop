@@ -168,7 +168,7 @@ impl Externals {
         }
     }
 
-    pub(crate) fn set_dependent_at_end(
+    pub fn set_dependent_at_end(
         &mut self,
         signature: &ExternalSignature,
     ) -> Result<(), ExternalsValidationError> {
@@ -324,7 +324,7 @@ impl Externals {
 
     #[allow(unused_variables)]
     #[inline]
-    pub(crate) fn get_indep_externals(&self) -> Vec<FourMomentum<F<f64>>> {
+    pub fn get_indep_externals(&self) -> Vec<FourMomentum<F<f64>>> {
         match self {
             Externals::Constant {
                 momenta,
@@ -345,7 +345,7 @@ impl Externals {
         }
     }
 
-    pub(crate) fn pdf(&self, _x_space_point: &[F<f64>]) -> F<f64> {
+    pub(crate) fn _pdf(&self, _x_space_point: &[F<f64>]) -> F<f64> {
         match self {
             Externals::Constant { .. } => F(1.0),
         }

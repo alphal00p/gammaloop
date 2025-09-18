@@ -5,7 +5,6 @@ use std::{
     iter,
     ops::Deref,
     path::Path,
-    sync::Mutex,
 };
 
 use ahash::AHashSet;
@@ -15,11 +14,9 @@ use color_eyre::{Result, Section};
 use momtrop::SampleGenerator;
 
 use idenso::color::ColorSimplifier;
-use rayon::iter::{
-    IndexedParallelIterator, IntoParallelRefIterator, IntoParallelRefMutIterator, ParallelIterator,
-};
+use rayon::iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
 use spenso::network::{Sequential, SmallestDegree};
-use tracing::{info_span, instrument, Span};
+use tracing::{info_span, instrument};
 use tracing_indicatif::{span_ext::IndicatifSpanExt, style::ProgressStyle};
 use vakint::{EvaluationOrder, LoopNormalizationFactor, Vakint, VakintSettings};
 
@@ -41,7 +38,7 @@ use crate::{
     numerator::symbolica_ext::AtomCoreExt,
     settings::{runtime::LockedRuntimeSettings, GlobalSettings},
     signature::SignatureLike,
-    status_debug, status_info,
+    status_debug,
     subtraction::amplitude_counterterm::AmplitudeCountertermAtom,
     utils::{symbolica_ext::LOGPRINTOPTS, Length, GS, TENSORLIB, W_},
     uv::UltravioletGraph,

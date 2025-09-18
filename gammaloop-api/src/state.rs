@@ -3,7 +3,7 @@ use std::{
     io::{self},
     ops::ControlFlow,
     path::{Path, PathBuf},
-    sync::{atomic::AtomicBool, Mutex},
+    sync::atomic::AtomicBool,
     time::Instant,
 };
 
@@ -28,7 +28,7 @@ use gammalooprs::{
     model::{InputParamCard, Model},
     processes::{ExportSettings, Process, ProcessCollection, ProcessDefinition, ProcessList},
     settings::{runtime::LockedRuntimeSettings, GlobalSettings, RuntimeSettings},
-    status_debug, status_info, status_warn,
+    status_debug, status_info,
     utils::{
         serde_utils::{get_schema_folder, SmartSerde},
         tracing::{init_bench_tracing, init_test_tracing},
@@ -37,10 +37,7 @@ use gammalooprs::{
     GammaLoopContextContainer,
 };
 
-use crate::{
-    generate::ProcessArgs,
-    tracing::{set_file_log_filter, set_stderr_log_filter},
-};
+use crate::tracing::{set_file_log_filter, set_stderr_log_filter};
 
 use super::{Cli, Commands};
 
@@ -469,7 +466,7 @@ impl State {
         samples: usize,
         process_id: usize,
         process_name: String,
-        n_cores: usize,
+        _n_cores: usize,
     ) -> Result<()> {
         let integrand = self
             .process_list
@@ -510,7 +507,7 @@ impl State {
     }
 
     pub fn new(save_path: PathBuf, log_file_name: Option<String>) -> Self {
-        initialise();
+        let _ = initialise();
         let handle = super::tracing::init_tracing(&save_path.join("logs"), log_file_name);
 
         let a = Self {
@@ -594,7 +591,7 @@ impl State {
         let input_param_card = if save_path.join("model_parameters.json").exists() {
             let a = InputParamCard::from_file(save_path.join("model_parameters.json"))?;
 
-            model.apply_param_card(&a);
+            let _ = model.apply_param_card(&a);
             a
         } else {
             InputParamCard::default_from_model(&model)

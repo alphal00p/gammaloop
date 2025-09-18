@@ -1,6 +1,6 @@
-use std::{collections::HashMap, path::PathBuf, str::FromStr};
+use std::{path::PathBuf, str::FromStr};
 
-use clap::{command, ArgGroup, Args, Subcommand};
+use clap::{command, Subcommand};
 use color_eyre::Result;
 use eyre::{eyre, Context, Report};
 use figment::{
@@ -107,7 +107,7 @@ impl Set {
 
                             *settings = input.merge_figment(fig)?.extract()?;
                         }
-                        ProcessCollection::CrossSections(a) => {
+                        ProcessCollection::CrossSections(_a) => {
                             // a[name].preprocess(&self.model, &global_settings.generation)?;
                         }
                     }
@@ -123,7 +123,7 @@ impl Set {
                                 };
                             }
                         }
-                        ProcessCollection::CrossSections(a) => {
+                        ProcessCollection::CrossSections(_a) => {
                             // a[name].preprocess(&self.model, &global_settings.generation)?;
                         }
                     }

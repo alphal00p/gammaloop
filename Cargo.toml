@@ -188,6 +188,9 @@ default = []
 python_api = ["pyo3"]
 # insta.opt-level = 3
 python_stubgen = ["python_api", "pyo3-stub-gen"]
+fjcore = []
+fail-on-warnings = []
+higher_loops = []
 
 [patch.crates-io]
 

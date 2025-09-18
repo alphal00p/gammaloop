@@ -3,7 +3,7 @@ use std::cell::RefCell;
 use eyre::Context;
 use linnet::{
     half_edge::{
-        involution::{EdgeData, EdgeIndex, Flow, Hedge, HedgePair},
+        involution::{EdgeData, EdgeIndex, Flow, Hedge, HedgePair, Orientation},
         HedgeGraph,
     },
     parser::{DotEdgeData, DotHedgeData, DotVertexData},
@@ -59,6 +59,21 @@ impl From<()> for PossibleParticle {
 }
 
 impl PossibleParticle {
+    pub fn orientation(&self) -> Orientation {
+        self.particle()
+            .map(|a| {
+                if a.is_fermion() {
+                    if a.pdg_code < 0 {
+                        Orientation::Reversed
+                    } else {
+                        Orientation::Default
+                    }
+                } else {
+                    Orientation::Undirected
+                }
+            })
+            .unwrap_or(Orientation::Undirected)
+    }
     pub fn mass_atom(&self) -> Atom {
         match &self {
             PossibleParticle::JustMass { expr, .. } => expr.clone(),
@@ -457,49 +472,50 @@ impl ParseEdge {
          eid: EdgeIndex,
          p: HedgePair,
          e_data: EdgeData<&'a DotEdgeData>| {
-            e_data.map_result(|e| {
-                let label = e.get::<_, String>("name").transpose()?;
+            let e = e_data.data;
+            let label = e.get::<_, String>("name").transpose()?;
 
-                let lmb_id: Option<LoopIndex> = e
-                    .get::<_, usize>("lmb_id")
-                    .transpose()?
-                    .map(LoopIndex::from);
+            let lmb_id: Option<LoopIndex> = e
+                .get::<_, usize>("lmb_id")
+                .transpose()?
+                .map(LoopIndex::from);
 
-                let is_cut: Option<Hedge> =
-                    e.get::<_, usize>("is_cut").transpose()?.map(Hedge::from);
+            let is_cut: Option<Hedge> = e.get::<_, usize>("is_cut").transpose()?.map(Hedge::from);
 
-                let dod = e
-                    .get::<_, String>("dod")
-                    .transpose()
-                    .with_context(|| format!("Error parsing dod"))?
-                    .map(|a| a.strip_parse())
-                    .transpose()?;
-                let is_dummy = e.get::<_, bool>("is_dummy").transpose()?.unwrap_or(false);
+            let dod = e
+                .get::<_, String>("dod")
+                .transpose()
+                .with_context(|| format!("Error parsing dod"))?
+                .map(|a| a.strip_parse())
+                .transpose()?;
+            let is_dummy = e.get::<_, bool>("is_dummy").transpose()?.unwrap_or(false);
 
-                let num = e
-                    .get::<_, String>("num")
-                    .transpose()?
-                    .map(|a| -> Result<Atom> {
-                        Ok(Self::localize_ainds(a.strip_parse::<Atom>()?, eid, p))
-                    })
-                    .transpose()?;
+            let num = e
+                .get::<_, String>("num")
+                .transpose()?
+                .map(|a| -> Result<Atom> {
+                    Ok(Self::localize_ainds(a.strip_parse::<Atom>()?, eid, p))
+                })
+                .transpose()?;
 
-                let mass = e
-                    .get::<_, String>("mass")
-                    .transpose()?
-                    .map(|a| a.strip_parse::<Atom>())
-                    .transpose()?;
+            let mass = e
+                .get::<_, String>("mass")
+                .transpose()?
+                .map(|a| a.strip_parse::<Atom>())
+                .transpose()?;
 
-                let particle: PossibleParticle = if let Some(v) = e.get::<_, isize>("pdg") {
-                    model.try_get_particle_from_pdg(v?)?.into()
-                } else if let Some(v) = e.get::<_, String>("particle") {
-                    let pname: String = v?.strip_parse()?;
-                    model.try_get_particle(pname)?.into()
-                } else {
-                    ().into()
-                };
+            let particle: PossibleParticle = if let Some(v) = e.get::<_, isize>("pdg") {
+                model.try_get_particle_from_pdg(v?)?.into()
+            } else if let Some(v) = e.get::<_, String>("particle") {
+                let pname: String = v?.strip_parse()?;
+                model.try_get_particle(pname)?.into()
+            } else {
+                ().into()
+            };
 
-                Ok(ParseEdge {
+            let orientation = particle.orientation();
+            Ok(EdgeData::new(
+                ParseEdge {
                     is_dummy,
                     dod,
                     lmb_id,
@@ -507,8 +523,9 @@ impl ParseEdge {
                     num,
                     is_cut,
                     name: label,
-                })
-            })
+                },
+                orientation,
+            ))
         }
     }
 }

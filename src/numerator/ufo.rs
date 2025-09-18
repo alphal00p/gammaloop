@@ -1,5 +1,7 @@
 use std::sync::LazyLock;
 
+use crate::symbolica_ext::CallSymbol;
+use crate::utils::{GS, W_};
 use idenso::color::CS;
 use idenso::gamma::AGS;
 use idenso::representations::{
@@ -20,11 +22,6 @@ use symbolica::{
     function,
     id::Replacement,
 };
-use tracing::debug;
-
-use crate::symbolica_ext::CallSymbol;
-use crate::utils::symbolica_ext::LOGPRINTOPTS;
-use crate::utils::{GS, W_};
 
 use super::aind::Aind;
 

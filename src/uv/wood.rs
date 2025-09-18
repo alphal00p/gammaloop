@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::graph::{Edge, LoopMomentumBasis, Vertex};
 use slotmap::SecondaryMap;
 use std::collections::VecDeque;

@@ -2,7 +2,7 @@ use std::{env, path::PathBuf};
 
 use crate::model::Model;
 
-use include_dir::{include_dir, Dir, File};
+use include_dir::{include_dir, Dir};
 
 static BUILTIN_MODELS: Dir = include_dir!("$CARGO_MANIFEST_DIR/models/json");
 

@@ -82,7 +82,7 @@ impl AmplitudeGraphTerm {
         graph: &AmplitudeGraph,
         own_group_position: GraphGroupPosition,
         esurface_map: TiVec<GroupEsurfaceId, TiVec<GraphGroupPosition, Option<EsurfaceID>>>,
-        model: &Model,
+        _model: &Model,
         settings: &GlobalSettings,
     ) -> Result<Self> {
         let orientations: TiVec<AmplitudeOrientationID, EdgeVec<Orientation>> = graph

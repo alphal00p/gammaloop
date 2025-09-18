@@ -1,3 +1,5 @@
+#![allow(dead_code, unused_variables, unreachable_code)]
+
 use std::fmt::Display;
 
 use color_eyre::Result;
@@ -22,7 +24,7 @@ use crate::{
     DependentMomentaConstructor,
 };
 
-const SLOPE_STABILITY_points: usize = 50;
+const SLOPE_STABILITY_POINTS: usize = 50;
 
 /// The range is from 10^start to 10^end.
 pub struct ApproachSettings {
@@ -182,7 +184,7 @@ impl CrossSectionGraphTerm {
             .collect_vec();
 
         let dependent_momenta_constructor = DependentMomentaConstructor::CrossSection {
-            external_connections: todo!(), //;self.graph.external_connections.as_ref().unwrap(),
+            external_connections: todo!(), //self.graph.external_connections.as_ref().unwrap(),
         };
 
         let loop_number = lmb.loop_edges.len();
@@ -637,13 +639,13 @@ impl IrLimit {
 }
 
 fn sample_random_unit_vector<T: FloatLike>(rng: &mut MonteCarloRng) -> ThreeMomentum<F<T>> {
-    let x_1 = F::from_f64(rng.random::<f64>());
-    let x_2 = F::from_f64(rng.random::<f64>());
-    let x_3 = F::from_f64(rng.random::<f64>());
-    let x_4 = F::from_f64(rng.random::<f64>());
+    let x_1 = F::<T>::from_f64(rng.random::<f64>());
+    let x_2 = F::<T>::from_f64(rng.random::<f64>());
+    let x_3 = F::<T>::from_f64(rng.random::<f64>());
+    let x_4 = F::<T>::from_f64(rng.random::<f64>());
 
     let (k_x, k_y) = box_muller(x_1, x_2);
-    let (k_z, _) = box_muller(x_3, x_4);
+    let k_z = box_muller(x_3, x_4).0;
 
     let unnormalized_momentum = ThreeMomentum::new(k_x, k_y, k_z);
     let norm = unnormalized_momentum.norm();
@@ -683,7 +685,7 @@ impl<T: FloatLike> LimitData<T> {
         let mut stable_slope = false;
         let mut current_slope = 0.0;
         let mut previous_slope: f64 = linear_regression_of(&log_data).unwrap().0;
-        let mut current_index_start = SLOPE_STABILITY_points;
+        let mut current_index_start = SLOPE_STABILITY_POINTS;
 
         while !stable_slope {
             current_slope = linear_regression_of(&log_data[current_index_start..])
@@ -697,7 +699,7 @@ impl<T: FloatLike> LimitData<T> {
                 stable_slope = true;
             } else {
                 previous_slope = current_slope;
-                current_index_start += SLOPE_STABILITY_points;
+                current_index_start += SLOPE_STABILITY_POINTS;
             }
         }
 

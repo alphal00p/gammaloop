@@ -355,6 +355,7 @@ pub(crate) fn dis_options_impl(
     }
 }
 
+#[allow(dead_code)]
 pub(crate) fn dis_options(
     init: &[&'static str],
     final_states: &[Vec<&'static str>],

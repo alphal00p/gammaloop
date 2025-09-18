@@ -1,4 +1,5 @@
-use crate::feyngen::FeynGenError;
+#![allow(dead_code)]
+
 use aind::Aind;
 use idenso::color::ColorSimplifier;
 use idenso::gamma::GammaSimplifier;
@@ -6,23 +7,20 @@ use idenso::representations::Bispinor;
 use linnet::half_edge::involution::EdgeIndex;
 use log::warn;
 use schemars::JsonSchema;
-use spenso::algebra::complex::Complex;
-use spenso::algebra::upgrading_arithmetic::FallibleSub;
+
 use spenso::network::library::{DummyLibrary, TensorLibraryData};
 use spenso::network::parsing::ShadowedStructure;
-use spenso::network::store::{NetworkStore, TensorScalarStoreMapping};
-use spenso::network::{
-    ContractScalars, ExecutionResult, Sequential, SingleSmallestDegree, SmallestDegree, Steps,
-};
+use spenso::network::store::NetworkStore;
+use spenso::network::{ContractScalars, Sequential, SingleSmallestDegree, SmallestDegree, Steps};
 use spenso::shadowing::symbolica_utils::SerializableAtom;
 use spenso::shadowing::symbolica_utils::SerializableSymbol;
-use spenso::tensors::complex::RealOrComplexTensor;
+
 use spenso::tensors::data::DataTensor;
 use spenso::tensors::data::GetTensorData;
 use spenso::tensors::data::StorageTensor;
 use spenso::tensors::parametric::atomcore::TensorAtomMaps;
 use spenso::tensors::parametric::MixedTensor;
-use spenso::tensors::parametric::ParamOrConcrete;
+
 use spenso::tensors::parametric::ParamTensor;
 use spenso::tensors::parametric::TensorSet;
 use std::fmt::Debug;
@@ -54,7 +52,6 @@ use serde::{Deserialize, Serialize};
 
 use spenso::contraction::Contract;
 
-use spenso::iterators::IteratableTensor;
 use spenso::network::library::symbolic::{ExplicitKey, ETS};
 
 use spenso::structure::concrete_index::{ExpandedIndex, FlatIndex};
@@ -69,7 +66,7 @@ use spenso::{
         NamedStructure, TensorStructure,
     },
 };
-use symbolica::domains::finite_field::PrimeIteratorU64;
+
 use symbolica::domains::rational::Rational;
 use symbolica::poly::Variable;
 use symbolica::printer::PrintOptions;

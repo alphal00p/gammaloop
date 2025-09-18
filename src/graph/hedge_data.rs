@@ -44,7 +44,7 @@ pub struct NumIndices {
 
 impl NumIndices {
     pub(crate) fn parse<'a>(graph: &'a ParseGraph) -> impl FnMut(Hedge, &'a ParseHedge) -> Self {
-        |h, a| {
+        |h, _| {
             let eid = graph[&h];
             let flow = graph.flow(h);
             let orientation = graph.orientation(h);
@@ -176,7 +176,7 @@ pub struct ParseHedge {
 
 impl ParseHedge {
     pub(crate) fn parse<'a>() -> impl FnMut((Hedge, &'a DotHedgeData)) -> Result<Self> {
-        |(i, h)| {
+        |(_, h)| {
             let hedge_id = h
                 .statement
                 .as_ref()

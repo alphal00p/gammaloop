@@ -2,11 +2,7 @@ use std::ops::Deref;
 
 use idenso::color::SelectiveExpand;
 use spenso::{
-    network::{
-        library::{DummyLibrary, TensorLibraryData},
-        store::NetworkStore,
-        Network,
-    },
+    network::{library::DummyLibrary, store::NetworkStore, Network},
     structure::{
         representation::{Minkowski, RepName},
         slot::{DualSlotTo, IsAbstractSlot},
@@ -14,7 +10,7 @@ use spenso::{
     },
     tensors::symbolic::SymbolicTensor,
 };
-use spenso_hep_lib::hep_lib;
+
 use symbolica::{
     atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol},
     function,

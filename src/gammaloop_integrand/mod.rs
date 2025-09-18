@@ -45,9 +45,6 @@ use crate::{
 };
 use color_eyre::Result;
 
-const HARD_CODED_M_UV: F<f64> = F(1000.0);
-const HARD_CODED_M_R_SQ: F<f64> = F(1000.0);
-
 pub mod evaluators;
 pub use evaluators::{GenericEvaluator, GenericEvaluatorFloat};
 
@@ -168,7 +165,7 @@ fn create_stability_iterator(
 
 #[inline]
 fn stability_check(
-    settings: &RuntimeSettings,
+    _settings: &RuntimeSettings,
     results: &[Complex<F<f64>>],
     stability_settings: &StabilityLevelSetting,
     max_eval: Complex<F<f64>>,

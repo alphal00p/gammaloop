@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use std::fmt::Display;
 
 use bincode_trait_derive::{Decode, Encode};
@@ -177,7 +179,7 @@ impl Esurface {
     }
 
     #[inline]
-    pub(crate) fn could_exist<T: FloatLike>(&self, graph: &Graph, assumptions: ()) -> bool {
+    pub(crate) fn could_exist<T: FloatLike>(&self, _graph: &Graph, _assumptions: ()) -> bool {
         true
     }
 

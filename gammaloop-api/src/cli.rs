@@ -1,5 +1,5 @@
 use _gammaloop::Cli;
-use clap::Parser;
+
 use color_eyre::Report;
 
 fn main() -> Result<(), Report> {

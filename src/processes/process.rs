@@ -1,6 +1,6 @@
 use ahash::HashMap;
 use std::{
-    collections::{BTreeMap, HashSet},
+    collections::BTreeMap,
     fs::{self, File},
     io::Write,
     path::{Path, PathBuf},
@@ -17,8 +17,6 @@ use std::fmt;
 use crate::{
     feyngen::NumeratorAwareGraphGroupingOption,
     gammaloop_integrand::NewIntegrand,
-    graph::{parse::complete_group_parsing, FeynmanGraph},
-    model::ArcParticle,
     numerator::GlobalPrefactor,
     settings::{runtime::LockedRuntimeSettings, GlobalSettings},
     GammaLoopContext, GammaLoopContextContainer,
@@ -134,7 +132,7 @@ impl Default for ProcessDefinition {
 
 impl ProcessDefinition {
     // Best attempt at creating what process definition matches the given graphs
-    pub fn from_graph_list(graphs: &[Graph], generation_type: GenerationType) -> Result<Self> {
+    pub fn from_graph_list(_graphs: &[Graph], generation_type: GenerationType) -> Result<Self> {
         // TODO: At least set correctly things like loop count range and initial/final states
         Ok(Self {
             generation_type,
@@ -603,10 +601,7 @@ impl ProcessCollection {
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        feyngen::diagram_generator::symbolica_symm_factors_bug,
-        utils::test_utils::load_generic_model, GammaLoopContextContainer,
-    };
+    use crate::{utils::test_utils::load_generic_model, GammaLoopContextContainer};
 
     #[test]
     fn test_proc_definition_encode() {
@@ -616,7 +611,7 @@ mod tests {
 
         let mut state_file = std::fs::File::create("state_map.bin").unwrap();
 
-        let exported = symbolica::state::State::export(&mut state_file).unwrap();
+        let _exported = symbolica::state::State::export(&mut state_file).unwrap();
         let state_map = symbolica::state::State::import(&mut state_file, None).unwrap();
 
         let context = GammaLoopContextContainer {

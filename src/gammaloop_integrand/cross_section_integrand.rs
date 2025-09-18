@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use bincode::Encode;
 use bincode_trait_derive::Decode;
 use color_eyre::Result;
@@ -64,7 +66,7 @@ pub struct CrossSectionIntegrandData {
 }
 
 impl CrossSectionIntegrand {
-    pub(crate) fn save(&self, path: impl AsRef<Path>, override_existing: bool) -> Result<()> {
+    pub(crate) fn save(&self, path: impl AsRef<Path>, _override_existing: bool) -> Result<()> {
         let binary = bincode::encode_to_vec(&self, bincode::config::standard())?;
         fs::write(path.as_ref().join("integrand.bin"), binary)?;
         File::create(path.as_ref().join("settings.toml"))?

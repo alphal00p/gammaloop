@@ -70,12 +70,9 @@ mod tests {
                 kinematic::Externals, DiscreteGraphSamplingSettings, DiscreteGraphSamplingType,
                 GammaloopTropicalSamplingSettings,
             },
-            GlobalSettings, KinematicsSettings, RuntimeSettings, SamplingSettings,
+            GlobalSettings, RuntimeSettings, SamplingSettings,
         },
-        utils::{
-            serde_utils::{SmartSerde, SHOWDEFAULTS},
-            F,
-        },
+        utils::{serde_utils::SHOWDEFAULTS, F},
     };
     use std::fmt::Debug;
 

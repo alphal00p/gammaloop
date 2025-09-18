@@ -6,7 +6,7 @@ use std::{
 
 use bincode::{Decode, Encode};
 use idenso::color::CS;
-use libc::ENOPROTOOPT;
+
 use linnet::half_edge::involution::{EdgeIndex, HedgePair, Orientation};
 use log::debug;
 use ringbuffer::{ConstGenericRingBuffer, RingBuffer};

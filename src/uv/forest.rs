@@ -39,7 +39,7 @@ pub struct Forest {
 }
 
 impl Forest {
-    pub(crate) fn n_terms(&self) -> usize {
+    pub(crate) fn _n_terms(&self) -> usize {
         self.dag.nodes.len()
     }
 
@@ -172,7 +172,7 @@ impl Forest {
         s
     }
 
-    pub(crate) fn local_expr(
+    pub(crate) fn _local_expr(
         &self,
         orientation: &OrientationData,
         cut_edges: Option<&BitVec>,

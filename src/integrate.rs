@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 //! This module steers the integration process.
 //! It contains two main ways of integrating the integrand.
 //! The havana_integrate function is mostly used for local runs.
@@ -1020,7 +1022,7 @@ impl MasterNode {
                 thread_id: job_id,
             }
         } else {
-            let mut rng = rand::thread_rng();
+            let mut rng = rand::rng();
             let mut samples_temp = vec![Sample::new(); num_samples];
             for sample in samples_temp.iter_mut() {
                 self.grid.sample(&mut rng, sample);

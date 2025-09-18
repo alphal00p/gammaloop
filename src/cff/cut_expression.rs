@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use ahash::HashMap;
 use bincode_trait_derive::{Decode, Encode};
 use derive_more::{From, Into};

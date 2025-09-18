@@ -9,10 +9,8 @@ use crate::{
     momentum::RotationMethod,
     utils::{
         serde_utils::{
-            is_false, is_float, is_true, is_u64, is_usize, IsDefault, _default_input_rescaling,
-            _default_rotation_axis, _default_shifts, _default_stability_levels,
-            is_default_input_rescaling, is_default_rotation_axis, is_default_shifts,
-            is_default_stability_levels,
+            is_false, is_float, is_true, is_u64, is_usize, IsDefault, _default_rotation_axis,
+            _default_stability_levels, is_default_rotation_axis, is_default_stability_levels,
         },
         F,
     },
@@ -276,7 +274,7 @@ impl RotationSetting {
         }
     }
 
-    pub(crate) fn as_str(&self) -> String {
+    pub(crate) fn _as_str(&self) -> String {
         match self {
             Self::Pi2X {} => "x".to_owned(),
             Self::Pi2Y {} => "y".to_owned(),

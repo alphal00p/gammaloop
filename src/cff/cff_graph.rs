@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::cff::hsurface::Hsurface;
 use ahash::{HashMap, HashSet, HashSetExt};
 use bincode::Encode;

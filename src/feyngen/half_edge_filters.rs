@@ -1,17 +1,17 @@
-use std::{fmt::Display, sync::Arc};
+use std::fmt::Display;
 
 use bitvec::vec::BitVec;
 use linnet::half_edge::{
     involution::{EdgeData, EdgeIndex, Flow, HedgePair, Orientation},
     nodestore::NodeStorageOps,
     subgraph::{cut::PossiblyCutEdge, SubGraph, SubGraphOps},
-    EdgeAccessors, HedgeGraph,
+    HedgeGraph,
 };
 use symbolica::graph::Graph as SymbolicaGraph;
 
 use crate::{
     graph::ext::HedgeGraphExt,
-    model::{ArcParticle, Model, Particle},
+    model::{ArcParticle, Model},
 };
 
 use super::diagram_generator::{EdgeColor, NodeColorFunctions};
@@ -38,16 +38,16 @@ pub struct FeynGenHedgeGraph<E, V> {
 }
 
 impl<E, V> FeynGenHedgeGraph<E, V> {
-    pub(crate) fn cut(&mut self)
-    where
-        E: Clone,
-    {
-        // -> HedgeGraph<isize, DisCompVertex> {
-        //
+    // pub(crate) fn cut(&mut self)
+    // where
+    //     E: Clone,
+    // {
+    //     // -> HedgeGraph<isize, DisCompVertex> {
+    //     //
 
-        self.graph.split_clone();
-        self.state = CutState::Cut;
-    }
+    //     self.graph.split_clone();
+    //     self.state = CutState::Cut;
+    // }
 
     pub(crate) fn glue_external_hedges(&mut self) {
         if self.state == CutState::Cut {
@@ -56,52 +56,52 @@ impl<E, V> FeynGenHedgeGraph<E, V> {
         }
     }
 
-    /// Only on cut graphs
-    pub(crate) fn only_default_orientations(&mut self) {
-        let cut = self.graph.cut();
+    // /// Only on cut graphs
+    // pub(crate) fn only_default_orientations(&mut self) {
+    //     let cut = self.graph.cut();
 
-        println!("//Left: \n{}", self.graph.dot(&cut.left));
-        println!("//Right: \n{}", self.graph.dot(&cut.right));
-        for l in cut.iter_left_hedges() {
-            let orientation = self.graph.orientation(l);
-            let flow = self.graph.flow(l);
+    //     println!("//Left: \n{}", self.graph.dot(&cut.left));
+    //     println!("//Right: \n{}", self.graph.dot(&cut.right));
+    //     for l in cut.iter_left_hedges() {
+    //         let orientation = self.graph.orientation(l);
+    //         let flow = self.graph.flow(l);
 
-            match orientation {
-                Orientation::Reversed => match flow {
-                    Flow::Source => self.graph.set_flow(l, Flow::Sink),
-                    Flow::Sink => self.graph.set_flow(l, Flow::Source),
-                },
-                Orientation::Undirected => {
-                    if let Flow::Sink = flow {
-                        self.graph.set_flow(l, Flow::Source);
-                        self.graph[[&l]].cut(Flow::Source);
-                    }
-                    self.graph.set_orientation(l, Orientation::Default);
-                }
-                _ => {}
-            }
-        }
+    //         match orientation {
+    //             Orientation::Reversed => match flow {
+    //                 Flow::Source => self.graph.set_flow(l, Flow::Sink),
+    //                 Flow::Sink => self.graph.set_flow(l, Flow::Source),
+    //             },
+    //             Orientation::Undirected => {
+    //                 if let Flow::Sink = flow {
+    //                     self.graph.set_flow(l, Flow::Source);
+    //                     self.graph[[&l]].cut(Flow::Source);
+    //                 }
+    //                 self.graph.set_orientation(l, Orientation::Default);
+    //             }
+    //             _ => {}
+    //         }
+    //     }
 
-        for l in cut.iter_right_hedges() {
-            let orientation = self.graph.orientation(l);
-            let flow = self.graph.flow(l);
+    //     for l in cut.iter_right_hedges() {
+    //         let orientation = self.graph.orientation(l);
+    //         let flow = self.graph.flow(l);
 
-            match orientation {
-                Orientation::Reversed => match flow {
-                    Flow::Source => self.graph.set_flow(l, Flow::Sink),
-                    Flow::Sink => self.graph.set_flow(l, Flow::Source),
-                },
-                Orientation::Undirected => {
-                    if let Flow::Sink = flow {
-                        self.graph.set_flow(l, Flow::Sink);
-                        self.graph[[&l]].cut(Flow::Sink);
-                    }
-                    self.graph.set_orientation(l, Orientation::Default);
-                }
-                _ => {}
-            }
-        }
-    }
+    //         match orientation {
+    //             Orientation::Reversed => match flow {
+    //                 Flow::Source => self.graph.set_flow(l, Flow::Sink),
+    //                 Flow::Sink => self.graph.set_flow(l, Flow::Source),
+    //             },
+    //             Orientation::Undirected => {
+    //                 if let Flow::Sink = flow {
+    //                     self.graph.set_flow(l, Flow::Sink);
+    //                     self.graph[[&l]].cut(Flow::Sink);
+    //                 }
+    //                 self.graph.set_orientation(l, Orientation::Default);
+    //             }
+    //             _ => {}
+    //         }
+    //     }
+    // }
 
     pub(crate) fn remove_external_nodes(&mut self)
     where

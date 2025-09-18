@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::cff::expression::GraphOrientation;
 use crate::gammaloop_integrand::GenericEvaluatorFloat;
 use crate::momentum::{FourMomentum, ThreeMomentum};
@@ -13,7 +15,7 @@ use bincode::{Decode, Encode};
 use colored::Colorize;
 use idenso::metric::MS;
 use idenso::representations::initialize;
-use itertools::{izip, Itertools};
+use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeIndex, Orientation};
 use rand::Rng;
 use ref_ops::{RefAdd, RefDiv, RefMul, RefNeg, RefRem, RefSub};
@@ -98,6 +100,7 @@ impl From<Side> for usize {
 }
 
 pub mod bitvec_ext;
+pub mod linnet_ext;
 pub mod symbolica_ext;
 pub mod tracing;
 
@@ -2674,7 +2677,7 @@ pub(crate) fn global_parameterize<T: FloatLike>(
         ParameterizationMode::Cartesian | ParameterizationMode::Spherical => {
             let mut jac = one.clone();
             let mut vecs = Vec::with_capacity(x.len() / 3);
-            for (i, xi) in x.chunks(3).enumerate() {
+            for xi in x.chunks(3) {
                 let (vec_i, jac_i) = parameterize3d(xi, e_cm.clone(), settings);
                 vecs.push(vec_i);
                 jac *= jac_i;
@@ -2898,7 +2901,7 @@ pub(crate) fn inv_parametrize3d<T: FloatLike>(
     jac /= F::<T>::from_f64(2.);
     jac /= k_r.square();
 
-    let mut x = [x1, x2, x3];
+    let x = [x1, x2, x3];
 
     (x, jac)
 }
@@ -3517,7 +3520,7 @@ pub static W_: LazyLock<WildCards> = LazyLock::new(|| WildCards {
 pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
     ufozero: symbol!(
         "UFO::ZERO",
-        norm = |f, out| {
+        norm = |_, out| {
             *out = Atom::Zero;
             true
         }

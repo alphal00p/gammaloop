@@ -3992,7 +3992,7 @@ impl ProcessDefinition {
             if n_cancellations > 1 { "s" } else { "" },
         );
 
-        for (_graph_id, graph) in bare_graphs.iter_mut() {
+        for (_graph_id, _graph) in bare_graphs.iter_mut() {
             // let forced_lmb = if let Some(lmbs) = loop_momentum_bases.as_ref() {
             //     let g_name = String::from(graph.name.clone());
             //     // lmbs.get(&g_name).map(|lmb: &Vec<String>| {

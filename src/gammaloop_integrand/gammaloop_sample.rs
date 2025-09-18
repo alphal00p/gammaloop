@@ -2,7 +2,7 @@ use crate::gammaloop_integrand::GraphTerm;
 use crate::graph::GroupId;
 use crate::momentum::{Rotation, ThreeMomentum};
 use crate::momentum_sample::MomentumSample;
-use crate::status_info;
+
 use crate::utils::{self, global_parameterize, FloatLike, F};
 use crate::{
     settings::runtime::kinematic::KinematicsSettings, settings::runtime::DiscreteGraphSamplingType,
@@ -14,7 +14,6 @@ use eyre::eyre;
 use itertools::Itertools;
 use momtrop::vector::Vector;
 use symbolica::numerical_integration::Sample;
-use tracing::info;
 
 use super::{ChannelIndex, GammaloopIntegrand};
 
@@ -430,7 +429,7 @@ pub(crate) fn parameterize<T: FloatLike, I: GammaloopIntegrand>(
                     })
                 }
                 DiscreteGraphSamplingType::TropicalSampling(tropical_sampling_settings) => {
-                    let mut graph = integrand.get_master_graph(group_id);
+                    let graph = integrand.get_master_graph(group_id);
                     let externals = &settings
                         .kinematics
                         .externals
@@ -441,7 +440,7 @@ pub(crate) fn parameterize<T: FloatLike, I: GammaloopIntegrand>(
                     let edge_data = graph
                         .get_graph()
                         .iter_loop_edges()
-                        .map(|(_, edge_id, edge)| {
+                        .map(|(_, edge_id, _edge)| {
                             let mass_re = graph.get_real_mass_vector()[edge_id].map(F::from_ff64);
 
                             let shift = utils::compute_shift_part(

@@ -46,8 +46,6 @@ use symbolica::state::StateMap;
 use utils::FloatLike;
 use utils::F;
 
-use crate::model::InputParamCard;
-
 pub static INTERRUPTED: AtomicBool = AtomicBool::new(false);
 
 pub const GAMMALOOP_NAMESPACE: &str = "GL";

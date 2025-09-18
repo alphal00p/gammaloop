@@ -14,7 +14,7 @@ use symbolica::atom::{Atom, AtomOrView, FunctionBuilder, Symbol};
 
 use crate::{
     graph::{edge::ParseEdge, Edge, Graph, NumHedgeData},
-    model::{ArcParticle, Particle},
+    model::ArcParticle,
     utils::GS,
 };
 
@@ -406,7 +406,6 @@ mod test {
         dot,
         gammaloop_integrand::param_builder::ParamBuilderGraph,
         graph::{parse::IntoGraph, Graph},
-        numerator::graph::GeneratePolarizations,
         processes::{Amplitude, AmplitudeGraph},
         settings::{
             global::GenerationSettings, runtime::kinematic::KinematicsSettings, GlobalSettings,

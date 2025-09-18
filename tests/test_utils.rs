@@ -1,3 +1,6 @@
+#![allow(dead_code)]
+#![allow(unused_variables)]
+
 use color_eyre::Result;
 
 use gammaloop_api::{
@@ -5,10 +8,7 @@ use gammaloop_api::{
     Cli, Commands,
 };
 
-use gammalooprs::{
-    initialisation::initialise,
-    utils::{test_utils::load_generic_model, F},
-};
+use gammalooprs::{initialisation::initialise, utils::test_utils::load_generic_model};
 use std::{
     env,
     ops::{Deref, DerefMut},

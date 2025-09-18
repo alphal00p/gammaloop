@@ -33,7 +33,7 @@ use spenso::tensors::parametric::ParamTensor;
 use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
 use std::fs;
-use symbolica::domains::float::{Float, Real};
+use symbolica::domains::float::Real;
 use symbolica::domains::integer::IntegerRing;
 use symbolica::domains::rational::{Fraction, Rational};
 use symbolica::evaluate::FunctionMap;
@@ -1942,7 +1942,7 @@ mod tests {
     use crate::{
         model::{ArcPropagator, ArcVertexRule},
         momentum::{Helicity, ThreeMomentum},
-        utils::{test_utils::load_generic_model, ApproxEq, F},
+        utils::{test_utils::load_generic_model, F},
     };
 
     use super::ArcParticle;

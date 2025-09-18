@@ -5,7 +5,7 @@ use bincode_trait_derive::Decode;
 use bincode_trait_derive::Encode;
 use diagram_generator::EdgeColor;
 use indicatif::{ParallelProgressIterator, ProgressBar, ProgressStyle};
-use itertools::Itertools;
+
 use rayon::iter::IntoParallelRefMutIterator;
 use rayon::iter::ParallelIterator;
 use schemars::JsonSchema;
@@ -19,7 +19,6 @@ use thiserror::Error;
 
 use crate::model::Model;
 use crate::numerator::symbolica_ext::ParsingNetError;
-use crate::GammaLoopContext;
 
 #[derive(Error, Debug)]
 pub enum FeynGenError {
@@ -137,6 +136,7 @@ impl NumeratorAwareGraphGroupingOption {
         }
     }
 
+    #[allow(dead_code)]
     pub(crate) fn description(&self) -> String {
         format!(
             "{}{}",
@@ -259,7 +259,8 @@ impl FeynGenFilters {
         })
     }
 
-    pub(crate) fn allow_tadpoles(&self) -> bool {
+    #[allow(dead_code)]
+    pub fn allow_tadpoles(&self) -> bool {
         !self
             .0
             .iter()

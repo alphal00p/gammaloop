@@ -1635,6 +1635,36 @@ fn parse_csv_list(s: &str) -> Vec<String> {
         .collect()
 }
 
+#[allow(dead_code)]
+fn parse_loop_momentum_bases(s: &str) -> Option<HashMap<String, Vec<String>>> {
+    // Format: "B1=p1,p2;B2=q1,q2"
+    let mut out: HashMap<String, Vec<String>> = HashMap::default();
+    for kv in s.split(';') {
+        let kv = kv.trim();
+        if kv.is_empty() {
+            continue;
+        }
+        if let Some((k, v)) = kv.split_once('=') {
+            let key = k.trim().to_string();
+            let vals = v
+                .split(',')
+                .map(|x| x.trim().to_string())
+                .filter(|x| !x.is_empty())
+                .collect::<Vec<_>>();
+            if !key.is_empty() {
+                out.insert(key, vals);
+            }
+        } else {
+            // single name without '=' is allowed but ignored
+        }
+    }
+    if out.is_empty() {
+        None
+    } else {
+        Some(out)
+    }
+}
+
 // =================== Tests ===================
 
 #[cfg(test)]

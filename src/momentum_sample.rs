@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use crate::gammaloop_integrand::evaluators::SingleOrAllOrientations;
 use crate::momentum::{FourMomentum, Polarization, Rotatable, Rotation, ThreeMomentum};
-use crate::status_info;
+
 use crate::utils::{FloatLike, Length, F};
 use crate::{define_index, settings::runtime::kinematic::Externals, DependentMomentaConstructor};
 use bincode_trait_derive::{Decode, Encode};
@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use std::ops::{Add, Index, IndexMut, Sub};
 use symbolica::domains::float::NumericalFloatLike;
 use tabled::settings::Style;
-use tracing::info;
+
 use typed_index_collections::TiVec;
 
 #[derive(

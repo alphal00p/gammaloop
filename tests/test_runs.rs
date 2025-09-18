@@ -1,25 +1,16 @@
+#![allow(dead_code)]
+#![allow(unused_variables)]
+
 use color_eyre::Result;
 
 use gammaloop_api::{inspect::Inspect, integrate::Integrate};
 
-use gammalooprs::{
-    initialisation::initialise,
-    model::UFOSymbol,
-    numerator::ufo::UFOSymbols,
-    status_info,
-    utils::{test_utils::load_generic_model, F},
-};
+use gammalooprs::{model::UFOSymbol, status_info, utils::F};
 use insta::assert_snapshot;
 use momtrop::assert_approx_eq;
 use spenso::algebra::complex::Complex;
-use std::{
-    env,
-    ops::{ControlFlow, Deref, DerefMut},
-    path::{Path, PathBuf},
-    str::FromStr,
-};
+use std::env;
 use symbolica::symbol;
-use tracing::{debug, warn};
 
 mod test_utils;
 use test_utils::{clean_test, get_test_cli, get_tests_workspace_path};

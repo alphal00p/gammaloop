@@ -13,17 +13,17 @@ use crate::{
     },
     processes::AmplitudeGraph,
     symbolica_ext::CallSymbol,
-    utils::{GS, W_},
+    utils::{linnet_ext::FromMappings, GS, W_},
 };
 use bitvec::vec::BitVec;
 use color_eyre::{Result, Section};
 use dot_parser::ast::GraphFromFileError;
 use eyre::{eyre, Ok};
 use itertools::Itertools;
-use libc::iconv_t;
+
 use linnet::{
     half_edge::{
-        involution::{EdgeIndex, EdgeVec, Flow, Hedge, HedgePair, Orientation},
+        involution::{EdgeData, EdgeIndex, EdgeVec, Flow, Hedge, HedgePair, Orientation},
         nodestore::NodeStorageVec,
         subgraph::{Inclusion, ModifySubgraph, OrientedCut, SubGraph, SubGraphOps},
         swap::Swap,
@@ -436,37 +436,31 @@ impl Graph {
             initial_hedges.add(sink);
         }
 
-        let mut h_perm: Vec<usize> = (0..graph.n_hedges()).collect();
-        let mut edge_perm: Vec<usize> = (0..graph.n_edges()).collect();
+        let mut h_perm: Vec<_> = vec![];
+        let mut edge_perm: Vec<_> = vec![];
 
-        initial_hedges = BitVec::empty(h_perm.len());
+        // debug!("xs_ext_id contents: {:?}", xs_ext_id);
+
+        initial_hedges = BitVec::empty(graph.n_hedges());
 
         for (target_pos, (_, (edge_idx, h_id))) in xs_ext_id.iter().enumerate() {
-            let old_pos = edge_idx.0;
-            if old_pos != target_pos {
-                let displaced_pos = edge_perm.iter().position(|&x| x == target_pos).unwrap();
-                edge_perm[old_pos] = target_pos;
-                edge_perm[displaced_pos] = old_pos;
-            }
-
-            initial_hedges.add(Hedge(target_pos));
-            // println!("{h_id}");
-            let old_posh = h_id.0;
-            if old_posh != target_pos {
-                let displaced_pos = h_perm.iter().position(|&x| x == target_pos).unwrap();
-                h_perm[old_posh] = target_pos;
-                h_perm[displaced_pos] = old_posh;
-            }
+            h_perm.push((h_id.0, target_pos));
+            edge_perm.push((edge_idx.0, target_pos));
+            initial_hedges.add(Hedge(target_pos))
         }
 
-        let per = Permutation::from_map(edge_perm);
-        // println!("Edge Perm:{per}");
-        let perh = Permutation::from_map(h_perm);
+        // debug!("Edge Perm:{edge_perm:?}");
+        let per = Permutation::from_mappings(edge_perm, graph.n_edges()).unwrap();
+        // debug!("Edge Perm:{per}");
+        // debug!("Hedge Perm:{h_perm:?}");
+        let perh = Permutation::from_mappings(h_perm, graph.n_hedges()).unwrap();
 
-        // println!("Hedge Perm:{perh}");
+        // debug!("Hedge Perm:{perh}");
 
-        <HedgeGraph<_, _, _> as Swap<EdgeIndex>>::permute(&mut graph, &per);
         <HedgeGraph<_, _, _> as Swap<Hedge>>::permute(&mut graph, &perh);
+        <HedgeGraph<_, _, _> as Swap<EdgeIndex>>::permute(&mut graph, &per);
+
+        // debug!("{}", graph.dot(&graph.full_filter()));
 
         let mut color_num_e: EdgeVec<_> = vec![Atom::num(1); graph.n_edges()].into();
         let mut spin_num_e: EdgeVec<_> = vec![Atom::i(); graph.n_edges()].into();
@@ -585,35 +579,45 @@ impl Graph {
                     vertex_rule: v.vertex_rule,
                 })
             },
-            |_, _, p, eid, e| {
-                e.map_result(|e| {
-                    let num = e.num.unwrap_or(if initial_state_cut.left.intersects(&p) {
-                        // is in the cut, we just take the color part, and count on the user/ polarizations to be generated
-                        color_num_e[eid].clone()
-                    } else {
-                        &color_num_e[eid] * &spin_num_e[eid]
-                    });
+            |_, _, p, eid, ed| {
+                let e = ed.data;
 
-                    let dod = if let Some(d) = e.dod {
-                        d
-                    } else {
-                        num.dod() - 2
-                    };
+                let num = e.num.unwrap_or(if initial_state_cut.left.intersects(&p) {
+                    // is in the cut, we just take the color part, and count on the user/ polarizations to be generated
+                    color_num_e[eid].clone()
+                } else {
+                    &color_num_e[eid] * &spin_num_e[eid]
+                });
 
-                    Ok(Edge {
+                let dod = if let Some(d) = e.dod {
+                    d
+                } else {
+                    num.dod() - 2
+                };
+
+                if e.particle.orientation() != ed.orientation {
+                    return Err(eyre!(
+                        "Edge orientation does not match particle orientation for edge {}",
+                        eid
+                    ));
+                }
+
+                Ok(EdgeData::new(
+                    Edge {
                         mass: EdgeMass::from_atom(e.particle.mass_atom(), model, &parambuilder)?,
                         is_dummy: e.is_dummy,
                         name: e.name.unwrap_or(eid.to_string()),
                         particle: e.particle,
                         num,
                         dod,
-                    })
-                })
+                    },
+                    ed.orientation,
+                ))
             },
             |_, h| Ok(h),
         )?;
 
-        // println!("{}", underlying.dot(&full_cut));
+        debug!("{}", underlying.dot(&full_cut));
 
         let mut loop_momentum_basis = if let Some(i) = full_cut.included_iter().next() {
             let tree = SimpleTraversalTree::depth_first_traverse(
@@ -648,12 +652,16 @@ impl Graph {
 
         // loop_momentum_basis
 
-        // println!("{:#?}", loop_momentum_basis);
+        // debug!("{:#?}", loop_momentum_basis);
+        // debug!(
+        //     "Loop momentum basis loop_edges: {:?}",
+        //     loop_momentum_basis.loop_edges
+        // );
 
         let inv_lmb_ids: BTreeMap<_, _> = lmb_ids.iter().map(|(k, v)| (*v, *k)).collect();
 
         for e in 0..xs_ext_id.len() {
-            // println!("{e}");
+            // debug!("{e}");
             let (l, _) = loop_momentum_basis
                 .loop_edges
                 .iter()
@@ -1234,9 +1242,93 @@ pub mod test {
     }
 
     #[test]
+    fn xs_glueing() {
+        test_initialise().unwrap();
+        let g: Graph = dot!(
+            digraph{
+              num = "1";
+              overall_factor = "1";
+              0[int_id=V_123];
+              1[int_id=V_127];
+              2[int_id=V_89];
+              3[int_id=V_93];
+
+              ext0	 [style=invis];
+              2:0	-> ext0	 [id=0 is_cut=0 is_dummy=false particle="u"];
+              ext1	 [style=invis];
+              ext1	-> 0:1	 [id=1 is_cut=0 is_dummy=false particle="u"];
+              ext2	 [style=invis];
+              3:2	-> ext2	 [id=2 is_cut=1 is_dummy=false particle="c"];
+              ext3	 [style=invis];
+              ext3	-> 1:3	 [id=3 is_cut=1 is_dummy=false particle="c"];
+              0:4	-> 2:5	 [id=4  is_dummy=false particle="d"];
+              1:6	-> 3:7	 [id=5  is_dummy=false particle="s"];
+              0:8	-> 1:9	 [id=6 dir=none  is_dummy=false particle="W-"];
+              2:10	-> 3:11	 [id=7 dir=none  is_dummy=false particle="W+"];
+            }
+        )
+        .unwrap();
+        assert_snapshot!(g.debug_dot(),@r#"
+        digraph {
+          num = "1";
+          overall_factor = "1";
+          projector = "ubar(0,spenso::bis(4,hedge(0)))*ubar(1,spenso::bis(4,hedge(2)))*u(0,spenso::bis(4,hedge(1)))*u(1,spenso::bis(4,hedge(3)))";
+          0[dod=0 int_id=V_123 num="UFO::GC_41*spenso::g(spenso::dind(spenso::cof(3,hedge(4))),spenso::cof(3,hedge(1)))*spenso::gamma(spenso::bis(4,hedge(4)),spenso::bis(4,vertex(0,1)),spenso::mink(4,hedge(8)))*spenso::projm(spenso::bis(4,vertex(0,1)),spenso::bis(4,hedge(1)))"];
+          1[dod=0 int_id=V_127 num="UFO::GC_45*spenso::g(spenso::dind(spenso::cof(3,hedge(6))),spenso::cof(3,hedge(3)))*spenso::gamma(spenso::bis(4,hedge(6)),spenso::bis(4,vertex(1,1)),spenso::mink(4,hedge(9)))*spenso::projm(spenso::bis(4,vertex(1,1)),spenso::bis(4,hedge(3)))"];
+          2[dod=0 int_id=V_89 num="UFO::GC_100*spenso::g(spenso::dind(spenso::cof(3,hedge(0))),spenso::cof(3,hedge(5)))*spenso::gamma(spenso::bis(4,hedge(0)),spenso::bis(4,vertex(2,1)),spenso::mink(4,hedge(10)))*spenso::projm(spenso::bis(4,vertex(2,1)),spenso::bis(4,hedge(5)))"];
+          3[dod=0 int_id=V_93 num="UFO::GC_104*spenso::g(spenso::dind(spenso::cof(3,hedge(2))),spenso::cof(3,hedge(7)))*spenso::gamma(spenso::bis(4,hedge(2)),spenso::bis(4,vertex(3,1)),spenso::mink(4,hedge(11)))*spenso::projm(spenso::bis(4,vertex(3,1)),spenso::bis(4,hedge(7)))"];
+
+          2:3	-> 0:0	 [id=0 source=0 sink=1  dod=-2 is_cut=0 is_dummy=false lmb_rep="P(0,a___)" name=e0 num="spenso::g(spenso::dind(spenso::cof(3,hedge(1))),spenso::cof(3,hedge(0)))" particle="u"];
+          3:2	-> 1:1	 [id=1 source=0 sink=1  dod=-2 is_cut=1 is_dummy=false lmb_rep="P(1,a___)" name=e1 num="spenso::g(spenso::dind(spenso::cof(3,hedge(3))),spenso::cof(3,hedge(2)))" particle="c"];
+          2:10	-> 3:11	 [id=2 dir=none source=2 sink=2  dod=0 is_dummy=false lmb_rep="-P(0,a___)+K(0,a___)" name=e2 num="-spenso::g(spenso::mink(4,hedge(10)),spenso::mink(4,hedge(11)))+UFO::MW^-2*Q(2,spenso::mink(4,hedge(10)))*Q(2,spenso::mink(4,hedge(11)))" particle="W+"];
+          0:8	-> 1:9	 [id=3 dir=none source=2 sink=2  dod=0 is_dummy=false lmb_rep="P(0,a___)-K(0,a___)" name=e3 num="-spenso::g(spenso::mink(4,hedge(8)),spenso::mink(4,hedge(9)))+UFO::MW^-2*Q(3,spenso::mink(4,hedge(8)))*Q(3,spenso::mink(4,hedge(9)))" particle="W-"];
+          0:4	-> 2:5	 [id=4 source=0 sink=1  dod=-1 is_dummy=false lmb_id=0 lmb_rep="K(0,a___)" name=e4 num="Q(4,spenso::mink(4,edge(4,1)))*spenso::g(spenso::dind(spenso::cof(3,hedge(5))),spenso::cof(3,hedge(4)))*spenso::gamma(spenso::bis(4,hedge(5)),spenso::bis(4,hedge(4)),spenso::mink(4,edge(4,1)))" particle="d"];
+          1:6	-> 3:7	 [id=5 source=0 sink=1  dod=-1 is_dummy=false lmb_rep="P(0,a___)+P(1,a___)-K(0,a___)" name=e5 num="Q(5,spenso::mink(4,edge(5,1)))*spenso::g(spenso::dind(spenso::cof(3,hedge(7))),spenso::cof(3,hedge(6)))*spenso::gamma(spenso::bis(4,hedge(7)),spenso::bis(4,hedge(6)),spenso::mink(4,edge(5,1)))" particle="s"];
+        }
+        "#);
+
+        test_initialise().unwrap();
+        let g: Graph = dot!(
+            digraph{
+                a->b [particle= c];
+                b->a [particle= u];
+                b->a [particle= "W-"];
+            }
+        )
+        .unwrap();
+        assert_snapshot!(g.debug_dot(),@"");
+    }
+
+    #[test]
+    fn vertex_normalization() {
+        test_initialise().unwrap();
+        let g: Graph = dot!(
+            digraph GL1{
+                num = "1";
+                overall_factor = "AutG(1)^-1*InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)*AntiFermionSpinSumSign(1)";
+                0[int_id=V_117];
+                1[int_id=V_82];
+                2[int_id=V_71];
+                3[int_id=V_11];
+
+                ext0 [style=invis];
+                2:0 -> ext0 [id=0 dir=back is_cut=0 is_dummy=false particle="a"];
+                ext1 [style=invis];
+                ext1 -> 3:1 [id=1 is_cut=0 is_dummy=false particle="a"];
+                0:2 -> 1:3 [id=2 is_dummy=false particle="c"];
+                0:4 -> 2:5 [id=3 is_dummy=false particle="d~"];
+                0:6 -> 3:7 [id=4 is_dummy=false particle="G-"];
+                1:8 -> 2:9 [id=5 is_dummy=false particle="d"];
+                1:10 -> 3:11 [id=6 is_dummy=false particle="G+"];
+            }
+        ).unwrap();
+        assert_snapshot!(g.debug_dot(),@"");
+    }
+
+    #[test]
     fn test_ufo() {
         test_initialise().unwrap();
-        let g:Graph =dot!(
+        let g: Graph = dot!(
             digraph GL0{
                 num = "1";
                 overall_factor = "AutG(1)^-1*InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)*AntiFermionSpinSumSign(1)";
@@ -1541,15 +1633,15 @@ pub mod test {
           D[dod=0 num="1"];
           E[dod=0 num="1"];
 
-          B:3	-> C:0	 [id=0 source=1 sink=3  dod=-2 is_cut=0 is_dummy=false lmb_rep="P(0,a___)" name=e0 num="1" particle="scalar_0"];
-          B:2	-> A:1	 [id=1 source=0 sink=3  dod=-2 is_cut=1 is_dummy=false lmb_rep="P(1,a___)" name=e1 num="1" particle="scalar_0"];
-          E:14	-> C:15	 [id=2 source=2 sink=2  dod=-2 is_dummy=false lmb_rep="-K(0,a___)-K(1,a___)" name=e2 num="1" particle="scalar_0"];
-          C:4	-> A:5	 [id=3 source=0 sink=1  dod=-2 is_dummy=false lmb_rep="-P(1,a___)-K(1,a___)+K(2,a___)" name=e3 num="P(3,spenso::mink(4,0))" particle="scalar_0"];
-          C:6	-> D:7	 [id=4 source=1 sink=1  dod=-2 is_dummy=false lmb_rep="P(0,a___)+P(1,a___)-K(0,a___)-K(2,a___)" name=e4 num="1" particle="scalar_0"];
-          D:8	-> B:9	 [id=5 source=2 sink=2  dod=-2 is_dummy=false lmb_rep="P(0,a___)+P(1,a___)-K(0,a___)" name=e5 num="1" particle="scalar_0"];
-          E:10	-> A:11	 [id=6 source=0 sink=2  dod=-2 is_dummy=false lmb_id=1 lmb_rep="K(1,a___)" name=e6 num="1" particle="scalar_0"];
-          E:12	-> B:13	 [id=7 source=1 sink=3  dod=-2 is_dummy=false lmb_id=0 lmb_rep="K(0,a___)" name=e7 num="1" particle="scalar_0"];
-          A:17	-> D:16	 [id=8 source=0 sink=0  dod=-2 is_dummy=false lmb_id=2 lmb_rep="K(2,a___)" name=e8 num="P(0,spenso::mink(4,0))" particle="scalar_0"];
+          B:3	-> C:0	 [id=0 dir=none source=1 sink=3  dod=-2 is_cut=0 is_dummy=false lmb_rep="P(0,a___)" name=e0 num="1" particle="scalar_0"];
+          B:2	-> A:1	 [id=1 dir=none source=0 sink=3  dod=-2 is_cut=1 is_dummy=false lmb_rep="P(1,a___)" name=e1 num="1" particle="scalar_0"];
+          E:14	-> C:15	 [id=2 dir=none source=2 sink=2  dod=-2 is_dummy=false lmb_rep="-P(0,a___)+K(0,a___)+K(1,a___)" name=e2 num="1" particle="scalar_0"];
+          C:4	-> A:5	 [id=3 dir=none source=0 sink=1  dod=-2 is_dummy=false lmb_id=0 lmb_rep="K(0,a___)" name=e3 num="P(3,spenso::mink(4,0))" particle="scalar_0"];
+          C:6	-> D:7	 [id=4 dir=none source=1 sink=1  dod=-2 is_dummy=false lmb_id=1 lmb_rep="K(1,a___)" name=e4 num="1" particle="scalar_0"];
+          D:8	-> B:9	 [id=5 dir=none source=2 sink=2  dod=-2 is_dummy=false lmb_rep="K(1,a___)+K(2,a___)" name=e5 num="1" particle="scalar_0"];
+          E:10	-> A:11	 [id=6 dir=none source=0 sink=2  dod=-2 is_dummy=false lmb_rep="-P(1,a___)-K(0,a___)+K(2,a___)" name=e6 num="1" particle="scalar_0"];
+          E:12	-> B:13	 [id=7 dir=none source=1 sink=3  dod=-2 is_dummy=false lmb_rep="P(0,a___)+P(1,a___)-K(1,a___)-K(2,a___)" name=e7 num="1" particle="scalar_0"];
+          A:17	-> D:16	 [id=8 dir=none source=0 sink=0  dod=-2 is_dummy=false lmb_id=2 lmb_rep="K(2,a___)" name=e8 num="P(0,spenso::mink(4,0))" particle="scalar_0"];
         }
         "#);
     }

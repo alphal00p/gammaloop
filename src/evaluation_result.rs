@@ -23,7 +23,7 @@ pub struct EvaluationResult {
 }
 
 impl EvaluationResult {
-    pub(crate) fn zero() -> Self {
+    pub fn zero() -> Self {
         Self {
             integrand_result: Complex::new_zero(),
             integrator_weight: F(0.0),

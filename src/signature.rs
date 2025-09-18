@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::momentum::{FourMomentum, SignOrZero, ThreeMomentum};
 use crate::momentum_sample::{
     ExternalFourMomenta, ExternalIndex, ExternalThreeMomenta, LoopIndex, LoopMomenta,
