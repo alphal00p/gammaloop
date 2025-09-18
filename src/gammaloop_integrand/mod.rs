@@ -31,6 +31,7 @@ use tracing::debug;
 use symbolica::numerical_integration::{ContinuousGrid, DiscreteGrid, Grid, Sample};
 use typed_index_collections::TiVec;
 pub mod amplitude_integrand;
+pub mod cache_debugging;
 pub mod cross_section_integrand;
 pub mod gammaloop_sample;
 use crate::observables::EventManager;
@@ -346,8 +347,9 @@ impl LmbMultiChannelingSetup {
             loop_moms: new_loop_moms,
 
             loop_mom_cache_id,
+            loop_mom_base_cache_id: momentum_sample.loop_mom_base_cache_id,
             external_mom_cache_id: momentum_sample.external_mom_cache_id,
-
+            external_mom_base_cache_id: momentum_sample.external_mom_base_cache_id,
             external_moms: momentum_sample.external_moms.clone(),
             jacobian: momentum_sample.jacobian.clone(),
             orientation: momentum_sample.orientation,
@@ -471,6 +473,161 @@ pub trait GammaloopIntegrand {
     fn increment_external_cache_id(&mut self, val: usize);
     fn external_cache_id(&self) -> usize;
 
+    /// Signal that external momenta configuration has actually changed
+    /// This increments the external cache ID to invalidate cached computations
+    ///
+    /// # Usage
+    /// Call this method when:
+    /// - You change the external momenta values in your Monte Carlo sampling
+    /// - You switch to a different kinematic configuration
+    /// - You want to force recomputation of cached polarizations/external quantities
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// // When you change external momenta in your sampling
+    /// integrand.signal_external_momenta_changed();
+    /// let new_sample = parameterize(&sample_point, &mut integrand)?;
+    ///
+    /// // Rotations will automatically get new cache IDs
+    /// let rotated_samples = evaluate_all_rotations(&new_sample, &mut integrand, true)?;
+    ///
+    /// // Next iteration - revert to base configuration to reuse cache
+    /// integrand.revert_to_base_external_cache_id();
+    /// let next_sample = parameterize(&next_sample_point, &mut integrand)?;
+    /// ```
+    fn signal_external_momenta_changed(&mut self) {
+        self.increment_external_cache_id(1);
+    }
+
+    /// Get the current external cache ID for reuse (doesn't increment)
+    ///
+    /// This returns the current cache ID without incrementing it, allowing
+    /// new samples to reuse cached computations for the same external
+    /// momenta configuration.
+    fn get_current_external_cache_id(&self) -> usize {
+        self.external_cache_id()
+    }
+
+    /// Revert to the base external cache ID for the current configuration
+    ///
+    /// This allows new samples to reuse the base cache ID when they represent
+    /// the same underlying external momenta configuration (e.g., after rotations)
+    ///
+    /// # Usage
+    /// Call this method when you want to create a new sample that represents
+    /// the same base external momenta configuration as before, allowing reuse
+    /// of cached polarizations and other external-dependent computations.
+    ///
+    /// # Example Cache Flow
+    /// ```text
+    /// 1. Initial sample:           cache_id = 0, base_cache_id = 0
+    /// 2. Rotation 1:               cache_id = 1, base_cache_id = 0
+    /// 3. Rotation 2:               cache_id = 2, base_cache_id = 0
+    /// 4. revert_to_base():         cache_id = 0, base_cache_id = 0  // Reuse cache!
+    /// 5. signal_changed():         cache_id = 3, base_cache_id = 3  // New base config
+    /// 6. Rotation of new config:   cache_id = 4, base_cache_id = 3
+    /// 7. revert_to_base():         cache_id = 3, base_cache_id = 3  // Reuse new base
+    /// ```
+    fn revert_to_base_external_cache_id(&mut self);
+
+    /// Check if external momenta caching is beneficial
+    ///
+    /// Returns true if the same external cache ID has been used multiple times,
+    /// indicating that caching is providing benefits.
+    fn is_external_caching_beneficial(&self) -> bool {
+        // Simple heuristic: if we've created samples without incrementing
+        // cache ID, then caching is being used
+        self.external_cache_id() < self.loop_cache_id()
+    }
+
+    /// Force a cache consistency check with detailed reporting
+    fn debug_cache_state(&self, context: &str) {
+        if std::env::var("GAMMALOOP_DEBUG_CACHE").is_ok() {
+            let validation = self.validate_cache_consistency();
+            let stats = self.get_cache_stats();
+
+            tracing::info!("🔍 DEBUG CACHE STATE at {}", context);
+            tracing::info!("   Validation: {}", validation);
+            tracing::info!("   Statistics: {}", stats);
+
+            if !validation.is_valid {
+                tracing::error!("   ❌ CACHE INCONSISTENCY DETECTED!");
+                panic!(
+                    "Cache corruption at {}: {}",
+                    context, validation.diagnostics
+                );
+            }
+
+            if validation.has_rotations {
+                tracing::info!(
+                    "   🔄 {} rotation variants from base cache_id {}",
+                    validation.current_external_cache_id - validation.base_external_cache_id,
+                    validation.base_external_cache_id
+                );
+            }
+
+            if stats.efficiency_ratio < 0.3 {
+                tracing::warn!(
+                    "   ⚠️ Very low cache efficiency: {:.1}%",
+                    stats.efficiency_ratio * 100.0
+                );
+            } else if stats.efficiency_ratio > 0.8 {
+                tracing::info!(
+                    "   ✅ Excellent cache efficiency: {:.1}%",
+                    stats.efficiency_ratio * 100.0
+                );
+            }
+        }
+    }
+
+    /// Get the base external cache ID for the current configuration
+    fn get_base_external_cache_id(&self) -> usize;
+
+    /// Validate cache ID consistency and return diagnostics
+    fn validate_cache_consistency(&self) -> CacheValidationResult {
+        let current_id = self.external_cache_id();
+        let base_id = self.get_base_external_cache_id();
+        let loop_id = self.loop_cache_id();
+
+        let is_valid = base_id <= current_id;
+        let has_rotations = current_id > base_id;
+        let cache_efficiency = if loop_id > 0 {
+            1.0 - (current_id as f64 / loop_id as f64)
+        } else {
+            0.0
+        };
+
+        CacheValidationResult {
+            is_valid,
+            current_external_cache_id: current_id,
+            base_external_cache_id: base_id,
+            loop_cache_id: loop_id,
+            has_rotations,
+            cache_efficiency,
+            diagnostics: if is_valid {
+                "Cache IDs are consistent".to_string()
+            } else {
+                format!(
+                    "ERROR: Base cache ID ({}) > Current cache ID ({})",
+                    base_id, current_id
+                )
+            },
+        }
+    }
+
+    /// Get cache usage statistics for monitoring
+    fn get_cache_stats(&self) -> CacheStats {
+        let validation = self.validate_cache_consistency();
+        CacheStats {
+            total_external_increments: validation.current_external_cache_id,
+            total_loop_increments: validation.loop_cache_id,
+            base_configurations: validation.base_external_cache_id + 1,
+            rotational_variants: validation.current_external_cache_id
+                - validation.base_external_cache_id,
+            efficiency_ratio: validation.cache_efficiency,
+        }
+    }
+
     fn get_group_masters(&self) -> impl Iterator<Item = &Self::G>;
 
     fn get_terms_mut(&mut self) -> impl Iterator<Item = &mut Self::G>;
@@ -562,11 +719,120 @@ fn evaluate_all_rotations<T: FloatLike, I: GammaloopIntegrand>(
     if cache {
         integrand.increment_loop_cache_id(rotations.len());
         integrand.increment_external_cache_id(rotations.len());
+        // After evaluating all rotations, revert to base cache ID to enable cache reuse
+        // for subsequent sample points with the same base external momenta
+        integrand.revert_to_base_external_cache_id();
     }
 
     let duration = start_time.elapsed() / gammaloop_samples.len() as u32;
 
     (evaluation_results, duration)
+}
+
+/// Result of cache validation checks
+#[derive(Debug, Clone)]
+pub struct CacheValidationResult {
+    pub is_valid: bool,
+    pub current_external_cache_id: usize,
+    pub base_external_cache_id: usize,
+    pub loop_cache_id: usize,
+    pub has_rotations: bool,
+    pub cache_efficiency: f64,
+    pub diagnostics: String,
+}
+
+impl std::fmt::Display for CacheValidationResult {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Cache Validation: {} | Current: {} | Base: {} | Loop: {} | Rotations: {} | Efficiency: {:.1}%",
+            if self.is_valid { "✓" } else { "✗" },
+            self.current_external_cache_id,
+            self.base_external_cache_id,
+            self.loop_cache_id,
+            if self.has_rotations { "Yes" } else { "No" },
+            self.cache_efficiency * 100.0
+        )
+    }
+}
+
+/// Cache usage statistics
+#[derive(Debug, Clone)]
+pub struct CacheStats {
+    pub total_external_increments: usize,
+    pub total_loop_increments: usize,
+    pub base_configurations: usize,
+    pub rotational_variants: usize,
+    pub efficiency_ratio: f64,
+}
+
+impl std::fmt::Display for CacheStats {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Cache Stats: {} base configs, {} rotations, {} loop increments, {:.1}% efficiency",
+            self.base_configurations,
+            self.rotational_variants,
+            self.total_loop_increments,
+            self.efficiency_ratio * 100.0
+        )
+    }
+}
+
+/// Helper macro for cache debugging
+#[macro_export]
+macro_rules! debug_cache {
+    ($integrand:expr, $msg:expr) => {
+        let validation = $integrand.validate_cache_consistency();
+        tracing::debug!("{}: {}", $msg, validation);
+    };
+}
+
+/// Helper macro for cache monitoring with custom conditions
+#[macro_export]
+macro_rules! monitor_cache {
+    ($integrand:expr, $condition:expr, $msg:expr) => {
+        if $condition {
+            let stats = $integrand.get_cache_stats();
+            tracing::info!("{}: {}", $msg, stats);
+        }
+    };
+}
+
+/// Helper macro for missed cache hit detection in debug mode
+#[macro_export]
+macro_rules! debug_cache_search {
+    ($integrand:expr, $msg:expr) => {
+        if std::env::var("GAMMALOOP_DEBUG_CACHE").is_ok() {
+            let validation = $integrand.validate_cache_consistency();
+            if !validation.is_valid {
+                tracing::error!(
+                    "CACHE CORRUPTION DETECTED at {}: {}",
+                    $msg,
+                    validation.diagnostics
+                );
+            } else {
+                tracing::debug!("Cache search at {}: {}", $msg, validation);
+            }
+        }
+    };
+}
+
+/// Helper macro for cache efficiency warnings
+#[macro_export]
+macro_rules! warn_cache_efficiency {
+    ($integrand:expr, $threshold:expr, $msg:expr) => {
+        let stats = $integrand.get_cache_stats();
+        if stats.efficiency_ratio < $threshold {
+            tracing::warn!(
+                "⚠️ Low cache efficiency at {}: {:.1}% (threshold: {:.1}%)",
+                $msg,
+                stats.efficiency_ratio * 100.0,
+                $threshold * 100.0
+            );
+            tracing::warn!("   Cache stats: {}", stats);
+        }
+    };
 }
 
 fn evaluate_single<T: FloatLike, I: GammaloopIntegrand>(

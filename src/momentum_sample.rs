@@ -222,8 +222,12 @@ pub type PolarizationVectors<T> = TiVec<ExternalIndex, Polarization<T>>; // shou
 pub struct BareMomentumSample<T: FloatLike> {
     pub loop_moms: LoopMomenta<F<T>>,
     pub loop_mom_cache_id: usize,
+    /// Base cache ID for the fundamental loop momentum configuration (before transformations)
+    pub loop_mom_base_cache_id: usize,
     pub external_moms: ExternalFourMomenta<F<T>>,
     pub external_mom_cache_id: usize,
+    /// Base cache ID for the fundamental external momentum configuration (before transformations)
+    pub external_mom_base_cache_id: usize,
     pub jacobian: F<T>,
     pub orientation: Option<usize>,
 }
@@ -284,7 +288,9 @@ impl<T: FloatLike> BareMomentumSample<T> {
         Ok(Self {
             loop_moms,
             loop_mom_cache_id,
+            loop_mom_base_cache_id: loop_mom_cache_id, // Initially same as cache_id
             external_mom_cache_id,
+            external_mom_base_cache_id: external_mom_cache_id, // Initially same as cache_id
             external_moms,
             jacobian,
             orientation,
@@ -319,7 +325,9 @@ impl<T: FloatLike> BareMomentumSample<T> {
     {
         BareMomentumSample {
             loop_mom_cache_id: self.loop_mom_cache_id,
+            loop_mom_base_cache_id: self.loop_mom_base_cache_id,
             external_mom_cache_id: self.external_mom_cache_id,
+            external_mom_base_cache_id: self.external_mom_base_cache_id,
             loop_moms: self.loop_moms.iter().map(ThreeMomentum::cast).collect(),
             external_moms: self.external_moms.iter().map(FourMomentum::cast).collect(),
             jacobian: self.jacobian.clone().into(),
@@ -338,10 +346,12 @@ impl<T: FloatLike> BareMomentumSample<T> {
                 .iter()
                 .map(FourMomentum::higher)
                 .collect(),
+            loop_mom_cache_id: self.loop_mom_cache_id,
+            loop_mom_base_cache_id: self.loop_mom_base_cache_id,
+            external_mom_cache_id: self.external_mom_cache_id,
+            external_mom_base_cache_id: self.external_mom_base_cache_id,
             jacobian: self.jacobian.higher(),
             orientation: self.orientation,
-            loop_mom_cache_id: self.loop_mom_cache_id,
-            external_mom_cache_id: self.external_mom_cache_id,
         }
     }
 
@@ -354,9 +364,10 @@ impl<T: FloatLike> BareMomentumSample<T> {
             external_moms: self.external_moms.iter().map(FourMomentum::lower).collect(),
             jacobian: self.jacobian.lower(),
             orientation: self.orientation,
-
             loop_mom_cache_id: self.loop_mom_cache_id,
+            loop_mom_base_cache_id: self.loop_mom_base_cache_id,
             external_mom_cache_id: self.external_mom_cache_id,
+            external_mom_base_cache_id: self.external_mom_base_cache_id,
         }
     }
 
@@ -376,7 +387,9 @@ impl<T: FloatLike> BareMomentumSample<T> {
                 .map(|l| l.rotate(rotation))
                 .collect(),
             loop_mom_cache_id,
+            loop_mom_base_cache_id: self.loop_mom_base_cache_id, // Preserve base cache ID
             external_mom_cache_id,
+            external_mom_base_cache_id: self.external_mom_base_cache_id, // Preserve base cache ID
             jacobian: self.jacobian.clone(),
             orientation: self.orientation,
         }
@@ -387,8 +400,10 @@ impl<T: FloatLike> BareMomentumSample<T> {
         Self {
             loop_moms: self.loop_moms.rescale(factor, subspace),
             loop_mom_cache_id: self.loop_mom_cache_id + 1,
+            loop_mom_base_cache_id: self.loop_mom_base_cache_id, // Preserve base cache ID
             external_moms: self.external_moms.clone(),
             external_mom_cache_id: self.external_mom_cache_id,
+            external_mom_base_cache_id: self.external_mom_base_cache_id, // Preserve base cache ID
             jacobian: self.jacobian.clone(),
             orientation: self.orientation,
         }

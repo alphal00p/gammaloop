@@ -439,6 +439,8 @@ pub struct AmplitudeIntegrandData {
     pub name: String,
     pub loop_cache_id: usize,
     pub external_cache_id: usize,
+    /// Cache ID for the base (unrotated) external momentum configuration
+    pub base_external_cache_id: usize,
     pub graph_terms: Vec<AmplitudeGraphTerm>,
     pub external_signature: SignatureLike<ExternalIndex>,
     pub graph_group_structure: TiVec<GroupId, GraphGroup>,
@@ -557,6 +559,30 @@ impl GammaloopIntegrand for AmplitudeIntegrand {
         //     self.data.external_cache_id
         // );
         self.data.external_cache_id += val
+    }
+
+    fn signal_external_momenta_changed(&mut self) {
+        self.increment_external_cache_id(1);
+        // Update base cache ID when the fundamental configuration changes
+        self.data.base_external_cache_id = self.data.external_cache_id;
+    }
+
+    fn get_current_external_cache_id(&self) -> usize {
+        self.external_cache_id()
+    }
+
+    /// Revert to the base external cache ID for the current configuration
+    fn revert_to_base_external_cache_id(&mut self) {
+        // status_info!(
+        //     "Reverting external cache id from {} to base {}",
+        //     self.data.external_cache_id,
+        //     self.data.base_external_cache_id
+        // );
+        self.data.external_cache_id = self.data.base_external_cache_id;
+    }
+
+    fn get_base_external_cache_id(&self) -> usize {
+        self.data.base_external_cache_id
     }
 
     fn increment_loop_cache_id(&mut self, val: usize) {

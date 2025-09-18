@@ -31,12 +31,22 @@ use crate::{
     momentum::{Helicity, PolType},
     momentum_sample::{ExternalFourMomenta, MomentumSample},
     numerator::ParsingNet,
+    status_debug, status_info, status_warn,
     utils::{
         f128, symbolica_ext::LOGPRINTOPTS, tracing::StatusRenderable, FloatLike,
         PrecisionUpgradable, F, GS, TENSORLIB,
     },
     GammaLoopContext,
 };
+
+/// Check if debug cache mode is enabled
+#[inline]
+fn is_debug_cache_enabled() -> bool {
+    std::env::var("GAMMALOOP_DEBUG_CACHE")
+        .map(|v| v == "1" || v.to_lowercase() == "true")
+        .unwrap_or(false)
+        || cfg!(debug_assertions)
+}
 
 #[derive(Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
 #[trait_decode(trait = GammaLoopContext)]
@@ -442,6 +452,7 @@ pub struct ParamCache<T: FloatLike> {
     cache: ConstGenericRingBuffer<Vec<Complex<F<T>>>, 64>,
     len: usize,
 }
+
 impl<T: FloatLike> ParamCache<T> {
     pub fn get(&self, key: usize) -> Option<&Vec<Complex<F<T>>>> {
         if self.len <= key || key + 64 < self.len {
@@ -493,6 +504,7 @@ pub struct ParamBuilder<T: FloatLike = f64> {
     pub values: Vec<Complex<F<T>>>,
     pub pairs: GammaLoopPairs,
     pub polarization_cache: ParamCache<T>,
+
     pub reps: Vec<(Atom, Atom)>,
     // pub eager_const_map: HashMap<Atom, Complex<F<T>>>,
     // pub eager_function_map: HashMap<Symbol, EvaluationFn<Atom, Complex<F<T>>>>,
@@ -675,6 +687,7 @@ impl<T: FloatLike> ParamBuilder<T> {
     pub(crate) fn new_empty() -> Self {
         Self {
             polarization_cache: ParamCache::default(),
+
             fn_map: FunctionMap::default(),
             pairs: GammaLoopPairs::default(),
             values: Vec::new(),
@@ -798,47 +811,252 @@ impl<T: FloatLike> ParamBuilder<T> {
         sample: &MomentumSample<T>,
         helicities: &[Helicity],
     ) {
-        let pols = if let Some(v) = self
-            .polarization_cache
-            .get(sample.sample.external_mom_cache_id)
-        {
-            debug_assert_eq!(
-                v,
-                &self
-                    .pairs
-                    .polarizations_values(graph, sample.external_moms(), helicities)
+        let cache_id = sample.sample.external_mom_cache_id;
+        let base_cache_id = sample.sample.external_mom_base_cache_id;
+
+        // Validate cache consistency
+        if cache_id < base_cache_id {
+            status_warn!(
+                "WARNING: Cache ID inconsistency detected! current={}, base={}",
+                cache_id,
+                base_cache_id
+            );
+        }
+
+        // Compute expected polarizations for debug search
+        let expected_pols = if is_debug_cache_enabled() {
+            Some(
+                self.pairs
+                    .polarizations_values(graph, sample.external_moms(), helicities),
+            )
+        } else {
+            None
+        };
+
+        // Try to get from cache first
+        let pols = if let Some(v) = self.polarization_cache.get(cache_id) {
+            status_debug!(
+                "Cache HIT for external_cache_id={} (base={})",
+                cache_id,
+                base_cache_id
             );
 
-            if !cache {
-                self.values[self.pairs.polarizations.value_range.clone()].clone_from_slice(
-                    &self
-                        .pairs
-                        .polarizations_values(graph, sample.external_moms(), helicities),
+            // Validate cached values in debug mode
+            if let Some(ref expected) = expected_pols {
+                debug_assert_eq!(
+                    v, expected,
+                    "Cached polarizations don't match computed values for cache_id={}",
+                    cache_id
                 );
+            }
+
+            if !cache {
+                self.values[self.pairs.polarizations.value_range.clone()].clone_from_slice(v);
                 return;
             }
             v
         } else {
-            if !cache {
-                self.values[self.pairs.polarizations.value_range.clone()].clone_from_slice(
-                    &self
-                        .pairs
-                        .polarizations_values(graph, sample.external_moms(), helicities),
-                );
-                return;
-            }
-            self.polarization_cache.checked_push(
-                sample.sample.external_mom_cache_id,
-                self.pairs
-                    .polarizations_values(graph, sample.external_moms(), helicities),
+            status_debug!(
+                "Cache MISS for external_cache_id={} (base={})",
+                cache_id,
+                base_cache_id
             );
 
+            // DEBUG: Search entire cache for matching polarizations to detect missed hits
+            if is_debug_cache_enabled() && cache {
+                if let Some(ref expected) = expected_pols {
+                    self.debug_search_cache_for_matching_polarizations(
+                        expected,
+                        cache_id,
+                        base_cache_id,
+                        sample.external_moms(),
+                    );
+                }
+            }
+
+            if !cache {
+                let computed_pols = expected_pols.unwrap_or_else(|| {
+                    self.pairs
+                        .polarizations_values(graph, sample.external_moms(), helicities)
+                });
+                self.values[self.pairs.polarizations.value_range.clone()]
+                    .clone_from_slice(&computed_pols);
+                return;
+            }
+
+            // Compute and cache new polarizations
+            let computed_pols = expected_pols.unwrap_or_else(|| {
+                self.pairs
+                    .polarizations_values(graph, sample.external_moms(), helicities)
+            });
+
             self.polarization_cache
-                .get(sample.sample.external_mom_cache_id)
-                .unwrap()
+                .checked_push(cache_id, computed_pols);
+            status_debug!("Cached new polarizations for cache_id={}", cache_id);
+
+            self.polarization_cache.get(cache_id).unwrap()
         };
 
         self.values[self.pairs.polarizations.value_range.clone()].clone_from_slice(pols);
+    }
+
+    /// Debug function to search cache for matching polarizations to detect missed cache hits
+    fn debug_search_cache_for_matching_polarizations(
+        &self,
+        expected_pols: &[Complex<F<T>>],
+        current_cache_id: usize,
+        base_cache_id: usize,
+        external_moms: &ExternalFourMomenta<F<T>>,
+    ) {
+        // Only run this expensive search if debug mode is enabled
+        if !is_debug_cache_enabled() {
+            return;
+        }
+
+        let tolerance = F::<T>::from_f64(1e-12);
+        let mut found_matches = Vec::new();
+
+        // Search through all possible cache IDs that could contain our polarizations
+        let max_search_id = std::cmp::max(current_cache_id + 10, self.polarization_cache.len);
+
+        for search_id in 0..max_search_id {
+            if let Some(cached_pols) = self.polarization_cache.get(search_id) {
+                if cached_pols.len() == expected_pols.len() {
+                    let matches =
+                        cached_pols
+                            .iter()
+                            .zip(expected_pols.iter())
+                            .all(|(cached, expected)| {
+                                (&cached.re - &expected.re).abs() < tolerance
+                                    && (&cached.im - &expected.im).abs() < tolerance
+                            });
+
+                    if matches {
+                        found_matches.push(search_id);
+                    }
+                }
+            }
+        }
+
+        if !found_matches.is_empty() {
+            status_warn!(
+                "🔍 DEBUG CACHE SEARCH: Found {} matching polarization(s) in cache but using cache_id={}!",
+                found_matches.len(),
+                current_cache_id
+            );
+            status_warn!(
+                "   ⚠️  MISSED CACHE HITS: Found identical polarizations at cache_id(s): {:?}",
+                found_matches
+            );
+            status_warn!(
+                "   📊 Current: cache_id={}, base_cache_id={}",
+                current_cache_id,
+                base_cache_id
+            );
+
+            // Provide actionable debugging information
+            if found_matches.contains(&base_cache_id) {
+                status_warn!(
+                    "   💡 HINT: Base cache_id {} has matching polarizations. You should call revert_to_base_external_cache_id()!",
+                    base_cache_id
+                );
+            }
+
+            // Check if any found matches are close to base_cache_id (indicating related configurations)
+            let related_ids: Vec<_> = found_matches
+                .iter()
+                .filter(|&&id| id >= base_cache_id && id <= base_cache_id + 20)
+                .collect();
+
+            if !related_ids.is_empty() {
+                status_warn!(
+                    "   🔗 RELATED IDs: Cache IDs {:?} are related to base_id {} and contain identical polarizations",
+                    related_ids,
+                    base_cache_id
+                );
+            }
+
+            // Log external momentum info for debugging
+            status_debug!(
+                "   🔍 External momenta: [{:.6}, {:.6}, {:.6}, {:.6}] (first external)",
+                external_moms
+                    .first()
+                    .map_or(&F::from_f64(0.0), |m| &m.temporal.value),
+                external_moms
+                    .first()
+                    .map_or(&F::from_f64(0.0), |m| &m.spatial.px),
+                external_moms
+                    .first()
+                    .map_or(&F::from_f64(0.0), |m| &m.spatial.py),
+                external_moms
+                    .first()
+                    .map_or(&F::from_f64(0.0), |m| &m.spatial.pz),
+            );
+        } else {
+            // Only log this in very verbose debug mode
+            if std::env::var("GAMMALOOP_DEBUG_CACHE_VERBOSE").is_ok() {
+                status_debug!(
+                    "🔍 DEBUG CACHE SEARCH: No matching polarizations found in cache (searched {} entries). This is a genuine cache miss.",
+                    max_search_id
+                );
+            }
+        }
+    }
+
+    /// Public method to enable/disable debug cache mode at runtime
+    pub fn set_debug_cache_mode(enabled: bool) {
+        std::env::set_var("GAMMALOOP_DEBUG_CACHE", if enabled { "1" } else { "0" });
+        status_info!(
+            "Debug cache mode {}: Set GAMMALOOP_DEBUG_CACHE={}",
+            if enabled { "enabled" } else { "disabled" },
+            if enabled { "1" } else { "0" }
+        );
+    }
+
+    /// Check current debug cache mode status
+    pub fn get_debug_cache_status() -> DebugCacheStatus {
+        let env_enabled = std::env::var("GAMMALOOP_DEBUG_CACHE")
+            .map(|v| v == "1" || v.to_lowercase() == "true")
+            .unwrap_or(false);
+        let verbose_enabled = std::env::var("GAMMALOOP_DEBUG_CACHE_VERBOSE").is_ok();
+        let debug_assertions = cfg!(debug_assertions);
+
+        DebugCacheStatus {
+            environment_enabled: env_enabled,
+            debug_assertions,
+            verbose_enabled,
+            effective_enabled: env_enabled || debug_assertions,
+        }
+    }
+
+    /// Debug function that's available in release mode for critical cache analysis
+    #[allow(dead_code)]
+    fn analyze_cache_efficiency(&self, sample: &MomentumSample<T>) -> CacheAnalysisResult<T> {
+        let mut analysis = CacheAnalysisResult::<T> {
+            _phantom: std::marker::PhantomData,
+            total_entries: self.polarization_cache.len,
+            current_cache_id: sample.sample.external_mom_cache_id,
+            base_cache_id: sample.sample.external_mom_base_cache_id,
+            entries_since_base: sample
+                .sample
+                .external_mom_cache_id
+                .saturating_sub(sample.sample.external_mom_base_cache_id),
+            potential_reuses: 0,
+            cache_span: 0,
+        };
+
+        // Calculate cache span (range of used cache IDs)
+        if self.polarization_cache.len > 0 {
+            analysis.cache_span = std::cmp::min(64, self.polarization_cache.len);
+        }
+
+        // Estimate potential reuses based on pattern
+        if analysis.entries_since_base > 0 {
+            // If we're far from base, there might be reuse opportunities
+            analysis.potential_reuses = analysis.entries_since_base.saturating_sub(1);
+        }
+
+        analysis
     }
 
     pub(crate) fn threshold_params(&mut self, threshold_params: &ThresholdParams<T>) {
@@ -901,6 +1119,58 @@ impl<T: FloatLike> StatusRenderable for ParamBuilder<T> {
 impl<T: FloatLike> Display for ParamBuilder<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.table().with(Style::rounded()).to_string().fmt(f)
+    }
+}
+
+/// Debug analysis result for cache efficiency
+#[derive(Debug, Clone)]
+pub struct CacheAnalysisResult<T: FloatLike> {
+    _phantom: std::marker::PhantomData<T>,
+    pub total_entries: usize,
+    pub current_cache_id: usize,
+    pub base_cache_id: usize,
+    pub entries_since_base: usize,
+    pub potential_reuses: usize,
+    pub cache_span: usize,
+}
+
+impl<T: FloatLike> std::fmt::Display for CacheAnalysisResult<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Cache Analysis: {} entries, current={}, base={}, span={}, potential_reuses={}",
+            self.total_entries,
+            self.current_cache_id,
+            self.base_cache_id,
+            self.cache_span,
+            self.potential_reuses
+        )
+    }
+}
+
+/// Status of debug cache mode
+#[derive(Debug, Clone)]
+pub struct DebugCacheStatus {
+    pub environment_enabled: bool,
+    pub debug_assertions: bool,
+    pub verbose_enabled: bool,
+    pub effective_enabled: bool,
+}
+
+impl std::fmt::Display for DebugCacheStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Debug Cache Status: {} (env={}, debug_assertions={}, verbose={})",
+            if self.effective_enabled {
+                "ENABLED"
+            } else {
+                "DISABLED"
+            },
+            self.environment_enabled,
+            self.debug_assertions,
+            self.verbose_enabled
+        )
     }
 }
 

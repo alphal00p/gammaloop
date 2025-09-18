@@ -8,31 +8,31 @@ use linnet::permutation::Permutation;
 use rayon::iter::ParallelIterator;
 use rayon::prelude::*;
 use rayon::ThreadPoolBuilder;
-use spenso::iterators::IteratableTensor;
+
 use spenso::network::library::symbolic::{ExplicitKey, TensorLibrary};
 use spenso::network::library::LibraryTensor;
 use spenso::network::{Sequential, SmallestDegree};
-use spenso::tensors::data::DataTensor;
+
 // use spenso::network::Network;
 
-use spenso::structure::representation::{Euclidean, LibraryRep, Minkowski, RepName};
-use spenso::structure::{OrderedStructure, PermutedStructure, TensorStructure, ToSymbolic};
-use spenso::tensors::parametric::{ConcreteOrParam, MixedTensor, ParamOrConcrete, ParamTensor};
+use spenso::structure::representation::{LibraryRep, Minkowski, RepName};
+use spenso::structure::{PermutedStructure, TensorStructure};
+use spenso::tensors::parametric::{MixedTensor, ParamOrConcrete, ParamTensor};
 use spenso_hep_lib::hep_lib;
 use std::collections::hash_map::Entry;
 use std::collections::HashSet;
-use std::num;
+
 use std::ops::RangeInclusive;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
-use symbolica::atom::{AtomView, Num};
+use symbolica::atom::AtomView;
 use symbolica::coefficient::Coefficient;
 use symbolica::domains::algebraic_number::AlgebraicExtension;
 use symbolica::domains::finite_field::PrimeIteratorU64;
 use symbolica::domains::float::Complex as SymbolicaComplex;
 use symbolica::function;
 use symbolica::graph::GenerationSettings;
-use symbolica::id::{Context, Replacement};
+use symbolica::id::Replacement;
 use tracing::instrument;
 
 use ahash::AHashMap;
@@ -59,20 +59,17 @@ use crate::model::{ArcParticle, ColorStructure};
 use crate::momentum::{Pow, Sign, SignOrZero};
 use crate::numerator::aind::Aind;
 use crate::numerator::graph::ReversibleEdge;
-use crate::numerator::symbolica_ext::{AtomCoreExt, ParsingNetError};
-use crate::numerator::Network;
-use crate::numerator::Numerator;
-use crate::numerator::SymbolicExpression;
-use crate::numerator::{ExpressionState, ParsingNet};
+use crate::numerator::symbolica_ext::AtomCoreExt;
+use crate::numerator::ParsingNet;
 use crate::processes::ProcessDefinition;
 use crate::utils::symbolica_ext::{COMPLEXRATPOLYFIELD, Q_I};
-use crate::utils::{self, F, GS, TENSORLIB, W_};
+use crate::utils::{self, F, GS, W_};
 use crate::uv::UltravioletGraph;
-use crate::{disable, status_error, status_info, status_warn};
 use crate::{
     feyngen::{FeynGenFilter, GenerationType},
     model::Model,
 };
+use crate::{status_error, status_info};
 use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeData, Flow, Orientation};
 use linnet::half_edge::subgraph::{InternalSubGraph, OrientedCut, SubGraph};
@@ -234,7 +231,7 @@ pub trait NodeColorFunctions: Sized + std::fmt::Display {
         }
     }
 
-    fn coupling_orders(&self, model: &Model) -> AHashMap<SmartString<LazyCompact>, usize> {
+    fn coupling_orders(&self, _model: &Model) -> AHashMap<SmartString<LazyCompact>, usize> {
         AHashMap::default()
     }
 
