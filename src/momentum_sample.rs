@@ -2,6 +2,7 @@ use std::fmt::Display;
 
 use crate::gammaloop_integrand::evaluators::SingleOrAllOrientations;
 use crate::momentum::{FourMomentum, Polarization, Rotatable, Rotation, ThreeMomentum};
+use crate::status_info;
 use crate::utils::{FloatLike, Length, F};
 use crate::{define_index, settings::runtime::kinematic::Externals, DependentMomentaConstructor};
 use bincode_trait_derive::{Decode, Encode};
@@ -13,6 +14,7 @@ use serde::{Deserialize, Serialize};
 use std::ops::{Add, Index, IndexMut, Sub};
 use symbolica::domains::float::NumericalFloatLike;
 use tabled::settings::Style;
+use tracing::info;
 use typed_index_collections::TiVec;
 
 #[derive(
@@ -278,6 +280,7 @@ impl<T: FloatLike> BareMomentumSample<T> {
         orientation: Option<usize>,
     ) -> Result<Self> {
         let external_moms = external_moms.get_dependent_externals(dependent_momenta_constructor)?;
+
         Ok(Self {
             loop_moms,
             loop_mom_cache_id,
@@ -455,6 +458,7 @@ impl<T: FloatLike> MomentumSample<T> {
         dependent_momenta_constructor: DependentMomentaConstructor,
         orientation: Option<usize>,
     ) -> Result<Self> {
+        // status_info!("New with ext cache id:{external_mom_cache_id}");
         Ok(Self {
             sample: BareMomentumSample::new(
                 loop_moms,

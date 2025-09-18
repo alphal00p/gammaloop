@@ -2,6 +2,7 @@ use crate::gammaloop_integrand::GraphTerm;
 use crate::graph::GroupId;
 use crate::momentum::{Rotation, ThreeMomentum};
 use crate::momentum_sample::MomentumSample;
+use crate::status_info;
 use crate::utils::{self, global_parameterize, FloatLike, F};
 use crate::{
     settings::runtime::kinematic::KinematicsSettings, settings::runtime::DiscreteGraphSamplingType,
@@ -13,6 +14,7 @@ use eyre::eyre;
 use itertools::Itertools;
 use momtrop::vector::Vector;
 use symbolica::numerical_integration::Sample;
+use tracing::info;
 
 use super::{ChannelIndex, GammaloopIntegrand};
 
@@ -533,7 +535,7 @@ fn default_parametrize<T: FloatLike>(
     let loop_moms = loop_moms_vec.into_iter().map(ThreeMomentum::from).collect();
 
     let jacobian = param_jacobian;
-
+    // status_info!("Default parametrize with ext cache id:{external_mom_cache_id}");
     MomentumSample::new(
         loop_moms,
         loop_mom_cache_id,

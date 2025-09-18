@@ -362,12 +362,15 @@ impl LmbMultiChannelingSetup {
         model: &Model,
         all_bases: &TiVec<LmbIndex, LoopMomentumBasis>,
         alpha: &F<T>,
+        cache: bool,
     ) -> TiVec<ChannelIndex, (MomentumSample<T>, F<T>)> {
         let mut loop_mom_cache_id = momentum_sample.sample.loop_mom_cache_id;
         self.channels
             .iter_enumerated()
             .map(|(channel_index, _)| {
-                loop_mom_cache_id += 1;
+                if cache {
+                    loop_mom_cache_id += 1;
+                }
                 self.reinterpret_loop_momenta_and_compute_prefactor(
                     channel_index,
                     momentum_sample,
@@ -527,6 +530,8 @@ fn evaluate_all_rotations<T: FloatLike, I: GammaloopIntegrand>(
 ) -> (Vec<Complex<F<f64>>>, Duration) {
     let rotations = integrand.get_rotations().cloned().collect_vec();
 
+    let cache = integrand.get_settings().general.enable_cache;
+
     let mut loop_mom_cache_id = integrand.loop_cache_id();
     let mut external_mom_cache_id = integrand.external_cache_id();
 
@@ -537,8 +542,10 @@ fn evaluate_all_rotations<T: FloatLike, I: GammaloopIntegrand>(
             if rotation.is_identity() {
                 return gammaloop_sample.clone();
             }
-            loop_mom_cache_id += 1;
-            external_mom_cache_id += 1;
+            if cache {
+                loop_mom_cache_id += 1;
+                external_mom_cache_id += 1;
+            }
             gammaloop_sample.rotate(rotation, loop_mom_cache_id, external_mom_cache_id)
         })
         .collect();
@@ -552,8 +559,10 @@ fn evaluate_all_rotations<T: FloatLike, I: GammaloopIntegrand>(
         })
         .collect_vec();
 
-    integrand.increment_loop_cache_id(rotations.len());
-    integrand.increment_external_cache_id(rotations.len());
+    if cache {
+        integrand.increment_loop_cache_id(rotations.len());
+        integrand.increment_external_cache_id(rotations.len());
+    }
 
     let duration = start_time.elapsed() / gammaloop_samples.len() as u32;
 
@@ -569,6 +578,7 @@ fn evaluate_single<T: FloatLike, I: GammaloopIntegrand>(
     let settings = integrand.get_settings().clone();
     let zero = Complex::new_re(gammaloop_sample.get_default_sample().zero());
     let mut loop_cache_shift = 0;
+    let cache = integrand.get_settings().general.enable_cache;
 
     let result = match &gammaloop_sample {
         GammaLoopSample::Default(sample) => integrand
@@ -586,6 +596,7 @@ fn evaluate_single<T: FloatLike, I: GammaloopIntegrand>(
                         model,
                         term.get_lmbs(),
                         alpha,
+                        cache,
                     );
 
                 loop_cache_shift += channels_samples.len();
@@ -614,7 +625,6 @@ fn evaluate_single<T: FloatLike, I: GammaloopIntegrand>(
                         channel_id,
                         sample,
                     } => {
-                        loop_cache_shift += 1;
                         let (reparameterized_sample, prefactor) = graph_term
                             .get_multi_channeling_setup()
                             .reinterpret_loop_momenta_and_compute_prefactor(
@@ -627,7 +637,9 @@ fn evaluate_single<T: FloatLike, I: GammaloopIntegrand>(
                                 alpha,
                             );
 
-                        loop_cache_shift += 1;
+                        if cache {
+                            loop_cache_shift += 1;
+                        }
 
                         Complex::new_re(prefactor)
                             * graph_term.evaluate(
@@ -646,9 +658,12 @@ fn evaluate_single<T: FloatLike, I: GammaloopIntegrand>(
                                 model,
                                 graph_term.get_lmbs(),
                                 alpha,
+                                cache,
                             );
 
-                        loop_cache_shift += channel_samples.len();
+                        if cache {
+                            loop_cache_shift += channel_samples.len();
+                        }
 
                         channel_samples
                             .into_iter()
@@ -694,7 +709,9 @@ fn evaluate_single<T: FloatLike, I: GammaloopIntegrand>(
         }
     };
 
-    integrand.increment_loop_cache_id(loop_cache_shift);
+    if cache {
+        integrand.increment_loop_cache_id(loop_cache_shift);
+    }
 
     let f_t_result = result * gammaloop_sample.get_default_sample().jacobian();
     Complex::new(f_t_result.re.into_ff64(), f_t_result.im.into_ff64())

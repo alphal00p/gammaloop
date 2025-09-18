@@ -547,10 +547,15 @@ impl GammaloopIntegrand for AmplitudeIntegrand {
     type G = AmplitudeGraphTerm;
 
     fn external_cache_id(&self) -> usize {
+        // status_info!("Getting cache id {}", self.data.external_cache_id);
         self.data.external_cache_id
     }
 
     fn increment_external_cache_id(&mut self, val: usize) {
+        // status_info!(
+        //     "Incrementing cache id {} by {val}",
+        //     self.data.external_cache_id
+        // );
         self.data.external_cache_id += val
     }
 
