@@ -1,24 +1,39 @@
-use color_eyre::Result;
+use color_eyre::{owo_colors::colors::xterm::BuddhaGold, Result};
 
 use gammaloop_api::{inspect::Inspect, integrate::Integrate};
 
 use gammalooprs::{
     initialisation::initialise,
     model::UFOSymbol,
-    numerator::ufo::UFOSymbols,
+    numerator::{aind::Aind, ufo::UFOSymbols},
     status_info,
-    utils::{test_utils::load_generic_model, F},
+    utils::{test_utils::load_generic_model, F, GS, TENSORLIB, W_},
+    GammaLoopContextContainer,
 };
 use insta::assert_snapshot;
 use momtrop::assert_approx_eq;
-use spenso::algebra::complex::Complex;
+use spenso::{
+    algebra::complex::Complex,
+    network::{store::NetworkStore, Network, Sequential, SmallestDegree},
+    structure::{representation::LibraryRep, IndexlessNamedStructure, NamedStructure},
+    tensors::{complex::RealOrComplexTensor, parametric::ParamOrConcrete},
+};
 use std::{
     env,
+    io::Read,
+    num,
     ops::{ControlFlow, Deref, DerefMut},
     path::{Path, PathBuf},
     str::FromStr,
 };
-use symbolica::symbol;
+use symbolica::{
+    atom::{Atom, AtomCore, Symbol},
+    function,
+    id::Pattern,
+    parse,
+    state::StateMap,
+    symbol,
+};
 use tracing::{debug, warn};
 
 mod test_utils;
@@ -243,6 +258,76 @@ fn scalar_box() -> Result<()> {
     );
 
     clean_test(&cli);
+
+    Ok(())
+}
+
+#[test]
+fn test_broken_network() -> Result<()> {
+    let mut cli = get_test_cli(
+        Some("photon_box.toml".into()),
+        get_tests_workspace_path().join("test_broken_network"),
+        Some("test_broken_network".to_string()),
+    )?;
+
+    let mut state_bin =
+        std::fs::File::open("tests/resources/misc/product_esurface_10_symbolica_state.bin")?;
+
+    let state = symbolica::state::State::import(&mut state_bin, None).unwrap();
+    let model = cli.state.model.clone();
+
+    let gammalooopcontainer = GammaLoopContextContainer {
+        state_map: &state,
+        model: &model,
+    };
+
+    let mut file = std::fs::File::open("tests/resources/misc/product_esurface_10.bin")?;
+
+    let mut network: Network<
+        NetworkStore<
+            ParamOrConcrete<
+                RealOrComplexTensor<F<f64>, NamedStructure<Symbol, Vec<Atom>, LibraryRep, Aind>>,
+                NamedStructure<Symbol, Vec<Atom>, LibraryRep, Aind>,
+            >,
+            Atom,
+        >,
+        IndexlessNamedStructure<Symbol, Vec<Atom>, LibraryRep, Aind>,
+        Aind,
+    > = bincode::decode_from_std_read_with_context(
+        &mut file,
+        bincode::config::standard(),
+        gammalooopcontainer,
+    )?;
+
+    network
+        .execute::<Sequential, SmallestDegree, _, _>(TENSORLIB.read().unwrap().deref())
+        .unwrap();
+
+    let scalar: Atom = network.result_scalar().unwrap().into();
+    let pattern = Pattern::from(function!(GS.ose, W_.x_) * function!(GS.sign, W_.x_));
+
+    let num_ose_match = scalar.pattern_match(&pattern, None, None);
+    //println!("num matches: {}", num_ose_match.count());
+
+    let mut edge_5_in_expression = false;
+    let mut edge_7_in_expression = false;
+
+    for matched_exp in num_ose_match {
+        for (symbol, atom) in matched_exp.iter() {
+            println!("Matched {} to {atom}", symbol);
+            if *atom == Atom::num(5) {
+                edge_5_in_expression = true;
+            }
+            if *atom == Atom::num(7) {
+                edge_7_in_expression = true;
+            }
+        }
+    }
+
+    assert!(edge_5_in_expression);
+    assert!(edge_7_in_expression);
+
+    //println!("Result: {scalar}");
 
     Ok(())
 }

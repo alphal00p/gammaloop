@@ -193,7 +193,7 @@ impl Forest {
                     status_debug!("rule: {}", GS.add_parametric_sign(edge_index));
                 }
 
-                // s = s.replace_multiple(&[GS.add_parametric_sign(edge_index)]);
+                s = s.replace_multiple(&[GS.add_parametric_sign(edge_index)]);
             }
         }
         s

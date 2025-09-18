@@ -662,7 +662,27 @@ impl AmplitudeGraph {
 
             if esurfaces_to_debug.contains(&esurface_id.0) {
                 println!("product: {}", product.dot_pretty());
+
+                let bincode_product =
+                    bincode::encode_to_vec(product.clone(), bincode::config::standard()).unwrap();
+
+                let mut file = File::create(format!(
+                    "tests/resources/misc/product_esurface_{}.bin",
+                    esurface_id.0
+                ))
+                .unwrap();
+
+                file.write(&bincode_product).unwrap();
+
+                let mut symbolica_state_file = File::create(format!(
+                    "tests/resources/misc/product_esurface_{}_symbolica_state.bin",
+                    esurface_id.0
+                ))
+                .unwrap();
+
+                symbolica::state::State::export(&mut symbolica_state_file).unwrap();
             }
+
             product
                 .execute::<Sequential, SmallestDegree, _, _>(TENSORLIB.read().unwrap().deref())
                 .unwrap();
