@@ -66,7 +66,14 @@ pub(crate) fn get_test_cli(
     run_card_path: Option<PathBuf>,
     state_path: impl AsRef<Path>,
     log_file_name: Option<String>,
+    clean: bool,
 ) -> Result<CLIState> {
+    if clean && state_path.as_ref().exists() {
+        clean_test(&State::new(
+            state_path.as_ref().to_path_buf(),
+            log_file_name.clone(),
+        ));
+    }
     let (mut cli, mut state) = new_cli_for_test(state_path, log_file_name);
     let cmds = if let Some(rc_path) = run_card_path {
         let mut run_card_cmds = run_card(rc_path)?;

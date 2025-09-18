@@ -30,6 +30,7 @@ fn qqx_aaa_subtracted_nlo_amplitude_test() -> Result<()> {
         Some("qqx_aaa_subtracted_nlo_amplitude.toml".into()),
         get_tests_workspace_path().join("qqx_aaa_subtracted_nlo_amplitude"),
         None,
+        false,
     )?;
 
     let a = Inspect {
@@ -52,6 +53,7 @@ fn trees() -> Result<()> {
         Some("trees/qqx_aaa.toml".into()),
         get_tests_workspace_path().join("qqx_aaa_tree"),
         None,
+        false,
     )?;
 
     let a = Inspect {
@@ -69,7 +71,7 @@ fn trees() -> Result<()> {
 
 #[test]
 fn photons_1l() -> Result<()> {
-    let mut cli = get_test_cli(Some("photons.toml".into()), "./tests/photons", None)?;
+    let mut cli = get_test_cli(Some("photons.toml".into()), "./tests/photons", None, false)?;
 
     // this can be moved to the run card once we have a set model param command
 
@@ -121,6 +123,7 @@ fn test_grouped_subtraction() -> Result<()> {
         Some("test_grouped_subtraction.toml".into()),
         get_tests_workspace_path().join("test_grouped_subtraction"),
         None,
+        false,
     )?;
 
     let int1 = Integrate {
@@ -181,6 +184,7 @@ fn scalar_box() -> Result<()> {
         Some("scalar_box.toml".into()),
         get_tests_workspace_path().join("scalar_box"),
         Some("scalar_box".to_string()),
+        false,
     )?;
 
     let a = Inspect {

@@ -810,7 +810,27 @@ pub fn parse_spec_with_model(
         .collect::<Result<Vec<_>, _>>()?;
 
     // Resolve vetoed particles to PDGs and validate they exist
-    let veto_pdgs = resolve_pdgs(model, &veto_names.iter().cloned().collect::<Vec<_>>())?;
+    let mut veto_pdgs = resolve_pdgs(model, &veto_names.iter().cloned().collect::<Vec<_>>())?;
+    if let Some(o) = only.clone() {
+        let only_vec = o.iter().cloned().collect::<Vec<_>>();
+        if !only_vec.is_empty() {
+            let only_pdgs = resolve_pdgs(model, &only_vec)?
+                .iter()
+                .map(|pdg| pdg.abs())
+                .collect::<Vec<_>>();
+
+            let all_pdgs = model
+                .particles
+                .iter()
+                .map(|p| p.pdg_code.abs() as i64)
+                .filter(|pdg| !only_pdgs.contains(&pdg))
+                .collect::<Vec<_>>();
+
+            veto_pdgs.extend(all_pdgs);
+            veto_pdgs.sort_unstable();
+            veto_pdgs.dedup();
+        }
+    }
 
     // Build FeynGenOptions with filters and PDGs
     let numerator_grouping = build_grouping_option(args);
@@ -1615,35 +1635,6 @@ fn parse_csv_list(s: &str) -> Vec<String> {
         .collect()
 }
 
-fn parse_loop_momentum_bases(s: &str) -> Option<HashMap<String, Vec<String>>> {
-    // Format: "B1=p1,p2;B2=q1,q2"
-    let mut out: HashMap<String, Vec<String>> = HashMap::default();
-    for kv in s.split(';') {
-        let kv = kv.trim();
-        if kv.is_empty() {
-            continue;
-        }
-        if let Some((k, v)) = kv.split_once('=') {
-            let key = k.trim().to_string();
-            let vals = v
-                .split(',')
-                .map(|x| x.trim().to_string())
-                .filter(|x| !x.is_empty())
-                .collect::<Vec<_>>();
-            if !key.is_empty() {
-                out.insert(key, vals);
-            }
-        } else {
-            // single name without '=' is allowed but ignored
-        }
-    }
-    if out.is_empty() {
-        None
-    } else {
-        Some(out)
-    }
-}
-
 // =================== Tests ===================
 
 #[cfg(test)]
@@ -1882,6 +1873,31 @@ mod tests {
 
         // u=2, d=1, u~=-2, e+=-11
         for pdg in [2_i64, 1_i64, -2_i64, -11_i64] {
+            assert!(set.contains(&pdg), "missing PDG {pdg} in veto");
+        }
+    }
+
+    #[test]
+    fn particle_inclusion_resolution_cross_section() {
+        use std::collections::BTreeSet;
+        test_initialise().unwrap();
+        // Veto both particles and anti-particles, plus a charged lepton
+        let ps = parse_ok_xs("e+ e- > mu+ mu- | u d u~ e+");
+        let xs_filters = &ps.process_definition.cross_section_filters.0;
+
+        let veto_pdgs = xs_filters
+            .iter()
+            .find_map(|f| match f {
+                FeynGenFilter::ParticleVeto(v) => Some(v.clone()),
+                _ => None,
+            })
+            .expect("ParticleVeto filter not found");
+        let set: BTreeSet<i64> = veto_pdgs.into_iter().collect();
+
+        for pdg in [
+            3, 4, 5, 6, 12, 13, 14, 15, 16, 21, 22, 23, 24, 25, 250, 251, 9000001, 9000002,
+            9000003, 9000004, 9000005,
+        ] {
             assert!(set.contains(&pdg), "missing PDG {pdg} in veto");
         }
     }
