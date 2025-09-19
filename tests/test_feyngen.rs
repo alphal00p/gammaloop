@@ -148,7 +148,7 @@ fn test_generate_sm_a_ddx() -> Result<()> {
     // Full particle contents
 
     assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{1}}] --symmetrize-left-right-states true")?,@"1 | -1");
-    // assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states false --compare-canonized-numerator true --number-of-samples-for-numerator-comparisons 0 --fully-numerical-substitution-when-comparing-numerators false")?,@"10 | -12+-27*G^2*Nc*TR*ee^-2+27*G^2*Nc^-1*TR*ee^-2");
+    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states false --compare-canonized-numerator true --number-of-samples-for-numerator-comparisons 0 --fully-numerical-substitution-when-comparing-numerators false")?,@"110 | -2*UFO::GC_3*UFO::GC_4^(-1)*UFO::GC_52*UFO::GC_53^(-1)+-2*UFO::GC_3^2*UFO::GC_4^(-2)+-32+3*UFO::GC_1*UFO::GC_2^(-1)+3*UFO::GC_1^2*UFO::GC_2^(-2)");
 
     // assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states true --compare-canonized-numerator true --number-of-samples-for-numerator-comparisons 0 --fully-numerical-substitution-when-comparing-numerators")?,@"10 | -12+-36*G^2*ee^-2");
     // assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states true --no-compare-canonized-numerator --number-of-samples-for-numerator-comparisons 3 --fully-numerical-substitution-when-comparing-numerators")?,@"10 | -12+-36*G^2*ee^-2");

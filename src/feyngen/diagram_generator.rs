@@ -69,7 +69,7 @@ use crate::{
     feyngen::{FeynGenFilter, GenerationType},
     model::Model,
 };
-use crate::{status_error, status_info};
+use crate::{status_debug, status_error, status_info};
 use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeData, Flow, Orientation};
 use linnet::half_edge::subgraph::{InternalSubGraph, OrientedCut, SubGraph};
@@ -1266,17 +1266,20 @@ impl ProcessDefinition {
                 .collect()
         } else {
             let mut reps = vec![];
-            for cpl in model.couplings.values() {
-                if cpl.value.is_some() {
-                    reps.push(Replacement::new(
-                        Atom::from(cpl.name).to_pattern(),
-                        cpl.expression.clone(),
-                    ));
-                }
-            }
+            // for cpl in model.couplings.values() {
+            //     if cpl.value.is_some() {
+            //         reps.push(Replacement::new(
+            //             Atom::from(cpl.name).to_pattern(),
+            //             cpl.expression.clone(),
+            //         ));
+            //     }
+            // }
             reps
         };
 
+        // for r in &reps {
+        //     status_info!("Model replacements: {}", r);
+        // }
         (reps, lib)
     }
 
@@ -2644,6 +2647,11 @@ impl ProcessDefinition {
             "[{elapsed_precise} | ETA: {eta_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} ({percent}%) {msg}",
         )
         .unwrap();
+        let mut cpl_reps: Vec<Replacement> = vec![];
+        for cpl in model.couplings.values() {
+            let [lhs, rhs] = cpl.rep_rule();
+            // cpl_reps.push(Replacement::new(lhs.to_pattern(), rhs));
+        }
 
         if self.final_pdgs_lists.is_empty() {
             return Err(FeynGenError::GenericError(
@@ -2681,7 +2689,7 @@ impl ProcessDefinition {
                 .expect("Failed to build default Rayon ThreadPool"),
         };
 
-        debug!(
+        status_debug!(
             "Generating Feynman diagrams over {} cores for model {} and process:\n{}",
             pool.current_num_threads(),
             model.name,
@@ -3767,6 +3775,8 @@ impl ProcessDefinition {
 
                         numerator.state.expr *=&bare_graph.global_prefactor.num * &bare_graph.global_prefactor.projector * &bare_graph.overall_factor;
 
+
+                        numerator.state.expr = numerator.state.expr.replace_multiple(&cpl_reps);
 
                         let numerator_color_simplified =
                             numerator.clone().color_simplify().get_single_atom().unwrap().canonize_spenso();

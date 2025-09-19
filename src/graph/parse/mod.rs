@@ -209,7 +209,7 @@ impl ParseGraph {
         symmetry_factor: Atom,
         external_connections: &[(Option<usize>, Option<usize>)],
     ) -> Result<Self> {
-        status_debug!("Input:{}", graph.to_dot());
+        debug!("Input:{}", graph.to_dot());
 
         let mut builder = HedgeGraphBuilder::new();
         let vertex_map = Self::build_vertex_map(graph, &mut builder);
@@ -387,7 +387,7 @@ impl ParseGraph {
         let mut generation_type: Option<GenerationType> = None;
 
         for (i, &(in_id, out_id)) in external_connections.iter().enumerate() {
-            status_debug!(
+            debug!(
                 "External connection {}: in_id={:?}, out_id={:?}",
                 i + 1,
                 in_id,
