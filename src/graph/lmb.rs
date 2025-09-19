@@ -25,8 +25,7 @@ use crate::{
     momentum::SignOrZero,
     momentum_sample::{ExternalIndex, LoopIndex},
     signature::{LoopExtSignature, SignatureLike},
-    symbolica_ext::CallSymbol,
-    utils::{GS, W_},
+    utils::{symbolica_ext::CallSymbol, GS, W_},
     GAMMALOOP_NAMESPACE,
 };
 

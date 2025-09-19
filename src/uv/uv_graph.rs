@@ -16,8 +16,7 @@ use crate::{
     graph::{Edge, FeynmanGraph, Graph, LMBext, LoopMomentumBasis, NumHedgeData, Vertex},
     momentum_sample::LoopIndex,
     numerator::{AppliedFeynmanRule, Numerator},
-    symbolica_ext::CallSymbol,
-    utils::{GS, W_},
+    utils::{symbolica_ext::CallSymbol, GS, W_},
 };
 
 use super::{is_not_paired, spenso_lor_atom, Wood};

@@ -1,4 +1,4 @@
-use std::cell::RefCell;
+use std::{cell::RefCell, fmt::Display};
 
 use eyre::Context;
 use linnet::{
@@ -19,6 +19,7 @@ use symbolica::{
 };
 
 use crate::{
+    feyngen::diagram_generator::EdgeColor,
     gammaloop_integrand::ParamBuilder,
     model::{ArcParticle, Model, UFOSymbol},
     momentum::Helicity,
@@ -59,6 +60,21 @@ impl From<()> for PossibleParticle {
 }
 
 impl PossibleParticle {
+    pub fn reverse(&self, model: &Model) -> Self {
+        match self {
+            PossibleParticle::Particle(p) => PossibleParticle::Particle(p.get_anti_particle(model)),
+            PossibleParticle::MassOverriddenParticle { particle, mass } => {
+                PossibleParticle::MassOverriddenParticle {
+                    particle: particle.get_anti_particle(model),
+                    mass: mass.clone(),
+                }
+            }
+            PossibleParticle::JustMass { expr } => {
+                PossibleParticle::JustMass { expr: expr.clone() }
+            }
+        }
+    }
+
     pub fn orientation(&self) -> Orientation {
         self.particle()
             .map(|a| {
@@ -273,6 +289,19 @@ pub struct ParseEdge {
     pub is_cut: Option<Hedge>,
 }
 
+impl ParseEdge {
+    pub fn from_symbolica_edge(
+        model: &Model,
+        edge_color: &EdgeColor,
+        is_cut: Option<Hedge>,
+    ) -> Self {
+        let particle = model.get_particle_from_pdg(edge_color.pdg);
+        let mut e = ParseEdge::new(particle);
+        e.is_cut = is_cut;
+        e
+    }
+}
+
 impl From<&ParseEdge> for DotEdgeData {
     fn from(value: &ParseEdge) -> Self {
         let mut e = DotEdgeData::empty();
@@ -307,6 +336,12 @@ impl From<&ParseEdge> for DotEdgeData {
         // e.add_statement("color_num", value.color_num.to_quoted());
         e.add_statement("is_dummy", value.is_dummy);
         e
+    }
+}
+
+impl Display for ParseEdge {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        DotEdgeData::from(self).fmt(f)
     }
 }
 

@@ -30,7 +30,6 @@ pub mod observables;
 pub mod processes;
 pub mod signature;
 pub mod subtraction;
-pub mod symbolica_ext;
 pub mod tests;
 // pub mod tests_from_pytest;
 pub mod utils;

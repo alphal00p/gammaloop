@@ -10,8 +10,10 @@ use crate::{
     graph::{Edge, Graph, LMBext, LoopMomentumBasis, Vertex},
     momentum::Sign,
     numerator::{symbolica_ext::AtomCoreExt, ParsingNet},
-    symbolica_ext::CallSymbol,
-    utils::{symbolica_ext::LOGPRINTOPTS, GS, W_},
+    utils::{
+        symbolica_ext::{CallSymbol, LOGPRINTOPTS},
+        GS, W_,
+    },
 };
 use ahash::AHashSet;
 use bitvec::vec::BitVec;

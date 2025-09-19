@@ -1,15 +1,13 @@
 use itertools::Itertools;
 use linnet::{
-    half_edge::{
-        involution::Orientation, nodestore::BitVecNeighborIter, EdgeAccessors, HedgeGraph,
-        NodeIndex,
-    },
+    half_edge::{nodestore::BitVecNeighborIter, HedgeGraph, NodeIndex},
     parser::DotVertexData,
 };
 
 use symbolica::atom::Atom;
 
 use crate::{
+    feyngen::diagram_generator::NodeColorWithVertexRule,
     model::{ArcParticle, ArcVertexRule, Model},
     GammaLoopContext,
 };
@@ -20,7 +18,7 @@ use super::{
     edge::ParseEdge,
     global::ParseData,
     hedge_data::ParseHedge,
-    parse::{StripParse, ToQuoted},
+    parse::{extract_oriented_particles_from_vertex_hedges, StripParse, ToQuoted},
 };
 
 #[derive(Debug, Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
@@ -112,39 +110,11 @@ pub trait ParticleEdge {
     fn is_dummy(&self) -> bool;
 }
 
-pub trait NodeCrownExt {
-    fn all_incoming_particles(&self, node: NodeIndex) -> Vec<ArcParticle>;
+impl From<&NodeColorWithVertexRule> for ParseVertex {
+    fn from(value: &NodeColorWithVertexRule) -> Self {
+        value.vertex_rule.clone().into()
+    }
 }
-
-// impl<E: ParticleEdge, V, N: NodeStorageOps<NodeData = V>, H> NodeCrownExt
-//     for HedgeGraph<E, V, H, N>
-// {
-//     fn all_incoming_particles(&self, node: NodeIndex) -> Vec<ArcParticle> {
-//         let mut particles: Vec<ArcParticle> = self
-//             .iter_crown(node)
-//             .filter_map(|h| {
-//                 let eid = self[&h];
-//                 if self[eid].is_dummy() {
-//                     return None;
-//                 }
-
-//                 let particle = match g.orientation(h).reverse().relative_to(g.flow(h)) {
-//                     Orientation::Reversed => {
-//                         println!("Reverse");
-//                         g[eid].particle.particle()?.get_anti_particle(model)
-//                     }
-//                     _ => g[eid].particle.particle()?.clone(),
-//                 };
-
-//                 println!("Local Particle to node: {node_id}: {}", particle.name);
-//                 Some(particle)
-//             })
-//             .collect();
-//         particles.sort();
-//         particles
-//     }
-// }
-
 impl ParseVertex {
     pub(crate) fn parse<'a>(
         model: &'a Model,
@@ -187,24 +157,12 @@ impl ParseVertex {
                     num: None,
                 })
             } else {
-                let mut node_id = NodeIndex(0);
-                let mut particles: Vec<ArcParticle> = n
-                    .filter_map(|h| {
-                        node_id = g.node_id(h);
-                        let eid = g[&h];
-                        if g[eid].is_dummy {
-                            return None;
-                        }
-                        let particle = match g.orientation(h).reverse().relative_to(g.flow(h)) {
-                            Orientation::Reversed => {
-                                g[eid].particle.particle()?.get_anti_particle(model)
-                            }
-                            _ => g[eid].particle.particle()?.clone(),
-                        };
-
-                        Some(particle)
-                    })
-                    .collect();
+                let node_id = n
+                    .clone()
+                    .next()
+                    .map(|h| g.node_id(h))
+                    .unwrap_or(NodeIndex(0));
+                let mut particles = extract_oriented_particles_from_vertex_hedges(g, n, model);
                 particles.sort();
 
                 let res = model.particle_set_to_vertex_rules_map.get(&particles);

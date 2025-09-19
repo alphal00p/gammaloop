@@ -1,13 +1,13 @@
 use std::sync::LazyLock;
 
-use crate::symbolica_ext::CallSymbol;
-use crate::utils::{GS, W_};
+use crate::utils::symbolica_ext::LOGPRINTOPTS;
+use crate::utils::{symbolica_ext::CallSymbol, GS, W_};
 use idenso::color::CS;
 use idenso::gamma::AGS;
 use idenso::representations::{
     Bispinor, ColorAdjoint, ColorAntiFundamental, ColorAntiSextet, ColorFundamental, ColorSextet,
 };
-use linnet::half_edge::involution::EdgeIndex;
+use linnet::half_edge::involution::{EdgeIndex, Flow};
 use spenso::network::library::symbolic::ETS;
 use spenso::structure::representation::{LibraryRep, Minkowski, RepName};
 use spenso::structure::slot::{IsAbstractSlot, Slot};
@@ -22,6 +22,7 @@ use symbolica::{
     function,
     id::Replacement,
 };
+use tracing::debug;
 
 use super::aind::Aind;
 
@@ -118,7 +119,7 @@ impl UFOSymbols {
     pub(crate) fn reindex_spin(
         &self,
         slots: &[&OrderedStructure<LibraryRep, Aind>],
-        momenta: &[EdgeIndex],
+        momenta: &[(Flow, EdgeIndex)],
         mut atom: Atom,
         dummy: impl Fn(usize) -> Aind,
     ) -> Atom {
@@ -128,7 +129,7 @@ impl UFOSymbols {
         // for s in slots {
         //     println!("{}", s);
         // }
-        // debug!(in = atom.printer(LOGPRINTOPTS).to_string());
+        debug!(in = atom.printer(LOGPRINTOPTS).to_string());
 
         atom = self.normalize_complex(atom);
         for (i, s) in slots.iter().enumerate() {
@@ -384,7 +385,7 @@ impl UFOSymbols {
             }
         });
 
-        // debug!(after_dummies = atom.printer(LOGPRINTOPTS).to_string());
+        debug!(after_dummies = atom.printer(LOGPRINTOPTS).to_string());
         // debug!("After dummies{}", atom);
 
         let reps: Vec<_> = [
@@ -461,7 +462,7 @@ impl UFOSymbols {
                                 gamma = gamma.add_arg(minki.to_atom());
 
                                 *out = gamma.finish()
-                                    * GS.emr_mom(momenta[i as usize], minki.to_atom());
+                                    * GS.emr_mom(momenta[i as usize].1, minki.to_atom());
 
                                 return true;
                             }
@@ -475,7 +476,7 @@ impl UFOSymbols {
 
                         gamma = gamma.add_arg(minki.to_atom());
 
-                        *out = gamma.finish() * GS.emr_mom(momenta[0], minki.to_atom());
+                        *out = gamma.finish() * GS.emr_mom(momenta[0].1, minki.to_atom());
 
                         return true;
                     }
@@ -484,17 +485,20 @@ impl UFOSymbols {
             false
         });
 
-        for (i, e) in momenta.iter().enumerate() {
+        for (i, (f, e)) in momenta.iter().enumerate() {
             atom = atom
-                .replace(function!(UFO.momentum, i as i64, W_.a_))
-                .with(GS.emr_mom(*e, W_.a_))
+                .replace(function!(UFO.momentum, W_.a_, (i + 1) as i64))
+                .with(match f {
+                    Flow::Sink => GS.emr_mom(*e, W_.a_),
+                    Flow::Source => -GS.emr_mom(*e, W_.a_),
+                })
         }
 
         atom = atom
             .replace(function!(UFO.momentum, W_.a_))
-            .with(GS.emr_mom(momenta[0], W_.a_));
+            .with(GS.emr_mom(momenta[0].1, W_.a_));
 
-        // debug!(out = atom.printer(LOGPRINTOPTS).to_string());
+        debug!(out = atom.printer(LOGPRINTOPTS).to_string());
         // println!("out:{atom:#}");
         atom
     }

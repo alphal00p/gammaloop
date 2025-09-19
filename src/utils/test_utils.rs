@@ -29,7 +29,7 @@ pub mod test {
     use spenso::structure::abstract_index::AIND_SYMBOLS;
     use symbolica::{atom::AtomCore, parse_lit};
 
-    use crate::{symbolica_ext::CallSymbol, utils::GS};
+    use crate::utils::{symbolica_ext::CallSymbol, GS};
 
     #[test]
     fn normalization() {

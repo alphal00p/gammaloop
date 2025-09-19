@@ -1265,7 +1265,16 @@ impl ProcessDefinition {
                 })
                 .collect()
         } else {
-            vec![]
+            let mut reps = vec![];
+            for cpl in model.couplings.values() {
+                if cpl.value.is_some() {
+                    reps.push(Replacement::new(
+                        Atom::from(cpl.name).to_pattern(),
+                        cpl.expression.clone(),
+                    ));
+                }
+            }
+            reps
         };
 
         (reps, lib)
@@ -2625,7 +2634,6 @@ impl ProcessDefinition {
         Ok(n_fermion_loops)
     }
 
-    #[allow(clippy::too_many_arguments)]
     #[instrument(skip_all)]
     pub fn generate(
         &self,
@@ -4365,6 +4373,7 @@ impl ProcessedNumeratorForComparison {
                     &[W_.x___],
                 );
 
+                debug!("Initial Numerator{numerator}");
                 numerator = numerator.replace_multiple(&lmb_reps);
 
                 let canonized_numerator = if group_options.test_canonized_numerator {
@@ -4420,11 +4429,18 @@ impl ProcessedNumeratorForComparison {
                                 // let c = ProcessDefinition::substitute_color_factors(c.as_view())
                                 //     .expand();
 
-                                let scalar: Atom = net
-                                    .result_scalar()
+                                let scalar = net
+                                    .result_scalar();
+
+                                if scalar.is_err(){
+                                    debug!("Failed scalar for {} for graph:{}",net.dot_pretty(),graph.debug_dot());
+                                }
+
+                                let scalar:Atom = scalar
                                     .expect(&format!(
-                                        "Expected scalar for c:{c} l:{l} that yields net:{}",
+                                        "Expected scalar for c:{c} l:{l} that yields net:{} for graph {}",
                                         net.dot_pretty()
+                                        ,graph.debug_dot()
                                     ))
                                     .into();
                                 let a = ProcessDefinition::substitute_color_factors(

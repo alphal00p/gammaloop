@@ -6,8 +6,7 @@ use crate::{
     graph::{Edge, Graph, Vertex},
     momentum::SignOrZero,
     numerator::{symbolica_ext::AtomCoreExt, ParsingNet},
-    symbolica_ext::CallSymbol,
-    utils::{ose_atom_from_index, GS},
+    utils::{ose_atom_from_index, symbolica_ext::CallSymbol, GS},
     uv::approx::CFFapprox,
 };
 use bitvec::vec::BitVec;

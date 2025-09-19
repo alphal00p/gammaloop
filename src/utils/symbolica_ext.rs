@@ -1,8 +1,13 @@
 use bincode_trait_derive::{Decode, Encode};
 use schemars::{json_schema, JsonSchema};
 use serde::{Deserialize, Serialize};
+use std::{
+    fmt::Display,
+    ops::{Deref, DerefMut},
+    sync::LazyLock,
+};
 use symbolica::{
-    atom::{Atom, AtomCore},
+    atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol},
     domains::{
         algebraic_number::AlgebraicExtension,
         integer::IntegerRing,
@@ -13,13 +18,9 @@ use symbolica::{
     printer::{PrintMode, PrintOptions},
 };
 
-use std::{
-    fmt::Display,
-    ops::{Deref, DerefMut},
-    sync::LazyLock,
-};
-
 use crate::GammaLoopContext;
+
+use super::{GS, W_};
 
 pub static Q_I: LazyLock<AlgebraicExtension<FractionField<IntegerRing>>> =
     LazyLock::new(|| AlgebraicExtension::new_complex(Q));
@@ -100,5 +101,148 @@ impl<'de> Deserialize<'de> for StringSerializedAtom {
         Ok(StringSerializedAtom(parse!(String::deserialize(
             deserializer
         )?)))
+    }
+}
+
+pub trait DOD {
+    fn dod(&self) -> i32;
+}
+
+impl DOD for Atom {
+    fn dod(&self) -> i32 {
+        self.as_view().dod()
+    }
+}
+impl DOD for AtomView<'_> {
+    fn dod(&self) -> i32 {
+        let rescaled = self
+            .replace(GS.emr_mom.f(&[W_.a__]))
+            .with(GS.emr_mom.f(&[W_.a__]) * GS.rescale);
+
+        let series = rescaled
+            .series(GS.rescale, Atom::Zero, (4, 1).into(), true)
+            .unwrap();
+
+        let dod = series.degree();
+
+        if dod.is_integer() {
+            dod.numerator().to_i64().unwrap() as i32
+        } else {
+            panic!("{dod} for {self}")
+        }
+    }
+}
+
+pub trait CallSymbol<T> {
+    fn f(&self, args: T) -> Atom;
+}
+
+impl<'a, I> CallSymbol<&'a [I]> for Symbol
+where
+    &'a I: Into<AtomOrView<'a>>,
+{
+    fn f(&self, args: &'a [I]) -> Atom {
+        FunctionBuilder::new(*self).add_args(args).finish()
+    }
+}
+impl<'a, I, const N: usize> CallSymbol<&'a [I; N]> for Symbol
+where
+    &'a I: Into<AtomOrView<'a>>,
+{
+    fn f(&self, args: &'a [I; N]) -> Atom {
+        FunctionBuilder::new(*self).add_args(args).finish()
+    }
+}
+
+impl<'a, 'b, I, J> CallSymbol<(&'a [I], &'b [J])> for Symbol
+where
+    &'a I: Into<AtomOrView<'a>>,
+    &'b J: Into<AtomOrView<'b>>,
+{
+    fn f(&self, args: (&'a [I], &'b [J])) -> Atom {
+        FunctionBuilder::new(*self)
+            .add_args(args.0)
+            .add_args(args.1)
+            .finish()
+    }
+}
+
+impl<'a, 'b, I, J, const N: usize> CallSymbol<(&'a [I; N], &'b [J])> for Symbol
+where
+    &'a I: Into<AtomOrView<'a>>,
+    &'b J: Into<AtomOrView<'b>>,
+{
+    fn f(&self, args: (&'a [I; N], &'b [J])) -> Atom {
+        FunctionBuilder::new(*self)
+            .add_args(args.0.as_slice())
+            .add_args(args.1)
+            .finish()
+    }
+}
+
+impl<'a, 'b, I, J, const N: usize, const M: usize> CallSymbol<(&'a [I; N], &'b [J; M])> for Symbol
+where
+    &'a I: Into<AtomOrView<'a>>,
+    &'b J: Into<AtomOrView<'b>>,
+{
+    fn f(&self, args: (&'a [I; N], &'b [J; M])) -> Atom {
+        FunctionBuilder::new(*self)
+            .add_args(args.0.as_slice())
+            .add_args(args.1)
+            .finish()
+    }
+}
+impl<'a, 'b, 'c, I, J, K, const N: usize, const M: usize, const O: usize>
+    CallSymbol<(&'a [I; N], &'b [J; M], &'c [K; O])> for Symbol
+where
+    &'a I: Into<AtomOrView<'a>>,
+    &'b J: Into<AtomOrView<'b>>,
+    &'c K: Into<AtomOrView<'c>>,
+{
+    fn f(&self, args: (&'a [I; N], &'b [J; M], &'c [K; O])) -> Atom {
+        FunctionBuilder::new(*self)
+            .add_args(args.0.as_slice())
+            .add_args(args.1)
+            .add_args(args.2)
+            .finish()
+    }
+}
+
+impl<I, const N: usize> CallSymbol<[I; N]> for Symbol
+where
+    for<'a> &'a I: Into<AtomOrView<'a>>,
+{
+    fn f(&self, args: [I; N]) -> Atom {
+        FunctionBuilder::new(*self)
+            .add_args(args.as_slice())
+            .finish()
+    }
+}
+
+impl<'b, I, J, const N: usize> CallSymbol<([I; N], &'b [J])> for Symbol
+where
+    for<'a> &'a I: Into<AtomOrView<'a>>,
+    &'b J: Into<AtomOrView<'b>>,
+{
+    fn f(&self, args: ([I; N], &'b [J])) -> Atom {
+        FunctionBuilder::new(*self)
+            .add_args(args.0.as_slice())
+            .add_args(args.1)
+            .finish()
+    }
+}
+
+impl<'a, I, J, K> CallSymbol<(&'a [I], &'a [J], &'a [K])> for Symbol
+where
+    &'a I: Into<AtomOrView<'a>>,
+    &'a J: Into<AtomOrView<'a>>,
+    &'a K: Into<AtomOrView<'a>>,
+{
+    fn f(&self, args: (&'a [I], &'a [J], &'a [K])) -> Atom {
+        FunctionBuilder::new(*self)
+            .add_args(args.0)
+            .add_args(args.1)
+            .add_args(args.2)
+            .finish()
     }
 }
