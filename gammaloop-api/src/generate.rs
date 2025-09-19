@@ -1268,7 +1268,7 @@ fn feyngen_from_spec_args(
         let (lo, hi) = a
             .n_cut_blobs
             .as_ref()
-            .and_then(|v| v.first().zip(v.get(1)).map(|(x, y)| (*x, *y)))
+            .and_then(|v| Some((v[0], v[1])))
             .unwrap_or((1, 1));
         lo..=hi
     };
@@ -1276,7 +1276,7 @@ fn feyngen_from_spec_args(
         let (lo, hi) = a
             .n_cut_spectators
             .as_ref()
-            .and_then(|v| v.first().zip(v.get(1)).map(|(x, y)| (*x, *y)))
+            .and_then(|v| Some((v[0], v[1])))
             .unwrap_or((0, 0));
         lo..=hi
     };
@@ -1418,13 +1418,16 @@ fn feyngen_from_spec_args(
 
     // Self-energy / snails / tadpoles with detailed veto flags:
     if filter_selfenergies {
-        let se = SelfEnergyFilterOptions {
-            veto_self_energy_of_massive_lines: a.veto_self_energy_of_massive_lines.unwrap_or(false),
-            veto_self_energy_of_massless_lines: a
-                .veto_self_energy_of_massless_lines
-                .unwrap_or(false),
-            veto_only_scaleless_self_energy: a.veto_only_scaleless_self_energy.unwrap_or(false),
-        };
+        let mut se = SelfEnergyFilterOptions::default();
+        if let Some(opt) = a.veto_self_energy_of_massive_lines {
+            se.veto_self_energy_of_massive_lines = opt;
+        }
+        if let Some(opt) = a.veto_self_energy_of_massless_lines {
+            se.veto_self_energy_of_massless_lines = opt;
+        }
+        if let Some(opt) = a.veto_only_scaleless_self_energy {
+            se.veto_only_scaleless_self_energy = opt;
+        }
         let filt = FeynGenFilter::SelfEnergyFilter(se);
         if fg.generation_type == GenerationType::Amplitude {
             amp_filters.push(filt);
@@ -1433,15 +1436,16 @@ fn feyngen_from_spec_args(
         }
     }
     if filter_snails {
-        let sn = SnailFilterOptions {
-            veto_snails_attached_to_massive_lines: a
-                .veto_snails_attached_to_massive_lines
-                .unwrap_or(false),
-            veto_snails_attached_to_massless_lines: a
-                .veto_snails_attached_to_massless_lines
-                .unwrap_or(false),
-            veto_only_scaleless_snails: a.veto_only_scaleless_snails.unwrap_or(false),
-        };
+        let mut sn = SnailFilterOptions::default();
+        if let Some(opt) = a.veto_snails_attached_to_massive_lines {
+            sn.veto_snails_attached_to_massive_lines = opt;
+        }
+        if let Some(opt) = a.veto_snails_attached_to_massless_lines {
+            sn.veto_snails_attached_to_massless_lines = opt;
+        }
+        if let Some(opt) = a.veto_only_scaleless_snails {
+            sn.veto_only_scaleless_snails = opt;
+        }
         let filt = FeynGenFilter::ZeroSnailsFilter(sn);
         if fg.generation_type == GenerationType::Amplitude {
             amp_filters.push(filt);
@@ -1450,15 +1454,16 @@ fn feyngen_from_spec_args(
         }
     }
     if filter_tadpoles {
-        let td = TadpolesFilterOptions {
-            veto_tadpoles_attached_to_massive_lines: a
-                .veto_tadpoles_attached_to_massive_lines
-                .unwrap_or(false),
-            veto_tadpoles_attached_to_massless_lines: a
-                .veto_tadpoles_attached_to_massless_lines
-                .unwrap_or(false),
-            veto_only_scaleless_tadpoles: a.veto_only_scaleless_tadpoles.unwrap_or(false),
-        };
+        let mut td = TadpolesFilterOptions::default();
+        if let Some(opt) = a.veto_tadpoles_attached_to_massive_lines {
+            td.veto_tadpoles_attached_to_massive_lines = opt;
+        }
+        if let Some(opt) = a.veto_tadpoles_attached_to_massless_lines {
+            td.veto_tadpoles_attached_to_massless_lines = opt;
+        }
+        if let Some(opt) = a.veto_only_scaleless_tadpoles {
+            td.veto_only_scaleless_tadpoles = opt;
+        }
         let filt = FeynGenFilter::TadpolesFilter(td);
         if fg.generation_type == GenerationType::Amplitude {
             amp_filters.push(filt);
@@ -1471,9 +1476,11 @@ fn feyngen_from_spec_args(
     if fg.generation_type == GenerationType::CrossSection
         && a.filter_cross_section_tadpoles.unwrap_or(false)
     {
-        xs_filters.push(FeynGenFilter::SewedFilter(SewedFilterOptions {
-            filter_tadpoles: true,
-        }));
+        if let Some(opt) = a.filter_cross_section_tadpoles {
+            xs_filters.push(FeynGenFilter::SewedFilter(SewedFilterOptions {
+                filter_tadpoles: opt,
+            }));
+        }
     }
 
     fg.amplitude_filters = FeynGenFilters(amp_filters);
