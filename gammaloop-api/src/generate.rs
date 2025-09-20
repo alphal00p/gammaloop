@@ -235,6 +235,9 @@ pub struct SpecArgs {
     /// Filter self-loop (explicit; default false)
     #[arg(long = "filter-self-loop")]
     pub filter_self_loop: Option<bool>,
+
+    #[arg(long = "filter-zero-flow-edges")]
+    pub filter_zero_flow_edges: Option<bool>,
 }
 
 // =================== Runner ===================
@@ -304,7 +307,7 @@ impl Generate {
                 let graphs = spec
                     .process_definition
                     .generate(model, args.num_threads.map(|n| n as usize))?;
-                println!(
+                status_info!(
                     "Generated {} {} graphs.",
                     if matches!(self.mode, Some(GenerateCmd::Amp(_))) {
                         "amplitude"
@@ -879,6 +882,8 @@ pub fn parse_spec_with_model(
             .unwrap_or(NumeratorAwareGraphGroupingOption::NoGrouping)
         });
     spec.process_definition.filter_self_loop = args.filter_self_loop.unwrap_or(false);
+    spec.process_definition.filter_zero_flow_edges = args.filter_zero_flow_edges.unwrap_or(true);
+
     spec.process_definition.graph_prefix = args
         .graph_prefix
         .clone()
@@ -1719,6 +1724,7 @@ mod tests {
             graph_prefix: None,
             max_multiplicity_for_fast_cut_filter: 6,
             filter_self_loop: None,
+            filter_zero_flow_edges: None,
             process_name: None,
             append: false,
             integrand_name: None,

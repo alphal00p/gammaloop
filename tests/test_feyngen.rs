@@ -123,9 +123,9 @@ fn cp_fix_from_symbolica()->Result<()>{
     let mut cli = get_test_cli(None,get_tests_workspace_path().join("feyn_gen_generation_test"),Some("feyngen".to_string()),true)?;
 
     // Choose the model to consider
-    cli.run_command("import model sm.json")?;
+    cli.run_command("import model sm-default.json")?;
 
-    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states true --numerator-grouping group_identical_graphs_up_to_scalar_rescaling -n 1")?,@"78 | -26");
+    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states true --numerator-grouping group_identical_graphs_up_to_scalar_rescaling -n 1 --filter-zero-flow-edges false")?,@"78 | -26");
     Ok(())
 }
 

@@ -50,6 +50,7 @@ pub struct ProcessDefinition {
     pub process_id: usize,
     pub numerator_grouping: NumeratorAwareGraphGroupingOption,
     pub filter_self_loop: bool,
+    pub filter_zero_flow_edges: bool,
     pub graph_prefix: String,
     pub selected_graphs: Option<Vec<String>>,
     pub vetoed_graphs: Option<Vec<String>>,
@@ -126,6 +127,7 @@ impl Default for ProcessDefinition {
             vetoed_graphs: None,
             loop_momentum_bases: None,
             prefactor: GlobalPrefactor::default(),
+            filter_zero_flow_edges: true,
         }
     }
 }

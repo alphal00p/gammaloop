@@ -211,8 +211,12 @@ impl ImportModel {
                 }
                 state.model = Model::from_str(json_model, "json")?;
                 state.model_parameters = if let Some(json_restriction) = json_restriction {
-                    let param_card = InputParamCard::from_str(json_restriction, "json")?;
-                    state.model.apply_param_card(&param_card)?;
+                    let mut param_card = InputParamCard::from_str(json_restriction, "json")?;
+                    if self.simplify_model {
+                        state.model.simplify(&mut param_card)?;
+                    } else {
+                        state.model.apply_param_card(&param_card)?;
+                    }
                     param_card
                 } else {
                     InputParamCard::default_from_model(&state.model)

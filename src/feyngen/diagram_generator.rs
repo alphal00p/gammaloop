@@ -2866,6 +2866,7 @@ impl ProcessDefinition {
         // Record the start time
         let start = Instant::now();
         let mut last_step = start;
+
         status_info!(
             "{} | Δ={} | {:<95}",
             format!("{:<6}", utils::format_wdhms(0)).blue().bold(),
@@ -2879,7 +2880,76 @@ impl ProcessDefinition {
             GenerationSettings::new()
         }
         .max_loops(self.loop_count_range.1)
-        .allow_self_loops(!self.filter_self_loop);
+        .allow_self_loops(!self.filter_self_loop)
+        .allow_zero_flow_edges(!self.filter_zero_flow_edges);
+
+        // println!("max_bridges = {:#?}", filters.get_max_bridge());
+        // println!("loop_count = {:#?}", self.loop_count_range.1);
+        // println!("self.filter_self_loop = {:#?}", self.filter_self_loop);
+        // println!(
+        //     "len external_edges_for_generation = {}",
+        //     external_edges_for_generation.len()
+        // );
+        // println!(
+        //     "len external_edges_for_generation = {}",
+        //     vertex_signatures_for_generation.len()
+        // );
+
+        // println!(
+        //     "external_edges_for_generation={:?}",
+        //     external_edges_for_generation
+        // );
+        // println!(
+        //     "vertex_signatures_for_generation=\n{:?}",
+        //     vertex_signatures_for_generation
+        // );
+
+        // println!(
+        //     "vertex_signatures_for_generation=\nvec![{:?}]",
+        //     vertex_signatures_for_generation
+        //         .iter()
+        //         .map(|v| {
+        //             format!(
+        //                 "vec![{}]",
+        //                 v.iter()
+        //                     .map(|e| format!("{:?}", e),)
+        //                     .collect::<Vec<_>>()
+        //                     .join(", ")
+        //             )
+        //         })
+        //         .collect::<Vec<_>>()
+        //         .join(", ")
+        // );
+
+        // println!(
+        //     "vertex_signatures_for_generation bis=\n{:?}",
+        //     vertex_signatures_for_generation
+        //         .iter()
+        //         .map(|v| {
+        //             v.iter()
+        //                 .map(|(orientation, edge_color)| {
+        //                     // (
+        //                     //     *orientation,
+        //                     //     format!(
+        //                     //         "{}{}",
+        //                     //         edge_color.pdg,
+        //                     //         model
+        //                     //             .get_particle_from_pdg(edge_color.pdg)
+        //                     //             .0
+        //                     //             .name
+        //                     //             .to_string()
+        //                     //     ),
+        //                     // )
+        //                     model
+        //                         .get_particle_from_pdg(edge_color.pdg)
+        //                         .0
+        //                         .name
+        //                         .to_string()
+        //                 })
+        //                 .collect::<Vec<_>>()
+        //         })
+        //         .collect::<Vec<_>>()
+        // );
 
         let mut graphs = match SymbolicaGraph::generate(
             external_edges_for_generation.as_slice(),
@@ -3682,6 +3752,28 @@ impl ProcessDefinition {
             format!("{}", 0).green().bold(),
         ));
 
+        // The quantity 'cuts_per_graph' below is only for debugging, remove its filling if too slow
+        #[allow(unused_mut)]
+        let mut cuts_per_graph: AHashMap<String, Vec<Vec<isize>>> = AHashMap::default();
+        // This function 'half_edge_filters' no longer returns the number of active cuts (it used to returned all of them as Vec<Vec<isize>>)
+        // A modified version without early termination would need to be used instead
+        // canonized_processed_graphs
+        //     .iter()
+        //     .enumerate()
+        //     .for_each(|(i_g, canonical_graph)| {
+        //         let graph_name = format!("{}{}", self.graph_prefix, i_g);
+        //         cuts_per_graph.insert(
+        //             graph_name.clone(),
+        //             self.half_edge_filters(
+        //                 model,
+        //                 &canonical_graph.graph,
+        //                 &external_connections,
+        //                 n_unresolved,
+        //                 &unresolved_type,
+        //             ),
+        //         );
+        //     });
+
         let samples: Vec<_> = if let Some(opts) = self.numerator_grouping.get_options() {
             let mut sample_iterator = PrimeIteratorU64::new(1);
             sample_iterator.nth(opts.numerical_sample_seed as usize);
@@ -4044,6 +4136,30 @@ impl ProcessDefinition {
             total_sym_factor =
                 total_sym_factor + evaluate_overall_factor(g.overall_factor.as_view());
         }
+        status_debug!(
+            "Graphs: [\n{}\n]",
+            bare_graphs
+                .iter()
+                .map(|(_graph_id, graph)| {
+                    let n_cuts_str = if let Some(cuts) = cuts_per_graph.get(&graph.name.to_string())
+                    {
+                        format!(" ({} cuts)", cuts.len())
+                    } else {
+                        String::from("")
+                    };
+                    format!(
+                        "{:-6} @ {} = {{{}}}{}",
+                        graph.name.clone(),
+                        evaluate_overall_factor(graph.overall_factor.as_view())
+                            .expand()
+                            .to_canonical_string(),
+                        graph.overall_factor,
+                        n_cuts_str
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("\n"),
+        );
         status_info!(
             "( Sum of the symmetry factors from each graph generated = {} ) ",
             format!("{}", total_sym_factor).green()

@@ -75,6 +75,7 @@ fn cut_content() {
         prefactor: GlobalPrefactor::default(),
         selected_graphs: None,
         vetoed_graphs: None,
+        filter_zero_flow_edges: true,
     };
 
     let mut graph = SymbolicaGraph::new();
@@ -255,6 +256,7 @@ fn cut_content() {
         prefactor: GlobalPrefactor::default(),
         selected_graphs: None,
         vetoed_graphs: None,
+        filter_zero_flow_edges: true,
     };
 
     let (n_unresolved, unresolved_type) = process_definition.unresolved_cut_content(&model);
@@ -352,6 +354,7 @@ pub(crate) fn dis_options_impl(
         prefactor: GlobalPrefactor::default(),
         selected_graphs: None,
         vetoed_graphs: None,
+        filter_zero_flow_edges: true,
     }
 }
 

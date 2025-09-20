@@ -2,14 +2,16 @@ use crate::momentum::Helicity;
 use crate::numerator::aind::Aind;
 use crate::utils::serde_utils::SmartSerde;
 use crate::utils::{self, F};
-use crate::HasModel;
+use crate::{status_info, HasModel};
 use ahash::{AHashMap, HashSet, RandomState};
 use bincode::{Decode, Encode};
+use color_eyre::owo_colors::OwoColorize;
 use color_eyre::Report;
 use eyre::eyre;
 use itertools::Itertools;
 use linnet::half_edge::drawing::Decoration;
 use linnet::half_edge::involution::Flow;
+
 use rand::rngs::SmallRng;
 use rand::{Rng, SeedableRng};
 use serde::de::DeserializeOwned;
@@ -1342,6 +1344,153 @@ impl Model {
         Ok(())
     }
 
+    pub fn simplify(
+        &mut self,
+        model_parameters: &mut InputParamCard<F<f64>>,
+    ) -> Result<(), Report> {
+        self.apply_param_card(model_parameters)?;
+        self.recompute_dependents()?;
+
+        // Remove zero parameters from the input card
+        model_parameters.data = model_parameters
+            .data
+            .iter()
+            .filter(|(_, v)| v.re != F::<f64>::from_f64(0.0) || v.im != F::<f64>::from_f64(0.0))
+            .map(|(k, v)| (k.clone(), *v))
+            .collect::<HashMap<UFOSymbol, Complex<F<f64>>>>();
+
+        // Set all external parameters with value 0 to constant internal parameters with expression zero.
+        let mut removed_parameters = vec![];
+        for (_p_name, param) in self.parameters.iter_mut() {
+            if param.nature == ParameterNature::External {
+                if let Some(value) = param.value {
+                    if value == Complex::new(F(0.0), F(0.0)) {
+                        param.value = Some(Complex::new(F(0.0), F(0.0)));
+                        param.expression = Some(parse!("UFO::ZERO"));
+                        param.nature = ParameterNature::Internal;
+                        removed_parameters.push(param.name);
+                    }
+                }
+            }
+        }
+
+        if removed_parameters.len() > 0 {
+            status_info!(
+                "The following {} external parameters were forced to zero by the restriction card:\n{}",
+                format!("{}", removed_parameters.len()).green(),
+                format!(
+                    "{}",
+                    removed_parameters
+                        .iter()
+                        .map(|p| p.to_string())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+                .blue(),
+            );
+        }
+
+        // Remove all vertices with zero couplings
+        let mut retained_vertex_rules = vec![];
+        let mut removed_vertex_rules = vec![];
+        for v in self.vertex_rules.iter() {
+            let mut new_vr = (*v).0.as_ref().clone();
+            for row in new_vr.couplings.iter_mut() {
+                *row = row
+                    .iter()
+                    .map(|c_opt| {
+                        if let Some(c) = c_opt {
+                            if let Some(cpl) = self.couplings.get(&c) {
+                                if let Some(value) = cpl.value {
+                                    if value == Complex::new(0.0, 0.0) {
+                                        None
+                                    } else {
+                                        Some(*c)
+                                    }
+                                } else {
+                                    Some(*c)
+                                }
+                            } else {
+                                Some(*c)
+                            }
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<Vec<_>>();
+            }
+            if new_vr
+                .couplings
+                .iter()
+                .all(|row| row.iter().all(|c| c.is_none()))
+            {
+                removed_vertex_rules.push(new_vr);
+            } else {
+                retained_vertex_rules.push(new_vr);
+            }
+        }
+
+        self.vertex_rules = retained_vertex_rules
+            .into_iter()
+            .map(|vr| ArcVertexRule(Arc::new(vr)))
+            .collect::<Vec<_>>();
+
+        if removed_vertex_rules.len() > 0 {
+            status_info!(
+                "The following {} vertex rules were removed by the restriction card:\n{}",
+                format!("{}", removed_vertex_rules.len()).green(),
+                format!(
+                    "{}",
+                    removed_vertex_rules
+                        .iter()
+                        .map(|v| format!(
+                            "{} -> ({})",
+                            v.name,
+                            v.particles
+                                .iter()
+                                .map(|p| p.name.to_string())
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        ))
+                        .collect::<Vec<_>>()
+                        .join(" | ")
+                )
+                .blue(),
+            );
+        }
+
+        let removed_couplings = self
+            .couplings
+            .iter()
+            .filter(|(_, cpl)| cpl.value == Some(Complex::new(0.0, 0.0)))
+            .map(|(name, _)| name.clone())
+            .collect::<Vec<_>>();
+
+        // Now remove all couplings that are zero
+        self.couplings
+            .retain(|_, cpl| cpl.value != Some(Complex::new(0.0, 0.0)));
+
+        if removed_couplings.len() > 0 {
+            status_info!(
+                "The following {} couplings were removed by the restriction card:\n{}",
+                format!("{}", removed_couplings.len()).green(),
+                format!(
+                    "{}",
+                    removed_couplings
+                        .iter()
+                        .map(|c| c.to_string())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+                .blue(),
+            );
+        }
+
+        self.update_name_dictionaries();
+
+        Ok(())
+    }
+
     pub fn default_param_card(&self) -> InputParamCard<F<f64>> {
         InputParamCard::default_from_model(self)
     }
@@ -1591,6 +1740,50 @@ impl Model {
         }
 
         self.unresolved_particles = map;
+    }
+
+    pub(crate) fn update_name_dictionaries(&mut self) {
+        self.order_name_to_position = self
+            .orders
+            .iter()
+            .enumerate()
+            .map(|(i, o)| (o.name.clone(), i))
+            .collect();
+
+        self.lorentz_structure_name_to_position = self
+            .lorentz_structures
+            .iter()
+            .enumerate()
+            .map(|(i, ls)| (ls.name.clone(), i))
+            .collect();
+
+        self.particle_name_to_position = self
+            .particles
+            .iter()
+            .enumerate()
+            .map(|(i, p)| (p.0.name.clone(), i))
+            .collect();
+
+        self.particle_pdg_to_position = self
+            .particles
+            .iter()
+            .enumerate()
+            .map(|(i, p)| (p.0.pdg_code, i))
+            .collect();
+
+        self.propagator_name_to_position = self
+            .propagators
+            .iter()
+            .enumerate()
+            .map(|(i, pr)| (pr.name.clone(), i))
+            .collect();
+
+        self.vertex_rule_name_to_position = self
+            .vertex_rules
+            .iter()
+            .enumerate()
+            .map(|(i, vr)| (vr.0.name.clone(), i))
+            .collect();
     }
 
     pub(crate) fn from_serializable_model(serializable_model: SerializableModel) -> Model {
