@@ -23,6 +23,7 @@ use std::collections::hash_map::Entry;
 use std::collections::HashSet;
 
 use std::ops::RangeInclusive;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use symbolica::atom::AtomView;
@@ -69,7 +70,8 @@ use crate::{
     feyngen::{FeynGenFilter, GenerationType},
     model::Model,
 };
-use crate::{status_debug, status_error, status_info};
+use crate::{is_interrupted, set_interrupted, INTERRUPTED};
+use crate::{status_debug, status_error, status_info, status_warn};
 use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeData, Flow, Orientation};
 use linnet::half_edge::subgraph::{InternalSubGraph, OrientedCut, SubGraph};
@@ -2650,7 +2652,7 @@ impl ProcessDefinition {
         let mut cpl_reps: Vec<Replacement> = vec![];
         for cpl in model.couplings.values() {
             let [lhs, rhs] = cpl.rep_rule();
-            // cpl_reps.push(Replacement::new(lhs.to_pattern(), rhs));
+            cpl_reps.push(Replacement::new(lhs.to_pattern(), rhs));
         }
 
         if self.final_pdgs_lists.is_empty() {
@@ -2874,6 +2876,20 @@ impl ProcessDefinition {
             "Starting Feynman graph generation with Symbolica..."
         );
 
+        // pool.install(|| {
+        //     graphs = graphs
+        //         .par_iter()
+        //         .progress_with(bar.clone())
+        //         .filter(|(g, _symmetry_factor)| {
+        //             contains_particles(
+        //                 g,
+        //                 unoriented_final_state_particles_always_present_vec.as_slice(),
+        //             )
+        //         })
+        //         .map(|(g, sf)| (g.clone(), sf.clone()))
+        //         .collect::<HashMap<_, _>>()
+        // });
+        // bar.finish_and_clear();
         let symbolica_generation_settings = if let Some(max_bridges) = filters.get_max_bridge() {
             GenerationSettings::new().max_bridges(max_bridges)
         } else {
@@ -2881,7 +2897,18 @@ impl ProcessDefinition {
         }
         .max_loops(self.loop_count_range.1)
         .allow_self_loops(!self.filter_self_loop)
-        .allow_zero_flow_edges(!self.filter_zero_flow_edges);
+        .allow_zero_flow_edges(!self.filter_zero_flow_edges)
+        .abort_check(Box::new(|| {
+            // Check for where keyboard interrupt has been triggered
+            if INTERRUPTED.swap(false, Ordering::SeqCst) {
+                // status_warn!(
+                //     "Generation aborted by the user via keyboard interrupt (Ctrl+C). Returning graphs generated thus far, BUT THE RESULT WILL BE INCOMPLETE"
+                // );
+                true
+            } else {
+                false
+            }
+        }));
 
         // println!("max_bridges = {:#?}", filters.get_max_bridge());
         // println!("loop_count = {:#?}", self.loop_count_range.1);
@@ -2959,8 +2986,9 @@ impl ProcessDefinition {
             Ok(gs) => gs,
             Err(gs_thus_far) => {
                 status_error!(
-                    "Symbolica graph generation was aborted by the user after generating {} graphs. Generation will continue with these only, BUT THE RESULT WILL BE INCOMPLETE",
-                    gs_thus_far.len()
+                    "\nSymbolica graph generation was aborted by the user after generating {} graphs. Generation will continue with these only, {}\n",
+                    gs_thus_far.len(),
+                    "BUT THE RESULT WILL BE INCOMPLETE".red().bold()
                 );
                 gs_thus_far
             }
@@ -3790,109 +3818,70 @@ impl ProcessDefinition {
         } else {
             vec![]
         };
+        let was_interrupted = Arc::new(AtomicBool::new(false));
         pool.install(|| {
             canonized_processed_graphs
                 .par_iter()
                 .progress_with(bar.clone())
                 .enumerate()
-                .map(|(i_g, canonical_graph)| {
-                    let graph_name = format!("{}{}", self.graph_prefix, i_g);
-                    if let Some(selected_graphs) = &self.selected_graphs {
-                        if !selected_graphs.contains(&graph_name) {
-                            return Ok(())
+                .map({
+                    |(i_g, canonical_graph)| {
+                        let was_interrupted = Arc::clone(&was_interrupted);
+                        let graph_name: String = format!("{}{}", self.graph_prefix, i_g);
+                        if let Some(selected_graphs) = &self.selected_graphs {
+                            if !selected_graphs.contains(&graph_name) {
+                                return Ok(())
+                            }
                         }
-                    }
-                    if let Some(vetoed_graphs) = &self.vetoed_graphs {
-                        if vetoed_graphs.contains(&graph_name) {
-                            return Ok(())
+                        if let Some(vetoed_graphs) = &self.vetoed_graphs {
+                            if vetoed_graphs.contains(&graph_name) {
+                                return Ok(())
+                            }
                         }
-                    }
-                    let bare_graph = Graph::from_symbolica_graph(
-                        model,
-                        graph_name.clone(),
-                        &canonical_graph.graph,
-                        canonical_graph.symmetry_factor.clone(),
-                        &external_connections,
-                    )?;
-
-                    // The step below is optional, but it is nice to have all internal fermion edges canonized as particles.
-                    // Notice that we cannot do this on the bare graph used for numerator local comparisons and diagram grouping because
-                    // it induces a misalignment of the LMB (w.r.t to their sign/orientation) due to the flip of the edges.
-                    // In principle this could be fixed by forcing to pick an LMB for edges that have not been flipped and allowing closed loops
-                    // of antiparticles as well, but I prefer to leave this a post-re-processing option instead.
-                    let canonized_fermion_flow_bare_graph = if CANONIZE_GRAPH_FLOWS {
-                        Graph::from_symbolica_graph(
+                        let bare_graph = Graph::from_symbolica_graph(
                             model,
-                            graph_name,
-                            &canonical_graph.graph_with_canonized_flow,
+                            graph_name.clone(),
+                            &canonical_graph.graph,
                             canonical_graph.symmetry_factor.clone(),
                             &external_connections,
-                        )?
-                    } else {
-                        bare_graph.clone()
-                    };
+                        )?;
 
-                    // println!(
-                    //     "bare_graph:\n{}",
-                    //     bare_graph.dot()
-                    // );
-                    // When disabling numerator-aware graph isomorphism, each graph is added separately
+                        // The step below is optional, but it is nice to have all internal fermion edges canonized as particles.
+                        // Notice that we cannot do this on the bare graph used for numerator local comparisons and diagram grouping because
+                        // it induces a misalignment of the LMB (w.r.t to their sign/orientation) due to the flip of the edges.
+                        // In principle this could be fixed by forcing to pick an LMB for edges that have not been flipped and allowing closed loops
+                        // of antiparticles as well, but I prefer to leave this a post-re-processing option instead.
+                        let canonized_fermion_flow_bare_graph = if CANONIZE_GRAPH_FLOWS {
+                            Graph::from_symbolica_graph(
+                                model,
+                                graph_name,
+                                &canonical_graph.graph_with_canonized_flow,
+                                canonical_graph.symmetry_factor.clone(),
+                                &external_connections,
+                            )?
+                        } else {
+                            bare_graph.clone()
+                        };
 
-                    let pooled_graph = PooledGraphData {
-                        graph_id: i_g,
-                        numerator_data: None,
-                        ratio: Atom::num(1),
-                        bare_graph:bare_graph.clone(),
-                    };
-                    if matches!(
-                        self.numerator_grouping,
-                        NumeratorAwareGraphGroupingOption::NoGrouping
-                    ) {
-                        {
-                            let mut pooled_bare_graphs_lock = pooled_bare_graphs_clone.lock().unwrap();
-                            match pooled_bare_graphs_lock.entry(canonical_graph.canonized_graph.clone()) {
-                                Entry::Vacant(entry) => {
-                                    entry.insert(vec![vec![pooled_graph]]);
-                                }
-                                Entry::Occupied(mut entry) => {
-                                    entry.get_mut().push(vec![pooled_graph]);
-                                }
-                            }
+                        // println!(
+                        //     "bare_graph:\n{}",
+                        //     bare_graph.dot()
+                        // );
+                        // When disabling numerator-aware graph isomorphism, each graph is added separately
+
+                        let pooled_graph = PooledGraphData {
+                            graph_id: i_g,
+                            numerator_data: None,
+                            ratio: Atom::num(1),
+                            bare_graph:bare_graph.clone(),
+                        };
+                        if was_interrupted.load(Ordering::Relaxed) && is_interrupted(){
+                            was_interrupted.store(true, Ordering::Relaxed);
+                            eprintln!("Numerator-aware comparison of graphs interrupted by user, finishing current operations {}...","WITHOUT NUMERATOR COMPARISONS".red().bold());
                         }
-                    } else {
-                        // println!("Processing graph #{}...", i_g);
-                        // println!("Bare graph: {}",bare_graph.dot());
-                        let mut numerator = bare_graph.numerator(&bare_graph.no_dummy());
-
-
-                        numerator.state.expr *=&bare_graph.global_prefactor.num * &bare_graph.global_prefactor.projector * &bare_graph.overall_factor;
-
-
-                        numerator.state.expr = numerator.state.expr.replace_multiple(&cpl_reps);
-
-                        let numerator_color_simplified =
-                            numerator.clone().color_simplify().get_single_atom().unwrap().canonize_spenso();
-
-                        if numerator_color_simplified
-                            .is_zero()
-                        {
-                            {
-                                let mut n_zeroes_color_value = n_zeroes_color.lock().unwrap();
-                                *n_zeroes_color_value += 1;
-                                let n_groupings_value = n_groupings.lock().unwrap();
-                                let n_zeroes_lorentz_value = n_zeroes_lorentz.lock().unwrap();
-                                bar.set_message(format!("Final numerator-aware processing of remaining graphs ({} found: {} | {} found: {})...",
-                                    "#zeros".green(),
-                                    format!("{}",*n_zeroes_color_value + *n_zeroes_lorentz_value).green().bold(),
-                                    "#groupings".green(),
-                                    format!("{}",n_groupings_value).green().bold(),
-                                ));
-                            }
-                            return Ok(())
-                        }
-                        if matches!(
+                        if was_interrupted.load(Ordering::Relaxed) || matches!(
                             self.numerator_grouping,
-                            NumeratorAwareGraphGroupingOption::OnlyDetectZeroes
+                            NumeratorAwareGraphGroupingOption::NoGrouping
                         ) {
                             {
                                 let mut pooled_bare_graphs_lock = pooled_bare_graphs_clone.lock().unwrap();
@@ -3906,121 +3895,168 @@ impl ProcessDefinition {
                                 }
                             }
                         } else {
+                            // println!("Processing graph #{}...", i_g);
+                            // println!("Bare graph: {}",bare_graph.dot());
+                            let mut numerator = bare_graph.numerator(&bare_graph.no_dummy());
 
 
+                            numerator.state.expr *=&bare_graph.global_prefactor.num * &bare_graph.global_prefactor.projector * &bare_graph.overall_factor;
 
-                            // println!(
-                            //     "I have:\n{}",
-                            //     numerator_color_simplified
-                            //         .clone()
-                            //         .parse()
-                            //         .contract(ContractionSettings::<Rational>::Normal)
-                            //         .unwrap()
-                            //         .state
-                            //         .tensor
-                            //         .iter_flat()
-                            //         .map(|(id, d)| format!("{}: {}", id, d))
-                            //         .collect::<Vec<_>>()
-                            //         .join("\n")
-                            // );
-                            // Important: The numerator-aware grouping is done with the simplified color structure and *not* with the fermion flow canonized bare graph
-                            let numerator_data = Some(
-                                ProcessedNumeratorForComparison::from_numerator_symbolic_expression(
-                                    i_g,
-                                    &bare_graph,
-                                    numerator_color_simplified,
-                                    &samples,
-                                    &self.numerator_grouping,
-                                )?,
-                            );
 
-                            // Test if Lorentz evaluations are zero
-                            if !numerator_data.as_ref().unwrap().sample_evaluations.is_empty() {
-                                if numerator_data.as_ref().unwrap().sample_evaluations.iter().all(|eval| eval.is_zero()) {
-                                    {
-                                        let n_zeroes_color_value = n_zeroes_color.lock().unwrap();
-                                        let mut n_zeroes_lorentz_value = n_zeroes_lorentz.lock().unwrap();
-                                        *n_zeroes_lorentz_value += 1;
-                                        let n_groupings_value = n_groupings.lock().unwrap();
-                                        bar.set_message(format!("Final numerator-aware processing of remaining graphs ({} found: {} | {} found: {})...",
-                                            "#zeros".green(),
-                                            format!("{}",*n_zeroes_color_value + *n_zeroes_lorentz_value).green().bold(),
-                                            "#groupings".green(),
-                                            format!("{}",n_groupings_value).green().bold(),
-                                        ));
+                            numerator.state.expr = numerator.state.expr.replace_multiple(&cpl_reps);
+
+                            let numerator_color_simplified =
+                                numerator.clone().color_simplify().get_single_atom().unwrap().canonize_spenso();
+
+                            if numerator_color_simplified
+                                .is_zero()
+                            {
+                                {
+                                    let mut n_zeroes_color_value = n_zeroes_color.lock().unwrap();
+                                    *n_zeroes_color_value += 1;
+                                    let n_groupings_value = n_groupings.lock().unwrap();
+                                    let n_zeroes_lorentz_value = n_zeroes_lorentz.lock().unwrap();
+                                    bar.set_message(format!("Final numerator-aware processing of remaining graphs ({} found: {} | {} found: {})...",
+                                        "#zeros".green(),
+                                        format!("{}",*n_zeroes_color_value + *n_zeroes_lorentz_value).green().bold(),
+                                        "#groupings".green(),
+                                        format!("{}",n_groupings_value).green().bold(),
+                                    ));
+                                }
+                                return Ok(())
+                            }
+                            if matches!(
+                                self.numerator_grouping,
+                                NumeratorAwareGraphGroupingOption::OnlyDetectZeroes
+                            ) {
+                                {
+                                    let mut pooled_bare_graphs_lock = pooled_bare_graphs_clone.lock().unwrap();
+                                    match pooled_bare_graphs_lock.entry(canonical_graph.canonized_graph.clone()) {
+                                        Entry::Vacant(entry) => {
+                                            entry.insert(vec![vec![pooled_graph]]);
+                                        }
+                                        Entry::Occupied(mut entry) => {
+                                            entry.get_mut().push(vec![pooled_graph]);
+                                        }
                                     }
-                                    return Ok(())
+                                }
+                            } else {
+
+
+
+                                // println!(
+                                //     "I have:\n{}",
+                                //     numerator_color_simplified
+                                //         .clone()
+                                //         .parse()
+                                //         .contract(ContractionSettings::<Rational>::Normal)
+                                //         .unwrap()
+                                //         .state
+                                //         .tensor
+                                //         .iter_flat()
+                                //         .map(|(id, d)| format!("{}: {}", id, d))
+                                //         .collect::<Vec<_>>()
+                                //         .join("\n")
+                                // );
+                                // Important: The numerator-aware grouping is done with the simplified color structure and *not* with the fermion flow canonized bare graph
+                                let numerator_data = Some(
+                                    ProcessedNumeratorForComparison::from_numerator_symbolic_expression(
+                                        i_g,
+                                        &bare_graph,
+                                        numerator_color_simplified,
+                                        &samples,
+                                        &self.numerator_grouping,
+                                    )?,
+                                );
+
+                                // Test if Lorentz evaluations are zero
+                                if !numerator_data.as_ref().unwrap().sample_evaluations.is_empty() {
+                                    if numerator_data.as_ref().unwrap().sample_evaluations.iter().all(|eval| eval.is_zero()) {
+                                        {
+                                            let n_zeroes_color_value = n_zeroes_color.lock().unwrap();
+                                            let mut n_zeroes_lorentz_value = n_zeroes_lorentz.lock().unwrap();
+                                            *n_zeroes_lorentz_value += 1;
+                                            let n_groupings_value = n_groupings.lock().unwrap();
+                                            bar.set_message(format!("Final numerator-aware processing of remaining graphs ({} found: {} | {} found: {})...",
+                                                "#zeros".green(),
+                                                format!("{}",*n_zeroes_color_value + *n_zeroes_lorentz_value).green().bold(),
+                                                "#groupings".green(),
+                                                format!("{}",n_groupings_value).green().bold(),
+                                            ));
+                                        }
+                                        return Ok(())
+                                    }
+
                                 }
 
-                            }
+                                // println!("Skeletton G#{}:\n{}", i_g, canonical_repr.to_dot());
+                                {
+                                    let mut pooled_bare_graphs_lock = pooled_bare_graphs_clone.lock().unwrap();
 
-                            // println!("Skeletton G#{}:\n{}", i_g, canonical_repr.to_dot());
-                            {
-                                let mut pooled_bare_graphs_lock = pooled_bare_graphs_clone.lock().unwrap();
-
-                                match pooled_bare_graphs_lock.entry(canonical_graph.canonized_graph.clone()) {
-                                    Entry::Vacant(entry) => {
-                                        entry.insert(vec![vec![
-                                            PooledGraphData {
-                                                graph_id: i_g,
-                                                numerator_data,
-                                                ratio: Atom::num(1),
-                                                bare_graph: canonized_fermion_flow_bare_graph,
-                                            }
-                                            ]]);
-                                    }
-                                    Entry::Occupied(mut entry) => {
-
-                                        let match_found = entry.get().iter().enumerate().find_map(|(i_entry, pooled_graphs_lists_for_this_topology)| {
-                                            let reference_pooled_graph_data = &pooled_graphs_lists_for_this_topology[0];
-                                            Self::compare_numerator_tensors(
-                                                &self.numerator_grouping,
-                                                numerator_data.as_ref().unwrap(),
-                                                reference_pooled_graph_data.numerator_data.as_ref().unwrap(),
-                                            ).map(|ratio| {
-                                                (i_entry, PooledGraphData {
-                                                    graph_id: i_g,
-                                                    numerator_data: None,
-                                                    ratio,
-                                                    bare_graph: canonized_fermion_flow_bare_graph.clone(),
-                                                })
-                                            })
-                                        });
-                                        if let Some((i_entry, new_entry)) = match_found {
-                                            {
-                                                let n_zeroes_color_value = n_zeroes_color.lock().unwrap();
-                                                let n_zeroes_lorentz_value = n_zeroes_lorentz.lock().unwrap();
-                                                let mut n_groupings_value =
-                                                    n_groupings.lock().unwrap();
-                                                *n_groupings_value += 1;
-                                                bar.set_message(format!("Final numerator-aware processing of remaining graphs ({} found: {} | {} found: {})...",
-                                                    "#zeros".green(),
-                                                    format!("{}",*n_zeroes_color_value+ *n_zeroes_lorentz_value).green().bold(),
-                                                    "#groupings".green(),
-                                                    format!("{}",n_groupings_value).green().bold(),
-                                                ));
-                                            }
-                                            entry.get_mut()[i_entry].push(new_entry);
-                                        } else {
-                                            entry.get_mut().push(vec![
+                                    match pooled_bare_graphs_lock.entry(canonical_graph.canonized_graph.clone()) {
+                                        Entry::Vacant(entry) => {
+                                            entry.insert(vec![vec![
                                                 PooledGraphData {
                                                     graph_id: i_g,
                                                     numerator_data,
                                                     ratio: Atom::num(1),
                                                     bare_graph: canonized_fermion_flow_bare_graph,
                                                 }
-                                            ]);
+                                                ]]);
+                                        }
+                                        Entry::Occupied(mut entry) => {
+
+                                            let match_found = entry.get().iter().enumerate().find_map(|(i_entry, pooled_graphs_lists_for_this_topology)| {
+                                                let reference_pooled_graph_data = &pooled_graphs_lists_for_this_topology[0];
+                                                Self::compare_numerator_tensors(
+                                                    &self.numerator_grouping,
+                                                    numerator_data.as_ref().unwrap(),
+                                                    reference_pooled_graph_data.numerator_data.as_ref().unwrap(),
+                                                ).map(|ratio| {
+                                                    (i_entry, PooledGraphData {
+                                                        graph_id: i_g,
+                                                        numerator_data: None,
+                                                        ratio,
+                                                        bare_graph: canonized_fermion_flow_bare_graph.clone(),
+                                                    })
+                                                })
+                                            });
+                                            if let Some((i_entry, new_entry)) = match_found {
+                                                {
+                                                    let n_zeroes_color_value = n_zeroes_color.lock().unwrap();
+                                                    let n_zeroes_lorentz_value = n_zeroes_lorentz.lock().unwrap();
+                                                    let mut n_groupings_value =
+                                                        n_groupings.lock().unwrap();
+                                                    *n_groupings_value += 1;
+                                                    bar.set_message(format!("Final numerator-aware processing of remaining graphs ({} found: {} | {} found: {})...",
+                                                        "#zeros".green(),
+                                                        format!("{}",*n_zeroes_color_value+ *n_zeroes_lorentz_value).green().bold(),
+                                                        "#groupings".green(),
+                                                        format!("{}",n_groupings_value).green().bold(),
+                                                    ));
+                                                }
+                                                entry.get_mut()[i_entry].push(new_entry);
+                                            } else {
+                                                entry.get_mut().push(vec![
+                                                    PooledGraphData {
+                                                        graph_id: i_g,
+                                                        numerator_data,
+                                                        ratio: Atom::num(1),
+                                                        bare_graph: canonized_fermion_flow_bare_graph,
+                                                    }
+                                                ]);
+                                            }
                                         }
                                     }
                                 }
                             }
-
                         }
+                        Ok(())
                     }
-                    Ok(())
-
                 }).collect::<Result<Vec<()>, FeynGenError>>()
         })?;
+        // Reset the interrupt flag
+        set_interrupted(!was_interrupted.load(Ordering::Relaxed));
         bar.finish_and_clear();
 
         // Now combine the pooled graphs identified to be combined.
