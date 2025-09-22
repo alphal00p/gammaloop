@@ -1,6 +1,6 @@
 commands = [
     "import model sm-default", 
-    "import amplitude ./tests/resources/graphs/physical_1L_6photons.dot",
+    "import amplitude ./tests/resources/graphs/physical_2L_6photons.dot",
     "generate"
 ]
 
@@ -90,7 +90,7 @@ disable_threshold_subtraction = true
 enable_thresholds = false
 
 [global_settings.generation.evaluator_settings]
-iterative_orientation_optimization = true
+iterative_orientation_optimization = false
 compile = true
 
 [default_runtime_settings.sampling]
