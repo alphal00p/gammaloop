@@ -1,5 +1,5 @@
 use insta::assert_snapshot;
-use linnet::half_edge::involution::HedgePair;
+use linnet::half_edge::involution::{EdgeIndex, HedgePair};
 use log::info;
 use spenso::{
     network::{library::DummyLibrary, parsing::ShadowedStructure, store::NetworkStore, Network},
@@ -18,6 +18,7 @@ use crate::{
         GraphGroup, LMBext,
     },
     initialisation::test_initialise,
+    momentum_sample::LoopIndex,
     numerator::{aind::Aind, Numerator, UnInit},
     utils::test_utils::load_generic_model,
 };
@@ -1206,4 +1207,60 @@ fn test_group_parsing_5() {
     .unwrap();
 
     assert!(complete_group_parsing(&mut graphs).is_err());
+}
+
+#[test]
+fn parse_triangle_lmb() {
+    test_initialise().unwrap();
+
+    let g: Graph = dot!(
+        digraph massless_triangle_0 {
+            ext [style=invis]
+        ext -> v4:0 [pdg=1000, id=0 ];
+        v5:1 -> ext [pdg=1000, id=1 ];
+        v6:2 -> ext [pdg=1000, id=2 ];
+        v4 -> v5 [pdg=1000, id=3, lmb_id=0];
+        v5 -> v6 [pdg=1000, id=4];
+        v6 -> v4 [pdg=1000, id=5];
+    }
+    ,"scalars"
+        )
+    .unwrap();
+
+    let lmb = g.loop_momentum_basis.loop_edges;
+    assert_eq!(lmb[LoopIndex::from(0)], EdgeIndex::from(3));
+
+    let g: Graph = dot!(
+        digraph massless_triangle_0 {
+            ext [style=invis]
+        ext -> v4:0 [pdg=1000, id=0 ];
+        v5:1 -> ext [pdg=1000, id=1 ];
+        v6:2 -> ext [pdg=1000, id=2 ];
+        v4 -> v5 [pdg=1000, id=3];
+        v5 -> v6 [pdg=1000, id=4, lmb_id=0];
+        v6 -> v4 [pdg=1000, id=5];
+    }
+    ,"scalars"
+        )
+    .unwrap();
+
+    let lmb = g.loop_momentum_basis.loop_edges;
+    assert_eq!(lmb[LoopIndex::from(0)], EdgeIndex::from(4));
+
+    let g: Graph = dot!(
+        digraph massless_triangle_0 {
+            ext [style=invis]
+        ext -> v4:0 [pdg=1000, id=0 ];
+        v5:1 -> ext [pdg=1000, id=1 ];
+        v6:2 -> ext [pdg=1000, id=2 ];
+        v4 -> v5 [pdg=1000, id=3];
+        v5 -> v6 [pdg=1000, id=4];
+        v6 -> v4 [pdg=1000, id=5, lmb_id=0];
+    }
+    ,"scalars"
+        )
+    .unwrap();
+
+    let lmb = g.loop_momentum_basis.loop_edges;
+    assert_eq!(lmb[LoopIndex::from(0)], EdgeIndex::from(5));
 }
