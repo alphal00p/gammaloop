@@ -21,13 +21,14 @@ use spenso::tensors::parametric::{MixedTensor, ParamOrConcrete, ParamTensor};
 use spenso_hep_lib::hep_lib;
 use std::collections::hash_map::Entry;
 use std::collections::HashSet;
+use symbolica::domains::rational::Rational;
 
 use std::ops::RangeInclusive;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use symbolica::atom::AtomView;
-use symbolica::coefficient::Coefficient;
+use symbolica::coefficient::{Coefficient, CoefficientView};
 use symbolica::domains::algebraic_number::AlgebraicExtension;
 use symbolica::domains::finite_field::PrimeIteratorU64;
 use symbolica::domains::float::Complex as SymbolicaComplex;
@@ -63,7 +64,7 @@ use crate::numerator::graph::ReversibleEdge;
 use crate::numerator::symbolica_ext::AtomCoreExt;
 use crate::numerator::ParsingNet;
 use crate::processes::ProcessDefinition;
-use crate::utils::symbolica_ext::{COMPLEXRATPOLYFIELD, Q_I};
+use crate::utils::symbolica_ext::{PrimeGenerate, COMPLEXRATPOLYFIELD, LOGPRINTOPTS, Q_I};
 use crate::utils::{self, F, GS, W_};
 use crate::uv::UltravioletGraph;
 use crate::{
@@ -77,7 +78,9 @@ use linnet::half_edge::involution::{EdgeData, Flow, Orientation};
 use linnet::half_edge::subgraph::{InternalSubGraph, OrientedCut, SubGraph};
 use linnet::half_edge::HedgeGraph;
 use linnet::half_edge::NodeIndex;
-use symbolica::{atom::Atom, graph::Graph as SymbolicaGraph};
+use symbolica::{
+    atom::Atom, domains::float::Complex as SymComplex, graph::Graph as SymbolicaGraph,
+};
 
 const CANONIZE_GRAPH_FLOWS: bool = true;
 const ANALYZE_RATIO_AS_RATIONAL_POLYNOMIAL: bool = false;
@@ -1113,7 +1116,7 @@ impl ProcessDefinition {
                     key.structure,
                     (0..4)
                         .into_iter()
-                        .map(|_| Atom::num(sample_iterator.next().unwrap()))
+                        .map(|_| Atom::prime_generate_rat(sample_iterator))
                         .collect(),
                 )
                 .unwrap(),
@@ -1137,7 +1140,7 @@ impl ProcessDefinition {
                     key.structure,
                     (0..4)
                         .into_iter()
-                        .map(|_| Atom::num(sample_iterator.next().unwrap()))
+                        .map(|_| Atom::prime_generate_rat(sample_iterator))
                         .collect(),
                 )
                 .unwrap(),
@@ -1164,7 +1167,7 @@ impl ProcessDefinition {
                     key.structure,
                     (0..len)
                         .into_iter()
-                        .map(|_| Atom::num(sample_iterator.next().unwrap()))
+                        .map(|_| Atom::prime_generate_rat_complex(sample_iterator))
                         .collect(),
                 )
                 .unwrap(),
@@ -1188,7 +1191,7 @@ impl ProcessDefinition {
                             key.structure,
                             (0..4)
                                 .into_iter()
-                                .map(|_| Atom::num(sample_iterator.next().unwrap()))
+                                .map(|_| Atom::prime_generate_rat(sample_iterator))
                                 .collect(),
                         )
                         .unwrap(),
@@ -1214,7 +1217,7 @@ impl ProcessDefinition {
                             key,
                             (0..len)
                                 .into_iter()
-                                .map(|_| Atom::num(sample_iterator.next().unwrap()))
+                                .map(|_| Atom::prime_generate_rat_complex(sample_iterator))
                                 .collect(),
                         )
                         .unwrap(),
@@ -1247,7 +1250,7 @@ impl ProcessDefinition {
                             key.structure,
                             (0..len)
                                 .into_iter()
-                                .map(|_| Atom::num(sample_iterator.next().unwrap()))
+                                .map(|_| Atom::prime_generate_rat_complex(sample_iterator))
                                 .collect(),
                         )
                         .unwrap(),
@@ -1257,28 +1260,19 @@ impl ProcessDefinition {
                 }
             }
         }
+        let mut reps = vec![];
 
-        let reps = if add_model_params {
-            model
-                .generate_params()
-                .into_iter()
-                .map(|a| {
-                    Replacement::new(a.to_pattern(), Atom::num(sample_iterator.next().unwrap()))
-                })
-                .collect()
-        } else {
-            let mut reps = vec![];
-            // for cpl in model.couplings.values() {
-            //     if cpl.value.is_some() {
-            //         reps.push(Replacement::new(
-            //             Atom::from(cpl.name).to_pattern(),
-            //             cpl.expression.clone(),
-            //         ));
-            //     }
-            // }
-            reps
-        };
-
+        if add_model_params {
+            for param in model.parameters.values().filter(|p| p.value.is_some()) {
+                if param.value.is_some() {
+                    let name: Atom = param.name.into();
+                    reps.push(Replacement::new(
+                        name.to_pattern(),
+                        Atom::prime_generate_rat_complex(sample_iterator),
+                    ));
+                }
+            }
+        }
         // for r in &reps {
         //     status_info!("Model replacements: {}", r);
         // }
@@ -3900,9 +3894,8 @@ impl ProcessDefinition {
                             let mut numerator = bare_graph.numerator(&bare_graph.no_dummy());
 
 
-                            numerator.state.expr *=&bare_graph.global_prefactor.num * &bare_graph.global_prefactor.projector * &bare_graph.overall_factor;
-
-
+                            // TODO Check if we include overall factor in main
+                            numerator.state.expr *=&bare_graph.global_prefactor.num * &bare_graph.global_prefactor.projector;// * &bare_graph.overall_factor;
                             numerator.state.expr = numerator.state.expr.replace_multiple(&cpl_reps);
 
                             let numerator_color_simplified =
@@ -4207,6 +4200,7 @@ impl ProcessDefinition {
             .collect::<Vec<_>>())
     }
 
+    #[instrument(skip_all)]
     fn compare_numerator_tensors(
         numerator_aware_isomorphism_grouping: &NumeratorAwareGraphGroupingOption,
         numerator_a: &ProcessedNumeratorForComparison,
@@ -4400,29 +4394,25 @@ impl ProcessDefinition {
                         })
                         .collect::<HashSet<_>>();
 
-                    // println!(
-                    //     "ratios from numerical evaluations when comparing diagram #{} and #{}:\n{}",
-                    //     numerator_b.diagram_id,
-                    //     numerator_a.diagram_id,
-                    //     ratios
-                    //         .iter()
-                    //         .map(|av| av.as_ref().unwrap().to_canonical_string())
-                    //         .collect::<Vec<_>>()
-                    //         .join("\n")
-                    // );
-                    // println!(
-                    //     "ratios from numerical evaluations when comparing diagram #{} and #{}:\n{}",
-                    //         numerator_b.diagram_id,
-                    //         numerator_a.diagram_id,
-                    //         ratios
-                    //             .iter()
-                    //             .map(|av| av
-                    //                 .as_ref()
-                    //                 .map(|ra| ra.to_canonical_string())
-                    //                 .unwrap_or("None".into()))
-                    //             .collect::<Vec<_>>()
-                    //             .join("\n")
-                    // );
+                    debug!(
+                        "ratios from numerical evaluations when comparing diagram #{} and #{}:\n{}",
+                        numerator_b.diagram_id,
+                        numerator_a.diagram_id,
+                        ratios
+                            .iter()
+                            .zip(evaluations_a)
+                            .zip(evaluations_b)
+                            .map(|((rat, a), b)| format!(
+                                "rat:{}\na:{}\nb:{}",
+                                rat.as_ref()
+                                    .map(|ra| ra.floatify(13).to_canonical_string())
+                                    .unwrap_or("None".into()),
+                                a.floatify(13).to_canonical_string(),
+                                b.floatify(13).to_canonical_string()
+                            ))
+                            .collect::<Vec<_>>()
+                            .join("\n")
+                    );
                     if let Some(ratio) = analyze_ratios(&ratios) {
                         //     debug!(
                         //     "Combining graph #{} with #{} using numerical evaluation, with ratio #{}/#{}={}",
@@ -4510,6 +4500,7 @@ struct ProcessedNumeratorForComparison {
 }
 
 impl ProcessedNumeratorForComparison {
+    #[instrument(skip_all)]
     fn from_numerator_symbolic_expression(
         diagram_id: usize,
         graph: &Graph,
@@ -4608,7 +4599,7 @@ impl ProcessedNumeratorForComparison {
                                 let a = ProcessDefinition::substitute_color_factors(
                                     (c * scalar).as_view(),
                                 );
-                                debug!(evaluated=%a);
+                                debug!(evaluated=%a.printer(LOGPRINTOPTS),"evaluated{}",a.floatify(13).printer(LOGPRINTOPTS));
                                 a
                             })
                             .fold(Atom::Zero, |acc, l| acc + l);

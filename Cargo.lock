@@ -1727,8 +1727,7 @@ dependencies = [
 [[package]]
 name = "idenso"
 version = "0.2.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1478f42f1bcf3d5e1833d5535056e491a425a5391e85605222dfc6d2cd41949d"
+source = "git+https://github.com/alphal00p/spenso?rev=2c9feee611b4c577991bd2700455daac281a01b1#2c9feee611b4c577991bd2700455daac281a01b1"
 dependencies = [
  "anyhow",
  "bincode",
@@ -3751,8 +3750,7 @@ dependencies = [
 [[package]]
 name = "spenso"
 version = "0.5.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d2d75eb9bffa8a44bc6930ebc4881db468a134d2b7041ea43b1b3d0a4848a335"
+source = "git+https://github.com/alphal00p/spenso?rev=2c9feee611b4c577991bd2700455daac281a01b1#2c9feee611b4c577991bd2700455daac281a01b1"
 dependencies = [
  "ahash",
  "anyhow",

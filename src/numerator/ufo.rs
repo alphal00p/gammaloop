@@ -46,15 +46,31 @@ pub struct UFOSymbols {
     pub t6: Symbol,
     pub k6: Symbol,
     pub k6bar: Symbol,
+    pub complexconjugate: Symbol,
     pub pslash: Symbol,
     pub complex: Symbol,
 }
 
-#[allow(dead_code)]
 pub static UFO: LazyLock<UFOSymbols> = LazyLock::new(|| UFOSymbols {
     identity: symbol!("UFO::Identity"),
     identityl: symbol!("UFO::IdentityL"),
     gamma: symbol!("UFO::Gamma"),
+    complexconjugate: symbol!(
+        "UFO::complexconjugate",
+        norm = |f, out| {
+            let AtomView::Fun(ff) = f else {
+                return false;
+            };
+            if ff.get_nargs() != 1 {
+                return false;
+            }
+            let AtomView::Num(arg) = ff.iter().next().unwrap() else {
+                return false;
+            };
+            *out = arg.as_view().conjugate();
+            true
+        }
+    ),
     gamma5: symbol!("UFO::Gamma5"),
     projm: symbol!("UFO::ProjM"),
     projp: symbol!("UFO::ProjP"),
@@ -515,8 +531,10 @@ impl UFOSymbols {
         let sext = ColorSextet {};
         let antisext = ColorAntiSextet {};
         // for s in slots {
-        //     println!("{}", s);
+        //     debug!("{}", s);
         // }
+
+        // debug!("In:{}", atom);
         // Fill in representations
         let reps: Vec<_> = [
             (
@@ -603,6 +621,8 @@ impl UFOSymbols {
                 self.identity.f((&[W_.g_.f(&[W_.a_])], &[W_.b_]))
                     * W_.f_.f((&[W_.a___], &[W_.g_.f(&[W_.a_])], &[W_.b___])),
             );
+
+        // debug!("Postid:{}", atom);
 
         // println!("postid:{atom}");
         atom = self.normalize_complex(atom);
@@ -712,6 +732,7 @@ impl UFOSymbols {
 
         atom = atom.replace_multiple(&reps);
 
+        // debug!("Out:{}", atom);
         atom
     }
 }

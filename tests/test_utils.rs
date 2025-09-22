@@ -69,10 +69,7 @@ pub(crate) fn get_test_cli(
     clean: bool,
 ) -> Result<CLIState> {
     if clean && state_path.as_ref().exists() {
-        clean_test(&State::new(
-            state_path.as_ref().to_path_buf(),
-            log_file_name.clone(),
-        ));
+        clean_test(state_path.as_ref());
     }
     let (mut cli, mut state) = new_cli_for_test(state_path, log_file_name);
     let cmds = if let Some(rc_path) = run_card_path {
@@ -124,21 +121,21 @@ pub(crate) fn new_cli_for_test(
     (state.new_test_cli(), state)
 }
 
-pub(crate) fn clean_test(state: &State) {
+pub(crate) fn clean_test(save_path: impl AsRef<Path>) {
     if env::var("GAMMALOOP_TESTS_NO_CLEAN_STATE").is_err() {
-        match std::fs::remove_dir_all(state.save_path.clone()) {
+        match std::fs::remove_dir_all(save_path.as_ref()) {
             Ok(()) => debug!(
                 "Gammaloop state folder '{}' deleted successfully",
-                state.save_path.display()
+                save_path.as_ref().display()
             ),
             Err(e) => debug!(
                 "Error deleting Gammaloop state folder '{}'. Error: {}",
-                state.save_path.display(),
+                save_path.as_ref().display(),
                 e
             ),
         }
     } else {
-        warn!("Environment variable 'GAMMALOOP_TESTS_NO_CLEAN_STATE' is set so that the gammaloop state test folder '{}' is not cleaned.",state.save_path.display());
+        warn!("Environment variable 'GAMMALOOP_TESTS_NO_CLEAN_STATE' is set so that the gammaloop state test folder '{}' is not cleaned.",save_path.as_ref().display());
     }
 }
 

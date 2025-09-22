@@ -1,6 +1,6 @@
 use color_eyre::{config::HookBuilder, Result};
 
-use crate::{model::UFOSymbol, utils::GS};
+use crate::{model::UFOSymbol, numerator::ufo::UFO, utils::GS};
 
 static INITIALISED: std::sync::Once = std::sync::Once::new();
 
@@ -13,6 +13,7 @@ pub fn initialise() -> Result<()> {
         eyre.install().unwrap();
 
         let _ = GS.delta_vec;
+        let _ = UFO.complexconjugate;
         let _ = UFOSymbol::zero();
 
         crate::set_interrupt_handler();

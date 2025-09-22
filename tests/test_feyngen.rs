@@ -78,7 +78,7 @@ fn simple_epem_ddx_generation() -> Result<()> {
 
     cli.run_command("generate amp e+ e- > d d~")?;
 
-    clean_test(&cli);
+    clean_test(&cli.save_path);
 
     Ok(())
 }
@@ -125,7 +125,7 @@ fn cp_fix_from_symbolica()->Result<()>{
     // Choose the model to consider
     cli.run_command("import model sm-default.json")?;
 
-    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states true --numerator-grouping group_identical_graphs_up_to_scalar_rescaling -n 1 --filter-zero-flow-edges false")?,@"78 | -26");
+    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states true --numerator-grouping group_identical_graphs_up_to_scalar_rescaling -n 1 --filter-zero-flow-edges false --fully-numerical-substitution-when-comparing-numerators false")?,@"11 | -12+-36*UFO::G^2*UFO::ee^(-2)");
     Ok(())
 }
 

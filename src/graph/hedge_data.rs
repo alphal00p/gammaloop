@@ -47,13 +47,13 @@ impl NumIndices {
         |h, _| {
             let eid = graph[&h];
             let flow = graph.flow(h);
-            let orientation = graph.orientation(h);
+            // let orientation = graph.orientation(h);
 
-            let flow = match orientation {
-                Orientation::Default => flow,
-                Orientation::Reversed => -flow,
-                Orientation::Undirected => flow,
-            };
+            // let flow = match orientation {
+            //     Orientation::Default => flow,
+            //     Orientation::Reversed => -flow,
+            //     Orientation::Undirected => flow,
+            // };
 
             let creps = graph[eid].particle.color_reps(flow);
             let sreps = graph[eid].particle.spin_reps();

@@ -13,6 +13,9 @@ use spenso::{
 
 use symbolica::{
     atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol},
+    coefficient::{Coefficient, CoefficientView},
+    domains::float::Complex as SymComplex,
+    domains::rational::Rational,
     function,
     id::Replacement,
 };
@@ -32,6 +35,8 @@ pub type ParsingNetError = spenso::network::TensorNetworkError<
 pub trait AtomCoreExt {
     fn wrap_color(&self, symbol: Symbol) -> Atom;
 
+    fn floatify(&self, prec: u32) -> Atom;
+
     fn canonize_spenso(&self) -> Atom;
 
     fn map_mink_dim<'a>(&self, dim: impl Into<AtomOrView<'a>>) -> Atom;
@@ -45,6 +50,10 @@ impl AtomCoreExt for Atom {
     fn map_mink_dim<'a>(&self, dim: impl Into<AtomOrView<'a>>) -> Atom {
         self.as_view().map_mink_dim(dim)
     }
+    fn floatify(&self, prec: u32) -> Atom {
+        self.as_view().floatify(prec)
+    }
+
     fn wrap_color(&self, symbol: Symbol) -> Atom {
         self.as_view().wrap_color(symbol)
     }
@@ -63,6 +72,20 @@ impl AtomCoreExt for Atom {
 }
 
 impl AtomCoreExt for AtomView<'_> {
+    fn floatify(&self, prec: u32) -> Atom {
+        self.map_coefficient(|c| match c {
+            CoefficientView::Natural(r, d, ri, di) => Coefficient::Float(SymComplex::new(
+                Rational::from((r, d)).to_multi_prec_float(prec),
+                Rational::from((ri, di)).to_multi_prec_float(prec),
+            )),
+            CoefficientView::Large(r, ri) => Coefficient::Float(SymComplex::new(
+                r.to_rat().to_multi_prec_float(prec),
+                ri.to_rat().to_multi_prec_float(prec),
+            )),
+            _ => c.to_owned(),
+        })
+    }
+
     fn canonize_spenso(&self) -> Atom {
         let lib = DummyLibrary::<SymbolicTensor>::new();
         let mut net =
@@ -128,4 +151,73 @@ impl AtomCoreExt for AtomView<'_> {
 
     //     ParsingNet::try_from_view(*self, &lib);
     // }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        dot,
+        graph::{parse::IntoGraph, FeynmanGraph, Graph},
+        initialisation::test_initialise,
+        uv::UltravioletGraph,
+    };
+
+    use super::AtomCoreExt;
+
+    #[test]
+    fn canonize_color() {
+        test_initialise().unwrap();
+        let gls: Vec<Graph> = dot!(
+            digraph{
+            num = "1";
+
+            ext0 [style=invis];
+            2:0-> ext0 [id=0 dir=none is_cut=0 is_dummy=false particle="a"];
+            ext1 [style=invis];
+            ext1-> 3:1 [id=1 dir=none is_cut=0 is_dummy=false particle="a"];
+            0:2-> 1:3 [id=2  is_dummy=false particle="d"];
+            0:4-> 1:5 [id=3 dir=none  is_dummy=false particle="g"];
+            3:6-> 0:7 [id=4  is_dummy=false particle="d"];
+            1:8-> 2:9 [id=5  is_dummy=false particle="d"];
+            2:10-> 3:11 [id=6  is_dummy=false particle="d"];
+        }
+
+        digraph GL8{
+            num = 1;
+        0[int_id=V_74];
+        1[int_id=V_74];
+        2[int_id=V_71];
+        3[int_id=V_71];
+        ext0 [style=invis];
+        2:0-> ext0 [id=0 dir=none is_cut=0 is_dummy=false particle=a];
+        ext1 [style=invis];
+        ext1-> 3:1 [id=1 dir=none is_cut=0 is_dummy=false particle=a];
+        0:2-> 1:3 [id=2  is_dummy=false particle=d];
+        0:4-> 1:5 [id=3 dir=none  is_dummy=false particle=g];
+        0:6-> 3:7 [id=4 dir=back  is_dummy=false particle="d~"];
+        1:8-> 2:9 [id=5  is_dummy=false particle=d];
+        2:10-> 3:11 [id=6  is_dummy=false particle=d];
+        }
+
+        )
+        .unwrap();
+
+        for g in gls {
+            let mut numerator = g.numerator(&g.no_dummy());
+
+            // TODO Check if we include overall factor in main
+            numerator.state.expr *= &g.global_prefactor.num * &g.global_prefactor.projector; // * &gl5.overall_factor;
+                                                                                             // numerator.state.expr = numerator.state.expr.replace_multiple(&cpl_reps);
+
+            let numerator_color_simplified = numerator
+                .clone()
+                .color_simplify()
+                .get_single_atom()
+                .unwrap()
+                .canonize_spenso();
+
+            println!("numerator_color_simplified:{numerator_color_simplified}");
+            println!("numerator:{}", numerator.state.expr);
+        }
+    }
 }

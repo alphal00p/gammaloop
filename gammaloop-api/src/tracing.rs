@@ -220,24 +220,24 @@ pub(crate) fn init_tracing(
             .event_format(StatusFmt::default())
             .with_writer(std::io::stderr);
 
-        let indicatif_layer = IndicatifLayer::new()
-            .with_span_field_formatter(hide_indicatif_span_fields(DefaultFields::new()));
+        // let indicatif_layer = IndicatifLayer::new()
+        //     .with_span_field_formatter(hide_indicatif_span_fields(DefaultFields::new()));
 
         tracing_subscriber::registry()
             .with(Filtered::new(json, file_filter_layer))
             .with(Filtered::new(status_layer, stderr_filter_layer))
-            .with(
-                tracing_subscriber::fmt::layer()
-                    .with_writer(indicatif_layer.get_stderr_writer())
-                    .with_filter(file_filter.clone())
-                    .with_filter(stderr_filter.clone()),
-            )
-            .with(
-                indicatif_layer
-                    .with_filter(file_filter)
-                    .with_filter(stderr_filter)
-                    .with_filter(IndicatifFilter::new(false)),
-            )
+            // .with(
+            //     tracing_subscriber::fmt::layer()
+            //         .with_writer(indicatif_layer.get_stderr_writer())
+            //         .with_filter(file_filter.clone())
+            //         .with_filter(stderr_filter.clone()),
+            // )
+            // .with(
+            //     indicatif_layer
+            //         .with_filter(file_filter)
+            //         .with_filter(stderr_filter)
+            //         .with_filter(IndicatifFilter::new(false)),
+            // )
             .init();
 
         FilterHandles {

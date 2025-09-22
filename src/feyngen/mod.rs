@@ -52,7 +52,7 @@ impl Default for GraphGroupingOptions {
             numerical_sample_seed: 3,
             number_of_numerical_samples: 5,
             differentiate_particle_masses_only: true,
-            fully_numerical_substitution_when_comparing_numerators: true,
+            fully_numerical_substitution_when_comparing_numerators: false,
             test_canonized_numerator: false,
         }
     }

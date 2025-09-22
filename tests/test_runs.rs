@@ -56,7 +56,7 @@ fn trees() -> Result<()> {
 
     assert_snapshot!(format!("{a:.8e}"),@"(1.4727604164105595e-4+-1.1503139369130214e-3i)");
 
-    clean_test(&cli);
+    clean_test(&cli.save_path);
     Ok(())
 }
 
@@ -164,7 +164,7 @@ fn test_grouped_subtraction() -> Result<()> {
         &F(1e-1),
     );
 
-    clean_test(&cli);
+    clean_test(&cli.save_path);
 
     Ok(())
 }
@@ -237,7 +237,7 @@ fn scalar_box() -> Result<()> {
         &F(1e-4),
     );
 
-    clean_test(&cli);
+    clean_test(&cli.save_path);
 
     Ok(())
 }

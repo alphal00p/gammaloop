@@ -3,6 +3,7 @@ use schemars::{json_schema, JsonSchema};
 use serde::{Deserialize, Serialize};
 use std::{
     fmt::Display,
+    num,
     ops::{Deref, DerefMut},
     sync::LazyLock,
 };
@@ -10,8 +11,10 @@ use symbolica::{
     atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol},
     domains::{
         algebraic_number::AlgebraicExtension,
+        finite_field::PrimeIteratorU64,
+        float::Complex,
         integer::IntegerRing,
-        rational::{FractionField, Q},
+        rational::{FractionField, Rational, Q},
     },
     parse,
     poly::polynomial::PolynomialRing,
@@ -101,6 +104,39 @@ impl<'de> Deserialize<'de> for StringSerializedAtom {
         Ok(StringSerializedAtom(parse!(String::deserialize(
             deserializer
         )?)))
+    }
+}
+
+pub trait PrimeGenerate {
+    fn prime_generate_int(sample_iterator: &mut PrimeIteratorU64) -> Atom;
+
+    fn prime_generate_rat_complex(sample_iterator: &mut PrimeIteratorU64) -> Atom;
+    fn prime_generate_rat(sample_iterator: &mut PrimeIteratorU64) -> Atom;
+}
+
+impl PrimeGenerate for Atom {
+    fn prime_generate_int(sample_iterator: &mut PrimeIteratorU64) -> Atom {
+        Atom::num(sample_iterator.next().unwrap())
+    }
+
+    fn prime_generate_rat(sample_iterator: &mut PrimeIteratorU64) -> Atom {
+        let a = Rational::from((
+            sample_iterator.next().unwrap(),
+            sample_iterator.next().unwrap(),
+        ));
+        Atom::num(a)
+    }
+
+    fn prime_generate_rat_complex(sample_iterator: &mut PrimeIteratorU64) -> Atom {
+        let a = Rational::from((
+            sample_iterator.next().unwrap(),
+            sample_iterator.next().unwrap(),
+        ));
+        let b = Rational::from((
+            sample_iterator.next().unwrap(),
+            sample_iterator.next().unwrap(),
+        ));
+        Atom::num(Complex::new(a, b))
     }
 }
 

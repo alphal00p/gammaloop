@@ -204,6 +204,12 @@ higher_loops = []
 # linnet = "0.10.0"
 # linnet = { path = "../linnet" }
 linnet = { git = "https://github.com/alphal00p/linnet", rev = "896c719d966facfcf1e18eb5d5fa44ca8458931d" }
+spenso = {git = "https://github.com/alphal00p/spenso",rev="2c9feee611b4c577991bd2700455daac281a01b1"}
+idenso = {git = "https://github.com/alphal00p/spenso",rev="2c9feee611b4c577991bd2700455daac281a01b1"}
+# spenso = {git = "https://github.com/alphal00p/spenso",rev="2c9feee611b4c577991bd2700455daac281a01b1"}
+# spenso = {git = "https://github.com/alphal00p/spenso",rev="2c9feee611b4c577991bd2700455daac281a01b1"}
+# spenso = {git = "https://github.com/alphal00p/spenso",rev="2c9feee611b4c577991bd2700455daac281a01b1"}
+
 # vaki = { git = "https://github.com/alphal00p/linnet", rev = "5c929e02966164be0ac84a57af4ce29753045520" }
 
 # symbolica-community={path="../symbolica-community"}
