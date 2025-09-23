@@ -145,7 +145,7 @@ impl UFOSymbols {
         // for s in slots {
         //     println!("{}", s);
         // }
-        debug!(in = atom.printer(LOGPRINTOPTS).to_string());
+        // debug!(in = atom.printer(LOGPRINTOPTS).to_string());
 
         atom = self.normalize_complex(atom);
         for (i, s) in slots.iter().enumerate() {
@@ -401,7 +401,7 @@ impl UFOSymbols {
             }
         });
 
-        debug!(after_dummies = atom.printer(LOGPRINTOPTS).to_string());
+        // debug!(after_dummies = atom.printer(LOGPRINTOPTS).to_string());
         // debug!("After dummies{}", atom);
 
         let reps: Vec<_> = [
@@ -514,7 +514,7 @@ impl UFOSymbols {
             .replace(function!(UFO.momentum, W_.a_))
             .with(GS.emr_mom(momenta[0].1, W_.a_));
 
-        debug!(out = atom.printer(LOGPRINTOPTS).to_string());
+        // debug!(out = atom.printer(LOGPRINTOPTS).to_string());
         // println!("out:{atom:#}");
         atom
     }

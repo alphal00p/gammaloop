@@ -15,7 +15,6 @@ use crate::{
         ufo::UFO,
         GlobalPrefactor,
     },
-    status_debug,
     utils::{linnet_ext::FromMappings, symbolica_ext::DOD},
 };
 use ahash::{AHashMap, AHashSet};
@@ -31,7 +30,7 @@ use linnet::{
         builder::HedgeGraphBuilder,
         involution::{EdgeData, EdgeIndex, EdgeVec, Flow, Hedge, HedgePair},
         nodestore::NodeStorageVec,
-        subgraph::{node, Inclusion, ModifySubgraph, OrientedCut, SubGraph, SubGraphOps},
+        subgraph::{Inclusion, ModifySubgraph, OrientedCut, SubGraph, SubGraphOps},
         swap::Swap,
         tree::SimpleTraversalTree,
         HedgeGraph, NodeIndex,
@@ -804,11 +803,9 @@ impl Graph {
         let mut xs_ext_id: BTreeMap<Hedge, (EdgeIndex, Hedge)> = BTreeMap::new();
 
         for (p, eid, e) in graph.iter_edges() {
-            let Some(_) = e.data.is_cut else {
-                continue;
-            };
             let HedgePair::Paired { sink, .. } = p else {
                 if e.data.is_cut.is_some() {
+                    //As we have already sewn the graph, all cut edges must be paired, failure to do so would indicate a bug
                     return Err(eyre!("Cut edge must be paired"));
                 } else {
                     continue;
@@ -1088,7 +1085,13 @@ impl Graph {
             ));
         };
 
-        let inv_lmb_ids: BTreeMap<_, _> = lmb_ids.iter().map(|(k, v)| (*v, *k)).collect();
+        let inv_lmb_ids: BTreeMap<_, _> = lmb_ids
+            .iter()
+            .map(|(k, v)| {
+                // debug!("v{v}k{k}");
+                (*v, *k)
+            })
+            .collect();
 
         for e in 0..xs_ext_id.len() {
             let (l, _) = loop_momentum_basis
