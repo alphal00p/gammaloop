@@ -110,7 +110,12 @@ fn photons_1l_integrate() -> Result<()> {
 
 #[test]
 fn photons_1l_inspect() -> Result<()> {
-    let mut cli = get_test_cli(Some("photons.toml".into()), "./tests/photons", None, false)?;
+    let mut cli = get_test_cli(
+        Some("photons_eu_inspect.toml".into()),
+        "./tests/photons_eu_inspect",
+        None,
+        false,
+    )?;
 
     // this can be moved to the run card once we have a set model param command
 
@@ -137,7 +142,7 @@ fn photons_1l_inspect() -> Result<()> {
 
     println!("Inspect result: {inspect:.16e}");
 
-    // The kinematics are not the same as the old test, but they come from the example, from which this value is also taken for now
+    // The old test at a very bad value of e_cm, so I created a new value using the example card in the old main
     assert_snapshot!(format!("{inspect:.8e}"),@"(-4.2365441831364175e-12+-3.71072895861423e-12i)");
 
     clean_test(&cli.cli_settings.state_folder);
