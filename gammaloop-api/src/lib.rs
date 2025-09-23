@@ -16,6 +16,7 @@ use tracing::set_stderr_log_filter;
 //     reedline::{DefaultPrompt, DefaultPromptSegment, FileBackedHistory},
 //     ClapEditor, ReadCommandOutput,
 // };
+use crate::state::CommandHistory;
 use color_eyre::Report;
 use color_eyre::Result;
 use colored::Colorize;
@@ -41,14 +42,14 @@ use std::str::FromStr;
 use std::{ffi::OsString, fs, path::PathBuf};
 use std::{fs::File, ops::ControlFlow};
 use symbolica::activate_oem_license;
-
-use crate::state::CommandHistory;
 // use tracing::LogLevel;
 
 pub mod generate;
 pub mod import_model;
 pub mod inspect;
 pub mod integrate;
+#[cfg(feature = "python_api")]
+pub mod python;
 pub mod repl;
 pub mod set;
 pub mod state;

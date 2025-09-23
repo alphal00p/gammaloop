@@ -61,7 +61,7 @@ fn trees() -> Result<()> {
 }
 
 #[test]
-fn photons_1l() -> Result<()> {
+fn photons_1l_integrate() -> Result<()> {
     let mut cli = get_test_cli(Some("photons.toml".into()), "./tests/photons", None, false)?;
 
     // this can be moved to the run card once we have a set model param command
@@ -105,6 +105,43 @@ fn photons_1l() -> Result<()> {
 
     assert_approx_eq(&integration_result.result.re, &target.re, &F(10e-2));
     assert_approx_eq(&integration_result.result.im, &target.im, &F(10e-2));
+    Ok(())
+}
+
+#[test]
+fn photons_1l_inspect() -> Result<()> {
+    let mut cli = get_test_cli(Some("photons.toml".into()), "./tests/photons", None, false)?;
+
+    // this can be moved to the run card once we have a set model param command
+
+    cli.state
+        .model_parameters
+        .insert(UFOSymbol(symbol!("UFO::MT")), Complex::new_re(F(1500.0)));
+
+    cli.state
+        .model_parameters
+        .insert(UFOSymbol(symbol!("UFO::aEWM1")), Complex::new_re(F(128.93)));
+
+    cli.state
+        .model
+        .apply_param_card(&cli.state.model_parameters)?;
+
+    let inspect = Inspect {
+        process_id: Some(0),
+        integrand_name: Some("default".to_string()),
+        point: vec![0.123, 0.3242, 0.4233],
+        momentum_space: false,
+        ..Default::default()
+    }
+    .run(&mut cli)?;
+
+    println!("Inspect result: {inspect:.16e}");
+
+    // running inspect on main does not match the value from the old test, I trust the inspect run more.
+    assert_snapshot!(format!("{inspect:.8e}"),@"(-4.236544183136419e-12+-3.7107289586142275e-12i)");
+
+    clean_test(&cli);
+
     Ok(())
 }
 

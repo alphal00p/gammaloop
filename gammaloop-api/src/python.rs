@@ -1,24 +1,27 @@
-use crate::{
-    cli::{inspect::Inspect, integrate::Integrate, state::State},
+use gammalooprs::{
     feyngen::{
-        self, diagram_generator::FeynGen, FeynGenError, FeynGenFilters, FeynGenOptions,
-        NumeratorAwareGraphGroupingOption, SewedFilterOptions,
+        //  self, diagram_generator::FeynGen, FeynGenError, FeynGenFilters, FeynGenOptions,
+        diagram_generator::evaluate_overall_factor,
+        NumeratorAwareGraphGroupingOption,
+        SewedFilterOptions,
     },
     initialisation::initialise,
     integrate::MasterNode,
-    model::Model,
+    model::{InputParamCard, Model},
     numerator::GlobalPrefactor,
     processes::{Process, ProcessDefinition, ProcessList},
     settings::{GlobalSettings, RuntimeSettings},
     utils::F,
 };
 
+use crate::{inspect::Inspect, integrate::Integrate, state::State};
 use ahash::HashMap;
+
 use color_eyre::Result;
 use eyre::eyre;
-use feyngen::{
-    FeynGenFilter, GenerationType, SelfEnergyFilterOptions, SnailFilterOptions,
-    TadpolesFilterOptions,
+use gammalooprs::feyngen::{
+    FeynGenError, FeynGenFilter, FeynGenFilters, GenerationType, SelfEnergyFilterOptions,
+    SnailFilterOptions, TadpolesFilterOptions,
 };
 use git_version::git_version;
 use itertools::{self, Itertools};
@@ -43,7 +46,7 @@ use pyo3::{
 #[pyo3(name = "evaluate_graph_overall_factor")]
 pub(crate) fn evaluate_graph_overall_factor(overall_factor: &str) -> Result<String> {
     let overall_factor = parse!(overall_factor);
-    let overall_factor_evaluated = FeynGen::evaluate_overall_factor(overall_factor.as_view());
+    let overall_factor_evaluated = evaluate_overall_factor(overall_factor.as_view());
     Ok(overall_factor_evaluated.to_canonical_string())
 }
 
@@ -54,10 +57,9 @@ pub(crate) fn atom_to_canonical_string(atom_str: &str) -> Result<String> {
 }
 
 #[pymodule]
-#[pyo3(name = "_gammaloop")]
-fn gammalooprs(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
-    crate::initialisation::initialise().expect("initialization failed");
-    crate::set_interrupt_handler();
+fn _gammaloop(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
+    gammalooprs::initialisation::initialise().expect("initialization failed");
+    gammalooprs::set_interrupt_handler();
     m.add_class::<State>()?;
     m.add_class::<RuntimeSettings>()?;
     m.add_class::<GlobalSettings>()?;
@@ -67,40 +69,12 @@ fn gammalooprs(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     m.add_class::<PySewedFilterOptions>()?;
     m.add_class::<PyTadpolesFilterOptions>()?;
     m.add_class::<PySelfEnergyFilterOptions>()?;
-    m.add_class::<PyFeynGenOptions>()?;
+    // m.add_class::<PyFeynGenOptions>()?;
     m.add_class::<PyNumeratorAwareGroupingOption>()?;
     m.add("git_version", GIT_VERSION)?;
     m.add_wrapped(wrap_pyfunction!(atom_to_canonical_string))?;
     m.add_wrapped(wrap_pyfunction!(evaluate_graph_overall_factor))?;
     Ok(())
-}
-
-impl<'py> IntoPyObject<'py> for F<f64> {
-    type Target = PyFloat;
-    type Output = Bound<'py, Self::Target>;
-    type Error = Infallible;
-
-    #[inline]
-    fn into_pyobject(self, py: Python<'py>) -> Result<Self::Output, Self::Error> {
-        Ok(PyFloat::new(py, self.0))
-    }
-}
-
-impl<'py> IntoPyObject<'py> for &F<f64> {
-    type Target = PyFloat;
-    type Output = Bound<'py, Self::Target>;
-    type Error = Infallible;
-
-    #[inline]
-    fn into_pyobject(self, py: Python<'py>) -> Result<Self::Output, Self::Error> {
-        (*self).into_pyobject(py)
-    }
-}
-
-impl<'py> FromPyObject<'py> for F<f64> {
-    fn extract_bound(obj: &Bound<'py, PyAny>) -> PyResult<Self> {
-        f64::extract_bound(obj).map(F)
-    }
 }
 
 pub struct OutputOptions {}
@@ -315,102 +289,102 @@ impl PyFeynGenFilters {
     }
 }
 
-#[pyclass(name = "FeynGenOptions")]
-pub struct PyFeynGenOptions {
-    pub options: FeynGenOptions,
-}
-impl<'a> FromPyObject<'a> for PyFeynGenOptions {
-    fn extract_bound(ob: &Bound<'a, PyAny>) -> PyResult<Self> {
-        if let Ok(a) = ob.extract::<PyFeynGenOptions>() {
-            Ok(PyFeynGenOptions { options: a.options })
-        } else {
-            Err(exceptions::PyValueError::new_err(
-                "Not a valid Feynman generation option structure",
-            ))
-        }
-    }
-}
+//#[pyclass(name = "FeynGenOptions")]
+//pub struct PyFeynGenOptions {
+//    pub options: FeynGenOptions,
+//}
+//impl<'a> FromPyObject<'a> for PyFeynGenOptions {
+//    fn extract_bound(ob: &Bound<'a, PyAny>) -> PyResult<Self> {
+//        if let Ok(a) = ob.extract::<PyFeynGenOptions>() {
+//            Ok(PyFeynGenOptions { options: a.options })
+//        } else {
+//            Err(exceptions::PyValueError::new_err(
+//                "Not a valid Feynman generation option structure",
+//            ))
+//        }
+//    }
+//}
 
 fn feyngen_to_python_error(error: FeynGenError) -> PyErr {
     exceptions::PyValueError::new_err(format!("Feynam diagram generator error | {error}"))
 }
 
-#[pymethods]
-impl PyFeynGenOptions {
-    pub(crate) fn __str__(&self) -> Result<String> {
-        Ok(format!("{}", self.options))
-    }
-    #[allow(clippy::too_many_arguments)]
-    #[new]
-    pub(crate) fn __new__(
-        generation_type: String,
-        initial_particles: Vec<i64>,
-        final_particles_lists: Vec<Vec<i64>>,
-        loop_count_range: (usize, usize),
-        n_cut_blobs: (usize, usize),
-        n_cut_spectators: (usize, usize),
-        symmetrize_initial_states: bool,
-        symmetrize_final_states: bool,
-        symmetrize_left_right_states: bool,
-        allow_symmetrization_of_external_fermions_in_amplitudes: bool,
-        max_multiplicity_for_fast_cut_filter: usize,
-        amplitude_filters: Option<PyRef<PyFeynGenFilters>>,
-        cross_section_filters: Option<PyRef<PyFeynGenFilters>>,
-    ) -> Result<PyFeynGenOptions> {
-        let amplitude_filters = FeynGenFilters(
-            amplitude_filters
-                .map(|f| f.filters.clone())
-                .unwrap_or_default(),
-        );
-
-        let mut cross_section_filters = FeynGenFilters(
-            cross_section_filters
-                .map(|f| f.filters.clone())
-                .unwrap_or_default(),
-        );
-
-        cross_section_filters
-            .0
-            .push(FeynGenFilter::BlobRange(n_cut_blobs.0..=n_cut_blobs.1));
-        cross_section_filters.0.push(FeynGenFilter::SpectatorRange(
-            n_cut_spectators.0..=n_cut_spectators.1,
-        ));
-
-        let feyngen_options = FeynGenOptions {
-            generation_type: GenerationType::from_str(&generation_type)
-                .map_err(feyngen_to_python_error)?,
-            initial_pdgs: initial_particles,
-            final_pdgs_lists: final_particles_lists,
-            loop_count_range,
-            symmetrize_initial_states,
-            symmetrize_final_states,
-            symmetrize_left_right_states,
-            allow_symmetrization_of_external_fermions_in_amplitudes,
-            max_multiplicity_for_fast_cut_filter,
-            amplitude_filters,
-            cross_section_filters,
-        };
-        if feyngen_options.generation_type == GenerationType::Amplitude {
-            if feyngen_options.final_pdgs_lists.len() > 1 {
-                return Err(eyre!(
-                    "Multiple set of final states are not allowed for amplitude generation",
-                ));
-            }
-        } else if feyngen_options.final_pdgs_lists.len() > 1
-            && feyngen_options
-                .final_pdgs_lists
-                .iter()
-                .any(|l| l.is_empty())
-        {
-            return Err(eyre!(
-                    "When specifying multiple set of final states options, each must contain at least one particle",
-                ));
-        }
-        Ok(PyFeynGenOptions {
-            options: feyngen_options,
-        })
-    }
-}
+//#[pymethods]
+//impl PyFeynGenOptions {
+//    pub(crate) fn __str__(&self) -> Result<String> {
+//        Ok(format!("{}", self.options))
+//    }
+//    #[allow(clippy::too_many_arguments)]
+//    #[new]
+//    pub(crate) fn __new__(
+//        generation_type: String,
+//        initial_particles: Vec<i64>,
+//        final_particles_lists: Vec<Vec<i64>>,
+//        loop_count_range: (usize, usize),
+//        n_cut_blobs: (usize, usize),
+//        n_cut_spectators: (usize, usize),
+//        symmetrize_initial_states: bool,
+//        symmetrize_final_states: bool,
+//        symmetrize_left_right_states: bool,
+//        allow_symmetrization_of_external_fermions_in_amplitudes: bool,
+//        max_multiplicity_for_fast_cut_filter: usize,
+//        amplitude_filters: Option<PyRef<PyFeynGenFilters>>,
+//        cross_section_filters: Option<PyRef<PyFeynGenFilters>>,
+//    ) -> Result<PyFeynGenOptions> {
+//        let amplitude_filters = FeynGenFilters(
+//            amplitude_filters
+//                .map(|f| f.filters.clone())
+//                .unwrap_or_default(),
+//        );
+//
+//        let mut cross_section_filters = FeynGenFilters(
+//            cross_section_filters
+//                .map(|f| f.filters.clone())
+//                .unwrap_or_default(),
+//        );
+//
+//        cross_section_filters
+//            .0
+//            .push(FeynGenFilter::BlobRange(n_cut_blobs.0..=n_cut_blobs.1));
+//        cross_section_filters.0.push(FeynGenFilter::SpectatorRange(
+//            n_cut_spectators.0..=n_cut_spectators.1,
+//        ));
+//
+//        let feyngen_options = FeynGenOptions {
+//            generation_type: GenerationType::from_str(&generation_type)
+//                .map_err(feyngen_to_python_error)?,
+//            initial_pdgs: initial_particles,
+//            final_pdgs_lists: final_particles_lists,
+//            loop_count_range,
+//            symmetrize_initial_states,
+//            symmetrize_final_states,
+//            symmetrize_left_right_states,
+//            allow_symmetrization_of_external_fermions_in_amplitudes,
+//            max_multiplicity_for_fast_cut_filter,
+//            amplitude_filters,
+//            cross_section_filters,
+//        };
+//        if feyngen_options.generation_type == GenerationType::Amplitude {
+//            if feyngen_options.final_pdgs_lists.len() > 1 {
+//                return Err(eyre!(
+//                    "Multiple set of final states are not allowed for amplitude generation",
+//                ));
+//            }
+//        } else if feyngen_options.final_pdgs_lists.len() > 1
+//            && feyngen_options
+//                .final_pdgs_lists
+//                .iter()
+//                .any(|l| l.is_empty())
+//        {
+//            return Err(eyre!(
+//                    "When specifying multiple set of final states options, each must contain at least one particle",
+//                ));
+//        }
+//        Ok(PyFeynGenOptions {
+//            options: feyngen_options,
+//        })
+//    }
+//}
 
 #[pyclass(name = "NumeratorAwareGroupingOption")]
 pub struct PyNumeratorAwareGroupingOption {
@@ -454,12 +428,16 @@ impl State {
     #[new]
     pub fn new_python(state_folder: PathBuf) -> Self {
         initialise().unwrap();
-        let handle = crate::cli::tracing::init_tracing("info", &state_folder.join("logs"));
+        let handle = crate::tracing::init_tracing(
+            "info",
+            Some(state_folder.join("logs").to_str().unwrap().to_owned()),
+        );
 
         let a = Self {
             save_path: state_folder,
             log_filter: handle,
             model: Model::default(),
+            model_parameters: InputParamCard::default(),
             process_list: ProcessList::default(),
             model_path: None,
         };
@@ -469,8 +447,8 @@ impl State {
     pub fn inspect<'py>(
         &mut self,
         py: Python<'py>,
-        process_id: usize,
-        process_name: String,
+        process_id: Option<usize>,
+        integrand_name: Option<String>,
         point: Vec<f64>,
         use_f128: bool,
         force_radius: bool,
@@ -479,7 +457,7 @@ impl State {
     ) -> Result<Bound<'py, PyComplex>> {
         let res = Inspect {
             process_id,
-            process_name,
+            integrand_name,
             point,
             use_f128,
             force_radius,
@@ -490,23 +468,25 @@ impl State {
         Ok(PyComplex::from_doubles(py, res.re, res.im))
     }
 
-    #[pyo3(signature = (path,name=None))]
+    #[pyo3(signature = (path, process_name=None, process_id=None, integrand_name=None))]
     pub(crate) fn import_amplitude_python(
         &mut self,
         path: PathBuf,
-        name: Option<String>,
+        process_name: Option<String>,
+        process_id: Option<usize>,
+        integrand_name: Option<String>,
     ) -> Result<()> {
-        self.import_amplitude(path, name)
+        self.import_amplitude(path, process_name, process_id, integrand_name)
     }
 
     pub(crate) fn import_model_python(&mut self, file_path: PathBuf) -> Result<()> {
         self.import_model(file_path)
     }
 
-    pub(crate) fn load_model_from_yaml_str(&mut self, yaml_str: &str) -> Result<()> {
-        self.model = Model::from_yaml_str(String::from(yaml_str))?;
-        Ok(())
-    }
+    //pub(crate) fn load_model_from_yaml_str(&mut self, yaml_str: &str) -> Result<()> {
+    //    self.model = Model::from_yaml_str(String::from(yaml_str))?;
+    //    Ok(())
+    //}
 
     pub(crate) fn generate_integrands_python(
         &mut self,
@@ -521,14 +501,22 @@ impl State {
         folder: PathBuf,
         override_existing: bool,
         global_settings: &GlobalSettings,
+        process_id: Option<usize>,
+        integrand_name: Option<String>,
     ) -> Result<()> {
-        self.compile_integrands(folder, override_existing, global_settings)
+        self.compile_integrands(
+            folder,
+            override_existing,
+            global_settings,
+            process_id,
+            integrand_name,
+        )
     }
 
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn generate_diagrams(
         &mut self,
-        generation_options: PyRef<PyFeynGenOptions>,
+        //generation_options: PyRef<PyFeynGenOptions>,
         proccess_name: String,
         numerator_aware_isomorphism_grouping: Option<PyRef<PyNumeratorAwareGroupingOption>>,
         filter_self_loop: Option<bool>,
@@ -540,45 +528,46 @@ impl State {
         global_prefactor_colorless: Option<String>,
         num_threads: Option<usize>,
     ) -> Result<Vec<String>> {
-        if self.model.is_empty() {
-            return Err(eyre!(
-                "A physics model must be loaded before generating diagrams"
-            ));
-        }
-        let feyngen_options = generation_options.options.clone();
+        todo!();
+        //if self.model.is_empty() {
+        //    return Err(eyre!(
+        //        "A physics model must be loaded before generating diagrams"
+        //    ));
+        //}
+        //let feyngen_options = generation_options.options.clone();
 
-        // clone some of the options that will be used in the process definition
-        let initial_pdgs = feyngen_options.initial_pdgs.clone();
-        let final_pdgs_lists = feyngen_options.final_pdgs_lists.clone();
-        let generation_type = feyngen_options.generation_type.clone();
-        let amplitude_filters = feyngen_options.amplitude_filters.clone();
-        let cross_section_filters = feyngen_options.cross_section_filters.clone();
+        //// clone some of the options that will be used in the process definition
+        //let initial_pdgs = feyngen_options.initial_pdgs.clone();
+        //let final_pdgs_lists = feyngen_options.final_pdgs_lists.clone();
+        //let generation_type = feyngen_options.generation_type.clone();
+        //let amplitude_filters = feyngen_options.amplitude_filters.clone();
+        //let cross_section_filters = feyngen_options.cross_section_filters.clone();
 
-        let diagram_generator = FeynGen::new(feyngen_options);
+        //let diagram_generator = FeynGen::new(feyngen_options);
 
-        let mut global_prefactor = GlobalPrefactor::default();
-        if let Some(global_prefactor_color) = global_prefactor_color {
-            global_prefactor.num = parse!(&global_prefactor_color);
-        }
-        if let Some(global_prefactor_colorless) = global_prefactor_colorless {
-            global_prefactor.projector = parse!(&global_prefactor_colorless);
-        }
+        //let mut global_prefactor = GlobalPrefactor::default();
+        //if let Some(global_prefactor_color) = global_prefactor_color {
+        //    global_prefactor.num = parse!(&global_prefactor_color);
+        //}
+        //if let Some(global_prefactor_colorless) = global_prefactor_colorless {
+        //    global_prefactor.projector = parse!(&global_prefactor_colorless);
+        //}
 
-        let _diagrams = diagram_generator
-            .generate(
-                &self.model,
-                &numerator_aware_isomorphism_grouping
-                    .map(|o| o.grouping_options.clone())
-                    .unwrap_or(NumeratorAwareGraphGroupingOption::NoGrouping),
-                filter_self_loop.unwrap_or(false),
-                graph_prefix.unwrap_or("GL".to_string()),
-                selected_graphs,
-                vetoed_graphs,
-                loop_momentum_bases,
-                global_prefactor,
-                num_threads,
-            )
-            .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
+        //let _diagrams = diagram_generator
+        //    .generate(
+        //        &self.model,
+        //        &numerator_aware_isomorphism_grouping
+        //            .map(|o| o.grouping_options.clone())
+        //            .unwrap_or(NumeratorAwareGraphGroupingOption::NoGrouping),
+        //        filter_self_loop.unwrap_or(false),
+        //        graph_prefix.unwrap_or("GL".to_string()),
+        //        selected_graphs,
+        //        vetoed_graphs,
+        //        loop_momentum_bases,
+        //        global_prefactor,
+        //        num_threads,
+        //    )
+        //    .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
 
         // let res = Ok(diagrams
         //     .iter()
@@ -586,30 +575,30 @@ impl State {
         //     .collect());
 
         // load everything into processlist
-        let (n_unresolved, unresolved_cut_content) =
-            diagram_generator.unresolved_cut_content(&self.model);
+        //let (n_unresolved, unresolved_cut_content) =
+        //    diagram_generator.unresolved_cut_content(&self.model);
 
-        let process_definition = ProcessDefinition {
-            initial_pdgs,
-            final_pdgs_lists,
-            n_unresolved,
-            unresolved_cut_content: unresolved_cut_content.into_iter().collect(),
-            amplitude_filters,
-            cross_section_filters,
-        };
+        //let process_definition = ProcessDefinition {
+        //    initial_pdgs,
+        //    final_pdgs_lists,
+        //    n_unresolved,
+        //    unresolved_cut_content: unresolved_cut_content.into_iter().collect(),
+        //    amplitude_filters,
+        //    cross_section_filters,
+        //};
 
-        let process = Process::from_graph_list(
-            proccess_name.into(),
-            vec![],
-            generation_type,
-            process_definition,
-            None,
-        )
-        .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
+        //let process = Process::from_graph_list(
+        //    proccess_name.into(),
+        //    vec![],
+        //    generation_type,
+        //    process_definition,
+        //    None,
+        //)
+        //.map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
 
-        self.process_list.add_process(process);
+        //self.process_list.add_process(process);
 
-        Ok(Vec::new())
+        //Ok(Vec::new())
     }
 
     // pub(crate) fn export_expressions(
@@ -654,17 +643,17 @@ impl State {
     pub fn integrate<'py>(
         &mut self,
         py: Python<'py>,
-        process_id: usize,
-        process_name: String,
-        result_path: PathBuf,
+        process_id: Option<usize>,
+        integrand_name: Option<String>,
+        result_path: Option<PathBuf>,
         n_cores: usize,
-        workspace_path: PathBuf,
+        workspace_path: Option<PathBuf>,
         target: Option<Vec<f64>>,
         restart: bool,
     ) -> Result<Vec<Bound<'py, PyComplex>>> {
         let a = Integrate {
             process_id,
-            process_name,
+            integrand_name,
             result_path,
             n_cores,
             workspace_path,

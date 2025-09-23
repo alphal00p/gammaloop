@@ -3391,3 +3391,34 @@ pub(crate) fn external_energy_atom_from_index(index: EdgeIndex) -> Atom {
 
 pub mod newton_solver;
 pub mod test_utils;
+
+#[cfg(feature = "python_api")]
+impl<'py> pyo3::IntoPyObject<'py> for F<f64> {
+    type Target = pyo3::types::PyFloat;
+    type Output = pyo3::Bound<'py, Self::Target>;
+    type Error = std::convert::Infallible;
+
+    #[inline]
+    fn into_pyobject(self, py: pyo3::Python<'py>) -> Result<Self::Output, Self::Error> {
+        Ok(pyo3::types::PyFloat::new(py, self.0))
+    }
+}
+
+#[cfg(feature = "python_api")]
+impl<'py> pyo3::IntoPyObject<'py> for &F<f64> {
+    type Target = pyo3::types::PyFloat;
+    type Output = pyo3::Bound<'py, Self::Target>;
+    type Error = std::convert::Infallible;
+
+    #[inline]
+    fn into_pyobject(self, py: pyo3::Python<'py>) -> Result<Self::Output, Self::Error> {
+        (*self).into_pyobject(py)
+    }
+}
+
+#[cfg(feature = "python_api")]
+impl<'py> pyo3::FromPyObject<'py> for F<f64> {
+    fn extract_bound(obj: &pyo3::Bound<'py, pyo3::types::PyAny>) -> pyo3::PyResult<Self> {
+        f64::extract_bound(obj).map(F)
+    }
+}
