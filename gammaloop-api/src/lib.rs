@@ -58,7 +58,15 @@ pub mod tracing;
 #[derive(Parser, Debug)]
 #[command(name = "gammaLoop", version, about)]
 #[command(next_line_help = true)]
-pub struct Cli {
+pub struct Repl {
+    #[command(subcommand)]
+    pub command: Commands,
+}
+
+#[derive(Parser, Debug)]
+#[command(name = "gammaLoop", version, about)]
+#[command(next_line_help = true)]
+pub struct OneShot {
     /// Path to the a run file as history, and as settings, by default is: `./gammaloop_state/run.yaml`
     #[arg(short = 'r', long, value_hint = clap::ValueHint::FilePath)]
     pub run_history: Option<PathBuf>,
@@ -114,13 +122,13 @@ impl FromStr for Commands {
 }
 
 pub struct Parsed {
-    pub cli: Cli,
+    pub cli: OneShot,
     pub input_string: String,
     pub matches: clap::ArgMatches,
 }
-impl Cli {
+impl OneShot {
     pub fn new_test(state_folder: PathBuf) -> Self {
-        Cli {
+        OneShot {
             run_history: None,
             state_folder,
             model_file: None,
@@ -140,11 +148,11 @@ impl Cli {
         let argv: Vec<OsString> = std::env::args_os().collect();
 
         // Build a Command (same as derive(Parser)) and get matches
-        let mut cmd = <Cli as CommandFactory>::command();
+        let mut cmd = <OneShot as CommandFactory>::command();
         let matches = cmd.clone().try_get_matches_from(&argv)?;
 
-        let cli =
-            <Cli as FromArgMatches>::from_arg_matches(&matches).map_err(|e| e.format(&mut cmd))?;
+        let cli = <OneShot as FromArgMatches>::from_arg_matches(&matches)
+            .map_err(|e| e.format(&mut cmd))?;
 
         Ok(Parsed {
             input_string: argv
@@ -155,15 +163,6 @@ impl Cli {
             matches,
             cli,
         })
-    }
-
-    fn override_settings(&mut self, other: Cli) {
-        self.state_folder = other.state_folder;
-        self.model_file = other.model_file;
-        self.override_state = other.override_state;
-        self.no_save_state = other.no_save_state;
-        self.try_strings = other.try_strings;
-        self.no_skip_default = other.no_skip_default;
     }
 
     pub fn run_command(
@@ -390,7 +389,7 @@ impl Cli {
             };
 
             // 2. Build the REPL – clap‑repl takes ownership and configures rustyline.
-            let mut repl = ClapEditor::<Cli>::builder().with_prompt(Box::new(prompt));
+            let mut repl = ClapEditor::<Repl>::builder().with_prompt(Box::new(prompt));
 
             if let Some(home) = home_dir() {
                 repl = repl.with_editor_hook(move |reed| {
@@ -405,25 +404,23 @@ impl Cli {
 
             loop {
                 match r.read_command() {
-                    ReadCommandOutput::Command(mut cli, raw_input) => {
-                        if let Some(c) = cli.command.take() {
-                            match cli.run_command(
-                                c.clone(),
-                                &mut state,
-                                &mut run_history,
-                                &mut global_settings,
-                                &mut default_runtime_settings,
-                            ) {
-                                Err(e) => {
-                                    eprintln!("{e:?}");
-                                }
-                                Ok(ControlFlow::Break(())) => {
-                                    run_history.push_with_raw(c, Some(raw_input.clone()));
-                                    break;
-                                }
-                                _ => {
-                                    run_history.push_with_raw(c, Some(raw_input));
-                                }
+                    ReadCommandOutput::Command(command, raw_input) => {
+                        match self.run_command(
+                            command.command.clone(),
+                            &mut state,
+                            &mut run_history,
+                            &mut global_settings,
+                            &mut default_runtime_settings,
+                        ) {
+                            Err(e) => {
+                                eprintln!("{e:?}");
+                            }
+                            Ok(ControlFlow::Break(())) => {
+                                run_history.push_with_raw(command.command, Some(raw_input.clone()));
+                                break;
+                            }
+                            _ => {
+                                run_history.push_with_raw(command.command, Some(raw_input));
                             }
                         }
                     }

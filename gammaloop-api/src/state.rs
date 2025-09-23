@@ -37,9 +37,12 @@ use gammalooprs::{
     GammaLoopContextContainer,
 };
 
-use crate::tracing::{set_file_log_filter, set_stderr_log_filter};
+use crate::{
+    tracing::{set_file_log_filter, set_stderr_log_filter},
+    OneShot,
+};
 
-use super::{Cli, Commands};
+use super::{Commands, Repl};
 
 pub trait SyncSettings {
     fn sync_settings(&self) -> Result<()>;
@@ -184,17 +187,13 @@ impl CommandHistory {
     /// This function attempts to parse the raw string using clap, and if successful,
     /// creates a CommandHistory with both the parsed command and the original string.
     pub fn from_raw_string(raw_string: &str) -> Result<Self, clap::Error> {
-        use crate::Cli;
+        use crate::Repl;
         use clap::Parser;
 
         let args: Vec<&str> = raw_string.split_whitespace().collect();
-        let cli = Cli::try_parse_from(std::iter::once("gammaloop").chain(args.iter().copied()))?;
+        let cli = Repl::try_parse_from(std::iter::once("gammaloop").chain(args.iter().copied()))?;
 
-        if let Some(command) = cli.command {
-            Ok(Self::new_with_raw(command, raw_string.into()))
-        } else {
-            Err(clap::Error::new(clap::error::ErrorKind::MissingSubcommand))
-        }
+        Ok(Self::new_with_raw(cli.command, raw_string.into()))
     }
 }
 
@@ -241,7 +240,7 @@ impl RunHistory {
     }
     pub fn run(
         &mut self,
-        cli: &mut Cli,
+        cli: &mut OneShot,
         state: &mut State,
         global_settings: &mut GlobalSettings,
         default_runtime_settings: &mut RuntimeSettings,
@@ -549,8 +548,8 @@ impl State {
         a
     }
 
-    pub fn new_test_cli(&self) -> Cli {
-        Cli {
+    pub fn new_test_cli(&self) -> OneShot {
+        OneShot {
             run_history: None,
             state_folder: self.save_path.clone(),
             model_file: None,

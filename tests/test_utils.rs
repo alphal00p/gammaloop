@@ -5,7 +5,7 @@ use color_eyre::Result;
 
 use gammaloop_api::{
     state::{RunHistory, State},
-    Cli, Commands,
+    Repl, Commands,
 };
 
 use gammalooprs::{initialisation::initialise, utils::test_utils::load_generic_model};
@@ -27,7 +27,7 @@ pub(crate) const TESTS_WORKSPACE: &str = "./tests/workspace";
 
 pub(crate) struct CLIState {
     pub state: State,
-    pub cli: Cli,
+    pub cli: Repl,
     pub global_settings: gammalooprs::settings::GlobalSettings,
     pub default_runtime_settings: gammalooprs::settings::RuntimeSettings,
     pub run_history: RunHistory,
@@ -110,7 +110,7 @@ pub(crate) fn get_test_cli(
 pub(crate) fn new_cli_for_test(
     state_path: impl AsRef<Path>,
     log_file_name: Option<String>,
-) -> (Cli, State) {
+) -> (Repl, State) {
     debug!(
         "Using gammaloop state path: {}",
         state_path.as_ref().display()
