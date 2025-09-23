@@ -196,7 +196,7 @@ impl CommandHistory {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Default, JsonSchema, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, JsonSchema, PartialEq)]
 #[serde(default, deny_unknown_fields)]
 pub struct RunHistory {
     #[serde(skip_serializing_if = "IsDefault::is_default")]
@@ -551,8 +551,8 @@ impl State {
             no_save_state: true,
             override_state: true,
             command: None,
+            dummy: false,
             level: None,
-            debug: false,
             trace_logs_filename: None,
             no_try_strings: false,
         }

@@ -65,6 +65,10 @@ pub struct OneShot {
     /// Path to the a run file to execute
     pub run_history: Option<PathBuf>,
 
+    /// Don't actually run anything, just build up run card
+    #[arg(short = 'd', long, default_value_t = false)]
+    pub dummy: bool,
+
     /// Path to the state folder
     #[arg(short = 's', long, default_value = "./gammaloop_state", value_hint = clap::ValueHint::DirPath)]
     pub state_folder: PathBuf,
@@ -89,9 +93,6 @@ pub struct OneShot {
     #[arg(short = 'l')]
     level: Option<LogLevel>,
 
-    #[arg(short = 'd', default_value_t = false)]
-    debug: bool,
-
     /// Try to serialize using strings when saving run history
     #[arg(long)]
     no_try_strings: bool,
@@ -111,6 +112,8 @@ pub struct GlobalCliSettings {
     pub try_strings: bool,
     #[serde(skip_serializing_if = "is_false")]
     pub override_state: bool,
+    #[serde(skip_serializing_if = "is_false")]
+    pub dummy: bool,
     pub state_folder: PathBuf,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub global_settings: GlobalSettings,
@@ -121,6 +124,7 @@ impl Default for GlobalCliSettings {
         GlobalCliSettings {
             try_strings: true,
             override_state: false,
+            dummy: false,
             state_folder: "./gammaloop_state".into(),
             global_settings: GlobalSettings::default(),
         }
@@ -130,6 +134,7 @@ impl Default for GlobalCliSettings {
 impl GlobalCliSettings {
     pub fn override_with(&mut self, cli: &OneShot) {
         self.try_strings = !cli.no_try_strings;
+        self.dummy = cli.dummy;
 
         self.override_state = cli.override_state;
 
@@ -147,6 +152,7 @@ pub struct Parsed {
 impl OneShot {
     pub fn new_cli_settings(&self, global: GlobalSettings) -> GlobalCliSettings {
         GlobalCliSettings {
+            dummy: self.dummy,
             try_strings: !self.no_try_strings,
             override_state: self.override_state,
             state_folder: self.state_folder.clone(),
@@ -158,12 +164,12 @@ impl OneShot {
         OneShot {
             run_history: None,
             state_folder,
+            dummy: false,
             model_file: None,
             no_save_state: true,
             override_state: false,
             command: None,
             level: Some(LogLevel::Info),
-            debug: false,
             no_try_strings: false,
             trace_logs_filename: None,
         }
@@ -241,8 +247,7 @@ impl OneShot {
 
                     if let Some(run) = self.run_history.as_ref() {
                         let run_history = RunHistory::load(run).unwrap_or_default();
-                        let mut global = run_history.global_settings.clone();
-                        global.override_with(&mut self);
+                        let global = run_history.global_settings.clone();
 
                         let default_runtime = run_history.default_runtime_settings.clone();
                         (state, run_history, global, default_runtime)
@@ -258,8 +263,9 @@ impl OneShot {
             };
 
         if let Some(run) = self.run_history.as_ref() {
-            let mut run_history = RunHistory::load(run).unwrap_or_default();
-            match run_history.run(
+            let mut run = RunHistory::load(run).unwrap_or_default();
+            run_history.merge(run.clone());
+            match run.run(
                 &mut state,
                 &mut global_settings,
                 &mut default_runtime_settings,
@@ -293,12 +299,22 @@ impl OneShot {
             run_history.push_with_raw(a, Some(raw));
         } else {
             print_banner();
-            let prompt = DefaultPrompt {
-                left_prompt: DefaultPromptSegment::Basic(format!(
-                    "{} | γloop ",
-                    self.state_folder.display()
-                )),
-                ..DefaultPrompt::default()
+            let prompt = if global_settings.dummy {
+                DefaultPrompt {
+                    left_prompt: DefaultPromptSegment::Basic(format!(
+                        "{} | γloop DUMMY ",
+                        global_settings.state_folder.display()
+                    )),
+                    ..DefaultPrompt::default()
+                }
+            } else {
+                DefaultPrompt {
+                    left_prompt: DefaultPromptSegment::Basic(format!(
+                        "{} | γloop ",
+                        global_settings.state_folder.display()
+                    )),
+                    ..DefaultPrompt::default()
+                }
             };
 
             // 2. Build the REPL – clap‑repl takes ownership and configures rustyline.

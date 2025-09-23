@@ -105,62 +105,69 @@ impl Commands {
         global_settings: &mut GlobalCliSettings,
         default_runtime_settings: &mut RuntimeSettings,
     ) -> Result<ControlFlow<SaveState>, Report> {
-        match self {
-            Commands::Quit(s) => {
+        if global_settings.dummy {
+            if let Commands::Quit(s) = self {
                 return Ok(ControlFlow::Break(s));
             }
-            Commands::Inspect(inspect) => {
-                let _ = inspect.run(state)?;
-            }
-            Commands::Bench {
-                samples,
-                process_id,
-                process_name,
-                n_cores,
-            } => {
-                state.bench(samples, process_id, process_name, n_cores)?;
-            }
-            Commands::Import(s) => s.run(state)?,
-            Commands::Save(s) => s.run(
-                state,
-                run_history,
-                default_runtime_settings,
-                global_settings,
-            )?,
-            Commands::Set(s) => s.run(state, global_settings, default_runtime_settings)?,
-
-            Commands::Generate(g) => g.run(
-                state,
-                &global_settings.state_folder,
-                global_settings.override_state,
-                &global_settings.global_settings,
-                &default_runtime_settings,
-            )?,
-
-            Commands::Integrate(g) => {
-                g.run(state)?;
-            }
-
-            Commands::Display(l) => l.run(state)?,
-            Commands::Run(r) => {
-                return r.run(
+            println!("Dummy mode: Command '{:?}' not executed.", self);
+        } else {
+            match self {
+                Commands::Quit(s) => {
+                    return Ok(ControlFlow::Break(s));
+                }
+                Commands::Inspect(inspect) => {
+                    let _ = inspect.run(state)?;
+                }
+                Commands::Bench {
+                    samples,
+                    process_id,
+                    process_name,
+                    n_cores,
+                } => {
+                    state.bench(samples, process_id, process_name, n_cores)?;
+                }
+                Commands::Import(s) => s.run(state)?,
+                Commands::Save(s) => s.run(
                     state,
-                    global_settings,
-                    default_runtime_settings,
                     run_history,
-                )
-            }
-            Commands::Reset(r) => r.run(state)?,
-            Commands::Batch {
-                process_file: _process_file,
-                batch_input_file: _batch_input_file,
-                name: _name,
-                output_name: _output_name,
-            } => {
-                todo!("Batch command not implemented yet");
-            }
-            Commands::Shell(s) => {
-                s.run()?;
+                    default_runtime_settings,
+                    global_settings,
+                )?,
+                Commands::Set(s) => s.run(state, global_settings, default_runtime_settings)?,
+
+                Commands::Generate(g) => g.run(
+                    state,
+                    &global_settings.state_folder,
+                    global_settings.override_state,
+                    &global_settings.global_settings,
+                    &default_runtime_settings,
+                )?,
+
+                Commands::Integrate(g) => {
+                    g.run(state)?;
+                }
+
+                Commands::Display(l) => l.run(state)?,
+                Commands::Run(r) => {
+                    return r.run(
+                        state,
+                        global_settings,
+                        default_runtime_settings,
+                        run_history,
+                    )
+                }
+                Commands::Reset(r) => r.run(state)?,
+                Commands::Batch {
+                    process_file: _process_file,
+                    batch_input_file: _batch_input_file,
+                    name: _name,
+                    output_name: _output_name,
+                } => {
+                    todo!("Batch command not implemented yet");
+                }
+                Commands::Shell(s) => {
+                    s.run()?;
+                }
             }
         }
         Ok(ControlFlow::Continue(()))
