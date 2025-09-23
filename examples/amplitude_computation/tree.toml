@@ -1,12 +1,9 @@
 #:schema /Users/lcnbr/.config/gammaloop/schemas/runhistory.json
 commands = [
-    "set global kv stderr_directive=gammalooprs=info,info",
     "import model sm-default",
-    "set global kv stderr_directive=gammalooprs=info,info",
     "import amplitude ./qqx_aaa_tree_user_numerator.dot",
     "generate",
-    "set global kv stderr_directive=gammalooprs=info",
-    "inspect --process-id 0 --name qqx_aaa_tree_user_numerator",
+    "inspect --process-id 0 --name default",
 ]
 
 [default_runtime_settings.Kinematics.externals]
@@ -54,8 +51,8 @@ check_on_norm = true
 [default_runtime_settings.subtraction]
 disable_threshold_subtraction = true
 
-[global_settings]
-stderr_directive = "Debug"
+[global_settings.global_settings]
+display_directive = "Debug"
 
-[global_settings.generation.evaluator_settings]
+[global_settings.global_settings.generation.evaluator_settings]
 compile = true
