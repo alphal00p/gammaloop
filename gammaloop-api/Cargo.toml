@@ -22,13 +22,15 @@ crate-type = ["cdylib", "rlib"]
 name = "gammaloop"
 path = "src/cli.rs"
 bench = false
+required-features = ["cli"]
 
 [features]
 # Keep Python optional unless explicitly enabled.
-default = []
+default = ["cli"]
 ufo_support = ["dep:pyo3", "pyo3/auto-initialize"]
 python_api = ["ufo_support"]
 python_stubgen = ["python_api", "dep:pyo3-stub-gen"]
+cli = []
 
 [dependencies]
 include_dir = "0.7"
@@ -79,7 +81,7 @@ version = "0.25"
 optional = true
 # If you ALSO ship a stable-ABI extension, keep abi3 flags.
 # If you only embed, you may drop "abi3" and "abi3-py37".
-features = ["auto-initialize", "abi3", "abi3-py37"]
+features = ["auto-initialize", "abi3", "abi3-py37", "eyre"]
 
 [build-dependencies]
 pyo3-build-config = "0.25"
