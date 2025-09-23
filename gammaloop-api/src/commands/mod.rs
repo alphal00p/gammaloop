@@ -26,7 +26,9 @@ pub use reset::Reset;
 pub mod save;
 pub use save::Save;
 pub mod set;
+pub mod shell;
 pub use set::Set;
+pub use shell::Shell;
 pub mod run;
 pub use run::Run;
 
@@ -84,6 +86,8 @@ pub enum Commands {
         #[arg(value_name = "NAME")]
         output_name: String,
     },
+    #[command(name = "!")]
+    Shell(Shell),
 }
 
 impl FromStr for Commands {
@@ -154,6 +158,9 @@ impl Commands {
                 output_name: _output_name,
             } => {
                 todo!("Batch command not implemented yet");
+            }
+            Commands::Shell(s) => {
+                s.run()?;
             }
         }
         Ok(ControlFlow::Continue(()))

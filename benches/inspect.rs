@@ -5,9 +5,9 @@ use criterion::{criterion_group, criterion_main, Criterion};
 use gammaloop_api::{
     commands::inspect::Inspect,
     state::{RunHistory, State},
-    GlobalCliSettings, OneShot, Repl,
+    GlobalCliSettings, OneShot,
 };
-use gammalooprs::settings::{GlobalSettings, RuntimeSettings};
+use gammalooprs::settings::RuntimeSettings;
 use gammalooprs::utils::serde_utils::SmartSerde;
 use gammalooprs::utils::test_utils::load_generic_model;
 use pprof::criterion::{Output, PProfProfiler};
