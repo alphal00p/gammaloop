@@ -278,7 +278,7 @@ mod tests {
             .preprocess(
                 &model,
                 &GenerationSettings {
-                    gammaloop_compile_options: GammaloopCompileOptions {
+                    compile: GammaloopCompileOptions {
                         inline_asm: false,
                         fast_math: false,
                         optimization_level: CompilationOptimizationLevel::O0,
@@ -286,7 +286,7 @@ mod tests {
                         compiler: "g++".into(),
                         custom: Vec::new(),
                     },
-                    tropical_subgraph_table_settings: TropicalSubgraphTableSettings {
+                    tropical_subgraph_table: TropicalSubgraphTableSettings {
                         panic_on_fail: false,
                         target_omega: 1.0,
                         ..Default::default()

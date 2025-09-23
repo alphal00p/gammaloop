@@ -634,7 +634,7 @@ impl AmplitudeGraph {
                 &circled_orientations,
                 &canonize_esurface,
                 &esurface.energies,
-                &settings.uv_settings,
+                &settings.uv,
             );
 
             complement_forest.compute(
@@ -644,7 +644,7 @@ impl AmplitudeGraph {
                 &complement_orientations,
                 &canonize_esurface,
                 &esurface.energies,
-                &settings.uv_settings,
+                &settings.uv,
             );
 
             let circled_expr =
@@ -751,7 +751,7 @@ impl AmplitudeGraph {
             &orientations,
             &canonize_esurface,
             &[],
-            &settings.uv_settings,
+            &settings.uv,
         );
 
         let global_num = self.graph.global_network();
@@ -793,7 +793,7 @@ impl AmplitudeGraph {
 
     fn build_tropical_sampler(&mut self, process_settings: &GenerationSettings) -> Result<()> {
         if process_settings
-            .tropical_subgraph_table_settings
+            .tropical_subgraph_table
             .disable_tropical_generation
         {
             debug!("Tropical subgraph table generation is disabled.");
@@ -801,9 +801,7 @@ impl AmplitudeGraph {
         }
         let num_virtual_loop_edges = self.graph.iter_loop_edges().count();
         let num_loops = self.graph.loop_momentum_basis.loop_edges.len();
-        let target_omega = process_settings
-            .tropical_subgraph_table_settings
-            .target_omega;
+        let target_omega = process_settings.tropical_subgraph_table.target_omega;
 
         let weight = (target_omega + (3 * num_loops) as f64 / 2.) / num_virtual_loop_edges as f64;
 

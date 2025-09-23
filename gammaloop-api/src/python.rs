@@ -16,6 +16,7 @@ use gammalooprs::{
 use crate::{
     commands::{inspect::Inspect, integrate::Integrate},
     state::State,
+    CLISettings,
 };
 use ahash::HashMap;
 
@@ -433,12 +434,10 @@ impl State {
         );
 
         let a = Self {
-            save_path: state_folder,
             log_filter: handle,
             model: Model::default(),
             model_parameters: InputParamCard::default(),
             process_list: ProcessList::default(),
-            model_path: None,
         };
         a
     }
@@ -648,7 +647,7 @@ impl State {
         integrand_name: Option<String>,
         result_path: Option<PathBuf>,
         n_cores: usize,
-        workspace_path: Option<PathBuf>,
+        workspace_path: PathBuf,
         target: Option<Vec<f64>>,
         restart: bool,
     ) -> Result<Vec<Bound<'py, PyComplex>>> {
@@ -657,11 +656,16 @@ impl State {
             integrand_name,
             result_path,
             n_cores,
-            workspace_path,
+            workspace_path: Some(workspace_path),
             target,
             restart,
         }
-        .run(self)?;
+        .run(
+            self,
+            &CLISettings {
+                ..Default::default()
+            },
+        )?;
 
         Ok(vec![PyComplex::from_doubles(
             py,

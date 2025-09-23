@@ -1,9 +1,9 @@
-General:
+general:
   debug: 0
   use_ltd: false
-Integrand:
+integrand:
   type: gamma_loop
-Kinematics:
+kinematics:
   e_cm: 3.0
   externals:
     type: constant
@@ -20,7 +20,7 @@ Parameterization:
   mode: spherical
   mapping: linear
   b: 10.0
-Integrator:
+integrator:
   n_bins: 16
   bin_number_evolution: null
   min_samples_for_update: 100
@@ -33,9 +33,9 @@ Integrator:
   show_max_wgt_info: false
   max_prob_ratio: 0.01
   seed: 1337
-Observables: []
-Selectors: []
-Stability:
+observables: []
+selectors: []
+stability:
   rotation_axis: y
   levels:
     - precision: Double

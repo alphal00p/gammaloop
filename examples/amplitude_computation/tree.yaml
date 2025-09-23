@@ -1,7 +1,7 @@
 global_settings:
   stderr_directive: Debug
   generation:
-    evaluator_settings:
+    evaluator:
       compile: true
 default_runtime_settings:
   Kinematics:
@@ -33,7 +33,7 @@ default_runtime_settings:
           - -1
           - -1
           - -1
-  Stability:
+  stability:
     check_on_norm: true
   subtraction:
     disable_threshold_subtraction: true

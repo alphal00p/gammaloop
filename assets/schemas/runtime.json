@@ -34,8 +34,8 @@
         "$ref": "#/$defs/PhaseSpaceSelectorSettings"
       }
     },
-    "Stability": {
-      "$ref": "#/$defs/StabilitySettings"
+    "stability": {
+      "$ref": "#/$defs/stabilitySettings"
     },
     "sampling": {
       "$ref": "#/$defs/SamplingSettings"
@@ -69,19 +69,11 @@
           "format": "double"
         }
       },
-      "required": [
-        "x_min",
-        "x_max",
-        "n_bins",
-        "write_to_file",
-        "filename"
-      ]
+      "required": ["x_min", "x_max", "n_bins", "write_to_file", "filename"]
     },
     "Dep": {
       "type": "string",
-      "enum": [
-        "dependent"
-      ]
+      "enum": ["dependent"]
     },
     "DiscreteGraphSamplingType": {
       "oneOf": [
@@ -153,9 +145,7 @@
             }
           },
           "additionalProperties": false,
-          "required": [
-            "subtype"
-          ]
+          "required": ["subtype"]
         },
         {
           "type": "object",
@@ -173,9 +163,7 @@
             }
           },
           "additionalProperties": false,
-          "required": [
-            "subtype"
-          ]
+          "required": ["subtype"]
         },
         {
           "type": "object",
@@ -193,18 +181,13 @@
             }
           },
           "additionalProperties": false,
-          "required": [
-            "subtype"
-          ]
+          "required": ["subtype"]
         },
         {
           "type": "object",
           "properties": {
             "matrix_stability_test": {
-              "type": [
-                "number",
-                "null"
-              ],
+              "type": ["number", "null"],
               "format": "double"
             },
             "subtype": {
@@ -216,9 +199,7 @@
             }
           },
           "additionalProperties": false,
-          "required": [
-            "subtype"
-          ]
+          "required": ["subtype"]
         }
       ]
     },
@@ -259,10 +240,7 @@
                 }
               },
               "additionalProperties": false,
-              "required": [
-                "momenta",
-                "helicities"
-              ]
+              "required": ["momenta", "helicities"]
             },
             "type": {
               "type": "string",
@@ -270,10 +248,7 @@
             }
           },
           "additionalProperties": false,
-          "required": [
-            "type",
-            "data"
-          ]
+          "required": ["type", "data"]
         }
       ]
     },
@@ -283,11 +258,7 @@
     },
     "FilterQuantity": {
       "type": "string",
-      "enum": [
-        "E",
-        "CosTheta",
-        "PT"
-      ]
+      "enum": ["E", "CosTheta", "PT"]
     },
     "GeneralSettings": {
       "type": "object",
@@ -334,10 +305,7 @@
           "$ref": "#/$defs/HFunction"
         },
         "power": {
-          "type": [
-            "integer",
-            "null"
-          ],
+          "type": ["integer", "null"],
           "format": "uint",
           "minimum": 0
         },
@@ -355,9 +323,7 @@
           "$ref": "#/$defs/HFunctionSettings"
         }
       },
-      "required": [
-        "h_function"
-      ]
+      "required": ["h_function"]
     },
     "IntegrandSettings": {
       "oneOf": [
@@ -370,9 +336,7 @@
             }
           },
           "$ref": "#/$defs/UnitSurfaceSettings",
-          "required": [
-            "type"
-          ]
+          "required": ["type"]
         },
         {
           "type": "object",
@@ -383,9 +347,7 @@
             }
           },
           "$ref": "#/$defs/UnitVolumeSettings",
-          "required": [
-            "type"
-          ]
+          "required": ["type"]
         },
         {
           "type": "object",
@@ -396,9 +358,7 @@
             }
           },
           "$ref": "#/$defs/HFunctionTestSettings",
-          "required": [
-            "type"
-          ]
+          "required": ["type"]
         }
       ]
     },
@@ -416,10 +376,7 @@
             }
           },
           "additionalProperties": false,
-          "required": [
-            "type",
-            "h_function_settings"
-          ]
+          "required": ["type", "h_function_settings"]
         },
         {
           "type": "object",
@@ -430,9 +387,7 @@
             }
           },
           "additionalProperties": false,
-          "required": [
-            "type"
-          ]
+          "required": ["type"]
         }
       ]
     },
@@ -447,20 +402,13 @@
     },
     "IntegratedPhase": {
       "type": "string",
-      "enum": [
-        "real",
-        "imag",
-        "both"
-      ]
+      "enum": ["real", "imag", "both"]
     },
     "IntegratorSettings": {
       "type": "object",
       "properties": {
         "bin_number_evolution": {
-          "type": [
-            "array",
-            "null"
-          ],
+          "type": ["array", "null"],
           "items": {
             "type": "integer",
             "format": "uint",
@@ -642,9 +590,7 @@
             }
           },
           "$ref": "#/$defs/Jet1PTSettings",
-          "required": [
-            "type"
-          ]
+          "required": ["type"]
         },
         {
           "type": "object",
@@ -655,9 +601,7 @@
             }
           },
           "$ref": "#/$defs/SingleParticleObservableSettings",
-          "required": [
-            "type"
-          ]
+          "required": ["type"]
         },
         {
           "type": "object",
@@ -668,9 +612,7 @@
             }
           },
           "$ref": "#/$defs/AFBSettings",
-          "required": [
-            "type"
-          ]
+          "required": ["type"]
         },
         {
           "type": "object",
@@ -680,9 +622,7 @@
               "const": "cross_section"
             }
           },
-          "required": [
-            "type"
-          ]
+          "required": ["type"]
         }
       ]
     },
@@ -709,10 +649,7 @@
           "type": "boolean"
         },
         "force_global_center": {
-          "type": [
-            "array",
-            "null"
-          ],
+          "type": ["array", "null"],
           "items": {
             "type": "array",
             "items": {
@@ -734,10 +671,7 @@
     },
     "ParameterizationMapping": {
       "type": "string",
-      "enum": [
-        "log",
-        "linear"
-      ]
+      "enum": ["log", "linear"]
     },
     "ParameterizationMode": {
       "type": "string",
@@ -815,9 +749,7 @@
     },
     "ParseableAtom": {
       "description": "An atom that is serialized as a string. Do not make any assumptions about the state",
-      "type": [
-        "string"
-      ]
+      "type": ["string"]
     },
     "PhaseSpaceSelectorSettings": {
       "oneOf": [
@@ -830,9 +762,7 @@
             }
           },
           "$ref": "#/$defs/JetSliceSettings",
-          "required": [
-            "type"
-          ]
+          "required": ["type"]
         },
         {
           "type": "object",
@@ -843,19 +773,13 @@
             }
           },
           "$ref": "#/$defs/RangeFilterSettings",
-          "required": [
-            "type"
-          ]
+          "required": ["type"]
         }
       ]
     },
     "Precision": {
       "type": "string",
-      "enum": [
-        "Double",
-        "Quad",
-        "Arb"
-      ]
+      "enum": ["Double", "Quad", "Arb"]
     },
     "RangeFilterSettings": {
       "type": "object",
@@ -879,12 +803,7 @@
           }
         }
       },
-      "required": [
-        "pdgs",
-        "filter",
-        "min_value",
-        "max_value"
-      ]
+      "required": ["pdgs", "filter", "min_value", "max_value"]
     },
     "RotationSetting": {
       "oneOf": [
@@ -897,9 +816,7 @@
             }
           },
           "additionalProperties": false,
-          "required": [
-            "type"
-          ]
+          "required": ["type"]
         },
         {
           "type": "object",
@@ -910,9 +827,7 @@
             }
           },
           "additionalProperties": false,
-          "required": [
-            "type"
-          ]
+          "required": ["type"]
         },
         {
           "type": "object",
@@ -923,9 +838,7 @@
             }
           },
           "additionalProperties": false,
-          "required": [
-            "type"
-          ]
+          "required": ["type"]
         },
         {
           "type": "object",
@@ -936,9 +849,7 @@
             }
           },
           "additionalProperties": false,
-          "required": [
-            "type"
-          ]
+          "required": ["type"]
         },
         {
           "type": "object",
@@ -961,12 +872,7 @@
             }
           },
           "additionalProperties": false,
-          "required": [
-            "type",
-            "alpha",
-            "beta",
-            "gamma"
-          ]
+          "required": ["type", "alpha", "beta", "gamma"]
         }
       ]
     },
@@ -1040,9 +946,7 @@
             }
           },
           "additionalProperties": false,
-          "required": [
-            "type"
-          ]
+          "required": ["type"]
         },
         {
           "type": "object",
@@ -1060,9 +964,7 @@
             }
           },
           "additionalProperties": false,
-          "required": [
-            "type"
-          ]
+          "required": ["type"]
         },
         {
           "type": "object",
@@ -1079,19 +981,13 @@
             }
           },
           "additionalProperties": false,
-          "required": [
-            "type"
-          ]
+          "required": ["type"]
         }
       ]
     },
     "SignOrZero": {
       "type": "string",
-      "enum": [
-        "Zero",
-        "Plus",
-        "Minus"
-      ]
+      "enum": ["Zero", "Plus", "Minus"]
     },
     "SingleParticleObservableSettings": {
       "type": "object",
@@ -1139,14 +1035,7 @@
           "format": "double"
         }
       },
-      "required": [
-        "x_min",
-        "x_max",
-        "n_bins",
-        "filename",
-        "pdgs",
-        "quantity"
-      ]
+      "required": ["x_min", "x_max", "n_bins", "filename", "pdgs", "quantity"]
     },
     "StabilityLevelSetting": {
       "type": "object",
@@ -1243,9 +1132,7 @@
           "minimum": 0
         }
       },
-      "required": [
-        "n_3d_momenta"
-      ]
+      "required": ["n_3d_momenta"]
     },
     "UnitVolumeSettings": {
       "type": "object",
@@ -1256,9 +1143,7 @@
           "minimum": 0
         }
       },
-      "required": [
-        "n_3d_momenta"
-      ]
+      "required": ["n_3d_momenta"]
     }
   }
 }

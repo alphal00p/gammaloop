@@ -20,12 +20,12 @@ fn load_helper(path: &str, use_orientations: bool) -> Graph {
         numerator_settings: Default::default(),
         cpe_rounds_cff: Some(1),
         compile_separate_orientations: use_orientations,
-        tropical_subgraph_table_settings: TropicalSubgraphTableSettings {
+        tropical_subgraph_table: TropicalSubgraphTableSettings {
             target_omega: 1.0,
             panic_on_fail: false,
             ..Default::default()
         },
-        gammaloop_compile_options: GammaloopCompileOptions {
+        compile: GammaloopCompileOptions {
             inline_asm: env::var("NO_ASM").is_err(),
             optimization_level: 3,
             fast_math: true,

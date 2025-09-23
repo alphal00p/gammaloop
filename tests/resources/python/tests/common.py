@@ -18,7 +18,7 @@ def get_gamma_loop_interpreter() -> gl_interface.GammaLoop:
     # gloop.run(gl_interface.CommandList.from_string("set compile_cff False"))
     # gloop.run(gl_interface.CommandList.from_string("set load_compiled_cff False"))
     # gloop.run(gl_interface.CommandList.from_string("set export_settings.numerator_settings.eval_settings.compile_options.subtype 'NotCompiled'"))
-    # gloop.run(gl_interface.CommandList.from_string("set export_settings.gammaloop_compile_options.inline_asm False"))
+    # gloop.run(gl_interface.CommandList.from_string("set export_settings.compile.inline_asm False"))
 
     gammaloop.misc.common.GL_DEBUG = True
     gammaloop.misc.common.GL_CONSOLE_HANDLER.setLevel(logging.CRITICAL)
@@ -32,7 +32,7 @@ def get_gamma_loop_interpreter_no_compilation() -> gl_interface.GammaLoop:
         "set load_compiled_cff False"))
     gloop.run(gl_interface.CommandList.from_string(
         "set export_settings.numerator_settings.eval_settings.compile_options.subtype 'NotCompiled'"))
-    # gloop.run(gl_interface.CommandList.from_string("set export_settings.gammaloop_compile_options.inline_asm False"))
+    # gloop.run(gl_interface.CommandList.from_string("set export_settings.compile.inline_asm False"))
 
     gammaloop.misc.common.GL_DEBUG = True
     gammaloop.misc.common.GL_CONSOLE_HANDLER.setLevel(logging.CRITICAL)

@@ -80,7 +80,7 @@ impl AmplitudeCountertermAtom {
 
         let iterative = if global_settings
             .generation
-            .evaluator_settings
+            .evaluator
             .iterative_orientation_optimization
         {
             Some(RefCell::new(
@@ -138,10 +138,7 @@ impl AmplitudeCountertermData {
                     .as_ref()
                     .join(format!("esurface_{}", i.0))
                     .with_extension("so"),
-                settings
-                    .generation
-                    .gammaloop_compile_options
-                    .export_settings(),
+                settings.generation.compile.export_settings(),
             );
 
             e.iterative.as_mut().map(|iterative| {
@@ -155,10 +152,7 @@ impl AmplitudeCountertermData {
                         .as_ref()
                         .join(format!("iterative_esurface_{}", i.0))
                         .with_extension("so"),
-                    settings
-                        .generation
-                        .gammaloop_compile_options
-                        .export_settings(),
+                    settings.generation.compile.export_settings(),
                 );
             });
         }

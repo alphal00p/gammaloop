@@ -45,14 +45,14 @@ helicities = [
     -1,
 ]
 
-[default_runtime_settings.Stability]
+[default_runtime_settings.stability]
 check_on_norm = true
 
 [default_runtime_settings.subtraction]
 disable_threshold_subtraction = true
 
-[global_settings.global_settings]
+[cli_settings.global]
 display_directive = "Debug"
 
-[global_settings.global_settings.generation.evaluator_settings]
+[cli_settings.global.generation.evaluator]
 compile = true

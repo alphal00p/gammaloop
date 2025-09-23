@@ -26,28 +26,28 @@ use crate::{
 pub struct GenerationSettings {
     // Generation Time settings
     #[serde(skip_serializing_if = "IsDefault::is_default")]
-    pub evaluator_settings: EvaluatorSettings,
+    pub evaluator: EvaluatorSettings,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub orientation_pattern: OrientationPattern,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
-    pub gammaloop_compile_options: GammaloopCompileOptions,
+    pub compile: GammaloopCompileOptions,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
-    pub tropical_subgraph_table_settings: TropicalSubgraphTableSettings,
+    pub tropical_subgraph_table: TropicalSubgraphTableSettings,
     #[serde(skip_serializing_if = "is_true")]
     pub enable_thresholds: bool,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
-    pub uv_settings: UVgenerationSettings,
+    pub uv: UVgenerationSettings,
 }
 
 impl Default for GenerationSettings {
     fn default() -> Self {
         Self {
-            evaluator_settings: EvaluatorSettings::default(),
+            evaluator: EvaluatorSettings::default(),
             orientation_pattern: OrientationPattern::default(),
-            gammaloop_compile_options: GammaloopCompileOptions::default(),
-            tropical_subgraph_table_settings: TropicalSubgraphTableSettings::default(),
+            compile: GammaloopCompileOptions::default(),
+            tropical_subgraph_table: TropicalSubgraphTableSettings::default(),
             enable_thresholds: true,
-            uv_settings: UVgenerationSettings::default(),
+            uv: UVgenerationSettings::default(),
         }
     }
 }

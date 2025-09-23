@@ -2,13 +2,13 @@ global_settings:
   debug_level: Debug
   generation:
     enable_thresholds: false
-    gammaloop_compile_options:
+    compile:
       inline_asm: true
-    evaluator_settings:
+    evaluator:
       iterative_orientation_optimization: true
       compile: false
 default_runtime_settings:
-  General:
+  general:
     debug: 3
     amplitude_prefactor:
       re: 0.0
@@ -17,7 +17,7 @@ default_runtime_settings:
     mu_r_sq: 8315.251344
   subtraction:
     disable_threshold_subtraction: true
-  Integrator:
+  integrator:
     n_bins: 64
     bin_number_evolution: null
     min_samples_for_update: 1000
@@ -60,7 +60,7 @@ default_runtime_settings:
           - -1
           - -1
           - -1
-  Stability:
+  stability:
     rotations: []
     levels:
       - required_precision_for_re: 1e-15

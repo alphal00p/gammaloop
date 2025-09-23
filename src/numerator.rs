@@ -1528,9 +1528,9 @@ impl Numerator<Contracted> {
     //     let o = &export_settings.numerator_settings.eval_settings;
     //     let owned_fn_map = self.generate_fn_map();
 
-    //     let inline_asm = export_settings.gammaloop_compile_options.inline_asm();
+    //     let inline_asm = export_settings.compile.inline_asm();
     //     let compile_options = export_settings
-    //         .gammaloop_compile_options
+    //         .compile
     //         .to_symbolica_compile_options();
 
     //     let eval_settings = NumeratorEvaluatorSettings {

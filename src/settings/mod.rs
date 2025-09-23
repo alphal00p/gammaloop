@@ -30,19 +30,19 @@ pub struct GlobalSettings {
 #[serde(default, deny_unknown_fields)]
 pub struct RuntimeSettings {
     // Runtime settings
-    #[serde(rename = "General", skip_serializing_if = "IsDefault::is_default")]
+    #[serde(rename = "general", skip_serializing_if = "IsDefault::is_default")]
     pub general: GeneralSettings,
-    #[serde(rename = "Integrand", skip_serializing_if = "IsDefault::is_default")]
+    #[serde(rename = "integrand", skip_serializing_if = "IsDefault::is_default")]
     pub hard_coded_integrand: Option<IntegrandSettings>,
-    #[serde(rename = "Kinematics", skip_serializing_if = "IsDefault::is_default")]
+    #[serde(rename = "kinematics", skip_serializing_if = "IsDefault::is_default")]
     pub kinematics: KinematicsSettings,
-    #[serde(rename = "Integrator", skip_serializing_if = "IsDefault::is_default")]
+    #[serde(rename = "integrator", skip_serializing_if = "IsDefault::is_default")]
     pub integrator: IntegratorSettings,
-    #[serde(rename = "Observables", skip_serializing_if = "IsDefault::is_default")]
+    #[serde(rename = "observables", skip_serializing_if = "IsDefault::is_default")]
     pub observables: Vec<ObservableSettings>,
-    #[serde(rename = "Selectors", skip_serializing_if = "IsDefault::is_default")]
+    #[serde(rename = "selectors", skip_serializing_if = "IsDefault::is_default")]
     pub selectors: Vec<PhaseSpaceSelectorSettings>,
-    #[serde(rename = "Stability")]
+    #[serde(rename = "stability")]
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub stability: StabilitySettings,
     #[serde(rename = "sampling", skip_serializing_if = "IsDefault::is_default")]
@@ -123,13 +123,13 @@ mod tests {
     }
 
     #[test]
-    fn gammaloop_compile_options_test_serialize_deserialize() {
+    fn compile_test_serialize_deserialize() {
         use crate::settings::global::GammaloopCompileOptions;
         generic_test_settings::<GammaloopCompileOptions>();
     }
 
     #[test]
-    fn tropical_subgraph_table_settings_test_serialize_deserialize() {
+    fn tropical_subgraph_table_test_serialize_deserialize() {
         use crate::settings::global::TropicalSubgraphTableSettings;
         generic_test_settings::<TropicalSubgraphTableSettings>();
     }

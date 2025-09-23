@@ -58,7 +58,7 @@ fn four_photon_one_loop_amp() {
                 .unwrap()
                 .orientations[AmplitudeOrientationID(0)],
         ),
-        uv_settings: UVgenerationSettings {
+        uv: UVgenerationSettings {
             generate_integrated: true,
         },
         ..Default::default()
@@ -100,7 +100,7 @@ fn tta_uv() {
             //         .unwrap()
             //         .orientations[AmplitudeOrientationID(0)],
             // ),
-            uv_settings: UVgenerationSettings {
+            uv: UVgenerationSettings {
                 generate_integrated: false,
             },
             ..Default::default()
@@ -1541,9 +1541,9 @@ General:
   load_compiled_numerator: true
   load_compiled_separate_orientations: false
   use_ltd: false
-Integrand:
+integrand:
   type: gamma_loop
-Integrator:
+integrator:
   bin_number_evolution: null
   continuous_dim_learning_rate: 0.0
   discrete_dim_learning_rate: 0.0
@@ -1557,7 +1557,7 @@ Integrator:
   seed: 2
   show_max_wgt_info: false
   train_on_avg: false
-Kinematics:
+kinematics:
   e_cm: 800.0
   externals:
     data:
@@ -1568,9 +1568,9 @@ Kinematics:
         - 0.0
         - 0.0
     type: constant
-Observables: []
-Selectors: []
-Stability:
+observables: []
+selectors: []
+stability:
   levels:
   - escalate_for_large_weight_threshold: 0.9
     precision: Double

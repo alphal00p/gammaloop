@@ -12,15 +12,11 @@
     "default_runtime_settings": {
       "$ref": "#/$defs/RuntimeSettings"
     },
-    "global_settings": {
+    "cli_settings": {
       "$ref": "#/$defs/GlobalSettings"
     }
   },
-  "required": [
-    "default_runtime_settings",
-    "global_settings",
-    "commands"
-  ],
+  "required": ["default_runtime_settings", "cli_settings", "commands"],
   "$defs": {
     "AFBSettings": {
       "type": "object",
@@ -45,13 +41,7 @@
           "format": "double"
         }
       },
-      "required": [
-        "x_min",
-        "x_max",
-        "n_bins",
-        "write_to_file",
-        "filename"
-      ]
+      "required": ["x_min", "x_max", "n_bins", "write_to_file", "filename"]
     },
     "CommandHistory": {
       "description": "Represents a command with optional raw string representation\n\nThis struct stores both the parsed command and optionally the original\nstring that was used to create it. This allows for preserving the exact\nuser input while still having access to the structured command data.",
@@ -63,15 +53,10 @@
         },
         "raw_string": {
           "description": "The original string representation of the command, if available",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         }
       },
-      "required": [
-        "command"
-      ]
+      "required": ["command"]
     },
     "Commands": {
       "oneOf": [
@@ -83,9 +68,7 @@
             }
           },
           "additionalProperties": false,
-          "required": [
-            "Display"
-          ]
+          "required": ["Display"]
         },
         {
           "type": "object",
@@ -95,9 +78,7 @@
             }
           },
           "additionalProperties": false,
-          "required": [
-            "Set"
-          ]
+          "required": ["Set"]
         },
         {
           "type": "object",
@@ -107,9 +88,7 @@
             }
           },
           "additionalProperties": false,
-          "required": [
-            "Import"
-          ]
+          "required": ["Import"]
         },
         {
           "type": "object",
@@ -119,9 +98,7 @@
             }
           },
           "additionalProperties": false,
-          "required": [
-            "Save"
-          ]
+          "required": ["Save"]
         },
         {
           "type": "object",
@@ -131,9 +108,7 @@
             }
           },
           "additionalProperties": false,
-          "required": [
-            "Run"
-          ]
+          "required": ["Run"]
         },
         {
           "type": "object",
@@ -143,9 +118,7 @@
             }
           },
           "additionalProperties": false,
-          "required": [
-            "Integrate"
-          ]
+          "required": ["Integrate"]
         },
         {
           "type": "object",
@@ -155,9 +128,7 @@
             }
           },
           "additionalProperties": false,
-          "required": [
-            "Generate"
-          ]
+          "required": ["Generate"]
         },
         {
           "description": "Quit gammaloop",
@@ -168,9 +139,7 @@
             }
           },
           "additionalProperties": false,
-          "required": [
-            "Quit"
-          ]
+          "required": ["Quit"]
         },
         {
           "description": "Inspect a single phase‑space point / momentum configuration",
@@ -181,9 +150,7 @@
             }
           },
           "additionalProperties": false,
-          "required": [
-            "Inspect"
-          ]
+          "required": ["Inspect"]
         },
         {
           "description": "Benchmark raw integrand evaluation speed",
@@ -215,18 +182,11 @@
                   "minimum": 0
                 }
               },
-              "required": [
-                "samples",
-                "process_id",
-                "process_name",
-                "n_cores"
-              ]
+              "required": ["samples", "process_id", "process_name", "n_cores"]
             }
           },
           "additionalProperties": false,
-          "required": [
-            "Bench"
-          ]
+          "required": ["Bench"]
         },
         {
           "description": "HPC batch evaluation branch",
@@ -257,26 +217,17 @@
             }
           },
           "additionalProperties": false,
-          "required": [
-            "Batch"
-          ]
+          "required": ["Batch"]
         }
       ]
     },
     "CompilationOptimizationLevel": {
       "type": "string",
-      "enum": [
-        "O0",
-        "O1",
-        "O2",
-        "O3"
-      ]
+      "enum": ["O0", "O1", "O2", "O3"]
     },
     "Dep": {
       "type": "string",
-      "enum": [
-        "dependent"
-      ]
+      "enum": ["dependent"]
     },
     "DiscreteGraphSamplingType": {
       "oneOf": [
@@ -348,9 +299,7 @@
             }
           },
           "additionalProperties": false,
-          "required": [
-            "subtype"
-          ]
+          "required": ["subtype"]
         },
         {
           "type": "object",
@@ -368,9 +317,7 @@
             }
           },
           "additionalProperties": false,
-          "required": [
-            "subtype"
-          ]
+          "required": ["subtype"]
         },
         {
           "type": "object",
@@ -388,18 +335,13 @@
             }
           },
           "additionalProperties": false,
-          "required": [
-            "subtype"
-          ]
+          "required": ["subtype"]
         },
         {
           "type": "object",
           "properties": {
             "matrix_stability_test": {
-              "type": [
-                "number",
-                "null"
-              ],
+              "type": ["number", "null"],
               "format": "double"
             },
             "subtype": {
@@ -411,9 +353,7 @@
             }
           },
           "additionalProperties": false,
-          "required": [
-            "subtype"
-          ]
+          "required": ["subtype"]
         }
       ]
     },
@@ -421,10 +361,7 @@
       "oneOf": [
         {
           "type": "string",
-          "enum": [
-            "Model",
-            "Processes"
-          ]
+          "enum": ["Model", "Processes"]
         },
         {
           "type": "object",
@@ -438,15 +375,11 @@
                   "minimum": 0
                 }
               },
-              "required": [
-                "process_id"
-              ]
+              "required": ["process_id"]
             }
           },
           "additionalProperties": false,
-          "required": [
-            "Integrands"
-          ]
+          "required": ["Integrands"]
         }
       ]
     },
@@ -498,10 +431,7 @@
                 }
               },
               "additionalProperties": false,
-              "required": [
-                "momenta",
-                "helicities"
-              ]
+              "required": ["momenta", "helicities"]
             },
             "type": {
               "type": "string",
@@ -509,10 +439,7 @@
             }
           },
           "additionalProperties": false,
-          "required": [
-            "type",
-            "data"
-          ]
+          "required": ["type", "data"]
         }
       ]
     },
@@ -522,11 +449,7 @@
     },
     "FilterQuantity": {
       "type": "string",
-      "enum": [
-        "E",
-        "CosTheta",
-        "PT"
-      ]
+      "enum": ["E", "CosTheta", "PT"]
     },
     "GammaloopCompileOptions": {
       "type": "object",
@@ -609,9 +532,7 @@
             }
           },
           "additionalProperties": false,
-          "required": [
-            "Xs"
-          ]
+          "required": ["Xs"]
         },
         {
           "description": "Amplitude generation",
@@ -622,9 +543,7 @@
             }
           },
           "additionalProperties": false,
-          "required": [
-            "Amp"
-          ]
+          "required": ["Amp"]
         },
         {
           "description": "Reuse an already generated process",
@@ -635,9 +554,7 @@
             }
           },
           "additionalProperties": false,
-          "required": [
-            "Existing"
-          ]
+          "required": ["Existing"]
         }
       ]
     },
@@ -647,19 +564,19 @@
         "enable_thresholds": {
           "type": "boolean"
         },
-        "evaluator_settings": {
+        "evaluator": {
           "$ref": "#/$defs/EvaluatorSettings"
         },
-        "gammaloop_compile_options": {
+        "compile": {
           "$ref": "#/$defs/GammaloopCompileOptions"
         },
         "orientation_pattern": {
           "$ref": "#/$defs/OrientationPattern"
         },
-        "tropical_subgraph_table_settings": {
+        "tropical_subgraph_table": {
           "$ref": "#/$defs/TropicalSubgraphTableSettings"
         },
-        "uv_settings": {
+        "uv": {
           "$ref": "#/$defs/UVgenerationSettings"
         }
       },
@@ -708,10 +625,7 @@
           "$ref": "#/$defs/HFunction"
         },
         "power": {
-          "type": [
-            "integer",
-            "null"
-          ],
+          "type": ["integer", "null"],
           "format": "uint",
           "minimum": 0
         },
@@ -729,9 +643,7 @@
           "$ref": "#/$defs/HFunctionSettings"
         }
       },
-      "required": [
-        "h_function"
-      ]
+      "required": ["h_function"]
     },
     "Import": {
       "oneOf": [
@@ -743,9 +655,7 @@
             }
           },
           "additionalProperties": false,
-          "required": [
-            "Model"
-          ]
+          "required": ["Model"]
         },
         {
           "type": "object",
@@ -757,15 +667,11 @@
                   "type": "string"
                 }
               },
-              "required": [
-                "path"
-              ]
+              "required": ["path"]
             }
           },
           "additionalProperties": false,
-          "required": [
-            "Amplitude"
-          ]
+          "required": ["Amplitude"]
         }
       ]
     },
@@ -780,10 +686,7 @@
           "type": "boolean"
         }
       },
-      "required": [
-        "path",
-        "simplify_model"
-      ]
+      "required": ["path", "simplify_model"]
     },
     "Inspect": {
       "type": "object",
@@ -849,9 +752,7 @@
             }
           },
           "$ref": "#/$defs/UnitSurfaceSettings",
-          "required": [
-            "type"
-          ]
+          "required": ["type"]
         },
         {
           "type": "object",
@@ -862,9 +763,7 @@
             }
           },
           "$ref": "#/$defs/UnitVolumeSettings",
-          "required": [
-            "type"
-          ]
+          "required": ["type"]
         },
         {
           "type": "object",
@@ -875,9 +774,7 @@
             }
           },
           "$ref": "#/$defs/HFunctionTestSettings",
-          "required": [
-            "type"
-          ]
+          "required": ["type"]
         }
       ]
     },
@@ -910,10 +807,7 @@
         },
         "target": {
           "description": "Specify the target integration result to compare against",
-          "type": [
-            "array",
-            "null"
-          ],
+          "type": ["array", "null"],
           "items": {
             "type": "number",
             "format": "double"
@@ -947,10 +841,7 @@
             }
           },
           "additionalProperties": false,
-          "required": [
-            "type",
-            "h_function_settings"
-          ]
+          "required": ["type", "h_function_settings"]
         },
         {
           "type": "object",
@@ -961,9 +852,7 @@
             }
           },
           "additionalProperties": false,
-          "required": [
-            "type"
-          ]
+          "required": ["type"]
         }
       ]
     },
@@ -978,20 +867,13 @@
     },
     "IntegratedPhase": {
       "type": "string",
-      "enum": [
-        "real",
-        "imag",
-        "both"
-      ]
+      "enum": ["real", "imag", "both"]
     },
     "IntegratorSettings": {
       "type": "object",
       "properties": {
         "bin_number_evolution": {
-          "type": [
-            "array",
-            "null"
-          ],
+          "type": ["array", "null"],
           "items": {
             "type": "integer",
             "format": "uint",
@@ -1163,10 +1045,7 @@
           "type": "string"
         }
       },
-      "required": [
-        "key",
-        "value"
-      ]
+      "required": ["key", "value"]
     },
     "LocalCounterTermSettings": {
       "type": "object",
@@ -1188,9 +1067,7 @@
             }
           },
           "$ref": "#/$defs/Jet1PTSettings",
-          "required": [
-            "type"
-          ]
+          "required": ["type"]
         },
         {
           "type": "object",
@@ -1201,9 +1078,7 @@
             }
           },
           "$ref": "#/$defs/SingleParticleObservableSettings",
-          "required": [
-            "type"
-          ]
+          "required": ["type"]
         },
         {
           "type": "object",
@@ -1214,9 +1089,7 @@
             }
           },
           "$ref": "#/$defs/AFBSettings",
-          "required": [
-            "type"
-          ]
+          "required": ["type"]
         },
         {
           "type": "object",
@@ -1226,9 +1099,7 @@
               "const": "cross_section"
             }
           },
-          "required": [
-            "type"
-          ]
+          "required": ["type"]
         }
       ]
     },
@@ -1255,10 +1126,7 @@
           "type": "boolean"
         },
         "force_global_center": {
-          "type": [
-            "array",
-            "null"
-          ],
+          "type": ["array", "null"],
           "items": {
             "type": "array",
             "items": {
@@ -1280,10 +1148,7 @@
     },
     "ParameterizationMapping": {
       "type": "string",
-      "enum": [
-        "log",
-        "linear"
-      ]
+      "enum": ["log", "linear"]
     },
     "ParameterizationMode": {
       "type": "string",
@@ -1361,9 +1226,7 @@
     },
     "ParseableAtom": {
       "description": "An atom that is serialized as a string. Do not make any assumptions about the state",
-      "type": [
-        "string"
-      ]
+      "type": ["string"]
     },
     "PhaseSpaceSelectorSettings": {
       "oneOf": [
@@ -1376,9 +1239,7 @@
             }
           },
           "$ref": "#/$defs/JetSliceSettings",
-          "required": [
-            "type"
-          ]
+          "required": ["type"]
         },
         {
           "type": "object",
@@ -1389,29 +1250,20 @@
             }
           },
           "$ref": "#/$defs/RangeFilterSettings",
-          "required": [
-            "type"
-          ]
+          "required": ["type"]
         }
       ]
     },
     "Precision": {
       "type": "string",
-      "enum": [
-        "Double",
-        "Quad",
-        "Arb"
-      ]
+      "enum": ["Double", "Quad", "Arb"]
     },
     "ProcessArgs": {
       "type": "object",
       "properties": {
         "name": {
           "description": "Optional human name",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "process_id": {
           "description": "Stored process ID",
@@ -1420,9 +1272,7 @@
           "minimum": 0
         }
       },
-      "required": [
-        "process_id"
-      ]
+      "required": ["process_id"]
     },
     "RangeFilterSettings": {
       "type": "object",
@@ -1446,12 +1296,7 @@
           }
         }
       },
-      "required": [
-        "pdgs",
-        "filter",
-        "min_value",
-        "max_value"
-      ]
+      "required": ["pdgs", "filter", "min_value", "max_value"]
     },
     "RotationSetting": {
       "oneOf": [
@@ -1464,9 +1309,7 @@
             }
           },
           "additionalProperties": false,
-          "required": [
-            "type"
-          ]
+          "required": ["type"]
         },
         {
           "type": "object",
@@ -1477,9 +1320,7 @@
             }
           },
           "additionalProperties": false,
-          "required": [
-            "type"
-          ]
+          "required": ["type"]
         },
         {
           "type": "object",
@@ -1490,9 +1331,7 @@
             }
           },
           "additionalProperties": false,
-          "required": [
-            "type"
-          ]
+          "required": ["type"]
         },
         {
           "type": "object",
@@ -1503,9 +1342,7 @@
             }
           },
           "additionalProperties": false,
-          "required": [
-            "type"
-          ]
+          "required": ["type"]
         },
         {
           "type": "object",
@@ -1528,12 +1365,7 @@
             }
           },
           "additionalProperties": false,
-          "required": [
-            "type",
-            "alpha",
-            "beta",
-            "gamma"
-          ]
+          "required": ["type", "alpha", "beta", "gamma"]
         }
       ]
     },
@@ -1545,9 +1377,7 @@
           "type": "string"
         }
       },
-      "required": [
-        "path"
-      ]
+      "required": ["path"]
     },
     "RuntimeSettings": {
       "type": "object",
@@ -1583,8 +1413,8 @@
             "$ref": "#/$defs/PhaseSpaceSelectorSettings"
           }
         },
-        "Stability": {
-          "$ref": "#/$defs/StabilitySettings"
+        "stability": {
+          "$ref": "#/$defs/stabilitySettings"
         },
         "sampling": {
           "$ref": "#/$defs/SamplingSettings"
@@ -1665,9 +1495,7 @@
             }
           },
           "additionalProperties": false,
-          "required": [
-            "type"
-          ]
+          "required": ["type"]
         },
         {
           "type": "object",
@@ -1685,9 +1513,7 @@
             }
           },
           "additionalProperties": false,
-          "required": [
-            "type"
-          ]
+          "required": ["type"]
         },
         {
           "type": "object",
@@ -1704,9 +1530,7 @@
             }
           },
           "additionalProperties": false,
-          "required": [
-            "type"
-          ]
+          "required": ["type"]
         }
       ]
     },
@@ -1719,18 +1543,13 @@
               "type": "object",
               "properties": {
                 "path": {
-                  "type": [
-                    "string",
-                    "null"
-                  ]
+                  "type": ["string", "null"]
                 }
               }
             }
           },
           "additionalProperties": false,
-          "required": [
-            "Dot"
-          ]
+          "required": ["Dot"]
         },
         {
           "type": "object",
@@ -1744,21 +1563,14 @@
                 },
                 "path": {
                   "description": "Path to save the state to, by default is the current state folder",
-                  "type": [
-                    "string",
-                    "null"
-                  ]
+                  "type": ["string", "null"]
                 }
               },
-              "required": [
-                "no_skip_default"
-              ]
+              "required": ["no_skip_default"]
             }
           },
           "additionalProperties": false,
-          "required": [
-            "State"
-          ]
+          "required": ["State"]
         },
         {
           "description": "regenerate the schema files",
@@ -1769,9 +1581,7 @@
             }
           },
           "additionalProperties": false,
-          "required": [
-            "Schema"
-          ]
+          "required": ["Schema"]
         }
       ]
     },
@@ -1788,15 +1598,11 @@
                   "type": "string"
                 }
               },
-              "required": [
-                "path"
-              ]
+              "required": ["path"]
             }
           },
           "additionalProperties": false,
-          "required": [
-            "BaseDir"
-          ]
+          "required": ["BaseDir"]
         },
         {
           "description": "Set GLOBAL settings",
@@ -1809,15 +1615,11 @@
                   "$ref": "#/$defs/SetArgs"
                 }
               },
-              "required": [
-                "input"
-              ]
+              "required": ["input"]
             }
           },
           "additionalProperties": false,
-          "required": [
-            "Global"
-          ]
+          "required": ["Global"]
         },
         {
           "description": "Set DEFAULT RUNTIME settings",
@@ -1830,15 +1632,11 @@
                   "$ref": "#/$defs/SetArgs"
                 }
               },
-              "required": [
-                "input"
-              ]
+              "required": ["input"]
             }
           },
           "additionalProperties": false,
-          "required": [
-            "DefaultRuntime"
-          ]
+          "required": ["DefaultRuntime"]
         },
         {
           "description": "Set settings for a PROCESS",
@@ -1854,16 +1652,11 @@
                   "$ref": "#/$defs/ProcessArgs"
                 }
               },
-              "required": [
-                "input",
-                "process"
-              ]
+              "required": ["input", "process"]
             }
           },
           "additionalProperties": false,
-          "required": [
-            "Process"
-          ]
+          "required": ["Process"]
         }
       ]
     },
@@ -1880,15 +1673,11 @@
                   "type": "string"
                 }
               },
-              "required": [
-                "file"
-              ]
+              "required": ["file"]
             }
           },
           "additionalProperties": false,
-          "required": [
-            "File"
-          ]
+          "required": ["File"]
         },
         {
           "description": "Set one or more dotted key-paths",
@@ -1905,15 +1694,11 @@
                   }
                 }
               },
-              "required": [
-                "pairs"
-              ]
+              "required": ["pairs"]
             }
           },
           "additionalProperties": false,
-          "required": [
-            "Kv"
-          ]
+          "required": ["Kv"]
         },
         {
           "description": "Use the stored settings file",
@@ -1924,11 +1709,7 @@
     },
     "SignOrZero": {
       "type": "string",
-      "enum": [
-        "Zero",
-        "Plus",
-        "Minus"
-      ]
+      "enum": ["Zero", "Plus", "Minus"]
     },
     "SingleParticleObservableSettings": {
       "type": "object",
@@ -1976,24 +1757,14 @@
           "format": "double"
         }
       },
-      "required": [
-        "x_min",
-        "x_max",
-        "n_bins",
-        "filename",
-        "pdgs",
-        "quantity"
-      ]
+      "required": ["x_min", "x_max", "n_bins", "filename", "pdgs", "quantity"]
     },
     "SpecArgs": {
       "type": "object",
       "properties": {
         "allow_symmetrization_of_external_fermions_in_amplitudes": {
           "description": "Symmetrization (Option<bool> for smart defaults depending on generation type)",
-          "type": [
-            "boolean",
-            "null"
-          ]
+          "type": ["boolean", "null"]
         },
         "amplitude": {
           "description": "Treat the process as an amplitude (otherwise as cross-section/forward).",
@@ -2004,69 +1775,39 @@
           "type": "boolean"
         },
         "compare_canonized_numerator": {
-          "type": [
-            "boolean",
-            "null"
-          ]
+          "type": ["boolean", "null"]
         },
         "consider_internal_masses_only_in_numerator_isomorphisms": {
-          "type": [
-            "boolean",
-            "null"
-          ]
+          "type": ["boolean", "null"]
         },
         "filter_cross_section_tadpoles": {
           "description": "Cross-section tadpole filtering when sewing",
-          "type": [
-            "boolean",
-            "null"
-          ]
+          "type": ["boolean", "null"]
         },
         "filter_self_loop": {
           "description": "Filter self-loop (explicit; default false)",
-          "type": [
-            "boolean",
-            "null"
-          ]
+          "type": ["boolean", "null"]
         },
         "filter_selfenergies": {
           "description": "Topology filters (Option<bool> to enable smart defaults)",
-          "type": [
-            "boolean",
-            "null"
-          ]
+          "type": ["boolean", "null"]
         },
         "filter_snails": {
-          "type": [
-            "boolean",
-            "null"
-          ]
+          "type": ["boolean", "null"]
         },
         "filter_tadpoles": {
-          "type": [
-            "boolean",
-            "null"
-          ]
+          "type": ["boolean", "null"]
         },
         "fully_numerical_substitution_when_comparing_numerators": {
-          "type": [
-            "boolean",
-            "null"
-          ]
+          "type": ["boolean", "null"]
         },
         "graph_prefix": {
           "description": "Graph name prefix",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "loop_momentum_bases": {
           "description": "Graph processing toggles\n\nFormat:\n  --loop-momentum-bases \"GL_12=p1,p2;GL_77=q1,q2\"\n  --select-graphs \"GL_12,GL_13\"\n  --veto-graphs \"GL_11,GL_15\"",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "max_multiplicity_for_fast_cut_filter": {
           "description": "Fast cut filter switch multiplicity",
@@ -2076,18 +1817,12 @@
         },
         "max_n_bridges": {
           "description": "Extra filters / constraints",
-          "type": [
-            "integer",
-            "null"
-          ],
+          "type": ["integer", "null"],
           "format": "int32"
         },
         "n_cut_blobs": {
           "description": "Cut options (cross-section)\nRange of cut blobs on either side of the cut",
-          "type": [
-            "array",
-            "null"
-          ],
+          "type": ["array", "null"],
           "items": {
             "type": "integer",
             "format": "uint",
@@ -2096,10 +1831,7 @@
         },
         "n_cut_spectators": {
           "description": "Range of cut spectators on either side of the cut",
-          "type": [
-            "array",
-            "null"
-          ],
+          "type": ["array", "null"],
           "items": {
             "type": "integer",
             "format": "uint",
@@ -2108,33 +1840,21 @@
         },
         "num_threads": {
           "description": "Number of threads",
-          "type": [
-            "integer",
-            "null"
-          ],
+          "type": ["integer", "null"],
           "format": "uint32",
           "minimum": 0
         },
         "number_of_factorized_loop_subtopologies": {
-          "type": [
-            "integer",
-            "null"
-          ],
+          "type": ["integer", "null"],
           "format": "int32"
         },
         "number_of_fermion_loops": {
           "description": "Number of closed fermion loops; negative disables",
-          "type": [
-            "integer",
-            "null"
-          ],
+          "type": ["integer", "null"],
           "format": "int32"
         },
         "number_of_samples_for_numerator_comparisons": {
-          "type": [
-            "integer",
-            "null"
-          ],
+          "type": ["integer", "null"],
           "format": "uint",
           "minimum": 0
         },
@@ -2151,37 +1871,22 @@
         },
         "numerical_samples_seed": {
           "description": "Grouping attributes",
-          "type": [
-            "integer",
-            "null"
-          ],
+          "type": ["integer", "null"],
           "format": "uint16",
           "maximum": 65535,
           "minimum": 0
         },
         "select_graphs": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "symmetrize_final_states": {
-          "type": [
-            "boolean",
-            "null"
-          ]
+          "type": ["boolean", "null"]
         },
         "symmetrize_initial_states": {
-          "type": [
-            "boolean",
-            "null"
-          ]
+          "type": ["boolean", "null"]
         },
         "symmetrize_left_right_states": {
-          "type": [
-            "boolean",
-            "null"
-          ]
+          "type": ["boolean", "null"]
         },
         "tokens": {
           "description": "Quote-free spec.\n\nGrammar (unquoted): `INITIAL to FINAL [process_options] [generation_options]`\nAlso accepts: `INITIAL > FINAL [ ... ]`\n\nExamples:\n  e+ e- to d d~ g veto u d xs QED^2==2 QCD^2<=4 pert loops=1 fsloops=2 QCD=2\n  e+ e- > { z z, a a } [ {1} {{2}} QCD=2 QED=1 ] / u d | g ghG QED==2 QCD>=2 QCD<=4\n\nNotes:\n- `veto` and `only` are synonyms for `/` and `|`.\n- The `[ ... ]` block holds perturbative spec: `{n}`, `{{n}}`, and orders `QCD=n` with shorthand `QCD`≡1.",
@@ -2191,67 +1896,37 @@
           }
         },
         "veto_graphs": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "veto_only_scaleless_self_energy": {
-          "type": [
-            "boolean",
-            "null"
-          ]
+          "type": ["boolean", "null"]
         },
         "veto_only_scaleless_snails": {
-          "type": [
-            "boolean",
-            "null"
-          ]
+          "type": ["boolean", "null"]
         },
         "veto_only_scaleless_tadpoles": {
-          "type": [
-            "boolean",
-            "null"
-          ]
+          "type": ["boolean", "null"]
         },
         "veto_self_energy_of_massive_lines": {
           "description": "Self-energy veto details",
-          "type": [
-            "boolean",
-            "null"
-          ]
+          "type": ["boolean", "null"]
         },
         "veto_self_energy_of_massless_lines": {
-          "type": [
-            "boolean",
-            "null"
-          ]
+          "type": ["boolean", "null"]
         },
         "veto_snails_attached_to_massive_lines": {
           "description": "Snail veto details",
-          "type": [
-            "boolean",
-            "null"
-          ]
+          "type": ["boolean", "null"]
         },
         "veto_snails_attached_to_massless_lines": {
-          "type": [
-            "boolean",
-            "null"
-          ]
+          "type": ["boolean", "null"]
         },
         "veto_tadpoles_attached_to_massive_lines": {
           "description": "Tadpole veto details",
-          "type": [
-            "boolean",
-            "null"
-          ]
+          "type": ["boolean", "null"]
         },
         "veto_tadpoles_attached_to_massless_lines": {
-          "type": [
-            "boolean",
-            "null"
-          ]
+          "type": ["boolean", "null"]
         }
       },
       "required": [
@@ -2381,9 +2056,7 @@
           "minimum": 0
         }
       },
-      "required": [
-        "n_3d_momenta"
-      ]
+      "required": ["n_3d_momenta"]
     },
     "UnitVolumeSettings": {
       "type": "object",
@@ -2394,9 +2067,7 @@
           "minimum": 0
         }
       },
-      "required": [
-        "n_3d_momenta"
-      ]
+      "required": ["n_3d_momenta"]
     }
   }
 }

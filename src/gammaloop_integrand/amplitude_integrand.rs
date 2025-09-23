@@ -105,7 +105,7 @@ impl AmplitudeGraphTerm {
 
         let iterative_integrand_evaluator = if settings
             .generation
-            .evaluator_settings
+            .evaluator
             .iterative_orientation_optimization
         {
             GenericEvaluator::new_from_builder(
@@ -203,10 +203,7 @@ impl AmplitudeGraphTerm {
             graph_path
                 .join("orientation_parametric_integrand")
                 .with_extension("so"),
-            settings
-                .generation
-                .gammaloop_compile_options
-                .export_settings(),
+            settings.generation.compile.export_settings(),
         );
 
         self.threshold_counterterm
@@ -217,10 +214,7 @@ impl AmplitudeGraphTerm {
                 graph_path.join("iterative").with_extension("cpp"),
                 format!("{}_iterative", &self.graph.name,),
                 graph_path.join("iterative").with_extension("so"),
-                settings
-                    .generation
-                    .gammaloop_compile_options
-                    .export_settings(),
+                settings.generation.compile.export_settings(),
             )
         });
 

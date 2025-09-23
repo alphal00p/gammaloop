@@ -9,7 +9,7 @@ commands = [
     "inspect --process-id 0 --name zeno_IR -p 0.1 0.2 0.3 -m",
 ]
 
-[default_runtime_settings.General]
+[default_runtime_settings.general]
 m_uv = 1.0
 mu_r_sq = 1.0
 
@@ -69,11 +69,11 @@ helicities = [
 [default_runtime_settings.subtraction]
 disable_threshold_subtraction = true
 
-[global_settings]
+[cli_settings.global]
 stderr_directive = "Debug"
 
-[global_settings.generation.evaluator_settings]
+[cli_settings.global.generation.evaluator]
 compile = true
 
-[global_settings.generation.tropical_subgraph_table_settings]
+[cli_settings.global.generation.tropical_subgraph_table]
 disable_tropical_generation = true

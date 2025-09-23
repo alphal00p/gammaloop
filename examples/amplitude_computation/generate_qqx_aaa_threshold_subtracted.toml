@@ -7,7 +7,7 @@ commands = [
 ]
 
 
-[default_runtime_settings.General]
+[default_runtime_settings.general]
 m_uv = 1.0
 mu_r_sq = 8315.251344
 
@@ -47,31 +47,31 @@ momenta = [
 ]
 helicities = [1, 1, -1, -1, -1]
 
-[default_runtime_settings.Integrator]
+[default_runtime_settings.integrator]
 n_increase = 0
 n_max = 20000000
 discrete_dim_learning_rate = 1.5
 continuous_dim_learning_rate = 1.5
 max_prob_ratio = 0.01
 
-[default_runtime_settings.Stability]
+[default_runtime_settings.stability]
 check_on_norm = true
 rotation_axis = []
 
 [default_runtime_settings.subtraction]
 disable_threshold_subtraction = false
 
-[global_settings]
+[cli_settings.global]
 display_directive = "debug"
 logfile_directive = "debug"
 
-[global_settings.generation]
+[cli_settings.global.generation]
 enable_thresholds = true
 
-[global_settings.generation.evaluator_settings]
+[cli_settings.global.generation.evaluator]
 iterative_orientation_optimization = true
 compile = true
 
-[global_settings.generation.gammaloop_compile_options]
+[cli_settings.global.generation.compile]
 inline_asm = true
 optimization_level = "O3"

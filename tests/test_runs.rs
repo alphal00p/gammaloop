@@ -232,7 +232,7 @@ fn scalar_box() -> Result<()> {
 
     assert_snapshot!(format!("{a:.8e}"),@"(1.3485885914334373e-3+0e0i)");
 
-    cli.run_command("set process -p 0 -i default kv General.enable_cache=false")?;
+    cli.run_command("set process -p 0 -i default kv general.enable_cache=false")?;
     let integral_no_cache = Integrate {
         process_id: Some(0),
         integrand_name: Some("default".to_string()),
@@ -247,7 +247,7 @@ fn scalar_box() -> Result<()> {
     }
     .run(&mut cli.state, &cli.cli_settings)?;
 
-    cli.run_command("set process -p 0 -i default kv General.enable_cache=true")?;
+    cli.run_command("set process -p 0 -i default kv general.enable_cache=true")?;
     let integral_with_cache = Integrate {
         process_id: Some(0),
         integrand_name: Some("default".to_string()),

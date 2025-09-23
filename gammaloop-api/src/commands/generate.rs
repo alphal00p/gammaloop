@@ -407,7 +407,7 @@ impl Generate {
                     process_args.process_id,
                     process_args.integrand_name.clone(),
                 )?;
-                if generation_settings.generation.evaluator_settings.compile {
+                if generation_settings.generation.evaluator.compile {
                     state.compile_integrands(
                         compile_folder,
                         override_existing_compiled,
@@ -420,7 +420,7 @@ impl Generate {
             }
             None => {
                 state.generate_integrands(generation_settings, runtime_settings.into())?;
-                if generation_settings.generation.evaluator_settings.compile {
+                if generation_settings.generation.evaluator.compile {
                     state.compile_integrands(
                         compile_folder,
                         override_existing_compiled,

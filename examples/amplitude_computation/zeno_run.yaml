@@ -1,17 +1,17 @@
 global_settings:
   stderr_directive: Debug
   generation:
-    evaluator_settings:
+    evaluator:
       compile: true
-    tropical_subgraph_table_settings:
+    tropical_subgraph_table:
       disable_tropical_generation: true
       panic_on_fail: false
       target_omega: 1.0
 default_runtime_settings:
-  General:
+  general:
     m_uv: 1.0
     mu_r_sq: 1.0
-  Kinematics:
+  kinematics:
     e_cm: 64.0
     externals:
       type: constant

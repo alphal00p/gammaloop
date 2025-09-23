@@ -17,12 +17,7 @@
   "$defs": {
     "CompilationOptimizationLevel": {
       "type": "string",
-      "enum": [
-        "O0",
-        "O1",
-        "O2",
-        "O3"
-      ]
+      "enum": ["O0", "O1", "O2", "O3"]
     },
     "EvaluatorSettings": {
       "type": "object",
@@ -68,19 +63,19 @@
         "enable_thresholds": {
           "type": "boolean"
         },
-        "evaluator_settings": {
+        "evaluator": {
           "$ref": "#/$defs/EvaluatorSettings"
         },
-        "gammaloop_compile_options": {
+        "compile": {
           "$ref": "#/$defs/GammaloopCompileOptions"
         },
         "orientation_pattern": {
           "$ref": "#/$defs/OrientationPattern"
         },
-        "tropical_subgraph_table_settings": {
+        "tropical_subgraph_table": {
           "$ref": "#/$defs/TropicalSubgraphTableSettings"
         },
-        "uv_settings": {
+        "uv": {
           "$ref": "#/$defs/UVgenerationSettings"
         }
       },
@@ -104,9 +99,7 @@
     },
     "ParseableAtom": {
       "description": "An atom that is serialized as a string. Do not make any assumptions about the state",
-      "type": [
-        "string"
-      ]
+      "type": ["string"]
     },
     "TropicalSubgraphTableSettings": {
       "type": "object",

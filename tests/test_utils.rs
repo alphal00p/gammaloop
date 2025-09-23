@@ -1,13 +1,12 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
 
-use bincode::de;
 use color_eyre::Result;
 
 use gammaloop_api::{
     commands::{save::SaveState, Commands},
     state::{RunHistory, State},
-    CLISettings, OneShot,
+    CLISettings,
 };
 
 use gammalooprs::{initialisation::initialise, utils::test_utils::load_generic_model};
