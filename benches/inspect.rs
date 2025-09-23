@@ -5,7 +5,7 @@ use criterion::{criterion_group, criterion_main, Criterion};
 use gammaloop_api::{
     inspect::Inspect,
     state::{RunHistory, State},
-    Repl,
+    GlobalCliSettings, OneShot, Repl,
 };
 use gammalooprs::settings::{GlobalSettings, RuntimeSettings};
 use gammalooprs::utils::serde_utils::SmartSerde;
@@ -14,7 +14,7 @@ use pprof::criterion::{Output, PProfProfiler};
 use std::{env, path::Path, time::Duration};
 use tracing::{debug, warn};
 
-fn new_cli_for_bench(test_path: impl AsRef<Path>) -> (Repl, State) {
+fn new_cli_for_bench(test_path: impl AsRef<Path>) -> (OneShot, State) {
     let state_path = if let Ok(user_specified_state_path) = env::var("TESTS_GAMMALOOP_STATE_PATH") {
         if user_specified_state_path.to_ascii_uppercase() == "AUTO" {
             env::temp_dir().join("tests_gammaloop_state")
@@ -68,10 +68,9 @@ fn criterion_benchmark(c: &mut Criterion) -> Result<()> {
         "run history",
     )?;
     let (mut cli, mut state) = new_cli_for_bench("./benches/qqx_aaa_amplitude");
-    let mut global_settings = GlobalSettings::default();
+    let mut global_settings = GlobalCliSettings::default();
     let mut default_runtime_settings = RuntimeSettings::default();
     let _ = qqx_aaa_run.run(
-        &mut cli,
         &mut state,
         &mut global_settings,
         &mut default_runtime_settings,

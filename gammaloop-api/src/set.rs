@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     generate::ProcessArgs,
     state::{State, SyncSettings},
-    Commands,
+    Commands, GlobalCliSettings,
 };
 
 impl FromStr for Set {
@@ -63,13 +63,12 @@ impl Set {
     pub fn run(
         &self,
         state: &mut State,
-        global_settings: &mut GlobalSettings,
+        global_settings: &mut GlobalCliSettings,
         default_runtime_settings: &mut RuntimeSettings,
-        state_folder: &mut PathBuf,
     ) -> Result<()> {
         match self {
             Set::BaseDir { path } => {
-                *state_folder = path.clone();
+                global_settings.state_folder = path.clone();
             }
             Self::Global { input } => {
                 let fig = Figment::from(Serialized::defaults(&global_settings));

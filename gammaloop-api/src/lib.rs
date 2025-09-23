@@ -3,6 +3,7 @@ use ::tracing::info;
 use ::tracing::level_filters::LevelFilter;
 use clap::{Args, CommandFactory, FromArgMatches, Parser, Subcommand};
 use gammalooprs::processes::ProcessList;
+use gammalooprs::utils::serde_utils::SerdeFileError;
 use reedline::DefaultPrompt;
 use reedline::DefaultPromptSegment;
 use reedline::FileBackedHistory;
@@ -10,7 +11,6 @@ use repl::ClapEditor;
 use repl::ReadCommandOutput;
 use state::set_serialize_commands_as_strings;
 use tracing::get_stderr_log_filter;
-use tracing::set_stderr_log_filter;
 
 // use clap_repl::{
 //     reedline::{DefaultPrompt, DefaultPromptSegment, FileBackedHistory},
@@ -27,8 +27,9 @@ use gammalooprs::{
     initialisation::initialise,
     settings::{GlobalSettings, RuntimeSettings},
     status_info,
+    utils::serde_utils::IsDefault,
     utils::{
-        serde_utils::{get_schema_folder, SmartSerde, SHOWDEFAULTS},
+        serde_utils::{get_schema_folder, is_false, is_true, SmartSerde, SHOWDEFAULTS},
         tracing::{LogFormat, LogLevel},
         GIT_VERSION,
     },
@@ -67,8 +68,7 @@ pub struct Repl {
 #[command(name = "gammaLoop", version, about)]
 #[command(next_line_help = true)]
 pub struct OneShot {
-    /// Path to the a run file as history, and as settings, by default is: `./gammaloop_state/run.yaml`
-    #[arg(short = 'r', long, value_hint = clap::ValueHint::FilePath)]
+    /// Path to the a run file to execute
     pub run_history: Option<PathBuf>,
 
     /// Path to the state folder
@@ -98,13 +98,9 @@ pub struct OneShot {
     #[arg(short = 'd', default_value_t = false)]
     debug: bool,
 
-    /// Do not skip fields that are default when saving state
-    #[arg(long)]
-    no_skip_default: bool,
-
     /// Try to serialize using strings when saving run history
     #[arg(long)]
-    try_strings: bool,
+    no_try_strings: bool,
 
     // /// Debug level
     // #[arg(short = 'd', long, value_enum, default_value_t = LogLevel::Info)]
@@ -113,6 +109,41 @@ pub struct OneShot {
     #[command(subcommand)]
     pub command: Option<Commands>,
 }
+
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, PartialEq)]
+#[serde(default, deny_unknown_fields)]
+pub struct GlobalCliSettings {
+    #[serde(skip_serializing_if = "is_true")]
+    pub try_strings: bool,
+    #[serde(skip_serializing_if = "is_false")]
+    pub override_state: bool,
+    pub state_folder: PathBuf,
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    pub global_settings: GlobalSettings,
+}
+
+impl Default for GlobalCliSettings {
+    fn default() -> Self {
+        GlobalCliSettings {
+            try_strings: true,
+            override_state: false,
+            state_folder: "./gammaloop_state".into(),
+            global_settings: GlobalSettings::default(),
+        }
+    }
+}
+
+impl GlobalCliSettings {
+    pub fn override_with(&mut self, cli: &OneShot) {
+        self.try_strings = !cli.no_try_strings;
+
+        self.override_state = cli.override_state;
+
+        self.state_folder = cli.state_folder.clone();
+    }
+}
+
+impl SmartSerde for GlobalCliSettings {}
 
 impl FromStr for Commands {
     type Err = Report;
@@ -127,6 +158,15 @@ pub struct Parsed {
     pub matches: clap::ArgMatches,
 }
 impl OneShot {
+    pub fn new_cli_settings(&self, global: GlobalSettings) -> GlobalCliSettings {
+        GlobalCliSettings {
+            try_strings: !self.no_try_strings,
+            override_state: self.override_state,
+            state_folder: self.state_folder.clone(),
+            global_settings: global,
+        }
+    }
+
     pub fn new_test(state_folder: PathBuf) -> Self {
         OneShot {
             run_history: None,
@@ -137,8 +177,7 @@ impl OneShot {
             command: None,
             level: Some(LogLevel::Info),
             debug: false,
-            no_skip_default: false,
-            try_strings: false,
+            no_try_strings: false,
             trace_logs_filename: None,
         }
     }
@@ -165,193 +204,44 @@ impl OneShot {
         })
     }
 
-    pub fn run_command(
-        &mut self,
-        command: Commands,
-        state: &mut State,
-        run_history: &mut RunHistory,
-        global_settings: &mut GlobalSettings,
-        default_runtime_settings: &mut RuntimeSettings,
-    ) -> Result<ControlFlow<()>, Report> {
-        if let Some(level) = self.level {
-            let spec = level.to_env_spec();
-            set_stderr_log_filter(spec)?;
-        }
-        if self.debug {
-            set_stderr_log_filter(LogLevel::Debug.to_env_spec())?;
-        }
-        match command {
-            Commands::Quit {} => {
-                return Ok(ControlFlow::Break(()));
-            }
-            Commands::Inspect(inspect) => {
-                let _ = inspect.run(state)?;
-            }
-            Commands::Bench {
-                samples,
-                process_id,
-                process_name,
-                n_cores,
-            } => {
-                state.bench(samples, process_id, process_name, n_cores)?;
-            }
-            Commands::Import(s) => match s {
-                Import::Amplitude {
-                    path,
-                    process_id,
-                    integrand_name,
-                } => {
-                    state.import_amplitude(path, None, process_id, integrand_name)?;
-                }
-                Import::Model(im) => {
-                    im.run(state)?;
-                }
-            },
-            Commands::Save(s) => match s {
-                Save::Dot { path } => {
-                    state.export_dots(path.unwrap_or(self.state_folder.clone()))?;
-                }
-                Save::State { path, .. } => {
-                    self.save(
-                        state,
-                        run_history,
-                        default_runtime_settings,
-                        global_settings,
-                        path,
-                        false,
-                    )?;
-                }
-                Save::Schema {} => {
-                    write_schemas()?;
-                }
-            },
-            Commands::Set(s) => s.run(
-                state,
-                global_settings,
-                default_runtime_settings,
-                &mut self.state_folder,
-            )?,
-
-            Commands::Generate(g) => g.run(
-                state,
-                &self.state_folder,
-                self.override_state,
-                &global_settings,
-                &default_runtime_settings,
-            )?,
-
-            Commands::Integrate(g) => {
-                g.run(state)?;
-            }
-
-            Commands::Display(l) => match l {
-                Display::Integrands { process_id } => {
-                    let process = if let Some(proc_id) = process_id {
-                        if proc_id >= state.process_list.processes.len() {
-                            return Err(eyre!(
-                                "Process ID {} invalid, only {} processes available",
-                                proc_id,
-                                state.process_list.processes.len()
-                            ));
-                        }
-                        &state.process_list.processes[proc_id]
-                    } else {
-                        if state.process_list.processes.len() == 1 {
-                            &state.process_list.processes[0]
-                        } else {
-                            return Err(eyre!(
-                                "Multiple processes available, please specify the process."
-                            ));
-                        }
-                    };
-
-                    println!("Integrands for process {}:", process.definition.process_id);
-                    for integrand in process.get_integrand_names() {
-                        println!("  {}", integrand);
-                    }
-                }
-                Display::Processes => {
-                    println!("Processes:");
-                    for process in state.process_list.processes.iter() {
-                        println!(
-                            "#{:-10}  {}",
-                            process.definition.process_id, process.definition.folder_name
-                        );
-                    }
-                }
-                Display::Model => {
-                    println!("{}", state.model.name)
-                }
-            },
-            Commands::Run(Run { path, commands }) => {
-                let mut a = ControlFlow::Continue(());
-                if let Some(mut new_run_history) = path.map(|p| RunHistory::load(p)).transpose()? {
-                    *global_settings = new_run_history.global_settings.clone();
-                    *default_runtime_settings = new_run_history.default_runtime_settings.clone();
-                    let res =
-                        new_run_history.run(self, state, global_settings, default_runtime_settings);
-
-                    run_history.merge(new_run_history);
-                    a = res?;
-                };
-
-                if let Some(c) = commands {
-                    for c in c.split(';') {
-                        if c.trim().is_empty() {
-                            continue;
-                        }
-                        info!("Running command from --commands: {}", c);
-                        let cmd = CommandHistory::from_raw_string(c)?;
-                        let res = self.run_command(
-                            cmd.command,
-                            state,
-                            run_history,
-                            global_settings,
-                            default_runtime_settings,
-                        )?;
-                        a = res;
-
-                        if let ControlFlow::Break(()) = res {
-                            return Ok(res);
-                        }
-                    }
-                }
-                return Ok(a);
-            }
-            Commands::Reset(Reset::Processes {}) => {
-                let n_processes = state.process_list.processes.len();
-                state.process_list = ProcessList::default();
-                status_info!(
-                    "All {} processes have been cleared from the current state.",
-                    n_processes
-                );
-            }
-            Commands::Batch {
-                process_file: _process_file,
-                batch_input_file: _batch_input_file,
-                name: _name,
-                output_name: _output_name,
-            } => {
-                todo!("Batch command not implemented yet");
-            }
-        }
-        Ok(ControlFlow::Continue(()))
-    }
-
     pub fn run(mut self, raw: String) -> Result<()> {
         if option_env!("NO_SYMBOLICA_OEM_LICENSE").is_none() {
             activate_oem_license!("SYMBOLICA_OEM_KEY_23177b25");
         };
         initialise()?;
 
-        let mut state = match State::load(
-            self.state_folder.clone(),
-            self.model_file.clone(),
-            self.trace_logs_filename.clone(),
-        ) {
-            Ok(state) => state,
-            Err(e) => {
-                info!(
+        let (mut state, mut run_history, mut global_settings, mut default_runtime_settings) =
+            match State::load(
+                self.state_folder.clone(),
+                self.model_file.clone(),
+                self.trace_logs_filename.clone(),
+            ) {
+                Ok(state) => {
+                    let mut global = match GlobalCliSettings::from_file_typed(
+                        &self.state_folder.join("global_settings.toml"),
+                    ) {
+                        Ok(a) => a,
+                        Err(SerdeFileError::FileError(_)) => GlobalCliSettings::default(),
+                        Err(e) => return Err(e.into()),
+                    };
+
+                    global.override_with(&mut self);
+
+                    let default_runtime = match RuntimeSettings::from_file_typed(
+                        &self.state_folder.join("default_runtime_settings.toml"),
+                    ) {
+                        Ok(a) => a,
+                        Err(SerdeFileError::FileError(_)) => RuntimeSettings::default(),
+                        Err(e) => return Err(e.into()),
+                    };
+
+                    let run_history =
+                        RunHistory::load(&self.state_folder.join("run.toml")).unwrap_or_default();
+
+                    (state, run_history, global, default_runtime)
+                }
+                Err(e) => {
+                    info!(
                     "No valid state folder found ({e}) :{} model_file:{}. Creating new default state.",
                     self.state_folder.display(),
                     self.model_file
@@ -359,18 +249,51 @@ impl OneShot {
                         .map(|p| p.display().to_string())
                         .unwrap_or("None".to_string())
                 );
-                State::new(self.state_folder.clone(), self.trace_logs_filename.clone())
-            }
-        };
-        let mut run_history = self.get_run_history()?;
-        let mut global_settings = run_history.global_settings.clone();
-        let mut default_runtime_settings = run_history.default_runtime_settings.clone();
+                    let state =
+                        State::new(self.state_folder.clone(), self.trace_logs_filename.clone());
 
-        // let mut state = State::load(&cli.state_file,);
+                    if let Some(run) = self.run_history.as_ref() {
+                        let run_history = RunHistory::load(run).unwrap_or_default();
+                        let mut global = run_history.global_settings.clone();
+                        global.override_with(&mut self);
+
+                        let default_runtime = run_history.default_runtime_settings.clone();
+                        (state, run_history, global, default_runtime)
+                    } else {
+                        (
+                            state,
+                            RunHistory::default(),
+                            self.new_cli_settings(GlobalSettings::default()),
+                            RuntimeSettings::default(),
+                        )
+                    }
+                }
+            };
+
+        if let Some(run) = self.run_history.as_ref() {
+            let mut run_history = RunHistory::load(run).unwrap_or_default();
+            match run_history.run(
+                &mut state,
+                &mut global_settings,
+                &mut default_runtime_settings,
+            )? {
+                ControlFlow::Break(()) => {
+                    save(
+                        &mut state,
+                        &run_history,
+                        &default_runtime_settings,
+                        &global_settings,
+                        None,
+                        false,
+                    )?;
+                    return Ok(());
+                }
+                ControlFlow::Continue(()) => {}
+            }
+        }
 
         if let Some(a) = self.command.take() {
-            let _ = self.run_command(
-                a.clone(),
+            let _ = a.clone().run(
                 &mut state,
                 &mut run_history,
                 &mut global_settings,
@@ -405,8 +328,7 @@ impl OneShot {
             loop {
                 match r.read_command() {
                     ReadCommandOutput::Command(command, raw_input) => {
-                        match self.run_command(
-                            command.command.clone(),
+                        match command.command.clone().run(
                             &mut state,
                             &mut run_history,
                             &mut global_settings,
@@ -445,7 +367,7 @@ impl OneShot {
 
         if !self.no_save_state {
             debug!("Saving State, override: {}", self.override_state);
-            self.save(
+            save(
                 &mut state,
                 &run_history,
                 &default_runtime_settings,
@@ -458,112 +380,83 @@ impl OneShot {
     }
 
     // pub fn initialize(&self) {}
+}
 
-    fn get_run_history(&self) -> Result<RunHistory> {
-        let default_path = self.state_folder.join("run.toml");
-        let path = self.run_history.as_ref().unwrap_or(&default_path);
-        if !path.exists() {
-            status_info!("Loading default state at {}", path.display());
-            Ok(RunHistory::default())
-        } else {
-            match RunHistory::load(path) {
-                Ok(r) => Ok(r),
-                Err(e) => {
-                    if path != &default_path {
-                        Err(eyre!(
-                            "Could not load run history from {}: {}",
-                            path.display(),
-                            e
-                        ))
-                    } else {
-                        info!(
-                            "No valid run history found at {}, creating new default run history",
-                            path.display()
-                        );
-                        Ok(RunHistory::default())
-                    }
-                }
-            }
-        }
-    }
+pub fn save(
+    state: &mut State,
+    run_history: &RunHistory,
+    default_runtime_settings: &RuntimeSettings,
+    global_settings: &GlobalCliSettings,
+    root_folder: Option<PathBuf>,
+    strict: bool,
+) -> Result<()> {
+    println!(
+        "Saving state to {}..",
+        global_settings.state_folder.display()
+    );
+    // let root_folder = root_folder.join("gammaloop_state");
 
-    pub fn save(
-        &self,
-        state: &mut State,
-        run_history: &RunHistory,
-        default_runtime_settings: &RuntimeSettings,
-        global_settings: &GlobalSettings,
-        root_folder: Option<PathBuf>,
-        strict: bool,
-    ) -> Result<()> {
-        // let root_folder = root_folder.join("gammaloop_state");
-
-        // check if the export root exists, if not create it, if it does return error
-        let mut selected_root_folder = root_folder.unwrap_or(self.state_folder.clone());
-        if !selected_root_folder.exists() {
-            fs::create_dir_all(&selected_root_folder)?;
-        } else {
-            if strict {
-                return Err(eyre!(
+    // check if the export root exists, if not create it, if it does return error
+    let mut selected_root_folder = root_folder.unwrap_or(global_settings.state_folder.clone());
+    if !selected_root_folder.exists() {
+        fs::create_dir_all(&selected_root_folder)?;
+    } else {
+        if strict {
+            return Err(eyre!(
                     "Export root already exists, please choose a different path or remove the existing directory",
                 ));
-            }
+        }
 
-            if !self.override_state {
-                while selected_root_folder.clone().exists() {
-                    eprint!(
+        if !global_settings.override_state {
+            while selected_root_folder.clone().exists() {
+                eprint!(
                         "Gammaloop export root {} already exists. Specify '{}' for overwriting, '{}' for not saving, or '{}' to specify where to save current state to:\n > ",
                         selected_root_folder.display().to_string().green(),
                         "o".red().bold(),
                         "n".blue().bold(),
                         "<NEW_PATH>".green().bold()
                     );
-                    let mut user_input = String::new();
-                    std::io::stdin()
-                        .read_line(&mut user_input)
-                        .expect("Could not read user-specified gammaloop state export destination");
-                    //user_input = user_input.trim().into();
-                    match user_input.trim() {
-                        "o" => {
-                            status_info!(
-                                "Overwriting existing gammaloop state at {}",
-                                selected_root_folder.display().to_string().green()
-                            );
-                            break;
-                        }
-                        "n" => {
-                            return Ok(());
-                        }
-                        new_path => {
-                            selected_root_folder = new_path.into();
-                            continue;
-                        }
+                let mut user_input = String::new();
+                std::io::stdin()
+                    .read_line(&mut user_input)
+                    .expect("Could not read user-specified gammaloop state export destination");
+                //user_input = user_input.trim().into();
+                match user_input.trim() {
+                    "o" => {
+                        status_info!(
+                            "Overwriting existing gammaloop state at {}",
+                            selected_root_folder.display().to_string().green()
+                        );
+                        break;
+                    }
+                    "n" => {
+                        return Ok(());
+                    }
+                    new_path => {
+                        selected_root_folder = new_path.into();
+                        continue;
                     }
                 }
             }
         }
-
-        state.save(&selected_root_folder, true, false)?;
-        if self.no_skip_default {
-            SHOWDEFAULTS.store(true, std::sync::atomic::Ordering::Relaxed);
-        }
-
-        set_serialize_commands_as_strings(self.try_strings);
-        run_history.save_toml(&selected_root_folder, true, false)?;
-        set_serialize_commands_as_strings(false);
-
-        default_runtime_settings.to_file(
-            &selected_root_folder.join("default_runtime_settings.toml"),
-            true,
-        )?;
-        global_settings.to_file(&selected_root_folder.join("global_settings.toml"), true)?;
-
-        if self.no_skip_default {
-            SHOWDEFAULTS.store(false, std::sync::atomic::Ordering::Relaxed);
-        }
-
-        Ok(())
     }
+
+    state.save(&selected_root_folder, true, false)?;
+
+    set_serialize_commands_as_strings(global_settings.try_strings);
+    run_history.save_toml(&selected_root_folder, true, false)?;
+    set_serialize_commands_as_strings(false);
+
+    SHOWDEFAULTS.store(true, std::sync::atomic::Ordering::Relaxed);
+    default_runtime_settings.to_file(
+        &selected_root_folder.join("default_runtime_settings.toml"),
+        true,
+    )?;
+    global_settings.to_file(&selected_root_folder.join("global_settings.toml"), true)?;
+
+    SHOWDEFAULTS.store(false, std::sync::atomic::Ordering::Relaxed);
+
+    Ok(())
 }
 
 #[derive(Subcommand, Debug, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
@@ -593,9 +486,13 @@ pub enum Save {
         #[arg(short = 'p', long, value_hint = clap::ValueHint::FilePath)]
         path: Option<PathBuf>,
 
-        /// Do not skip fields that are default
-        #[arg(short = 'd', long)]
-        no_skip_default: bool,
+        /// Save state to file after each call
+        #[arg(short = 'o', long)]
+        override_state: Option<bool>,
+
+        /// Try to serialize using strings when saving run history
+        #[arg(long)]
+        try_strings: Option<bool>,
     },
     /// regenerate the schema files
     Schema {},
@@ -650,8 +547,17 @@ pub enum Commands {
 
     /// Quit gammaloop
     Quit {
-        // #[arg(short = 'o', long, default_value_t = false)]
-        // override_state: bool,
+        /// Path to save the state to, by default is the current state folder
+        #[arg(short = 'p', long, value_hint = clap::ValueHint::FilePath)]
+        path: Option<PathBuf>,
+
+        /// Save state to file after each call
+        #[arg(short = 'o', long)]
+        override_state: Option<bool>,
+
+        /// Try to serialize using strings when saving run history
+        #[arg(long)]
+        try_strings: Option<bool>,
     },
     /// Inspect a single phase‑space point / momentum configuration
     // #[clap(subcommand)]
@@ -700,7 +606,196 @@ pub enum Commands {
 //     }
 // }
 
-impl Commands {}
+impl Commands {
+    pub fn run(
+        self,
+        state: &mut State,
+        run_history: &mut RunHistory,
+        global_settings: &mut GlobalCliSettings,
+        default_runtime_settings: &mut RuntimeSettings,
+    ) -> Result<ControlFlow<()>, Report> {
+        match self {
+            Commands::Quit {
+                try_strings,
+                override_state,
+                path,
+            } => {
+                if let Some(v) = override_state {
+                    global_settings.override_state = v;
+                }
+                if let Some(v) = try_strings {
+                    global_settings.try_strings = v
+                };
+
+                if let Some(p) = path {
+                    global_settings.state_folder = p;
+                }
+                return Ok(ControlFlow::Break(()));
+            }
+            Commands::Inspect(inspect) => {
+                let _ = inspect.run(state)?;
+            }
+            Commands::Bench {
+                samples,
+                process_id,
+                process_name,
+                n_cores,
+            } => {
+                state.bench(samples, process_id, process_name, n_cores)?;
+            }
+            Commands::Import(s) => match s {
+                Import::Amplitude {
+                    path,
+                    process_id,
+                    integrand_name,
+                } => {
+                    state.import_amplitude(path, None, process_id, integrand_name)?;
+                }
+                Import::Model(im) => {
+                    im.run(state)?;
+                }
+            },
+            Commands::Save(s) => match s {
+                Save::Dot { path } => {
+                    state.export_dots(path.unwrap_or(global_settings.state_folder.clone()))?;
+                }
+                Save::State {
+                    path,
+                    override_state,
+                    try_strings,
+                    ..
+                } => {
+                    let og_override = global_settings.override_state;
+                    let og_try_strings = global_settings.try_strings;
+
+                    if let Some(v) = override_state {
+                        global_settings.override_state = v;
+                    }
+                    if let Some(v) = try_strings {
+                        global_settings.try_strings = v;
+                    }
+
+                    save(
+                        state,
+                        run_history,
+                        default_runtime_settings,
+                        global_settings,
+                        path,
+                        false,
+                    )?;
+
+                    global_settings.override_state = og_override;
+                    global_settings.try_strings = og_try_strings;
+                }
+                Save::Schema {} => {
+                    write_schemas()?;
+                }
+            },
+            Commands::Set(s) => s.run(state, global_settings, default_runtime_settings)?,
+
+            Commands::Generate(g) => g.run(
+                state,
+                &global_settings.state_folder,
+                global_settings.override_state,
+                &global_settings.global_settings,
+                &default_runtime_settings,
+            )?,
+
+            Commands::Integrate(g) => {
+                g.run(state)?;
+            }
+
+            Commands::Display(l) => match l {
+                Display::Integrands { process_id } => {
+                    let process = if let Some(proc_id) = process_id {
+                        if proc_id >= state.process_list.processes.len() {
+                            return Err(eyre!(
+                                "Process ID {} invalid, only {} processes available",
+                                proc_id,
+                                state.process_list.processes.len()
+                            ));
+                        }
+                        &state.process_list.processes[proc_id]
+                    } else {
+                        if state.process_list.processes.len() == 1 {
+                            &state.process_list.processes[0]
+                        } else {
+                            return Err(eyre!(
+                                "Multiple processes available, please specify the process."
+                            ));
+                        }
+                    };
+
+                    println!("Integrands for process {}:", process.definition.process_id);
+                    for integrand in process.get_integrand_names() {
+                        println!("  {}", integrand);
+                    }
+                }
+                Display::Processes => {
+                    println!("Processes:");
+                    for process in state.process_list.processes.iter() {
+                        println!(
+                            "#{:-10}  {}",
+                            process.definition.process_id, process.definition.folder_name
+                        );
+                    }
+                }
+                Display::Model => {
+                    println!("{}", state.model.name)
+                }
+            },
+            Commands::Run(Run { path, commands }) => {
+                let mut a = ControlFlow::Continue(());
+                if let Some(mut new_run_history) = path.map(|p| RunHistory::load(p)).transpose()? {
+                    let res = new_run_history.run(state, global_settings, default_runtime_settings);
+
+                    run_history.merge(new_run_history);
+                    a = res?;
+                };
+
+                if let Some(c) = commands {
+                    for c in c.split(';') {
+                        if c.trim().is_empty() {
+                            continue;
+                        }
+                        info!("Running command from --commands: {}", c);
+                        let cmd = CommandHistory::from_raw_string(c)?;
+                        let res = cmd.command.clone().run(
+                            state,
+                            run_history,
+                            global_settings,
+                            default_runtime_settings,
+                        )?;
+                        run_history.commands.push(cmd);
+                        a = res;
+
+                        if let ControlFlow::Break(()) = res {
+                            return Ok(res);
+                        }
+                    }
+                }
+                return Ok(a);
+            }
+            Commands::Reset(Reset::Processes {}) => {
+                let n_processes = state.process_list.processes.len();
+                state.process_list = ProcessList::default();
+                status_info!(
+                    "All {} processes have been cleared from the current state.",
+                    n_processes
+                );
+            }
+            Commands::Batch {
+                process_file: _process_file,
+                batch_input_file: _batch_input_file,
+                name: _name,
+                output_name: _output_name,
+            } => {
+                todo!("Batch command not implemented yet");
+            }
+        }
+        Ok(ControlFlow::Continue(()))
+    }
+}
 
 pub(crate) fn print_banner() {
     let spec = get_stderr_log_filter();

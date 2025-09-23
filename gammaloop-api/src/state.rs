@@ -39,7 +39,7 @@ use gammalooprs::{
 
 use crate::{
     tracing::{set_file_log_filter, set_stderr_log_filter},
-    OneShot,
+    GlobalCliSettings, OneShot,
 };
 
 use super::{Commands, Repl};
@@ -48,10 +48,10 @@ pub trait SyncSettings {
     fn sync_settings(&self) -> Result<()>;
 }
 
-impl SyncSettings for GlobalSettings {
+impl SyncSettings for GlobalCliSettings {
     fn sync_settings(&self) -> Result<()> {
-        set_file_log_filter(&self.logfile_directive)?;
-        set_stderr_log_filter(&self.display_directive)
+        set_file_log_filter(&self.global_settings.logfile_directive)?;
+        set_stderr_log_filter(&self.global_settings.display_directive)
     }
 }
 
@@ -204,7 +204,7 @@ pub struct RunHistory {
     pub default_runtime_settings: RuntimeSettings,
 
     #[serde(skip_serializing_if = "IsDefault::is_default")]
-    pub global_settings: GlobalSettings,
+    pub global_settings: GlobalCliSettings,
     // #[serde(with = "serde_yaml::with::singleton_map_recursive")]
     // #[schemars(with = "Vec<CommandHistory>")]
     pub commands: Vec<CommandHistory>,
@@ -240,15 +240,13 @@ impl RunHistory {
     }
     pub fn run(
         &mut self,
-        cli: &mut OneShot,
         state: &mut State,
-        global_settings: &mut GlobalSettings,
+        global_settings: &mut GlobalCliSettings,
         default_runtime_settings: &mut RuntimeSettings,
     ) -> Result<ControlFlow<()>> {
         for command_history in self.commands.clone() {
             status_info!("Running command: {:?}", command_history.command);
-            if let ControlFlow::Break(_) = cli.run_command(
-                command_history.command,
+            if let ControlFlow::Break(_) = command_history.command.run(
                 state,
                 self,
                 global_settings,
@@ -261,8 +259,6 @@ impl RunHistory {
     }
     pub fn merge(&mut self, other: Self) {
         self.commands.extend(other.commands);
-        self.default_runtime_settings = other.default_runtime_settings;
-        self.global_settings = other.global_settings;
     }
 
     pub fn load(path: impl AsRef<Path>) -> Result<Self> {
@@ -559,8 +555,7 @@ impl State {
             level: None,
             debug: false,
             trace_logs_filename: None,
-            no_skip_default: false,
-            try_strings: false,
+            no_try_strings: false,
         }
     }
 }
@@ -750,12 +745,22 @@ mod tests {
         use crate::Commands;
 
         // Test basic construction
-        let cmd_history = CommandHistory::new(Commands::Quit {});
+        let cmd_history = CommandHistory::new(Commands::Quit {
+            override_state: None,
+            try_strings: None,
+            path: None,
+        });
         assert_eq!(cmd_history.raw_string, None);
 
         // Test with raw string
-        let cmd_history_with_raw =
-            CommandHistory::new_with_raw(Commands::Quit {}, "quit".to_string());
+        let cmd_history_with_raw = CommandHistory::new_with_raw(
+            Commands::Quit {
+                override_state: None,
+                try_strings: None,
+                path: None,
+            },
+            "quit".to_string(),
+        );
         assert_eq!(cmd_history_with_raw.raw_string, Some("quit".to_string()));
 
         // Test serialization as Commands (default behavior)
@@ -784,8 +789,19 @@ mod tests {
         use crate::Commands;
 
         // Test different command types
-        let quit_cmd = CommandHistory::new(Commands::Quit {});
-        let quit_with_raw = CommandHistory::new_with_raw(Commands::Quit {}, "quit".to_string());
+        let quit_cmd = CommandHistory::new(Commands::Quit {
+            override_state: None,
+            try_strings: None,
+            path: None,
+        });
+        let quit_with_raw = CommandHistory::new_with_raw(
+            Commands::Quit {
+                override_state: None,
+                try_strings: None,
+                path: None,
+            },
+            "quit".to_string(),
+        );
 
         // Test JSON serialization/deserialization
         {

@@ -4,8 +4,9 @@
 use color_eyre::Result;
 
 use gammaloop_api::{
+    save,
     state::{RunHistory, State},
-    Repl, Commands,
+    Commands, GlobalCliSettings, OneShot, Repl,
 };
 
 use gammalooprs::{initialisation::initialise, utils::test_utils::load_generic_model};
@@ -27,8 +28,8 @@ pub(crate) const TESTS_WORKSPACE: &str = "./tests/workspace";
 
 pub(crate) struct CLIState {
     pub state: State,
-    pub cli: Repl,
-    pub global_settings: gammalooprs::settings::GlobalSettings,
+    pub cli: OneShot,
+    pub global_settings: GlobalCliSettings,
     pub default_runtime_settings: gammalooprs::settings::RuntimeSettings,
     pub run_history: RunHistory,
 }
@@ -50,15 +51,14 @@ impl DerefMut for CLIState {
 impl CLIState {
     pub(crate) fn run_command(&mut self, command: &str) -> Result<()> {
         let cmd = Commands::from_str(command)?;
-        self.cli
-            .run_command(
-                cmd,
-                &mut self.state,
-                &mut self.run_history,
-                &mut self.global_settings,
-                &mut self.default_runtime_settings,
-            )
-            .map(|_| ())
+
+        cmd.run(
+            &mut self.state,
+            &mut self.run_history,
+            &mut self.global_settings,
+            &mut self.default_runtime_settings,
+        )
+        .map(|_| ())
     }
 }
 
@@ -78,7 +78,6 @@ pub(crate) fn get_test_cli(
         let mut default_runtime_settings_for_running_cms =
             run_card_cmds.default_runtime_settings.clone();
         _ = run_card_cmds.run(
-            &mut cli,
             &mut state,
             &mut global_settings_for_running_cms,
             &mut default_runtime_settings_for_running_cms,
@@ -89,7 +88,7 @@ pub(crate) fn get_test_cli(
     };
     let global_settings = cmds.global_settings.clone();
     let default_runtime_settings = cmds.default_runtime_settings.clone();
-    cli.save(
+    save(
         &mut state,
         &cmds,
         &default_runtime_settings,
@@ -110,7 +109,7 @@ pub(crate) fn get_test_cli(
 pub(crate) fn new_cli_for_test(
     state_path: impl AsRef<Path>,
     log_file_name: Option<String>,
-) -> (Repl, State) {
+) -> (OneShot, State) {
     debug!(
         "Using gammaloop state path: {}",
         state_path.as_ref().display()
