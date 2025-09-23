@@ -85,6 +85,7 @@ def get_integrand_results_old(stdout):
     return all_evals, total, jac
 
 
+global graph_names
 graph_names = [
     "qqx_aaa_pentagon",
     "qqx_aaa_box_A",
@@ -261,7 +262,7 @@ def run_limit_test(elements_to_display=None, tests_to_run=None, gammaloop_state=
     x = 0.1
     for test_name, k_base, scaling, pref_power in [
         ('IR', [0.0001, 0.0001, 1.0*x], 0.1, 0.0),
-        ('UV', [1.0e3, 1.0e3, 1.0e3], 10.0, 1./2.),
+        ('UV', [1.0e3, 1.0e3, 1.0e3], 10.0, 0.0),
         ('THRES', on_threshold_point, 0.1, 0.0),
     ]:
         if test_name not in tests_to_run:
@@ -338,7 +339,7 @@ def run_limit_test(elements_to_display=None, tests_to_run=None, gammaloop_state=
         print(f"{'Total evaluation result from non-CT':60s}: {running_sum_non_ct:50.16e} | scaled: {running_sum_non_ct_scaled:50.16e}  | log10(abs(scaled / orig)) = {
               log10(abs(running_sum_non_ct_scaled / running_sum_non_ct)) if running_sum_non_ct != 0. else float('nan'):.3f} ")
         print(f"{'Total evaluation result from CT':60s}: {running_sum_ct:50.16e} | scaled: {running_sum_ct_scaled:50.16e}  | log10(abs(scaled / orig)) = {
-              log10(abs(running_sum_ct_scaled / running_sum_ct)) if running_sum_non_ct != 0. else float('nan'):.3f} ")
+              log10(abs(running_sum_ct_scaled / running_sum_ct)) if running_sum_ct != 0. else float('nan'):.3f} ")
         print(f"{'Total evaluation result':60s}: {running_sum_ct+running_sum_non_ct:50.16e} | scaled: {running_sum_ct_scaled+running_sum_non_ct_scaled:50.16e}  | log10(abs(scaled / orig)) = {
               log10(abs((running_sum_ct_scaled+running_sum_non_ct_scaled) / (running_sum_ct+running_sum_non_ct))) if running_sum_ct+running_sum_non_ct != 0. else float('nan'):.3f} ")
         # print(f"{'Ratio non-CT / CT ':60s}: {running_sum_non_ct / running_sum_ct:50.16e} | scaled: {running_sum_non_ct_scaled / running_sum_ct_scaled:50.16e}  | log10(abs(scaled / orig)) = {log10(abs((running_sum_non_ct_scaled / running_sum_ct_scaled) / (running_sum_non_ct / running_sum_ct))) if running_sum_ct_scaled!=0. and running_sum_ct!=0. and running_sum_non_ct!=0. else float('nan'):.3f} ")
@@ -355,11 +356,16 @@ parser.add_argument('--threshold_to_study', '-thres', type=str, choices=['A'],
                     help="Which threshold to study", default='A')
 parser.add_argument('--gammaloop_state', '-s', type=str,
                     help="Path to the GammaLoop state directory. Default=%(default)s", default='./GL_QQX_AAA_euclidean')
+parser.add_argument('--graph_names', '-g', type=str, nargs="*", default=None,
+                    help="Graph names to consider. Default=all")
+
 parser.add_argument('--gammaloop_executable', '-e', type=str,
                     help="Path to the GammaLoop executable. Default=%(default)s", default='../../target/dev-optim/gammaloop')
 parser.add_argument('--debug', action='store_true',
                     help="Enable debug output", default=False)
 if __name__ == "__main__":
-    args = parser.parse_args()
+    args = parser.parse_args() 
+    if args.graph_names is not None:
+        graph_names = args.graph_names
     run_limit_test(args.display_elements, args.tests,
                    args.gammaloop_state, args.gammaloop_executable, args.debug, args.threshold_to_study)

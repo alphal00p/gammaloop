@@ -286,7 +286,7 @@ impl AmplitudeGraphTerm {
                 "Original integrand value"
             );
         }
-        //status_debug!("last_params"; data = self.param_builder);
+        status_debug!("Parameters from previous evaluation"; data = self.param_builder.clone());
 
         let sum_of_cts = self.threshold_counterterm.evaluate(
             momentum_sample,

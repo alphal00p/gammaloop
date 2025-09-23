@@ -48,9 +48,10 @@ build-backend = "maturin"
 
 [tool.maturin]
 features = ["python_api"]
-python-source = "python"
+python-source = "gammaloop-api/python"
 module-name = "gammaloop._gammaloop"
 sdist-include = ["LICENSE.md", "README.md"]
+
 
 [tool.pytest.ini_options]
 
