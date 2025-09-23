@@ -7,17 +7,15 @@ use figment::{
     providers::{Format, Serialized},
     Figment,
 };
-use gammalooprs::{
-    processes::ProcessCollection,
-    settings::{GlobalSettings, RuntimeSettings},
-};
+use gammalooprs::{processes::ProcessCollection, settings::RuntimeSettings};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    generate::ProcessArgs,
+    commands::generate::ProcessArgs,
+    commands::Commands,
     state::{State, SyncSettings},
-    Commands, GlobalCliSettings,
+    GlobalCliSettings,
 };
 
 impl FromStr for Set {

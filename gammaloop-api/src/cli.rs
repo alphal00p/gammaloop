@@ -1,4 +1,4 @@
-use _gammaloop::{OneShot, Repl};
+use _gammaloop::OneShot;
 
 use color_eyre::Report;
 

@@ -9,7 +9,6 @@ use gammalooprs::utils::F;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use super::state::State;
 use gammalooprs::{
     model::{InputParamCard, Model},
     status_info,
@@ -21,6 +20,8 @@ use std::{env, fs};
 use pyo3::prelude::*;
 #[cfg(feature = "ufo_support")]
 use pyo3::sync::GILOnceCell;
+
+use crate::state::State;
 
 static BUILTIN_MODELS: Dir = include_dir!("$CARGO_MANIFEST_DIR/../models/json");
 

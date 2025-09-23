@@ -13,7 +13,10 @@ use gammalooprs::{
     utils::F,
 };
 
-use crate::{inspect::Inspect, integrate::Integrate, state::State};
+use crate::{
+    commands::{inspect::Inspect, integrate::Integrate},
+    state::State,
+};
 use ahash::HashMap;
 
 use color_eyre::Result;

@@ -3,7 +3,7 @@
 use color_eyre::Result;
 use criterion::{criterion_group, criterion_main, Criterion};
 use gammaloop_api::{
-    inspect::Inspect,
+    commands::inspect::Inspect,
     state::{RunHistory, State},
     GlobalCliSettings, OneShot, Repl,
 };

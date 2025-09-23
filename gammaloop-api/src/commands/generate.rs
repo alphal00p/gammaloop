@@ -27,9 +27,8 @@ use gammalooprs::processes::amplitude::Amplitude;
 use gammalooprs::processes::{CrossSection, Process, ProcessDefinition, ProcessList};
 use gammalooprs::settings::{GlobalSettings, RuntimeSettings};
 
-use crate::set::KvPair;
-
-use super::state::State;
+use crate::commands::set::KvPair;
+use crate::state::State;
 
 // =================== CLI containers (kept close to your structure) ===================
 

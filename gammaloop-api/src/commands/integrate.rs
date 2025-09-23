@@ -17,7 +17,7 @@ use gammalooprs::{
 };
 use tracing::info;
 
-use super::state::State;
+use crate::state::State;
 
 #[cfg_attr(
     feature = "python_api",

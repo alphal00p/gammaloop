@@ -3,7 +3,7 @@
 
 use color_eyre::Result;
 
-use gammaloop_api::{inspect::Inspect, integrate::Integrate};
+use gammaloop_api::commands::{inspect::Inspect, integrate::Integrate};
 
 use gammalooprs::{model::UFOSymbol, status_info, utils::F};
 use insta::assert_snapshot;

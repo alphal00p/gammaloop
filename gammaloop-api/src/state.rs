@@ -38,11 +38,10 @@ use gammalooprs::{
 };
 
 use crate::{
+    commands::{save::SaveState, Commands},
     tracing::{set_file_log_filter, set_stderr_log_filter},
     GlobalCliSettings, OneShot,
 };
-
-use super::{Commands, Repl};
 
 pub trait SyncSettings {
     fn sync_settings(&self) -> Result<()>;
@@ -243,16 +242,16 @@ impl RunHistory {
         state: &mut State,
         global_settings: &mut GlobalCliSettings,
         default_runtime_settings: &mut RuntimeSettings,
-    ) -> Result<ControlFlow<()>> {
+    ) -> Result<ControlFlow<SaveState>> {
         for command_history in self.commands.clone() {
             status_info!("Running command: {:?}", command_history.command);
-            if let ControlFlow::Break(_) = command_history.command.run(
+            if let ControlFlow::Break(a) = command_history.command.run(
                 state,
                 self,
                 global_settings,
                 default_runtime_settings,
             )? {
-                return Ok(ControlFlow::Break(()));
+                return Ok(ControlFlow::Break(a));
             }
         }
         Ok(ControlFlow::Continue(()))
@@ -702,7 +701,10 @@ mod tests {
         utils::serde_utils::SHOWDEFAULTS,
     };
 
-    use crate::set::{Set, SetArgs};
+    use crate::commands::{
+        save::SaveState,
+        set::{Set, SetArgs},
+    };
 
     use super::*;
 
@@ -742,25 +744,15 @@ mod tests {
     #[test]
     fn test_command_history_serialization() {
         use super::{set_serialize_commands_as_strings, CommandHistory};
-        use crate::Commands;
+        use crate::commands::Commands;
 
         // Test basic construction
-        let cmd_history = CommandHistory::new(Commands::Quit {
-            override_state: None,
-            try_strings: None,
-            path: None,
-        });
+        let cmd_history = CommandHistory::new(Commands::Quit(SaveState::default()));
         assert_eq!(cmd_history.raw_string, None);
 
         // Test with raw string
-        let cmd_history_with_raw = CommandHistory::new_with_raw(
-            Commands::Quit {
-                override_state: None,
-                try_strings: None,
-                path: None,
-            },
-            "quit".to_string(),
-        );
+        let cmd_history_with_raw =
+            CommandHistory::new_with_raw(Commands::Quit(SaveState::default()), "quit".to_string());
         assert_eq!(cmd_history_with_raw.raw_string, Some("quit".to_string()));
 
         // Test serialization as Commands (default behavior)
@@ -786,22 +778,12 @@ mod tests {
     #[test]
     fn test_command_history_toml_and_json_formats() {
         use super::{set_serialize_commands_as_strings, CommandHistory};
-        use crate::Commands;
+        use crate::commands::Commands;
 
         // Test different command types
-        let quit_cmd = CommandHistory::new(Commands::Quit {
-            override_state: None,
-            try_strings: None,
-            path: None,
-        });
-        let quit_with_raw = CommandHistory::new_with_raw(
-            Commands::Quit {
-                override_state: None,
-                try_strings: None,
-                path: None,
-            },
-            "quit".to_string(),
-        );
+        let quit_cmd = CommandHistory::new(Commands::Quit(SaveState::default()));
+        let quit_with_raw =
+            CommandHistory::new_with_raw(Commands::Quit(SaveState::default()), "quit".to_string());
 
         // Test JSON serialization/deserialization
         {

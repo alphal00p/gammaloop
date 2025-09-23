@@ -4,10 +4,8 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
 
-use crate::status_info;
+use crate::{state::State, status_info};
 use color_eyre::Result;
-
-use super::state::State;
 
 #[derive(Debug, Args, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
 pub struct Inspect {

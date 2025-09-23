@@ -4,9 +4,9 @@
 use color_eyre::Result;
 
 use gammaloop_api::{
-    save,
+    commands::{save::SaveState, Commands},
     state::{RunHistory, State},
-    Commands, GlobalCliSettings, OneShot, Repl,
+    GlobalCliSettings, OneShot,
 };
 
 use gammalooprs::{initialisation::initialise, utils::test_utils::load_generic_model};
@@ -88,13 +88,11 @@ pub(crate) fn get_test_cli(
     };
     let global_settings = cmds.global_settings.clone();
     let default_runtime_settings = cmds.default_runtime_settings.clone();
-    save(
+    SaveState::default().save(
         &mut state,
         &cmds,
         &default_runtime_settings,
         &global_settings,
-        None,
-        false,
     )?;
 
     Ok(CLIState {
