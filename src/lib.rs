@@ -91,7 +91,7 @@ pub const MAX_LOOP: usize = 3;
 #[cfg(feature = "higher_loops")]
 pub const MAX_LOOP: usize = 6;
 
-pub(crate) fn set_interrupt_handler() {
+pub fn set_interrupt_handler() {
     INTERRUPTED.store(false, std::sync::atomic::Ordering::Relaxed);
     let _ = ctrlc::set_handler(|| {
         INTERRUPTED.store(true, std::sync::atomic::Ordering::Relaxed);
