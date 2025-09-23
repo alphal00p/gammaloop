@@ -170,7 +170,7 @@ ringbuffer = "0.16.0"
 tracing-indicatif = "0.3.13"
 
 [dependencies.pyo3]
-features = ["abi3", "abi3-py37", "eyre"]
+features = ["abi3", "abi3-py37", "eyre", "auto-initialize", "extension-module"]
 optional = true
 version = "0.25"
 

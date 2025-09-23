@@ -244,6 +244,8 @@ impl AmplitudeGraphTerm {
         let orientations =
             momentum_sample.orientations(&self.orientation_filter.0, &self.orientations);
 
+        status_debug!("loop_moms: {}", momentum_sample.loop_moms());
+
         let evaluator = &mut self.orientation_parametric_integrand;
         let mut result = Complex::new_re(F(T::from_f64(0.)));
 
@@ -297,7 +299,10 @@ impl AmplitudeGraphTerm {
             orientations,
         );
 
-        debug!(bare_cff = format!("{result:16e}"), "{}", self.graph.name);
+        debug!(
+            bare_cff = format!("{result:16e}"),
+            "{}: {result:16e}", self.graph.name
+        );
         debug!(cts = format!("{sum_of_cts:16e}"), "{}", self.graph.name);
         status_debug!("result: {result:16e}");
         status_debug!("sum_of_cts: {sum_of_cts:16e}");

@@ -140,7 +140,7 @@ fn photons_1l_inspect() -> Result<()> {
     // running inspect on main does not match the value from the old test, I trust the inspect run more.
     assert_snapshot!(format!("{inspect:.8e}"),@"(-4.236544183136419e-12+-3.7107289586142275e-12i)");
 
-    clean_test(&cli);
+    clean_test(&cli.save_path);
 
     Ok(())
 }
