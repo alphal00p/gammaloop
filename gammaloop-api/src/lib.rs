@@ -143,8 +143,6 @@ impl Cli {
         let mut cmd = <Cli as CommandFactory>::command();
         let matches = cmd.clone().try_get_matches_from(&argv)?;
 
-        // Recreate the typed struct from matches (don’t lose info)
-        // Recreate the typed struct from matches (don't lose info)
         let cli =
             <Cli as FromArgMatches>::from_arg_matches(&matches).map_err(|e| e.format(&mut cmd))?;
 
@@ -418,16 +416,13 @@ impl Cli {
                             ) {
                                 Err(e) => {
                                     eprintln!("{e:?}");
-                                    self.override_settings(cli);
                                 }
                                 Ok(ControlFlow::Break(())) => {
                                     run_history.push_with_raw(c, Some(raw_input.clone()));
-                                    self.override_settings(cli);
                                     break;
                                 }
                                 _ => {
                                     run_history.push_with_raw(c, Some(raw_input));
-                                    self.override_settings(cli);
                                 }
                             }
                         }
