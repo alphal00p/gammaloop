@@ -40,17 +40,17 @@ use gammalooprs::{
 use crate::{
     commands::{save::SaveState, Commands},
     tracing::{set_file_log_filter, set_stderr_log_filter},
-    GlobalCliSettings, OneShot,
+    CLISettings, OneShot,
 };
 
 pub trait SyncSettings {
     fn sync_settings(&self) -> Result<()>;
 }
 
-impl SyncSettings for GlobalCliSettings {
+impl SyncSettings for CLISettings {
     fn sync_settings(&self) -> Result<()> {
-        set_file_log_filter(&self.global_settings.logfile_directive)?;
-        set_stderr_log_filter(&self.global_settings.display_directive)
+        set_file_log_filter(&self.global.logfile_directive)?;
+        set_stderr_log_filter(&self.global.display_directive)
     }
 }
 
@@ -203,7 +203,7 @@ pub struct RunHistory {
     pub default_runtime_settings: RuntimeSettings,
 
     #[serde(skip_serializing_if = "IsDefault::is_default")]
-    pub global_settings: GlobalCliSettings,
+    pub cli_settings: CLISettings,
     // #[serde(with = "serde_yaml::with::singleton_map_recursive")]
     // #[schemars(with = "Vec<CommandHistory>")]
     pub commands: Vec<CommandHistory>,
@@ -240,7 +240,7 @@ impl RunHistory {
     pub fn run(
         &mut self,
         state: &mut State,
-        global_settings: &mut GlobalCliSettings,
+        global_settings: &mut CLISettings,
         default_runtime_settings: &mut RuntimeSettings,
     ) -> Result<ControlFlow<SaveState>> {
         for command_history in self.commands.clone() {
@@ -264,7 +264,7 @@ impl RunHistory {
         status_debug!("Loaded run history from file {}", path.as_ref().display());
 
         let runhistory = Self::from_file(path.as_ref(), "run history")?;
-        runhistory.global_settings.sync_settings()?;
+        runhistory.cli_settings.sync_settings()?;
 
         Ok(runhistory)
     }
@@ -302,8 +302,6 @@ pub struct State {
     pub model: Model,
     pub model_parameters: InputParamCard<F<f64>>,
     pub process_list: ProcessList,
-    pub model_path: Option<PathBuf>,
-    pub save_path: PathBuf,
     pub log_filter: reload::Handle<EnvFilter, Registry>,
 }
 
@@ -500,62 +498,41 @@ impl State {
         Ok(())
     }
 
-    pub fn new(save_path: PathBuf, log_file_name: Option<String>) -> Self {
+    pub fn new(log_dir: impl AsRef<Path>, log_file_name: Option<String>) -> Self {
         let _ = initialise();
-        let handle = super::tracing::init_tracing(&save_path.join("logs"), log_file_name);
+        let handle = super::tracing::init_tracing(&log_dir.as_ref().join("logs"), log_file_name);
 
         let a = Self {
-            save_path,
             log_filter: handle,
             model: Model::default(),
             process_list: ProcessList::default(),
-            model_path: None,
             model_parameters: InputParamCard::default(),
         };
         a
     }
 
-    pub fn new_test(state_folder: PathBuf) -> Self {
+    pub fn new_test() -> Self {
         let handle = init_test_tracing();
 
         let a = Self {
-            save_path: state_folder,
             log_filter: handle,
             model: Model::default(),
             process_list: ProcessList::default(),
-            model_path: None,
             model_parameters: InputParamCard::default(),
         };
         a
     }
 
-    pub fn new_bench(state_folder: PathBuf) -> Self {
+    pub fn new_bench() -> Self {
         let handle = init_bench_tracing();
 
         let a = Self {
-            save_path: state_folder,
             log_filter: handle,
             model: Model::default(),
             process_list: ProcessList::default(),
-            model_path: None,
             model_parameters: InputParamCard::default(),
         };
         a
-    }
-
-    pub fn new_test_cli(&self) -> OneShot {
-        OneShot {
-            run_history: None,
-            state_folder: self.save_path.clone(),
-            model_file: None,
-            no_save_state: true,
-            override_state: true,
-            command: None,
-            dummy: false,
-            level: None,
-            trace_logs_filename: None,
-            no_try_strings: false,
-        }
     }
 }
 
@@ -610,7 +587,6 @@ impl State {
         state.process_list = process_list;
         state.model = model;
         state.model_parameters = input_param_card;
-        state.model_path = model_path;
         Ok(state)
     }
 

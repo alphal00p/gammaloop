@@ -78,7 +78,7 @@ fn simple_epem_ddx_generation() -> Result<()> {
 
     cli.run_command("generate amp e+ e- > d d~")?;
 
-    clean_test(&cli.save_path);
+    clean_test(&cli.cli_settings.state_folder);
 
     Ok(())
 }

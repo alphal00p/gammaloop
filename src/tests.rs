@@ -175,7 +175,7 @@ fn compare_inspect(
     let pt = pt.iter().map(|&x| F(x)).collect::<Vec<F<f64>>>();
     let target = Complex::new(F(target.re), F(target.im));
     let mut integrand = integrand_factory(settings);
-    let res = inspect(
+    let (_, res) = inspect(
         settings,
         &mut integrand,
         model,

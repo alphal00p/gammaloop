@@ -107,7 +107,7 @@ pub struct OneShot {
 
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, PartialEq)]
 #[serde(default, deny_unknown_fields)]
-pub struct GlobalCliSettings {
+pub struct CLISettings {
     #[serde(skip_serializing_if = "is_true")]
     pub try_strings: bool,
     #[serde(skip_serializing_if = "is_false")]
@@ -116,22 +116,22 @@ pub struct GlobalCliSettings {
     pub dummy: bool,
     pub state_folder: PathBuf,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
-    pub global_settings: GlobalSettings,
+    pub global: GlobalSettings,
 }
 
-impl Default for GlobalCliSettings {
+impl Default for CLISettings {
     fn default() -> Self {
-        GlobalCliSettings {
+        CLISettings {
             try_strings: true,
             override_state: false,
             dummy: false,
             state_folder: "./gammaloop_state".into(),
-            global_settings: GlobalSettings::default(),
+            global: GlobalSettings::default(),
         }
     }
 }
 
-impl GlobalCliSettings {
+impl CLISettings {
     pub fn override_with(&mut self, cli: &OneShot) {
         self.try_strings = !cli.no_try_strings;
         self.dummy = cli.dummy;
@@ -142,7 +142,7 @@ impl GlobalCliSettings {
     }
 }
 
-impl SmartSerde for GlobalCliSettings {}
+impl SmartSerde for CLISettings {}
 
 pub struct Parsed {
     pub cli: OneShot,
@@ -150,13 +150,13 @@ pub struct Parsed {
     pub matches: clap::ArgMatches,
 }
 impl OneShot {
-    pub fn new_cli_settings(&self, global: GlobalSettings) -> GlobalCliSettings {
-        GlobalCliSettings {
+    pub fn new_cli_settings(&self, global: GlobalSettings) -> CLISettings {
+        CLISettings {
             dummy: self.dummy,
             try_strings: !self.no_try_strings,
             override_state: self.override_state,
             state_folder: self.state_folder.clone(),
-            global_settings: global,
+            global,
         }
     }
 
@@ -210,11 +210,11 @@ impl OneShot {
                 self.trace_logs_filename.clone(),
             ) {
                 Ok(state) => {
-                    let mut global = match GlobalCliSettings::from_file_typed(
-                        &self.state_folder.join("global_settings.toml"),
+                    let mut global = match CLISettings::from_file_typed(
+                        &self.state_folder.join("cli_settings.toml"),
                     ) {
                         Ok(a) => a,
-                        Err(SerdeFileError::FileError(_)) => GlobalCliSettings::default(),
+                        Err(SerdeFileError::FileError(_)) => CLISettings::default(),
                         Err(e) => return Err(e.into()),
                     };
 
@@ -247,8 +247,8 @@ impl OneShot {
 
                     if let Some(run) = self.run_history.as_ref() {
                         let run_history = RunHistory::load(run).unwrap_or_default();
-                        let global = run_history.global_settings.clone();
-
+                        let mut global = run_history.cli_settings.clone();
+                        global.override_with(&mut self);
                         let default_runtime = run_history.default_runtime_settings.clone();
                         (state, run_history, global, default_runtime)
                     } else {

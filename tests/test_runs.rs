@@ -24,7 +24,7 @@ fn qqx_aaa_subtracted_nlo_amplitude_test() -> Result<()> {
         false,
     )?;
 
-    let a = Inspect {
+    let (jac, a) = Inspect {
         process_id: Some(0),
         integrand_name: Some("default".to_string()),
         point: vec![0.1, 0.2, 0.3],
@@ -33,7 +33,7 @@ fn qqx_aaa_subtracted_nlo_amplitude_test() -> Result<()> {
     }
     .run(&mut state)?;
 
-    assert_snapshot!(format!("{a:.8e}"),@"(6.923469780323106e-4+-6.181987787694587e-4i)");
+    assert_snapshot!(format!("{:.8e}",a*jac.unwrap()),@"(6.923469780323106e-4+-6.181987787694587e-4i)");
 
     Ok(())
 }
@@ -47,7 +47,7 @@ fn trees() -> Result<()> {
         false,
     )?;
 
-    let a = Inspect {
+    let (_, a) = Inspect {
         process_id: Some(0),
         integrand_name: Some("default".to_string()),
         ..Default::default()
@@ -56,7 +56,7 @@ fn trees() -> Result<()> {
 
     assert_snapshot!(format!("{a:.8e}"),@"(1.4727604164105595e-4+-1.1503139369130214e-3i)");
 
-    clean_test(&cli.save_path);
+    clean_test(&cli.cli_settings.state_folder);
     Ok(())
 }
 
@@ -101,7 +101,7 @@ fn photons_1l_integrate() -> Result<()> {
         restart: true,
     };
 
-    let integration_result = integrate.run(&mut cli)?;
+    let integration_result = integrate.run(&mut cli.state, &cli.cli_settings)?;
 
     assert_approx_eq(&integration_result.result.re, &target.re, &F(10e-2));
     assert_approx_eq(&integration_result.result.im, &target.im, &F(10e-2));
@@ -126,7 +126,7 @@ fn photons_1l_inspect() -> Result<()> {
         .model
         .apply_param_card(&cli.state.model_parameters)?;
 
-    let inspect = Inspect {
+    let (_, inspect) = Inspect {
         process_id: Some(0),
         integrand_name: Some("default".to_string()),
         point: vec![0.123, 0.3242, 0.4233],
@@ -140,7 +140,7 @@ fn photons_1l_inspect() -> Result<()> {
     // running inspect on main does not match the value from the old test, I trust the inspect run more.
     assert_snapshot!(format!("{inspect:.8e}"),@"(-4.236544183136419e-12+-3.7107289586142275e-12i)");
 
-    clean_test(&cli.save_path);
+    clean_test(&cli.cli_settings.state_folder);
 
     Ok(())
 }
@@ -184,8 +184,8 @@ fn test_grouped_subtraction() -> Result<()> {
             restart: true,
         };
 
-    let integration_results_no_group = int1.run(&mut cli)?;
-    let integration_results_group = int2.run(&mut cli)?;
+    let integration_results_no_group = int1.run(&mut cli.state, &cli.cli_settings)?;
+    let integration_results_group = int2.run(&mut cli.state, &cli.cli_settings)?;
 
     status_info!("No group result: {:#?}", integration_results_no_group);
     status_info!("Group result: {:#?}", integration_results_group);
@@ -201,7 +201,7 @@ fn test_grouped_subtraction() -> Result<()> {
         &F(1e-1),
     );
 
-    clean_test(&cli.save_path);
+    clean_test(&cli.cli_settings.state_folder);
 
     Ok(())
 }
@@ -215,7 +215,7 @@ fn scalar_box() -> Result<()> {
         false,
     )?;
 
-    let a = Inspect {
+    let (_, a) = Inspect {
         process_id: Some(0),
         integrand_name: Some("default".to_string()),
         point: vec![0.1, 0.2, 0.3],
@@ -240,7 +240,7 @@ fn scalar_box() -> Result<()> {
         target: None,
         restart: true,
     }
-    .run(&mut cli)?;
+    .run(&mut cli.state, &cli.cli_settings)?;
 
     cli.run_command("set process -p 0 -i default kv General.enable_cache=true")?;
     let integral_with_cache = Integrate {
@@ -255,7 +255,7 @@ fn scalar_box() -> Result<()> {
         target: None,
         restart: true,
     }
-    .run(&mut cli)?;
+    .run(&mut cli.state, &cli.cli_settings)?;
 
     status_info!("Integral result without caching: {:#?}", integral_no_cache);
     status_info!(
@@ -274,7 +274,7 @@ fn scalar_box() -> Result<()> {
         &F(1e-4),
     );
 
-    clean_test(&cli.save_path);
+    clean_test(&cli.cli_settings.state_folder);
 
     Ok(())
 }

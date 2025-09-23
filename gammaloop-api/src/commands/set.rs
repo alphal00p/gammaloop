@@ -18,7 +18,7 @@ use crate::{
     commands::generate::ProcessArgs,
     commands::Commands,
     state::{State, SyncSettings},
-    GlobalCliSettings,
+    CLISettings,
 };
 
 impl FromStr for Set {
@@ -71,7 +71,7 @@ impl Set {
     pub fn run(
         &self,
         state: &mut State,
-        global_settings: &mut GlobalCliSettings,
+        global_settings: &mut CLISettings,
         default_runtime_settings: &mut RuntimeSettings,
     ) -> Result<()> {
         match self {

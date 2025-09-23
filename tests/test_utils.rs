@@ -1,12 +1,13 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
 
+use bincode::de;
 use color_eyre::Result;
 
 use gammaloop_api::{
     commands::{save::SaveState, Commands},
     state::{RunHistory, State},
-    GlobalCliSettings, OneShot,
+    CLISettings, OneShot,
 };
 
 use gammalooprs::{initialisation::initialise, utils::test_utils::load_generic_model};
@@ -28,8 +29,7 @@ pub(crate) const TESTS_WORKSPACE: &str = "./tests/workspace";
 
 pub(crate) struct CLIState {
     pub state: State,
-    pub cli: OneShot,
-    pub global_settings: GlobalCliSettings,
+    pub cli_settings: CLISettings,
     pub default_runtime_settings: gammalooprs::settings::RuntimeSettings,
     pub run_history: RunHistory,
 }
@@ -55,13 +55,17 @@ impl CLIState {
         cmd.run(
             &mut self.state,
             &mut self.run_history,
-            &mut self.global_settings,
+            &mut self.cli_settings,
             &mut self.default_runtime_settings,
         )
         .map(|_| ())
     }
 }
 
+/// Yields a cli state for testing.
+/// If a run card path is provided, the commands in the run card are executed first.
+/// If clean is true, the state path is deleted before creating the cli state.
+/// The resulting state will be saved in the state path specified
 pub(crate) fn get_test_cli(
     run_card_path: Option<PathBuf>,
     state_path: impl AsRef<Path>,
@@ -71,10 +75,11 @@ pub(crate) fn get_test_cli(
     if clean && state_path.as_ref().exists() {
         clean_test(state_path.as_ref());
     }
-    let (mut cli, mut state) = new_cli_for_test(state_path, log_file_name);
+    let mut state = new_cli_for_test(state_path.as_ref(), log_file_name);
+
     let cmds = if let Some(rc_path) = run_card_path {
         let mut run_card_cmds = run_card(rc_path)?;
-        let mut global_settings_for_running_cms = run_card_cmds.global_settings.clone();
+        let mut global_settings_for_running_cms = run_card_cmds.cli_settings.clone();
         let mut default_runtime_settings_for_running_cms =
             run_card_cmds.default_runtime_settings.clone();
         _ = run_card_cmds.run(
@@ -86,9 +91,14 @@ pub(crate) fn get_test_cli(
     } else {
         RunHistory::default()
     };
-    let global_settings = cmds.global_settings.clone();
+    let mut global_settings = cmds.cli_settings.clone();
+    global_settings.state_folder = state_path.as_ref().to_path_buf();
     let default_runtime_settings = cmds.default_runtime_settings.clone();
-    SaveState::default().save(
+    SaveState {
+        override_state: Some(true),
+        ..Default::default()
+    }
+    .save(
         &mut state,
         &cmds,
         &default_runtime_settings,
@@ -97,8 +107,7 @@ pub(crate) fn get_test_cli(
 
     Ok(CLIState {
         state,
-        cli,
-        global_settings,
+        cli_settings: global_settings,
         default_runtime_settings,
         run_history: cmds,
     })
@@ -107,7 +116,7 @@ pub(crate) fn get_test_cli(
 pub(crate) fn new_cli_for_test(
     state_path: impl AsRef<Path>,
     log_file_name: Option<String>,
-) -> (OneShot, State) {
+) -> State {
     debug!(
         "Using gammaloop state path: {}",
         state_path.as_ref().display()
@@ -115,7 +124,7 @@ pub(crate) fn new_cli_for_test(
     let mut state = State::new(state_path.as_ref().to_path_buf(), log_file_name);
     state.model = load_generic_model("sm");
 
-    (state.new_test_cli(), state)
+    state
 }
 
 pub(crate) fn clean_test(save_path: impl AsRef<Path>) {

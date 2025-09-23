@@ -17,7 +17,7 @@ use gammalooprs::{
 };
 use tracing::info;
 
-use crate::state::State;
+use crate::{state::State, CLISettings};
 
 #[cfg_attr(
     feature = "python_api",
@@ -59,9 +59,13 @@ pub struct Integrate {
 }
 
 impl Integrate {
-    pub fn run(&self, state: &mut State) -> Result<IntegrationResult> {
-        let state_name: String = state
-            .save_path
+    pub fn run(
+        &self,
+        state: &mut State,
+        global_cli_settings: &CLISettings,
+    ) -> Result<IntegrationResult> {
+        let state_name: String = global_cli_settings
+            .state_folder
             .file_stem()
             .unwrap()
             .to_string_lossy()

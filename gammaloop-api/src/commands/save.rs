@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     state::{set_serialize_commands_as_strings, RunHistory, State},
-    write_schemas, GlobalCliSettings,
+    write_schemas, CLISettings,
 };
 
 #[derive(Subcommand, Debug, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
@@ -32,7 +32,7 @@ impl Save {
         state: &mut State,
         run_history: &RunHistory,
         default_runtime_settings: &RuntimeSettings,
-        global_settings: &GlobalCliSettings,
+        global_settings: &CLISettings,
     ) -> Result<()> {
         match self {
             Save::Dot { path } => {
@@ -54,18 +54,18 @@ impl Save {
 pub struct SaveState {
     /// Path to save the state to, by default is the current state folder
     #[arg(short = 'p', long, value_hint = clap::ValueHint::FilePath)]
-    path: Option<PathBuf>,
+    pub path: Option<PathBuf>,
 
     /// Save state to file after each call
     #[arg(short = 'o', long)]
-    override_state: Option<bool>,
+    pub override_state: Option<bool>,
 
     /// Try to serialize using strings when saving run history
     #[arg(long)]
-    try_strings: Option<bool>,
+    pub try_strings: Option<bool>,
 
     #[arg(long)]
-    strict: Option<bool>,
+    pub strict: Option<bool>,
 }
 
 impl SaveState {
@@ -74,7 +74,7 @@ impl SaveState {
         state: &mut State,
         run_history: &RunHistory,
         default_runtime_settings: &RuntimeSettings,
-        global_settings: &GlobalCliSettings,
+        global_settings: &CLISettings,
     ) -> Result<()> {
         println!(
             "Saving state to {}..",
@@ -96,7 +96,10 @@ impl SaveState {
                 ));
             }
 
-            if !global_settings.override_state {
+            if !self
+                .override_state
+                .unwrap_or(global_settings.override_state)
+            {
                 while selected_root_folder.clone().exists() {
                     eprint!(
                         "Gammaloop export root {} already exists. Specify '{}' for overwriting, '{}' for not saving, or '{}' to specify where to save current state to:\n > ",
@@ -132,7 +135,7 @@ impl SaveState {
 
         state.save(&selected_root_folder, true, false)?;
 
-        set_serialize_commands_as_strings(global_settings.try_strings);
+        set_serialize_commands_as_strings(self.try_strings.unwrap_or(global_settings.try_strings));
         run_history.save_toml(&selected_root_folder, true, false)?;
         set_serialize_commands_as_strings(false);
 
@@ -141,7 +144,7 @@ impl SaveState {
             &selected_root_folder.join("default_runtime_settings.toml"),
             true,
         )?;
-        global_settings.to_file(&selected_root_folder.join("global_settings.toml"), true)?;
+        global_settings.to_file(&selected_root_folder.join("cli_settings.toml"), true)?;
 
         SHOWDEFAULTS.store(false, std::sync::atomic::Ordering::Relaxed);
 

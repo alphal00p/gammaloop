@@ -2890,7 +2890,6 @@ pub(crate) fn inv_parametrize3d<T: FloatLike>(
     };
 
     let x3 = F::<T>::from_f64(0.5) * (&one + z / &k_r);
-
     jac /= F::<T>::from_f64(2.) * zero.PI();
     jac /= F::<T>::from_f64(2.);
     jac /= k_r.square();

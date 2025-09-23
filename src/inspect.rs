@@ -1,6 +1,7 @@
 use colored::Colorize;
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
+use momtrop::float::MomTropFloat;
 use spenso::algebra::complex::Complex;
 use symbolica::domains::float::NumericalFloatLike;
 use symbolica::numerical_integration::Sample;
@@ -23,31 +24,38 @@ pub fn inspect<I: HasIntegrand>(
     mut force_radius: bool,
     is_momentum_space: bool,
     use_f128: bool,
-) -> Complex<F<f64>> {
+) -> (Option<f64>, Complex<F<f64>>) {
     if integrand.get_n_dim() as isize == pt.len() as isize - 1 {
         force_radius = true;
     }
 
-    let xs_f128 = if is_momentum_space {
+    let (jac, xs_f128) = if is_momentum_space {
         let (xs, inv_jac) = utils::global_inv_parameterize::<f128>(
             &pt.chunks_exact_mut(3)
                 .map(|x| ThreeMomentum::new(x[0], x[1], x[2]).higher())
                 .collect::<Vec<ThreeMomentum<F<f128>>>>(),
             F(settings.kinematics.e_cm).higher(),
-            &settings.sampling.get_parameterization_settings().unwrap(),
+            // TODO! return an error instead of panic
+            &settings
+                .sampling
+                .get_parameterization_settings()
+                .unwrap_or_else(|| panic!("Invalid sampling method for momentum-space inspect.")),
             force_radius,
         );
 
         status_info!(
             "f128 sampling jacobian for this point = {:+.32e}",
-            inv_jac.inv()
+            NumericalFloatLike::inv(&inv_jac)
         );
 
-        xs
+        (Some(inv_jac.to_f64()), xs)
     } else {
-        pt.iter()
-            .map(|x| F::<f128>::from_ff64(*x))
-            .collect::<Vec<_>>()
+        (
+            None,
+            pt.iter()
+                .map(|x| F::<f128>::from_ff64(*x))
+                .collect::<Vec<_>>(),
+        )
     };
     let xs_f64 = xs_f128.iter().map(|x| F(x.into_f64())).collect::<Vec<_>>();
 
@@ -65,7 +73,7 @@ pub fn inspect<I: HasIntegrand>(
     let eval = eval_result.integrand_result;
 
     status_info!(
-        "\nFor input point xs: \n\n{}\n\nThe evaluation of integrand '{}' is:\n\n{}\n",
+        "\nInput point in unit hypercube xs: \n\n{}\n\nThe evaluation of integrand '{}' is:\n\n{}\n",
         format!(
             "( {} )",
             xs_f64
@@ -79,7 +87,7 @@ pub fn inspect<I: HasIntegrand>(
         format!("( {:+.16e}, {:+.16e} i)", eval.re, eval.im).blue(),
     );
 
-    eval
+    (jac, eval)
 }
 
 fn havana_sample(cont: Vec<F<f64>>, discrete_dimensions: &[usize]) -> Sample<F<f64>> {

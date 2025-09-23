@@ -36,7 +36,7 @@ fn file_filter_from(user_spec: &str) -> Result<EnvFilter> {
     // Start from a strict global default…
     let mut filter = EnvFilter::builder()
         .with_default_directive(LevelFilter::WARN.into()) // global floor
-        .parse_lossy(""); // no user rules yet
+        .parse_lossy("status=off"); // no user rules yet
 
     // for req in ["gammalooprs=debug", "_gammaloop=info", "symbolica=off"] {
     //     let Ok(d) = req.parse() else {

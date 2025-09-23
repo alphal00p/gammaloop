@@ -1,9 +1,8 @@
-#:schema /Users/lcnbr/.config/gammaloop/schemas/runhistory.json
 commands = [
-    "import model sm-default.json",
-    "import amplitude ./tests/resources/graphs/qqx_aaa_subtracted.dot",
+    "import model sm-default",
+    "import amplitude ./qqx_aaa_pentagon.dot",
     "generate",
-    # "inspect --process-id 0 --name qqx_aaa_subtracted -p 0.1 0.2 0.3 -m",
+    "inspect -m -p 0.1 0.2 0.3",
 ]
 
 
@@ -56,13 +55,22 @@ max_prob_ratio = 0.01
 
 [default_runtime_settings.Stability]
 check_on_norm = true
+rotation_axis = []
 
 [default_runtime_settings.subtraction]
 disable_threshold_subtraction = true
 
-[cli_settings.global.generation]
+[global_settings]
+display_directive = "debug"
+logfile_directive = "debug"
+
+[global_settings.generation]
 enable_thresholds = false
 
-[cli_settings.global.generation.evaluator_settings]
+[global_settings.generation.evaluator_settings]
 iterative_orientation_optimization = true
-compile = false
+compile = true
+
+[global_settings.generation.gammaloop_compile_options]
+inline_asm = true
+optimization_level = "O3"

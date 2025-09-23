@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     state::{CommandHistory, RunHistory, State},
-    GlobalCliSettings,
+    CLISettings,
 };
 pub mod display;
 pub use display::Display;
@@ -102,10 +102,10 @@ impl Commands {
         self,
         state: &mut State,
         run_history: &mut RunHistory,
-        global_settings: &mut GlobalCliSettings,
+        global_cli_settings: &mut CLISettings,
         default_runtime_settings: &mut RuntimeSettings,
     ) -> Result<ControlFlow<SaveState>, Report> {
-        if global_settings.dummy {
+        if global_cli_settings.dummy {
             if let Commands::Quit(s) = self {
                 return Ok(ControlFlow::Break(s));
             }
@@ -131,27 +131,27 @@ impl Commands {
                     state,
                     run_history,
                     default_runtime_settings,
-                    global_settings,
+                    global_cli_settings,
                 )?,
-                Commands::Set(s) => s.run(state, global_settings, default_runtime_settings)?,
+                Commands::Set(s) => s.run(state, global_cli_settings, default_runtime_settings)?,
 
                 Commands::Generate(g) => g.run(
                     state,
-                    &global_settings.state_folder,
-                    global_settings.override_state,
-                    &global_settings.global_settings,
+                    &global_cli_settings.state_folder,
+                    global_cli_settings.override_state,
+                    &global_cli_settings.global,
                     &default_runtime_settings,
                 )?,
 
                 Commands::Integrate(g) => {
-                    g.run(state)?;
+                    g.run(state, &global_cli_settings)?;
                 }
 
                 Commands::Display(l) => l.run(state)?,
                 Commands::Run(r) => {
                     return r.run(
                         state,
-                        global_settings,
+                        global_cli_settings,
                         default_runtime_settings,
                         run_history,
                     )

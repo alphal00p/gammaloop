@@ -10,7 +10,7 @@ use tracing::info;
 
 use crate::{
     state::{CommandHistory, RunHistory, State},
-    GlobalCliSettings,
+    CLISettings,
 };
 
 use super::save::SaveState;
@@ -29,7 +29,7 @@ impl Run {
     pub fn run(
         &self,
         state: &mut State,
-        global_settings: &mut GlobalCliSettings,
+        global_settings: &mut CLISettings,
         default_runtime_settings: &mut RuntimeSettings,
         run_history: &mut RunHistory,
     ) -> Result<ControlFlow<SaveState>> {

@@ -464,7 +464,7 @@ impl State {
             discrete_dim,
         }
         .run(self)?;
-        Ok(PyComplex::from_doubles(py, res.re, res.im))
+        Ok(PyComplex::from_doubles(py, res.1.re, res.1.im))
     }
 
     #[pyo3(signature = (path, process_name=None, process_id=None, integrand_name=None))]

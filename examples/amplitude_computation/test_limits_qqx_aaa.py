@@ -280,7 +280,7 @@ def run_limit_test(elements_to_display=None, tests_to_run=None, gammaloop_state=
                         k[1]*scaling_factor, k[2]]
         elif test_name == 'UV':
             k = k_base
-            scaled_k = [k[0]+scaling_factor,
+            scaled_k = [k[0]*scaling_factor,
                         k[1]*scaling_factor, k[2]*scaling_factor]
         elif test_name == 'THRES':
             eps = 0.001

@@ -55,7 +55,7 @@ impl Default for Inspect {
 }
 
 impl Inspect {
-    pub fn run(&self, state: &mut State) -> Result<Complex<f64>> {
+    pub fn run(&self, state: &mut State) -> Result<(Option<f64>, Complex<f64>)> {
         state.process_list.warm_up(&state.model)?;
 
         let process_id = if let Some(id) = self.process_id {
@@ -111,7 +111,7 @@ impl Inspect {
 
         let settings = integrand.get_settings().clone();
 
-        let res = gammalooprs::inspect::inspect(
+        let (inspect_res_jac, inspect_res_eval) = gammalooprs::inspect::inspect(
             &settings,
             integrand,
             &state.model,
@@ -121,9 +121,22 @@ impl Inspect {
             self.momentum_space,
             self.use_f128,
         );
+        let res_to_return: Complex<f64> = if let Some(jac) = inspect_res_jac {
+            status_info!("Jacobian for this point: {:+.6e}", jac);
+            if jac == 0. {
+                return Err(color_eyre::eyre::eyre!(
+                    "Jacobian is zero at this point, cannot divide by zero."
+                ));
+            }
+            let r = inspect_res_eval.map(|a| a.into());
+            r / jac
+        } else {
+            inspect_res_eval.map(|a| a.into())
+        };
+        status_info!("Result: {}", inspect_res_eval);
 
-        status_info!("Result: {}", res);
+        Ok((inspect_res_jac, res_to_return))
 
-        Ok(res.map(|a| a.0))
+        //Ok(res.map(|a| a.0))
     }
 }
