@@ -137,8 +137,8 @@ fn photons_1l_inspect() -> Result<()> {
 
     println!("Inspect result: {inspect:.16e}");
 
-    // running inspect on main does not match the value from the old test, I trust the inspect run more.
-    assert_snapshot!(format!("{inspect:.8e}"),@"(-4.236544183136419e-12+-3.7107289586142275e-12i)");
+    // The kinematics are not the same as the old test, but they come from the example, from which this value is also taken for now
+    assert_snapshot!(format!("{inspect:.8e}"),@"(-4.2365441831364175e-12+-3.71072895861423e-12i)");
 
     clean_test(&cli.cli_settings.state_folder);
 
