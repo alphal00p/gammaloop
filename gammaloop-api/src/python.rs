@@ -437,15 +437,13 @@ impl State {
     #[new]
     pub fn new_python(state_folder: PathBuf) -> Self {
         initialise().unwrap();
-        // let handle = crate::tracing::init_tracing(
-        //     "info",
-        //     Some(state_folder.join("logs").to_str().unwrap().to_owned()),
-        // );
+
         let a =
             State::load(state_folder.clone(), None, Some("python".to_string())).expect(&format!(
                 "Could not load or create state from path '{}'",
                 state_folder.display()
             ));
+
         a
     }
 

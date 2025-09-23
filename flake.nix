@@ -52,6 +52,7 @@
             # pkgs.mold
             pkgs.gcc
             pkgs.clang
+            pkgs.stdenv.cc.cc.lib
             # Add additional build inputs here
           ]
           ++ lib.optionals pkgs.stdenv.isDarwin [
@@ -160,6 +161,10 @@
           tdf
           cargo-flamegraph
           yaml-language-server
+          zellij
+          vim
+          helix
+          jujutsu
 
           # pkgs.ripgrep
           cargo-insta

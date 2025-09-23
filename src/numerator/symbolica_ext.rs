@@ -1,8 +1,13 @@
 use std::ops::Deref;
 
 use idenso::color::SelectiveExpand;
+use itertools::Itertools;
 use spenso::{
-    network::{library::DummyLibrary, store::NetworkStore, Network},
+    network::{
+        library::{DummyKey, DummyLibrary},
+        store::{NetworkStore, TensorScalarStore},
+        Network, StructureLessDisplay,
+    },
     structure::{
         representation::{Minkowski, RepName},
         slot::{DualSlotTo, IsAbstractSlot},
@@ -19,8 +24,12 @@ use symbolica::{
     function,
     id::Replacement,
 };
+use tracing::{debug, event_enabled, Level};
 
-use crate::utils::{TENSORLIB, W_};
+use crate::{
+    numerator::aind::Aind,
+    utils::{TENSORLIB, W_},
+};
 
 use super::ParsingNet;
 pub type ParsingNetError = spenso::network::TensorNetworkError<
@@ -87,9 +96,26 @@ impl AtomCoreExt for AtomView<'_> {
     }
 
     fn canonize_spenso(&self) -> Atom {
-        let lib = DummyLibrary::<SymbolicTensor>::new();
+        let lib = DummyLibrary::<SymbolicTensor<Aind>>::new();
         let mut net =
-            Network::<NetworkStore<SymbolicTensor, Atom>, _>::try_from_view(*self, &lib).unwrap();
+            Network::<NetworkStore<SymbolicTensor<Aind>, Atom>, DummyKey, Aind>::try_from_view(
+                *self, &lib,
+            )
+            .unwrap();
+
+        debug!(net=%net.graph.dot_impl(
+            |i| {
+                let ss = &net.store.get_scalar(i);
+                format!("{:#}", ss)
+            },
+            |_| "AAAA".to_string(),
+            |t| {
+                let tt = &net.store.get_tensor(t);
+                format!("{}({})",
+                    tt.name().map(|a|a.to_string()).unwrap_or("NA".to_string()),
+                    tt.args().map(|a|a.iter().map(|a|format!("{}",a)).join(",")).unwrap_or(String::new()))
+            },
+        ),"Network for canonization");
 
         let mut redual_reps = vec![];
 
@@ -97,9 +123,11 @@ impl AtomCoreExt for AtomView<'_> {
 
         for t in net.store.tensors.iter_mut() {
             let mut reps = vec![];
+            debug!(name=%t.name().unwrap());
             let mut pat = FunctionBuilder::new(t.name().unwrap());
             let mut rhs = pat.clone();
             for s in t.structure.external_structure_iter() {
+                debug!(slot=%s.to_string(),rep=%s.rep().to_string());
                 if !s.rep_name().is_self_dual() && s.rep_name().is_dual() {
                     pat = pat.add_arg(s.rep().dual().to_symbolic([Atom::var(W_.a_)]));
                     indices.push((s.dual().to_atom(), s.dual().rep()));
@@ -117,6 +145,16 @@ impl AtomCoreExt for AtomView<'_> {
                 redual_reps.push(Replacement::new(pat.finish().to_pattern(), rhs.finish()));
                 t.expression = t.expression.replace_multiple(&reps);
             }
+        }
+
+        debug!(len=%indices.len());
+
+        if event_enabled!(Level::DEBUG) {
+            let indices = indices
+                .iter()
+                .map(|(i, r)| format!("{}:{}", i.to_canonical_string(), r.to_string()))
+                .join("\n");
+            debug!(indices=%indices);
         }
 
         self.canonize_tensors(&indices)
@@ -155,9 +193,15 @@ impl AtomCoreExt for AtomView<'_> {
 
 #[cfg(test)]
 mod tests {
+    use libc::YESEXPR;
+    use symbolica::{atom::AtomCore, parse_lit};
+
     use crate::{
         dot,
-        graph::{parse::IntoGraph, FeynmanGraph, Graph},
+        graph::{
+            parse::{self, IntoGraph},
+            FeynmanGraph, Graph,
+        },
         initialisation::test_initialise,
         uv::UltravioletGraph,
     };
@@ -219,5 +263,186 @@ mod tests {
             println!("numerator_color_simplified:{numerator_color_simplified}");
             println!("numerator:{}", numerator.state.expr);
         }
+    }
+
+    #[test]
+    fn canonizations() {
+        test_initialise().unwrap();
+        let a = parse_lit!(
+            1 / 27 * UFO::ee
+                ^ 4 * (gammalooprs::K(0, spenso::mink(4, gammalooprs::edge(1, 1)))
+                    + gammalooprs::K(1, spenso::mink(4, gammalooprs::edge(1, 1))))
+                    * (gammalooprs::K(0, spenso::mink(4, gammalooprs::edge(4, 1)))
+                        + gammalooprs::K(1, spenso::mink(4, gammalooprs::edge(4, 1))))
+                    * (gammalooprs::K(0, spenso::mink(4, gammalooprs::edge(5, 1)))
+                        + gammalooprs::K(1, spenso::mink(4, gammalooprs::edge(5, 1)))
+                        - gammalooprs::P(0, spenso::mink(4, gammalooprs::edge(5, 1))))
+                    * spenso::g(
+                        spenso::mink(4, gammalooprs::hedge(4)),
+                        spenso::mink(4, gammalooprs::hedge(5))
+                    )
+                    * spenso::gamma(
+                        spenso::bis(4, gammalooprs::hedge(3)),
+                        spenso::bis(4, gammalooprs::hedge(8)),
+                        spenso::mink(4, gammalooprs::hedge(5))
+                    )
+                    * spenso::gamma(
+                        spenso::bis(4, gammalooprs::hedge(6)),
+                        spenso::bis(4, gammalooprs::hedge(2)),
+                        spenso::mink(4, gammalooprs::hedge(4))
+                    )
+                    * spenso::gamma(
+                        spenso::bis(4, gammalooprs::hedge(9)),
+                        spenso::bis(4, gammalooprs::hedge(10)),
+                        spenso::mink(4, gammalooprs::hedge(0))
+                    )
+                    * spenso::gamma(
+                        spenso::bis(4, gammalooprs::hedge(11)),
+                        spenso::bis(4, gammalooprs::hedge(7)),
+                        spenso::mink(4, gammalooprs::hedge(1))
+                    )
+                    * spenso::gamma(
+                        spenso::bis(4, gammalooprs::hedge(2)),
+                        spenso::bis(4, gammalooprs::hedge(3)),
+                        spenso::mink(4, gammalooprs::edge(2, 1))
+                    )
+                    * spenso::gamma(
+                        spenso::bis(4, gammalooprs::hedge(7)),
+                        spenso::bis(4, gammalooprs::hedge(6)),
+                        spenso::mink(4, gammalooprs::edge(4, 1))
+                    )
+                    * spenso::gamma(
+                        spenso::bis(4, gammalooprs::hedge(8)),
+                        spenso::bis(4, gammalooprs::hedge(9)),
+                        spenso::mink(4, gammalooprs::edge(1, 1))
+                    )
+                    * spenso::gamma(
+                        spenso::bis(4, gammalooprs::hedge(10)),
+                        spenso::bis(4, gammalooprs::hedge(11)),
+                        spenso::mink(4, gammalooprs::edge(5, 1))
+                    )
+                    * gammalooprs::K(0, spenso::mink(4, gammalooprs::edge(2, 1)))
+                    * gammalooprs::ϵ(0, spenso::mink(4, gammalooprs::hedge(1)))
+                    * gammalooprs::ϵbar(0, spenso::mink(4, gammalooprs::hedge(0)))
+        );
+        println!("a:{}", a);
+        let b = parse_lit!(
+            1 / 27 * UFO::ee
+                ^ 4 * (gammalooprs::K(0, spenso::mink(4, gammalooprs::edge(1, 1)))
+                    + gammalooprs::K(1, spenso::mink(4, gammalooprs::edge(1, 1))))
+                    * (gammalooprs::K(0, spenso::mink(4, gammalooprs::edge(4, 1)))
+                        + gammalooprs::K(1, spenso::mink(4, gammalooprs::edge(4, 1))))
+                    * (gammalooprs::K(0, spenso::mink(4, gammalooprs::edge(5, 1)))
+                        + gammalooprs::K(1, spenso::mink(4, gammalooprs::edge(5, 1)))
+                        - gammalooprs::P(0, spenso::mink(4, gammalooprs::edge(5, 1))))
+                    * spenso::g(
+                        spenso::mink(4, gammalooprs::hedge(4)),
+                        spenso::mink(4, gammalooprs::hedge(5))
+                    )
+                    * spenso::gamma(
+                        spenso::bis(4, gammalooprs::hedge(2)),
+                        spenso::bis(4, gammalooprs::hedge(6)),
+                        spenso::mink(4, gammalooprs::hedge(4))
+                    )
+                    * spenso::gamma(
+                        spenso::bis(4, gammalooprs::hedge(7)),
+                        spenso::bis(4, gammalooprs::hedge(11)),
+                        spenso::mink(4, gammalooprs::hedge(1))
+                    )
+                    * spenso::gamma(
+                        spenso::bis(4, gammalooprs::hedge(8)),
+                        spenso::bis(4, gammalooprs::hedge(3)),
+                        spenso::mink(4, gammalooprs::hedge(5))
+                    )
+                    * spenso::gamma(
+                        spenso::bis(4, gammalooprs::hedge(10)),
+                        spenso::bis(4, gammalooprs::hedge(9)),
+                        spenso::mink(4, gammalooprs::hedge(0))
+                    )
+                    * spenso::gamma(
+                        spenso::bis(4, gammalooprs::hedge(3)),
+                        spenso::bis(4, gammalooprs::hedge(2)),
+                        spenso::mink(4, gammalooprs::edge(2, 1))
+                    )
+                    * spenso::gamma(
+                        spenso::bis(4, gammalooprs::hedge(6)),
+                        spenso::bis(4, gammalooprs::hedge(7)),
+                        spenso::mink(4, gammalooprs::edge(4, 1))
+                    )
+                    * spenso::gamma(
+                        spenso::bis(4, gammalooprs::hedge(9)),
+                        spenso::bis(4, gammalooprs::hedge(8)),
+                        spenso::mink(4, gammalooprs::edge(1, 1))
+                    )
+                    * spenso::gamma(
+                        spenso::bis(4, gammalooprs::hedge(11)),
+                        spenso::bis(4, gammalooprs::hedge(10)),
+                        spenso::mink(4, gammalooprs::edge(5, 1))
+                    )
+                    * gammalooprs::K(0, spenso::mink(4, gammalooprs::edge(2, 1)))
+                    * gammalooprs::ϵ(0, spenso::mink(4, gammalooprs::hedge(1)))
+                    * gammalooprs::ϵbar(0, spenso::mink(4, gammalooprs::hedge(0)))
+        );
+
+        println!("b:{}", b);
+
+        println!("ratio:{}", &a / &b);
+
+        let ac = a.canonize_spenso();
+        let bc = b.canonize_spenso();
+        println!("ac:{}", ac);
+        println!("bc:{}", bc);
+        println!("ratio canonized:{}", ac / bc);
+    }
+
+    #[test]
+    fn test_can() {
+        let a = parse_lit!(T(a, b, c) * T(c, d, e) * T(d, b, f)(K(e) + P(e)) * (K(f) + P(f)));
+        let b = parse_lit!(T(a, d) * T(d, c));
+
+        let indices = vec![
+            (parse_lit!(a), 1),
+            (parse_lit!(a), 1),
+            (parse_lit!(a), 1),
+            (parse_lit!(b), 1),
+            (parse_lit!(b), 1),
+            (parse_lit!(c), 1),
+            (parse_lit!(d), 1),
+            (parse_lit!(e), 1),
+            (parse_lit!(f), 1),
+        ];
+
+        let ac = a.canonize_tensors(&indices);
+        println!("{}", ac.unwrap());
+        let bc = b.canonize_tensors(&indices);
+        println!("{}", bc.unwrap());
+
+        let a = parse_lit!(
+            1 / 27 * UFO::ee
+                ^ 4 * (K(0, m4e_1_1) + K(1, m4e_1_1))
+                    * (K(0, m4e_4_1) + K(1, m4e_4_1))
+                    * (K(0, m4e_5_1) + K(1, m4e_5_1) - P(0, m4e_5_1))
+                    * g(m4he_4, m4he_5)
+                    * gamma(bis_4(3), bis_4(8), m4he_5)
+                    * gamma(bis_4(6), bis_4(2), m4he_4)
+                    * gamma(bis_4(9), bis_4(10), m4he_0)
+                    * gamma(bis_4(11), bis_4(7), m4he_1)
+                    * gamma(bis_4(2), bis_4(3), m4e_2_1)
+                    * gamma(bis_4(7), bis_4(6), m4e_4_1)
+                    * gamma(bis_4(8), bis_4(9), m4e_1_1)
+                    * gamma(bis_4(10), bis_4(11), m4e_5_1)
+                    * K(0, m4e_2_1)
+                    * ϵ(0, m4he_1)
+                    * ϵbar(0, m4he_0)
+        );
+
+        let indices = vec![
+            (parse_lit!(a), 1),
+            (parse_lit!(b), 1),
+            (parse_lit!(c), 1),
+            (parse_lit!(d), 1),
+            (parse_lit!(e), 1),
+            (parse_lit!(f), 1),
+        ];
     }
 }

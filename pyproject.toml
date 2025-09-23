@@ -23,6 +23,9 @@ dependencies = [
     "symbolica>=0.14.0",
     "pytest",
     "ufo-model-loader>=0.1.1",
+    "polars>=1.33.1",
+    "jupyter>=1.1.1",
+    "numpy>=2.3.3",
 ]
 
 [project.urls]

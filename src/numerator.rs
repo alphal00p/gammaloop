@@ -28,7 +28,7 @@ use std::ops::Deref;
 use std::sync::{Arc, Mutex};
 use symbolica_ext::AtomCoreExt;
 use thiserror::Error;
-use tracing::debug;
+use tracing::{debug, instrument};
 // use crate::feyngen::dis::{DisEdge, DisVertex};
 
 use crate::momentum::{PolDef, PolType};
@@ -723,15 +723,16 @@ impl ExpressionState for NonLocal {
 }
 
 impl Numerator<Global> {
+    #[instrument(skip(self))]
     pub(crate) fn color_simplify(self) -> Numerator<ColorSimplified> {
-        debug!("Color simplifying global numerator");
+        // debug!("Color simplifying global numerator");
         // let mut fully_simplified = true;
 
         let state = ColorSimplified {
             expr: self.state.expr.simplify_color(),
             state: Color::Fully,
         };
-        debug!("Color simplified numerator:{}", state.expr);
+        // debug!("Color simplified numerator:{}", state.expr);
         Numerator { state }
     }
 }

@@ -1,6 +1,7 @@
 use color_eyre::Result;
 
 mod test_utils;
+use gammaloop_api::state::SyncSettings;
 use gammalooprs::feyngen::diagram_generator::evaluate_overall_factor;
 use gammalooprs::processes::ProcessCollection;
 use symbolica::atom::{Atom, AtomCore};
@@ -104,6 +105,7 @@ fn graph_count_from_amplitude_load() -> Result<()> {
 fn example_graph_count() -> Result<()> {
     let mut cli = get_test_cli(None,get_tests_workspace_path().join("feyn_gen_generation_test"),Some("feyngen".to_string()),true)?;
 
+
     // Choose the model to consider
     cli.run_command("import model sm.json")?;
 
@@ -121,6 +123,8 @@ fn example_graph_count() -> Result<()> {
 #[rustfmt::skip]
 fn cp_fix_from_symbolica()->Result<()>{
     let mut cli = get_test_cli(None,get_tests_workspace_path().join("feyn_gen_generation_test"),Some("feyngen".to_string()),true)?;
+    cli.cli_settings.global.logfile_directive = "[from_new_graph]=debug,[compare_with_scalar_rescaling]=debug,[compare_with_sign_only]=debug".to_string();
+    cli.cli_settings.sync_settings().unwrap();
 
     // Choose the model to consider
     cli.run_command("import model sm-default.json")?;

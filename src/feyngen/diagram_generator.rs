@@ -35,7 +35,7 @@ use symbolica::domains::float::Complex as SymbolicaComplex;
 use symbolica::function;
 use symbolica::graph::GenerationSettings;
 use symbolica::id::Replacement;
-use tracing::instrument;
+use tracing::{event_enabled, instrument};
 
 use ahash::AHashMap;
 use ahash::AHashSet;
@@ -3899,7 +3899,7 @@ impl ProcessDefinition {
                             numerator.state.expr = numerator.state.expr.replace_multiple(&cpl_reps);
 
                             let numerator_color_simplified =
-                                numerator.clone().color_simplify().get_single_atom().unwrap().canonize_spenso();
+                                numerator.clone().color_simplify().get_single_atom().unwrap();
 
                             if numerator_color_simplified
                                 .is_zero()
@@ -3956,7 +3956,7 @@ impl ProcessDefinition {
                                     ProcessedNumeratorForComparison::from_numerator_symbolic_expression(
                                         i_g,
                                         &bare_graph,
-                                        numerator_color_simplified,
+                                       numerator_color_simplified,
                                         &samples,
                                         &self.numerator_grouping,
                                     )?,
@@ -4206,41 +4206,9 @@ impl ProcessDefinition {
         numerator_a: &ProcessedNumeratorForComparison,
         numerator_b: &ProcessedNumeratorForComparison,
     ) -> Option<Atom> {
-        fn analyze_ratios(ratios: &HashSet<Option<Atom>>) -> Option<Atom> {
-            if ratios.len() > 1 {
-                None
-            } else {
-                let ratio = ratios.iter().next().unwrap().to_owned();
-                if let Some(r) = ratio {
-                    for head in LibraryRep::all_self_duals()
-                        .chain(LibraryRep::all_inline_metrics())
-                        .chain(LibraryRep::all_dualizables())
-                        .map(|a| a.to_symbolic([W_.a__]).to_pattern())
-                    {
-                        if r.pattern_match(&head, None, None).next().is_some() {
-                            return None;
-                        }
-                    }
-                    Some(r)
-                } else {
-                    None
-                }
-            }
-        }
-
-        fn analyze_diff_and_sum(a: AtomView, b: AtomView) -> Option<Atom> {
-            if (a - b).expand().is_zero() {
-                return Some(Atom::num(1));
-            }
-            if (a + b).expand().is_zero() {
-                return Some(Atom::num(-1));
-            }
-            None
-        }
-
-        if numerator_a.canonized_numerator.is_none() && numerator_a.canonized_numerator.is_some()
+        if numerator_a.canonized_numerator.is_none() && numerator_b.canonized_numerator.is_some()
             || numerator_a.canonized_numerator.is_some()
-                && numerator_a.canonized_numerator.is_none()
+                && numerator_b.canonized_numerator.is_none()
         {
             panic!("Inconsistent state: one sample has canonalized numerator while the other does not.");
         }
@@ -4250,185 +4218,15 @@ impl ProcessDefinition {
         }
 
         match numerator_aware_isomorphism_grouping {
-            NumeratorAwareGraphGroupingOption::NoGrouping => {
-                return None;
-            }
-            NumeratorAwareGraphGroupingOption::OnlyDetectZeroes => {
-                return None;
-            }
-
+            NumeratorAwareGraphGroupingOption::NoGrouping => None,
+            NumeratorAwareGraphGroupingOption::OnlyDetectZeroes => None,
             NumeratorAwareGraphGroupingOption::GroupIdenticalGraphUpToSign(_) => {
-                if let (Some(canonized_num_a), Some(canonized_num_b)) = (
-                    numerator_a.canonized_numerator.as_ref(),
-                    numerator_b.canonized_numerator.as_ref(),
-                ) {
-                    if let Some(ratio) =
-                        analyze_diff_and_sum(canonized_num_a.as_view(), canonized_num_b.as_view())
-                    {
-                        //     debug!(
-                        //     "Combining graph #{} with #{} using canonized numerators, with ratio #{}/#{}={}",
-                        //     numerator_b.diagram_id,
-                        //     numerator_a.diagram_id,
-                        //     numerator_a.diagram_id,
-                        //     numerator_b.diagram_id,
-                        //     ratio
-                        // );
-                        return Some(ratio);
-                    }
-                }
-
-                if !numerator_a.sample_evaluations.is_empty() {
-                    let evaluations_a = &numerator_a.sample_evaluations;
-                    let evaluations_b = &numerator_b.sample_evaluations;
-
-                    let ratios = evaluations_a
-                        .iter()
-                        .zip(evaluations_b.iter())
-                        .map(|(a, b)| analyze_diff_and_sum(a.as_view(), b.as_view()))
-                        .collect::<HashSet<_>>();
-
-                    // println!(
-                    //     "ratios from numerical evaluations when comparing diagram #{} and #{}:\n{}",
-                    //     numerator_b.diagram_id,
-                    //     numerator_a.diagram_id,
-                    //     ratios
-                    //         .iter()
-                    //         .map(|av| av.as_ref().unwrap().to_canonical_string())
-                    //         .collect::<Vec<_>>()
-                    //         .join("\n")
-                    // );
-
-                    if ratios.len() == 1 {
-                        if let Some(ratio) = ratios.iter().next().unwrap().to_owned() {
-                            debug!(
-                            "Combining graph #{} with #{} using numerical evaluation, with ratio = {}",
-                            numerator_b.diagram_id,
-                            numerator_a.diagram_id,
-                            ratio
-                        );
-                            return Some(ratio);
-                        }
-                    }
-                }
+                numerator_a.compare_with_sign_only(numerator_b)
             }
             NumeratorAwareGraphGroupingOption::GroupIdenticalGraphUpToScalarRescaling(_) => {
-                if let (Some(canonized_num_a), Some(canonized_num_b)) = (
-                    numerator_a.canonized_numerator.as_ref(),
-                    numerator_b.canonized_numerator.as_ref(),
-                ) {
-                    let mut ratios = HashSet::<Option<Atom>>::default();
-                    let r = if canonized_num_a == canonized_num_b {
-                        Some(Atom::num(1))
-                    } else if *canonized_num_a == canonized_num_b * Atom::num(-1) {
-                        Some(Atom::num(-1))
-                    } else if canonized_num_b.is_zero() {
-                        None
-                    } else {
-                        Some(canonized_num_a / canonized_num_b)
-                    };
-                    // println!(
-                    //     "Canonalized numerator of diagiaram #{}: {}",
-                    //     numerator_a.diagram_id,
-                    //     numerator_a.canonized_numerator.as_ref().unwrap()
-                    // );
-                    // println!(
-                    //     "Canonalized numerator of diagiaram #{}: {}",
-                    //     numerator_b.diagram_id,
-                    //     numerator_b.canonized_numerator.as_ref().unwrap().clone()
-                    // );
-                    // println!(
-                    //     "ratio from canonalized numerators:\n{}",
-                    //     ratios
-                    //         .iter()
-                    //         .map(|av| av
-                    //             .as_ref()
-                    //             .map(|ra| ra.to_canonical_string())
-                    //             .unwrap_or("None".into()))
-                    //         .collect::<Vec<_>>()
-                    //         .join("\n")
-                    // );
-                    ratios.insert(r);
-                    if let Some(ratio) = analyze_ratios(&ratios) {
-                        // debug!(
-                        //     "Combining graph #{} with #{} using canonized numerators, with ratio #{}/#{}={}",
-                        //     numerator_b.diagram_id,
-                        //     numerator_a.diagram_id,
-                        //     numerator_a.diagram_id,
-                        //     numerator_b.diagram_id,
-                        //     ratio
-                        // );
-                        return Some(ratio);
-                    }
-                }
-
-                if !numerator_a.sample_evaluations.is_empty() {
-                    let evaluations_a = &numerator_a.sample_evaluations;
-                    let evaluations_b = &numerator_b.sample_evaluations;
-                    if evaluations_a.is_empty() {
-                        return None;
-                    }
-
-                    let ratios = evaluations_a
-                        .iter()
-                        .zip(evaluations_b.iter())
-                        .map(|(a, b)| {
-                            if a == b {
-                                Some(Atom::num(1))
-                            } else if *a == b * Atom::num(-1) {
-                                Some(Atom::num(-1))
-                            } else if b.is_zero() || a.is_zero() {
-                                None
-                            } else {
-                                if ANALYZE_RATIO_AS_RATIONAL_POLYNOMIAL {
-                                    let element = COMPLEXRATPOLYFIELD.to_element(
-                                        a.to_polynomial(&Q_I, None),
-                                        b.to_polynomial(&Q_I, None),
-                                        true,
-                                    );
-                                    Some(polyrat_to_atom(&element))
-                                } else {
-                                    // Make sure that collect_factor() has been called already when creating the samples
-                                    Some(a / b)
-                                }
-                            }
-                        })
-                        .collect::<HashSet<_>>();
-
-                    debug!(
-                        "ratios from numerical evaluations when comparing diagram #{} and #{}:\n{}",
-                        numerator_b.diagram_id,
-                        numerator_a.diagram_id,
-                        ratios
-                            .iter()
-                            .zip(evaluations_a)
-                            .zip(evaluations_b)
-                            .map(|((rat, a), b)| format!(
-                                "rat:{}\na:{}\nb:{}",
-                                rat.as_ref()
-                                    .map(|ra| ra.floatify(13).to_canonical_string())
-                                    .unwrap_or("None".into()),
-                                a.floatify(13).to_canonical_string(),
-                                b.floatify(13).to_canonical_string()
-                            ))
-                            .collect::<Vec<_>>()
-                            .join("\n")
-                    );
-                    if let Some(ratio) = analyze_ratios(&ratios) {
-                        //     debug!(
-                        //     "Combining graph #{} with #{} using numerical evaluation, with ratio #{}/#{}={}",
-                        //     numerator_b.diagram_id,
-                        //     numerator_a.diagram_id,
-                        //     numerator_a.diagram_id,
-                        //     numerator_b.diagram_id,
-                        //     ratio
-                        // );
-                        return Some(ratio);
-                    }
-                }
+                numerator_a.compare_with_scalar_rescaling(numerator_b)
             }
         }
-
-        None
     }
 
     pub(crate) fn substitute_color_factors(expr: AtomView) -> Atom {
@@ -4495,11 +4293,389 @@ struct PooledGraphData {
 #[derive(Clone)]
 struct ProcessedNumeratorForComparison {
     diagram_id: usize,
+    /// Canonized numerator expression for symbolic comparison.
+    ///
+    /// This is `None` when:
+    /// - `--compare-canonized-numerator` flag is disabled (test_canonized_numerator = false)
+    /// - Numerator grouping is disabled (NoGrouping or OnlyDetectZeroes variants)
+    /// - No grouping options are available (numerator_aware_isomorphism_grouping.get_options() returns None)
+    ///
+    /// This is `Some(canonized_atom)` when:
+    /// - `--compare-canonized-numerator` flag is enabled (test_canonized_numerator = true)
+    /// - The numerator has been processed through loop momentum replacements
+    /// - Optionally processed through color factor substitution (if --fully-numerical-substitution-when-comparing-numerators)
+    /// - Optionally processed through factor collection (for GroupIdenticalGraphUpToScalarRescaling mode)
     canonized_numerator: Option<Atom>,
+
+    /// Numerical evaluations of the numerator at sample points for numerical comparison.
+    ///
+    /// This is empty (`vec![]`) when:
+    /// - `--number-of-samples-for-numerator-comparisons 0` is specified
+    /// - Numerator grouping is disabled (NoGrouping or OnlyDetectZeroes variants)
+    /// - No grouping options are available (numerator_aware_isomorphism_grouping.get_options() returns None)
+    /// - Neither test_canonized_numerator nor number_of_numerical_samples > 0
+    ///
+    /// This contains evaluated `Atom`s when:
+    /// - `--number-of-samples-for-numerator-comparisons N` where N > 0
+    /// - Each element represents the numerator evaluated at a different sample point
+    /// - Sample points are generated using a prime-based iterator seeded by numerical_sample_seed
+    /// - Evaluations include color expansion, tensor network execution, and color factor substitution
+    /// - May have common factors collected depending on the grouping mode and ANALYZE_RATIO_AS_RATIONAL_POLYNOMIAL setting
     sample_evaluations: Vec<Atom>,
 }
 
 impl ProcessedNumeratorForComparison {
+    /// Compare two numerators allowing only sign changes (±1 ratios).
+    #[instrument(skip_all, fields(self_id = %self.diagram_id, other_id = %other.diagram_id))]
+    fn compare_with_sign_only(&self, other: &ProcessedNumeratorForComparison) -> Option<Atom> {
+        debug!(
+            self_diagram_id = %self.diagram_id,
+            other_diagram_id = %other.diagram_id,
+            "Starting sign-only comparison between diagrams"
+        );
+        fn analyze_diff_and_sum(a: AtomView, b: AtomView) -> Option<Atom> {
+            if (a - b).expand().is_zero() {
+                return Some(Atom::num(1));
+            }
+            if (a + b).expand().is_zero() {
+                return Some(Atom::num(-1));
+            }
+            None
+        }
+
+        // Try canonized numerator comparison first
+        if let (Some(canonized_num_a), Some(canonized_num_b)) = (
+            self.canonized_numerator.as_ref(),
+            other.canonized_numerator.as_ref(),
+        ) {
+            debug!("Attempting symbolic comparison using canonized numerators");
+            debug!(
+                numerator = %canonized_num_a.to_canonical_string(),
+                numerator_diagram_id = %self.diagram_id,
+                "Canonized numerator for comparison"
+            );
+            debug!(
+                denominator = %canonized_num_b.to_canonical_string(),
+                denominator_diagram_id = %other.diagram_id,
+                "Canonized denominator for comparison"
+            );
+            if let Some(ratio) =
+                analyze_diff_and_sum(canonized_num_a.as_view(), canonized_num_b.as_view())
+            {
+                debug!(
+                    ratio = %ratio.to_canonical_string(),
+                    method = "canonized_numerators",
+                    "Successfully matched diagrams using canonized numerators"
+                );
+                return Some(ratio);
+            } else {
+                debug!(
+                    comparison_type = "canonized_numerator",
+                    result = "failed",
+                    reason = "expressions_not_identical_up_to_sign",
+                    "Canonized numerator comparison failed"
+                );
+            }
+        } else {
+            debug!(
+                comparison_type = "canonized_numerator",
+                result = "skipped",
+                reason = "missing_numerators",
+                "Skipping canonized numerator comparison"
+            );
+        }
+
+        // Fall back to sample evaluations
+        if !self.sample_evaluations.is_empty() {
+            debug!(
+                comparison_type = "numerical_samples",
+                sample_count = %self.sample_evaluations.len(),
+                "Attempting numerical comparison using sample evaluations"
+            );
+            let ratios = self
+                .sample_evaluations
+                .iter()
+                .zip(other.sample_evaluations.iter())
+                .enumerate()
+                .map(|(idx, (a, b))| {
+                    debug!(
+                        sample_idx = %idx,
+                        numerator = %a.to_canonical_string(),
+                        numerator_diagram_id = %self.diagram_id,
+                        "Sample numerator evaluation"
+                    );
+                    debug!(
+                        sample_idx = %idx,
+                        denominator = %b.to_canonical_string(),
+                        denominator_diagram_id = %other.diagram_id,
+                        "Sample denominator evaluation"
+                    );
+                    let ratio = analyze_diff_and_sum(a.as_view(), b.as_view());
+                    if let Some(a) = &ratio {
+                        debug!(
+                            sample_idx = %idx,
+                            ratio = %a.to_canonical_string(),
+                            "Sign-only comparison result for sample"
+                        );
+                    } else {
+                        debug!(
+                            sample_idx = %idx,
+                            result = "none_ratio",
+                            reason = "expressions_not_identical_up_to_sign",
+                            "Sign-only comparison result for sample is None"
+                        );
+                    }
+
+                    ratio
+                })
+                .collect::<HashSet<_>>();
+
+            debug!(
+                unique_ratios_found = %ratios.len(),
+                "Found unique ratios from sample evaluations"
+            );
+
+            if ratios.len() == 1 {
+                if let Some(ratio) = ratios.iter().next().unwrap().to_owned() {
+                    debug!(
+                        ratio = %ratio.to_canonical_string(),
+                        method = "numerical_evaluation",
+                        "Successfully matched diagrams using numerical evaluation"
+                    );
+                    return Some(ratio);
+                } else {
+                    debug!(
+                        result = "none_ratio",
+                        reason = "likely_zeros",
+                        "Sample evaluations yielded None ratio"
+                    );
+                }
+            } else {
+                debug!(
+                    result = "inconsistent_ratios",
+                    unique_ratios_count = %ratios.len(),
+                    "Sample evaluations yielded inconsistent ratios - cannot group diagrams"
+                );
+            }
+        } else {
+            debug!(
+                comparison_type = "numerical_samples",
+                result = "skipped",
+                reason = "no_sample_evaluations",
+                "Skipping numerical comparison"
+            );
+        }
+
+        debug!(
+            self_diagram_id = %self.diagram_id,
+            other_diagram_id = %other.diagram_id,
+            final_result = "no_grouping_possible",
+            "No grouping possible between diagrams"
+        );
+        None
+    }
+
+    /// Compare two numerators allowing arbitrary scalar rescaling.
+    #[instrument(skip_all, fields(self_id = %self.diagram_id, other_id = %other.diagram_id))]
+    fn compare_with_scalar_rescaling(
+        &self,
+        other: &ProcessedNumeratorForComparison,
+    ) -> Option<Atom> {
+        debug!(
+            self_diagram_id = %self.diagram_id,
+            other_diagram_id = %other.diagram_id,
+            "Starting scalar rescaling comparison between diagrams"
+        );
+        fn analyze_ratios(ratios: &HashSet<Option<Atom>>) -> Option<Atom> {
+            if ratios.len() > 1 {
+                None
+            } else {
+                let ratio = ratios.iter().next().unwrap().to_owned();
+                if let Some(r) = ratio {
+                    for head in LibraryRep::all_self_duals()
+                        .chain(LibraryRep::all_inline_metrics())
+                        .chain(LibraryRep::all_dualizables())
+                        .map(|a| a.to_symbolic([W_.a__]).to_pattern())
+                    {
+                        if r.pattern_match(&head, None, None).next().is_some() {
+                            return None;
+                        }
+                    }
+                    Some(r)
+                } else {
+                    None
+                }
+            }
+        }
+
+        // Try canonized numerator comparison first
+        if let (Some(canonized_num_a), Some(canonized_num_b)) = (
+            self.canonized_numerator.as_ref(),
+            other.canonized_numerator.as_ref(),
+        ) {
+            debug!(
+                numerator = %canonized_num_a.to_canonical_string(),
+                numerator_diagram_id = %self.diagram_id,
+                denominator = %canonized_num_b.to_canonical_string(),
+                denominator_diagram_id = %other.diagram_id,
+                "Attempting symbolic comparison using canonized numerators",
+            );
+            let mut ratios = HashSet::<Option<Atom>>::default();
+            let r = if canonized_num_a == canonized_num_b {
+                debug!("Canonized numerators are identical");
+                Some(Atom::num(1))
+            } else if *canonized_num_a == canonized_num_b * Atom::num(-1) {
+                debug!("Canonized numerators differ by sign only");
+                Some(Atom::num(-1))
+            } else if canonized_num_b.is_zero() {
+                debug!("Reference canonized numerator is zero - cannot compute ratio");
+                None
+            } else {
+                let ratio = canonized_num_a / canonized_num_b;
+                debug!(
+                    computed_ratio = %ratio.to_canonical_string(),
+                    "Computed canonized numerator ratio"
+                );
+                Some(ratio)
+            };
+            ratios.insert(r);
+            if let Some(ratio) = analyze_ratios(&ratios) {
+                debug!(
+                    ratio = %ratio.to_canonical_string(),
+                    method = "canonized_numerators",
+                    "Successfully matched diagrams using canonized numerators"
+                );
+                return Some(ratio);
+            } else {
+                debug!(
+                    comparison_type = "canonized_numerator",
+                    result = "rejected",
+                    reason = "problematic_patterns",
+                    rejection_stage = "analyze_ratios",
+                    "Canonized numerator ratio was rejected"
+                );
+            }
+        } else {
+            debug!(
+                comparison_type = "canonized_numerator",
+                result = "skipped",
+                reason = "missing_numerators",
+                "Skipping canonized numerator comparison"
+            );
+        }
+
+        // Fall back to sample evaluations
+        if !self.sample_evaluations.is_empty() {
+            debug!(
+                comparison_type = "numerical_samples",
+                sample_count = %self.sample_evaluations.len(),
+                "Attempting numerical comparison using sample evaluations"
+            );
+            let evaluations_a = &self.sample_evaluations;
+            let evaluations_b = &other.sample_evaluations;
+            if evaluations_a.is_empty() {
+                debug!(
+                    result = "cannot_proceed",
+                    reason = "empty_self_evaluations",
+                    "Self sample evaluations are empty"
+                );
+                return None;
+            }
+
+            let ratios = evaluations_a
+                .iter()
+                .zip(evaluations_b.iter())
+                .enumerate()
+                .map(|(idx, (a, b))| {
+                    debug!(
+                        sample_id= %idx,
+                        numerator = %a.to_canonical_string(),
+                        numerator_diagram_id = %self.diagram_id,
+                        denominator = %b.to_canonical_string(),
+                        denominator_diagram_id = %other.diagram_id,
+                        "Sample evaluation"
+                    );
+                    if a == b {
+                        Some(Atom::num(1))
+                    } else if *a == b * Atom::num(-1) {
+                        Some(Atom::num(-1))
+                    } else if b.is_zero() || a.is_zero() {
+                        debug!(
+                            sample_idx = %idx,
+                            "Skipping sample due to zero value"
+                        );
+                        None
+                    } else {
+                        let ratio = if ANALYZE_RATIO_AS_RATIONAL_POLYNOMIAL {
+                            let element = COMPLEXRATPOLYFIELD.to_element(
+                                a.to_polynomial(&Q_I, None),
+                                b.to_polynomial(&Q_I, None),
+                                true,
+                            );
+                            polyrat_to_atom(&element)
+                        } else {
+                            // Make sure that collect_factor() has been called already when creating the samples
+                            a / b
+                        };
+                        debug!(
+                            sample_idx = %idx,
+                            computed_ratio = %ratio.to_canonical_string(),
+                            "Computed ratio for sample"
+                        );
+                        Some(ratio)
+                    }
+                })
+                .collect::<HashSet<_>>();
+
+            debug!(
+                unique_ratios_found = %ratios.len(),
+                "Found unique ratios from sample evaluations"
+            );
+            if event_enabled!(tracing::Level::DEBUG, parent: &Span::current()) {
+                for ((rat, a), b) in ratios.iter().zip(evaluations_a).zip(evaluations_b) {
+                    debug!(
+                        self_diagram_id = %self.diagram_id,
+                        other_diagram_id = %other.diagram_id,
+                        ratio_value = ?rat.as_ref().map(|ra| ra.floatify(13).to_canonical_string()).unwrap_or("None".into()),
+                        numerator_value = %a.floatify(13).to_canonical_string(),
+                        denominator_value = %b.floatify(13).to_canonical_string(),
+                        "Detailed sample evaluation ratio information"
+                    );
+                }
+            }
+            if let Some(ratio) = analyze_ratios(&ratios) {
+                debug!(
+                    ratio = %ratio.to_canonical_string(),
+                    method = "numerical_evaluation",
+                    "Successfully matched diagrams using numerical evaluation"
+                );
+                return Some(ratio);
+            } else {
+                debug!(
+                    comparison_type = "numerical_samples",
+                    result = "rejected",
+                    reason = "inconsistent_or_problematic_patterns",
+                    rejection_stage = "analyze_ratios",
+                    "Sample evaluation ratios were rejected"
+                );
+            }
+        } else {
+            debug!(
+                comparison_type = "numerical_samples",
+                result = "skipped",
+                reason = "no_sample_evaluations",
+                "Skipping numerical comparison"
+            );
+        }
+
+        debug!(
+            self_diagram_id = %self.diagram_id,
+            other_diagram_id = %other.diagram_id,
+            final_result = "no_grouping_possible",
+            "No grouping possible between diagrams"
+        );
+        None
+    }
     #[instrument(skip_all)]
     fn from_numerator_symbolic_expression(
         diagram_id: usize,
@@ -4530,14 +4706,7 @@ impl ProcessedNumeratorForComparison {
                 numerator = numerator.replace_multiple(&lmb_reps);
 
                 let canonized_numerator = if group_options.test_canonized_numerator {
-                    // let mut canonized_numerator_to_consider = numerator
-                    //     .canonize_lorentz()
-                    //     .unwrap()
-                    //     .get_single_atom()
-                    //     .unwrap()
-                    //     .0;
-                    // TODO: FIXME: What to replace the above with?
-                    let mut canonized_numerator_to_consider = numerator.clone();
+                    let mut canonized_numerator_to_consider = numerator.canonize_spenso();
                     if group_options.fully_numerical_substitution_when_comparing_numerators {
                         canonized_numerator_to_consider =
                             ProcessDefinition::substitute_color_factors(

@@ -2,9 +2,11 @@ use std::sync::atomic::AtomicUsize;
 
 use bitvec::vec::BitVec;
 use linnet::half_edge::{involution::HedgePair, subgraph::SubGraph, NodeIndex};
-use log::debug;
 use spenso::network::library::TensorLibraryData;
 use symbolica::atom::Atom;
+use symbolica::atom::AtomCore;
+use tracing::debug;
+use tracing::instrument;
 
 use crate::graph::Graph;
 
@@ -13,14 +15,12 @@ use super::{AppliedFeynmanRule, Numerator, UnInit};
 static MAXEDGECOUNTER: AtomicUsize = AtomicUsize::new(0);
 
 impl Numerator<UnInit> {
+    #[instrument(skip_all, fields(graph=%graph.name,debug_dot=%graph.debug_dot(),subgraph_dot=%graph.dot(subgraph)))]
     pub(crate) fn from_new_graph<S: SubGraph>(
         self,
         graph: &Graph,
         subgraph: &S,
     ) -> Numerator<AppliedFeynmanRule> {
-        debug!("Generating numerator for graph: {}", graph.name);
-
-        debug!("Graph: {}", graph.dot(subgraph));
         let mut num = Atom::one();
 
         let mut seen: BitVec = BitVec::empty(graph.n_nodes());
@@ -67,6 +67,8 @@ impl Numerator<UnInit> {
                 num *= graph[node_id].get_num()
             }
         }
+
+        debug!( numerator = %num.to_canonical_string(),"Numerator constructed",);
 
         Numerator {
             state: AppliedFeynmanRule {
