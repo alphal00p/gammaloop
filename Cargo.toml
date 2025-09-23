@@ -168,6 +168,7 @@ figment = "0.10.19"
 schemars = "1.0.4"
 ringbuffer = "0.16.0"
 tracing-indicatif = "0.3.13"
+json5 = "0.4.1"
 
 [dependencies.pyo3]
 features = ["abi3", "abi3-py37", "eyre", "auto-initialize"]

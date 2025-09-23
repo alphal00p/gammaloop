@@ -7,9 +7,12 @@ use figment::{
     providers::{Format, Serialized},
     Figment,
 };
-use gammalooprs::{processes::ProcessCollection, settings::RuntimeSettings};
+use gammalooprs::{
+    model::UFOSymbol, processes::ProcessCollection, settings::RuntimeSettings, utils::F,
+};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use spenso::algebra::complex::Complex;
 
 use crate::{
     commands::generate::ProcessArgs,
@@ -48,6 +51,13 @@ pub enum Set {
         input: SetArgs,
     },
 
+    /// Set Model parameters
+    Model {
+        /// Any number of KEY=VALUE pairs
+        #[arg(value_name = "KEY=VALUE", num_args = 1.., value_parser = KvPair::from_str)]
+        pairs: Vec<KvPair>,
+    },
+
     /// Set settings for a PROCESS
     Process {
         #[command(subcommand)]
@@ -65,6 +75,31 @@ impl Set {
         default_runtime_settings: &mut RuntimeSettings,
     ) -> Result<()> {
         match self {
+            Set::Model { pairs } => {
+                for KvPair { key, value } in pairs {
+                    let value = json5::from_str::<Complex<F<f64>>>(value).with_context(|| {
+                        format!("While parsing JSON value {value} for key '{key}'")
+                    })?;
+
+                    if let Some(p) = state.model_parameters.get_mut(&UFOSymbol::from(key)) {
+                        *p = value;
+                        continue;
+                    } else {
+                        let possiblilities: Vec<String> = state
+                            .model_parameters
+                            .keys()
+                            .map(|s| s.to_string())
+                            .collect();
+                        return Err(eyre!("No model parameter named '{key}'")).with_context(|| {
+                            format!(
+                                "Possible model parameters are: {}",
+                                possiblilities.join(", ")
+                            )
+                        });
+                    }
+                }
+                state.model_parameters.apply_to_model(&mut state.model)?;
+            }
             Set::BaseDir { path } => {
                 global_settings.state_folder = path.clone();
             }
@@ -237,5 +272,18 @@ fn yaml_to_json(v: Y) -> Result<J> {
             "Unsupported complex YAML value in CLI key-value: {:?}",
             other
         )),
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use gammalooprs::utils::F;
+    use spenso::algebra::complex::Complex;
+
+    #[test]
+    fn serialize_complex() {
+        let s = Complex::new(F(1.), F(-2.));
+        let j = serde_json::to_string(&s).unwrap();
+        assert_eq!(j, r#"{"re":1.0,"im":-2.0}"#.to_string());
     }
 }

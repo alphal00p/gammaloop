@@ -1529,7 +1529,7 @@ impl Model {
         reps
     }
 
-    pub(crate) fn recompute_dependents(&mut self) -> Result<()> {
+    pub fn recompute_dependents(&mut self) -> Result<()> {
         let mut fn_map = FunctionMap::new();
         let reps = self.parameters_to_empty_fns();
 
@@ -2061,18 +2061,18 @@ impl Model {
     }
 
     #[inline]
-    pub fn get_parameter_mut<S: AsRef<str>>(&mut self, name: S) -> &mut Parameter {
+    pub fn get_parameter_mut<S: AsRef<str>>(&mut self, name: S) -> Result<&mut Parameter> {
         if let Some(position) = self
             .parameters
             .get_mut(&ParameterName(UFOSymbol::from(name.as_ref())))
         {
-            position
+            Ok(position)
         } else {
-            panic!(
+            Err(eyre!(
                 "Parameter '{}' not found in model '{}'.",
                 name.as_ref(),
                 self.name
-            );
+            ))
         }
     }
 

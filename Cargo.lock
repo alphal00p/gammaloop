@@ -1451,6 +1451,7 @@ dependencies = [
  "include_dir",
  "indicatif 0.17.11",
  "itertools 0.8.2",
+ "json5",
  "nu-ansi-term",
  "pyo3",
  "pyo3-build-config",
@@ -1514,6 +1515,7 @@ dependencies = [
  "insta",
  "is-terminal",
  "itertools 0.8.2",
+ "json5",
  "libc",
  "linnet",
  "linreg",
@@ -2012,6 +2014,17 @@ checksum = "0c0b063578492ceec17683ef2f8c5e89121fbd0b172cbc280635ab7567db2738"
 dependencies = [
  "once_cell",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "json5"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "96b0db21af676c1ce64250b5f40f3ce2cf27e4e47cb91ed91eb6fe9350b430c1"
+dependencies = [
+ "pest",
+ "pest_derive",
+ "serde",
 ]
 
 [[package]]
