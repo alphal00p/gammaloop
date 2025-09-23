@@ -25,11 +25,17 @@ pub fn output_dir() -> PathBuf {
 #[cfg(test)]
 pub mod test {
     use insta::assert_snapshot;
+    use itertools::Itertools;
     use linnet::half_edge::involution::EdgeIndex;
+    use momtrop::assert_approx_eq;
     use spenso::structure::abstract_index::AIND_SYMBOLS;
     use symbolica::{atom::AtomCore, parse_lit};
 
-    use crate::utils::{symbolica_ext::CallSymbol, GS};
+    use crate::{
+        momentum::ThreeMomentum,
+        settings::runtime::ParameterizationSettings,
+        utils::{global_inv_parameterize, global_parameterize, symbolica_ext::CallSymbol, F, GS},
+    };
 
     #[test]
     fn normalization() {
@@ -46,5 +52,41 @@ pub mod test {
 
         let expr = parse_lit!(f(a + p + r));
         assert_snapshot!(GS.linearize.f(&[expr]).to_canonical_string(),@"_gammaloop::f(_gammaloop::a)+_gammaloop::f(_gammaloop::p)+_gammaloop::f(_gammaloop::r)");
+    }
+
+    #[test]
+    fn test_inv_param() {
+        let x = [
+            F(0.1),
+            F(0.2),
+            F(0.3),
+            F(0.4),
+            F(0.5),
+            F(0.6),
+            F(0.7),
+            F(0.8),
+            F(0.9),
+        ];
+        let e_cm = F(42.2);
+        let param_settings = ParameterizationSettings::default();
+
+        let (momenta, jac_1) = global_parameterize(&x, e_cm.clone(), &param_settings);
+        let actual_momenta = momenta
+            .iter()
+            .map(|p| ThreeMomentum {
+                px: p[0],
+                py: p[1],
+                pz: p[2],
+            })
+            .collect_vec();
+
+        let (xs, jac_2) = global_inv_parameterize(&actual_momenta, e_cm, &param_settings, false);
+
+        for i in 0..9 {
+            assert_approx_eq(&x[i], &xs[i], &F(1.0e-14));
+        }
+
+        let prod = jac_1 * jac_2;
+        assert_approx_eq(&prod, &F(1.0), &F(1.0e-14));
     }
 }
