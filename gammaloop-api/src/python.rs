@@ -70,6 +70,8 @@ fn _gammaloop(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     m.add_class::<PySewedFilterOptions>()?;
     m.add_class::<PyTadpolesFilterOptions>()?;
     m.add_class::<PySelfEnergyFilterOptions>()?;
+    m.add_class::<GlobalSettings>()?;
+    m.add_class::<RuntimeSettings>()?;
     // m.add_class::<PyFeynGenOptions>()?;
     m.add_class::<PyNumeratorAwareGroupingOption>()?;
     m.add("git_version", GIT_VERSION)?;
