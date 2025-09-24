@@ -28,7 +28,7 @@ required-features = ["cli"]
 # Keep Python optional unless explicitly enabled.
 default = ["cli"]
 ufo_support = ["dep:pyo3", "pyo3/auto-initialize"]
-python_api = ["ufo_support", "gammalooprs/python_api"]
+python_api = ["ufo_support", "gammalooprs/python_api", "dep:numpy"]
 python_stubgen = ["python_api", "dep:pyo3-stub-gen"]
 cli = []
 
@@ -75,6 +75,8 @@ tracing-indicatif = "0.3.13"
 itertools = "0.8"
 git-version = "0.3"
 json5 = "0.4.1"
+numpy = { version = "0.25.0", optional = true}
+ndarray = { version = "0.16"}
 
 # PyO3: optional for embedding. Auto-init at runtime.
 [dependencies.pyo3]

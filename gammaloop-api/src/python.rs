@@ -11,11 +11,17 @@ use gammalooprs::{
     numerator::GlobalPrefactor,
     processes::{Process, ProcessDefinition, ProcessList},
     settings::{GlobalSettings, RuntimeSettings},
-    utils::F,
+    utils::{FloatLike, F},
+};
+use numpy::{
+    Complex64, IntoPyArray, PyArray, PyArray1, PyArray2, PyReadonlyArray2, PyReadonlyArrayDyn,
 };
 
 use crate::{
-    commands::{inspect::Inspect, integrate::Integrate},
+    commands::{
+        inspect::{BatchedInspect, Inspect},
+        integrate::Integrate,
+    },
     state::State,
     CLISettings,
 };
@@ -465,6 +471,36 @@ impl State {
         }
         .run(self)?;
         Ok(PyComplex::from_doubles(py, res.1.re, res.1.im))
+    }
+
+    pub fn batched_inspect<'py>(
+        &mut self,
+        py: Python<'py>,
+        points: PyReadonlyArray2<'py, f64>,
+        discrete_dims: PyReadonlyArray2<'py, usize>,
+        process_id: Option<usize>,
+        integrand_name: Option<String>,
+        use_f128: bool,
+        momentum_space: bool,
+    ) -> Result<Bound<'py, PyArray1<Complex64>>> {
+        let points_rust = points.as_array();
+        let discrete_dims_rust = discrete_dims.as_array();
+
+        let batched_inspect = BatchedInspect {
+            process_id,
+            integrand_name,
+            use_f128,
+            momentum_space,
+            points: points_rust,
+            discrete_dims: discrete_dims_rust,
+        };
+
+        let res = batched_inspect.run(self).unwrap();
+        let res_map = res
+            .mapv_into_any(|c| Complex64::new(c.re, c.im))
+            .into_pyarray(py);
+
+        Ok(res_map)
     }
 
     #[pyo3(signature = (path, process_name=None, process_id=None, integrand_name=None))]

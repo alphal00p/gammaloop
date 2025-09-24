@@ -1238,7 +1238,7 @@ impl<T: FloatLike> F<T> {
         F(self.0.lower())
     }
 
-    pub(crate) fn from_f64(x: f64) -> Self {
+    pub fn from_f64(x: f64) -> Self {
         F(T::from_f64(x))
     }
 

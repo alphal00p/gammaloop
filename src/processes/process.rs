@@ -474,6 +474,31 @@ impl ProcessCollection {
         }
     }
 
+    pub fn find_integrand(&self, name: Option<String>) -> Result<String> {
+        let all_integrand_names = self.get_integrand_names();
+
+        let integrand_name = if let Some(name) = name {
+            if !all_integrand_names.contains(&name.as_str()) {
+                return Err(color_eyre::eyre::eyre!(
+                    "No integrand named '{}' in process, Available integrands: {:?}",
+                    name,
+                    all_integrand_names
+                ));
+            }
+            name
+        } else {
+            if all_integrand_names.len() != 1 {
+                return Err(color_eyre::eyre::eyre!(
+                    "Multiple integrands in process,Please specify one of: {:?}",
+                    all_integrand_names
+                ));
+            }
+            all_integrand_names[0].to_string()
+        };
+
+        Ok(integrand_name)
+    }
+
     fn get_integrand_mut(&mut self, name: impl AsRef<str>) -> Result<&mut NewIntegrand> {
         let res = match self {
             Self::Amplitudes(amplitudes) => {

@@ -206,6 +206,32 @@ impl ProcessList {
         }
         Ok(())
     }
+
+    pub fn find_process(&self, process_id: Option<usize>) -> Result<usize> {
+        let process_id = if let Some(id) = process_id {
+            if id >= self.processes.len() {
+                return Err(color_eyre::eyre::eyre!(
+                    "Invalid process id {}. Number of processes: {}",
+                    id,
+                    self.processes.len()
+                ));
+            }
+            Ok(id)
+        } else {
+            if self.processes.is_empty() {
+                return Err(color_eyre::eyre::eyre!("No processes generated yet."));
+            } else if self.processes.len() > 1 {
+                return Err(color_eyre::eyre::eyre!(
+                    "There are {} processes available. Please specify a process id.",
+                    self.processes.len()
+                ));
+            } else {
+                Ok(0)
+            }
+        };
+
+        process_id
+    }
 }
 
 pub mod process;

@@ -1,11 +1,13 @@
 use clap::Args;
+use eyre::Ok;
 use gammalooprs::utils::F;
+use ndarray::{Array, ArrayBase, OwnedRepr, ViewRepr};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
 
 use crate::{state::State, status_info};
-use color_eyre::Result;
+use color_eyre::{Result, Section};
 
 #[derive(Debug, Args, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
 pub struct Inspect {
@@ -58,50 +60,12 @@ impl Inspect {
     pub fn run(&self, state: &mut State) -> Result<(Option<f64>, Complex<f64>)> {
         state.process_list.warm_up(&state.model)?;
 
-        let process_id = if let Some(id) = self.process_id {
-            if id >= state.process_list.processes.len() {
-                return Err(color_eyre::eyre::eyre!(
-                    "Invalid process id {}. Number of processes: {}",
-                    id,
-                    state.process_list.processes.len()
-                ));
-            }
-            id
-        } else {
-            if state.process_list.processes.is_empty() {
-                return Err(color_eyre::eyre::eyre!("No processes generated yet."));
-            } else if state.process_list.processes.len() > 1 {
-                return Err(color_eyre::eyre::eyre!(
-                    "There are {} processes available. Please specify a process id.",
-                    state.process_list.processes.len()
-                ));
-            } else {
-                0
-            }
-        };
-        let all_integrand_names = state.process_list.processes[process_id]
+        let process_id = state.process_list.find_process(self.process_id)?;
+
+        let integrand_name = state.process_list.processes[process_id]
             .collection
-            .get_integrand_names();
-        let integrand_name = if let Some(name) = self.integrand_name.clone() {
-            if !all_integrand_names.contains(&name.as_str()) {
-                return Err(color_eyre::eyre::eyre!(
-                    "No integrand named '{}' in process id {}. Available integrands: {:?}",
-                    name,
-                    process_id,
-                    all_integrand_names
-                ));
-            }
-            name
-        } else {
-            if all_integrand_names.len() != 1 {
-                return Err(color_eyre::eyre::eyre!(
-                    "Multiple integrands in process id {}. Please specify one of: {:?}",
-                    process_id,
-                    all_integrand_names
-                ));
-            }
-            all_integrand_names[0].to_string()
-        };
+            .find_integrand(self.integrand_name.clone())
+            .with_note(|| format!("in process id {process_id}"))?;
 
         let integrand = state
             .process_list
@@ -138,5 +102,76 @@ impl Inspect {
         Ok((inspect_res_jac, res_to_return))
 
         //Ok(res.map(|a| a.0))
+    }
+}
+
+pub struct BatchedInspect<'a> {
+    pub process_id: Option<usize>,
+    pub integrand_name: Option<String>,
+    pub use_f128: bool,
+    pub momentum_space: bool,
+    pub points: ArrayBase<ViewRepr<&'a f64>, ndarray::Dim<[usize; 2]>>,
+    pub discrete_dims: ArrayBase<ViewRepr<&'a usize>, ndarray::Dim<[usize; 2]>>,
+}
+
+impl<'a> BatchedInspect<'a> {
+    // todo add jacobians to output
+    pub fn run(
+        &self,
+        state: &mut State,
+    ) -> Result<ArrayBase<OwnedRepr<Complex<f64>>, ndarray::Dim<[usize; 1]>>> {
+        state.process_list.warm_up(&state.model)?;
+
+        let process_id = state.process_list.find_process(self.process_id)?;
+
+        let integrand_name = state.process_list.processes[process_id]
+            .collection
+            .find_integrand(self.integrand_name.clone())
+            .with_note(|| format!("in process id {process_id}"))?;
+
+        let integrand = state
+            .process_list
+            .get_integrand_mut(process_id, &integrand_name)?;
+
+        let settings = integrand.get_settings().clone();
+
+        let mut vec_res = vec![];
+
+        for (point, discrete_dim) in self
+            .points
+            .outer_iter()
+            .zip(self.discrete_dims.outer_iter())
+        {
+            let pt = point.iter().map(|&x| F(x)).collect::<Vec<F<f64>>>();
+            let discrete_dim = discrete_dim.iter().copied().collect::<Vec<usize>>();
+
+            let (inspect_res_jac, inspect_res_eval) = gammalooprs::inspect::inspect(
+                &settings,
+                integrand,
+                &state.model,
+                pt,
+                &discrete_dim,
+                false,
+                self.momentum_space,
+                self.use_f128,
+            );
+            let res_to_return: Complex<f64> = if let Some(jac) = inspect_res_jac {
+                if jac == 0. {
+                    return Err(color_eyre::eyre::eyre!(
+                        "Jacobian is zero at this point, cannot divide by zero."
+                    ));
+                }
+                let r = inspect_res_eval.map(|a| a.into());
+                r / jac
+            } else {
+                inspect_res_eval.map(|a| a.into())
+            };
+
+            vec_res.push(res_to_return);
+        }
+
+        let res_array = Array::from_vec(vec_res);
+
+        Ok(res_array)
     }
 }
