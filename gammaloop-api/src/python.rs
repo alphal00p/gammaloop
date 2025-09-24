@@ -10,6 +10,7 @@ use gammalooprs::{
     model::{InputParamCard, Model},
     numerator::GlobalPrefactor,
     processes::{Process, ProcessDefinition, ProcessList},
+    settings::{GlobalSettings, RuntimeSettings},
     utils::F,
 };
 
@@ -479,36 +480,34 @@ impl State {
         self.import_model(file_path)
     }
 
-    //pub(crate) fn load_model_from_yaml_str(&mut self, yaml_str: &str) -> Result<()> {
-    //    self.model = Model::from_yaml_str(String::from(yaml_str))?;
-    //    Ok(())
-    //}
+    //    pub(crate) fn load_model_from_yaml_str(&mut self, yaml_str: &str) -> Result<()> {
+    //        self.model = Model::from_str(String::from(yaml_str))?;
+    //        Ok(())
+    //    }
 
     pub(crate) fn generate_integrands_python(
         &mut self,
-        //global_settings: &GlobalSettings,
-        //runtime_default: &RuntimeSettings,
+        global_settings: &GlobalSettings,
+        runtime_default: &RuntimeSettings,
     ) -> Result<()> {
-        todo!();
-        //self.generate_integrands(global_settings, runtime_default.into())
+        self.generate_integrands(global_settings, runtime_default.into())
     }
 
     pub(crate) fn compile_integrands_python(
         &mut self,
         folder: PathBuf,
         override_existing: bool,
-        //global_settings: &GlobalSettings,
+        global_settings: &GlobalSettings,
         process_id: Option<usize>,
         integrand_name: Option<String>,
     ) -> Result<()> {
-        todo!();
-        //self.compile_integrands(
-        //    folder,
-        //    override_existing,
-        //    global_settings,
-        //    process_id,
-        //    integrand_name,
-        //)
+        self.compile_integrands(
+            folder,
+            override_existing,
+            global_settings,
+            process_id,
+            integrand_name,
+        )
     }
 
     #[allow(clippy::too_many_arguments)]
