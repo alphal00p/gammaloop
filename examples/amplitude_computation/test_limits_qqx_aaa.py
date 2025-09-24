@@ -193,7 +193,7 @@ def eval_integrand(k_input, debug=False, gammaloop_state='./GL_QQX_AAA_euclidean
     if debug:
         print(f"Running command:\n{cmd}")
     tmp_env = os.environ.copy()
-    tmp_env['GL_LOGFILE_FILTER'] = 'debug'
+    tmp_env['GL_LOGFILE_FILTER'] = 'debug,status=on'
     if debug:
         tmp_env['GL_DISPLAY_FILTER'] = 'debug'
     else:
@@ -206,7 +206,8 @@ def eval_integrand(k_input, debug=False, gammaloop_state='./GL_QQX_AAA_euclidean
         f'{gammaloop_state}/logs/gammalog-inspect.jsonl')
 
     reconstructed_total = sum(v['I']+v['threshold_CT']
-                              for v in all_res.values())*jac
+                              for v in all_res.values())
+    reconstructed_total *= jac
     if debug:
         for g_name in graph_names:
             res = all_res[g_name]['I'] + all_res[g_name]['threshold_CT']
@@ -364,7 +365,7 @@ parser.add_argument('--gammaloop_executable', '-e', type=str,
 parser.add_argument('--debug', action='store_true',
                     help="Enable debug output", default=False)
 if __name__ == "__main__":
-    args = parser.parse_args() 
+    args = parser.parse_args()
     if args.graph_names is not None:
         graph_names = args.graph_names
     run_limit_test(args.display_elements, args.tests,
