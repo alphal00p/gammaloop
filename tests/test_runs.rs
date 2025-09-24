@@ -62,7 +62,12 @@ fn trees() -> Result<()> {
 
 #[test]
 fn photons_1l_integrate() -> Result<()> {
-    let mut cli = get_test_cli(Some("photons.toml".into()), "./tests/photons", None, false)?;
+    let mut cli = get_test_cli(
+        Some("photons_eu_inspect.toml".into()),
+        "./tests/photons_eu_integrate",
+        None,
+        true,
+    )?;
 
     // this can be moved to the run card once we have a set model param command
 
@@ -78,24 +83,15 @@ fn photons_1l_integrate() -> Result<()> {
         .model
         .apply_param_card(&cli.state.model_parameters)?;
 
-    //let inspect = Inspect {
-    //    process_id: 0,
-    //    integrand_name: "physical_1L_6photons".to_string(),
-    //    point: vec![0.1, 0.2, 0.3],
-    //    momentum_space: true,
-    //    ..Default::default()
-    //}
-    //.run(&mut cli)?;
-
-    //assert_snapshot!(format!("{inspect:.8e}"),@"(-1.1779656944253678e-15+9.093348564643939e-16i)");
-
     let target = Complex::new(F(-1.22898408452706e-13), F(-3.94362534040412e-13));
 
     let integrate = Integrate {
         process_id: Some(0),
         integrand_name: Some("default".to_string()),
-        result_path: Some("./tests/photons/integration_workspace/integration_results.yaml".into()),
-        workspace_path: Some("./tests/photons/integration_workspace/".into()),
+        result_path: Some(
+            "./tests/photons_eu_integrate/integration_workspace/integration_results.yaml".into(),
+        ),
+        workspace_path: Some("./tests/photons_eu_integrate/integration_workspace/".into()),
         n_cores: 6,
         target: Some(vec![target.re.0, target.im.0]),
         restart: true,
@@ -105,6 +101,8 @@ fn photons_1l_integrate() -> Result<()> {
 
     assert_approx_eq(&integration_result.result.re, &target.re, &F(10e-2));
     assert_approx_eq(&integration_result.result.im, &target.im, &F(10e-2));
+
+    clean_test(&cli.cli_settings.state_folder);
     Ok(())
 }
 

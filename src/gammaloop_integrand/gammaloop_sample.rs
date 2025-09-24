@@ -460,7 +460,7 @@ pub(crate) fn parameterize<T: FloatLike, I: GammaloopIntegrand>(
                         &xs,
                         edge_data,
                         &tropical_sampling_settings.into_tropical_sampling_settings(),
-                        &momtrop::log::DummyLogger {},
+                        None,
                     );
 
                     let sampling_result = match sampling_result_result {

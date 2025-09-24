@@ -1,6 +1,5 @@
 use bincode_trait_derive::{Decode, Encode};
 use clap::ValueEnum;
-use momtrop::log::Logger;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::sync::OnceLock;
@@ -175,33 +174,6 @@ impl TracingLogger {
         Self {
             level,
             sink: Target::Status,
-        }
-    }
-}
-
-impl Logger for TracingLogger {
-    fn write<T: Serialize>(&self, msg: &str, data: &T) {
-        let json = match serde_json::to_string(data) {
-            Ok(s) => s,
-            Err(e) => format!(r#"{{"serde_error":"{}"}}"#, e),
-        };
-
-        // helper to pick the literal target
-        macro_rules! log_to {
-            ($lvl:ident, $($rest:tt)*) => {
-                match self.sink {
-                    Target::Lib    => event!(Level::$lvl,        $($rest)*),
-                    Target::Status => event!(target: "status", Level::$lvl, $($rest)*),
-                }
-            }
-        }
-
-        match self.level {
-            Level::TRACE => log_to!(TRACE, data = %json, "{msg}"),
-            Level::DEBUG => log_to!(DEBUG, data = %json, "{msg}"),
-            Level::INFO => log_to!(INFO,  data = %json, "{msg}"),
-            Level::WARN => log_to!(WARN,  data = %json, "{msg}"),
-            Level::ERROR => log_to!(ERROR, data = %json, "{msg}"),
         }
     }
 }

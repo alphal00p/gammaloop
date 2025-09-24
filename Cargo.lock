@@ -2249,11 +2249,13 @@ dependencies = [
 
 [[package]]
 name = "momtrop"
-version = "0.2.1"
-source = "git+https://github.com/alphal00p/momtrop#a586c14b84cd69f61adf51a2105ad866f1d9c3be"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1d93ec96a6ea66e5d1895bc6076920b682d6c3fc66d9aa4fa02481d82f6e579b"
 dependencies = [
  "ahash",
  "bincode",
+ "clarabel",
  "criterion",
  "itertools 0.12.1",
  "rand 0.8.5",
