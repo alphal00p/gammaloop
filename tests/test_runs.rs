@@ -149,6 +149,46 @@ fn photons_1l_inspect() -> Result<()> {
 }
 
 #[test]
+fn photons_2l_inspect() -> Result<()> {
+    let mut cli = get_test_cli(
+        Some("photons_eu.toml".into()),
+        "./tests/photons_eu_inspect",
+        None,
+        false,
+    )?;
+
+    cli.state
+        .model_parameters
+        .insert(UFOSymbol(symbol!("UFO::MT")), Complex::new_re(F(1500.0)));
+
+    cli.state
+        .model_parameters
+        .insert(UFOSymbol(symbol!("UFO::aEWM1")), Complex::new_re(F(128.93)));
+
+    cli.state
+        .model
+        .apply_param_card(&cli.state.model_parameters)?;
+
+    let (_, inspect) = Inspect {
+        process_id: Some(0),
+        integrand_name: Some("default".to_string()),
+        point: vec![0.123, 0.3242, 0.4233],
+        momentum_space: false,
+        ..Default::default()
+    }
+    .run(&mut cli)?;
+
+    println!("Inspect result: {inspect:.16e}");
+
+    // wrong result
+    assert_snapshot!(format!("{inspect:.8e}"));
+
+    clean_test(&cli.cli_settings.state_folder);
+
+    Ok(())
+}
+
+#[test]
 fn test_grouped_subtraction() -> Result<()> {
     let mut cli = get_test_cli(
         Some("test_grouped_subtraction.toml".into()),

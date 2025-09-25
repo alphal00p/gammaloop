@@ -1,5 +1,5 @@
 commands = [
-    "import model sm-default",
+    "import model sm-default", 
     "import amplitude ./tests/resources/graphs/physical_2L_6photons.dot",
     "generate"
 ]
@@ -91,10 +91,17 @@ enable_thresholds = false
 
 [cli_settings.global.generation.evaluator]
 iterative_orientation_optimization = false
-compile = true
+compile = false
 
 [default_runtime_settings.sampling]
 type = "default"
 mode = "spherical"
 mapping = "linear"
 b = 10.0
+
+
+
+
+
+
+
