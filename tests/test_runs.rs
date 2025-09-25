@@ -63,7 +63,7 @@ fn trees() -> Result<()> {
 #[test]
 fn photons_1l_integrate() -> Result<()> {
     let mut cli = get_test_cli(
-        Some("photons_eu_inspect.toml".into()),
+        Some("photons_eu.toml".into()),
         "./tests/photons_eu_integrate",
         None,
         true,
@@ -109,7 +109,7 @@ fn photons_1l_integrate() -> Result<()> {
 #[test]
 fn photons_1l_inspect() -> Result<()> {
     let mut cli = get_test_cli(
-        Some("photons_eu_inspect.toml".into()),
+        Some("photons_eu.toml".into()),
         "./tests/photons_eu_inspect",
         None,
         false,
