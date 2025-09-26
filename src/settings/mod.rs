@@ -1,5 +1,5 @@
 use bincode_trait_derive::{Decode, Encode};
-use global::GenerationSettings;
+use global::{GenerationSettings, Parallelisation};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -22,6 +22,8 @@ pub struct GlobalSettings {
     pub display_directive: String,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub generation: GenerationSettings,
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    pub n_cores: Parallelisation,
 }
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
