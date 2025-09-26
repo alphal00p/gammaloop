@@ -29,9 +29,9 @@ lto = "fat"
 opt-level = 3
 debug = true
 
-[[bench]]
-name = "inspect"
-harness = false
+# [[bench]]
+# name = "inspect"
+# harness = false
 
 [profile.release]
 lto = "fat"

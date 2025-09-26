@@ -410,6 +410,7 @@ impl PyNumeratorAwareGroupingOption {
         consider_internal_masses_only_in_numerator_isomorphisms: Option<bool>,
         fully_numerical_substitution_when_comparing_numerators: Option<bool>,
         numerical_samples_seed: Option<u16>,
+        symmetric_polarizations: Option<bool>,
     ) -> Result<PyNumeratorAwareGroupingOption> {
         Ok(PyNumeratorAwareGroupingOption {
             grouping_options: NumeratorAwareGraphGroupingOption::new_with_attributes(
@@ -421,6 +422,7 @@ impl PyNumeratorAwareGroupingOption {
                 consider_internal_masses_only_in_numerator_isomorphisms,
                 fully_numerical_substitution_when_comparing_numerators,
                 compare_canonized_numerator,
+                symmetric_polarizations,
             )
             .map_err(|e| exceptions::PyException::new_err(e.to_string()))?,
         })

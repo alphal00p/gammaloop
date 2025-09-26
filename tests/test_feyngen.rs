@@ -123,13 +123,13 @@ fn example_graph_count() -> Result<()> {
 #[rustfmt::skip]
 fn cp_fix_from_symbolica()->Result<()>{
     let mut cli = get_test_cli(None,get_tests_workspace_path().join("feyn_gen_generation_test"),Some("feyngen".to_string()),true)?;
-    cli.cli_settings.global.logfile_directive = "[from_new_graph]=debug,[compare_with_scalar_rescaling]=debug,[compare_with_sign_only]=debug".to_string();
+    cli.cli_settings.global.logfile_directive = "[from_numerator_symbolic_expression]=debug,[compare_with_scalar_rescaling]=debug,[compare_with_sign_only]=debug".to_string();
     cli.cli_settings.sync_settings().unwrap();
 
     // Choose the model to consider
     cli.run_command("import model sm-default.json")?;
 
-    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states true --numerator-grouping group_identical_graphs_up_to_scalar_rescaling -n 1 --filter-zero-flow-edges false --fully-numerical-substitution-when-comparing-numerators false")?,@"11 | -12+-36*UFO::G^2*UFO::ee^(-2)");
+    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --numerator-grouping group_identical_graphs_up_to_scalar_rescaling -n 1 --filter-zero-flow-edges false --fully-numerical-substitution-when-comparing-numerators false --compare-canonized-numerator true")?,@"10 | -12+-12*UFO::G^2*UFO::ee^(-2)+-48*UFO::G^2*UFO::ee^(-2)*spenso::TR");
     Ok(())
 }
 

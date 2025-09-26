@@ -44,6 +44,7 @@ pub struct GraphGroupingOptions {
     pub differentiate_particle_masses_only: bool,
     pub fully_numerical_substitution_when_comparing_numerators: bool,
     pub test_canonized_numerator: bool,
+    pub symmetric_polarizations: bool,
 }
 
 impl Default for GraphGroupingOptions {
@@ -54,6 +55,7 @@ impl Default for GraphGroupingOptions {
             differentiate_particle_masses_only: true,
             fully_numerical_substitution_when_comparing_numerators: false,
             test_canonized_numerator: false,
+            symmetric_polarizations: false,
         }
     }
 }
@@ -62,11 +64,13 @@ impl fmt::Display for GraphGroupingOptions {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "differentiate_masses_only={}, test_canonized_numerator={}, #samples={}, seed={}",
+            "differentiate_masses_only={}, test_canonized_numerator={}, #samples={}, seed={}, fully_numerical_substitution={}, symmetric_polarizations={}",
             self.numerical_sample_seed,
             self.number_of_numerical_samples,
             self.differentiate_particle_masses_only,
-            self.test_canonized_numerator
+            self.test_canonized_numerator,
+            self.fully_numerical_substitution_when_comparing_numerators,
+            self.symmetric_polarizations
         )
     }
 }
@@ -152,6 +156,7 @@ impl NumeratorAwareGraphGroupingOption {
         differentiate_particle_masses_only: Option<bool>,
         fully_numerical_substitution_when_comparing_numerators: Option<bool>,
         test_canonized_numerator: Option<bool>,
+        symmetric_polarizations: Option<bool>,
     ) -> Result<Self, FeynGenError> {
         let mut opt = NumeratorAwareGraphGroupingOption::from_str(strategy)?;
         let grouping_options = opt.set_options();
@@ -174,6 +179,9 @@ impl NumeratorAwareGraphGroupingOption {
             {
                 grouping_options.fully_numerical_substitution_when_comparing_numerators =
                     fully_numerical_substitution_when_comparing_numerators;
+            }
+            if let Some(symmetric_polarizations) = symmetric_polarizations {
+                grouping_options.symmetric_polarizations = symmetric_polarizations;
             }
         }
 

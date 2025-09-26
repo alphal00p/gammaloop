@@ -1,11 +1,21 @@
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::{
+    collections::BTreeSet,
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        LazyLock, RwLock,
+    },
+};
 
+use idenso::representations::{Bispinor, ColorAdjoint, ColorFundamental};
 use linnet::half_edge::{
     involution::{EdgeIndex, Hedge},
     NodeIndex,
 };
 use spenso::{
-    structure::slot::{AbsInd, DummyAind, SlotError},
+    structure::{
+        representation::{LibraryRep, Minkowski, RepName, Representation},
+        slot::{AbsInd, DummyAind, IsAbstractSlot, SlotError},
+    },
     utils::{to_subscript, to_superscript},
 };
 use symbolica::{
@@ -14,8 +24,10 @@ use symbolica::{
     function, symbol,
 };
 use thiserror::Error;
+use tracing::debug;
 
 static DUMMYCOUNTER: AtomicUsize = AtomicUsize::new(0);
+
 /// A type that represents the name of an index in a tensor.
 #[derive(
     Debug,

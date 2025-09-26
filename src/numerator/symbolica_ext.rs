@@ -1,16 +1,22 @@
-use std::ops::Deref;
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    ops::Deref,
+};
 
+use bitvec::vec::BitVec;
 use idenso::color::SelectiveExpand;
 use itertools::Itertools;
+use linnet::half_edge::subgraph::ModifySubgraph;
 use spenso::{
     network::{
+        graph::{NetworkEdge, NetworkLeaf, NetworkNode, NetworkOp},
         library::{DummyKey, DummyLibrary},
         store::{NetworkStore, TensorScalarStore},
-        Network, StructureLessDisplay,
+        Network,
     },
     structure::{
-        representation::{Minkowski, RepName},
-        slot::{DualSlotTo, IsAbstractSlot},
+        representation::{LibraryRep, Minkowski, RepName},
+        slot::IsAbstractSlot,
         HasName, TensorStructure,
     },
     tensors::symbolic::SymbolicTensor,
@@ -19,12 +25,11 @@ use spenso::{
 use symbolica::{
     atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol},
     coefficient::{Coefficient, CoefficientView},
-    domains::float::Complex as SymComplex,
-    domains::rational::Rational,
+    domains::{float::Complex as SymComplex, rational::Rational},
     function,
     id::Replacement,
 };
-use tracing::{debug, event_enabled, Level};
+use tracing::debug;
 
 use crate::{
     numerator::aind::Aind,
@@ -48,6 +53,12 @@ pub trait AtomCoreExt {
 
     fn canonize_spenso(&self) -> Atom;
 
+    fn canonize_tensors_nice<'a>(
+        &'a self,
+        is_index: &[Replacement],
+        new_dummy: impl FnMut(usize, &Atom) -> Atom,
+    ) -> Atom;
+
     fn map_mink_dim<'a>(&self, dim: impl Into<AtomOrView<'a>>) -> Atom;
 
     fn unwrap_function(&self, symbol: Symbol) -> Atom;
@@ -67,6 +78,13 @@ impl AtomCoreExt for Atom {
         self.as_view().wrap_color(symbol)
     }
 
+    fn canonize_tensors_nice<'a>(
+        &'a self,
+        is_index: &[Replacement],
+        new_dummy: impl FnMut(usize, &Atom) -> Atom,
+    ) -> Atom {
+        self.as_view().canonize_tensors_nice(is_index, new_dummy)
+    }
     fn canonize_spenso(&self) -> Atom {
         self.as_view().canonize_spenso()
     }
@@ -81,12 +99,64 @@ impl AtomCoreExt for Atom {
 }
 
 impl AtomCoreExt for AtomView<'_> {
+    fn canonize_tensors_nice<'a>(
+        &'a self,
+        is_index: &[Replacement],
+        mut new_dummy: impl FnMut(usize, &Atom) -> Atom,
+    ) -> Atom {
+        let mut indices_sorted = BTreeSet::new();
+
+        for i in 0..(is_index.len()) {
+            let rep = &is_index[i..(i + 1)];
+            let r = &is_index[i];
+            for m in self.pattern_match(&r.pat, None, None) {
+                let a = r.pat.replace_wildcards(&m);
+                let group = a.replace_multiple(&rep);
+                indices_sorted.insert((group, a));
+            }
+        }
+
+        let mut indices = vec![];
+
+        let mut slot_location_replacements = vec![];
+
+        let mut last_group = Atom::Zero;
+
+        let mut groups = vec![];
+
+        for (slot_loc, (g, i)) in indices_sorted.into_iter().enumerate() {
+            if last_group != g {
+                groups.push((slot_loc, g.clone()));
+                last_group = g.clone();
+            };
+            let last_shift = groups.last().unwrap().0;
+            slot_location_replacements.push(Replacement::new(
+                i.to_pattern(),
+                new_dummy(slot_loc - last_shift, &g),
+            ));
+            indices.push((i, g));
+        }
+
+        let can = self.canonize_tensors(&indices).unwrap();
+
+        can //.replace_multiple(&slot_location_replacements)
+    }
+
     fn floatify(&self, prec: u32) -> Atom {
         self.map_coefficient(|c| match c {
-            CoefficientView::Natural(r, d, ri, di) => Coefficient::Float(SymComplex::new(
-                Rational::from((r, d)).to_multi_prec_float(prec),
-                Rational::from((ri, di)).to_multi_prec_float(prec),
-            )),
+            CoefficientView::Natural(r, d, ri, di) => {
+                if (ri == 0 || di == 1) && (r == 0 || d == 1) {
+                    Coefficient::Complex(SymComplex::new(
+                        Rational::new(r, d),
+                        Rational::new(ri, di),
+                    ))
+                } else {
+                    Coefficient::Float(SymComplex::new(
+                        Rational::from((r, d)).to_multi_prec_float(prec),
+                        Rational::from((ri, di)).to_multi_prec_float(prec),
+                    ))
+                }
+            }
             CoefficientView::Large(r, ri) => Coefficient::Float(SymComplex::new(
                 r.to_rat().to_multi_prec_float(prec),
                 ri.to_rat().to_multi_prec_float(prec),
@@ -96,6 +166,23 @@ impl AtomCoreExt for AtomView<'_> {
     }
 
     fn canonize_spenso(&self) -> Atom {
+        fn new_dummy(i: usize, b: &Atom) -> Atom {
+            let mut index = Atom::Zero;
+            if let AtomView::Fun(f) = b.as_view() {
+                if f.get_nargs() == 1 {
+                    if let AtomView::Num(n) = f.iter().next().unwrap() {
+                        let dim = i64::try_from(f.iter().next().unwrap()).unwrap() as usize;
+                        index = LibraryRep::try_from_symbol_coerced(f.get_symbol())
+                            .unwrap()
+                            .new_slot::<Aind, _, Aind>(dim, Aind::Dummy(i))
+                            .to_atom();
+                    }
+                }
+            }
+
+            index
+        }
+
         let lib = DummyLibrary::<SymbolicTensor<Aind>>::new();
         let mut net =
             Network::<NetworkStore<SymbolicTensor<Aind>, Atom>, DummyKey, Aind>::try_from_view(
@@ -119,8 +206,6 @@ impl AtomCoreExt for AtomView<'_> {
 
         let mut redual_reps = vec![];
 
-        let mut indices = vec![];
-
         for t in net.store.tensors.iter_mut() {
             let mut reps = vec![];
             debug!(name=%t.name().unwrap());
@@ -130,14 +215,13 @@ impl AtomCoreExt for AtomView<'_> {
                 debug!(slot=%s.to_string(),rep=%s.rep().to_string());
                 if !s.rep_name().is_self_dual() && s.rep_name().is_dual() {
                     pat = pat.add_arg(s.rep().dual().to_symbolic([Atom::var(W_.a_)]));
-                    indices.push((s.dual().to_atom(), s.dual().rep()));
+
                     reps.push(Replacement::new(
                         s.rep().to_symbolic([Atom::var(W_.a_)]).to_pattern(),
                         s.rep().dual().to_symbolic([Atom::var(W_.a_)]),
                     ));
                 } else {
                     pat = pat.add_arg(s.rep().to_symbolic([Atom::var(W_.a_)]));
-                    indices.push((s.to_atom(), s.rep()));
                 }
                 rhs = rhs.add_arg(s.rep().to_symbolic([Atom::var(W_.a_)]));
             }
@@ -147,18 +231,77 @@ impl AtomCoreExt for AtomView<'_> {
             }
         }
 
-        debug!(len=%indices.len());
+        let mut dummies = BTreeMap::new();
 
-        if event_enabled!(Level::DEBUG) {
-            let indices = indices
-                .iter()
-                .map(|(i, r)| format!("{}:{}", i.to_canonical_string(), r.to_string()))
-                .join("\n");
-            debug!(indices=%indices);
+        let mut only_products_and_associated: BitVec = net.graph.graph.empty_subgraph();
+
+        for (_, crown, d) in net.graph.graph.iter_nodes() {
+            if let NetworkNode::Op(NetworkOp::Product) = d {
+                for h in crown {
+                    let n = net.graph.graph.node_id(h);
+                    if let Some(cc) = net.graph.graph.involved_node_crown(h) {
+                        for h in cc {
+                            only_products_and_associated.add(h);
+                        }
+                    }
+                    for h in net.graph.graph.iter_crown(n) {
+                        only_products_and_associated.add(h);
+                    }
+                    only_products_and_associated.add(h);
+                }
+            }
         }
 
-        self.canonize_tensors(&indices)
-            .unwrap()
+        debug!(net=%net.graph.graph.dot_impl(
+                &only_products_and_associated,
+                "",
+                &|_| None,
+                &|e| {
+                    if let NetworkEdge::Slot(s) = e {
+                        Some(format!("label=\"{s}\""))
+                    } else {
+                        None
+                    }
+                },
+                &|n| match n {
+                    NetworkNode::Leaf(l) => match l {
+                        NetworkLeaf::LibraryKey(l) => {
+                            Some(format!("label= \"L:\""))
+                        }
+                        NetworkLeaf::LocalTensor(l) => {
+                            let tt = &net.store.get_tensor(*l);
+                            let a = format!("{}({})",
+                                tt.name().map(|a|a.to_string()).unwrap_or("NA".to_string()),
+                                tt.args().map(|a|a.iter().map(|a|format!("{}",a)).join(",")).unwrap_or(String::new()));
+                            Some(format!("label = \"T:{a}\""))
+                        }
+                        NetworkLeaf::Scalar(s) => { let ss = &net.store.get_scalar(*s);
+                            Some(format!("label = \"S:{ss}\""))},
+                    },
+                    NetworkNode::Op(o) => Some(format!("label = \"{o}\"")),
+                },
+            ),"only_products_and_associated"
+        );
+
+        for (p, e, d) in net.graph.graph.iter_edges_of(&only_products_and_associated) {
+            if p.is_paired() {
+                if let NetworkEdge::Slot(s) = d.data {
+                    dummies.insert(s.to_atom(), s.rep().to_symbolic([]));
+                }
+            }
+        }
+
+        let index_ident_pat: Vec<Replacement> = dummies
+            .iter()
+            .map(|(k, v)| {
+                debug!(k=%k,v=%v.to_string(),"Index identified for canonization");
+                Replacement::new(k.to_pattern(), v.clone())
+            })
+            .collect();
+
+        // mink(W_.dim,W_.i)=>mink(W_.dim)
+
+        self.canonize_tensors_nice(&index_ident_pat, new_dummy)
             .replace_multiple(&redual_reps)
     }
 
@@ -193,15 +336,11 @@ impl AtomCoreExt for AtomView<'_> {
 
 #[cfg(test)]
 mod tests {
-    use libc::YESEXPR;
     use symbolica::{atom::AtomCore, parse_lit};
 
     use crate::{
         dot,
-        graph::{
-            parse::{self, IntoGraph},
-            FeynmanGraph, Graph,
-        },
+        graph::{parse::IntoGraph, FeynmanGraph, Graph},
         initialisation::test_initialise,
         uv::UltravioletGraph,
     };
@@ -268,33 +407,66 @@ mod tests {
     #[test]
     fn canonizations() {
         test_initialise().unwrap();
+
         let a = parse_lit!(
-            1 / 27 * UFO::ee
-                ^ 4 * (gammalooprs::K(0, spenso::mink(4, gammalooprs::edge(1, 1)))
-                    + gammalooprs::K(1, spenso::mink(4, gammalooprs::edge(1, 1))))
-                    * (gammalooprs::K(0, spenso::mink(4, gammalooprs::edge(4, 1)))
-                        + gammalooprs::K(1, spenso::mink(4, gammalooprs::edge(4, 1))))
-                    * (gammalooprs::K(0, spenso::mink(4, gammalooprs::edge(5, 1)))
-                        + gammalooprs::K(1, spenso::mink(4, gammalooprs::edge(5, 1)))
-                        - gammalooprs::P(0, spenso::mink(4, gammalooprs::edge(5, 1))))
-                    * spenso::g(
+            ((-2 * spenso::projp(
+                spenso::bis(4, gammalooprs::edge(0)),
+                spenso::bis(4, gammalooprs::hedge(2))
+            ) + spenso::projm(
+                spenso::bis(4, gammalooprs::edge(0)),
+                spenso::bis(4, gammalooprs::hedge(2))
+            )) * -1𝑖
+                / 6
+                * UFO::sw
+                ^ 2 + -1𝑖 / 2 * UFO::cw
+                ^ 2 * spenso::projm(
+                    spenso::bis(4, gammalooprs::edge(0)),
+                    spenso::bis(4, gammalooprs::hedge(2))
+                ))
+                * ((-2
+                    * spenso::projp(
+                        spenso::bis(4, gammalooprs::hedge(0)),
+                        spenso::bis(4, gammalooprs::hedge(8))
+                    )
+                    + spenso::projm(
+                        spenso::bis(4, gammalooprs::hedge(0)),
+                        spenso::bis(4, gammalooprs::hedge(8))
+                    ))
+                    * -1𝑖
+                    / 6
+                    * UFO::sw
+                    ^ 2 + -1𝑖 / 2 * UFO::cw
+                    ^ 2 * spenso::projm(
+                        spenso::bis(4, gammalooprs::hedge(0)),
+                        spenso::bis(4, gammalooprs::hedge(8))
+                    ))
+                * (-1 * UFO::MZ
+                    ^ 2 * spenso::g(
                         spenso::mink(4, gammalooprs::hedge(4)),
                         spenso::mink(4, gammalooprs::hedge(5))
-                    )
+                    ) + gammalooprs::K(1, spenso::mink(4, gammalooprs::hedge(4)))
+                        * gammalooprs::K(1, spenso::mink(4, gammalooprs::hedge(5))))
+                * (-1 * gammalooprs::P(0, spenso::mink(4, gammalooprs::edge(5, 1)))
+                    + gammalooprs::K(0, spenso::mink(4, gammalooprs::edge(5, 1)))
+                    + gammalooprs::K(1, spenso::mink(4, gammalooprs::edge(5, 1))))
+                * (gammalooprs::K(0, spenso::mink(4, gammalooprs::edge(1, 1)))
+                    + gammalooprs::K(1, spenso::mink(4, gammalooprs::edge(1, 1))))
+                * (gammalooprs::K(0, spenso::mink(4, gammalooprs::edge(4, 1)))
+                    + gammalooprs::K(1, spenso::mink(4, gammalooprs::edge(4, 1))))
+                * 1
+                / 3
+                * UFO::MZ
+                ^ (-2) * UFO::cw
+                ^ (-2) * UFO::ee
+                ^ 4 * UFO::sw
+                ^ (-2)
+                    * gammalooprs::K(0, spenso::mink(4, gammalooprs::edge(2, 1)))
+                    * gammalooprs::ϵ(0, spenso::mink(4, gammalooprs::hedge(1)))
+                    * gammalooprs::ϵbar(0, spenso::mink(4, gammalooprs::hedge(0)))
                     * spenso::gamma(
-                        spenso::bis(4, gammalooprs::hedge(3)),
-                        spenso::bis(4, gammalooprs::hedge(8)),
-                        spenso::mink(4, gammalooprs::hedge(5))
-                    )
-                    * spenso::gamma(
-                        spenso::bis(4, gammalooprs::hedge(6)),
-                        spenso::bis(4, gammalooprs::hedge(2)),
-                        spenso::mink(4, gammalooprs::hedge(4))
-                    )
-                    * spenso::gamma(
-                        spenso::bis(4, gammalooprs::hedge(9)),
                         spenso::bis(4, gammalooprs::hedge(10)),
-                        spenso::mink(4, gammalooprs::hedge(0))
+                        spenso::bis(4, gammalooprs::hedge(11)),
+                        spenso::mink(4, gammalooprs::edge(5, 1))
                     )
                     * spenso::gamma(
                         spenso::bis(4, gammalooprs::hedge(11)),
@@ -307,6 +479,16 @@ mod tests {
                         spenso::mink(4, gammalooprs::edge(2, 1))
                     )
                     * spenso::gamma(
+                        spenso::bis(4, gammalooprs::hedge(3)),
+                        spenso::bis(4, gammalooprs::hedge(0)),
+                        spenso::mink(4, gammalooprs::hedge(5))
+                    )
+                    * spenso::gamma(
+                        spenso::bis(4, gammalooprs::hedge(6)),
+                        spenso::bis(4, gammalooprs::edge(0)),
+                        spenso::mink(4, gammalooprs::hedge(4))
+                    )
+                    * spenso::gamma(
                         spenso::bis(4, gammalooprs::hedge(7)),
                         spenso::bis(4, gammalooprs::hedge(6)),
                         spenso::mink(4, gammalooprs::edge(4, 1))
@@ -317,47 +499,81 @@ mod tests {
                         spenso::mink(4, gammalooprs::edge(1, 1))
                     )
                     * spenso::gamma(
+                        spenso::bis(4, gammalooprs::hedge(9)),
                         spenso::bis(4, gammalooprs::hedge(10)),
-                        spenso::bis(4, gammalooprs::hedge(11)),
-                        spenso::mink(4, gammalooprs::edge(5, 1))
+                        spenso::mink(4, gammalooprs::hedge(0))
                     )
-                    * gammalooprs::K(0, spenso::mink(4, gammalooprs::edge(2, 1)))
-                    * gammalooprs::ϵ(0, spenso::mink(4, gammalooprs::hedge(1)))
-                    * gammalooprs::ϵbar(0, spenso::mink(4, gammalooprs::hedge(0)))
         );
         println!("a:{}", a);
         let b = parse_lit!(
-            1 / 27 * UFO::ee
-                ^ 4 * (gammalooprs::K(0, spenso::mink(4, gammalooprs::edge(1, 1)))
-                    + gammalooprs::K(1, spenso::mink(4, gammalooprs::edge(1, 1))))
-                    * (gammalooprs::K(0, spenso::mink(4, gammalooprs::edge(4, 1)))
-                        + gammalooprs::K(1, spenso::mink(4, gammalooprs::edge(4, 1))))
-                    * (gammalooprs::K(0, spenso::mink(4, gammalooprs::edge(5, 1)))
-                        + gammalooprs::K(1, spenso::mink(4, gammalooprs::edge(5, 1)))
-                        - gammalooprs::P(0, spenso::mink(4, gammalooprs::edge(5, 1))))
-                    * spenso::g(
+            ((-2 * spenso::projp(
+                spenso::bis(4, gammalooprs::edge(0)),
+                spenso::bis(4, gammalooprs::hedge(6))
+            ) + spenso::projm(
+                spenso::bis(4, gammalooprs::edge(0)),
+                spenso::bis(4, gammalooprs::hedge(6))
+            )) * -1𝑖
+                / 6
+                * UFO::sw
+                ^ 2 + -1𝑖 / 2 * UFO::cw
+                ^ 2 * spenso::projm(
+                    spenso::bis(4, gammalooprs::edge(0)),
+                    spenso::bis(4, gammalooprs::hedge(6))
+                ))
+                * ((-2
+                    * spenso::projp(
+                        spenso::bis(4, gammalooprs::hedge(0)),
+                        spenso::bis(4, gammalooprs::hedge(3))
+                    )
+                    + spenso::projm(
+                        spenso::bis(4, gammalooprs::hedge(0)),
+                        spenso::bis(4, gammalooprs::hedge(3))
+                    ))
+                    * -1𝑖
+                    / 6
+                    * UFO::sw
+                    ^ 2 + -1𝑖 / 2 * UFO::cw
+                    ^ 2 * spenso::projm(
+                        spenso::bis(4, gammalooprs::hedge(0)),
+                        spenso::bis(4, gammalooprs::hedge(3))
+                    ))
+                * (-1 * UFO::MZ
+                    ^ 2 * spenso::g(
                         spenso::mink(4, gammalooprs::hedge(4)),
                         spenso::mink(4, gammalooprs::hedge(5))
-                    )
-                    * spenso::gamma(
-                        spenso::bis(4, gammalooprs::hedge(2)),
-                        spenso::bis(4, gammalooprs::hedge(6)),
-                        spenso::mink(4, gammalooprs::hedge(4))
-                    )
-                    * spenso::gamma(
-                        spenso::bis(4, gammalooprs::hedge(7)),
-                        spenso::bis(4, gammalooprs::hedge(11)),
-                        spenso::mink(4, gammalooprs::hedge(1))
-                    )
-                    * spenso::gamma(
-                        spenso::bis(4, gammalooprs::hedge(8)),
-                        spenso::bis(4, gammalooprs::hedge(3)),
-                        spenso::mink(4, gammalooprs::hedge(5))
-                    )
+                    ) + gammalooprs::K(1, spenso::mink(4, gammalooprs::hedge(4)))
+                        * gammalooprs::K(1, spenso::mink(4, gammalooprs::hedge(5))))
+                * (-1 * gammalooprs::P(0, spenso::mink(4, gammalooprs::edge(5, 1)))
+                    + gammalooprs::K(0, spenso::mink(4, gammalooprs::edge(5, 1)))
+                    + gammalooprs::K(1, spenso::mink(4, gammalooprs::edge(5, 1))))
+                * (gammalooprs::K(0, spenso::mink(4, gammalooprs::edge(1, 1)))
+                    + gammalooprs::K(1, spenso::mink(4, gammalooprs::edge(1, 1))))
+                * (gammalooprs::K(0, spenso::mink(4, gammalooprs::edge(4, 1)))
+                    + gammalooprs::K(1, spenso::mink(4, gammalooprs::edge(4, 1))))
+                * 1
+                / 3
+                * UFO::MZ
+                ^ (-2) * UFO::cw
+                ^ (-2) * UFO::ee
+                ^ 4 * UFO::sw
+                ^ (-2)
+                    * gammalooprs::K(0, spenso::mink(4, gammalooprs::edge(2, 1)))
+                    * gammalooprs::ϵ(0, spenso::mink(4, gammalooprs::hedge(1)))
+                    * gammalooprs::ϵbar(0, spenso::mink(4, gammalooprs::hedge(0)))
                     * spenso::gamma(
                         spenso::bis(4, gammalooprs::hedge(10)),
                         spenso::bis(4, gammalooprs::hedge(9)),
                         spenso::mink(4, gammalooprs::hedge(0))
+                    )
+                    * spenso::gamma(
+                        spenso::bis(4, gammalooprs::hedge(11)),
+                        spenso::bis(4, gammalooprs::hedge(10)),
+                        spenso::mink(4, gammalooprs::edge(5, 1))
+                    )
+                    * spenso::gamma(
+                        spenso::bis(4, gammalooprs::hedge(2)),
+                        spenso::bis(4, gammalooprs::edge(0)),
+                        spenso::mink(4, gammalooprs::hedge(4))
                     )
                     * spenso::gamma(
                         spenso::bis(4, gammalooprs::hedge(3)),
@@ -370,18 +586,20 @@ mod tests {
                         spenso::mink(4, gammalooprs::edge(4, 1))
                     )
                     * spenso::gamma(
+                        spenso::bis(4, gammalooprs::hedge(7)),
+                        spenso::bis(4, gammalooprs::hedge(11)),
+                        spenso::mink(4, gammalooprs::hedge(1))
+                    )
+                    * spenso::gamma(
+                        spenso::bis(4, gammalooprs::hedge(8)),
+                        spenso::bis(4, gammalooprs::hedge(0)),
+                        spenso::mink(4, gammalooprs::hedge(5))
+                    )
+                    * spenso::gamma(
                         spenso::bis(4, gammalooprs::hedge(9)),
                         spenso::bis(4, gammalooprs::hedge(8)),
                         spenso::mink(4, gammalooprs::edge(1, 1))
                     )
-                    * spenso::gamma(
-                        spenso::bis(4, gammalooprs::hedge(11)),
-                        spenso::bis(4, gammalooprs::hedge(10)),
-                        spenso::mink(4, gammalooprs::edge(5, 1))
-                    )
-                    * gammalooprs::K(0, spenso::mink(4, gammalooprs::edge(2, 1)))
-                    * gammalooprs::ϵ(0, spenso::mink(4, gammalooprs::hedge(1)))
-                    * gammalooprs::ϵbar(0, spenso::mink(4, gammalooprs::hedge(0)))
         );
 
         println!("b:{}", b);

@@ -1,5 +1,6 @@
 use bitvec::vec::BitVec;
 use idenso::color::{SelectiveExpand, CS};
+use idenso::gamma::AGS;
 use idenso::metric::PermuteWithMetric;
 use indicatif::ProgressBar;
 use indicatif::{ParallelProgressIterator, ProgressStyle};
@@ -17,18 +18,20 @@ use spenso::network::{Sequential, SmallestDegree};
 
 use spenso::structure::representation::{LibraryRep, Minkowski, RepName};
 use spenso::structure::{PermutedStructure, TensorStructure};
+use spenso::tensors::data::DataTensor;
 use spenso::tensors::parametric::{MixedTensor, ParamOrConcrete, ParamTensor};
-use spenso_hep_lib::hep_lib;
+use spenso_hep_lib::{
+    gamma5_weyl_data, gamma_data_weyl, hep_lib, proj_m_data_weyl, proj_p_data_weyl,
+};
 use std::collections::hash_map::Entry;
 use std::collections::HashSet;
-use symbolica::domains::rational::Rational;
 
 use std::ops::RangeInclusive;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use symbolica::atom::AtomView;
-use symbolica::coefficient::{Coefficient, CoefficientView};
+use symbolica::coefficient::Coefficient;
 use symbolica::domains::algebraic_number::AlgebraicExtension;
 use symbolica::domains::finite_field::PrimeIteratorU64;
 use symbolica::domains::float::Complex as SymbolicaComplex;
@@ -72,18 +75,16 @@ use crate::{
     model::Model,
 };
 use crate::{is_interrupted, set_interrupted, INTERRUPTED};
-use crate::{status_debug, status_error, status_info, status_warn};
+use crate::{status_debug, status_error, status_info};
 use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeData, Flow, Orientation};
 use linnet::half_edge::subgraph::{InternalSubGraph, OrientedCut, SubGraph};
 use linnet::half_edge::HedgeGraph;
 use linnet::half_edge::NodeIndex;
-use symbolica::{
-    atom::Atom, domains::float::Complex as SymComplex, graph::Graph as SymbolicaGraph,
-};
+use symbolica::{atom::Atom, graph::Graph as SymbolicaGraph};
 
 const CANONIZE_GRAPH_FLOWS: bool = true;
-const ANALYZE_RATIO_AS_RATIONAL_POLYNOMIAL: bool = false;
+const ANALYZE_RATIO_AS_RATIONAL_POLYNOMIAL: bool = true;
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct NodeColorWithVertexRule {
     pub external_tag: i32,
@@ -1096,12 +1097,48 @@ impl ProcessDefinition {
         &self,
         sample_iterator: &mut PrimeIteratorU64,
         add_model_params: bool,
+        symmetric_polarizations: bool,
         model: &Model,
     ) -> (
         Vec<Replacement>,
         TensorLibrary<MixedTensor<F<f64>, ExplicitKey<Aind>>, Aind>,
     ) {
-        let mut lib = hep_lib(F(1.), F(0.));
+        let mut weyl = TensorLibrary::new();
+        weyl.update_ids();
+
+        let gamma_key = PermutedStructure::identity(ParamOrConcrete::Param(
+            ParamTensor::composite(DataTensor::Sparse(
+                gamma_data_weyl(AGS.gamma_strct::<Aind>(4), Atom::num(1), Atom::num(0))
+                    .map_data(|a| a.re + Atom::i() * a.im),
+            )),
+        ));
+        // println!("permutation{}", gamma_key.rep_permutation);
+        weyl.insert_explicit(gamma_key);
+
+        let gamma5_key = PermutedStructure::identity(ParamOrConcrete::Param(
+            ParamTensor::composite(DataTensor::Sparse(
+                gamma5_weyl_data(AGS.gamma5_strct::<Aind>(4), Atom::num(1), Atom::num(0))
+                    .map_data(|a| a.re + Atom::i() * a.im),
+            )),
+        ));
+        weyl.insert_explicit(gamma5_key);
+
+        let projm_key = PermutedStructure::identity(ParamOrConcrete::Param(
+            ParamTensor::composite(DataTensor::Sparse(
+                proj_m_data_weyl(AGS.projm_strct::<Aind>(4), Atom::num(1), Atom::num(0))
+                    .map_data(|a| a.re + Atom::i() * a.im),
+            )),
+        ));
+        weyl.insert_explicit(projm_key);
+
+        let projp_key = PermutedStructure::identity(ParamOrConcrete::Param(
+            ParamTensor::composite(DataTensor::Sparse(
+                proj_p_data_weyl(AGS.projp_strct::<Aind>(4), Atom::num(1), Atom::num(0))
+                    .map_data(|a| a.re + Atom::i() * a.im),
+            )),
+        ));
+        weyl.insert_explicit(projp_key);
+        let mut lib = weyl;
 
         for i in 0..self.loop_count_range.1 {
             let key = ExplicitKey::from_iter(
@@ -1125,6 +1162,7 @@ impl ProcessDefinition {
             lib.insert_explicit(PermutedStructure::identity(key));
         }
 
+        let mut pol_vals = vec![];
         for (i, pdg) in self.initial_pdgs.iter().enumerate() {
             let additional_args = Some(vec![Atom::num(i)]);
             let key = ExplicitKey::from_iter(
@@ -1161,16 +1199,16 @@ impl ProcessDefinition {
                 additional_args,
             });
 
+            pol_vals.push(
+                (0..len)
+                    .into_iter()
+                    .map(|_| Atom::prime_generate_rat_complex(sample_iterator))
+                    .collect::<Vec<_>>(),
+            );
+
             debug!("lib_pol:{}", key.clone().permute_with_metric());
             let key = ParamOrConcrete::Param(
-                ParamTensor::from_dense(
-                    key.structure,
-                    (0..len)
-                        .into_iter()
-                        .map(|_| Atom::prime_generate_rat_complex(sample_iterator))
-                        .collect(),
-                )
-                .unwrap(),
+                ParamTensor::from_dense(key.structure, pol_vals.last().unwrap().clone()).unwrap(),
             );
 
             lib.insert_explicit(PermutedStructure::identity(key));
@@ -1236,7 +1274,7 @@ impl ProcessDefinition {
                     let global_name =
                         EdgeData::new(p, Orientation::Default).pol_symbol(Flow::Source);
 
-                    let len = structure.size().unwrap();
+                    // let len = structure.size().unwrap();
 
                     let key = PermutedStructure::identity(ExplicitKey {
                         structure,
@@ -1248,9 +1286,15 @@ impl ProcessDefinition {
                     let key = ParamOrConcrete::Param(
                         ParamTensor::from_dense(
                             key.structure,
-                            (0..len)
-                                .into_iter()
-                                .map(|_| Atom::prime_generate_rat_complex(sample_iterator))
+                            pol_vals[i]
+                                .iter()
+                                .map(|a| {
+                                    if symmetric_polarizations {
+                                        a.clone()
+                                    } else {
+                                        Atom::prime_generate_rat_complex(sample_iterator)
+                                    }
+                                })
                                 .collect(),
                         )
                         .unwrap(),
@@ -3805,6 +3849,7 @@ impl ProcessDefinition {
                     self.sample_lib(
                         &mut sample_iterator,
                         opts.fully_numerical_substitution_when_comparing_numerators,
+                        opts.symmetric_polarizations,
                         model,
                     )
                 })
@@ -4291,7 +4336,7 @@ struct PooledGraphData {
 }
 
 #[derive(Clone)]
-struct ProcessedNumeratorForComparison {
+pub(crate) struct ProcessedNumeratorForComparison {
     diagram_id: usize,
     /// Canonized numerator expression for symbolic comparison.
     ///
@@ -4477,7 +4522,7 @@ impl ProcessedNumeratorForComparison {
 
     /// Compare two numerators allowing arbitrary scalar rescaling.
     #[instrument(skip_all, fields(self_id = %self.diagram_id, other_id = %other.diagram_id))]
-    fn compare_with_scalar_rescaling(
+    pub(crate) fn compare_with_scalar_rescaling(
         &self,
         other: &ProcessedNumeratorForComparison,
     ) -> Option<Atom> {
@@ -4615,7 +4660,7 @@ impl ProcessedNumeratorForComparison {
                             polyrat_to_atom(&element)
                         } else {
                             // Make sure that collect_factor() has been called already when creating the samples
-                            a / b
+                            a.collect_factors() / b.collect_factors()
                         };
                         debug!(
                             sample_idx = %idx,
@@ -4677,7 +4722,7 @@ impl ProcessedNumeratorForComparison {
         None
     }
     #[instrument(skip_all)]
-    fn from_numerator_symbolic_expression(
+    pub fn from_numerator_symbolic_expression(
         diagram_id: usize,
         graph: &Graph,
         mut numerator: Atom,
@@ -4702,8 +4747,8 @@ impl ProcessedNumeratorForComparison {
                     &[W_.x___],
                 );
 
-                debug!("Initial Numerator{numerator}");
                 numerator = numerator.replace_multiple(&lmb_reps);
+                debug!(numerator=%numerator.to_canonical_string(),diagram_id=%diagram_id,debug_dot=%graph.debug_dot(),"Initial Numerator");
 
                 let canonized_numerator = if group_options.test_canonized_numerator {
                     let mut canonized_numerator_to_consider = numerator.canonize_spenso();
@@ -4724,6 +4769,7 @@ impl ProcessedNumeratorForComparison {
                         canonized_numerator_to_consider =
                             canonized_numerator_to_consider.collect_factors();
                     }
+                    // numerator = canonized_numerator_to_consider.clone();
                     Some(canonized_numerator_to_consider)
                 } else {
                     None

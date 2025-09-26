@@ -205,6 +205,8 @@ pub struct SpecArgs {
     pub fully_numerical_substitution_when_comparing_numerators: Option<bool>,
     #[arg(long = "compare-canonized-numerator")]
     pub compare_canonized_numerator: Option<bool>,
+    #[arg(long = "symmetric-left-right-polarizations")]
+    pub symmetric_left_right_polarizations: Option<bool>,
 
     /// Graph processing toggles
     ///
@@ -876,6 +878,7 @@ pub fn parse_spec_with_model(
                 args.consider_internal_masses_only_in_numerator_isomorphisms,
                 args.fully_numerical_substitution_when_comparing_numerators,
                 args.compare_canonized_numerator,
+                args.symmetric_left_right_polarizations,
             )
             .unwrap_or(NumeratorAwareGraphGroupingOption::NoGrouping)
         });
@@ -1540,6 +1543,7 @@ fn build_grouping_option(a: &SpecArgs) -> Option<NumeratorAwareGraphGroupingOpti
         a.consider_internal_masses_only_in_numerator_isomorphisms,
         a.fully_numerical_substitution_when_comparing_numerators,
         a.compare_canonized_numerator,
+        a.symmetric_left_right_polarizations,
     );
     match opt {
         Ok(v) => Some(v),
@@ -1703,6 +1707,7 @@ mod tests {
             max_n_bridges: None,
             number_of_factorized_loop_subtopologies: None,
             number_of_fermion_loops: None,
+            symmetric_left_right_polarizations: None,
             n_cut_blobs: None,
             n_cut_spectators: None,
             allow_symmetrization_of_external_fermions_in_amplitudes: None,

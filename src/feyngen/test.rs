@@ -3,20 +3,61 @@ use std::sync::Arc;
 use ahash::HashMap;
 use ahash::HashMapExt;
 use ahash::HashSet;
+use idenso::gamma::AGS;
+use idenso::metric::PermuteWithMetric;
 use insta::assert_snapshot;
 use itertools::Itertools;
+use libc::YESEXPR;
+use linnet::half_edge::involution::EdgeData;
+use linnet::half_edge::involution::Flow;
+use linnet::half_edge::involution::Orientation;
+use spenso::network::library::symbolic::ExplicitKey;
+use spenso::network::library::symbolic::TensorLibrary;
+use spenso::network::library::LibraryTensor;
+use spenso::structure::representation::Minkowski;
+use spenso::structure::representation::RepName;
+use spenso::structure::PermutedStructure;
+use spenso::structure::TensorStructure;
+use spenso::tensors::data::DataTensor;
+use spenso::tensors::parametric::MixedTensor;
+use spenso::tensors::parametric::ParamOrConcrete;
+use spenso::tensors::parametric::ParamTensor;
+use spenso_hep_lib::gamma5_weyl_data;
+use spenso_hep_lib::gamma_data_weyl;
+use spenso_hep_lib::hep_lib;
+use spenso_hep_lib::proj_m_data_weyl;
+use spenso_hep_lib::proj_p_data_weyl;
+use symbolica::atom::Atom;
+use symbolica::atom::AtomCore;
+use symbolica::atom::Symbol;
+use symbolica::coefficient::Coefficient;
 use symbolica::graph::Graph as SymbolicaGraph;
+use symbolica::id::Replacement;
+use symbolica::parse_lit;
+use tracing::debug;
 
+use crate::dot;
 use crate::feyngen::diagram_generator::EdgeColor;
+use crate::graph::FeynmanGraph;
+use crate::initialisation::test_initialise;
+use crate::numerator::aind::Aind;
+use crate::numerator::graph::ReversibleEdge;
+use crate::numerator::symbolica_ext::AtomCoreExt;
+use crate::utils::symbolica_ext::PrimeGenerate;
+use crate::utils::F;
+use crate::utils::GS;
+use crate::uv::UltravioletGraph;
 // use crate::graph::BareGraph;
 use super::diagram_generator::NodeColorWithVertexRule;
+use super::diagram_generator::ProcessedNumeratorForComparison;
 use super::GenerationType;
+use super::GraphGroupingOptions;
 use super::NumeratorAwareGraphGroupingOption;
 use super::SewedFilterOptions;
 use super::SnailFilterOptions;
 use super::TadpolesFilterOptions;
 use super::{FeynGenFilter, FeynGenFilters};
-use crate::graph::Graph;
+use crate::graph::{parse::IntoGraph, Graph};
 use crate::model::ArcVertexRule;
 use crate::model::ColorStructure;
 use crate::model::Model;
@@ -24,6 +65,314 @@ use crate::model::VertexRule;
 use crate::numerator::GlobalPrefactor;
 use crate::processes::ProcessDefinition;
 use crate::utils::test_utils::load_generic_model;
+
+fn manual_lib<C: Into<Coefficient>>(
+    loop_momenta: Vec<Vec<C>>,
+    pol_v: Vec<(isize, Vec<C>, Vec<C>)>,
+    pol_out: Vec<(isize, Vec<C>)>,
+    model: &Model,
+) -> TensorLibrary<MixedTensor<F<f64>, ExplicitKey<Aind>>, Aind> {
+    let mut weyl = TensorLibrary::new();
+    weyl.update_ids();
+
+    let gamma_key = PermutedStructure::identity(ParamOrConcrete::Param(ParamTensor::composite(
+        DataTensor::Sparse(
+            gamma_data_weyl(AGS.gamma_strct::<Aind>(4), Atom::num(1), Atom::num(0))
+                .map_data(|a| a.re + Atom::i() * a.im),
+        ),
+    )));
+    // println!("permutation{}", gamma_key.rep_permutation);
+    weyl.insert_explicit(gamma_key);
+
+    let gamma5_key = PermutedStructure::identity(ParamOrConcrete::Param(ParamTensor::composite(
+        DataTensor::Sparse(
+            gamma5_weyl_data(AGS.gamma5_strct::<Aind>(4), Atom::num(1), Atom::num(0))
+                .map_data(|a| a.re + Atom::i() * a.im),
+        ),
+    )));
+    weyl.insert_explicit(gamma5_key);
+
+    let projm_key = PermutedStructure::identity(ParamOrConcrete::Param(ParamTensor::composite(
+        DataTensor::Sparse(
+            proj_m_data_weyl(AGS.projm_strct::<Aind>(4), Atom::num(1), Atom::num(0))
+                .map_data(|a| a.re + Atom::i() * a.im),
+        ),
+    )));
+    weyl.insert_explicit(projm_key);
+
+    let projp_key = PermutedStructure::identity(ParamOrConcrete::Param(ParamTensor::composite(
+        DataTensor::Sparse(
+            proj_p_data_weyl(AGS.projp_strct::<Aind>(4), Atom::num(1), Atom::num(0))
+                .map_data(|a| a.re + Atom::i() * a.im),
+        ),
+    )));
+    weyl.insert_explicit(projp_key);
+
+    let mut lib = weyl; //hep_lib(F(1.), F(0.));
+    for (i, v) in loop_momenta.into_iter().enumerate() {
+        let key = ExplicitKey::from_iter(
+            [Minkowski {}.new_rep(4)],
+            GS.loop_mom,
+            Some(vec![Atom::num(i)]),
+        );
+
+        debug!("lib_loop:{}", key.clone().permute_with_metric());
+        let key = ParamOrConcrete::Param(
+            ParamTensor::from_dense(key.structure, v.into_iter().map(|n| Atom::num(n)).collect())
+                .unwrap(),
+        );
+
+        lib.insert_explicit(PermutedStructure::identity(key));
+    }
+
+    for (i, (pdg, pol, ext_mom)) in pol_v.into_iter().enumerate() {
+        let additional_args = Some(vec![Atom::num(i)]);
+        let key = ExplicitKey::from_iter(
+            [Minkowski {}.new_rep(4)],
+            GS.external_mom,
+            additional_args.clone(),
+        );
+
+        debug!("lib_ext:{}", key.clone().permute_with_metric());
+
+        let key = ParamOrConcrete::Param(
+            ParamTensor::from_dense(key.structure, ext_mom.into_iter().map(Atom::num).collect())
+                .unwrap(),
+        );
+
+        lib.insert_explicit(PermutedStructure::identity(key));
+
+        let p = model.get_particle_from_pdg(pdg);
+
+        let structure = p.spin_reps();
+        let global_name = EdgeData::new(p, Orientation::Default).pol_symbol(Flow::Sink);
+        let key = PermutedStructure::identity(ExplicitKey {
+            structure,
+            global_name,
+            additional_args,
+        });
+
+        debug!("lib_pol:{}", key.clone().permute_with_metric());
+        let key = ParamOrConcrete::Param(
+            ParamTensor::from_dense(key.structure, pol.into_iter().map(Atom::num).collect())
+                .unwrap(),
+        );
+
+        lib.insert_explicit(PermutedStructure::identity(key));
+    }
+
+    for (i, (pdg, pol)) in pol_out.into_iter().enumerate() {
+        let additional_args = Some(vec![Atom::num(i)]);
+
+        let p = model.get_particle_from_pdg(pdg);
+
+        let structure = p.spin_reps();
+        let global_name = EdgeData::new(p, Orientation::Default).pol_symbol(Flow::Source);
+
+        let key = PermutedStructure::identity(ExplicitKey {
+            structure,
+            global_name,
+            additional_args,
+        });
+        debug!("lib_pol:{}", key.clone().permute_with_metric());
+        let key = ParamOrConcrete::Param(
+            ParamTensor::from_dense(key.structure, pol.into_iter().map(Atom::num).collect())
+                .unwrap(),
+        );
+
+        lib.insert_explicit(PermutedStructure::identity(key));
+    }
+    lib
+}
+
+#[test]
+fn gl_11_vs_gl_12() {
+    test_initialise().unwrap();
+
+    let gl_12:Graph = dot!(
+        digraph GL12{
+            num = "1";
+        overall_factor = "AutG(1)^-1*InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)*AntiFermionSpinSumSign(1)";
+        // projector = "ϵ(0,spenso::mink(4,hedge(1)))*ϵbar(0,spenso::mink(4,hedge(0)))";
+        projector = "ϵ(0,spenso::mink(4,hedge(1)))*ϵ(0,spenso::mink(4,hedge(0)))";
+        // projector = "spenso::g(spenso::mink(4,hedge(1)),spenso::mink(4,hedge(0)))";
+        2:1-> 3:0 [id=0  is_cut=0   particle="a"];
+        1:8-> 2:9 [id=1 dir=back particle="d~"];
+        0:2-> 1:3 [id=2 dir=back lmb_id=0 particle="d~"];
+        0:4-> 1:5 [id=3 dir=none  particle="Z"];
+        3:6-> 0:7 [id=4 dir=back lmb_id=1 particle="d~"];
+        2:10-> 3:11 [id=5 dir=back particle="d~"];
+        }
+    ).unwrap();
+
+    let gl_11:Graph = dot!(
+        digraph GL11{
+            num = "1";
+        overall_factor = "AutG(1)^-1*InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)*AntiFermionSpinSumSign(1)";
+        // projector = "ϵ(0,spenso::mink(4,hedge(1)))*ϵbar(0,spenso::mink(4,hedge(0)))";
+        projector = "ϵ(0,spenso::mink(4,hedge(1)))*ϵ(0,spenso::mink(4,hedge(0)))";
+        // projector = "spenso::g(spenso::mink(4,hedge(1)),spenso::mink(4,hedge(0)))";
+        2:1-> 3:0 [id=0  is_cut=0   particle="a"];
+        1:8-> 2:9 [id=1 particle="d"];
+        0:2-> 1:3 [id=2 lmb_id=0 particle="d"];
+        0:4-> 1:5 [id=3 dir=none  particle="Z"];
+        3:6-> 0:7 [id=4 lmb_id=1 particle="d"];
+        2:10-> 3:11 [id=5 particle="d"];
+        }
+    ).unwrap();
+
+    let gl_12:Graph = dot!(
+        digraph GL12{
+            num = "1";
+        overall_factor = "AutG(1)^-1*InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)*AntiFermionSpinSumSign(1)";
+        // projector = "ϵ(0,spenso::mink(4,hedge(1)))*ϵbar(0,spenso::mink(4,hedge(0)))";
+        projector = "ϵ(0,spenso::mink(4,hedge(1)))*ϵ(0,spenso::mink(4,hedge(0)))";
+        // projector = "spenso::g(spenso::mink(4,hedge(1)),spenso::mink(4,hedge(0)))";
+        0[dod=0 int_id=V_79 num_old="(UFO::GC_58*(-2*spenso::gamma(spenso::bis(4,hedge(6)),spenso::bis(4,vertex(0,1)),spenso::mink(4,hedge(4)))*spenso::projp(spenso::bis(4,vertex(0,1)),spenso::bis(4,hedge(2)))+spenso::gamma(spenso::bis(4,hedge(6)),spenso::bis(4,vertex(0,1)),spenso::mink(4,hedge(4)))*spenso::projm(spenso::bis(4,vertex(0,1)),spenso::bis(4,hedge(2))))+UFO::GC_50*spenso::gamma(spenso::bis(4,hedge(6)),spenso::bis(4,vertex(0,1)),spenso::mink(4,hedge(4)))*spenso::projm(spenso::bis(4,vertex(0,1)),spenso::bis(4,hedge(2))))*spenso::g(spenso::dind(spenso::cof(3,hedge(6))),spenso::cof(3,hedge(2)))"];
+        1[dod=0 int_id=V_79 num_old="(UFO::GC_58*(-2*spenso::gamma(spenso::bis(4,hedge(3)),spenso::bis(4,vertex(1,1)),spenso::mink(4,hedge(5)))*spenso::projp(spenso::bis(4,vertex(1,1)),spenso::bis(4,hedge(8)))+spenso::gamma(spenso::bis(4,hedge(3)),spenso::bis(4,vertex(1,1)),spenso::mink(4,hedge(5)))*spenso::projm(spenso::bis(4,vertex(1,1)),spenso::bis(4,hedge(8))))+UFO::GC_50*spenso::gamma(spenso::bis(4,hedge(3)),spenso::bis(4,vertex(1,1)),spenso::mink(4,hedge(5)))*spenso::projm(spenso::bis(4,vertex(1,1)),spenso::bis(4,hedge(8))))*spenso::g(spenso::dind(spenso::cof(3,hedge(3))),spenso::cof(3,hedge(8)))"];
+        2[dod=0 int_id=V_71 num_old="UFO::GC_1*spenso::g(spenso::dind(spenso::cof(3,hedge(9))),spenso::cof(3,hedge(10)))*spenso::gamma(spenso::bis(4,hedge(9)),spenso::bis(4,hedge(10)),spenso::mink(4,hedge(0)))"];
+        3[dod=0 int_id=V_71 num_old="UFO::GC_1*spenso::g(spenso::dind(spenso::cof(3,hedge(11))),spenso::cof(3,hedge(7)))*spenso::gamma(spenso::bis(4,hedge(11)),spenso::bis(4,hedge(7)),spenso::mink(4,hedge(1)))"];
+        2:1-> 3:0 [id=0 dir=none source=2 sink=2  dod=-2 is_cut=0 is_dummy=false lmb_rep="P(0,a___)" name=e0 num_old="1" particle="a"];
+        1:8-> 2:9 [id=1 dir=back source=1 sink=0  dod=-1 is_dummy=false lmb_rep="K(0,a___)+K(1,a___)" name=e1 num_old="Q(1,spenso::mink(4,edge(1,1)))*spenso::g(spenso::dind(spenso::cof(3,hedge(8))),spenso::cof(3,hedge(9)))*spenso::gamma(spenso::bis(4,hedge(8)),spenso::bis(4,hedge(9)),spenso::mink(4,edge(1,1)))" particle="d~"];
+        0:2-> 1:3 [id=2 dir=back source=1 sink=0  dod=-1 is_dummy=false lmb_id=0 lmb_rep="K(0,a___)" name=e2 num_old="Q(2,spenso::mink(4,edge(2,1)))*spenso::g(spenso::dind(spenso::cof(3,hedge(2))),spenso::cof(3,hedge(3)))*spenso::gamma(spenso::bis(4,hedge(2)),spenso::bis(4,hedge(3)),spenso::mink(4,edge(2,1)))" particle="d~"];
+        0:4-> 1:5 [id=3 dir=none source=2 sink=2  dod=0 is_dummy=false  lmb_rep="K(1,a___)" name=e3 num_old="-spenso::g(spenso::mink(4,hedge(4)),spenso::mink(4,hedge(5)))+UFO::MZ^-2*Q(3,spenso::mink(4,hedge(4)))*Q(3,spenso::mink(4,hedge(5)))" particle="Z"];
+        0:6-> 3:7 [id=4 source=0 sink=1  dod=-1 is_dummy=false lmb_id=1 lmb_rep="-K(0,a___)-K(1,a___)" name=e4 num_old="Q(4,spenso::mink(4,edge(4,1)))*spenso::g(spenso::dind(spenso::cof(3,hedge(7))),spenso::cof(3,hedge(6)))*spenso::gamma(spenso::bis(4,hedge(7)),spenso::bis(4,hedge(6)),spenso::mink(4,edge(4,1)))" particle="d"];
+        2:10-> 3:11 [id=5 dir=back source=1 sink=0  dod=-1 is_dummy=false lmb_rep="-P(0,a___)+K(0,a___)+K(1,a___)" name=e5 num_old="Q(5,spenso::mink(4,edge(5,1)))*spenso::g(spenso::dind(spenso::cof(3,hedge(10))),spenso::cof(3,hedge(11)))*spenso::gamma(spenso::bis(4,hedge(10)),spenso::bis(4,hedge(11)),spenso::mink(4,edge(5,1)))" particle="d~"];
+        }
+    ).unwrap();
+
+    let gl_11:Graph = dot!(
+        digraph GL11{
+            num = "1";
+            overall_factor = "AutG(1)^-1*InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)*AntiFermionSpinSumSign(1)";
+            // projector = "ϵ(0,spenso::mink(4,hedge(1)))*ϵbar(0,spenso::mink(4,hedge(0)))";
+            projector = "ϵ(0,spenso::mink(4,hedge(1)))*ϵ(0,spenso::mink(4,hedge(0)))";
+            // projector = "spenso::g(spenso::mink(4,hedge(1)),spenso::mink(4,hedge(0)))";
+            0[dod=0 int_id=V_79 num_old="(UFO::GC_58*(-2*spenso::gamma(spenso::bis(4,hedge(2)),spenso::bis(4,vertex(0,1)),spenso::mink(4,hedge(4)))*spenso::projp(spenso::bis(4,vertex(0,1)),spenso::bis(4,hedge(6)))+spenso::gamma(spenso::bis(4,hedge(2)),spenso::bis(4,vertex(0,1)),spenso::mink(4,hedge(4)))*spenso::projm(spenso::bis(4,vertex(0,1)),spenso::bis(4,hedge(6))))+UFO::GC_50*spenso::gamma(spenso::bis(4,hedge(2)),spenso::bis(4,vertex(0,1)),spenso::mink(4,hedge(4)))*spenso::projm(spenso::bis(4,vertex(0,1)),spenso::bis(4,hedge(6))))*spenso::g(spenso::dind(spenso::cof(3,hedge(2))),spenso::cof(3,hedge(6)))"];
+            1[dod=0 int_id=V_79 num_old="(UFO::GC_58*(-2*spenso::gamma(spenso::bis(4,hedge(8)),spenso::bis(4,vertex(1,1)),spenso::mink(4,hedge(5)))*spenso::projp(spenso::bis(4,vertex(1,1)),spenso::bis(4,hedge(3)))+spenso::gamma(spenso::bis(4,hedge(8)),spenso::bis(4,vertex(1,1)),spenso::mink(4,hedge(5)))*spenso::projm(spenso::bis(4,vertex(1,1)),spenso::bis(4,hedge(3))))+UFO::GC_50*spenso::gamma(spenso::bis(4,hedge(8)),spenso::bis(4,vertex(1,1)),spenso::mink(4,hedge(5)))*spenso::projm(spenso::bis(4,vertex(1,1)),spenso::bis(4,hedge(3))))*spenso::g(spenso::dind(spenso::cof(3,hedge(8))),spenso::cof(3,hedge(3)))"];
+            2[dod=0 int_id=V_71 num_old="UFO::GC_1*spenso::g(spenso::dind(spenso::cof(3,hedge(10))),spenso::cof(3,hedge(9)))*spenso::gamma(spenso::bis(4,hedge(10)),spenso::bis(4,hedge(9)),spenso::mink(4,hedge(0)))"];
+            3[dod=0 int_id=V_71 num_old="UFO::GC_1*spenso::g(spenso::dind(spenso::cof(3,hedge(7))),spenso::cof(3,hedge(11)))*spenso::gamma(spenso::bis(4,hedge(7)),spenso::bis(4,hedge(11)),spenso::mink(4,hedge(1)))"];
+            2:1-> 3:0 [id=0 dir=none source=2 sink=2  dod=-2 is_cut=0 is_dummy=false lmb_rep="P(0,a___)" name=e0 num_old="1" particle="a"];
+            1:8-> 2:9 [id=1 source=0 sink=1  dod=-1 is_dummy=false lmb_rep="K(0,a___)+K(1,a___)" name=e1 num_old="Q(1,spenso::mink(4,edge(1,1)))*spenso::g(spenso::dind(spenso::cof(3,hedge(9))),spenso::cof(3,hedge(8)))*spenso::gamma(spenso::bis(4,hedge(9)),spenso::bis(4,hedge(8)),spenso::mink(4,edge(1,1)))" particle="d"];
+            0:2-> 1:3 [id=2 source=0 sink=1  dod=-1 is_dummy=false lmb_id=0 lmb_rep="K(0,a___)" name=e2 num_old="Q(2,spenso::mink(4,edge(2,1)))*spenso::g(spenso::dind(spenso::cof(3,hedge(3))),spenso::cof(3,hedge(2)))*spenso::gamma(spenso::bis(4,hedge(3)),spenso::bis(4,hedge(2)),spenso::mink(4,edge(2,1)))" particle="d"];
+            0:4-> 1:5 [id=3 dir=none source=2 sink=2  dod=0 is_dummy=false  lmb_rep="K(1,a___)" name=e3 num_old="-spenso::g(spenso::mink(4,hedge(4)),spenso::mink(4,hedge(5)))+UFO::MZ^-2*Q(3,spenso::mink(4,hedge(4)))*Q(3,spenso::mink(4,hedge(5)))" particle="Z"];
+            0:6-> 3:7 [id=4 dir=back source=1 sink=0  dod=-1 is_dummy=false lmb_id=1 lmb_rep="-K(0,a___)-K(1,a___)" name=e4 num_old="Q(4,spenso::mink(4,edge(4,1)))*spenso::g(spenso::dind(spenso::cof(3,hedge(6))),spenso::cof(3,hedge(7)))*spenso::gamma(spenso::bis(4,hedge(6)),spenso::bis(4,hedge(7)),spenso::mink(4,edge(4,1)))" particle="d~"];
+            2:10-> 3:11 [id=5 source=0 sink=1  dod=-1 is_dummy=false lmb_rep="-P(0,a___)+K(0,a___)+K(1,a___)" name=e5 num_old="Q(5,spenso::mink(4,edge(5,1)))*spenso::g(spenso::dind(spenso::cof(3,hedge(11))),spenso::cof(3,hedge(10)))*spenso::gamma(spenso::bis(4,hedge(11)),spenso::bis(4,hedge(10)),spenso::mink(4,edge(5,1)))" particle="d"];
+        }
+        ).unwrap();
+
+    let loop_momenta = vec![vec![79, 83, 89, 97], vec![101, 103, 107, 109]];
+    let pol_v = vec![(22, vec![43, 47, 53, 59], vec![29, 31, 37, 41])];
+    let pol_out = vec![(22, vec![61, 67, 71, 73])];
+    let model = load_generic_model("sm");
+
+    let reps = vec![
+        Replacement::new(parse_lit!(UFO::MZ).to_pattern(), Atom::num(13)),
+        Replacement::new(parse_lit!(UFO::ee).to_pattern(), Atom::num(17)),
+        Replacement::new(parse_lit!(UFO::cw).to_pattern(), Atom::num(19)),
+        Replacement::new(parse_lit!(UFO::sw).to_pattern(), Atom::num(23)),
+    ];
+
+    let lib = manual_lib(loop_momenta, pol_v, pol_out, &model);
+    let mut cpl_reps: Vec<Replacement> = vec![];
+    for cpl in model.couplings.values() {
+        let [lhs, rhs] = cpl.rep_rule();
+        cpl_reps.push(Replacement::new(lhs.to_pattern(), rhs));
+    }
+
+    let mut numerator_11 = gl_11.numerator(&gl_11.no_dummy());
+    numerator_11.state.expr *= &gl_11.global_prefactor.num * &gl_11.global_prefactor.projector; // * &bare_graph.overall_factor;
+    numerator_11.state.expr = numerator_11.state.expr.replace_multiple(&cpl_reps);
+
+    let numerator_color_simplified_11 = numerator_11
+        .clone()
+        .color_simplify()
+        .get_single_atom()
+        .unwrap();
+    // .replace_multiple(&reps);
+    // .replace(parse_lit!(UFO::MZ ^ (-2)))
+    // .with(Atom::Zero)
+    // // .replace(parse_lit!(UFO::cw))
+    // // .with(parse_lit!(UFO::sw));
+    // // .replace(parse_lit!(UFO::sw))
+    // // .with(Atom::num(1));
+    // .replace(parse_lit!(spenso::projp(w__)))
+    // .with(parse_lit!(-spenso::projm(w__)));
+    // .replace(parse_lit!(spenso::projm(w__)))
+    // .with(parse_lit!(spenso::g(w__)));
+
+    let mut numerator_12 = gl_12.numerator(&gl_12.no_dummy());
+    numerator_12.state.expr *= &gl_12.global_prefactor.num * &gl_12.global_prefactor.projector; // * &bare_graph.overall_factor;
+    numerator_12.state.expr = numerator_12.state.expr.replace_multiple(&cpl_reps);
+
+    let numerator_color_simplified_12 = numerator_12
+        .clone()
+        .color_simplify()
+        .get_single_atom()
+        .unwrap();
+    // .replace_multiple(&reps);
+    // .replace(parse_lit!(UFO::MZ ^ (-2)))
+    // .with(Atom::Zero)
+    // .replace(parse_lit!(spenso::projp(w__)))
+    // .with(parse_lit!(-spenso::projm(w__)));
+    // .replace(parse_lit!(UFO::cw))
+    // .with(parse_lit!(UFO::sw));
+    // .replace(parse_lit!(UFO::sw))
+    // .with(Atom::num(1));
+    // .replace(parse_lit!(spenso::projp(w__)))
+    // .with(parse_lit!(spenso::g(w__)))
+    // .replace(parse_lit!(spenso::projm(w__)))
+    // .with(parse_lit!(spenso::g(w__)));
+
+    println!("color_simplified_12 {}", numerator_color_simplified_12);
+    println!("color_simplified_11 {}", numerator_color_simplified_11);
+    println!(
+        "color_simplified_12_can {}",
+        numerator_color_simplified_12.canonize_spenso()
+    );
+    println!(
+        "color_simplified_11_can {}",
+        numerator_color_simplified_11.canonize_spenso()
+    );
+
+    let r = (numerator_color_simplified_11.canonize_spenso()
+        / &numerator_color_simplified_12.canonize_spenso())
+        .expand();
+
+    println!("ratio:{r}");
+
+    let samples = [(vec![], lib)];
+
+    let options = NumeratorAwareGraphGroupingOption::GroupIdenticalGraphUpToScalarRescaling(
+        GraphGroupingOptions {
+            test_canonized_numerator: false,
+            ..Default::default()
+        },
+    );
+
+    let pn_12 = ProcessedNumeratorForComparison::from_numerator_symbolic_expression(
+        12,
+        &gl_12,
+        numerator_color_simplified_12,
+        &samples,
+        &options,
+    )
+    .unwrap();
+
+    let pn_11 = ProcessedNumeratorForComparison::from_numerator_symbolic_expression(
+        11,
+        &gl_11,
+        numerator_color_simplified_11,
+        &samples,
+        &options,
+    )
+    .unwrap();
+
+    if let Some(a) = pn_11.compare_with_scalar_rescaling(&pn_12) {
+        println!("{}", a);
+        println!("Expanded: {}", a.expand());
+    }
+}
 
 #[test]
 fn cut_content() {
