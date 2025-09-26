@@ -91,6 +91,7 @@ fn photons_1l_integrate() -> Result<()> {
         result_path: Some(
             "./tests/photons_eu_integrate/integration_workspace/integration_results.yaml".into(),
         ),
+        n_cores: Some(1),
         workspace_path: Some("./tests/photons_eu_integrate/integration_workspace/".into()),
         target: Some(vec![target.re.0, target.im.0]),
         restart: true,
@@ -207,6 +208,7 @@ fn test_grouped_subtraction() -> Result<()> {
                 .join("test_grouped_subtraction/integration_workspace_no_group/"),
         ),
         target: None,
+        n_cores: Some(1),
         restart: true,
     };
     let int2 =
@@ -221,6 +223,7 @@ fn test_grouped_subtraction() -> Result<()> {
                     .join("test_grouped_subtraction/integration_workspace_group/"),
             ),
             target: None,
+            n_cores: Some(1),
             restart: true,
         };
 
@@ -276,6 +279,7 @@ fn scalar_box() -> Result<()> {
                 .join("scalar_box/integration_workspace/integration_results.toml"),
         ),
         workspace_path: Some(get_tests_workspace_path().join("scalar_box/integration_workspace")),
+        n_cores: Some(1),
         target: None,
         restart: true,
     }
@@ -291,6 +295,7 @@ fn scalar_box() -> Result<()> {
         ),
         workspace_path: Some(get_tests_workspace_path().join("scalar_box/integration_workspace")),
         target: None,
+        n_cores: Some(1),
         restart: true,
     }
     .run(&mut cli.state, &cli.cli_settings)?;
