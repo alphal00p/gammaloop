@@ -316,9 +316,18 @@ impl State {
         global_settings: &GlobalSettings,
         runtime_default: LockedRuntimeSettings,
     ) -> Result<()> {
-        self.process_list.preprocess(&self.model, global_settings)?;
+        let generation_pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(global_settings.n_cores.integrand_gen)
+            .build()?;
+
         self.process_list
-            .generate_integrands(&self.model, global_settings, runtime_default)?;
+            .preprocess(&self.model, global_settings, &generation_pool)?;
+        self.process_list.generate_integrands(
+            &self.model,
+            global_settings,
+            runtime_default,
+            &generation_pool,
+        )?;
         Ok(())
     }
 
@@ -329,13 +338,22 @@ impl State {
         process_id: usize,
         integrand_name: Option<String>,
     ) -> Result<()> {
+        let generation_pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(global_settings.n_cores.integrand_gen)
+            .build()?;
+
         let p = &mut self.process_list.processes[process_id];
         if let Some(name) = &integrand_name {
             match &mut p.collection {
                 ProcessCollection::Amplitudes(a) => {
                     if let Some(a) = a.get_mut(name) {
-                        a.preprocess(&self.model, &global_settings.generation)?;
-                        a.build_integrand(&self.model, global_settings, runtime_default)?;
+                        a.preprocess(&self.model, &global_settings.generation, &generation_pool)?;
+                        a.build_integrand(
+                            &self.model,
+                            global_settings,
+                            runtime_default,
+                            &generation_pool,
+                        )?;
                     } else {
                         return Err(eyre!(
                             "No amplitude named '{}' in process id {}",
@@ -349,8 +367,13 @@ impl State {
                 }
             }
         } else {
-            p.preprocess(&self.model, global_settings)?;
-            p.generate_integrands(&self.model, global_settings, runtime_default)?;
+            p.preprocess(&self.model, global_settings, &generation_pool)?;
+            p.generate_integrands(
+                &self.model,
+                global_settings,
+                runtime_default,
+                &generation_pool,
+            )?;
         }
 
         Ok(())
@@ -364,12 +387,16 @@ impl State {
         process_id: Option<usize>,
         integrand_name: Option<String>,
     ) -> Result<()> {
+        let compile_pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(global_settings.n_cores.compile)
+            .build()?;
         self.process_list.compile(
             folder,
             override_existing,
             global_settings,
             process_id,
             integrand_name,
+            &compile_pool,
         )?;
         Ok(())
     }
@@ -598,8 +625,17 @@ impl State {
     ) -> Result<()> {
         fs::create_dir_all(root_folder)?;
 
-        self.process_list
-            .compile(root_folder, override_compiled, settings, None, None)?;
+        let compile_pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(settings.n_cores.compile)
+            .build()?;
+        self.process_list.compile(
+            root_folder,
+            override_compiled,
+            settings,
+            None,
+            None,
+            &compile_pool,
+        )?;
         Ok(())
     }
 

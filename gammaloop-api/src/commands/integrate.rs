@@ -37,10 +37,6 @@ pub struct Integrate {
     #[arg(short = 'p', long, value_hint = clap::ValueHint::FilePath)]
     pub result_path: Option<PathBuf>,
 
-    /// Number of cores to parallelize over
-    #[arg(short = 'c', long)]
-    pub n_cores: usize,
-
     /// The path to run the integrationg within
     #[arg(short = 'w', long, value_hint = clap::ValueHint::DirPath)]
     pub workspace_path: Option<PathBuf>,
@@ -215,7 +211,10 @@ impl Integrate {
         let result = havana_integrate(
             &settings,
             &state.model,
-            |set| gloop_integrand.user_data_generator(self.n_cores, set),
+            |set| {
+                gloop_integrand
+                    .user_data_generator(global_cli_settings.global.n_cores.integrate, set)
+            },
             target,
             integration_state,
             Some(workspace_path.clone()),

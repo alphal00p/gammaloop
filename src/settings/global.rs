@@ -11,7 +11,7 @@ use crate::{
     cff::expression::GraphOrientation,
     processes::EvaluatorSettings,
     utils::{
-        serde_utils::{is_false, is_float, is_true, IsDefault},
+        serde_utils::{is_false, is_float, is_true, is_usize, IsDefault},
         symbolica_ext::StringSerializedAtom,
         GS, W_,
     },
@@ -222,6 +222,31 @@ impl OrientationPattern {
             a
         } else {
             true
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
+#[serde(default, deny_unknown_fields)]
+pub struct Parallelisation {
+    #[serde(skip_serializing_if = "is_usize::<1>")]
+    pub feyngen: usize,
+    #[serde(skip_serializing_if = "is_usize::<1>")]
+    pub integrand_gen: usize,
+    #[serde(skip_serializing_if = "is_usize::<1>")]
+    pub compile: usize,
+    #[serde(skip_serializing_if = "is_usize::<1>")]
+    pub integrate: usize,
+}
+
+impl Default for Parallelisation {
+    fn default() -> Self {
+        Self {
+            feyngen: 1,
+            integrand_gen: 1,
+            compile: 1,
+            integrate: 1,
         }
     }
 }

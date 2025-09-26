@@ -36,7 +36,7 @@ use gammalooprs::feyngen::{
 use git_version::git_version;
 use itertools::{self, Itertools};
 use pyo3::types::PyFloat;
-use std::{convert::Infallible, path::PathBuf, str::FromStr};
+use std::{convert::Infallible, default, path::PathBuf, str::FromStr};
 
 use symbolica::{atom::AtomCore, parse};
 const GIT_VERSION: &str = git_version!(fallback = "unavailable");
@@ -684,21 +684,20 @@ impl State {
         target: Option<Vec<f64>>,
         restart: bool,
     ) -> Result<Vec<Bound<'py, PyComplex>>> {
+        let mut default_cli_settings = CLISettings {
+            ..Default::default()
+        };
+        default_cli_settings.global.n_cores.integrate = n_cores;
+
         let a = Integrate {
             process_id,
             integrand_name,
             result_path,
-            n_cores,
             workspace_path: Some(workspace_path),
             target,
             restart,
         }
-        .run(
-            self,
-            &CLISettings {
-                ..Default::default()
-            },
-        )?;
+        .run(self, &default_cli_settings)?;
 
         Ok(vec![PyComplex::from_doubles(
             py,

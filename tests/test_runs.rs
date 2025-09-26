@@ -92,7 +92,6 @@ fn photons_1l_integrate() -> Result<()> {
             "./tests/photons_eu_integrate/integration_workspace/integration_results.yaml".into(),
         ),
         workspace_path: Some("./tests/photons_eu_integrate/integration_workspace/".into()),
-        n_cores: 6,
         target: Some(vec![target.re.0, target.im.0]),
         restart: true,
     };
@@ -151,8 +150,8 @@ fn photons_1l_inspect() -> Result<()> {
 #[test]
 fn photons_2l_inspect() -> Result<()> {
     let mut cli = get_test_cli(
-        Some("photons_eu.toml".into()),
-        "./tests/photons_eu_inspect",
+        Some("photons_eu_2l.toml".into()),
+        "./tests/photons_eu_2l_inspect",
         None,
         false,
     )?;
@@ -172,7 +171,7 @@ fn photons_2l_inspect() -> Result<()> {
     let (_, inspect) = Inspect {
         process_id: Some(0),
         integrand_name: Some("default".to_string()),
-        point: vec![0.123, 0.3242, 0.4233],
+        point: vec![0.123, 0.3242, 0.4233, 0.523, 0.314, 0.125],
         momentum_space: false,
         ..Default::default()
     }
@@ -203,7 +202,6 @@ fn test_grouped_subtraction() -> Result<()> {
         result_path: Some(get_tests_workspace_path().join(
             "test_grouped_subtraction/integration_workspace_no_group/integration_results.yaml",
         )),
-        n_cores: 1,
         workspace_path: Some(
             get_tests_workspace_path()
                 .join("test_grouped_subtraction/integration_workspace_no_group/"),
@@ -218,7 +216,6 @@ fn test_grouped_subtraction() -> Result<()> {
             result_path: Some(get_tests_workspace_path().join(
                 "test_grouped_subtraction/integration_workspace_group/integration_results.yaml",
             )),
-            n_cores: 1,
             workspace_path: Some(
                 get_tests_workspace_path()
                     .join("test_grouped_subtraction/integration_workspace_group/"),
@@ -278,7 +275,6 @@ fn scalar_box() -> Result<()> {
             get_tests_workspace_path()
                 .join("scalar_box/integration_workspace/integration_results.toml"),
         ),
-        n_cores: 1,
         workspace_path: Some(get_tests_workspace_path().join("scalar_box/integration_workspace")),
         target: None,
         restart: true,
@@ -293,7 +289,6 @@ fn scalar_box() -> Result<()> {
             get_tests_workspace_path()
                 .join("scalar_box/integration_workspace/integration_results.toml"),
         ),
-        n_cores: 1,
         workspace_path: Some(get_tests_workspace_path().join("scalar_box/integration_workspace")),
         target: None,
         restart: true,

@@ -95,10 +95,9 @@ pub struct SpecArgs {
     pub tokens: Vec<String>,
 
     // --------- Generation options that influence FeynGenOptions ---------
-    /// Number of threads
-    #[arg(short = 'n', long = "num-threads")]
-    pub num_threads: Option<u32>,
-
+    // Number of threads
+    //#[arg(short = 'n', long = "num-threads")]
+    //pub num_threads: Option<u32>, deprectaed in favor of global parallelisation settings
     #[arg(short = 'a', default_value_t = false)]
     pub append: bool,
 
@@ -305,7 +304,7 @@ impl Generate {
                 // TODO handle existing process and continue
                 let graphs = spec
                     .process_definition
-                    .generate(model, args.num_threads.map(|n| n as usize))?;
+                    .generate(model, Some(generation_settings.n_cores.feyngen))?;
                 status_info!(
                     "Generated {} {} graphs.",
                     if matches!(self.mode, Some(GenerateCmd::Amp(_))) {
@@ -1687,7 +1686,6 @@ mod tests {
     fn base_args(tokens: &str) -> SpecArgs {
         SpecArgs {
             tokens: tokens.split_whitespace().map(|x| x.to_string()).collect(),
-            num_threads: None,
             clear_existing_processes: false,
             filter_selfenergies: None,
             filter_snails: None,

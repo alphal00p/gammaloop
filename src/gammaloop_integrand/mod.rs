@@ -90,6 +90,7 @@ impl NewIntegrand {
         path: impl AsRef<Path>,
         override_existing: bool,
         settings: &GlobalSettings,
+        thread_pool: &rayon::ThreadPool,
     ) -> Result<()> {
         let path = path.as_ref().join("integrand");
 
@@ -104,7 +105,7 @@ impl NewIntegrand {
         }
         match self {
             NewIntegrand::Amplitude(integrand) => {
-                integrand.compile(path, override_existing, settings)
+                integrand.compile(path, override_existing, settings, thread_pool)
             }
             _ => unimplemented!("compiling cross sections not yet implemented"), // NewIntegrand::CrossSection(integrand) => integrand.save(path, override_existing),
         }

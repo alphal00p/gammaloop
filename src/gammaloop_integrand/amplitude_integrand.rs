@@ -452,11 +452,14 @@ impl AmplitudeIntegrand {
         path: impl AsRef<Path> + Sync,
         override_existing: bool,
         settings: &GlobalSettings,
+        thread_pool: &rayon::ThreadPool,
     ) -> Result<()> {
-        self.data
-            .graph_terms
-            .par_iter_mut()
-            .try_for_each(|a| a.compile(path.as_ref(), override_existing, settings))?;
+        thread_pool.install(|| {
+            self.data
+                .graph_terms
+                .par_iter_mut()
+                .try_for_each(|a| a.compile(path.as_ref(), override_existing, settings))
+        })?;
 
         Ok(())
     }

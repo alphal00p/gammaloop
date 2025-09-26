@@ -453,11 +453,17 @@ mod test {
 
         let proc_set = GenerationSettings::default();
 
-        amp.preprocess(&model, &proc_set).unwrap();
+        let thread_pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(1)
+            .build()
+            .unwrap();
+
+        amp.preprocess(&model, &proc_set, &thread_pool).unwrap();
         amp.build_integrand(
             &model,
             &GlobalSettings::default(),
             (&RuntimeSettings::default()).into(),
+            &thread_pool,
         )
         .unwrap();
 
@@ -532,11 +538,17 @@ mod test {
         // debug!("Building Evaluator");
         // amp.graphs[0].build_evaluator(&model);
 
-        amp.preprocess(&model, &proc_set).unwrap();
+        let thread_pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(1)
+            .build()
+            .unwrap();
+
+        amp.preprocess(&model, &proc_set, &thread_pool).unwrap();
         amp.build_integrand(
             &model,
             &GlobalSettings::default(),
             (&RuntimeSettings::default()).into(),
+            &thread_pool,
         )
         .unwrap();
 
@@ -586,13 +598,18 @@ mod test {
         }
 
         let proc_set = GenerationSettings::default();
+        let thread_pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(1)
+            .build()
+            .unwrap();
 
-        amp.preprocess(&model, &proc_set).unwrap();
+        amp.preprocess(&model, &proc_set, &thread_pool).unwrap();
 
         amp.build_integrand(
             &model,
             &GlobalSettings::default(),
             (&RuntimeSettings::default()).into(),
+            &thread_pool,
         )
         .unwrap();
 
@@ -837,7 +854,12 @@ mod test {
         }
         let model = crate::utils::test_utils::load_generic_model("sm");
 
-        a.preprocess(&model, &GenerationSettings::default())
+        let generation_pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(1)
+            .build()
+            .unwrap();
+
+        a.preprocess(&model, &GenerationSettings::default(), &generation_pool)
             .unwrap();
     }
 

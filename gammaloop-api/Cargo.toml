@@ -77,6 +77,7 @@ git-version = "0.3"
 json5 = "0.4.1"
 numpy = { version = "0.25.0", optional = true}
 ndarray = { version = "0.16"}
+rayon = "1.5"
 
 # PyO3: optional for embedding. Auto-init at runtime.
 [dependencies.pyo3]

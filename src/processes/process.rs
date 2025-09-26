@@ -1,8 +1,10 @@
 use ahash::HashMap;
+use rayon::ThreadPool;
 use std::{
     collections::BTreeMap,
     fs::{self, File},
     io::Write,
+    os::unix::thread,
     path::{Path, PathBuf},
 };
 // use bincode::{Decode, Encode};
@@ -155,9 +157,14 @@ impl Process {
     pub(crate) fn warm_up(&mut self, model: &Model) -> Result<()> {
         self.collection.warm_up(model)
     }
-    pub fn preprocess(&mut self, model: &Model, settings: &GlobalSettings) -> Result<()> {
+    pub fn preprocess(
+        &mut self,
+        model: &Model,
+        settings: &GlobalSettings,
+        thread_pool: &ThreadPool,
+    ) -> Result<()> {
         self.collection
-            .preprocess(model, &self.definition, &settings.generation)?;
+            .preprocess(model, &self.definition, &settings.generation, thread_pool)?;
         self.settings_history = Some(settings.clone());
         Ok(())
     }
@@ -279,6 +286,7 @@ impl Process {
         override_existing: bool,
         settings: &GlobalSettings,
         integrand_name: Option<String>,
+        thread_pool: &ThreadPool,
     ) -> Result<()> {
         match &mut self.collection {
             ProcessCollection::Amplitudes(a) => {
@@ -303,7 +311,7 @@ impl Process {
                         }
                     }
 
-                    amp.compile(&p, override_existing, settings)?;
+                    amp.compile(&p, override_existing, settings, thread_pool)?;
                 }
             }
             ProcessCollection::CrossSections(_a) => {
@@ -405,9 +413,10 @@ impl Process {
         model: &Model,
         global_settings: &GlobalSettings,
         runtime_default: LockedRuntimeSettings,
+        thread_pool: &ThreadPool,
     ) -> Result<()> {
         self.collection
-            .generate_integrands(model, global_settings, runtime_default)
+            .generate_integrands(model, global_settings, runtime_default, thread_pool)
     }
 }
 
@@ -570,11 +579,12 @@ impl ProcessCollection {
         model: &Model,
         process_definition: &ProcessDefinition,
         settings: &GenerationSettings,
+        thread_pool: &ThreadPool,
     ) -> Result<()> {
         match self {
             Self::Amplitudes(amplitudes) => {
                 for (_, amplitude) in amplitudes {
-                    amplitude.preprocess(model, settings)?;
+                    amplitude.preprocess(model, settings, thread_pool)?;
                 }
             }
             Self::CrossSections(cross_sections) => {
@@ -607,12 +617,18 @@ impl ProcessCollection {
         model: &Model,
         global_settings: &GlobalSettings,
         runtime_default: LockedRuntimeSettings,
+        thread_pool: &ThreadPool,
     ) -> Result<()> {
         // let mut result = HashMap::default();
         match self {
             Self::Amplitudes(amplitudes) => {
                 for (_, amplitude) in amplitudes {
-                    amplitude.build_integrand(model, global_settings, runtime_default)?;
+                    amplitude.build_integrand(
+                        model,
+                        global_settings,
+                        runtime_default,
+                        thread_pool,
+                    )?;
                 }
             }
             Self::CrossSections(cross_sections) => {

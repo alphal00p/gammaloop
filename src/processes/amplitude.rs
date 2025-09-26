@@ -14,7 +14,10 @@ use color_eyre::{Result, Section};
 use momtrop::SampleGenerator;
 
 use idenso::color::ColorSimplifier;
-use rayon::iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator};
+use rayon::{
+    iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator},
+    ThreadPool,
+};
 use spenso::network::{Sequential, SmallestDegree};
 use tracing::{info_span, instrument};
 use tracing_indicatif::{span_ext::IndicatifSpanExt, style::ProgressStyle};
@@ -134,6 +137,7 @@ impl Amplitude {
         path: impl AsRef<Path>,
         override_existing: bool,
         settings: &GlobalSettings,
+        thread_pool: &ThreadPool,
     ) -> Result<()> {
         info!("Compiling amplitude {}", self.name);
         let p = path.as_ref().join(format!("amp_{}", self.name));
@@ -148,7 +152,7 @@ impl Amplitude {
             r?;
         }
         if let Some(integrand) = &mut self.integrand {
-            integrand.compile(&p, override_existing, settings)?;
+            integrand.compile(&p, override_existing, settings, thread_pool)?;
         };
         Ok(())
     }
@@ -196,7 +200,12 @@ impl Amplitude {
              amplitude.name = %self.name,
         )
     )]
-    pub fn preprocess(&mut self, model: &Model, settings: &GenerationSettings) -> Result<()> {
+    pub fn preprocess(
+        &mut self,
+        model: &Model,
+        settings: &GenerationSettings,
+        thread_pool: &ThreadPool,
+    ) -> Result<()> {
         // preprocess each graph individually
 
         let preprocess_span = info_span!("Preprocessing graphs", indicatif.pb_show = true);
@@ -209,11 +218,13 @@ impl Amplitude {
 
         let preprocess_span_enter = preprocess_span.enter();
 
-        self.graphs.par_iter_mut().try_for_each(|amplitude_graph| {
-            let ok = amplitude_graph.preprocess(model, settings);
-            preprocess_span.pb_inc(1);
+        thread_pool.install(|| {
+            self.graphs.par_iter_mut().try_for_each(|amplitude_graph| {
+                let ok = amplitude_graph.preprocess(model, settings);
+                preprocess_span.pb_inc(1);
 
-            ok
+                ok
+            })
         })?;
 
         drop(preprocess_span_enter);
@@ -235,26 +246,28 @@ impl Amplitude {
         model: &Model,
         global_settings: &GlobalSettings,
         runtime_default: LockedRuntimeSettings,
+        thread_pool: &ThreadPool,
     ) -> Result<()> {
-        let terms: Result<Vec<_>> = self
-            .graphs
-            .par_iter_mut()
-            .enumerate()
-            .map(|(graph_id, graph)| {
-                let group_id = graph.graph.group_id.unwrap(); // should always be set
-                let esurface_map = &self.group_derived_data[group_id].esurface_map;
-                let group_pos = self.graph_group_structure[group_id]
-                    .find_position(graph_id)
-                    .unwrap();
+        let terms: Result<Vec<_>> = thread_pool.install(|| {
+            self.graphs
+                .par_iter_mut()
+                .enumerate()
+                .map(|(graph_id, graph)| {
+                    let group_id = graph.graph.group_id.unwrap(); // should always be set
+                    let esurface_map = &self.group_derived_data[group_id].esurface_map;
+                    let group_pos = self.graph_group_structure[group_id]
+                        .find_position(graph_id)
+                        .unwrap();
 
-                graph.generate_term_for_graph(
-                    model,
-                    group_pos,
-                    esurface_map.clone(),
-                    global_settings,
-                )
-            })
-            .collect();
+                    graph.generate_term_for_graph(
+                        model,
+                        group_pos,
+                        esurface_map.clone(),
+                        global_settings,
+                    )
+                })
+                .collect()
+        });
 
         let amplitude_integrand = AmplitudeIntegrand {
             settings: runtime_default.into(),
