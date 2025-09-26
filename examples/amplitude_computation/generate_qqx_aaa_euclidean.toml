@@ -10,13 +10,13 @@ commands = [
 m_uv = 1.0
 mu_r_sq = 8315.251344
 
-[default_runtime_settings.Kinematics]
+[default_runtime_settings.kinematics]
 e_cm = 2.0
 
-[default_runtime_settings.Kinematics.externals]
+[default_runtime_settings.kinematics.externals]
 type = "constant"
 
-[default_runtime_settings.Kinematics.externals.data]
+[default_runtime_settings.kinematics.externals.data]
 momenta = [
     "dependent",
     [
