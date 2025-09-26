@@ -684,20 +684,21 @@ impl State {
         target: Option<Vec<f64>>,
         restart: bool,
     ) -> Result<Vec<Bound<'py, PyComplex>>> {
-        let mut default_cli_settings = CLISettings {
-            ..Default::default()
-        };
-        default_cli_settings.global.n_cores.integrate = n_cores;
-
         let a = Integrate {
             process_id,
             integrand_name,
             result_path,
             workspace_path: Some(workspace_path),
+            n_cores: Some(n_cores),
             target,
             restart,
         }
-        .run(self, &default_cli_settings)?;
+        .run(
+            self,
+            &CLISettings {
+                ..Default::default()
+            },
+        )?;
 
         Ok(vec![PyComplex::from_doubles(
             py,

@@ -1,7 +1,7 @@
 use std::{fs, path::PathBuf};
 
 use clap::Args;
-use gammalooprs::{status_warn, utils::serde_utils::SmartSerde};
+use gammalooprs::{graph::global, status_warn, utils::serde_utils::SmartSerde};
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -36,6 +36,10 @@ pub struct Integrate {
     /// The path to store results in
     #[arg(short = 'p', long, value_hint = clap::ValueHint::FilePath)]
     pub result_path: Option<PathBuf>,
+
+    /// Number of cores to parallelize over
+    #[arg(short = 'c', long)]
+    pub n_cores: Option<usize>,
 
     /// The path to run the integrationg within
     #[arg(short = 'w', long, value_hint = clap::ValueHint::DirPath)]
@@ -208,13 +212,14 @@ impl Integrate {
         }
         let settings = gloop_integrand.get_settings().clone();
 
+        let n_cores = self
+            .n_cores
+            .unwrap_or(global_cli_settings.global.n_cores.integrate);
+
         let result = havana_integrate(
             &settings,
             &state.model,
-            |set| {
-                gloop_integrand
-                    .user_data_generator(global_cli_settings.global.n_cores.integrate, set)
-            },
+            |set| gloop_integrand.user_data_generator(n_cores, set),
             target,
             integration_state,
             Some(workspace_path.clone()),
