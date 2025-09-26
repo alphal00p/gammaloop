@@ -685,8 +685,9 @@ impl<const N: u32> VarFloat<N> {
     }
 
     pub(crate) fn from_f64(x: f64) -> Self {
+        let valid = Float::parse(format!("{}", x)).unwrap();
         VarFloat {
-            float: rug::Float::with_val(N, x),
+            float: rug::Float::with_val(N, valid),
         }
     }
 

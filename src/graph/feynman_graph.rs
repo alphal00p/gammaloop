@@ -19,6 +19,7 @@ use symbolica::{
     id::Replacement,
     parse,
 };
+use typed_index_collections::TiVec;
 
 use crate::{
     cff::generation::ShiftRewrite,
@@ -59,6 +60,7 @@ pub trait FeynmanGraph {
     fn get_cff_inverse_energy_product(&self) -> Atom;
     fn get_loop_number(&self) -> usize;
     fn get_real_mass_vector<T: FloatLike>(&self, model: &Model) -> EdgeVec<F<T>>;
+    fn get_external_masses<T: FloatLike>(&self, model: &Model) -> TiVec<ExternalIndex, F<T>>;
     fn get_energy_cache<T: FloatLike>(
         &self,
         model: &Model,
@@ -440,6 +442,32 @@ impl FeynmanGraph for Graph {
                 )
             }
         })
+    }
+
+    fn get_external_masses<T: FloatLike>(&self, model: &Model) -> TiVec<ExternalIndex, F<T>> {
+        let external_filter = self.external_filter();
+
+        self.iter_edges_of(&external_filter)
+            .map(|(_, _, edge)| {
+                let c = edge
+                    .data
+                    .mass_value(model, &self.param_builder)
+                    .unwrap_or(Complex {
+                        re: F::from_f64(0.0),
+                        im: F::from_f64(0.0),
+                    });
+
+                if c.im.is_zero() {
+                    c.re
+                } else {
+                    panic!(
+                        "Complex masses not yet supported in gammaLoop for {}:{}",
+                        edge.data.mass_atom(),
+                        c
+                    )
+                }
+            })
+            .collect()
     }
 
     fn get_energy_cache<T: FloatLike>(

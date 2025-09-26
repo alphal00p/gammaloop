@@ -1091,6 +1091,25 @@ impl<T: FloatLike> FourMomentum<F<T>> {
         let spatial = ThreeMomentum::from_ff64(four_momentum.spatial);
         FourMomentum { temporal, spatial }
     }
+
+    pub(crate) fn rescale_spatial(&self, x: &F<T>) -> Self {
+        FourMomentum {
+            temporal: self.temporal.clone(),
+            spatial: ThreeMomentum {
+                px: &self.spatial.px * x,
+                py: &self.spatial.py * x,
+                pz: &self.spatial.pz * x,
+            },
+        }
+    }
+
+    pub(crate) fn set_energy_on_shell(&self, mass: Option<F<T>>) -> Self {
+        let energy = self.spatial.on_shell_energy(mass);
+        FourMomentum {
+            temporal: energy,
+            spatial: self.spatial.clone(),
+        }
+    }
 }
 
 #[derive(
