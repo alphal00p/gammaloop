@@ -646,6 +646,38 @@ struct CutProcessingResult {
     lmb_ids: BTreeMap<LoopIndex, EdgeIndex>,
     xs_ext_id: BTreeMap<Hedge, (EdgeIndex, Hedge)>,
     initial_hedges: BitVec,
+    full_cut: BitVec,
+}
+
+impl CutProcessingResult {
+    fn permute(&mut self, graph: &mut NumGraph) -> Result<()> {
+        let (h_perm, edge_perm): (Vec<_>, Vec<_>) = self
+            .xs_ext_id
+            .iter()
+            .enumerate()
+            .map(|(target_pos, (_, (edge_idx, h_id)))| {
+                ((h_id.0, target_pos), (edge_idx.0, target_pos))
+            })
+            .unzip();
+
+        let per = Permutation::from_mappings(edge_perm, graph.n_edges()).unwrap();
+        let perh = Permutation::from_mappings(h_perm, graph.n_hedges()).unwrap();
+
+        debug!("Before: {}", graph.dot(&self.initial_hedges));
+        <HedgeGraph<_, _, _> as Swap<Hedge>>::permute(graph, &perh);
+        let trans = perh.transpositions();
+
+        for (i, j) in trans.into_iter().rev() {
+            self.full_cut.swap(i, j);
+            // self.initial_hedges.swap(i, j);// initial hedges is already assuming permuted hedges
+        }
+
+        debug!("Before after: {}", graph.dot(&self.initial_hedges));
+        <HedgeGraph<_, _, _> as Swap<EdgeIndex>>::permute(graph, &per);
+
+        debug!(" after: {}", graph.dot(&self.initial_hedges));
+        Ok(())
+    }
 }
 
 /// Edge and vertex numerators
@@ -717,10 +749,9 @@ impl Graph {
             )
             .map_err(|e| eyre::eyre!("Graph sewing failed: {:?}", e))?;
 
-        let mut full_cut: BitVec = graph.full_filter();
-        let cut_result = Self::process_cut_edges(&mut graph, &mut full_cut)?;
+        let mut cut_result = Self::process_cut_edges(&mut graph)?;
 
-        Self::apply_permutations(&mut graph, &cut_result.xs_ext_id)?;
+        cut_result.permute(&mut graph)?;
 
         let numerators = Self::generate_numerators(&graph, model);
 
@@ -745,7 +776,7 @@ impl Graph {
 
         let loop_momentum_basis = Self::setup_loop_momentum_basis(
             &underlying,
-            &full_cut,
+            &cut_result.full_cut,
             &cut_result.lmb_ids,
             &cut_result.xs_ext_id,
         )?;
@@ -795,12 +826,10 @@ impl Graph {
         Ok((initial_data, num_graph))
     }
 
-    fn process_cut_edges(
-        graph: &mut NumGraph,
-        full_cut: &mut BitVec,
-    ) -> Result<CutProcessingResult> {
+    fn process_cut_edges(graph: &NumGraph) -> Result<CutProcessingResult> {
         let mut lmb_ids: BTreeMap<LoopIndex, EdgeIndex> = BTreeMap::new();
         let mut xs_ext_id: BTreeMap<Hedge, (EdgeIndex, Hedge)> = BTreeMap::new();
+        let mut full_cut: BitVec = graph.full_filter();
 
         for (p, eid, e) in graph.iter_edges() {
             let HedgePair::Paired { sink, .. } = p else {
@@ -818,6 +847,7 @@ impl Graph {
                         "lmb_id {lmb_id:?} already exists with value {old_value:?}",
                     ));
                 }
+                debug!("Cutting {eid} for lmb_id{lmb_id}");
                 full_cut.sub(p);
             } else if let Some(h) = e.data.is_cut {
                 if let Some(old_value) = xs_ext_id.insert(h, (eid, sink)) {
@@ -827,37 +857,19 @@ impl Graph {
             }
         }
 
+        // debug!("Graph now:{}", graph.dot(full_cut));
+
         let mut initial_hedges: BitVec = graph.empty_subgraph();
         for (target_pos, _) in xs_ext_id.iter().enumerate() {
             initial_hedges.add(Hedge(target_pos));
         }
 
         Ok(CutProcessingResult {
+            full_cut,
             lmb_ids,
             xs_ext_id,
             initial_hedges,
         })
-    }
-
-    fn apply_permutations(
-        graph: &mut NumGraph,
-        xs_ext_id: &BTreeMap<Hedge, (EdgeIndex, Hedge)>,
-    ) -> Result<()> {
-        let (h_perm, edge_perm): (Vec<_>, Vec<_>) = xs_ext_id
-            .iter()
-            .enumerate()
-            .map(|(target_pos, (_, (edge_idx, h_id)))| {
-                ((h_id.0, target_pos), (edge_idx.0, target_pos))
-            })
-            .unzip();
-
-        let per = Permutation::from_mappings(edge_perm, graph.n_edges()).unwrap();
-        let perh = Permutation::from_mappings(h_perm, graph.n_hedges()).unwrap();
-
-        <HedgeGraph<_, _, _> as Swap<Hedge>>::permute(graph, &perh);
-        <HedgeGraph<_, _, _> as Swap<EdgeIndex>>::permute(graph, &per);
-
-        Ok(())
     }
 
     fn generate_numerators(graph: &NumGraph, model: &Model) -> NumeratorData {

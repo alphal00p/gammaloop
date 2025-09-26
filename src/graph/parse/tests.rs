@@ -226,6 +226,91 @@ fn test_load() {
 }
 
 #[test]
+fn xs_parsing() {
+    test_initialise().unwrap();
+    let g: Graph = dot!(
+        digraph{
+          ext0	 [style=invis is_cut=0];
+          ext1	 [style=invis is_cut=1];
+          ext0	-> 0	 [dir=back particle="e+"];
+          ext1	-> 0	 [particle="e-"];
+            0	-> 1	 [particle="a"];
+            1 -> 2	 [particle="d"];
+            2 -> 4   [particle="g"];
+            2 -> 3	 [particle="d"];
+            3 -> 4	 [particle="d"];
+            4 -> 1	 [particle="d"];
+            3->5	 [particle="a"];
+            5	-> ext0	 [dir=back particle="e+"];
+            5	-> ext1	 [particle="e-"];
+        }
+    )
+    .unwrap();
+    assert_snapshot!(g.debug_dot(),@r#"
+    digraph {
+      num = "1";
+      overall_factor = "1";
+      projector = "ubar(0,spenso::bis(4,hedge(14)))*ubar(1,spenso::bis(4,hedge(15)))*u(0,spenso::bis(4,hedge(16)))*u(1,spenso::bis(4,hedge(17)))";
+      0[dod=0 int_id=V_98 num="UFO::GC_3*spenso::gamma(spenso::bis(4,hedge(16)),spenso::bis(4,hedge(17)),spenso::mink(4,hedge(0)))"];
+      1[dod=0 int_id=V_71 num="UFO::GC_1*spenso::g(spenso::dind(spenso::cof(3,hedge(2))),spenso::cof(3,hedge(13)))*spenso::gamma(spenso::bis(4,hedge(2)),spenso::bis(4,hedge(13)),spenso::mink(4,hedge(1)))"];
+      2[dod=0 int_id=V_74 num="UFO::GC_11*spenso::gamma(spenso::bis(4,hedge(4)),spenso::bis(4,hedge(3)),spenso::mink(4,hedge(6)))*spenso::t(spenso::coad(8,hedge(6)),spenso::cof(3,hedge(3)),spenso::dind(spenso::cof(3,hedge(4))))"];
+      3[dod=0 int_id=V_71 num="UFO::GC_1*spenso::g(spenso::dind(spenso::cof(3,hedge(8))),spenso::cof(3,hedge(5)))*spenso::gamma(spenso::bis(4,hedge(8)),spenso::bis(4,hedge(5)),spenso::mink(4,hedge(10)))"];
+      4[dod=0 int_id=V_74 num="UFO::GC_11*spenso::gamma(spenso::bis(4,hedge(12)),spenso::bis(4,hedge(9)),spenso::mink(4,hedge(7)))*spenso::t(spenso::coad(8,hedge(7)),spenso::cof(3,hedge(9)),spenso::dind(spenso::cof(3,hedge(12))))"];
+      5[dod=0 int_id=V_98 num="UFO::GC_3*spenso::gamma(spenso::bis(4,hedge(15)),spenso::bis(4,hedge(14)),spenso::mink(4,hedge(11)))"];
+
+      5:14	-> 0:0	 [id=0 dir=back source=1 sink=0  dod=-2 is_cut=0 is_dummy=false lmb_rep="P(0,a___)" name=e0 num="1" particle="e+"];
+      5:15	-> 0:1	 [id=1 source=0 sink=1  dod=-2 is_cut=1 is_dummy=false lmb_rep="P(1,a___)" name=e1 num="1" particle="e-"];
+      2:4	-> 3:5	 [id=2 source=0 sink=1  dod=-1 is_dummy=false lmb_rep="K(0,a___)-K(1,a___)" name=e2 num="Q(2,spenso::mink(4,edge(2,1)))*spenso::g(spenso::dind(spenso::cof(3,hedge(5))),spenso::cof(3,hedge(4)))*spenso::gamma(spenso::bis(4,hedge(5)),spenso::bis(4,hedge(4)),spenso::mink(4,edge(2,1)))" particle="d"];
+      2:6	-> 4:7	 [id=3 dir=none source=2 sink=2  dod=-2 is_dummy=false lmb_id=1 lmb_rep="K(1,a___)" name=e3 num="-spenso::g(spenso::mink(4,hedge(6)),spenso::mink(4,hedge(7)))*spenso::g(spenso::coad(8,hedge(6)),spenso::coad(8,hedge(7)))" particle="g"];
+      3:8	-> 4:9	 [id=4 source=0 sink=1  dod=-1 is_dummy=false lmb_rep="-P(0,a___)-P(1,a___)+K(0,a___)-K(1,a___)" name=e4 num="Q(4,spenso::mink(4,edge(4,1)))*spenso::g(spenso::dind(spenso::cof(3,hedge(9))),spenso::cof(3,hedge(8)))*spenso::gamma(spenso::bis(4,hedge(9)),spenso::bis(4,hedge(8)),spenso::mink(4,edge(4,1)))" particle="d"];
+      3:10	-> 5:11	 [id=5 dir=none source=2 sink=2  dod=-2 is_dummy=false lmb_rep="P(0,a___)+P(1,a___)" name=e5 num="-spenso::g(spenso::mink(4,hedge(10)),spenso::mink(4,hedge(11)))" particle="a"];
+      4:12	-> 1:13	 [id=6 source=0 sink=1  dod=-1 is_dummy=false lmb_rep="-P(0,a___)-P(1,a___)+K(0,a___)" name=e6 num="Q(6,spenso::mink(4,edge(6,1)))*spenso::g(spenso::dind(spenso::cof(3,hedge(13))),spenso::cof(3,hedge(12)))*spenso::gamma(spenso::bis(4,hedge(13)),spenso::bis(4,hedge(12)),spenso::mink(4,edge(6,1)))" particle="d"];
+      0:16	-> 1:17	 [id=7 dir=none source=2 sink=2  dod=-2 is_dummy=false lmb_rep="P(0,a___)+P(1,a___)" name=e7 num="-spenso::g(spenso::mink(4,hedge(0)),spenso::mink(4,hedge(1)))" particle="a"];
+      1:2	-> 2:3	 [id=8 source=0 sink=1  dod=-1 is_dummy=false lmb_id=0 lmb_rep="K(0,a___)" name=e8 num="Q(8,spenso::mink(4,edge(8,1)))*spenso::g(spenso::dind(spenso::cof(3,hedge(3))),spenso::cof(3,hedge(2)))*spenso::gamma(spenso::bis(4,hedge(3)),spenso::bis(4,hedge(2)),spenso::mink(4,edge(8,1)))" particle="d"];
+    }
+    "#);
+
+    let g: Graph = dot!(
+        digraph{
+            edge [
+                pdg=1000
+            ]
+            ext0[style=invis is_cut=0];
+            ext0->a
+            a->b->c->d->a
+            b->e
+            c->e
+            d->e
+            c->ext0
+
+
+        }
+        ,"scalars")
+    .unwrap();
+    assert_snapshot!(g.debug_dot(),@r#"
+    digraph {
+      num = "1";
+      overall_factor = "1";
+      projector = "1";
+      a[dod=0 int_id=V_3_SCALAR_000 num="UFO::SCALAR_COUPLING"];
+      b[dod=0 int_id=V_3_SCALAR_000 num="UFO::SCALAR_COUPLING"];
+      c[dod=0 int_id=V_4_SCALAR_0000 num="UFO::SCALAR_COUPLING"];
+      d[dod=0 int_id=V_3_SCALAR_000 num="UFO::SCALAR_COUPLING"];
+      e[dod=0 int_id=V_3_SCALAR_000 num="UFO::SCALAR_COUPLING"];
+
+      c:10	-> a:0	 [id=0 dir=none source=3 sink=2  dod=-2 is_cut=0 is_dummy=false lmb_rep="P(0,a___)" name=e0 num="1" particle="scalar_0"];
+      b:2	-> c:3	 [id=1 dir=none source=1 sink=0  dod=-2 is_dummy=false lmb_id=0 lmb_rep="K(0,a___)" name=e1 num="1" particle="scalar_0"];
+      b:4	-> e:5	 [id=2 dir=none source=2 sink=0  dod=-2 is_dummy=false lmb_rep="-K(0,a___)+K(2,a___)" name=e2 num="1" particle="scalar_0"];
+      c:6	-> d:7	 [id=3 dir=none source=1 sink=0  dod=-2 is_dummy=false lmb_rep="-P(0,a___)+K(0,a___)-K(1,a___)" name=e3 num="1" particle="scalar_0"];
+      c:8	-> e:9	 [id=4 dir=none source=2 sink=1  dod=-2 is_dummy=false lmb_id=1 lmb_rep="K(1,a___)" name=e4 num="1" particle="scalar_0"];
+      d:13	-> e:14	 [id=5 dir=none source=2 sink=2  dod=-2 is_dummy=false lmb_rep="K(0,a___)-K(1,a___)-K(2,a___)" name=e5 num="1" particle="scalar_0"];
+      d:11	-> a:12	 [id=6 dir=none source=1 sink=1  dod=-2 is_dummy=false lmb_rep="-P(0,a___)+K(2,a___)" name=e6 num="1" particle="scalar_0"];
+      a:15	-> b:1	 [id=7 dir=none source=0 sink=0  dod=-2 is_dummy=false lmb_id=2 lmb_rep="K(2,a___)" name=e7 num="1" particle="scalar_0"];
+    }
+    "#);
+}
+
+#[test]
 fn xs_glueing() {
     test_initialise().unwrap();
     let g: Graph = dot!(
