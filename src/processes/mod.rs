@@ -8,6 +8,7 @@ use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
 use eyre::Context;
 use log::debug;
+use rayon::ThreadPool;
 use schemars::JsonSchema;
 
 use crate::{
@@ -136,6 +137,7 @@ impl ProcessList {
         settings: &GlobalSettings,
         process_id: Option<usize>,
         integrand_name: Option<String>,
+        thread_pool: &ThreadPool,
     ) -> Result<()> {
         let path = folder.as_ref().join("processes");
 
@@ -150,7 +152,13 @@ impl ProcessList {
                     continue;
                 }
             }
-            p.compile(&path, override_existing, settings, integrand_name.clone())?;
+            p.compile(
+                &path,
+                override_existing,
+                settings,
+                integrand_name.clone(),
+                thread_pool,
+            )?;
         }
 
         Ok(())
@@ -188,9 +196,14 @@ impl ProcessList {
     }
 
     ///preprocesses the process list according to the settings
-    pub fn preprocess(&mut self, model: &Model, settings: &GlobalSettings) -> Result<()> {
+    pub fn preprocess(
+        &mut self,
+        model: &Model,
+        settings: &GlobalSettings,
+        thread_pool: &ThreadPool,
+    ) -> Result<()> {
         for process in self.processes.iter_mut() {
-            process.preprocess(model, settings)?;
+            process.preprocess(model, settings, thread_pool)?;
         }
         Ok(())
     }
@@ -200,9 +213,10 @@ impl ProcessList {
         model: &Model,
         global_settings: &GlobalSettings,
         runtime_default: LockedRuntimeSettings,
+        thread_pool: &ThreadPool,
     ) -> Result<()> {
         for process in &mut self.processes {
-            process.generate_integrands(model, global_settings, runtime_default)?;
+            process.generate_integrands(model, global_settings, runtime_default, thread_pool)?;
         }
         Ok(())
     }
