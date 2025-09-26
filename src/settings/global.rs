@@ -233,7 +233,7 @@ pub struct Parallelisation {
     #[serde(skip_serializing_if = "is_usize::<1>")]
     pub feyngen: usize,
     #[serde(skip_serializing_if = "is_usize::<1>")]
-    pub integrand_gen: usize,
+    pub generate: usize,
     #[serde(skip_serializing_if = "is_usize::<1>")]
     pub compile: usize,
     #[serde(skip_serializing_if = "is_usize::<1>")]
@@ -244,7 +244,7 @@ impl Default for Parallelisation {
     fn default() -> Self {
         Self {
             feyngen: 1,
-            integrand_gen: 1,
+            generate: 1,
             compile: 1,
             integrate: 1,
         }

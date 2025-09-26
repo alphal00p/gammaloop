@@ -317,7 +317,7 @@ impl State {
         runtime_default: LockedRuntimeSettings,
     ) -> Result<()> {
         let generation_pool = rayon::ThreadPoolBuilder::new()
-            .num_threads(global_settings.n_cores.integrand_gen)
+            .num_threads(global_settings.n_cores.generate)
             .build()?;
 
         self.process_list
@@ -339,7 +339,7 @@ impl State {
         integrand_name: Option<String>,
     ) -> Result<()> {
         let generation_pool = rayon::ThreadPoolBuilder::new()
-            .num_threads(global_settings.n_cores.integrand_gen)
+            .num_threads(global_settings.n_cores.generate)
             .build()?;
 
         let p = &mut self.process_list.processes[process_id];
