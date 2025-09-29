@@ -8,7 +8,7 @@ use crate::{
     DependentMomentaConstructor,
 };
 
-use eyre::Result;
+use eyre::{Ok, Result};
 use itertools::Itertools;
 use symbolica::domains::float::{NumericalFloatLike, Real};
 use typed_index_collections::TiVec;
@@ -164,7 +164,7 @@ fn improve_ps_vh<T: FloatLike>(
         let mass = &external_masses[*final_state];
         let new_z_value = (mom.temporal.value.square()
             - mom.spatial.px.square()
-            - mom.spatial.pz.square()
+            - mom.spatial.py.square()
             - mass.square())
         .abs()
         .sqrt()
@@ -194,10 +194,60 @@ fn improve_ps_vh<T: FloatLike>(
             + pt.temporal.value.square()
             + pt.spatial.px.square()
             + pt.spatial.py.square())
-        + (&two * &p1_vec.temporal.value - &pt.temporal.value) * &pt.spatial.pz.square()
-        + &pt.spatial.pz);
+        + (&two * &p1_vec.temporal.value - &pt.temporal.value) * pt.spatial.pz.square()
+        + &pt.spatial.pz * &discr)
+        / (&two * (&pt.temporal.value - &pt.spatial.pz) * (&pt.temporal.value + &pt.spatial.pz));
 
-    unimplemented!()
+    let shift_e_2 = -(&pt.temporal.value
+        * (&two * &p2_vec.temporal.value * &pt.temporal.value - pt.temporal.value.square()
+            + pt.spatial.px.square()
+            + pt.spatial.py.square())
+        + (-&two * &p2_vec.temporal.value + &pt.temporal.value) * pt.spatial.pz.square()
+        + &pt.spatial.pz * &discr)
+        / (&two * (&pt.temporal.value - &pt.spatial.pz) * (&pt.temporal.value + &pt.spatial.pz));
+
+    let shift_z_1 =
+        (-&two * &p1_vec.spatial.pz * (pt.temporal.value.square() - pt.spatial.pz.square())
+            + &pt.spatial.pz
+                * (pt.temporal.value.square() + pt.spatial.px.square() + pt.spatial.py.square()
+                    - pt.spatial.pz.square())
+            + &pt.temporal.value * &discr)
+            / (&two * (pt.temporal.value.square() - pt.spatial.pz.square()));
+
+    let shift_z_2 =
+        -(&two * &p2_vec.spatial.pz * (pt.temporal.value.square() - pt.spatial.pz.square())
+            + &pt.spatial.pz
+                * (-pt.temporal.value.square()
+                    + pt.spatial.px.square()
+                    + pt.spatial.py.square()
+                    + pt.spatial.pz.square())
+            + &pt.temporal.value * &discr)
+            / (&two * (pt.temporal.value.square() - pt.spatial.pz.square()));
+
+    new_momenta[p1].temporal.value = &p1_vec.temporal.value + &shift_e_1;
+    new_momenta[p1].spatial.pz = &p1_vec.spatial.pz + &shift_z_1;
+    new_momenta[p2].temporal.value = &p2_vec.temporal.value + &shift_e_2;
+    new_momenta[p2].spatial.pz = &p2_vec.spatial.pz + &shift_z_2;
+    new_momenta[p2].spatial.px = p2_vec.spatial.px.clone();
+    new_momenta[p2].spatial.py = p2_vec.spatial.py.clone();
+
+    let final_state_x_component = final_states
+        .iter()
+        .map(|s| &dependent_momenta[*s].spatial.px)
+        .fold(e_cm.zero(), |a, b| a + b);
+
+    let final_state_y_component = final_states
+        .iter()
+        .map(|s| &dependent_momenta[*s].spatial.py)
+        .fold(e_cm.zero(), |a, b| a + b);
+
+    let ref_x = final_state_x_component - &p2_vec.spatial.px;
+    let ref_y = final_state_y_component - &p2_vec.spatial.py;
+
+    new_momenta[p1].spatial.px = ref_x;
+    new_momenta[p1].spatial.py = ref_y;
+
+    Ok(new_momenta)
 }
 
 #[cfg(test)]
@@ -230,13 +280,13 @@ mod tests {
             },
         );
 
-        println!("Sum of momenta: {}", mom_sum);
+        println!("Sum of momenta: {:+16e}", mom_sum);
 
         for (mom, mass) in externals.iter().zip(masses) {
             let p2 = mom.square();
             let mass2 = &mass * &mass;
             let diff = (p2 - mass2).abs();
-            println!("on-shell ness: {}", diff);
+            println!("on-shell ness: {:+16e}", diff);
         }
     }
 
@@ -294,10 +344,23 @@ mod tests {
         );
 
         let e_cm = F(20.0);
-        let improved_momenta = super::improve_ps_psmc(external, &e_cm, &graph, &sm).unwrap();
+        let improved_momenta =
+            super::improve_ps_psmc(external.clone(), &e_cm, &graph, &sm).unwrap();
 
         println!("After improvement:");
-        test_kinematic_validity(improved_momenta, external_signature, external_masses);
+        test_kinematic_validity(
+            improved_momenta,
+            external_signature.clone(),
+            external_masses.clone(),
+        );
+
+        let vh_improved_momenta =
+            super::improve_ps_vh(external.clone(), &e_cm, &graph, &sm).unwrap();
+
+        println!("vh improved momenta: {:?}", vh_improved_momenta);
+        println!("After vh improvement:");
+        test_kinematic_validity(vh_improved_momenta, external_signature, external_masses);
+        println!("eps: {:+16e}", e_cm.epsilon());
     }
 
     #[test]
