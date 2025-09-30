@@ -10,6 +10,7 @@ use bincode_trait_derive::{Decode, Encode};
 use eyre::Context;
 use linnet::half_edge::involution::EdgeIndex;
 use momtrop::vector::Vector;
+use ref_ops::{RefMul, RefSub};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
@@ -40,7 +41,10 @@ use symbolica::{
     atom::{Atom, AtomCore, Symbol},
     coefficient::Coefficient,
     domains::{
-        float::{Complex as SymComplex, NumericalFloatLike, Real, RealNumberLike, SingleFloat},
+        float::{
+            Complex as SymComplex, ConstructibleFloat, NumericalFloatLike, Real, RealNumberLike,
+            SingleFloat,
+        },
         integer::IntegerRing,
         rational::{Rational, RationalField},
     },
@@ -611,6 +615,34 @@ impl<T: FloatLike> ThreeMomentum<F<T>> {
         let two = pt.from_i64(2);
         -(th / two).tan().ln()
     }
+
+    pub(crate) fn cross_product(&self, rhs: &ThreeMomentum<F<T>>) -> ThreeMomentum<F<T>> {
+        ThreeMomentum {
+            px: &self.py * &rhs.pz - &self.pz * &rhs.py,
+            py: &self.pz * &rhs.px - &self.px * &rhs.pz,
+            pz: &self.px * &rhs.py - &self.py * &rhs.px,
+        }
+    }
+
+    // Rodriguez rotation formula
+    pub(crate) fn axis_angle_rotation(
+        &self,
+        cos_theta: &F<T>,
+        axis: &ThreeMomentum<F<T>>,
+    ) -> ThreeMomentum<F<T>> {
+        // ensure unit vector
+        let axis = axis * &axis.norm().inv();
+        let sin_theta = (cos_theta.one() - cos_theta.square()).sqrt();
+        let k_cross_v = axis.cross_product(self);
+        let k_dot_v = self * axis.clone();
+
+        self * cos_theta + k_cross_v * &sin_theta + &axis * &k_dot_v * &(self.px.one() - cos_theta)
+    }
+
+    pub(crate) fn get_cos_theta_with(&self, rhs: &ThreeMomentum<F<T>>) -> F<T> {
+        let dot = self * rhs.clone();
+        dot / (self.norm() * rhs.norm())
+    }
 }
 
 impl<T: Neg<Output = T> + Clone> ThreeMomentum<T> {
@@ -1029,6 +1061,18 @@ impl<T> From<ThreeMomentum<T>> for (T, T, T) {
 pub struct FourMomentum<T, U = T> {
     pub temporal: Energy<U>,
     pub spatial: ThreeMomentum<T>,
+}
+
+impl<T: FloatLike> Sub<&FourMomentum<F<T>>> for &FourMomentum<F<T>> {
+    type Output = FourMomentum<F<T>>;
+    fn sub(self, rhs: &FourMomentum<F<T>>) -> Self::Output {
+        FourMomentum {
+            temporal: Energy {
+                value: &self.temporal.value - &rhs.temporal.value,
+            },
+            spatial: &self.spatial - &rhs.spatial,
+        }
+    }
 }
 
 impl<T> FourMomentum<T> {
@@ -1675,16 +1719,16 @@ impl<T> FourMomentum<T, T> {
         }
     }
 
-    pub(crate) fn boost(&self, boost_vector: &FourMomentum<T>) -> FourMomentum<T>
+    pub(crate) fn boost(&self, boost_vector: &ThreeMomentum<T>) -> FourMomentum<T>
     where
         T: Real + SingleFloat + PartialOrd,
     {
-        let b2 = boost_vector.spatial.norm_squared();
+        let b2 = boost_vector.norm_squared();
         let one = b2.one();
         let zero = one.zero();
         let gamma = (one.clone() - &b2).sqrt().inv();
 
-        let bp = self.spatial.clone() * &boost_vector.spatial;
+        let bp = self.spatial.clone() * boost_vector;
         let gamma2 = if b2 > zero {
             (gamma.clone() - &one) / b2
         } else {
@@ -1694,9 +1738,9 @@ impl<T> FourMomentum<T, T> {
 
         FourMomentum::from_args(
             (bp + &self.temporal.value) * &gamma,
-            self.spatial.px.mul_add(&factor, &boost_vector.spatial.px),
-            self.spatial.py.mul_add(&factor, &boost_vector.spatial.py),
-            self.spatial.pz.mul_add(&factor, &boost_vector.spatial.pz),
+            self.spatial.px.mul_add(&factor, &boost_vector.px),
+            self.spatial.py.mul_add(&factor, &boost_vector.py),
+            self.spatial.pz.mul_add(&factor, &boost_vector.pz),
         )
     }
 }

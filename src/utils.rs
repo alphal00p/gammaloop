@@ -39,7 +39,7 @@ use symbolica::domains::float::{
     ConstructibleFloat, NumericalFloatLike, RealNumberLike, SingleFloat,
 };
 use symbolica::domains::integer::Integer;
-use symbolica::{function, parse};
+use symbolica::{create_hyperdual_single_derivative, function, parse};
 
 use statrs::function::gamma::{gamma, gamma_lr, gamma_ur};
 use std::cmp::{Ord, Ordering};
@@ -838,8 +838,7 @@ pub trait FloatLike:
     }
 
     fn ln(&self) -> Self {
-        panic!("ln not implemented for {:?}", self);
-        // self.log() //FIXME
+       self.log()
     }
 
     fn rem_euclid(&self, rhs: &Self) -> Self;
