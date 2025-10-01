@@ -1,7 +1,10 @@
+use std::iter;
+
 use crate::{
     graph::{FeynmanGraph, Graph},
+    improve_ps,
     model::Model,
-    momentum::{Energy, FourMomentum, Sign, SignOrZero, ThreeMomentum},
+    momentum::{Dep, Energy, ExternalMomenta, FourMomentum, Sign, SignOrZero, ThreeMomentum},
     momentum_sample::ExternalIndex,
     settings::runtime::kinematic::Externals,
     signature::SignatureLike,
@@ -10,19 +13,23 @@ use crate::{
     DependentMomentaConstructor,
 };
 
+use bitvec::vec;
 use eyre::{Ok, Result};
 use itertools::Itertools;
 use symbolica::domains::float::{NumericalFloatLike, Real};
+use tracing::warn;
 use typed_index_collections::TiVec;
 
 pub struct PhaseSpaceImprovementSettings {
     pub mode: ImprovementMode,
-    pub large_deformation_failure: Option<F<f64>>,
+    pub large_deformation_check: Option<F<f64>>,
+    pub only_warn_on_large_deformation: bool,
 }
 
 pub enum ImprovementMode {
     Psmc,
     Vh,
+    Mf,
 }
 
 fn dimensionless_metric<T: FloatLike>(
@@ -52,21 +59,95 @@ pub(crate) fn improve_ps<T: FloatLike>(
         ImprovementMode::Vh => {
             improve_ps_vh(dependent_momenta, external_masses, external_signature, e_cm)
         }
+        ImprovementMode::Mf => {
+            improve_ps_mf(dependent_momenta, external_masses, external_signature, e_cm)
+        }
     }?;
 
     let deformation_size = dimensionless_metric(dependent_momenta, &result, e_cm);
 
-    if let Some(threshold) = settings.large_deformation_failure {
+    if let Some(threshold) = settings.large_deformation_check {
         if deformation_size > F::from_ff64(threshold) {
-            return Err(eyre::eyre!(
-                "Phase space improvement resulted in a large deformation: {:+e} > {:+e}",
-                deformation_size,
-                threshold
-            ));
+            if settings.only_warn_on_large_deformation {
+                warn!(
+                    "Phase space improvement resulted in a large deformation: {:+e} > {:+e}",
+                    deformation_size, threshold
+                );
+            } else {
+                return Err(eyre::eyre!(
+                    "Phase space improvement resulted in a large deformation: {:+e} > {:+e}",
+                    deformation_size,
+                    threshold
+                ));
+            }
         }
     }
 
     Ok(result)
+}
+
+pub(crate) fn generate_default_momenta(
+    external_masses: &TiVec<ExternalIndex, F<f64>>,
+    external_signature: &SignatureLike<ExternalIndex>,
+    e_cm: &F<f64>,
+) -> Result<Externals> {
+    let n_indep_externals = external_signature.len() - 1;
+    let z_components = (0..n_indep_externals).map(|i| {
+        let sign = if i % 2 == 0 { F(1.0) } else { F(-1.0) };
+        let i_ff64 = F(i as f64);
+        let pz = (i_ff64 + F(1.0)) / (i_ff64 + F(2.0)) * e_cm * sign;
+        pz
+    });
+
+    let mut momenta = vec![ExternalMomenta::Dependent(Dep::Dep)];
+    let helicities = iter::from_fn(|| Some(SignOrZero::Plus))
+        .take(external_signature.len())
+        .collect_vec();
+
+    for (pz, mass) in z_components.zip(external_masses.iter()) {
+        let energy = (pz * pz + mass * mass).sqrt();
+        momenta.push(ExternalMomenta::Independent(
+            [energy, F(0.0), F(0.0), pz].into(),
+        ));
+    }
+
+    let unphysical_externals = Externals::Constant {
+        momenta,
+        helicities: helicities.clone(),
+    };
+
+    let momentum_constructor = DependentMomentaConstructor::Amplitude(external_signature);
+    let dependent_momenta =
+        unphysical_externals.get_dependent_externals::<f64>(momentum_constructor)?;
+
+    let improve_ps_settings = PhaseSpaceImprovementSettings {
+        mode: ImprovementMode::Mf,
+        large_deformation_check: None,
+        only_warn_on_large_deformation: true,
+    };
+
+    let new_externals = improve_ps(
+        &dependent_momenta,
+        external_masses,
+        external_signature,
+        e_cm,
+        &improve_ps_settings,
+    )?;
+
+    let mut new_externals_momenta = vec![ExternalMomenta::Dependent(Dep::Dep)];
+    for mom in new_externals.iter().skip(1) {
+        new_externals_momenta.push(ExternalMomenta::Independent([
+            mom.temporal.value,
+            mom.spatial.px,
+            mom.spatial.py,
+            mom.spatial.pz,
+        ]));
+    }
+
+    Ok(Externals::Constant {
+        momenta: new_externals_momenta,
+        helicities,
+    })
 }
 
 fn improve_ps_psmc<T: FloatLike>(
@@ -453,16 +534,14 @@ fn improve_ps_vh<T: FloatLike>(
 
 #[cfg(test)]
 mod tests {
-
-    use symbolica::create_hyperdual_single_derivative;
-    use symbolica::domains::float::NumericalFloatLike;
-    use symbolica::domains::rational::Rational;
+    use eyre::Result;
     use typed_index_collections::TiVec;
 
     use crate::{
         dot,
-        graph::{ext, parse::IntoGraph, FeynmanGraph, Graph},
+        graph::{parse::IntoGraph, FeynmanGraph, Graph},
         initialisation::test_initialise,
+        model::Model,
         momentum::{Dep, ExternalMomenta, FourMomentum, SignOrZero},
         momentum_sample::ExternalIndex,
         settings::runtime::kinematic::Externals,
@@ -471,12 +550,34 @@ mod tests {
         DependentMomentaConstructor,
     };
 
+    fn test_default_momenta_graph(graph: &Graph, model: &Model, e_cm: &F<f64>) -> Result<()> {
+        let external_signature = graph.get_external_signature();
+        let external_masses = graph.get_external_masses::<f64>(model);
+
+        let default_momenta =
+            super::generate_default_momenta(&external_masses, &external_signature, e_cm).unwrap();
+
+        let constructor = DependentMomentaConstructor::Amplitude(&external_signature);
+        let dependent_momenta = default_momenta
+            .get_dependent_externals::<f64>(constructor)
+            .unwrap();
+
+        tracing::debug!("Default momenta: {:#?}", dependent_momenta);
+
+        test_kinematic_validity(
+            &dependent_momenta,
+            &external_signature,
+            &external_masses,
+            e_cm,
+        )
+    }
+
     fn test_kinematic_validity<T: FloatLike>(
         externals: &TiVec<ExternalIndex, FourMomentum<F<T>>>,
         external_signature: &SignatureLike<ExternalIndex>,
         masses: &TiVec<ExternalIndex, F<T>>,
         e_cm: &F<T>,
-    ) {
+    ) -> Result<()> {
         let mom_sum = externals.iter().zip(external_signature).fold(
             externals[ExternalIndex::from(0)].zero(),
             |acc, (mom, sign)| match sign {
@@ -486,16 +587,53 @@ mod tests {
             },
         );
 
-        println!("Total momentum after improvement: {:?}", mom_sum);
-        assert!(mom_sum.temporal.value.abs() < e_cm.epsilon() * e_cm);
-        assert!(mom_sum.spatial.px.abs() < e_cm.epsilon() * e_cm);
-        assert!(mom_sum.spatial.py.abs() < e_cm.epsilon() * e_cm);
-        assert!(mom_sum.spatial.pz.abs() < e_cm.epsilon() * e_cm);
-
-        for (mom, mass) in externals.iter().zip(masses) {
-            let diff = (mom.square() - mass.square()).abs();
-            assert!(diff < e_cm.epsilon() * e_cm.square());
+        //println!("Total momentum after improvement: {:?}", mom_sum);
+        if mom_sum.temporal.value.abs() > e_cm.epsilon() * e_cm {
+            return Err(eyre::eyre!(
+                "Energy is not conserved: {:+e} > {:+e}",
+                mom_sum.temporal.value,
+                e_cm.epsilon() * e_cm
+            ));
         }
+
+        if mom_sum.spatial.px.abs() > e_cm.epsilon() * e_cm {
+            return Err(eyre::eyre!(
+                "Momentum in x direction is not conserved: {:+e} > {:+e}",
+                mom_sum.spatial.px,
+                e_cm.epsilon() * e_cm
+            ));
+        }
+
+        if mom_sum.spatial.py.abs() > e_cm.epsilon() * e_cm {
+            return Err(eyre::eyre!(
+                "Momentum in y direction is not conserved: {:+e} > {:+e}",
+                mom_sum.spatial.py,
+                e_cm.epsilon() * e_cm
+            ));
+        }
+
+        if mom_sum.spatial.pz.abs() > e_cm.epsilon() * e_cm {
+            return Err(eyre::eyre!(
+                "Momentum in z direction is not conserved: {:+e} > {:+e}",
+                mom_sum.spatial.pz,
+                e_cm.epsilon() * e_cm
+            ));
+        }
+
+        for (i, (mom, mass)) in externals.iter().zip(masses).enumerate() {
+            let diff = (mom.square() - mass.square()).abs();
+            let threshold = F::from_f64(2.0) * e_cm.epsilon() * e_cm * e_cm;
+            if diff > threshold {
+                return Err(eyre::eyre!(
+                    "External {} is not on-shell: {:+e} > {:+e}",
+                    i,
+                    diff,
+                    threshold
+                ));
+            }
+        }
+
+        Ok((()))
     }
 
     #[test]
@@ -625,6 +763,8 @@ mod tests {
             .get_dependent_externals::<f64>(constructor)
             .unwrap();
 
+        println!("dependent momenta: {:#?}", dependent_momenta);
+
         let e_cm = F(440.0);
         let improved_momenta = super::improve_ps_mf(
             &dependent_momenta,
@@ -633,6 +773,8 @@ mod tests {
             &e_cm,
         )
         .unwrap();
+
+        println!("improved momenta: {:?}", improved_momenta);
 
         test_kinematic_validity(
             &improved_momenta,
@@ -647,5 +789,69 @@ mod tests {
         let test: F<f128> = F(0.0324).higher();
 
         println!("test: {:?}", test);
+    }
+
+    #[test]
+    fn test_generate_default_momenta() {
+        test_initialise().unwrap();
+
+        let photon_box: Graph = dot!(
+            digraph photon_box {
+                ext [style=invis];
+                ext -> v1:0 [particle = "a", id=0];
+                ext -> v2:1 [particle = "a", id=1];
+                v3:2 -> ext [particle = "a", id=2];
+                v4:3 -> ext [particle = "a", id=3];
+                v1 -> v2 [particle = "t", id=4];
+                v2 -> v3 [particle = "t", id=5];
+                v3 -> v4 [particle = "t", id=6];
+                v4 -> v1 [particle = "t", id=7];
+            },
+            "sm"
+        )
+        .unwrap();
+
+        let sm = load_generic_model("sm");
+        let e_cm = F(500.0);
+
+        let photon_box_res = test_default_momenta_graph(&photon_box, &sm, &e_cm);
+        if let Some(err) = photon_box_res.err() {
+            panic!("Error in photon box test: {:?}", err);
+        }
+
+        let aa_tt: Graph = dot!(
+            digraph aa_tt {
+                ext [style=invis];
+                ext -> v1:0 [particle = "a", id=0];
+                ext -> v2:1 [particle = "a", id=1];
+                v1:2 -> ext [particle = "t", id=2];
+                v2:3 -> ext [particle = "t~", id=3];
+                v2 -> v1 [particle = "t", id=4];
+            },
+            "sm"
+        )
+        .unwrap();
+
+        let aa_tt_res = test_default_momenta_graph(&aa_tt, &sm, &e_cm);
+        if let Some(err) = aa_tt_res.err() {
+            panic!("Error in aa_tt test: {:?}", err);
+        }
+
+        let gt_gt: Graph = dot!(
+            digraph gt_gt {
+                ext [style=invis];
+                ext -> v1:0 [particle = "g", id=0];
+                ext -> v1:1 [particle = "t", id=1];
+                v2:2 -> ext [particle = "g", id=2];
+                v2:3 -> ext [particle = "t", id=3];
+                v1 -> v2 [particle = "t", id=4];
+            }, "sm"
+        )
+        .unwrap();
+
+        let gt_gt_res = test_default_momenta_graph(&gt_gt, &sm, &e_cm);
+        if let Some(err) = gt_gt_res.err() {
+            panic!("Error in gt_gt test: {:?}", err);
+        }
     }
 }
