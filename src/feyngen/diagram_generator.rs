@@ -3021,8 +3021,26 @@ impl ProcessDefinition {
             vertex_signatures_for_generation.as_slice(),
             &symbolica_generation_settings,
         ) {
-            Ok(gs) => gs,
+            Ok(gs) => {
+                if gs.is_empty() {
+                    status_error!(
+                        "\nSymbolica graph generation for this process did not yield any graph. This likely indicates a problem with the model or process specification. Please check the model and process and try again.\n"
+                    );
+                    return Err(FeynGenError::GenericError(
+                        "Symbolica graph generation failed to generate any graphs".to_string(),
+                    ));
+                }
+                gs
+            }
             Err(gs_thus_far) => {
+                if gs_thus_far.is_empty() {
+                    status_error!(
+                        "\nSymbolica graph generation for this process did not yield any graph before being interrupted by the user.\n"
+                    );
+                    return Err(FeynGenError::GenericError(
+                        "Symbolica graph generation failed to generate any graphs".to_string(),
+                    ));
+                }
                 status_error!(
                     "\nSymbolica graph generation was aborted by the user after generating {} graphs. Generation will continue with these only, {}\n",
                     gs_thus_far.len(),
@@ -4094,7 +4112,7 @@ impl ProcessDefinition {
                 }).collect::<Result<Vec<()>, FeynGenError>>()
         })?;
         // Reset the interrupt flag
-        set_interrupted(!was_interrupted.load(Ordering::Relaxed));
+        set_interrupted(false);
         bar.finish_and_clear();
 
         // Now combine the pooled graphs identified to be combined.

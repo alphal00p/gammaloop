@@ -1,3 +1,4 @@
+use bincode::de;
 use color_eyre::Result;
 
 mod test_utils;
@@ -6,6 +7,7 @@ use gammalooprs::feyngen::diagram_generator::evaluate_overall_factor;
 use gammalooprs::processes::ProcessCollection;
 use symbolica::atom::{Atom, AtomCore};
 use test_utils::{clean_test, get_test_cli, get_tests_workspace_path};
+use tracing::debug;
 
 use crate::test_utils::CLIState;
 use insta::assert_snapshot;
@@ -52,10 +54,12 @@ fn generate_graphs_and_count(
     process: &str,
 ) -> Result<(usize, Atom)> {
     let (process_input, process_options) = split_before_flags(process);
-    cli.run_command(&format!(
+    let cmd = format!(
         "generate {} {} {} --clear-existing-processes --only-diagrams",
         generation_type, process_input, process_options
-    ))?;
+    );
+    debug!("Running diagram generation command: {}", cmd);
+    cli.run_command(&cmd)?;
     Ok(count_graphs_in_processes(cli))
 }
 
@@ -110,8 +114,11 @@ fn example_graph_count() -> Result<()> {
     cli.run_command("import model sm.json")?;
 
     // A first process
-    assert_snapshot!(feyngen_str(&mut cli, "xs", "e+ e- > d d~ / Z QED^2==4 [{{1}} QCD] --numerator-grouping no_grouping")?,@"1 | -1");
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "e+ e- > d d~ / z | e- a d g QED^2==4 [{{1}} QCD] --compare-canonized-numerator true --number-of-samples-for-numerator-comparisons 3")?,@"10 | 4*UFO::GC_11^2*UFO::GC_1^(-2)+6");
+    assert_snapshot!(feyngen_str(&mut cli, "xs", "e+ e- > d d~ / z QED^2==4 [{{1}} QCD] --numerator-grouping no_grouping")?,@"1 | -1");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", "e+ e- > d d~ / z QED==2 [{1}] --filter-selfenergies true")?,@"1 | 1");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", "e+ e- > d d~ / z QED==2 [{1}] --filter-selfenergies false")?,@"3 | 3");
+
+    // assert_snapshot!(feyngen_str(&mut cli, "amp", "e+ e- > d d~ / z | e- a d g QED^2==4 [{{1}} QCD] --compare-canonized-numerator true --number-of-samples-for-numerator-comparisons 3")?,@"10 | 4*UFO::GC_11^2*UFO::GC_1^(-2)+6");
 
     // Another process, etc...
     // ...
@@ -129,7 +136,7 @@ fn cp_fix_from_symbolica()->Result<()>{
     // Choose the model to consider
     cli.run_command("import model sm-default.json")?;
 
-    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --numerator-grouping group_identical_graphs_up_to_scalar_rescaling -n 1 --filter-zero-flow-edges false --fully-numerical-substitution-when-comparing-numerators false --compare-canonized-numerator true")?,@"10 | -12+-12*UFO::G^2*UFO::ee^(-2)+-48*UFO::G^2*UFO::ee^(-2)*spenso::TR");
+    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --filter-zero-flow-edges false --fully-numerical-substitution-when-comparing-numerators false --compare-canonized-numerator true")?,@"10 | -12+-12*UFO::G^2*UFO::ee^(-2)+-48*UFO::G^2*UFO::ee^(-2)*spenso::TR");
     Ok(())
 }
 

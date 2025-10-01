@@ -2,7 +2,8 @@ commands = [
     "import model sm-default",
     "import amplitude ./qqx_aaa_subtracted.dot",
     "generate",
-    "inspect -m -p 0.1 0.2 0.3",
+#    "inspect -m -p 0.1 0.2 0.3",
+	"quit"
 ]
 
 

@@ -41,6 +41,8 @@ use state::{RunHistory, State};
 use std::{ffi::OsString, path::PathBuf};
 use std::{fs::File, ops::ControlFlow};
 use symbolica::activate_oem_license;
+
+use crate::commands::Run;
 // use tracing::LogLevel;
 
 #[cfg(feature = "python_api")]
@@ -227,9 +229,12 @@ impl OneShot {
                         Err(SerdeFileError::FileError(_)) => RuntimeSettings::default(),
                         Err(e) => return Err(e.into()),
                     };
-
-                    let run_history =
-                        RunHistory::load(&self.state_folder.join("run.toml")).unwrap_or_default();
+                    let run_path = self.state_folder.join("run.toml");
+                    let run_history = if run_path.exists() {
+                        RunHistory::load(&self.state_folder.join("run.toml"))?
+                    } else {
+                        RunHistory::default()
+                    };
 
                     (state, run_history, global, default_runtime)
                 }
@@ -246,7 +251,7 @@ impl OneShot {
                         State::new(self.state_folder.clone(), self.trace_logs_filename.clone());
 
                     if let Some(run) = self.run_history.as_ref() {
-                        let run_history = RunHistory::load(run).unwrap_or_default();
+                        let run_history = RunHistory::load(run)?;
                         let mut global = run_history.cli_settings.clone();
                         global.override_with(&mut self);
                         let default_runtime = run_history.default_runtime_settings.clone();
@@ -263,7 +268,7 @@ impl OneShot {
             };
 
         if let Some(run) = self.run_history.as_ref() {
-            let mut run = RunHistory::load(run).unwrap_or_default();
+            let mut run = RunHistory::load(run)?;
             run_history.merge(run.clone());
             match run.run(
                 &mut state,
