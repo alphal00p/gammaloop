@@ -1,12 +1,18 @@
 use std::fmt::Display;
 
 use bincode_trait_derive::{Decode, Encode};
+use eyre::Result;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
+use typed_index_collections::TiVec;
 
 use crate::{
+    improve_ps::generate_default_momenta,
     momentum::RotationMethod,
+    momentum_sample::ExternalIndex,
+    settings::runtime::kinematic::Externals,
+    signature::SignatureLike,
     utils::{
         serde_utils::{
             is_false, is_float, is_true, is_u64, is_usize, IsDefault, _default_rotation_axis,
@@ -44,6 +50,40 @@ impl<'a> From<&'a RuntimeSettings> for LockedRuntimeSettings<'a> {
 impl<'a> From<LockedRuntimeSettings<'a>> for RuntimeSettings {
     fn from(value: LockedRuntimeSettings) -> Self {
         value.0.clone()
+    }
+}
+
+impl<'a> LockedRuntimeSettings<'a> {
+    /// If no external momenta are set in the settings, generate a default kinematic point that satisfies the phase-space constraints
+    pub(crate) fn into_with_modified_kinematics(
+        self,
+        external_signature: &SignatureLike<ExternalIndex>,
+        external_masses: &TiVec<ExternalIndex, F<f64>>,
+    ) -> Result<RuntimeSettings> {
+        if external_signature.is_empty() {
+            Ok(self.into())
+        } else {
+            match &self.0.kinematics.externals {
+                Externals::Constant {
+                    momenta,
+                    helicities,
+                } => {
+                    if momenta.is_empty() && helicities.is_empty() {
+                        let new_externals = generate_default_momenta(
+                            external_masses,
+                            external_signature,
+                            &F(self.0.kinematics.e_cm),
+                        )?;
+
+                        let mut new_settigns = self.0.clone();
+                        new_settigns.kinematics.externals = new_externals;
+                        Ok(new_settigns)
+                    } else {
+                        Ok(self.into())
+                    }
+                }
+            }
+        }
     }
 }
 

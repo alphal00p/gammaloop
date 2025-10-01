@@ -270,7 +270,10 @@ impl Amplitude {
         });
 
         let amplitude_integrand = AmplitudeIntegrand {
-            settings: runtime_default.into(),
+            settings: runtime_default.into_with_modified_kinematics(
+                &self.external_signature,
+                &self.graphs[0].graph.get_external_masses(model),
+            )?,
             data: AmplitudeIntegrandData {
                 name: self.name.clone(),
                 rotations: None,
