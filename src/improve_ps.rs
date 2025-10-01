@@ -223,6 +223,68 @@ fn improve_ps_psmc<T: FloatLike>(
         .collect::<TiVec<ExternalIndex, FourMomentum<F<T>>>>())
 }
 
+fn find_rescaling<T: FloatLike>(
+    momenta: &TiVec<ExternalIndex, FourMomentum<F<T>>>,
+    external_masses: &TiVec<ExternalIndex, F<T>>,
+    external_signature: &SignatureLike<ExternalIndex>,
+    e_cm: &F<T>,
+    total_energy: &F<T>,
+    selected_sign: SignOrZero,
+) -> TiVec<ExternalIndex, FourMomentum<F<T>>> {
+    let function = |x: &F<T>| {
+        let (energy_sum, der) = momenta
+            .iter()
+            .enumerate()
+            .zip(external_signature)
+            .zip(external_masses)
+            .map(|(((_id, mom), sign), mass)| {
+                if selected_sign == sign {
+                    let rescaled_mom = mom.rescale_spatial(x);
+                    let ose = rescaled_mom
+                        .spatial
+                        .on_shell_energy(Some(mass.clone()))
+                        .value;
+                    let der = x * mom.spatial.norm_squared() / &ose;
+
+                    (ose, der)
+                } else {
+                    (F::from_f64(0.0), F::from_f64(0.0))
+                }
+            })
+            .reduce(|(ose_a, der_a), (ose_b, der_b)| ((ose_a + ose_b), (der_a + der_b)))
+            .unwrap_or((F::from_f64(0.0), F::from_f64(0.0)));
+
+        (energy_sum - total_energy, der)
+    };
+
+    let solution = newton_iteration_and_derivative(
+        &F::from_f64(1.0),
+        function,
+        &F::<T>::from_f64(1.000),
+        400,
+        &e_cm,
+    );
+
+    status_debug!("solution: {:?}", solution);
+
+    momenta
+        .iter()
+        .enumerate()
+        .zip(external_signature)
+        .zip(external_masses)
+        .map(|(((_id, mom), sign), mass)| {
+            if selected_sign == sign {
+                let mut rescaled_mom = mom.rescale_spatial(&solution.solution);
+                let ose = rescaled_mom.spatial.on_shell_energy(Some(mass.clone()));
+                rescaled_mom.temporal = ose;
+                rescaled_mom
+            } else {
+                mom.clone()
+            }
+        })
+        .collect::<TiVec<ExternalIndex, FourMomentum<F<T>>>>()
+}
+
 // Here we use Lorentz invariance to align sum of incoming momenta along the z-axis, and boost to the CM frame.
 // We can then do a psmc rescaling in just the final states without the need to add an x^2 term
 // In principle, it would be possible to do an inverse transformation to go back to the original frame
@@ -292,7 +354,7 @@ fn improve_ps_mf<T: FloatLike>(
     let cosh_eta = rapiditiy.cosh();
     let sinh_eta = rapiditiy.sinh();
 
-    let boosted_momenta = rotated_dependent_momenta
+    let mut boosted_momenta = rotated_dependent_momenta
         .iter()
         .map(|m| FourMomentum {
             temporal: Energy {
@@ -306,65 +368,28 @@ fn improve_ps_mf<T: FloatLike>(
         })
         .collect::<TiVec<ExternalIndex, FourMomentum<F<T>>>>();
 
-    let function = |x: &F<T>| {
-        boosted_momenta
-            .iter()
-            .enumerate()
-            .zip(external_signature)
-            .zip(external_masses)
-            .map(|(((_id, mom), sign), mass)| {
-                let rescaled_mom = match sign {
-                    SignOrZero::Plus => mom.clone(),
-                    SignOrZero::Minus => mom.rescale_spatial(x),
-                    SignOrZero::Zero => unreachable!(),
-                };
-
-                let ose = rescaled_mom.spatial.on_shell_energy(Some(mass.clone()));
-                let der = match sign {
-                    SignOrZero::Plus => e_cm.zero(),
-                    SignOrZero::Minus => -x * mom.spatial.norm_squared() / &ose.value,
-                    SignOrZero::Zero => unreachable!(),
-                };
-
-                let signed_ose = match sign {
-                    SignOrZero::Plus => ose.value.clone(),
-                    SignOrZero::Minus => -&ose.value,
-                    SignOrZero::Zero => unreachable!(),
-                };
-
-                (signed_ose, der)
-            })
-            .reduce(|(ose_a, der_a), (ose_b, der_b)| ((ose_a + ose_b), (der_a + der_b)))
-            .unwrap_or((F::from_f64(0.0), F::from_f64(0.0)))
-    };
-
-    let solution = newton_iteration_and_derivative(
-        &F::from_f64(1.0),
-        function,
-        &F::<T>::from_f64(1.000),
-        400,
-        &e_cm,
-    );
-
-    status_debug!("solution: {:?}", solution);
-
-    Ok(boosted_momenta
-        .iter()
-        .enumerate()
+    let mut total_energy = e_cm.zero();
+    for ((boosted_momenta, sign), mass) in boosted_momenta
+        .iter_mut()
         .zip(external_signature)
         .zip(external_masses)
-        .map(|(((id, mom), sign), mass)| {
-            let mut rescaled_mom = match sign {
-                SignOrZero::Plus => mom.clone(),
-                SignOrZero::Minus => mom.rescale_spatial(&solution.solution),
-                SignOrZero::Zero => unreachable!(),
-            };
+    {
+        if sign == SignOrZero::Plus {
+            let ose = boosted_momenta.spatial.on_shell_energy(Some(mass.clone()));
+            boosted_momenta.temporal = ose;
+            total_energy += &boosted_momenta.temporal.value;
+        }
+    }
 
-            let ose = rescaled_mom.spatial.on_shell_energy(Some(mass.clone()));
-            rescaled_mom.temporal = ose;
-            rescaled_mom
-        })
-        .collect::<TiVec<ExternalIndex, FourMomentum<F<T>>>>())
+    Ok(find_rescaling(
+        &boosted_momenta,
+        external_masses,
+        external_signature,
+        e_cm,
+        &total_energy,
+        SignOrZero::Minus,
+    ))
+    // todo!("implement inverse transformation to original frame")
 }
 
 fn improve_ps_vh<T: FloatLike>(
