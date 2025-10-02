@@ -632,7 +632,11 @@ impl<T: FloatLike> ThreeMomentum<F<T>> {
     ) -> ThreeMomentum<F<T>> {
         // ensure unit vector
         let axis = axis * &axis.norm().inv();
-        let sin_theta = (cos_theta.one() - cos_theta.square()).sqrt();
+        let sin_theta = if cos_theta >= &cos_theta.one() {
+            cos_theta.zero()
+        } else {
+            (cos_theta.one() - cos_theta.square()).sqrt()
+        };
         let k_cross_v = axis.cross_product(self);
         let k_dot_v = self * axis.clone();
 
@@ -640,6 +644,12 @@ impl<T: FloatLike> ThreeMomentum<F<T>> {
     }
 
     pub(crate) fn get_cos_theta_with(&self, rhs: &ThreeMomentum<F<T>>) -> F<T> {
+        let self_norm = self.norm();
+        let rhs_norm = rhs.norm();
+        if &self_norm < &self_norm.epsilon() || &rhs_norm < &rhs_norm.epsilon() {
+            return self_norm.one();
+        }
+
         let dot = self * rhs.clone();
         dot / (self.norm() * rhs.norm())
     }

@@ -22,7 +22,7 @@ use symbolica::{
     domains::float::{NumericalFloatLike, Real},
     numerical_integration::MonteCarloRng,
 };
-use tracing::warn;
+use tracing::{debug, warn};
 use typed_index_collections::TiVec;
 
 pub struct PhaseSpaceImprovementSettings {
@@ -355,21 +355,31 @@ fn improve_ps_mf<T: FloatLike>(
         pz: e_cm.one(),
     };
 
+    let initial_state_norm = initial_state_sum.spatial.norm();
+    let initial_state_unit_vector = if initial_state_norm > e_cm.epsilon() * e_cm {
+        &initial_state_sum.spatial * initial_state_sum.spatial.norm().inv()
+    } else {
+        z_axis.clone()
+    };
+
+    debug!("Initial state unit vector: {:?}", initial_state_unit_vector);
+
     let cos_theta_to_z_axis = initial_state_sum.spatial.get_cos_theta_with(&z_axis);
+
+    debug!("cos theta to z axis: {:?}", cos_theta_to_z_axis);
 
     let rotated_dependent_momenta = dependent_momenta
         .iter()
-        .map(|m| {
-            let mut new_momenta = FourMomentum {
-                temporal: m.temporal.clone(),
-                spatial: m.spatial.axis_angle_rotation(&cos_theta_to_z_axis, &z_axis),
-            };
-            // force px and py to be zero:
-            new_momenta.spatial.px = e_cm.zero();
-            new_momenta.spatial.py = e_cm.zero();
-            new_momenta
+        .map(|m| FourMomentum {
+            temporal: m.temporal.clone(),
+            spatial: m.spatial.axis_angle_rotation(&cos_theta_to_z_axis, &z_axis),
         })
         .collect::<TiVec<ExternalIndex, FourMomentum<F<T>>>>();
+
+    debug!(
+        "Rotated dependent momenta: {:#?}",
+        rotated_dependent_momenta
+    );
 
     let rotated_initial_state_sum = initial_states
         .iter()
@@ -405,12 +415,15 @@ fn improve_ps_mf<T: FloatLike>(
         })
         .collect::<TiVec<ExternalIndex, FourMomentum<F<T>>>>();
 
+    debug!("Boosted momenta: {:#?}", boosted_momenta);
+
     let mut total_energy = e_cm.zero();
     for ((boosted_momenta, sign), mass) in boosted_momenta
         .iter_mut()
         .zip(external_signature)
         .zip(external_masses)
     {
+        // ensure the initial states are on-shell
         if sign == SignOrZero::Plus {
             let ose = boosted_momenta.spatial.on_shell_energy(Some(mass.clone()));
             boosted_momenta.temporal = ose;
@@ -418,15 +431,43 @@ fn improve_ps_mf<T: FloatLike>(
         }
     }
 
-    Ok(find_rescaling(
+    let rotated_boosted_rescaled_momenta = find_rescaling(
         &boosted_momenta,
         external_masses,
         external_signature,
         e_cm,
         &total_energy,
         SignOrZero::Minus,
-    ))
-    // todo!("implement inverse transformation to original frame")
+    );
+
+    debug!(
+        "Rotated, boosted and rescaled momenta: {:#?}",
+        rotated_boosted_rescaled_momenta
+    );
+
+    // transform back to original frame
+    let rescaled_momenta = rotated_boosted_rescaled_momenta
+        .into_iter()
+        .map(|m| FourMomentum {
+            temporal: Energy {
+                value: &m.temporal.value * &cosh_eta + &m.spatial.pz * &sinh_eta,
+            },
+            spatial: ThreeMomentum {
+                px: m.spatial.px.clone(),
+                py: m.spatial.py.clone(),
+                pz: &m.temporal.value * &sinh_eta + &m.spatial.pz * &cosh_eta,
+            },
+        })
+        .map(|m| FourMomentum {
+            temporal: m.temporal,
+            spatial: m
+                .spatial
+                .axis_angle_rotation(&cos_theta_to_z_axis, &initial_state_unit_vector),
+        })
+        .collect::<TiVec<ExternalIndex, FourMomentum<F<T>>>>();
+
+    debug!("Rescaled momenta: {:#?}", rescaled_momenta);
+    Ok(rescaled_momenta)
 }
 
 fn improve_ps_vh<T: FloatLike>(
@@ -601,6 +642,7 @@ mod tests {
 
     use crate::{
         dot,
+        feyngen::half_edge_filters::test,
         graph::{parse::IntoGraph, FeynmanGraph, Graph},
         initialisation::test_initialise,
         model::Model,
@@ -631,7 +673,37 @@ mod tests {
             &external_signature,
             &external_masses,
             e_cm,
-        )
+        )?;
+
+        let dependent_momenta_f128 = default_momenta
+            .get_dependent_externals::<f128>(constructor)
+            .unwrap();
+
+        tracing::debug!("upcasted momenta f128: {:#?}", dependent_momenta_f128);
+        let masses_f128 = graph.get_external_masses::<f128>(model);
+        let improve_ps_settings = super::PhaseSpaceImprovementSettings {
+            mode: super::ImprovementMode::Mf,
+            large_deformation_check: Some(F(1e-4)),
+            only_warn_on_large_deformation: false,
+        };
+
+        let improved_point = super::improve_ps(
+            &dependent_momenta_f128,
+            &masses_f128,
+            &external_signature,
+            &F::from_ff64(e_cm.clone()),
+            &improve_ps_settings,
+        )?;
+        tracing::debug!("Improved momenta f128: {:#?}", improved_point);
+
+        test_kinematic_validity(
+            &improved_point,
+            &external_signature,
+            &masses_f128,
+            &F::from_ff64(e_cm.clone()),
+        )?;
+
+        Ok(())
     }
 
     fn test_kinematic_validity<T: FloatLike>(
@@ -695,151 +767,11 @@ mod tests {
             }
         }
 
-        Ok((()))
+        Ok(())
     }
 
     #[test]
-    fn test_massless_photon_box() {
-        test_initialise().unwrap();
-
-        let graph: Graph = dot!(
-            digraph photon_box {
-                ext [style=invis];
-                ext -> v1:0 [particle = "a", id=0];
-                ext -> v2:1 [particle = "a", id=1];
-                v3:2 -> ext [particle = "a", id=2];
-                v4:3 -> ext [particle = "a", id=3];
-                v1 -> v2 [particle = "t", id=4];
-                v2 -> v3 [particle = "t", id=5];
-                v3 -> v4 [particle = "t", id=6];
-                v4 -> v1 [particle = "t", id=7];
-            },
-            "sm"
-        )
-        .unwrap();
-
-        let sm = load_generic_model("sm");
-
-        let external = Externals::Constant {
-            momenta: vec![
-                ExternalMomenta::Independent([F(10.0), F(0.0), F(0.00), F(10.0)].into()),
-                ExternalMomenta::Independent([F(10.0), F(0.0), F(0.0), F(-10.0)].into()),
-                ExternalMomenta::Independent([F(5.0), F(0.0), F(4.0), F(3.0)].into()),
-                ExternalMomenta::Dependent(Dep::Dep),
-            ],
-            helicities: vec![
-                SignOrZero::Plus,
-                SignOrZero::Plus,
-                SignOrZero::Minus,
-                SignOrZero::Minus,
-            ],
-        };
-
-        let external_signature = graph.get_external_signature();
-        let external_masses = graph.get_external_masses::<f64>(&sm);
-
-        let constructor = DependentMomentaConstructor::Amplitude(&external_signature);
-
-        let dependent_momenta = external
-            .get_dependent_externals::<f64>(constructor)
-            .unwrap();
-
-        let e_cm = F(20.0);
-
-        let vh_improved_momenta = super::improve_ps_vh(
-            &dependent_momenta,
-            &external_masses,
-            &external_signature,
-            &e_cm,
-        )
-        .unwrap();
-
-        test_kinematic_validity(
-            &vh_improved_momenta,
-            &external_signature,
-            &external_masses,
-            &e_cm,
-        );
-    }
-
-    #[test]
-    fn test_aa_tt() {
-        test_initialise().unwrap();
-        let graph: Graph = dot!(
-            digraph aa_tt {
-                ext [style=invis];
-                ext -> v1:0 [particle = "a", id=0];
-                ext -> v2:1 [particle = "a", id=1];
-                v1:2 -> ext [particle = "t", id=2];
-                v2:3 -> ext [particle = "t~", id=3];
-                v2 -> v1 [particle = "t", id=4];
-            },
-            "sm"
-        )
-        .unwrap();
-
-        let sm = load_generic_model("sm");
-        let externals = Externals::Constant {
-            momenta: vec![
-                ExternalMomenta::Independent([F(170.0), F(0.0), F(0.0), F(-170.0)].into()),
-                ExternalMomenta::Independent([F(180.0), F(0.0), F(0.0), F(180.0)].into()),
-                ExternalMomenta::Independent(
-                    [
-                        F((173.0 * 173.0 + 134.0 * 134.0f64).sqrt()),
-                        F(0.0),
-                        F(0.0),
-                        F(134.0),
-                    ]
-                    .into(),
-                ),
-                ExternalMomenta::Dependent(Dep::Dep),
-            ],
-            helicities: vec![
-                SignOrZero::Plus,
-                SignOrZero::Plus,
-                SignOrZero::Minus,
-                SignOrZero::Minus,
-            ],
-        };
-
-        let external_signature = graph.get_external_signature();
-        let external_masses = graph.get_external_masses::<f64>(&sm);
-        let constructor = DependentMomentaConstructor::Amplitude(&external_signature);
-
-        let dependent_momenta = externals
-            .get_dependent_externals::<f64>(constructor)
-            .unwrap();
-
-        println!("dependent momenta: {:#?}", dependent_momenta);
-
-        let e_cm = F(440.0);
-        let improved_momenta = super::improve_ps_mf(
-            &dependent_momenta,
-            &external_masses,
-            &external_signature,
-            &e_cm,
-        )
-        .unwrap();
-
-        println!("improved momenta: {:?}", improved_momenta);
-
-        test_kinematic_validity(
-            &improved_momenta,
-            &external_signature,
-            &external_masses,
-            &e_cm,
-        );
-    }
-
-    #[test]
-    fn buh() {
-        let test: F<f128> = F(0.0324).higher();
-
-        println!("test: {:?}", test);
-    }
-
-    #[test]
-    fn test_generate_default_momenta() {
+    fn test_photon_box() {
         test_initialise().unwrap();
 
         let photon_box: Graph = dot!(
@@ -865,6 +797,13 @@ mod tests {
         if let Some(err) = photon_box_res.err() {
             panic!("Error in photon box test: {:?}", err);
         }
+    }
+
+    #[test]
+    fn test_aa_tt() {
+        test_initialise().unwrap();
+        let sm = load_generic_model("sm");
+        let e_cm = F(600.0);
 
         let aa_tt: Graph = dot!(
             digraph aa_tt {
@@ -883,6 +822,13 @@ mod tests {
         if let Some(err) = aa_tt_res.err() {
             panic!("Error in aa_tt test: {:?}", err);
         }
+    }
+
+    #[test]
+    fn test_gt_gt() {
+        test_initialise().unwrap();
+        let sm = load_generic_model("sm");
+        let e_cm = F(700.0);
 
         let gt_gt: Graph = dot!(
             digraph gt_gt {
