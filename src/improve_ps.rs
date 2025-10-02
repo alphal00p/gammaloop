@@ -6,6 +6,7 @@ use crate::{
     model::Model,
     momentum::{Dep, Energy, ExternalMomenta, FourMomentum, Sign, SignOrZero, ThreeMomentum},
     momentum_sample::ExternalIndex,
+    observables,
     settings::runtime::kinematic::Externals,
     signature::SignatureLike,
     status_debug,
@@ -16,7 +17,11 @@ use crate::{
 use bitvec::vec;
 use eyre::{Ok, Result};
 use itertools::Itertools;
-use symbolica::domains::float::{NumericalFloatLike, Real};
+use rand::Rng;
+use symbolica::{
+    domains::float::{NumericalFloatLike, Real},
+    numerical_integration::MonteCarloRng,
+};
 use tracing::warn;
 use typed_index_collections::TiVec;
 
@@ -54,7 +59,7 @@ pub(crate) fn improve_ps<T: FloatLike>(
 ) -> Result<TiVec<ExternalIndex, FourMomentum<F<T>>>> {
     let result = match settings.mode {
         ImprovementMode::Psmc => {
-            improve_ps_psmc(dependent_momenta, external_masses, external_signature, e_cm)
+            unimplemented!()
         }
         ImprovementMode::Vh => {
             improve_ps_vh(dependent_momenta, external_masses, external_signature, e_cm)
@@ -91,51 +96,152 @@ pub(crate) fn generate_default_momenta(
     external_signature: &SignatureLike<ExternalIndex>,
     e_cm: &F<f64>,
 ) -> Result<Externals> {
-    let n_indep_externals = external_signature.len() - 1;
-    let z_components = (0..n_indep_externals).map(|i| {
-        let sign = if i % 2 == 0 { F(1.0) } else { F(-1.0) };
-        let i_ff64 = F(i as f64);
-        let pz = (i_ff64 + F(1.0)) / (i_ff64 + F(2.0)) * e_cm * sign;
-        pz
-    });
-
-    let mut momenta = vec![ExternalMomenta::Dependent(Dep::Dep)];
-    let helicities = iter::from_fn(|| Some(SignOrZero::Plus))
-        .take(external_signature.len())
+    let initial_states = external_signature
+        .iter_enumerated()
+        .filter_map(|(id, s)| {
+            if *s == SignOrZero::Plus {
+                Some(id)
+            } else {
+                None
+            }
+        })
         .collect_vec();
 
-    for (pz, mass) in z_components.zip(external_masses.iter()) {
-        let energy = (pz * pz + mass * mass).sqrt();
-        momenta.push(ExternalMomenta::Independent(
-            [energy, F(0.0), F(0.0), pz].into(),
+    let final_states = external_signature
+        .iter_enumerated()
+        .filter_map(|(id, s)| {
+            if *s == SignOrZero::Minus {
+                Some(id)
+            } else {
+                None
+            }
+        })
+        .collect_vec();
+
+    let num_initial = initial_states.len();
+    let num_final = final_states.len();
+
+    if num_initial == 0 || num_final == 0 {
+        return Err(eyre::eyre!(
+            "Only processes with at least one initial and one final state are supported"
         ));
     }
 
-    let unphysical_externals = Externals::Constant {
-        momenta,
-        helicities: helicities.clone(),
+    let final_state_mass_sum = final_states
+        .iter()
+        .map(|i| &external_masses[*i])
+        .fold(F(0.0), |a, b| a + b);
+
+    let initial_state_mass_sum = initial_states
+        .iter()
+        .map(|i| &external_masses[*i])
+        .fold(F(0.0), |a, b| a + b);
+
+    // maybe add a fudge factor?
+    let incoming_energy = e_cm.max(final_state_mass_sum).max(initial_state_mass_sum);
+
+    let capital_p = FourMomentum {
+        temporal: Energy {
+            value: incoming_energy,
+        },
+        spatial: ThreeMomentum {
+            px: F(0.0),
+            py: F(0.0),
+            pz: F(0.0),
+        },
     };
 
-    let momentum_constructor = DependentMomentaConstructor::Amplitude(external_signature);
-    let dependent_momenta =
-        unphysical_externals.get_dependent_externals::<f64>(momentum_constructor)?;
+    // start a rng with a fixed seed
+    let mut rng = MonteCarloRng::new(1234567, 0);
 
-    let improve_ps_settings = PhaseSpaceImprovementSettings {
-        mode: ImprovementMode::Mf,
-        large_deformation_check: None,
-        only_warn_on_large_deformation: true,
-    };
+    let mut final_state_momenta = (0..num_final - 1)
+        .map(|i| {
+            let sign = if i % 2 == 0 { F(1.0) } else { F(-1.0) };
+            let spatial = ThreeMomentum {
+                px: F(rng.random::<f64>() + 1.0) * incoming_energy / F(num_final as f64 * 10.0),
+                py: F(rng.random::<f64>() + 1.0) * incoming_energy / F(num_final as f64 * 10.0),
+                pz: F(rng.random::<f64>() + 1.0) * incoming_energy / F(num_final as f64 * 10.0),
+            };
+            let signed_spatial = spatial * sign;
+            let ose = spatial.on_shell_energy(Some(external_masses[final_states[i]].clone()));
+            FourMomentum {
+                temporal: ose,
+                spatial: signed_spatial,
+            }
+        })
+        .collect_vec();
 
-    let new_externals = improve_ps(
-        &dependent_momenta,
+    let last_final_state = final_state_momenta
+        .iter()
+        .fold(capital_p.clone(), |acc, mom| acc - mom.clone());
+    final_state_momenta.push(last_final_state);
+
+    let mut initial_state_momenta = (0..num_initial - 1)
+        .map(|i| {
+            let (sign_x, sign_y, sign_z) = (0..3)
+                .map(|_| {
+                    if rng.random_bool(0.5) {
+                        F(1.0)
+                    } else {
+                        F(-1.0)
+                    }
+                })
+                .collect_tuple()
+                .unwrap();
+
+            let spatial = ThreeMomentum {
+                px: F(rng.random::<f64>() + 1.0) * incoming_energy / F(num_final as f64 * 10.0)
+                    * sign_x,
+                py: F(rng.random::<f64>() + 1.0) * incoming_energy / F(num_final as f64 * 10.0)
+                    * sign_y,
+                pz: F(rng.random::<f64>() + 1.0) * incoming_energy / F(num_final as f64 * 10.0)
+                    * sign_z,
+            };
+            let ose = spatial.on_shell_energy(Some(external_masses[final_states[i]].clone()));
+            FourMomentum {
+                temporal: ose,
+                spatial: spatial,
+            }
+        })
+        .collect_vec();
+
+    let last_initial_state = initial_state_momenta
+        .iter()
+        .fold(capital_p.clone(), |acc, mom| acc - mom.clone());
+    initial_state_momenta.push(last_initial_state);
+
+    let mut initial_state_iter = initial_state_momenta.into_iter();
+    let mut final_state_iter = final_state_momenta.into_iter();
+
+    let momenta_to_rescale = external_signature
+        .iter()
+        .map(|s| match s {
+            SignOrZero::Plus => initial_state_iter.next().unwrap(),
+            SignOrZero::Minus => final_state_iter.next().unwrap(),
+            SignOrZero::Zero => unreachable!(),
+        })
+        .collect::<TiVec<ExternalIndex, FourMomentum<F<f64>>>>();
+
+    let initial_states_rescaled = find_rescaling(
+        &momenta_to_rescale,
         external_masses,
         external_signature,
         e_cm,
-        &improve_ps_settings,
-    )?;
+        &incoming_energy,
+        SignOrZero::Plus,
+    );
+
+    let all_states_rescaled = find_rescaling(
+        &initial_states_rescaled,
+        external_masses,
+        external_signature,
+        e_cm,
+        &incoming_energy,
+        SignOrZero::Minus,
+    );
 
     let mut new_externals_momenta = vec![ExternalMomenta::Dependent(Dep::Dep)];
-    for mom in new_externals.iter().skip(1) {
+    for mom in all_states_rescaled.iter().skip(1) {
         new_externals_momenta.push(ExternalMomenta::Independent([
             mom.temporal.value,
             mom.spatial.px,
@@ -144,83 +250,14 @@ pub(crate) fn generate_default_momenta(
         ]));
     }
 
+    let helicities = iter::from_fn(|| Some(SignOrZero::Plus))
+        .take(num_final + num_initial)
+        .collect();
+
     Ok(Externals::Constant {
         momenta: new_externals_momenta,
         helicities,
     })
-}
-
-fn improve_ps_psmc<T: FloatLike>(
-    dependent_momenta: &TiVec<ExternalIndex, FourMomentum<F<T>>>,
-    external_masses: &TiVec<ExternalIndex, F<T>>,
-    external_signature: &SignatureLike<ExternalIndex>,
-    e_cm: &F<T>,
-) -> Result<TiVec<ExternalIndex, FourMomentum<F<T>>>> {
-    let function = |x: &F<T>| {
-        dependent_momenta
-            .iter()
-            .enumerate()
-            .zip(external_signature)
-            .zip(external_masses)
-            .map(|(((id, mom), sign), mass)| {
-                let rescaled_mom = if id == 0 {
-                    mom.rescale_spatial(x)
-                } else {
-                    mom.rescale_spatial(x)
-                };
-
-                let ose = rescaled_mom.spatial.on_shell_energy(Some(mass.clone()));
-                let der = if id == 0 {
-                    x * mom.spatial.norm_squared() / &ose.value
-                } else {
-                    x * mom.spatial.norm_squared() / &ose.value
-                };
-
-                let signed_ose = match sign {
-                    SignOrZero::Plus => ose.value.clone(),
-                    SignOrZero::Minus => -&ose.value,
-                    SignOrZero::Zero => unreachable!(),
-                };
-
-                let signed_der = match sign {
-                    SignOrZero::Plus => der,
-                    SignOrZero::Minus => -&der,
-                    SignOrZero::Zero => unreachable!(),
-                };
-
-                (signed_ose, signed_der)
-            })
-            .reduce(|(ose_a, der_a), (ose_b, der_b)| ((ose_a + ose_b), (der_a + der_b)))
-            .unwrap_or((F::from_f64(0.0), F::from_f64(0.0)))
-    };
-
-    let solution = newton_iteration_and_derivative(
-        &F::from_f64(1.0),
-        function,
-        &F::<T>::from_f64(1.000),
-        400,
-        &e_cm,
-    );
-
-    status_debug!("solution: {:?}", solution);
-
-    Ok(dependent_momenta
-        .iter()
-        .enumerate()
-        .zip(external_signature)
-        .zip(external_masses)
-        .map(|(((id, mom), sign), mass)| {
-            let mut rescaled_mom = if id == 0 {
-                mom.rescale_spatial(&solution.solution)
-            } else {
-                mom.rescale_spatial(&solution.solution)
-            };
-
-            let ose = rescaled_mom.spatial.on_shell_energy(Some(mass.clone()));
-            rescaled_mom.temporal = ose;
-            rescaled_mom
-        })
-        .collect::<TiVec<ExternalIndex, FourMomentum<F<T>>>>())
 }
 
 fn find_rescaling<T: FloatLike>(
@@ -708,21 +745,6 @@ mod tests {
             .unwrap();
 
         let e_cm = F(20.0);
-        let improved_momenta = super::improve_ps_psmc(
-            &dependent_momenta,
-            &external_masses,
-            &external_signature,
-            &e_cm,
-        )
-        .unwrap();
-
-        println!("After improvement:");
-        test_kinematic_validity(
-            &improved_momenta,
-            &external_signature,
-            &external_masses,
-            &e_cm,
-        );
 
         let vh_improved_momenta = super::improve_ps_vh(
             &dependent_momenta,
