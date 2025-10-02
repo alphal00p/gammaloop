@@ -65,6 +65,7 @@ mod tests {
     use serde::{Deserialize, Serialize};
 
     use crate::{
+        improve_ps::PhaseSpaceImprovementSettings,
         momentum::{Dep, ExternalMomenta, SignOrZero},
         settings::{
             global::GenerationSettings,
@@ -237,6 +238,9 @@ mod tests {
                     ExternalMomenta::Dependent(Dep::Dep),
                 ],
                 helicities: vec![SignOrZero::Plus, SignOrZero::Minus],
+                improvement_settings: PhaseSpaceImprovementSettings::default(),
+                f_64_cache: None,
+                f_128_cache: None,
             },
         };
 

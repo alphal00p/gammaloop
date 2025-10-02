@@ -30,6 +30,7 @@ use crate::{
     },
     gammaloop_integrand::{LmbMultiChannelingSetup, ParamBuilder},
     graph::{edge::ParseEdge, vertex::ParseVertex},
+    improve_ps::PhaseSpaceImprovementSettings,
     model::Model,
     momentum::{Dep, ExternalMomenta, PolDef},
     momentum_sample::ExternalIndex,
@@ -118,6 +119,9 @@ impl Graph {
         Externals::Constant {
             momenta,
             helicities,
+            improvement_settings: PhaseSpaceImprovementSettings::default(),
+            f_64_cache: None,
+            f_128_cache: None,
         }
     }
 

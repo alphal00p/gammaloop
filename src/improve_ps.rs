@@ -1,23 +1,21 @@
 use std::iter;
 
 use crate::{
-    graph::{FeynmanGraph, Graph},
-    improve_ps,
-    model::Model,
-    momentum::{Dep, Energy, ExternalMomenta, FourMomentum, Sign, SignOrZero, ThreeMomentum},
+    momentum::{Dep, Energy, ExternalMomenta, FourMomentum, SignOrZero, ThreeMomentum},
     momentum_sample::ExternalIndex,
-    observables,
     settings::runtime::kinematic::Externals,
     signature::SignatureLike,
     status_debug,
     utils::{newton_solver::newton_iteration_and_derivative, FloatLike, F},
-    DependentMomentaConstructor,
 };
 
-use bitvec::vec;
-use eyre::{Ok, Result};
+use crate::utils::serde_utils::{is_false, IsDefault};
+use bincode_trait_derive::{Decode, Encode};
+use eyre::Result;
 use itertools::Itertools;
 use rand::Rng;
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
 use symbolica::{
     domains::float::{NumericalFloatLike, Real},
     numerical_integration::MonteCarloRng,
@@ -25,16 +23,43 @@ use symbolica::{
 use tracing::{debug, warn};
 use typed_index_collections::TiVec;
 
+#[cfg_attr(feature = "python_api", pyo3::pyclass)]
+#[derive(Debug, Clone, Deserialize, Serialize, Encode, Decode, PartialEq, JsonSchema)]
+#[serde(default, deny_unknown_fields)]
 pub struct PhaseSpaceImprovementSettings {
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub mode: ImprovementMode,
+    #[serde(skip_serializing_if = "_default_large_def_check")]
     pub large_deformation_check: Option<F<f64>>,
+    #[serde(skip_serializing_if = "is_false")]
     pub only_warn_on_large_deformation: bool,
 }
 
+fn _default_large_def_check(val: &Option<F<f64>>) -> bool {
+    *val == Some(F(1e-12))
+}
+
+impl Default for PhaseSpaceImprovementSettings {
+    fn default() -> Self {
+        Self {
+            mode: ImprovementMode::Mf,
+            large_deformation_check: Some(F(1e-12)),
+            only_warn_on_large_deformation: false,
+        }
+    }
+}
+
+#[cfg_attr(feature = "python_api", pyo3::pyclass)]
+#[derive(Debug, Clone, Deserialize, Serialize, Encode, Decode, PartialEq, JsonSchema, Default)]
+#[serde(deny_unknown_fields)]
 pub enum ImprovementMode {
-    Psmc,
+    #[serde(rename = "vh")]
     Vh,
+    #[serde(rename = "mf")]
     Mf,
+    #[default]
+    #[serde(rename = "mf")]
+    None,
 }
 
 fn dimensionless_metric<T: FloatLike>(
@@ -58,15 +83,13 @@ pub(crate) fn improve_ps<T: FloatLike>(
     settings: &PhaseSpaceImprovementSettings,
 ) -> Result<TiVec<ExternalIndex, FourMomentum<F<T>>>> {
     let result = match settings.mode {
-        ImprovementMode::Psmc => {
-            unimplemented!()
-        }
         ImprovementMode::Vh => {
             improve_ps_vh(dependent_momenta, external_masses, external_signature, e_cm)
         }
         ImprovementMode::Mf => {
             improve_ps_mf(dependent_momenta, external_masses, external_signature, e_cm)
         }
+        ImprovementMode::None => Ok(dependent_momenta.clone()),
     }?;
 
     let deformation_size = dimensionless_metric(dependent_momenta, &result, e_cm);
@@ -256,7 +279,10 @@ pub(crate) fn generate_default_momenta(
 
     Ok(Externals::Constant {
         momenta: new_externals_momenta,
+        improvement_settings: PhaseSpaceImprovementSettings::default(),
         helicities,
+        f_64_cache: None,
+        f_128_cache: None,
     })
 }
 
@@ -642,13 +668,11 @@ mod tests {
 
     use crate::{
         dot,
-        feyngen::half_edge_filters::test,
         graph::{parse::IntoGraph, FeynmanGraph, Graph},
         initialisation::test_initialise,
         model::Model,
-        momentum::{Dep, ExternalMomenta, FourMomentum, SignOrZero},
+        momentum::{FourMomentum, SignOrZero},
         momentum_sample::ExternalIndex,
-        settings::runtime::kinematic::Externals,
         signature::SignatureLike,
         utils::{f128, test_utils::load_generic_model, FloatLike, F},
         DependentMomentaConstructor,
@@ -681,11 +705,7 @@ mod tests {
 
         tracing::debug!("upcasted momenta f128: {:#?}", dependent_momenta_f128);
         let masses_f128 = graph.get_external_masses::<f128>(model);
-        let improve_ps_settings = super::PhaseSpaceImprovementSettings {
-            mode: super::ImprovementMode::Mf,
-            large_deformation_check: Some(F(1e-4)),
-            only_warn_on_large_deformation: false,
-        };
+        let improve_ps_settings = super::PhaseSpaceImprovementSettings::default();
 
         let improved_point = super::improve_ps(
             &dependent_momenta_f128,

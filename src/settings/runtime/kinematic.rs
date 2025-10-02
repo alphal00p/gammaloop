@@ -6,14 +6,16 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
 use tabled::{builder::Builder, settings::Style};
+use typed_index_collections::TiVec;
 
 use crate::{
     graph::Graph,
+    improve_ps::{improve_ps, ImprovementMode, PhaseSpaceImprovementSettings},
     momentum::{
         self, Dep, ExternalMomenta, FourMomentum, Helicity, Polarization, Rotatable, SignOrZero,
     },
-    momentum_sample::ExternalFourMomenta,
-    signature::ExternalSignature,
+    momentum_sample::{ExternalFourMomenta, ExternalIndex},
+    signature::{ExternalSignature, SignatureLike},
     utils::{
         f128,
         serde_utils::{is_float, IsDefault},
@@ -61,6 +63,13 @@ pub enum Externals {
     Constant {
         momenta: Vec<ExternalMomenta<F<f64>>>,
         helicities: Vec<Helicity>,
+        #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+        improvement_settings: PhaseSpaceImprovementSettings,
+        // must be set in warmup, but is tied to the constant
+        #[serde(skip)]
+        f_64_cache: Option<TiVec<ExternalIndex, FourMomentum<F<f64>>>>,
+        #[serde(skip)]
+        f_128_cache: Option<TiVec<ExternalIndex, FourMomentum<F<f128>>>>,
     },
     // add different type of pdfs here when needed
 }
@@ -73,11 +82,21 @@ impl Rotatable for Externals {
             Externals::Constant {
                 momenta,
                 helicities,
+                f_64_cache,
+                f_128_cache,
+                improvement_settings,
             } => {
                 let momenta = momenta.iter().map(|m| m.rotate(rotation)).collect();
                 Externals::Constant {
                     momenta,
                     helicities: helicities.clone(),
+                    improvement_settings: improvement_settings.clone(),
+                    f_64_cache: f_64_cache
+                        .as_ref()
+                        .map(|cache| cache.iter().map(|m| m.rotate(rotation)).collect()),
+                    f_128_cache: f_128_cache
+                        .as_ref()
+                        .map(|cache| cache.iter().map(|m| m.rotate(rotation)).collect()),
                 }
             }
         }
@@ -222,6 +241,10 @@ impl Externals {
 // where
     //     T::Higher: PrecisionUpgradable<Lower = T> + FloatLike,
     {
+        if let Some(cached) = T::try_extract_externals_from_cache(self) {
+            return Ok(cached.clone());
+        }
+
         match self {
             Externals::Constant { momenta, .. } => {
                 match dependent_momenta_constructor {
@@ -329,6 +352,7 @@ impl Externals {
             Externals::Constant {
                 momenta,
                 helicities,
+                ..
             } => {
                 let momenta: Vec<FourMomentum<_>> = momenta
                     .iter()
@@ -350,6 +374,49 @@ impl Externals {
             Externals::Constant { .. } => F(1.0),
         }
     }
+
+    pub fn improve_and_cache(
+        &mut self,
+        constructor: DependentMomentaConstructor,
+        masses: &TiVec<ExternalIndex, F<f64>>,
+        e_cm: &F<f64>,
+    ) -> Result<()> {
+        let dep_momenta_f64 = self.get_dependent_externals::<f64>(constructor.clone())?;
+        let dep_momenta_f128 = self.get_dependent_externals::<f128>(constructor.clone())?;
+
+        match constructor {
+            DependentMomentaConstructor::Amplitude(signature) => match self {
+                Externals::Constant {
+                    improvement_settings,
+                    f_64_cache,
+                    f_128_cache,
+                    ..
+                } => {
+                    let improved_f64 = improve_ps(
+                        &dep_momenta_f64,
+                        masses,
+                        signature,
+                        e_cm,
+                        &improvement_settings,
+                    )?;
+
+                    let upcasted_masses = masses.iter().map(|m| F::<f128>::from_ff64(*m)).collect();
+
+                    let improved_f128 = improve_ps(
+                        &dep_momenta_f128,
+                        &upcasted_masses,
+                        signature,
+                        &F::<f128>::from_ff64(*e_cm),
+                        &improvement_settings,
+                    )?;
+                    *f_64_cache = Some(improved_f64);
+                    *f_128_cache = Some(improved_f128);
+                    Ok(())
+                }
+            },
+            DependentMomentaConstructor::CrossSection { .. } => Ok(()),
+        }
+    }
 }
 
 #[test]
@@ -357,6 +424,9 @@ fn external_inv() {
     let mut ext = Externals::Constant {
         momenta: vec![[F(1.), F(2.), F(3.), F(4.)].into(); 3],
         helicities: vec![Helicity::Plus; 4],
+        f_64_cache: None,
+        f_128_cache: None,
+        improvement_settings: PhaseSpaceImprovementSettings::default(),
     };
 
     let signs: ExternalSignature = [1i8, 1, 1, 1].into_iter().collect();
@@ -371,6 +441,9 @@ fn external_inv() {
     let mut ext2 = Externals::Constant {
         momenta,
         helicities: vec![Helicity::Plus; 4],
+        f_64_cache: None,
+        f_128_cache: None,
+        improvement_settings: PhaseSpaceImprovementSettings::default(),
     };
 
     ext2.set_dependent_at_end(&signs).unwrap();
@@ -383,6 +456,9 @@ impl Default for Externals {
         Externals::Constant {
             momenta: vec![],
             helicities: vec![],
+            f_64_cache: None,
+            f_128_cache: None,
+            improvement_settings: PhaseSpaceImprovementSettings::default(),
         }
     }
 }

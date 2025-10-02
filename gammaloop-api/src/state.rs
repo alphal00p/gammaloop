@@ -708,6 +708,7 @@ impl State {
 #[cfg(test)]
 mod tests {
     use gammalooprs::{
+        improve_ps::PhaseSpaceImprovementSettings,
         momentum::{Dep, ExternalMomenta, SignOrZero},
         settings::{runtime::kinematic::Externals, KinematicsSettings},
         utils::serde_utils::SHOWDEFAULTS,
@@ -732,7 +733,10 @@ mod tests {
                     ExternalMomenta::Independent([F(1.), F(2.), F(3.), F(4.)]),
                     ExternalMomenta::Dependent(Dep::Dep),
                 ],
+                improvement_settings: PhaseSpaceImprovementSettings::default(),
                 helicities: vec![SignOrZero::Plus, SignOrZero::Minus],
+                f_64_cache: None,
+                f_128_cache: None,
             },
         };
 

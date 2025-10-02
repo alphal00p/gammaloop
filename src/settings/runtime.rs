@@ -67,6 +67,7 @@ impl<'a> LockedRuntimeSettings<'a> {
                 Externals::Constant {
                     momenta,
                     helicities,
+                    ..
                 } => {
                     if momenta.is_empty() && helicities.is_empty() {
                         let new_externals = generate_default_momenta(

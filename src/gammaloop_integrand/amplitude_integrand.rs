@@ -618,6 +618,14 @@ impl GammaloopIntegrand for AmplitudeIntegrand {
         for a in self.data.graph_terms.iter_mut() {
             a.warm_up(&self.settings, model)?;
         }
+        let e_cm = F(self.settings.kinematics.e_cm);
+        let constructor = DependentMomentaConstructor::Amplitude(&self.data.external_signature);
+        let masses = self.data.graph_terms[0].graph.get_external_masses(&model);
+
+        self.settings
+            .kinematics
+            .externals
+            .improve_and_cache(constructor, &masses, &e_cm)?;
 
         let thresholds_generated = self
             .data

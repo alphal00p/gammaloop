@@ -5,6 +5,7 @@ use crate::momentum::{FourMomentum, ThreeMomentum};
 use crate::momentum_sample::{ExternalFourMomenta, ExternalIndex, LoopMomenta};
 use crate::numerator::aind::Aind;
 use crate::numerator::ufo::UFO;
+use crate::settings::runtime::kinematic::Externals;
 use crate::settings::runtime::ParameterizationSettings;
 use crate::settings::runtime::SamplingSettings;
 use crate::settings::runtime::{ParameterizationMapping, ParameterizationMode};
@@ -647,6 +648,14 @@ impl FloatLike for VarFloat<113> {
     fn floor(&self) -> Self {
         self.float.clone().floor().into()
     }
+
+    fn try_extract_externals_from_cache(
+        externals: &Externals,
+    ) -> Option<&TiVec<ExternalIndex, FourMomentum<F<Self>>>> {
+        match externals {
+            Externals::Constant { f_128_cache, .. } => f_128_cache.as_ref(),
+        }
+    }
 }
 
 impl<const N: u32> VarFloat<N> {
@@ -842,6 +851,8 @@ pub trait FloatLike:
     }
 
     fn rem_euclid(&self, rhs: &Self) -> Self;
+
+    fn try_extract_externals_from_cache(externals: &Externals) -> Option<&TiVec<ExternalIndex, FourMomentum<F<Self>>>>;
 }
 
 #[derive(
@@ -1608,6 +1619,14 @@ impl FloatLike for f64 {
 
     fn rem_euclid(&self, rhs: &Self) -> Self {
         f64::rem_euclid(*self, *rhs)
+    }
+
+    fn try_extract_externals_from_cache(
+        externals: &Externals,
+    ) -> Option<&TiVec<ExternalIndex, FourMomentum<F<Self>>>> {
+        match externals {
+            Externals::Constant { f_64_cache, .. } => f_64_cache.as_ref(),
+        }
     }
 }
 impl From<F<f64>> for f64 {
