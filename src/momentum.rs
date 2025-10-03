@@ -10,7 +10,6 @@ use bincode_trait_derive::{Decode, Encode};
 use eyre::Context;
 use linnet::half_edge::involution::EdgeIndex;
 use momtrop::vector::Vector;
-use ref_ops::{RefMul, RefSub};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
@@ -41,10 +40,7 @@ use symbolica::{
     atom::{Atom, AtomCore, Symbol},
     coefficient::Coefficient,
     domains::{
-        float::{
-            Complex as SymComplex, ConstructibleFloat, NumericalFloatLike, Real, RealNumberLike,
-            SingleFloat,
-        },
+        float::{Complex as SymComplex, NumericalFloatLike, Real, RealNumberLike, SingleFloat},
         integer::IntegerRing,
         rational::{Rational, RationalField},
     },
@@ -2308,7 +2304,7 @@ impl Signature {
         self.0.len()
     }
 
-    pub(crate) fn iter(&self) -> std::slice::Iter<SignOrZero> {
+    pub(crate) fn iter(&'_ self) -> std::slice::Iter<'_, SignOrZero> {
         self.0.iter()
     }
 

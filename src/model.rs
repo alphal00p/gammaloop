@@ -457,7 +457,7 @@ pub struct ColorStructure {
 }
 
 impl ColorStructure {
-    pub(crate) fn iter(&self) -> std::slice::Iter<Atom> {
+    pub(crate) fn iter(&'_ self) -> std::slice::Iter<'_, Atom> {
         self.color_structure.iter()
     }
 }

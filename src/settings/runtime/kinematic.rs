@@ -10,12 +10,12 @@ use typed_index_collections::TiVec;
 
 use crate::{
     graph::Graph,
-    improve_ps::{improve_ps, ImprovementMode, PhaseSpaceImprovementSettings},
+    improve_ps::{improve_ps, PhaseSpaceImprovementSettings},
     momentum::{
         self, Dep, ExternalMomenta, FourMomentum, Helicity, Polarization, Rotatable, SignOrZero,
     },
     momentum_sample::{ExternalFourMomenta, ExternalIndex},
-    signature::{ExternalSignature, SignatureLike},
+    signature::ExternalSignature,
     utils::{
         f128,
         serde_utils::{is_float, IsDefault},

@@ -40,7 +40,7 @@ use gammalooprs::{
 use crate::{
     commands::{save::SaveState, Commands},
     tracing::{set_file_log_filter, set_stderr_log_filter},
-    CLISettings, OneShot,
+    CLISettings,
 };
 
 pub trait SyncSettings {

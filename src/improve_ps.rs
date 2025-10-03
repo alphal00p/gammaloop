@@ -58,7 +58,7 @@ pub enum ImprovementMode {
     #[serde(rename = "mf")]
     Mf,
     #[default]
-    #[serde(rename = "mf")]
+    #[serde(rename = "none")]
     None,
 }
 
