@@ -282,7 +282,7 @@ impl<'a, T: FloatLike> CounterTermBuilder<'a, T> {
             counterterm_builder: self,
             overlap_group,
             rotated_center,
-            unrotated_center,
+            _unrotated_center: unrotated_center,
             unit_shifted_momenta,
             radius,
         }
@@ -293,7 +293,7 @@ struct OverlapBuilder<'a, T: FloatLike> {
     counterterm_builder: &'a CounterTermBuilder<'a, T>,
     overlap_group: &'a OverlapGroup,
     rotated_center: LoopMomenta<F<T>>,
-    unrotated_center: LoopMomenta<F<T>>,
+    _unrotated_center: LoopMomenta<F<T>>,
     unit_shifted_momenta: LoopMomenta<F<T>>,
     radius: F<T>,
 }
@@ -313,7 +313,7 @@ impl<'a, T: FloatLike> OverlapBuilder<'a, T> {
 
         esurface_id.map(|esurface_id| EsurfaceCTBuilder {
             overlap_builder: self,
-            existing_esurface_id,
+            _existing_esurface_id: existing_esurface_id,
             esurface: &self.counterterm_builder.esurface_collection[esurface_id],
             esurface_id,
         })
@@ -322,14 +322,13 @@ impl<'a, T: FloatLike> OverlapBuilder<'a, T> {
 
 struct EsurfaceCTBuilder<'a, T: FloatLike> {
     overlap_builder: &'a OverlapBuilder<'a, T>,
-    existing_esurface_id: ExistingEsurfaceId,
+    _existing_esurface_id: ExistingEsurfaceId,
     esurface: &'a Esurface,
     esurface_id: EsurfaceID,
 }
 
 impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
     fn solve_rstar(self) -> RstarSolution<'a, T> {
-        let settings = self.overlap_builder.counterterm_builder.settings;
         let (radius_guess, _) = self.esurface.get_radius_guess(
             &self.overlap_builder.unit_shifted_momenta,
             &self

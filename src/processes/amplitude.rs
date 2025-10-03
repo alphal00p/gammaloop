@@ -413,8 +413,12 @@ impl AmplitudeGraph {
         self.generate_cff()?;
         status_debug!("Building Parametric Integrand");
         self.build_parametric_integrand(settings)?;
-        status_debug!("Building Tropical Sampler");
-        self.build_tropical_sampler(settings)?;
+
+        if self.graph.is_group_master {
+            status_debug!("Building Tropical Sampler");
+            self.build_tropical_sampler(settings)?;
+        }
+
         status_debug!("Building Loop Momentum Bases");
         self.build_lmbs();
         status_debug!("Building Multi-Channeling Channels");
