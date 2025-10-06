@@ -42,7 +42,7 @@ fn _default_large_def_check(val: &Option<F<f64>>) -> bool {
 impl Default for PhaseSpaceImprovementSettings {
     fn default() -> Self {
         Self {
-            mode: ImprovementMode::Mf,
+            mode: ImprovementMode::None,
             large_deformation_check: Some(F(1e-12)),
             only_warn_on_large_deformation: false,
         }
