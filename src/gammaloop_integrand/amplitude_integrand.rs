@@ -842,16 +842,19 @@ impl HasIntegrand for AmplitudeIntegrand {
         {
             self.data.graph_terms[0].graph.get_loop_number() * 3
         } else {
-            let dimensions = self
-                .data
-                .graph_terms
-                .iter()
-                .map(|term| term.get_tropical_sampler().get_dimension())
-                .sorted()
-                .collect_vec();
+            // let dimensions = self
+            //     .data
+            //     .graph_terms
+            //     .iter()
+            //     .map(|term| term.get_tropical_sampler().get_dimension())
+            //     .sorted()
+            //     .collect_vec();
 
-            let median_dimension = dimensions[dimensions.len() / 2];
-            median_dimension
+            tracing::warn!("get n dim called for tropical sampling, if groups are enabled this function panics, returning bs value to avoid this");
+            69
+
+            //let median_dimension = dimensions[dimensions.len() / 2];
+            //median_dimension
         }
     }
 }
