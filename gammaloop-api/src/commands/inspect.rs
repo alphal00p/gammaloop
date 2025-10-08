@@ -119,7 +119,10 @@ impl<'a> BatchedInspect<'a> {
     pub fn run(
         &self,
         state: &mut State,
-    ) -> Result<ArrayBase<OwnedRepr<Complex<f64>>, ndarray::Dim<[usize; 1]>>> {
+    ) -> Result<(
+        ArrayBase<OwnedRepr<Complex<f64>>, ndarray::Dim<[usize; 1]>>,
+        Option<ArrayBase<OwnedRepr<f64>, ndarray::Dim<[usize; 1]>>>,
+    )> {
         state.process_list.warm_up(&state.model)?;
 
         let process_id = state.process_list.find_process(self.process_id)?;
@@ -136,6 +139,7 @@ impl<'a> BatchedInspect<'a> {
         let settings = integrand.get_settings().clone();
 
         let mut vec_res = vec![];
+        let mut jac_res = vec![];
 
         for (point, discrete_dim) in self
             .points
@@ -156,6 +160,7 @@ impl<'a> BatchedInspect<'a> {
                 self.use_f128,
             );
             let res_to_return: Complex<f64> = if let Some(jac) = inspect_res_jac {
+                jac_res.push(jac);
                 if jac == 0. {
                     return Err(color_eyre::eyre::eyre!(
                         "Jacobian is zero at this point, cannot divide by zero."
@@ -171,7 +176,12 @@ impl<'a> BatchedInspect<'a> {
         }
 
         let res_array = Array::from_vec(vec_res);
+        let res_jac = if jac_res.is_empty() {
+            None
+        } else {
+            Some(Array::from_vec(jac_res))
+        };
 
-        Ok(res_array)
+        Ok((res_array, res_jac))
     }
 }

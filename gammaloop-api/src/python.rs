@@ -482,7 +482,10 @@ impl State {
         integrand_name: Option<String>,
         use_f128: bool,
         momentum_space: bool,
-    ) -> Result<Bound<'py, PyArray1<Complex64>>> {
+    ) -> Result<(
+        Bound<'py, PyArray1<Complex64>>,
+        Option<Bound<'py, PyArray1<f64>>>,
+    )> {
         let points_rust = points.as_array();
         let discrete_dims_rust = discrete_dims.as_array();
 
@@ -495,12 +498,14 @@ impl State {
             discrete_dims: discrete_dims_rust,
         };
 
-        let res = batched_inspect.run(self).unwrap();
+        let (res, res_jac) = batched_inspect.run(self).unwrap();
         let res_map = res
             .mapv_into_any(|c| Complex64::new(c.re, c.im))
             .into_pyarray(py);
 
-        Ok(res_map)
+        let res_jac_map = res_jac.map(|r| r.into_pyarray(py));
+
+        Ok((res_map, res_jac_map))
     }
 
     #[pyo3(signature = (path, process_name=None, process_id=None, integrand_name=None))]
