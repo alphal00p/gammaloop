@@ -849,55 +849,63 @@ fn evaluate_single<T: FloatLike, I: GammaloopIntegrand>(
             .get_terms_mut()
             .map(|term: &mut I::G| term.evaluate(sample, model, &settings, rotation))
             .fold(zero.clone(), |sum, term| sum + term),
-        GammaLoopSample::MultiChanneling { alpha, sample } => integrand
-            .get_terms_mut()
-            .map(|term: &mut I::G| {
-                let channels_samples = term
-                    .get_multi_channeling_setup()
-                    .reinterpret_loop_momenta_and_compute_prefactor_all_channels(
-                        sample,
-                        term.get_graph(),
-                        model,
-                        term.get_lmbs(),
-                        alpha,
-                        cache,
-                    );
+        GammaLoopSample::MultiChanneling { alpha, sample } => {
+            todo!("fix this with the groups");
+            integrand
+                .get_terms_mut()
+                .map(|term: &mut I::G| {
+                    let channels_samples = term
+                        .get_multi_channeling_setup()
+                        .reinterpret_loop_momenta_and_compute_prefactor_all_channels(
+                            sample,
+                            term.get_graph(),
+                            model,
+                            term.get_lmbs(),
+                            alpha,
+                            cache,
+                        );
 
-                loop_cache_shift += channels_samples.len();
+                    loop_cache_shift += channels_samples.len();
 
-                channels_samples
-                    .into_iter()
-                    .map(|(reparameterized_sample, prefactor)| {
-                        Complex::new_re(prefactor)
-                            * term.evaluate(&reparameterized_sample, model, &settings, rotation)
-                    })
-                    .fold(zero.clone(), |sum, term| sum + term)
-            })
-            .fold(zero.clone(), |sum, term| sum + term),
+                    channels_samples
+                        .into_iter()
+                        .map(|(reparameterized_sample, prefactor)| {
+                            Complex::new_re(prefactor)
+                                * term.evaluate(&reparameterized_sample, model, &settings, rotation)
+                        })
+                        .fold(zero.clone(), |sum, term| sum + term)
+                })
+                .fold(zero.clone(), |sum, term| sum + term)
+        }
         GammaLoopSample::DiscreteGraph { group_id, sample } => {
             let group = integrand.get_group(*group_id).into_iter().collect_vec(); // collect to avoid borrowing issues
+
             let mut res = zero.clone();
 
             for graph_id in group.into_iter() {
-                let graph_term = integrand.get_graph_mut(graph_id);
                 let graph_term_res = match sample {
-                    DiscreteGraphSample::Default(sample) => {
-                        graph_term.evaluate(sample, model, &settings, rotation)
-                    }
+                    DiscreteGraphSample::Default(sample) => integrand
+                        .get_graph_mut(graph_id)
+                        .evaluate(sample, model, &settings, rotation),
                     DiscreteGraphSample::DiscreteMultiChanneling {
                         alpha,
                         channel_id,
                         sample,
                     } => {
-                        let (reparameterized_sample, prefactor) = graph_term
-                            .get_multi_channeling_setup()
+                        let master_setup = integrand
+                            .get_master_graph(*group_id)
+                            .get_multi_channeling_setup();
+                        let master_graph = integrand.get_master_graph(*group_id).get_graph();
+                        let master_lmbs = integrand.get_master_graph(*group_id).get_lmbs();
+
+                        let (reparameterized_sample, prefactor) = master_setup
                             .reinterpret_loop_momenta_and_compute_prefactor(
                                 *channel_id,
                                 sample,
                                 loop_cache_shift,
-                                graph_term.get_graph(),
+                                master_graph,
                                 model,
-                                graph_term.get_lmbs(),
+                                master_lmbs,
                                 alpha,
                             );
 
@@ -906,7 +914,7 @@ fn evaluate_single<T: FloatLike, I: GammaloopIntegrand>(
                         }
 
                         Complex::new_re(prefactor)
-                            * graph_term.evaluate(
+                            * integrand.get_graph_mut(graph_id).evaluate(
                                 &reparameterized_sample,
                                 model,
                                 &settings,
@@ -914,13 +922,18 @@ fn evaluate_single<T: FloatLike, I: GammaloopIntegrand>(
                             )
                     }
                     DiscreteGraphSample::MultiChanneling { alpha, sample } => {
-                        let channel_samples = graph_term
-                            .get_multi_channeling_setup()
+                        let master_setup = integrand
+                            .get_master_graph(*group_id)
+                            .get_multi_channeling_setup();
+                        let master_graph = integrand.get_master_graph(*group_id).get_graph();
+                        let master_lmbs = integrand.get_master_graph(*group_id).get_lmbs();
+
+                        let channel_samples = master_setup
                             .reinterpret_loop_momenta_and_compute_prefactor_all_channels(
                                 sample,
-                                graph_term.get_graph(),
+                                master_graph,
                                 model,
-                                graph_term.get_lmbs(),
+                                master_lmbs,
                                 alpha,
                                 cache,
                             );
@@ -930,31 +943,36 @@ fn evaluate_single<T: FloatLike, I: GammaloopIntegrand>(
                         }
 
                         channel_samples
-                            .into_iter()
-                            .map(|(reparameterized_sample, prefactor)| {
-                                Complex::new_re(prefactor)
-                                    * graph_term.evaluate(
-                                        &reparameterized_sample,
-                                        model,
-                                        &settings,
-                                        rotation,
-                                    )
+                            .into_iter_enumerated()
+                            .map(|(_channel_index, (reparameterized_sample, prefactor))| {
+                                integrand.get_graph_mut(graph_id).evaluate(
+                                    &reparameterized_sample,
+                                    model,
+                                    &settings,
+                                    rotation,
+                                )
                             })
                             .fold(zero.clone(), |sum, term| sum + term)
                     }
                     DiscreteGraphSample::Tropical(sample) => {
-                        let energy_cache = graph_term.get_graph().get_energy_cache(
+                        let master_graph = integrand.get_master_graph(*group_id).get_graph();
+
+                        let energy_cache = master_graph.get_energy_cache(
                             model,
                             &sample.loop_moms(),
                             &sample.external_moms(),
-                            &graph_term.get_graph().loop_momentum_basis,
+                            &master_graph.loop_momentum_basis,
                         );
 
-                        let prefactor = graph_term
-                            .get_graph()
+                        let prefactor = master_graph
                             .iter_loop_edges()
                             .map(|(_, edge_index, _)| edge_index)
-                            .zip(graph_term.get_tropical_sampler().iter_edge_weights())
+                            .zip(
+                                integrand
+                                    .get_master_graph(*group_id)
+                                    .get_tropical_sampler()
+                                    .iter_edge_weights(),
+                            )
                             .fold(sample.one(), |product, (edge_id, weight)| {
                                 let energy = &energy_cache[edge_id];
                                 let edge_weight = weight;
@@ -962,7 +980,9 @@ fn evaluate_single<T: FloatLike, I: GammaloopIntegrand>(
                             });
 
                         Complex::new_re(prefactor)
-                            * graph_term.evaluate(sample, model, &settings, rotation)
+                            * integrand
+                                .get_graph_mut(graph_id)
+                                .evaluate(sample, model, &settings, rotation)
                     }
                 };
 

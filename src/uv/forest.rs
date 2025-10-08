@@ -160,7 +160,7 @@ impl Forest {
             // add Feynman rules of cut edges
             for (_p, edge_index, d) in graph.iter_edges_of(cut) {
                 s = s
-                    * (&d.data.num / (Atom::num(2) * ose_atom_from_index(edge_index)))
+                    * (&d.data.num / (-Atom::num(2) * ose_atom_from_index(edge_index)))
                         .wrap_color(GS.color_wrap)
                         .parse_into_net()
                         .unwrap();

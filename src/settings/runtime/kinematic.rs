@@ -305,7 +305,9 @@ impl Externals {
                         }
 
                         dependent_momenta[pos_dep] = dependent_sign * sum; //.lower();
-                        Ok(dependent_momenta.into())
+                        let res = dependent_momenta.into();
+
+                        Ok(res)
                     }
                     DependentMomentaConstructor::CrossSection {
                         external_connections,

@@ -11,6 +11,7 @@ use color_eyre::Result;
 
 use eyre::Context;
 use itertools::Itertools;
+use libc::SYS_umount2;
 use linnet::half_edge::involution::{EdgeVec, Orientation};
 use momtrop::SampleGenerator;
 use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
@@ -31,7 +32,7 @@ use crate::{
         expression::{AmplitudeOrientationID, GraphOrientation},
     },
     evaluation_result::EvaluationResult,
-    gammaloop_integrand::ParamBuilder,
+    gammaloop_integrand::{ChannelIndex, ParamBuilder},
     graph::{
         FeynmanGraph, Graph, GraphGroup, GraphGroupPosition, GroupId, LMBext, LmbIndex,
         LoopMomentumBasis,
@@ -238,7 +239,8 @@ impl AmplitudeGraphTerm {
         let orientations =
             momentum_sample.orientations(&self.orientation_filter.0, &self.orientations);
 
-        status_debug!("loop_moms: {}", momentum_sample.loop_moms());
+        debug!("loop_moms: {}", momentum_sample.loop_moms());
+        debug!("jacobian: {:16e}", momentum_sample.jacobian());
 
         let evaluator = &mut self.orientation_parametric_integrand;
         let mut result = Complex::new_re(F(T::from_f64(0.)));
@@ -298,14 +300,17 @@ impl AmplitudeGraphTerm {
             "{}: {result:16e}", self.graph.name
         );
         debug!(cts = format!("{sum_of_cts:16e}"), "{}", self.graph.name);
-        status_debug!("result: {result:16e}");
-        status_debug!("sum_of_cts: {sum_of_cts:16e}");
+        debug!("result: {result:16e}");
+        debug!("sum_of_cts: {sum_of_cts:16e}");
 
         debug!(
             value = format!("{sum_of_cts:16e}"),
             "evaluated sum of threshold counterterms"
         );
-        result - sum_of_cts
+
+        let diff = result - sum_of_cts;
+
+        diff
     }
 }
 

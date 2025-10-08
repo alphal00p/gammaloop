@@ -2,13 +2,14 @@ use std::{cell::RefCell, path::Path};
 
 use bincode_trait_derive::{Decode, Encode};
 use linnet::half_edge::involution::{EdgeVec, Orientation};
-use spenso::algebra::complex::Complex;
+use spenso::algebra::{algebraic_traits::IsZero, complex::Complex};
 use symbolica::{
     atom::Atom,
     domains::float::{NumericalFloatLike, Real},
     evaluate::OptimizationSettings,
 };
 use tracing::debug;
+use tracing_subscriber::field::debug;
 use typed_index_collections::TiVec;
 
 use crate::{
@@ -208,15 +209,20 @@ impl AmplitudeCountertermData {
                     })
                     .unwrap_or_else(|| Complex::new_re(momentum_sample.zero()));
 
-                debug!(
-                    "Param Builder for {}:\n{}",
-                    existing_esurface_id, param_builder
-                );
+                if !single_result.is_zero() {
+                    debug!(
+                        "Param Builder for {}:\n{}",
+                        existing_esurface_id, param_builder
+                    );
+                    debug!(
+                        "Counterterm for esurface {}: {:+16e}",
+                        existing_esurface_id, single_result
+                    );
+                }
 
                 result += single_result;
             }
         }
-
         result
     }
 }
@@ -452,6 +458,8 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
 
         debug!("uv_damp_plus: {:?}", uv_damp_plus);
         debug!("uv_damp_minus: {:?}", uv_damp_minus);
+        debug!("radius: {:?}", radius);
+        debug!("radius_star: {:?}", radius_star);
 
         let h_function = evaluate_integrated_ct_normalisation(
             &radius,

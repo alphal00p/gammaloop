@@ -170,37 +170,37 @@ impl Graph {
             }
 
             // only for 1 to n for now, assuming center of mass
-            if channels.iter().any(|channel| {
-                let massless_edges_of_included_channel = lmbs[*channel]
-                    .loop_edges
-                    .iter()
-                    .filter(|&edge_id| self.underlying[*edge_id].particle.is_massless())
-                    .collect_vec();
+            //if channels.iter().any(|channel| {
+            //    let massless_edges_of_included_channel = lmbs[*channel]
+            //        .loop_edges
+            //        .iter()
+            //        .filter(|&edge_id| self.underlying[*edge_id].particle.is_massless())
+            //        .collect_vec();
 
-                let loop_signatures_of_massless_edges_of_included_channel =
-                    massless_edges_of_included_channel
-                        .iter()
-                        .map(|edge_index| {
-                            self.loop_momentum_basis.edge_signatures[**edge_index]
-                                .internal
-                                .first_abs()
-                        })
-                        .collect::<HashSet<_>>();
+            //    let loop_signatures_of_massless_edges_of_included_channel =
+            //        massless_edges_of_included_channel
+            //            .iter()
+            //            .map(|edge_index| {
+            //                self.loop_momentum_basis.edge_signatures[**edge_index]
+            //                    .internal
+            //                    .first_abs()
+            //            })
+            //            .collect::<HashSet<_>>();
 
-                let loop_signatures_of_massless_edges_of_potential_channel = massless_edges
-                    .iter()
-                    .map(|edge_index| {
-                        self.loop_momentum_basis.edge_signatures[**edge_index]
-                            .internal
-                            .first_abs()
-                    })
-                    .collect::<HashSet<_>>();
+            //    let loop_signatures_of_massless_edges_of_potential_channel = massless_edges
+            //        .iter()
+            //        .map(|edge_index| {
+            //            self.loop_momentum_basis.edge_signatures[**edge_index]
+            //                .internal
+            //                .first_abs()
+            //        })
+            //        .collect::<HashSet<_>>();
 
-                loop_signatures_of_massless_edges_of_included_channel
-                    == loop_signatures_of_massless_edges_of_potential_channel
-            }) {
-                continue;
-            }
+            //    loop_signatures_of_massless_edges_of_included_channel
+            //        == loop_signatures_of_massless_edges_of_potential_channel
+            //}) {
+            //    continue;
+            //}
 
             channels.push(lmb_index);
         }
