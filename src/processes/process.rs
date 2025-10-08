@@ -271,8 +271,33 @@ impl Process {
                     amp.save(&p, override_existing)?;
                 }
             }
-            ProcessCollection::CrossSections(_a) => {
-                todo!("Implement save for cross sections");
+            ProcessCollection::CrossSections(cs) => {
+                let p = path.as_ref().join("cross_sections");
+                fs::create_dir_all(&p)?;
+                let p = p.join(PathBuf::from(self.definition.folder_name.clone()));
+
+                let r = fs::create_dir_all(&p).with_context(|| {
+                    format!(
+                        "Trying to create directory to save cross section dot {}",
+                        p.display()
+                    )
+                });
+
+                if override_existing {
+                    r?;
+                }
+
+                let binary = bincode::encode_to_vec(&self.definition, bincode::config::standard())?;
+                fs::write(p.join("def.bin"), binary)?;
+
+                if let Some(a) = &self.settings_history {
+                    File::create(path.as_ref().join("settings_history.toml"))?
+                        .write(&toml::to_string_pretty(a)?.into_bytes())?;
+                }
+
+                for (_, cs) in cs {
+                    cs.save(&p, override_existing)?;
+                }
             }
         }
 

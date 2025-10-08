@@ -1,6 +1,9 @@
 use std::{
     fmt::{Display, Formatter},
+    fs::{self, File},
+    io::Write,
     marker::PhantomData,
+    path::Path,
 };
 
 use ahash::AHashSet;
@@ -24,7 +27,7 @@ use crate::{
     utils::{ose_atom_from_index, GS, W_},
     GammaLoopContext, GammaLoopContextContainer,
 };
-use eyre::eyre;
+use eyre::{eyre, Context};
 use itertools::Itertools;
 use linnet::half_edge::{
     involution::{Flow, HedgePair, Orientation},
@@ -182,6 +185,36 @@ impl<S: CrossSectionState> CrossSection<S> {
         };
 
         self.integrand = Some(NewIntegrand::CrossSection(cross_section_integrand));
+        Ok(())
+    }
+
+    pub fn save(&mut self, path: impl AsRef<Path>, override_existing: bool) -> Result<()> {
+        let p = path.as_ref().join(format!("cs_{}", self.name));
+        let r = fs::create_dir_all(&p).with_context(|| {
+            format!(
+                "Trying to create directory to save cross section {}",
+                p.display()
+            )
+        });
+
+        if override_existing {
+            r?;
+        }
+
+        let integrand = self.integrand.take();
+        if let Some(integrand) = &integrand {
+            integrand.save(&p, override_existing)?;
+        }
+
+        let binary = bincode::encode_to_vec(&(*self), bincode::config::standard())?;
+        if override_existing {
+            fs::write(p.join("cs.bin"), &binary)?;
+        } else {
+            let mut file = File::create_new(p.join("cs.bin"))?;
+            file.write(&binary)?;
+        }
+
+        self.integrand = integrand;
         Ok(())
     }
 }
