@@ -11,7 +11,6 @@ use color_eyre::Result;
 
 use eyre::Context;
 use itertools::Itertools;
-use libc::SYS_umount2;
 use linnet::half_edge::involution::{EdgeVec, Orientation};
 use momtrop::SampleGenerator;
 use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};

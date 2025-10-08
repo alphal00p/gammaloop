@@ -370,6 +370,7 @@ impl Esurface {
         graph: &HedgeGraph<E, V, H>,
         cut: &CrossSectionCut,
     ) -> Self {
+        todo!("this implementation is wrong, because it does not use the is cut");
         let edges = graph
             .iter_edges_of(&cut.cut)
             .map(|(_, id, _)| id)

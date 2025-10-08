@@ -14,6 +14,7 @@ use color_eyre::Result;
 
 use idenso::metric::MS;
 use rayon::ThreadPool;
+use tracing::info;
 
 use crate::{
     cff::cut_expression::SuperGraphOrientationID,
@@ -25,6 +26,7 @@ use crate::{
     graph::{get_cff_inverse_energy_product_impl, LMBext, LmbIndex, LoopMomentumBasis},
     model::ArcParticle,
     settings::{global::GenerationSettings, runtime::LockedRuntimeSettings, GlobalSettings},
+    status_info,
     utils::{ose_atom_from_index, GS, W_},
     GammaLoopContext, GammaLoopContextContainer,
 };
@@ -398,20 +400,19 @@ impl<S: CrossSectionState> CrossSectionGraph<S> {
         let mut source_nodes = AHashSet::new();
         let mut target_nodes = AHashSet::new();
 
-        for (hedge_pair, _, _) in graph.underlying.iter_edges() {
+        for (hedge_pair, _, _) in graph.underlying.iter_edges_of(&graph.initial_state_cut) {
             match hedge_pair {
-                HedgePair::Unpaired { hedge, flow } => {
-                    let node_id = graph.underlying.node_id(hedge);
-                    match flow {
-                        Flow::Source => {
-                            target_nodes.insert(node_id);
-                        }
-                        Flow::Sink => {
-                            source_nodes.insert(node_id);
-                        }
-                    }
+                HedgePair::Split { source, sink, .. } => {
+                    // yes it is supposed to be like this, becuase a sink hedge goes into the node from which to construct the cuts
+                    let source_node = graph.underlying.node_id(sink);
+                    let sink_node = graph.underlying.node_id(source);
+
+                    source_nodes.insert(source_node);
+                    target_nodes.insert(sink_node);
                 }
-                _ => continue,
+                _ => {
+                    unreachable!();
+                }
             }
         }
 
@@ -444,11 +445,16 @@ impl<S: CrossSectionState> CrossSectionGraph<S> {
         model: &Model,
         process_definition: &ProcessDefinition,
     ) -> Result<()> {
+        status_info!("generating cuts");
         self.generate_cuts(model, process_definition)?;
+        status_info!("generating esurfaces corresponding to cuts");
         self.generate_esurface_cuts();
+        status_info!("generating cff");
         self.generate_cff()?;
+        status_info!("extending cut esurface cache");
         self.update_surface_cache();
 
+        todo!("build evaluator for integrand");
         //self.build_cut_evaluators(model, None);
         //self.build_orientation_evaluators(model);
         self.build_lmbs();
@@ -502,14 +508,14 @@ impl<S: CrossSectionState> CrossSectionGraph<S> {
         model: &Model,
         process_definition: &ProcessDefinition,
     ) -> Result<()> {
-        debug!("generatig cuts for graph: {}", self.graph.name);
+        info!("generatig cuts for graph: {}", self.graph.name);
 
         let all_st_cuts = self
             .graph
             .underlying
             .all_cuts(self.source_nodes.clone(), self.target_nodes.clone());
 
-        debug!("num s_t cuts: {}", all_st_cuts.len());
+        info!("num s_t cuts: {}", all_st_cuts.len());
 
         let mut cuts: TiVec<CutId, CrossSectionCut> = all_st_cuts
             .into_iter()
