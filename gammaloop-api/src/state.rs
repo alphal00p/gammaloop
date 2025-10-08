@@ -362,8 +362,27 @@ impl State {
                         ));
                     }
                 }
-                ProcessCollection::CrossSections(_) => {
-                    // a[name].preprocess(&self.model, &global_settings.generation)?;
+                ProcessCollection::CrossSections(cs) => {
+                    if let Some(cs) = cs.get_mut(name) {
+                        cs.preprocess(
+                            &self.model,
+                            &p.definition,
+                            &global_settings.generation,
+                            &generation_pool,
+                        )?;
+                        cs.build_integrand(
+                            &self.model,
+                            global_settings,
+                            runtime_default,
+                            &generation_pool,
+                        )?;
+                    } else {
+                        return Err(eyre!(
+                            "No cross section named '{}' in process id {}",
+                            name,
+                            process_id
+                        ));
+                    }
                 }
             }
         } else {

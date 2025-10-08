@@ -13,6 +13,7 @@ use bitvec::vec::BitVec;
 use color_eyre::Result;
 
 use idenso::metric::MS;
+use rayon::ThreadPool;
 
 use crate::{
     cff::cut_expression::SuperGraphOrientationID,
@@ -23,7 +24,7 @@ use crate::{
     },
     graph::{get_cff_inverse_energy_product_impl, LMBext, LmbIndex, LoopMomentumBasis},
     model::ArcParticle,
-    settings::runtime::LockedRuntimeSettings,
+    settings::{global::GenerationSettings, runtime::LockedRuntimeSettings, GlobalSettings},
     utils::{ose_atom_from_index, GS, W_},
     GammaLoopContext, GammaLoopContextContainer,
 };
@@ -151,6 +152,8 @@ impl<S: CrossSectionState> CrossSection<S> {
         &mut self,
         model: &Model,
         process_definition: &ProcessDefinition,
+        generation_settings: &GenerationSettings,
+        generatioon_pool: &ThreadPool,
     ) -> Result<()> {
         for supergraph in &mut self.supergraphs {
             supergraph.preprocess(model, process_definition)?;
@@ -161,7 +164,9 @@ impl<S: CrossSectionState> CrossSection<S> {
     pub fn build_integrand(
         &mut self,
         model: &Model,
+        global_settings: &GlobalSettings,
         runtime_default: LockedRuntimeSettings,
+        generatioon_pool: &ThreadPool,
     ) -> Result<()> {
         let terms = self
             .supergraphs

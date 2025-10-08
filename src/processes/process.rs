@@ -622,7 +622,7 @@ impl ProcessCollection {
             }
             Self::CrossSections(cross_sections) => {
                 for (_, cross_section) in cross_sections {
-                    cross_section.preprocess(model, process_definition)?;
+                    cross_section.preprocess(model, process_definition, settings, thread_pool)?;
                 }
             }
         }
@@ -666,7 +666,12 @@ impl ProcessCollection {
             }
             Self::CrossSections(cross_sections) => {
                 for (_, cross_section) in cross_sections {
-                    cross_section.build_integrand(model, runtime_default)?;
+                    cross_section.build_integrand(
+                        model,
+                        global_settings,
+                        runtime_default,
+                        thread_pool,
+                    )?;
                 }
             }
         }
