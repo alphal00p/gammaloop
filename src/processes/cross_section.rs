@@ -75,6 +75,17 @@ pub struct CrossSection<S: CrossSectionState = ()> {
 }
 
 impl<S: CrossSectionState> CrossSection<S> {
+    pub(crate) fn write_dot<W: std::io::Write>(
+        &self,
+        writer: &mut W,
+    ) -> Result<(), std::io::Error> {
+        for graph in &self.supergraphs {
+            graph.write_dot(writer)?;
+            writeln!(writer)?;
+        }
+        Ok(())
+    }
+
     pub(crate) fn new(name: String) -> Self {
         Self {
             name,
@@ -405,6 +416,13 @@ impl<S: CrossSectionState> CrossSectionGraph<S> {
         self.build_lmbs();
 
         Ok(self.build_multi_channeling_channels())
+    }
+
+    pub(crate) fn write_dot<W: std::io::Write>(
+        &self,
+        writer: &mut W,
+    ) -> Result<(), std::io::Error> {
+        self.graph.dot_serialize_io(writer)
     }
 
     pub(crate) fn update_surface_cache(&mut self) {

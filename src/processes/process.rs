@@ -354,8 +354,17 @@ impl Process {
                     amp.write_dot(&mut dot)?;
                 }
             }
-            ProcessCollection::CrossSections(_a) => {
-                todo!("Implement export_dot for cross sections");
+            ProcessCollection::CrossSections(cs) => {
+                for (_, cs) in cs {
+                    let mut dot = File::create_new(path.join(&format!("{}.dot", cs.name)))
+                        .with_context(|| {
+                            format!(
+                                "Trying to create file to export cross section dot {}",
+                                p.join(&format!("{}.dot", cs.name)).display()
+                            )
+                        })?;
+                    cs.write_dot(&mut dot)?;
+                }
             }
         }
         Ok(())
