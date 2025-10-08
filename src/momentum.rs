@@ -1445,7 +1445,7 @@ where
 {
     fn ref_zero(&self) -> Self {
         Polarization {
-            tensor: self.tensor.ref_zero(),
+            tensor: <DenseTensor<_, _> as RefZero>::ref_zero(&self.tensor),
             pol_type: self.pol_type,
         }
     }
@@ -2903,23 +2903,23 @@ impl RotationMethod {
         let zero = 0.;
         match self {
             RotationMethod::Identity => {
-                let omega = SparseTensor::empty(structure);
+                let omega = SparseTensor::empty(structure, zero);
                 omega.into()
             }
             RotationMethod::Pi2X => {
-                let mut omega = SparseTensor::empty(structure);
+                let mut omega = SparseTensor::empty(structure, zero);
                 omega.set(&[2, 3], -zero.PIHALF()).unwrap();
                 omega.set(&[3, 2], zero.PIHALF()).unwrap();
                 omega.into()
             }
             RotationMethod::Pi2Y => {
-                let mut omega = SparseTensor::empty(structure);
+                let mut omega = SparseTensor::empty(structure, zero);
                 omega.set(&[1, 3], zero.PIHALF()).unwrap();
                 omega.set(&[3, 1], -zero.PIHALF()).unwrap();
                 omega.into()
             }
             RotationMethod::Pi2Z => {
-                let mut omega = SparseTensor::empty(structure);
+                let mut omega = SparseTensor::empty(structure, zero);
                 omega.set(&[1, 2], -zero.PIHALF()).unwrap();
                 omega.set(&[2, 1], zero.PIHALF()).unwrap();
                 omega.into()
@@ -3067,7 +3067,7 @@ impl RotationMethod {
 
         match self {
             RotationMethod::Identity => {
-                let mut rot = SparseTensor::empty(structure);
+                let mut rot = SparseTensor::empty(structure, zeroc);
                 rot.set(&[0, 0], zeroc.one()).unwrap();
                 rot.set(&[1, 1], zeroc.one()).unwrap();
                 rot.set(&[2, 2], zeroc.one()).unwrap();
@@ -3075,7 +3075,7 @@ impl RotationMethod {
                 rot.into()
             }
             RotationMethod::Pi2X => {
-                let mut rot = SparseTensor::empty(structure);
+                let mut rot = SparseTensor::empty(structure, zeroc);
                 let sqrt2_half = zero.SQRT_2_HALF();
                 let sqrt2_halfim = Complex::new_im(sqrt2_half);
                 let sqrt2_halfre = Complex::new_re(sqrt2_half);
@@ -3091,7 +3091,7 @@ impl RotationMethod {
                 rot.into()
             }
             RotationMethod::Pi2Y => {
-                let mut rot = SparseTensor::empty(structure);
+                let mut rot = SparseTensor::empty(structure, zeroc);
                 let sqrt2_half = zero.SQRT_2_HALF();
                 let sqrt2_halfim = Complex::new_im(sqrt2_half);
                 let sqrt2_halfre = Complex::new_re(sqrt2_half);
@@ -3108,7 +3108,7 @@ impl RotationMethod {
                 rot.into()
             }
             RotationMethod::Pi2Z => {
-                let mut rot = SparseTensor::empty(structure);
+                let mut rot = SparseTensor::empty(structure, zeroc);
                 let sqrt2_half = zero.SQRT_2_HALF();
                 let sqrt2_halfc = Complex::new(sqrt2_half, sqrt2_half);
                 let sqrt2_halfcc = sqrt2_halfc.conj();

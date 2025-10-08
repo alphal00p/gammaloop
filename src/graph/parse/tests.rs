@@ -2,7 +2,12 @@ use insta::assert_snapshot;
 use linnet::half_edge::involution::{EdgeIndex, HedgePair};
 use log::info;
 use spenso::{
-    network::{library::DummyLibrary, parsing::ShadowedStructure, store::NetworkStore, Network},
+    network::{
+        library::DummyLibrary,
+        parsing::{ParseSettings, ShadowedStructure},
+        store::NetworkStore,
+        Network,
+    },
     structure::{HasName, PermutedStructure},
     tensors::symbolic::SymbolicTensor,
 };
@@ -571,9 +576,12 @@ fn parse() {
     let expr = num.state.expr.as_view();
 
     let lib: DummyLibrary<SymbolicTensor<Aind>> = DummyLibrary::<_>::new();
-    let net =
-        Network::<NetworkStore<SymbolicTensor<Aind>, Atom>, _, Aind>::try_from_view(expr, &lib)
-            .unwrap();
+    let net = Network::<NetworkStore<SymbolicTensor<Aind>, Atom>, _, Aind>::try_from_view(
+        expr,
+        &lib,
+        &ParseSettings::default(),
+    )
+    .unwrap();
 
     println!("{}", expr);
     println!(
@@ -665,9 +673,12 @@ fn parse_local() {
     let expr = num.state.expr.as_view();
 
     let lib: DummyLibrary<SymbolicTensor<Aind>> = DummyLibrary::<_>::new();
-    let net =
-        Network::<NetworkStore<SymbolicTensor<Aind>, Atom>, _, Aind>::try_from_view(expr, &lib)
-            .unwrap();
+    let net = Network::<NetworkStore<SymbolicTensor<Aind>, Atom>, _, Aind>::try_from_view(
+        expr,
+        &lib,
+        &ParseSettings::default(),
+    )
+    .unwrap();
 
     println!("{}", expr);
     println!(
@@ -838,9 +849,12 @@ fn parse_lmbsetting() {
     let expr = num.state.expr.as_view();
 
     let lib: DummyLibrary<SymbolicTensor<Aind>> = DummyLibrary::<_>::new();
-    let net =
-        Network::<NetworkStore<SymbolicTensor<Aind>, Atom>, _, Aind>::try_from_view(expr, &lib)
-            .unwrap();
+    let net = Network::<NetworkStore<SymbolicTensor<Aind>, Atom>, _, Aind>::try_from_view(
+        expr,
+        &lib,
+        &ParseSettings::default(),
+    )
+    .unwrap();
 
     println!("{}", expr);
     println!(

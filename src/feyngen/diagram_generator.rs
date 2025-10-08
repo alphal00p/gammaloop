@@ -12,6 +12,7 @@ use rayon::ThreadPoolBuilder;
 
 use spenso::network::library::symbolic::{ExplicitKey, TensorLibrary};
 use spenso::network::library::LibraryTensor;
+use spenso::network::parsing::ParseSettings;
 use spenso::network::{Sequential, SmallestDegree};
 
 // use spenso::network::Network;
@@ -4802,7 +4803,7 @@ impl ProcessedNumeratorForComparison {
                             .iter()
                             .map(|(c, l)| {
                                 debug!("Sample evaluation inputs c:{c},l:{l}");
-                                let mut net = ParsingNet::try_from_view(l.as_view(), lib).unwrap();
+                                let mut net = ParsingNet::try_from_view(l.as_view(), lib,&ParseSettings::default()).unwrap();
                                 net.store
                                     .scalar
                                     .iter_mut()

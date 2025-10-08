@@ -15,7 +15,7 @@ use serde::Serialize;
 use spenso::{
     algebra::{algebraic_traits::RefOne, complex::Complex},
     iterators::IteratableTensor,
-    network::ExecutionResult,
+    network::{parsing::ParseSettings, ExecutionResult},
     tensors::parametric::AtomViewOrConcrete,
 };
 use symbolica::{
@@ -361,10 +361,14 @@ impl GammaLoopPairs {
         let mut params = Vec::new();
 
         for a in graph.polarizations() {
-            match ParsingNet::try_from_view(a.as_view(), TENSORLIB.read().unwrap().deref())
-                .unwrap()
-                .result_tensor(TENSORLIB.read().unwrap().deref())
-                .unwrap()
+            match ParsingNet::try_from_view(
+                a.as_view(),
+                TENSORLIB.read().unwrap().deref(),
+                &ParseSettings::default(),
+            )
+            .unwrap()
+            .result_tensor(TENSORLIB.read().unwrap().deref())
+            .unwrap()
             {
                 ExecutionResult::One => {}
                 ExecutionResult::Zero => {}

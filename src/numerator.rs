@@ -9,7 +9,7 @@ use log::warn;
 use schemars::JsonSchema;
 
 use spenso::network::library::{DummyLibrary, TensorLibraryData};
-use spenso::network::parsing::ShadowedStructure;
+use spenso::network::parsing::{ParseSettings, ShadowedStructure};
 use spenso::network::store::NetworkStore;
 use spenso::network::{ContractScalars, Sequential, SingleSmallestDegree, SmallestDegree, Steps};
 use spenso::shadowing::symbolica_utils::SerializableAtom;
@@ -1192,8 +1192,12 @@ impl PolyContracted {}
 impl GammaSimplified {
     pub(crate) fn parse(self) -> Network {
         let lib = DummyLibrary::<(), _>::new();
-        let net = StandardTensorNet::try_from_view(self.get_single_atom().unwrap().as_view(), &lib)
-            .unwrap();
+        let net = StandardTensorNet::try_from_view(
+            self.get_single_atom().unwrap().as_view(),
+            &lib,
+            &ParseSettings::default(),
+        )
+        .unwrap();
 
         // println!("net scalar{}", net.scalar.as_ref().unwrap());
         Network { net }
@@ -1226,6 +1230,7 @@ impl Numerator<GammaSimplified> {
                 net: ParsingNet::try_from_view(
                     self.state.expr.as_view(),
                     TENSORLIB.read().unwrap().deref(),
+                    &ParseSettings::default(),
                 )?,
             },
         })
@@ -1309,7 +1314,7 @@ pub type StandardTensorNet = spenso::network::Network<
 impl Network {
     pub(crate) fn parse_impl(expr: AtomView) -> Self {
         let lib = DummyLibrary::<(), _>::new();
-        let net = StandardTensorNet::try_from_view(expr, &lib).unwrap();
+        let net = StandardTensorNet::try_from_view(expr, &lib, &ParseSettings::default()).unwrap();
 
         // println!("net scalar{}", net.scalar.as_ref().unwrap());
         Network { net }

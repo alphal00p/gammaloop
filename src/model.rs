@@ -540,6 +540,7 @@ impl VertexRule {
         let mut couplings: ParamTensor<OrderedStructure<Euclidean, Aind>> =
             ParamTensor::composite(DataTensor::Sparse(SparseTensor::empty(
                 PermutedStructure::from_iter([i, j]).structure,
+                Atom::Zero,
             )));
 
         for (i, row) in self.couplings.iter().enumerate() {

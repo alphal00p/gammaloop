@@ -193,12 +193,13 @@ impl CsAmplitudeCTDiagram {
             );
 
             let cut_edges_for_right = if add_lu_cut_feynman_rules {
-                Some(&lu_cut.left.union(&lu_cut.right))
+                Some(lu_cut.left.union(&lu_cut.right))
             } else {
                 None
             };
 
-            let right_expr = right_forest.orientation_parametric_expr(cut_edges_for_right, graph);
+            let right_expr =
+                right_forest.orientation_parametric_expr(cut_edges_for_right.as_ref(), graph);
 
             self.network = Some(left_expr * right_expr);
             self.network.clone().unwrap()

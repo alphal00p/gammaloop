@@ -22,6 +22,9 @@ use spenso::{
     tensors::symbolic::SymbolicTensor,
 };
 
+use spenso::{
+    network::parsing::ParseSettings,
+};
 use symbolica::{
     atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol},
     coefficient::{Coefficient, CoefficientView},
@@ -186,7 +189,9 @@ impl AtomCoreExt for AtomView<'_> {
         let lib = DummyLibrary::<SymbolicTensor<Aind>>::new();
         let mut net =
             Network::<NetworkStore<SymbolicTensor<Aind>, Atom>, DummyKey, Aind>::try_from_view(
-                *self, &lib,
+                *self,
+                &lib,
+                &ParseSettings::default(),
             )
             .unwrap();
 
@@ -320,7 +325,11 @@ impl AtomCoreExt for AtomView<'_> {
     }
 
     fn parse_into_net(&self) -> Result<ParsingNet, ParsingNetError> {
-        ParsingNet::try_from_view(*self, TENSORLIB.read().unwrap().deref())
+        ParsingNet::try_from_view(
+            *self,
+            TENSORLIB.read().unwrap().deref(),
+            &ParseSettings::default(),
+        )
     }
 
     // fn parse_into_only_lib_net<T: TensorLibraryData + Clone + Default>(
