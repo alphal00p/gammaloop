@@ -583,27 +583,38 @@ impl CrossSectionGraph {
         self.cut_esurface = esurfaces;
     }
 
-    fn build_original_parametric_integrand(&self) -> Result<TiVec<CutId, Atom>> {
+    fn build_original_parametric_integrand(
+        &self,
+        settings: &GenerationSettings,
+    ) -> Result<TiVec<CutId, Atom>> {
         let global_num = self.graph.global_network();
         let canonize_esurface = self
             .graph
             .get_esurface_canonization(&self.graph.loop_momentum_basis);
 
         for ((cut_id, cut), esurface) in self.cuts.iter_enumerated().zip(self.cut_esurface.iter()) {
-            let (left_orientations, right_orientations): (
-                Vec<AmplitudeOrientationID>,
-                Vec<AmplitudeOrientationID>,
-            ) = self
+            let expression_for_cut = &self
                 .derived_data
                 .cff_expression
                 .as_ref()
                 .unwrap()
-                .cut_expressions[cut_id]
-                .orientation_map
-                .map
-                .values()
-                .copied()
-                .unzip();
+                .cut_expressions[cut_id];
+
+            let left_orientations = expression_for_cut
+                .left_amplitude
+                .orientations
+                .iter()
+                .map(|expr| expr.data.orientation.clone())
+                .filter(|o| settings.orientation_pattern.filter(o))
+                .collect::<TiVec<AmplitudeOrientationID, _>>();
+
+            let right_orientations = expression_for_cut
+                .right_amplitude
+                .orientations
+                .iter()
+                .map(|expr| expr.data.orientation.clone())
+                .filter(|o| settings.orientation_pattern.filter(o))
+                .collect::<TiVec<AmplitudeOrientationID, _>>();
         }
         todo!()
     }
