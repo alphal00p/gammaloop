@@ -710,6 +710,7 @@ fn evaluate_all_rotations<T: FloatLike, I: GammaloopIntegrand>(
         .iter()
         .zip(rotations.iter())
         .map(|(gammaloop_sample, rotation)| {
+            debug!("Evaluating rotation: {}", rotation.method);
             evaluate_single(integrand, model, gammaloop_sample, rotation)
         })
         .collect_vec();
@@ -1154,6 +1155,7 @@ fn evaluate_sample<I: GammaloopIntegrand>(
             match stability_level.precision {
                 Precision::Double => {
                     if let Ok(gammaloop_sample) = parameterize::<f64, I>(sample, integrand) {
+                        debug!("evaluating at f64");
                         status_debug!(
                             "jacobian: {:+16e}",
                             gammaloop_sample.get_default_sample().jacobian()
@@ -1169,6 +1171,7 @@ fn evaluate_sample<I: GammaloopIntegrand>(
                 }
                 Precision::Quad => {
                     if let Ok(gammaloop_sample) = parameterize::<f128, I>(sample, integrand) {
+                        debug!("evaluating at f128");
                         status_debug!(
                             "jacobian: {:+16e}",
                             gammaloop_sample.get_default_sample().jacobian()

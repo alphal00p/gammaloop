@@ -2768,6 +2768,20 @@ pub enum RotationMethod {
     Identity,
 }
 
+impl Display for RotationMethod {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RotationMethod::EulerAngles(alpha, beta, gamma) => {
+                write!(f, "EulerAngles({}, {}, {})", alpha, beta, gamma)
+            }
+            RotationMethod::Pi2X => write!(f, "Pi/2 rotation around x-axis"),
+            RotationMethod::Pi2Y => write!(f, "Pi/2 rotation around y-axis"),
+            RotationMethod::Pi2Z => write!(f, "Pi/2 rotation around z-axis"),
+            RotationMethod::Identity => write!(f, "Identity rotation"),
+        }
+    }
+}
+
 impl From<RotationMethod> for Rotation {
     fn from(method: RotationMethod) -> Self {
         Rotation::new(method)
