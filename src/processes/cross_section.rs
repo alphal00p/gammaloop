@@ -513,7 +513,33 @@ impl<S: CrossSectionState> CrossSectionGraph<S> {
         let all_st_cuts = self
             .graph
             .underlying
-            .all_cuts(self.source_nodes.clone(), self.target_nodes.clone());
+            .all_cuts(self.source_nodes.clone(), self.target_nodes.clone())
+            .into_iter()
+            .map(|(l, mut c, r)| {
+                // remove initial state cut edges from cut
+                self.graph
+                    .initial_state_cut
+                    .left
+                    .iter()
+                    .by_vals()
+                    .enumerate()
+                    .chain(
+                        self.graph
+                            .initial_state_cut
+                            .right
+                            .iter()
+                            .by_vals()
+                            .enumerate(),
+                    )
+                    .for_each(|(index, is_set)| {
+                        if is_set {
+                            c.left.set(index, false);
+                            c.right.set(index, false);
+                        }
+                    });
+
+                (l, c, r)
+            });
 
         info!("num s_t cuts: {}", all_st_cuts.len());
 
@@ -533,7 +559,7 @@ impl<S: CrossSectionState> CrossSectionGraph<S> {
 
         self.cuts = cuts;
 
-        debug!(
+        info!(
             "found {} cuts for graph: {}",
             self.cuts.len(),
             self.graph.name
