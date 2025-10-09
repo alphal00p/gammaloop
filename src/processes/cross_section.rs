@@ -17,7 +17,7 @@ use rayon::ThreadPool;
 use tracing::info;
 
 use crate::{
-    cff::cut_expression::SuperGraphOrientationID,
+    cff::{cut_expression::SuperGraphOrientationID, expression::AmplitudeOrientationID},
     gammaloop_integrand::{
         cross_section_integrand::{CrossSectionIntegrandData, OrientationEvaluator},
         param_builder::ParamBuilderGraph,
@@ -25,6 +25,7 @@ use crate::{
     },
     graph::{get_cff_inverse_energy_product_impl, LMBext, LmbIndex, LoopMomentumBasis},
     model::ArcParticle,
+    processes::Amplitude,
     settings::{global::GenerationSettings, runtime::LockedRuntimeSettings, GlobalSettings},
     status_info,
     utils::{ose_atom_from_index, GS, W_},
@@ -582,233 +583,29 @@ impl CrossSectionGraph {
         self.cut_esurface = esurfaces;
     }
 
-    fn build_left_right_amplitudes(&self, cut: CutId) -> (Atom, Atom) {
-        let (left_amplitude, right_amplitude) = self
-            .derived_data
-            .cff_expression
-            .as_ref()
-            .unwrap()
-            .to_atom_for_cut(cut);
-
-        let cut_edges = self
+    fn build_original_parametric_integrand(&self) -> Result<TiVec<CutId, Atom>> {
+        let global_num = self.graph.global_network();
+        let canonize_esurface = self
             .graph
-            .underlying
-            .iter_edges_of(&self.cuts[cut].cut)
-            .map(|(_, id, _)| id)
-            .collect_vec();
+            .get_esurface_canonization(&self.graph.loop_momentum_basis);
 
-        let left_amplitude_energy_sub = self
-            .derived_data
-            .cff_expression
-            .as_ref()
-            .unwrap()
-            .surfaces
-            .substitute_energies(&left_amplitude, &cut_edges);
-
-        let right_amplitude_energy_sub = self
-            .derived_data
-            .cff_expression
-            .as_ref()
-            .unwrap()
-            .surfaces
-            .substitute_energies(&right_amplitude, &cut_edges);
-
-        let left_ose_product =
-            get_cff_inverse_energy_product_impl(&self.graph.underlying, &self.cuts[cut].left, &[]);
-        let right_ose_product =
-            get_cff_inverse_energy_product_impl(&self.graph.underlying, &self.cuts[cut].right, &[]);
-
-        (
-            left_amplitude_energy_sub * left_ose_product,
-            right_amplitude_energy_sub * right_ose_product,
-        )
-    }
-
-    pub(crate) fn build_left_right_amplitudes_for_orientation(
-        &self,
-        cut: CutId,
-        orientation: SuperGraphOrientationID,
-    ) -> (Atom, Atom) {
-        let (left_amplitude, right_amplitude) = self
-            .derived_data
-            .cff_expression
-            .as_ref()
-            .unwrap()
-            .get_atom_for_orientation_and_cut(orientation, cut);
-
-        let cut_edges = self
-            .graph
-            .underlying
-            .iter_edges_of(&self.cuts[cut].cut)
-            .map(|(_, id, _)| id)
-            .collect_vec();
-
-        let left_amplitude_energy_sub = self
-            .derived_data
-            .cff_expression
-            .as_ref()
-            .unwrap()
-            .surfaces
-            .substitute_energies(&left_amplitude, &cut_edges);
-
-        let right_amplitude_energy_sub = self
-            .derived_data
-            .cff_expression
-            .as_ref()
-            .unwrap()
-            .surfaces
-            .substitute_energies(&right_amplitude, &cut_edges);
-
-        let left_ose_product =
-            get_cff_inverse_energy_product_impl(&self.graph.underlying, &self.cuts[cut].left, &[]);
-        let right_ose_product =
-            get_cff_inverse_energy_product_impl(&self.graph.underlying, &self.cuts[cut].right, &[]);
-
-        (
-            left_amplitude_energy_sub * left_ose_product,
-            right_amplitude_energy_sub * right_ose_product,
-        )
-    }
-
-    fn build_atom_for_cut(&self, cut_id: CutId) -> Atom {
-        let (left_amplitude, right_amplitude) = self.build_left_right_amplitudes(cut_id);
-
-        let product = left_amplitude * right_amplitude;
-
-        let ose_atom = self.add_additional_factors_to_cff_atom(&product, cut_id);
-        debug!("ose atom for cut: {}: {}", cut_id, ose_atom);
-
-        let replacements = self.graph.underlying.get_ose_replacements();
-        let replaced_atom = ose_atom.replace_multiple(&replacements);
-        let replace_dots = replaced_atom
-            .replace(function!(
-                MS.dot,
-                function!(GS.emr_vec, W_.x_),
-                function!(GS.emr_vec, W_.y_)
-            ))
-            .with(
-                -(function!(GS.emr_vec, W_.x_, 1) * function!(GS.emr_vec, W_.y_, 1)
-                    + function!(GS.emr_vec, W_.x_, 2) * function!(GS.emr_vec, W_.y_, 2)
-                    + function!(GS.emr_vec, W_.x_, 3) * function!(GS.emr_vec, W_.y_, 3)),
-            );
-
-        // debug!("replaced atom: {}", replace_dots);
-        replace_dots
-    }
-
-    fn build_atom_for_orientation_and_cut(
-        &self,
-        cut_id: CutId,
-        orientation: SuperGraphOrientationID,
-    ) -> Atom {
-        let (left_amplitude, right_amplitude) =
-            self.build_left_right_amplitudes_for_orientation(cut_id, orientation);
-
-        let product = left_amplitude * right_amplitude;
-
-        let ose_atom = self.add_additional_factors_to_cff_atom(&product, cut_id);
-        let replacements = self.graph.underlying.get_ose_replacements();
-        let replaced_atom = ose_atom.replace_multiple(&replacements);
-        let replace_dots = replaced_atom
-            .replace(function!(
-                MS.dot,
-                function!(GS.emr_vec, W_.x_),
-                function!(GS.emr_vec, W_.y_)
-            ))
-            .with(
-                -(function!(GS.emr_vec, W_.x_, 1) * function!(GS.emr_vec, W_.y_, 1)
-                    + function!(GS.emr_vec, W_.x_, 2) * function!(GS.emr_vec, W_.y_, 2)
-                    + function!(GS.emr_vec, W_.x_, 3) * function!(GS.emr_vec, W_.y_, 3)),
-            );
-
-        debug!("replaced atom: {}", replace_dots);
-        replace_dots
-    }
-
-    // do not use this function together with do_replacement_rules
-    pub(crate) fn add_additional_factors_to_cff_atom(
-        &self,
-        cut_atom: &Atom,
-        cut_id: CutId,
-    ) -> Atom {
-        let loop_3 = self.graph.get_loop_number() as i64 * 3;
-        let t_star_factor = Atom::var(GS.rescale_star).npow(loop_3);
-
-        let h_function = Atom::var(GS.hfunction);
-        let grad_eta = Atom::var(GS.deta);
-
-        let factors_of_pi = (Atom::num(2) * Atom::var(GS.pi)).npow(loop_3);
-
-        let cut_inverse_energy_product = Atom::num(1)
-            / self
-                .graph
-                .underlying
-                .iter_edges_of(&self.cuts[cut_id].cut)
-                .map(|(_, edge_id, _)| Atom::num(2) * ose_atom_from_index(edge_id))
-                .fold(Atom::num(1), |product, factor| product * factor);
-
-        let result = cut_atom * cut_inverse_energy_product * t_star_factor * h_function
-            / grad_eta
-            / factors_of_pi;
-
-        //debug!("result: {}", result);
-        result
-    }
-
-    fn get_builder(&self, model: &Model) -> ParamBuilder<f64> {
-        let mut params = vec![];
-
-        // all external energies
-        params.extend(self.graph.underlying.get_external_energy_atoms());
-
-        // spatial components of external momenta
-        for (pair, edge_id, _) in self.graph.underlying.iter_edges() {
-            match pair {
-                HedgePair::Unpaired { .. } => {
-                    let i64_id = Into::<usize>::into(edge_id) as i64;
-                    let external_spatial = [
-                        function!(GS.external_mom, i64_id, 1),
-                        function!(GS.external_mom, i64_id, 2),
-                        function!(GS.external_mom, i64_id, 3),
-                    ];
-                    params.extend(external_spatial);
-                }
-                _ => {}
-            }
+        for ((cut_id, cut), esurface) in self.cuts.iter_enumerated().zip(self.cut_esurface.iter()) {
+            let (left_orientations, right_orientations): (
+                Vec<AmplitudeOrientationID>,
+                Vec<AmplitudeOrientationID>,
+            ) = self
+                .derived_data
+                .cff_expression
+                .as_ref()
+                .unwrap()
+                .cut_expressions[cut_id]
+                .orientation_map
+                .map
+                .values()
+                .copied()
+                .unzip();
         }
-
-        // spatial EMR
-        for (pair, edge_id, _) in self.graph.underlying.iter_edges() {
-            match pair {
-                HedgePair::Paired { .. } => {
-                    let i64_id = Into::<usize>::into(edge_id) as i64;
-                    let emr_components = [
-                        function!(GS.emr_vec, i64_id, 1),
-                        function!(GS.emr_vec, i64_id, 2),
-                        function!(GS.emr_vec, i64_id, 3),
-                    ];
-                    params.extend(emr_components)
-                }
-                _ => {}
-            }
-        }
-
-        // add model parameters
-        params.extend(model.generate_params());
-        // add additional parameters
-        params.push(Atom::var(GS.m_uv));
-        params.push(Atom::var(GS.mu_r_sq));
-        params.push(Atom::var(GS.rescale_star));
-        params.push(Atom::var(GS.hfunction));
-        params.push(Atom::var(GS.deta));
-        ParamBuilder::new_empty()
-    }
-
-    fn get_function_map(&self) -> FunctionMap {
-        let mut fn_map = FunctionMap::new();
-        let pi_rational = Rational::from(std::f64::consts::PI);
-        fn_map.add_constant(GS.pi.into(), pi_rational.into());
-        fn_map
+        todo!()
     }
 
     fn build_lmbs(&mut self) {

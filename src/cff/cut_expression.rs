@@ -53,8 +53,9 @@ impl From<&SingleCutOrientationExpression> for Atom {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct OrientationMap {
-    map: HashMap<SuperGraphOrientationID, (AmplitudeOrientationID, AmplitudeOrientationID)>,
-    revesed_map: HashMap<(AmplitudeOrientationID, AmplitudeOrientationID), SuperGraphOrientationID>,
+    pub map: HashMap<SuperGraphOrientationID, (AmplitudeOrientationID, AmplitudeOrientationID)>,
+    pub revesed_map:
+        HashMap<(AmplitudeOrientationID, AmplitudeOrientationID), SuperGraphOrientationID>,
 }
 
 impl OrientationMap {
