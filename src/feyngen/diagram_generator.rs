@@ -1147,7 +1147,7 @@ impl ProcessDefinition {
                 Some(vec![Atom::num(i)]),
             );
 
-            debug!("lib_loop:{}", key.clone().permute_with_metric());
+            //debug!("lib_loop:{}", key.clone().permute_with_metric());
             let key = ParamOrConcrete::Param(
                 ParamTensor::from_dense(
                     key.structure,
@@ -1171,7 +1171,7 @@ impl ProcessDefinition {
                 additional_args.clone(),
             );
 
-            debug!("lib_ext:{}", key.clone().permute_with_metric());
+            //debug!("lib_ext:{}", key.clone().permute_with_metric());
 
             let key = ParamOrConcrete::Param(
                 ParamTensor::from_dense(
@@ -1206,7 +1206,7 @@ impl ProcessDefinition {
                     .collect::<Vec<_>>(),
             );
 
-            debug!("lib_pol:{}", key.clone().permute_with_metric());
+            //debug!("lib_pol:{}", key.clone().permute_with_metric());
             let key = ParamOrConcrete::Param(
                 ParamTensor::from_dense(key.structure, pol_vals.last().unwrap().clone()).unwrap(),
             );
@@ -1282,7 +1282,7 @@ impl ProcessDefinition {
                         additional_args,
                     });
 
-                    debug!("lib_pol:{}", key.clone().permute_with_metric());
+                    //debug!("lib_pol:{}", key.clone().permute_with_metric());
                     let key = ParamOrConcrete::Param(
                         ParamTensor::from_dense(
                             key.structure,
