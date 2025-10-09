@@ -8,7 +8,7 @@ use derive_more::{From, Into};
 use eyre::eyre;
 use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Flow, HedgePair};
-use linnet::half_edge::subgraph::{ModifySubgraph, SubGraphOps};
+use linnet::half_edge::subgraph::{ModifySubgraph, OrientedCut, SubGraphOps};
 use linnet::half_edge::HedgeGraph;
 use lorentz_vector::LorentzVector;
 use ref_ops::RefNeg;
@@ -369,25 +369,33 @@ impl Esurface {
     pub(crate) fn new_from_cut_left<E, V, H>(
         graph: &HedgeGraph<E, V, H>,
         cut: &CrossSectionCut,
+        initial_state_cut: Option<&OrientedCut>,
     ) -> Self {
-        todo!("this implementation is wrong, because it does not use the is cut");
         let edges = graph
             .iter_edges_of(&cut.cut)
             .map(|(_, id, _)| id)
             .sorted()
             .collect();
 
-        let external_shift = graph
-            .iter_edges_of(&cut.left)
-            .filter_map(|(hedge_pair, edge_index, _)| match hedge_pair {
-                HedgePair::Unpaired { flow, .. } => match flow {
-                    Flow::Sink => Some((edge_index, -1)),
-                    Flow::Source => Some((edge_index, 1)),
-                },
-                _ => None,
-            })
-            .sorted_by(|a, b| a.0.cmp(&b.0))
-            .collect();
+        let external_shift = if let Some(is_cut) = initial_state_cut {
+            graph
+                .iter_edges_of(is_cut)
+                .map(|(_, edge_index, __)| (edge_index, -1))
+                .sorted_by(|a, b| a.0.cmp(&b.0))
+                .collect()
+        } else {
+            graph
+                .iter_edges_of(&cut.left)
+                .filter_map(|(hedge_pair, edge_index, _)| match hedge_pair {
+                    HedgePair::Unpaired { flow, .. } => match flow {
+                        Flow::Sink => Some((edge_index, -1)),
+                        Flow::Source => Some((edge_index, 1)),
+                    },
+                    _ => None,
+                })
+                .sorted_by(|a, b| a.0.cmp(&b.0))
+                .collect()
+        };
 
         let vertex_set = graph
             .iter_nodes_of(&cut.left)
@@ -732,7 +740,7 @@ mod tests {
                 left: node_l,
                 right: node_r,
             })
-            .map(|cut| Esurface::new_from_cut_left(&double_triangle, &cut))
+            .map(|cut| Esurface::new_from_cut_left(&double_triangle, &cut, None))
             .collect_vec();
 
         let expected_esurfaces = vec![
@@ -795,7 +803,7 @@ mod tests {
                 left: node_l,
                 right: node_r,
             })
-            .map(|cut| Esurface::new_from_cut_left(&box_graph, &cut))
+            .map(|cut| Esurface::new_from_cut_left(&box_graph, &cut, None))
             .collect_vec();
 
         let expected_esurfaces = vec![

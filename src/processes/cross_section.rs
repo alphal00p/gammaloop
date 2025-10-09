@@ -574,7 +574,13 @@ impl<S: CrossSectionState> CrossSectionGraph<S> {
         let esurfaces: TiVec<CutId, Esurface> = self
             .cuts
             .iter()
-            .map(|cut| Esurface::new_from_cut_left(&self.graph.underlying, cut))
+            .map(|cut| {
+                Esurface::new_from_cut_left(
+                    &self.graph.underlying,
+                    cut,
+                    Some(&self.graph.initial_state_cut),
+                )
+            })
             .collect();
 
         self.cut_esurface = esurfaces;
