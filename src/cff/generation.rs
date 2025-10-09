@@ -27,7 +27,7 @@ use symbolica::{
     atom::{Atom, AtomCore},
     id::{Pattern, Replacement},
 };
-use typed_index_collections::TiVec;
+use typed_index_collections::{ti_vec, TiVec};
 
 use serde::{Deserialize, Serialize};
 
@@ -444,13 +444,15 @@ pub(crate) fn generate_cff_with_cuts<E, V, H>(
     canonize_esurface: &Option<ShiftRewrite>,
     cuts: &TiVec<CutId, CrossSectionCut>,
 ) -> Result<CFFCutsExpression> {
-    let super_graph_orientations = get_possible_orientations_for_cut_list(graph, cuts);
+    // let super_graph_orientations = get_possible_orientations_for_cut_list(graph, cuts);
+    let mut super_graph_orientations = TiVec::<SuperGraphOrientationID, CutOrientationData>::new();
+
     let mut surface_cache = SurfaceCache {
         esurface_cache: EsurfaceCollection::from_iter(std::iter::empty()),
         hsurface_cache: HsurfaceCollection::from_iter(std::iter::empty()),
     };
     let mut cut_expressions = TiVec::new();
-    for cut in cuts.iter() {
+    for (cut_id, cut) in cuts.iter_enumerated() {
         let edges_in_cut = graph.iter_edges_of(&cut.cut).map(|(_, id, _)| id);
         let orientation_of_edges_in_cut = cut.cut.iter_edges(graph).map(|(or, _)| or);
 
@@ -508,12 +510,18 @@ pub(crate) fn generate_cff_with_cuts<E, V, H>(
                 amplitude_orientations_to_sg_orientaion(&left_orientation, &right_orientation)
                     .unwrap();
 
-            let (sg_id, _) = super_graph_orientations
+            if let Some((sg_id, _)) = super_graph_orientations
                 .iter_enumerated()
                 .find(|(_, orientation)| orientation.orientation == merged_orientation)
-                .expect("unable to find orientation");
-
-            orientation_map.insert(sg_id, left_amplitude_id, right_amplitude_id);
+            {
+                orientation_map.insert(sg_id, left_amplitude_id, right_amplitude_id);
+                super_graph_orientations[sg_id].cuts.push(cut_id)
+            } else {
+                super_graph_orientations.push(CutOrientationData {
+                    orientation: merged_orientation,
+                    cuts: vec![cut_id],
+                });
+            }
         }
 
         let single_cut_expression = SingleCutExpression {
