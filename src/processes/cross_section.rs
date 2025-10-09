@@ -404,8 +404,8 @@ impl<S: CrossSectionState> CrossSectionGraph<S> {
             match hedge_pair {
                 HedgePair::Split { source, sink, .. } => {
                     // yes it is supposed to be like this, becuase a sink hedge goes into the node from which to construct the cuts
-                    let source_node = graph.underlying.node_id(sink);
-                    let sink_node = graph.underlying.node_id(source);
+                    let source_node = graph.underlying.node_id(source);
+                    let sink_node = graph.underlying.node_id(sink);
 
                     source_nodes.insert(source_node);
                     target_nodes.insert(sink_node);
@@ -582,6 +582,8 @@ impl<S: CrossSectionState> CrossSectionGraph<S> {
                 )
             })
             .collect();
+
+        debug!("generated esurfaces {:?}", esurfaces);
 
         self.cut_esurface = esurfaces;
     }
