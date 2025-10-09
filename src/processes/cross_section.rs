@@ -71,16 +71,16 @@ impl CrossSectionState for () {}
 use derive_more::{From, Into};
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
-pub struct CrossSection<S: CrossSectionState = ()> {
+pub struct CrossSection {
     pub name: String,
     pub integrand: Option<NewIntegrand>,
-    pub supergraphs: Vec<CrossSectionGraph<S>>,
+    pub supergraphs: Vec<CrossSectionGraph>,
     pub external_particles: Vec<ArcParticle>,
     pub external_connections: Vec<ExternalConnection>,
     pub n_incmoming: usize,
 }
 
-impl<S: CrossSectionState> CrossSection<S> {
+impl CrossSection {
     pub(crate) fn write_dot<W: std::io::Write>(
         &self,
         writer: &mut W,
@@ -236,10 +236,7 @@ pub struct CrossSectionCut {
 }
 
 impl CrossSectionCut {
-    pub(crate) fn is_s_channel<S: CrossSectionState>(
-        &self,
-        cross_section_graph: &CrossSectionGraph<S>,
-    ) -> Result<bool> {
+    pub(crate) fn is_s_channel(&self, cross_section_graph: &CrossSectionGraph) -> Result<bool> {
         let nodes_of_left_cut: Vec<_> = cross_section_graph
             .graph
             .underlying
@@ -261,9 +258,9 @@ impl CrossSectionCut {
         Ok(true)
     }
 
-    pub(crate) fn is_valid_for_process<S: CrossSectionState>(
+    pub(crate) fn is_valid_for_process(
         &self,
-        cross_section_graph: &CrossSectionGraph<S>,
+        cross_section_graph: &CrossSectionGraph,
         process: &ProcessDefinition,
         model: &Model,
     ) -> Result<bool> {
@@ -385,17 +382,17 @@ impl Display for CutId {
 
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
-pub struct CrossSectionGraph<S: CrossSectionState = ()> {
+pub struct CrossSectionGraph {
     pub graph: Graph,
     pub source_nodes: HedgeNode,
     pub target_nodes: HedgeNode,
     pub cuts: TiVec<CutId, CrossSectionCut>,
     pub cut_esurface: TiVec<CutId, Esurface>,
     pub cut_esurface_id_map: TiVec<CutId, EsurfaceID>,
-    pub derived_data: CrossSectionDerivedData<S>,
+    pub derived_data: CrossSectionDerivedData,
 }
 
-impl<S: CrossSectionState> CrossSectionGraph<S> {
+impl CrossSectionGraph {
     pub(crate) fn new(graph: Graph) -> Self {
         let mut source_nodes = AHashSet::new();
         let mut target_nodes = AHashSet::new();
@@ -436,7 +433,7 @@ impl<S: CrossSectionState> CrossSectionGraph<S> {
             cuts: TiVec::new(),
             cut_esurface: TiVec::new(),
             cut_esurface_id_map: TiVec::new(),
-            derived_data: CrossSectionDerivedData::<S>::new_empty(),
+            derived_data: CrossSectionDerivedData::new_empty(),
         }
     }
 
@@ -454,9 +451,6 @@ impl<S: CrossSectionState> CrossSectionGraph<S> {
         status_info!("extending cut esurface cache");
         self.update_surface_cache();
 
-        todo!("build evaluator for integrand");
-        //self.build_cut_evaluators(model, None);
-        //self.build_orientation_evaluators(model);
         self.build_lmbs();
 
         Ok(self.build_multi_channeling_channels())
@@ -817,92 +811,6 @@ impl<S: CrossSectionState> CrossSectionGraph<S> {
         fn_map
     }
 
-    pub(crate) fn build_cut_evaluators(
-        &mut self,
-        model: &Model,
-        overwrite_atoms_for_test: Option<TiVec<CutId, Atom>>,
-    ) {
-        let evaluators = self
-            .cuts
-            .iter_enumerated()
-            .map(|(cut_id, _)| {
-                let atom = if let Some(atoms) = &overwrite_atoms_for_test {
-                    atoms[cut_id].clone()
-                } else {
-                    self.build_atom_for_cut(cut_id)
-                };
-
-                let params = self.get_builder(model);
-
-                let mut eval = GenericEvaluator::new_from_builder(
-                    [atom],
-                    &params,
-                    OptimizationSettings::default(),
-                )
-                .unwrap();
-                let filename = format!("{}_cut_{}.cpp", self.graph.name, cut_id);
-                let function_name = format!("{}_cut_{}", self.graph.name, cut_id);
-                let lib_name = format!("{}_cut_{}.so", self.graph.name, cut_id);
-
-                eval.compile(
-                    filename,
-                    function_name,
-                    lib_name,
-                    symbolica::evaluate::ExportSettings::default(),
-                );
-                eval
-            })
-            .collect();
-
-        self.derived_data.bare_cff_evaluators = Some(evaluators)
-    }
-
-    fn build_orientation_evaluators(&mut self, model: &Model) {
-        let orientation_data = &self
-            .derived_data
-            .cff_expression
-            .as_ref()
-            .unwrap()
-            .orientation_data;
-
-        let substituted_energies = orientation_data
-            .iter_enumerated()
-            .map(|(orientation_id, data)| {
-                data.cuts
-                    .iter()
-                    .map(|cut_id| self.build_atom_for_orientation_and_cut(*cut_id, orientation_id))
-                    .collect_vec()
-            })
-            .collect::<TiVec<SuperGraphOrientationID, _>>();
-
-        let orientation_evaluators = substituted_energies
-            .iter()
-            .zip(orientation_data)
-            .map(|(cut_atoms, orientation_data)| {
-                let cut_evaluators = cut_atoms
-                    .iter()
-                    .map(|cut_atom| {
-                        let params = self.get_builder(model);
-
-                        GenericEvaluator::new_from_builder(
-                            [cut_atom.clone()],
-                            &params,
-                            OptimizationSettings::default(),
-                        )
-                        .unwrap()
-                    })
-                    .collect_vec();
-
-                OrientationEvaluator {
-                    orientation_data: orientation_data.clone(),
-                    evaluators: cut_evaluators,
-                }
-            })
-            .collect();
-
-        self.derived_data.bare_cff_orientation_evaluators = Some(orientation_evaluators);
-    }
-
     fn build_lmbs(&mut self) {
         let lmbs = self
             .graph
@@ -921,45 +829,26 @@ impl<S: CrossSectionState> CrossSectionGraph<S> {
     }
 
     fn generate_term_for_graph(&self, _model: &Model) -> CrossSectionGraphTerm {
-        CrossSectionGraphTerm {
-            multi_channeling_setup: self.derived_data.multi_channeling_setup.clone().unwrap(),
-            bare_cff_evaluators: self.derived_data.bare_cff_evaluators.clone().unwrap(),
-            bare_cff_orientation_evaluators: self
-                .derived_data
-                .bare_cff_orientation_evaluators
-                .clone()
-                .unwrap_or_else(|| vec![].into()),
-            graph: self.graph.clone(),
-            cuts: self.cuts.clone(),
-            cut_esurface: self.cut_esurface.clone(),
-            lmbs: self.derived_data.lmbs.clone().unwrap(),
-            estimated_scale: None,
-            param_builder: ParamBuilder::new_empty(),
-        }
+        todo!()
     }
 }
 
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
-pub struct CrossSectionDerivedData<S: CrossSectionState = ()> {
+pub struct CrossSectionDerivedData {
     pub orientations: Option<TiVec<SuperGraphOrientationID, CutOrientationData>>,
-    pub bare_cff_evaluators: Option<TiVec<CutId, GenericEvaluator>>,
-    pub bare_cff_orientation_evaluators:
-        Option<TiVec<SuperGraphOrientationID, OrientationEvaluator>>,
+    pub cut_paramatric_integrand: Option<TiVec<CutId, GenericEvaluator>>,
     pub cff_expression: Option<CFFCutsExpression>,
     pub lmbs: Option<TiVec<LmbIndex, LoopMomentumBasis>>,
     pub multi_channeling_setup: Option<LmbMultiChannelingSetup>,
-    pub _temp_numerator: Option<PhantomData<S>>,
 }
 
-impl<S: CrossSectionState> CrossSectionDerivedData<S> {
+impl CrossSectionDerivedData {
     fn new_empty() -> Self {
         Self {
             orientations: None,
             cff_expression: None,
-            _temp_numerator: None,
-            bare_cff_evaluators: None,
-            bare_cff_orientation_evaluators: None,
+            cut_paramatric_integrand: None,
             lmbs: None,
             multi_channeling_setup: None,
         }

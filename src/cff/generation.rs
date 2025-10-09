@@ -533,6 +533,8 @@ pub(crate) fn generate_cff_with_cuts<E, V, H>(
         cut_expressions.push(single_cut_expression);
     }
 
+    debug!("supergraph orientations: {:?}", super_graph_orientations);
+
     Ok(CFFCutsExpression {
         cut_expressions,
         orientation_data: super_graph_orientations,
