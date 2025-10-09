@@ -168,7 +168,7 @@ impl ProcessList {
         &self,
         process_id: usize,
         integrand_name: impl AsRef<str>,
-    ) -> Result<&crate::gammaloop_integrand::NewIntegrand> {
+    ) -> Result<&crate::gammaloop_integrand::GLIntegrand> {
         let process = &self.processes[process_id];
         process.get_integrand(integrand_name)
     }
@@ -177,7 +177,7 @@ impl ProcessList {
         &mut self,
         process_id: usize,
         integrand_name: impl AsRef<str>,
-    ) -> Result<&mut crate::gammaloop_integrand::NewIntegrand> {
+    ) -> Result<&mut crate::gammaloop_integrand::GLIntegrand> {
         let process = &mut self.processes[process_id];
         process.get_integrand_mut(integrand_name)
     }

@@ -62,7 +62,7 @@ use typed_index_collections::{ti_vec, TiVec};
 
 use crate::{
     cff::esurface::EsurfaceID,
-    gammaloop_integrand::NewIntegrand,
+    gammaloop_integrand::GLIntegrand,
     graph::{FeynmanGraph, Graph},
     model::Model,
     settings::global::GenerationSettings,
@@ -74,7 +74,7 @@ use crate::graph::parse::complete_group_parsing;
 #[trait_decode(trait = GammaLoopContext)]
 pub struct Amplitude {
     pub name: String,
-    pub integrand: Option<NewIntegrand>,
+    pub integrand: Option<GLIntegrand>,
     pub graphs: Vec<AmplitudeGraph>,
     pub graph_group_structure: TiVec<GroupId, GraphGroup>,
     pub external_particles: Vec<ArcParticle>,
@@ -120,7 +120,7 @@ impl Amplitude {
 
         if path.as_ref().join("integrand").exists() {
             let integrand = AmplitudeIntegrand::load(path.as_ref().join("integrand"), context)?;
-            amp.integrand = Some(NewIntegrand::Amplitude(integrand));
+            amp.integrand = Some(GLIntegrand::Amplitude(integrand));
         }
 
         Ok(amp)
@@ -286,7 +286,7 @@ impl Amplitude {
                 group_derived_data: self.group_derived_data.clone(),
             },
         };
-        self.integrand = Some(NewIntegrand::Amplitude(amplitude_integrand));
+        self.integrand = Some(GLIntegrand::Amplitude(amplitude_integrand));
         Ok(())
     }
 

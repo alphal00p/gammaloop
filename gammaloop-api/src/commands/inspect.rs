@@ -6,8 +6,9 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
 
-use crate::{state::State, status_info};
+use crate::state::State;
 use color_eyre::{Result, Section};
+use tracing::info;
 
 #[derive(Debug, Args, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
 pub struct Inspect {
@@ -86,7 +87,7 @@ impl Inspect {
             self.use_f128,
         );
         let res_to_return: Complex<f64> = if let Some(jac) = inspect_res_jac {
-            status_info!("Jacobian for this point: {:+.6e}", jac);
+            info!("Jacobian for this point: {:+.16e}", jac);
             if jac == 0. {
                 return Err(color_eyre::eyre::eyre!(
                     "Jacobian is zero at this point, cannot divide by zero."
@@ -97,7 +98,7 @@ impl Inspect {
         } else {
             inspect_res_eval.map(|a| a.into())
         };
-        status_info!("Result: {}", inspect_res_eval);
+        info!("Result: {}", inspect_res_eval);
 
         Ok((inspect_res_jac, res_to_return))
 

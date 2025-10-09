@@ -55,7 +55,7 @@ use crate::{
     },
     gammaloop_integrand::{
         cross_section_integrand::{CrossSectionGraphTerm, CrossSectionIntegrand},
-        NewIntegrand,
+        GLIntegrand,
     },
     graph::{ExternalConnection, FeynmanGraph, Graph},
     model::Model,
@@ -74,7 +74,7 @@ use derive_more::{From, Into};
 #[trait_decode(trait = GammaLoopContext)]
 pub struct CrossSection {
     pub name: String,
-    pub integrand: Option<NewIntegrand>,
+    pub integrand: Option<GLIntegrand>,
     pub supergraphs: Vec<CrossSectionGraph>,
     pub external_particles: Vec<ArcParticle>,
     pub external_connections: Vec<ExternalConnection>,
@@ -192,7 +192,7 @@ impl CrossSection {
             },
         };
 
-        self.integrand = Some(NewIntegrand::CrossSection(cross_section_integrand));
+        self.integrand = Some(GLIntegrand::CrossSection(cross_section_integrand));
         Ok(())
     }
 

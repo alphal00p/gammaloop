@@ -54,12 +54,12 @@ pub use param_builder::{ParamBuilder, ParamValuePairs, ThresholdParams, UpdateAn
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
 #[enum_dispatch(HasIntegrand)]
-pub enum NewIntegrand {
+pub enum GLIntegrand {
     Amplitude(amplitude_integrand::AmplitudeIntegrand),
     CrossSection(cross_section_integrand::CrossSectionIntegrand),
 }
 
-impl NewIntegrand {
+impl GLIntegrand {
     pub(crate) fn warm_up(&mut self, model: &Model) -> Result<()> {
         match self {
             Self::Amplitude(a) => a.warm_up(model),
@@ -80,8 +80,8 @@ impl NewIntegrand {
             r?;
         }
         match self {
-            NewIntegrand::Amplitude(integrand) => integrand.save(path, override_existing),
-            NewIntegrand::CrossSection(integrand) => integrand.save(path, override_existing),
+            GLIntegrand::Amplitude(integrand) => integrand.save(path, override_existing),
+            GLIntegrand::CrossSection(integrand) => integrand.save(path, override_existing),
         }
     }
 
@@ -104,7 +104,7 @@ impl NewIntegrand {
             r?;
         }
         match self {
-            NewIntegrand::Amplitude(integrand) => {
+            GLIntegrand::Amplitude(integrand) => {
                 integrand.compile(path, override_existing, settings, thread_pool)
             }
             _ => unimplemented!("compiling cross sections not yet implemented"), // NewIntegrand::CrossSection(integrand) => integrand.save(path, override_existing),
@@ -113,22 +113,22 @@ impl NewIntegrand {
 
     pub fn get_settings(&self) -> &RuntimeSettings {
         match self {
-            NewIntegrand::Amplitude(integrand) => &integrand.settings,
-            NewIntegrand::CrossSection(integrand) => &integrand.settings,
+            GLIntegrand::Amplitude(integrand) => &integrand.settings,
+            GLIntegrand::CrossSection(integrand) => &integrand.settings,
         }
     }
 
     /// Used to create the use_data_generator closure for havana_integrate
     pub fn user_data_generator(&self, num_cores: usize, _settings: &RuntimeSettings) -> UserData {
         UserData {
-            integrand: vec![Integrand::NewIntegrand(self.clone()); num_cores],
+            integrand: vec![Integrand::GLIntegrand(self.clone()); num_cores],
         }
     }
 
     pub fn get_mut_settings(&mut self) -> &mut RuntimeSettings {
         match self {
-            NewIntegrand::Amplitude(integrand) => &mut integrand.settings,
-            NewIntegrand::CrossSection(integrand) => &mut integrand.settings,
+            GLIntegrand::Amplitude(integrand) => &mut integrand.settings,
+            GLIntegrand::CrossSection(integrand) => &mut integrand.settings,
         }
     }
 }
@@ -1155,8 +1155,8 @@ fn evaluate_sample<I: GammaloopIntegrand>(
             match stability_level.precision {
                 Precision::Double => {
                     if let Ok(gammaloop_sample) = parameterize::<f64, I>(sample, integrand) {
-                        debug!("evaluating at f64");
-                        status_debug!(
+                        debug!("f64 parameterization succeeded");
+                        debug!(
                             "jacobian: {:+16e}",
                             gammaloop_sample.get_default_sample().jacobian()
                         );
@@ -1171,8 +1171,8 @@ fn evaluate_sample<I: GammaloopIntegrand>(
                 }
                 Precision::Quad => {
                     if let Ok(gammaloop_sample) = parameterize::<f128, I>(sample, integrand) {
-                        debug!("evaluating at f128");
-                        status_debug!(
+                        debug!("f128 parameterization succeeded");
+                        debug!(
                             "jacobian: {:+16e}",
                             gammaloop_sample.get_default_sample().jacobian()
                         );

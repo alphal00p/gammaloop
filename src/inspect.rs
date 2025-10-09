@@ -48,7 +48,7 @@ pub fn inspect<I: HasIntegrand>(
             NumericalFloatLike::inv(&inv_jac)
         );
 
-        (Some(inv_jac.to_f64()), xs)
+        (Some(NumericalFloatLike::inv(&inv_jac).to_f64()), xs)
     } else {
         (
             None,

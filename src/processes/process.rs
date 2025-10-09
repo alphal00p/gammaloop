@@ -17,7 +17,7 @@ use std::fmt;
 
 use crate::{
     feyngen::NumeratorAwareGraphGroupingOption,
-    gammaloop_integrand::NewIntegrand,
+    gammaloop_integrand::GLIntegrand,
     numerator::GlobalPrefactor,
     settings::{runtime::LockedRuntimeSettings, GlobalSettings},
     GammaLoopContext, GammaLoopContextContainer,
@@ -346,7 +346,7 @@ impl Process {
         Ok(())
     }
 
-    pub fn get_integrand(&self, integrand_name: impl AsRef<str>) -> Result<&NewIntegrand> {
+    pub fn get_integrand(&self, integrand_name: impl AsRef<str>) -> Result<&GLIntegrand> {
         self.collection.get_integrand(integrand_name)
     }
 
@@ -357,7 +357,7 @@ impl Process {
     pub fn get_integrand_mut(
         &mut self,
         integrand_name: impl AsRef<str>,
-    ) -> Result<&mut NewIntegrand> {
+    ) -> Result<&mut GLIntegrand> {
         self.collection.get_integrand_mut(integrand_name)
     }
 
@@ -474,7 +474,7 @@ impl ProcessCollection {
         }
     }
 
-    fn get_integrand(&self, name: impl AsRef<str>) -> Result<&NewIntegrand> {
+    fn get_integrand(&self, name: impl AsRef<str>) -> Result<&GLIntegrand> {
         let res = match self {
             Self::Amplitudes(amplitudes) => {
                 if amplitudes.contains_key(name.as_ref()) {
@@ -541,7 +541,7 @@ impl ProcessCollection {
         Ok(integrand_name)
     }
 
-    fn get_integrand_mut(&mut self, name: impl AsRef<str>) -> Result<&mut NewIntegrand> {
+    fn get_integrand_mut(&mut self, name: impl AsRef<str>) -> Result<&mut GLIntegrand> {
         let res = match self {
             Self::Amplitudes(amplitudes) => {
                 if amplitudes.contains_key(name.as_ref()) {

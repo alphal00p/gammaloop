@@ -459,7 +459,7 @@ impl State {
         force_radius: bool,
         momentum_space: bool,
         discrete_dim: Vec<usize>,
-    ) -> Result<Bound<'py, PyComplex>> {
+    ) -> Result<(Bound<'py, PyComplex>, Option<Bound<'py, PyFloat>>)> {
         let res = Inspect {
             process_id,
             integrand_name,
@@ -470,7 +470,10 @@ impl State {
             discrete_dim,
         }
         .run(self)?;
-        Ok(PyComplex::from_doubles(py, res.1.re, res.1.im))
+        Ok((
+            PyComplex::from_doubles(py, res.1.re, res.1.im),
+            res.0.map(|j| j.into_pyobject(py).unwrap()),
+        ))
     }
 
     pub fn batched_inspect<'py>(
