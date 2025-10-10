@@ -4,10 +4,31 @@ from .object_library import all_parameters, Parameter
 
 from .function_library import complexconjugate, re, im, csc, sec, acsc, asec
 
+import os
+
 # Specify here how many scalars need to be considered
-N_SCALARS = 3
+if os.environ.get('UFO_SCALARS_MODEL_N_SCALARS') is not None:
+    try:
+        N_SCALARS = int(os.environ['UFO_SCALARS_MODEL_N_SCALARS'])
+    except ValueError:
+        raise ValueError(
+            "Environment variable UFO_SCALARS_MODEL_N_SCALARS must be an integer")
+    print("Loading UFO scalars model with %d scalars" % N_SCALARS)
+else:
+    N_SCALARS = 3
+
 # Add all possible three-point interactions. User can filter undesired ones in vertices.py if needed.
-N_POINT_INTERACTIONS = [3, 4, 5, 6, 7, 8, 9, 10]
+if os.environ.get('UFO_SCALARS_MODEL_N_POINT_INTERACTIONS') is not None:
+    try:
+        N_POINT_INTERACTIONS = [
+            int(x) for x in os.environ['UFO_SCALARS_MODEL_N_POINT_INTERACTIONS'].split(',')]
+    except ValueError:
+        raise ValueError(
+            "Environment variable UFO_SCALARS_MODEL_N_POINT_INTERACTIONS must be a comma-separated list of integers")
+    print("Loading UFO scalars model with n-point interactions, n=[%s]" %
+          '|'.join(str(x) for x in N_POINT_INTERACTIONS))
+else:
+    N_POINT_INTERACTIONS = [3, 4, 5, 6, 7, 8, 9, 10]
 # N_POINT_INTERACTIONS = [3,4]
 
 # This is a default parameter object representing 0.
