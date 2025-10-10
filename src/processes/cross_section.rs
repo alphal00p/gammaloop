@@ -26,7 +26,10 @@ use crate::{
         param_builder::ParamBuilderGraph,
         GenericEvaluator, LmbMultiChannelingSetup, ParamBuilder,
     },
-    graph::{get_cff_inverse_energy_product_impl, LMBext, LmbIndex, LoopMomentumBasis},
+    graph::{
+        get_cff_inverse_energy_product_impl, parse::complete_group_parsing, GraphGroup, GroupId,
+        LMBext, LmbIndex, LoopMomentumBasis,
+    },
     model::ArcParticle,
     numerator::symbolica_ext::AtomCoreExt,
     processes::Amplitude,
@@ -84,6 +87,7 @@ pub struct CrossSection {
     pub external_particles: Vec<ArcParticle>,
     pub external_connections: Vec<ExternalConnection>,
     pub n_incmoming: usize,
+    pub graph_group_structure: TiVec<GroupId, GraphGroup>,
 }
 
 impl CrossSection {
@@ -106,11 +110,13 @@ impl CrossSection {
             external_connections: vec![],
             external_particles: vec![],
             n_incmoming: 0,
+            graph_group_structure: TiVec::new(),
         }
     }
 
-    pub fn from_graph_list(name: String, graphs: Vec<Graph>) -> Result<Self> {
+    pub fn from_graph_list(name: String, mut graphs: Vec<Graph>) -> Result<Self> {
         let mut cross_section = CrossSection::new(name);
+        cross_section.graph_group_structure = complete_group_parsing(&mut graphs)?;
 
         for cross_section_graph in graphs {
             cross_section.add_supergraph(cross_section_graph)?;
@@ -133,7 +139,7 @@ impl CrossSection {
         //    .map(|a| a.warm_up(derived_data_container));
     }
 
-    pub(crate) fn add_supergraph(&mut self, supergraph: Graph) -> Result<()> {
+    fn add_supergraph(&mut self, supergraph: Graph) -> Result<()> {
         if self.external_particles.is_empty() {
             let external_particles = supergraph.get_external_partcles();
             if external_particles.len() % 2 != 0 {
@@ -194,6 +200,7 @@ impl CrossSection {
                 n_incoming: self.n_incmoming,
                 // polarizations,
                 graph_terms: terms,
+                graph_group_structure: self.graph_group_structure.clone(),
             },
         };
 
