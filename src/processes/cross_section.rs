@@ -646,20 +646,6 @@ impl CrossSectionGraph {
             let mut left_forest = left_wood.unfold(&self.graph, &self.graph.loop_momentum_basis);
             let mut right_forest = right_wood.unfold(&self.graph, &self.graph.loop_momentum_basis);
 
-            let edges_in_cut = self.graph.iter_edges_of(&cut.cut).map(|(_, id, _)| id);
-            let orientation_of_edges_in_cut = cut.cut.iter_edges(&self.graph).map(|(or, _)| or);
-
-            let reversed_dangling = edges_in_cut
-                .zip(orientation_of_edges_in_cut)
-                .filter_map(|(edge_id, orientation)| {
-                    if orientation == Orientation::Reversed {
-                        Some(edge_id)
-                    } else {
-                        None
-                    }
-                })
-                .collect_vec();
-
             left_forest.compute(
                 &self.graph,
                 &cut.left,
