@@ -25,7 +25,7 @@ use typed_index_collections::TiVec;
 use crate::{
     define_index,
     feyngen::{
-        diagram_generator::{EdgeColor, NodeColorWithVertexRule},
+        diagram_generator::{evaluate_overall_factor, EdgeColor, NodeColorWithVertexRule},
         GenerationType,
     },
     gammaloop_integrand::{LmbMultiChannelingSetup, ParamBuilder},
@@ -78,11 +78,12 @@ impl Graph {
     /// With wrapped color, so that it doesn't enter the network as a tensor. Can unwrap using `unwrap_function`
     /// Contains the parametric sign on the OSE
     pub(crate) fn global_network(&self) -> ParsingNet {
-        let net =
-            (&self.global_prefactor.num * &self.global_prefactor.projector * &self.overall_factor)
-                .wrap_color(GS.color_wrap)
-                .parse_into_net()
-                .unwrap();
+        let net = (&self.global_prefactor.num
+            * &self.global_prefactor.projector
+            * evaluate_overall_factor(self.overall_factor.as_view()))
+        .wrap_color(GS.color_wrap)
+        .parse_into_net()
+        .unwrap();
 
         let mut reps = Vec::new();
         for (p, eid, _) in self.iter_edges() {
