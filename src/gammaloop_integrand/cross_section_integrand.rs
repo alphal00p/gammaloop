@@ -23,12 +23,14 @@ use crate::{
     },
     evaluation_result::EvaluationResult,
     gammaloop_integrand::ParamBuilder,
-    graph::{ExternalConnection, FeynmanGraph, Graph, GroupId, LmbIndex, LoopMomentumBasis},
+    graph::{
+        ExternalConnection, FeynmanGraph, Graph, GraphGroup, GroupId, LmbIndex, LoopMomentumBasis,
+    },
     integrands::HasIntegrand,
     model::Model,
     momentum::{Rotation, RotationMethod, ThreeMomentum},
     momentum_sample::{LoopMomenta, MomentumSample},
-    processes::{CrossSectionCut, CutId},
+    processes::{CrossSectionCut, CutId, GroupDerivedData},
     settings::{runtime::IntegratedCounterTermRange, RuntimeSettings},
     utils::{self, newton_solver::newton_iteration_and_derivative, FloatLike, F},
     DependentMomentaConstructor, GammaLoopContext, GammaLoopContextContainer,
@@ -62,6 +64,7 @@ pub struct CrossSectionIntegrandData {
     pub graph_terms: Vec<CrossSectionGraphTerm>,
     pub n_incoming: usize,
     pub external_connections: Vec<ExternalConnection>,
+    pub graph_group_structure: TiVec<GroupId, GraphGroup>,
     // pub builder_cache: ParamBuilder<f64>,
 }
 
@@ -152,8 +155,10 @@ impl GammaloopIntegrand for CrossSectionIntegrand {
     }
 
     fn get_group_masters(&self) -> impl Iterator<Item = &Self::G> {
-        todo!();
-        std::iter::empty()
+        self.data
+            .graph_group_structure
+            .iter()
+            .map(|group| &self.data.graph_terms[group.master()])
     }
 
     fn get_settings(&self) -> &RuntimeSettings {
@@ -165,11 +170,12 @@ impl GammaloopIntegrand for CrossSectionIntegrand {
     }
 
     fn get_master_graph(&self, group_id: GroupId) -> &Self::G {
-        todo!()
+        let group_master = self.data.graph_group_structure[group_id].master();
+        &self.data.graph_terms[group_master]
     }
 
     fn get_group(&self, group_id: GroupId) -> &crate::graph::GraphGroup {
-        todo!()
+        &self.data.graph_group_structure[group_id]
     }
 
     fn get_dependent_momenta_constructor(&self) -> DependentMomentaConstructor {

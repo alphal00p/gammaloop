@@ -3,6 +3,7 @@ use std::{
     fs::{self, File},
     io::Write,
     marker::PhantomData,
+    ops::Deref,
     path::Path,
 };
 
@@ -12,9 +13,11 @@ use bincode_trait_derive::{Decode, Encode};
 use bitvec::vec::BitVec;
 use color_eyre::Result;
 
-use idenso::metric::MS;
+use idenso::{color::ColorSimplifier, metric::MS};
 use rayon::ThreadPool;
+use spenso::network::{Sequential, SmallestDegree};
 use tracing::info;
+use vakint::{EvaluationOrder, LoopNormalizationFactor, Vakint, VakintSettings};
 
 use crate::{
     cff::{cut_expression::SuperGraphOrientationID, expression::AmplitudeOrientationID},
@@ -23,12 +26,17 @@ use crate::{
         param_builder::ParamBuilderGraph,
         GenericEvaluator, LmbMultiChannelingSetup, ParamBuilder,
     },
-    graph::{get_cff_inverse_energy_product_impl, LMBext, LmbIndex, LoopMomentumBasis},
+    graph::{
+        get_cff_inverse_energy_product_impl, parse::complete_group_parsing, GraphGroup, GroupId,
+        LMBext, LmbIndex, LoopMomentumBasis,
+    },
     model::ArcParticle,
+    numerator::symbolica_ext::AtomCoreExt,
     processes::Amplitude,
     settings::{global::GenerationSettings, runtime::LockedRuntimeSettings, GlobalSettings},
     status_info,
-    utils::{ose_atom_from_index, GS, W_},
+    utils::{ose_atom_from_index, GS, TENSORLIB, W_},
+    uv::UltravioletGraph,
     GammaLoopContext, GammaLoopContextContainer,
 };
 use eyre::{eyre, Context};
@@ -79,6 +87,7 @@ pub struct CrossSection {
     pub external_particles: Vec<ArcParticle>,
     pub external_connections: Vec<ExternalConnection>,
     pub n_incmoming: usize,
+    pub graph_group_structure: TiVec<GroupId, GraphGroup>,
 }
 
 impl CrossSection {
@@ -101,11 +110,13 @@ impl CrossSection {
             external_connections: vec![],
             external_particles: vec![],
             n_incmoming: 0,
+            graph_group_structure: TiVec::new(),
         }
     }
 
-    pub fn from_graph_list(name: String, graphs: Vec<Graph>) -> Result<Self> {
+    pub fn from_graph_list(name: String, mut graphs: Vec<Graph>) -> Result<Self> {
         let mut cross_section = CrossSection::new(name);
+        cross_section.graph_group_structure = complete_group_parsing(&mut graphs)?;
 
         for cross_section_graph in graphs {
             cross_section.add_supergraph(cross_section_graph)?;
@@ -128,7 +139,7 @@ impl CrossSection {
         //    .map(|a| a.warm_up(derived_data_container));
     }
 
-    pub(crate) fn add_supergraph(&mut self, supergraph: Graph) -> Result<()> {
+    fn add_supergraph(&mut self, supergraph: Graph) -> Result<()> {
         if self.external_particles.is_empty() {
             let external_particles = supergraph.get_external_partcles();
             if external_particles.len() % 2 != 0 {
@@ -159,7 +170,7 @@ impl CrossSection {
         generatioon_pool: &ThreadPool,
     ) -> Result<()> {
         for supergraph in &mut self.supergraphs {
-            supergraph.preprocess(model, process_definition)?;
+            supergraph.preprocess(model, process_definition, generation_settings)?;
         }
         Ok(())
     }
@@ -189,6 +200,7 @@ impl CrossSection {
                 n_incoming: self.n_incmoming,
                 // polarizations,
                 graph_terms: terms,
+                graph_group_structure: self.graph_group_structure.clone(),
             },
         };
 
@@ -442,19 +454,24 @@ impl CrossSectionGraph {
         &mut self,
         model: &Model,
         process_definition: &ProcessDefinition,
+        settings: &GenerationSettings,
     ) -> Result<()> {
-        status_info!("generating cuts");
+        debug!("generating cuts");
         self.generate_cuts(model, process_definition)?;
-        status_info!("generating esurfaces corresponding to cuts");
+        debug!("generating esurfaces corresponding to cuts");
         self.generate_esurface_cuts();
-        status_info!("generating cff");
+        debug!("generating cff");
         self.generate_cff()?;
-        status_info!("extending cut esurface cache");
+        debug!("extending cut esurface cache");
         self.update_surface_cache();
-
+        debug!("building lmbs");
         self.build_lmbs();
+        debug!("building multi channeling channels");
+        self.build_multi_channeling_channels();
+        debug!("building parametric integrand");
+        self.build_parametric_integrand(&settings)?;
 
-        Ok(self.build_multi_channeling_channels())
+        Ok(())
     }
 
     pub(crate) fn write_dot<W: std::io::Write>(
@@ -583,14 +600,26 @@ impl CrossSectionGraph {
         self.cut_esurface = esurfaces;
     }
 
+    pub(crate) fn build_parametric_integrand(
+        &mut self,
+        settings: &GenerationSettings,
+    ) -> Result<()> {
+        self.derived_data.cut_paramatric_integrand =
+            self.build_original_parametric_integrand(settings)?;
+        Ok(())
+    }
+
     fn build_original_parametric_integrand(
         &self,
         settings: &GenerationSettings,
     ) -> Result<TiVec<CutId, Atom>> {
         let global_num = self.graph.global_network();
+
         let canonize_esurface = self
             .graph
             .get_esurface_canonization(&self.graph.loop_momentum_basis);
+
+        let mut integrands = TiVec::new();
 
         for ((cut_id, cut), esurface) in self.cuts.iter_enumerated().zip(self.cut_esurface.iter()) {
             let expression_for_cut = &self
@@ -615,8 +644,92 @@ impl CrossSectionGraph {
                 .map(|expr| expr.data.orientation.clone())
                 .filter(|o| settings.orientation_pattern.filter(o))
                 .collect::<TiVec<AmplitudeOrientationID, _>>();
+
+            let vakint = self.new_vakint();
+
+            let left_wood = self.graph.wood(&cut.left);
+            let right_wood = self.graph.wood(&cut.right);
+
+            let mut left_forest = left_wood.unfold(&self.graph, &self.graph.loop_momentum_basis);
+            let mut right_forest = right_wood.unfold(&self.graph, &self.graph.loop_momentum_basis);
+
+            left_forest.compute(
+                &self.graph,
+                &cut.left,
+                &vakint,
+                &left_orientations,
+                &canonize_esurface,
+                &esurface.energies,
+                &settings.uv,
+            );
+
+            right_forest.compute(
+                &self.graph,
+                &cut.right,
+                &vakint,
+                &right_orientations,
+                &canonize_esurface,
+                &esurface.energies,
+                &settings.uv,
+            );
+
+            let left_expr = left_forest.orientation_parametric_expr(
+                Some(&esurface.bitvec(&self.graph.underlying)),
+                &self.graph,
+            );
+
+            let right_expr = right_forest.orientation_parametric_expr(None, &self.graph);
+
+            let mut product = left_expr * right_expr * global_num.clone();
+
+            product
+                .execute::<Sequential, SmallestDegree, _, _>(TENSORLIB.read().unwrap().deref())
+                .unwrap();
+
+            let scalar: Atom = product
+                .result_scalar()
+                .with_context(|| "in building LU integrand")?
+                .into();
+
+            let integrand = scalar
+                .unwrap_function(GS.color_wrap)
+                .simplify_color()
+                .replace(function!(GS.energy, W_.x_))
+                .with(function!(GS.ose, W_.x_));
+
+            let loop_number = self.graph.cyclotomatic_number(&cut.left)
+                + self.graph.n_loops(&cut.right)
+                + (esurface.energies.len() - 1);
+
+            let loop_3 = loop_number as i64 * 3;
+            let grad_eta = Atom::var(GS.deta);
+            let factors_of_pi = (Atom::num(2) * Atom::var(GS.pi)).npow(loop_3);
+            let tstar = Atom::var(GS.rescale_star);
+            let tsrat_pow = tstar.npow(loop_3);
+            let hfunction = Atom::var(GS.hfunction);
+
+            let prefactor = tsrat_pow * hfunction / factors_of_pi / grad_eta;
+            let integrand_with_prefactor = prefactor * integrand;
+            debug!("integrand for cut {}: {}", cut_id, integrand_with_prefactor);
+            integrands.push(integrand_with_prefactor);
         }
-        todo!()
+
+        Ok(integrands)
+    }
+
+    fn new_vakint(&self) -> Vakint {
+        Vakint::new(Some(VakintSettings {
+            allow_unknown_integrals: false,
+            evaluation_order: EvaluationOrder::alphaloop_only(),
+            integral_normalization_factor: LoopNormalizationFactor::MSbar,
+            run_time_decimal_precision: 32,
+            number_of_terms_in_epsilon_expansion: self.graph.n_loops(&self.graph.no_dummy()) as i64
+                + 1,
+            // temporary_directory: Some("./form".into()),
+            mu_r_sq_symbol: GS.mu_r_sq.get_name().to_string(),
+            ..VakintSettings::default()
+        }))
+        .unwrap()
     }
 
     fn build_lmbs(&mut self) {
@@ -645,7 +758,7 @@ impl CrossSectionGraph {
 #[trait_decode(trait = GammaLoopContext)]
 pub struct CrossSectionDerivedData {
     pub orientations: Option<TiVec<SuperGraphOrientationID, CutOrientationData>>,
-    pub cut_paramatric_integrand: Option<TiVec<CutId, GenericEvaluator>>,
+    pub cut_paramatric_integrand: TiVec<CutId, Atom>,
     pub cff_expression: Option<CFFCutsExpression>,
     pub lmbs: Option<TiVec<LmbIndex, LoopMomentumBasis>>,
     pub multi_channeling_setup: Option<LmbMultiChannelingSetup>,
@@ -656,7 +769,7 @@ impl CrossSectionDerivedData {
         Self {
             orientations: None,
             cff_expression: None,
-            cut_paramatric_integrand: None,
+            cut_paramatric_integrand: TiVec::new(),
             lmbs: None,
             multi_channeling_setup: None,
         }
