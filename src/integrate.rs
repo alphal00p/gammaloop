@@ -448,79 +448,6 @@ where
 
         integration_state.update_iter(false);
 
-        integration_state.integral.update_iter(false);
-
-        disable! {
-            if settings.general.debug > 1 {
-                // Currently not available when using havana from symbolica
-                // if let Grid::Discrete(g) = &grid {
-                //     g.bins[0]
-                //         .plot(&format!("grid_disc_it_{}.svg", iter))
-                //         .unwrap();
-                // }
-                let mut tabled_data = vec![];
-
-                tabled_data.push(IntegralResult {
-                    id: format!("Sum@it#{}", integration_state.integral.cur_iter),
-                    n_samples: format!("{}", integration_state.integral.processed_samples),
-                    n_samples_perc: format!("{:.3e}%", 100.),
-                    integral: format!("{:.8e}", integration_state.integral.avg),
-                    variance: format!(
-                        "{:.8e}",
-                        integration_state.integral.err
-                            * F::<f64>::new_from_usize(
-                                (integration_state.integral.processed_samples - 1).max(0)
-                            )
-                            .sqrt()
-                    ),
-                    err: format!("{:.8e}", integration_state.integral.err),
-                    err_perc: format!(
-                        "{:.3e}%",
-                        (integration_state.integral.err
-                            / (integration_state.integral.avg.abs()).max(F(1.0e-99)))
-                        .abs()
-                            * F(100.)
-                    ),
-                    pdf: String::from_str("N/A").unwrap(),
-                });
-                if let Grid::Discrete(g) = &integration_state.grid {
-                    for (i, b) in g.bins.iter().enumerate() {
-                        tabled_data.push(IntegralResult {
-                            id: format!("chann#{}", i),
-                            n_samples: format!("{}", b.accumulator.processed_samples),
-                            n_samples_perc: format!(
-                                "{:.3e}%",
-                                ((b.accumulator.processed_samples as f64)
-                                    / (integration_state.integral.processed_samples.max(1) as f64))
-                                    * 100.
-                            ),
-                            integral: format!("{:.8e}", b.accumulator.avg),
-                            variance: format!(
-                                "{:.8e}",
-                                b.accumulator.err
-                                    * F::<f64>::new_from_usize(
-                                        (b.accumulator.processed_samples - 1).max(0)
-                                    )
-                                    .sqrt()
-                            ),
-                            err: format!("{:.8e}", b.accumulator.err),
-                            err_perc: format!(
-                                "{:.3e}%",
-                                (b.accumulator.err / (b.accumulator.avg.abs()).max(F(1.0e-99))).abs()
-                                    * F(100.)
-                            ),
-                            pdf: format!("{:.8e}", b.pdf),
-                        });
-                    }
-                }
-                let mut f = BufWriter::new(
-                    File::create(format!("results_it_{}.txt", integration_state.iter))
-                        .expect("Could not create results file"),
-                );
-                writeln!(f, "{}", Table::new(tabled_data).with(Style::psql())).unwrap();
-            }
-        }
-
         integration_state.iter += 1;
 
         integration_state.num_points += cur_points;
@@ -1285,3 +1212,6 @@ pub fn print_integral_result(
         }
     );
 }
+
+#[test]
+fn test_threading() {}
