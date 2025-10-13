@@ -2,6 +2,7 @@
 
 use bincode::Encode;
 use bincode_trait_derive::Decode;
+use bitvec::vec::BitVec;
 use color_eyre::Result;
 use colored::Colorize;
 use itertools::Itertools;
@@ -26,7 +27,9 @@ use crate::{
         expression::GraphOrientation,
     },
     evaluation_result::EvaluationResult,
-    gammaloop_integrand::ParamBuilder,
+    gammaloop_integrand::{
+        param_builder::LUParams, GenericEvaluatorFloat, ParamBuilder, UpdateAndGetParams,
+    },
     graph::{
         ExternalConnection, FeynmanGraph, Graph, GraphGroup, GroupId, LmbIndex, LoopMomentumBasis,
     },
@@ -35,8 +38,14 @@ use crate::{
     momentum::{Rotation, RotationMethod, ThreeMomentum},
     momentum_sample::{LoopMomenta, MomentumSample},
     processes::{Amplitude, CrossSectionCut, CrossSectionGraph, CutId, GroupDerivedData},
-    settings::{runtime::IntegratedCounterTermRange, GlobalSettings, RuntimeSettings},
-    utils::{self, newton_solver::newton_iteration_and_derivative, FloatLike, Length, F},
+    settings::{
+        runtime::{HFunctionSettings, IntegratedCounterTermRange},
+        GlobalSettings, RuntimeSettings,
+    },
+    utils::{
+        self, bitvec_ext::BinVec, h, newton_solver::newton_iteration_and_derivative, FloatLike,
+        Length, F,
+    },
     DependentMomentaConstructor, GammaLoopContext, GammaLoopContextContainer,
 };
 
@@ -213,6 +222,7 @@ pub struct CrossSectionGraphTerm {
     pub estimated_scale: Option<F<f64>>,
     pub param_builder: ParamBuilder<f64>,
     pub orientations: TiVec<SuperGraphOrientationID, EdgeVec<Orientation>>,
+    pub orientation_filter: BinVec,
 }
 
 impl CrossSectionGraphTerm {
@@ -283,6 +293,7 @@ impl CrossSectionGraphTerm {
             lmbs: graph.derived_data.lmbs.as_ref().unwrap().clone(),
             estimated_scale: None,
             param_builder: graph.graph.param_builder.clone(),
+            orientation_filter: BinVec(BitVec::repeat(true, orientations.len())),
             orientations,
         })
     }
@@ -308,7 +319,10 @@ impl GraphTerm for CrossSectionGraphTerm {
         settings: &RuntimeSettings,
         rotation: &Rotation,
     ) -> Complex<F<T>> {
-        let mut result = Complex::new_re(momentum_sample.zero());
+        let orientations =
+            momentum_sample.orientations(&self.orientation_filter.0, &self.orientations);
+
+        let mut all_cut_result = Complex::new_re(momentum_sample.zero());
         let center = LoopMomenta::from_iter(vec![
             ThreeMomentum {
                 px: momentum_sample.zero(),
@@ -318,6 +332,7 @@ impl GraphTerm for CrossSectionGraphTerm {
             momentum_sample.loop_moms().len()
         ]);
         let masses = self.graph.get_real_mass_vector(&model);
+        let hel = settings.kinematics.externals.get_helicities();
 
         for (cut, esurface) in self.cut_esurface.iter_enumerated() {
             let function = |t: &F<T>| {
@@ -344,9 +359,60 @@ impl GraphTerm for CrossSectionGraphTerm {
                 20,
                 &F::from_f64(settings.kinematics.e_cm),
             );
+
+            let h_function = h(
+                &solution.solution,
+                None,
+                None,
+                &HFunctionSettings::default(),
+            );
+
+            let lu_params = LUParams {
+                h_function,
+                tstar: solution.solution.clone(),
+                esurface_derivative: solution.derivative_at_solution.clone(),
+            };
+
+            let mut result = Complex::new_re(momentum_sample.zero());
+            let params = T::get_parameters(
+                &mut self.param_builder,
+                settings.general.enable_cache,
+                &self.graph,
+                momentum_sample,
+                hel,
+                None,
+                Some(&lu_params),
+            );
+
+            let iterative = self
+                .iterative_integrand
+                .as_mut()
+                .map(|ev| <T as GenericEvaluatorFloat>::get_evaluator(&mut ev[cut])(&params));
+
+            for (i, e) in orientations.iter() {
+                if let Some(iterative) = &iterative {
+                    result += &iterative[i.0]
+                } else {
+                    self.param_builder.orientation_value(e);
+                    let a = T::get_parameters(
+                        &mut self.param_builder,
+                        settings.general.enable_cache,
+                        &self.graph,
+                        momentum_sample,
+                        hel,
+                        None,
+                        None,
+                    );
+                    result += <T as GenericEvaluatorFloat>::get_evaluator_single(
+                        &mut self.parametric_integrand[cut],
+                    )(&a)
+                }
+            }
+
+            all_cut_result += result;
         }
 
-        result
+        all_cut_result
     }
     fn name(&self) -> String {
         self.graph.name.clone()
