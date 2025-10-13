@@ -327,9 +327,9 @@ impl GraphTerm for CrossSectionGraphTerm {
         let externals = settings
             .kinematics
             .externals
-            .get_dependent_externals(DependentMomentaConstructor::Amplitude(
-                &self.graph.get_external_signature(),
-            ))
+            .get_dependent_externals(DependentMomentaConstructor::CrossSection {
+                external_connections: todo!("aaaaarrgjhhh"),
+            })
             .with_context(|| {
                 format!(
                     "Failed to get dependent external momenta for graph {}",
