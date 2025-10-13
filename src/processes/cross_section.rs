@@ -231,6 +231,19 @@ impl CrossSection {
         self.integrand = integrand;
         Ok(())
     }
+
+    pub(crate) fn load(path: impl AsRef<Path>, context: GammaLoopContextContainer) -> Result<Self> {
+        let binary = fs::read(path.as_ref().join("cs.bin"))?;
+        let (mut cs, _): (Self, _) =
+            bincode::decode_from_slice_with_context(&binary, bincode::config::standard(), context)?;
+
+        if path.as_ref().join("integrand").exists() {
+            let integrand = CrossSectionIntegrand::load(path.as_ref().join("integrand"), context)?;
+            cs.integrand = Some(GLIntegrand::CrossSection(integrand));
+        }
+
+        Ok(cs)
+    }
 }
 
 #[derive(Clone, bincode::Encode, bincode::Decode)]

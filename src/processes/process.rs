@@ -222,18 +222,29 @@ impl Process {
         let (definition, _) =
             bincode::decode_from_slice_with_context(&binary, bincode::config::standard(), context)?;
 
-        let collection = ProcessCollection::new_cross_section();
+        let mut collection = ProcessCollection::new_cross_section();
         let settings_history = File::open(path.as_ref().join("settings_history.yaml"))
             .ok()
             .map(|a| serde_yaml::from_reader(a))
             .transpose()?;
 
-        // for entry in fs::read_dir(path)? {
-        //     let entry = entry?;
-        //     let path = entry.path();
-        //     let amp = CrossSection::load(path, context.clone())?;
-        //     collection.add_amplitude(amp);
-        // }
+        for entry in fs::read_dir(path.as_ref())
+            .context(format!("error reading {}", path.as_ref().display()))?
+        {
+            let Ok(entry) = entry else {
+                debug!("Error reading entry");
+                continue;
+            };
+            if entry.file_type()?.is_file() {
+                continue; //skip def.bin, cross sections are in folders
+            }
+            let path = entry.path();
+            debug!("loading cross section at {}", path.display());
+            let cs =
+                CrossSection::load(path, context.clone()).context("Error loading cross section")?;
+
+            collection.add_cross_section(cs);
+        }
 
         Ok(Self {
             definition,
