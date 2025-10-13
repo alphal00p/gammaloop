@@ -5,6 +5,7 @@ use bincode_trait_derive::Decode;
 use bitvec::vec::BitVec;
 use color_eyre::Result;
 use colored::Colorize;
+use eyre::Context;
 use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeVec, Orientation};
 use log::{debug, info};
@@ -43,8 +44,8 @@ use crate::{
         GlobalSettings, RuntimeSettings,
     },
     utils::{
-        self, bitvec_ext::BinVec, h, newton_solver::newton_iteration_and_derivative, FloatLike,
-        Length, F,
+        self, bitvec_ext::BinVec, h, newton_solver::newton_iteration_and_derivative,
+        serde_utils::SmartSerde, FloatLike, Length, F,
     },
     DependentMomentaConstructor, GammaLoopContext, GammaLoopContextContainer,
 };
@@ -82,11 +83,13 @@ pub struct CrossSectionIntegrandData {
 }
 
 impl CrossSectionIntegrand {
-    pub(crate) fn save(&self, path: impl AsRef<Path>, _override_existing: bool) -> Result<()> {
-        let binary = bincode::encode_to_vec(&self, bincode::config::standard())?;
+    pub(crate) fn save(&self, path: impl AsRef<Path>, override_existing: bool) -> Result<()> {
+        let binary = bincode::encode_to_vec(self, bincode::config::standard())?;
         fs::write(path.as_ref().join("integrand.bin"), binary)?;
-        File::create(path.as_ref().join("settings.toml"))?
-            .write(toml::to_string_pretty(&self.settings)?.as_bytes())?;
+
+        self.settings
+            .to_file(path.as_ref().join("settings.toml"), override_existing)
+            .with_context(|| "Error saving settings.toml file for amplitude integrand")?;
         Ok(())
     }
 
@@ -94,9 +97,11 @@ impl CrossSectionIntegrand {
         let binary = fs::read(path.as_ref().join("integrand.bin"))?;
         let (data, _) =
             bincode::decode_from_slice_with_context(&binary, bincode::config::standard(), context)?;
-        let mut buf = vec![];
-        File::open(path.as_ref().join("settings.toml"))?.read(&mut buf)?;
-        let settings = toml::from_slice(&buf)?;
+
+        let settings = SmartSerde::from_file(
+            path.as_ref().join("settings.toml"),
+            "runtime settings for amplitude integrand",
+        )?;
 
         Ok(CrossSectionIntegrand { settings, data })
     }
@@ -183,7 +188,9 @@ impl GammaloopIntegrand for CrossSectionIntegrand {
     }
 
     fn get_master_graph(&self, group_id: GroupId) -> &Self::G {
+        println!("group structure: {:?}", self.data.graph_group_structure);
         let group_master = self.data.graph_group_structure[group_id].master();
+
         &self.data.graph_terms[group_master]
     }
 
@@ -301,7 +308,7 @@ impl CrossSectionGraphTerm {
 
 impl GraphTerm for CrossSectionGraphTerm {
     fn get_mut_param_builder(&mut self) -> &mut ParamBuilder<f64> {
-        todo!()
+        &mut self.param_builder
     }
 
     fn warm_up(&mut self, settings: &RuntimeSettings, model: &Model) -> Result<()> {
@@ -309,6 +316,53 @@ impl GraphTerm for CrossSectionGraphTerm {
             self.graph
                 .expected_scale(F(settings.kinematics.e_cm), model),
         );
+
+        self.orientation_filter = BinVec(
+            self.orientations
+                .iter()
+                .map(|or| settings.general.orientation_pat.filter(or))
+                .collect(),
+        );
+
+        let externals = settings
+            .kinematics
+            .externals
+            .get_dependent_externals(DependentMomentaConstructor::Amplitude(
+                &self.graph.get_external_signature(),
+            ))
+            .with_context(|| {
+                format!(
+                    "Failed to get dependent external momenta for graph {}",
+                    self.graph.name
+                )
+            })?;
+        self.graph.param_builder.add_external_four_mom(&externals);
+
+        self.graph.param_builder.add_external_four_mom(&externals);
+        let pols = self.graph.param_builder.pairs.polarizations_values(
+            &self.graph,
+            &externals,
+            settings.kinematics.externals.get_helicities(),
+        );
+
+        self.graph.param_builder.values[self
+            .graph
+            .param_builder
+            .pairs
+            .polarizations
+            .value_range
+            .clone()]
+        .clone_from_slice(&pols);
+
+        self.graph
+            .param_builder
+            .m_uv_value(Complex::new_re(F(settings.general.m_uv)));
+        self.graph
+            .param_builder
+            .mu_r_sq_value(Complex::new_re(F(settings.general.mu_r_sq)));
+        self.graph.param_builder.update_model_values(model);
+
+        self.param_builder = self.graph.param_builder.clone();
 
         Ok(())
     }

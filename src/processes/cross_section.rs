@@ -111,6 +111,7 @@ impl CrossSection {
     pub fn from_graph_list(name: String, mut graphs: Vec<Graph>) -> Result<Self> {
         let mut cross_section = CrossSection::new(name);
         cross_section.graph_group_structure = complete_group_parsing(&mut graphs)?;
+        println!("group structure: {:?}", cross_section.graph_group_structure);
 
         for cross_section_graph in graphs {
             cross_section.add_supergraph(cross_section_graph)?;
@@ -118,19 +119,15 @@ impl CrossSection {
         Ok(cross_section)
     }
 
-    pub(crate) fn warm_up(&mut self, _model: &Model) -> Result<()> {
-        let _derived_data = self
-            .supergraphs
-            .iter()
-            .map(|g| &g.derived_data)
-            .collect_vec();
-
-        todo!()
-        //let derived_data_container = DerivedDataContainer::CrossSection(&derived_data);
-
-        //self.integrand
-        //    .as_mut()
-        //    .map(|a| a.warm_up(derived_data_container));
+    pub(crate) fn warm_up(&mut self, model: &Model) -> Result<()> {
+        if let Some(integrand) = &mut self.integrand {
+            integrand.warm_up(model)
+        } else {
+            Err(eyre!(
+                "Cannot warm up amplitude {} without integrand",
+                self.name
+            ))
+        }
     }
 
     fn add_supergraph(&mut self, supergraph: Graph) -> Result<()> {
@@ -182,6 +179,7 @@ impl CrossSection {
             .map(|sg| sg.generate_term_for_graph(model, global_settings))
             .collect::<Result<Vec<_>>>()?;
 
+        println!("cloning structure: {:?}", self.graph_group_structure);
         let cross_section_integrand = CrossSectionIntegrand {
             settings: runtime_default.into(),
             data: CrossSectionIntegrandData {
