@@ -71,12 +71,6 @@ use crate::{
 
 use crate::processes::ProcessDefinition;
 
-pub trait CrossSectionState:
-    Clone + std::fmt::Debug + bincode::Encode + for<'a> bincode::Decode<GammaLoopContextContainer<'a>>
-{
-}
-impl CrossSectionState for () {}
-
 use derive_more::{From, Into};
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
@@ -180,13 +174,13 @@ impl CrossSection {
         model: &Model,
         global_settings: &GlobalSettings,
         runtime_default: LockedRuntimeSettings,
-        generatioon_pool: &ThreadPool,
+        generation_pool: &ThreadPool,
     ) -> Result<()> {
         let terms = self
             .supergraphs
             .iter()
-            .map(|sg| sg.generate_term_for_graph(model))
-            .collect_vec();
+            .map(|sg| sg.generate_term_for_graph(model, global_settings))
+            .collect::<Result<Vec<_>>>()?;
 
         let cross_section_integrand = CrossSectionIntegrand {
             settings: runtime_default.into(),
@@ -749,8 +743,12 @@ impl CrossSectionGraph {
         self.derived_data.multi_channeling_setup = Some(channels)
     }
 
-    fn generate_term_for_graph(&self, _model: &Model) -> CrossSectionGraphTerm {
-        todo!()
+    fn generate_term_for_graph(
+        &self,
+        _model: &Model,
+        settings: &GlobalSettings,
+    ) -> Result<CrossSectionGraphTerm> {
+        CrossSectionGraphTerm::from_cross_section_graph(&self, settings)
     }
 }
 
