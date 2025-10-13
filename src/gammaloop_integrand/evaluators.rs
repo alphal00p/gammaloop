@@ -15,6 +15,7 @@ use symbolica::{
 use typed_index_collections::TiVec;
 
 use crate::{
+    gammaloop_integrand::param_builder::LUParams,
     graph::Graph,
     momentum::Helicity,
     momentum_sample::MomentumSample,
@@ -195,6 +196,7 @@ pub trait GenericEvaluatorFloat<T: FloatLike = Self> {
         sample: &'a MomentumSample<T>,
         helicities: &[Helicity],
         threshold_params: Option<&ThresholdParams<T>>,
+        lu_params: Option<&LUParams<T>>,
     ) -> Cow<'a, Vec<Complex<F<T>>>>;
 }
 
@@ -253,6 +255,7 @@ impl GenericEvaluatorFloat for f64 {
         sample: &'a MomentumSample<Self>,
         helicities: &[Helicity],
         threshold_params: Option<&ThresholdParams<f64>>,
+        lu_params: Option<&LUParams<f64>>,
     ) -> Cow<'a, Vec<Complex<F<Self>>>> {
         let params = param_builder.update_emr_and_get_params(
             cache,
@@ -260,6 +263,7 @@ impl GenericEvaluatorFloat for f64 {
             graph,
             helicities,
             threshold_params,
+            lu_params,
         );
 
         params
@@ -334,7 +338,15 @@ impl GenericEvaluatorFloat for f128 {
         sample: &'a MomentumSample<Self>,
         helicities: &[Helicity],
         threshold_params: Option<&ThresholdParams<f128>>,
+        lu_params: Option<&LUParams<f128>>,
     ) -> Cow<'a, Vec<Complex<F<Self>>>> {
-        param_builder.update_emr_and_get_params(cache, sample, graph, helicities, threshold_params)
+        param_builder.update_emr_and_get_params(
+            cache,
+            sample,
+            graph,
+            helicities,
+            threshold_params,
+            lu_params,
+        )
     }
 }

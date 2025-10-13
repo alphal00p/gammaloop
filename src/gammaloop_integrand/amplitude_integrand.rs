@@ -252,6 +252,7 @@ impl AmplitudeGraphTerm {
                 momentum_sample,
                 hel,
                 None,
+                None,
             );
 
             let iterative = self
@@ -270,6 +271,7 @@ impl AmplitudeGraphTerm {
                         &self.graph,
                         momentum_sample,
                         hel,
+                        None,
                         None,
                     );
                     result += <T as GenericEvaluatorFloat>::get_evaluator_single(evaluator)(&a)

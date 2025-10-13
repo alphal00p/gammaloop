@@ -9,6 +9,7 @@ use idenso::color::CS;
 
 use linnet::half_edge::involution::{EdgeIndex, HedgePair, Orientation};
 use log::debug;
+use nalgebra::LU;
 use ringbuffer::{ConstGenericRingBuffer, RingBuffer};
 use serde::Serialize;
 use spenso::{
@@ -423,6 +424,17 @@ impl GammaLoopPairs {
         values[self.h_function.value_range.start] =
             Complex::new_re(threshold_params.h_function.clone());
     }
+
+    pub(crate) fn lu_params<T: FloatLike>(
+        &self,
+        lu_params: &LUParams<T>,
+        values: &mut [Complex<F<T>>],
+    ) {
+        values[self.tstar.value_range.start] = Complex::new_re(lu_params.tstar.clone());
+        values[self.esurface_derivative.value_range.start] =
+            Complex::new_re(lu_params.esurface_derivative.clone());
+        values[self.h_function.value_range.start] = Complex::new_re(lu_params.h_function.clone());
+    }
 }
 
 impl Default for GammaLoopPairs {
@@ -528,6 +540,12 @@ pub struct ThresholdParams<T: FloatLike> {
     pub h_function: F<T>,
 }
 
+pub struct LUParams<T: FloatLike> {
+    pub tstar: F<T>,
+    pub esurface_derivative: F<T>,
+    pub h_function: F<T>,
+}
+
 pub trait UpdateAndGetParams<T: FloatLike> {
     fn update_emr_and_get_params<'a>(
         &'a mut self,
@@ -536,6 +554,7 @@ pub trait UpdateAndGetParams<T: FloatLike> {
         graph: &'a Graph,
         helicities: &[Helicity],
         threshold_params: Option<&ThresholdParams<T>>,
+        lu_params: Option<&LUParams<T>>,
     ) -> Cow<'a, Vec<Complex<F<T>>>>;
 }
 
@@ -547,6 +566,7 @@ impl UpdateAndGetParams<f64> for ParamBuilder<f64> {
         graph: &'a Graph,
         helicities: &[Helicity],
         threshold_params: Option<&ThresholdParams<f64>>,
+        lu_params: Option<&LUParams<f64>>,
     ) -> Cow<'a, Vec<Complex<F<f64>>>> {
         let emr_start = self.pairs.emr_spatial.value_range.start;
         let mut shift = 0;
@@ -576,6 +596,10 @@ impl UpdateAndGetParams<f64> for ParamBuilder<f64> {
             self.threshold_params(threshold_params);
         }
 
+        if let Some(lu_params) = lu_params {
+            self.lu_params(lu_params);
+        }
+
         Cow::Borrowed(&self.values)
     }
 }
@@ -588,6 +612,7 @@ impl UpdateAndGetParams<f128> for ParamBuilder<f64> {
         graph: &Graph,
         helicities: &[Helicity],
         threshold_params: Option<&ThresholdParams<f128>>,
+        lu_params: Option<&LUParams<f128>>,
     ) -> Cow<Vec<Complex<F<f128>>>> {
         let mut emr_start = self.pairs.emr_spatial.value_range.start;
         let mut values = self.higher();
@@ -615,6 +640,10 @@ impl UpdateAndGetParams<f128> for ParamBuilder<f64> {
 
         if let Some(threshold_params) = threshold_params {
             self.pairs.threshold_params(threshold_params, &mut values);
+        }
+
+        if let Some(lu_params) = lu_params {
+            self.pairs.lu_params(lu_params, &mut values);
         }
 
         Cow::Owned(values)
@@ -1063,6 +1092,10 @@ impl<T: FloatLike> ParamBuilder<T> {
     pub(crate) fn threshold_params(&mut self, threshold_params: &ThresholdParams<T>) {
         self.pairs
             .threshold_params(threshold_params, &mut self.values);
+    }
+
+    pub(crate) fn lu_params(&mut self, lu_params: &LUParams<T>) {
+        self.pairs.lu_params(lu_params, &mut self.values);
     }
 
     pub fn table(&self) -> Table {

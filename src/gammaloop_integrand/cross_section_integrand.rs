@@ -36,7 +36,7 @@ use crate::{
     momentum_sample::{LoopMomenta, MomentumSample},
     processes::{Amplitude, CrossSectionCut, CrossSectionGraph, CutId, GroupDerivedData},
     settings::{runtime::IntegratedCounterTermRange, GlobalSettings, RuntimeSettings},
-    utils::{self, newton_solver::newton_iteration_and_derivative, FloatLike, F},
+    utils::{self, newton_solver::newton_iteration_and_derivative, FloatLike, Length, F},
     DependentMomentaConstructor, GammaLoopContext, GammaLoopContextContainer,
 };
 
@@ -308,8 +308,45 @@ impl GraphTerm for CrossSectionGraphTerm {
         settings: &RuntimeSettings,
         rotation: &Rotation,
     ) -> Complex<F<T>> {
-        todo!()
-        // self.evaluate_impl(momentum_sample, settings, rotation)
+        let mut result = Complex::new_re(momentum_sample.zero());
+        let center = LoopMomenta::from_iter(vec![
+            ThreeMomentum {
+                px: momentum_sample.zero(),
+                py: momentum_sample.zero(),
+                pz: momentum_sample.zero(),
+            };
+            momentum_sample.loop_moms().len()
+        ]);
+        let masses = self.graph.get_real_mass_vector(&model);
+
+        for (cut, esurface) in self.cut_esurface.iter_enumerated() {
+            let function = |t: &F<T>| {
+                esurface.compute_self_and_r_derivative(
+                    t,
+                    momentum_sample.loop_moms(),
+                    &center,
+                    momentum_sample.external_moms(),
+                    &self.graph.loop_momentum_basis,
+                    &masses,
+                )
+            };
+
+            let (guess, _) = esurface.get_radius_guess(
+                momentum_sample.loop_moms(),
+                momentum_sample.external_moms(),
+                &self.graph.loop_momentum_basis,
+            );
+
+            let solution = newton_iteration_and_derivative(
+                &guess,
+                function,
+                &F::from_f64(1.0),
+                20,
+                &F::from_f64(settings.kinematics.e_cm),
+            );
+        }
+
+        result
     }
     fn name(&self) -> String {
         self.graph.name.clone()
