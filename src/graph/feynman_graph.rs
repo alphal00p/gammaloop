@@ -420,7 +420,8 @@ impl FeynmanGraph for Graph {
     fn get_loop_number(&self) -> usize {
         let internal_subgraph =
             InternalSubGraph::cleaned_filter_pessimist(self.full_filter(), self);
-        self.cyclotomatic_number(&internal_subgraph)
+        let n_initial = self.initial_state_cut.nedges(self);
+        self.cyclotomatic_number(&internal_subgraph) - n_initial
     }
 
     fn get_real_mass_vector<T: FloatLike>(&self, model: &Model) -> EdgeVec<F<T>> {

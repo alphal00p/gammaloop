@@ -342,6 +342,18 @@ impl Externals {
 
                         Ok(dependent_momenta)
                     }
+                    DependentMomentaConstructor::None => {
+                        let dependent_momenta = momenta
+                            .iter()
+                            .map(|m| {
+                                FourMomentum::<F<T>>::from_ff64(
+                                    &FourMomentum::try_from(*m)
+                                        .expect("dependent momenta in None not allowed"),
+                                )
+                            })
+                            .collect::<ExternalFourMomenta<F<T>>>();
+                        Ok(dependent_momenta)
+                    }
                 }
             }
         }
@@ -417,6 +429,7 @@ impl Externals {
                 }
             },
             DependentMomentaConstructor::CrossSection { .. } => Ok(()),
+            DependentMomentaConstructor::None => Ok(()),
         }
     }
 }

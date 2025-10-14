@@ -184,7 +184,6 @@ impl Esurface {
     }
 
     /// Only compute the shift part, useful for center finding.
-    #[inline]
     pub(crate) fn compute_shift_part_from_momenta<T: FloatLike>(
         &self,
         lmb: &LoopMomentumBasis,
@@ -268,7 +267,7 @@ impl Esurface {
         result
     }
 
-    #[inline]
+    // #[inline]
     pub(crate) fn get_radius_guess<T: FloatLike>(
         &self,
         unit_loops: &LoopMomenta<F<T>>,

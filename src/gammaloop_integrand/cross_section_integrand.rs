@@ -327,9 +327,7 @@ impl GraphTerm for CrossSectionGraphTerm {
         let externals = settings
             .kinematics
             .externals
-            .get_dependent_externals(DependentMomentaConstructor::CrossSection {
-                external_connections: todo!("aaaaarrgjhhh"),
-            })
+            .get_dependent_externals(DependentMomentaConstructor::None)
             .with_context(|| {
                 format!(
                     "Failed to get dependent external momenta for graph {}",
@@ -399,6 +397,9 @@ impl GraphTerm for CrossSectionGraphTerm {
                     &masses,
                 )
             };
+
+            println!("lmb: {:?}", self.graph.loop_momentum_basis);
+            println!("esurface: {:?}", esurface);
 
             let (guess, _) = esurface.get_radius_guess(
                 momentum_sample.loop_moms(),

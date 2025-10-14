@@ -115,6 +115,7 @@ pub enum DependentMomentaConstructor<'a> {
     CrossSection {
         external_connections: &'a [ExternalConnection],
     }, // at the moment I assume the first n/2 externals are incoming and the second n/2 are outgoing, the mapping is (0, n/2), (1, n/2+1), (2, n/2+2), ...
+    None, // will probably replace CrossSection due to is cut
 }
 
 #[comemo::track]
