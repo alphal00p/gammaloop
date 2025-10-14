@@ -17,6 +17,7 @@ use serde::Deserialize;
 use serde::Serialize;
 use spenso::algebra::algebraic_traits::IsZero;
 use symbolica::domains::float::ConstructibleFloat;
+use symbolica::numerical_integration::ContinuousGrid;
 use symbolica::numerical_integration::{Grid, MonteCarloRng, Sample, StatisticsAccumulator};
 
 use crate::disable;
@@ -363,11 +364,15 @@ where
                 .zip(grids)
                 .zip(n_points_per_core)
                 .map(|(((core_id, integrand), mut grid), n_points)| {
-                    // set the rng for the current core
                     let mut rng = MonteCarloRng::new(
-                        settings.integrator.seed,
-                        cores * integration_state.iter + core_id,
+                        settings.integrator.seed + integration_state.iter as u64,
+                        0,
                     );
+
+                    for _ in 0..(target_points_per_core * core_id) {
+                        let mut sample = Sample::new();
+                        grid.sample(&mut rng, &mut sample);
+                    }
 
                     let samples = (0..n_points)
                         .map(|_| {
@@ -1220,4 +1225,54 @@ pub fn print_integral_result(
 }
 
 #[test]
-fn test_threading() {}
+fn test_threading() {
+    fn test_fn(x: f64) -> f64 {
+        x * x * (x * 6.).sin()
+    }
+
+    let mut acc_1 = StatisticsAccumulator::<f64>::new();
+    let mut acc_2 = StatisticsAccumulator::<f64>::new();
+
+    let samples_per_sample = 4;
+    let samples_per_iter = 100000;
+    let n_iter = 10;
+
+    let mut rng = MonteCarloRng::new(42, 0);
+
+    let mut grid = Grid::<f64>::Continuous(ContinuousGrid::new(1, 64, 100, None, false));
+
+    for _i_iter in 0..n_iter {
+        let mut multiplice_accs = vec![StatisticsAccumulator::<f64>::new(); samples_per_sample];
+        for _i_sample in 0..samples_per_iter {
+            let n_samples = (0..samples_per_sample)
+                .map(|_| {
+                    let mut sample = Sample::new();
+                    grid.sample(&mut rng, &mut sample);
+                    sample
+                })
+                .collect_vec();
+
+            let n_evals = n_samples
+                .iter()
+                .map(|s| match s {
+                    Sample::Continuous(wgt, xs) => test_fn(xs[0]),
+                    _ => unreachable!(),
+                })
+                .collect_vec();
+
+            for (i_eval, (sample, eval)) in n_samples.iter().zip(&n_evals).enumerate() {
+                acc_1.add_sample(eval * sample.get_weight(), Some(sample));
+                multiplice_accs[i_eval].add_sample(eval * sample.get_weight(), Some(sample));
+            }
+        }
+
+        for acc in multiplice_accs {
+            acc_2.merge_samples(&mut acc.clone());
+        }
+        acc_1.update_iter(false);
+        acc_2.update_iter(false);
+    }
+
+    println!("acc1: {:?}", acc_1);
+    println!("acc2: {:?}", acc_2);
+}

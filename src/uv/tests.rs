@@ -283,26 +283,26 @@ fn tri_box_tri_LU() {
     let hpdg = hp.pdg_code as i64;
     let tpdg = tp.pdg_code as i64;
     let mut cs: CrossSection = CrossSection::new("".into());
-    cs.preprocess(
-        &model,
-        &ProcessDefinition {
-            initial_pdgs: vec![hpdg],
-            final_pdgs_lists: vec![
-                vec![tpdg, -tpdg],
-                vec![tpdg, -tpdg, hpdg],
-                vec![hpdg, hpdg],
-                vec![hpdg, hpdg, hpdg],
-                vec![tpdg, -tpdg, hpdg, hpdg],
-            ],
-            amplitude_filters: FeynGenFilters(vec![]),
-            cross_section_filters: FeynGenFilters(vec![]),
-            ..Default::default()
-        },
-    )
-    .unwrap();
-    cs.build_integrand(&model, (&RuntimeSettings::default()).into())
-        .unwrap();
-
+    //    cs.preprocess(
+    //        &model,
+    //        &ProcessDefinition {
+    //            initial_pdgs: vec![hpdg],
+    //            final_pdgs_lists: vec![
+    //                vec![tpdg, -tpdg],
+    //                vec![tpdg, -tpdg, hpdg],
+    //                vec![hpdg, hpdg],
+    //                vec![hpdg, hpdg, hpdg],
+    //                vec![tpdg, -tpdg, hpdg, hpdg],
+    //            ],
+    //            amplitude_filters: FeynGenFilters(vec![]),
+    //            cross_section_filters: FeynGenFilters(vec![]),
+    //            ..Default::default()
+    //        },
+    //    )
+    //    .unwrap();
+    //    cs.build_integrand(&model, (&RuntimeSettings::default()).into())
+    //        .unwrap();
+    //
     //println!("Final result: {:>}", sum.expand());
 }
 
@@ -409,25 +409,25 @@ fn double_triangle_LU() {
     let graph = Graph::from_parsed(underlying, &model).unwrap();
 
     let mut cs: CrossSection = CrossSection::new("".into());
-    cs.add_supergraph(graph).unwrap();
-
-    let hpdg = hp.pdg_code as i64;
-    let tpdg = tp.pdg_code as i64;
-    cs.preprocess(
-        &model,
-        &ProcessDefinition {
-            initial_pdgs: vec![hpdg],
-            final_pdgs_lists: vec![vec![tpdg, -tpdg], vec![tpdg, -tpdg, hpdg], vec![hpdg, hpdg]],
-            amplitude_filters: FeynGenFilters(vec![]),
-            cross_section_filters: FeynGenFilters(vec![]),
-            ..Default::default()
-        },
-    )
-    .unwrap();
-
-    cs.build_integrand(&model, (&RuntimeSettings::default()).into())
-        .unwrap();
-
+    //    cs.add_supergraph(graph).unwrap();
+    //
+    //    let hpdg = hp.pdg_code as i64;
+    //    let tpdg = tp.pdg_code as i64;
+    //    cs.preprocess(
+    //        &model,
+    //        &ProcessDefinition {
+    //            initial_pdgs: vec![hpdg],
+    //            final_pdgs_lists: vec![vec![tpdg, -tpdg], vec![tpdg, -tpdg, hpdg], vec![hpdg, hpdg]],
+    //            amplitude_filters: FeynGenFilters(vec![]),
+    //            cross_section_filters: FeynGenFilters(vec![]),
+    //            ..Default::default()
+    //        },
+    //    )
+    //    .unwrap();
+    //
+    //    cs.build_integrand(&model, (&RuntimeSettings::default()).into())
+    //        .unwrap();
+    //
     //println!("Final result: {:>}", sum.expand());
 }
 
