@@ -179,7 +179,6 @@ impl CrossSection {
             .map(|sg| sg.generate_term_for_graph(model, global_settings))
             .collect::<Result<Vec<_>>>()?;
 
-        println!("cloning structure: {:?}", self.graph_group_structure);
         let cross_section_integrand = CrossSectionIntegrand {
             settings: runtime_default.into(),
             data: CrossSectionIntegrandData {

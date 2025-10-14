@@ -84,7 +84,7 @@ pub struct CrossSectionIntegrandData {
 
 impl CrossSectionIntegrand {
     pub(crate) fn save(&self, path: impl AsRef<Path>, override_existing: bool) -> Result<()> {
-        let binary = bincode::encode_to_vec(self, bincode::config::standard())?;
+        let binary = bincode::encode_to_vec(&self.data, bincode::config::standard())?;
         fs::write(path.as_ref().join("integrand.bin"), binary)?;
 
         self.settings
@@ -95,7 +95,7 @@ impl CrossSectionIntegrand {
 
     pub(crate) fn load(path: impl AsRef<Path>, context: GammaLoopContextContainer) -> Result<Self> {
         let binary = fs::read(path.as_ref().join("integrand.bin"))?;
-        let (data, _) =
+        let (data, _): (CrossSectionIntegrandData, _) =
             bincode::decode_from_slice_with_context(&binary, bincode::config::standard(), context)?;
 
         let settings = SmartSerde::from_file(
