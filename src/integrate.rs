@@ -12,6 +12,7 @@ use colored::Colorize;
 use itertools::izip;
 use itertools::Itertools;
 use rayon::iter::repeat_n;
+use rayon::ThreadPoolBuilder;
 use serde::Deserialize;
 use serde::Serialize;
 use spenso::algebra::algebraic_traits::IsZero;
@@ -328,6 +329,8 @@ where
     );
     status_info!("");
 
+    let pool = ThreadPoolBuilder::new().num_threads(cores).build().unwrap();
+
     let mut n_samples_evaluated = 0;
     'integrateLoop: while integration_state.num_points < settings.integrator.n_max {
         // ensure we do not overshoot
@@ -352,71 +355,74 @@ where
 
         let grids = repeat_n(integration_state.grid.clone(), cores);
 
-        let core_results: Vec<CoreResult> = user_data
-            .integrand
-            .par_iter_mut()
-            .enumerate()
-            .zip(grids)
-            .zip(n_points_per_core)
-            .map(|(((core_id, integrand), mut grid), n_points)| {
-                // set the rng for the current core
-                let mut rng = MonteCarloRng::new(
-                    settings.integrator.seed,
-                    cores * integration_state.iter + core_id,
-                );
+        let core_results: Vec<CoreResult> = pool.install(|| {
+            user_data
+                .integrand
+                .par_iter_mut()
+                .enumerate()
+                .zip(grids)
+                .zip(n_points_per_core)
+                .map(|(((core_id, integrand), mut grid), n_points)| {
+                    // set the rng for the current core
+                    let mut rng = MonteCarloRng::new(
+                        settings.integrator.seed,
+                        cores * integration_state.iter + core_id,
+                    );
 
-                let samples = (0..n_points)
-                    .map(|_| {
-                        let mut sample = Sample::new();
-                        grid.sample(&mut rng, &mut sample);
-                        sample
-                    })
-                    .collect_vec();
+                    let samples = (0..n_points)
+                        .map(|_| {
+                            let mut sample = Sample::new();
+                            grid.sample(&mut rng, &mut sample);
+                            sample
+                        })
+                        .collect_vec();
 
-                let mut core_accumulator = ComplexAccumulator::new();
+                    let mut core_accumulator = ComplexAccumulator::new();
 
-                let results = samples
-                    .iter()
-                    .map(|s| {
-                        let result = integrand.evaluate_sample(
-                            s,
-                            model,
-                            s.get_weight(),
-                            integration_state.iter,
-                            false,
-                            current_max_evals,
-                        );
+                    let results = samples
+                        .iter()
+                        .map(|s| {
+                            let result = integrand.evaluate_sample(
+                                s,
+                                model,
+                                s.get_weight(),
+                                integration_state.iter,
+                                false,
+                                current_max_evals,
+                            );
 
-                        core_accumulator.add_sample(
-                            result.integrand_result,
-                            s.get_weight(),
-                            Some(s),
-                        );
+                            core_accumulator.add_sample(
+                                result.integrand_result,
+                                s.get_weight(),
+                                Some(s),
+                            );
 
-                        let training_eval = match settings.integrator.integrated_phase {
-                            IntegratedPhase::Real => result.integrand_result.re,
-                            IntegratedPhase::Imag => result.integrand_result.im,
-                            IntegratedPhase::Both => unimplemented!(),
-                        };
+                            let training_eval = match settings.integrator.integrated_phase {
+                                IntegratedPhase::Real => result.integrand_result.re,
+                                IntegratedPhase::Imag => result.integrand_result.im,
+                                IntegratedPhase::Both => unimplemented!(),
+                            };
 
-                        if let Err(err) = grid.add_training_sample(s, training_eval) {
-                            println!("Error adding training sample to grid: {}", err);
-                        };
+                            if let Err(err) = grid.add_training_sample(s, training_eval) {
+                                println!("Error adding training sample to grid: {}", err);
+                            };
 
-                        result
-                    })
-                    .take_while(|_| !INTERRUPTED.load(std::sync::atomic::Ordering::Relaxed)) // make sure ctrl+c does it's job
-                    .collect_vec();
+                            result
+                        })
+                        .take_while(|_| !INTERRUPTED.load(std::sync::atomic::Ordering::Relaxed)) // make sure ctrl+c does it's job
+                        .collect_vec();
 
-                let evaluation_statistics = StatisticsCounter::from_evaluation_results(&results);
+                    let evaluation_statistics =
+                        StatisticsCounter::from_evaluation_results(&results);
 
-                CoreResult {
-                    stats: evaluation_statistics,
-                    integral: core_accumulator,
-                    grid,
-                }
-            })
-            .collect();
+                    CoreResult {
+                        stats: evaluation_statistics,
+                        integral: core_accumulator,
+                        grid,
+                    }
+                })
+                .collect()
+        });
 
         if is_interrupted() {
             warn!("{}", "Integration iterrupted by user".yellow());
