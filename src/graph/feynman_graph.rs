@@ -4,7 +4,7 @@ use bitvec::vec::BitVec;
 use itertools::Itertools;
 use linnet::half_edge::{
     involution::{EdgeData, EdgeIndex, EdgeVec, Flow, HedgePair},
-    subgraph::{InternalSubGraph, ModifySubgraph, SubGraph, SubGraphOps},
+    subgraph::{HedgeNode, InternalSubGraph, ModifySubgraph, OrientedCut, SubGraph, SubGraphOps},
     HedgeGraph, NodeIndex,
 };
 use momtrop::float::MomTropFloat;
@@ -81,6 +81,11 @@ pub trait FeynmanGraph {
     fn expected_scale(&self, e_cm: F<f64>, model: &Model) -> F<f64>;
     fn dummy_list(&self) -> Vec<EdgeIndex>;
     fn no_dummy(&self) -> BitVec;
+    fn all_st_cuts_for_cs(
+        &self,
+        source_nodes: HedgeNode,
+        target_nodes: HedgeNode,
+    ) -> Vec<(BitVec, OrientedCut, BitVec)>;
 }
 
 impl Deref for Graph {
@@ -710,5 +715,33 @@ impl FeynmanGraph for Graph {
                 }
             })
             .collect()
+    }
+
+    fn all_st_cuts_for_cs(
+        &self,
+        source_nodes: HedgeNode,
+        target_nodes: HedgeNode,
+    ) -> Vec<(BitVec, OrientedCut, BitVec)> {
+        self.underlying
+            .all_cuts(source_nodes, target_nodes)
+            .into_iter()
+            .map(|(l, mut c, r)| {
+                // remove initial state cut edges from cut
+                self.initial_state_cut
+                    .left
+                    .iter()
+                    .by_vals()
+                    .enumerate()
+                    .chain(self.initial_state_cut.right.iter().by_vals().enumerate())
+                    .for_each(|(index, is_set)| {
+                        if is_set {
+                            c.left.set(index, false);
+                            c.right.set(index, false);
+                        }
+                    });
+
+                (l, c, r)
+            })
+            .collect_vec()
     }
 }

@@ -9,7 +9,7 @@ use linnet::{
     half_edge::{
         builder::HedgeGraphBuilder,
         involution::{EdgeData, EdgeIndex, Flow, Hedge, HedgePair, Orientation},
-        subgraph::{OrientedCut, SubGraph},
+        subgraph::{HedgeNode, OrientedCut, SubGraph},
         HedgeGraph,
     },
     parser::DotGraph,
@@ -247,6 +247,42 @@ impl Graph {
                 .iter()
                 .all(|sign| sign.is_zero())
         })
+    }
+
+    pub(crate) fn get_source_and_target(&self) -> (HedgeNode, HedgeNode) {
+        let mut source_nodes = AHashSet::new();
+        let mut target_nodes = AHashSet::new();
+
+        for (hedge_pair, _, _) in self.underlying.iter_edges_of(&self.initial_state_cut) {
+            match hedge_pair {
+                HedgePair::Split { source, sink, .. } => {
+                    // yes it is supposed to be like this, becuase a sink hedge goes into the node from which to construct the cuts
+                    let source_node = self.underlying.node_id(source);
+                    let sink_node = self.underlying.node_id(sink);
+
+                    source_nodes.insert(source_node);
+                    target_nodes.insert(sink_node);
+                }
+                _ => {
+                    unreachable!();
+                }
+            }
+        }
+
+        assert_eq!(source_nodes.len(), target_nodes.len());
+
+        let source_node_vec = source_nodes.into_iter().collect_vec();
+        let target_node_vec = target_nodes.into_iter().collect_vec();
+
+        let source_node = self
+            .underlying
+            .combine_to_single_hedgenode(&source_node_vec);
+
+        let target_node = self
+            .underlying
+            .combine_to_single_hedgenode(&target_node_vec);
+
+        (source_node, target_node)
     }
 }
 

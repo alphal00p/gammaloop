@@ -1,4 +1,8 @@
 use ahash::HashMap;
+use ahash::HashSet;
+use linnet::half_edge::involution::Flow;
+use linnet::half_edge::involution::HedgePair;
+use linnet::half_edge::involution::Orientation;
 use rayon::ThreadPool;
 use std::{
     collections::BTreeMap,
@@ -6,6 +10,7 @@ use std::{
     io::Write,
     path::{Path, PathBuf},
 };
+use tracing::warn;
 // use bincode::{Decode, Encode};
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::{Help, Result};
@@ -15,6 +20,8 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
+use crate::graph::edge::PossibleParticle;
+use crate::graph::FeynmanGraph;
 use crate::{
     feyngen::NumeratorAwareGraphGroupingOption,
     gammaloop_integrand::GLIntegrand,
@@ -136,10 +143,127 @@ impl Default for ProcessDefinition {
 
 impl ProcessDefinition {
     // Best attempt at creating what process definition matches the given graphs
-    pub fn from_graph_list(_graphs: &[Graph], generation_type: GenerationType) -> Result<Self> {
+    pub fn from_graph_list(
+        graphs: &[Graph],
+        generation_type: GenerationType,
+        model: &Model,
+    ) -> Result<Self> {
         // TODO: At least set correctly things like loop count range and initial/final states
+        let mut initial_pdgs = HashSet::default();
+
+        for g in graphs {
+            let mut initial_pdgs_of_graph = vec![];
+            match generation_type {
+                GenerationType::Amplitude => {
+                    for (pair, _, edge) in g.iter_edges() {
+                        if matches!(
+                            pair,
+                            HedgePair::Unpaired {
+                                hedge: _,
+                                flow: Flow::Sink
+                            }
+                        ) {
+                            if let PossibleParticle::Particle(particle) = &edge.data.particle {
+                                initial_pdgs_of_graph.push(particle.0.pdg_code as i64);
+                            } else {
+                                debug!("Edge without particle data in initial state");
+                            }
+                        }
+                    }
+                }
+                GenerationType::CrossSection => {
+                    for (_, _, edge) in g.iter_edges_of(&g.initial_state_cut) {
+                        if let PossibleParticle::Particle(particle) = &edge.data.particle {
+                            initial_pdgs_of_graph.push(particle.0.pdg_code as i64);
+                        } else {
+                            debug!("Edge without particle data in initial state");
+                        }
+                    }
+                }
+            }
+
+            initial_pdgs_of_graph.sort();
+            initial_pdgs.insert(initial_pdgs_of_graph);
+        }
+
+        let initial_pdgs = if initial_pdgs.len() == 1 {
+            initial_pdgs.into_iter().next().unwrap()
+        } else {
+            warn!("Multiple initial states found in graphs, setting initial state to empty");
+            vec![]
+        };
+
+        let mut final_states = HashSet::default();
+        match generation_type {
+            GenerationType::Amplitude => {
+                for g in graphs {
+                    let mut final_pdgs_of_graph = vec![];
+                    for (pair, _, edge) in g.iter_edges() {
+                        if matches!(
+                            pair,
+                            HedgePair::Unpaired {
+                                hedge: _,
+                                flow: Flow::Source
+                            }
+                        ) {
+                            if let PossibleParticle::Particle(particle) = &edge.data.particle {
+                                final_pdgs_of_graph.push(particle.0.pdg_code as i64);
+                            } else {
+                                debug!("Edge without particle data in final state");
+                            }
+                        }
+                    }
+                    final_pdgs_of_graph.sort();
+                    final_states.insert(final_pdgs_of_graph);
+                }
+            }
+            GenerationType::CrossSection => {
+                for g in graphs {
+                    let (source_nodes, target_nodes) = g.get_source_and_target();
+                    let st_cuts = g.all_st_cuts_for_cs(source_nodes, target_nodes);
+                    for (_, cut, _) in st_cuts {
+                        let mut final_pdgs_of_cut = vec![];
+                        for (orientaion, edge) in cut.iter_edges(&g.underlying) {
+                            if let PossibleParticle::Particle(particle) = &edge.data.particle {
+                                if orientaion == Orientation::Reversed {
+                                    final_pdgs_of_cut
+                                        .push(particle.0.get_anti_particle(model).pdg_code as i64);
+                                } else {
+                                    final_pdgs_of_cut.push(particle.0.pdg_code as i64);
+                                }
+                            } else {
+                                debug!("Edge without particle data in final state");
+                            }
+                        }
+                        final_pdgs_of_cut.sort();
+                        final_states.insert(final_pdgs_of_cut);
+                    }
+                }
+            }
+        }
+
+        let final_pdgs_lists = final_states.into_iter().sorted().collect_vec();
+        let mut min_loop_count = usize::MAX;
+        let mut max_loop_count = 0usize;
+
+        for g in graphs {
+            // don't know how the looop count is really intended, for now it doesn't matter I think
+            let lc = g.underlying.cyclotomatic_number(&g.full_filter());
+            if lc < min_loop_count {
+                min_loop_count = lc;
+            }
+            if lc > max_loop_count {
+                max_loop_count = lc;
+            }
+        }
+
+        let loop_count_range = (min_loop_count, max_loop_count);
+
         Ok(Self {
             generation_type,
+            initial_pdgs,
+            final_pdgs_lists,
+            loop_count_range,
             ..Self::default()
         })
     }

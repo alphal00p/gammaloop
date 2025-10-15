@@ -477,7 +477,7 @@ impl State {
                 Some(existing_proc)
             } else {
                 let process_defintion =
-                    ProcessDefinition::from_graph_list(&graphs, generation_type)?;
+                    ProcessDefinition::from_graph_list(&graphs, generation_type, &self.model)?;
                 let process = Process::from_graph_list(
                     process_name,
                     integrand_base_name.clone(),

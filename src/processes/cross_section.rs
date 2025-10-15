@@ -412,37 +412,7 @@ pub struct CrossSectionGraph {
 
 impl CrossSectionGraph {
     pub(crate) fn new(graph: Graph) -> Self {
-        let mut source_nodes = AHashSet::new();
-        let mut target_nodes = AHashSet::new();
-
-        for (hedge_pair, _, _) in graph.underlying.iter_edges_of(&graph.initial_state_cut) {
-            match hedge_pair {
-                HedgePair::Split { source, sink, .. } => {
-                    // yes it is supposed to be like this, becuase a sink hedge goes into the node from which to construct the cuts
-                    let source_node = graph.underlying.node_id(source);
-                    let sink_node = graph.underlying.node_id(sink);
-
-                    source_nodes.insert(source_node);
-                    target_nodes.insert(sink_node);
-                }
-                _ => {
-                    unreachable!();
-                }
-            }
-        }
-
-        assert_eq!(source_nodes.len(), target_nodes.len());
-
-        let source_node_vec = source_nodes.into_iter().collect_vec();
-        let target_node_vec = target_nodes.into_iter().collect_vec();
-
-        let source_node = graph
-            .underlying
-            .combine_to_single_hedgenode(&source_node_vec);
-
-        let target_node = graph
-            .underlying
-            .combine_to_single_hedgenode(&target_node_vec);
+        let (source_node, target_node) = graph.get_source_and_target();
 
         Self {
             graph,
@@ -529,34 +499,7 @@ impl CrossSectionGraph {
 
         let all_st_cuts = self
             .graph
-            .underlying
-            .all_cuts(self.source_nodes.clone(), self.target_nodes.clone())
-            .into_iter()
-            .map(|(l, mut c, r)| {
-                // remove initial state cut edges from cut
-                self.graph
-                    .initial_state_cut
-                    .left
-                    .iter()
-                    .by_vals()
-                    .enumerate()
-                    .chain(
-                        self.graph
-                            .initial_state_cut
-                            .right
-                            .iter()
-                            .by_vals()
-                            .enumerate(),
-                    )
-                    .for_each(|(index, is_set)| {
-                        if is_set {
-                            c.left.set(index, false);
-                            c.right.set(index, false);
-                        }
-                    });
-
-                (l, c, r)
-            });
+            .all_st_cuts_for_cs(self.source_nodes.clone(), self.target_nodes.clone());
 
         info!("num s_t cuts: {}", all_st_cuts.len());
 
