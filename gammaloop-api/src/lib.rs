@@ -176,6 +176,36 @@ impl OneShot {
         }
     }
 
+    fn subcmd_input_string(
+        argv: &[OsString],
+        cmd: &clap::Command,
+        matches: &clap::ArgMatches,
+    ) -> Option<String> {
+        let (sc_name, _) = matches.subcommand()?; // no subcommand -> None
+
+        // Find the Command that corresponds to the canonical subcommand name
+        let sc = cmd.get_subcommands().find(|c| c.get_name() == sc_name)?;
+
+        // Tokens that could have been used to invoke it: canonical + all aliases
+        let mut names: Vec<&str> = vec![sc_name];
+        names.extend(sc.get_all_aliases());
+
+        // Locate the index in argv where the subcommand token appears
+        let idx = argv.iter().position(|t| {
+            let s = t.to_string_lossy();
+            names.iter().any(|&n| s == n)
+        })?;
+
+        // Join from the subcommand onward
+        Some(
+            argv[idx..]
+                .iter()
+                .map(|s| s.to_string_lossy().into_owned())
+                .collect::<Vec<_>>()
+                .join(" "),
+        )
+    }
+
     /// Parse from env args *and* capture ArgMatches (explicit vs defaults).
     pub fn parse_env_with_capture() -> Result<Parsed, clap::Error> {
         let argv: Vec<OsString> = std::env::args_os().collect();
@@ -187,12 +217,9 @@ impl OneShot {
         let cli = <OneShot as FromArgMatches>::from_arg_matches(&matches)
             .map_err(|e| e.format(&mut cmd))?;
 
+        let input_string = OneShot::subcmd_input_string(&argv, &cmd, &matches).unwrap_or_default();
         Ok(Parsed {
-            input_string: argv
-                .into_iter()
-                .map(|s| s.to_string_lossy().into_owned()) // handles non-UTF8 gracefully
-                .collect::<Vec<_>>()
-                .join(" "),
+            input_string: input_string,
             matches,
             cli,
         })
@@ -299,7 +326,6 @@ impl OneShot {
             if let ControlFlow::Break(a) = flow {
                 save_state = a;
             }
-
             run_history.push_with_raw(a, Some(raw));
         } else {
             print_banner();
