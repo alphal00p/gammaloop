@@ -148,7 +148,6 @@ impl ProcessDefinition {
         generation_type: GenerationType,
         model: &Model,
     ) -> Result<Self> {
-        // TODO: At least set correctly things like loop count range and initial/final states
         let mut initial_pdgs = HashSet::default();
 
         for g in graphs {
