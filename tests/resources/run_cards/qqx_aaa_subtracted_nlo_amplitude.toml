@@ -1,7 +1,7 @@
 #:schema /Users/lcnbr/.config/gammaloop/schemas/runhistory.json
 commands = [
     "import model sm-default.json",
-    "import amplitude ./tests/resources/graphs/qqx_aaa_subtracted.dot",
+    "import graphs ./tests/resources/graphs/qqx_aaa_subtracted.dot",
     "generate",
     # "inspect --process-id 0 --name qqx_aaa_subtracted -p 0.1 0.2 0.3 -m",
 ]

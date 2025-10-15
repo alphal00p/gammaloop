@@ -97,7 +97,7 @@ fn graph_count_from_amplitude_load() -> Result<()> {
         true,
     )?;
     cli.run_command("import model sm.json")?;
-    cli.run_command("import amplitude ./tests/resources/graphs/qqx_aaa_subtracted.dot")?;
+    cli.run_command("import graphs ./tests/resources/graphs/qqx_aaa_subtracted.dot")?;
     let (n_graphs, overall_factor_sum) = count_graphs_in_processes(&cli);
     assert_snapshot!((format!("{} | {}",n_graphs,overall_factor_sum.to_canonical_string())),@"19 | 8-11𝑖");
 

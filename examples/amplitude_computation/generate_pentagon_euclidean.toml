@@ -1,6 +1,6 @@
 commands = [
     "import model sm-default",
-    "import amplitude ./qqx_aaa_pentagon.dot",
+    "import graphs ./qqx_aaa_pentagon.dot",
     "generate",
     "inspect -m -p 0.1 0.2 0.3",
 ]

@@ -1,7 +1,7 @@
 #:schema /Users/lcnbr/.config/gammaloop/schemas/runhistory.json
 commands = [
     "import model sm-default",
-    "import amplitude ./qqx_aaa_tree_user_numerator.dot",
+    "import graphs ./qqx_aaa_tree_user_numerator.dot",
     "generate",
     "inspect --process-id 0 --name default",
 ]

@@ -1,7 +1,7 @@
 #:schema https://raw.githubusercontent.com/alphal00p/gammaloop/refs/heads/hedge_numerator/assets/schemas/runhistory.json
 commands = [
     "import model scalars-default.json",
-    "import amplitude ./tests/resources/graphs/scalar_box.dot",
+    "import graphs ./tests/resources/graphs/scalar_box.dot",
     "generate",
     # "inspect --process-id 0 --name box -m -p 0.1 0.2 0.3",
 ]

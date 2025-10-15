@@ -1,8 +1,8 @@
 #:schema /Users/lcnbr/.config/gammaloop/schemas/runhistory.json
 commands = [
     "import model scalars-default",
-    "import amplitude ./tests/resources/graphs/grouped_subtraction/no_group.dot",
-    "import amplitude ./tests/resources/graphs/grouped_subtraction/group.dot",
+    "import graphs ./tests/resources/graphs/grouped_subtraction/no_group.dot",
+    "import graphs ./tests/resources/graphs/grouped_subtraction/group.dot",
     "generate",
 ]
 

@@ -3,7 +3,7 @@ commands = [
     "set global kv stderr_directive=gammalooprs=info,info",
     "import model sm-default",
     "set global kv stderr_directive=gammalooprs=info,info",
-    "import amplitude ./zeno_IR.dot",
+    "import graphs ./zeno_IR.dot",
     "generate",
     "set global kv stderr_directive=gammalooprs=info",
     "inspect --process-id 0 --name zeno_IR -p 0.1 0.2 0.3 -m",

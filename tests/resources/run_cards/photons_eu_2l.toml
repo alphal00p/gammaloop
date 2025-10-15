@@ -1,6 +1,6 @@
 commands = [
     "import model sm-default", 
-    "import amplitude ./tests/resources/graphs/physical_2L_6photons.dot",
+    "import graphs ./tests/resources/graphs/physical_2L_6photons.dot",
     "generate"
 ]
 

@@ -2,7 +2,7 @@
 commands = [
     #    "set global kv display_directive=gammalooprs=info,info",
     "import model sm-default",
-    "import amplitude ./tests/resources/graphs/trees/qqx_aaa.dot",
+    "import graphs ./tests/resources/graphs/trees/qqx_aaa.dot",
     "generate",
     #"inspect --process-id 0 --name default",
 ]
