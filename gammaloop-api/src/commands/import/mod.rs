@@ -11,7 +11,7 @@ use color_eyre::Result;
 #[derive(Subcommand, Debug, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
 pub enum Import {
     Model(ImportModel),
-    Amplitude {
+    Graphs {
         // #[arg(short = 'p')]
         #[arg(value_hint = clap::ValueHint::FilePath)]
         path: PathBuf,
@@ -29,11 +29,11 @@ pub mod model;
 impl Import {
     pub fn run(self, state: &mut State) -> Result<()> {
         match self {
-            Import::Amplitude {
+            Import::Graphs {
                 path,
                 process_id,
                 integrand_name,
-            } => state.import_amplitude(path, None, process_id, integrand_name),
+            } => state.import_graphs(path, None, process_id, integrand_name),
             Import::Model(im) => im.run(state),
         }
     }

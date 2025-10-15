@@ -519,7 +519,7 @@ impl State {
         process_id: Option<usize>,
         integrand_name: Option<String>,
     ) -> Result<()> {
-        self.import_amplitude(path, process_name, process_id, integrand_name)
+        self.import_graphs(path, process_name, process_id, integrand_name)
     }
 
     pub(crate) fn import_model_python(&mut self, file_path: PathBuf) -> Result<()> {

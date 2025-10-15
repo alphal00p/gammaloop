@@ -189,7 +189,7 @@ impl NumeratorAwareGraphGroupingOption {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, JsonSchema, Encode, Decode)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, JsonSchema, Encode, Decode, Copy)]
 pub enum GenerationType {
     Amplitude,
     CrossSection,

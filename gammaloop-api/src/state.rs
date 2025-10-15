@@ -11,7 +11,11 @@ use clap::Args;
 use color_eyre::Result;
 use colored::Colorize;
 use eyre::{eyre, Context};
-use gammalooprs::{processes::Amplitude, utils::serde_utils::IsDefault};
+use gammalooprs::{
+    processes::{Amplitude, CrossSection},
+    utils::serde_utils::IsDefault,
+};
+use linnet::half_edge::subgraph::SubGraph;
 use schemars::{schema_for, JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
@@ -428,7 +432,7 @@ impl State {
         Ok(())
     }
 
-    pub fn import_amplitude(
+    pub fn import_graphs(
         &mut self,
         path: impl AsRef<Path>,
         process_name: Option<String>,
@@ -436,6 +440,16 @@ impl State {
         integrand_name: Option<String>,
     ) -> Result<()> {
         let graphs = Graph::from_file(&path, &self.model)?;
+        let generation_type = if graphs.iter().all(|g| g.initial_state_cut.nedges(g) == 0) {
+            GenerationType::Amplitude
+        } else if graphs.iter().all(|g| g.initial_state_cut.nedges(g) > 0) {
+            GenerationType::CrossSection
+        } else {
+            return Err(eyre!(
+                "Mix of amplitude and cross section graphs in the same file is not supported"
+            ));
+        };
+
         let integrand_base_name = integrand_name.clone().unwrap_or("default".to_string());
         let process = if let Some(proc_id) = process_id {
             if proc_id >= self.process_list.processes.len() {
@@ -463,13 +477,13 @@ impl State {
                 Some(existing_proc)
             } else {
                 let process_defintion =
-                    ProcessDefinition::from_graph_list(&graphs, GenerationType::Amplitude)?;
+                    ProcessDefinition::from_graph_list(&graphs, generation_type)?;
                 let process = Process::from_graph_list(
                     process_name,
                     integrand_base_name.clone(),
                     // TODO: avoid clone here
                     graphs.clone(),
-                    GenerationType::Amplitude,
+                    generation_type,
                     Some(process_defintion),
                     None,
                     &self.model,
@@ -493,8 +507,20 @@ impl State {
             } else {
                 integrand_base_name.clone()
             };
-            p.collection
-                .add_amplitude(Amplitude::from_graph_list(integrand_name.clone(), graphs)?);
+
+            match generation_type {
+                GenerationType::Amplitude => p
+                    .collection
+                    .add_amplitude(Amplitude::from_graph_list(integrand_name.clone(), graphs)?),
+                GenerationType::CrossSection => {
+                    p.collection
+                        .add_cross_section(CrossSection::from_graph_list(
+                            integrand_name.clone(),
+                            graphs,
+                            &self.model,
+                        )?)
+                }
+            }
         }
 
         Ok(())

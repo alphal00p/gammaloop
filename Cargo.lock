@@ -1452,6 +1452,7 @@ dependencies = [
  "indicatif 0.17.11",
  "itertools 0.8.2",
  "json5",
+ "linnet",
  "ndarray",
  "nu-ansi-term",
  "numpy",
