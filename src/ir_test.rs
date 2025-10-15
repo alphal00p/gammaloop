@@ -14,6 +14,7 @@ use symbolica::{
 
 use crate::{
     cff::surface::Surface,
+    disable,
     gammaloop_integrand::{cross_section_integrand::CrossSectionGraphTerm, GraphTerm},
     graph::FeynmanGraph,
     model::Model,
@@ -111,6 +112,7 @@ impl CrossSectionGraphTerm {
         approach_settings: &ApproachSettings,
         model: &Model,
     ) -> Result<()> {
+        disable! {
         let edges_in_limit = ir_limit.get_all_edges()?;
 
         // find cut that for that as all edges of the limit
@@ -183,9 +185,7 @@ impl CrossSectionGraphTerm {
             .map(|loop_id| (*loop_id, sample_random_unit_vector(rng)))
             .collect_vec();
 
-        let dependent_momenta_constructor = DependentMomentaConstructor::CrossSection {
-            external_connections: todo!(), //self.graph.external_connections.as_ref().unwrap(),
-        };
+        let dependent_momenta_constructor = DependentMomentaConstructor::CrossSection;
 
         let loop_number = lmb.loop_edges.len();
         let external_particles = self.graph.get_external_partcles();
@@ -248,6 +248,8 @@ impl CrossSectionGraphTerm {
         let slope = limit_data.extract_power();
 
         Ok(println!("slope: {}", slope))
+        }
+        todo!()
     }
 }
 

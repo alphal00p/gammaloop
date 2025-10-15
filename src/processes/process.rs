@@ -18,6 +18,7 @@ use std::fmt;
 use crate::{
     feyngen::NumeratorAwareGraphGroupingOption,
     gammaloop_integrand::GLIntegrand,
+    model,
     numerator::GlobalPrefactor,
     settings::{runtime::LockedRuntimeSettings, GlobalSettings},
     GammaLoopContext, GammaLoopContextContainer,
@@ -413,6 +414,7 @@ impl Process {
         generation_type: GenerationType,
         definition: Option<ProcessDefinition>,
         sub_classes: Option<Vec<Vec<String>>>,
+        model: &Model,
     ) -> Result<Self> {
         let mut proc_definition = definition.unwrap_or_default();
         proc_definition.folder_name = process_name;
@@ -439,8 +441,11 @@ impl Process {
                 if let Some(_sub_classes) = sub_classes {
                     todo!("implement seperation of processes into user defined sub classes");
                 } else {
-                    collection
-                        .add_cross_section(CrossSection::from_graph_list(integrand_name, graphs)?);
+                    collection.add_cross_section(CrossSection::from_graph_list(
+                        integrand_name,
+                        graphs,
+                        model,
+                    )?);
                     // TODO: construct a better default definition from graph (i.e. at least the external IDs)
                     Ok(Self {
                         settings_history: None,

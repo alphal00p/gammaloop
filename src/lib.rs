@@ -46,6 +46,8 @@ use symbolica::state::StateMap;
 use utils::FloatLike;
 use utils::F;
 
+use crate::graph::Graph;
+
 pub static INTERRUPTED: AtomicBool = AtomicBool::new(false);
 
 pub const GAMMALOOP_NAMESPACE: &str = "GL";
@@ -109,13 +111,13 @@ pub(crate) fn set_interrupted(flag: bool) {
     INTERRUPTED.store(flag, std::sync::atomic::Ordering::Relaxed);
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum DependentMomentaConstructor<'a> {
     Amplitude(&'a ExternalSignature),
-    CrossSection {
-        external_connections: &'a [ExternalConnection],
-    }, // at the moment I assume the first n/2 externals are incoming and the second n/2 are outgoing, the mapping is (0, n/2), (1, n/2+1), (2, n/2+2), ...
-    None, // will probably replace CrossSection due to is cut
+    //CrossSection {
+    //    external_connections: &'a [ExternalConnection],
+    //}, // at the moment I assume the first n/2 externals are incoming and the second n/2 are outgoing, the mapping is (0, n/2), (1, n/2+1), (2, n/2+2), ...
+    CrossSection,
 }
 
 #[comemo::track]

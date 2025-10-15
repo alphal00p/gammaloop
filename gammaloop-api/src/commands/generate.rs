@@ -348,6 +348,7 @@ impl Generate {
                                 .add_cross_section(CrossSection::from_graph_list(
                                     integrand_name.clone(),
                                     graphs,
+                                    model,
                                 )?);
                         }
                         _ => unreachable!(),
@@ -361,6 +362,7 @@ impl Generate {
                         generation_type,
                         Some(spec.process_definition),
                         None,
+                        model,
                     )?;
                     state.process_list.add_process(process);
                     integrand_base_name

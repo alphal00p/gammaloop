@@ -108,12 +108,13 @@ impl CrossSection {
         }
     }
 
-    pub fn from_graph_list(name: String, mut graphs: Vec<Graph>) -> Result<Self> {
+    pub fn from_graph_list(name: String, mut graphs: Vec<Graph>, model: &Model) -> Result<Self> {
         let mut cross_section = CrossSection::new(name);
         cross_section.graph_group_structure = complete_group_parsing(&mut graphs)?;
         println!("group structure: {:?}", cross_section.graph_group_structure);
 
-        for cross_section_graph in graphs {
+        for mut cross_section_graph in graphs {
+            cross_section_graph.param_builder = ParamBuilder::new(&cross_section_graph, model);
             cross_section.add_supergraph(cross_section_graph)?;
         }
         Ok(cross_section)

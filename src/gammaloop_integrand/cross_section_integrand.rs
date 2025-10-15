@@ -199,9 +199,7 @@ impl GammaloopIntegrand for CrossSectionIntegrand {
     }
 
     fn get_dependent_momenta_constructor(&self) -> DependentMomentaConstructor {
-        DependentMomentaConstructor::CrossSection {
-            external_connections: &self.data.external_connections,
-        }
+        DependentMomentaConstructor::CrossSection
     }
 
     // fn get_builder_cache(&self) -> &ParamBuilder<f64> {
@@ -327,7 +325,7 @@ impl GraphTerm for CrossSectionGraphTerm {
         let externals = settings
             .kinematics
             .externals
-            .get_dependent_externals(DependentMomentaConstructor::None)
+            .get_dependent_externals(DependentMomentaConstructor::CrossSection)
             .with_context(|| {
                 format!(
                     "Failed to get dependent external momenta for graph {}",
@@ -398,9 +396,6 @@ impl GraphTerm for CrossSectionGraphTerm {
                 )
             };
 
-            println!("lmb: {:?}", self.graph.loop_momentum_basis);
-            println!("esurface: {:?}", esurface);
-
             let (guess, _) = esurface.get_radius_guess(
                 momentum_sample.loop_moms(),
                 momentum_sample.external_moms(),
@@ -428,12 +423,18 @@ impl GraphTerm for CrossSectionGraphTerm {
                 esurface_derivative: solution.derivative_at_solution.clone(),
             };
 
+            let rescaled_momenta = MomentumSample {
+                sample: momentum_sample
+                    .sample
+                    .rescaled_loop_momenta(&solution.solution, None),
+            };
+
             let mut result = Complex::new_re(momentum_sample.zero());
             let params = T::get_parameters(
                 &mut self.param_builder,
                 settings.general.enable_cache,
                 &self.graph,
-                momentum_sample,
+                &rescaled_momenta,
                 hel,
                 None,
                 Some(&lu_params),
@@ -453,16 +454,18 @@ impl GraphTerm for CrossSectionGraphTerm {
                         &mut self.param_builder,
                         settings.general.enable_cache,
                         &self.graph,
-                        momentum_sample,
+                        &rescaled_momenta,
                         hel,
                         None,
-                        None,
+                        Some(&lu_params),
                     );
                     result += <T as GenericEvaluatorFloat>::get_evaluator_single(
                         &mut self.parametric_integrand[cut],
                     )(&a)
                 }
             }
+
+            debug!("param builder for cut {}: \n{}", cut, self.param_builder);
 
             all_cut_result += result;
         }

@@ -472,6 +472,7 @@ impl State {
                     GenerationType::Amplitude,
                     Some(process_defintion),
                     None,
+                    &self.model,
                 )?;
 
                 self.process_list.add_process(process);

@@ -309,40 +309,40 @@ impl Externals {
 
                         Ok(res)
                     }
-                    DependentMomentaConstructor::CrossSection {
-                        external_connections,
-                    } => {
-                        assert_eq!(external_connections.len(), momenta.len());
+                    //DependentMomentaConstructor::CrossSection {
+                    //    external_connections,
+                    //} => {
+                    //    assert_eq!(external_connections.len(), momenta.len());
 
-                        // set all_to_zero
-                        let mut dependent_momenta = (0..momenta.len() * 2)
-                            .map(|_| {
-                                FourMomentum::<F<T>>::from_ff64(&FourMomentum::from([F(0.0); 4]))
-                            })
-                            .collect::<ExternalFourMomenta<F<T>>>();
+                    //    // set all_to_zero
+                    //    let mut dependent_momenta = (0..momenta.len() * 2)
+                    //        .map(|_| {
+                    //            FourMomentum::<F<T>>::from_ff64(&FourMomentum::from([F(0.0); 4]))
+                    //        })
+                    //        .collect::<ExternalFourMomenta<F<T>>>();
 
-                        let incoming_momenta = momenta
-                            .iter()
-                            .map(|m| {
-                                FourMomentum::<F<T>>::from_ff64(
-                                    &FourMomentum::try_from(*m)
-                                        .expect("dependent momenta in cross section not allowed"),
-                                )
-                            })
-                            .collect_vec();
+                    //    let incoming_momenta = momenta
+                    //        .iter()
+                    //        .map(|m| {
+                    //            FourMomentum::<F<T>>::from_ff64(
+                    //                &FourMomentum::try_from(*m)
+                    //                    .expect("dependent momenta in cross section not allowed"),
+                    //            )
+                    //        })
+                    //        .collect_vec();
 
-                        for (external_connection, incoming_momentum) in
-                            external_connections.iter().zip(incoming_momenta)
-                        {
-                            dependent_momenta[external_connection.incoming_index] =
-                                incoming_momentum.clone();
-                            dependent_momenta[external_connection.outgoing_index] =
-                                incoming_momentum;
-                        }
+                    //    for (external_connection, incoming_momentum) in
+                    //        external_connections.iter().zip(incoming_momenta)
+                    //    {
+                    //        dependent_momenta[external_connection.incoming_index] =
+                    //            incoming_momentum.clone();
+                    //        dependent_momenta[external_connection.outgoing_index] =
+                    //            incoming_momentum;
+                    //    }
 
-                        Ok(dependent_momenta)
-                    }
-                    DependentMomentaConstructor::None => {
+                    //    Ok(dependent_momenta)
+                    //}
+                    DependentMomentaConstructor::CrossSection => {
                         let dependent_momenta = momenta
                             .iter()
                             .map(|m| {
@@ -428,8 +428,8 @@ impl Externals {
                     Ok(())
                 }
             },
+            // todo, improve the on-shellness
             DependentMomentaConstructor::CrossSection { .. } => Ok(()),
-            DependentMomentaConstructor::None => Ok(()),
         }
     }
 }

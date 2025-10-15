@@ -222,11 +222,35 @@ impl ParamBuilderGraph for Graph {
     }
 
     fn get_external_energy_atoms(&self) -> Vec<Atom> {
-        self.underlying.get_external_energy_atoms()
+        if self.initial_state_cut.nedges(&self.underlying) == 0 {
+            self.underlying.get_external_energy_atoms()
+        } else {
+            self.underlying
+                .iter_edges_of(&self.initial_state_cut)
+                .map(|(_, edge_id, _)| external_energy_atom_from_index(edge_id))
+                .collect()
+        }
     }
 
     fn get_ose_replacements(&self) -> Vec<Replacement> {
-        self.underlying.get_ose_replacements()
+        if self.initial_state_cut.nedges(&self.underlying) == 0 {
+            return self.underlying.get_ose_replacements();
+        } else {
+            let underlying_without_is_cut = self
+                .underlying
+                .full_filter()
+                .subtract(&self.initial_state_cut.left)
+                .subtract(&self.initial_state_cut.right);
+
+            self.underlying
+                .iter_edges_of(&underlying_without_is_cut)
+                .map(|(_, edge_id, _)| {
+                    let ose_atom = ose_atom_from_index(edge_id);
+                    let explicit = self.underlying.explicit_ose_atom(edge_id);
+                    Replacement::new(ose_atom.to_pattern(), explicit.to_pattern())
+                })
+                .collect()
+        }
     }
 
     fn explicit_ose_atom(&self, edge: EdgeIndex) -> Atom {
@@ -234,11 +258,43 @@ impl ParamBuilderGraph for Graph {
     }
 
     fn emr_spatial_params(&self) -> Vec<Atom> {
-        self.underlying.emr_spatial_params()
+        if self.initial_state_cut.nedges(&self.underlying) == 0 {
+            self.underlying.emr_spatial_params()
+        } else {
+            let underlying_without_is_cut = self
+                .underlying
+                .full_filter()
+                .subtract(&self.initial_state_cut.left)
+                .subtract(&self.initial_state_cut.right);
+
+            self.underlying
+                .iter_edges_of(&underlying_without_is_cut)
+                .flat_map(|(_, edge_id, _)| {
+                    vec![
+                        GS.emr_mom(edge_id, Atom::from(ExpandedIndex::from_iter([1]))),
+                        GS.emr_mom(edge_id, Atom::from(ExpandedIndex::from_iter([2]))),
+                        GS.emr_mom(edge_id, Atom::from(ExpandedIndex::from_iter([3]))),
+                    ]
+                })
+                .collect()
+        }
     }
 
     fn external_spatial_params(&self) -> Vec<Atom> {
-        self.underlying.external_spatial_params()
+        if self.initial_state_cut.nedges(&self.underlying) == 0 {
+            self.underlying.external_spatial_params()
+        } else {
+            self.underlying
+                .iter_edges_of(&self.initial_state_cut)
+                .flat_map(|(_, edge_id, _)| {
+                    vec![
+                        GS.emr_mom(edge_id, Atom::from(ExpandedIndex::from_iter([1]))),
+                        GS.emr_mom(edge_id, Atom::from(ExpandedIndex::from_iter([2]))),
+                        GS.emr_mom(edge_id, Atom::from(ExpandedIndex::from_iter([3]))),
+                    ]
+                })
+                .collect()
+        }
     }
 }
 
