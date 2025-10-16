@@ -270,13 +270,11 @@ fn stability_check_on_norm(
 
     if let Some(unstable_index) = unstable_sample {
         let unstable_point = results[unstable_index];
-        let rotation_axis = format!("{:?}", settings.stability.rotation_axis[unstable_index]);
 
         let (real_formatted, rotated_real_formatted) =
             format_for_compare_digits(average, unstable_point.re);
 
         debug!("{}", "\nUnstable point detected:".red());
-        debug!("Rotation axis: {}", rotation_axis);
         debug!("\tnormed average result: {}", real_formatted,);
         debug!("\tnormed rotated result: {}", rotated_real_formatted,);
     }
