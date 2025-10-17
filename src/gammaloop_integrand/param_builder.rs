@@ -367,10 +367,6 @@ impl GammaLoopPairs {
                 s_start += 1;
             }
         }
-        debug!(
-            "external_energies range: {:?}",
-            self.external_energies.value_range
-        );
 
         debug_assert_eq!(e_start, self.external_energies.value_range.end);
         debug_assert_eq!(s_start, self.external_spatial.value_range.end);

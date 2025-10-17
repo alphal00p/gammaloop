@@ -1,11 +1,13 @@
 use bincode_trait_derive::{Decode, Encode};
+use linnet::half_edge::involution::EdgeIndex;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use symbolica::{
-    atom::{Atom, AtomCore},
+    atom::{Atom, AtomCore, AtomView},
     evaluate::{CompileOptions, ExportSettings, InlineASM},
     function,
 };
+use tracing::debug;
 
 use crate::{
     cff::expression::GraphOrientation,
@@ -220,6 +222,48 @@ impl OrientationPattern {
                 .is_some();
             // println!("{a}");
             a
+        } else {
+            true
+        }
+    }
+
+    pub fn alt_filter<O: GraphOrientation>(&self, orientation: &O) -> bool {
+        if let Some(pat) = &self.pat {
+            let mut theta_rep = Atom::num(1);
+            let atom_pat = pat.as_view();
+
+            if let AtomView::Fun(f) = atom_pat {
+                if f.get_symbol() == GS.orientation_delta {
+                    for (edge_id, edge_or) in f.iter().enumerate() {
+                        let edge_id = EdgeIndex::from(edge_id);
+                        if let Ok(sign) = i64::try_from(edge_or) {
+                            match sign {
+                                1 => theta_rep *= GS.sign_theta(GS.sign(edge_id)),
+                                -1 => theta_rep *= GS.sign_theta(-GS.sign(edge_id)),
+                                0 => continue,
+                                _ => {
+                                    panic!(
+                                        "arguments of orientation delta function should be -1,0 1"
+                                    )
+                                }
+                            }
+                        } else {
+                            panic!("arguments of orientation delta function should be -1,0 1")
+                        }
+                    }
+                } else {
+                    panic!("pattern should be a orientation delta function")
+                }
+            } else {
+                panic!("pattern should be a orientation delta function")
+            }
+
+            let orientation_theta_rep = orientation.orientation_thetas().to_pattern();
+
+            theta_rep
+                .pattern_match(&orientation_theta_rep, None, None)
+                .next()
+                .is_some()
         } else {
             true
         }

@@ -372,7 +372,7 @@ impl GraphTerm for CrossSectionGraphTerm {
         let orientations =
             momentum_sample.orientations(&self.orientation_filter.0, &self.orientations);
 
-        let mut all_cut_result = Complex::new_re(momentum_sample.zero());
+        // let mut all_cut_result = Complex::new_re(momentum_sample.zero());
         let center = LoopMomenta::from_iter(vec![
             ThreeMomentum {
                 px: momentum_sample.zero(),
@@ -383,6 +383,7 @@ impl GraphTerm for CrossSectionGraphTerm {
         ]);
         let masses = self.graph.get_real_mass_vector(&model);
         let hel = settings.kinematics.externals.get_helicities();
+        let mut cut_results = TiVec::<CutId, Complex<F<T>>>::new();
 
         for (cut, esurface) in self.cut_esurface.iter_enumerated() {
             let function = |t: &F<T>| {
@@ -467,6 +468,12 @@ impl GraphTerm for CrossSectionGraphTerm {
 
             debug!("param builder for cut {}: \n{}", cut, self.param_builder);
 
+            cut_results.push(result);
+        }
+
+        let mut all_cut_result = Complex::new_re(momentum_sample.zero());
+        for (cut_id, result) in cut_results.iter_enumerated() {
+            debug!("Result for cut {}: {}", cut_id, result);
             all_cut_result += result;
         }
 

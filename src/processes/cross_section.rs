@@ -20,7 +20,10 @@ use tracing::info;
 use vakint::{EvaluationOrder, LoopNormalizationFactor, Vakint, VakintSettings};
 
 use crate::{
-    cff::{cut_expression::SuperGraphOrientationID, expression::AmplitudeOrientationID},
+    cff::{
+        cut_expression::SuperGraphOrientationID,
+        expression::{AmplitudeOrientationID, GraphOrientation},
+    },
     gammaloop_integrand::{
         cross_section_integrand::{CrossSectionIntegrandData, OrientationEvaluator},
         param_builder::ParamBuilderGraph,
@@ -436,7 +439,7 @@ impl CrossSectionGraph {
         debug!("generating esurfaces corresponding to cuts");
         self.generate_esurface_cuts();
         debug!("generating cff");
-        self.generate_cff()?;
+        self.generate_cff(settings)?;
         debug!("extending cut esurface cache");
         self.update_surface_cache();
         debug!("building lmbs");
@@ -476,7 +479,7 @@ impl CrossSectionGraph {
         }
     }
 
-    fn generate_cff(&mut self) -> Result<()> {
+    fn generate_cff(&mut self, settings: &GenerationSettings) -> Result<()> {
         // hardcorde 1 to n for now
         debug!("generating cff");
 
@@ -582,7 +585,7 @@ impl CrossSectionGraph {
                 .orientations
                 .iter()
                 .map(|expr| expr.data.orientation.clone())
-                .filter(|o| settings.orientation_pattern.filter(o))
+                .filter(|o| settings.orientation_pattern.alt_filter(o))
                 .collect::<TiVec<AmplitudeOrientationID, _>>();
 
             let right_orientations = expression_for_cut
@@ -590,7 +593,7 @@ impl CrossSectionGraph {
                 .orientations
                 .iter()
                 .map(|expr| expr.data.orientation.clone())
-                .filter(|o| settings.orientation_pattern.filter(o))
+                .filter(|o| settings.orientation_pattern.alt_filter(o))
                 .collect::<TiVec<AmplitudeOrientationID, _>>();
 
             let vakint = self.new_vakint();
