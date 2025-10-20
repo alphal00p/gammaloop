@@ -440,17 +440,12 @@ where
             integration_state.all_integrals[0].merge(&core_result.integral);
         }
 
-        // The grids need to merged by collecting them into the one of the first core, and then overwriting the grid in integration_state
-        // This is because we clone the integration state for each core.
-
-        let mut first_grid = core_results[0].grid.clone();
-        for core_result in core_results[1..].iter() {
-            first_grid
+        for core_result in core_results.iter() {
+            integration_state
+                .grid
                 .merge(&core_result.grid)
                 .expect("could not merge grids");
         }
-
-        integration_state.grid = first_grid;
 
         integration_state.grid.update(
             F(settings.integrator.discrete_dim_learning_rate),
