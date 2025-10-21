@@ -188,7 +188,6 @@ impl GammaloopIntegrand for CrossSectionIntegrand {
     }
 
     fn get_master_graph(&self, group_id: GroupId) -> &Self::G {
-        println!("group structure: {:?}", self.data.graph_group_structure);
         let group_master = self.data.graph_group_structure[group_id].master();
 
         &self.data.graph_terms[group_master]
@@ -516,18 +515,6 @@ impl GraphTerm for CrossSectionGraphTerm {
     }
 
     fn get_real_mass_vector(&self) -> EdgeVec<Option<F<f64>>> {
-        todo!()
-    }
-}
-
-impl CrossSectionGraphTerm {
-    fn evaluate_impl<T: FloatLike>(
-        &mut self,
-        model: &Model,
-        momentum_sample: &MomentumSample<T>,
-        settings: &RuntimeSettings,
-        param_builder: ParamBuilder<T>,
-    ) -> Result<Complex<F<T>>> {
         todo!()
     }
 }

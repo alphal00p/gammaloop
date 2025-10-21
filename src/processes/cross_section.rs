@@ -49,7 +49,7 @@ use eyre::{eyre, Context};
 use itertools::Itertools;
 use linnet::half_edge::{
     involution::{Flow, HedgePair, Orientation},
-    subgraph::{HedgeNode, Inclusion, InternalSubGraph, OrientedCut},
+    subgraph::{HedgeNode, Inclusion, InternalSubGraph, OrientedCut, SubGraphOps},
 };
 use log::{debug, warn};
 use serde::{Deserialize, Serialize};
@@ -697,10 +697,14 @@ impl CrossSectionGraph {
     }
 
     fn build_lmbs(&mut self) {
-        let lmbs = self
-            .graph
-            .underlying
-            .generate_loop_momentum_bases(&self.graph.underlying.full_filter());
+        let lmbs = self.graph.generate_loop_momentum_bases(
+            &self
+                .graph
+                .underlying
+                .full_filter()
+                .subtract(&self.graph.initial_state_cut.left)
+                .subtract(&self.graph.initial_state_cut.right),
+        );
 
         self.derived_data.lmbs = Some(lmbs)
     }
