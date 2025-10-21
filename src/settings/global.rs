@@ -260,6 +260,7 @@ impl OrientationPattern {
 
             let orientation_theta_rep = orientation.orientation_thetas().to_pattern();
 
+            debug!("matching {} with {}", theta_rep, orientation_theta_rep);
             theta_rep
                 .pattern_match(&orientation_theta_rep, None, None)
                 .next()

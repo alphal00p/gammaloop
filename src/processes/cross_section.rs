@@ -15,7 +15,10 @@ use color_eyre::Result;
 
 use idenso::{color::ColorSimplifier, metric::MS};
 use rayon::ThreadPool;
-use spenso::network::{Sequential, SmallestDegree};
+use spenso::{
+    network::{Sequential, SmallestDegree},
+    structure::concrete_index::{ConcreteIndex, ExpandedIndex},
+};
 use tracing::info;
 use vakint::{EvaluationOrder, LoopNormalizationFactor, Vakint, VakintSettings};
 
@@ -642,11 +645,21 @@ impl CrossSectionGraph {
                 .with_context(|| "in building LU integrand")?
                 .into();
 
-            let integrand = scalar
+            let mut integrand = scalar
                 .unwrap_function(GS.color_wrap)
                 .simplify_color()
                 .replace(function!(GS.energy, W_.x_))
                 .with(function!(GS.ose, W_.x_));
+
+            for (_, edge_index, _) in self
+                .graph
+                .underlying
+                .iter_edges_of(&self.graph.initial_state_cut)
+            {
+                integrand = integrand
+                    .replace(GS.ose(edge_index))
+                    .with(GS.emr_mom(edge_index, Atom::from(ExpandedIndex::from_iter([0]))));
+            }
 
             let loop_number = self.graph.cyclotomatic_number(&cut.left)
                 + self.graph.n_loops(&cut.right)

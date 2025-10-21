@@ -385,6 +385,8 @@ impl GraphTerm for CrossSectionGraphTerm {
         let hel = settings.kinematics.externals.get_helicities();
         let mut cut_results = TiVec::<CutId, Complex<F<T>>>::new();
 
+        debug!("loop moms: {}", momentum_sample.loop_moms());
+
         for (cut, esurface) in self.cut_esurface.iter_enumerated() {
             let function = |t: &F<T>| {
                 esurface.compute_self_and_r_derivative(
@@ -430,6 +432,8 @@ impl GraphTerm for CrossSectionGraphTerm {
                     .rescaled_loop_momenta(&solution.solution, None),
             };
 
+            debug!("rescaled loop moms: {}", rescaled_momenta.loop_moms());
+
             let mut result = Complex::new_re(momentum_sample.zero());
             let params = T::get_parameters(
                 &mut self.param_builder,
@@ -440,6 +444,12 @@ impl GraphTerm for CrossSectionGraphTerm {
                 None,
                 Some(&lu_params),
             );
+
+            if cut == CutId::from(2) {
+                for expr in &self.iterative_integrand.as_ref().unwrap()[cut].exprs {
+                    debug!("expr: {}", expr);
+                }
+            }
 
             let iterative = self
                 .iterative_integrand

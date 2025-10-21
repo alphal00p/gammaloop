@@ -232,6 +232,7 @@ impl ParamBuilderGraph for Graph {
         } else {
             self.underlying
                 .iter_edges_of(&self.initial_state_cut)
+                .sorted_by(|a, b| a.1.cmp(&b.1))
                 .map(|(_, edge_id, _)| external_energy_atom_from_index(edge_id))
                 .collect()
         }
@@ -274,6 +275,7 @@ impl ParamBuilderGraph for Graph {
 
             self.underlying
                 .iter_edges_of(&underlying_without_is_cut)
+                .sorted_by(|a, b| a.1.cmp(&b.1))
                 .flat_map(|(_, edge_id, _)| {
                     vec![
                         GS.emr_mom(edge_id, Atom::from(ExpandedIndex::from_iter([1]))),
@@ -291,6 +293,7 @@ impl ParamBuilderGraph for Graph {
         } else {
             self.underlying
                 .iter_edges_of(&self.initial_state_cut)
+                .sorted_by(|a, b| a.1.cmp(&b.1))
                 .flat_map(|(_, edge_id, _)| {
                     vec![
                         GS.emr_mom(edge_id, Atom::from(ExpandedIndex::from_iter([1]))),
@@ -572,17 +575,35 @@ impl FeynmanGraph for Graph {
         external_moms: &ExternalFourMomenta<F<T>>,
         lmb: &LoopMomentumBasis,
     ) -> Vec<F<T>> {
-        self.iter_edges()
-            .flat_map(|(pair, edge_id, _)| {
-                if let HedgePair::Paired { .. } = pair {
+        if self.initial_state_cut.nedges(&self.underlying) == 0 {
+            self.iter_edges()
+                .flat_map(|(pair, edge_id, _)| {
+                    if let HedgePair::Paired { .. } = pair {
+                        let emr_vec = lmb.edge_signatures[edge_id]
+                            .compute_three_momentum_from_four(loop_moms, external_moms);
+                        vec![emr_vec.px, emr_vec.py, emr_vec.pz]
+                    } else {
+                        vec![]
+                    }
+                })
+                .collect()
+        } else {
+            let underlying_without_is_cut = self
+                .underlying
+                .full_filter()
+                .subtract(&self.initial_state_cut.left)
+                .subtract(&self.initial_state_cut.right);
+
+            self.underlying
+                .iter_edges_of(&underlying_without_is_cut)
+                .sorted_by(|a, b| a.1.cmp(&b.1))
+                .flat_map(|(_pair, edge_id, _)| {
                     let emr_vec = lmb.edge_signatures[edge_id]
                         .compute_three_momentum_from_four(loop_moms, external_moms);
                     vec![emr_vec.px, emr_vec.py, emr_vec.pz]
-                } else {
-                    vec![]
-                }
-            })
-            .collect()
+                })
+                .collect()
+        }
     }
 
     fn get_esurface_canonization(&self, lmb: &LoopMomentumBasis) -> Option<ShiftRewrite> {

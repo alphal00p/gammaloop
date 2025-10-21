@@ -28,7 +28,7 @@ use tabled::{settings::Style, Table};
 
 use crate::{
     cff::expression::GraphOrientation,
-    graph::Graph,
+    graph::{FeynmanGraph, Graph},
     model::Model,
     momentum::{Helicity, PolType},
     momentum_sample::{ExternalFourMomenta, MomentumSample},
@@ -570,20 +570,17 @@ impl UpdateAndGetParams<f64> for ParamBuilder<f64> {
     ) -> Cow<'a, Vec<Complex<F<f64>>>> {
         let emr_start = self.pairs.emr_spatial.value_range.start;
         let mut shift = 0;
-        graph.iter_loop_edges().for_each(|(pair, edge_id, _)| {
-            let emr_vec = graph.loop_momentum_basis.edge_signatures[edge_id]
-                .compute_three_momentum_from_four(sample.loop_moms(), sample.external_moms());
-            // info!("px:{}", self.pairs.emr_spatial.params[shift]);
-            //
-            self.values[emr_start + shift] = Complex::new_re(emr_vec.px);
+
+        let emr_vec_cahe = graph.get_emr_vec_cache(
+            sample.loop_moms(),
+            sample.external_moms(),
+            &graph.loop_momentum_basis,
+        );
+
+        for value in emr_vec_cahe {
+            self.values[emr_start + shift] = Complex::new_re(value);
             shift += 1;
-            // info!("py:{}", self.pairs.emr_spatial.params[shift]);
-            self.values[emr_start + shift] = Complex::new_re(emr_vec.py);
-            shift += 1;
-            // info!("pz:{}", self.pairs.emr_spatial.params[shift]);
-            self.values[emr_start + shift] = Complex::new_re(emr_vec.pz);
-            shift += 1;
-        });
+        }
 
         // parse!("s").evaluator(fn_map, params, optimization_settings).unwrap().
 
@@ -614,17 +611,16 @@ impl UpdateAndGetParams<f128> for ParamBuilder<f64> {
     ) -> Cow<Vec<Complex<F<f128>>>> {
         let mut emr_start = self.pairs.emr_spatial.value_range.start;
         let mut values = self.higher();
-        graph.iter_loop_edges().for_each(|(pair, edge_id, _)| {
-            let emr_vec = graph.loop_momentum_basis.edge_signatures[edge_id]
-                .compute_three_momentum_from_four(sample.loop_moms(), sample.external_moms());
-            // println!("{edge_id}:{emr_vec}");
-            values[emr_start] = Complex::new_re(emr_vec.px);
+        let emr_vec_cahe = graph.get_emr_vec_cache(
+            sample.loop_moms(),
+            sample.external_moms(),
+            &graph.loop_momentum_basis,
+        );
+
+        for value in emr_vec_cahe {
+            values[emr_start] = Complex::new_re(value);
             emr_start += 1;
-            values[emr_start] = Complex::new_re(emr_vec.py);
-            emr_start += 1;
-            values[emr_start] = Complex::new_re(emr_vec.pz);
-            emr_start += 1;
-        });
+        }
 
         self.pairs
             .add_external_four_mom_impl(sample.external_moms(), &mut values);

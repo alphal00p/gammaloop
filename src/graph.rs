@@ -20,6 +20,7 @@ use parse::ParseGraph;
 use rand::{rngs::SmallRng, Rng, SeedableRng};
 // use petgraph::Direction::Outgoing;
 use symbolica::{atom::Atom, graph::Graph as SymbolicaGraph};
+use tracing::warn;
 use typed_index_collections::TiVec;
 
 use crate::{
@@ -212,10 +213,14 @@ impl Graph {
             let current_lmb_index = lmbs
                 .iter_enumerated()
                 .find(|(_lmb_index, lmb)| lmb.loop_edges == self.loop_momentum_basis.loop_edges)
-                .map(|(lmb_index, _)| lmb_index)
-                .unwrap();
+                .map(|(lmb_index, _)| lmb_index);
 
-            vec![current_lmb_index].into()
+            if let Some(current_lmb_index) = current_lmb_index {
+                vec![current_lmb_index].into()
+            } else {
+                warn!("lmb not in the list of all lmb, please check if lmbs are sorted!");
+                vec![].into()
+            }
         };
 
         debug!(
@@ -256,9 +261,8 @@ impl Graph {
         for (hedge_pair, _, _) in self.underlying.iter_edges_of(&self.initial_state_cut) {
             match hedge_pair {
                 HedgePair::Split { source, sink, .. } => {
-                    // yes it is supposed to be like this, becuase a sink hedge goes into the node from which to construct the cuts
-                    let source_node = self.underlying.node_id(source);
-                    let sink_node = self.underlying.node_id(sink);
+                    let source_node = self.underlying.node_id(sink);
+                    let sink_node = self.underlying.node_id(source);
 
                     source_nodes.insert(source_node);
                     target_nodes.insert(sink_node);

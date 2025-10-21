@@ -1,8 +1,16 @@
 use std::{borrow::Cow, mem::transmute, path::Path};
 
+use crate::{
+    gammaloop_integrand::param_builder,
+    graph::parse::IntoGraph,
+    improve_ps::PhaseSpaceImprovementSettings,
+    momentum::{self, ExternalMomenta, ThreeMomentum},
+    momentum_sample::{ExternalFourMomenta, LoopMomenta},
+    settings::runtime::kinematic::Externals,
+};
 use bincode_trait_derive::{Decode, Encode};
 use bitvec::{order::Lsb0, slice::IterOnes, vec::BitVec};
-use linnet::half_edge::involution::{EdgeVec, Orientation};
+use linnet::half_edge::involution::{EdgeVec, Orientation, SignOrZero};
 use spenso::algebra::complex::{symbolica_traits::CompiledComplexEvaluatorSpenso, Complex};
 use symbolica::{
     atom::{Atom, AtomCore},
@@ -11,15 +19,19 @@ use symbolica::{
         CompileOptions, CompiledComplexEvaluator, ExportSettings, ExpressionEvaluator, FunctionMap,
         OptimizationSettings,
     },
+    parse,
 };
+use tracing::debug;
 use typed_index_collections::TiVec;
 
 use crate::{
+    dot,
     gammaloop_integrand::param_builder::LUParams,
     graph::Graph,
+    initialisation::test_initialise,
     momentum::Helicity,
     momentum_sample::MomentumSample,
-    utils::{f128, FloatLike, F},
+    utils::{f128, test_utils::load_generic_model, FloatLike, F},
     GammaLoopContext,
 };
 
