@@ -248,7 +248,7 @@ impl Amplitude {
         runtime_default: LockedRuntimeSettings,
         thread_pool: &ThreadPool,
     ) -> Result<()> {
-        let terms: Result<Vec<_>> = thread_pool.install(|| {
+        let mut terms: Vec<_> = thread_pool.install(|| {
             self.graphs
                 .par_iter_mut()
                 .enumerate()
@@ -266,8 +266,21 @@ impl Amplitude {
                         global_settings,
                     )
                 })
-                .collect()
-        });
+                .collect::<Result<Vec<_>>>()
+        })?;
+
+        for group in self.graph_group_structure.iter() {
+            let master_graph_id = group.master();
+            let mc_of_master = self.graphs[master_graph_id]
+                .derived_data
+                .multi_channeling_setup
+                .as_ref()
+                .unwrap();
+
+            for graph_id in group.into_iter() {
+                terms[graph_id].multi_channeling_setup = mc_of_master.clone();
+            }
+        }
 
         let amplitude_integrand = AmplitudeIntegrand {
             settings: runtime_default.into_with_modified_kinematics(
@@ -280,7 +293,7 @@ impl Amplitude {
                 loop_cache_id: 0,
                 external_cache_id: 0,
                 base_external_cache_id: 0,
-                graph_terms: terms?,
+                graph_terms: terms,
                 external_signature: self.external_signature.clone(),
                 graph_group_structure: self.graph_group_structure.clone(),
                 group_derived_data: self.group_derived_data.clone(),
@@ -421,8 +434,11 @@ impl AmplitudeGraph {
 
         status_debug!("Building Loop Momentum Bases");
         self.build_lmbs();
-        status_debug!("Building Multi-Channeling Channels");
-        self.build_multi_channeling_channels();
+
+        if self.graph.is_group_master {
+            status_debug!("Building Multi-Channeling Channels");
+            self.build_multi_channeling_channels();
+        }
 
         if settings.enable_thresholds {
             status_debug!("Building Threshold Counterterms");

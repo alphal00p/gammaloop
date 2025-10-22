@@ -184,12 +184,25 @@ impl CrossSection {
         runtime_default: LockedRuntimeSettings,
         generation_pool: &ThreadPool,
     ) -> Result<()> {
-        let terms = generation_pool.install(|| {
+        let mut terms = generation_pool.install(|| {
             self.supergraphs
                 .par_iter_mut()
                 .map(|sg| sg.generate_term_for_graph(model, global_settings))
                 .collect::<Result<Vec<_>>>()
         })?;
+
+        for group in self.graph_group_structure.iter() {
+            let master = group.master();
+            let mc_of_master = self.supergraphs[master]
+                .derived_data
+                .multi_channeling_setup
+                .as_ref()
+                .unwrap();
+
+            for graph_id in group.into_iter() {
+                terms[graph_id].multi_channeling_setup = mc_of_master.clone();
+            }
+        }
 
         let cross_section_integrand = CrossSectionIntegrand {
             settings: runtime_default.into(),
@@ -480,7 +493,10 @@ impl CrossSectionGraph {
         debug!("building lmbs");
         self.build_lmbs();
         debug!("building multi channeling channels");
-        self.build_multi_channeling_channels();
+
+        if self.graph.is_group_master {
+            self.build_multi_channeling_channels();
+        }
         debug!("building parametric integrand");
         self.build_parametric_integrand(&settings)?;
 

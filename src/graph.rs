@@ -229,7 +229,11 @@ impl Graph {
             channels.len()
         );
 
-        LmbMultiChannelingSetup { channels }
+        LmbMultiChannelingSetup {
+            channels,
+            graph: self.clone(),
+            all_bases: lmbs.clone(),
+        }
     }
 
     pub(crate) fn iter_loop_edges(

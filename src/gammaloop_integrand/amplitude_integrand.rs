@@ -146,11 +146,11 @@ impl AmplitudeGraphTerm {
             orientation_parametric_integrand,
             tropical_sampler: graph.derived_data.tropical_sampler.clone(),
             graph: graph.graph.clone(),
-            multi_channeling_setup: graph
-                .derived_data
-                .multi_channeling_setup
-                .clone()
-                .expect("multi_channeling_setup should have been created"),
+            multi_channeling_setup: LmbMultiChannelingSetup {
+                channels: TiVec::new(),
+                graph: graph.graph.clone(), // will be overwritten later,
+                all_bases: TiVec::new(),
+            }, // to be taken from froup master
             lmbs: graph
                 .derived_data
                 .lmbs
@@ -233,7 +233,21 @@ impl AmplitudeGraphTerm {
         model: &Model,
         settings: &RuntimeSettings,
         rotation: &Rotation,
+        channel_id: Option<(ChannelIndex, F<T>)>,
     ) -> Complex<F<T>> {
+        let (momentum_sample, prefactor) = if let Some((channel_id, alpha)) = channel_id {
+            self.multi_channeling_setup
+                .reinterpret_loop_momenta_and_compute_prefactor(
+                    channel_id,
+                    momentum_sample,
+                    0,
+                    model,
+                    &alpha,
+                )
+        } else {
+            (momentum_sample.clone(), momentum_sample.one())
+        };
+
         let hel = settings.kinematics.externals.get_helicities();
         let orientations =
             momentum_sample.orientations(&self.orientation_filter.0, &self.orientations);
@@ -249,7 +263,7 @@ impl AmplitudeGraphTerm {
                 &mut self.param_builder,
                 settings.general.enable_cache,
                 &self.graph,
-                momentum_sample,
+                &momentum_sample,
                 hel,
                 None,
                 None,
@@ -269,7 +283,7 @@ impl AmplitudeGraphTerm {
                         &mut self.param_builder,
                         settings.general.enable_cache,
                         &self.graph,
-                        momentum_sample,
+                        &momentum_sample,
                         hel,
                         None,
                         None,
@@ -287,7 +301,7 @@ impl AmplitudeGraphTerm {
         debug!("params: \n{}", self.param_builder);
 
         let sum_of_cts = self.threshold_counterterm.evaluate(
-            momentum_sample,
+            &momentum_sample,
             &self.graph,
             model,
             &self.esurfaces,
@@ -390,12 +404,8 @@ impl GraphTerm for AmplitudeGraphTerm {
         &self.graph
     }
 
-    fn get_multi_channeling_setup(&self) -> &LmbMultiChannelingSetup {
-        &self.multi_channeling_setup
-    }
-
-    fn get_lmbs(&self) -> &TiVec<LmbIndex, LoopMomentumBasis> {
-        &self.lmbs
+    fn get_num_channels(&self) -> usize {
+        self.multi_channeling_setup.channels.len()
     }
 
     fn evaluate<T: FloatLike>(
@@ -404,8 +414,9 @@ impl GraphTerm for AmplitudeGraphTerm {
         model: &Model,
         settings: &RuntimeSettings,
         rotation: &Rotation,
+        channel_id: Option<(ChannelIndex, F<T>)>,
     ) -> Complex<F<T>> {
-        self.evaluate_impl(momentum_sample, model, settings, rotation)
+        self.evaluate_impl(momentum_sample, model, settings, rotation, channel_id)
     }
 
     fn get_num_orientations(&self) -> usize {

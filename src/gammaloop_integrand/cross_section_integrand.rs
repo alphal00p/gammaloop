@@ -33,7 +33,8 @@ use crate::{
     },
     evaluation_result::EvaluationResult,
     gammaloop_integrand::{
-        param_builder::LUParams, GenericEvaluatorFloat, ParamBuilder, UpdateAndGetParams,
+        param_builder::LUParams, ChannelIndex, GenericEvaluatorFloat, ParamBuilder,
+        UpdateAndGetParams,
     },
     graph::{
         ExternalConnection, FeynmanGraph, Graph, GraphGroup, GroupId, LmbIndex, LoopMomentumBasis,
@@ -309,12 +310,11 @@ impl CrossSectionGraphTerm {
             graph: graph.graph.clone(),
             cut_esurface: graph.cut_esurface.clone(),
             cuts: graph.cuts.clone(),
-            multi_channeling_setup: graph
-                .derived_data
-                .multi_channeling_setup
-                .as_ref()
-                .unwrap()
-                .clone(),
+            multi_channeling_setup: LmbMultiChannelingSetup {
+                channels: TiVec::new(),
+                graph: graph.graph.clone(), // will be overwritten later,
+                all_bases: TiVec::new(),
+            },
             lmbs: graph.derived_data.lmbs.as_ref().unwrap().clone(),
             estimated_scale: None,
             param_builder: graph.graph.param_builder.clone(),
@@ -385,6 +385,10 @@ impl GraphTerm for CrossSectionGraphTerm {
         &mut self.param_builder
     }
 
+    fn get_num_channels(&self) -> usize {
+        self.multi_channeling_setup.channels.len()
+    }
+
     fn warm_up(&mut self, settings: &RuntimeSettings, model: &Model) -> Result<()> {
         self.estimated_scale = Some(
             self.graph
@@ -444,6 +448,7 @@ impl GraphTerm for CrossSectionGraphTerm {
         model: &Model,
         settings: &RuntimeSettings,
         rotation: &Rotation,
+        channel_id: Option<(ChannelIndex, F<T>)>,
     ) -> Complex<F<T>> {
         let orientations =
             momentum_sample.orientations(&self.orientation_filter.0, &self.orientations);
@@ -460,6 +465,18 @@ impl GraphTerm for CrossSectionGraphTerm {
         let masses = self.graph.get_real_mass_vector(&model);
         let hel = settings.kinematics.externals.get_helicities();
         let mut cut_results = TiVec::<CutId, Complex<F<T>>>::new();
+
+        let momentum_sample = if let Some((channel_id, _alpha)) = &channel_id {
+            MomentumSample {
+                sample: self.multi_channeling_setup.reinterpret_loop_momenta_impl(
+                    *channel_id,
+                    &momentum_sample.sample,
+                    momentum_sample.sample.loop_mom_cache_id,
+                ),
+            }
+        } else {
+            momentum_sample.clone()
+        };
 
         debug!("loop moms: {}", momentum_sample.loop_moms());
 
@@ -510,6 +527,17 @@ impl GraphTerm for CrossSectionGraphTerm {
 
             debug!("rescaled loop moms: {}", rescaled_momenta.loop_moms());
 
+            let prefactor = if let Some((channel_index, alpha)) = &channel_id {
+                self.multi_channeling_setup.compute_prefactor_impl(
+                    *channel_index,
+                    &rescaled_momenta,
+                    model,
+                    alpha,
+                )
+            } else {
+                rescaled_momenta.one()
+            };
+
             let mut result = Complex::new_re(momentum_sample.zero());
             let params = T::get_parameters(
                 &mut self.param_builder,
@@ -548,13 +576,13 @@ impl GraphTerm for CrossSectionGraphTerm {
                     );
                     result += <T as GenericEvaluatorFloat>::get_evaluator_single(
                         &mut self.parametric_integrand[cut],
-                    )(&a)
+                    )(&a);
                 }
             }
 
             debug!("param builder for cut {}: \n{}", cut, self.param_builder);
 
-            cut_results.push(result);
+            cut_results.push(result * prefactor);
         }
 
         let mut all_cut_result = Complex::new_re(momentum_sample.zero());
@@ -569,16 +597,8 @@ impl GraphTerm for CrossSectionGraphTerm {
         self.graph.name.clone()
     }
 
-    fn get_multi_channeling_setup(&self) -> &LmbMultiChannelingSetup {
-        &self.multi_channeling_setup
-    }
-
     fn get_graph(&self) -> &Graph {
         &self.graph
-    }
-
-    fn get_lmbs(&self) -> &TiVec<LmbIndex, LoopMomentumBasis> {
-        &self.lmbs
     }
 
     fn get_num_orientations(&self) -> usize {

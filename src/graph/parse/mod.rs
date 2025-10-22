@@ -1268,6 +1268,7 @@ pub(crate) fn complete_group_parsing(graphs: &mut [Graph]) -> Result<TiVec<Group
 
             // the special case of a single graph in the group is easy
             if graphs_in_group.len() == 1 {
+                graphs[graphs_in_group[0]].is_group_master = true;
                 Ok(GraphGroup {
                     master: graphs_in_group[0],
                     remaining: vec![],

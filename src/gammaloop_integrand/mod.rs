@@ -1,4 +1,5 @@
 use std::fs;
+use std::ops::Range;
 use std::path::Path;
 
 use crate::evaluation_result::{EvaluationMetaData, EvaluationResult};
@@ -26,9 +27,8 @@ use serde::{Deserialize, Serialize};
 use spenso::algebra::algebraic_traits::IsZero;
 use spenso::algebra::complex::Complex;
 use std::time::Duration;
-use tracing::debug;
-
 use symbolica::numerical_integration::{ContinuousGrid, DiscreteGrid, Grid, Sample};
+use tracing::debug;
 use typed_index_collections::TiVec;
 pub mod amplitude_integrand;
 pub mod cache_debugging;
@@ -310,9 +310,12 @@ pub struct StabilityLevelResult {
 pub struct ChannelIndex(usize);
 
 /// Helper struct for the LMB multi-channeling setup
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
+#[derive(Clone, Encode, Decode)]
+#[trait_decode(trait = GammaLoopContext)]
 pub struct LmbMultiChannelingSetup {
     pub channels: TiVec<ChannelIndex, LmbIndex>,
+    pub graph: Graph,
+    pub all_bases: TiVec<LmbIndex, LoopMomentumBasis>,
 }
 
 impl LmbMultiChannelingSetup {
@@ -321,11 +324,11 @@ impl LmbMultiChannelingSetup {
         channel_index: ChannelIndex,
         momentum_sample: &BareMomentumSample<T>,
         loop_mom_cache_id: usize,
-        base_lmb: &LoopMomentumBasis,
-        all_bases: &TiVec<LmbIndex, LoopMomentumBasis>,
     ) -> BareMomentumSample<T> {
-        let channel_lmb = &all_bases[self.channels[channel_index]];
-        let new_loop_moms: LoopMomenta<F<T>> = base_lmb
+        let channel_lmb = &self.all_bases[self.channels[channel_index]];
+        let new_loop_moms: LoopMomenta<F<T>> = self
+            .graph
+            .loop_momentum_basis
             .loop_edges
             .iter()
             .map(|&edge_index| {
@@ -358,9 +361,7 @@ impl LmbMultiChannelingSetup {
     pub(crate) fn reinterpret_loop_momenta_and_compute_prefactor_all_channels<T: FloatLike>(
         &self,
         momentum_sample: &MomentumSample<T>,
-        graph: &Graph,
         model: &Model,
-        all_bases: &TiVec<LmbIndex, LoopMomentumBasis>,
         alpha: &F<T>,
         cache: bool,
     ) -> TiVec<ChannelIndex, (MomentumSample<T>, F<T>)> {
@@ -375,9 +376,7 @@ impl LmbMultiChannelingSetup {
                     channel_index,
                     momentum_sample,
                     loop_mom_cache_id,
-                    graph,
                     model,
-                    all_bases,
                     alpha,
                 )
             })
@@ -394,25 +393,20 @@ impl LmbMultiChannelingSetup {
         channel_index: ChannelIndex,
         momentum_sample: &MomentumSample<T>,
         loop_mom_cache_id: usize,
-        graph: &Graph,
         model: &Model,
-        all_bases: &TiVec<LmbIndex, LoopMomentumBasis>,
         alpha: &F<T>,
     ) -> (MomentumSample<T>, F<T>) {
-        let base_lmb = &graph.loop_momentum_basis;
+        let base_lmb = &self.graph.loop_momentum_basis;
 
         let sample = MomentumSample {
             sample: self.reinterpret_loop_momenta_impl(
                 channel_index,
                 &momentum_sample.sample,
                 loop_mom_cache_id,
-                base_lmb,
-                all_bases,
             ), // uuid: momentum_sample.uuid,
         };
 
-        let prefactor =
-            self.compute_prefactor_impl(channel_index, &sample, graph, model, all_bases, alpha);
+        let prefactor = self.compute_prefactor_impl(channel_index, &sample, model, alpha);
 
         (sample, prefactor)
     }
@@ -422,16 +416,14 @@ impl LmbMultiChannelingSetup {
         &self,
         channel_index: ChannelIndex,
         momentum_sample: &MomentumSample<T>,
-        graph: &Graph,
         model: &Model,
-        all_bases: &TiVec<LmbIndex, LoopMomentumBasis>,
         alpha: &F<T>,
     ) -> F<T> {
-        let all_energies = graph.get_energy_cache(
+        let all_energies = self.graph.get_energy_cache(
             model,
             &momentum_sample.sample.loop_moms,
             &momentum_sample.sample.external_moms,
-            &graph.loop_momentum_basis,
+            &self.graph.loop_momentum_basis,
         );
 
         let mut numerator = momentum_sample.zero();
@@ -440,7 +432,7 @@ impl LmbMultiChannelingSetup {
             .channels
             .iter()
             .map(|&lmb_index| {
-                let channel_product = all_bases[lmb_index]
+                let channel_product = self.all_bases[lmb_index]
                     .loop_edges
                     .iter()
                     .map(|&edge_index| &all_energies[edge_index])
@@ -664,14 +656,14 @@ pub trait GraphTerm {
         model: &Model,
         settings: &RuntimeSettings,
         rotation: &Rotation,
+        channel_id: Option<(ChannelIndex, F<T>)>,
     ) -> Complex<F<T>>;
 
     fn name(&self) -> String;
 
     fn warm_up(&mut self, settings: &RuntimeSettings, model: &Model) -> Result<()>;
-    fn get_multi_channeling_setup(&self) -> &LmbMultiChannelingSetup;
     fn get_graph(&self) -> &Graph;
-    fn get_lmbs(&self) -> &TiVec<LmbIndex, LoopMomentumBasis>;
+    fn get_num_channels(&self) -> usize;
     fn get_num_orientations(&self) -> usize;
     fn get_tropical_sampler(&self) -> &SampleGenerator<3>;
     fn get_mut_param_builder(&mut self) -> &mut ParamBuilder<f64>;
@@ -848,35 +840,10 @@ fn evaluate_single<T: FloatLike, I: GammaloopIntegrand>(
     let result = match &gammaloop_sample {
         GammaLoopSample::Default(sample) => integrand
             .get_terms_mut()
-            .map(|term: &mut I::G| term.evaluate(sample, model, &settings, rotation))
+            .map(|term: &mut I::G| term.evaluate(sample, model, &settings, rotation, None))
             .fold(zero.clone(), |sum, term| sum + term),
         GammaLoopSample::MultiChanneling { alpha, sample } => {
-            todo!("fix this with the groups");
-            integrand
-                .get_terms_mut()
-                .map(|term: &mut I::G| {
-                    let channels_samples = term
-                        .get_multi_channeling_setup()
-                        .reinterpret_loop_momenta_and_compute_prefactor_all_channels(
-                            sample,
-                            term.get_graph(),
-                            model,
-                            term.get_lmbs(),
-                            alpha,
-                            cache,
-                        );
-
-                    loop_cache_shift += channels_samples.len();
-
-                    channels_samples
-                        .into_iter()
-                        .map(|(reparameterized_sample, prefactor)| {
-                            Complex::new_re(prefactor)
-                                * term.evaluate(&reparameterized_sample, model, &settings, rotation)
-                        })
-                        .fold(zero.clone(), |sum, term| sum + term)
-                })
-                .fold(zero.clone(), |sum, term| sum + term)
+            todo!();
         }
         GammaLoopSample::DiscreteGraph { group_id, sample } => {
             let group = integrand.get_group(*group_id).into_iter().collect_vec(); // collect to avoid borrowing issues
@@ -887,70 +854,29 @@ fn evaluate_single<T: FloatLike, I: GammaloopIntegrand>(
                 let graph_term_res = match sample {
                     DiscreteGraphSample::Default(sample) => integrand
                         .get_graph_mut(graph_id)
-                        .evaluate(sample, model, &settings, rotation),
+                        .evaluate(sample, model, &settings, rotation, None),
                     DiscreteGraphSample::DiscreteMultiChanneling {
                         alpha,
                         channel_id,
                         sample,
-                    } => {
-                        let master_setup = integrand
-                            .get_master_graph(*group_id)
-                            .get_multi_channeling_setup();
-                        let master_graph = integrand.get_master_graph(*group_id).get_graph();
-                        let master_lmbs = integrand.get_master_graph(*group_id).get_lmbs();
-
-                        let (reparameterized_sample, prefactor) = master_setup
-                            .reinterpret_loop_momenta_and_compute_prefactor(
-                                *channel_id,
-                                sample,
-                                loop_cache_shift,
-                                master_graph,
-                                model,
-                                master_lmbs,
-                                alpha,
-                            );
-
-                        if cache {
-                            loop_cache_shift += 1;
-                        }
-
-                        Complex::new_re(prefactor)
-                            * integrand.get_graph_mut(graph_id).evaluate(
-                                &reparameterized_sample,
-                                model,
-                                &settings,
-                                rotation,
-                            )
-                    }
+                    } => integrand.get_graph_mut(graph_id).evaluate(
+                        &sample,
+                        model,
+                        &settings,
+                        rotation,
+                        Some((*channel_id, alpha.clone())),
+                    ),
                     DiscreteGraphSample::MultiChanneling { alpha, sample } => {
-                        let master_setup = integrand
-                            .get_master_graph(*group_id)
-                            .get_multi_channeling_setup();
-                        let master_graph = integrand.get_master_graph(*group_id).get_graph();
-                        let master_lmbs = integrand.get_master_graph(*group_id).get_lmbs();
-
-                        let channel_samples = master_setup
-                            .reinterpret_loop_momenta_and_compute_prefactor_all_channels(
-                                sample,
-                                master_graph,
-                                model,
-                                master_lmbs,
-                                alpha,
-                                cache,
-                            );
-
-                        if cache {
-                            loop_cache_shift += channel_samples.len();
-                        }
-
-                        channel_samples
-                            .into_iter_enumerated()
-                            .map(|(_channel_index, (reparameterized_sample, prefactor))| {
+                        let num_channels = integrand.get_master_graph(*group_id).get_num_channels();
+                        (0..num_channels)
+                            .map(ChannelIndex::from)
+                            .map(|channel_index| {
                                 integrand.get_graph_mut(graph_id).evaluate(
-                                    &reparameterized_sample,
+                                    &sample,
                                     model,
                                     &settings,
                                     rotation,
+                                    Some((channel_index, alpha.clone())),
                                 )
                             })
                             .fold(zero.clone(), |sum, term| sum + term)
@@ -983,7 +909,7 @@ fn evaluate_single<T: FloatLike, I: GammaloopIntegrand>(
                         Complex::new_re(prefactor)
                             * integrand
                                 .get_graph_mut(graph_id)
-                                .evaluate(sample, model, &settings, rotation)
+                                .evaluate(sample, model, &settings, rotation, None)
                     }
                 };
 
@@ -1028,10 +954,7 @@ fn create_grid_for_graph<G: GraphTerm>(
         DiscreteGraphSamplingType::DiscreteMultiChanneling(_multichanneling_settings) => {
             let continuous_grid = create_default_continous_grid(graph_term, integrator_settings);
             let lmb_channel_grid = Grid::Discrete(DiscreteGrid::new(
-                graph_term
-                    .get_multi_channeling_setup()
-                    .channels
-                    .iter()
+                (0..graph_term.get_num_channels())
                     .map(|_| Some(continuous_grid.clone()))
                     .collect_vec(),
                 F(integrator_settings.max_prob_ratio),
