@@ -107,7 +107,9 @@ impl GLIntegrand {
             GLIntegrand::Amplitude(integrand) => {
                 integrand.compile(path, override_existing, settings, thread_pool)
             }
-            _ => unimplemented!("compiling cross sections not yet implemented"), // NewIntegrand::CrossSection(integrand) => integrand.save(path, override_existing),
+            GLIntegrand::CrossSection(integrand) => {
+                integrand.compile(path, override_existing, settings, thread_pool)
+            }
         }
     }
 

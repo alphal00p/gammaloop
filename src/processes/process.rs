@@ -473,8 +473,30 @@ impl Process {
                     amp.compile(&p, override_existing, settings, thread_pool)?;
                 }
             }
-            ProcessCollection::CrossSections(_a) => {
-                todo!("Implement compile for cross sections");
+            ProcessCollection::CrossSections(cs) => {
+                let p = path.as_ref().join("cross_sections");
+                fs::create_dir_all(&p)?;
+                let p = p.join(PathBuf::from(self.definition.folder_name.clone()));
+
+                let r = fs::create_dir_all(&p).with_context(|| {
+                    format!(
+                        "Trying to create directory to export cross section dot {}",
+                        p.display()
+                    )
+                });
+                if override_existing {
+                    r?;
+                }
+
+                for (_, cs) in cs {
+                    if let Some(int_name) = integrand_name.clone() {
+                        if cs.name != int_name {
+                            continue;
+                        }
+                    }
+
+                    cs.compile(&p, override_existing, settings, thread_pool)?;
+                }
             }
         }
 

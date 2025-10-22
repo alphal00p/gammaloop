@@ -9,6 +9,10 @@ use eyre::Context;
 use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeVec, Orientation};
 use log::{debug, info};
+use rayon::{
+    iter::{IntoParallelRefMutIterator, ParallelIterator},
+    ThreadPool,
+};
 use spenso::algebra::complex::Complex;
 use std::{
     fs::{self, File},
@@ -104,6 +108,23 @@ impl CrossSectionIntegrand {
         )?;
 
         Ok(CrossSectionIntegrand { settings, data })
+    }
+
+    pub(crate) fn compile(
+        &mut self,
+        path: impl AsRef<Path> + Sync,
+        override_existing: bool,
+        settings: &GlobalSettings,
+        thread_pool: &ThreadPool,
+    ) -> Result<()> {
+        thread_pool.install(|| {
+            self.data
+                .graph_terms
+                .par_iter_mut()
+                .try_for_each(|term| term.compile(path.as_ref(), override_existing, settings))
+        })?;
+
+        Ok(())
     }
 }
 
@@ -300,6 +321,62 @@ impl CrossSectionGraphTerm {
             orientation_filter: BinVec(BitVec::repeat(true, orientations.len())),
             orientations,
         })
+    }
+
+    pub fn compile(
+        &mut self,
+        path: impl AsRef<Path>,
+        _override_existing: bool,
+        settings: &GlobalSettings,
+    ) -> Result<()> {
+        let graph_path = path.as_ref().join(&self.graph.name);
+
+        let _ = fs::create_dir_all(&graph_path).with_context(|| {
+            format!(
+                "Failed to create directory for cross section graph {} at {}",
+                self.graph.name,
+                graph_path.display()
+            )
+        })?;
+
+        for (cut_id, integrand) in self.parametric_integrand.iter_mut_enumerated() {
+            integrand.compile(
+                graph_path
+                    .join(&format!(
+                        "orientation_parametric_integrand_cut_{}",
+                        cut_id.0
+                    ))
+                    .with_extension("cpp"),
+                format!(
+                    "{}_orientation_paramatric_integrand_cut_{}",
+                    self.graph.name, cut_id.0
+                ),
+                graph_path
+                    .join(&format!(
+                        "orientation_parametric_integrand_cut_{}",
+                        cut_id.0
+                    ))
+                    .with_extension("so"),
+                settings.generation.compile.export_settings(),
+            );
+        }
+
+        self.iterative_integrand.as_mut().map(|iterative| {
+            for (cut_id, integrand) in iterative.iter_mut_enumerated() {
+                integrand.compile(
+                    graph_path
+                        .join(&format!("iterative_cut_{}", cut_id.0))
+                        .with_extension("cpp"),
+                    format!("{}_iterative_cut_{}", self.graph.name, cut_id.0),
+                    graph_path
+                        .join(&format!("iterative_cut_{}", cut_id.0))
+                        .with_extension("so"),
+                    settings.generation.compile.export_settings(),
+                );
+            }
+        });
+
+        Ok(())
     }
 }
 

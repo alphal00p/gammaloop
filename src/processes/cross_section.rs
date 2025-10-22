@@ -206,6 +206,33 @@ impl CrossSection {
         Ok(())
     }
 
+    pub fn compile(
+        &mut self,
+        path: impl AsRef<Path>,
+        override_existing: bool,
+        settings: &GlobalSettings,
+        thread_pool: &ThreadPool,
+    ) -> Result<()> {
+        info!("Compiling cross section {}", self.name);
+        let p = path.as_ref().join(format!("cs_{}", self.name));
+
+        let result = fs::create_dir_all(&p).with_context(|| {
+            format!(
+                "Trying to create directory to compile cross section {}",
+                p.display()
+            )
+        });
+
+        if override_existing {
+            result?;
+        }
+
+        if let Some(integrand) = &mut self.integrand {
+            integrand.compile(&p, override_existing, settings, thread_pool)?;
+        }
+        Ok(())
+    }
+
     pub fn save(&mut self, path: impl AsRef<Path>, override_existing: bool) -> Result<()> {
         let p = path.as_ref().join(format!("cs_{}", self.name));
         let r = fs::create_dir_all(&p).with_context(|| {
