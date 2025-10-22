@@ -14,7 +14,10 @@ use bitvec::vec::BitVec;
 use color_eyre::Result;
 
 use idenso::{color::ColorSimplifier, metric::MS};
-use rayon::ThreadPool;
+use rayon::{
+    iter::{IntoParallelRefIterator, IntoParallelRefMutIterator, ParallelIterator},
+    ThreadPool,
+};
 use spenso::{
     network::{Sequential, SmallestDegree},
     structure::concrete_index::{ConcreteIndex, ExpandedIndex},
@@ -165,12 +168,13 @@ impl CrossSection {
         model: &Model,
         process_definition: &ProcessDefinition,
         generation_settings: &GenerationSettings,
-        generatioon_pool: &ThreadPool,
+        generation_pool: &ThreadPool,
     ) -> Result<()> {
-        for supergraph in &mut self.supergraphs {
-            supergraph.preprocess(model, process_definition, generation_settings)?;
-        }
-        Ok(())
+        generation_pool.install(|| {
+            self.supergraphs.par_iter_mut().try_for_each(|supergraph| {
+                supergraph.preprocess(model, process_definition, generation_settings)
+            })
+        })
     }
 
     pub fn build_integrand(
@@ -180,11 +184,12 @@ impl CrossSection {
         runtime_default: LockedRuntimeSettings,
         generation_pool: &ThreadPool,
     ) -> Result<()> {
-        let terms = self
-            .supergraphs
-            .iter()
-            .map(|sg| sg.generate_term_for_graph(model, global_settings))
-            .collect::<Result<Vec<_>>>()?;
+        let terms = generation_pool.install(|| {
+            self.supergraphs
+                .par_iter_mut()
+                .map(|sg| sg.generate_term_for_graph(model, global_settings))
+                .collect::<Result<Vec<_>>>()
+        })?;
 
         let cross_section_integrand = CrossSectionIntegrand {
             settings: runtime_default.into(),
