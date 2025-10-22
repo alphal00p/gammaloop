@@ -326,7 +326,7 @@ impl AmplitudeGraphTerm {
 
         let diff = result - sum_of_cts;
 
-        diff
+        diff * prefactor
     }
 }
 
@@ -820,6 +820,9 @@ impl GammaloopIntegrand for AmplitudeIntegrand {
         DependentMomentaConstructor::Amplitude(&self.data.external_signature)
     }
 
+    fn get_group_structure(&self) -> &TiVec<GroupId, GraphGroup> {
+        &self.data.graph_group_structure
+    }
     // fn get_builder_cache(&self) -> &ParamBuilder<f64> {
     //     &self.data.builder_cache
     // }
