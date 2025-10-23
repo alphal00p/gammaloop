@@ -354,7 +354,7 @@ where
 
         let current_max_evals = integration_state.integral.get_worst_case();
 
-        let grids = repeat_n(integration_state.grid.clone(), cores);
+        let grids = repeat_n(integration_state.grid.clone_without_samples(), cores);
 
         let core_results: Vec<CoreResult> = pool.install(|| {
             user_data

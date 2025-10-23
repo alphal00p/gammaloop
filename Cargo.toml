@@ -43,15 +43,22 @@ gammaloop_api = { path = "./gammaloop-api", package = "gammaloop-api" }
 [profile.dev.package]
 insta.opt-level = 3
 
+# [dependencies]
+# symbolica = { version = "0.18.0", default-features = false, features = [
+#     "serde",
+#     "bincode",
+#     # "tracing_only_warnings",
+# ] } # These will be patched
+# # symbolica_community = { git = "https://github.com/alphal00p/symbolica-community", rev = "5231643e98ebcb52faa44eba065d62fc2a09c0e6", features = [
+# #     "bincode",
+# # ] }
+
 [dependencies]
-symbolica = { version = "0.18.0", default-features = false, features = [
+symbolica = { git = "https://github.com/benruijl/symbolica.git", branch = "chi_sq_fix", default-features = false, features = [
     "serde",
     "bincode",
-    # "tracing_only_warnings",
-] } # These will be patched
-# symbolica_community = { git = "https://github.com/alphal00p/symbolica-community", rev = "5231643e98ebcb52faa44eba065d62fc2a09c0e6", features = [
-#     "bincode",
-# ] }
+
+] }
 
 idenso = { version = "0.2.3", features = ["bincode"] }
 spenso-hep-lib = { version = "0.1.4" }
@@ -64,7 +71,7 @@ linnet = { version = "0.12.0", features = [
 ] }
 
 vakint = { git = "https://github.com/alphal00p/vakint", rev = "e44c210ded3936048615d39872022a0b6ef18454" }
-momtrop = { version = "0.3.0"}
+momtrop = { version = "0.3.0" }
 serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "*"
 bincode = { version = "2.0.0", features = ["serde"] }
@@ -195,7 +202,7 @@ higher_loops = []
 
 [patch.crates-io]
 
-
+symbolica = { git = "https://github.com/benruijl/symbolica", branch = "chi_sq_fix" }
 # spenso-macros = { path = "../spenso/spenso-macros" }
 # symbolica = { git = "https://github.com/benruijl/symbolica", branch = "optim" }
 # symbolica = { path = "./python/gammaloop/dependencies/symbolica" }
@@ -205,8 +212,8 @@ higher_loops = []
 # linnet = "0.10.0"
 # linnet = { path = "../linnet" }
 linnet = { git = "https://github.com/alphal00p/linnet", rev = "896c719d966facfcf1e18eb5d5fa44ca8458931d" }
-spenso = {git = "https://github.com/alphal00p/spenso",rev="2c9feee611b4c577991bd2700455daac281a01b1"}
-idenso = {git = "https://github.com/alphal00p/spenso",rev="2c9feee611b4c577991bd2700455daac281a01b1"}
+spenso = { git = "https://github.com/alphal00p/spenso", rev = "2c9feee611b4c577991bd2700455daac281a01b1" }
+idenso = { git = "https://github.com/alphal00p/spenso", rev = "2c9feee611b4c577991bd2700455daac281a01b1" }
 # spenso = {git = "https://github.com/alphal00p/spenso",rev="2c9feee611b4c577991bd2700455daac281a01b1"}
 # spenso = {git = "https://github.com/alphal00p/spenso",rev="2c9feee611b4c577991bd2700455daac281a01b1"}
 # spenso = {git = "https://github.com/alphal00p/spenso",rev="2c9feee611b4c577991bd2700455daac281a01b1"}
