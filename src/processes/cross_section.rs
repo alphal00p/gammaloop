@@ -25,11 +25,13 @@ use vakint::{EvaluationOrder, LoopNormalizationFactor, Vakint, VakintSettings};
 
 use crate::{
     cff::{cut_expression::SuperGraphOrientationID, expression::AmplitudeOrientationID},
+    define_index,
     gammaloop_integrand::{
         cross_section_integrand::CrossSectionIntegrandData, LmbMultiChannelingSetup, ParamBuilder,
     },
     graph::{
-        parse::complete_group_parsing, GraphGroup, GroupId, LMBext, LmbIndex, LoopMomentumBasis,
+        self, parse::complete_group_parsing, GraphGroup, GroupId, LMBext, LmbIndex,
+        LoopMomentumBasis,
     },
     model::ArcParticle,
     numerator::symbolica_ext::AtomCoreExt,
@@ -67,6 +69,8 @@ use crate::{
 };
 
 use crate::processes::ProcessDefinition;
+
+define_index! {pub struct GlobalThresholdId;}
 
 use derive_more::{From, Into};
 #[derive(Clone, Encode, Decode)]
@@ -759,10 +763,56 @@ impl CrossSectionGraph {
     }
 
     fn build_threshold_counteterm(&mut self) -> Result<()> {
-        /// thershold enumeration as st cuts
-        let all_st_cuts = self
-            .graph
-            .all_st_cuts_for_cs(self.source_nodes.clone(), self.target_nodes.clone());
+        // thershold enumeration as st cuts
+        let all_possible_thresholds: TiVec<GlobalThresholdId, _> = {
+            let mut unsorted = self
+                .graph
+                .all_st_cuts_for_cs(self.source_nodes.clone(), self.target_nodes.clone());
+
+            unsorted.sort_by(|a, b| a.1.cmp(&b.1));
+            unsorted.into()
+        };
+
+        for (cut_id, cut) in self.cuts.iter_enumerated() {
+            let mut thresholds_on_the_left = Vec::<GlobalThresholdId>::new();
+            let mut thresholds_on_the_right = Vec::<GlobalThresholdId>::new();
+
+            for (threshold_id, (left_threshold_diagram, threshold_cut, right_threshold_diagram)) in
+                all_possible_thresholds.iter_enumerated()
+            {
+                if &cut.cut == threshold_cut {
+                    continue;
+                }
+                // if the subgraph on the left of the threshold cut is a subgraph of the left amplitude, then the threshold is on the left of the cut
+                if cut.left.includes(left_threshold_diagram) {
+                    // now we must check that the threshold cuts a loop
+                    if self.graph.underlying.cyclotomatic_number(&cut.left)
+                        > self
+                            .graph
+                            .underlying
+                            .cyclotomatic_number(left_threshold_diagram)
+                    {
+                        thresholds_on_the_left.push(threshold_id);
+                    }
+                }
+
+                if cut.right.includes(right_threshold_diagram) {
+                    if self.graph.underlying.cyclotomatic_number(&cut.right)
+                        > self
+                            .graph
+                            .underlying
+                            .cyclotomatic_number(right_threshold_diagram)
+                    {
+                        thresholds_on_the_right.push(threshold_id);
+                    }
+                }
+            }
+
+            println!("cut {}", cut_id,);
+            println!("cut edges: {:?}", self.cut_esurface[cut_id].energies);
+            println!("num thresholds on left: {}", thresholds_on_the_left.len());
+            println!("num thresholds on right: {}", thresholds_on_the_right.len());
+        }
 
         todo!();
         Ok(())
