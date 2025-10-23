@@ -70,7 +70,16 @@ use crate::{
 
 use crate::processes::ProcessDefinition;
 
+#[derive(Clone, Debug)]
+pub struct CsAmplitudeCTDiagram {
+    left_subgraph: BitVec,
+    cut: OrientedCut,
+    right_subgraph: BitVec,
+}
+
 define_index! {pub struct GlobalThresholdId;}
+define_index! {pub struct RightThresholdId;}
+define_index! {pub struct LeftThresholdId;}
 
 use derive_more::{From, Into};
 #[derive(Clone, Encode, Decode)]
@@ -774,10 +783,11 @@ impl CrossSectionGraph {
         };
 
         for (cut_id, cut) in self.cuts.iter_enumerated() {
-            let mut thresholds_on_the_left = Vec::<GlobalThresholdId>::new();
-            let mut thresholds_on_the_right = Vec::<GlobalThresholdId>::new();
+            let mut thresholds_on_the_left = TiVec::<LeftThresholdId, CsAmplitudeCTDiagram>::new();
+            let mut thresholds_on_the_right =
+                TiVec::<RightThresholdId, CsAmplitudeCTDiagram>::new();
 
-            for (threshold_id, (left_threshold_diagram, threshold_cut, right_threshold_diagram)) in
+            for (_threshold_id, (left_threshold_diagram, threshold_cut, right_threshold_diagram)) in
                 all_possible_thresholds.iter_enumerated()
             {
                 if &cut.cut == threshold_cut {
@@ -792,7 +802,15 @@ impl CrossSectionGraph {
                             .underlying
                             .cyclotomatic_number(left_threshold_diagram)
                     {
-                        thresholds_on_the_left.push(threshold_id);
+                        let right_subgraph = right_threshold_diagram.subtract(&cut.right);
+
+                        let ct_diagram = CsAmplitudeCTDiagram {
+                            left_subgraph: left_threshold_diagram.clone(),
+                            cut: threshold_cut.clone(),
+                            right_subgraph,
+                        };
+
+                        thresholds_on_the_left.push(ct_diagram);
                     }
                 }
 
@@ -803,7 +821,15 @@ impl CrossSectionGraph {
                             .underlying
                             .cyclotomatic_number(right_threshold_diagram)
                     {
-                        thresholds_on_the_right.push(threshold_id);
+                        let left_subgraph = left_threshold_diagram.subtract(&cut.left);
+
+                        let ct_diagram = CsAmplitudeCTDiagram {
+                            left_subgraph,
+                            cut: threshold_cut.clone(),
+                            right_subgraph: right_threshold_diagram.clone(),
+                        };
+
+                        thresholds_on_the_right.push(ct_diagram);
                     }
                 }
             }
@@ -812,6 +838,21 @@ impl CrossSectionGraph {
             println!("cut edges: {:?}", self.cut_esurface[cut_id].energies);
             println!("num thresholds on left: {}", thresholds_on_the_left.len());
             println!("num thresholds on right: {}", thresholds_on_the_right.len());
+
+            println!("left dot: \n{}", self.graph.dot(&cut.left));
+            println!("right dot: \n{}", self.graph.dot(&cut.right));
+
+            for threshold in thresholds_on_the_left.iter() {
+                println!(
+                    "left threshold_dot: \n{}",
+                    self.graph.dot(&threshold.left_subgraph)
+                );
+                println!(
+                    "right threshold_dot: \n{}",
+                    self.graph.dot(&threshold.right_subgraph)
+                );
+                println!("cut_edges dot: \n{}", self.graph.dot(&threshold.cut));
+            }
         }
 
         todo!();
