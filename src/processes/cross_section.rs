@@ -2,64 +2,52 @@ use std::{
     fmt::{Display, Formatter},
     fs::{self, File},
     io::Write,
-    marker::PhantomData,
     ops::Deref,
     path::Path,
 };
 
-use ahash::AHashSet;
 // use bincode::{Decode, Encode};
 use bincode_trait_derive::{Decode, Encode};
 use bitvec::vec::BitVec;
 use color_eyre::Result;
 
-use idenso::{color::ColorSimplifier, metric::MS};
+use idenso::color::ColorSimplifier;
 use rayon::{
-    iter::{IntoParallelRefIterator, IntoParallelRefMutIterator, ParallelIterator},
+    iter::{IntoParallelRefMutIterator, ParallelIterator},
     ThreadPool,
 };
 use spenso::{
     network::{Sequential, SmallestDegree},
-    structure::concrete_index::{ConcreteIndex, ExpandedIndex},
+    structure::concrete_index::ExpandedIndex,
 };
 use tracing::info;
 use vakint::{EvaluationOrder, LoopNormalizationFactor, Vakint, VakintSettings};
 
 use crate::{
-    cff::{
-        cut_expression::SuperGraphOrientationID,
-        expression::{AmplitudeOrientationID, GraphOrientation},
-    },
+    cff::{cut_expression::SuperGraphOrientationID, expression::AmplitudeOrientationID},
     gammaloop_integrand::{
-        cross_section_integrand::{CrossSectionIntegrandData, OrientationEvaluator},
-        param_builder::ParamBuilderGraph,
-        GenericEvaluator, LmbMultiChannelingSetup, ParamBuilder,
+        cross_section_integrand::CrossSectionIntegrandData, LmbMultiChannelingSetup, ParamBuilder,
     },
     graph::{
-        get_cff_inverse_energy_product_impl, parse::complete_group_parsing, GraphGroup, GroupId,
-        LMBext, LmbIndex, LoopMomentumBasis,
+        parse::complete_group_parsing, GraphGroup, GroupId, LMBext, LmbIndex, LoopMomentumBasis,
     },
     model::ArcParticle,
     numerator::symbolica_ext::AtomCoreExt,
-    processes::Amplitude,
     settings::{global::GenerationSettings, runtime::LockedRuntimeSettings, GlobalSettings},
-    status_info,
-    utils::{ose_atom_from_index, GS, TENSORLIB, W_},
+    utils::{GS, TENSORLIB, W_},
     uv::UltravioletGraph,
     GammaLoopContext, GammaLoopContextContainer,
 };
 use eyre::{eyre, Context};
 use itertools::Itertools;
 use linnet::half_edge::{
-    involution::{Flow, HedgePair, Orientation},
+    involution::Orientation,
     subgraph::{HedgeNode, Inclusion, InternalSubGraph, OrientedCut, SubGraphOps},
 };
 use log::{debug, warn};
 use serde::{Deserialize, Serialize};
 use symbolica::{
     atom::{Atom, AtomCore},
-    domains::rational::Rational,
-    evaluate::{FunctionMap, OptimizationSettings},
     function,
 };
 use typed_index_collections::TiVec;
@@ -500,6 +488,11 @@ impl CrossSectionGraph {
         debug!("building parametric integrand");
         self.build_parametric_integrand(&settings)?;
 
+        if settings.enable_thresholds {
+            debug!("building threshold counterterm");
+            self.build_threshold_counteterm()?;
+        }
+
         Ok(())
     }
 
@@ -763,6 +756,16 @@ impl CrossSectionGraph {
             .build_multi_channeling_channels(self.derived_data.lmbs.as_ref().unwrap());
 
         self.derived_data.multi_channeling_setup = Some(channels)
+    }
+
+    fn build_threshold_counteterm(&mut self) -> Result<()> {
+        /// thershold enumeration as st cuts
+        let all_st_cuts = self
+            .graph
+            .all_st_cuts_for_cs(self.source_nodes.clone(), self.target_nodes.clone());
+
+        todo!();
+        Ok(())
     }
 
     fn generate_term_for_graph(
