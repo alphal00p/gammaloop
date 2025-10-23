@@ -625,6 +625,7 @@ pub trait GammaloopIntegrand {
     fn get_master_graph(&self, group_id: GroupId) -> &Self::G;
     fn get_graph_mut(&mut self, graph_id: usize) -> &mut Self::G;
     fn get_group(&self, group_id: GroupId) -> &GraphGroup;
+    fn get_group_structure(&self) -> &TiVec<GroupId, GraphGroup>;
     fn get_dependent_momenta_constructor(&self) -> DependentMomentaConstructor;
 
     // fn get_builder_cache(&self) -> &ParamBuilder<f64>;
@@ -842,8 +843,10 @@ fn evaluate_single<T: FloatLike, I: GammaloopIntegrand>(
             .get_terms_mut()
             .map(|term: &mut I::G| term.evaluate(sample, model, &settings, rotation, None))
             .fold(zero.clone(), |sum, term| sum + term),
-        GammaLoopSample::MultiChanneling { alpha, sample } => {
-            todo!();
+        GammaLoopSample::MultiChanneling { .. } => {
+            unimplemented!(
+                "deprecated due to annyoing borrow issues, just set each graph to the same group"
+            );
         }
         GammaLoopSample::DiscreteGraph { group_id, sample } => {
             let group = integrand.get_group(*group_id).into_iter().collect_vec(); // collect to avoid borrowing issues

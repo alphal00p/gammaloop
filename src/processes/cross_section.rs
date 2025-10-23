@@ -636,7 +636,11 @@ impl CrossSectionGraph {
                 .orientations
                 .iter()
                 .map(|expr| expr.data.orientation.clone())
-                .filter(|o| settings.orientation_pattern.alt_filter(o))
+                .filter(|o| {
+                    settings
+                        .orientation_pattern
+                        .alt_filter(o, &cut.left, &self.graph)
+                })
                 .collect::<TiVec<AmplitudeOrientationID, _>>();
 
             let right_orientations = expression_for_cut
@@ -644,7 +648,11 @@ impl CrossSectionGraph {
                 .orientations
                 .iter()
                 .map(|expr| expr.data.orientation.clone())
-                .filter(|o| settings.orientation_pattern.alt_filter(o))
+                .filter(|o| {
+                    settings
+                        .orientation_pattern
+                        .alt_filter(o, &cut.right, &self.graph)
+                })
                 .collect::<TiVec<AmplitudeOrientationID, _>>();
 
             let vakint = self.new_vakint();

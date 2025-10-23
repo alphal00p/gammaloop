@@ -170,6 +170,10 @@ impl GammaloopIntegrand for CrossSectionIntegrand {
         self.data.rotations.as_ref().expect("forgot warmup").iter()
     }
 
+    fn get_group_structure(&self) -> &TiVec<GroupId, GraphGroup> {
+        &self.data.graph_group_structure
+    }
+
     fn warm_up(&mut self, model: &Model) -> Result<()> {
         self.data.rotations = Some(
             Some(Rotation::new(RotationMethod::Identity))

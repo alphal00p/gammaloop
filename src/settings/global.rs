@@ -1,5 +1,5 @@
 use bincode_trait_derive::{Decode, Encode};
-use linnet::half_edge::involution::EdgeIndex;
+use linnet::half_edge::{involution::EdgeIndex, subgraph::SubGraph};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use symbolica::{
@@ -11,6 +11,7 @@ use tracing::debug;
 
 use crate::{
     cff::expression::GraphOrientation,
+    graph::Graph,
     processes::EvaluatorSettings,
     utils::{
         serde_utils::{is_false, is_float, is_true, is_usize, IsDefault},
@@ -227,14 +228,24 @@ impl OrientationPattern {
         }
     }
 
-    pub fn alt_filter<O: GraphOrientation>(&self, orientation: &O) -> bool {
+    pub fn alt_filter<O: GraphOrientation, S: SubGraph>(
+        &self,
+        orientation: &O,
+        subgraph: &S,
+        graph: &Graph,
+    ) -> bool {
         if let Some(pat) = &self.pat {
             let mut theta_rep = Atom::num(1);
             let atom_pat = pat.as_view();
 
             if let AtomView::Fun(f) = atom_pat {
                 if f.get_symbol() == GS.orientation_delta {
-                    for (edge_id, edge_or) in f.iter().enumerate() {
+                    for (edge_id, edge_or) in f.iter().enumerate().filter(|(edge_id, _)| {
+                        graph
+                            .underlying
+                            .iter_edges_of(subgraph)
+                            .any(|(_, e, _)| e == EdgeIndex::from(*edge_id))
+                    }) {
                         let edge_id = EdgeIndex::from(edge_id);
                         if let Ok(sign) = i64::try_from(edge_or) {
                             match sign {
