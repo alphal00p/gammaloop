@@ -228,30 +228,23 @@ impl OrientationPattern {
         }
     }
 
-    pub fn alt_filter<O: GraphOrientation, S: SubGraph>(
-        &self,
-        orientation: &O,
-        subgraph: &S,
-        graph: &Graph,
-    ) -> bool {
+    pub fn alt_filter<O: GraphOrientation>(&self, orientation: &O) -> bool {
         if let Some(pat) = &self.pat {
             let mut theta_rep = Atom::num(1);
             let atom_pat = pat.as_view();
 
             if let AtomView::Fun(f) = atom_pat {
                 if f.get_symbol() == GS.orientation_delta {
-                    for (edge_id, edge_or) in f.iter().enumerate().filter(|(edge_id, _)| {
-                        graph
-                            .underlying
-                            .iter_edges_of(subgraph)
-                            .any(|(_, e, _)| e == EdgeIndex::from(*edge_id))
-                    }) {
+                    for (edge_id, edge_or) in f.iter().enumerate() {
                         let edge_id = EdgeIndex::from(edge_id);
                         if let Ok(sign) = i64::try_from(edge_or) {
                             match sign {
                                 1 => theta_rep *= GS.sign_theta(GS.sign(edge_id)),
                                 -1 => theta_rep *= GS.sign_theta(-GS.sign(edge_id)),
-                                0 => continue,
+                                0 => {
+                                    theta_rep *= GS.sign_theta(GS.sign(edge_id))
+                                        * GS.sign_theta(-GS.sign(edge_id))
+                                }
                                 _ => {
                                     panic!(
                                         "arguments of orientation delta function should be -1,0 1"
