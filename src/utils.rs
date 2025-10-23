@@ -51,6 +51,7 @@ use std::sync::{LazyLock, RwLock};
 use std::time::Duration;
 use symbolica::domains::float::Real;
 use symbolica::domains::rational::Rational;
+use vakint::Vakint;
 // use symbolica_community::physics::tensors::library::{
 //     gamma5_weyl_data, gamma_data_weyl, proj_m_data_weyl, proj_p_data_weyl, SpensorLibrary,
 //     TensorNamespace,
@@ -3281,6 +3282,8 @@ pub use symbols::{GS, W_};
 pub static TENSORLIB: LazyLock<
     RwLock<TensorLibrary<MixedTensor<F<f64>, ExplicitKey<Aind>>, Aind>>,
 > = LazyLock::new(|| RwLock::new(hep_lib(F(1.), F(0.))));
+
+pub static VAKINT: LazyLock<RwLock<Option<Vakint>>> = LazyLock::new(|| RwLock::new(None));
 
 impl<T: FloatLike> momtrop::float::MomTropFloat for F<T> {
     #[inline]

@@ -277,7 +277,7 @@ pub struct Process {
 }
 
 impl Process {
-    pub(crate) fn warm_up(&mut self, model: &Model) -> Result<()> {
+    pub fn warm_up(&mut self, model: &Model) -> Result<()> {
         self.collection.warm_up(model)
     }
     pub fn preprocess(
@@ -790,7 +790,7 @@ impl ProcessCollection {
         Ok(())
     }
 
-    fn warm_up(&mut self, model: &Model) -> Result<()> {
+    pub fn warm_up(&mut self, model: &Model) -> Result<()> {
         match self {
             Self::Amplitudes(amplitudes) => {
                 for (_, amplitude) in amplitudes {

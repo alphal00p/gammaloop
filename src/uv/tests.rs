@@ -12,6 +12,7 @@ use crate::momentum_sample::LoopIndex;
 use crate::processes::AmplitudeGraph;
 use crate::settings::global::OrientationPattern;
 use crate::utils::W_;
+use crate::uv::settings::VakintSettings;
 use linnet::half_edge::involution::EdgeIndex;
 
 use linnet::half_edge::{builder::HedgeGraphBuilder, involution::Flow};
@@ -60,6 +61,7 @@ fn four_photon_one_loop_amp() {
         ),
         uv: UVgenerationSettings {
             generate_integrated: true,
+            vakint: VakintSettings::default(),
         },
         ..Default::default()
     })
@@ -102,6 +104,7 @@ fn tta_uv() {
             // ),
             uv: UVgenerationSettings {
                 generate_integrated: false,
+                vakint: VakintSettings::default(),
             },
             ..Default::default()
         })

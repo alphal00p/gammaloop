@@ -63,7 +63,7 @@ impl ProcessList {
         ProcessList { processes: vec![] }
     }
 
-    pub fn warm_up(&mut self, model: &Model) -> Result<()> {
+    pub fn warm_up_all_processes(&mut self, model: &Model) -> Result<()> {
         for process in &mut self.processes.iter_mut() {
             process.warm_up(model)?;
         }
@@ -245,6 +245,18 @@ impl ProcessList {
         };
 
         process_id
+    }
+
+    pub fn find_integrand(
+        &self,
+        process_id: Option<usize>,
+        integrand_name: Option<&String>,
+    ) -> Result<(usize, String)> {
+        let p_id = self.find_process(process_id)?;
+        let integrand_name = self.processes[p_id]
+            .collection
+            .find_integrand(integrand_name.cloned())?;
+        Ok((p_id, integrand_name))
     }
 }
 

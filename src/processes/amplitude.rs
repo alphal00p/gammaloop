@@ -43,14 +43,17 @@ use crate::{
     signature::SignatureLike,
     status_debug,
     subtraction::amplitude_counterterm::AmplitudeCountertermAtom,
-    utils::{symbolica_ext::LOGPRINTOPTS, Length, GS, TENSORLIB, W_},
+    utils::{symbolica_ext::LOGPRINTOPTS, Length, GS, TENSORLIB, VAKINT, W_},
     uv::UltravioletGraph,
     GammaLoopContext, GammaLoopContextContainer,
 };
 use eyre::{eyre, Context};
 use itertools::Itertools;
 use linnet::{
-    half_edge::involution::{HedgePair, Orientation},
+    half_edge::{
+        involution::{HedgePair, Orientation},
+        subgraph::SubGraph,
+    },
     parser::DotGraph,
 };
 use log::{debug, info};
@@ -519,18 +522,33 @@ impl AmplitudeGraph {
     }
 
     fn new_vakint(&self) -> Vakint {
-        Vakint::new(Some(VakintSettings {
-            allow_unknown_integrals: false,
-            evaluation_order: EvaluationOrder::alphaloop_only(),
-            integral_normalization_factor: LoopNormalizationFactor::MSbar,
-            run_time_decimal_precision: 32,
-            number_of_terms_in_epsilon_expansion: self.graph.n_loops(&self.graph.no_dummy()) as i64
-                + 1,
-            // temporary_directory: Some("./form".into()),
-            mu_r_sq_symbol: GS.mu_r_sq.get_name().to_string(),
-            ..VakintSettings::default()
-        }))
-        .unwrap()
+        // TODO: avoid cloning by modifying Vakint's API so as to be able to set number_of_terms_in_epsilon_expansion for each call to evaluate
+        let mut vakint = {
+            let guard = VAKINT.read().unwrap();
+            if let Some(ref vakint) = *guard {
+                vakint.clone()
+            } else {
+                panic!("Vakint not initialised");
+            }
+        };
+        vakint.settings.number_of_terms_in_epsilon_expansion =
+            self.graph.n_loops(&self.graph.no_dummy()) as i64 + 1;
+
+        vakint
+    }
+
+    pub fn analytical_evaluation<S: SubGraph>(&self, component: &S) -> Result<Atom> {
+        let vakint = self.new_vakint();
+
+        // let t_arg = uv_graph
+        //     .numerator(&reduced)
+        //     .to_d_dim(GS.dim)
+        //     .get_single_atom()
+        //     .unwrap()
+        //     .simplify_gamma()
+        //     / uv_graph.denominator(&reduced);
+
+        Ok(Atom::Zero)
     }
 
     pub(crate) fn build_parametric_integrand(

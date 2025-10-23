@@ -59,9 +59,8 @@ impl Default for Inspect {
 
 impl Inspect {
     pub fn run(&self, state: &mut State) -> Result<(Option<f64>, Complex<f64>)> {
-        state.process_list.warm_up(&state.model)?;
-
         let process_id = state.process_list.find_process(self.process_id)?;
+        state.process_list.processes[process_id].warm_up(&state.model)?;
 
         let integrand_name = state.process_list.processes[process_id]
             .collection
@@ -124,9 +123,8 @@ impl<'a> BatchedInspect<'a> {
         ArrayBase<OwnedRepr<Complex<f64>>, ndarray::Dim<[usize; 1]>>,
         Option<ArrayBase<OwnedRepr<f64>, ndarray::Dim<[usize; 1]>>>,
     )> {
-        state.process_list.warm_up(&state.model)?;
-
         let process_id = state.process_list.find_process(self.process_id)?;
+        state.process_list.processes[process_id].warm_up(&state.model)?;
 
         let integrand_name = state.process_list.processes[process_id]
             .collection

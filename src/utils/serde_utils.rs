@@ -284,6 +284,34 @@ pub fn _default_shifts() -> Vec<(f64, f64, f64, f64)> {
     vec![(1.0, 0.0, 0.0, 0.0); 15]
 }
 
+pub fn is_default_form_path(form_path: &String) -> bool {
+    show_defaults_helper(form_path == &_default_form_path())
+}
+
+pub fn _default_form_path() -> String {
+    "form".to_string()
+}
+
+pub fn is_default_python_path(python_path: &String) -> bool {
+    show_defaults_helper(python_path == &_default_python_path())
+}
+
+pub fn _default_python_path() -> String {
+    "python3".to_string()
+}
+
+pub fn is_default_vakint_evaluation_methods(evaluation_methods: &Vec<String>) -> bool {
+    show_defaults_helper(evaluation_methods == &_default_vakint_evaluation_methods())
+}
+
+pub fn _default_vakint_evaluation_methods() -> Vec<String> {
+    vec![
+        "alphaloop".to_string(),
+        "matad".to_string(),
+        "fmft".to_string(),
+    ]
+}
+
 pub fn _default_stability_levels() -> Vec<crate::settings::runtime::StabilityLevelSetting> {
     vec![
         crate::settings::runtime::StabilityLevelSetting::default_double(),

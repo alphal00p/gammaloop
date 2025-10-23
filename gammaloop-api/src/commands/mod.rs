@@ -31,6 +31,8 @@ pub use set::Set;
 pub use shell::Shell;
 pub mod run;
 pub use run::Run;
+pub mod evaluate;
+pub use evaluate::Evaluate;
 
 #[derive(Subcommand, Debug, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
 pub enum Commands {
@@ -57,6 +59,8 @@ pub enum Commands {
     /// Inspect a single phase‑space point / momentum configuration
     // #[clap(subcommand)]
     Inspect(Inspect),
+
+    Evaluate(Evaluate),
 
     /// Benchmark raw integrand evaluation speed
     Bench {
@@ -144,6 +148,10 @@ impl Commands {
                 )?,
 
                 Commands::Integrate(g) => {
+                    g.run(state, &global_cli_settings)?;
+                }
+
+                Commands::Evaluate(g) => {
                     g.run(state, &global_cli_settings)?;
                 }
 

@@ -91,55 +91,11 @@ impl Integrate {
             None
         };
 
-        let process_id = if let Some(id) = self.process_id {
-            if id >= state.process_list.processes.len() {
-                return Err(color_eyre::eyre::eyre!(
-                    "Invalid process id {}. Number of processes: {}",
-                    id,
-                    state.process_list.processes.len()
-                ));
-            }
-            id
-        } else {
-            if state.process_list.processes.is_empty() {
-                return Err(color_eyre::eyre::eyre!("No processes generated yet."));
-            }
-            if state.process_list.processes.is_empty() {
-                return Err(color_eyre::eyre::eyre!("No processes generated yet."));
-            } else if state.process_list.processes.len() > 1 {
-                return Err(color_eyre::eyre::eyre!(
-                    "There are {} processes available. Please specify a process id.",
-                    state.process_list.processes.len()
-                ));
-            } else {
-                0
-            }
-        };
-        let all_integrand_names = state.process_list.processes[process_id]
-            .collection
-            .get_integrand_names();
-        let integrand_name = if let Some(name) = self.integrand_name.clone() {
-            if !all_integrand_names.contains(&name.as_str()) {
-                return Err(color_eyre::eyre::eyre!(
-                    "No integrand named '{}' in process id {}. Available integrands: {:?}",
-                    name,
-                    process_id,
-                    all_integrand_names
-                ));
-            }
-            name
-        } else {
-            if all_integrand_names.len() != 1 {
-                return Err(color_eyre::eyre::eyre!(
-                    "Multiple integrands in process id {}. Please specify one of: {:?}",
-                    process_id,
-                    all_integrand_names
-                ));
-            }
-            all_integrand_names[0].to_string()
-        };
+        let (process_id, integrand_name) = state
+            .process_list
+            .find_integrand(self.process_id, self.integrand_name.as_ref())?;
 
-        state.process_list.warm_up(&state.model)?;
+        state.process_list.processes[process_id].warm_up(&state.model)?;
 
         if self.restart && workspace_path.exists() {
             fs::remove_dir_all(&workspace_path)?;

@@ -25,8 +25,8 @@ use dirs::home_dir;
 use eyre::Context;
 use gammalooprs::{
     initialisation::initialise,
+    initialisation::initialise_with_settings,
     settings::{GlobalSettings, RuntimeSettings},
-    status_info,
     utils::serde_utils::IsDefault,
     utils::{
         serde_utils::{get_schema_folder, is_false, is_true, SmartSerde},
@@ -43,7 +43,6 @@ use std::{fs::File, ops::ControlFlow};
 use symbolica::activate_oem_license;
 
 // use tracing::LogLevel;
-
 #[cfg(feature = "python_api")]
 pub mod python;
 pub mod repl;
@@ -226,9 +225,10 @@ impl OneShot {
     }
 
     pub fn run(mut self, raw: String) -> Result<()> {
-        if option_env!("NO_SYMBOLICA_OEM_LICENSE").is_none() {
-            activate_oem_license!("SYMBOLICA_OEM_KEY_23177b25");
-        };
+        // Now done in initialise()
+        // if option_env!("NO_SYMBOLICA_OEM_LICENSE").is_none() {
+        //     activate_oem_license!("SYMBOLICA_OEM_KEY_23177b25");
+        // };
         initialise()?;
 
         let (mut state, mut run_history, mut global_settings, mut default_runtime_settings) =
@@ -292,6 +292,8 @@ impl OneShot {
                     }
                 }
             };
+
+        initialise_with_settings(Some(&global_settings.global))?;
 
         if let Some(run) = self.run_history.as_ref() {
             let mut run = RunHistory::load(run)?;
