@@ -490,6 +490,7 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
                 ct_builder.settings.kinematics.externals.get_helicities(),
                 Some(&threshold_params),
                 None,
+                None,
             );
 
             let iterative_result = <T as GenericEvaluatorFloat>::get_evaluator(
@@ -520,6 +521,7 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
                     &self.rstar_sample,
                     ct_builder.settings.kinematics.externals.get_helicities(),
                     Some(&threshold_params),
+                    None,
                     None,
                 );
                 let result = <T as GenericEvaluatorFloat>::get_evaluator(

@@ -732,15 +732,15 @@ impl AmplitudeGraph {
 
             let loop_3 = self.graph.get_loop_number() as i64 * 3;
 
-            let grad_eta = Atom::var(GS.deta);
+            let grad_eta = Atom::var(GS.deta_left_th);
             let factors_of_pi = (Atom::num(2) * Atom::var(GS.pi)).npow(loop_3);
             let i = Atom::i();
 
-            let radius = Atom::var(GS.radius);
-            let radius_star = Atom::var(GS.radius_star);
-            let uv_damp_plus = Atom::var(GS.uv_damp_plus);
-            let uv_damp_minus = Atom::var(GS.uv_damp_minus);
-            let hfunction = Atom::var(GS.hfunction);
+            let radius = Atom::var(GS.radius_left);
+            let radius_star = Atom::var(GS.radius_star_left);
+            let uv_damp_plus = Atom::var(GS.uv_damp_plus_left);
+            let uv_damp_minus = Atom::var(GS.uv_damp_minus_left);
+            let hfunction = Atom::var(GS.hfunction_left_th);
 
             let delta_r_plus = &radius - &radius_star;
             let delta_r_minus = -&radius - &radius_star;

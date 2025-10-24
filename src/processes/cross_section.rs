@@ -586,7 +586,7 @@ impl CrossSectionGraph {
 
         if settings.enable_thresholds {
             debug!("building threshold counterterm");
-            self.build_threshold_counteterm()?;
+            self.build_threshold_counteterm(settings)?;
         }
 
         Ok(())
@@ -810,11 +810,11 @@ impl CrossSectionGraph {
                 + (esurface.energies.len() - 1);
 
             let loop_3 = loop_number as i64 * 3;
-            let grad_eta = Atom::var(GS.deta);
+            let grad_eta = Atom::var(GS.deta_lu_cut);
             let factors_of_pi = (Atom::num(2) * Atom::var(GS.pi)).npow(loop_3);
             let tstar = Atom::var(GS.rescale_star);
             let tsrat_pow = tstar.npow(loop_3);
-            let hfunction = Atom::var(GS.hfunction);
+            let hfunction = Atom::var(GS.hfunction_lu_cut);
 
             let prefactor = tsrat_pow * hfunction / factors_of_pi / grad_eta;
             let integrand_with_prefactor = prefactor * integrand;
@@ -861,7 +861,7 @@ impl CrossSectionGraph {
         self.derived_data.multi_channeling_setup = Some(channels)
     }
 
-    fn build_threshold_counteterm(&mut self) -> Result<()> {
+    fn build_threshold_counteterm(&mut self, settings: &GenerationSettings) -> Result<()> {
         // thershold enumeration as st cuts
         let all_possible_thresholds: TiVec<GlobalThresholdId, _> = {
             let mut unsorted = self
@@ -871,6 +871,9 @@ impl CrossSectionGraph {
             unsorted.sort_by(|a, b| a.1.cmp(&b.1));
             unsorted.into()
         };
+
+        let vakint = self.new_vakint();
+        let global_num = self.graph.global_network();
 
         for (cut_id, cut) in self.cuts.iter_enumerated() {
             let mut thresholds_on_the_left = TiVec::<LeftThresholdId, CsAmplitudeCTDiagram>::new();
@@ -954,6 +957,24 @@ impl CrossSectionGraph {
                     }
                 }
             }
+
+            let left_counterterms = thresholds_on_the_left.iter().map(|ct_diagram| {
+                let left_ct =
+                    ct_diagram.to_tensor_network(&self.graph, &cut.cut, &vakint, true, settings);
+
+                let product = left_ct
+                    * self.derived_data.tensor_network_cache[cut_id].1.clone()
+                    * global_num.clone();
+            });
+
+            let right_counterterms = thresholds_on_the_right.iter().map(|ct_diagram| {
+                let right_ct =
+                    ct_diagram.to_tensor_network(&self.graph, &cut.cut, &vakint, false, settings);
+
+                let product = self.derived_data.tensor_network_cache[cut_id].0.clone()
+                    * right_ct
+                    * global_num.clone();
+            });
         }
 
         todo!();

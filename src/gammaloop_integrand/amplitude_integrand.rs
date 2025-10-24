@@ -267,6 +267,7 @@ impl AmplitudeGraphTerm {
                 hel,
                 None,
                 None,
+                None,
             );
 
             let iterative = self
@@ -285,6 +286,7 @@ impl AmplitudeGraphTerm {
                         &self.graph,
                         &momentum_sample,
                         hel,
+                        None,
                         None,
                         None,
                     );

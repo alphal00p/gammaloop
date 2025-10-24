@@ -133,17 +133,25 @@ pub struct GammaLoopPairs {
     pub polarizations: ParamValuePairs,
     emr_spatial: ParamValuePairs,
     tstar: ParamValuePairs,
-    h_function: ParamValuePairs,
-    esurface_derivative: ParamValuePairs,
-    uv_damp_plus: ParamValuePairs,
-    uv_damp_minus: ParamValuePairs,
-    radius: ParamValuePairs,
-    radius_star: ParamValuePairs,
+    h_function_lu_cut: ParamValuePairs,
+    h_function_left_th: ParamValuePairs,
+    h_function_right_th: ParamValuePairs,
+    esurface_derivative_lu_cut: ParamValuePairs,
+    esurface_derivative_left_th: ParamValuePairs,
+    esurface_derivative_right_th: ParamValuePairs,
+    uv_damp_plus_left: ParamValuePairs,
+    uv_damp_minus_left: ParamValuePairs,
+    radius_left: ParamValuePairs,
+    radius_star_left: ParamValuePairs,
+    uv_damp_plus_right: ParamValuePairs,
+    uv_damp_minus_right: ParamValuePairs,
+    radius_right: ParamValuePairs,
+    radius_star_right: ParamValuePairs,
 }
 
 impl IntoIterator for GammaLoopPairs {
     type Item = ParamValuePairs;
-    type IntoIter = std::array::IntoIter<Self::Item, 16>;
+    type IntoIter = std::array::IntoIter<Self::Item, 24>;
 
     fn into_iter(self) -> Self::IntoIter {
         [
@@ -156,12 +164,20 @@ impl IntoIterator for GammaLoopPairs {
             self.polarizations,
             self.emr_spatial,
             self.tstar,
-            self.h_function,
-            self.esurface_derivative,
-            self.uv_damp_plus,
-            self.uv_damp_minus,
-            self.radius,
-            self.radius_star,
+            self.h_function_lu_cut,
+            self.h_function_left_th,
+            self.h_function_right_th,
+            self.esurface_derivative_lu_cut,
+            self.esurface_derivative_left_th,
+            self.esurface_derivative_right_th,
+            self.uv_damp_plus_left,
+            self.uv_damp_minus_left,
+            self.radius_left,
+            self.radius_star_left,
+            self.uv_damp_plus_right,
+            self.uv_damp_minus_right,
+            self.radius_right,
+            self.radius_star_right,
             self.orientations,
         ]
         .into_iter()
@@ -170,7 +186,7 @@ impl IntoIterator for GammaLoopPairs {
 
 impl<'a> IntoIterator for &'a GammaLoopPairs {
     type Item = &'a ParamValuePairs;
-    type IntoIter = std::array::IntoIter<Self::Item, 16>;
+    type IntoIter = std::array::IntoIter<Self::Item, 24>;
 
     fn into_iter(self) -> Self::IntoIter {
         [
@@ -183,12 +199,20 @@ impl<'a> IntoIterator for &'a GammaLoopPairs {
             &self.polarizations,
             &self.emr_spatial,
             &self.tstar,
-            &self.h_function,
-            &self.esurface_derivative,
-            &self.uv_damp_plus,
-            &self.uv_damp_minus,
-            &self.radius,
-            &self.radius_star,
+            &self.h_function_lu_cut,
+            &self.h_function_left_th,
+            &self.h_function_right_th,
+            &self.esurface_derivative_lu_cut,
+            &self.esurface_derivative_left_th,
+            &self.esurface_derivative_right_th,
+            &self.uv_damp_plus_left,
+            &self.uv_damp_minus_left,
+            &self.radius_left,
+            &self.radius_star_left,
+            &self.uv_damp_plus_right,
+            &self.uv_damp_minus_right,
+            &self.radius_right,
+            &self.radius_star_right,
             &self.orientations,
         ]
         .into_iter()
@@ -197,7 +221,7 @@ impl<'a> IntoIterator for &'a GammaLoopPairs {
 
 impl<'a> IntoIterator for &'a mut GammaLoopPairs {
     type Item = &'a mut ParamValuePairs;
-    type IntoIter = std::array::IntoIter<Self::Item, 16>;
+    type IntoIter = std::array::IntoIter<Self::Item, 24>;
 
     fn into_iter(self) -> Self::IntoIter {
         [
@@ -210,12 +234,20 @@ impl<'a> IntoIterator for &'a mut GammaLoopPairs {
             &mut self.polarizations,
             &mut self.emr_spatial,
             &mut self.tstar,
-            &mut self.h_function,
-            &mut self.esurface_derivative,
-            &mut self.uv_damp_plus,
-            &mut self.uv_damp_minus,
-            &mut self.radius,
-            &mut self.radius_star,
+            &mut self.h_function_lu_cut,
+            &mut self.h_function_left_th,
+            &mut self.h_function_right_th,
+            &mut self.esurface_derivative_lu_cut,
+            &mut self.esurface_derivative_left_th,
+            &mut self.esurface_derivative_right_th,
+            &mut self.uv_damp_plus_left,
+            &mut self.uv_damp_minus_left,
+            &mut self.radius_left,
+            &mut self.radius_star_left,
+            &mut self.uv_damp_plus_right,
+            &mut self.uv_damp_minus_right,
+            &mut self.radius_right,
+            &mut self.radius_star_right,
             &mut self.orientations,
         ]
         .into_iter()
@@ -249,17 +281,25 @@ impl GammaLoopPairs {
         debug!("Validating tstar");
         self.tstar.validate();
         debug!("Validating h_function");
-        self.h_function.validate();
+        self.h_function_lu_cut.validate();
+        self.h_function_left_th.validate();
+        self.h_function_right_th.validate();
         debug!("Validating derivative_at_tstar");
-        self.esurface_derivative.validate();
+        self.esurface_derivative_lu_cut.validate();
+        self.esurface_derivative_left_th.validate();
+        self.esurface_derivative_right_th.validate();
         debug!("Validating uv_damp_plus");
-        self.uv_damp_plus.validate();
+        self.uv_damp_plus_left.validate();
+        self.uv_damp_plus_right.validate();
         debug!("Validating uv_damp_minus");
-        self.uv_damp_minus.validate();
+        self.uv_damp_minus_left.validate();
+        self.uv_damp_minus_right.validate();
         debug!("Validating radius");
-        self.radius.validate();
+        self.radius_left.validate();
+        self.radius_right.validate();
         debug!("Validating radius_star");
-        self.radius_star.validate();
+        self.radius_star_left.validate();
+        self.radius_star_right.validate();
     }
 
     pub(crate) fn new<G: ParamBuilderGraph + SplitPolarizations>(
@@ -272,12 +312,20 @@ impl GammaLoopPairs {
 
         pairs.mu_r_sq = ParamValuePairs::default_from_symbol(GS.mu_r_sq);
         pairs.tstar = ParamValuePairs::default_from_symbol(GS.rescale_star);
-        pairs.radius = ParamValuePairs::default_from_symbol(GS.radius);
-        pairs.radius_star = ParamValuePairs::default_from_symbol(GS.radius_star);
-        pairs.h_function = ParamValuePairs::default_from_symbol(GS.hfunction);
-        pairs.esurface_derivative = ParamValuePairs::default_from_symbol(GS.deta);
-        pairs.uv_damp_plus = ParamValuePairs::default_from_symbol(GS.uv_damp_plus);
-        pairs.uv_damp_minus = ParamValuePairs::default_from_symbol(GS.uv_damp_minus);
+        pairs.radius_left = ParamValuePairs::default_from_symbol(GS.radius_left);
+        pairs.radius_right = ParamValuePairs::default_from_symbol(GS.radius_right);
+        pairs.radius_star_left = ParamValuePairs::default_from_symbol(GS.radius_star_left);
+        pairs.radius_star_right = ParamValuePairs::default_from_symbol(GS.radius_star_right);
+        pairs.h_function_lu_cut = ParamValuePairs::default_from_symbol(GS.hfunction_lu_cut);
+        pairs.h_function_left_th = ParamValuePairs::default_from_symbol(GS.hfunction_left_th);
+        pairs.h_function_right_th = ParamValuePairs::default_from_symbol(GS.hfunction_right_th);
+        pairs.esurface_derivative_lu_cut = ParamValuePairs::default_from_symbol(GS.deta_lu_cut);
+        pairs.esurface_derivative_left_th = ParamValuePairs::default_from_symbol(GS.deta_left_th);
+        pairs.esurface_derivative_right_th = ParamValuePairs::default_from_symbol(GS.deta_right_th);
+        pairs.uv_damp_plus_left = ParamValuePairs::default_from_symbol(GS.uv_damp_plus_left);
+        pairs.uv_damp_plus_right = ParamValuePairs::default_from_symbol(GS.uv_damp_plus_right);
+        pairs.uv_damp_minus_left = ParamValuePairs::default_from_symbol(GS.uv_damp_minus_left);
+        pairs.uv_damp_minus_right = ParamValuePairs::default_from_symbol(GS.uv_damp_minus_right);
 
         pairs.idenso_vars();
 
@@ -406,22 +454,43 @@ impl GammaLoopPairs {
         values
     }
 
-    pub(crate) fn threshold_params<T: FloatLike>(
+    pub(crate) fn left_threshold_params<T: FloatLike>(
         &self,
         threshold_params: &ThresholdParams<T>,
         values: &mut [Complex<F<T>>],
     ) {
-        values[self.radius.value_range.start] = Complex::new_re(threshold_params.radius.clone());
-        values[self.radius_star.value_range.start] =
+        values[self.radius_left.value_range.start] =
+            Complex::new_re(threshold_params.radius.clone());
+        values[self.radius_star_left.value_range.start] =
             Complex::new_re(threshold_params.radius_star.clone());
-        values[self.esurface_derivative.value_range.start] =
+        values[self.esurface_derivative_left_th.value_range.start] =
             Complex::new_re(threshold_params.esurface_derivative.clone());
 
-        values[self.uv_damp_plus.value_range.start] =
+        values[self.uv_damp_plus_left.value_range.start] =
             Complex::new_re(threshold_params.uv_damp_plus.clone());
-        values[self.uv_damp_minus.value_range.start] =
+        values[self.uv_damp_minus_left.value_range.start] =
             Complex::new_re(threshold_params.uv_damp_minus.clone());
-        values[self.h_function.value_range.start] =
+        values[self.h_function_left_th.value_range.start] =
+            Complex::new_re(threshold_params.h_function.clone());
+    }
+
+    pub(crate) fn right_threshold_params<T: FloatLike>(
+        &self,
+        threshold_params: &ThresholdParams<T>,
+        values: &mut [Complex<F<T>>],
+    ) {
+        values[self.radius_right.value_range.start] =
+            Complex::new_re(threshold_params.radius.clone());
+        values[self.radius_star_right.value_range.start] =
+            Complex::new_re(threshold_params.radius_star.clone());
+        values[self.esurface_derivative_right_th.value_range.start] =
+            Complex::new_re(threshold_params.esurface_derivative.clone());
+
+        values[self.uv_damp_plus_right.value_range.start] =
+            Complex::new_re(threshold_params.uv_damp_plus.clone());
+        values[self.uv_damp_minus_right.value_range.start] =
+            Complex::new_re(threshold_params.uv_damp_minus.clone());
+        values[self.h_function_right_th.value_range.start] =
             Complex::new_re(threshold_params.h_function.clone());
     }
 
@@ -431,9 +500,10 @@ impl GammaLoopPairs {
         values: &mut [Complex<F<T>>],
     ) {
         values[self.tstar.value_range.start] = Complex::new_re(lu_params.tstar.clone());
-        values[self.esurface_derivative.value_range.start] =
+        values[self.esurface_derivative_lu_cut.value_range.start] =
             Complex::new_re(lu_params.esurface_derivative.clone());
-        values[self.h_function.value_range.start] = Complex::new_re(lu_params.h_function.clone());
+        values[self.h_function_lu_cut.value_range.start] =
+            Complex::new_re(lu_params.h_function.clone());
     }
 }
 
@@ -450,12 +520,20 @@ impl Default for GammaLoopPairs {
             external_spatial: ParamValuePairs::default(),
             emr_spatial: ParamValuePairs::default(),
             tstar: ParamValuePairs::default(),
-            h_function: ParamValuePairs::default(),
-            esurface_derivative: ParamValuePairs::default(),
-            uv_damp_plus: ParamValuePairs::default(),
-            uv_damp_minus: ParamValuePairs::default(),
-            radius: ParamValuePairs::default(),
-            radius_star: ParamValuePairs::default(),
+            h_function_lu_cut: ParamValuePairs::default(),
+            h_function_left_th: ParamValuePairs::default(),
+            h_function_right_th: ParamValuePairs::default(),
+            esurface_derivative_lu_cut: ParamValuePairs::default(),
+            esurface_derivative_left_th: ParamValuePairs::default(),
+            esurface_derivative_right_th: ParamValuePairs::default(),
+            uv_damp_plus_left: ParamValuePairs::default(),
+            uv_damp_plus_right: ParamValuePairs::default(),
+            uv_damp_minus_left: ParamValuePairs::default(),
+            uv_damp_minus_right: ParamValuePairs::default(),
+            radius_left: ParamValuePairs::default(),
+            radius_right: ParamValuePairs::default(),
+            radius_star_left: ParamValuePairs::default(),
+            radius_star_right: ParamValuePairs::default(),
         }
     }
 }
@@ -553,7 +631,8 @@ pub trait UpdateAndGetParams<T: FloatLike> {
         sample: &'a MomentumSample<T>,
         graph: &'a Graph,
         helicities: &[Helicity],
-        threshold_params: Option<&ThresholdParams<T>>,
+        left_threshold_params: Option<&ThresholdParams<T>>,
+        right_threshold_params: Option<&ThresholdParams<T>>,
         lu_params: Option<&LUParams<T>>,
     ) -> Cow<'a, Vec<Complex<F<T>>>>;
 }
@@ -565,7 +644,8 @@ impl UpdateAndGetParams<f64> for ParamBuilder<f64> {
         sample: &'a MomentumSample<f64>,
         graph: &'a Graph,
         helicities: &[Helicity],
-        threshold_params: Option<&ThresholdParams<f64>>,
+        left_threshold_params: Option<&ThresholdParams<f64>>,
+        right_threshold_params: Option<&ThresholdParams<f64>>,
         lu_params: Option<&LUParams<f64>>,
     ) -> Cow<'a, Vec<Complex<F<f64>>>> {
         let emr_start = self.pairs.emr_spatial.value_range.start;
@@ -587,8 +667,12 @@ impl UpdateAndGetParams<f64> for ParamBuilder<f64> {
         self.add_external_four_mom(sample.external_moms());
         self.polarizations_values(cache, graph, sample, helicities);
 
-        if let Some(threshold_params) = threshold_params {
-            self.threshold_params(threshold_params);
+        if let Some(threshold_params) = left_threshold_params {
+            self.left_threshold_params(threshold_params);
+        }
+
+        if let Some(threshold_params) = right_threshold_params {
+            self.right_threshold_params(threshold_params);
         }
 
         if let Some(lu_params) = lu_params {
@@ -606,7 +690,8 @@ impl UpdateAndGetParams<f128> for ParamBuilder<f64> {
         sample: &MomentumSample<f128>,
         graph: &Graph,
         helicities: &[Helicity],
-        threshold_params: Option<&ThresholdParams<f128>>,
+        left_threshold_params: Option<&ThresholdParams<f128>>,
+        right_threshold_params: Option<&ThresholdParams<f128>>,
         lu_params: Option<&LUParams<f128>>,
     ) -> Cow<Vec<Complex<F<f128>>>> {
         let mut emr_start = self.pairs.emr_spatial.value_range.start;
@@ -630,8 +715,14 @@ impl UpdateAndGetParams<f128> for ParamBuilder<f64> {
                 .polarizations_values(graph, sample.external_moms(), helicities),
         );
 
-        if let Some(threshold_params) = threshold_params {
-            self.pairs.threshold_params(threshold_params, &mut values);
+        if let Some(threshold_params) = left_threshold_params {
+            self.pairs
+                .left_threshold_params(threshold_params, &mut values);
+        }
+
+        if let Some(threshold_params) = right_threshold_params {
+            self.pairs
+                .right_threshold_params(threshold_params, &mut values);
         }
 
         if let Some(lu_params) = lu_params {
@@ -1081,11 +1172,15 @@ impl<T: FloatLike> ParamBuilder<T> {
         analysis
     }
 
-    pub(crate) fn threshold_params(&mut self, threshold_params: &ThresholdParams<T>) {
+    pub(crate) fn left_threshold_params(&mut self, threshold_params: &ThresholdParams<T>) {
         self.pairs
-            .threshold_params(threshold_params, &mut self.values);
+            .left_threshold_params(threshold_params, &mut self.values);
     }
 
+    pub(crate) fn right_threshold_params(&mut self, threshold_params: &ThresholdParams<T>) {
+        self.pairs
+            .right_threshold_params(threshold_params, &mut self.values);
+    }
     pub(crate) fn lu_params(&mut self, lu_params: &LUParams<T>) {
         self.pairs.lu_params(lu_params, &mut self.values);
     }

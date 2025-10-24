@@ -550,6 +550,7 @@ impl GraphTerm for CrossSectionGraphTerm {
                 &rescaled_momenta,
                 hel,
                 None,
+                None,
                 Some(&lu_params),
             );
 
@@ -575,6 +576,7 @@ impl GraphTerm for CrossSectionGraphTerm {
                         &self.graph,
                         &rescaled_momenta,
                         hel,
+                        None,
                         None,
                         Some(&lu_params),
                     );
