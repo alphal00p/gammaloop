@@ -701,7 +701,7 @@ impl CrossSectionGraph {
     }
 
     fn build_original_parametric_integrand(
-        &self,
+        &mut self,
         settings: &GenerationSettings,
     ) -> Result<TiVec<CutId, Atom>> {
         let global_num = self.graph.global_network();
@@ -770,6 +770,13 @@ impl CrossSectionGraph {
             );
 
             let right_expr = right_forest.orientation_parametric_expr(None, &self.graph);
+
+            if settings.enable_thresholds {
+                // we can recycle these tensor networks for the single threshold counterterms
+                self.derived_data
+                    .tensor_network_cache
+                    .push((left_expr.clone(), right_expr.clone()));
+            }
 
             let mut product = left_expr * right_expr * global_num.clone();
 
@@ -970,6 +977,7 @@ pub struct CrossSectionDerivedData {
     pub cff_expression: Option<CFFCutsExpression>,
     pub lmbs: Option<TiVec<LmbIndex, LoopMomentumBasis>>,
     pub multi_channeling_setup: Option<LmbMultiChannelingSetup>,
+    pub tensor_network_cache: TiVec<CutId, (ParsingNet, ParsingNet)>,
 }
 
 impl CrossSectionDerivedData {
@@ -980,6 +988,7 @@ impl CrossSectionDerivedData {
             cut_paramatric_integrand: TiVec::new(),
             lmbs: None,
             multi_channeling_setup: None,
+            tensor_network_cache: TiVec::new(),
         }
     }
 }
