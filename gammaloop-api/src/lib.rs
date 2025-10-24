@@ -225,10 +225,9 @@ impl OneShot {
     }
 
     pub fn run(mut self, raw: String) -> Result<()> {
-        // Now done in initialise()
-        // if option_env!("NO_SYMBOLICA_OEM_LICENSE").is_none() {
-        //     activate_oem_license!("SYMBOLICA_OEM_KEY_23177b25");
-        // };
+        if option_env!("NO_SYMBOLICA_OEM_LICENSE").is_none() {
+            activate_oem_license!("SYMBOLICA_OEM_KEY_23177b25");
+        };
         initialise()?;
 
         let (mut state, mut run_history, mut global_settings, mut default_runtime_settings) =

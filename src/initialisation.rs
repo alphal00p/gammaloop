@@ -11,9 +11,10 @@ static INITIALISED: std::sync::Once = std::sync::Once::new();
 
 pub fn initialise() -> Result<()> {
     INITIALISED.call_once(|| {
-        if option_env!("NO_SYMBOLICA_OEM_LICENSE").is_none() {
-            activate_oem_license!("SYMBOLICA_OEM_KEY_23177b25");
-        };
+        // Here it would not match the crate name
+        // if option_env!("NO_SYMBOLICA_OEM_LICENSE").is_none() {
+        //     activate_oem_license!("SYMBOLICA_OEM_KEY_23177b25");
+        // };
 
         let (panic, eyre) = HookBuilder::default()
             .capture_span_trace_by_default(cfg!(debug_assertions))
