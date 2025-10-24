@@ -24,7 +24,10 @@ use tracing::info;
 use vakint::{EvaluationOrder, LoopNormalizationFactor, Vakint, VakintSettings};
 
 use crate::{
-    cff::{cut_expression::SuperGraphOrientationID, expression::AmplitudeOrientationID},
+    cff::{
+        cut_expression::SuperGraphOrientationID, expression::AmplitudeOrientationID,
+        generation::get_orientations_from_subgraph,
+    },
     define_index,
     gammaloop_integrand::{
         cross_section_integrand::CrossSectionIntegrandData, LmbMultiChannelingSetup, ParamBuilder,
@@ -43,7 +46,7 @@ use crate::{
 use eyre::{eyre, Context};
 use itertools::Itertools;
 use linnet::half_edge::{
-    involution::Orientation,
+    involution::{EdgeIndex, Orientation},
     subgraph::{HedgeNode, Inclusion, InternalSubGraph, OrientedCut, SubGraphOps},
 };
 use log::{debug, warn};
@@ -66,15 +69,95 @@ use crate::{
     },
     graph::{ExternalConnection, FeynmanGraph, Graph},
     model::Model,
+    numerator::ParsingNet,
 };
 
 use crate::processes::ProcessDefinition;
 
 #[derive(Clone, Debug)]
-pub struct CsAmplitudeCTDiagram {
+struct CsAmplitudeCTDiagram {
     left_subgraph: BitVec,
-    cut: OrientedCut,
+    threshold_cut: OrientedCut,
     right_subgraph: BitVec,
+    reversed_dangling_edges: Vec<EdgeIndex>,
+}
+
+impl CsAmplitudeCTDiagram {
+    fn to_tensor_network(
+        &self,
+        graph: &Graph,
+        lu_cut: &OrientedCut,
+        vakint: &Vakint,
+        add_lu_cut_feynman_rules: bool,
+        settings: &GenerationSettings,
+    ) -> ParsingNet {
+        let all_cut_edges = graph
+            .iter_edges_of(&self.threshold_cut)
+            .chain(graph.iter_edges_of(lu_cut))
+            .map(|(_, e, _)| e)
+            .collect_vec();
+
+        let left_orientations = get_orientations_from_subgraph(
+            &graph,
+            &self.left_subgraph,
+            &self.reversed_dangling_edges,
+        )
+        .into_iter()
+        .map(|cff_graph| cff_graph.global_orientation)
+        .filter(|or| settings.orientation_pattern.alt_filter(or))
+        .collect::<TiVec<SuperGraphOrientationID, _>>();
+
+        let right_orientations = get_orientations_from_subgraph(
+            &graph,
+            &self.right_subgraph,
+            &self.reversed_dangling_edges,
+        )
+        .into_iter()
+        .map(|cff_graph| cff_graph.global_orientation)
+        .filter(|or| settings.orientation_pattern.alt_filter(or))
+        .collect::<TiVec<SuperGraphOrientationID, _>>();
+
+        let left_wood = graph.wood(&self.left_subgraph);
+        let right_wood = graph.wood(&self.right_subgraph);
+
+        let mut left_forest = left_wood.unfold(graph, &graph.loop_momentum_basis);
+        let mut right_forest = right_wood.unfold(graph, &graph.loop_momentum_basis);
+
+        left_forest.compute(
+            graph,
+            &self.left_subgraph,
+            vakint,
+            &left_orientations,
+            &None,
+            &all_cut_edges,
+            &settings.uv,
+        );
+
+        right_forest.compute(
+            graph,
+            &self.right_subgraph,
+            vakint,
+            &right_orientations,
+            &None,
+            &all_cut_edges,
+            &settings.uv,
+        );
+
+        let left_expr = left_forest.orientation_parametric_expr(
+            Some(&self.threshold_cut.right.union(&self.threshold_cut.left)),
+            graph,
+        );
+
+        let cut_edges_for_right = if add_lu_cut_feynman_rules {
+            Some(&lu_cut.left.union(&lu_cut.right))
+        } else {
+            None
+        };
+
+        let right_expr = right_forest.orientation_parametric_expr(cut_edges_for_right, graph);
+
+        left_expr * right_expr
+    }
 }
 
 define_index! {pub struct GlobalThresholdId;}
@@ -787,12 +870,43 @@ impl CrossSectionGraph {
             let mut thresholds_on_the_right =
                 TiVec::<RightThresholdId, CsAmplitudeCTDiagram>::new();
 
+            let reversed_edges_in_xs_cut = cut
+                .cut
+                .iter_edges(&self.graph.underlying)
+                .filter_map(|(orientation, edge)| match orientation {
+                    Orientation::Reversed => Some(
+                        self.graph
+                            .edge_name_to_index(edge.data.name.as_str())
+                            .unwrap(),
+                    ),
+                    _ => None,
+                })
+                .collect_vec();
+
             for (_threshold_id, (left_threshold_diagram, threshold_cut, right_threshold_diagram)) in
                 all_possible_thresholds.iter_enumerated()
             {
                 if &cut.cut == threshold_cut {
                     continue;
                 }
+
+                let mut reversed_dangling_edges = reversed_edges_in_xs_cut.clone();
+
+                threshold_cut
+                    .iter_edges(&self.graph.underlying)
+                    .for_each(|(orientation, edge)| {
+                        if orientation == Orientation::Reversed {
+                            let edge_index = self
+                                .graph
+                                .edge_name_to_index(edge.data.name.as_str())
+                                .unwrap();
+
+                            if !reversed_dangling_edges.contains(&edge_index) {
+                                reversed_dangling_edges.push(edge_index);
+                            }
+                        }
+                    });
+
                 // if the subgraph on the left of the threshold cut is a subgraph of the left amplitude, then the threshold is on the left of the cut
                 if cut.left.includes(left_threshold_diagram) {
                     // now we must check that the threshold cuts a loop
@@ -806,15 +920,14 @@ impl CrossSectionGraph {
 
                         let ct_diagram = CsAmplitudeCTDiagram {
                             left_subgraph: left_threshold_diagram.clone(),
-                            cut: threshold_cut.clone(),
+                            threshold_cut: threshold_cut.clone(),
                             right_subgraph,
+                            reversed_dangling_edges,
                         };
 
                         thresholds_on_the_left.push(ct_diagram);
                     }
-                }
-
-                if cut.right.includes(right_threshold_diagram) {
+                } else if cut.right.includes(right_threshold_diagram) {
                     if self.graph.underlying.cyclotomatic_number(&cut.right)
                         > self
                             .graph
@@ -825,33 +938,14 @@ impl CrossSectionGraph {
 
                         let ct_diagram = CsAmplitudeCTDiagram {
                             left_subgraph,
-                            cut: threshold_cut.clone(),
+                            threshold_cut: threshold_cut.clone(),
                             right_subgraph: right_threshold_diagram.clone(),
+                            reversed_dangling_edges,
                         };
 
                         thresholds_on_the_right.push(ct_diagram);
                     }
                 }
-            }
-
-            println!("cut {}", cut_id,);
-            println!("cut edges: {:?}", self.cut_esurface[cut_id].energies);
-            println!("num thresholds on left: {}", thresholds_on_the_left.len());
-            println!("num thresholds on right: {}", thresholds_on_the_right.len());
-
-            println!("left dot: \n{}", self.graph.dot(&cut.left));
-            println!("right dot: \n{}", self.graph.dot(&cut.right));
-
-            for threshold in thresholds_on_the_left.iter() {
-                println!(
-                    "left threshold_dot: \n{}",
-                    self.graph.dot(&threshold.left_subgraph)
-                );
-                println!(
-                    "right threshold_dot: \n{}",
-                    self.graph.dot(&threshold.right_subgraph)
-                );
-                println!("cut_edges dot: \n{}", self.graph.dot(&threshold.cut));
             }
         }
 
