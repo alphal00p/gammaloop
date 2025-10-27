@@ -837,7 +837,9 @@ impl CrossSectionGraph {
                 .unwrap_function(GS.color_wrap)
                 .simplify_color()
                 .replace(function!(GS.energy, W_.x_))
-                .with(function!(GS.ose, W_.x_));
+                .with(function!(GS.ose, W_.x_))
+                .replace(function!(GS.theta, W_.x_).pow(Atom::var(W_.n_)))
+                .with(function!(GS.theta, W_.x_));
 
             for (_, edge_index, _) in self
                 .graph
@@ -1088,7 +1090,9 @@ impl CrossSectionGraph {
                         .unwrap_function(GS.color_wrap)
                         .simplify_color()
                         .replace(function!(GS.energy, W_.x_))
-                        .with(function!(GS.ose, W_.x_));
+                        .with(function!(GS.ose, W_.x_))
+                        .replace(function!(GS.theta, W_.x_).pow(Atom::var(W_.n_)))
+                        .with(function!(GS.theta, W_.x_));
 
                     for (_, edge_index, _) in self
                         .graph
@@ -1140,7 +1144,9 @@ impl CrossSectionGraph {
                         .unwrap_function(GS.color_wrap)
                         .simplify_color()
                         .replace(function!(GS.energy, W_.x_))
-                        .with(function!(GS.ose, W_.x_));
+                        .with(function!(GS.ose, W_.x_))
+                        .replace(function!(GS.theta, W_.x_).pow(Atom::var(W_.n_)))
+                        .with(function!(GS.theta, W_.x_));
 
                     for (_, edge_index, _) in self
                         .graph
@@ -1185,7 +1191,9 @@ impl CrossSectionGraph {
                         .unwrap_function(GS.color_wrap)
                         .simplify_color()
                         .replace(function!(GS.energy, W_.x_))
-                        .with(function!(GS.ose, W_.x_));
+                        .with(function!(GS.ose, W_.x_))
+                        .replace(function!(GS.theta, W_.x_).pow(Atom::var(W_.n_)))
+                        .with(function!(GS.theta, W_.x_));
 
                     for (_, edge_index, _) in self
                         .graph
