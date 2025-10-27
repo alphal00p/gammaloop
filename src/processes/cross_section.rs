@@ -2,7 +2,7 @@ use std::{
     fmt::{Display, Formatter},
     fs::{self, File},
     io::Write,
-    ops::Deref,
+    ops::{Deref, Index, IndexMut},
     path::Path,
 };
 
@@ -16,6 +16,7 @@ use rayon::{
     iter::{IntoParallelRefMutIterator, ParallelIterator},
     ThreadPool,
 };
+use serde_yaml::mapping::Iter;
 use spenso::{
     network::{Sequential, SmallestDegree},
     structure::concrete_index::ExpandedIndex,
@@ -44,10 +45,10 @@ use crate::{
     GammaLoopContext, GammaLoopContextContainer,
 };
 use eyre::{eyre, Context};
-use itertools::Itertools;
+use itertools::{Either::Right, Itertools};
 use linnet::half_edge::{
     involution::{EdgeIndex, Orientation},
-    subgraph::{HedgeNode, Inclusion, InternalSubGraph, OrientedCut, SubGraphOps},
+    subgraph::{HedgeNode, Inclusion, InternalSubGraph, OrientedCut, SubGraph, SubGraphOps},
 };
 use log::{debug, warn};
 use serde::{Deserialize, Serialize};
@@ -74,89 +75,132 @@ use crate::{
 
 use crate::processes::ProcessDefinition;
 
+#[derive(Clone, Debug, Encode, Decode)]
+pub struct IteratedCtCollection<T> {
+    data: Vec<T>,
+    num_left_thresholds: usize,
+}
+
+impl<T> Index<(LeftThresholdId, RightThresholdId)> for IteratedCtCollection<T> {
+    type Output = T;
+
+    fn index(&self, index: (LeftThresholdId, RightThresholdId)) -> &Self::Output {
+        let (left_id, right_id) = index;
+        &self.data[left_id.0 * self.num_left_thresholds + right_id.0]
+    }
+}
+
+impl<T> IndexMut<(LeftThresholdId, RightThresholdId)> for IteratedCtCollection<T> {
+    fn index_mut(&mut self, index: (LeftThresholdId, RightThresholdId)) -> &mut Self::Output {
+        let (left_id, right_id) = index;
+        &mut self.data[left_id.0 * self.num_left_thresholds + right_id.0]
+    }
+}
+
 #[derive(Clone, Debug)]
 struct CsAmplitudeCTDiagram {
     left_subgraph: BitVec,
     threshold_cut: OrientedCut,
     right_subgraph: BitVec,
     reversed_dangling_edges: Vec<EdgeIndex>,
+    network: Option<ParsingNet>,
+}
+
+#[derive(Clone, Debug, Encode, Decode)]
+#[trait_decode(trait = GammaLoopContext)]
+struct LUCounterTermAtom {
+    pub left_atoms: TiVec<LeftThresholdId, Atom>,
+    pub right_atoms: TiVec<RightThresholdId, Atom>,
+    pub iterated: IteratedCtCollection<Atom>,
 }
 
 impl CsAmplitudeCTDiagram {
-    fn to_tensor_network(
-        &self,
+    fn get_tensor_network_cached(
+        &mut self,
         graph: &Graph,
         lu_cut: &OrientedCut,
         vakint: &Vakint,
         add_lu_cut_feynman_rules: bool,
         settings: &GenerationSettings,
     ) -> ParsingNet {
-        let all_cut_edges = graph
-            .iter_edges_of(&self.threshold_cut)
-            .chain(graph.iter_edges_of(lu_cut))
-            .map(|(_, e, _)| e)
-            .collect_vec();
-
-        let left_orientations = get_orientations_from_subgraph(
-            &graph,
-            &self.left_subgraph,
-            &self.reversed_dangling_edges,
-        )
-        .into_iter()
-        .map(|cff_graph| cff_graph.global_orientation)
-        .filter(|or| settings.orientation_pattern.alt_filter(or))
-        .collect::<TiVec<SuperGraphOrientationID, _>>();
-
-        let right_orientations = get_orientations_from_subgraph(
-            &graph,
-            &self.right_subgraph,
-            &self.reversed_dangling_edges,
-        )
-        .into_iter()
-        .map(|cff_graph| cff_graph.global_orientation)
-        .filter(|or| settings.orientation_pattern.alt_filter(or))
-        .collect::<TiVec<SuperGraphOrientationID, _>>();
-
-        let left_wood = graph.wood(&self.left_subgraph);
-        let right_wood = graph.wood(&self.right_subgraph);
-
-        let mut left_forest = left_wood.unfold(graph, &graph.loop_momentum_basis);
-        let mut right_forest = right_wood.unfold(graph, &graph.loop_momentum_basis);
-
-        left_forest.compute(
-            graph,
-            &self.left_subgraph,
-            vakint,
-            &left_orientations,
-            &None,
-            &all_cut_edges,
-            &settings.uv,
-        );
-
-        right_forest.compute(
-            graph,
-            &self.right_subgraph,
-            vakint,
-            &right_orientations,
-            &None,
-            &all_cut_edges,
-            &settings.uv,
-        );
-
-        let left_expr = left_forest.orientation_parametric_expr(
-            Some(&self.threshold_cut.right.union(&self.threshold_cut.left)),
-            graph,
-        );
-
-        let cut_edges_for_right = if add_lu_cut_feynman_rules {
-            Some(&lu_cut.left.union(&lu_cut.right))
+        if let Some(network) = &self.network {
+            network.clone()
         } else {
-            None
-        };
+            let all_cut_edges = graph
+                .iter_edges_of(&self.threshold_cut)
+                .chain(graph.iter_edges_of(lu_cut))
+                .map(|(_, e, _)| e)
+                .collect_vec();
 
-        let right_expr = right_forest.orientation_parametric_expr(cut_edges_for_right, graph);
+            let left_orientations = get_orientations_from_subgraph(
+                &graph,
+                &self.left_subgraph,
+                &self.reversed_dangling_edges,
+            )
+            .into_iter()
+            .map(|cff_graph| cff_graph.global_orientation)
+            .filter(|or| settings.orientation_pattern.alt_filter(or))
+            .collect::<TiVec<SuperGraphOrientationID, _>>();
 
-        left_expr * right_expr
+            let right_orientations = get_orientations_from_subgraph(
+                &graph,
+                &self.right_subgraph,
+                &self.reversed_dangling_edges,
+            )
+            .into_iter()
+            .map(|cff_graph| cff_graph.global_orientation)
+            .filter(|or| settings.orientation_pattern.alt_filter(or))
+            .collect::<TiVec<SuperGraphOrientationID, _>>();
+
+            let left_wood = graph.wood(&self.left_subgraph);
+            let right_wood = graph.wood(&self.right_subgraph);
+
+            let mut left_forest = left_wood.unfold(graph, &graph.loop_momentum_basis);
+            let mut right_forest = right_wood.unfold(graph, &graph.loop_momentum_basis);
+
+            left_forest.compute(
+                graph,
+                &self.left_subgraph,
+                vakint,
+                &left_orientations,
+                &None,
+                &all_cut_edges,
+                &settings.uv,
+            );
+
+            right_forest.compute(
+                graph,
+                &self.right_subgraph,
+                vakint,
+                &right_orientations,
+                &None,
+                &all_cut_edges,
+                &settings.uv,
+            );
+
+            let left_expr = left_forest.orientation_parametric_expr(
+                Some(
+                    &self
+                        .threshold_cut
+                        .right
+                        .union(&self.threshold_cut.left)
+                        .subtract(&lu_cut.right)
+                        .subtract(&lu_cut.left),
+                ),
+                graph,
+            );
+
+            let cut_edges_for_right = if add_lu_cut_feynman_rules {
+                Some(&lu_cut.left.union(&lu_cut.right))
+            } else {
+                None
+            };
+
+            let right_expr = right_forest.orientation_parametric_expr(cut_edges_for_right, graph);
+
+            self.network = Some(left_expr * right_expr);
+            self.network.clone().unwrap()
+        }
     }
 }
 
@@ -805,24 +849,78 @@ impl CrossSectionGraph {
                     .with(GS.emr_mom(edge_index, Atom::from(ExpandedIndex::from_iter([0]))));
             }
 
-            let loop_number = self.graph.cyclotomatic_number(&cut.left)
-                + self.graph.n_loops(&cut.right)
-                + (esurface.energies.len() - 1);
-
-            let loop_3 = loop_number as i64 * 3;
-            let grad_eta = Atom::var(GS.deta_lu_cut);
-            let factors_of_pi = (Atom::num(2) * Atom::var(GS.pi)).npow(loop_3);
-            let tstar = Atom::var(GS.rescale_star);
-            let tsrat_pow = tstar.npow(loop_3);
-            let hfunction = Atom::var(GS.hfunction_lu_cut);
-
-            let prefactor = tsrat_pow * hfunction / factors_of_pi / grad_eta;
+            let prefactor = self.lu_prefactor_helper();
             let integrand_with_prefactor = prefactor * integrand;
             debug!("integrand for cut {}: {}", cut_id, integrand_with_prefactor);
             integrands.push(integrand_with_prefactor);
         }
 
         Ok(integrands)
+    }
+
+    fn lu_prefactor_helper(&self) -> Atom {
+        let loop_number = self.graph.cyclotomatic_number(&self.graph.full_filter())
+            - self.graph.initial_state_cut.nedges(&self.graph);
+
+        let loop_3 = loop_number as i64 * 3;
+        let grad_eta = Atom::var(GS.deta_lu_cut);
+        let factors_of_pi = (Atom::num(2) * Atom::var(GS.pi)).npow(loop_3);
+        let tstar = Atom::var(GS.rescale_star);
+        let tsrat_pow = tstar.npow(loop_3);
+        let hfunction = Atom::var(GS.hfunction_lu_cut);
+        tsrat_pow * hfunction / factors_of_pi / grad_eta
+    }
+
+    fn th_prefactor_helper(&self, subspace_loop_count: usize, is_on_right: bool) -> Atom {
+        let radius = if is_on_right {
+            Atom::var(GS.radius_right)
+        } else {
+            Atom::var(GS.radius_left)
+        };
+
+        let radius_star = if is_on_right {
+            Atom::var(GS.radius_star_right)
+        } else {
+            Atom::var(GS.radius_star_left)
+        };
+
+        let grad_eta = if is_on_right {
+            Atom::var(GS.deta_right_th)
+        } else {
+            Atom::var(GS.deta_left_th)
+        };
+
+        let uv_damp_plus = if is_on_right {
+            Atom::var(GS.uv_damp_plus_right)
+        } else {
+            Atom::var(GS.uv_damp_plus_left)
+        };
+
+        let uv_damp_minus = if is_on_right {
+            Atom::var(GS.uv_damp_minus_right)
+        } else {
+            Atom::var(GS.uv_damp_minus_left)
+        };
+
+        let h_function = if is_on_right {
+            Atom::var(GS.hfunction_right_th)
+        } else {
+            Atom::var(GS.hfunction_left_th)
+        };
+
+        let i = Atom::i();
+        let pi = Atom::var(GS.pi);
+
+        let jacobian_ratio = (&radius_star / &radius).npow(subspace_loop_count as i64 * 3 - 1);
+
+        let local_prefactor = (&uv_damp_plus / (&radius - &radius_star)
+            + &uv_damp_minus / (-&radius - &radius_star))
+            / &grad_eta
+            * &jacobian_ratio;
+
+        let integrated_prefactor = &h_function * &i * &pi * &jacobian_ratio / &grad_eta;
+
+        local_prefactor + integrated_prefactor
     }
 
     fn new_vakint(&self) -> Vakint {
@@ -933,6 +1031,7 @@ impl CrossSectionGraph {
                             threshold_cut: threshold_cut.clone(),
                             right_subgraph,
                             reversed_dangling_edges,
+                            network: None,
                         };
 
                         thresholds_on_the_left.push(ct_diagram);
@@ -951,6 +1050,7 @@ impl CrossSectionGraph {
                             threshold_cut: threshold_cut.clone(),
                             right_subgraph: right_threshold_diagram.clone(),
                             reversed_dangling_edges,
+                            network: None,
                         };
 
                         thresholds_on_the_right.push(ct_diagram);
@@ -958,23 +1058,210 @@ impl CrossSectionGraph {
                 }
             }
 
-            let left_counterterms = thresholds_on_the_left.iter().map(|ct_diagram| {
-                let left_ct =
-                    ct_diagram.to_tensor_network(&self.graph, &cut.cut, &vakint, true, settings);
+            let left_counterterms = thresholds_on_the_left
+                .iter_mut()
+                .map(|ct_diagram| {
+                    let left_ct = ct_diagram.get_tensor_network_cached(
+                        &self.graph,
+                        &cut.cut,
+                        &vakint,
+                        true,
+                        settings,
+                    );
 
-                let product = left_ct
-                    * self.derived_data.tensor_network_cache[cut_id].1.clone()
-                    * global_num.clone();
-            });
+                    let mut product = left_ct
+                        * self.derived_data.tensor_network_cache[cut_id].1.clone()
+                        * global_num.clone();
 
-            let right_counterterms = thresholds_on_the_right.iter().map(|ct_diagram| {
-                let right_ct =
-                    ct_diagram.to_tensor_network(&self.graph, &cut.cut, &vakint, false, settings);
+                    product
+                        .execute::<Sequential, SmallestDegree, _, _>(
+                            TENSORLIB.read().unwrap().deref(),
+                        )
+                        .unwrap();
 
-                let product = self.derived_data.tensor_network_cache[cut_id].0.clone()
-                    * right_ct
-                    * global_num.clone();
-            });
+                    let left_scalar: Atom = product
+                        .result_scalar()
+                        .with_context(|| "in building threshold counterterm left")?
+                        .into();
+
+                    let mut left_integrand = left_scalar
+                        .unwrap_function(GS.color_wrap)
+                        .simplify_color()
+                        .replace(function!(GS.energy, W_.x_))
+                        .with(function!(GS.ose, W_.x_));
+
+                    for (_, edge_index, _) in self
+                        .graph
+                        .underlying
+                        .iter_edges_of(&self.graph.initial_state_cut)
+                    {
+                        left_integrand = left_integrand.replace(GS.ose(edge_index)).with(
+                            GS.emr_mom(edge_index, Atom::from(ExpandedIndex::from_iter([0]))),
+                        );
+                    }
+
+                    let lu_prefactor = self.lu_prefactor_helper();
+
+                    let left_loop_count = self.graph.underlying.cyclotomatic_number(&cut.left);
+
+                    let th_prefactor = self.th_prefactor_helper(left_loop_count, false);
+
+                    Ok(left_integrand * lu_prefactor * th_prefactor)
+                })
+                .collect::<Result<TiVec<LeftThresholdId, Atom>>>()?;
+
+            let right_counterterms = thresholds_on_the_right
+                .iter_mut()
+                .map(|ct_diagram| {
+                    let right_ct = ct_diagram.get_tensor_network_cached(
+                        &self.graph,
+                        &cut.cut,
+                        &vakint,
+                        false,
+                        settings,
+                    );
+
+                    let mut product = self.derived_data.tensor_network_cache[cut_id].0.clone()
+                        * right_ct
+                        * global_num.clone();
+
+                    product
+                        .execute::<Sequential, SmallestDegree, _, _>(
+                            TENSORLIB.read().unwrap().deref(),
+                        )
+                        .unwrap();
+
+                    let right_scalar: Atom = product
+                        .result_scalar()
+                        .with_context(|| "in building threshold counterterm right")?
+                        .into();
+
+                    let mut right_integrand = right_scalar
+                        .unwrap_function(GS.color_wrap)
+                        .simplify_color()
+                        .replace(function!(GS.energy, W_.x_))
+                        .with(function!(GS.ose, W_.x_));
+
+                    for (_, edge_index, _) in self
+                        .graph
+                        .underlying
+                        .iter_edges_of(&self.graph.initial_state_cut)
+                    {
+                        right_integrand = right_integrand.replace(GS.ose(edge_index)).with(
+                            GS.emr_mom(edge_index, Atom::from(ExpandedIndex::from_iter([0]))),
+                        );
+                    }
+
+                    let lu_prefactor = self.lu_prefactor_helper();
+
+                    let right_loop_count = self.graph.underlying.cyclotomatic_number(&cut.right);
+
+                    let th_prefactor = self.th_prefactor_helper(right_loop_count, true);
+
+                    Ok(right_integrand * lu_prefactor * th_prefactor)
+                })
+                .collect::<Result<TiVec<RightThresholdId, Atom>>>()?;
+
+            let iterated_counterterms = thresholds_on_the_left
+                .iter()
+                .cartesian_product(&thresholds_on_the_right)
+                .map(|(left_ct_diagram, right_ct_diagram)| {
+                    let mut product = left_ct_diagram.network.clone().unwrap()
+                        * right_ct_diagram.network.clone().unwrap()
+                        * global_num.clone();
+
+                    product
+                        .execute::<Sequential, SmallestDegree, _, _>(
+                            TENSORLIB.read().unwrap().deref(),
+                        )
+                        .unwrap();
+
+                    let iterated_scalar: Atom = product
+                        .result_scalar()
+                        .with_context(|| "in building threshold counterterm iterated")?
+                        .into();
+
+                    let mut iterated_integrand = iterated_scalar
+                        .unwrap_function(GS.color_wrap)
+                        .simplify_color()
+                        .replace(function!(GS.energy, W_.x_))
+                        .with(function!(GS.ose, W_.x_));
+
+                    for (_, edge_index, _) in self
+                        .graph
+                        .underlying
+                        .iter_edges_of(&self.graph.initial_state_cut)
+                    {
+                        iterated_integrand = iterated_integrand.replace(GS.ose(edge_index)).with(
+                            GS.emr_mom(edge_index, Atom::from(ExpandedIndex::from_iter([0]))),
+                        );
+                    }
+
+                    let lu_prefactor = self.lu_prefactor_helper();
+                    let left_prefactor = self.th_prefactor_helper(
+                        self.graph
+                            .underlying
+                            .cyclotomatic_number(&left_ct_diagram.left_subgraph),
+                        false,
+                    );
+                    let right_prefactor = self.th_prefactor_helper(
+                        self.graph
+                            .underlying
+                            .cyclotomatic_number(&right_ct_diagram.right_subgraph),
+                        true,
+                    );
+
+                    Ok(iterated_scalar * lu_prefactor * left_prefactor * right_prefactor)
+                })
+                .collect::<Result<Vec<_>>>()?;
+
+            let iterated_counterterm = IteratedCtCollection {
+                data: iterated_counterterms,
+                num_left_thresholds: left_counterterms.len(),
+            };
+
+            println!("cut id {}", cut_id);
+            let edges_in_cut = cut
+                .cut
+                .iter_edges(&self.graph.underlying)
+                .map(|(_, edge)| edge.data.name.clone())
+                .collect_vec();
+
+            println!(" edges in cut {:?}", edges_in_cut);
+
+            for (left_ct, thereshold_diagram) in
+                left_counterterms.iter().zip(thresholds_on_the_left.iter())
+            {
+                let edges_in_left_ct = thereshold_diagram
+                    .threshold_cut
+                    .iter_edges(&self.graph.underlying)
+                    .map(|(_, edge)| edge.data.name.clone())
+                    .collect_vec();
+                println!(" left ct edges {:?}", edges_in_left_ct);
+                println!(" left ct {}", left_ct);
+            }
+
+            for (right_ct, thereshold_diagarm) in
+                right_counterterms.iter().zip(thresholds_on_the_right)
+            {
+                let edges_in_right_ct = thereshold_diagarm
+                    .threshold_cut
+                    .iter_edges(&self.graph.underlying)
+                    .map(|(_, edge)| edge.data.name.clone())
+                    .collect_vec();
+                println!(" right ct edges {:?}", edges_in_right_ct);
+                println!(" right ct {}", right_ct);
+            }
+
+            for iterated_ct in &iterated_counterterm.data {
+                println!(" iterated ct {}", iterated_ct);
+            }
+
+            let lu_counterterm_atom = LUCounterTermAtom {
+                left_atoms: left_counterterms,
+                right_atoms: right_counterterms,
+                iterated: iterated_counterterm,
+            };
         }
 
         todo!();
@@ -999,6 +1286,7 @@ pub struct CrossSectionDerivedData {
     pub lmbs: Option<TiVec<LmbIndex, LoopMomentumBasis>>,
     pub multi_channeling_setup: Option<LmbMultiChannelingSetup>,
     pub tensor_network_cache: TiVec<CutId, (ParsingNet, ParsingNet)>,
+    pub threshold_counterterms: TiVec<CutId, LUCounterTermAtom>,
 }
 
 impl CrossSectionDerivedData {
@@ -1010,6 +1298,7 @@ impl CrossSectionDerivedData {
             lmbs: None,
             multi_channeling_setup: None,
             tensor_network_cache: TiVec::new(),
+            threshold_counterterms: TiVec::new(),
         }
     }
 }
