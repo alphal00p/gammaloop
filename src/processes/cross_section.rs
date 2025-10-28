@@ -108,7 +108,9 @@ struct CsAmplitudeCTDiagram {
 
 #[derive(Clone, Debug, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
-pub struct LUCounterTermAtom {
+pub struct LUCounterTermData {
+    pub left_thresholds: TiVec<LeftThresholdId, Esurface>,
+    pub right_thresholds: TiVec<RightThresholdId, Esurface>,
     pub left_atoms: TiVec<LeftThresholdId, Atom>,
     pub right_atoms: TiVec<RightThresholdId, Atom>,
     pub iterated: IteratedCtCollection<Atom>,
@@ -975,12 +977,15 @@ impl CrossSectionGraph {
         let vakint = self.new_vakint();
         let global_num = self.graph.global_network();
 
-        let mut counterterms = TiVec::<CutId, LUCounterTermAtom>::new();
+        let mut counterterms = TiVec::<CutId, LUCounterTermData>::new();
 
         for (cut_id, cut) in self.cuts.iter_enumerated() {
             let mut thresholds_on_the_left = TiVec::<LeftThresholdId, CsAmplitudeCTDiagram>::new();
             let mut thresholds_on_the_right =
                 TiVec::<RightThresholdId, CsAmplitudeCTDiagram>::new();
+
+            let mut threshold_esurfaces_on_the_left = TiVec::<LeftThresholdId, Esurface>::new();
+            let mut threshold_esurfaces_on_the_right = TiVec::<RightThresholdId, Esurface>::new();
 
             let reversed_edges_in_xs_cut = cut
                 .cut
@@ -1039,6 +1044,26 @@ impl CrossSectionGraph {
                         };
 
                         thresholds_on_the_left.push(ct_diagram);
+
+                        let cross_section_cut_for_threshold = CrossSectionCut {
+                            cut: threshold_cut.clone(),
+                            left: left_threshold_diagram.clone(),
+                            right: right_threshold_diagram.clone(),
+                        };
+
+                        let mut threshold_esurface = Esurface::new_from_cut_left(
+                            &self.graph.underlying,
+                            &cross_section_cut_for_threshold,
+                            Some(&self.graph.initial_state_cut),
+                        );
+
+                        threshold_esurface.subspace_graph =
+                            InternalSubGraph::cleaned_filter_pessimist(
+                                cut.left.clone(),
+                                &self.graph,
+                            );
+
+                        threshold_esurfaces_on_the_left.push(threshold_esurface);
                     }
                 } else if cut.right.includes(right_threshold_diagram) {
                     if self.graph.underlying.cyclotomatic_number(&cut.right)
@@ -1058,6 +1083,26 @@ impl CrossSectionGraph {
                         };
 
                         thresholds_on_the_right.push(ct_diagram);
+
+                        let cross_section_cut_for_threshold = CrossSectionCut {
+                            cut: threshold_cut.clone(),
+                            left: left_threshold_diagram.clone(),
+                            right: right_threshold_diagram.clone(),
+                        };
+
+                        let mut threshold_esurface = Esurface::new_from_cut_left(
+                            &self.graph.underlying,
+                            &cross_section_cut_for_threshold,
+                            Some(&self.graph.initial_state_cut),
+                        );
+
+                        threshold_esurface.subspace_graph =
+                            InternalSubGraph::cleaned_filter_pessimist(
+                                cut.right.clone(),
+                                &self.graph,
+                            );
+
+                        threshold_esurfaces_on_the_right.push(threshold_esurface);
                     }
                 }
             }
@@ -1230,7 +1275,9 @@ impl CrossSectionGraph {
                 num_left_thresholds: left_counterterms.len(),
             };
 
-            let lu_counterterm_atom = LUCounterTermAtom {
+            let lu_counterterm_atom = LUCounterTermData {
+                left_thresholds: threshold_esurfaces_on_the_left,
+                right_thresholds: threshold_esurfaces_on_the_right,
                 left_atoms: left_counterterms,
                 right_atoms: right_counterterms,
                 iterated: iterated_counterterm,
@@ -1261,7 +1308,7 @@ pub struct CrossSectionDerivedData {
     pub lmbs: Option<TiVec<LmbIndex, LoopMomentumBasis>>,
     pub multi_channeling_setup: Option<LmbMultiChannelingSetup>,
     pub tensor_network_cache: TiVec<CutId, (ParsingNet, ParsingNet)>,
-    pub threshold_counterterms: TiVec<CutId, LUCounterTermAtom>,
+    pub threshold_counterterms: TiVec<CutId, LUCounterTermData>,
 }
 
 impl CrossSectionDerivedData {
