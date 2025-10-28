@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use std::fmt::Display;
 
 use bincode_trait_derive::{Decode, Encode};
@@ -38,7 +36,6 @@ use crate::uv::uv_graph::UVE;
 use color_eyre::Result;
 
 use super::generation::ShiftRewrite;
-use super::surface::{self, Surface};
 
 /// Core esurface struct
 #[derive(Serialize, Deserialize, Debug, Clone, bincode::Encode, bincode::Decode)]
@@ -46,18 +43,8 @@ pub struct Esurface {
     pub energies: Vec<EdgeIndex>,
     pub external_shift: ExternalShift,
     pub vertex_set: VertexSet,
-    #[bincode(with_serde)]
-    pub subspace_graph: InternalSubGraph,
-}
-
-impl Surface for Esurface {
-    fn get_positive_energies(&self) -> impl Iterator<Item = &EdgeIndex> {
-        self.energies.iter()
-    }
-
-    fn get_external_shift(&self) -> impl Iterator<Item = &(EdgeIndex, i64)> {
-        self.external_shift.iter()
-    }
+    //#[bincode(with_serde)]
+    //pub subspace_graph: InternalSubGraph,
 }
 
 impl PartialEq for Esurface {
@@ -95,19 +82,6 @@ impl Esurface {
             .fold(builder_atom, |acc, energy| acc + energy);
 
         energy_sum + &symbolic_shift
-    }
-
-    /// Compute the value of the esurface from an energy cache that can be computed from the underlying graph
-    /// This is the fastest way to compute the value of all esurfaces in a full evaluation
-    #[inline]
-    pub(crate) fn compute_value<T: FloatLike>(&self, energy_cache: &EdgeVec<F<T>>) -> F<T> {
-        surface::compute_value(self, energy_cache)
-    }
-
-    /// Only compute the shift part, useful for existence checks
-    #[inline]
-    pub(crate) fn compute_shift_part<T: FloatLike>(&self, energy_cache: &EdgeVec<F<T>>) -> F<T> {
-        surface::compute_shift_part(self, energy_cache)
     }
 
     /// Compute the value of the esurface from the momenta, needed to check if an arbitrary point
@@ -182,18 +156,14 @@ impl Esurface {
         }
     }
 
-    #[inline]
-    pub(crate) fn could_exist<T: FloatLike>(&self, _graph: &Graph, _assumptions: ()) -> bool {
-        true
-    }
-
     /// Only compute the shift part, useful for center finding.
     pub(crate) fn compute_shift_part_from_momenta<T: FloatLike>(
         &self,
         lmb: &LoopMomentumBasis,
         external_moms: &ExternalFourMomenta<F<T>>,
     ) -> F<T> {
-        self.external_shift
+        let full_external_shift = self
+            .external_shift
             .iter()
             .map(|(index, sign)| {
                 let external_signature = &lmb.edge_signatures[*index].external;
@@ -201,7 +171,9 @@ impl Esurface {
                     * compute_t_part_of_shift_part(external_signature, external_moms)
             })
             .reduce(|acc, x| acc + x)
-            .unwrap_or_else(|| external_moms[ExternalIndex(0)].temporal.value.zero())
+            .unwrap_or_else(|| external_moms[ExternalIndex(0)].temporal.value.zero());
+
+        full_external_shift
     }
 
     #[inline]
@@ -310,47 +282,6 @@ impl Esurface {
         (radius_guess, negative_radius)
     }
 
-    /// Write out the esurface expression in a given lmb
-    pub(crate) fn string_format_in_lmb(&self, lmb: &LoopMomentumBasis) -> String {
-        let mut energy_sum = self
-            .energies
-            .iter()
-            .map(|index| {
-                let signature = &lmb.edge_signatures[*index];
-                format!("|{}|", signature.format_momentum())
-            })
-            .join(" + ");
-
-        let shift_part = self
-            .external_shift
-            .iter()
-            .map(|(index, sign)| {
-                let signature = &lmb.edge_signatures[*index];
-
-                let sign = if *sign == 1 {
-                    "+".to_owned()
-                } else if *sign == -1 {
-                    "-".to_owned()
-                } else {
-                    format!("+{}", sign)
-                };
-                format!(" {} ({})^0", sign, signature.format_momentum())
-            })
-            .join("");
-
-        energy_sum.push_str(&shift_part);
-        energy_sum
-    }
-
-    /// Write out the esurface expression in a generic way
-    pub(crate) fn string_format(&self) -> String {
-        surface::string_format(self)
-    }
-
-    pub(crate) fn get_point_inside(&self) -> Vec<LorentzVector<f64>> {
-        todo!()
-    }
-
     pub(crate) fn canonicalize_shift(&mut self, shift_rewrite: &ShiftRewrite) {
         if let Some(dep_mom_pos) = self
             .external_shift
@@ -410,7 +341,7 @@ impl Esurface {
             energies: edges,
             external_shift,
             vertex_set,
-            subspace_graph: graph.full_graph(),
+            //subspace_graph: graph.full_graph(),
         }
     }
 
@@ -467,17 +398,6 @@ define_index! {pub struct GroupEsurfaceId;}
 
 pub type EsurfaceCollection = TiVec<EsurfaceID, Esurface>;
 
-pub(crate) fn compute_esurface_cache<T: FloatLike>(
-    esurfaces: &EsurfaceCollection,
-    energy_cache: &EdgeVec<F<T>>,
-) -> EsurfaceCache<F<T>> {
-    esurfaces
-        .iter()
-        .map(|esurface| esurface.compute_value(energy_cache))
-        .collect::<Vec<F<T>>>()
-        .into()
-}
-
 pub type EsurfaceCache<T> = TiVec<EsurfaceID, T>;
 
 /// Index type for esurface, location of an esurface in the list of all esurfaces of a graph
@@ -485,7 +405,6 @@ pub type EsurfaceCache<T> = TiVec<EsurfaceID, T>;
 pub struct EsurfaceID(pub usize);
 
 /// Container for esurfaces that exist at a given point in the phase space
-pub type OldExistingEsurfaces = TiVec<ExistingEsurfaceId, EsurfaceID>;
 pub type ExistingEsurfaces = TiVec<ExistingEsurfaceId, GroupEsurfaceId>;
 
 pub(crate) fn get_representative(
@@ -527,25 +446,8 @@ impl Display for ExistingEsurfaceId {
     }
 }
 
-const MAX_EXPECTED_CAPACITY: usize = 32; // Used to prevent reallocations during existence check
 const SHIFT_THRESHOLD: F<f64> = F(1.0e-13);
 const EXISTENCE_THRESHOLD: F<f64> = F(1.0e-7);
-
-/// Returns the list of esurfaces which may exist, must be called each time at evaluation if externals are not fixed.
-#[inline]
-pub(crate) fn get_existing_esurfaces<T: FloatLike>() -> OldExistingEsurfaces {
-    todo!();
-}
-
-#[derive(Serialize)]
-struct ExistenceCheckDebug {
-    esurface_id: EsurfaceID,
-    shift_zero_sq: F<f64>,
-    shift_spatial_sq: F<f64>,
-    mass_sum_sq: F<f64>,
-    existence_condition: F<f64>,
-    threshold: F<f64>,
-}
 
 pub type ExternalShift = Vec<(EdgeIndex, i64)>;
 
@@ -612,11 +514,8 @@ mod tests {
             energies,
             external_shift,
             vertex_set: VertexSet::dummy(),
-            subspace_graph: dummy_graph.full_graph(),
+            //subspace_graph: dummy_graph.full_graph(),
         };
-
-        let res = esurface.compute_value(&energies_cache);
-        assert_eq!(res.0, 15.);
 
         let shift_rewrite = ShiftRewrite {
             dependent_momentum: EdgeIndex::from(4),
@@ -642,11 +541,8 @@ mod tests {
             energies,
             external_shift,
             vertex_set: VertexSet::dummy(),
-            subspace_graph: dummy_graph.full_graph(),
+            //subspace_graph: dummy_graph.full_graph(),
         };
-
-        let res = esurface.compute_value(&energies_cache);
-        assert_eq!(res.0, 2.);
     }
 
     #[test]
@@ -657,7 +553,7 @@ mod tests {
             energies: vec![EdgeIndex::from(2), EdgeIndex::from(3)],
             external_shift,
             vertex_set: VertexSet::dummy(),
-            subspace_graph: unsafe { InternalSubGraph::new_unchecked(BitVec::new()) },
+            // subspace_graph: unsafe { InternalSubGraph::new_unchecked(BitVec::new()) },
         };
 
         let esurface_atom = esurface.to_atom(&[]);
@@ -708,14 +604,14 @@ mod tests {
             energies: vec![EdgeIndex::from(3), EdgeIndex::from(5)],
             external_shift: vec![(EdgeIndex::from(0), 1), (EdgeIndex::from(1), 1)],
             vertex_set: VertexSet::dummy(),
-            subspace_graph: unsafe { InternalSubGraph::new_unchecked(BitVec::new()) },
+            //subspace_graph: unsafe { InternalSubGraph::new_unchecked(BitVec::new()) },
         };
 
         let esurface_2 = Esurface {
             energies: vec![EdgeIndex::from(3), EdgeIndex::from(5)],
             external_shift: vec![(EdgeIndex::from(0), 1), (EdgeIndex::from(1), 1)],
             vertex_set: VertexSet::dummy(),
-            subspace_graph: unsafe { InternalSubGraph::new_unchecked(BitVec::new()) },
+            //subspace_graph: unsafe { InternalSubGraph::new_unchecked(BitVec::new()) },
         };
 
         assert_eq!(esurface_1, esurface_2);
@@ -759,25 +655,25 @@ mod tests {
                 energies: vec![EdgeIndex::from(0), EdgeIndex::from(1)],
                 external_shift: vec![(EdgeIndex::from(5), -1)],
                 vertex_set: VertexSet::dummy(),
-                subspace_graph: double_triangle.full_graph(),
+                //subspace_graph: double_triangle.full_graph(),
             },
             Esurface {
                 energies: vec![EdgeIndex::from(0), EdgeIndex::from(2), EdgeIndex::from(4)],
                 external_shift: vec![(EdgeIndex::from(5), -1)],
                 vertex_set: VertexSet::dummy(),
-                subspace_graph: double_triangle.full_graph(),
+                //subspace_graph: double_triangle.full_graph(),
             },
             Esurface {
                 energies: vec![EdgeIndex::from(3), EdgeIndex::from(4)],
                 external_shift: vec![(EdgeIndex::from(5), -1)],
                 vertex_set: VertexSet::dummy(),
-                subspace_graph: double_triangle.full_graph(),
+                //subspace_graph: double_triangle.full_graph(),
             },
             Esurface {
                 energies: vec![EdgeIndex::from(1), EdgeIndex::from(2), EdgeIndex::from(3)],
                 external_shift: vec![(EdgeIndex::from(5), -1)],
                 vertex_set: VertexSet::dummy(),
-                subspace_graph: double_triangle.full_graph(),
+                //subspace_graph: double_triangle.full_graph(),
             },
         ];
 
@@ -826,19 +722,19 @@ mod tests {
                 energies: vec![EdgeIndex::from(0), EdgeIndex::from(3)],
                 external_shift: vec![(EdgeIndex::from(4), -1)],
                 vertex_set: VertexSet::dummy(),
-                subspace_graph: box_graph.full_graph(),
+                //subspace_graph: box_graph.full_graph(),
             },
             Esurface {
                 energies: vec![EdgeIndex::from(0), EdgeIndex::from(2)],
                 external_shift: vec![(EdgeIndex::from(4), -1), (EdgeIndex::from(7), -1)],
                 vertex_set: VertexSet::dummy(),
-                subspace_graph: box_graph.full_graph(),
+                //subspace_graph: box_graph.full_graph(),
             },
             Esurface {
                 energies: vec![EdgeIndex::from(1), EdgeIndex::from(3)],
                 external_shift: vec![(EdgeIndex::from(4), -1), (EdgeIndex::from(5), 1)],
                 vertex_set: VertexSet::dummy(),
-                subspace_graph: box_graph.full_graph(),
+                //subspace_graph: box_graph.full_graph(),
             },
             Esurface {
                 energies: vec![EdgeIndex::from(1), EdgeIndex::from(2)],
@@ -848,7 +744,7 @@ mod tests {
                     (EdgeIndex::from(7), -1),
                 ],
                 vertex_set: VertexSet::dummy(),
-                subspace_graph: box_graph.full_graph(),
+                //subspace_graph: box_graph.full_graph(),
             },
         ];
 

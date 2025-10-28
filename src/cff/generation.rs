@@ -649,7 +649,7 @@ impl SurfaceCache {
 
     pub(crate) fn set_subspaces(&mut self, subspace_graph: &InternalSubGraph) {
         for esurface in self.esurface_cache.iter_mut() {
-            esurface.subspace_graph = subspace_graph.clone();
+            //esurface.subspace_graph = subspace_graph.clone();
         }
     }
 }

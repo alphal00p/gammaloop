@@ -13,7 +13,6 @@ use symbolica::{
 };
 
 use crate::{
-    cff::surface::Surface,
     disable,
     gammaloop_integrand::{cross_section_integrand::CrossSectionGraphTerm, GraphTerm},
     graph::FeynmanGraph,
@@ -44,10 +43,11 @@ impl CrossSectionGraphTerm {
 
         for (cut_id, esurface) in self.cut_esurface.iter_enumerated() {
             let supergraph_loop_count = self.graph.get_loop_number();
-            let cut_cardinality = esurface.get_positive_energies().count();
+            let cut_cardinality = esurface.energies.len();
 
             let massless_edges_in_cut = esurface
-                .get_positive_energies()
+                .energies
+                .iter()
                 .filter(|edge_id| self.graph.underlying[*edge_id].0.particle.is_massless())
                 .copied()
                 .sorted()

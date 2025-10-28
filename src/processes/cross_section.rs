@@ -1057,11 +1057,11 @@ impl CrossSectionGraph {
                             Some(&self.graph.initial_state_cut),
                         );
 
-                        threshold_esurface.subspace_graph =
-                            InternalSubGraph::cleaned_filter_pessimist(
-                                cut.left.clone(),
-                                &self.graph,
-                            );
+                        //threshold_esurface.subspace_graph =
+                        //    InternalSubGraph::cleaned_filter_pessimist(
+                        //        cut.left.clone(),
+                        //        &self.graph,
+                        //    );
 
                         threshold_esurfaces_on_the_left.push(threshold_esurface);
                     }
@@ -1096,11 +1096,11 @@ impl CrossSectionGraph {
                             Some(&self.graph.initial_state_cut),
                         );
 
-                        threshold_esurface.subspace_graph =
-                            InternalSubGraph::cleaned_filter_pessimist(
-                                cut.right.clone(),
-                                &self.graph,
-                            );
+                        // threshold_esurface.subspace_graph =
+                        //     InternalSubGraph::cleaned_filter_pessimist(
+                        //         cut.right.clone(),
+                        //         &self.graph,
+                        //     );
 
                         threshold_esurfaces_on_the_right.push(threshold_esurface);
                     }

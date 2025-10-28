@@ -745,7 +745,7 @@ impl CFFGenerationGraph {
                 energies: positive_energies,
                 external_shift,
                 vertex_set: vertex.vertex_set,
-                subspace_graph: unsafe { InternalSubGraph::new_unchecked(BitVec::new()) },
+                //subspace_graph: unsafe { InternalSubGraph::new_unchecked(BitVec::new()) },
             };
 
             HybridSurface::Esurface(esurface)
