@@ -1,6 +1,7 @@
 use std::fmt::Display;
 
 use crate::gammaloop_integrand::evaluators::SingleOrAllOrientations;
+use crate::graph::{Graph, LmbIndex, LoopMomentumBasis};
 use crate::momentum::{FourMomentum, Polarization, Rotatable, Rotation, ThreeMomentum};
 
 use crate::utils::{FloatLike, Length, F};
@@ -9,7 +10,8 @@ use bincode_trait_derive::{Decode, Encode};
 use bitvec::vec::BitVec;
 use color_eyre::Result;
 use derive_more::{From, Into};
-use linnet::half_edge::involution::{EdgeVec, Orientation};
+use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation};
+use linnet::half_edge::subgraph::{InternalSubGraph, SubGraph};
 use serde::{Deserialize, Serialize};
 use std::ops::{Add, Index, IndexMut, Sub};
 use symbolica::domains::float::NumericalFloatLike;
@@ -105,6 +107,30 @@ impl<T> Length for LoopMomenta<T> {
 }
 
 pub type Subspace<'a> = Option<&'a [LoopIndex]>; // None means full space
+
+pub(crate) struct SubspaceData {
+    subgraph: InternalSubGraph,
+    complement_subgraph: BitVec,
+    lmb: LmbIndex,
+    lmb_indices: Vec<LoopIndex>,
+}
+
+impl SubspaceData {
+    pub(crate) fn get_lmb<'a>(
+        &self,
+        all_lmbs: &'a TiVec<LmbIndex, LoopMomentumBasis>,
+    ) -> &'a LoopMomentumBasis {
+        &all_lmbs[self.lmb]
+    }
+
+    pub(crate) fn does_not_contain(&self, edges: &[EdgeIndex], graph: &Graph) -> Vec<EdgeIndex> {
+        graph
+            .iter_edges_of(&self.complement_subgraph)
+            .map(|ed| ed.1)
+            .filter(|e| edges.contains(e))
+            .collect()
+    }
+}
 
 // #[comemo::track]
 // impl<T> LoopMomenta<T> {}

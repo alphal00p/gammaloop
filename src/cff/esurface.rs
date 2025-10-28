@@ -22,10 +22,11 @@ use crate::cff::cff_graph::VertexSet;
 
 use crate::define_index;
 use crate::gammaloop_integrand::GammaloopIntegrand;
-use crate::graph::{Graph, GraphGroupPosition, LoopMomentumBasis};
+use crate::graph::{Graph, GraphGroupPosition, LmbIndex, LoopMomentumBasis};
 
 use crate::momentum_sample::{
     ExternalFourMomenta, ExternalIndex, ExternalThreeMomenta, LoopIndex, LoopMomenta, Subspace,
+    SubspaceData,
 };
 use crate::processes::CrossSectionCut;
 use crate::utils::{
@@ -94,6 +95,8 @@ impl Esurface {
         loop_moms: &LoopMomenta<F<T>>,
         external_moms: &ExternalFourMomenta<F<T>>,
     ) -> F<T> {
+        todo!("refactor for subspaces");
+
         let spatial_part_of_externals = external_moms
             .iter()
             .map(|mom| mom.spatial.clone())
@@ -124,6 +127,7 @@ impl Esurface {
         external_moms: &ExternalFourMomenta<F<T>>,
         e_cm: &F<T>,
     ) -> bool {
+        todo!("refactor for subspaces");
         if self.external_shift.is_empty() {
             return false;
         }
@@ -159,9 +163,15 @@ impl Esurface {
     /// Only compute the shift part, useful for center finding.
     pub(crate) fn compute_shift_part_from_momenta<T: FloatLike>(
         &self,
-        lmb: &LoopMomentumBasis,
+        loop_moms: &LoopMomenta<F<T>>,
         external_moms: &ExternalFourMomenta<F<T>>,
+        subspace: &SubspaceData,
+        all_lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
+        graph: &Graph,
+        masses: &EdgeVec<F<T>>,
     ) -> F<T> {
+        let lmb = subspace.get_lmb(all_lmbs);
+
         let full_external_shift = self
             .external_shift
             .iter()
@@ -173,7 +183,24 @@ impl Esurface {
             .reduce(|acc, x| acc + x)
             .unwrap_or_else(|| external_moms[ExternalIndex(0)].temporal.value.zero());
 
-        full_external_shift
+        let spatial_externals = external_moms
+            .iter()
+            .map(|mom| mom.spatial.clone())
+            .collect::<TiVec<ExternalIndex, _>>();
+
+        let remaining_shift = subspace
+            .does_not_contain(&self.energies, graph)
+            .into_iter()
+            .map(|index| {
+                let signature = &lmb.edge_signatures[index];
+                let momentum = signature.compute_momentum(loop_moms, &spatial_externals);
+                let mass = &masses[index];
+                (momentum.norm_squared() + mass * mass).sqrt()
+            })
+            .reduce(|acc, x| acc + x)
+            .unwrap_or_else(|| full_external_shift.zero());
+
+        full_external_shift + remaining_shift
     }
 
     #[inline]
@@ -186,6 +213,7 @@ impl Esurface {
         lmb: &LoopMomentumBasis,
         real_mass_vector: &EdgeVec<F<T>>,
     ) -> (F<T>, F<T>) {
+        todo!("refactor for subspaces");
         let spatial_part_of_externals: ExternalThreeMomenta<F<T>> = external_moms
             .iter()
             .map(|mom| mom.spatial.clone())
@@ -250,6 +278,7 @@ impl Esurface {
         external_moms: &ExternalFourMomenta<F<T>>,
         lmb: &LoopMomentumBasis,
     ) -> (F<T>, F<T>) {
+        todo!("refactor for subspaces");
         let const_builder = &unit_loops[LoopIndex(0)].px;
 
         let esurface_shift = self.compute_shift_part_from_momenta(lmb, external_moms);
