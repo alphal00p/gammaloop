@@ -115,7 +115,7 @@ impl Default for GeneralSettings {
             enable_cache: false,
             orientation_pat: OrientationPattern::default(),
             m_uv: 1000.0,
-            mu_r_sq: 1000.0 * 1000.0,
+            mu_r_sq: 1000000.0,
         }
     }
 }

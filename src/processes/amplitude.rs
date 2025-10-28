@@ -1,5 +1,5 @@
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, HashMap},
     fs::{self, File},
     io::Write,
     iter,
@@ -10,18 +10,25 @@ use std::{
 use ahash::AHashSet;
 // use bincode::{Decode, Encode};
 use bincode_trait_derive::{Decode, Encode};
+use bitvec::vec::BitVec;
 use color_eyre::{Result, Section};
 use momtrop::SampleGenerator;
 
-use idenso::color::ColorSimplifier;
+use idenso::{color::ColorSimplifier, gamma::GammaSimplifier};
 use rayon::{
     iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator},
     ThreadPool,
 };
-use spenso::network::{Sequential, SmallestDegree};
+use spenso::{
+    algebra::complex::Complex,
+    network::{Sequential, SmallestDegree},
+};
 use tracing::{info_span, instrument};
 use tracing_indicatif::{span_ext::IndicatifSpanExt, style::ProgressStyle};
-use vakint::{EvaluationOrder, LoopNormalizationFactor, Vakint, VakintSettings};
+use vakint::{
+    vakint_symbol, EvaluationMethod, EvaluationOrder, LoopNormalizationFactor,
+    NumericalEvaluationResult, Vakint, VakintExpression, VakintSettings,
+};
 
 use crate::{
     cff::{
@@ -33,18 +40,19 @@ use crate::{
     },
     gammaloop_integrand::{
         amplitude_integrand::{AmplitudeGraphTerm, AmplitudeIntegrand, AmplitudeIntegrandData},
-        LmbMultiChannelingSetup,
+        param_builder::GammaLoopPairs,
+        LmbMultiChannelingSetup, ParamBuilder,
     },
     graph::{GraphGroup, GraphGroupPosition, GroupId, LMBext, LmbIndex, LoopMomentumBasis},
     model::ArcParticle,
     momentum_sample::ExternalIndex,
     numerator::symbolica_ext::AtomCoreExt,
-    settings::{runtime::LockedRuntimeSettings, GlobalSettings},
+    settings::{runtime::LockedRuntimeSettings, GlobalSettings, RuntimeSettings},
     signature::SignatureLike,
     status_debug,
     subtraction::amplitude_counterterm::AmplitudeCountertermAtom,
-    utils::{symbolica_ext::LOGPRINTOPTS, Length, GS, TENSORLIB, VAKINT, W_},
-    uv::UltravioletGraph,
+    utils::{symbolica_ext::LOGPRINTOPTS, Length, F, GS, TENSORLIB, VAKINT, W_},
+    uv::{approx::to_vakint_integrand, UltravioletGraph},
     GammaLoopContext, GammaLoopContextContainer,
 };
 use eyre::{eyre, Context};
@@ -52,13 +60,13 @@ use itertools::Itertools;
 use linnet::{
     half_edge::{
         involution::{HedgePair, Orientation},
-        subgraph::SubGraph,
+        subgraph::{empty, FullOrEmpty, InternalSubGraph, SubGraph},
     },
     parser::DotGraph,
 };
 use log::{debug, info};
 use symbolica::{
-    atom::{Atom, AtomCore},
+    atom::{Atom, AtomCore, AtomView, Symbol, Var},
     function,
 };
 use typed_index_collections::{ti_vec, TiVec};
@@ -521,7 +529,23 @@ impl AmplitudeGraph {
         result
     }
 
-    fn new_vakint(&self) -> Vakint {
+    pub fn to_numerical(numerical_result: AtomView) -> Result<NumericalEvaluationResult> {
+        let vakint = {
+            let guard = VAKINT.read().unwrap();
+            if let Some(ref vakint) = *guard {
+                vakint.clone()
+            } else {
+                panic!("Vakint not initialised");
+            }
+        };
+        Ok(NumericalEvaluationResult::from_atom(
+            numerical_result,
+            vakint_symbol!(&vakint.settings.epsilon_symbol),
+            &vakint.settings,
+        )?)
+    }
+
+    pub fn new_vakint(&self) -> Vakint {
         // TODO: avoid cloning by modifying Vakint's API so as to be able to set number_of_terms_in_epsilon_expansion for each call to evaluate
         let mut vakint = {
             let guard = VAKINT.read().unwrap();
@@ -531,24 +555,169 @@ impl AmplitudeGraph {
                 panic!("Vakint not initialised");
             }
         };
+        // FIXME: This is incorrect: it needs to be the max number of loops across all divergent spinneys of that graph
         vakint.settings.number_of_terms_in_epsilon_expansion =
             self.graph.n_loops(&self.graph.no_dummy()) as i64 + 1;
 
         vakint
     }
 
-    pub fn analytical_evaluation<S: SubGraph>(&self, component: &S) -> Result<Atom> {
-        let vakint = self.new_vakint();
+    pub fn analytical_evaluation<S: SubGraph>(
+        &self,
+        model: &Model,
+        component: &S,
+        evaluate_numerically: bool,
+        number_of_terms_in_epsilon_expansion: Option<usize>,
+        run_time_settings: &RuntimeSettings,
+    ) -> Result<Atom> {
+        let mut vakint = self.new_vakint();
 
-        // let t_arg = uv_graph
-        //     .numerator(&reduced)
-        //     .to_d_dim(GS.dim)
-        //     .get_single_atom()
-        //     .unwrap()
-        //     .simplify_gamma()
-        //     / uv_graph.denominator(&reduced);
+        if let Some(n_terms) = number_of_terms_in_epsilon_expansion {
+            vakint.settings.number_of_terms_in_epsilon_expansion = n_terms as i64;
+        }
 
-        Ok(Atom::Zero)
+        let pysec_dec_enabled_in_vakint = vakint.settings.evaluation_order.0.iter().find_map(|o| {
+            if let EvaluationMethod::PySecDec(opts) = o {
+                Some(opts)
+            } else {
+                None
+            }
+        });
+
+        let complex_params_vakint = if evaluate_numerically || pysec_dec_enabled_in_vakint.is_some()
+        {
+            let mut param_builder = ParamBuilder::<f64>::new(&self.graph, model);
+            param_builder.m_uv_value(Complex::new_re(F(run_time_settings.general.m_uv)));
+            param_builder.mu_r_sq_value(Complex::new_re(F(run_time_settings.general.mu_r_sq)));
+
+            // println!("\nParamBuilder parameters:\n{}", param_builder);
+
+            let mut complex_params: HashMap<String, symbolica::domains::float::Complex<f64>> =
+                HashMap::default();
+            for params in param_builder.pairs.into_iter() {
+                let ps: crate::gammaloop_integrand::ParamValuePairs = params;
+                for (p_name, p_value) in
+                    ps.params
+                        .iter()
+                        .zip(ps.value_range.into_iter())
+                        .map(|(a, value_index)| {
+                            (a.to_canonical_string(), param_builder.values[value_index])
+                        })
+                {
+                    complex_params.insert(
+                        p_name,
+                        symbolica::domains::float::Complex::new(
+                            p_value.re.into(),
+                            p_value.im.into(),
+                        ),
+                    );
+                }
+            }
+            // Make sure to remove entries already supported by vakint, as they may not match required precision
+            for atom in &[
+                Atom::Var(Var::new(Symbol::PI)),
+                Atom::Var(Var::new(vakint_symbol!("EulerGamma"))),
+                function!(Symbol::LOG, Atom::num(2)),
+            ] {
+                _ = complex_params.remove(&atom.to_string());
+            }
+
+            // Make sure to properly do the upcasting to required precision in vakint settings
+            vakint.params_from_complex_f64(&complex_params)
+        } else {
+            HashMap::default()
+        };
+
+        if let Some(pysec_dec_opts) = pysec_dec_enabled_in_vakint {
+            vakint.settings.evaluation_order.adjust(
+                None,
+                pysec_dec_opts.relative_precision,
+                &HashMap::default(),
+                &complex_params_vakint,
+                &HashMap::default(),
+            );
+        }
+        let mut four_dimensional_integrand = self
+            .graph
+            .numerator(component)
+            .to_d_dim(GS.dim)
+            .get_single_atom()
+            .unwrap()
+            .simplify_gamma()
+            / self.graph.denominator(component);
+
+        // println!("Four-dimensional integrand: {}", four_dimensional_integrand);
+
+        let mom_reps = self.graph.uv_wrapped_replacement(
+            &self.graph.full_filter(),
+            &self.graph.loop_momentum_basis,
+            &[W_.x___],
+        );
+
+        // println!("Reps:");
+        // for r in &mom_reps {
+        //     println!("{r}");
+        // }
+
+        // rewrite the inner_t as well
+        four_dimensional_integrand = four_dimensional_integrand.replace_multiple(&mom_reps);
+
+        // println!("LMB: {}", lmb);
+        // let vk_mom = vakint_symbol!("k");
+        // for (i, l) in lmb.loop_edges.iter().enumerate() {
+        //     four_dimensional_integrand = four_dimensional_integrand
+        //         .replace(function!(GS.emr_mom, usize::from(*l) as i64))
+        //         .with(function!(vk_mom, i as i64 + 1))
+        //         .replace(function!(
+        //             GS.emr_mom,
+        //             function!(vk_mom, i as i64 + 1),
+        //             W_.x___
+        //         ))
+        //         .with(function!(vk_mom, i as i64 + 1, W_.x___));
+        // }
+
+        let vakint_integrand = to_vakint_integrand(
+            &four_dimensional_integrand,
+            &self.graph.loop_momentum_basis,
+            &self.graph,
+            &self.graph.full_filter(),
+            &self.graph.empty_subgraph::<BitVec>(),
+            false,
+        );
+
+        // println!(
+        //     "\nVakint expression:\n{:#}",
+        //     VakintExpression::try_from(vakint_integrand.clone()).unwrap()
+        // );
+        // println!(
+        //     "\nVakint expression raw:\n{}",
+        //     vakint_integrand.to_canonical_string()
+        // );
+
+        let analytical_evaluation = vakint.evaluate(vakint_integrand.as_view()).unwrap();
+        // println!(
+        //     "\nVakint analytical evaluation:\n{:#}",
+        //     analytical_evaluation
+        // );
+        if !evaluate_numerically {
+            Ok(analytical_evaluation)
+        } else {
+            let (numerical_evaluation, _error) = vakint
+                .numerical_evaluation(
+                    analytical_evaluation.as_view(),
+                    &HashMap::default(),
+                    &complex_params_vakint,
+                    None,
+                )
+                .unwrap();
+
+            // println!("\nVakint numerical evaluation:\n{:#}", numerical_evaluation);
+
+            let numerical_evaluation_atom = numerical_evaluation
+                .to_atom(vakint_symbol!(vakint.settings.epsilon_symbol.clone()));
+
+            Ok(numerical_evaluation_atom)
+        }
     }
 
     pub(crate) fn build_parametric_integrand(

@@ -32,12 +32,7 @@ pub fn initialise() -> Result<()> {
     Ok(())
 }
 
-pub fn initialise_with_settings(settings: Option<&GlobalSettings>) -> Result<()> {
-    let global_settings = if let Some(s) = settings {
-        s
-    } else {
-        &GlobalSettings::default()
-    };
+pub fn initialise_vakint(global_settings: &GlobalSettings) -> Result<()> {
     let vakint_settings = &global_settings.generation.uv.vakint;
 
     let mut vakint_evaluation_methods = EvaluationOrder::empty();
@@ -48,13 +43,35 @@ pub fn initialise_with_settings(settings: Option<&GlobalSettings>) -> Result<()>
                 .push(EvaluationMethod::AlphaLoop),
             "matad" => vakint_evaluation_methods
                 .0
-                .push(EvaluationMethod::MATAD(MATADOptions::default())),
+                .push(EvaluationMethod::MATAD(MATADOptions {
+                    expand_masters: vakint_settings.matad.expand_masters,
+                    susbstitute_masters: vakint_settings.matad.susbstitute_masters,
+                    substitute_hpls: vakint_settings.matad.substitute_hpls,
+                    direct_numerical_substition: vakint_settings.matad.direct_numerical_substition,
+                    ..MATADOptions::default()
+                })),
             "fmft" => vakint_evaluation_methods
                 .0
-                .push(EvaluationMethod::FMFT(FMFTOptions::default())),
-            "pysecdec" => vakint_evaluation_methods
-                .0
-                .push(EvaluationMethod::PySecDec(PySecDecOptions::default())),
+                .push(EvaluationMethod::FMFT(FMFTOptions {
+                    expand_masters: vakint_settings.fmft.expand_masters,
+                    susbstitute_masters: vakint_settings.fmft.susbstitute_masters,
+                    ..FMFTOptions::default()
+                })),
+            "pysecdec" => {
+                vakint_evaluation_methods
+                    .0
+                    .push(EvaluationMethod::PySecDec(PySecDecOptions {
+                        quiet: vakint_settings.pysecdec.quiet,
+                        relative_precision: vakint_settings.pysecdec.relative_precision,
+                        min_n_evals: vakint_settings.pysecdec.min_n_evals as u64,
+                        max_n_evals: vakint_settings.pysecdec.max_n_evals as u64,
+                        reuse_existing_output: vakint_settings
+                            .pysecdec
+                            .reuse_existing_output
+                            .clone(),
+                        ..PySecDecOptions::default()
+                    }))
+            }
             other => {
                 return Err(color_eyre::eyre::eyre!(
                     "Unknown Vakint evaluation method: {}",
@@ -67,7 +84,11 @@ pub fn initialise_with_settings(settings: Option<&GlobalSettings>) -> Result<()>
     *VAKINT.write().unwrap() = Some(Vakint::new(Some(VakintSettings {
         allow_unknown_integrals: false,
         evaluation_order: vakint_evaluation_methods,
-        integral_normalization_factor: LoopNormalizationFactor::MSbar,
+        integral_normalization_factor: if vakint_settings.normalization.to_uppercase() == "MSBAR" {
+            LoopNormalizationFactor::MSbar
+        } else {
+            LoopNormalizationFactor::Custom(vakint_settings.normalization.clone())
+        },
         run_time_decimal_precision: vakint_settings.run_time_decimal_precision as u32,
         number_of_terms_in_epsilon_expansion: 5,
         temporary_directory: vakint_settings.temporary_directory.clone(),
@@ -77,6 +98,18 @@ pub fn initialise_with_settings(settings: Option<&GlobalSettings>) -> Result<()>
         clean_tmp_dir: vakint_settings.clean_tmp_dir,
         ..VakintSettings::default()
     }))?);
+
+    Ok(())
+}
+
+pub fn initialise_with_settings(settings: Option<&GlobalSettings>) -> Result<()> {
+    let global_settings = if let Some(s) = settings {
+        s
+    } else {
+        &GlobalSettings::default()
+    };
+
+    initialise_vakint(global_settings)?;
 
     Ok(())
 }

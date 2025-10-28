@@ -126,8 +126,190 @@ impl SimpleApprox {
     }
 }
 
-#[derive(Clone)]
+pub(crate) fn to_vakint_integrand<E: UVE, V, H, S: SubGraph, SS: SubGraph>(
+    integrand: &Atom,
+    lmb: &LoopMomentumBasis,
+    graph: &HedgeGraph<E, V, H>,
+    reduced: &S,
+    dependent_subgraph: &SS,
+    substitute_masses_to_m_uv: bool,
+) -> Atom {
+    let mut integrand_vakint = integrand.clone();
 
+    //Atom::Zero
+
+    // strip the momentum wrapper from the denominator
+    integrand_vakint = integrand_vakint
+        .replace(function!(
+            GS.den,
+            W_.prop_,
+            function!(GS.emr_mom, W_.prop_, W_.mom_),
+            W_.x__
+        ))
+        .with(function!(GS.den, W_.prop_, W_.mom_, W_.x__));
+
+    println!("Expanded: {:>}", integrand_vakint.expand());
+
+    integrand_vakint = integrand_vakint.expand();
+
+    let mut propagator_id = 1;
+
+    let vk_prop = vakint_symbol!("prop");
+    let vk_edge = vakint_symbol!("edge");
+    let vk_mom = vakint_symbol!("k");
+    let vk_topo = vakint_symbol!("topo");
+
+    for (pair, index, _data) in graph.iter_edges_of(reduced) {
+        if let HedgePair::Paired { source, sink } = pair {
+            integrand_vakint = integrand_vakint
+                .replace(function!(
+                    GS.den,
+                    usize::from(index) as i64,
+                    W_.mom_,
+                    W_.mass_,
+                    W_.x___
+                ))
+                .with(function!(
+                    vk_prop,
+                    propagator_id,
+                    function!(
+                        vk_edge,
+                        usize::from(graph.node_id(source)) as i64,
+                        usize::from(graph.node_id(sink)) as i64
+                    ),
+                    W_.mom_,
+                    if substitute_masses_to_m_uv {
+                        GS.m_uv
+                    } else {
+                        W_.mass_
+                    },
+                    1
+                ))
+                .replace(function!(vk_prop, W_.x___, 1).pow(Atom::var(W_.e_)))
+                .with(function!(vk_prop, W_.x___, -Atom::var(W_.e_)));
+            propagator_id += 1;
+        }
+    }
+
+    // shrink vertices of the subgraph
+    for (pair, _index, _data) in graph.iter_edges_of(dependent_subgraph) {
+        if let HedgePair::Paired { source, sink } = pair {
+            integrand_vakint = integrand_vakint
+                .replace(function!(
+                    vk_prop,
+                    W_.x_,
+                    function!(vk_edge, usize::from(graph.node_id(source)) as i64, W_.y_),
+                    W_.x___
+                ))
+                .with(function!(
+                    vk_prop,
+                    W_.x_,
+                    function!(vk_edge, usize::from(graph.node_id(sink)) as i64, W_.y_),
+                    W_.x___
+                ))
+                .replace(function!(
+                    vk_prop,
+                    W_.x_,
+                    function!(vk_edge, W_.y_, usize::from(graph.node_id(source)) as i64),
+                    W_.x___
+                ))
+                .with(function!(
+                    vk_prop,
+                    W_.x_,
+                    function!(vk_edge, W_.y_, usize::from(graph.node_id(sink)) as i64),
+                    W_.x___
+                ));
+        }
+    }
+
+    // flip edges to positive momentum
+    // FIXME: how will this work for sums of momenta?
+    integrand_vakint = integrand_vakint
+        .replace(function!(
+            vk_prop,
+            W_.x_,
+            function!(vk_edge, W_.a_, W_.b_),
+            -Atom::var(W_.y_),
+            W_.e___
+        ))
+        .repeat()
+        .with(function!(
+            vk_prop,
+            W_.x_,
+            function!(vk_edge, W_.b_, W_.a_),
+            W_.y_,
+            W_.e___
+        ));
+
+    // fuse raised edges
+    integrand_vakint = integrand_vakint
+        .replace(
+            function!(
+                vk_prop,
+                W_.x_,
+                function!(vk_edge, W_.a_, W_.b_),
+                W_.x___,
+                W_.e_
+            ) * function!(
+                vk_prop,
+                W_.y_,
+                function!(vk_edge, W_.b_, W_.c_),
+                W_.x___,
+                W_.f_
+            ),
+        )
+        .repeat()
+        .with(function!(
+            vk_prop,
+            W_.y_,
+            function!(vk_edge, W_.a_, W_.c_),
+            W_.x___,
+            W_.e_ + W_.f_
+        ));
+
+    debug!("Integrand pre dot vakint: {:}", integrand_vakint);
+    // rewrite numerator
+    // linearize the numerator first
+    // integrand_vakint = integrand_vakint
+    //     .replace(function!(GS.emr_mom, W_.prop_, W_.a___))
+    //     .with(GS.linearize.f(&[function!(GS.emr_mom, W_.a___)]));
+
+    // // rewrite numerator
+    // // linearize the numerator first
+    integrand_vakint = integrand_vakint
+        .replace(function!(GS.emr_mom, W_.prop_, W_.mom_, W_.x_))
+        .with(function!(MS.dot, W_.mom_, W_.x_))
+        .replace(function!(MS.dot, W_.mom_, W_.x_))
+        .with(function!(GS.emr_mom, W_.mom_, W_.x_));
+
+    debug!("Integrand pre vakint: {:}", integrand_vakint);
+    // panic!("FUFU");
+    for (i, l) in lmb.loop_edges.iter().enumerate() {
+        integrand_vakint = integrand_vakint
+            .replace(function!(GS.emr_mom, usize::from(*l) as i64))
+            .with(function!(vk_mom, i as i64 + 1))
+            .replace(function!(
+                GS.emr_mom,
+                function!(vk_mom, i as i64 + 1),
+                W_.x___
+            ))
+            .with(function!(vk_mom, i as i64 + 1, W_.x___));
+    }
+
+    // collect the topology
+    integrand_vakint = integrand_vakint
+        .replace(function!(vk_prop, W_.x__))
+        .with(function!(vk_topo, function!(vk_prop, W_.x__)))
+        .replace(function!(vk_topo, W_.x_) * function!(vk_topo, W_.y_))
+        .repeat()
+        .with(function!(vk_topo, W_.x_ * W_.y_));
+
+    debug!("Integrand vakint: {:#}", integrand_vakint);
+
+    integrand_vakint
+}
+
+#[derive(Clone)]
 pub struct Approximation {
     // The union of all spinneys, remaining graph is full graph minus subgraph
     pub subgraph: InternalSubGraph,
@@ -338,7 +520,7 @@ impl Approximation {
                 .replace(function!(GS.emr_mom, usize::from(*e) as i64, W_.x___))
                 .with(function!(GS.emr_mom, usize::from(*e) as i64, W_.x___) * GS.rescale);
         }
-
+        // TODO: only enable soft CT if doing OS renormalization
         let soft_ct = graph.full_crown(&self.subgraph).count_ones() == 2 && self.dod > 0;
 
         let mut masses = AHashSet::new();
@@ -408,173 +590,15 @@ impl Approximation {
             a = a.replace(GS.rescale).with(Atom::num(1));
         }
 
-        // strip the momentum wrapper from the denominator
-        a = a
-            .replace(function!(
-                GS.den,
-                W_.prop_,
-                function!(GS.emr_mom, W_.prop_, W_.mom_),
-                W_.x__
-            ))
-            .with(function!(GS.den, W_.prop_, W_.mom_, W_.x__));
-
-        println!("Expanded: {:>}", a.expand());
-
-        let mut integrand_vakint = a.expand();
-        let mut propagator_id = 1;
-
-        let vk_prop = vakint_symbol!("prop");
-        let vk_edge = vakint_symbol!("edge");
-        let vk_mom = vakint_symbol!("k");
-        let vk_topo = vakint_symbol!("topo");
-        let vk_metric = vakint_symbol!("g");
-
-        for (pair, index, _data) in graph.iter_edges_of(&reduced) {
-            if let HedgePair::Paired { source, sink } = pair {
-                integrand_vakint = integrand_vakint
-                    .replace(function!(
-                        GS.den,
-                        usize::from(index) as i64,
-                        W_.mom_,
-                        W_.x___
-                    ))
-                    .with(function!(
-                        vk_prop,
-                        propagator_id,
-                        function!(
-                            vk_edge,
-                            usize::from(graph.node_id(source)) as i64,
-                            usize::from(graph.node_id(sink)) as i64
-                        ),
-                        W_.mom_,
-                        GS.m_uv,
-                        1
-                    ))
-                    .replace(function!(vk_prop, W_.x___, 1).pow(Atom::var(W_.e_)))
-                    .with(function!(vk_prop, W_.x___, -Atom::var(W_.e_)));
-                propagator_id += 1;
-            }
-        }
-
-        // shrink vertices of the subgraph
-        for (pair, _index, _data) in graph.iter_edges_of(&dependent.subgraph) {
-            if let HedgePair::Paired { source, sink } = pair {
-                integrand_vakint = integrand_vakint
-                    .replace(function!(
-                        vk_prop,
-                        W_.x_,
-                        function!(vk_edge, usize::from(graph.node_id(source)) as i64, W_.y_),
-                        W_.x___
-                    ))
-                    .with(function!(
-                        vk_prop,
-                        W_.x_,
-                        function!(vk_edge, usize::from(graph.node_id(sink)) as i64, W_.y_),
-                        W_.x___
-                    ))
-                    .replace(function!(
-                        vk_prop,
-                        W_.x_,
-                        function!(vk_edge, W_.y_, usize::from(graph.node_id(source)) as i64),
-                        W_.x___
-                    ))
-                    .with(function!(
-                        vk_prop,
-                        W_.x_,
-                        function!(vk_edge, W_.y_, usize::from(graph.node_id(sink)) as i64),
-                        W_.x___
-                    ));
-            }
-        }
-
-        // flip edges to positive momentum
-        // FIXME: how will this work for sums of momenta?
-        integrand_vakint = integrand_vakint
-            .replace(function!(
-                vk_prop,
-                W_.x_,
-                function!(vk_edge, W_.a_, W_.b_),
-                -Atom::var(W_.y_),
-                W_.e___
-            ))
-            .repeat()
-            .with(function!(
-                vk_prop,
-                W_.x_,
-                function!(vk_edge, W_.b_, W_.a_),
-                W_.y_,
-                W_.e___
-            ));
-
-        // fuse raised edges
-        integrand_vakint = integrand_vakint
-            .replace(
-                function!(
-                    vk_prop,
-                    W_.x_,
-                    function!(vk_edge, W_.a_, W_.b_),
-                    W_.x___,
-                    W_.e_
-                ) * function!(
-                    vk_prop,
-                    W_.y_,
-                    function!(vk_edge, W_.b_, W_.c_),
-                    W_.x___,
-                    W_.f_
-                ),
-            )
-            .repeat()
-            .with(function!(
-                vk_prop,
-                W_.y_,
-                function!(vk_edge, W_.a_, W_.c_),
-                W_.x___,
-                W_.e_ + W_.f_
-            ));
-
-        debug!("Integrand pre dot vakint: {:}", integrand_vakint);
-        // rewrite numerator
-        // linearize the numerator first
-        integrand_vakint = integrand_vakint
-            .replace(function!(GS.emr_mom, W_.prop_, W_.a___))
-            .with(GS.linearize.f(&[function!(GS.emr_mom, W_.a___)]));
-
-        // // rewrite numerator
-        // // linearize the numerator first
-        // integrand_vakint = integrand_vakint
-        //     .replace(function!(GS.emr_mom, W_.prop_, W_.mom_, W_.x_))
-        //     .with(function!(MS.dot, W_.mom_, W_.x_))
-        //     .replace(function!(MS.dot, W_.mom_, W_.x_))
-        //     .with(function!(GS.emr_mom, W_.mom_, W_.x_));
-
-        debug!("Integrand pre vakint: {:}", integrand_vakint);
-        for (i, l) in self.lmb.loop_edges.iter().enumerate() {
-            integrand_vakint = integrand_vakint
-                .replace(function!(GS.emr_mom, usize::from(*l) as i64))
-                .with(function!(vk_mom, i as i64 + 1))
-                .replace(function!(
-                    GS.emr_mom,
-                    function!(vk_mom, i as i64 + 1),
-                    W_.x___
-                ))
-                .with(function!(vk_mom, i as i64 + 1, W_.x___));
-        }
-
-        // collect the topology
-        integrand_vakint = integrand_vakint
-            .replace(function!(vk_prop, W_.x__))
-            .with(function!(vk_topo, function!(vk_prop, W_.x__)))
-            .replace(function!(vk_topo, W_.x_) * function!(vk_topo, W_.y_))
-            .repeat()
-            .with(function!(vk_topo, W_.x_ * W_.y_));
-
-        debug!("Integrand vakint: {:#}", integrand_vakint);
+        let integrand_vakint =
+            to_vakint_integrand(&a, &self.lmb, &graph, &reduced, &dependent.subgraph, true);
 
         let vakint_expr = VakintExpression::try_from(integrand_vakint.clone()).unwrap();
         println!("\nVakint expression:\n{:#}", vakint_expr);
 
         let mut res = vakint.evaluate(integrand_vakint.as_view()).unwrap();
 
+        let vk_metric = vakint_symbol!("g");
         // apply metric
         res = res
             .replace(function!(vk_metric, W_.x_, W_.y_) * function!(GS.emr_mom, W_.x___, W_.x_))

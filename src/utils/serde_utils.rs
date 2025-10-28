@@ -246,6 +246,14 @@ impl<T: Default + PartialEq> IsDefault for T {
     }
 }
 
+pub fn is_default_pysecdec_relative_precision(val: &f64) -> bool {
+    show_defaults_helper(*val == 1.0e-7 as f64)
+}
+
+pub fn is_default_vakint_normalization(val: &String) -> bool {
+    show_defaults_helper(val == "MSbar")
+}
+
 pub fn is_float<const D: i64>(val: &f64) -> bool {
     show_defaults_helper(*val == D as f64)
 }

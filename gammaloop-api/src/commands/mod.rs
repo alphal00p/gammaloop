@@ -152,7 +152,7 @@ impl Commands {
                 }
 
                 Commands::Evaluate(g) => {
-                    g.run(state, &global_cli_settings)?;
+                    _ = g.run(state, &global_cli_settings, &default_runtime_settings)?;
                 }
 
                 Commands::Display(l) => l.run(state)?,

@@ -70,7 +70,7 @@ linnet = { version = "0.12.0", features = [
     "symbolica",
 ] }
 
-vakint = { git = "https://github.com/alphal00p/vakint", rev = "e44c210ded3936048615d39872022a0b6ef18454" }
+vakint = { git = "https://github.com/alphal00p/vakint", rev = "12d2ac6338693445672af606fe027bcbe414dc82" } # "e44c210ded3936048615d39872022a0b6ef18454"
 momtrop = { version = "0.3.0" }
 serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "*"
@@ -141,6 +141,7 @@ tabled = { version = "0.20.0", features = ["ansi"] }
 bitvec = { version = "1.0.1", features = ["serde"] }
 pathfinding = "4.11.0"
 insta = { version = "1.40.0", features = ["json", "ron", "serde", "toml"] }
+which = "8.0.0"
 slotmap = { version = "1.0.7", features = ["serde"] }
 base62 = "2.0.2"
 trie-rs = { version = "0.4.2", features = ["serde"] }
