@@ -8,11 +8,12 @@ use derive_more::{From, Into};
 use eyre::eyre;
 use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Flow, HedgePair};
-use linnet::half_edge::subgraph::{ModifySubgraph, OrientedCut, SubGraphOps};
+use linnet::half_edge::subgraph::{InternalSubGraph, ModifySubgraph, OrientedCut, SubGraphOps};
 use linnet::half_edge::HedgeGraph;
 use lorentz_vector::LorentzVector;
 use ref_ops::RefNeg;
 use serde::{Deserialize, Serialize};
+use spenso::network::graph;
 use symbolica::atom::{Atom, AtomCore};
 use symbolica::domains::float::{NumericalFloatLike, Real};
 use symbolica::id::Replacement;
@@ -22,10 +23,11 @@ use typed_index_collections::TiVec;
 use crate::cff::cff_graph::VertexSet;
 
 use crate::define_index;
+use crate::gammaloop_integrand::GammaloopIntegrand;
 use crate::graph::{Graph, GraphGroupPosition, LoopMomentumBasis};
 
 use crate::momentum_sample::{
-    ExternalFourMomenta, ExternalIndex, ExternalThreeMomenta, LoopIndex, LoopMomenta,
+    ExternalFourMomenta, ExternalIndex, ExternalThreeMomenta, LoopIndex, LoopMomenta, Subspace,
 };
 use crate::processes::CrossSectionCut;
 use crate::utils::{
@@ -39,11 +41,13 @@ use super::generation::ShiftRewrite;
 use super::surface::{self, Surface};
 
 /// Core esurface struct
-#[derive(Serialize, Deserialize, Debug, Clone, Encode, Decode)]
+#[derive(Serialize, Deserialize, Debug, Clone, bincode::Encode, bincode::Decode)]
 pub struct Esurface {
     pub energies: Vec<EdgeIndex>,
     pub external_shift: ExternalShift,
     pub vertex_set: VertexSet,
+    #[bincode(with_serde)]
+    pub subspace_graph: InternalSubGraph,
 }
 
 impl Surface for Esurface {
@@ -406,6 +410,7 @@ impl Esurface {
             energies: edges,
             external_shift,
             vertex_set,
+            subspace_graph: graph.full_graph(),
         }
     }
 
@@ -572,10 +577,12 @@ impl From<EsurfaceID> for Atom {
 
 #[cfg(test)]
 mod tests {
+    use bitvec::vec::BitVec;
     use itertools::Itertools;
     use linnet::half_edge::builder::HedgeGraphBuilder;
     use linnet::half_edge::involution::{EdgeIndex, Flow, Orientation};
     use linnet::half_edge::nodestore::NodeStorageVec;
+    use linnet::half_edge::subgraph::InternalSubGraph;
     use linnet::half_edge::HedgeGraph;
     use symbolica::atom::{Atom, AtomCore};
     use symbolica::parse;
@@ -605,6 +612,7 @@ mod tests {
             energies,
             external_shift,
             vertex_set: VertexSet::dummy(),
+            subspace_graph: dummy_graph.full_graph(),
         };
 
         let res = esurface.compute_value(&energies_cache);
@@ -634,6 +642,7 @@ mod tests {
             energies,
             external_shift,
             vertex_set: VertexSet::dummy(),
+            subspace_graph: dummy_graph.full_graph(),
         };
 
         let res = esurface.compute_value(&energies_cache);
@@ -648,6 +657,7 @@ mod tests {
             energies: vec![EdgeIndex::from(2), EdgeIndex::from(3)],
             external_shift,
             vertex_set: VertexSet::dummy(),
+            subspace_graph: unsafe { InternalSubGraph::new_unchecked(BitVec::new()) },
         };
 
         let esurface_atom = esurface.to_atom(&[]);
@@ -698,12 +708,14 @@ mod tests {
             energies: vec![EdgeIndex::from(3), EdgeIndex::from(5)],
             external_shift: vec![(EdgeIndex::from(0), 1), (EdgeIndex::from(1), 1)],
             vertex_set: VertexSet::dummy(),
+            subspace_graph: unsafe { InternalSubGraph::new_unchecked(BitVec::new()) },
         };
 
         let esurface_2 = Esurface {
             energies: vec![EdgeIndex::from(3), EdgeIndex::from(5)],
             external_shift: vec![(EdgeIndex::from(0), 1), (EdgeIndex::from(1), 1)],
             vertex_set: VertexSet::dummy(),
+            subspace_graph: unsafe { InternalSubGraph::new_unchecked(BitVec::new()) },
         };
 
         assert_eq!(esurface_1, esurface_2);
@@ -747,21 +759,25 @@ mod tests {
                 energies: vec![EdgeIndex::from(0), EdgeIndex::from(1)],
                 external_shift: vec![(EdgeIndex::from(5), -1)],
                 vertex_set: VertexSet::dummy(),
+                subspace_graph: double_triangle.full_graph(),
             },
             Esurface {
                 energies: vec![EdgeIndex::from(0), EdgeIndex::from(2), EdgeIndex::from(4)],
                 external_shift: vec![(EdgeIndex::from(5), -1)],
                 vertex_set: VertexSet::dummy(),
+                subspace_graph: double_triangle.full_graph(),
             },
             Esurface {
                 energies: vec![EdgeIndex::from(3), EdgeIndex::from(4)],
                 external_shift: vec![(EdgeIndex::from(5), -1)],
                 vertex_set: VertexSet::dummy(),
+                subspace_graph: double_triangle.full_graph(),
             },
             Esurface {
                 energies: vec![EdgeIndex::from(1), EdgeIndex::from(2), EdgeIndex::from(3)],
                 external_shift: vec![(EdgeIndex::from(5), -1)],
                 vertex_set: VertexSet::dummy(),
+                subspace_graph: double_triangle.full_graph(),
             },
         ];
 
@@ -810,16 +826,19 @@ mod tests {
                 energies: vec![EdgeIndex::from(0), EdgeIndex::from(3)],
                 external_shift: vec![(EdgeIndex::from(4), -1)],
                 vertex_set: VertexSet::dummy(),
+                subspace_graph: box_graph.full_graph(),
             },
             Esurface {
                 energies: vec![EdgeIndex::from(0), EdgeIndex::from(2)],
                 external_shift: vec![(EdgeIndex::from(4), -1), (EdgeIndex::from(7), -1)],
                 vertex_set: VertexSet::dummy(),
+                subspace_graph: box_graph.full_graph(),
             },
             Esurface {
                 energies: vec![EdgeIndex::from(1), EdgeIndex::from(3)],
                 external_shift: vec![(EdgeIndex::from(4), -1), (EdgeIndex::from(5), 1)],
                 vertex_set: VertexSet::dummy(),
+                subspace_graph: box_graph.full_graph(),
             },
             Esurface {
                 energies: vec![EdgeIndex::from(1), EdgeIndex::from(2)],
@@ -829,6 +848,7 @@ mod tests {
                     (EdgeIndex::from(7), -1),
                 ],
                 vertex_set: VertexSet::dummy(),
+                subspace_graph: box_graph.full_graph(),
             },
         ];
 

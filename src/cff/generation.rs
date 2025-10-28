@@ -1,7 +1,7 @@
 use crate::{
     cff::{
         cut_expression::CFFCutsExpression,
-        esurface::add_external_shifts,
+        esurface::{self, add_external_shifts},
         expression::OrientationData,
         hsurface::HsurfaceID,
         surface::{HybridSurface, HybridSurfaceID},
@@ -342,6 +342,8 @@ pub(crate) fn generate_cff_expression<E, V, H>(
     let graph_cff =
         generate_cff_from_orientations(graphs, &mut surface_cache, None, canonize_esurface)?;
 
+    // patch the surface cache
+    surface_cache.set_subspaces(&graph.full_graph());
     Ok(graph_cff)
 }
 
@@ -642,6 +644,12 @@ impl SurfaceCache {
         Self {
             esurface_cache: EsurfaceCollection::from_iter(std::iter::empty()),
             hsurface_cache: HsurfaceCollection::from_iter(std::iter::empty()),
+        }
+    }
+
+    pub(crate) fn set_subspaces(&mut self, subspace_graph: &InternalSubGraph) {
+        for esurface in self.esurface_cache.iter_mut() {
+            esurface.subspace_graph = subspace_graph.clone();
         }
     }
 }

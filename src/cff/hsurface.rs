@@ -5,9 +5,11 @@ use crate::utils::{
     cut_energy, external_energy_atom_from_index, ose_atom_from_index, FloatLike, F,
 };
 use bincode_trait_derive::{Decode, Encode};
+use bitvec::vec::BitVec;
 use derive_more::{From, Into};
 use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeIndex, EdgeVec};
+use linnet::half_edge::subgraph::InternalSubGraph;
 use serde::{Deserialize, Serialize};
 use symbolica::atom::Atom;
 use symbolica::parse;
@@ -128,6 +130,7 @@ impl Hsurface {
             energies,
             external_shift,
             vertex_set: VertexSet::dummy(),
+            subspace_graph: unsafe { InternalSubGraph::new_unchecked(BitVec::new()) },
         };
 
         Some(dummy_esurface.to_atom(&[]))
@@ -153,9 +156,11 @@ impl From<HsurfaceID> for Atom {
 
 #[cfg(test)]
 mod tests {
+    use bitvec::vec::BitVec;
     use linnet::half_edge::{
         builder::HedgeGraphBuilder,
         involution::{EdgeIndex, Orientation},
+        subgraph::InternalSubGraph,
         HedgeGraph, NodeIndex,
     };
     use symbolica::atom::{Atom, AtomCore};
@@ -246,6 +251,7 @@ mod tests {
             energies: vec![EdgeIndex::from(2), EdgeIndex::from(3), EdgeIndex::from(6)],
             external_shift: vec![(EdgeIndex::from(4), 1)],
             vertex_set: VertexSet::dummy(),
+            subspace_graph: unsafe { InternalSubGraph::new_unchecked(BitVec::new()) },
         };
 
         let h_surface_atom = h_surface.to_atom(&[]).expand();

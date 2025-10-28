@@ -10,7 +10,7 @@ use eyre::eyre;
 use itertools::Itertools;
 use linnet::half_edge::{
     involution::{EdgeIndex, EdgeVec, Flow, HedgePair, Orientation},
-    subgraph::{ModifySubgraph, SubGraph},
+    subgraph::{InternalSubGraph, ModifySubgraph, SubGraph},
     HedgeGraph, NodeIndex,
 };
 use serde::{Deserialize, Serialize};
@@ -154,7 +154,18 @@ impl CFFVertex {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Encode, Decode)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+    Serialize,
+    Deserialize,
+    bincode::Encode,
+    bincode::Decode,
+)]
 pub struct VertexSet {
     vertex_set: u64,
 }
@@ -734,6 +745,7 @@ impl CFFGenerationGraph {
                 energies: positive_energies,
                 external_shift,
                 vertex_set: vertex.vertex_set,
+                subspace_graph: unsafe { InternalSubGraph::new_unchecked(BitVec::new()) },
             };
 
             HybridSurface::Esurface(esurface)

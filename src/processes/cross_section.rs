@@ -108,7 +108,7 @@ struct CsAmplitudeCTDiagram {
 
 #[derive(Clone, Debug, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
-struct LUCounterTermAtom {
+pub struct LUCounterTermAtom {
     pub left_atoms: TiVec<LeftThresholdId, Atom>,
     pub right_atoms: TiVec<RightThresholdId, Atom>,
     pub iterated: IteratedCtCollection<Atom>,
@@ -975,6 +975,8 @@ impl CrossSectionGraph {
         let vakint = self.new_vakint();
         let global_num = self.graph.global_network();
 
+        let mut counterterms = TiVec::<CutId, LUCounterTermAtom>::new();
+
         for (cut_id, cut) in self.cuts.iter_enumerated() {
             let mut thresholds_on_the_left = TiVec::<LeftThresholdId, CsAmplitudeCTDiagram>::new();
             let mut thresholds_on_the_right =
@@ -1228,51 +1230,16 @@ impl CrossSectionGraph {
                 num_left_thresholds: left_counterterms.len(),
             };
 
-            println!("cut id {}", cut_id);
-            let edges_in_cut = cut
-                .cut
-                .iter_edges(&self.graph.underlying)
-                .map(|(_, edge)| edge.data.name.clone())
-                .collect_vec();
-
-            println!(" edges in cut {:?}", edges_in_cut);
-
-            for (left_ct, thereshold_diagram) in
-                left_counterterms.iter().zip(thresholds_on_the_left.iter())
-            {
-                let edges_in_left_ct = thereshold_diagram
-                    .threshold_cut
-                    .iter_edges(&self.graph.underlying)
-                    .map(|(_, edge)| edge.data.name.clone())
-                    .collect_vec();
-                println!(" left ct edges {:?}", edges_in_left_ct);
-                println!(" left ct {}", left_ct);
-            }
-
-            for (right_ct, thereshold_diagarm) in
-                right_counterterms.iter().zip(thresholds_on_the_right)
-            {
-                let edges_in_right_ct = thereshold_diagarm
-                    .threshold_cut
-                    .iter_edges(&self.graph.underlying)
-                    .map(|(_, edge)| edge.data.name.clone())
-                    .collect_vec();
-                println!(" right ct edges {:?}", edges_in_right_ct);
-                println!(" right ct {}", right_ct);
-            }
-
-            for iterated_ct in &iterated_counterterm.data {
-                println!(" iterated ct {}", iterated_ct);
-            }
-
             let lu_counterterm_atom = LUCounterTermAtom {
                 left_atoms: left_counterterms,
                 right_atoms: right_counterterms,
                 iterated: iterated_counterterm,
             };
+
+            counterterms.push(lu_counterterm_atom);
         }
 
-        todo!();
+        self.derived_data.threshold_counterterms = counterterms;
         Ok(())
     }
 
