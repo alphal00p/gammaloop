@@ -32,6 +32,17 @@ mod test_utils;
 use test_utils::{clean_test, get_test_cli, get_tests_workspace_path};
 
 #[test]
+fn oak() -> Result<()> {
+    let mut state = get_test_cli(
+        Some("generate_oak_diag.toml".into()),
+        get_tests_workspace_path().join("generate_oak_diag"),
+        None,
+        false,
+    )?;
+    Ok(())
+}
+
+#[test]
 fn qqx_aaa_subtracted_nlo_amplitude_test() -> Result<()> {
     let mut state = get_test_cli(
         Some("qqx_aaa_subtracted_nlo_amplitude.toml".into()),

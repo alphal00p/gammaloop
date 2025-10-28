@@ -1,7 +1,7 @@
 commands = [
     "import model scalars-default.json",
     "set model mass_scalar_2={re:1.0,im:0.0}",
-	"import graphs ./oak_diag.dot",
+	"import graphs ./tests/resources/graphs/oak_diag.dot",
     "generate",
 	"save dot OAK_DIAG_PROCESSED",
 	"quit"
