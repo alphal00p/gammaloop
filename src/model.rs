@@ -9,7 +9,7 @@ use color_eyre::owo_colors::OwoColorize;
 use color_eyre::Report;
 use eyre::eyre;
 use itertools::Itertools;
-use linnet::half_edge::drawing::Decoration;
+// use linnet::half_edge::drawing::Decoration;
 use linnet::half_edge::involution::Flow;
 
 use rand::rngs::SmallRng;
@@ -808,21 +808,21 @@ impl Particle {
     pub(crate) fn is_massless(&self) -> bool {
         !self.is_massive()
     }
-    pub fn decoration(&self) -> Decoration {
-        match self.spin {
-            0 => Decoration::Dashed,
-            1 => Decoration::None,
-            2 => Decoration::Arrow,
-            3 => {
-                if self.pdg_code.abs() == 9 || self.pdg_code.abs() == 21 {
-                    Decoration::Coil
-                } else {
-                    Decoration::Wave
-                }
-            }
-            _ => Decoration::None,
-        }
-    }
+    // pub fn decoration(&self) -> Decoration {
+    //     match self.spin {
+    //         0 => Decoration::Dashed,
+    //         1 => Decoration::None,
+    //         2 => Decoration::Arrow,
+    //         3 => {
+    //             if self.pdg_code.abs() == 9 || self.pdg_code.abs() == 21 {
+    //                 Decoration::Coil
+    //             } else {
+    //                 Decoration::Wave
+    //             }
+    //         }
+    //         _ => Decoration::None,
+    //     }
+    // }
 
     pub fn is_fermion(&self) -> bool {
         self.spin % 2 == 0

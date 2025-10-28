@@ -90,6 +90,24 @@ impl PossibleParticle {
             })
             .unwrap_or(Orientation::Undirected)
     }
+
+    pub fn is_fermion(&self) -> bool {
+        match self {
+            PossibleParticle::Particle(p) => p.is_fermion(),
+            PossibleParticle::MassOverriddenParticle { particle, .. } => particle.is_fermion(),
+            PossibleParticle::JustMass { .. } => false,
+        }
+    }
+
+    pub fn is_self_antiparticle(&self) -> bool {
+        match self {
+            PossibleParticle::Particle(p) => p.is_self_antiparticle(),
+            PossibleParticle::MassOverriddenParticle { particle, .. } => {
+                particle.is_self_antiparticle()
+            }
+            PossibleParticle::JustMass { .. } => false,
+        }
+    }
     pub fn mass_atom(&self) -> Atom {
         match &self {
             PossibleParticle::JustMass { expr, .. } => expr.clone(),
@@ -548,7 +566,11 @@ impl ParseEdge {
                 ().into()
             };
 
-            let orientation = particle.orientation();
+            let orientation = if e.local_statements.contains_key("dir") {
+                e_data.orientation
+            } else {
+                particle.orientation()
+            };
             Ok(EdgeData::new(
                 ParseEdge {
                     is_dummy,

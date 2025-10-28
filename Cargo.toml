@@ -211,7 +211,7 @@ symbolica = { git = "https://github.com/benruijl/symbolica", branch = "chi_sq_fi
 # symbolica = { path = "../symbolica" }
 # linnet = "0.10.0"
 # linnet = { path = "../linnet" }
-linnet = { git = "https://github.com/alphal00p/linnet", rev = "896c719d966facfcf1e18eb5d5fa44ca8458931d" }
+linnet = { git = "https://github.com/alphal00p/linnet", rev = "2b5e8c5339f99685e8902154b6cc6415363dd33e" }
 spenso = { git = "https://github.com/alphal00p/spenso", rev = "85e2d31adf70ef841f0aee859a8163791146b9b8" }
 idenso = { git = "https://github.com/alphal00p/spenso", rev = "85e2d31adf70ef841f0aee859a8163791146b9b8" }
 spenso-hep-lib = {git = "https://github.com/alphal00p/spenso",rev="85e2d31adf70ef841f0aee859a8163791146b9b8"}

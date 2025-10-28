@@ -1019,7 +1019,7 @@ impl Graph {
             },
             |_, _, p, eid, ed| {
                 let e = ed.data;
-                if e.particle.orientation() != ed.orientation {
+                if e.particle.is_fermion() && !e.particle.is_self_antiparticle()&&  e.particle.orientation() != ed.orientation {
                     return Err(eyre!(
                         "Edge orientation {:?} does not match particle orientation {:?} for edge {},{}",
                         ed.orientation,
@@ -1027,7 +1027,8 @@ impl Graph {
                         eid,
                         e
                     ));
-                }
+                    }
+
 
                 let num = e.num.unwrap_or(if initial_state_cut.left.intersects(&p) {
                     numerators.color_edge[eid].clone()

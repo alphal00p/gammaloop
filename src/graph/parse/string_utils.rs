@@ -22,9 +22,10 @@ where
     A: AtomCore,
 {
     fn to_quoted(&self) -> String {
-        let mut opts = PrintOptions::file();
-        opts.hide_namespace = Some("gammalooprs");
-        format!("\"{}\"", self.printer(opts))
+        // let mut opts = PrintOptions::file();
+        // opts.hide_namespace = Some("gammalooprs");
+        format!("\"{}\"", self.to_canonical_string()).replace("gammalooprs::", "")
+        //.printer(opts))
     }
 }
 

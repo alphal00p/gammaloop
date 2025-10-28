@@ -152,6 +152,7 @@ impl ReversibleEdge for EdgeData<&Edge> {
 
     fn pol_symbol(&self, flow: Flow) -> Option<Symbol> {
         if let Some(p) = self.data.particle() {
+            // println!("{}{:?}", p.spin, flow);
             match (p.spin, flow) {
                 (2, Flow::Sink) => {
                     if self.pdg() > 0 {
@@ -211,7 +212,7 @@ impl ReversibleEdge for EdgeData<&ParseEdge> {
         if let Some(p) = self.data.particle.particle() {
             match self.orientation {
                 Orientation::Default | Orientation::Undirected => p.pdg_code,
-                Orientation::Reversed => -p.pdg_code,
+                Orientation::Reversed => p.pdg_code,
             }
         } else {
             0
@@ -220,18 +221,29 @@ impl ReversibleEdge for EdgeData<&ParseEdge> {
 
     fn pol_symbol(&self, flow: Flow) -> Option<Symbol> {
         if let Some(p) = self.data.particle.particle() {
+            // println!(
+            //     "pdg:{},orientation_aware:{},spin:{},flow:{:?}",
+            //     p.pdg_code,
+            //     self.pdg(),
+            //     p.spin,
+            //     flow
+            // );
             match (p.spin, flow) {
                 (2, Flow::Sink) => {
                     if self.pdg() > 0 {
+                        // println!("u");
                         Some(GS.u)
                     } else {
+                        // println!("vbar");
                         Some(GS.vbar)
                     }
                 }
                 (2, Flow::Source) => {
                     if self.pdg() > 0 {
+                        // println!("ubar");
                         Some(GS.ubar)
                     } else {
+                        // println!("v");
                         Some(GS.v)
                     }
                 }
