@@ -562,7 +562,7 @@ impl AmplitudeGraph {
         vakint
     }
 
-    pub fn analytical_evaluation<S: SubGraph>(
+    pub fn analytical_evaluation<S: SubGraph<Base = BitVec>>(
         &self,
         model: &Model,
         component: &S,
@@ -650,7 +650,7 @@ impl AmplitudeGraph {
 
         let mom_reps = self.graph.uv_wrapped_replacement(
             &self.graph.full_filter(),
-            &self.graph.loop_momentum_basis,
+            &self.graph.lmb(component),
             &[W_.x___],
         );
 

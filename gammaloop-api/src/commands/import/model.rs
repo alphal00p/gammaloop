@@ -29,12 +29,12 @@ static BUILTIN_MODELS: Dir = include_dir!("$CARGO_MANIFEST_DIR/../models/json");
 /// Generate integrands
 pub struct ImportModel {
     #[arg(value_hint = clap::ValueHint::AnyPath)]
-    path: PathBuf,
+    pub path: PathBuf,
     #[arg(short = 's', long,
           action = clap::ArgAction::Set,     // take an optional bool value
           default_value_t = true,
           require_equals = true)] // --simplify-model=false
-    simplify_model: bool,
+    pub simplify_model: bool,
 }
 
 #[cfg(not(feature = "ufo_support"))]

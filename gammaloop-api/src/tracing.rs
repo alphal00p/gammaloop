@@ -75,6 +75,7 @@ fn display_filter_from(user_spec: &str) -> Result<EnvFilter> {
 }
 
 const ENV_FILE_LOG_FILTER: &'static str = "GL_LOGFILE_FILTER";
+const ENV_NO_GL_HARD_WARNINGS: &'static str = "GL_NO_HARD_WARNINGS";
 const ENV_DISPLAY_LOG_FILTER: &'static str = "GL_DISPLAY_FILTER";
 const ENV_ALL_LOG_FILTER: &'static str = "GL_ALL_LOG_FILTER";
 
@@ -126,10 +127,12 @@ pub fn set_file_log_filter(user_spec: impl AsRef<str>) -> Result<()> {
         return Ok(());
     };
     let user_spec = if let Some(file) = std::env::var(ENV_FILE_LOG_FILTER).ok() {
-        println!(
-            "WARNING, file log filter is set to {file}, will override settings {}",
-            user_spec.as_ref()
-        );
+        if std::env::var(ENV_NO_GL_HARD_WARNINGS).is_err() {
+            println!(
+                "WARNING, file log filter is set to {file}, will override settings {}",
+                user_spec.as_ref()
+            );
+        }
         file
     } else {
         user_spec.as_ref().to_string()
@@ -148,10 +151,12 @@ pub fn set_stderr_log_filter(user_spec: impl AsRef<str>) -> Result<()> {
         return Ok(());
     };
     let user_spec = if let Some(display) = std::env::var(ENV_DISPLAY_LOG_FILTER).ok() {
-        println!(
-            "WARNING, display log filter is set to {display}, will override settings {}",
-            user_spec.as_ref()
-        );
+        if std::env::var(ENV_NO_GL_HARD_WARNINGS).is_err() {
+            println!(
+                "WARNING, display log filter is set to {display}, will override settings {}",
+                user_spec.as_ref()
+            );
+        }
         display
     } else {
         user_spec.as_ref().to_string()

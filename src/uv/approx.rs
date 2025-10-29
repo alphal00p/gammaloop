@@ -148,7 +148,7 @@ pub(crate) fn to_vakint_integrand<E: UVE, V, H, S: SubGraph, SS: SubGraph>(
         ))
         .with(function!(GS.den, W_.prop_, W_.mom_, W_.x__));
 
-    println!("Expanded: {:>}", integrand_vakint.expand());
+    // println!("Expanded: {:>}", integrand_vakint.expand());
 
     integrand_vakint = integrand_vakint.expand();
 

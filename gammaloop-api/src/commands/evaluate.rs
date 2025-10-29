@@ -91,7 +91,7 @@ impl Evaluate {
             for (i_gc, gc) in g.connected_components(&g.full_filter()).iter().enumerate() {
                 info!(
                     "Evaluating connected component #{} of graph named: {}",
-                    i_gc,
+                    i_gc + 1,
                     graph_term.graph.name.blue()
                 );
                 complete_evaluation_for_this_graph *= graph_term.analytical_evaluation(
@@ -122,7 +122,7 @@ impl Evaluate {
             if self.numerical {
                 let numerical_evaluation_result =
                     AmplitudeGraph::to_numerical(full_evaluation.as_view())?;
-                status_info!(
+                info!(
                     "Numerical evaluation of the analytical result for process {}:\n{}",
                     state.process_list.processes[process_id]
                         .definition
@@ -131,7 +131,7 @@ impl Evaluate {
                     numerical_evaluation_result
                 );
             } else {
-                status_info!(
+                info!(
                     "Analytical result for process {}:\n{}",
                     state.process_list.processes[process_id]
                         .definition

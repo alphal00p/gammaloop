@@ -42,6 +42,8 @@ use std::{ffi::OsString, path::PathBuf};
 use std::{fs::File, ops::ControlFlow};
 use symbolica::activate_oem_license;
 
+use crate::commands::run;
+
 // use tracing::LogLevel;
 #[cfg(feature = "python_api")]
 pub mod python;
@@ -67,7 +69,7 @@ pub struct OneShot {
 
     /// Don't actually run anything, just build up run card
     #[arg(short = 'd', long, default_value_t = false)]
-    pub dummy: bool,
+    pub dry_run: bool,
 
     /// Path to the state folder
     #[arg(short = 's', long, default_value = "./gammaloop_state", value_hint = clap::ValueHint::DirPath)]
@@ -134,7 +136,7 @@ impl Default for CLISettings {
 impl CLISettings {
     pub fn override_with(&mut self, cli: &OneShot) {
         self.try_strings = !cli.no_try_strings;
-        self.dummy = cli.dummy;
+        self.dummy = cli.dry_run;
 
         self.override_state = cli.override_state;
 
@@ -152,7 +154,7 @@ pub struct Parsed {
 impl OneShot {
     pub fn new_cli_settings(&self, global: GlobalSettings) -> CLISettings {
         CLISettings {
-            dummy: self.dummy,
+            dummy: self.dry_run,
             try_strings: !self.no_try_strings,
             override_state: self.override_state,
             state_folder: self.state_folder.clone(),
@@ -164,7 +166,7 @@ impl OneShot {
         OneShot {
             run_history: None,
             state_folder,
-            dummy: false,
+            dry_run: false,
             model_file: None,
             no_save_state: true,
             override_state: false,
@@ -224,47 +226,41 @@ impl OneShot {
         })
     }
 
-    pub fn run(mut self, raw: String) -> Result<()> {
-        if option_env!("NO_SYMBOLICA_OEM_LICENSE").is_none() {
-            activate_oem_license!("SYMBOLICA_OEM_KEY_23177b25");
-        };
-        initialise()?;
+    pub fn load(&mut self) -> Result<(State, RunHistory, CLISettings, RuntimeSettings)> {
+        let (state, run_history, cli_settings, default_runtime_settings) = match State::load(
+            self.state_folder.clone(),
+            self.model_file.clone(),
+            self.trace_logs_filename.clone(),
+        ) {
+            Ok(state) => {
+                let mut global = match CLISettings::from_file_typed(
+                    &self.state_folder.join("cli_settings.toml"),
+                ) {
+                    Ok(a) => a,
+                    Err(SerdeFileError::FileError(_)) => CLISettings::default(),
+                    Err(e) => return Err(e.into()),
+                };
 
-        let (mut state, mut run_history, mut global_settings, mut default_runtime_settings) =
-            match State::load(
-                self.state_folder.clone(),
-                self.model_file.clone(),
-                self.trace_logs_filename.clone(),
-            ) {
-                Ok(state) => {
-                    let mut global = match CLISettings::from_file_typed(
-                        &self.state_folder.join("cli_settings.toml"),
-                    ) {
-                        Ok(a) => a,
-                        Err(SerdeFileError::FileError(_)) => CLISettings::default(),
-                        Err(e) => return Err(e.into()),
-                    };
+                global.override_with(self);
 
-                    global.override_with(&mut self);
+                let default_runtime = match RuntimeSettings::from_file_typed(
+                    &self.state_folder.join("default_runtime_settings.toml"),
+                ) {
+                    Ok(a) => a,
+                    Err(SerdeFileError::FileError(_)) => RuntimeSettings::default(),
+                    Err(e) => return Err(e.into()),
+                };
+                let run_path = self.state_folder.join("run.toml");
+                let run_history = if run_path.exists() {
+                    RunHistory::load(&self.state_folder.join("run.toml"))?
+                } else {
+                    RunHistory::default()
+                };
 
-                    let default_runtime = match RuntimeSettings::from_file_typed(
-                        &self.state_folder.join("default_runtime_settings.toml"),
-                    ) {
-                        Ok(a) => a,
-                        Err(SerdeFileError::FileError(_)) => RuntimeSettings::default(),
-                        Err(e) => return Err(e.into()),
-                    };
-                    let run_path = self.state_folder.join("run.toml");
-                    let run_history = if run_path.exists() {
-                        RunHistory::load(&self.state_folder.join("run.toml"))?
-                    } else {
-                        RunHistory::default()
-                    };
-
-                    (state, run_history, global, default_runtime)
-                }
-                Err(e) => {
-                    info!(
+                (state, run_history, global, default_runtime)
+            }
+            Err(e) => {
+                info!(
                     "No valid state folder found ({e}) :{} model_file:{}. Creating new default state.",
                     self.state_folder.display(),
                     self.model_file
@@ -272,42 +268,49 @@ impl OneShot {
                         .map(|p| p.display().to_string())
                         .unwrap_or("None".to_string())
                 );
-                    let state =
-                        State::new(self.state_folder.clone(), self.trace_logs_filename.clone());
+                let state = State::new(self.state_folder.clone(), self.trace_logs_filename.clone());
 
-                    if let Some(run) = self.run_history.as_ref() {
-                        let run_history = RunHistory::load(run)?;
-                        let mut global = run_history.cli_settings.clone();
-                        global.override_with(&mut self);
-                        let default_runtime = run_history.default_runtime_settings.clone();
-                        (state, run_history, global, default_runtime)
-                    } else {
-                        (
-                            state,
-                            RunHistory::default(),
-                            self.new_cli_settings(GlobalSettings::default()),
-                            RuntimeSettings::default(),
-                        )
-                    }
+                if let Some(run) = self.run_history.as_ref() {
+                    let run_history = RunHistory::load(run)?;
+                    let mut global = run_history.cli_settings.clone();
+                    global.override_with(self);
+                    let default_runtime = run_history.default_runtime_settings.clone();
+                    (state, run_history, global, default_runtime)
+                } else {
+                    (
+                        state,
+                        RunHistory::default(),
+                        self.new_cli_settings(GlobalSettings::default()),
+                        RuntimeSettings::default(),
+                    )
                 }
-            };
+            }
+        };
 
-        initialise_with_settings(Some(&global_settings.global))?;
+        initialise_with_settings(Some(&cli_settings.global))?;
+
+        Ok((state, run_history, cli_settings, default_runtime_settings))
+    }
+
+    pub fn run(mut self, raw: String) -> Result<()> {
+        if option_env!("NO_SYMBOLICA_OEM_LICENSE").is_none() {
+            activate_oem_license!("SYMBOLICA_OEM_KEY_23177b25");
+        };
+        initialise()?;
+
+        let (mut state, mut run_history, mut cli_settings, mut default_runtime_settings) =
+            self.load()?;
 
         if let Some(run) = self.run_history.as_ref() {
             let mut run = RunHistory::load(run)?;
             run_history.merge(run.clone());
-            match run.run(
-                &mut state,
-                &mut global_settings,
-                &mut default_runtime_settings,
-            )? {
+            match run.run(&mut state, &mut cli_settings, &mut default_runtime_settings)? {
                 ControlFlow::Break(a) => {
                     return a.save(
                         &mut state,
                         &run_history,
                         &default_runtime_settings,
-                        &global_settings,
+                        &cli_settings,
                     )
                 }
                 ControlFlow::Continue(()) => {}
@@ -320,7 +323,7 @@ impl OneShot {
             let flow = a.clone().run(
                 &mut state,
                 &mut run_history,
-                &mut global_settings,
+                &mut cli_settings,
                 &mut default_runtime_settings,
             )?;
 
@@ -330,11 +333,11 @@ impl OneShot {
             run_history.push_with_raw(a, Some(raw));
         } else {
             print_banner();
-            let prompt = if global_settings.dummy {
+            let prompt = if cli_settings.dummy {
                 DefaultPrompt {
                     left_prompt: DefaultPromptSegment::Basic(format!(
                         "{} | γloop DUMMY ",
-                        global_settings.state_folder.display()
+                        cli_settings.state_folder.display()
                     )),
                     ..DefaultPrompt::default()
                 }
@@ -342,7 +345,7 @@ impl OneShot {
                 DefaultPrompt {
                     left_prompt: DefaultPromptSegment::Basic(format!(
                         "{} | γloop ",
-                        global_settings.state_folder.display()
+                        cli_settings.state_folder.display()
                     )),
                     ..DefaultPrompt::default()
                 }
@@ -368,7 +371,7 @@ impl OneShot {
                         match command.command.clone().run(
                             &mut state,
                             &mut run_history,
-                            &mut global_settings,
+                            &mut cli_settings,
                             &mut default_runtime_settings,
                         ) {
                             Err(e) => {
@@ -409,7 +412,7 @@ impl OneShot {
                 &mut state,
                 &run_history,
                 &default_runtime_settings,
-                &global_settings,
+                &cli_settings,
             )?
         }
         Ok(())

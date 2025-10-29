@@ -751,6 +751,21 @@ impl ProcessCollection {
     fn new_cross_section() -> Self {
         Self::CrossSections(BTreeMap::new())
     }
+    pub fn remove_integrand(&mut self, integrand_name: &str) -> Result<()> {
+        match self {
+            Self::Amplitudes(amplitudes) => {
+                amplitudes
+                    .remove(integrand_name)
+                    .ok_or(eyre!("No amplitude named {}", integrand_name))?;
+            }
+            Self::CrossSections(cross_sections) => {
+                cross_sections
+                    .remove(integrand_name)
+                    .ok_or(eyre!("No cross section named {}", integrand_name))?;
+            }
+        }
+        Ok(())
+    }
 
     pub fn add_amplitude(&mut self, amplitude: Amplitude) {
         match self {

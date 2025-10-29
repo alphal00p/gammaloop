@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use clap::{arg, Subcommand};
+use gammalooprs::graph::Graph;
 use model::ImportModel;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -16,11 +17,18 @@ pub enum Import {
         #[arg(value_hint = clap::ValueHint::FilePath)]
         path: PathBuf,
 
+        // TODO Add the ability to specify process name, and even perhaps remove that of specifying process id
         #[arg(short = 'i')]
         process_id: Option<usize>,
 
         #[arg(short = 'n')]
         integrand_name: Option<String>,
+
+        #[arg(short = 'o', default_value_t = false, conflicts_with = "append")]
+        overwrite: bool,
+
+        #[arg(short = 'a', default_value_t = false, conflicts_with = "overwrite")]
+        append: bool,
     },
 }
 
@@ -33,7 +41,21 @@ impl Import {
                 path,
                 process_id,
                 integrand_name,
-            } => state.import_graphs(path, None, process_id, integrand_name),
+                overwrite,
+                append,
+            } => {
+                let process_name = path.file_stem().unwrap().to_string_lossy().into_owned();
+
+                let graphs = Graph::from_file(&path, &state.model)?;
+                state.import_graphs(
+                    graphs,
+                    Some(process_name),
+                    process_id,
+                    integrand_name,
+                    overwrite,
+                    append,
+                )
+            }
             Import::Model(im) => im.run(state),
         }
     }

@@ -4,77 +4,14 @@ use color_eyre::Result;
 
 mod test_utils;
 use gammaloop_api::commands::Commands;
-use gammalooprs::feyngen::diagram_generator::evaluate_overall_factor;
-use gammalooprs::processes::ProcessCollection;
-use symbolica::atom::{Atom, AtomCore};
+use symbolica::atom::AtomCore;
 use test_utils::{clean_test, get_test_cli, get_tests_workspace_path};
-use tracing::debug;
 use vakint::{vakint_symbol, NumericalEvaluationResult};
 
 use crate::test_utils::CLIState;
 use gammalooprs::utils::VAKINT;
 use insta::assert_snapshot;
 use which::which;
-
-fn count_graphs_in_processes(cli: &CLIState) -> (usize, Atom) {
-    assert_eq!(cli.state.process_list.processes.len(), 1);
-    let process = &cli.state.process_list.processes[0];
-    let integrand_names = process.collection.get_integrand_names();
-    assert_eq!(integrand_names.len(), 1);
-    let integrand_name = integrand_names[0];
-
-    let graphs = match &process.collection {
-        ProcessCollection::Amplitudes(amps) => {
-            let amp = amps.get(integrand_name).unwrap();
-            amp.graphs.iter().map(|g| &g.graph).collect::<Vec<_>>()
-        }
-        ProcessCollection::CrossSections(xss) => {
-            let xs = xss.get(integrand_name).unwrap();
-            xs.supergraphs.iter().map(|g| &g.graph).collect::<Vec<_>>()
-        }
-    };
-    let n_graphs = graphs.len();
-    let mut overall_factor_sum = Atom::Zero;
-    for g in graphs {
-        overall_factor_sum += &g.overall_factor;
-    }
-    overall_factor_sum = evaluate_overall_factor(overall_factor_sum.as_view());
-    (n_graphs, overall_factor_sum)
-}
-
-fn split_before_flags(s: &str) -> (&str, &str) {
-    match s.find("--") {
-        Some(i) => {
-            let (left, right) = s.split_at(i);
-            (left.trim_end(), right) // X, Y
-        }
-        None => (s, ""), // no flags present
-    }
-}
-
-fn generate_graphs_and_count(
-    cli: &mut CLIState,
-    generation_type: &str,
-    process: &str,
-) -> Result<(usize, Atom)> {
-    let (process_input, process_options) = split_before_flags(process);
-    let cmd = format!(
-        "generate {} {} {} --clear-existing-processes --only-diagrams",
-        generation_type, process_input, process_options
-    );
-    debug!("Running diagram generation command: {}", cmd);
-    cli.run_command(&cmd)?;
-    Ok(count_graphs_in_processes(cli))
-}
-
-fn feyngen_str(cli: &mut CLIState, generation_type: &str, process: &str) -> Result<String> {
-    let (n_graphs, overall_factor_sum) = generate_graphs_and_count(cli, generation_type, process)?;
-    Ok(format!(
-        "{} | {}",
-        n_graphs,
-        overall_factor_sum.to_canonical_string()
-    ))
-}
 
 fn compare_numerical_evaluation(
     cli: &mut CLIState,

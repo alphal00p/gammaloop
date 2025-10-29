@@ -5,40 +5,52 @@ use gammalooprs::{
         NumeratorAwareGraphGroupingOption,
         SewedFilterOptions,
     },
+    graph::Graph,
     initialisation::initialise,
     integrate::MasterNode,
     model::{InputParamCard, Model},
     numerator::GlobalPrefactor,
-    processes::{Process, ProcessDefinition, ProcessList},
+    processes::{AmplitudeGraph, Process, ProcessCollection, ProcessDefinition, ProcessList},
     settings::{GlobalSettings, RuntimeSettings},
-    utils::{FloatLike, F},
+    utils::{tracing::LogLevel, FloatLike, F},
 };
 use numpy::{
     Complex64, IntoPyArray, PyArray, PyArray1, PyArray2, PyReadonlyArray2, PyReadonlyArrayDyn,
 };
+use spenso::shadowing::symbolica_utils::SerializableAtom;
 
 use crate::{
     commands::{
+        import::model::ImportModel,
         inspect::{BatchedInspect, Inspect},
         integrate::Integrate,
+        Commands, Evaluate, Set,
     },
-    state::State,
-    CLISettings,
+    state::{RunHistory, State},
+    CLISettings, OneShot,
 };
 use ahash::HashMap;
 
 use color_eyre::Result;
 use eyre::eyre;
+
+/*
 use gammalooprs::feyngen::{
     FeynGenError, FeynGenFilter, FeynGenFilters, GenerationType, SelfEnergyFilterOptions,
     SnailFilterOptions, TadpolesFilterOptions,
 };
+*/
+
 use git_version::git_version;
 use itertools::{self, Itertools};
 use pyo3::types::PyFloat;
 use std::{convert::Infallible, default, path::PathBuf, str::FromStr};
 
-use symbolica::{atom::AtomCore, parse};
+use symbolica::{
+    activate_oem_license,
+    atom::{Atom, AtomCore},
+    parse,
+};
 const GIT_VERSION: &str = git_version!(fallback = "unavailable");
 
 #[allow(unused)]
@@ -70,7 +82,9 @@ pub(crate) fn atom_to_canonical_string(atom_str: &str) -> Result<String> {
 fn _gammaloop(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     gammalooprs::initialisation::initialise().expect("initialization failed");
     gammalooprs::set_interrupt_handler();
-    m.add_class::<State>()?;
+    m.add_class::<GammaLoopAPI>()?;
+    m.add_class::<LogLevel>()?;
+    /*
     m.add_class::<PyFeynGenFilters>()?;
     m.add_class::<PySnailFilterOptions>()?;
     m.add_class::<PySewedFilterOptions>()?;
@@ -78,14 +92,17 @@ fn _gammaloop(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     m.add_class::<PySelfEnergyFilterOptions>()?;
     m.add_class::<GlobalSettings>()?;
     m.add_class::<RuntimeSettings>()?;
+
     // m.add_class::<PyFeynGenOptions>()?;
     m.add_class::<PyNumeratorAwareGroupingOption>()?;
+    */
     m.add("git_version", GIT_VERSION)?;
     m.add_wrapped(wrap_pyfunction!(atom_to_canonical_string))?;
     m.add_wrapped(wrap_pyfunction!(evaluate_graph_overall_factor))?;
     Ok(())
 }
 
+/*
 pub struct OutputOptions {}
 
 /// There should only be 1 worker per instance of gammaloop.
@@ -298,102 +315,9 @@ impl PyFeynGenFilters {
     }
 }
 
-//#[pyclass(name = "FeynGenOptions")]
-//pub struct PyFeynGenOptions {
-//    pub options: FeynGenOptions,
-//}
-//impl<'a> FromPyObject<'a> for PyFeynGenOptions {
-//    fn extract_bound(ob: &Bound<'a, PyAny>) -> PyResult<Self> {
-//        if let Ok(a) = ob.extract::<PyFeynGenOptions>() {
-//            Ok(PyFeynGenOptions { options: a.options })
-//        } else {
-//            Err(exceptions::PyValueError::new_err(
-//                "Not a valid Feynman generation option structure",
-//            ))
-//        }
-//    }
-//}
-
 fn feyngen_to_python_error(error: FeynGenError) -> PyErr {
-    exceptions::PyValueError::new_err(format!("Feynam diagram generator error | {error}"))
+    exceptions::PyValueError::new_err(format!("Feynman diagram generator error | {error}"))
 }
-
-//#[pymethods]
-//impl PyFeynGenOptions {
-//    pub(crate) fn __str__(&self) -> Result<String> {
-//        Ok(format!("{}", self.options))
-//    }
-//    #[allow(clippy::too_many_arguments)]
-//    #[new]
-//    pub(crate) fn __new__(
-//        generation_type: String,
-//        initial_particles: Vec<i64>,
-//        final_particles_lists: Vec<Vec<i64>>,
-//        loop_count_range: (usize, usize),
-//        n_cut_blobs: (usize, usize),
-//        n_cut_spectators: (usize, usize),
-//        symmetrize_initial_states: bool,
-//        symmetrize_final_states: bool,
-//        symmetrize_left_right_states: bool,
-//        allow_symmetrization_of_external_fermions_in_amplitudes: bool,
-//        max_multiplicity_for_fast_cut_filter: usize,
-//        amplitude_filters: Option<PyRef<PyFeynGenFilters>>,
-//        cross_section_filters: Option<PyRef<PyFeynGenFilters>>,
-//    ) -> Result<PyFeynGenOptions> {
-//        let amplitude_filters = FeynGenFilters(
-//            amplitude_filters
-//                .map(|f| f.filters.clone())
-//                .unwrap_or_default(),
-//        );
-//
-//        let mut cross_section_filters = FeynGenFilters(
-//            cross_section_filters
-//                .map(|f| f.filters.clone())
-//                .unwrap_or_default(),
-//        );
-//
-//        cross_section_filters
-//            .0
-//            .push(FeynGenFilter::BlobRange(n_cut_blobs.0..=n_cut_blobs.1));
-//        cross_section_filters.0.push(FeynGenFilter::SpectatorRange(
-//            n_cut_spectators.0..=n_cut_spectators.1,
-//        ));
-//
-//        let feyngen_options = FeynGenOptions {
-//            generation_type: GenerationType::from_str(&generation_type)
-//                .map_err(feyngen_to_python_error)?,
-//            initial_pdgs: initial_particles,
-//            final_pdgs_lists: final_particles_lists,
-//            loop_count_range,
-//            symmetrize_initial_states,
-//            symmetrize_final_states,
-//            symmetrize_left_right_states,
-//            allow_symmetrization_of_external_fermions_in_amplitudes,
-//            max_multiplicity_for_fast_cut_filter,
-//            amplitude_filters,
-//            cross_section_filters,
-//        };
-//        if feyngen_options.generation_type == GenerationType::Amplitude {
-//            if feyngen_options.final_pdgs_lists.len() > 1 {
-//                return Err(eyre!(
-//                    "Multiple set of final states are not allowed for amplitude generation",
-//                ));
-//            }
-//        } else if feyngen_options.final_pdgs_lists.len() > 1
-//            && feyngen_options
-//                .final_pdgs_lists
-//                .iter()
-//                .any(|l| l.is_empty())
-//        {
-//            return Err(eyre!(
-//                    "When specifying multiple set of final states options, each must contain at least one particle",
-//                ));
-//        }
-//        Ok(PyFeynGenOptions {
-//            options: feyngen_options,
-//        })
-//    }
-//}
 
 #[pyclass(name = "NumeratorAwareGroupingOption")]
 pub struct PyNumeratorAwareGroupingOption {
@@ -432,21 +356,73 @@ impl PyNumeratorAwareGroupingOption {
         Ok(format!("{}", self.grouping_options))
     }
 }
+*/
 
-// TODO: Improve error broadcasting to Python so as to show rust backtrace
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(unsendable, name = "GammaLoopAPI")
+)]
+struct GammaLoopAPI {
+    gammaloop_state: State,
+    cli_settings: CLISettings,
+    #[allow(unused)]
+    run_history: RunHistory,
+    default_runtime_settings: RuntimeSettings,
+}
+
+// TODO: Improve error broadcasting to Python everywhere so as to show rust backtrace
 #[pymethods]
-impl State {
+impl GammaLoopAPI {
     #[new]
-    pub fn new_python(state_folder: PathBuf) -> Self {
-        initialise().unwrap();
-
-        let a =
-            State::load(state_folder.clone(), None, Some("python".to_string())).expect(&format!(
-                "Could not load or create state from path '{}'",
-                state_folder.display()
-            ));
-
-        a
+    #[pyo3(signature = (state_folder=PathBuf::from("./gammaloop_state"), log_file_name=None, log_level=None))]
+    pub fn new_python(
+        state_folder: PathBuf,
+        log_file_name: Option<String>,
+        log_level: Option<LogLevel>,
+    ) -> Result<Self> {
+        if option_env!("NO_SYMBOLICA_OEM_LICENSE").is_none() {
+            activate_oem_license!("SYMBOLICA_OEM_KEY_23177b25");
+        };
+        initialise().map_err(|e| {
+            exceptions::PyException::new_err(format!(
+                "Could not initialize GammaLoop API: {}",
+                e.to_string()
+            ))
+        })?;
+        let mut one_shot = OneShot {
+            // Path to the a run file to execute
+            run_history: None,
+            // Don't actually run anything, just build up run card
+            dry_run: false,
+            // Path to the state folder
+            state_folder,
+            // Path to the model file
+            model_file: None,
+            // Skip saving state on exit
+            no_save_state: false,
+            // Save state to file after each call
+            override_state: false,
+            // Set the name of the file containing all traces from gammaloop (logs) for current session
+            trace_logs_filename: log_file_name,
+            // Set log level for current session
+            level: log_level,
+            // Try to serialize using strings when saving run history
+            no_try_strings: false,
+            command: None,
+        };
+        let (state, run_history, cli_settings, default_runtime_settings) =
+            one_shot.load().map_err(|e| {
+                exceptions::PyException::new_err(format!(
+                    "Could not load or create GammaLoop state: {}",
+                    e.to_string()
+                ))
+            })?;
+        Ok(GammaLoopAPI {
+            gammaloop_state: state,
+            run_history,
+            cli_settings,
+            default_runtime_settings,
+        })
     }
 
     pub fn inspect<'py>(
@@ -469,7 +445,7 @@ impl State {
             momentum_space,
             discrete_dim,
         }
-        .run(self)?;
+        .run(&mut self.gammaloop_state)?;
         Ok((
             PyComplex::from_doubles(py, res.1.re, res.1.im),
             res.0.map(|j| j.into_pyobject(py).unwrap()),
@@ -501,7 +477,7 @@ impl State {
             discrete_dims: discrete_dims_rust,
         };
 
-        let (res, res_jac) = batched_inspect.run(self).unwrap();
+        let (res, res_jac) = batched_inspect.run(&mut self.gammaloop_state).unwrap();
         let res_map = res
             .mapv_into_any(|c| Complex64::new(c.re, c.im))
             .into_pyarray(py);
@@ -511,56 +487,178 @@ impl State {
         Ok((res_map, res_jac_map))
     }
 
-    #[pyo3(signature = (path, process_name=None, process_id=None, integrand_name=None))]
-    pub(crate) fn import_amplitude_python(
+    #[pyo3(name="import_graphs", signature = (graphs, process_name=None, process_id=None, integrand_name=None, format="dot".into(), overwrite=false, append=false))]
+    pub(crate) fn import_graphs_python(
         &mut self,
-        path: PathBuf,
+        graphs: String,
         process_name: Option<String>,
         process_id: Option<usize>,
         integrand_name: Option<String>,
+        format: String,
+        overwrite: bool,
+        append: bool,
     ) -> Result<()> {
-        self.import_graphs(path, process_name, process_id, integrand_name)
-    }
+        if overwrite && append {
+            return Err(eyre!(
+                "Cannot use both overwrite and append options when importing graphs"
+            ));
+        }
+        let (graphs, process_name) = match format.as_str() {
+            "dot" => {
+                if !graphs.ends_with(".dot") {
+                    return Err(eyre!(
+                        "When using 'dot' format, the graphs argument must be a path to a DOT file"
+                    ));
+                }
+                let dot_path = PathBuf::from(&graphs);
+                let process_name = process_name
+                    .unwrap_or(dot_path.file_stem().unwrap().to_string_lossy().into_owned());
 
-    pub(crate) fn import_model_python(&mut self, file_path: PathBuf) -> Result<()> {
-        self.import_model(file_path)
-    }
+                let graphs =
+                    Graph::from_file(&dot_path, &self.gammaloop_state.model).map_err(|e| {
+                        eyre!("Could not parse graphs from DOT file: {}", e.to_string())
+                    })?;
+                Result::<(Vec<Graph>, Option<String>)>::Ok((graphs, Some(process_name)))
+            }
+            "string" => {
+                if process_id.is_none() && process_name.is_none() {
+                    return Err(eyre!(
+                        "When importing graphs from string, either a process id or a process name must be provided"
+                    ));
+                }
 
-    //    pub(crate) fn load_model_from_yaml_str(&mut self, yaml_str: &str) -> Result<()> {
-    //        self.model = Model::from_str(String::from(yaml_str))?;
-    //        Ok(())
-    //    }
+                let graphs = Graph::from_string(&graphs, &self.gammaloop_state.model)
+                    .map_err(|e| eyre!("Could not parse graphs from string: {}", e.to_string()))?;
+                Result::<(Vec<Graph>, Option<String>)>::Ok((graphs, process_name))
+            }
+            other => {
+                return Err(eyre!(
+                    "Unknown graph import format: {}. Supported formats are 'yaml' and 'json'",
+                    other
+                ))
+            }
+        }?;
 
-    pub(crate) fn generate_integrands_python(
-        &mut self,
-        global_settings: &GlobalSettings,
-        runtime_default: &RuntimeSettings,
-    ) -> Result<()> {
-        self.generate_integrands(global_settings, runtime_default.into())
-    }
-
-    pub(crate) fn compile_integrands_python(
-        &mut self,
-        folder: PathBuf,
-        override_existing: bool,
-        global_settings: &GlobalSettings,
-        process_id: Option<usize>,
-        integrand_name: Option<String>,
-    ) -> Result<()> {
-        self.compile_integrands(
-            folder,
-            override_existing,
-            global_settings,
+        self.gammaloop_state.import_graphs(
+            graphs,
+            process_name,
             process_id,
             integrand_name,
+            overwrite,
+            append,
         )
     }
 
+    #[pyo3(name="evaluate", signature = (process_id=None, graphs_group_name=None, result_path=None, numerical=true, number_of_terms_in_epsilon_expansion=None))]
+    pub(crate) fn evaluate_python(
+        &mut self,
+        process_id: Option<usize>,
+        graphs_group_name: Option<String>,
+        result_path: Option<PathBuf>,
+        numerical: bool,
+        number_of_terms_in_epsilon_expansion: Option<usize>,
+    ) -> PyResult<String> {
+        Evaluate {
+            process_id,
+            graphs_group_name,
+            result_path,
+            numerical,
+            number_of_terms_in_epsilon_expansion,
+        }
+        .run(
+            &mut self.gammaloop_state,
+            &self.cli_settings,
+            &self.default_runtime_settings,
+        )
+        .map_err(|e| {
+            exceptions::PyException::new_err(format!(
+                "Could not load or create GammaLoop state: {}",
+                e.to_string()
+            ))
+        })
+        .map(|res| res.to_canonical_string())
+    }
+
+    #[pyo3(name="import_model", signature = (model_specifier, simplify_model=true))]
+    pub(crate) fn import_model_python(
+        &mut self,
+        model_specifier: PathBuf,
+        simplify_model: bool,
+    ) -> PyResult<()> {
+        ImportModel {
+            path: model_specifier,
+            simplify_model,
+        }
+        .run(&mut self.gammaloop_state)
+        .map_err(|e| {
+            exceptions::PyException::new_err(format!("Could not import model: {}", e.to_string()))
+        })
+    }
+
+    #[pyo3(name="get_integrand_settings", signature = (process_id=None, integrand_name=None))]
+    pub(crate) fn get_integrand_settings(
+        &mut self,
+        process_id: Option<usize>,
+        integrand_name: Option<String>,
+    ) -> PyResult<RuntimeSettings> {
+        let (pid, name) = self
+            .gammaloop_state
+            .process_list
+            .find_integrand(process_id, integrand_name.as_ref())
+            .map_err(|e| {
+                exceptions::PyException::new_err(format!(
+                    "Could not find integrand: {}",
+                    e.to_string()
+                ))
+            })?;
+        match &self.gammaloop_state.process_list.processes[pid].collection {
+            ProcessCollection::Amplitudes(amplitudes) => {
+                match &amplitudes.get(&name).unwrap().integrand {
+                    Some(integrand) => Ok::<_, PyErr>(integrand.get_settings().clone()),
+                    None => Err(exceptions::PyException::new_err(
+                        "Integrand for selected amplitude not yet generated",
+                    )),
+                }
+            }
+            ProcessCollection::CrossSections(cross_sections) => {
+                match &cross_sections.get(&name).unwrap().integrand {
+                    Some(integrand) => Ok::<_, PyErr>(integrand.get_settings().clone()),
+                    None => Err(exceptions::PyException::new_err(
+                        "Integrand for selected cross-section not yet generated",
+                    )),
+                }
+            }
+        }
+    }
+
+    #[pyo3(name="run", signature = (command,))]
+    pub(crate) fn run_command(&mut self, command: String) -> PyResult<()> {
+        let cmd = Commands::from_str(&command)?;
+
+        cmd.run(
+            &mut self.gammaloop_state,
+            &mut self.run_history,
+            &mut self.cli_settings,
+            &mut self.default_runtime_settings,
+        )
+        .map_err(|e| {
+            exceptions::PyException::new_err(format!(
+                "Execution of command '{}' failed: {}",
+                command,
+                e.to_string()
+            ))
+        })
+        .map(|_| ())
+    }
+
+    /*
+
     #[allow(clippy::too_many_arguments)]
+    #[pyo3(name="generate", signature = (process_name, numerator_aware_isomorphism_grouping=None, filter_self_loop=None, graph_prefix=None, selected_graphs=None, vetoed_graphs=None, loop_momentum_bases=None, global_prefactor_color=None, global_prefactor_colorless=None, num_threads=None))]
     pub(crate) fn generate_diagrams(
         &mut self,
         //generation_options: PyRef<PyFeynGenOptions>,
-        proccess_name: String,
+        process_name: String,
         numerator_aware_isomorphism_grouping: Option<PyRef<PyNumeratorAwareGroupingOption>>,
         filter_self_loop: Option<bool>,
         graph_prefix: Option<String>,
@@ -704,7 +802,7 @@ impl State {
             restart,
         }
         .run(
-            self,
+            &mut self.gammaloop_state,
             &CLISettings {
                 ..Default::default()
             },
@@ -869,4 +967,7 @@ impl State {
     //         master_node.update_iter();
     //     }
     // }
+
+
+    */
 }

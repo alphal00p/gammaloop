@@ -62,7 +62,7 @@ pub struct SaveState {
     pub override_state: Option<bool>,
 
     #[arg(short = 'n', long, default_value_t = false)]
-    no_save_state: bool,
+    pub no_save_state: bool,
 
     /// Try to serialize using strings when saving run history
     #[arg(long, num_args(0..=1),default_missing_value = "true",

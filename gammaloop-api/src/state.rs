@@ -436,12 +436,13 @@ impl State {
 
     pub fn import_graphs(
         &mut self,
-        path: impl AsRef<Path>,
+        graphs: Vec<Graph>,
         process_name: Option<String>,
         process_id: Option<usize>,
         integrand_name: Option<String>,
+        overwrite: bool,
+        append: bool,
     ) -> Result<()> {
-        let graphs = Graph::from_file(&path, &self.model)?;
         let generation_type = if graphs.iter().all(|g| g.initial_state_cut.nedges(g) == 0) {
             GenerationType::Amplitude
         } else if graphs.iter().all(|g| g.initial_state_cut.nedges(g) > 0) {
@@ -463,25 +464,26 @@ impl State {
             }
             Some(&mut self.process_list.processes[proc_id])
         } else {
-            let process_name = process_name.unwrap_or(
-                path.as_ref()
-                    .file_stem()
-                    .unwrap()
-                    .to_string_lossy()
-                    .into_owned(),
-            );
+            let p_name = match process_name {
+                Some(n) => n,
+                None => {
+                    return Err(eyre!(
+                        "Either process ID or process name must be provided when importing graphs"
+                    ))
+                }
+            };
             if let Some(existing_proc) = self
                 .process_list
                 .processes
                 .iter_mut()
-                .find(|p| p.definition.folder_name == process_name)
+                .find(|p| p.definition.folder_name == p_name)
             {
                 Some(existing_proc)
             } else {
                 let process_defintion =
                     ProcessDefinition::from_graph_list(&graphs, generation_type, &self.model)?;
                 let process = Process::from_graph_list(
-                    process_name,
+                    p_name,
                     integrand_base_name.clone(),
                     // TODO: avoid clone here
                     graphs.clone(),
@@ -498,14 +500,25 @@ impl State {
         if let Some(p) = process {
             let existing_names = p.get_integrand_names();
             let integrand_name = if existing_names.contains(&integrand_base_name.as_str()) {
-                let mut integrand_i = 0;
-                while existing_names
-                    .iter()
-                    .any(|ce| *ce == format!("{}_{}", integrand_base_name, integrand_i))
-                {
-                    integrand_i += 1;
+                if append {
+                    let mut integrand_i = 0;
+                    while existing_names
+                        .iter()
+                        .any(|ce| *ce == format!("{}_{}", integrand_base_name, integrand_i))
+                    {
+                        integrand_i += 1;
+                    }
+                    format!("{}_{}", integrand_base_name, integrand_i)
+                } else if overwrite {
+                    p.collection.remove_integrand(&integrand_base_name)?;
+                    integrand_base_name.clone()
+                } else {
+                    return Err(eyre!(
+                        "Integrand name '{}' already exists in process '{}', use either --overwrite or --append flag when loading graphs",
+                        integrand_base_name,
+                        p.definition.folder_name
+                    ));
                 }
-                format!("{}_{}", integrand_base_name, integrand_i)
             } else {
                 integrand_base_name.clone()
             };
@@ -620,11 +633,11 @@ impl State {
         // let root_folder = root_folder.join("gammaloop_state");
 
         let mut model = if let Some(model_path) = &model_path {
-            warn!("Loading model from {}", model_path.display());
+            info!("Loading model from {}", model_path.display());
             Model::from_file(model_path)?
         } else {
             let model_dir = save_path.join("model.json");
-            warn!(
+            info!(
                 "Loading model from default location: {}",
                 model_dir.display()
             );
