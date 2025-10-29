@@ -32,8 +32,8 @@ use typed_index_collections::TiVec;
     Ord,
     PartialEq,
     PartialOrd,
-    Encode,
-    Decode,
+    bincode::Encode,
+    bincode::Decode,
     Debug,
     Serialize,
     Deserialize,
@@ -111,8 +111,10 @@ impl<T> Length for LoopMomenta<T> {
 
 pub type Subspace<'a> = Option<&'a [LoopIndex]>; // None means full space
 
+#[derive(Clone, Debug, bincode::Encode, bincode::Decode)]
 pub(crate) struct SubspaceData {
     subgraph: InternalSubGraph,
+    #[bincode(with_serde)]
     complement_subgraph: BitVec,
     lmb: LmbIndex,
     lmb_indices: Vec<LoopIndex>,

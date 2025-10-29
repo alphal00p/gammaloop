@@ -553,12 +553,28 @@ impl AmplitudeIntegrand {
                                         .take(graph.graph.get_loop_number()),
                                     );
 
-                                    let subspace: SubspaceData = todo!();
+                                    let (lmb_index, _) = graph
+                                        .lmbs
+                                        .iter_enumerated()
+                                        .find(|lmb| {
+                                            graph.graph.loop_momentum_basis.loop_edges
+                                                == lmb.1.loop_edges
+                                        })
+                                        .unwrap();
+
+                                    let subspace: SubspaceData =
+                                        SubspaceData::new_with_user_selected_lmb(
+                                            graph.graph.full_filter(),
+                                            lmb_index,
+                                            &graph.graph,
+                                            &graph.lmbs,
+                                        )
+                                        .unwrap();
 
                                     esurface.exists(
                                         &loop_moms,
                                         &external_moms,
-                                        &graph.graph.loop_momentum_basis,
+                                        &subspace,
                                         &graph.lmbs,
                                         &graph.graph,
                                         &graph.graph.get_real_mass_vector(model),
