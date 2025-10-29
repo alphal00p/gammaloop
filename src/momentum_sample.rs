@@ -158,6 +158,19 @@ impl SubspaceData {
             }
         })
     }
+
+    pub(crate) fn project_complement_loop_signature<'a>(
+        &'a self,
+        signature: &'a LoopSignature,
+    ) -> impl Iterator<Item = SignOrZero> + 'a {
+        signature.iter_enumerated().map(|(loop_index, sign)| {
+            if !self.lmb_indices.contains(&loop_index) {
+                *sign
+            } else {
+                SignOrZero::Zero
+            }
+        })
+    }
 }
 
 // #[comemo::track]

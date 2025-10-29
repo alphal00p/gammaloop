@@ -2,7 +2,9 @@
 
 use crate::gammaloop_integrand::GenericEvaluatorFloat;
 use crate::momentum::{FourMomentum, ThreeMomentum};
-use crate::momentum_sample::{ExternalFourMomenta, ExternalIndex, LoopMomenta, SubspaceData};
+use crate::momentum_sample::{
+    ExternalFourMomenta, ExternalIndex, ExternalThreeMomenta, LoopMomenta, SubspaceData,
+};
 use crate::numerator::aind::Aind;
 use crate::numerator::ufo::UFO;
 use crate::settings::runtime::kinematic::Externals;
@@ -2205,6 +2207,22 @@ pub(crate) fn compute_shift_part<T: FloatLike>(
 ) -> FourMomentum<F<T>> {
     external_signature
         .apply_typed::<FourMomentum<F<T>>, ExternalIndex, ExternalFourMomenta<F<T>>>(external_moms)
+}
+
+pub(crate) fn compute_shift_part_subspace<T: FloatLike>(
+    loop_signature: &LoopSignature,
+    external_signature: &ExternalSignature,
+    loop_moms: &LoopMomenta<F<T>>,
+    external_moms: &ExternalThreeMomenta<F<T>>,
+    subspace: &SubspaceData,
+) -> ThreeMomentum<F<T>> {
+    let projected_loop_complement: LoopSignature = subspace
+        .project_complement_loop_signature(loop_signature)
+        .collect();
+
+    let loop_part = projected_loop_complement.apply_typed(loop_moms);
+    let external_part = external_signature.apply_typed(external_moms);
+    loop_part + external_part
 }
 
 pub(crate) fn compute_t_part_of_shift_part<T: FloatLike>(

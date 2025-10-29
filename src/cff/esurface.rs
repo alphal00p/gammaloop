@@ -31,7 +31,7 @@ use crate::momentum_sample::{
 };
 use crate::processes::CrossSectionCut;
 use crate::utils::{
-    compute_loop_part, compute_loop_part_subspace, compute_shift_part,
+    compute_loop_part, compute_loop_part_subspace, compute_shift_part, compute_shift_part_subspace,
     compute_t_part_of_shift_part, cut_energy, external_energy_atom_from_index, ose_atom_from_index,
     FloatLike, F, GS,
 };
@@ -341,6 +341,8 @@ impl Esurface {
 
         let lmb = subspace.get_lmb(all_lmbs);
 
+        let external_3_momenta = external_moms.iter().map(|x| x.spatial.clone()).collect();
+
         //println!("got to energy loop");
         for energy in subspace.contains(&self.energies, graph).into_iter() {
             //println!("computing contribution for energy {:?}", energy);
@@ -351,11 +353,15 @@ impl Esurface {
                 compute_loop_part_subspace(&signature.internal, loops_unit_in_subspace, &subspace);
             //println!("computed_loop_part {:?}", unit_loop_part);
 
-            todo!("compute shift in subspace");
-            let shift = compute_shift_part(&signature.external, external_moms);
+            let three_shift = compute_shift_part_subspace(
+                &signature.internal,
+                &signature.external,
+                &loops_unit_in_subspace,
+                &external_3_momenta,
+                subspace,
+            );
             //./bprintln!("computed_shift {:?}", shift);
 
-            let three_shift = shift.spatial;
             let norm_unit_loop_part_squared = unit_loop_part.norm_squared();
             let loop_dot_shift = &unit_loop_part * three_shift;
 
