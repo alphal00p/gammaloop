@@ -2,7 +2,7 @@
 
 use crate::gammaloop_integrand::GenericEvaluatorFloat;
 use crate::momentum::{FourMomentum, ThreeMomentum};
-use crate::momentum_sample::{ExternalFourMomenta, ExternalIndex, LoopMomenta};
+use crate::momentum_sample::{ExternalFourMomenta, ExternalIndex, LoopMomenta, SubspaceData};
 use crate::numerator::aind::Aind;
 use crate::numerator::ufo::UFO;
 use crate::settings::runtime::kinematic::Externals;
@@ -2188,6 +2188,15 @@ pub(crate) fn compute_loop_part<T: FloatLike>(
     loop_moms: &LoopMomenta<F<T>>,
 ) -> ThreeMomentum<F<T>> {
     loop_signature.apply_typed(loop_moms)
+}
+
+pub(crate) fn compute_loop_part_subspace<T: FloatLike>(
+    loop_signature: &LoopSignature,
+    loop_moms: &LoopMomenta<F<T>>,
+    subspace: &SubspaceData,
+) -> ThreeMomentum<F<T>> {
+    let projected: LoopSignature = subspace.project_loop_signature(loop_signature).collect();
+    projected.apply_typed(loop_moms)
 }
 
 pub(crate) fn compute_shift_part<T: FloatLike>(

@@ -2,8 +2,9 @@ use std::fmt::Display;
 
 use crate::gammaloop_integrand::evaluators::SingleOrAllOrientations;
 use crate::graph::{Graph, LmbIndex, LoopMomentumBasis};
-use crate::momentum::{FourMomentum, Polarization, Rotatable, Rotation, ThreeMomentum};
+use crate::momentum::{FourMomentum, Polarization, Rotatable, Rotation, SignOrZero, ThreeMomentum};
 
+use crate::signature::LoopSignature;
 use crate::utils::{FloatLike, Length, F};
 use crate::{define_index, settings::runtime::kinematic::Externals, DependentMomentaConstructor};
 use bincode_trait_derive::{Decode, Encode};
@@ -123,12 +124,39 @@ impl SubspaceData {
         &all_lmbs[self.lmb]
     }
 
-    pub(crate) fn does_not_contain(&self, edges: &[EdgeIndex], graph: &Graph) -> Vec<EdgeIndex> {
+    pub(crate) fn does_not_contain<'a>(
+        &'a self,
+        edges: &'a [EdgeIndex],
+        graph: &'a Graph,
+    ) -> impl Iterator<Item = EdgeIndex> + 'a {
         graph
             .iter_edges_of(&self.complement_subgraph)
             .map(|ed| ed.1)
             .filter(|e| edges.contains(e))
-            .collect()
+    }
+
+    pub(crate) fn contains<'a>(
+        &'a self,
+        edges: &'a [EdgeIndex],
+        graph: &'a Graph,
+    ) -> impl Iterator<Item = EdgeIndex> + 'a {
+        graph
+            .iter_edges_of(&self.subgraph)
+            .map(|ed| ed.1)
+            .filter(|e| edges.contains(e))
+    }
+
+    pub(crate) fn project_loop_signature<'a>(
+        &'a self,
+        signature: &'a LoopSignature,
+    ) -> impl Iterator<Item = SignOrZero> + 'a {
+        signature.iter_enumerated().map(|(loop_index, sign)| {
+            if self.lmb_indices.contains(&loop_index) {
+                *sign
+            } else {
+                SignOrZero::Zero
+            }
+        })
     }
 }
 

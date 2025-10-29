@@ -31,8 +31,9 @@ use crate::momentum_sample::{
 };
 use crate::processes::CrossSectionCut;
 use crate::utils::{
-    compute_loop_part, compute_shift_part, compute_t_part_of_shift_part, cut_energy,
-    external_energy_atom_from_index, ose_atom_from_index, FloatLike, F, GS,
+    compute_loop_part, compute_loop_part_subspace, compute_shift_part,
+    compute_t_part_of_shift_part, cut_energy, external_energy_atom_from_index, ose_atom_from_index,
+    FloatLike, F, GS,
 };
 use crate::uv::uv_graph::UVE;
 use color_eyre::Result;
@@ -314,29 +315,43 @@ impl Esurface {
     }
 
     // #[inline]
+    /// the "loops_unit_in_subspace" means that the loop momenta that are part of the subspace are jointly normalized to unit length
     pub(crate) fn get_radius_guess<T: FloatLike>(
         &self,
-        unit_loops: &LoopMomenta<F<T>>,
+        loops_unit_in_subspace: &LoopMomenta<F<T>>,
         external_moms: &ExternalFourMomenta<F<T>>,
-        lmb: &LoopMomentumBasis,
+        subspace: &SubspaceData,
+        all_lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
+        graph: &Graph,
+        masses: &EdgeVec<F<T>>,
     ) -> (F<T>, F<T>) {
-        todo!("refactor for subspaces");
-        let const_builder = &unit_loops[LoopIndex(0)].px;
+        let const_builder = &loops_unit_in_subspace[LoopIndex(0)].px;
 
-        let esurface_shift = self.compute_shift_part_from_momenta(lmb, external_moms);
+        let esurface_shift = self.compute_shift_part_from_momenta(
+            loops_unit_in_subspace,
+            external_moms,
+            subspace,
+            all_lmbs,
+            graph,
+            masses,
+        );
 
         let mut radius_guess = const_builder.zero();
         let mut denominator = const_builder.zero();
 
+        let lmb = subspace.get_lmb(all_lmbs);
+
         //println!("got to energy loop");
-        for energy in self.energies.iter() {
+        for energy in subspace.contains(&self.energies, graph).into_iter() {
             //println!("computing contribution for energy {:?}", energy);
-            let signature = &lmb.edge_signatures[*energy];
+            let signature = &lmb.edge_signatures[energy];
             //println!("signature {:?}", signature);
 
-            let unit_loop_part = compute_loop_part(&signature.internal, unit_loops);
+            let unit_loop_part =
+                compute_loop_part_subspace(&signature.internal, loops_unit_in_subspace, &subspace);
             //println!("computed_loop_part {:?}", unit_loop_part);
 
+            todo!("compute shift in subspace");
             let shift = compute_shift_part(&signature.external, external_moms);
             //./bprintln!("computed_shift {:?}", shift);
 
