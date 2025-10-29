@@ -24,6 +24,7 @@ use crate::define_index;
 use crate::gammaloop_integrand::GammaloopIntegrand;
 use crate::graph::{Graph, GraphGroupPosition, LmbIndex, LoopMomentumBasis};
 
+use crate::momentum::ThreeMomentum;
 use crate::momentum_sample::{
     ExternalFourMomenta, ExternalIndex, ExternalThreeMomenta, LoopIndex, LoopMomenta, Subspace,
     SubspaceData,
@@ -95,8 +96,6 @@ impl Esurface {
         loop_moms: &LoopMomenta<F<T>>,
         external_moms: &ExternalFourMomenta<F<T>>,
     ) -> F<T> {
-        todo!("refactor for subspaces");
-
         let spatial_part_of_externals = external_moms
             .iter()
             .map(|mom| mom.spatial.clone())
@@ -115,33 +114,58 @@ impl Esurface {
             .reduce(|acc, x| acc + x)
             .unwrap_or_else(|| loop_moms[LoopIndex(0)].px.zero());
 
-        energy_sum + self.compute_shift_part_from_momenta(lmb, external_moms)
+        let shift_part = self
+            .external_shift
+            .iter()
+            .map(|(index, sign)| {
+                let external_signature = &lmb.edge_signatures[*index].external;
+                F::from_f64(*sign as f64)
+                    * compute_t_part_of_shift_part(external_signature, external_moms)
+            })
+            .reduce(|acc, x| acc + x)
+            .unwrap_or_else(|| energy_sum.zero());
+
+        energy_sum + shift_part
     }
 
     #[inline]
     /// TODO: upgrade to a status type
     pub(crate) fn exists<T: FloatLike>(
         &self,
-        lmb: &LoopMomentumBasis,
-        real_mass_vector: &EdgeVec<F<T>>,
+        loop_moms: &LoopMomenta<F<T>>,
         external_moms: &ExternalFourMomenta<F<T>>,
+        subspace: &SubspaceData,
+        all_lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
+        graph: &Graph,
+        real_mass_vector: &EdgeVec<F<T>>,
         e_cm: &F<T>,
     ) -> bool {
-        todo!("refactor for subspaces");
+        //todo!("refactor for subspaces");
         if self.external_shift.is_empty() {
             return false;
         }
 
-        let shift_part = self.compute_shift_part_from_momenta(lmb, external_moms);
+        let shift_part = self.compute_shift_part_from_momenta(
+            loop_moms,
+            external_moms,
+            subspace,
+            all_lmbs,
+            graph,
+            real_mass_vector,
+        );
 
         if shift_part < -F::from_ff64(SHIFT_THRESHOLD) * e_cm {
+            let lmb = subspace.get_lmb(all_lmbs);
+
             let mass_sum: F<T> = self
                 .energies
                 .iter()
                 .map(|index| &real_mass_vector[*index])
                 .fold(F::from_f64(0.0), |acc, x| acc + x);
 
-            let shift_vector_sq = self
+            let zero_vector = ThreeMomentum::new(e_cm.zero(), e_cm.zero(), e_cm.zero());
+
+            let graph_vector = self
                 .external_shift
                 .iter()
                 .map(|(index, sign)| {
@@ -150,8 +174,26 @@ impl Esurface {
                         * F::from_f64(*sign as f64)
                 })
                 .reduce(|acc, x| acc + x)
-                .map(|v| v.norm_squared())
-                .unwrap_or_else(|| F::from_f64(0.0));
+                .unwrap_or_else(|| zero_vector.clone());
+
+            let other_part = subspace
+                .does_not_contain(&self.energies, graph)
+                .into_iter()
+                .map(|index| {
+                    let signature = &lmb.edge_signatures[index];
+                    let momentum = signature.compute_momentum(
+                        loop_moms,
+                        &external_moms
+                            .iter()
+                            .map(|mom| mom.spatial.clone())
+                            .collect::<TiVec<ExternalIndex, _>>(),
+                    );
+                    momentum
+                })
+                .reduce(|acc, x| acc + x)
+                .unwrap_or_else(|| zero_vector.clone());
+
+            let shift_vector_sq = (&graph_vector + &other_part).norm_squared();
 
             &shift_part * &shift_part - shift_vector_sq - &mass_sum * &mass_sum
                 > F::from_ff64(EXISTENCE_THRESHOLD) * e_cm * e_cm
