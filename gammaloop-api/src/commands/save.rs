@@ -57,14 +57,20 @@ pub struct SaveState {
     pub path: Option<PathBuf>,
 
     /// Save state to file after each call
-    #[arg(short = 'o', long)]
+    #[arg(short = 'o', long,num_args(0..=1), default_missing_value = "true",
+           value_parser = clap::builder::BoolishValueParser::new(),)]
     pub override_state: Option<bool>,
 
+    #[arg(short = 'n', long, default_value_t = false)]
+    no_save_state: bool,
+
     /// Try to serialize using strings when saving run history
-    #[arg(long)]
+    #[arg(long, num_args(0..=1),default_missing_value = "true",
+           value_parser = clap::builder::BoolishValueParser::new(),)]
     pub try_strings: Option<bool>,
 
-    #[arg(long)]
+    #[arg(long, num_args(0..=1),default_missing_value = "true",
+           value_parser = clap::builder::BoolishValueParser::new())]
     pub strict: Option<bool>,
 }
 
@@ -76,6 +82,10 @@ impl SaveState {
         default_runtime_settings: &RuntimeSettings,
         global_settings: &CLISettings,
     ) -> Result<()> {
+        if self.no_save_state {
+            // status_info!("Skipping saving state as per user request");
+            return Ok(());
+        }
         println!(
             "Saving state to {}..",
             global_settings.state_folder.display()
