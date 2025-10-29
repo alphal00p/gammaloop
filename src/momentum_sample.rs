@@ -171,6 +171,10 @@ impl SubspaceData {
             }
         })
     }
+
+    pub(crate) fn iter_lmb_indices<'a>(&'a self) -> impl Iterator<Item = LoopIndex> + 'a {
+        self.lmb_indices.iter().copied()
+    }
 }
 
 // #[comemo::track]

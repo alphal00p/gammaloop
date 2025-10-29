@@ -250,34 +250,48 @@ impl Esurface {
     pub(crate) fn compute_self_and_r_derivative<T: FloatLike>(
         &self,
         radius: &F<T>,
-        shifted_unit_loops: &LoopMomenta<F<T>>,
-        center: &LoopMomenta<F<T>>,
+        shifted_unit_loops_in_subspace: &LoopMomenta<F<T>>,
+        center_in_subspace: &LoopMomenta<F<T>>,
         external_moms: &ExternalFourMomenta<F<T>>,
-        lmb: &LoopMomentumBasis,
         real_mass_vector: &EdgeVec<F<T>>,
+        subspace: &SubspaceData,
+        all_lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
+        graph: &Graph,
     ) -> (F<T>, F<T>) {
-        todo!("refactor for subspaces");
         let spatial_part_of_externals: ExternalThreeMomenta<F<T>> = external_moms
             .iter()
             .map(|mom| mom.spatial.clone())
             .collect();
 
-        let loops: LoopMomenta<F<T>> = shifted_unit_loops
-            .iter()
-            .zip(center.iter())
-            .map(|(loop_mom, center)| loop_mom * radius + center)
+        let loops: LoopMomenta<F<T>> = subspace
+            .iter_lmb_indices()
+            .map(|loop_index| {
+                &shifted_unit_loops_in_subspace[loop_index] * radius
+                    + &center_in_subspace[loop_index]
+            })
             .collect();
 
-        let shift = self.compute_shift_part_from_momenta(lmb, external_moms);
+        let shift = self.compute_shift_part_from_momenta(
+            shifted_unit_loops_in_subspace,
+            external_moms,
+            subspace,
+            all_lmbs,
+            graph,
+            real_mass_vector,
+        );
 
-        let (derivative, energy_sum) = self
-            .energies
-            .iter()
-            .map(|&index| {
+        let lmb = subspace.get_lmb(all_lmbs);
+        let (derivative, energy_sum) = subspace
+            .contains(&self.energies, graph)
+            .map(|index| {
                 let signature = &lmb.edge_signatures[index];
 
                 let momentum = signature.compute_momentum(&loops, &spatial_part_of_externals);
-                let unit_loop_part = compute_loop_part(&signature.internal, shifted_unit_loops);
+                let unit_loop_part = compute_loop_part_subspace(
+                    &signature.internal,
+                    shifted_unit_loops_in_subspace,
+                    subspace,
+                );
 
                 let energy = (momentum.norm_squared()
                     + &real_mass_vector[index] * &real_mass_vector[index])

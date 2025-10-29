@@ -2221,7 +2221,10 @@ pub(crate) fn compute_shift_part_subspace<T: FloatLike>(
         .collect();
 
     let loop_part = projected_loop_complement.apply_typed(loop_moms);
-    let external_part = external_signature.apply_typed(external_moms);
+    let external_part: ThreeMomentum<F<T>> = external_signature
+        .apply_typed::<ThreeMomentum<F<T>>, ExternalIndex, ExternalThreeMomenta<F<T>>>(
+            external_moms,
+        );
     loop_part + external_part
 }
 
