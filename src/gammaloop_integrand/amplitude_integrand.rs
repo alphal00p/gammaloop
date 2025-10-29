@@ -38,8 +38,8 @@ use crate::{
     },
     integrands::HasIntegrand,
     model::Model,
-    momentum::{Rotation, RotationMethod},
-    momentum_sample::{ExternalIndex, MomentumSample},
+    momentum::{Rotation, RotationMethod, ThreeMomentum},
+    momentum_sample::{ExternalIndex, LoopMomenta, MomentumSample, SubspaceData},
     processes::{AmplitudeGraph, GroupDerivedData},
     settings::{GlobalSettings, RuntimeSettings},
     signature::SignatureLike,
@@ -544,11 +544,24 @@ impl AmplitudeIntegrand {
                                         .graph_group_structure[group_id][graph_group_pos]];
 
                                     let esurface = &graph.esurfaces[esurface_id];
+                                    let loop_moms = LoopMomenta::from_iter(
+                                        std::iter::repeat(ThreeMomentum::new(
+                                            F(0.0),
+                                            F(0.0),
+                                            F(0.0),
+                                        ))
+                                        .take(graph.graph.get_loop_number()),
+                                    );
+
+                                    let subspace: SubspaceData = todo!();
 
                                     esurface.exists(
-                                        &graph.graph.loop_momentum_basis,
-                                        &graph.graph.get_real_mass_vector(model),
+                                        &loop_moms,
                                         &external_moms,
+                                        &graph.graph.loop_momentum_basis,
+                                        &graph.lmbs,
+                                        &graph.graph,
+                                        &graph.graph.get_real_mass_vector(model),
                                         &F(e_cm),
                                     )
                                 })

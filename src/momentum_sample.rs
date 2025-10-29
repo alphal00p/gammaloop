@@ -11,9 +11,11 @@ use bincode_trait_derive::{Decode, Encode};
 use bitvec::vec::BitVec;
 use color_eyre::Result;
 use derive_more::{From, Into};
+use eyre::eyre;
 use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation};
-use linnet::half_edge::subgraph::{InternalSubGraph, SubGraph};
+use linnet::half_edge::subgraph::{InternalSubGraph, SubGraph, SubGraphOps};
 use serde::{Deserialize, Serialize};
+use spenso::algebra::complex::sub;
 use std::ops::{Add, Index, IndexMut, Sub};
 use symbolica::domains::float::NumericalFloatLike;
 use tabled::settings::Style;
@@ -117,6 +119,76 @@ pub(crate) struct SubspaceData {
 }
 
 impl SubspaceData {
+    pub(crate) fn new_with_user_selected_lmb(
+        subgraph: BitVec,
+        lmb: LmbIndex,
+        graph: &Graph,
+        all_lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
+    ) -> Result<Self> {
+        let mut subgraph = InternalSubGraph::cleaned_filter_pessimist(subgraph, graph);
+        subgraph.set_loopcount(graph);
+        let edges_in_subgraph = graph
+            .iter_edges_of(&subgraph.filter)
+            .map(|ed| ed.1)
+            .collect::<Vec<_>>();
+        let complement_subgraph = graph.full_filter().subtract(&subgraph.filter);
+
+        let mut lmb_indices = Vec::new();
+        for (loop_index, edge_index) in all_lmbs[lmb].loop_edges.iter_enumerated() {
+            if edges_in_subgraph.contains(edge_index) {
+                lmb_indices.push(loop_index);
+            }
+        }
+
+        if lmb_indices.len() != subgraph.loopcount.unwrap() {
+            return Err(color_eyre::eyre::eyre!(
+                "Provided loop momentum basis does not align with subgraph"
+            ));
+        }
+
+        Ok(Self {
+            subgraph,
+            complement_subgraph,
+            lmb,
+            lmb_indices,
+        })
+    }
+
+    /// this function chooses the lmb automatically based on the subgraph
+    pub(crate) fn new(
+        subgraph: BitVec,
+        graph: &Graph,
+        all_lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
+    ) -> Result<Self> {
+        let mut subgraph = InternalSubGraph::cleaned_filter_pessimist(subgraph, graph);
+        subgraph.set_loopcount(graph);
+        let complement_subgraph = graph.full_filter().subtract(&subgraph.filter);
+
+        let edges_in_subgraph = graph
+            .iter_edges_of(&subgraph.filter)
+            .map(|ed| ed.1)
+            .collect::<Vec<_>>();
+
+        for (lmb_index, lmb) in all_lmbs.iter_enumerated() {
+            let mut lmb_indices = Vec::new();
+            for (loop_index, edge_index) in lmb.loop_edges.iter_enumerated() {
+                if edges_in_subgraph.contains(edge_index) {
+                    lmb_indices.push(loop_index);
+                }
+            }
+
+            if lmb_indices.len() == subgraph.loopcount.unwrap() {
+                return Ok(Self {
+                    subgraph,
+                    complement_subgraph,
+                    lmb: lmb_index,
+                    lmb_indices,
+                });
+            }
+        }
+
+        Err(eyre!("No suitable loop momentum basis found for subgraph"))
+    }
     pub(crate) fn get_lmb<'a>(
         &self,
         all_lmbs: &'a TiVec<LmbIndex, LoopMomentumBasis>,
