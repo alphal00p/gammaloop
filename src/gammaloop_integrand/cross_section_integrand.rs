@@ -253,7 +253,6 @@ pub struct CrossSectionGraphTerm {
     pub param_builder: ParamBuilder<f64>,
     pub orientations: TiVec<SuperGraphOrientationID, EdgeVec<Orientation>>,
     pub orientation_filter: BinVec,
-    pub global_subspace: SubspaceData,
 }
 
 impl CrossSectionGraphTerm {
@@ -309,22 +308,6 @@ impl CrossSectionGraphTerm {
             None
         };
 
-        let (lmb_index, _) = graph
-            .derived_data
-            .lmbs
-            .as_ref()
-            .unwrap()
-            .iter_enumerated()
-            .find(|(_, lmb)| lmb.loop_edges == graph.graph.loop_momentum_basis.loop_edges)
-            .unwrap();
-
-        let global_subspace = SubspaceData::new_with_user_selected_lmb(
-            graph.graph.full_filter(),
-            lmb_index,
-            &graph.graph,
-            graph.derived_data.lmbs.as_ref().unwrap(),
-        )?;
-
         Ok(Self {
             iterative_integrand,
             parametric_integrand,
@@ -341,7 +324,6 @@ impl CrossSectionGraphTerm {
             param_builder: graph.graph.param_builder.clone(),
             orientation_filter: BinVec(BitVec::repeat(true, orientations.len())),
             orientations,
-            global_subspace,
         })
     }
 
@@ -510,19 +492,14 @@ impl GraphTerm for CrossSectionGraphTerm {
                     &center,
                     momentum_sample.external_moms(),
                     &masses,
-                    &self.global_subspace,
-                    &self.lmbs,
-                    &self.graph,
+                    &self.graph.loop_momentum_basis,
                 )
             };
 
             let (guess, _) = esurface.get_radius_guess(
                 momentum_sample.loop_moms(),
                 momentum_sample.external_moms(),
-                &self.global_subspace,
-                &self.lmbs,
-                &self.graph,
-                &masses,
+                &self.graph.loop_momentum_basis,
             );
 
             let solution = newton_iteration_and_derivative(

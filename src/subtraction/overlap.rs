@@ -314,7 +314,7 @@ fn construct_solver(
         let lmb = overlap_input.graph_data[graph_group_pos].lmb;
         let esurface = &overlap_input.graph_data[graph_group_pos].esurfaces[esurface_id];
 
-        let shift_part = esurface.compute_shift_part_from_momenta(lmb, external_momenta);
+        let shift_part = esurface.compute_shift_part_from_momenta(external_momenta, lmb);
         b_vector[constraint_index + 1] = -shift_part.0;
         a_matrix[constraint_index + 1][0] = -1.0;
     }

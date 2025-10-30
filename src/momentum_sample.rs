@@ -249,6 +249,14 @@ impl SubspaceData {
     pub(crate) fn iter_lmb_indices<'a>(&'a self) -> impl Iterator<Item = LoopIndex> + 'a {
         self.lmb_indices.iter().copied()
     }
+
+    pub(crate) fn contains_loop_index(&self, loop_index: LoopIndex) -> bool {
+        self.lmb_indices.contains(&loop_index)
+    }
+
+    pub(crate) fn loopcount(&self) -> usize {
+        self.subgraph.loopcount.unwrap()
+    }
 }
 
 // #[comemo::track]

@@ -131,7 +131,7 @@ impl Esurface {
 
     #[inline]
     /// TODO: upgrade to a status type
-    pub(crate) fn exists<T: FloatLike>(
+    pub(crate) fn exists_subspace<T: FloatLike>(
         &self,
         loop_moms: &LoopMomenta<F<T>>,
         external_moms: &ExternalFourMomenta<F<T>>,
@@ -146,7 +146,7 @@ impl Esurface {
             return false;
         }
 
-        let shift_part = self.compute_shift_part_from_momenta(
+        let shift_part = self.compute_shift_part_from_momenta_in_subspace(
             loop_moms,
             external_moms,
             subspace,
@@ -203,8 +203,53 @@ impl Esurface {
         }
     }
 
+    #[inline]
+    /// TODO: upgrade to a status type
+    pub(crate) fn exists<T: FloatLike>(
+        &self,
+        external_moms: &ExternalFourMomenta<F<T>>,
+        lmb: &LoopMomentumBasis,
+        real_mass_vector: &EdgeVec<F<T>>,
+        e_cm: &F<T>,
+    ) -> bool {
+        //todo!("refactor for subspaces");
+        if self.external_shift.is_empty() {
+            return false;
+        }
+
+        let shift_part = self.compute_shift_part_from_momenta(external_moms, lmb);
+
+        if shift_part < -F::from_ff64(SHIFT_THRESHOLD) * e_cm {
+            let mass_sum: F<T> = self
+                .energies
+                .iter()
+                .map(|index| &real_mass_vector[*index])
+                .fold(F::from_f64(0.0), |acc, x| acc + x);
+
+            let zero_vector = ThreeMomentum::new(e_cm.zero(), e_cm.zero(), e_cm.zero());
+
+            let shift_vector = self
+                .external_shift
+                .iter()
+                .map(|(index, sign)| {
+                    let external_signature = &lmb.edge_signatures[*index].external;
+                    compute_shift_part(external_signature, external_moms).spatial
+                        * F::from_f64(*sign as f64)
+                })
+                .reduce(|acc, x| acc + x)
+                .unwrap_or_else(|| zero_vector.clone());
+
+            let shift_vector_sq = shift_vector.norm_squared();
+
+            &shift_part * &shift_part - shift_vector_sq - &mass_sum * &mass_sum
+                > F::from_ff64(EXISTENCE_THRESHOLD) * e_cm * e_cm
+        } else {
+            false
+        }
+    }
+
     /// Only compute the shift part, useful for center finding.
-    pub(crate) fn compute_shift_part_from_momenta<T: FloatLike>(
+    pub(crate) fn compute_shift_part_from_momenta_in_subspace<T: FloatLike>(
         &self,
         loop_moms: &LoopMomenta<F<T>>,
         external_moms: &ExternalFourMomenta<F<T>>,
@@ -246,8 +291,25 @@ impl Esurface {
         full_external_shift + remaining_shift
     }
 
+    /// Only compute the shift part, useful for center finding.
+    pub(crate) fn compute_shift_part_from_momenta<T: FloatLike>(
+        &self,
+        external_moms: &ExternalFourMomenta<F<T>>,
+        lmb: &LoopMomentumBasis,
+    ) -> F<T> {
+        self.external_shift
+            .iter()
+            .map(|(index, sign)| {
+                let external_signature = &lmb.edge_signatures[*index].external;
+                F::from_f64(*sign as f64)
+                    * compute_t_part_of_shift_part(external_signature, external_moms)
+            })
+            .reduce(|acc, x| acc + x)
+            .unwrap_or_else(|| external_moms[ExternalIndex(0)].temporal.value.zero())
+    }
+
     #[inline]
-    pub(crate) fn compute_self_and_r_derivative<T: FloatLike>(
+    pub(crate) fn compute_self_and_r_derivative_subspace<T: FloatLike>(
         &self,
         radius: &F<T>,
         shifted_unit_loops_in_subspace: &LoopMomenta<F<T>>,
@@ -271,7 +333,7 @@ impl Esurface {
             })
             .collect();
 
-        let shift = self.compute_shift_part_from_momenta(
+        let shift = self.compute_shift_part_from_momenta_in_subspace(
             shifted_unit_loops_in_subspace,
             external_moms,
             subspace,
@@ -292,6 +354,54 @@ impl Esurface {
                     shifted_unit_loops_in_subspace,
                     subspace,
                 );
+
+                let energy = (momentum.norm_squared()
+                    + &real_mass_vector[index] * &real_mass_vector[index])
+                    .sqrt();
+
+                let numerator = momentum * &unit_loop_part;
+
+                (numerator / &energy, energy)
+            })
+            .fold(
+                (radius.zero(), radius.zero()),
+                |(der_sum, en_sum), (der, en)| (der_sum + der, en_sum + en),
+            );
+
+        (energy_sum + shift, derivative)
+    }
+
+    #[inline]
+    pub(crate) fn compute_self_and_r_derivative<T: FloatLike>(
+        &self,
+        radius: &F<T>,
+        shifted_unit_loops: &LoopMomenta<F<T>>,
+        center: &LoopMomenta<F<T>>,
+        external_moms: &ExternalFourMomenta<F<T>>,
+        real_mass_vector: &EdgeVec<F<T>>,
+        lmb: &LoopMomentumBasis,
+    ) -> (F<T>, F<T>) {
+        let spatial_part_of_externals: ExternalThreeMomenta<F<T>> = external_moms
+            .iter()
+            .map(|mom| mom.spatial.clone())
+            .collect();
+
+        let loops: LoopMomenta<F<T>> = shifted_unit_loops
+            .iter()
+            .zip(center.iter())
+            .map(|(momentum, center)| momentum * radius + center)
+            .collect();
+
+        let shift = self.compute_shift_part_from_momenta(external_moms, lmb);
+
+        let (derivative, energy_sum) = self
+            .energies
+            .iter()
+            .map(|&index| {
+                let signature = &lmb.edge_signatures[index];
+
+                let momentum = signature.compute_momentum(&loops, &spatial_part_of_externals);
+                let unit_loop_part = compute_loop_part(&signature.internal, shifted_unit_loops);
 
                 let energy = (momentum.norm_squared()
                     + &real_mass_vector[index] * &real_mass_vector[index])
@@ -330,7 +440,7 @@ impl Esurface {
 
     // #[inline]
     /// the "loops_unit_in_subspace" means that the loop momenta that are part of the subspace are jointly normalized to unit length
-    pub(crate) fn get_radius_guess<T: FloatLike>(
+    pub(crate) fn get_radius_guess_subspace<T: FloatLike>(
         &self,
         loops_unit_in_subspace: &LoopMomenta<F<T>>,
         external_moms: &ExternalFourMomenta<F<T>>,
@@ -341,7 +451,7 @@ impl Esurface {
     ) -> (F<T>, F<T>) {
         let const_builder = &loops_unit_in_subspace[LoopIndex(0)].px;
 
-        let esurface_shift = self.compute_shift_part_from_momenta(
+        let esurface_shift = self.compute_shift_part_from_momenta_in_subspace(
             loops_unit_in_subspace,
             external_moms,
             subspace,
@@ -374,6 +484,43 @@ impl Esurface {
                 &external_3_momenta,
                 subspace,
             );
+            //./bprintln!("computed_shift {:?}", shift);
+
+            let norm_unit_loop_part_squared = unit_loop_part.norm_squared();
+            let loop_dot_shift = &unit_loop_part * three_shift;
+
+            radius_guess += loop_dot_shift.abs() / &norm_unit_loop_part_squared;
+            denominator += norm_unit_loop_part_squared.sqrt();
+        }
+
+        radius_guess += esurface_shift.abs() / denominator;
+        let negative_radius = radius_guess.ref_neg();
+        (radius_guess, negative_radius)
+    }
+
+    pub(crate) fn get_radius_guess<T: FloatLike>(
+        &self,
+        unit_loops: &LoopMomenta<F<T>>,
+        external_moms: &ExternalFourMomenta<F<T>>,
+        lmb: &LoopMomentumBasis,
+    ) -> (F<T>, F<T>) {
+        let const_builder = &unit_loops[LoopIndex(0)].px;
+
+        let esurface_shift = self.compute_shift_part_from_momenta(external_moms, lmb);
+
+        let mut radius_guess = const_builder.zero();
+        let mut denominator = const_builder.zero();
+
+        //println!("got to energy loop");
+        for &energy in &self.energies {
+            //println!("computing contribution for energy {:?}", energy);
+            let signature = &lmb.edge_signatures[energy];
+            //println!("signature {:?}", signature);
+
+            let unit_loop_part = compute_loop_part(&signature.internal, unit_loops);
+            //println!("computed_loop_part {:?}", unit_loop_part);
+
+            let three_shift = compute_shift_part(&signature.external, external_moms).spatial;
             //./bprintln!("computed_shift {:?}", shift);
 
             let norm_unit_loop_part_squared = unit_loop_part.norm_squared();

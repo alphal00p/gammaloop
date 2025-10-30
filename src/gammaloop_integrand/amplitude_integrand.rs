@@ -572,11 +572,8 @@ impl AmplitudeIntegrand {
                                         .unwrap();
 
                                     esurface.exists(
-                                        &loop_moms,
                                         &external_moms,
-                                        &subspace,
-                                        &graph.lmbs,
-                                        &graph.graph,
+                                        &graph.graph.loop_momentum_basis,
                                         &graph.graph.get_real_mass_vector(model),
                                         &F(e_cm),
                                     )

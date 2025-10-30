@@ -358,12 +358,12 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
                     .counterterm_builder
                     .sample
                     .external_moms(),
+                &self.overlap_builder.counterterm_builder.real_mass_vector,
                 &self
                     .overlap_builder
                     .counterterm_builder
                     .graph
                     .loop_momentum_basis,
-                &self.overlap_builder.counterterm_builder.real_mass_vector,
             )
         };
 
