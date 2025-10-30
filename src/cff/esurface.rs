@@ -659,6 +659,7 @@ pub struct EsurfaceID(pub usize);
 
 /// Container for esurfaces that exist at a given point in the phase space
 pub type ExistingEsurfaces = TiVec<ExistingEsurfaceId, GroupEsurfaceId>;
+pub type ExistingThresholds = TiVec<ExistingEsurfaceId, EsurfaceID>;
 
 pub(crate) fn get_representative(
     esurface_map: &TiVec<GraphGroupPosition, Option<EsurfaceID>>,
