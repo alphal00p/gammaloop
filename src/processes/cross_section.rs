@@ -825,7 +825,7 @@ impl CrossSectionGraph {
                     .push((left_expr.clone(), right_expr.clone()));
             }
 
-            let mut product = left_expr * right_expr * global_num.clone();
+            let mut product = left_expr * right_expr* global_num.clone();
 
             product
                 .execute::<Sequential, SmallestDegree, _, _>(TENSORLIB.read().unwrap().deref())
