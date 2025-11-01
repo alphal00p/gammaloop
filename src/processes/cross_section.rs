@@ -81,6 +81,19 @@ pub struct IteratedCtCollection<T> {
     num_left_thresholds: usize,
 }
 
+impl<T> IteratedCtCollection<T> {
+    pub fn map_ref<U, F>(&self, f: F) -> IteratedCtCollection<U>
+    where
+        F: Fn(&T) -> U,
+    {
+        let data = self.data.iter().map(f).collect();
+        IteratedCtCollection {
+            data,
+            num_left_thresholds: self.num_left_thresholds,
+        }
+    }
+}
+
 impl<T> Index<(LeftThresholdId, RightThresholdId)> for IteratedCtCollection<T> {
     type Output = T;
 
@@ -825,7 +838,7 @@ impl CrossSectionGraph {
                     .push((left_expr.clone(), right_expr.clone()));
             }
 
-            let mut product = left_expr * right_expr* global_num.clone();
+            let mut product = left_expr * right_expr * global_num.clone();
 
             product
                 .execute::<Sequential, SmallestDegree, _, _>(TENSORLIB.read().unwrap().deref())
