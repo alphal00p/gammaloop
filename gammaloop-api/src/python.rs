@@ -1,7 +1,8 @@
 use gammalooprs::{
+    cff::generation::{generate_cff_expression_from_subgraph, SurfaceCache},
     feyngen::{
-        //  self, diagram_generator::FeynGen, FeynGenError, FeynGenFilters, FeynGenOptions,
         diagram_generator::evaluate_overall_factor,
+        //  self, diagram_generator::FeynGen, FeynGenError, FeynGenFilters, FeynGenOptions,
         NumeratorAwareGraphGroupingOption,
         SewedFilterOptions,
     },
@@ -14,10 +15,12 @@ use gammalooprs::{
     settings::{GlobalSettings, RuntimeSettings},
     utils::{tracing::LogLevel, FloatLike, F},
 };
+use linnet::half_edge::{builder::HedgeNodeBuilder, subgraph::HedgeNode};
 use numpy::{
     Complex64, IntoPyArray, PyArray, PyArray1, PyArray2, PyReadonlyArray2, PyReadonlyArrayDyn,
 };
 use spenso::shadowing::symbolica_utils::SerializableAtom;
+use typed_index_collections::TiVec;
 
 use crate::{
     commands::{
@@ -651,6 +654,51 @@ impl GammaLoopAPI {
         .map(|_| ())
     }
 
+    #[pyo3(name = "generate_cff")]
+    pub(crate) fn generate_cff(
+        &self,
+        dot_string: String,
+        subgraph_nodes: Vec<String>,
+    ) -> PyResult<String> {
+        let graph = Graph::from_string(dot_string, &self.gammaloop_state.model)
+            .unwrap()
+            .pop()
+            .unwrap();
+
+        let subgraph = if subgraph_nodes.is_empty() {
+            graph.full_filter()
+        } else {
+            let mut nodes = vec![];
+            for (node_id, _, vertex) in graph.iter_nodes() {
+                if subgraph_nodes.contains(&vertex.name.to_string()) {
+                    nodes.push(node_id);
+                }
+            }
+
+            todo!()
+        };
+
+        let mut surface_cache = SurfaceCache {
+            esurface_cache: TiVec::new(),
+            hsurface_cache: TiVec::new(),
+        };
+
+        let cff = generate_cff_expression_from_subgraph(
+            &graph.underlying,
+            &subgraph,
+            &None,
+            &[],
+            &mut surface_cache,
+        )
+        .map_err(|e| {
+            exceptions::PyException::new_err(format!(
+                "Could not generate CFF expression: {}",
+                e.to_string()
+            ))
+        })?;
+
+        todo!()
+    }
     /*
 
     #[allow(clippy::too_many_arguments)]

@@ -347,7 +347,7 @@ pub(crate) fn generate_cff_expression<E, V, H>(
     Ok(graph_cff)
 }
 
-pub(crate) fn generate_cff_expression_from_subgraph<E, V, H, S: SubGraph>(
+pub fn generate_cff_expression_from_subgraph<E, V, H, S: SubGraph>(
     graph: &HedgeGraph<E, V, H>,
     subgraph: &S,
     canonize_esurface: &Option<ShiftRewrite>,
@@ -359,7 +359,7 @@ pub(crate) fn generate_cff_expression_from_subgraph<E, V, H, S: SubGraph>(
     Ok(cff)
 }
 
-pub(crate) fn generate_uv_cff<E, V, H, S: SubGraph>(
+pub fn generate_uv_cff<E, V, H, S: SubGraph>(
     graph: &HedgeGraph<E, V, H>,
     subgraph: &S,
     canonize_esurface: &Option<ShiftRewrite>,

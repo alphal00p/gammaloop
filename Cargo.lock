@@ -1468,6 +1468,7 @@ dependencies = [
  "tracing-appender",
  "tracing-indicatif",
  "tracing-subscriber",
+ "typed-index-collections",
  "vergen",
  "vergen-gitcl",
  "walkdir",

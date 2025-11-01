@@ -84,6 +84,11 @@ linnet = { version = "0.12.0", features = [
     "bincode",
     "symbolica",
 ] }
+typed-index-collections = { version = "3.3.0", features = [
+    "serde",
+    "serde-alloc",
+    "bincode",
+] }
 
 # PyO3: optional for embedding. Auto-init at runtime.
 [dependencies.pyo3]
