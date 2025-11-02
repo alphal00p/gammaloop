@@ -3,15 +3,15 @@ use linnet::half_edge::involution::{EdgeIndex, HedgePair};
 use log::info;
 use spenso::{
     network::{
+        Network,
         library::DummyLibrary,
         parsing::{ParseSettings, ShadowedStructure},
         store::NetworkStore,
-        Network,
     },
     structure::{HasName, PermutedStructure},
     tensors::symbolic::SymbolicTensor,
 };
-use symbolica::atom::{Atom, FunctionBuilder};
+use symbolica::atom::{Atom, FunctionBuilder, Symbol};
 use typed_index_collections::ti_vec;
 
 use super::Graph;
@@ -19,12 +19,12 @@ use crate::{
     dot,
     feyngen::diagram_generator::{EdgeColor, NodeColorWithVertexRule},
     graph::{
-        parse::{complete_group_parsing, IntoGraph},
         GraphGroup, LMBext,
+        parse::{IntoGraph, complete_group_parsing},
     },
     initialisation::test_initialise,
     momentum_sample::LoopIndex,
-    numerator::{aind::Aind, Numerator, UnInit},
+    numerator::{Numerator, UnInit, aind::Aind},
     utils::test_utils::load_generic_model,
 };
 
@@ -679,7 +679,7 @@ fn parse() {
     let expr = num.state.expr.as_view();
 
     let lib: DummyLibrary<SymbolicTensor<Aind>> = DummyLibrary::<_>::new();
-    let net = Network::<NetworkStore<SymbolicTensor<Aind>, Atom>, _, Aind>::try_from_view(
+    let net = Network::<NetworkStore<SymbolicTensor<Aind>, Atom>, _, Symbol, Aind>::try_from_view(
         expr,
         &lib,
         &ParseSettings::default(),
@@ -690,7 +690,7 @@ fn parse() {
     println!(
         "{}",
         net.dot_display_impl(
-            |a| a.to_string(),
+            ToString::to_string,
             |_| None,
             |a| {
                 if let Ok(a) =
@@ -709,7 +709,8 @@ fn parse() {
                 } else {
                     "".to_string()
                 }
-            }
+            },
+            ToString::to_string,
         )
     );
 
@@ -776,7 +777,7 @@ fn parse_local() {
     let expr = num.state.expr.as_view();
 
     let lib: DummyLibrary<SymbolicTensor<Aind>> = DummyLibrary::<_>::new();
-    let net = Network::<NetworkStore<SymbolicTensor<Aind>, Atom>, _, Aind>::try_from_view(
+    let net = Network::<NetworkStore<SymbolicTensor<Aind>, Atom>, _, Symbol, Aind>::try_from_view(
         expr,
         &lib,
         &ParseSettings::default(),
@@ -787,7 +788,7 @@ fn parse_local() {
     println!(
         "{}",
         net.dot_display_impl(
-            |a| a.to_string(),
+            ToString::to_string,
             |_| None,
             |a| {
                 if let Ok(a) =
@@ -806,7 +807,8 @@ fn parse_local() {
                 } else {
                     "".to_string()
                 }
-            }
+            },
+            ToString::to_string
         )
     );
 
@@ -952,7 +954,7 @@ fn parse_lmbsetting() {
     let expr = num.state.expr.as_view();
 
     let lib: DummyLibrary<SymbolicTensor<Aind>> = DummyLibrary::<_>::new();
-    let net = Network::<NetworkStore<SymbolicTensor<Aind>, Atom>, _, Aind>::try_from_view(
+    let net = Network::<NetworkStore<SymbolicTensor<Aind>, Atom>, _, Symbol, Aind>::try_from_view(
         expr,
         &lib,
         &ParseSettings::default(),
@@ -963,7 +965,7 @@ fn parse_lmbsetting() {
     println!(
         "{}",
         net.dot_display_impl(
-            |a| a.to_string(),
+            ToString::to_string,
             |_| None,
             |a| {
                 if let Ok(a) =
@@ -982,7 +984,8 @@ fn parse_lmbsetting() {
                 } else {
                     "".to_string()
                 }
-            }
+            },
+            ToString::to_string
         )
     );
 

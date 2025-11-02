@@ -17,8 +17,8 @@ use momtrop::SampleGenerator;
 
 use idenso::{color::ColorSimplifier, gamma::GammaSimplifier};
 use rayon::{
-    iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator},
     ThreadPool,
+    iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator},
 };
 use spenso::{
     algebra::complex::Complex,
@@ -26,12 +26,10 @@ use spenso::{
 };
 use tracing::{info_span, instrument};
 use tracing_indicatif::{span_ext::IndicatifSpanExt, style::ProgressStyle};
-use vakint::{
-    vakint_symbol, EvaluationMethod, EvaluationOrder, LoopNormalizationFactor,
-    NumericalEvaluationResult, Vakint, VakintExpression, VakintSettings,
-};
+use vakint::{EvaluationMethod, NumericalEvaluationResult, Vakint, vakint_symbol};
 
 use crate::{
+    GammaLoopContext, GammaLoopContextContainer,
     cff::{
         esurface::GroupEsurfaceId,
         expression::{
@@ -40,28 +38,26 @@ use crate::{
         generation::{generate_cff_expression, get_orientations_from_subgraph},
     },
     gammaloop_integrand::{
-        amplitude_integrand::{AmplitudeGraphTerm, AmplitudeIntegrand, AmplitudeIntegrandData},
-        param_builder::GammaLoopPairs,
         LmbMultiChannelingSetup, ParamBuilder,
+        amplitude_integrand::{AmplitudeGraphTerm, AmplitudeIntegrand, AmplitudeIntegrandData},
     },
     graph::{GraphGroup, GraphGroupPosition, GroupId, LMBext, LmbIndex, LoopMomentumBasis},
     model::ArcParticle,
     momentum_sample::ExternalIndex,
     numerator::symbolica_ext::AtomCoreExt,
-    settings::{runtime::LockedRuntimeSettings, GlobalSettings, RuntimeSettings},
+    settings::{GlobalSettings, RuntimeSettings, runtime::LockedRuntimeSettings},
     signature::SignatureLike,
     status_debug,
     subtraction::amplitude_counterterm::AmplitudeCountertermAtom,
-    utils::{symbolica_ext::LOGPRINTOPTS, Length, F, GS, TENSORLIB, VAKINT, W_},
-    uv::{approx::to_vakint_integrand, UltravioletGraph},
-    GammaLoopContext, GammaLoopContextContainer,
+    utils::{F, FUN_LIB, GS, Length, TENSORLIB, VAKINT, W_, symbolica_ext::LOGPRINTOPTS},
+    uv::{UltravioletGraph, approx::to_vakint_integrand},
 };
-use eyre::{eyre, Context};
+use eyre::{Context, eyre};
 use itertools::Itertools;
 use linnet::{
     half_edge::{
         involution::{HedgePair, Orientation},
-        subgraph::{empty, FullOrEmpty, InternalSubGraph, SubGraph},
+        subgraph::{SuBitGraph, SubGraphLike, SubSetLike},
     },
     parser::DotGraph,
 };
@@ -70,7 +66,7 @@ use symbolica::{
     atom::{Atom, AtomCore, AtomView, Symbol, Var},
     function,
 };
-use typed_index_collections::{ti_vec, TiVec};
+use typed_index_collections::{TiVec, ti_vec};
 
 use crate::{
     cff::esurface::EsurfaceID,
@@ -584,7 +580,7 @@ impl AmplitudeGraph {
         vakint
     }
 
-    pub fn analytical_evaluation<S: SubGraph<Base = BitVec>>(
+    pub fn analytical_evaluation<S: SubGraphLike<Base = SuBitGraph>>(
         &self,
         model: &Model,
         component: &S,
@@ -710,7 +706,7 @@ impl AmplitudeGraph {
             &self.graph.loop_momentum_basis,
             &self.graph,
             &self.graph.full_filter(),
-            &self.graph.empty_subgraph::<BitVec>(),
+            &self.graph.empty_subgraph::<SuBitGraph>(),
             false,
         );
 
@@ -913,7 +909,10 @@ impl AmplitudeGraph {
             let mut product = circled_expr * complement_expr * global_num.clone();
 
             product
-                .execute::<Sequential, SmallestDegree, _, _>(TENSORLIB.read().unwrap().deref())
+                .execute::<Sequential, SmallestDegree, _, _, _>(
+                    TENSORLIB.read().unwrap().deref(),
+                    FUN_LIB.deref(),
+                )
                 .unwrap();
             // println!("{}", product.dot_pretty());
 
@@ -1011,12 +1010,26 @@ impl AmplitudeGraph {
 
         full *= global_num;
 
-        full.execute::<Sequential, SmallestDegree, _, _>(TENSORLIB.read().unwrap().deref())
-            .unwrap();
+        full.execute::<Sequential, SmallestDegree, _, _, _>(
+            TENSORLIB.read().unwrap().deref(),
+            FUN_LIB.deref(),
+        )
+        .unwrap();
 
         let mut scalar: Atom = full
             .result_scalar()
-            .with_context(|| format!("Failed to get scalar from network when building original paramteric integrand.")).with_note(||format!("Network: \n{}\nGraph:\n{}", full.dot_pretty(),DotGraph::from(&self.graph).debug_dot()))?
+            .with_context(|| {
+                format!(
+                    "Failed to get scalar from network when building original paramteric integrand."
+                )
+            })
+            .with_note(|| {
+                format!(
+                    "Network: \n{}\nGraph:\n{}",
+                    full.dot_pretty(),
+                    DotGraph::from(&self.graph).debug_dot()
+                )
+            })?
             .into();
 
         debug!(
@@ -1282,7 +1295,7 @@ pub mod test {
         graph::parse::IntoGraph,
         initialisation::test_initialise,
         processes::AmplitudeGraph,
-        utils::{test_utils::load_generic_model, GS},
+        utils::{GS, test_utils::load_generic_model},
     };
     #[test]
     fn amplitude_tree() {

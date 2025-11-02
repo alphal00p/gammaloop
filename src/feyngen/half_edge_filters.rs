@@ -1,12 +1,12 @@
-use std::fmt::Display;
-
-use bitvec::vec::BitVec;
 use linnet::half_edge::{
+    HedgeGraph,
     involution::{EdgeData, EdgeIndex, Flow, HedgePair, Orientation},
     nodestore::NodeStorageOps,
-    subgraph::{cut::PossiblyCutEdge, SubGraph, SubGraphOps},
-    HedgeGraph,
+    subgraph::{
+        ModifySubSet, SuBitGraph, SubGraphLike, SubGraphOps, SubSetOps, cut::PossiblyCutEdge,
+    },
 };
+use std::fmt::Display;
 use symbolica::graph::Graph as SymbolicaGraph;
 
 use crate::{
@@ -111,7 +111,7 @@ impl<E, V> FeynGenHedgeGraph<E, V> {
         if self.state != CutState::Saturated {
             return;
         }
-        let mut excised: BitVec = self.graph.empty_subgraph();
+        let mut excised: SuBitGraph = self.graph.empty_subgraph();
 
         for (_, n, d) in self.graph.iter_nodes() {
             if !matches!(d, VertexType::Internal(_)) {
@@ -140,15 +140,15 @@ impl<E, V> FeynGenHedgeGraph<E, V> {
 }
 impl<V> FeynGenHedgeGraph<ArcParticle, V> {
     pub(crate) fn number_of_fermion_loops(&self) -> usize {
-        let mut fermions: BitVec = self.graph.empty_subgraph();
+        let mut fermions: SuBitGraph = self.graph.empty_subgraph();
 
         for (p, _, d) in self.graph.iter_edges() {
             if d.data.edge_data().0.is_fermion() {
                 #[allow(clippy::single_match)]
                 match p {
                     HedgePair::Paired { source, sink } => {
-                        fermions.set(source.0, true);
-                        fermions.set(sink.0, true);
+                        fermions.add(source);
+                        fermions.add(sink);
                     }
                     _ => {}
                 }
@@ -158,7 +158,7 @@ impl<V> FeynGenHedgeGraph<ArcParticle, V> {
         self.loop_count(&fermions)
     }
 
-    pub(crate) fn loop_count<S: SubGraph>(&self, subgraph: &S) -> usize {
+    pub(crate) fn loop_count<S: SubGraphLike>(&self, subgraph: &S) -> usize {
         let n_hedges = self.graph.count_internal_edges(subgraph);
 
         let n_nodes = self.graph.number_of_nodes_in_subgraph(subgraph);

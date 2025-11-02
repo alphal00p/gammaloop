@@ -2,38 +2,38 @@ use std::{collections::BTreeMap, ops::Deref, path::Path};
 
 use crate::{
     feyngen::{
-        diagram_generator::{EdgeColor, NodeColorWithVertexRule},
         GenerationType,
+        diagram_generator::{EdgeColor, NodeColorWithVertexRule},
     },
     gammaloop_integrand::ParamBuilder,
     graph::{edge::EdgeExtraData, GraphGroup, GroupId, LoopMomentumBasis},
     model::Model,
     momentum_sample::LoopIndex,
     numerator::{
+        GlobalPrefactor,
         aind::{Aind, NewAind},
         graph::GeneratePolarizations,
         ufo::UFO,
-        GlobalPrefactor,
     },
     utils::symbolica_ext::DOD,
 };
 use ahash::{AHashMap, AHashSet};
-use bitvec::vec::BitVec;
+
 use color_eyre::{Result, Section};
 
-use eyre::{eyre, Ok};
+use eyre::{Ok, eyre};
 use itertools::Itertools;
 // use symbolica::{atom::Atom, graph::Graph as SymbolicaGraph};
 
 use linnet::{
     half_edge::{
+        HedgeGraph, NodeIndex,
         builder::HedgeGraphBuilder,
         involution::{EdgeData, EdgeIndex, EdgeVec, Flow, Hedge, HedgePair},
         nodestore::NodeStorageVec,
-        subgraph::{Inclusion, ModifySubgraph, OrientedCut, SubGraph, SubGraphOps},
+        subgraph::{Inclusion, ModifySubSet, OrientedCut, SuBitGraph, SubSetLike, SubSetOps},
         swap::Swap,
         tree::SimpleTraversalTree,
-        HedgeGraph, NodeIndex,
     },
     parser::{DotEdgeData, DotGraph, DotHedgeData, DotVertexData, GraphSet, HedgeParseError},
     permutation::Permutation,
@@ -42,18 +42,18 @@ use log::debug;
 use spenso::{
     contraction::Contract,
     network::library::TensorLibraryData,
-    structure::{representation::Euclidean, HasStructure, OrderedStructure},
+    structure::{HasStructure, OrderedStructure, representation::Euclidean},
     tensors::{data::StorageTensor, parametric::ParamTensor},
 };
 use symbolica::{atom::Atom, graph::Graph as SymbolicaGraph};
 use typed_index_collections::TiVec;
 
 use super::{
+    Edge, Graph, LMBext, NumHedgeData, Vertex,
     edge::{EdgeMass, ParseEdge},
     global::ParseData,
     hedge_data::{NumIndices, ParseHedge},
     vertex::ParseVertex,
-    Edge, Graph, LMBext, NumHedgeData, Vertex,
 };
 
 /// Extract oriented particles from hedges, filtering out dummy edges
@@ -299,14 +299,16 @@ impl ParseGraph {
                     } else {
                         return Err(eyre!(
                             "Failed to find CP vertex rule for particles: {:?} for node {node_id} in graph {}",
-                            particles,self.global_data.name,
+                            particles,
+                            self.global_data.name,
                         ));
                     }
                 } else {
                     let particles = particles.iter().map(|p| p.name.as_str()).collect_vec();
                     return Err(eyre!(
                         "Failed to find CP vertex rule for particles: {:?} for node {node_id} in graph {}",
-                        particles,self.global_data.name,
+                        particles,
+                        self.global_data.name,
                     ));
                 }
             }
@@ -398,7 +400,9 @@ impl ParseGraph {
                     // Bidirectional connection
                     if let Some(existing_type) = &generation_type {
                         if *existing_type != GenerationType::CrossSection {
-                            return Err(eyre!("Cannot have both incoming and outgoing external connections for amplitudes"));
+                            return Err(eyre!(
+                                "Cannot have both incoming and outgoing external connections for amplitudes"
+                            ));
                         }
                     } else {
                         generation_type = Some(GenerationType::CrossSection);
@@ -444,7 +448,9 @@ impl ParseGraph {
                     // Incoming only
                     if let Some(existing_type) = &generation_type {
                         if *existing_type != GenerationType::Amplitude {
-                            return Err(eyre!("Cannot mix single directional connections with bidirectional ones for cross sections"));
+                            return Err(eyre!(
+                                "Cannot mix single directional connections with bidirectional ones for cross sections"
+                            ));
                         }
                     } else {
                         generation_type = Some(GenerationType::Amplitude);
@@ -466,7 +472,9 @@ impl ParseGraph {
                     // Outgoing only
                     if let Some(existing_type) = &generation_type {
                         if *existing_type != GenerationType::Amplitude {
-                            return Err(eyre!("Cannot mix single directional connections with bidirectional ones for cross sections"));
+                            return Err(eyre!(
+                                "Cannot mix single directional connections with bidirectional ones for cross sections"
+                            ));
                         }
                     } else {
                         generation_type = Some(GenerationType::Amplitude);
@@ -486,8 +494,8 @@ impl ParseGraph {
                 }
                 (None, None) => {
                     return Err(eyre!(
-                    "External connections must have at least one of incoming or outgoing defined"
-                ));
+                        "External connections must have at least one of incoming or outgoing defined"
+                    ));
                 }
             }
         }
@@ -551,14 +559,20 @@ impl ParseGraph {
         if out_edge.directed != in_edge.directed {
             return Err(eyre!(
                 "External edges must have the same directedness, for edge ids {} and {} found {:?} and {:?}",
-                in_id, out_id, in_edge, out_edge
+                in_id,
+                out_id,
+                in_edge,
+                out_edge
             ));
         }
 
         if in_edge.data.pdg.abs() != out_edge.data.pdg.abs() {
             return Err(eyre!(
                 "External edges must have the same pdg in abs, for edge ids {} and {} found {:?} and {:?}",
-                in_id, out_id, in_edge, out_edge
+                in_id,
+                out_id,
+                in_edge,
+                out_edge
             ));
         }
 
@@ -645,8 +659,8 @@ struct InitialGraphData {
 struct CutProcessingResult {
     lmb_ids: BTreeMap<LoopIndex, EdgeIndex>,
     xs_ext_id: BTreeMap<Hedge, (EdgeIndex, Hedge)>,
-    initial_hedges: BitVec,
-    full_cut: BitVec,
+    initial_hedges: SuBitGraph,
+    full_cut: SuBitGraph,
 }
 
 impl CutProcessingResult {
@@ -668,7 +682,7 @@ impl CutProcessingResult {
         let trans = perh.transpositions();
 
         for (i, j) in trans.into_iter().rev() {
-            self.full_cut.swap(i, j);
+            self.full_cut.swap(Hedge(i), Hedge(j));
             // self.initial_hedges.swap(i, j);// initial hedges is already assuming permuted hedges
         }
 
@@ -829,7 +843,7 @@ impl Graph {
     fn process_cut_edges(graph: &NumGraph) -> Result<CutProcessingResult> {
         let mut lmb_ids: BTreeMap<LoopIndex, EdgeIndex> = BTreeMap::new();
         let mut xs_ext_id: BTreeMap<Hedge, (EdgeIndex, Hedge)> = BTreeMap::new();
-        let mut full_cut: BitVec = graph.full_filter();
+        let mut full_cut: SuBitGraph = graph.full_filter();
 
         for (p, eid, e) in graph.iter_edges() {
             let HedgePair::Paired { sink, .. } = p else {
@@ -859,7 +873,7 @@ impl Graph {
 
         // debug!("Graph now:{}", graph.dot(full_cut));
 
-        let mut initial_hedges: BitVec = graph.empty_subgraph();
+        let mut initial_hedges: SuBitGraph = graph.empty_subgraph();
         for (target_pos, _) in xs_ext_id.iter().enumerate() {
             initial_hedges.add(Hedge(target_pos));
         }
@@ -1064,7 +1078,7 @@ impl Graph {
 
     fn setup_loop_momentum_basis(
         underlying: &UnderlyingGraph,
-        full_cut: &BitVec,
+        full_cut: &SuBitGraph,
         lmb_ids: &BTreeMap<LoopIndex, EdgeIndex>,
         xs_ext_id: &BTreeMap<Hedge, (EdgeIndex, Hedge)>,
     ) -> Result<LoopMomentumBasis> {

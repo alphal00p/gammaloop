@@ -15,19 +15,19 @@ use color_eyre::Report;
 use color_eyre::Result;
 use itertools::Itertools;
 use linnet::half_edge::{
-    involution::{EdgeIndex, Orientation},
-    subgraph::InternalSubGraph,
+    HedgeGraph,
+    involution::{EdgeVec, HedgePair},
+    subgraph::{OrientedCut, SubGraphLike, SubSetLike},
 };
 use linnet::half_edge::{
-    involution::{EdgeVec, HedgePair},
-    subgraph::{OrientedCut, SubGraph},
-    HedgeGraph,
+    involution::{EdgeIndex, Orientation},
+    subgraph::InternalSubGraph,
 };
 use symbolica::{
     atom::{Atom, AtomCore},
     id::{Pattern, Replacement},
 };
-use typed_index_collections::{ti_vec, TiVec};
+use typed_index_collections::{TiVec, ti_vec};
 
 use serde::{Deserialize, Serialize};
 
@@ -36,8 +36,8 @@ use log::debug;
 use super::{
     cff_graph::CFFGenerationGraph,
     cut_expression::{
-        amplitude_orientations_to_sg_orientaion, CutOrientationData, OrientationMap,
-        SingleCutExpression, SingleCutOrientationExpression, SuperGraphOrientationID,
+        CutOrientationData, OrientationMap, SingleCutExpression, SingleCutOrientationExpression,
+        SuperGraphOrientationID, amplitude_orientations_to_sg_orientaion,
     },
     esurface::{Esurface, EsurfaceCollection, EsurfaceID, ExternalShift},
     expression::{AmplitudeOrientationID, CFFExpression, OrientationID, SubgraphOrientationID},
@@ -173,7 +173,7 @@ fn get_orientations<E, V, H>(
         .collect_vec()
 }
 
-pub(crate) fn get_orientations_from_subgraph<E, V, H, S: SubGraph>(
+pub(crate) fn get_orientations_from_subgraph<E, V, H, S: SubGraphLike>(
     graph: &HedgeGraph<E, V, H>,
     subgraph: &S,
     reversed_dangling: &[EdgeIndex],
@@ -347,7 +347,7 @@ pub(crate) fn generate_cff_expression<E, V, H>(
     Ok(graph_cff)
 }
 
-pub fn generate_cff_expression_from_subgraph<E, V, H, S: SubGraph>(
+pub fn generate_cff_expression_from_subgraph<E, V, H, S: SubGraphLike>(
     graph: &HedgeGraph<E, V, H>,
     subgraph: &S,
     canonize_esurface: &Option<ShiftRewrite>,
@@ -359,7 +359,7 @@ pub fn generate_cff_expression_from_subgraph<E, V, H, S: SubGraph>(
     Ok(cff)
 }
 
-pub fn generate_uv_cff<E, V, H, S: SubGraph>(
+pub fn generate_uv_cff<E, V, H, S: SubGraphLike>(
     graph: &HedgeGraph<E, V, H>,
     subgraph: &S,
     canonize_esurface: &Option<ShiftRewrite>,
@@ -829,7 +829,7 @@ mod tests_cff {
         cff::cff_graph::CFFEdgeType,
         momentum::{FourMomentum, ThreeMomentum},
         settings::global::OrientationPattern,
-        utils::{self, dummy_hedge_graph, RefDefault, F},
+        utils::{self, F, RefDefault, dummy_hedge_graph},
     };
 
     use super::*;

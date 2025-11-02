@@ -7,9 +7,9 @@ use crate::momentum_sample::{
 };
 use crate::numerator::aind::Aind;
 use crate::numerator::ufo::UFO;
-use crate::settings::runtime::kinematic::Externals;
 use crate::settings::runtime::ParameterizationSettings;
 use crate::settings::runtime::SamplingSettings;
+use crate::settings::runtime::kinematic::Externals;
 use crate::settings::runtime::{ParameterizationMapping, ParameterizationMode};
 use crate::signature::{ExternalSignature, LoopSignature};
 
@@ -20,22 +20,27 @@ use itertools::Itertools;
 use linnet::half_edge::involution::EdgeIndex;
 use rand::Rng;
 use ref_ops::{RefAdd, RefDiv, RefMul, RefNeg, RefRem, RefSub};
+use rug::Float;
 use rug::float::{Constant, ParseFloatError};
 use rug::ops::{CompleteRound, Pow};
-use rug::Float;
 use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize};
 use spenso::algebra::algebraic_traits::RefOne;
 use spenso::algebra::algebraic_traits::RefZero;
 use spenso::algebra::complex::Complex;
-use spenso::algebra::complex::SymbolicaComplex;
 use spenso::algebra::complex::R;
+use spenso::algebra::complex::SymbolicaComplex;
+use spenso::algebra::complex::symbolica_traits::ToFloat;
 use spenso::algebra::upgrading_arithmetic::TrySmallestUpgrade;
-use spenso::network::library::symbolic::{ExplicitKey, TensorLibrary};
 use spenso::network::library::TensorLibraryData;
+use spenso::network::library::function_lib::{INBUILTS, PanicMissingConcrete, SymbolLib};
+use spenso::network::library::symbolic::{ExplicitKey, TensorLibrary};
+use spenso::network::parsing::ShadowedStructure;
 use spenso::structure::concrete_index::ExpandedIndex;
-use spenso::tensors::parametric::to_param::ToAtom;
+use spenso::tensors::complex::RealOrComplexTensor;
+use spenso::tensors::data::StorageTensor;
 use spenso::tensors::parametric::MixedTensor;
+use spenso::tensors::parametric::to_param::ToAtom;
 use spenso_hep_lib::hep_lib;
 use symbolica::coefficient::Coefficient;
 use symbolica::domains::float::{
@@ -60,7 +65,7 @@ use vakint::Vakint;
 // };
 // use symbolica_community::physics::tensors::structure::SpensoStucture;
 // use symbolica::domains::Field;
-use crate::{status_debug, MAX_LOOP};
+use crate::{MAX_LOOP, status_debug};
 #[allow(unused_imports)]
 use log::{debug, info};
 use symbolica::atom::Atom;
@@ -186,7 +191,7 @@ impl<const N: u32> From<&Rational> for VarFloat<N> {
         let n = match n {
             Integer::Double(f) => Float::with_val(N, f),
             Integer::Large(f) => Float::with_val(N, f),
-            Integer::Natural(f) => Float::with_val(N, f),
+            Integer::Single(f) => Float::with_val(N, f),
         };
 
         let d = x.denominator();
@@ -194,7 +199,7 @@ impl<const N: u32> From<&Rational> for VarFloat<N> {
         let d = match d {
             Integer::Double(f) => Float::with_val(N, f),
             Integer::Large(f) => Float::with_val(N, f),
-            Integer::Natural(f) => Float::with_val(N, f),
+            Integer::Single(f) => Float::with_val(N, f),
         };
 
         let r = n / d;
@@ -436,6 +441,10 @@ impl<const N: u32> NumericalFloatLike for VarFloat<N> {
         (&self.float * &a.float + &b.float).complete(N).into()
     }
 
+    fn is_fully_zero(&self) -> bool {
+        self.float.is_zero()
+    }
+
     // fn norm(&self) -> Self {
     //     self.float.clone().abs().into()
     // }
@@ -535,6 +544,11 @@ impl<const N: u32> Real for VarFloat<N> {
     fn i(&self) -> Option<Self> {
         None
     }
+
+    fn conj(&self) -> Self {
+        self.clone()
+    }
+
     #[inline(always)]
     fn pi(&self) -> Self {
         Float::with_val(N, rug::float::Constant::Pi).into()
@@ -613,11 +627,7 @@ impl FloatLike for VarFloat<113> {
 
     fn rem_euclid(&self, rhs: &Self) -> Self {
         let r = self.ref_rem(rhs);
-        if r < r.zero() {
-            r + rhs
-        } else {
-            r
-        }
+        if r < r.zero() { r + rhs } else { r }
     }
 
     fn FRAC_1_PI(&self) -> Self {
@@ -921,6 +931,12 @@ impl<'a> From<&'a F<f64>> for Coefficient {
     }
 }
 
+impl ToFloat for F<f64> {
+    fn to_float(&self) -> symbolica::domains::float::Float {
+        symbolica::domains::float::Float::with_val(53, self.0)
+    }
+}
+
 impl ToAtom for F<f64> {
     fn to_atom(self) -> Atom {
         Atom::num(self.0)
@@ -1088,6 +1104,11 @@ impl<T: FloatLike> NumericalFloatLike for F<T> {
     fn mul_add(&self, a: &Self, b: &Self) -> Self {
         F(self.0.mul_add(&a.0, &b.0))
     }
+
+    fn is_fully_zero(&self) -> bool {
+        self.0.is_fully_zero()
+    }
+
     fn new_zero() -> Self {
         F(T::new_zero())
     }
@@ -1149,6 +1170,10 @@ impl<T: FloatLike + ConstructibleFloat> ConstructibleFloat for F<T> {
 impl<T: FloatLike> Real for F<T> {
     fn atan2(&self, x: &Self) -> Self {
         F(self.0.atan2(&x.0))
+    }
+
+    fn conj(&self) -> Self {
+        F(self.0.conj())
     }
 
     fn i(&self) -> Option<Self> {
@@ -1223,11 +1248,7 @@ use delegate::delegate;
 
 impl<T: FloatLike> F<T> {
     pub(crate) fn max(self, other: F<T>) -> F<T> {
-        if self < other {
-            other
-        } else {
-            self
-        }
+        if self < other { other } else { self }
     }
 
     pub fn negate(&mut self) {
@@ -1733,11 +1754,7 @@ pub(crate) fn format_uncertainty(mean: F<f64>, sdev: F<f64>) -> String {
         if ans > 0 && x * 10.0.powi(ans) >= [0.5, 9.5, 99.5][offset] {
             ans -= 1;
         }
-        if ans < 0 {
-            0
-        } else {
-            ans
-        }
+        if ans < 0 { 0 } else { ans }
     }
     let v = mean;
     let dv = sdev.abs();
@@ -2408,9 +2425,12 @@ impl<T: FloatLike> ApproxEq<Complex<F<T>>, F<T>> for Complex<F<T>> {
         // let arg_diff = (&self.arg() - &other.arg()).rem_euclid(&two_pi);
         // let arg_zero = self.re.zero();
         if !arg_self.approx_eq(&arg_other, tolerance) {
-            return  Err(eyre!(
+            return Err(eyre!(
                 "Phases are not approximately equal: \n{:+e} - \n{:+e}= \n{:+e}!=0 with tolerance {:+e}",
-                arg_self, arg_other,&arg_self-&arg_other, tolerance
+                arg_self,
+                arg_other,
+                &arg_self - &arg_other,
+                tolerance
             ));
         }
         Ok(())
@@ -2803,7 +2823,9 @@ pub(crate) fn global_inv_parameterize<T: FloatLike>(
             (xs, inv_jac)
         }
         ParameterizationMode::HyperSphericalFlat => {
-            panic!("Inverse of flat hyperspherical sampling is not available since it is not bijective.");
+            panic!(
+                "Inverse of flat hyperspherical sampling is not available since it is not bijective."
+            );
         }
         ParameterizationMode::Cartesian | ParameterizationMode::Spherical => {
             if force_radius {
@@ -3313,6 +3335,17 @@ pub static TENSORLIB: LazyLock<
     RwLock<TensorLibrary<MixedTensor<F<f64>, ExplicitKey<Aind>>, Aind>>,
 > = LazyLock::new(|| RwLock::new(hep_lib(F(1.), F(0.))));
 
+pub static FUN_LIB: LazyLock<
+    SymbolLib<RealOrComplexTensor<F<f64>, ShadowedStructure<Aind>>, PanicMissingConcrete>,
+> = LazyLock::new(|| {
+    let mut lib = PanicMissingConcrete::new_lib();
+    lib.insert(INBUILTS.conj, |a| match a {
+        RealOrComplexTensor::Complex(c) => RealOrComplexTensor::Complex(c.map_data(|x| x.conj())),
+        RealOrComplexTensor::Real(r) => RealOrComplexTensor::Real(r),
+    });
+    lib
+});
+
 pub static VAKINT: LazyLock<RwLock<Option<Vakint>>> = LazyLock::new(|| RwLock::new(None));
 
 impl<T: FloatLike> momtrop::float::MomTropFloat for F<T> {
@@ -3388,9 +3421,9 @@ impl<T: FloatLike> momtrop::float::MomTropFloat for F<T> {
 }
 
 pub(crate) fn dummy_hedge_graph(num_edges: usize) -> linnet::half_edge::HedgeGraph<(), ()> {
+    use linnet::half_edge::NodeIndex;
     use linnet::half_edge::builder::HedgeGraphBuilder;
     use linnet::half_edge::involution::Orientation;
-    use linnet::half_edge::NodeIndex;
 
     let mut graph = HedgeGraphBuilder::new();
     graph.add_node(());

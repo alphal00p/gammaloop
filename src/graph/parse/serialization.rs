@@ -1,5 +1,5 @@
 use linnet::{
-    half_edge::{subgraph::SubGraph, HedgeGraph},
+    half_edge::{HedgeGraph, subgraph::SubSetLike},
     parser::{DotEdgeData, DotGraph, DotHedgeData, DotVertexData},
 };
 
@@ -8,7 +8,7 @@ use crate::{
     utils::{GS, W_},
 };
 
-use super::{string_utils::ToQuoted, ParseGraph};
+use super::{ParseGraph, string_utils::ToQuoted};
 
 impl From<&Graph> for DotGraph {
     fn from(value: &Graph) -> Self {

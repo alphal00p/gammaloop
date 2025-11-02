@@ -1,43 +1,19 @@
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    ops::Deref,
-};
+use std::ops::Deref;
 
-use bitvec::vec::BitVec;
 use idenso::color::SelectiveExpand;
-use itertools::Itertools;
-use linnet::half_edge::subgraph::ModifySubgraph;
-use spenso::{
-    network::{
-        graph::{NetworkEdge, NetworkLeaf, NetworkNode, NetworkOp},
-        library::{DummyKey, DummyLibrary},
-        store::{NetworkStore, TensorScalarStore},
-        Network,
-    },
-    structure::{
-        representation::{LibraryRep, Minkowski, RepName},
-        slot::IsAbstractSlot,
-        HasName, TensorStructure,
-    },
-    tensors::symbolic::SymbolicTensor,
-};
-
 use spenso::{
     network::parsing::ParseSettings,
+    structure::representation::{Minkowski, RepName},
 };
+
 use symbolica::{
-    atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol},
+    atom::{Atom, AtomCore, AtomOrView, AtomView, Symbol},
     coefficient::{Coefficient, CoefficientView},
     domains::{float::Complex as SymComplex, rational::Rational},
     function,
-    id::Replacement,
 };
-use tracing::debug;
 
-use crate::{
-    numerator::aind::Aind,
-    utils::{TENSORLIB, W_},
-};
+use crate::utils::{TENSORLIB, W_};
 
 use super::ParsingNet;
 pub type ParsingNetError = spenso::network::TensorNetworkError<
@@ -47,20 +23,13 @@ pub type ParsingNetError = spenso::network::TensorNetworkError<
         spenso::structure::representation::LibraryRep,
         super::aind::Aind,
     >,
+    Symbol,
 >;
 
 pub trait AtomCoreExt {
     fn wrap_color(&self, symbol: Symbol) -> Atom;
 
     fn floatify(&self, prec: u32) -> Atom;
-
-    fn canonize_spenso(&self) -> Atom;
-
-    fn canonize_tensors_nice<'a>(
-        &'a self,
-        is_index: &[Replacement],
-        new_dummy: impl FnMut(usize, &Atom) -> Atom,
-    ) -> Atom;
 
     fn map_mink_dim<'a>(&self, dim: impl Into<AtomOrView<'a>>) -> Atom;
 
@@ -81,17 +50,6 @@ impl AtomCoreExt for Atom {
         self.as_view().wrap_color(symbol)
     }
 
-    fn canonize_tensors_nice<'a>(
-        &'a self,
-        is_index: &[Replacement],
-        new_dummy: impl FnMut(usize, &Atom) -> Atom,
-    ) -> Atom {
-        self.as_view().canonize_tensors_nice(is_index, new_dummy)
-    }
-    fn canonize_spenso(&self) -> Atom {
-        self.as_view().canonize_spenso()
-    }
-
     fn unwrap_function(&self, symbol: Symbol) -> Atom {
         self.as_view().unwrap_function(symbol)
     }
@@ -102,49 +60,6 @@ impl AtomCoreExt for Atom {
 }
 
 impl AtomCoreExt for AtomView<'_> {
-    fn canonize_tensors_nice<'a>(
-        &'a self,
-        is_index: &[Replacement],
-        mut new_dummy: impl FnMut(usize, &Atom) -> Atom,
-    ) -> Atom {
-        let mut indices_sorted = BTreeSet::new();
-
-        for i in 0..(is_index.len()) {
-            let rep = &is_index[i..(i + 1)];
-            let r = &is_index[i];
-            for m in self.pattern_match(&r.pat, None, None) {
-                let a = r.pat.replace_wildcards(&m);
-                let group = a.replace_multiple(&rep);
-                indices_sorted.insert((group, a));
-            }
-        }
-
-        let mut indices = vec![];
-
-        let mut slot_location_replacements = vec![];
-
-        let mut last_group = Atom::Zero;
-
-        let mut groups = vec![];
-
-        for (slot_loc, (g, i)) in indices_sorted.into_iter().enumerate() {
-            if last_group != g {
-                groups.push((slot_loc, g.clone()));
-                last_group = g.clone();
-            };
-            let last_shift = groups.last().unwrap().0;
-            slot_location_replacements.push(Replacement::new(
-                i.to_pattern(),
-                new_dummy(slot_loc - last_shift, &g),
-            ));
-            indices.push((i, g));
-        }
-
-        let can = self.canonize_tensors(&indices).unwrap();
-
-        can //.replace_multiple(&slot_location_replacements)
-    }
-
     fn floatify(&self, prec: u32) -> Atom {
         self.map_coefficient(|c| match c {
             CoefficientView::Natural(r, d, ri, di) => {
@@ -166,148 +81,6 @@ impl AtomCoreExt for AtomView<'_> {
             )),
             _ => c.to_owned(),
         })
-    }
-
-    fn canonize_spenso(&self) -> Atom {
-        fn new_dummy(i: usize, b: &Atom) -> Atom {
-            let mut index = Atom::Zero;
-            if let AtomView::Fun(f) = b.as_view() {
-                if f.get_nargs() == 1 {
-                    if let AtomView::Num(n) = f.iter().next().unwrap() {
-                        let dim = i64::try_from(f.iter().next().unwrap()).unwrap() as usize;
-                        index = LibraryRep::try_from_symbol_coerced(f.get_symbol())
-                            .unwrap()
-                            .new_slot::<Aind, _, Aind>(dim, Aind::Dummy(i))
-                            .to_atom();
-                    }
-                }
-            }
-
-            index
-        }
-
-        let lib = DummyLibrary::<SymbolicTensor<Aind>>::new();
-        let mut net =
-            Network::<NetworkStore<SymbolicTensor<Aind>, Atom>, DummyKey, Aind>::try_from_view(
-                *self,
-                &lib,
-                &ParseSettings::default(),
-            )
-            .unwrap();
-
-        debug!(net=%net.graph.dot_impl(
-            |i| {
-                let ss = &net.store.get_scalar(i);
-                format!("{:#}", ss)
-            },
-            |_| "AAAA".to_string(),
-            |t| {
-                let tt = &net.store.get_tensor(t);
-                format!("{}({})",
-                    tt.name().map(|a|a.to_string()).unwrap_or("NA".to_string()),
-                    tt.args().map(|a|a.iter().map(|a|format!("{}",a)).join(",")).unwrap_or(String::new()))
-            },
-        ),"Network for canonization");
-
-        let mut redual_reps = vec![];
-
-        for t in net.store.tensors.iter_mut() {
-            let mut reps = vec![];
-            debug!(name=%t.name().unwrap());
-            let mut pat = FunctionBuilder::new(t.name().unwrap());
-            let mut rhs = pat.clone();
-            for s in t.structure.external_structure_iter() {
-                debug!(slot=%s.to_string(),rep=%s.rep().to_string());
-                if !s.rep_name().is_self_dual() && s.rep_name().is_dual() {
-                    pat = pat.add_arg(s.rep().dual().to_symbolic([Atom::var(W_.a_)]));
-
-                    reps.push(Replacement::new(
-                        s.rep().to_symbolic([Atom::var(W_.a_)]).to_pattern(),
-                        s.rep().dual().to_symbolic([Atom::var(W_.a_)]),
-                    ));
-                } else {
-                    pat = pat.add_arg(s.rep().to_symbolic([Atom::var(W_.a_)]));
-                }
-                rhs = rhs.add_arg(s.rep().to_symbolic([Atom::var(W_.a_)]));
-            }
-            if !reps.is_empty() {
-                redual_reps.push(Replacement::new(pat.finish().to_pattern(), rhs.finish()));
-                t.expression = t.expression.replace_multiple(&reps);
-            }
-        }
-
-        let mut dummies = BTreeMap::new();
-
-        let mut only_products_and_associated: BitVec = net.graph.graph.empty_subgraph();
-
-        for (_, crown, d) in net.graph.graph.iter_nodes() {
-            if let NetworkNode::Op(NetworkOp::Product) = d {
-                for h in crown {
-                    let n = net.graph.graph.node_id(h);
-                    if let Some(cc) = net.graph.graph.involved_node_crown(h) {
-                        for h in cc {
-                            only_products_and_associated.add(h);
-                        }
-                    }
-                    for h in net.graph.graph.iter_crown(n) {
-                        only_products_and_associated.add(h);
-                    }
-                    only_products_and_associated.add(h);
-                }
-            }
-        }
-
-        debug!(net=%net.graph.graph.dot_impl(
-                &only_products_and_associated,
-                "",
-                &|_| None,
-                &|e| {
-                    if let NetworkEdge::Slot(s) = e {
-                        Some(format!("label=\"{s}\""))
-                    } else {
-                        None
-                    }
-                },
-                &|n| match n {
-                    NetworkNode::Leaf(l) => match l {
-                        NetworkLeaf::LibraryKey(l) => {
-                            Some(format!("label= \"L:\""))
-                        }
-                        NetworkLeaf::LocalTensor(l) => {
-                            let tt = &net.store.get_tensor(*l);
-                            let a = format!("{}({})",
-                                tt.name().map(|a|a.to_string()).unwrap_or("NA".to_string()),
-                                tt.args().map(|a|a.iter().map(|a|format!("{}",a)).join(",")).unwrap_or(String::new()));
-                            Some(format!("label = \"T:{a}\""))
-                        }
-                        NetworkLeaf::Scalar(s) => { let ss = &net.store.get_scalar(*s);
-                            Some(format!("label = \"S:{ss}\""))},
-                    },
-                    NetworkNode::Op(o) => Some(format!("label = \"{o}\"")),
-                },
-            ),"only_products_and_associated"
-        );
-
-        for (p, e, d) in net.graph.graph.iter_edges_of(&only_products_and_associated) {
-            if p.is_paired() {
-                if let NetworkEdge::Slot(s) = d.data {
-                    dummies.insert(s.to_atom(), s.rep().to_symbolic([]));
-                }
-            }
-        }
-
-        let index_ident_pat: Vec<Replacement> = dummies
-            .iter()
-            .map(|(k, v)| {
-                debug!(k=%k,v=%v.to_string(),"Index identified for canonization");
-                Replacement::new(k.to_pattern(), v.clone())
-            })
-            .collect();
-
-        // mink(W_.dim,W_.i)=>mink(W_.dim)
-
-        self.canonize_tensors_nice(&index_ident_pat, new_dummy)
-            .replace_multiple(&redual_reps)
     }
 
     fn map_mink_dim<'a>(&self, dim: impl Into<AtomOrView<'a>>) -> Atom {
@@ -345,11 +118,12 @@ impl AtomCoreExt for AtomView<'_> {
 
 #[cfg(test)]
 mod tests {
+    use idenso::IndexTooling;
     use symbolica::{atom::AtomCore, parse_lit};
 
     use crate::{
         dot,
-        graph::{parse::IntoGraph, FeynmanGraph, Graph},
+        graph::{FeynmanGraph, Graph, parse::IntoGraph},
         initialisation::test_initialise,
         uv::UltravioletGraph,
     };
@@ -399,14 +173,14 @@ mod tests {
 
             // TODO Check if we include overall factor in main
             numerator.state.expr *= &g.global_prefactor.num * &g.global_prefactor.projector; // * &gl5.overall_factor;
-                                                                                             // numerator.state.expr = numerator.state.expr.replace_multiple(&cpl_reps);
+            // numerator.state.expr = numerator.state.expr.replace_multiple(&cpl_reps);
 
             let numerator_color_simplified = numerator
                 .clone()
                 .color_simplify()
                 .get_single_atom()
                 .unwrap()
-                .canonize_spenso();
+                .canonize(Aind::Dummy);
 
             println!("numerator_color_simplified:{numerator_color_simplified}");
             println!("numerator:{}", numerator.state.expr);
@@ -470,8 +244,8 @@ mod tests {
                 ^ 4 * UFO::sw
                 ^ (-2)
                     * gammalooprs::K(0, spenso::mink(4, gammalooprs::edge(2, 1)))
-                    * gammalooprs::ϵ(0, spenso::mink(4, gammalooprs::hedge(1)))
-                    * gammalooprs::ϵbar(0, spenso::mink(4, gammalooprs::hedge(0)))
+                    * gammalooprs::e(0, spenso::mink(4, gammalooprs::hedge(1)))
+                    * gammalooprs::ebar(0, spenso::mink(4, gammalooprs::hedge(0)))
                     * spenso::gamma(
                         spenso::bis(4, gammalooprs::hedge(10)),
                         spenso::bis(4, gammalooprs::hedge(11)),
@@ -567,8 +341,8 @@ mod tests {
                 ^ 4 * UFO::sw
                 ^ (-2)
                     * gammalooprs::K(0, spenso::mink(4, gammalooprs::edge(2, 1)))
-                    * gammalooprs::ϵ(0, spenso::mink(4, gammalooprs::hedge(1)))
-                    * gammalooprs::ϵbar(0, spenso::mink(4, gammalooprs::hedge(0)))
+                    * gammalooprs::e(0, spenso::mink(4, gammalooprs::hedge(1)))
+                    * gammalooprs::ebar(0, spenso::mink(4, gammalooprs::hedge(0)))
                     * spenso::gamma(
                         spenso::bis(4, gammalooprs::hedge(10)),
                         spenso::bis(4, gammalooprs::hedge(9)),
@@ -615,8 +389,8 @@ mod tests {
 
         println!("ratio:{}", &a / &b);
 
-        let ac = a.canonize_spenso();
-        let bc = b.canonize_spenso();
+        let ac = a.canonize(Aind::Dummy);
+        let bc = b.canonize(Aind::Dummy);
         println!("ac:{}", ac);
         println!("bc:{}", bc);
         println!("ratio canonized:{}", ac / bc);
@@ -643,33 +417,5 @@ mod tests {
         println!("{}", ac.unwrap());
         let bc = b.canonize_tensors(&indices);
         println!("{}", bc.unwrap());
-
-        let a = parse_lit!(
-            1 / 27 * UFO::ee
-                ^ 4 * (K(0, m4e_1_1) + K(1, m4e_1_1))
-                    * (K(0, m4e_4_1) + K(1, m4e_4_1))
-                    * (K(0, m4e_5_1) + K(1, m4e_5_1) - P(0, m4e_5_1))
-                    * g(m4he_4, m4he_5)
-                    * gamma(bis_4(3), bis_4(8), m4he_5)
-                    * gamma(bis_4(6), bis_4(2), m4he_4)
-                    * gamma(bis_4(9), bis_4(10), m4he_0)
-                    * gamma(bis_4(11), bis_4(7), m4he_1)
-                    * gamma(bis_4(2), bis_4(3), m4e_2_1)
-                    * gamma(bis_4(7), bis_4(6), m4e_4_1)
-                    * gamma(bis_4(8), bis_4(9), m4e_1_1)
-                    * gamma(bis_4(10), bis_4(11), m4e_5_1)
-                    * K(0, m4e_2_1)
-                    * ϵ(0, m4he_1)
-                    * ϵbar(0, m4he_0)
-        );
-
-        let indices = vec![
-            (parse_lit!(a), 1),
-            (parse_lit!(b), 1),
-            (parse_lit!(c), 1),
-            (parse_lit!(d), 1),
-            (parse_lit!(e), 1),
-            (parse_lit!(f), 1),
-        ];
     }
 }

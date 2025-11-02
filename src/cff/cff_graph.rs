@@ -4,14 +4,13 @@ use crate::cff::hsurface::Hsurface;
 use ahash::{HashMap, HashSet, HashSetExt};
 use bincode::Encode;
 use bincode_trait_derive::Decode;
-use bitvec::vec::BitVec;
 use color_eyre::Result;
 use eyre::eyre;
 use itertools::Itertools;
 use linnet::half_edge::{
-    involution::{EdgeIndex, EdgeVec, Flow, HedgePair, Orientation},
-    subgraph::{InternalSubGraph, ModifySubgraph, SubGraph},
     HedgeGraph, NodeIndex,
+    involution::{EdgeIndex, EdgeVec, Flow, HedgePair, Orientation},
+    subgraph::{InternalSubGraph, ModifySubSet, SuBitGraph, SubGraphLike, SubSetLike},
 };
 use serde::{Deserialize, Serialize};
 use std::hash::Hash;
@@ -199,8 +198,8 @@ impl VertexSet {
             .collect()
     }
 
-    pub(crate) fn subgraph<E, V, H>(&self, graph: &HedgeGraph<E, V, H>) -> BitVec {
-        let mut result: BitVec = graph.empty_subgraph();
+    pub(crate) fn subgraph<E, V, H>(&self, graph: &HedgeGraph<E, V, H>) -> SuBitGraph {
+        let mut result: SuBitGraph = graph.empty_subgraph();
         for hedge in self
             .get_nodes()
             .iter()
@@ -745,7 +744,7 @@ impl CFFGenerationGraph {
                 energies: positive_energies,
                 external_shift,
                 vertex_set: vertex.vertex_set,
-                //subspace_graph: unsafe { InternalSubGraph::new_unchecked(BitVec::new()) },
+                //subspace_graph: unsafe { InternalSubGraph::new_unchecked(SuBitGraph::new()) },
             };
 
             HybridSurface::Esurface(esurface)
@@ -877,7 +876,7 @@ impl CFFGenerationGraph {
         }
     }
 
-    pub(crate) fn new_from_subgraph<E, V, H, S: SubGraph>(
+    pub(crate) fn new_from_subgraph<E, V, H, S: SubGraphLike>(
         graph: &HedgeGraph<E, V, H>,
         global_orientation: EdgeVec<Orientation>,
         subgraph: &S,
@@ -975,7 +974,7 @@ impl CFFGenerationGraph {
                                         "undirected edge found for source split, edge_id: {}, subgraph: \n {}",
                                         edge_index,
                                         graph.dot(subgraph)
-                                    ))
+                                    ));
                                 }
                             }
                         }
@@ -993,7 +992,7 @@ impl CFFGenerationGraph {
                                         "undirected edge found for sink split, edge_id: {}, subgraph: \n {}",
                                         edge_index,
                                         graph.dot(subgraph)
-                                    ))
+                                    ));
                                 }
                             }
                         }
@@ -1096,14 +1095,13 @@ impl CFFGenerationGraph {
 mod test {
     use super::CFFGenerationGraph;
     use crate::cff::cff_graph::{CFFEdge, CFFEdgeType, VertexSet};
-    use bitvec::vec::BitVec;
     use itertools::Itertools;
     use linnet::half_edge::{
+        HedgeGraph,
         builder::HedgeGraphBuilder,
         involution::{EdgeIndex, Flow, Orientation},
         nodestore::NodeStorageVec,
         subgraph::SubGraphOps,
-        HedgeGraph,
     };
 
     #[test]
@@ -1686,9 +1684,9 @@ mod test {
         hedge_graph_builder.add_external_edge(nodes[3], (), Orientation::Undirected, Flow::Source);
 
         let hedge_graph: HedgeGraph<(), (), ()> = hedge_graph_builder.build::<NodeStorageVec<_>>();
-        let node_0: BitVec = hedge_graph.iter_crown(nodes[0]).into();
-        let node_1: BitVec = hedge_graph.iter_crown(nodes[1]).into();
-        let node_2: BitVec = hedge_graph.iter_crown(nodes[2]).into();
+        let node_0: SuBitGraph = hedge_graph.iter_crown(nodes[0]).into();
+        let node_1: SuBitGraph = hedge_graph.iter_crown(nodes[1]).into();
+        let node_2: SuBitGraph = hedge_graph.iter_crown(nodes[2]).into();
 
         let left_triangle = node_0.union(&node_1).union(&node_2);
 

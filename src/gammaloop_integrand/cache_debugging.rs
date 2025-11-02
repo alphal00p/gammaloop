@@ -134,7 +134,9 @@ pub fn warn_cache_efficiency<I: GammaloopIntegrand>(
 
 /// Example usage for development
 pub fn setup_debug_environment() {
-    std::env::set_var("GAMMALOOP_DEBUG_CACHE", "1");
+    unsafe {
+        std::env::set_var("GAMMALOOP_DEBUG_CACHE", "1");
+    }
     status_info!("🔧 Cache debug mode enabled");
     status_info!("   Use debug_cache!(integrand, \"context\") for state checks");
     status_info!("   Use monitor_cache!(integrand, condition, \"context\") for monitoring");
@@ -150,16 +152,18 @@ mod tests {
     #[test]
     fn test_debug_mode_detection() {
         // Test environment variable detection
-        std::env::remove_var("GAMMALOOP_DEBUG_CACHE");
-        assert!(!is_debug_cache_enabled());
+        unsafe {
+            std::env::remove_var("GAMMALOOP_DEBUG_CACHE");
+            assert!(!is_debug_cache_enabled());
 
-        std::env::set_var("GAMMALOOP_DEBUG_CACHE", "1");
-        assert!(is_debug_cache_enabled());
+            std::env::set_var("GAMMALOOP_DEBUG_CACHE", "1");
+            assert!(is_debug_cache_enabled());
 
-        std::env::set_var("GAMMALOOP_DEBUG_CACHE", "true");
-        assert!(is_debug_cache_enabled());
+            std::env::set_var("GAMMALOOP_DEBUG_CACHE", "true");
+            assert!(is_debug_cache_enabled());
 
-        std::env::set_var("GAMMALOOP_DEBUG_CACHE", "0");
-        assert!(!is_debug_cache_enabled());
+            std::env::set_var("GAMMALOOP_DEBUG_CACHE", "0");
+            assert!(!is_debug_cache_enabled());
+        }
     }
 }

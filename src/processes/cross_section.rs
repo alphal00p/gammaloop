@@ -8,15 +8,13 @@ use std::{
 
 // use bincode::{Decode, Encode};
 use bincode_trait_derive::{Decode, Encode};
-use bitvec::vec::BitVec;
 use color_eyre::Result;
 
 use idenso::color::ColorSimplifier;
 use rayon::{
-    iter::{IntoParallelRefMutIterator, ParallelIterator},
     ThreadPool,
+    iter::{IntoParallelRefMutIterator, ParallelIterator},
 };
-use serde_yaml::mapping::Iter;
 use spenso::{
     network::{Sequential, SmallestDegree},
     structure::concrete_index::ExpandedIndex,
@@ -25,30 +23,31 @@ use tracing::info;
 use vakint::{EvaluationOrder, LoopNormalizationFactor, Vakint, VakintSettings};
 
 use crate::{
+    GammaLoopContext, GammaLoopContextContainer,
     cff::{
         cut_expression::SuperGraphOrientationID, expression::AmplitudeOrientationID,
         generation::get_orientations_from_subgraph,
     },
     define_index,
     gammaloop_integrand::{
-        cross_section_integrand::CrossSectionIntegrandData, LmbMultiChannelingSetup, ParamBuilder,
+        LmbMultiChannelingSetup, ParamBuilder, cross_section_integrand::CrossSectionIntegrandData,
     },
     graph::{
-        self, parse::complete_group_parsing, GraphGroup, GroupId, LMBext, LmbIndex,
-        LoopMomentumBasis,
+        GraphGroup, GroupId, LMBext, LmbIndex, LoopMomentumBasis, parse::complete_group_parsing,
     },
     model::ArcParticle,
     numerator::symbolica_ext::AtomCoreExt,
-    settings::{global::GenerationSettings, runtime::LockedRuntimeSettings, GlobalSettings},
-    utils::{GS, TENSORLIB, W_},
+    settings::{GlobalSettings, global::GenerationSettings, runtime::LockedRuntimeSettings},
+    utils::{FUN_LIB, GS, TENSORLIB, W_},
     uv::UltravioletGraph,
-    GammaLoopContext, GammaLoopContextContainer,
 };
-use eyre::{eyre, Context};
-use itertools::{Either::Right, Itertools};
+use eyre::{Context, eyre};
+use itertools::Itertools;
 use linnet::half_edge::{
     involution::{EdgeIndex, Orientation},
-    subgraph::{HedgeNode, Inclusion, InternalSubGraph, OrientedCut, SubGraph, SubGraphOps},
+    subgraph::{
+        HedgeNode, Inclusion, InternalSubGraph, OrientedCut, SuBitGraph, SubGraphLike, SubSetOps,
+    },
 };
 use log::{debug, warn};
 use serde::{Deserialize, Serialize};
@@ -65,8 +64,8 @@ use crate::{
         generation::generate_cff_with_cuts,
     },
     gammaloop_integrand::{
-        cross_section_integrand::{CrossSectionGraphTerm, CrossSectionIntegrand},
         GLIntegrand,
+        cross_section_integrand::{CrossSectionGraphTerm, CrossSectionIntegrand},
     },
     graph::{ExternalConnection, FeynmanGraph, Graph},
     model::Model,
@@ -112,9 +111,9 @@ impl<T> IndexMut<(LeftThresholdId, RightThresholdId)> for IteratedCtCollection<T
 
 #[derive(Clone, Debug)]
 struct CsAmplitudeCTDiagram {
-    left_subgraph: BitVec,
+    left_subgraph: SuBitGraph,
     threshold_cut: OrientedCut,
-    right_subgraph: BitVec,
+    right_subgraph: SuBitGraph,
     reversed_dangling_edges: Vec<EdgeIndex>,
     network: Option<ParsingNet>,
 }
@@ -450,10 +449,8 @@ impl CrossSection {
 #[derive(Clone, bincode::Encode, bincode::Decode)]
 pub struct CrossSectionCut {
     pub cut: OrientedCut,
-    #[bincode(with_serde)]
-    pub left: BitVec,
-    #[bincode(with_serde)]
-    pub right: BitVec,
+    pub left: SuBitGraph,
+    pub right: SuBitGraph,
 }
 
 impl CrossSectionCut {
@@ -856,7 +853,10 @@ impl CrossSectionGraph {
             let mut product = left_expr * right_expr * global_num.clone();
 
             product
-                .execute::<Sequential, SmallestDegree, _, _>(TENSORLIB.read().unwrap().deref())
+                .execute::<Sequential, SmallestDegree, _, _, _>(
+                    TENSORLIB.read().unwrap().deref(),
+                    FUN_LIB.deref(),
+                )
                 .unwrap();
 
             let scalar: Atom = product
@@ -1152,8 +1152,9 @@ impl CrossSectionGraph {
                         * global_num.clone();
 
                     product
-                        .execute::<Sequential, SmallestDegree, _, _>(
+                        .execute::<Sequential, SmallestDegree, _, _, _>(
                             TENSORLIB.read().unwrap().deref(),
+                            FUN_LIB.deref(),
                         )
                         .unwrap();
 
@@ -1206,8 +1207,9 @@ impl CrossSectionGraph {
                         * global_num.clone();
 
                     product
-                        .execute::<Sequential, SmallestDegree, _, _>(
+                        .execute::<Sequential, SmallestDegree, _, _, _>(
                             TENSORLIB.read().unwrap().deref(),
+                            FUN_LIB.deref(),
                         )
                         .unwrap();
 
@@ -1253,8 +1255,9 @@ impl CrossSectionGraph {
                         * global_num.clone();
 
                     product
-                        .execute::<Sequential, SmallestDegree, _, _>(
+                        .execute::<Sequential, SmallestDegree, _, _, _>(
                             TENSORLIB.read().unwrap().deref(),
+                            FUN_LIB.deref(),
                         )
                         .unwrap();
 

@@ -1,7 +1,8 @@
 use std::sync::atomic::AtomicUsize;
 
-use bitvec::vec::BitVec;
-use linnet::half_edge::{involution::HedgePair, subgraph::SubGraph, NodeIndex};
+use linnet::half_edge::subgraph::subset::SubSet;
+use linnet::half_edge::subgraph::{ModifySubSet, SubGraphLike, SubSetLike};
+use linnet::half_edge::{NodeIndex, involution::HedgePair};
 use spenso::network::library::TensorLibraryData;
 use symbolica::atom::Atom;
 use symbolica::atom::AtomCore;
@@ -16,14 +17,14 @@ static MAXEDGECOUNTER: AtomicUsize = AtomicUsize::new(0);
 
 impl Numerator<UnInit> {
     #[instrument(skip_all, fields(graph=%graph.name,debug_dot=%graph.debug_dot(),subgraph_dot=%graph.dot(subgraph)))]
-    pub(crate) fn from_new_graph<S: SubGraph>(
+    pub(crate) fn from_new_graph<S: SubGraphLike>(
         self,
         graph: &Graph,
         subgraph: &S,
     ) -> Numerator<AppliedFeynmanRule> {
         let mut num = Atom::one();
 
-        let mut seen: BitVec = BitVec::empty(graph.n_nodes());
+        let mut seen: SubSet<NodeIndex> = SubSet::empty(graph.n_nodes());
 
         for (p, eid, e) in graph.underlying.iter_edges_of(subgraph) {
             let i = MAXEDGECOUNTER.fetch_max(eid.0, std::sync::atomic::Ordering::Relaxed);
@@ -43,13 +44,13 @@ impl Numerator<UnInit> {
             }
             if let HedgePair::Paired { source, sink } = p {
                 let source_n = graph.node_id(source);
-                if !seen[source_n.0] {
-                    seen.set(source_n.0, true);
+                if !seen[source_n] {
+                    seen.add(source_n);
                     num *= graph[source_n].get_num();
                 }
                 let sink_n = graph.node_id(sink);
-                if !seen[sink_n.0] {
-                    seen.set(sink_n.0, true);
+                if !seen[sink_n] {
+                    seen.add(sink_n);
                     num *= graph[sink_n].get_num();
                 }
 
@@ -57,9 +58,10 @@ impl Numerator<UnInit> {
             }
         }
 
+        let notseen = !seen;
+
         // From all the nodes not yet covered by paired edges, include those included in the subgraph, ignoring dummies
-        for n in seen.iter_zeros() {
-            let node_id = NodeIndex(n);
+        for node_id in notseen.included_iter() {
             if graph
                 .iter_crown(node_id)
                 .all(|h| subgraph.includes(&h) || graph[graph[&h]].is_dummy)

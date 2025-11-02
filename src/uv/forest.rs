@@ -5,9 +5,12 @@ use crate::{
     },
     graph::{Edge, Graph, Vertex},
     momentum::SignOrZero,
-    numerator::{symbolica_ext::AtomCoreExt, ParsingNet},
-    utils::{ose_atom_from_index, symbolica_ext::CallSymbol, GS},
-    uv::approx::CFFapprox,
+    numerator::{ParsingNet, symbolica_ext::AtomCoreExt},
+    utils::{GS, ose_atom_from_index, symbolica_ext::CallSymbol},
+    uv::{
+        ApproxOp,
+        approx::{CFFapprox, SimpleApprox},
+    },
 };
 use bitvec::vec::BitVec;
 use spenso::{
@@ -21,16 +24,20 @@ use symbolica::{
     id::Replacement,
 };
 
-use linnet::half_edge::{involution::EdgeIndex, subgraph::SubGraph, HedgeGraph};
+use linnet::half_edge::{
+    HedgeGraph,
+    involution::EdgeIndex,
+    subgraph::{SuBitGraph, SubGraphLike, SubSetLike},
+};
 use std::fmt::Write;
 
 use typed_index_collections::TiVec;
 use vakint::Vakint;
 
 use super::{
-    approx::Approximation,
-    poset::{DagNode, DAG},
     UVgenerationSettings, UltravioletGraph,
+    approx::Approximation,
+    poset::{DAG, DagNode},
 };
 
 pub struct Forest {
@@ -45,7 +52,7 @@ impl Forest {
     pub(crate) fn compute<
         H,
         G: UltravioletGraph + AsRef<HedgeGraph<Edge, Vertex, H>>,
-        S: SubGraph<Base = BitVec>,
+        S: SubGraphLike<Base = SuBitGraph>,
         OID: OrientationID,
         O: GraphOrientation,
     >(
@@ -72,7 +79,7 @@ impl Forest {
                     );
                 }
                 1 => {
-                    let [ref mut current, ref mut parent] = &mut self
+                    let [current, parent] = &mut self
                         .dag
                         .nodes
                         .get_disjoint_mut([n, self.dag.nodes[n].parents[0]])
@@ -139,7 +146,7 @@ impl Forest {
 
     pub(crate) fn orientation_parametric_expr(
         &self,
-        cut_edges: Option<&BitVec>,
+        cut_edges: Option<&SuBitGraph>,
         graph: &Graph,
     ) -> ParsingNet {
         let mut sum: Option<ParsingNet> = None;
@@ -174,7 +181,7 @@ impl Forest {
     pub(crate) fn _local_expr(
         &self,
         orientation: &OrientationData,
-        cut_edges: Option<&BitVec>,
+        cut_edges: Option<&SuBitGraph>,
         graph: &Graph,
     ) -> ParsingNet {
         let mut sum: Option<ParsingNet> = None;

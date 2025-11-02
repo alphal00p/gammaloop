@@ -5,17 +5,16 @@ use crate::graph::{Graph, LmbIndex, LoopMomentumBasis};
 use crate::momentum::{FourMomentum, Polarization, Rotatable, Rotation, SignOrZero, ThreeMomentum};
 
 use crate::signature::LoopSignature;
-use crate::utils::{FloatLike, Length, F};
-use crate::{define_index, settings::runtime::kinematic::Externals, DependentMomentaConstructor};
+use crate::utils::{F, FloatLike, Length};
+use crate::{DependentMomentaConstructor, define_index, settings::runtime::kinematic::Externals};
 use bincode_trait_derive::{Decode, Encode};
 use bitvec::vec::BitVec;
 use color_eyre::Result;
 use derive_more::{From, Into};
 use eyre::eyre;
 use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation};
-use linnet::half_edge::subgraph::{InternalSubGraph, SubGraph, SubGraphOps};
+use linnet::half_edge::subgraph::{InternalSubGraph, SuBitGraph, SubSetOps};
 use serde::{Deserialize, Serialize};
-use spenso::algebra::complex::sub;
 use std::ops::{Add, Index, IndexMut, Sub};
 use symbolica::domains::float::NumericalFloatLike;
 use tabled::settings::Style;
@@ -115,14 +114,14 @@ pub type Subspace<'a> = Option<&'a [LoopIndex]>; // None means full space
 pub(crate) struct SubspaceData {
     subgraph: InternalSubGraph,
     #[bincode(with_serde)]
-    complement_subgraph: BitVec,
+    complement_subgraph: SuBitGraph,
     lmb: LmbIndex,
     lmb_indices: Vec<LoopIndex>,
 }
 
 impl SubspaceData {
     pub(crate) fn new_with_user_selected_lmb(
-        subgraph: BitVec,
+        subgraph: SuBitGraph,
         lmb: LmbIndex,
         graph: &Graph,
         all_lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
@@ -158,7 +157,7 @@ impl SubspaceData {
 
     /// this function chooses the lmb automatically based on the subgraph
     pub(crate) fn new(
-        subgraph: BitVec,
+        subgraph: SuBitGraph,
         graph: &Graph,
         all_lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
     ) -> Result<Self> {

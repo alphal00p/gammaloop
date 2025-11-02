@@ -2,9 +2,12 @@ use ahash::AHashSet;
 use bitvec::vec::BitVec;
 use idenso::metric::MS;
 use linnet::half_edge::{
-    involution::{Hedge, HedgePair},
-    subgraph::{Cycle, InternalSubGraph, ModifySubgraph, SubGraph, SubGraphOps},
     HedgeGraph, PowersetIterator,
+    involution::{Hedge, HedgePair},
+    subgraph::{
+        Cycle, InternalSubGraph, ModifySubSet, SuBitGraph, SubGraphLike, SubGraphOps, SubSetLike,
+        SubSetOps,
+    },
 };
 use symbolica::{
     atom::{Atom, AtomCore, Symbol},
@@ -16,30 +19,33 @@ use crate::{
     graph::{Edge, FeynmanGraph, Graph, LMBext, LoopMomentumBasis, NumHedgeData, Vertex},
     momentum_sample::LoopIndex,
     numerator::{AppliedFeynmanRule, Numerator},
-    utils::{symbolica_ext::CallSymbol, GS, W_},
+    utils::{GS, W_, symbolica_ext::CallSymbol},
 };
 
-use super::{is_not_paired, spenso_lor_atom, Wood};
+use super::{Wood, is_not_paired, spenso_lor_atom};
 
 pub trait UltravioletGraph: LMBext + FeynmanGraph {
-    fn n_loops<S: SubGraph, E, V, H>(&self, subgraph: &S) -> usize
+    fn n_loops<S: SubGraphLike, E, V, H>(&self, subgraph: &S) -> usize
     where
         Self: AsRef<HedgeGraph<E, V, H>>,
     {
         self.as_ref().cyclotomatic_number(subgraph)
     }
 
-    fn dummy_less_full_crown<S: SubGraph>(&self, subgraph: &S) -> S::Base
+    fn dummy_less_full_crown<S: SubGraphLike>(&self, subgraph: &S) -> S::Base
     where
-        S::Base: ModifySubgraph<Hedge> + SubGraphOps;
+        S::Base: ModifySubSet<Hedge> + SubGraphOps;
 
     ///Get the numerator of the graph.
     /// If multiply_prefactor is true, the numerator is multiplied by the global  prefactor. (just num not projector)
-    fn numerator<S: SubGraph>(&self, subgraph: &S) -> Numerator<AppliedFeynmanRule>;
-    //fn denominator<S: SubGraph>(&self, subgraph: &S) -> Atom;
-    fn denominator<S: SubGraph, T: Fn(&Edge) -> isize>(&self, subgraph: &S, edge_powers: T)
-        -> Atom;
-    fn all_cycle_unions<E, V, H, S: SubGraph<Base = BitVec>>(
+
+    fn numerator<S: SubGraphLike>(&self, subgraph: &S) -> Numerator<AppliedFeynmanRule>;
+    fn denominator<S: SubGraphLike, T: Fn(&Edge) -> isize>(
+        &self,
+        subgraph: &S,
+        edge_powers: T,
+    ) -> Atom;
+    fn all_cycle_unions<E, V, H, S: SubGraphLike<Base = SuBitGraph>>(
         &self,
         subgraph: &S,
     ) -> AHashSet<InternalSubGraph>
@@ -63,7 +69,7 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph {
 
         spinneys
     }
-    fn all_limits<E, V, H, S: SubGraph>(
+    fn all_limits<E, V, H, S: SubGraphLike>(
         &self,
         subgraph: &S,
         expr: &Atom,
@@ -133,8 +139,8 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph {
 
         for ls in loops {
             let mut expr = expr.clone();
-            for l in ls.iter_ones() {
-                let e = usize::from(lmb.loop_edges[LoopIndex(l)]) as i64;
+            for l in ls.included_iter() {
+                let e = usize::from(lmb.loop_edges[LoopIndex(l.0)]) as i64;
                 expr = expr
                     .replace(function!(GS.emr_vec, e, W_.x___))
                     .with(function!(GS.emr_vec, e, W_.x___) / expansion);
@@ -157,8 +163,8 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph {
 
             println!(
                 "LIMIT {:?}:",
-                ls.iter_ones()
-                    .map(|l| usize::from(lmb.loop_edges[LoopIndex(l)]) as i64)
+                ls.included_iter()
+                    .map(|l| usize::from(lmb.loop_edges[LoopIndex(l.0)]) as i64)
                     .collect::<Vec<_>>(),
             );
             if l.is_empty() {
@@ -173,16 +179,16 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph {
         limits
     }
 
-    fn wood<E, V, H, S: SubGraph<Base = BitVec>>(&self, subgraph: &S) -> Wood
+    fn wood<E, V, H, S: SubGraphLike<Base = SuBitGraph>>(&self, subgraph: &S) -> Wood
     where
         Self: AsRef<HedgeGraph<E, V, H>>,
     {
         Wood::from_spinneys(self.spinneys(subgraph), self)
     }
 
-    fn dod<S: SubGraph>(&self, subgraph: &S) -> i32;
+    fn dod<S: SubGraphLike>(&self, subgraph: &S) -> i32;
 
-    fn spinneys<E, V, H, S: SubGraph<Base = BitVec>>(
+    fn spinneys<E, V, H, S: SubGraphLike<Base = SuBitGraph>>(
         &self,
         subgraph: &S,
     ) -> AHashSet<InternalSubGraph>
@@ -227,9 +233,9 @@ impl AsRef<HedgeGraph<Edge, Vertex, NumHedgeData>> for Graph {
 }
 
 impl UltravioletGraph for Graph {
-    fn dummy_less_full_crown<S: SubGraph>(&self, subgraph: &S) -> S::Base
+    fn dummy_less_full_crown<S: SubGraphLike>(&self, subgraph: &S) -> S::Base
     where
-        S::Base: ModifySubgraph<Hedge>,
+        S::Base: ModifySubSet<Hedge>,
     {
         let a = self.full_crown(subgraph);
         let mut ac = a.clone();
@@ -243,7 +249,7 @@ impl UltravioletGraph for Graph {
         ac
     }
 
-    fn denominator<S: SubGraph, T: Fn(&Edge) -> isize>(
+    fn denominator<S: SubGraphLike, T: Fn(&Edge) -> isize>(
         &self,
         subgraph: &S,
         edge_powers: T,
@@ -277,13 +283,13 @@ impl UltravioletGraph for Graph {
 
         den.into()
     }
-    fn numerator<S: SubGraph>(&self, subgraph: &S) -> Numerator<AppliedFeynmanRule> {
+    fn numerator<S: SubGraphLike>(&self, subgraph: &S) -> Numerator<AppliedFeynmanRule> {
         let num = Numerator::default();
 
         num.from_new_graph(self, subgraph)
     }
 
-    fn dod<S: SubGraph>(&self, subgraph: &S) -> i32 {
+    fn dod<S: SubGraphLike>(&self, subgraph: &S) -> i32 {
         let mut dod: i32 = 4 * self.n_loops(subgraph) as i32;
         // println!("nloops: {}", dod / 4);
 

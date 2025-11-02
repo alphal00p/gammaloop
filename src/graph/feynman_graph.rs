@@ -1,11 +1,13 @@
 use std::{borrow::Borrow, ops::Deref};
 
-use bitvec::vec::BitVec;
 use itertools::Itertools;
 use linnet::half_edge::{
-    involution::{EdgeData, EdgeIndex, EdgeVec, Flow, HedgePair},
-    subgraph::{HedgeNode, InternalSubGraph, ModifySubgraph, OrientedCut, SubGraph, SubGraphOps},
     HedgeGraph, NodeIndex,
+    involution::{EdgeData, EdgeIndex, EdgeVec, Flow, HedgePair},
+    subgraph::{
+        HedgeNode, InternalSubGraph, ModifySubSet, OrientedCut, SuBitGraph, SubGraphLike,
+        SubSetLike, SubSetOps,
+    },
 };
 use momtrop::float::MomTropFloat;
 
@@ -29,12 +31,12 @@ use crate::{
     momentum_sample::{ExternalFourMomenta, ExternalIndex, LoopMomenta},
     numerator::graph::ReversibleEdge,
     signature::{ExternalSignature, SignatureLike},
-    utils::{external_energy_atom_from_index, ose_atom_from_index, FloatLike, F, GS},
+    utils::{F, FloatLike, GS, external_energy_atom_from_index, ose_atom_from_index},
     uv::uv_graph::UVE,
 };
 
 use super::{
-    get_cff_inverse_energy_product_impl, Edge, Graph, LoopMomentumBasis, NumHedgeData, Vertex,
+    Edge, Graph, LoopMomentumBasis, NumHedgeData, Vertex, get_cff_inverse_energy_product_impl,
 };
 
 pub trait FeynmanGraph {
@@ -45,7 +47,7 @@ pub trait FeynmanGraph {
         lmb: &LoopMomentumBasis,
     ) -> Vec<F<T>>;
 
-    fn num_virtual_edges(&self, subgraph: BitVec) -> usize;
+    fn num_virtual_edges(&self, subgraph: SuBitGraph) -> usize;
     fn is_incoming_to(&self, edge: EdgeIndex, vertex: NodeIndex) -> bool;
     // fn denominator(&self, edge: EdgeIndex) -> (Atom, Atom);
     fn substitute_lmb(&self, edge: EdgeIndex, atom: Atom, lmb: &LoopMomentumBasis) -> Atom;
@@ -80,12 +82,12 @@ pub trait FeynmanGraph {
     // fn get_ose_replacements(&self) -> Vec<Replacement>;
     fn expected_scale(&self, e_cm: F<f64>, model: &Model) -> F<f64>;
     fn dummy_list(&self) -> Vec<EdgeIndex>;
-    fn no_dummy(&self) -> BitVec;
+    fn no_dummy(&self) -> SuBitGraph;
     fn all_st_cuts_for_cs(
         &self,
         source_nodes: HedgeNode,
         target_nodes: HedgeNode,
-    ) -> Vec<(BitVec, OrientedCut, BitVec)>;
+    ) -> Vec<(SuBitGraph, OrientedCut, SuBitGraph)>;
 }
 
 impl Deref for Graph {
@@ -398,11 +400,11 @@ impl ParamBuilderGraph for Graph {
 //         self.underlying.is_incoming_to(edge, vertex)
 //     }
 
-//     fn no_dummy(&self) -> BitVec {
+//     fn no_dummy(&self) -> SuBitGraph {
 //         self.underlying.no_dummy()
 //     }
 
-//     fn num_virtual_edges(&self, subgraph: BitVec) -> usize {
+//     fn num_virtual_edges(&self, subgraph: SuBitGraph) -> usize {
 //         self.underlying.num_virtual_edges(subgraph)
 //     }
 
@@ -412,7 +414,7 @@ impl ParamBuilderGraph for Graph {
 // }
 
 impl FeynmanGraph for Graph {
-    fn num_virtual_edges(&self, subgraph: BitVec) -> usize {
+    fn num_virtual_edges(&self, subgraph: SuBitGraph) -> usize {
         let internal_subgraph = InternalSubGraph::cleaned_filter_pessimist(subgraph, self);
         self.count_internal_edges(&internal_subgraph)
     }
@@ -462,7 +464,7 @@ impl FeynmanGraph for Graph {
     // }
 
     fn add_signs_to_edges(&self, node_id: NodeIndex) -> Vec<isize> {
-        let node_hairs: BitVec = self.iter_crown(node_id).into();
+        let node_hairs: SuBitGraph = self.iter_crown(node_id).into();
 
         self.iter_edges_of(&node_hairs)
             .map(|(_, edge_index, _)| {
@@ -510,7 +512,7 @@ impl FeynmanGraph for Graph {
     }
 
     fn get_external_masses<T: FloatLike>(&self, model: &Model) -> TiVec<ExternalIndex, F<T>> {
-        let external_filter = self.external_filter();
+        let external_filter: SuBitGraph = self.external_filter();
 
         self.iter_edges_of(&external_filter)
             .map(|(_, _, edge)| {
@@ -659,7 +661,7 @@ impl FeynmanGraph for Graph {
     }
 
     fn get_external_signature(&self) -> SignatureLike<ExternalIndex> {
-        let externals = self.external_filter();
+        let externals: SuBitGraph = self.external_filter();
 
         SignatureLike::from_iter(externals.included_iter().map(|h| match self.flow(h) {
             Flow::Source => SignOrZero::Minus,
@@ -716,7 +718,7 @@ impl FeynmanGraph for Graph {
         scale.norm_squared().sqrt()
     }
 
-    fn no_dummy(&self) -> BitVec {
+    fn no_dummy(&self) -> SuBitGraph {
         let mut subgraph = self.full_filter();
         for (hedge_pair, _, edge) in self.iter_edges() {
             if edge.data.is_dummy {
@@ -742,24 +744,16 @@ impl FeynmanGraph for Graph {
         &self,
         source_nodes: HedgeNode,
         target_nodes: HedgeNode,
-    ) -> Vec<(BitVec, OrientedCut, BitVec)> {
+    ) -> Vec<(SuBitGraph, OrientedCut, SuBitGraph)> {
         self.underlying
             .all_cuts(source_nodes, target_nodes)
             .into_iter()
             .map(|(l, mut c, r)| {
                 // remove initial state cut edges from cut
-                self.initial_state_cut
-                    .left
-                    .iter()
-                    .by_vals()
-                    .enumerate()
-                    .chain(self.initial_state_cut.right.iter().by_vals().enumerate())
-                    .for_each(|(index, is_set)| {
-                        if is_set {
-                            c.left.set(index, false);
-                            c.right.set(index, false);
-                        }
-                    });
+                c.left.subtract_with(&self.initial_state_cut.left);
+                c.right.subtract_with(&self.initial_state_cut.left);
+                c.left.subtract_with(&self.initial_state_cut.right);
+                c.right.subtract_with(&self.initial_state_cut.right);
 
                 (l, c, r)
             })

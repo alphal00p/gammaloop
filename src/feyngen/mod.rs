@@ -18,7 +18,6 @@ use symbolica::graph::Graph as SymbolicaGraph;
 use thiserror::Error;
 
 use crate::model::Model;
-use crate::numerator::symbolica_ext::ParsingNetError;
 
 #[derive(Error, Debug)]
 pub enum FeynGenError {
@@ -30,8 +29,6 @@ pub enum FeynGenError {
     SymmetryFactorError(String),
     #[error("Could not numerically evaluate numerator: {0}")]
     NumeratorEvaluationError(String),
-    #[error("Tensor Net parsing error: {0}")]
-    TensorNetError(#[from] ParsingNetError),
     #[error(transparent)]
     Eyre(#[from] color_eyre::Report),
 }

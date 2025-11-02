@@ -18,8 +18,8 @@ use spenso::shadowing::symbolica_utils::SerializableSymbol;
 use spenso::tensors::data::DataTensor;
 use spenso::tensors::data::GetTensorData;
 use spenso::tensors::data::StorageTensor;
-use spenso::tensors::parametric::atomcore::TensorAtomMaps;
 use spenso::tensors::parametric::MixedTensor;
+use spenso::tensors::parametric::atomcore::TensorAtomMaps;
 
 use spenso::tensors::parametric::ParamTensor;
 use spenso::tensors::parametric::TensorSet;
@@ -32,13 +32,13 @@ use tracing::{debug, instrument};
 // use crate::feyngen::dis::{DisEdge, DisVertex};
 
 use crate::momentum::{PolDef, PolType};
-use crate::utils::{GS, TENSORLIB, W_};
+use crate::utils::{FUN_LIB, GS, TENSORLIB, W_};
 use crate::{
     model::Model,
-    utils::{serde_utils::IsDefault, F},
+    utils::{F, serde_utils::IsDefault},
 };
 
-use crate::{disable, GammaLoopContextContainer};
+use crate::{GammaLoopContextContainer, disable};
 use ahash::AHashMap;
 use bincode::{Decode, Encode};
 use color_eyre::{Report, Result};
@@ -52,7 +52,7 @@ use serde::{Deserialize, Serialize};
 
 use spenso::contraction::Contract;
 
-use spenso::network::library::symbolic::{ExplicitKey, ETS};
+use spenso::network::library::symbolic::{ETS, ExplicitKey};
 
 use spenso::structure::concrete_index::{ExpandedIndex, FlatIndex};
 
@@ -62,8 +62,8 @@ use spenso::structure::{HasStructure, ScalarTensor, SmartShadowStructure};
 use spenso::{
     shadowing::Shadowable,
     structure::{
-        representation::{Lorentz, RepName},
         NamedStructure, TensorStructure,
+        representation::{Lorentz, RepName},
     },
 };
 
@@ -73,7 +73,7 @@ use symbolica::printer::PrintOptions;
 use symbolica::state::Workspace;
 
 use crate::numerator::ufo::UFO;
-use symbolica::atom::{AtomCore, AtomOrView, AtomView};
+use symbolica::atom::{AtomCore, AtomOrView, AtomView, Symbol};
 use symbolica::evaluate::{CompileOptions, InlineASM};
 use symbolica::{
     atom::{Atom, FunctionBuilder},
@@ -361,8 +361,8 @@ pub struct GlobalPrefactor {
 }
 
 impl JsonSchema for GlobalPrefactor {
-    fn json_schema(gen: &mut schemars::SchemaGenerator) -> schemars::Schema {
-        gen.subschema_for::<_GlobalPrefactorAny>()
+    fn json_schema(generated: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        generated.subschema_for::<_GlobalPrefactorAny>()
     }
     fn schema_name() -> std::borrow::Cow<'static, str> {
         "GlobalPrefactor".into()
@@ -848,7 +848,7 @@ impl<T: Copy + Default> Numerator<SymbolicExpression<T>> {
 
         let sorted = indices_map.into_iter().sorted().collect::<Vec<_>>();
 
-        let expr = self.state.expr.canonize_tensors(&sorted)?;
+        let expr = self.state.expr.canonize_tensors(sorted)?.canonical_form;
 
         Ok(Self {
             state: SymbolicExpression {
@@ -1031,7 +1031,7 @@ impl PolySplit {
                         Variable::Temporary(_) => {
                             unreachable!("Temporary variable in expression")
                         }
-                        Variable::Function(_, a) | Variable::Other(a) => {
+                        Variable::Function(_, a) | Variable::Power(a) => {
                             var_h.set_from_view(&a.as_view());
                         }
                     }
@@ -1183,7 +1183,9 @@ impl NumeratorState for PolyContracted {
     }
 
     fn update_model(&mut self, _model: &Model) -> Result<()> {
-        Err(eyre!("Only applied feynman rule, simplified color, gamma, parsed into network and contracted, nothing to update"))
+        Err(eyre!(
+            "Only applied feynman rule, simplified color, gamma, parsed into network and contracted, nothing to update"
+        ))
     }
 }
 
@@ -1247,6 +1249,7 @@ impl Numerator<GammaSimplified> {
 pub type ParsingNet = spenso::network::Network<
     NetworkStore<MixedTensor<F<f64>, ShadowedStructure<Aind>>, Atom>,
     ExplicitKey<Aind>,
+    Symbol,
     Aind,
 >;
 
@@ -1308,6 +1311,7 @@ pub enum ExecutionMode {
 pub type StandardTensorNet = spenso::network::Network<
     NetworkStore<MixedTensor<F<f64>, ShadowedStructure<Aind>>, Atom>,
     ExplicitKey<Aind>,
+    Symbol,
     Aind,
 >;
 
@@ -1322,7 +1326,7 @@ impl Network {
 
     pub(crate) fn contract(&mut self, settings: impl Into<ContractionSettings>) -> Result<()> {
         let lib = TENSORLIB.read().unwrap();
-
+        let fnlib = FUN_LIB.deref();
         let settings = settings.into();
         debug!(
             "Contracting network:{} with settings: {:#?}",
@@ -1334,28 +1338,34 @@ impl Network {
                 match settings.mode {
                     ExecutionMode::All => self
                         .net
-                        .execute::<Steps<1>, SmallestDegree, _, _>(lib.deref())?,
+                        .execute::<Steps<1>, SmallestDegree, _, _, _>(lib.deref(), fnlib)?,
                     ExecutionMode::Scalar => self
                         .net
-                        .execute::<Steps<1>, ContractScalars, _, _>(lib.deref())?,
+                        .execute::<Steps<1>, ContractScalars, _, _, _>(lib.deref(), fnlib)?,
                     ExecutionMode::Single => self
                         .net
-                        .execute::<Steps<1>, SingleSmallestDegree<false>, _, _>(lib.deref())?,
+                        .execute::<Steps<1>, SingleSmallestDegree<false>, _, _, _>(
+                            lib.deref(),
+                            fnlib,
+                        )?,
                 }
             }
         } else {
             match settings.mode {
                 ExecutionMode::All => {
                     self.net
-                        .execute::<Sequential, SmallestDegree, _, _>(lib.deref())?;
+                        .execute::<Sequential, SmallestDegree, _, _, _>(lib.deref(), fnlib)?;
                 }
                 ExecutionMode::Scalar => {
                     self.net
-                        .execute::<Sequential, ContractScalars, _, _>(lib.deref())?;
+                        .execute::<Sequential, ContractScalars, _, _, _>(lib.deref(), fnlib)?;
                 }
                 ExecutionMode::Single => {
                     self.net
-                        .execute::<Sequential, SingleSmallestDegree<false>, _, _>(lib.deref())?;
+                        .execute::<Sequential, SingleSmallestDegree<false>, _, _, _>(
+                            lib.deref(),
+                            fnlib,
+                        )?;
                 }
             }
         }
@@ -1489,7 +1499,9 @@ impl NumeratorState for Contracted {
     }
 
     fn update_model(&mut self, _model: &Model) -> Result<()> {
-        Err(eyre!("Only applied feynman rule, simplified color, gamma, parsed into network and contracted, nothing to update"))
+        Err(eyre!(
+            "Only applied feynman rule, simplified color, gamma, parsed into network and contracted, nothing to update"
+        ))
     }
 }
 

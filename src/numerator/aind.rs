@@ -1,21 +1,11 @@
-use std::{
-    collections::BTreeSet,
-    sync::{
-        atomic::{AtomicUsize, Ordering},
-        LazyLock, RwLock,
-    },
-};
+use std::sync::atomic::{AtomicUsize, Ordering};
 
-use idenso::representations::{Bispinor, ColorAdjoint, ColorFundamental};
 use linnet::half_edge::{
-    involution::{EdgeIndex, Hedge},
     NodeIndex,
+    involution::{EdgeIndex, Hedge},
 };
 use spenso::{
-    structure::{
-        representation::{LibraryRep, Minkowski, RepName, Representation},
-        slot::{AbsInd, DummyAind, IsAbstractSlot, SlotError},
-    },
+    structure::slot::{AbsInd, DummyAind, ParseableAind, SlotError},
     utils::{to_subscript, to_superscript},
 };
 use symbolica::{
@@ -24,7 +14,6 @@ use symbolica::{
     function, symbol,
 };
 use thiserror::Error;
-use tracing::debug;
 
 static DUMMYCOUNTER: AtomicUsize = AtomicUsize::new(0);
 
@@ -78,6 +67,26 @@ impl AbsInd for Aind {}
 impl DummyAind for Aind {
     fn new_dummy() -> Self {
         Aind::Dummy(DUMMYCOUNTER.fetch_add(1, Ordering::Relaxed))
+    }
+
+    fn is_dummy(&self) -> bool {
+        matches!(self, Aind::Dummy(_))
+    }
+
+    fn new_dummy_at(i: usize) -> Self {
+        Aind::Dummy(i)
+    }
+}
+
+impl ParseableAind for Aind {
+    type Error = AindError;
+
+    fn from_view(view: AtomView<'_>) -> Result<Self, Self::Error> {
+        view.try_into()
+    }
+
+    fn to_atom(&self) -> Atom {
+        (*self).into()
     }
 }
 
@@ -354,7 +363,7 @@ mod tests {
     use idenso::metric::MetricSimplifier;
     use spenso::{
         network::parsing::ShadowedStructure,
-        structure::{permuted::Perm, PermutedStructure, TensorStructure},
+        structure::{PermutedStructure, TensorStructure, permuted::Perm},
         tensors::symbolic::SymbolicTensor,
     };
     use symbolica::{atom::AtomCore, parse_lit};

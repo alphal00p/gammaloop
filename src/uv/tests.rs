@@ -15,6 +15,7 @@ use crate::utils::W_;
 use crate::uv::settings::VakintSettings;
 use linnet::half_edge::involution::EdgeIndex;
 
+use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike};
 use linnet::half_edge::{builder::HedgeGraphBuilder, involution::Flow};
 use symbolica::atom::Symbol;
 use symbolica::symbol;
@@ -22,10 +23,10 @@ use symbolica::symbol;
 use crate::{
     dot,
     feyngen::FeynGenFilters,
-    graph::{parse::IntoGraph, Graph},
+    graph::{Graph, parse::IntoGraph},
     processes::{CrossSection, CutId, ProcessDefinition},
-    settings::global::GenerationSettings,
     settings::RuntimeSettings,
+    settings::global::GenerationSettings,
     signature::LoopExtSignature,
     utils::test_utils::load_generic_model,
 };
@@ -403,7 +404,7 @@ fn double_triangle_LU() {
     };
 
     let loop_momentum_basis = LoopMomentumBasis {
-        tree: None,
+        tree: SuBitGraph::empty(0),
         loop_edges: vec![EdgeIndex::from(0), EdgeIndex::from(3)].into(),
         ext_edges: vec![EdgeIndex::from(5), EdgeIndex::from(6)].into(),
         edge_signatures: underlying.new_edgevec(|_, _, _| LoopExtSignature::from((vec![], vec![]))),

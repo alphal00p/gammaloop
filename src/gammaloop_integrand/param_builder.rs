@@ -15,7 +15,7 @@ use serde::Serialize;
 use spenso::{
     algebra::{algebraic_traits::RefOne, complex::Complex},
     iterators::IteratableTensor,
-    network::{parsing::ParseSettings, ExecutionResult},
+    network::{ExecutionResult, parsing::ParseSettings},
     tensors::parametric::AtomViewOrConcrete,
 };
 use symbolica::{
@@ -24,9 +24,10 @@ use symbolica::{
     evaluate::FunctionMap,
     id::Replacement,
 };
-use tabled::{settings::Style, Table};
+use tabled::{Table, settings::Style};
 
 use crate::{
+    GammaLoopContext,
     cff::expression::GraphOrientation,
     graph::{FeynmanGraph, Graph},
     model::Model,
@@ -35,10 +36,9 @@ use crate::{
     numerator::ParsingNet,
     status_debug, status_info, status_warn,
     utils::{
-        f128, symbolica_ext::LOGPRINTOPTS, tracing::StatusRenderable, FloatLike,
-        PrecisionUpgradable, F, GS, TENSORLIB,
+        F, FloatLike, GS, PrecisionUpgradable, TENSORLIB, f128, symbolica_ext::LOGPRINTOPTS,
+        tracing::StatusRenderable,
     },
-    GammaLoopContext,
 };
 
 /// Check if debug cache mode is enabled
@@ -1122,7 +1122,9 @@ impl<T: FloatLike> ParamBuilder<T> {
 
     /// Public method to enable/disable debug cache mode at runtime
     pub fn set_debug_cache_mode(enabled: bool) {
-        std::env::set_var("GAMMALOOP_DEBUG_CACHE", if enabled { "1" } else { "0" });
+        unsafe {
+            std::env::set_var("GAMMALOOP_DEBUG_CACHE", if enabled { "1" } else { "0" });
+        }
         status_info!(
             "Debug cache mode {}: Set GAMMALOOP_DEBUG_CACHE={}",
             if enabled { "enabled" } else { "disabled" },

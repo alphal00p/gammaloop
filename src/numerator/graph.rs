@@ -1,7 +1,7 @@
 use linnet::half_edge::{
-    involution::{EdgeData, Flow, Orientation},
-    subgraph::SubGraph,
     HedgeGraph,
+    involution::{EdgeData, Flow, Orientation},
+    subgraph::{SuBitGraph, SubSetLike},
 };
 use spenso::{
     iterators::IteratableTensor,
@@ -13,7 +13,7 @@ use spenso::{
 use symbolica::atom::{Atom, AtomOrView, FunctionBuilder, Symbol};
 
 use crate::{
-    graph::{edge::ParseEdge, Edge, Graph, NumHedgeData},
+    graph::{Edge, Graph, NumHedgeData, edge::ParseEdge},
     model::ArcParticle,
     utils::GS,
 };
@@ -24,27 +24,27 @@ pub trait GeneratePolarizations {
     /// Returns the polarizations of the given subgraph. One polarization per half-edge.
     /// If you only want those that are dangling first get the crown of the subgraph.
 
-    fn generate_polarizations_of<S: SubGraph>(&self, subgraph: &S) -> Atom;
-    fn generate_polarization_parameters_of<S: SubGraph>(&self, subgraph: &S) -> Vec<Atom>;
+    fn generate_polarizations_of<S: SubSetLike>(&self, subgraph: &S) -> Atom;
+    fn generate_polarization_parameters_of<S: SubSetLike>(&self, subgraph: &S) -> Vec<Atom>;
     // fn generate_polarizations(&self) -> Atom;
     // fn generate_polarization_params(&self) -> Vec<Atom>;
 }
 
 impl Graph {
     pub fn generate_polarizations(&self) -> Atom {
-        self.generate_polarizations_of(&self.underlying.external_filter())
+        self.generate_polarizations_of(&self.underlying.external_filter::<SuBitGraph>())
     }
     pub fn generate_polarization_params(&self) -> Vec<Atom> {
-        self.generate_polarization_parameters_of(&self.underlying.external_filter())
+        self.generate_polarization_parameters_of(&self.underlying.external_filter::<SuBitGraph>())
     }
 }
 
 impl GeneratePolarizations for Graph {
-    fn generate_polarizations_of<S: SubGraph>(&self, subgraph: &S) -> Atom {
+    fn generate_polarizations_of<S: SubSetLike>(&self, subgraph: &S) -> Atom {
         self.underlying.generate_polarizations_of(subgraph)
     }
 
-    fn generate_polarization_parameters_of<S: SubGraph>(&self, subgraph: &S) -> Vec<Atom> {
+    fn generate_polarization_parameters_of<S: SubSetLike>(&self, subgraph: &S) -> Vec<Atom> {
         self.underlying
             .generate_polarization_parameters_of(subgraph)
     }
@@ -65,7 +65,7 @@ impl<V, E> GeneratePolarizations for HedgeGraph<E, V, NumHedgeData>
 where
     for<'a> EdgeData<&'a E>: ReversibleEdge,
 {
-    fn generate_polarizations_of<S: SubGraph>(&self, subgraph: &S) -> Atom {
+    fn generate_polarizations_of<S: SubSetLike>(&self, subgraph: &S) -> Atom {
         let mut pols = Atom::num(1);
 
         for h in subgraph.included_iter() {
@@ -80,7 +80,7 @@ where
         pols
     }
 
-    fn generate_polarization_parameters_of<S: SubGraph>(&self, subgraph: &S) -> Vec<Atom> {
+    fn generate_polarization_parameters_of<S: SubSetLike>(&self, subgraph: &S) -> Vec<Atom> {
         let mut pols = Vec::new();
 
         for h in subgraph.included_iter() {
@@ -417,11 +417,11 @@ mod test {
     use crate::{
         dot,
         gammaloop_integrand::param_builder::ParamBuilderGraph,
-        graph::{parse::IntoGraph, Graph},
+        graph::{Graph, parse::IntoGraph},
         processes::{Amplitude, AmplitudeGraph},
         settings::{
-            global::GenerationSettings, runtime::kinematic::KinematicsSettings, GlobalSettings,
-            RuntimeSettings,
+            GlobalSettings, RuntimeSettings, global::GenerationSettings,
+            runtime::kinematic::KinematicsSettings,
         },
         uv::UltravioletGraph,
     };

@@ -3,14 +3,14 @@ use std::{cell::RefCell, fmt::Display};
 use eyre::Context;
 use linnet::{
     half_edge::{
-        involution::{EdgeData, EdgeIndex, Flow, Hedge, HedgePair, Orientation},
         HedgeGraph,
+        involution::{EdgeData, EdgeIndex, Flow, Hedge, HedgePair, Orientation},
     },
     parser::{DotEdgeData, DotHedgeData, DotVertexData},
 };
 use spenso::{
     algebra::complex::Complex,
-    structure::{representation::LibraryRep, IndexLess, ScalarStructure},
+    structure::{IndexLess, ScalarStructure, representation::LibraryRep},
 };
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, Symbol},
@@ -26,7 +26,7 @@ use crate::{
     momentum::Helicity,
     momentum_sample::LoopIndex,
     numerator::aind::{Aind, NewAind},
-    utils::{FloatLike, F, GS},
+    utils::{F, FloatLike, GS},
     uv::uv_graph::UVE,
 };
 
@@ -465,19 +465,14 @@ impl ParseEdge {
             .replace(GS.edgeid)
             .with(Atom::num(usize::from(eid) as i64))
             .replace_map(|term, _, out| {
-                if let AtomView::Fun(f) = term {
-                    if f.get_symbol() == GS.edgeid {
-                        if f.get_nargs() == 1 {
-                            if let Ok(i) = i64::try_from(f.iter().next().unwrap()) {
-                                if let Ok(u) = u16::try_from(i) {
-                                    *out = eid.aind(u).into();
-                                    return true;
-                                }
-                            }
-                        }
-                    }
+                if let AtomView::Fun(f) = term
+                    && f.get_symbol() == GS.edgeid
+                    && f.get_nargs() == 1
+                    && let Ok(i) = i64::try_from(f.iter().next().unwrap())
+                    && let Ok(u) = u16::try_from(i)
+                {
+                    **out = eid.aind(u).into();
                 }
-                false
             });
 
         match hedge_pair {
@@ -485,73 +480,53 @@ impl ParseEdge {
                 .replace(GS.sink_id)
                 .with(Atom::num(sink.0 as i64))
                 .replace_map(|term, _, out| {
-                    if let AtomView::Fun(f) = term {
-                        if f.get_symbol() == GS.sink_id {
-                            if f.get_nargs() == 1 {
-                                if let Ok(i) = i64::try_from(f.iter().next().unwrap()) {
-                                    if let Ok(u) = u16::try_from(i) {
-                                        *out = sink.aind(u).into();
-                                        return true;
-                                    }
-                                }
-                            }
-                        }
+                    if let AtomView::Fun(f) = term
+                        && f.get_symbol() == GS.sink_id
+                        && f.get_nargs() == 1
+                        && let Ok(i) = i64::try_from(f.iter().next().unwrap())
+                        && let Ok(u) = u16::try_from(i)
+                    {
+                        **out = sink.aind(u).into();
                     }
-                    false
                 })
                 .replace(GS.source_id)
                 .with(Atom::num(source.0 as i64))
                 .replace_map(|term, _, out| {
-                    if let AtomView::Fun(f) = term {
-                        if f.get_symbol() == GS.source_id {
-                            if f.get_nargs() == 1 {
-                                if let Ok(i) = i64::try_from(f.iter().next().unwrap()) {
-                                    if let Ok(u) = u16::try_from(i) {
-                                        *out = source.aind(u).into();
-                                        return true;
-                                    }
-                                }
-                            }
-                        }
+                    if let AtomView::Fun(f) = term
+                        && f.get_symbol() == GS.source_id
+                        && f.get_nargs() == 1
+                        && let Ok(i) = i64::try_from(f.iter().next().unwrap())
+                        && let Ok(u) = u16::try_from(i)
+                    {
+                        **out = source.aind(u).into();
                     }
-                    false
                 }),
             HedgePair::Unpaired { hedge, flow } => match flow {
                 Flow::Source => a
                     .replace(GS.source_id)
                     .with(Atom::num(hedge.0 as i64))
                     .replace_map(|term, _, out| {
-                        if let AtomView::Fun(f) = term {
-                            if f.get_symbol() == GS.source_id {
-                                if f.get_nargs() == 1 {
-                                    if let Ok(i) = i64::try_from(f.iter().next().unwrap()) {
-                                        if let Ok(u) = u16::try_from(i) {
-                                            *out = hedge.aind(u).into();
-                                            return true;
-                                        }
-                                    }
-                                }
-                            }
+                        if let AtomView::Fun(f) = term
+                            && f.get_symbol() == GS.source_id
+                            && f.get_nargs() == 1
+                            && let Ok(i) = i64::try_from(f.iter().next().unwrap())
+                            && let Ok(u) = u16::try_from(i)
+                        {
+                            **out = hedge.aind(u).into();
                         }
-                        false
                     }),
                 Flow::Sink => a
                     .replace(GS.sink_id)
                     .with(Atom::num(hedge.0 as i64))
                     .replace_map(|term, _, out| {
-                        if let AtomView::Fun(f) = term {
-                            if f.get_symbol() == GS.sink_id {
-                                if f.get_nargs() == 1 {
-                                    if let Ok(i) = i64::try_from(f.iter().next().unwrap()) {
-                                        if let Ok(u) = u16::try_from(i) {
-                                            *out = hedge.aind(u).into();
-                                            return true;
-                                        }
-                                    }
-                                }
-                            }
+                        if let AtomView::Fun(f) = term
+                            && f.get_symbol() == GS.sink_id
+                            && f.get_nargs() == 1
+                            && let Ok(i) = i64::try_from(f.iter().next().unwrap())
+                            && let Ok(u) = u16::try_from(i)
+                        {
+                            **out = hedge.aind(u).into();
                         }
-                        false
                     }),
             },
         }

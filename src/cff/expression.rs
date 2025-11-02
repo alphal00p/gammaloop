@@ -5,15 +5,15 @@ use std::borrow::Borrow;
 use crate::{
     cff::esurface::EsurfaceID,
     settings::global::OrientationPattern,
-    utils::{ose_atom_from_index, W_},
+    utils::{W_, ose_atom_from_index},
 };
 use bincode_trait_derive::{Decode, Encode};
 use derive_more::{From, Into};
 use itertools::{EitherOrBoth, Itertools};
 use linnet::half_edge::{
+    GVEdgeAttrs, HedgeGraph,
     involution::{EdgeVec, Orientation},
     nodestore::NodeStorageOps,
-    GVEdgeAttrs, HedgeGraph,
 };
 use serde::{Deserialize, Serialize};
 use symbolica::{
@@ -117,14 +117,12 @@ pub trait GraphOrientation {
                                 EitherOrBoth::Left(_) | EitherOrBoth::Right(_) => false,
                             },
                         ) {
-                            *out = Atom::num(1);
+                            **out = Atom::num(1);
                         } else {
-                            *out = Atom::Zero;
+                            **out = Atom::Zero;
                         }
-                        return true;
                     }
                 }
-                false
             })
     }
 }

@@ -7,17 +7,17 @@ use global::ParseData;
 use itertools::Itertools;
 use linnet::{
     half_edge::{
+        HedgeGraph,
         builder::HedgeGraphBuilder,
         involution::{EdgeData, EdgeIndex, Flow, Hedge, HedgePair, Orientation},
-        subgraph::{HedgeNode, OrientedCut, SubGraph},
-        HedgeGraph,
+        subgraph::{HedgeNode, OrientedCut, SuBitGraph, SubGraphLike, SubSetLike},
     },
     parser::DotGraph,
 };
 use log::debug;
 
 use parse::ParseGraph;
-use rand::{rngs::SmallRng, Rng, SeedableRng};
+use rand::{Rng, SeedableRng, rngs::SmallRng};
 // use petgraph::Direction::Outgoing;
 use symbolica::{atom::Atom, graph::Graph as SymbolicaGraph};
 use tracing::warn;
@@ -26,8 +26,8 @@ use typed_index_collections::TiVec;
 use crate::{
     define_index,
     feyngen::{
-        diagram_generator::{evaluate_overall_factor, EdgeColor, NodeColorWithVertexRule},
         GenerationType,
+        diagram_generator::{EdgeColor, NodeColorWithVertexRule, evaluate_overall_factor},
     },
     gammaloop_integrand::{LmbMultiChannelingSetup, ParamBuilder},
     graph::{edge::ParseEdge, vertex::ParseVertex},
@@ -35,9 +35,9 @@ use crate::{
     model::Model,
     momentum::{Dep, ExternalMomenta, PolDef},
     momentum_sample::ExternalIndex,
-    numerator::{symbolica_ext::AtomCoreExt, GlobalPrefactor, ParsingNet},
+    numerator::{GlobalPrefactor, ParsingNet, symbolica_ext::AtomCoreExt},
     settings::runtime::kinematic::Externals,
-    utils::{ose_atom_from_index, Length, F, GS},
+    utils::{F, GS, Length, ose_atom_from_index},
 };
 
 pub mod global;
@@ -101,7 +101,7 @@ impl Graph {
 
         let mut momenta = vec![ExternalMomenta::Dependent(Dep::Dep)];
         let mut helicities = vec![];
-        let ext = self.external_filter();
+        let ext: SuBitGraph = self.external_filter();
 
         for (_, _, d) in self.iter_edges_of(&ext) {
             let hel = d.data.random_helicity(seed);
@@ -382,7 +382,7 @@ pub struct ExternalConnection {
     pub outgoing_index: ExternalIndex,
 }
 
-pub fn get_cff_inverse_energy_product_impl<E, V, H, S: SubGraph>(
+pub fn get_cff_inverse_energy_product_impl<E, V, H, S: SubSetLike>(
     graph: &HedgeGraph<E, V, H>,
     subgraph: &S,
     contract_edges: &[EdgeIndex],

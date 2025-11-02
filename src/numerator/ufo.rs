@@ -1,7 +1,6 @@
 use std::sync::LazyLock;
 
-use crate::utils::symbolica_ext::LOGPRINTOPTS;
-use crate::utils::{symbolica_ext::CallSymbol, GS, W_};
+use crate::utils::{GS, W_, symbolica_ext::CallSymbol};
 use idenso::color::CS;
 use idenso::gamma::AGS;
 use idenso::representations::{
@@ -22,7 +21,6 @@ use symbolica::{
     function,
     id::Replacement,
 };
-use tracing::debug;
 
 use super::aind::Aind;
 
@@ -58,17 +56,12 @@ pub static UFO: LazyLock<UFOSymbols> = LazyLock::new(|| UFOSymbols {
     complexconjugate: symbol!(
         "UFO::complexconjugate",
         norm = |f, out| {
-            let AtomView::Fun(ff) = f else {
-                return false;
-            };
-            if ff.get_nargs() != 1 {
-                return false;
+            if let AtomView::Fun(ff) = f
+                && ff.get_nargs() != 1
+                && let AtomView::Num(arg) = ff.iter().next().unwrap()
+            {
+                **out = arg.as_view().conj();
             }
-            let AtomView::Num(arg) = ff.iter().next().unwrap() else {
-                return false;
-            };
-            *out = arg.as_view().conjugate();
-            true
         }
     ),
     gamma5: symbol!("UFO::Gamma5"),
@@ -123,12 +116,10 @@ impl UFOSymbols {
                     // println!("{re}+i{im}");
 
                     if count == 2 {
-                        *out = Atom::num(symbolica::domains::float::Complex { re, im });
-                        return true;
+                        **out = Atom::num(symbolica::domains::float::Complex { re, im });
                     }
                 }
             }
-            false
         })
     }
 
@@ -311,8 +302,7 @@ impl UFOSymbols {
                         }
                     }
 
-                    *out = fbuilder.finish();
-                    true
+                    **out = fbuilder.finish();
                 } else if name == self.charge_conj
                     || name == self.gamma5
                     || name == self.identity
@@ -338,8 +328,7 @@ impl UFOSymbols {
                             }
                         }
                     }
-                    *out = fbuilder.finish();
-                    true
+                    **out = fbuilder.finish();
                 } else if name == self.identityl
                     || name == self.levicivita
                     || name == self.momentum
@@ -362,8 +351,7 @@ impl UFOSymbols {
                             fbuilder = fbuilder.add_arg(a);
                         }
                     }
-                    *out = fbuilder.finish();
-                    true
+                    **out = fbuilder.finish();
                 } else if name == self.sigma {
                     let mut fbuilder = FunctionBuilder::new(self.gamma);
                     let mut count = 0;
@@ -391,13 +379,8 @@ impl UFOSymbols {
                         count += 1;
                     }
 
-                    *out = fbuilder.finish();
-                    true
-                } else {
-                    false
+                    **out = fbuilder.finish();
                 }
-            } else {
-                false
             }
         });
 
@@ -477,10 +460,9 @@ impl UFOSymbols {
 
                                 gamma = gamma.add_arg(minki.to_atom());
 
-                                *out = gamma.finish()
+                                **out = gamma.finish()
                                     * GS.emr_mom(momenta[i as usize].1, minki.to_atom());
-
-                                return true;
+                                return;
                             }
                         }
                     }
@@ -492,13 +474,10 @@ impl UFOSymbols {
 
                         gamma = gamma.add_arg(minki.to_atom());
 
-                        *out = gamma.finish() * GS.emr_mom(momenta[0].1, minki.to_atom());
-
-                        return true;
+                        **out = gamma.finish() * GS.emr_mom(momenta[0].1, minki.to_atom());
                     }
                 }
             }
-            false
         });
 
         for (i, (f, e)) in momenta.iter().enumerate() {
@@ -672,14 +651,12 @@ impl UFOSymbols {
                                         }
                                         fbuilder = fbuilder
                                             .add_arg(rep.to_symbolic([Atom::from(dummy(a))]));
-                                        *out = fbuilder.finish();
-                                        return true;
+                                        **out = fbuilder.finish();
                                     }
                                 }
                             }
                         }
                     }
-                    false
                 });
             }
         }

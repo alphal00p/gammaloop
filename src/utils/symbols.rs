@@ -281,8 +281,7 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
     ufozero: symbol!(
         "UFO::ZERO",
         norm = |_, out| {
-            *out = Atom::Zero;
-            true
+            **out = Atom::Zero;
         }
     ),
     rescale: symbol!("t"),
@@ -290,22 +289,17 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
     linearize: symbol!(
         "linearize",
         norm = |f, out| {
-            let AtomView::Fun(ff) = f else {
-                return false;
-            };
-            if ff.get_nargs() != 1 {
-                return false;
+            if let AtomView::Fun(ff) = f
+                && ff.get_nargs() == 1
+                && let AtomView::Fun(arg) = ff.iter().next().unwrap()
+            {
+                let args = arg.iter().collect_vec();
+                **out = GS
+                    ._linear
+                    .f(args.as_slice())
+                    .replace(GS._linear.f(&[W_.a___]))
+                    .with(arg.get_symbol().f(&[W_.a___]));
             }
-            let AtomView::Fun(arg) = ff.iter().next().unwrap() else {
-                return false;
-            };
-            let args = arg.iter().collect_vec();
-            *out = GS
-                ._linear
-                .f(args.as_slice())
-                .replace(GS._linear.f(&[W_.a___]))
-                .with(arg.get_symbol().f(&[W_.a___]));
-            true
         }
     ),
     rescale_star: symbol!("t⃰"),
@@ -329,23 +323,21 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
     delta_vec: symbol!(
         "δ",
         norm = |f, out| {
-            if let AtomView::Fun(ff) = f {
-                if ff.get_nargs() == 2 {
-                    let mut iter = ff.iter();
-                    let matchid = iter.next().unwrap();
-                    if let AtomView::Fun(cind) = iter.next().unwrap() {
-                        if cind.get_symbol() == AIND_SYMBOLS.cind {
-                            if cind.as_view() != matchid {
-                                *out = Atom::Zero;
-                            } else {
-                                *out = Atom::num(1);
-                            }
-                            return true;
-                        }
+            if let AtomView::Fun(ff) = f
+                && ff.get_nargs() == 2
+            {
+                let mut iter = ff.iter();
+                let matchid = iter.next().unwrap();
+                if let AtomView::Fun(cind) = iter.next().unwrap()
+                    && cind.get_symbol() == AIND_SYMBOLS.cind
+                {
+                    if cind.as_view() != matchid {
+                        **out = Atom::Zero;
+                    } else {
+                        **out = Atom::num(1);
                     }
                 }
             }
-            false
         }
     ),
     top: symbol!("Top"),
@@ -366,23 +358,19 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
                 if ff.get_nargs() == 2 {
                     let mut iter = ff.iter();
                     let eid = iter.next().unwrap();
-                    if let AtomView::Fun(cind) = iter.next().unwrap() {
-                        if cind.get_symbol() == AIND_SYMBOLS.cind {
-                            if let Some(i) = cind.iter().next() {
-                                if let Ok(i) = i64::try_from(i) {
-                                    if i == 0 {
-                                        *out = Atom::Zero;
-                                    } else {
-                                        *out = symbol!("Q").f(&[eid, cind.as_view()])
-                                    }
-                                    return true;
-                                }
-                            }
+                    if let AtomView::Fun(cind) = iter.next().unwrap()
+                        && cind.get_symbol() == AIND_SYMBOLS.cind
+                        && let Some(i) = cind.iter().next()
+                        && let Ok(i) = i64::try_from(i)
+                    {
+                        if i == 0 {
+                            **out = Atom::Zero;
+                        } else {
+                            **out = symbol!("Q").f(&[eid, cind.as_view()])
                         }
                     }
                 }
             }
-            false
         }
     ),
     ose: symbol!("OSE"),

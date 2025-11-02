@@ -1,14 +1,16 @@
 use std::fmt::Display;
 
 use bincode_trait_derive::{Decode, Encode};
-use bitvec::vec::BitVec;
 use derive_more::{From, Into};
 use itertools::Itertools;
 use linnet::half_edge::{
-    involution::{EdgeData, EdgeIndex, EdgeVec, Flow, Hedge, HedgePair, Orientation},
-    subgraph::{cycle::SignedCycle, Inclusion, ModifySubgraph, SubGraph, SubGraphOps},
-    tree::SimpleTraversalTree,
     HedgeGraph, NoData,
+    involution::{EdgeData, EdgeIndex, EdgeVec, Flow, Hedge, HedgePair, Orientation},
+    subgraph::{
+        Inclusion, ModifySubSet, SuBitGraph, SubGraphLike, SubGraphOps, SubSetLike, SubSetOps,
+        cycle::SignedCycle,
+    },
+    tree::SimpleTraversalTree,
 };
 use serde::{Deserialize, Serialize};
 use symbolica::{
@@ -22,18 +24,18 @@ use tabled::{builder::Builder, settings::Style};
 use typed_index_collections::TiVec;
 
 use crate::{
+    GAMMALOOP_NAMESPACE,
     momentum::SignOrZero,
     momentum_sample::{ExternalIndex, LoopIndex},
     signature::{LoopExtSignature, SignatureLike},
-    utils::{symbolica_ext::CallSymbol, GS, W_},
-    GAMMALOOP_NAMESPACE,
+    utils::{GS, W_, symbolica_ext::CallSymbol},
 };
 
 use super::Graph;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct LoopMomentumBasis {
-    pub tree: Option<()>,
+    pub tree: SuBitGraph,
     pub loop_edges: TiVec<LoopIndex, EdgeIndex>,
     pub ext_edges: TiVec<ExternalIndex, EdgeIndex>, //It should have length = to number of externals (not number of independent externals)
     pub edge_signatures: EdgeVec<LoopExtSignature>,
@@ -122,17 +124,17 @@ impl LoopMomentumBasis {
 }
 
 pub trait LMBext {
-    fn generate_loop_momentum_bases<S: SubGraph>(
+    fn generate_loop_momentum_bases<S: SubGraphLike>(
         &self,
         subgraph: &S,
     ) -> TiVec<LmbIndex, LoopMomentumBasis>
     where
-        S::Base: SubGraph<Base = S::Base>
-            + SubGraphOps
+        S::Base: SubGraphLike<Base = S::Base>
+            + SubSetOps
             + Clone
-            + ModifySubgraph<HedgePair>
-            + ModifySubgraph<Hedge>;
-    fn uv_wrapped_replacement<'a, S: SubGraph, I>(
+            + ModifySubSet<HedgePair>
+            + ModifySubSet<Hedge>;
+    fn uv_wrapped_replacement<'a, S: SubSetLike, I>(
         &self,
         subgraph: &S,
         lmb: &LoopMomentumBasis,
@@ -165,7 +167,7 @@ pub trait LMBext {
         )
     }
 
-    fn uv_spatial_wrapped_replacement<'a, S: SubGraph, I>(
+    fn uv_spatial_wrapped_replacement<'a, S: SubSetLike, I>(
         &self,
         subgraph: &S,
         lmb: &LoopMomentumBasis,
@@ -201,7 +203,7 @@ pub trait LMBext {
         )
     }
 
-    fn normal_emr_replacement<'a, S: SubGraph, I>(
+    fn normal_emr_replacement<'a, S: SubSetLike, I>(
         &self,
         subgraph: &S,
         lmb: &LoopMomentumBasis,
@@ -229,7 +231,7 @@ pub trait LMBext {
         )
     }
 
-    fn integrand_replacement<'a, S: SubGraph, I>(
+    fn integrand_replacement<'a, S: SubSetLike, I>(
         &self,
         subgraph: &S,
         lmb: &LoopMomentumBasis,
@@ -256,7 +258,7 @@ pub trait LMBext {
         )
     }
 
-    fn replacement_impl<'a, S: SubGraph, I>(
+    fn replacement_impl<'a, S: SubSetLike, I>(
         &self,
         rep: impl Fn(EdgeIndex, Atom, Atom) -> Replacement,
         subgraph: &S,
@@ -271,38 +273,40 @@ pub trait LMBext {
     where
         &'a I: Into<AtomOrView<'a>>;
 
-    fn lmb_impl<S: SubGraph + SubGraphOps + ModifySubgraph<HedgePair> + ModifySubgraph<Hedge>>(
+    fn lmb_impl<S: SubGraphLike + SubSetOps + ModifySubSet<HedgePair> + ModifySubSet<Hedge>>(
         &self,
         subgraph: &S,
         tree: &S,
         externals: S,
     ) -> LoopMomentumBasis
     where
-        S::Base: ModifySubgraph<Hedge>;
+        S::Base: ModifySubSet<Hedge>;
 
-    fn lmb<S: SubGraph<Base = BitVec>>(&self, subgraph: &S) -> LoopMomentumBasis;
+    fn lmb<S: SubGraphLike<Base = SuBitGraph>>(&self, subgraph: &S) -> LoopMomentumBasis;
 
-    fn compatible_sub_lmb<S: SubGraph>(
+    fn compatible_sub_lmb<S: SubGraphLike>(
         &self,
         subgraph: &S,
         externals: S::Base,
         lmb: &LoopMomentumBasis,
     ) -> LoopMomentumBasis
     where
-        S::Base: SubGraph<Base = S::Base>
-            + SubGraphOps
+        S::Base: SubGraphLike<Base = S::Base>
+            + SubSetOps
             + Clone
-            + ModifySubgraph<HedgePair>
-            + ModifySubgraph<Hedge>;
+            + ModifySubSet<HedgePair>
+            + ModifySubSet<Hedge>;
 
-    fn cotree_lmb<S: SubGraph + SubGraphOps + ModifySubgraph<HedgePair> + ModifySubgraph<Hedge>>(
+    fn cotree_lmb<
+        S: SubGraphLike + SubSetOps + SubGraphOps + ModifySubSet<HedgePair> + ModifySubSet<Hedge>,
+    >(
         &self,
         subgraph: &S,
         cotree: &S,
         externals: S,
     ) -> LoopMomentumBasis
     where
-        S::Base: ModifySubgraph<Hedge>,
+        S::Base: ModifySubSet<Hedge>,
     {
         let tree = subgraph.subtract(cotree);
         self.lmb_impl(subgraph, &tree, externals)
@@ -310,7 +314,7 @@ pub trait LMBext {
 
     fn empty_lmb(&self) -> LoopMomentumBasis;
 
-    fn dot_lmb<S: SubGraph>(&self, subgraph: &S, lmb: &LoopMomentumBasis) -> String;
+    fn dot_lmb<S: SubGraphLike>(&self, subgraph: &S, lmb: &LoopMomentumBasis) -> String;
 }
 
 pub(crate) fn no_filter(_pair: &HedgePair) -> bool {
@@ -320,14 +324,14 @@ pub(crate) fn no_filter(_pair: &HedgePair) -> bool {
 impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
     fn empty_lmb(&self) -> LoopMomentumBasis {
         LoopMomentumBasis {
-            tree: None,
+            tree: SuBitGraph::empty(0),
             loop_edges: vec![].into(),
             ext_edges: vec![].into(),
             edge_signatures: self.new_edgevec(|_, _, _| LoopExtSignature::from((vec![], vec![]))),
         }
     }
 
-    fn dot_lmb<S: SubGraph>(&self, subgraph: &S, lmb: &LoopMomentumBasis) -> String {
+    fn dot_lmb<S: SubGraphLike>(&self, subgraph: &S, lmb: &LoopMomentumBasis) -> String {
         let reps = self.normal_emr_replacement::<_, Atom>(subgraph, lmb, &[], no_filter);
 
         let emrgraph = self.map_data_ref(
@@ -351,7 +355,7 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
         emrgraph.dot_label(subgraph)
     }
 
-    fn lmb<S: SubGraph<Base = BitVec>>(&self, subgraph: &S) -> LoopMomentumBasis {
+    fn lmb<S: SubGraphLike<Base = SuBitGraph>>(&self, subgraph: &S) -> LoopMomentumBasis {
         if let Some(i) = subgraph.included_iter().next() {
             let tree =
                 SimpleTraversalTree::depth_first_traverse(self, subgraph, &self.node_id(i), None)
@@ -365,18 +369,18 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
         };
     }
 
-    fn compatible_sub_lmb<S: SubGraph>(
+    fn compatible_sub_lmb<S: SubGraphLike>(
         &self,
         subgraph: &S,
         externals: S::Base,
         lmb: &LoopMomentumBasis,
     ) -> LoopMomentumBasis
     where
-        S::Base: SubGraph<Base = S::Base>
-            + SubGraphOps
+        S::Base: SubGraphLike<Base = S::Base>
+            + SubSetOps
             + Clone
-            + ModifySubgraph<HedgePair>
-            + ModifySubgraph<Hedge>,
+            + ModifySubSet<HedgePair>
+            + ModifySubSet<Hedge>,
     {
         let n_loops = self.cyclotomatic_number(subgraph);
         if n_loops == 0 {
@@ -413,14 +417,14 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
     }
 
     /// The true externals (that will flow through the graph (i.e. not dummy)) are those that are both in the subgraph and in the externals
-    fn lmb_impl<S: SubGraph + SubGraphOps + ModifySubgraph<HedgePair> + ModifySubgraph<Hedge>>(
+    fn lmb_impl<S: SubGraphLike + SubSetOps + ModifySubSet<HedgePair> + ModifySubSet<Hedge>>(
         &self,
         subgraph: &S,
         tree: &S,
         true_externals: S,
     ) -> LoopMomentumBasis
     where
-        S::Base: ModifySubgraph<Hedge>,
+        S::Base: ModifySubSet<Hedge>,
     {
         // println!(
         //     "//Lmb of subgraph:\n{}\n//Tree:\n{}\n//Externals\n{}",
@@ -431,6 +435,8 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
         let Some(h) = subgraph.included_iter().next() else {
             return self.empty_lmb();
         };
+
+        let mut tree_bitvec: SuBitGraph = self.empty_subgraph();
         let mut ext_edges: TiVec<ExternalIndex, EdgeIndex> = vec![].into();
 
         let mut externals = self.full_crown(subgraph);
@@ -441,6 +447,9 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
         let cotree = subgraph.subtract(&tree);
         let tree = SimpleTraversalTree::depth_first_traverse(self, tree, &root_node, None).ok();
 
+        if let Some(t) = &tree {
+            tree_bitvec = t.tree_subgraph.clone();
+        }
         let mut loop_edges: TiVec<LoopIndex, EdgeIndex> = vec![].into();
         let mut cycles = vec![];
 
@@ -614,23 +623,23 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
         });
 
         LoopMomentumBasis {
-            tree: None,
+            tree: tree_bitvec,
             edge_signatures: signature,
             ext_edges,
             loop_edges,
         }
     }
 
-    fn generate_loop_momentum_bases<S: SubGraph>(
+    fn generate_loop_momentum_bases<S: SubGraphLike>(
         &self,
         subgraph: &S,
     ) -> TiVec<LmbIndex, LoopMomentumBasis>
     where
-        S::Base: SubGraph<Base = S::Base>
-            + SubGraphOps
+        S::Base: SubGraphLike<Base = S::Base>
+            + SubSetOps
             + Clone
-            + ModifySubgraph<HedgePair>
-            + ModifySubgraph<Hedge>,
+            + ModifySubSet<HedgePair>
+            + ModifySubSet<Hedge>,
     {
         let Some(_) = subgraph.included_iter().next() else {
             return vec![].into();
@@ -646,7 +655,7 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
         lmbs
     }
 
-    fn replacement_impl<'a, S: SubGraph, I>(
+    fn replacement_impl<'a, S: SubSetLike, I>(
         &self,
         rep: impl Fn(EdgeIndex, Atom, Atom) -> Replacement,
         subgraph: &S,
@@ -680,28 +689,28 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
 }
 
 impl LMBext for Graph {
-    fn dot_lmb<S: SubGraph>(&self, subgraph: &S, lmb: &LoopMomentumBasis) -> String {
+    fn dot_lmb<S: SubGraphLike>(&self, subgraph: &S, lmb: &LoopMomentumBasis) -> String {
         self.underlying.dot_lmb(subgraph, lmb)
     }
 
     fn empty_lmb(&self) -> LoopMomentumBasis {
         self.underlying.empty_lmb()
     }
-    fn generate_loop_momentum_bases<S: SubGraph>(
+    fn generate_loop_momentum_bases<S: SubGraphLike>(
         &self,
         subgraph: &S,
     ) -> TiVec<LmbIndex, LoopMomentumBasis>
     where
-        S::Base: SubGraph<Base = S::Base>
-            + SubGraphOps
+        S::Base: SubGraphLike<Base = S::Base>
+            + SubSetOps
             + Clone
-            + ModifySubgraph<HedgePair>
-            + ModifySubgraph<Hedge>,
+            + ModifySubSet<HedgePair>
+            + ModifySubSet<Hedge>,
     {
         self.underlying.generate_loop_momentum_bases(subgraph)
     }
 
-    fn replacement_impl<'a, S: SubGraph, I>(
+    fn replacement_impl<'a, S: SubSetLike, I>(
         &self,
         rep: impl Fn(EdgeIndex, Atom, Atom) -> Replacement,
         subgraph: &S,
@@ -729,34 +738,34 @@ impl LMBext for Graph {
         )
     }
 
-    fn lmb_impl<S: SubGraph + SubGraphOps + ModifySubgraph<HedgePair> + ModifySubgraph<Hedge>>(
+    fn lmb_impl<S: SubGraphLike + SubSetOps + ModifySubSet<HedgePair> + ModifySubSet<Hedge>>(
         &self,
         subgraph: &S,
         tree: &S,
         externals: S,
     ) -> LoopMomentumBasis
     where
-        S::Base: ModifySubgraph<Hedge>,
+        S::Base: ModifySubSet<Hedge>,
     {
         self.underlying.lmb_impl(subgraph, tree, externals)
     }
 
-    fn lmb<S: SubGraph<Base = BitVec>>(&self, subgraph: &S) -> LoopMomentumBasis {
+    fn lmb<S: SubGraphLike<Base = SuBitGraph>>(&self, subgraph: &S) -> LoopMomentumBasis {
         self.underlying.lmb(subgraph)
     }
 
-    fn compatible_sub_lmb<S: SubGraph>(
+    fn compatible_sub_lmb<S: SubGraphLike>(
         &self,
         subgraph: &S,
         externals: S::Base,
         lmb: &LoopMomentumBasis,
     ) -> LoopMomentumBasis
     where
-        S::Base: SubGraph<Base = S::Base>
-            + SubGraphOps
+        S::Base: SubGraphLike<Base = S::Base>
+            + SubSetOps
             + Clone
-            + ModifySubgraph<HedgePair>
-            + ModifySubgraph<Hedge>,
+            + ModifySubSet<HedgePair>
+            + ModifySubSet<Hedge>,
     {
         self.underlying.compatible_sub_lmb(subgraph, externals, lmb)
     }
@@ -882,11 +891,14 @@ pub struct LmbIndex(usize);
 pub mod test {
     use bitvec::vec::BitVec;
     use insta::assert_snapshot;
-    use linnet::{half_edge::subgraph::SubGraphOps, parser::DotGraph};
+    use linnet::{
+        half_edge::subgraph::{SuBitGraph, SubGraphOps, SubSetOps},
+        parser::DotGraph,
+    };
 
     use crate::{
         dot,
-        graph::{parse::IntoGraph, Graph, LMBext},
+        graph::{Graph, LMBext, parse::IntoGraph},
     };
 
     #[test]
@@ -942,9 +954,9 @@ pub mod test {
         )
         .unwrap();
 
-        let subgraph: BitVec = g.compass_subgraph(Some(dot_parser::ast::CompassPt::S));
+        let subgraph: SuBitGraph = g.compass_subgraph(Some(dot_parser::ast::CompassPt::S));
 
-        let dummy: BitVec = g.compass_subgraph(Some(dot_parser::ast::CompassPt::N));
+        let dummy: SuBitGraph = g.compass_subgraph(Some(dot_parser::ast::CompassPt::N));
         let non_dummy = g.full_filter().subtract(&dummy);
         let lmb = g.lmb(&non_dummy);
         let non_dummy_sub_ext = g.full_crown(&subgraph).subtract(&dummy);

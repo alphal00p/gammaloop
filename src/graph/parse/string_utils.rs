@@ -1,6 +1,5 @@
 use symbolica::{
     atom::{Atom, AtomCore},
-    printer::PrintOptions,
     try_parse,
 };
 

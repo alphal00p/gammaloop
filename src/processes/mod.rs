@@ -12,8 +12,8 @@ use rayon::ThreadPool;
 use schemars::JsonSchema;
 
 use crate::{
-    settings::{runtime::LockedRuntimeSettings, GlobalSettings},
     GammaLoopContext, GammaLoopContextContainer,
+    settings::{GlobalSettings, runtime::LockedRuntimeSettings},
 };
 use serde::{Deserialize, Serialize};
 
@@ -271,20 +271,22 @@ pub use cross_section::*;
 mod tests {
     use std::fs::OpenOptions;
 
-    use linnet::half_edge::involution::EdgeIndex;
+    use linnet::half_edge::{
+        involution::EdgeIndex,
+        subgraph::{SuBitGraph, SubSetLike},
+    };
 
     use symbolica::state::State;
 
     use crate::{
-        dot,
-        graph::{parse::IntoGraph, Graph, LoopMomentumBasis},
+        GammaLoopContextContainer, dot,
+        graph::{Graph, LoopMomentumBasis, parse::IntoGraph},
         settings::global::{
             CompilationOptimizationLevel, GammaloopCompileOptions, GenerationSettings,
             TropicalSubgraphTableSettings,
         },
         signature::LoopExtSignature,
         utils::test_utils::load_generic_model,
-        GammaLoopContextContainer,
     };
 
     use super::AmplitudeGraph;
@@ -310,7 +312,7 @@ mod tests {
         )
         .unwrap();
         let loop_momentum_basis = LoopMomentumBasis {
-            tree: None,
+            tree: SuBitGraph::empty(0),
             loop_edges: vec![EdgeIndex::from(0), EdgeIndex::from(4)].into(),
             ext_edges: vec![EdgeIndex::from(5), EdgeIndex::from(6)].into(),
             edge_signatures: graph

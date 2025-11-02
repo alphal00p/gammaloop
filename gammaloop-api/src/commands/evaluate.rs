@@ -114,6 +114,7 @@ impl Evaluate {
                 )?;
             }
             complete_evaluation_for_this_graph *= &g.global_prefactor.projector * &g.overall_factor;
+
             full_evaluation += complete_evaluation_for_this_graph;
         }
 

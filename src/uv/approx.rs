@@ -5,14 +5,14 @@ use std::hash::Hash;
 use crate::{
     cff::{
         expression::{GraphOrientation, OrientationID},
-        generation::{generate_uv_cff, ShiftRewrite},
+        generation::{ShiftRewrite, generate_uv_cff},
     },
     graph::{Edge, Graph, LMBext, LoopMomentumBasis, Vertex},
     momentum::Sign,
-    numerator::{symbolica_ext::AtomCoreExt, ParsingNet},
+    numerator::{ParsingNet, symbolica_ext::AtomCoreExt},
     utils::{
-        symbolica_ext::{CallSymbol, LOGPRINTOPTS},
         GS, W_,
+        symbolica_ext::{CallSymbol, LOGPRINTOPTS},
     },
 };
 use ahash::AHashSet;
@@ -26,16 +26,18 @@ use symbolica::{
 };
 
 use linnet::half_edge::{
-    involution::{EdgeIndex, HedgePair},
-    subgraph::{Inclusion, InternalSubGraph, SubGraph, SubGraphOps},
     HedgeGraph,
+    involution::{EdgeIndex, HedgePair},
+    subgraph::{
+        Inclusion, InternalSubGraph, SuBitGraph, SubGraphLike, SubGraphOps, SubSetLike, SubSetOps,
+    },
 };
 
 use typed_index_collections::TiVec;
-use vakint::{vakint_symbol, Vakint, VakintExpression};
+use vakint::{Vakint, VakintExpression, vakint_symbol};
 // use vakint::{EvaluationOrder, LoopNormalizationFactor, Vakint, VakintSettings};
 
-use super::{uv_graph::UVE, IntegrandExpr, UltravioletGraph};
+use super::{IntegrandExpr, UltravioletGraph, uv_graph::UVE};
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum ApproxOp {
@@ -61,7 +63,7 @@ pub struct SimpleApprox {
 }
 
 impl SimpleApprox {
-    fn subgraph_shadow(graph: &BitVec, subgraph: &InternalSubGraph) -> Symbol {
+    fn subgraph_shadow(graph: &SuBitGraph, subgraph: &InternalSubGraph) -> Symbol {
         symbol!(&format!(
             "S_{}⊛{}",
             graph.string_label(),
@@ -69,7 +71,7 @@ impl SimpleApprox {
         ))
     }
 
-    pub(crate) fn expr(&self, bigger_graph: &BitVec) -> Atom {
+    pub(crate) fn expr(&self, bigger_graph: &SuBitGraph) -> Atom {
         let reduced = Atom::var(Self::subgraph_shadow(bigger_graph, &self.graph));
         let mut mul = Atom::num(1);
         for i in &self.t_args {
@@ -78,7 +80,7 @@ impl SimpleApprox {
         reduced * mul
     }
 
-    pub(crate) fn t_op(&self, bigger_graph: &BitVec) -> Atom {
+    pub(crate) fn t_op(&self, bigger_graph: &SuBitGraph) -> Atom {
         function!(GS.top, self.expr(bigger_graph))
     }
 
@@ -126,7 +128,7 @@ impl SimpleApprox {
     }
 }
 
-pub(crate) fn to_vakint_integrand<E: UVE, V, H, S: SubGraph, SS: SubGraph>(
+pub(crate) fn to_vakint_integrand<E: UVE, V, H, S: SubSetLike, SS: SubSetLike>(
     integrand: &Atom,
     lmb: &LoopMomentumBasis,
     graph: &HedgeGraph<E, V, H>,
@@ -339,8 +341,8 @@ impl CFFapprox {
         E,
         V,
         H,
-        S: SubGraph,
-        SS: SubGraph,
+        S: SubGraphLike,
+        SS: SubGraphLike,
         OID: OrientationID,
         O: GraphOrientation,
     >(
@@ -379,7 +381,7 @@ impl CFFapprox {
         }
     }
 
-    pub(crate) fn root<E, V, H, S: SubGraph, OID: OrientationID, O: GraphOrientation>(
+    pub(crate) fn root<E, V, H, S: SubGraphLike, OID: OrientationID, O: GraphOrientation>(
         graph: &HedgeGraph<E, V, H>,
         amplitude_subgraph: &S,
         canonize_esurface: &Option<ShiftRewrite>,
@@ -388,7 +390,7 @@ impl CFFapprox {
     ) -> CFFapprox {
         Self::dependent(
             graph,
-            &graph.empty_subgraph::<BitVec>(),
+            &graph.empty_subgraph::<SuBitGraph>(),
             amplitude_subgraph,
             canonize_esurface,
             orientations,
@@ -404,7 +406,7 @@ impl Approximation {
     pub(crate) fn root<
         H,
         G: UltravioletGraph + AsRef<HedgeGraph<Edge, Vertex, H>>,
-        S: SubGraph<Base = BitVec>,
+        S: SubGraphLike<Base = SuBitGraph>,
         OID: OrientationID,
         O: GraphOrientation,
     >(
@@ -453,7 +455,7 @@ impl Approximation {
         V,
         H,
         G: UltravioletGraph + AsRef<HedgeGraph<E, V, H>>,
-        S: SubGraph,
+        S: SubGraphLike,
     >(
         &self,
         dependent: &Self,
@@ -521,7 +523,7 @@ impl Approximation {
                 .with(function!(GS.emr_mom, usize::from(*e) as i64, W_.x___) * GS.rescale);
         }
         // TODO: only enable soft CT if doing OS renormalization
-        let soft_ct = graph.full_crown(&self.subgraph).count_ones() == 2 && self.dod > 0;
+        let soft_ct = graph.full_crown(&self.subgraph).n_included() == 2 && self.dod > 0;
 
         let mut masses = AHashSet::new();
         masses.insert(Atom::var(GS.m_uv));
@@ -642,7 +644,7 @@ impl Approximation {
         V,
         H,
         G: UltravioletGraph + AsRef<HedgeGraph<E, V, H>>,
-        S: SubGraph,
+        S: SubGraphLike,
     >(
         &mut self,
         graph: &G,
@@ -657,7 +659,7 @@ impl Approximation {
     pub(crate) fn compute<
         H,
         G: UltravioletGraph + AsRef<HedgeGraph<Edge, Vertex, H>>,
-        S: SubGraph<Base = BitVec>,
+        S: SubGraphLike<Base = SuBitGraph>,
         OID: OrientationID,
         O: GraphOrientation,
     >(
@@ -793,7 +795,7 @@ impl Approximation {
         //     atomarg, self.dod, self.lmb.ext_edges
         // );
 
-        let soft_ct = graph.full_crown(&self.subgraph).count_ones() == 2 && self.dod > 0;
+        let soft_ct = graph.full_crown(&self.subgraph).n_included() == 2 && self.dod > 0;
 
         // (re-)expand OSEs from the subgraph only
         for (_, eid, _) in graph.iter_edges_of(&self.subgraph) {
@@ -900,7 +902,7 @@ impl Approximation {
     pub(crate) fn final_integrand<
         G,
         H,
-        S: SubGraph<Base = BitVec>,
+        S: SubGraphLike<Base = SuBitGraph>,
         OID: OrientationID,
         O: GraphOrientation,
     >(

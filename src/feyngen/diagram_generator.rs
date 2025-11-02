@@ -1,17 +1,16 @@
-use bitvec::vec::BitVec;
-use idenso::color::{SelectiveExpand, CS};
+use idenso::IndexTooling;
+use idenso::color::{CS, SelectiveExpand};
 use idenso::gamma::AGS;
-use idenso::metric::PermuteWithMetric;
 use indicatif::ProgressBar;
 use indicatif::{ParallelProgressIterator, ProgressStyle};
 
 use linnet::permutation::Permutation;
+use rayon::ThreadPoolBuilder;
 use rayon::iter::ParallelIterator;
 use rayon::prelude::*;
-use rayon::ThreadPoolBuilder;
 
-use spenso::network::library::symbolic::{ExplicitKey, TensorLibrary};
 use spenso::network::library::LibraryTensor;
+use spenso::network::library::symbolic::{ExplicitKey, TensorLibrary};
 use spenso::network::parsing::ParseSettings;
 use spenso::network::{Sequential, SmallestDegree};
 
@@ -21,13 +20,11 @@ use spenso::structure::representation::{LibraryRep, Minkowski, RepName};
 use spenso::structure::{PermutedStructure, TensorStructure};
 use spenso::tensors::data::DataTensor;
 use spenso::tensors::parametric::{MixedTensor, ParamOrConcrete, ParamTensor};
-use spenso_hep_lib::{
-    gamma5_weyl_data, gamma_data_weyl, hep_lib, proj_m_data_weyl, proj_p_data_weyl,
-};
-use std::collections::hash_map::Entry;
+use spenso_hep_lib::{gamma_data_weyl, gamma5_weyl_data, proj_m_data_weyl, proj_p_data_weyl};
 use std::collections::HashSet;
+use std::collections::hash_map::Entry;
 
-use std::ops::RangeInclusive;
+use std::ops::{Deref, RangeInclusive};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
@@ -63,25 +60,25 @@ use crate::model::ArcVertexRule;
 use crate::model::VertexRule;
 use crate::model::{ArcParticle, ColorStructure};
 use crate::momentum::{Pow, Sign, SignOrZero};
+use crate::numerator::ParsingNet;
 use crate::numerator::aind::Aind;
 use crate::numerator::graph::ReversibleEdge;
 use crate::numerator::symbolica_ext::AtomCoreExt;
-use crate::numerator::ParsingNet;
 use crate::processes::ProcessDefinition;
-use crate::utils::symbolica_ext::{PrimeGenerate, COMPLEXRATPOLYFIELD, LOGPRINTOPTS, Q_I};
-use crate::utils::{self, F, GS, W_};
+use crate::utils::symbolica_ext::{COMPLEXRATPOLYFIELD, LOGPRINTOPTS, PrimeGenerate, Q_I};
+use crate::utils::{self, F, FUN_LIB, GS, W_};
 use crate::uv::UltravioletGraph;
+use crate::{INTERRUPTED, is_interrupted, set_interrupted};
 use crate::{
     feyngen::{FeynGenFilter, GenerationType},
     model::Model,
 };
-use crate::{is_interrupted, set_interrupted, INTERRUPTED};
 use crate::{status_debug, status_error, status_info};
 use itertools::Itertools;
-use linnet::half_edge::involution::{EdgeData, Flow, Orientation};
-use linnet::half_edge::subgraph::{InternalSubGraph, OrientedCut, SubGraph};
 use linnet::half_edge::HedgeGraph;
 use linnet::half_edge::NodeIndex;
+use linnet::half_edge::involution::{EdgeData, Flow, Orientation};
+use linnet::half_edge::subgraph::{InternalSubGraph, OrientedCut, SuBitGraph, SubSetLike};
 use symbolica::{atom::Atom, graph::Graph as SymbolicaGraph};
 
 const CANONIZE_GRAPH_FLOWS: bool = true;
@@ -257,7 +254,7 @@ pub trait NodeColorFunctions: Sized + std::fmt::Display {
     #[allow(clippy::type_complexity)]
     fn passes_amplitude_filter(
         _model: &Model,
-        _amplitude_subgraph: &BitVec,
+        _amplitude_subgraph: &SuBitGraph,
         _graph: &HedgeGraph<ArcParticle, Self>,
         _amp_couplings: Option<
             &std::collections::HashMap<String, (usize, Option<usize>), ahash::RandomState>,
@@ -289,7 +286,7 @@ impl NodeColorFunctions for NodeColorWithVertexRule {
 
     fn passes_amplitude_filter(
         model: &Model,
-        amplitude_subgraph: &BitVec,
+        amplitude_subgraph: &SuBitGraph,
         graph: &HedgeGraph<ArcParticle, Self>,
         amp_couplings: Option<
             &std::collections::HashMap<String, (usize, Option<usize>), ahash::RandomState>,
@@ -345,7 +342,7 @@ impl NodeColorFunctions for NodeColorWithoutVertexRule {
 
     fn passes_amplitude_filter(
         _model: &Model,
-        _amplitude_subgraph: &BitVec,
+        _amplitude_subgraph: &SuBitGraph,
         _graph: &HedgeGraph<ArcParticle, Self>,
         _amp_couplings: Option<
             &std::collections::HashMap<String, (usize, Option<usize>), ahash::RandomState>,
@@ -445,12 +442,12 @@ pub(crate) fn follow_chain(
         if targets.is_empty() {
             Ok((None, current_node))
         } else if targets.len() == 1 {
-            let (&next_edge, &next_node) = targets.first().unwrap();
-            vetos[next_edge] = true;
+            let (next_edge, next_node) = targets.first().unwrap();
+            vetos[**next_edge] = true;
             if one_step_only {
-                Ok((Some(next_edge), next_node))
+                Ok((Some(**next_edge), **next_node))
             } else {
-                return follow_chain(next_node, vetos, adj_map, one_step_only);
+                return follow_chain(**next_node, vetos, adj_map, one_step_only);
             }
         } else {
             Ok((None, *targets.first().unwrap().1))
@@ -710,7 +707,9 @@ pub(crate) fn veto_special_topologies_with_spanning_tree_root(
     let max_external = external_particles.len();
 
     if graph.nodes().iter().any(|n| n.data.external_tag < 0) {
-        panic!("External tag must be positive, but found negative as obtained when performing external state symmetrization");
+        panic!(
+            "External tag must be positive, but found negative as obtained when performing external state symmetrization"
+        );
     }
     const DEBUG_VETO: bool = false;
     if DEBUG_VETO {
@@ -939,7 +938,11 @@ pub(crate) fn veto_special_topologies_with_spanning_tree_root(
                 if DEBUG_VETO {
                     debug!(
                         "Vetoing self-energy for leg_id={}, back_edge_start_node_index={}, back_edge_position_in_list={}, chain_id={}, with options:\n{:?}",
-                        leg_id, back_edge_start_node_index, back_edge_position_in_list, _chain_id, veto_self_energy_options
+                        leg_id,
+                        back_edge_start_node_index,
+                        back_edge_position_in_list,
+                        _chain_id,
+                        veto_self_energy_options
                     );
                 }
                 if veto_self_energy_options.veto_only_scaleless_self_energy {
@@ -1006,7 +1009,10 @@ pub(crate) fn veto_special_topologies_with_spanning_tree_root(
                 if DEBUG_VETO {
                     debug!(
                         "Vetoing tadpole for back_edge_start_node_index={}, back_edge_position_in_list={}, chain_id={}, with options:\n{:?}",
-                        back_edge_start_node_index, back_edge_position_in_list, chain_id, veto_tadpole_options
+                        back_edge_start_node_index,
+                        back_edge_position_in_list,
+                        chain_id,
+                        veto_tadpole_options
                     );
                 }
                 if veto_tadpole_options.veto_only_scaleless_tadpoles {
@@ -1032,7 +1038,10 @@ pub(crate) fn veto_special_topologies_with_spanning_tree_root(
                 if DEBUG_VETO {
                     debug!(
                         "Vetoing snail for back_edge_start_node_index={}, back_edge_position_in_list={}, chain_id={}, with options:\n{:?}",
-                        back_edge_start_node_index, back_edge_position_in_list, chain_id, veto_snails_options
+                        back_edge_start_node_index,
+                        back_edge_position_in_list,
+                        chain_id,
+                        veto_snails_options
                     );
                 }
                 #[allow(clippy::unnecessary_unwrap)]
@@ -1355,7 +1364,7 @@ impl ProcessDefinition {
         #[allow(clippy::too_many_arguments)]
         #[allow(clippy::type_complexity)]
         fn is_valid_cut<NodeColor: NodeColorFunctions>(
-            cut: &(BitVec, OrientedCut, BitVec),
+            cut: &(SuBitGraph, OrientedCut, SuBitGraph),
             blob_range: &RangeInclusive<usize>,
             spectator_range: &RangeInclusive<usize>,
             model: &Model,
@@ -1487,7 +1496,7 @@ impl ProcessDefinition {
         }
 
         fn validate_connectivity<NodeColor>(
-            subgraph: &BitVec,
+            subgraph: &SuBitGraph,
             blob_range: &RangeInclusive<usize>,
             spectator_range: &RangeInclusive<usize>,
             graph: &HedgeGraph<ArcParticle, NodeColor>,
@@ -1498,7 +1507,7 @@ impl ProcessDefinition {
             let mut n_spectators = 0;
 
             for component in components {
-                if component.nhedges() > 1 {
+                if component.n_included() > 1 {
                     n_blobs += 1;
                 } else {
                     n_spectators += 1;
@@ -1934,13 +1943,13 @@ impl ProcessDefinition {
                     if self.symmetrize_left_right_states {
                         let matched_external_pos = all_pdgs
                             .iter()
-                            .position(|(&_pdg, i_ext)| (*i_ext as i32) == symmetrized_external_tag)
+                            .position(|(_pdg, i_ext)| (*i_ext as i32) == symmetrized_external_tag)
                             .unwrap();
                         all_pdgs.remove(matched_external_pos);
                     } else {
                         let matched_external_pos = container
                             .iter()
-                            .position(|(&_pdg, i_ext)| (*i_ext as i32) == symmetrized_external_tag)
+                            .position(|(_pdg, i_ext)| (*i_ext as i32) == symmetrized_external_tag)
                             .unwrap();
                         container.remove(matched_external_pos);
                     };
@@ -1952,18 +1961,20 @@ impl ProcessDefinition {
                     let (matched_position, is_initial_match) = if let Some(matched_initial_pos) =
                         all_pdgs
                             .iter()
-                            .position(|(&_pdg, i_ext)| (*i_ext as i32) == external_leg_position)
+                            .position(|(_pdg, i_ext)| (*i_ext as i32) == external_leg_position)
                     {
                         (matched_initial_pos, true)
                     } else if let Some(matched_final_pos) =
-                        all_pdgs.iter().position(|(&_pdg, i_ext)| {
+                        all_pdgs.iter().position(|(_pdg, i_ext)| {
                             (*i_ext as i32)
                                 == external_leg_position + (self.initial_pdgs.len() as i32)
                         })
                     {
                         (matched_final_pos, false)
                     } else {
-                        unreachable!("Logical mistake in feyngen: external legs in canonicalized graphs should always be matchable.")
+                        unreachable!(
+                            "Logical mistake in feyngen: external legs in canonicalized graphs should always be matchable."
+                        )
                     };
 
                     let mut new_data = graph.nodes()[e.vertices.0].data.clone();
@@ -1991,7 +2002,7 @@ impl ProcessDefinition {
                     if self.symmetrize_left_right_states {
                         let matched_external_pos: usize = all_pdgs
                             .iter()
-                            .position(|(&pdg, _i_ext)| pdg == pdg_code as i64)
+                            .position(|(pdg, _i_ext)| **pdg == pdg_code as i64)
                             .unwrap();
                         let mut new_data = graph.nodes()[e.vertices.0].data.clone();
                         let new_external_tag = all_pdgs[matched_external_pos].1 as i32;
@@ -2016,7 +2027,7 @@ impl ProcessDefinition {
                     } else {
                         let matched_external_pos = container
                             .iter()
-                            .position(|(&pdg, _i_ext)| pdg == pdg_code as i64)
+                            .position(|(pdg, _i_ext)| **pdg == pdg_code as i64)
                             .unwrap();
                         let mut new_data = graph.nodes()[e.vertices.0].data.clone();
                         new_data.set_external_tag(container[matched_external_pos].1 as i32);
@@ -3608,9 +3619,12 @@ impl ProcessDefinition {
                         perform_graph_pregrouping_without_numerator_and_left_right_symmetry = false;
                     }
                     _ => {
-                        return Err(FeynGenError::GenericError(
-                            format!("Option symmetrize_initial_states={}, symmetrize_final_states={} and symmetrize_left_right_states={} not valid for amplitude generation.",
-                                self.symmetrize_initial_states, self.symmetrize_final_states, self.symmetrize_left_right_states)));
+                        return Err(FeynGenError::GenericError(format!(
+                            "Option symmetrize_initial_states={}, symmetrize_final_states={} and symmetrize_left_right_states={} not valid for amplitude generation.",
+                            self.symmetrize_initial_states,
+                            self.symmetrize_final_states,
+                            self.symmetrize_left_right_states
+                        )));
                     }
                 }
             }
@@ -4173,12 +4187,10 @@ impl ProcessDefinition {
         step = Instant::now();
         status_info!(
             "{} | Δ={} | {:<95}{} ({} isomorphically unique graph{}, {} color zero{}, {} lorentz zero{}, {} grouped and {} cancellation{})",
-            format!("{:<6}", utils::format_wdhms_from_duration(step - start)).blue().bold(),
-            format!(
-                "{:<6}",
-                utils::format_wdhms_from_duration(step - last_step)
-            )
-            .blue(),
+            format!("{:<6}", utils::format_wdhms_from_duration(step - start))
+                .blue()
+                .bold(),
+            format!("{:<6}", utils::format_wdhms_from_duration(step - last_step)).blue(),
             format!(
                 "Number of graphs after numerator-aware grouping with strategy '{}':",
                 self.numerator_grouping
@@ -4274,11 +4286,15 @@ impl ProcessDefinition {
             || numerator_a.canonized_numerator.is_some()
                 && numerator_b.canonized_numerator.is_none()
         {
-            panic!("Inconsistent state: one sample has canonalized numerator while the other does not.");
+            panic!(
+                "Inconsistent state: one sample has canonalized numerator while the other does not."
+            );
         }
 
         if numerator_a.sample_evaluations.len() != numerator_b.sample_evaluations.len() {
-            panic!("Inconsistent state: the two samples have different number of numerical evaluations.");
+            panic!(
+                "Inconsistent state: the two samples have different number of numerical evaluations."
+            );
         }
 
         match numerator_aware_isomorphism_grouping {
@@ -4770,7 +4786,7 @@ impl ProcessedNumeratorForComparison {
                 debug!(numerator=%numerator.to_canonical_string(),diagram_id=%diagram_id,debug_dot=%graph.debug_dot(),"Initial Numerator");
 
                 let canonized_numerator = if group_options.test_canonized_numerator {
-                    let mut canonized_numerator_to_consider = numerator.canonize_spenso();
+                    let mut canonized_numerator_to_consider = numerator.canonize(Aind::Dummy);
                     if group_options.fully_numerical_substitution_when_comparing_numerators {
                         canonized_numerator_to_consider =
                             ProcessDefinition::substitute_color_factors(
@@ -4810,7 +4826,7 @@ impl ProcessedNumeratorForComparison {
                                     .for_each(|a| *a = a.replace_multiple(reps));
 
                                 // debug!(net=?net.dot_pretty());
-                                net.execute::<Sequential, SmallestDegree, _, _>(lib)
+                                net.execute::<Sequential, SmallestDegree, _, _,_>(lib,FUN_LIB.deref())
                                     .expect(&format!("failed to execute net:{}", net.dot_pretty()));
 
                                 // let c = ProcessDefinition::substitute_color_factors(c.as_view())

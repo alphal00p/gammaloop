@@ -1,13 +1,14 @@
 use std::fmt::Display;
 
 use bincode_trait_derive::{Decode, Encode};
-use bitvec::vec::BitVec;
 use derive_more::{From, Into};
 use eyre::eyre;
 use itertools::Itertools;
-use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Flow, HedgePair};
-use linnet::half_edge::subgraph::{InternalSubGraph, ModifySubgraph, OrientedCut, SubGraphOps};
 use linnet::half_edge::HedgeGraph;
+use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Flow, HedgePair};
+use linnet::half_edge::subgraph::{
+    InternalSubGraph, ModifySubSet, OrientedCut, SuBitGraph, SubGraphOps,
+};
 use lorentz_vector::LorentzVector;
 use ref_ops::RefNeg;
 use serde::{Deserialize, Serialize};
@@ -31,9 +32,9 @@ use crate::momentum_sample::{
 };
 use crate::processes::CrossSectionCut;
 use crate::utils::{
-    compute_loop_part, compute_loop_part_subspace, compute_shift_part, compute_shift_part_subspace,
-    compute_t_part_of_shift_part, cut_energy, external_energy_atom_from_index, ose_atom_from_index,
-    FloatLike, F, GS,
+    F, FloatLike, GS, compute_loop_part, compute_loop_part_subspace, compute_shift_part,
+    compute_shift_part_subspace, compute_t_part_of_shift_part, cut_energy,
+    external_energy_atom_from_index, ose_atom_from_index,
 };
 use crate::uv::uv_graph::UVE;
 use color_eyre::Result;
@@ -422,14 +423,14 @@ impl Esurface {
     pub(crate) fn get_subgraph_components<E, V, H>(
         &self,
         graph: &HedgeGraph<E, V, H>,
-    ) -> (BitVec, BitVec) {
+    ) -> (SuBitGraph, SuBitGraph) {
         let vertex_subgraph = self.vertex_set.subgraph(graph);
         let complement = vertex_subgraph.complement(graph);
         (vertex_subgraph, complement)
     }
 
-    pub(crate) fn bitvec<E, V, H>(&self, graph: &HedgeGraph<E, V, H>) -> BitVec {
-        let mut result: BitVec = graph.empty_subgraph();
+    pub(crate) fn bitvec<E, V, H>(&self, graph: &HedgeGraph<E, V, H>) -> SuBitGraph {
+        let mut result: SuBitGraph = graph.empty_subgraph();
         for edge_id in self.energies.iter() {
             let (_, pair) = graph[edge_id];
             result.add(pair);
@@ -733,13 +734,12 @@ impl From<EsurfaceID> for Atom {
 
 #[cfg(test)]
 mod tests {
-    use bitvec::vec::BitVec;
     use itertools::Itertools;
+    use linnet::half_edge::HedgeGraph;
     use linnet::half_edge::builder::HedgeGraphBuilder;
     use linnet::half_edge::involution::{EdgeIndex, Flow, Orientation};
     use linnet::half_edge::nodestore::NodeStorageVec;
     use linnet::half_edge::subgraph::InternalSubGraph;
-    use linnet::half_edge::HedgeGraph;
     use symbolica::atom::{Atom, AtomCore};
     use symbolica::parse;
 
@@ -747,7 +747,7 @@ mod tests {
     use crate::processes::CrossSectionCut;
     use crate::{
         cff::{esurface::Esurface, generation::ShiftRewrite},
-        utils::{dummy_hedge_graph, F},
+        utils::{F, dummy_hedge_graph},
     };
 
     use super::add_external_shifts;
@@ -807,7 +807,7 @@ mod tests {
             energies: vec![EdgeIndex::from(2), EdgeIndex::from(3)],
             external_shift,
             vertex_set: VertexSet::dummy(),
-            // subspace_graph: unsafe { InternalSubGraph::new_unchecked(BitVec::new()) },
+            // subspace_graph: unsafe { InternalSubGraph::new_unchecked(SuBitGraph::new()) },
         };
 
         let esurface_atom = esurface.to_atom(&[]);
@@ -858,14 +858,14 @@ mod tests {
             energies: vec![EdgeIndex::from(3), EdgeIndex::from(5)],
             external_shift: vec![(EdgeIndex::from(0), 1), (EdgeIndex::from(1), 1)],
             vertex_set: VertexSet::dummy(),
-            //subspace_graph: unsafe { InternalSubGraph::new_unchecked(BitVec::new()) },
+            //subspace_graph: unsafe { InternalSubGraph::new_unchecked(SuBitGraph::new()) },
         };
 
         let esurface_2 = Esurface {
             energies: vec![EdgeIndex::from(3), EdgeIndex::from(5)],
             external_shift: vec![(EdgeIndex::from(0), 1), (EdgeIndex::from(1), 1)],
             vertex_set: VertexSet::dummy(),
-            //subspace_graph: unsafe { InternalSubGraph::new_unchecked(BitVec::new()) },
+            //subspace_graph: unsafe { InternalSubGraph::new_unchecked(SuBitGraph::new()) },
         };
 
         assert_eq!(esurface_1, esurface_2);

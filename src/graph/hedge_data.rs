@@ -1,15 +1,9 @@
 use itertools::Itertools;
-use linnet::{
-    half_edge::{
-        involution::{Hedge, Orientation},
-        EdgeAccessors,
-    },
-    parser::DotHedgeData,
-};
+use linnet::{half_edge::involution::Hedge, parser::DotHedgeData};
 use spenso::structure::{
+    OrderedStructure, PermutedStructure, TensorStructure,
     representation::{LibraryRep, LibrarySlot},
     slot::IsAbstractSlot,
-    OrderedStructure, PermutedStructure, TensorStructure,
 };
 use symbolica::atom::{Atom, FunctionBuilder};
 

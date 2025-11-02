@@ -1,9 +1,8 @@
 use bincode_trait_derive::{Decode, Encode};
-use schemars::{json_schema, JsonSchema};
+use schemars::{JsonSchema, json_schema};
 use serde::{Deserialize, Serialize};
 use std::{
     fmt::Display,
-    num,
     ops::{Deref, DerefMut},
     sync::LazyLock,
 };
@@ -14,7 +13,7 @@ use symbolica::{
         finite_field::PrimeIteratorU64,
         float::Complex,
         integer::IntegerRing,
-        rational::{FractionField, Rational, Q},
+        rational::{FractionField, Q, Rational},
     },
     parse,
     poly::polynomial::PolynomialRing,
@@ -38,7 +37,8 @@ pub static LOGPRINTOPTS: PrintOptions = PrintOptions {
     color_builtin_symbols: false,
     color_top_level_sum: false,
     terms_on_new_line: false,
-    print_finite_field: true,
+    print_ring: false,
+    include_attributes: false,
     symmetric_representation_for_finite_field: false,
     explicit_rational_polynomial: false,
     number_thousands_separator: None,

@@ -1,7 +1,7 @@
 [package]
 name = "gammalooprs"
 version = "0.3.3"
-edition = "2021"
+edition = "2024"
 authors = ["Valentin Hirschi <valentin.hirschi@gmail.com>"]
 categories = ["science"]
 description = "An implementation of the Local Unitarity method for computing differential collider cross-sections."
@@ -54,7 +54,7 @@ insta.opt-level = 3
 # # ] }
 
 [dependencies]
-symbolica = { git = "https://github.com/benruijl/symbolica.git", branch = "chi_sq_fix", default-features = false, features = [
+symbolica = { version="0.19.2", default-features = false, features = [
     "serde",
     "bincode",
 
@@ -63,14 +63,14 @@ symbolica = { git = "https://github.com/benruijl/symbolica.git", branch = "chi_s
 idenso = { version = "0.2.3", features = ["bincode"] }
 spenso-hep-lib = { version = "0.1.4" }
 spenso = { version = "0.5.4", features = ["shadowing"] }
-linnet = { version = "0.12.0", features = [
+linnet = { version = "0.13.1", features = [
     "drawing",
     "serde",
     "bincode",
     "symbolica",
 ] }
 
-vakint = { git = "https://github.com/alphal00p/vakint", rev = "12d2ac6338693445672af606fe027bcbe414dc82" } # "e44c210ded3936048615d39872022a0b6ef18454"
+vakint = { git = "https://github.com/alphal00p/vakint", rev = "d3d6cf4ee7e36cf5602d277b6a11e88afb95c935" } # "e44c210ded3936048615d39872022a0b6ef18454"
 momtrop = { version = "0.3.0" }
 serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "*"
@@ -203,18 +203,22 @@ higher_loops = []
 
 [patch.crates-io]
 
-symbolica = { git = "https://github.com/benruijl/symbolica", branch = "chi_sq_fix" }
+# symbolica = { git = "https://github.com/benruijl/symbolica", branch = "chi_sq_fix" }
 # spenso-macros = { path = "../spenso/spenso-macros" }
 # symbolica = { git = "https://github.com/benruijl/symbolica", branch = "optim" }
 # symbolica = { path = "./python/gammaloop/dependencies/symbolica" }
-# symbolica={git="https://github.com/benruijl/symbolica",rev="a714571c8c8ee1a292237eb3ef1bc8123a4d7db4"}
+symbolica={git="https://github.com/benruijl/symbolica",rev="93680d5098e1bdc8a69dc2f59c548f653a46f9e7"}
+# vakint={git="https://github.com/alphal00p/vakint",rev="5a0a920d199f8993c00ecdb1a3af6e82aa3bd9f2"}
 # symbolica = { git = "https://github.com/alphal00p/symbolica", rev = "a23ebaa71b1bc715a129ac765764ece7273625dc" }
 # symbolica = { path = "../symbolica" }
 # linnet = "0.10.0"
 # linnet = { path = "../linnet" }
-linnet = { git = "https://github.com/alphal00p/linnet", rev = "2b5e8c5339f99685e8902154b6cc6415363dd33e" }
-spenso = { git = "https://github.com/alphal00p/spenso", rev = "5206930c518709021c2597ebb2cb4572895cf869" }
-idenso = { git = "https://github.com/alphal00p/spenso", rev = "5206930c518709021c2597ebb2cb4572895cf869" }
-spenso-hep-lib = {git = "https://github.com/alphal00p/spenso",rev="5206930c518709021c2597ebb2cb4572895cf869"}
+# linnet = { git = "https://github.com/alphal00p/linnet", rev = "2b5e8c5339f99685e8902154b6cc6415363dd33e" }
+spenso = { git = "https://github.com/alphal00p/spenso", rev = "d7e3cd01dc419185e00d958301afe1bd6cf8c4e3" }
+# {path="../spenso/spenso"}
+idenso = { git = "https://github.com/alphal00p/spenso", rev = "d7e3cd01dc419185e00d958301afe1bd6cf8c4e3" }
+# {path="../spenso/idenso"}
+spenso-hep-lib = {git = "https://github.com/alphal00p/spenso",rev="d7e3cd01dc419185e00d958301afe1bd6cf8c4e3"}
+# {path="../spenso/spenso-hep-lib"}
 # symbolica-community={path="../symbolica-community"}
 # linnet = { git = "https://github.com/alphal00p/linnet", rev = "d72588ecbea39c6df3fdde9ffa4e4f3575f93542" }

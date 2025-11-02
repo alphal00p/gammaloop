@@ -1,5 +1,5 @@
 use bincode_trait_derive::{Decode, Encode};
-use linnet::half_edge::{involution::EdgeIndex, subgraph::SubGraph};
+use linnet::half_edge::{involution::EdgeIndex, subgraph::SubGraphLike};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use symbolica::{

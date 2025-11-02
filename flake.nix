@@ -190,7 +190,7 @@
           ghostscript
           graphviz
           mupdf
-          poppler_utils
+          poppler-utils
           rust-analyzer
           maturin
           virtualenv
