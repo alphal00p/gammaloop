@@ -115,6 +115,8 @@ fn example_graph_count() -> Result<()> {
 
     // A first process
     assert_snapshot!(feyngen_str(&mut cli, "xs", "e+ e- > d d~ / z QED^2==4 [{{1}} QCD] --numerator-grouping no_grouping")?,@"1 | -1");
+    assert_snapshot!(feyngen_str(&mut cli, "xs", "e+ e- > d d~ | e- a d g QED^2==4 [{{2}} QCD] --numerator-grouping only_detect_zeroes")?,@"3 | -3");
+    assert_snapshot!(feyngen_str(&mut cli, "xs", "e+ e- > d d~ | e- a d g QED^2==4 [{{2}} QCD] --numerator-grouping group_identical_graphs_up_to_sign")?,@"2 | -3");
     assert_snapshot!(feyngen_str(&mut cli, "amp", "e+ e- > d d~ / z QED==2 [{1}] --filter-selfenergies true")?,@"1 | 1");
     assert_snapshot!(feyngen_str(&mut cli, "amp", "e+ e- > d d~ / z QED==2 [{1}] --filter-selfenergies false")?,@"3 | 3");
 
@@ -151,25 +153,22 @@ fn test_generate_sm_a_ddx() -> Result<()> {
     // Test the validity of multiple final-state specifications for cross-section generation
     assert_snapshot!(feyngen_str(&mut cli, "xs", "a > {d d~, g g} [{{1}}] | d g a --numerator-grouping only_detect_zeroes")?,@"1 | -1");
     assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ g [{{2}}] | d g a --numerator-grouping only_detect_zeroes")?,@"3 | -3");
-    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ g [{{2}}] | d g a --symmetrize-left-right-states true")?,@"3 | -3");
+    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ g [{{2}}] | d g a --symmetrize-left-right-states true")?,@"2 | -3");
     assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ z [{{2}}] | d g a --numerator-grouping only_detect_zeroes")?,@"0 | 0");
 
 
-
     // Full particle contents
-
     assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{1}}] --symmetrize-left-right-states true")?,@"1 | -1");
-    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states false --compare-canonized-numerator true --number-of-samples-for-numerator-comparisons 0 --fully-numerical-substitution-when-comparing-numerators false")?,@"110 | -2*UFO::GC_3*UFO::GC_4^(-1)*UFO::GC_52*UFO::GC_53^(-1)+-2*UFO::GC_3^2*UFO::GC_4^(-2)+-32+3*UFO::GC_1*UFO::GC_2^(-1)+3*UFO::GC_1^2*UFO::GC_2^(-2)");
+    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states false --compare-canonized-numerator true --number-of-samples-for-numerator-comparisons 0 --fully-numerical-substitution-when-comparing-numerators false")?,@"10 | -12+-27*UFO::G^2*spenso::Nc*spenso::TR*UFO::ee^(-2)+27*UFO::G^2*spenso::Nc^-1*spenso::TR*UFO::ee^(-2)");
+    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states true --compare-canonized-numerator true --number-of-samples-for-numerator-comparisons 0 --fully-numerical-substitution-when-comparing-numerators true")?,@"10 | -12+-36*UFO::G^2*UFO::ee^(-2)");
+    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states true --no-compare-canonized-numerator --number-of-samples-for-numerator-comparisons 3 --fully-numerical-substitution-when-comparing-numerators true")?,@"10 | -12+-36*UFO::G^2*UFO::ee^(-2)");
+    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states true --no-compare-canonized-numerator --number-of-samples-for-numerator-comparisons 3 --fully-numerical-substitution-when-comparing-numerators false")?,@"10 | -12+-3*spenso::Nc*spenso::TR+3*spenso::Nc^-1*spenso::TR");
 
-    // assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states true --compare-canonized-numerator true --number-of-samples-for-numerator-comparisons 0 --fully-numerical-substitution-when-comparing-numerators")?,@"10 | -12+-36*G^2*ee^-2");
-    // assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states true --no-compare-canonized-numerator --number-of-samples-for-numerator-comparisons 3 --fully-numerical-substitution-when-comparing-numerators")?,@"10 | -12+-36*G^2*ee^-2");
-    // assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states true --no-compare-canonized-numerator --number-of-samples-for-numerator-comparisons 3 --fully-numerical-substitution-when-comparing-numerators false")?,@"10 | -12+-3*Nc*TR+3*Nc^-1*TR");
-
-    // // Only 1-flavour pure QCD corrections
-    // assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ | d g ghG a QED^2==2 [{{1}}] --symmetrize-left-right-states true")?,@"1 | -1");
-    // assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ | d g ghG a QED^2==2 [{{2}} QCD=1] --symmetrize-left-right-states true")?,@"2 | -3");
-    // assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ | d g ghG a QED^2==2 [{{3}} QCD=2] --symmetrize-left-right-states true")?,@"16 | -41/2");
-    // assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ | d g ghG a QED^2==2 [{{4}} QCD=3] --symmetrize-left-right-states true")?,@"166 | -3107/14");
+    // Only 1-flavour pure QCD corrections
+    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ | d g ghG a QED^2==2 [{{1}}] --symmetrize-left-right-states true")?,@"1 | -1");
+    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ | d g ghG a QED^2==2 [{{2}} QCD=1] --symmetrize-left-right-states true")?,@"2 | -3");
+    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ | d g ghG a QED^2==2 [{{3}} QCD=2] --symmetrize-left-right-states true")?,@"16 | -41/2");
+    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ | d g ghG a QED^2==2 [{{4}} QCD=3] --symmetrize-left-right-states true")?,@"166 | -3107/14");
 
 
     Ok(())
