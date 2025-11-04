@@ -323,6 +323,14 @@ impl<T: FloatLike> LoopMomenta<F<T>> {
     pub(crate) fn rotate(&self, rotation: &Rotation) -> Self {
         LoopMomenta::from_iter(self.iter().map(|k| k.rotate(rotation)))
     }
+
+    pub(crate) fn lmb_transform(&self, from: &LoopMomentumBasis, to: &LoopMomentumBasis) -> Self {
+        LoopMomenta::from_iter(
+            to.loop_edges
+                .iter()
+                .map(|e_id| from.edge_signatures[*e_id].internal.apply_typed(self)),
+        )
+    }
 }
 
 impl LoopMomenta<F<f64>> {
@@ -561,6 +569,20 @@ impl<T: FloatLike> BareMomentumSample<T> {
             orientation: self.orientation,
         }
     }
+
+    #[inline]
+    pub(crate) fn lmb_transform(&self, from: &LoopMomentumBasis, to: &LoopMomentumBasis) -> Self {
+        Self {
+            loop_moms: self.loop_moms.lmb_transform(from, to),
+            loop_mom_cache_id: self.loop_mom_cache_id + 1,
+            loop_mom_base_cache_id: self.loop_mom_base_cache_id, // Preserve base cache ID
+            external_moms: self.external_moms.clone(),
+            external_mom_cache_id: self.external_mom_cache_id,
+            external_mom_base_cache_id: self.external_mom_base_cache_id, // Preserve base cache ID
+            jacobian: self.jacobian.clone(),
+            orientation: self.orientation,
+        }
+    }
 }
 
 impl<T: FloatLike> MomentumSample<T> {
@@ -696,6 +718,13 @@ impl<T: FloatLike> MomentumSample<T> {
     pub(crate) fn rescaled_loop_momenta(&self, factor: &F<T>, subspace: Subspace) -> Self {
         Self {
             sample: self.sample.rescaled_loop_momenta(factor, subspace),
+        }
+    }
+
+    #[inline]
+    pub(crate) fn lmb_transform(&self, from: &LoopMomentumBasis, to: &LoopMomentumBasis) -> Self {
+        Self {
+            sample: self.sample.lmb_transform(from, to),
         }
     }
 }

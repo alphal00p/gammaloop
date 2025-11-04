@@ -295,7 +295,7 @@ struct CounterTermBuilder<'a, T: FloatLike> {
     rotation_for_overlap: &'a Rotation,
     settings: &'a RuntimeSettings,
     esurface_collection: &'a EsurfaceCollection,
-    sample: &'a MomentumSample<T>,
+    transformed_sample: MomentumSample<T>,
 }
 
 impl<'a, T: FloatLike> CounterTermBuilder<'a, T> {
@@ -311,6 +311,8 @@ impl<'a, T: FloatLike> CounterTermBuilder<'a, T> {
         subspace: &'a SubspaceData,
     ) -> Self {
         let e_cm = F::from_f64(settings.kinematics.e_cm);
+        let transformed_sample =
+            sample.lmb_transform(&graph.loop_momentum_basis, subspace.get_lmb(all_lmbs));
 
         Self {
             real_mass_vector: masses,
@@ -320,7 +322,7 @@ impl<'a, T: FloatLike> CounterTermBuilder<'a, T> {
             settings,
             esurface_collection,
             overlap_structure,
-            sample,
+            transformed_sample,
             all_lmbs,
             subspace,
         }
@@ -335,7 +337,7 @@ impl<'a, T: FloatLike> CounterTermBuilder<'a, T> {
             center.rotate(self.rotation_for_overlap).cast(),
         );
 
-        let shifted_loop_momenta = self.sample.loop_moms() - &rotated_center;
+        let shifted_loop_momenta = self.transformed_sample.loop_moms() - &rotated_center;
         let radius = shifted_loop_momenta
             .hyper_radius_squared(Some(&subspace.iter_lmb_indices().collect_vec()))
             .sqrt();
@@ -405,7 +407,7 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
             &self
                 .overlap_builder
                 .counterterm_builder
-                .sample
+                .transformed_sample
                 .external_moms(),
             subspace,
             lmbs,
@@ -420,7 +422,7 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
                 &self.overlap_builder.rotated_center,
                 self.overlap_builder
                     .counterterm_builder
-                    .sample
+                    .transformed_sample
                     .external_moms(),
                 &self.overlap_builder.counterterm_builder.real_mass_vector,
                 subspace,
@@ -471,7 +473,7 @@ impl<'a, T: FloatLike> RstarSolution<'a, T> {
             .esurface_ct_builder
             .overlap_builder
             .counterterm_builder
-            .sample
+            .transformed_sample
             .clone();
 
         rstar_sample.sample.loop_moms = rstar_loop_momenta;
