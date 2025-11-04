@@ -1,28 +1,37 @@
 use core::f64;
 
+use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeVec, Orientation};
-use spenso::algebra::complex::Complex;
-use symbolica::{domains::float::RealNumberLike, evaluate::OptimizationSettings};
+use spenso::algebra::complex::{sub, Complex};
+use symbolica::{
+    domains::float::{NumericalFloatLike, Real, RealNumberLike},
+    evaluate::OptimizationSettings,
+};
 use typed_index_collections::TiVec;
 
 use crate::{
     cff::{
         cut_expression::SuperGraphOrientationID,
-        esurface::{Esurface, EsurfaceID},
+        esurface::{Esurface, EsurfaceCollection, EsurfaceID, ExistingEsurfaceId},
         expression::GraphOrientation,
     },
     gammaloop_integrand::{GenericEvaluator, ParamBuilder},
     graph::{Graph, LmbIndex, LoopMomentumBasis},
-    momentum_sample::{MomentumSample, SubspaceData},
+    model::Model,
+    momentum::Rotation,
+    momentum_sample::{LoopMomenta, MomentumSample, SubspaceData},
     processes::{
         CutId, IteratedCtCollection, LUCounterTermData, LeftThresholdId, RightThresholdId,
     },
     settings::{GlobalSettings, RuntimeSettings},
     subtraction::{
         overlap::find_maximal_overlap,
-        overlap_subspace::{self, OverlapInput},
+        overlap_subspace::{self, OverlapGroup, OverlapInput, OverlapStructure},
     },
-    utils::{FloatLike, F},
+    utils::{
+        newton_solver::{newton_iteration_and_derivative, NewtonIterationResult},
+        FloatLike, F,
+    },
 };
 
 pub struct LUCounterTermEvaluators {
@@ -274,4 +283,207 @@ impl LUCounterTerm {
 
         todo!()
     }
+}
+
+struct CounterTermBuilder<'a, T: FloatLike> {
+    overlap_structure: &'a OverlapStructure,
+    real_mass_vector: &'a EdgeVec<F<T>>,
+    e_cm: F<T>,
+    graph: &'a Graph,
+    subspace: &'a SubspaceData,
+    all_lmbs: &'a TiVec<LmbIndex, LoopMomentumBasis>,
+    rotation_for_overlap: &'a Rotation,
+    settings: &'a RuntimeSettings,
+    esurface_collection: &'a EsurfaceCollection,
+    sample: &'a MomentumSample<T>,
+}
+
+impl<'a, T: FloatLike> CounterTermBuilder<'a, T> {
+    fn new(
+        graph: &'a Graph,
+        rotation_for_overlap: &'a Rotation,
+        settings: &'a RuntimeSettings,
+        esurface_collection: &'a EsurfaceCollection,
+        sample: &'a MomentumSample<T>,
+        overlap_structure: &'a OverlapStructure,
+        masses: &'a EdgeVec<F<T>>,
+        all_lmbs: &'a TiVec<LmbIndex, LoopMomentumBasis>,
+        subspace: &'a SubspaceData,
+    ) -> Self {
+        let e_cm = F::from_f64(settings.kinematics.e_cm);
+
+        Self {
+            real_mass_vector: masses,
+            e_cm,
+            graph,
+            rotation_for_overlap,
+            settings,
+            esurface_collection,
+            overlap_structure,
+            sample,
+            all_lmbs,
+            subspace,
+        }
+    }
+
+    fn new_overlap_builder(&'a self, overlap_group: &'a OverlapGroup) -> OverlapBuilder<'a, T> {
+        let center = &overlap_group.center;
+        let subspace = self.subspace;
+
+        let (unrotated_center, rotated_center) = (
+            center.cast(),
+            center.rotate(self.rotation_for_overlap).cast(),
+        );
+
+        let shifted_loop_momenta = self.sample.loop_moms() - &rotated_center;
+        let radius = shifted_loop_momenta
+            .hyper_radius_squared(Some(&subspace.iter_lmb_indices().collect_vec()))
+            .sqrt();
+        let unit_shifted_momenta = shifted_loop_momenta.rescale(
+            &radius.inv(),
+            Some(&subspace.iter_lmb_indices().collect_vec()),
+        );
+
+        OverlapBuilder {
+            counterterm_builder: self,
+            overlap_group,
+            rotated_center,
+            _unrotated_center: unrotated_center,
+            unit_shifted_momenta,
+            radius,
+        }
+    }
+}
+
+struct OverlapBuilder<'a, T: FloatLike> {
+    counterterm_builder: &'a CounterTermBuilder<'a, T>,
+    overlap_group: &'a OverlapGroup,
+    rotated_center: LoopMomenta<F<T>>,
+    _unrotated_center: LoopMomenta<F<T>>,
+    unit_shifted_momenta: LoopMomenta<F<T>>,
+    radius: F<T>,
+}
+
+impl<'a, T: FloatLike> OverlapBuilder<'a, T> {
+    fn new_esurface_builder(
+        &'a self,
+        existing_esurface_id: ExistingEsurfaceId,
+    ) -> EsurfaceCTBuilder<'a, T> {
+        let esurface_id = self
+            .counterterm_builder
+            .overlap_structure
+            .existing_esurfaces[existing_esurface_id];
+
+        EsurfaceCTBuilder {
+            overlap_builder: self,
+            _existing_esurface_id: existing_esurface_id,
+            esurface: &self.counterterm_builder.esurface_collection[esurface_id],
+            esurface_id,
+        }
+    }
+}
+
+const MAX_ITERATIONS: usize = 40;
+const TOLERANCE: f64 = 1.0;
+
+struct EsurfaceCTBuilder<'a, T: FloatLike> {
+    overlap_builder: &'a OverlapBuilder<'a, T>,
+    _existing_esurface_id: ExistingEsurfaceId,
+    esurface: &'a Esurface,
+    esurface_id: EsurfaceID,
+}
+
+impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
+    fn solve_rstar(self) -> RstarSolution<'a, T> {
+        let subspace = self.overlap_builder.counterterm_builder.subspace;
+        let graph = self.overlap_builder.counterterm_builder.graph;
+        let lmbs = self.overlap_builder.counterterm_builder.all_lmbs;
+        let masses = self.overlap_builder.counterterm_builder.real_mass_vector;
+
+        let (radius_guess, _) = self.esurface.get_radius_guess_subspace(
+            &self.overlap_builder.unit_shifted_momenta,
+            &self
+                .overlap_builder
+                .counterterm_builder
+                .sample
+                .external_moms(),
+            subspace,
+            lmbs,
+            graph,
+            masses,
+        );
+
+        let function = |r: &_| {
+            self.esurface.compute_self_and_r_derivative_subspace(
+                r,
+                &self.overlap_builder.unit_shifted_momenta,
+                &self.overlap_builder.rotated_center,
+                self.overlap_builder
+                    .counterterm_builder
+                    .sample
+                    .external_moms(),
+                &self.overlap_builder.counterterm_builder.real_mass_vector,
+                subspace,
+                lmbs,
+                graph,
+            )
+        };
+
+        let solution = newton_iteration_and_derivative(
+            &radius_guess,
+            function,
+            &F::from_f64(TOLERANCE),
+            MAX_ITERATIONS,
+            &self.overlap_builder.counterterm_builder.e_cm,
+        );
+
+        RstarSolution {
+            esurface_ct_builder: self,
+            solution,
+        }
+    }
+}
+
+struct RstarSolution<'a, T: FloatLike> {
+    esurface_ct_builder: EsurfaceCTBuilder<'a, T>,
+    solution: NewtonIterationResult<T>,
+}
+
+impl<'a, T: FloatLike> RstarSolution<'a, T> {
+    fn rstar_samples(self) -> RstarSample<'a, T> {
+        let subspace = self
+            .esurface_ct_builder
+            .overlap_builder
+            .counterterm_builder
+            .subspace;
+
+        let rstar_loop_momenta = &self
+            .esurface_ct_builder
+            .overlap_builder
+            .unit_shifted_momenta
+            .rescale(
+                &self.solution.solution,
+                Some(&subspace.iter_lmb_indices().collect_vec()),
+            )
+            + &self.esurface_ct_builder.overlap_builder.rotated_center;
+
+        let mut rstar_sample = self
+            .esurface_ct_builder
+            .overlap_builder
+            .counterterm_builder
+            .sample
+            .clone();
+
+        rstar_sample.sample.loop_moms = rstar_loop_momenta;
+
+        RstarSample {
+            rstar_solution: self,
+            rstar_sample,
+        }
+    }
+}
+
+struct RstarSample<'a, T: FloatLike> {
+    rstar_solution: RstarSolution<'a, T>,
+    rstar_sample: MomentumSample<T>,
 }

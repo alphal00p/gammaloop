@@ -49,7 +49,6 @@ pub struct OverlapGroup {
     pub existing_esurfaces: Vec<ExistingEsurfaceId>,
     pub complement: Vec<ExistingEsurfaceId>,
     pub center: LoopMomenta<F<f64>>,
-    pub prefactor_evaluator: Option<RefCell<GenericEvaluator>>,
 }
 
 #[derive(Debug, Clone, Encode, Decode)]
@@ -96,64 +95,6 @@ impl OverlapStructure {
                 })
                 .collect();
         }
-    }
-
-    pub fn build_evaluators(
-        &mut self,
-        atoms: &TiVec<EsurfaceID, Atom>,
-        optimization_settings: &OptimizationSettings,
-        num_loops: usize,
-        num_externals: usize,
-        model_params: Vec<Atom>,
-    ) -> Result<()> {
-        let group_square_atoms = self
-            .overlap_groups
-            .iter()
-            .map(|group| {
-                group
-                    .complement
-                    .iter()
-                    .map(|&existing_esurface_id| {
-                        let esurface = self.existing_esurfaces[existing_esurface_id];
-                        let atom = &atoms[esurface];
-                        atom * atom
-                    })
-                    .reduce(|prod, atom| prod * atom)
-                    .unwrap_or_else(|| Atom::num(1))
-            })
-            .collect_vec();
-
-        let denominator = group_square_atoms
-            .iter()
-            .fold(Atom::new(), |sum, atom| sum + atom);
-
-        let params = (0..num_loops)
-            .flat_map(|loop_index| {
-                (1..=3).map(move |spatial_index| function!(GS.loop_mom, loop_index, spatial_index))
-            })
-            .chain((0..num_externals).flat_map(|external_index| {
-                (0..=3).map(move |spatial_index| {
-                    function!(GS.external_mom, external_index, spatial_index)
-                })
-            }))
-            .chain(model_params)
-            .collect_vec();
-
-        for (group, square_atom) in self.overlap_groups.iter_mut().zip(group_square_atoms) {
-            let atom = square_atom / &denominator;
-
-            let evalautor = GenericEvaluator::new_from_raw_params(
-                [atom],
-                &params,
-                &FunctionMap::new(),
-                optimization_settings.clone(),
-            )
-            .ok_or_else(|| eyre!("Could not build evaluator for overlap prefactor"))?;
-
-            group.prefactor_evaluator = Some(RefCell::new(evalautor));
-        }
-
-        Ok(())
     }
 
     pub fn new_empty() -> Self {
@@ -528,7 +469,6 @@ pub fn find_maximal_overlap(
             existing_esurfaces: all_existing_esurfaces,
             center: global_center_f,
             complement: vec![],
-            prefactor_evaluator: None,
         };
         res.overlap_groups.push(single_group);
 
@@ -558,7 +498,6 @@ pub fn find_maximal_overlap(
             existing_esurfaces: all_existing_esurfaces,
             center,
             complement: vec![],
-            prefactor_evaluator: None,
         };
         res.overlap_groups.push(single_group);
         res.fill_in_complements();
@@ -612,7 +551,6 @@ pub fn find_maximal_overlap(
                 existing_esurfaces: vec![existing_esurface_id],
                 center: center,
                 complement: vec![],
-                prefactor_evaluator: None,
             });
             num_disconnected_surfaces += 1;
         }
@@ -653,7 +591,6 @@ pub fn find_maximal_overlap(
                     existing_esurfaces: subset.clone(),
                     center,
                     complement: vec![],
-                    prefactor_evaluator: None,
                 });
             }
         }
