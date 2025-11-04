@@ -1,30 +1,6 @@
 #![allow(dead_code)]
 
-use bincode::Encode;
-use bincode_trait_derive::Decode;
-use bitvec::vec::BitVec;
-use color_eyre::Result;
-use colored::Colorize;
-use eyre::Context;
-use itertools::Itertools;
-use linnet::half_edge::involution::{EdgeVec, Orientation};
-use log::{debug, info};
-use rayon::{
-    iter::{IntoParallelRefMutIterator, ParallelIterator},
-    ThreadPool,
-};
-use spenso::algebra::complex::Complex;
-use std::{
-    fs::{self, File},
-    io::{Read, Write},
-    path::Path,
-};
-use symbolica::{
-    evaluate::OptimizationSettings,
-    numerical_integration::{Grid, Sample},
-};
-use typed_index_collections::TiVec;
-
+use crate::processes::cross_section::{LeftThresholdId, RightThresholdId};
 use crate::{
     cff::{
         cut_expression::{CutOrientationData, SuperGraphOrientationID},
@@ -54,6 +30,30 @@ use crate::{
     },
     DependentMomentaConstructor, GammaLoopContext, GammaLoopContextContainer,
 };
+use bincode::Encode;
+use bincode_trait_derive::Decode;
+use bitvec::vec::BitVec;
+use color_eyre::Result;
+use colored::Colorize;
+use eyre::Context;
+use itertools::Itertools;
+use linnet::half_edge::involution::{EdgeVec, Orientation};
+use log::{debug, info};
+use rayon::{
+    iter::{IntoParallelRefMutIterator, ParallelIterator},
+    ThreadPool,
+};
+use spenso::algebra::complex::Complex;
+use std::{
+    fs::{self, File},
+    io::{Read, Write},
+    path::Path,
+};
+use symbolica::{
+    evaluate::OptimizationSettings,
+    numerical_integration::{Grid, Sample},
+};
+use typed_index_collections::TiVec;
 
 use super::{
     create_grid, evaluate_sample, GammaloopIntegrand, GenericEvaluator, GraphTerm,
