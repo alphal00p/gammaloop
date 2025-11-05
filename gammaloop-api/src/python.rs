@@ -12,7 +12,7 @@ use gammalooprs::{
     numerator::GlobalPrefactor,
     processes::{AmplitudeGraph, Process, ProcessCollection, ProcessDefinition, ProcessList},
     settings::{GlobalSettings, RuntimeSettings},
-    utils::{tracing::LogLevel, FloatLike, F},
+    utils::{symbolica_ext::StringSerializedAtom, tracing::LogLevel, FloatLike, F},
 };
 use linnet::half_edge::{
     builder::HedgeNodeBuilder,
@@ -656,11 +656,12 @@ impl GammaLoopAPI {
         .map(|_| ())
     }
 
-    #[pyo3(name = "generate_cff")]
+    #[pyo3(name = "generate_cff", signature = (dot_string, subgraph_nodes, orientation_pattern=None))]
     pub(crate) fn generate_cff(
         &self,
         dot_string: String,
         subgraph_nodes: Vec<String>,
+        orientation_pattern: Option<String>,
     ) -> PyResult<String> {
         let graph = Graph::from_string(dot_string, &self.gammaloop_state.model)
             .unwrap()
@@ -698,7 +699,14 @@ impl GammaLoopAPI {
             ))
         })?;
 
-        let atom = cff.to_atom();
+        let or_pattern = gammalooprs::settings::global::OrientationPattern {
+            pat: match orientation_pattern {
+                Some(pat) => Some(StringSerializedAtom(parse!(pat))),
+                None => None,
+            },
+        };
+
+        let atom = cff.to_atom(or_pattern);
         let inverse_energies = graph::get_cff_inverse_energy_product_impl(&graph, &subgraph, &[]);
 
         let energy_sub = cff.surfaces.substitute_energies(&atom, &[]) * inverse_energies;

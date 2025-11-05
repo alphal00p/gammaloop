@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use symbolica::atom::Atom;
 use typed_index_collections::TiVec;
 
-use crate::processes::CutId;
+use crate::{processes::CutId, settings::global::OrientationPattern};
 
 use super::{
     expression::{AmplitudeOrientationID, CFFExpression, GraphOrientation},
@@ -121,9 +121,13 @@ impl CFFCutsExpression {
     }
 
     pub(crate) fn to_atom_for_cut(&self, cut: CutId) -> (Atom, Atom) {
-        let left_amplitude_atom = self.cut_expressions[cut].left_amplitude.to_atom();
+        let left_amplitude_atom = self.cut_expressions[cut]
+            .left_amplitude
+            .to_atom(OrientationPattern::default());
 
-        let right_amplitude_atom = self.cut_expressions[cut].right_amplitude.to_atom();
+        let right_amplitude_atom = self.cut_expressions[cut]
+            .right_amplitude
+            .to_atom(OrientationPattern::default());
 
         (left_amplitude_atom, right_amplitude_atom)
     }

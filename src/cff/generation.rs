@@ -828,6 +828,7 @@ mod tests_cff {
     use crate::{
         cff::cff_graph::CFFEdgeType,
         momentum::{FourMomentum, ThreeMomentum},
+        settings::global::OrientationPattern,
         utils::{self, dummy_hedge_graph, RefDefault, F},
     };
 
@@ -840,7 +841,7 @@ mod tests_cff {
             external_range: Range<usize>,
             virtual_range: Range<usize>,
         ) -> ExpressionEvaluator<F<f64>> {
-            let expression_atom_no_energy_sub = self.to_atom();
+            let expression_atom_no_energy_sub = self.to_atom(OrientationPattern::default());
             let expression_atom = self
                 .surfaces
                 .substitute_energies(&expression_atom_no_energy_sub, &[]);
@@ -1566,7 +1567,7 @@ mod tests_cff {
     fn proper_atom(graph: &HedgeGraph<(), ()>) -> Atom {
         let cff = generate_cff_expression(&graph, &None, &[]).unwrap();
 
-        let mut cff_atom = cff.to_atom();
+        let mut cff_atom = cff.to_atom(OrientationPattern::default());
         cff_atom = cff.surfaces.substitute_energies(&cff_atom, &[]);
         let inverse_energy_product =
             get_cff_inverse_energy_product_impl(&graph, &graph.full_graph(), &[]);
