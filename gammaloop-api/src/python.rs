@@ -2,12 +2,10 @@ use bitvec::vec::BitVec;
 use gammalooprs::{
     cff::generation::{generate_cff_expression_from_subgraph, SurfaceCache},
     feyngen::{
-        diagram_generator::evaluate_overall_factor,
-        //  self, diagram_generator::FeynGen, FeynGenError, FeynGenFilters, FeynGenOptions,
-        NumeratorAwareGraphGroupingOption,
+        diagram_generator::evaluate_overall_factor, NumeratorAwareGraphGroupingOption,
         SewedFilterOptions,
     },
-    graph::Graph,
+    graph::{self, Graph},
     initialisation::initialise,
     integrate::MasterNode,
     model::{InputParamCard, Model},
@@ -673,7 +671,7 @@ impl GammaLoopAPI {
             graph.full_filter()
         } else {
             let mut result: BitVec = graph.empty_subgraph();
-            for (node_id, neighbors, vertex) in graph.iter_nodes() {
+            for (_node_id, neighbors, vertex) in graph.iter_nodes() {
                 if subgraph_nodes.contains(&vertex.name.to_string()) {
                     neighbors.for_each(|hedge| result.add(hedge));
                 }
@@ -700,7 +698,12 @@ impl GammaLoopAPI {
             ))
         })?;
 
-        todo!()
+        let atom = cff.to_atom();
+        let inverse_energies = graph::get_cff_inverse_energy_product_impl(&graph, &subgraph, &[]);
+
+        let energy_sub = cff.surfaces.substitute_energies(&atom, &[]) * inverse_energies;
+
+        Ok(energy_sub.to_string())
     }
     /*
 

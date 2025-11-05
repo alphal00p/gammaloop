@@ -382,7 +382,7 @@ pub struct ExternalConnection {
     pub outgoing_index: ExternalIndex,
 }
 
-pub(crate) fn get_cff_inverse_energy_product_impl<E, V, H, S: SubGraph>(
+pub fn get_cff_inverse_energy_product_impl<E, V, H, S: SubGraph>(
     graph: &HedgeGraph<E, V, H>,
     subgraph: &S,
     contract_edges: &[EdgeIndex],

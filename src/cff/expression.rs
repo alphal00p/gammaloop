@@ -262,7 +262,7 @@ where
         }
     }
 
-    pub(crate) fn to_atom(&self) -> Atom {
+    pub fn to_atom(&self) -> Atom {
         self.orientations
             .iter()
             .map(|orientation| orientation.expression.to_atom_inv())

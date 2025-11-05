@@ -597,7 +597,7 @@ pub struct SurfaceCache {
 }
 
 impl SurfaceCache {
-    pub(crate) fn substitute_energies(&self, atom: &Atom, cut_edges: &[EdgeIndex]) -> Atom {
+    pub fn substitute_energies(&self, atom: &Atom, cut_edges: &[EdgeIndex]) -> Atom {
         let replacement_rules = self.get_all_replacements(cut_edges);
         atom.replace_multiple(&replacement_rules)
     }
