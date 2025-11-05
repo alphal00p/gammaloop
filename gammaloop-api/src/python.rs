@@ -1,3 +1,4 @@
+use bitvec::vec::BitVec;
 use gammalooprs::{
     cff::generation::{generate_cff_expression_from_subgraph, SurfaceCache},
     feyngen::{
@@ -15,7 +16,10 @@ use gammalooprs::{
     settings::{GlobalSettings, RuntimeSettings},
     utils::{tracing::LogLevel, FloatLike, F},
 };
-use linnet::half_edge::{builder::HedgeNodeBuilder, subgraph::HedgeNode};
+use linnet::half_edge::{
+    builder::HedgeNodeBuilder,
+    subgraph::{HedgeNode, ModifySubgraph},
+};
 use numpy::{
     Complex64, IntoPyArray, PyArray, PyArray1, PyArray2, PyReadonlyArray2, PyReadonlyArrayDyn,
 };
@@ -665,17 +669,16 @@ impl GammaLoopAPI {
             .pop()
             .unwrap();
 
-        let subgraph = if subgraph_nodes.is_empty() {
+        let subgraph: BitVec = if subgraph_nodes.is_empty() {
             graph.full_filter()
         } else {
-            let mut nodes = vec![];
-            for (node_id, _, vertex) in graph.iter_nodes() {
+            let mut result: BitVec = graph.empty_subgraph();
+            for (node_id, neighbors, vertex) in graph.iter_nodes() {
                 if subgraph_nodes.contains(&vertex.name.to_string()) {
-                    nodes.push(node_id);
+                    neighbors.for_each(|hedge| result.add(hedge));
                 }
             }
-
-            todo!()
+            result
         };
 
         let mut surface_cache = SurfaceCache {

@@ -89,6 +89,7 @@ typed-index-collections = { version = "3.3.0", features = [
     "serde-alloc",
     "bincode",
 ] }
+bitvec = { version = "1.0.1", features = ["serde"] }
 
 # PyO3: optional for embedding. Auto-init at runtime.
 [dependencies.pyo3]

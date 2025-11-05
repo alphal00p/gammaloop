@@ -1429,6 +1429,7 @@ dependencies = [
  "ahash",
  "bincode",
  "bincode-trait-derive",
+ "bitvec",
  "chrono",
  "clap",
  "clap_complete",

@@ -179,6 +179,7 @@ impl LUCounterTerm {
         all_lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
         graph: &Graph,
         masses: &EdgeVec<F<T>>,
+        rotation: &Rotation,
         settings: &RuntimeSettings,
     ) -> Complex<F<T>> {
         let (left_subspace, right_subspace) = &self.subspaces[cut_id];
@@ -280,6 +281,30 @@ impl LUCounterTerm {
         } else {
             return Complex::new_re(F::from_f64(f64::NAN));
         };
+
+        let left_counterterm_builder = CounterTermBuilder::new(
+            graph,
+            rotation,
+            settings,
+            &left_overlap_input.thresholds,
+            momentum_sample,
+            &left_overlap,
+            masses,
+            all_lmbs,
+            left_subspace,
+        );
+
+        let right_counterterm_builder = CounterTermBuilder::new(
+            graph,
+            rotation,
+            settings,
+            &right_overlap_input.thresholds,
+            momentum_sample,
+            &right_overlap,
+            masses,
+            all_lmbs,
+            right_subspace,
+        );
 
         todo!()
     }
@@ -452,7 +477,7 @@ struct RstarSolution<'a, T: FloatLike> {
 }
 
 impl<'a, T: FloatLike> RstarSolution<'a, T> {
-    fn rstar_samples(self) -> RstarSample<'a, T> {
+    fn rstar_sample(self) -> RstarSample<'a, T> {
         let subspace = self
             .esurface_ct_builder
             .overlap_builder
