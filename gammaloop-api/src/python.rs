@@ -1,6 +1,9 @@
 use bitvec::vec::BitVec;
 use gammalooprs::{
-    cff::generation::{generate_cff_expression_from_subgraph, SurfaceCache},
+    cff::{
+        expression::OrientationExpression,
+        generation::{generate_cff_expression_from_subgraph, SurfaceCache},
+    },
     feyngen::{
         diagram_generator::evaluate_overall_factor, NumeratorAwareGraphGroupingOption,
         SewedFilterOptions,
@@ -11,8 +14,8 @@ use gammalooprs::{
     model::{InputParamCard, Model},
     numerator::GlobalPrefactor,
     processes::{AmplitudeGraph, Process, ProcessCollection, ProcessDefinition, ProcessList},
-    settings::{GlobalSettings, RuntimeSettings},
-    utils::{symbolica_ext::StringSerializedAtom, tracing::LogLevel, FloatLike, F},
+    settings::{global::OrientationPattern, GlobalSettings, RuntimeSettings},
+    utils::{serde_utils, symbolica_ext::StringSerializedAtom, tracing::LogLevel, FloatLike, F},
 };
 use linnet::half_edge::{
     builder::HedgeNodeBuilder,
@@ -699,11 +702,11 @@ impl GammaLoopAPI {
             ))
         })?;
 
-        let or_pattern = gammalooprs::settings::global::OrientationPattern {
-            pat: match orientation_pattern {
-                Some(pat) => Some(StringSerializedAtom(parse!(pat))),
-                None => None,
-            },
+        let or_pattern: OrientationPattern = match orientation_pattern {
+            Some(pattern) => {
+                serde_json::from_str(format!("{{\"pat\": \"{}\"}}", pattern).as_str()).unwrap()
+            }
+            None => OrientationPattern { pat: None },
         };
 
         let atom = cff.to_atom(or_pattern);

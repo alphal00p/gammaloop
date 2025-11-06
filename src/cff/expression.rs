@@ -4,6 +4,7 @@ use std::borrow::Borrow;
 
 use crate::{
     cff::esurface::EsurfaceID,
+    settings::global::OrientationPattern,
     utils::{ose_atom_from_index, W_},
 };
 use bincode_trait_derive::{Decode, Encode};
@@ -262,10 +263,16 @@ where
         }
     }
 
-    pub fn to_atom(&self) -> Atom {
+    pub fn to_atom(&self, pattern: OrientationPattern) -> Atom {
         self.orientations
             .iter()
-            .map(|orientation| orientation.expression.to_atom_inv())
+            .filter_map(|orientation| {
+                if pattern.alt_filter(orientation.orientation()) {
+                    Some(orientation.expression.to_atom_inv())
+                } else {
+                    None
+                }
+            })
             .reduce(|a, b| a + b)
             .unwrap_or_default()
     }
