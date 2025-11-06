@@ -26,7 +26,7 @@ required-features = ["cli"]
 
 [features]
 # Keep Python optional unless explicitly enabled.
-default = ["cli"]
+default = ["cli", "python_api"]
 ufo_support = ["dep:pyo3", "pyo3/auto-initialize"]
 python_api = ["ufo_support", "gammalooprs/python_api", "dep:numpy"]
 python_stubgen = ["python_api", "dep:pyo3-stub-gen"]
@@ -53,7 +53,12 @@ tracing-subscriber = { version = "0.3.19", features = [
     "json",
 ] }
 tracing = "0.1.41"
-symbolica = { version = "0.18.0", default-features = false }
+#symbolica = { version = "0.18.0", default-features = false }
+symbolica = { git = "https://github.com/benruijl/symbolica.git", branch = "chi_sq_fix", default-features = false, features = [
+    "serde",
+    "bincode",
+
+] }
 bincode-trait-derive = { version = "0.1.1" }
 bincode = { version = "2.0.0", features = ["serde"] }
 serde_json = "1"
@@ -75,8 +80,8 @@ tracing-indicatif = "0.3.13"
 itertools = "0.8"
 git-version = "0.3"
 json5 = "0.4.1"
-numpy = { version = "0.25.0", optional = true}
-ndarray = { version = "0.16"}
+numpy = { version = "0.25.0", optional = true }
+ndarray = { version = "0.16" }
 rayon = "1.5"
 linnet = { version = "0.12.0", features = [
     "drawing",

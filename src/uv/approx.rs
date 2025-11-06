@@ -473,7 +473,7 @@ impl Approximation {
             .get_single_atom()
             .unwrap()
             .simplify_gamma()
-            / uv_graph.denominator(&reduced);
+            / uv_graph.denominator(&reduced, |_| 1);
 
         let ep = vakint_symbol!("ε");
 

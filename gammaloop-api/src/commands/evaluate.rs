@@ -25,7 +25,7 @@ use gammalooprs::{
     utils::F,
 };
 use symbolica::atom::{Atom, AtomCore};
-use tracing::info;
+use tracing::{info, warn};
 
 use crate::{state::State, CLISettings};
 
@@ -88,7 +88,16 @@ impl Evaluate {
                     graph_term.graph.name
                 ));
             }
-            for (i_gc, gc) in g.connected_components(&g.full_filter()).iter().enumerate() {
+            let connected_components = g.connected_components(&g.full_filter());
+            if connected_components.len() > 1 && g.global_prefactor.num != Atom::num(1) {
+                warn!(
+                    "Graph named: {} has more than one ({}) connected components and its expression contains a global numerator ({}), which will only be applied to the first connected component. Make sure this is intended.",
+                    graph_term.graph.name,
+                    connected_components.len(),
+                    g.global_prefactor.num
+                );
+            }
+            for (i_gc, gc) in connected_components.iter().enumerate() {
                 info!(
                     "Evaluating connected component #{} of graph named: {}",
                     i_gc + 1,
@@ -100,8 +109,11 @@ impl Evaluate {
                     self.numerical,
                     self.number_of_terms_in_epsilon_expansion,
                     default_runtime_settings,
+                    // Only include the overall global numerator on the first of the connected components
+                    i_gc == 0,
                 )?;
             }
+            complete_evaluation_for_this_graph *= &g.global_prefactor.projector * &g.overall_factor;
             full_evaluation += complete_evaluation_for_this_graph;
         }
 

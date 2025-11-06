@@ -639,6 +639,54 @@ impl GammaLoopAPI {
         }
     }
 
+    #[pyo3(name="get_dot_files", signature = (process_id=None, integrand_name=None))]
+    pub(crate) fn get_dot_files(
+        &mut self,
+        process_id: Option<usize>,
+        integrand_name: Option<String>,
+    ) -> PyResult<String> {
+        let (pid, name) = self
+            .gammaloop_state
+            .process_list
+            .find_integrand(process_id, integrand_name.as_ref())
+            .map_err(|e| {
+                exceptions::PyException::new_err(format!(
+                    "Could not find integrand: {}",
+                    e.to_string()
+                ))
+            })?;
+        let mut dot_output = String::new();
+        match &self.gammaloop_state.process_list.processes[pid].collection {
+            ProcessCollection::Amplitudes(amplitudes) => match &amplitudes.get(&name) {
+                Some(amplitude) => amplitude.write_dot_fmt(&mut dot_output).map_err(|e| {
+                    exceptions::PyException::new_err(format!(
+                        "Could not write DOT format for amplitude {}: {}",
+                        name,
+                        e.to_string()
+                    ))
+                }),
+                None => Err(exceptions::PyException::new_err(format!(
+                    "Could not find amplitude named {}",
+                    name
+                ))),
+            },
+            ProcessCollection::CrossSections(cross_sections) => match &cross_sections.get(&name) {
+                Some(cross_section) => cross_section.write_dot_fmt(&mut dot_output).map_err(|e| {
+                    exceptions::PyException::new_err(format!(
+                        "Could not write DOT format for amplitude {}: {}",
+                        name,
+                        e.to_string()
+                    ))
+                }),
+                None => Err(exceptions::PyException::new_err(format!(
+                    "Could not find cross-section named {}",
+                    name
+                ))),
+            },
+        }?;
+        Ok(dot_output)
+    }
+
     #[pyo3(name="run", signature = (command,))]
     pub(crate) fn run_command(&mut self, command: String) -> PyResult<()> {
         let cmd = Commands::from_str(&command)?;

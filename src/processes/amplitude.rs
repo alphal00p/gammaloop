@@ -1,5 +1,6 @@
 use std::{
     collections::{BTreeMap, HashMap},
+    fmt,
     fs::{self, File},
     io::Write,
     iter,
@@ -331,6 +332,20 @@ impl Amplitude {
         Ok(())
     }
 
+    #[instrument(
+        skip_all,
+          fields(
+              amplitude.name = %self.name,
+          )
+      )]
+    pub fn write_dot_fmt<W: fmt::Write>(&self, writer: &mut W) -> Result<(), std::fmt::Error> {
+        for graph in &self.graphs {
+            graph.write_dot_fmt(writer)?;
+            writeln!(writer)?;
+        }
+        Ok(())
+    }
+
     pub fn generate_grouped_derived_data(&mut self) -> Result<()> {
         // for each group we must collect all inequivalent esurfaces.
 
@@ -410,6 +425,13 @@ impl AmplitudeGraph {
         writer: &mut W,
     ) -> Result<(), std::io::Error> {
         self.graph.dot_serialize_io(writer)
+    }
+
+    pub(crate) fn write_dot_fmt<W: fmt::Write>(
+        &self,
+        writer: &mut W,
+    ) -> Result<(), std::fmt::Error> {
+        self.graph.dot_serialize_fmt(writer)
     }
 
     pub(crate) fn generate_cff(&mut self) -> Result<()> {
@@ -569,6 +591,7 @@ impl AmplitudeGraph {
         evaluate_numerically: bool,
         number_of_terms_in_epsilon_expansion: Option<usize>,
         run_time_settings: &RuntimeSettings,
+        include_global_numerator: bool,
     ) -> Result<Atom> {
         let mut vakint = self.new_vakint();
 
@@ -637,14 +660,20 @@ impl AmplitudeGraph {
                 &HashMap::default(),
             );
         }
-        let mut four_dimensional_integrand = self
-            .graph
-            .numerator(component)
+
+        let mut num = self.graph.numerator(component);
+        if include_global_numerator {
+            num.state.expr *= &self.graph.global_prefactor.num;
+        }
+
+        let mut four_dimensional_integrand = num
             .to_d_dim(GS.dim)
             .get_single_atom()
             .unwrap()
             .simplify_gamma()
-            / self.graph.denominator(component);
+            / self
+                .graph
+                .denominator(component, |e| e.extra_data.vakint_edge_power.unwrap_or(1));
 
         // println!("Four-dimensional integrand: {}", four_dimensional_integrand);
 

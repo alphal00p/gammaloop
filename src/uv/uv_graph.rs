@@ -36,7 +36,9 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph {
     ///Get the numerator of the graph.
     /// If multiply_prefactor is true, the numerator is multiplied by the global  prefactor. (just num not projector)
     fn numerator<S: SubGraph>(&self, subgraph: &S) -> Numerator<AppliedFeynmanRule>;
-    fn denominator<S: SubGraph>(&self, subgraph: &S) -> Atom;
+    //fn denominator<S: SubGraph>(&self, subgraph: &S) -> Atom;
+    fn denominator<S: SubGraph, T: Fn(&Edge) -> isize>(&self, subgraph: &S, edge_powers: T)
+        -> Atom;
     fn all_cycle_unions<E, V, H, S: SubGraph<Base = BitVec>>(
         &self,
         subgraph: &S,
@@ -241,23 +243,35 @@ impl UltravioletGraph for Graph {
         ac
     }
 
-    fn denominator<S: SubGraph>(&self, subgraph: &S) -> Atom {
+    fn denominator<S: SubGraph, T: Fn(&Edge) -> isize>(
+        &self,
+        subgraph: &S,
+        edge_powers: T,
+    ) -> Atom {
         let mut den = Atom::num(1);
 
         for (pair, eid, d) in self.underlying.iter_edges_of(subgraph) {
             if matches!(pair, HedgePair::Paired { .. }) {
                 let m2 = d.data.mass_atom().npow(2);
-                den = den
-                    * function!(
-                        GS.den,
-                        usize::from(eid) as i64,
-                        function!(GS.emr_mom, usize::from(eid) as i64),
-                        m2,
-                        spenso_lor_atom(usize::from(eid) as i32, usize::from(eid), GS.dim)
+                let edge_power = edge_powers(d.data);
+                let is_power_negative = edge_power < 0;
+                let prop_den = function!(
+                    GS.den,
+                    usize::from(eid) as i64,
+                    function!(GS.emr_mom, usize::from(eid) as i64),
+                    m2,
+                    spenso_lor_atom(usize::from(eid) as i32, usize::from(eid), GS.dim)
                             .npow(2)
                             //.to_dots()
                             - m2
-                    );
+                );
+                for _i in 0..edge_power.abs() {
+                    if is_power_negative {
+                        den /= prop_den.clone();
+                    } else {
+                        den *= prop_den.clone();
+                    }
+                }
             }
         }
 

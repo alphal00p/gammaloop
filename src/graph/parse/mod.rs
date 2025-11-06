@@ -6,7 +6,7 @@ use crate::{
         GenerationType,
     },
     gammaloop_integrand::ParamBuilder,
-    graph::{GraphGroup, GroupId, LoopMomentumBasis},
+    graph::{edge::EdgeExtraData, GraphGroup, GroupId, LoopMomentumBasis},
     model::Model,
     momentum_sample::LoopIndex,
     numerator::{
@@ -15,7 +15,7 @@ use crate::{
         ufo::UFO,
         GlobalPrefactor,
     },
-    utils::{linnet_ext::FromMappings, symbolica_ext::DOD},
+    utils::symbolica_ext::DOD,
 };
 use ahash::{AHashMap, AHashSet};
 use bitvec::vec::BitVec;
@@ -1050,6 +1050,10 @@ impl Graph {
                         particle: e.particle,
                         num,
                         dod,
+                        extra_data: EdgeExtraData {
+                            momtrop_edge_power: e.momtrop_edge_power,
+                            vakint_edge_power: e.vakint_edge_power,
+                        }
                     },
                     ed.orientation,
                 ))

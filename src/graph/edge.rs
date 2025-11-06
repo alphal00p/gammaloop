@@ -16,6 +16,7 @@ use symbolica::{
     atom::{Atom, AtomCore, AtomView, Symbol},
     domains::float::{Complex as SymComplex, Float},
     evaluate::{ExpressionEvaluator, OptimizationSettings},
+    parse,
 };
 
 use crate::{
@@ -172,9 +173,28 @@ impl PossibleParticle {
 
 #[derive(Debug, Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
 #[trait_decode(trait = crate::GammaLoopContext)]
+pub struct EdgeExtraData {
+    /// This controls the power of the momentum in the momtrop sampler. This does *not* affect other aspects of the treatment of the graph by gammaloop.
+    pub momtrop_edge_power: Option<Atom>,
+    /// This controls the power of the momentum in the vakint evaluation of the graph. This does *not* affect other aspects of the treatment of the graph by gammaloop.
+    pub vakint_edge_power: Option<isize>,
+}
+
+impl Default for EdgeExtraData {
+    fn default() -> Self {
+        EdgeExtraData {
+            momtrop_edge_power: None,
+            vakint_edge_power: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
+#[trait_decode(trait = crate::GammaLoopContext)]
 pub struct Edge {
     // #[bincode(with_serde)]
     pub name: String,
+    pub extra_data: EdgeExtraData,
     // pub edge_type: EdgeType,
     // pub propagator: ArcPropagator,
     pub particle: PossibleParticle,
@@ -270,56 +290,6 @@ impl Edge {
     }
 }
 
-impl From<&Edge> for DotEdgeData {
-    fn from(value: &Edge) -> Self {
-        let mut e = DotEdgeData::empty();
-        e.add_statement("name", value.name.clone());
-        match &value.particle {
-            PossibleParticle::Particle(p) => {
-                e.add_statement("particle", format!("\"{}\"", p.name));
-            }
-            PossibleParticle::JustMass { expr, .. } => {
-                e.add_statement("mass", expr.to_quoted());
-            }
-            PossibleParticle::MassOverriddenParticle { mass, particle, .. } => {
-                e.add_statement("mass", mass.to_quoted());
-                e.add_statement("particle", format!("\"{}\"", particle.name));
-            }
-        }
-        e.add_statement("dod", value.dod);
-        e.add_statement("num", value.num.to_quoted());
-        // e.add_statement("color_num", value.color_num.to_quoted());
-        e.add_statement("is_dummy", value.is_dummy);
-        e
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct ParseEdge {
-    pub name: Option<String>,
-    pub particle: PossibleParticle,
-    pub dod: Option<i32>,
-    pub is_dummy: bool,
-    pub lmb_id: Option<LoopIndex>,
-    /// User provided numerator
-    pub num: Option<Atom>,
-    /// Specifies the incoming initial state hedge
-    pub is_cut: Option<Hedge>,
-}
-
-impl ParseEdge {
-    pub fn from_symbolica_edge(
-        model: &Model,
-        edge_color: &EdgeColor,
-        is_cut: Option<Hedge>,
-    ) -> Self {
-        let particle = model.get_particle_from_pdg(edge_color.pdg);
-        let mut e = ParseEdge::new(particle);
-        e.is_cut = is_cut;
-        e
-    }
-}
-
 impl From<&ParseEdge> for DotEdgeData {
     fn from(value: &ParseEdge) -> Self {
         let mut e = DotEdgeData::empty();
@@ -351,8 +321,79 @@ impl From<&ParseEdge> for DotEdgeData {
             e.add_statement("num", num.to_quoted());
         }
 
+        if let Some(mep) = value.momtrop_edge_power.as_ref() {
+            e.add_statement("momtrop_edge_power", mep.to_canonical_string());
+        }
+
+        if let Some(vak) = value.vakint_edge_power {
+            e.add_statement("vakint_edge_power", vak);
+        }
+
         // e.add_statement("color_num", value.color_num.to_quoted());
         e.add_statement("is_dummy", value.is_dummy);
+        e
+    }
+}
+
+impl From<&Edge> for DotEdgeData {
+    fn from(value: &Edge) -> Self {
+        let mut e = DotEdgeData::empty();
+        e.add_statement("name", value.name.clone());
+        match &value.particle {
+            PossibleParticle::Particle(p) => {
+                e.add_statement("particle", format!("\"{}\"", p.name));
+            }
+            PossibleParticle::JustMass { expr, .. } => {
+                e.add_statement("mass", expr.to_quoted());
+            }
+            PossibleParticle::MassOverriddenParticle { mass, particle, .. } => {
+                e.add_statement("mass", mass.to_quoted());
+                e.add_statement("particle", format!("\"{}\"", particle.name));
+            }
+        }
+        e.add_statement("dod", value.dod);
+        e.add_statement("num", value.num.to_quoted());
+        // e.add_statement("color_num", value.color_num.to_quoted());
+        e.add_statement("is_dummy", value.is_dummy);
+
+        value
+            .extra_data
+            .momtrop_edge_power
+            .as_ref()
+            .map(|mep| e.add_statement("momtrop_edge_power", mep.to_canonical_string()));
+        value
+            .extra_data
+            .vakint_edge_power
+            .map(|vak| e.add_statement("vakint_edge_power", vak));
+
+        e
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ParseEdge {
+    pub name: Option<String>,
+    pub particle: PossibleParticle,
+    pub dod: Option<i32>,
+    pub is_dummy: bool,
+    pub lmb_id: Option<LoopIndex>,
+    /// User provided numerator
+    pub num: Option<Atom>,
+    /// Specifies the incoming initial state hedge
+    pub is_cut: Option<Hedge>,
+    pub momtrop_edge_power: Option<Atom>,
+    pub vakint_edge_power: Option<isize>,
+}
+
+impl ParseEdge {
+    pub fn from_symbolica_edge(
+        model: &Model,
+        edge_color: &EdgeColor,
+        is_cut: Option<Hedge>,
+    ) -> Self {
+        let particle = model.get_particle_from_pdg(edge_color.pdg);
+        let mut e = ParseEdge::new(particle);
+        e.is_cut = is_cut;
         e
     }
 }
@@ -383,6 +424,8 @@ impl ParseEdge {
             lmb_id: None,
             num: None,
             is_cut: None,
+            momtrop_edge_power: None,
+            vakint_edge_power: None,
         }
     }
 
@@ -557,6 +600,13 @@ impl ParseEdge {
                 .map(|a| a.strip_parse::<Atom>())
                 .transpose()?;
 
+            let momtrop_edge_power: Option<Atom> = e
+                .get::<_, String>("momtrop_edge_power")
+                .transpose()?
+                .map(|a| parse!(&a));
+            let vakint_edge_power: Option<isize> =
+                e.get::<_, isize>("vakint_edge_power").transpose()?;
+
             let particle: PossibleParticle = if let Some(v) = e.get::<_, isize>("pdg") {
                 model.try_get_particle_from_pdg(v?)?.into()
             } else if let Some(v) = e.get::<_, String>("particle") {
@@ -580,6 +630,8 @@ impl ParseEdge {
                     num,
                     is_cut,
                     name: label,
+                    momtrop_edge_power,
+                    vakint_edge_power,
                 },
                 orientation,
             ))

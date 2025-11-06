@@ -249,6 +249,14 @@ impl CrossSection {
         Ok(())
     }
 
+    pub fn write_dot_fmt<W: std::fmt::Write>(&self, writer: &mut W) -> Result<(), std::fmt::Error> {
+        for graph in &self.supergraphs {
+            graph.write_dot_fmt(writer)?;
+            writeln!(writer)?;
+        }
+        Ok(())
+    }
+
     pub(crate) fn new(name: String) -> Self {
         Self {
             name,
@@ -657,6 +665,13 @@ impl CrossSectionGraph {
         writer: &mut W,
     ) -> Result<(), std::io::Error> {
         self.graph.dot_serialize_io(writer)
+    }
+
+    pub(crate) fn write_dot_fmt<W: std::fmt::Write>(
+        &self,
+        writer: &mut W,
+    ) -> Result<(), std::fmt::Error> {
+        self.graph.dot_serialize_fmt(writer)
     }
 
     pub(crate) fn update_surface_cache(&mut self) {
