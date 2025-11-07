@@ -1,7 +1,6 @@
 #![allow(dead_code)]
-
-use crate::processes::cross_section::{LeftThresholdId, RightThresholdId};
 use crate::{
+    DependentMomentaConstructor, GammaLoopContext, GammaLoopContextContainer,
     cff::{
         cut_expression::{CutOrientationData, SuperGraphOrientationID},
         esurface::Esurface,
@@ -9,8 +8,7 @@ use crate::{
     },
     evaluation_result::EvaluationResult,
     gammaloop_integrand::{
-        param_builder::LUParams, ChannelIndex, GenericEvaluatorFloat, ParamBuilder,
-        UpdateAndGetParams,
+        ChannelIndex, GenericEvaluatorFloat, ParamBuilder, param_builder::LUParams,
     },
     graph::{
         ExternalConnection, FeynmanGraph, Graph, GraphGroup, GroupId, LmbIndex, LoopMomentumBasis,
@@ -18,35 +16,33 @@ use crate::{
     integrands::HasIntegrand,
     model::Model,
     momentum::{Rotation, RotationMethod, ThreeMomentum},
-    momentum_sample::{LoopMomenta, MomentumSample, SubspaceData},
-    processes::{Amplitude, CrossSectionCut, CrossSectionGraph, CutId, GroupDerivedData},
-    settings::{
-        runtime::{HFunctionSettings, IntegratedCounterTermRange},
-        GlobalSettings, RuntimeSettings,
-    },
+    momentum_sample::{LoopMomenta, MomentumSample},
+    processes::{CrossSectionCut, CrossSectionGraph, CutId},
+    settings::{GlobalSettings, RuntimeSettings, runtime::HFunctionSettings},
     utils::{
-        self, bitvec_ext::BinVec, h, newton_solver::newton_iteration_and_derivative,
-        serde_utils::SmartSerde, FloatLike, Length, F,
+        F, FloatLike, Length, h, newton_solver::newton_iteration_and_derivative,
+        serde_utils::SmartSerde,
     },
-    DependentMomentaConstructor, GammaLoopContext, GammaLoopContextContainer,
 };
 use bincode::Encode;
 use bincode_trait_derive::Decode;
 use bitvec::vec::BitVec;
 use color_eyre::Result;
-use colored::Colorize;
 use eyre::Context;
 use itertools::Itertools;
-use linnet::half_edge::involution::{EdgeVec, Orientation};
+use linnet::half_edge::{
+    involution::{EdgeVec, Orientation},
+    subgraph::{ModifySubSet, SubSetLike, subset::SubSet},
+};
 use log::{debug, info};
 use rayon::{
-    iter::{IntoParallelRefMutIterator, ParallelIterator},
     ThreadPool,
+    iter::{IntoParallelRefMutIterator, ParallelIterator},
 };
 use spenso::algebra::complex::Complex;
 use std::{
-    fs::{self, File},
-    io::{Read, Write},
+    fs::{self},
+    io::Read,
     path::Path,
 };
 use symbolica::{
@@ -56,8 +52,8 @@ use symbolica::{
 use typed_index_collections::TiVec;
 
 use super::{
-    create_grid, evaluate_sample, GammaloopIntegrand, GenericEvaluator, GraphTerm,
-    LmbMultiChannelingSetup,
+    GammaloopIntegrand, GenericEvaluator, GraphTerm, LmbMultiChannelingSetup, create_grid,
+    evaluate_sample,
 };
 
 const TOLERANCE: F<f64> = F(2.0);
@@ -252,7 +248,7 @@ pub struct CrossSectionGraphTerm {
     pub estimated_scale: Option<F<f64>>,
     pub param_builder: ParamBuilder<f64>,
     pub orientations: TiVec<SuperGraphOrientationID, EdgeVec<Orientation>>,
-    pub orientation_filter: BinVec,
+    pub orientation_filter: SubSet<SuperGraphOrientationID>,
 }
 
 impl CrossSectionGraphTerm {
@@ -322,7 +318,7 @@ impl CrossSectionGraphTerm {
             lmbs: graph.derived_data.lmbs.as_ref().unwrap().clone(),
             estimated_scale: None,
             param_builder: graph.graph.param_builder.clone(),
-            orientation_filter: BinVec(BitVec::repeat(true, orientations.len())),
+            orientation_filter: SubSet::full(orientations.len()),
             orientations,
         })
     }
@@ -399,12 +395,13 @@ impl GraphTerm for CrossSectionGraphTerm {
                 .expected_scale(F(settings.kinematics.e_cm), model),
         );
 
-        self.orientation_filter = BinVec(
-            self.orientations
-                .iter()
-                .map(|or| settings.general.orientation_pat.filter(or))
-                .collect(),
-        );
+        self.orientation_filter = SubSet::empty(self.orientations.len());
+
+        for (i, or) in self.orientations.iter_enumerated() {
+            if settings.general.orientation_pat.filter(or) {
+                self.orientation_filter.add(i);
+            }
+        }
 
         let externals = settings
             .kinematics
@@ -455,7 +452,7 @@ impl GraphTerm for CrossSectionGraphTerm {
         channel_id: Option<(ChannelIndex, F<T>)>,
     ) -> Complex<F<T>> {
         let orientations =
-            momentum_sample.orientations(&self.orientation_filter.0, &self.orientations);
+            momentum_sample.orientations(&self.orientation_filter, &self.orientations);
 
         // let mut all_cut_result = Complex::new_re(momentum_sample.zero());
         let center = LoopMomenta::from_iter(vec![
@@ -655,12 +652,13 @@ impl HasIntegrand for CrossSectionIntegrand {
             "Tropical smapling not implemented for cross sections yet"
         );
 
-        assert!(self
-            .data
-            .graph_terms
-            .iter()
-            .map(|term| term.graph.get_loop_number())
-            .all_equal());
+        assert!(
+            self.data
+                .graph_terms
+                .iter()
+                .map(|term| term.graph.get_loop_number())
+                .all_equal()
+        );
 
         self.data.graph_terms[0].graph.get_loop_number() * 3
     }

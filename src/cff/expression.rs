@@ -32,7 +32,20 @@ use super::{
 use crate::utils::GS;
 
 #[derive(
-    Debug, Clone, Serialize, Deserialize, From, Into, Hash, PartialEq, Eq, Copy, Encode, Decode,
+    Debug,
+    Clone,
+    Serialize,
+    Deserialize,
+    From,
+    Into,
+    Hash,
+    PartialEq,
+    Eq,
+    Copy,
+    Encode,
+    Decode,
+    PartialOrd,
+    Ord,
 )]
 pub struct AmplitudeOrientationID(pub usize);
 

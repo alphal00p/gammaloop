@@ -1,9 +1,5 @@
-use bitvec::vec::BitVec;
 use gammalooprs::{
-    cff::{
-        expression::OrientationExpression,
-        generation::{generate_cff_expression_from_subgraph, SurfaceCache},
-    },
+    cff::generation::{generate_cff_expression_from_subgraph, SurfaceCache},
     feyngen::{
         diagram_generator::evaluate_overall_factor, NumeratorAwareGraphGroupingOption,
         SewedFilterOptions,

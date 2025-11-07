@@ -42,8 +42,6 @@ use std::{ffi::OsString, path::PathBuf};
 use std::{fs::File, ops::ControlFlow};
 use symbolica::activate_oem_license;
 
-use crate::commands::run;
-
 // use tracing::LogLevel;
 #[cfg(feature = "python_api")]
 pub mod python;

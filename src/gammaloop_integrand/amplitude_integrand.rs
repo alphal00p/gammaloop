@@ -5,13 +5,14 @@ use std::{
 
 use bincode_trait_derive::{Decode, Encode};
 
-use bitvec::vec::BitVec;
-
 use color_eyre::Result;
 
 use eyre::Context;
 use itertools::Itertools;
-use linnet::half_edge::involution::{EdgeVec, Orientation};
+use linnet::half_edge::{
+    involution::{EdgeVec, Orientation},
+    subgraph::{ModifySubSet, SuBitGraph, SubSetLike, subset::SubSet},
+};
 use momtrop::SampleGenerator;
 use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 use spenso::algebra::complex::Complex;
@@ -24,9 +25,10 @@ use tracing::{debug, instrument};
 use typed_index_collections::TiVec;
 
 use crate::{
+    DependentMomentaConstructor, F, FloatLike, GammaLoopContext, GammaLoopContextContainer,
     cff::{
         esurface::{
-            get_representative, EsurfaceCollection, EsurfaceID, ExistingEsurfaces, GroupEsurfaceId,
+            EsurfaceCollection, EsurfaceID, ExistingEsurfaces, GroupEsurfaceId, get_representative,
         },
         expression::{AmplitudeOrientationID, GraphOrientation},
     },
@@ -46,15 +48,14 @@ use crate::{
     status_debug, status_info, status_warn,
     subtraction::{
         amplitude_counterterm::AmplitudeCountertermData,
-        overlap::{find_maximal_overlap, OverlapInput, SingleGraphOverlapData},
+        overlap::{OverlapInput, SingleGraphOverlapData, find_maximal_overlap},
     },
-    utils::{bitvec_ext::BinVec, serde_utils::SmartSerde, symbolica_ext::LOGPRINTOPTS, W_},
-    DependentMomentaConstructor, FloatLike, GammaLoopContext, GammaLoopContextContainer, F,
+    utils::{W_, serde_utils::SmartSerde, symbolica_ext::LOGPRINTOPTS},
 };
 
 use super::{
-    create_grid, evaluate_sample, GammaloopIntegrand, GenericEvaluator, GenericEvaluatorFloat,
-    GraphTerm, LmbMultiChannelingSetup,
+    GammaloopIntegrand, GenericEvaluator, GenericEvaluatorFloat, GraphTerm,
+    LmbMultiChannelingSetup, create_grid, evaluate_sample,
 };
 
 #[derive(Clone, Encode, Decode)]
@@ -63,7 +64,7 @@ pub struct AmplitudeGraphTerm {
     pub orientation_parametric_integrand: GenericEvaluator,
     pub iterative_integrand_evaluator: Option<GenericEvaluator>,
     pub orientations: TiVec<AmplitudeOrientationID, EdgeVec<Orientation>>,
-    pub orientation_filter: BinVec,
+    pub orientation_filter: SubSet<AmplitudeOrientationID>,
     pub esurfaces: EsurfaceCollection,
     pub threshold_counterterm: AmplitudeCountertermData,
     pub multi_channeling_setup: LmbMultiChannelingSetup,
@@ -140,7 +141,7 @@ impl AmplitudeGraphTerm {
         threshold_counterterm.esurface_map = esurface_map;
 
         Ok(AmplitudeGraphTerm {
-            orientation_filter: BinVec(BitVec::repeat(true, orientations.len())),
+            orientation_filter: SubSet::full(orientations.len()),
             orientations,
             iterative_integrand_evaluator,
             orientation_parametric_integrand,
@@ -250,7 +251,7 @@ impl AmplitudeGraphTerm {
 
         let hel = settings.kinematics.externals.get_helicities();
         let orientations =
-            momentum_sample.orientations(&self.orientation_filter.0, &self.orientations);
+            momentum_sample.orientations(&self.orientation_filter, &self.orientations);
 
         debug!("loop_moms: {}", momentum_sample.loop_moms());
         debug!("jacobian: {:16e}", momentum_sample.jacobian());
@@ -341,13 +342,13 @@ impl GraphTerm for AmplitudeGraphTerm {
           err
     )]
     fn warm_up(&mut self, settings: &RuntimeSettings, model: &Model) -> Result<()> {
-        let a: BitVec = self
-            .orientations
-            .iter()
-            .map(|a| settings.general.orientation_pat.filter(a))
-            .collect();
+        self.orientation_filter = SubSet::empty(self.orientations.len());
+        for (id, o) in self.orientations.iter_enumerated() {
+            if settings.general.orientation_pat.filter(o) {
+                self.orientation_filter.add(id);
+            }
+        }
 
-        self.orientation_filter = BinVec(a);
         self.estimated_scale = Some(
             self.graph
                 .expected_scale(F(settings.kinematics.e_cm), model),
@@ -680,7 +681,9 @@ impl GammaloopIntegrand for AmplitudeIntegrand {
             .all(|term| !term.threshold_counterterm.evaluators.is_empty());
 
         if !thresholds_generated && !self.settings.subtraction.disable_threshold_subtraction {
-            status_warn!("Not all graphs have threshold counterterms generated, but threshold subtraction is not disabled. disable runtime threshold subtraction to remove this warning");
+            status_warn!(
+                "Not all graphs have threshold counterterms generated, but threshold subtraction is not disabled. disable runtime threshold subtraction to remove this warning"
+            );
             self.settings.subtraction.disable_threshold_subtraction = true;
         }
 
@@ -756,7 +759,7 @@ impl GammaloopIntegrand for AmplitudeIntegrand {
                             for readable_esurface in readable_esurfaces {
                                 msg += &format!(
                                     "esurface id: {}, atom: {}\n",
-                                    readable_esurface.0 .0, readable_esurface.1
+                                    readable_esurface.0.0, readable_esurface.1
                                 );
                             }
 
@@ -894,7 +897,9 @@ impl HasIntegrand for AmplitudeIntegrand {
             //     .sorted()
             //     .collect_vec();
 
-            tracing::warn!("get n dim called for tropical sampling, if groups are enabled this function panics, returning bs value to avoid this");
+            tracing::warn!(
+                "get n dim called for tropical sampling, if groups are enabled this function panics, returning bs value to avoid this"
+            );
             69
 
             //let median_dimension = dimensions[dimensions.len() / 2];

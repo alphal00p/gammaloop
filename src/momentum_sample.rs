@@ -13,6 +13,7 @@ use color_eyre::Result;
 use derive_more::{From, Into};
 use eyre::eyre;
 use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation};
+use linnet::half_edge::subgraph::subset::SubSet;
 use linnet::half_edge::subgraph::{InternalSubGraph, SuBitGraph, SubSetOps};
 use serde::{Deserialize, Serialize};
 use std::ops::{Add, Index, IndexMut, Sub};
@@ -587,7 +588,7 @@ impl<T: FloatLike> BareMomentumSample<T> {
 impl<T: FloatLike> MomentumSample<T> {
     pub(crate) fn orientations<'a, OID: From<usize> + Copy>(
         &self,
-        filter: &'a BitVec,
+        filter: &'a SubSet<OID>,
         orientations: &'a TiVec<OID, EdgeVec<Orientation>>,
     ) -> SingleOrAllOrientations<'a, OID>
     where

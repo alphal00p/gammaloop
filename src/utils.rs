@@ -102,7 +102,6 @@ impl From<Side> for usize {
     }
 }
 
-pub mod bitvec_ext;
 pub mod linnet_ext;
 pub mod symbolica_ext;
 pub mod tracing;

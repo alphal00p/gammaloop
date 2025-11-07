@@ -10,8 +10,12 @@ use crate::{
 };
 use bincode_trait_derive::{Decode, Encode};
 use bitvec::{order::Lsb0, slice::IterOnes, vec::BitVec};
-use linnet::half_edge::involution::{EdgeVec, Orientation, SignOrZero};
-use spenso::algebra::complex::{symbolica_traits::CompiledComplexEvaluatorSpenso, Complex};
+use linnet::half_edge::{
+    involution::{EdgeVec, Orientation, SignOrZero},
+    subgraph::{SubSetIter, SubSetLike, subset::SubSet},
+    typed_vec::IndexLike,
+};
+use spenso::algebra::complex::{Complex, symbolica_traits::CompiledComplexEvaluatorSpenso};
 use symbolica::{
     atom::{Atom, AtomCore},
     domains::{float::Complex as SymComplex, rational::Rational},
@@ -25,19 +29,18 @@ use tracing::debug;
 use typed_index_collections::TiVec;
 
 use crate::{
-    dot,
+    GammaLoopContext, dot,
     gammaloop_integrand::param_builder::LUParams,
     graph::Graph,
     initialisation::test_initialise,
     momentum::Helicity,
     momentum_sample::MomentumSample,
-    utils::{f128, test_utils::load_generic_model, FloatLike, F},
-    GammaLoopContext,
+    utils::{F, FloatLike, f128, test_utils::load_generic_model},
 };
 
 use super::{
-    param_builder::{ThresholdParams, UpdateAndGetParams},
     ParamBuilder,
+    param_builder::{ThresholdParams, UpdateAndGetParams},
 };
 
 #[derive(Clone, Copy)]
@@ -48,15 +51,15 @@ pub enum SingleOrAllOrientations<'a, OID> {
     },
     All {
         all: &'a TiVec<OID, EdgeVec<Orientation>>,
-        filter: &'a BitVec,
+        filter: &'a SubSet<OID>,
     },
 }
-impl<'a, OID: Copy> SingleOrAllOrientations<'a, OID> {
+impl<'a, OID: IndexLike> SingleOrAllOrientations<'a, OID> {
     pub fn iter(&self) -> SingleOrAllOrientationsIterator<'_, OID> {
         match self {
             SingleOrAllOrientations::All { all, filter } => SingleOrAllOrientationsIterator::All {
                 all: *all,
-                filter: filter.iter_ones(),
+                filter: (*filter).included_iter(),
             },
             SingleOrAllOrientations::Single { orientation, id } => {
                 SingleOrAllOrientationsIterator::Single {
@@ -68,7 +71,7 @@ impl<'a, OID: Copy> SingleOrAllOrientations<'a, OID> {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub enum SingleOrAllOrientationsIterator<'a, OID> {
     Single {
         orientation: Option<&'a EdgeVec<Orientation>>,
@@ -76,11 +79,11 @@ pub enum SingleOrAllOrientationsIterator<'a, OID> {
     },
     All {
         all: &'a TiVec<OID, EdgeVec<Orientation>>,
-        filter: IterOnes<'a, usize, Lsb0>,
+        filter: SubSetIter<'a, OID>,
     },
 }
 
-impl<'a, OID: From<usize> + Copy> Iterator for SingleOrAllOrientationsIterator<'a, OID>
+impl<'a, OID: IndexLike> Iterator for SingleOrAllOrientationsIterator<'a, OID>
 where
     usize: From<OID>,
 {
@@ -92,7 +95,7 @@ where
                 orientation.take().map(|a| (*id, a))
             }
             SingleOrAllOrientationsIterator::All { all, filter } => {
-                let a = OID::from(filter.next()?);
+                let a = filter.next()?;
                 Some((a, &all[a]))
             }
         }

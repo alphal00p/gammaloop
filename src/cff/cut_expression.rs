@@ -21,7 +21,20 @@ use super::{
 };
 
 #[derive(
-    Debug, Clone, Serialize, Deserialize, From, Into, Hash, PartialEq, Eq, Copy, Encode, Decode,
+    Debug,
+    Clone,
+    Serialize,
+    Deserialize,
+    From,
+    Into,
+    Hash,
+    PartialEq,
+    Eq,
+    Copy,
+    Encode,
+    Decode,
+    PartialOrd,
+    Ord,
 )]
 pub struct SuperGraphOrientationID(pub usize);
 
@@ -231,10 +244,10 @@ pub(crate) fn amplitude_orientations_to_sg_orientaion(
 mod tests {
     use itertools::Itertools;
     use linnet::half_edge::{
+        HedgeGraph,
         builder::HedgeGraphBuilder,
         involution::{Flow, Orientation},
         nodestore::NodeStorageVec,
-        HedgeGraph,
     };
     use typed_index_collections::TiVec;
 

@@ -1,10 +1,10 @@
 use crate::cff::cff_graph::VertexSet;
 use crate::cff::esurface::add_external_shifts;
 use crate::utils::{
-    cut_energy, external_energy_atom_from_index, ose_atom_from_index, FloatLike, F,
+    F, FloatLike, cut_energy, external_energy_atom_from_index, ose_atom_from_index,
 };
 use bincode_trait_derive::{Decode, Encode};
-use bitvec::vec::BitVec;
+
 use derive_more::{From, Into};
 use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeIndex, EdgeVec};
@@ -84,12 +84,12 @@ impl From<HsurfaceID> for Atom {
 
 #[cfg(test)]
 mod tests {
-    use bitvec::vec::BitVec;
+
     use linnet::half_edge::{
+        HedgeGraph, NodeIndex,
         builder::HedgeGraphBuilder,
         involution::{EdgeIndex, Orientation},
         subgraph::InternalSubGraph,
-        HedgeGraph, NodeIndex,
     };
     use symbolica::atom::{Atom, AtomCore};
 
@@ -123,7 +123,9 @@ mod tests {
         };
 
         let h_surface_atom = h_surface.to_atom(&[]);
-        let expected_atom = parse!("Q(0, cind(0)) + Q(1, cind(0)) - Q(2, cind(0)) - Q(3, cind(0)) - P(4, cind(0)) + P(5, cind(0))");
+        let expected_atom = parse!(
+            "Q(0, cind(0)) + Q(1, cind(0)) - Q(2, cind(0)) - Q(3, cind(0)) - P(4, cind(0)) + P(5, cind(0))"
+        );
         let diff = h_surface_atom - &expected_atom;
         let diff = diff.expand();
         assert_eq!(diff, Atom::new());
