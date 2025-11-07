@@ -3,11 +3,11 @@ use crate::graph::GroupId;
 use crate::momentum::{Rotation, ThreeMomentum};
 use crate::momentum_sample::MomentumSample;
 
-use crate::utils::{self, global_parameterize, FloatLike, F};
+use crate::utils::{self, F, FloatLike, global_parameterize};
 use crate::{
-    settings::runtime::kinematic::KinematicsSettings, settings::runtime::DiscreteGraphSamplingType,
+    DependentMomentaConstructor, settings::runtime::DiscreteGraphSamplingType,
     settings::runtime::ParameterizationSettings, settings::runtime::SamplingSettings,
-    DependentMomentaConstructor,
+    settings::runtime::kinematic::KinematicsSettings,
 };
 use color_eyre::Result;
 use eyre::eyre;
@@ -31,6 +31,10 @@ fn unwrap_sample_impl<T: FloatLike>(
         Sample::Continuous(_, xs) => {
             let xs = xs.iter().map(|x| F::from_ff64(*x)).collect();
             (discrete_dimensions, xs)
+        }
+        Sample::Uniform(_, discrete, xs) => {
+            let xs = xs.iter().map(|x| F::from_ff64(*x)).collect();
+            (discrete.clone(), xs)
         }
         Sample::Discrete(_, index, sample) => {
             discrete_dimensions.push(*index);
