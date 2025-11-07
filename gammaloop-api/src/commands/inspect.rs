@@ -92,8 +92,8 @@ impl Inspect {
                     "Jacobian is zero at this point, cannot divide by zero."
                 ));
             }
-            let r = inspect_res_eval.map(|a| a.into());
-            r / jac
+            let r = inspect_res_eval.map(|a| a.0 / jac);
+            r
         } else {
             inspect_res_eval.map(|a| a.into())
         };
@@ -165,8 +165,7 @@ impl<'a> BatchedInspect<'a> {
                         "Jacobian is zero at this point, cannot divide by zero."
                     ));
                 }
-                let r = inspect_res_eval.map(|a| a.into());
-                r / jac
+                inspect_res_eval.map(|a| a.0 / jac)
             } else {
                 inspect_res_eval.map(|a| a.into())
             };

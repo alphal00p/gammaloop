@@ -19,7 +19,7 @@ use gammalooprs::{
 };
 use linnet::half_edge::{
     builder::HedgeNodeBuilder,
-    subgraph::{HedgeNode, ModifySubgraph},
+    subgraph::{HedgeNode, ModifySubSet, SuBitGraph},
 };
 use numpy::{
     Complex64, IntoPyArray, PyArray, PyArray1, PyArray2, PyReadonlyArray2, PyReadonlyArrayDyn,
@@ -526,7 +526,7 @@ impl GammaLoopAPI {
                     Graph::from_file(&dot_path, &self.gammaloop_state.model).map_err(|e| {
                         eyre!("Could not parse graphs from DOT file: {}", e.to_string())
                     })?;
-                Result::<(Vec<Graph>, Option<String>)>::Ok((graphs, Some(process_name)))
+                (graphs, Some(process_name))
             }
             "string" => {
                 if process_id.is_none() && process_name.is_none() {
@@ -537,7 +537,7 @@ impl GammaLoopAPI {
 
                 let graphs = Graph::from_string(&graphs, &self.gammaloop_state.model)
                     .map_err(|e| eyre!("Could not parse graphs from string: {}", e.to_string()))?;
-                Result::<(Vec<Graph>, Option<String>)>::Ok((graphs, process_name))
+                (graphs, process_name)
             }
             other => {
                 return Err(eyre!(
@@ -545,7 +545,7 @@ impl GammaLoopAPI {
                     other
                 ))
             }
-        }?;
+        };
 
         self.gammaloop_state.import_graphs(
             graphs,
@@ -719,10 +719,10 @@ impl GammaLoopAPI {
             .pop()
             .unwrap();
 
-        let subgraph: BitVec = if subgraph_nodes.is_empty() {
+        let subgraph: SuBitGraph = if subgraph_nodes.is_empty() {
             graph.full_filter()
         } else {
-            let mut result: BitVec = graph.empty_subgraph();
+            let mut result: SuBitGraph = graph.empty_subgraph();
             for (_node_id, neighbors, vertex) in graph.iter_nodes() {
                 if subgraph_nodes.contains(&vertex.name.to_string()) {
                     neighbors.for_each(|hedge| result.add(hedge));

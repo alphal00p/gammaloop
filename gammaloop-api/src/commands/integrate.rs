@@ -1,7 +1,7 @@
 use std::{fs, path::PathBuf};
 
 use clap::Args;
-use gammalooprs::{graph::global, status_warn, utils::serde_utils::SmartSerde};
+use gammalooprs::{status_warn, utils::serde_utils::SmartSerde};
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};

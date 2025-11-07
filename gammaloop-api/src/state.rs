@@ -15,7 +15,7 @@ use gammalooprs::{
     processes::{Amplitude, CrossSection},
     utils::serde_utils::IsDefault,
 };
-use linnet::half_edge::subgraph::SubGraph;
+use linnet::half_edge::subgraph::SubGraphLike;
 use schemars::{schema_for, JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
