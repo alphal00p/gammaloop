@@ -34,7 +34,7 @@ use symbolica::domains::algebraic_number::AlgebraicExtension;
 use symbolica::domains::finite_field::PrimeIteratorU64;
 use symbolica::domains::float::Complex as SymbolicaComplex;
 use symbolica::function;
-use symbolica::graph::GenerationSettings;
+use symbolica::graph::{GenerationSettings, HalfEdge};
 use symbolica::id::Replacement;
 use tracing::{event_enabled, instrument};
 
@@ -2807,14 +2807,20 @@ impl ProcessDefinition {
                         external_tag: (i_initial + 1) as i32,
                     },
                     if p.0.is_self_antiparticle() {
-                        (None, EdgeColor::from_particle(p))
+                        HalfEdge {
+                            direction: None,
+                            data: EdgeColor::from_particle(p),
+                        }
                     } else if p.0.is_antiparticle() {
-                        (
-                            Some(SB_OUTGOING),
-                            EdgeColor::from_particle(p.0.get_anti_particle(model)),
-                        )
+                        HalfEdge {
+                            direction: Some(SB_OUTGOING),
+                            data: EdgeColor::from_particle(p.0.get_anti_particle(model)),
+                        }
                     } else {
-                        (Some(SB_INCOMING), EdgeColor::from_particle(p))
+                        HalfEdge {
+                            direction: Some(SB_INCOMING),
+                            data: EdgeColor::from_particle(p),
+                        }
                     },
                 )
             })
@@ -2842,14 +2848,22 @@ impl ProcessDefinition {
                                     external_tag: (self.initial_pdgs.len() + i_final + 1) as i32,
                                 },
                                 if p.0.is_self_antiparticle() {
-                                    (None, EdgeColor::from_particle(p))
+                                    HalfEdge {
+                                        direction: None,
+                                        data: EdgeColor::from_particle(p),
+                                    }
                                 } else if p.0.is_antiparticle() {
-                                    (
-                                        Some(SB_INCOMING),
-                                        EdgeColor::from_particle(p.0.get_anti_particle(model)),
-                                    )
+                                    HalfEdge {
+                                        direction: Some(SB_OUTGOING),
+                                        data: EdgeColor::from_particle(
+                                            p.0.get_anti_particle(model),
+                                        ),
+                                    }
                                 } else {
-                                    (Some(SB_OUTGOING), EdgeColor::from_particle(p))
+                                    HalfEdge {
+                                        direction: Some(SB_INCOMING),
+                                        data: EdgeColor::from_particle(p),
+                                    }
                                 },
                             )
                         })
@@ -2867,14 +2881,20 @@ impl ProcessDefinition {
                             external_tag: i_final as i32,
                         },
                         if p.0.is_self_antiparticle() {
-                            (None, EdgeColor::from_particle(p))
+                            HalfEdge {
+                                direction: None,
+                                data: EdgeColor::from_particle(p),
+                            }
                         } else if p.0.is_antiparticle() {
-                            (
-                                Some(SB_INCOMING),
-                                EdgeColor::from_particle(p.0.get_anti_particle(model)),
-                            )
+                            HalfEdge {
+                                direction: Some(SB_OUTGOING),
+                                data: EdgeColor::from_particle(p.0.get_anti_particle(model)),
+                            }
                         } else {
-                            (Some(SB_OUTGOING), EdgeColor::from_particle(p))
+                            HalfEdge {
+                                direction: Some(SB_INCOMING),
+                                data: EdgeColor::from_particle(p),
+                            }
                         },
                     ));
                 }
@@ -2893,11 +2913,9 @@ impl ProcessDefinition {
             .keys()
             .map(|v| {
                 v.iter()
-                    .map(|(orientation, p)| {
-                        (
-                            *orientation,
-                            EdgeColor::from_particle(model.get_particle(p)),
-                        )
+                    .map(|(orientation, p)| HalfEdge {
+                        direction: *orientation,
+                        data: EdgeColor::from_particle(model.get_particle(p)),
                     })
                     .collect::<Vec<_>>()
             })
@@ -3031,7 +3049,7 @@ impl ProcessDefinition {
         let mut graphs = match SymbolicaGraph::generate(
             external_edges_for_generation.as_slice(),
             vertex_signatures_for_generation.as_slice(),
-            &symbolica_generation_settings,
+            symbolica_generation_settings,
         ) {
             Ok(gs) => {
                 if gs.is_empty() {
