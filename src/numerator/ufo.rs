@@ -79,49 +79,44 @@ pub static UFO: LazyLock<UFOSymbols> = LazyLock::new(|| UFOSymbols {
     k6: symbol!("UFO::K6"),
     k6bar: symbol!("UFO::K6Bar"),
     pslash: symbol!("UFO::PSlash"),
-    complex: symbol!("UFO::complex"),
+    complex: symbol!(
+        "UFO::complex",
+        norm = |f, out| {
+            if let AtomView::Fun(ff) = f {
+                let mut re = Rational::zero();
+                let mut im = Rational::zero();
+                let mut count = 0;
+                for i in ff.iter() {
+                    if let Ok(i) = Rational::try_from(i) {
+                        if count == 0 {
+                            re = i;
+                        } else {
+                            im = i;
+                        }
+                        count += 1;
+                    } else if let Ok(i) = i64::try_from(i) {
+                        if count == 0 {
+                            re = re.from_i64(i);
+                        } else {
+                            im = im.from_i64(i);
+                        }
+                        count += 1;
+                    }
+
+                    if count > 1 {
+                        break;
+                    }
+                }
+
+                if count == 2 {
+                    **out = Atom::num(symbolica::domains::float::Complex { re, im });
+                }
+            }
+        }
+    ),
 });
 
 impl UFOSymbols {
-    pub(crate) fn normalize_complex(&self, a: impl AtomCore) -> Atom {
-        a.replace_map(|term, _, out| {
-            if let AtomView::Fun(f) = term {
-                if f.get_symbol() == self.complex {
-                    let mut re = Rational::zero();
-                    let mut im = Rational::zero();
-                    let mut count = 0;
-                    for i in f.iter() {
-                        if let Ok(i) = Rational::try_from(i) {
-                            if count == 0 {
-                                re = i;
-                            } else {
-                                im = i;
-                            }
-                            count += 1;
-                        } else if let Ok(i) = i64::try_from(i) {
-                            if count == 0 {
-                                re = re.from_i64(i);
-                            } else {
-                                im = im.from_i64(i);
-                            }
-                            count += 1;
-                        }
-
-                        if count > 1 {
-                            break;
-                        }
-                    }
-
-                    // println!("{re}+i{im}");
-
-                    if count == 2 {
-                        **out = Atom::num(symbolica::domains::float::Complex { re, im });
-                    }
-                }
-            }
-        })
-    }
-
     pub(crate) fn reindex_spin(
         &self,
         slots: &[&OrderedStructure<LibraryRep, Aind>],
@@ -137,7 +132,6 @@ impl UFOSymbols {
         // }
         // debug!(in = atom.printer(LOGPRINTOPTS).to_string());
 
-        atom = self.normalize_complex(atom);
         for (i, s) in slots.iter().enumerate() {
             let i = (i + 1) as i64;
             for r in s.external_structure_iter() {
@@ -603,7 +597,7 @@ impl UFOSymbols {
         // debug!("Postid:{}", atom);
 
         // println!("postid:{atom}");
-        atom = self.normalize_complex(atom);
+
         for (i, s) in slots.iter().enumerate() {
             let i = (i + 1) as i64;
             for r in s.external_structure_iter() {

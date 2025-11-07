@@ -6,7 +6,7 @@ use crate::{
         diagram_generator::{EdgeColor, NodeColorWithVertexRule},
     },
     gammaloop_integrand::ParamBuilder,
-    graph::{edge::EdgeExtraData, GraphGroup, GroupId, LoopMomentumBasis},
+    graph::{GraphGroup, GroupId, LoopMomentumBasis, edge::EdgeExtraData},
     model::Model,
     momentum_sample::LoopIndex,
     numerator::{
@@ -979,14 +979,14 @@ impl Graph {
                 continue;
             };
 
-            let [mut color_structure, mut couplings, mut spin_structure] =
+            let [mut color_structure, couplings, mut spin_structure] =
                 vertex_rule.tensors(ni.aind(1), ni.aind(0));
 
             spin_structure.map_data_mut(|a| {
                 *a = UFO.reindex_spin(&spin_slots, &momenta, (*a).clone(), |u| ni.aind(u as u16));
             });
 
-            couplings.map_data_mut(|a| *a = UFO.normalize_complex((*a).clone()));
+            // couplings.map_data_mut(|a| *a = UFO.normalize_complex((*a).clone()));
 
             color_structure.map_data_mut(|a| {
                 *a = UFO.reindex_color(&color_slots, (*a).clone(), |u| ni.aind(u as u16));
