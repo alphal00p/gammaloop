@@ -57,10 +57,9 @@ pub static UFO: LazyLock<UFOSymbols> = LazyLock::new(|| UFOSymbols {
         "UFO::complexconjugate",
         norm = |f, out| {
             if let AtomView::Fun(ff) = f
-                && ff.get_nargs() != 1
-                && let AtomView::Num(arg) = ff.iter().next().unwrap()
+                && ff.get_nargs() == 1
             {
-                **out = arg.as_view().conj();
+                **out = ff.iter().next().unwrap().conj();
             }
         }
     ),
