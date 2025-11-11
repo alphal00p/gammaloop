@@ -64,6 +64,7 @@ impl Forest {
         canonize_esurface: &Option<ShiftRewrite>,
         cut_edges: &[EdgeIndex],
         settings: &UVgenerationSettings,
+        conjugate: bool,
     ) {
         let order = self.dag.compute_topological_order();
 

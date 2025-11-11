@@ -883,6 +883,7 @@ impl AmplitudeGraph {
                 &canonize_esurface,
                 &esurface.energies,
                 &settings.uv,
+                false,
             );
 
             complement_forest.compute(
@@ -893,6 +894,7 @@ impl AmplitudeGraph {
                 &canonize_esurface,
                 &esurface.energies,
                 &settings.uv,
+                false,
             );
 
             let circled_expr =
@@ -1003,6 +1005,7 @@ impl AmplitudeGraph {
             &canonize_esurface,
             &[],
             &settings.uv,
+            false,
         );
 
         let global_num = self.graph.global_network();

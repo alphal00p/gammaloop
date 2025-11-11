@@ -136,6 +136,7 @@ impl CsAmplitudeCTDiagram {
         vakint: &Vakint,
         add_lu_cut_feynman_rules: bool,
         settings: &GenerationSettings,
+        conjugate: bool,
     ) -> ParsingNet {
         if let Some(network) = &self.network {
             network.clone()
@@ -180,6 +181,7 @@ impl CsAmplitudeCTDiagram {
                 &None,
                 &all_cut_edges,
                 &settings.uv,
+                conjugate,
             );
 
             right_forest.compute(
@@ -190,6 +192,7 @@ impl CsAmplitudeCTDiagram {
                 &None,
                 &all_cut_edges,
                 &settings.uv,
+                conjugate,
             );
 
             let left_expr = left_forest.orientation_parametric_expr(
@@ -824,6 +827,7 @@ impl CrossSectionGraph {
                 &canonize_esurface,
                 &esurface.energies,
                 &settings.uv,
+                false,
             );
 
             right_forest.compute(
@@ -834,6 +838,7 @@ impl CrossSectionGraph {
                 &canonize_esurface,
                 &esurface.energies,
                 &settings.uv,
+                true,
             );
 
             let left_expr = left_forest.orientation_parametric_expr(
@@ -1145,6 +1150,7 @@ impl CrossSectionGraph {
                         &vakint,
                         true,
                         settings,
+                        false,
                     );
 
                     let mut product = left_ct
@@ -1200,6 +1206,7 @@ impl CrossSectionGraph {
                         &vakint,
                         false,
                         settings,
+                        true,
                     );
 
                     let mut product = self.derived_data.tensor_network_cache[cut_id].0.clone()
