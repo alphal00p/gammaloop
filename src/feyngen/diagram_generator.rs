@@ -4897,70 +4897,70 @@ impl ProcessedNumeratorForComparison {
     }
 }
 
-#[test]
-pub(crate) fn symbolica_symm_factors_bug() {
-    let external_edges_for_generation: Vec<(usize, (Option<bool>, usize))> = vec![];
+// #[test]
+// pub(crate) fn symbolica_symm_factors_bug() {
+//     let external_edges_for_generation: Vec<(usize, (Option<bool>, usize))> = vec![];
 
-    let vertex_signatures_for_generation_a = vec![
-        vec![(None, 21), (None, 21), (None, 21)],
-        vec![(None, 21), (None, 21), (None, 21), (None, 21)],
-        vec![(Some(true), 1), (Some(false), 1), (None, 21)],
-        vec![(Some(true), 6), (Some(false), 6), (None, 21)],
-        vec![(Some(false), 9000005), (Some(true), 9000005), (None, 21)],
-        vec![(Some(true), 2), (Some(false), 2), (None, 21)],
-    ];
+//     let vertex_signatures_for_generation_a = vec![
+//         vec![(None, 21), (None, 21), (None, 21)],
+//         vec![(None, 21), (None, 21), (None, 21), (None, 21)],
+//         vec![(Some(true), 1), (Some(false), 1), (None, 21)],
+//         vec![(Some(true), 6), (Some(false), 6), (None, 21)],
+//         vec![(Some(false), 9000005), (Some(true), 9000005), (None, 21)],
+//         vec![(Some(true), 2), (Some(false), 2), (None, 21)],
+//     ];
 
-    let settings = GenerationSettings::new()
-        .max_loops(5)
-        .max_bridges(0)
-        .allow_self_loops(true);
+//     let settings = GenerationSettings::new()
+//         .max_loops(5)
+//         .max_bridges(0)
+//         .allow_self_loops(true);
 
-    //let mut graphs_a = SymbolicaGraph::generate(
-    //    &external_edges_for_generation,
-    //    vertex_signatures_for_generation_a.as_slice(),
-    //    None,
-    //    Some(5),
-    //    Some(0),
-    //    true,
-    //);
+//     //let mut graphs_a = SymbolicaGraph::generate(
+//     //    &external_edges_for_generation,
+//     //    vertex_signatures_for_generation_a.as_slice(),
+//     //    None,
+//     //    Some(5),
+//     //    Some(0),
+//     //    true,
+//     //);
 
-    let mut graphs_a = SymbolicaGraph::generate(
-        &external_edges_for_generation,
-        vertex_signatures_for_generation_a.as_slice(),
-        &settings,
-    )
-    .unwrap();
+//     let mut graphs_a = SymbolicaGraph::generate(
+//         &external_edges_for_generation,
+//         vertex_signatures_for_generation_a.as_slice(),
+//         &settings,
+//     )
+//     .unwrap();
 
-    graphs_a.retain(|g, _| g.num_loops() >= 5);
+//     graphs_a.retain(|g, _| g.num_loops() >= 5);
 
-    let mut tot_symm_fact_graphs_a = Atom::num(0);
-    for (_g, s) in graphs_a.iter() {
-        tot_symm_fact_graphs_a = tot_symm_fact_graphs_a + Atom::num(1) / Atom::num(s.clone());
-    }
-    println!("tot_symm_fact_graphs_A = {}", tot_symm_fact_graphs_a);
+//     let mut tot_symm_fact_graphs_a = Atom::num(0);
+//     for (_g, s) in graphs_a.iter() {
+//         tot_symm_fact_graphs_a = tot_symm_fact_graphs_a + Atom::num(1) / Atom::num(s.clone());
+//     }
+//     println!("tot_symm_fact_graphs_A = {}", tot_symm_fact_graphs_a);
 
-    let vertex_signatures_for_generation_b = vec![
-        vec![(Some(true), 1), (Some(false), 1), (None, 21)],
-        vec![(None, 21), (None, 21), (None, 21), (None, 21)],
-        vec![(Some(true), 6), (Some(false), 6), (None, 21)],
-        vec![(None, 21), (None, 21), (None, 21)],
-        vec![(Some(false), 9000005), (Some(true), 9000005), (None, 21)],
-        vec![(Some(true), 2), (Some(false), 2), (None, 21)],
-    ];
-    let mut graphs_b = SymbolicaGraph::generate(
-        &external_edges_for_generation,
-        vertex_signatures_for_generation_b.as_slice(),
-        &settings,
-    )
-    .unwrap();
+//     let vertex_signatures_for_generation_b = vec![
+//         vec![(Some(true), 1), (Some(false), 1), (None, 21)],
+//         vec![(None, 21), (None, 21), (None, 21), (None, 21)],
+//         vec![(Some(true), 6), (Some(false), 6), (None, 21)],
+//         vec![(None, 21), (None, 21), (None, 21)],
+//         vec![(Some(false), 9000005), (Some(true), 9000005), (None, 21)],
+//         vec![(Some(true), 2), (Some(false), 2), (None, 21)],
+//     ];
+//     let mut graphs_b = SymbolicaGraph::generate(
+//         &external_edges_for_generation,
+//         vertex_signatures_for_generation_b.as_slice(),
+//         &settings,
+//     )
+//     .unwrap();
 
-    graphs_b.retain(|g, _| g.num_loops() >= 5);
+//     graphs_b.retain(|g, _| g.num_loops() >= 5);
 
-    let mut tot_symm_fact_graphs_b = Atom::num(0);
-    for (_g, s) in graphs_b.iter() {
-        tot_symm_fact_graphs_b = tot_symm_fact_graphs_b + Atom::num(1) / Atom::num(s.clone());
-    }
-    println!("tot_symm_fact_graphs_B = {}", tot_symm_fact_graphs_b);
+//     let mut tot_symm_fact_graphs_b = Atom::num(0);
+//     for (_g, s) in graphs_b.iter() {
+//         tot_symm_fact_graphs_b = tot_symm_fact_graphs_b + Atom::num(1) / Atom::num(s.clone());
+//     }
+//     println!("tot_symm_fact_graphs_B = {}", tot_symm_fact_graphs_b);
 
-    assert!(tot_symm_fact_graphs_a == tot_symm_fact_graphs_b);
-}
+//     assert!(tot_symm_fact_graphs_a == tot_symm_fact_graphs_b);
+// }

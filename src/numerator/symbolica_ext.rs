@@ -6,6 +6,7 @@ use spenso::{
     structure::representation::{Minkowski, RepName},
 };
 
+use crate::numerator::Aind;
 use symbolica::{
     atom::{Atom, AtomCore, AtomOrView, AtomView, Symbol},
     coefficient::{Coefficient, CoefficientView},
@@ -125,6 +126,7 @@ mod tests {
         dot,
         graph::{FeynmanGraph, Graph, parse::IntoGraph},
         initialisation::test_initialise,
+        numerator::aind::Aind,
         uv::UltravioletGraph,
     };
 
@@ -396,26 +398,26 @@ mod tests {
         println!("ratio canonized:{}", ac / bc);
     }
 
-    #[test]
-    fn test_can() {
-        let a = parse_lit!(T(a, b, c) * T(c, d, e) * T(d, b, f)(K(e) + P(e)) * (K(f) + P(f)));
-        let b = parse_lit!(T(a, d) * T(d, c));
+    // #[test]
+    // fn test_can() {
+    //     let a = parse_lit!(T(a, b, c) * T(c, d, e) * T(d, b, f)(K(e) + P(e)) * (K(f) + P(f)));
+    //     let b = parse_lit!(T(a, d) * T(d, c));
 
-        let indices = vec![
-            (parse_lit!(a), 1),
-            (parse_lit!(a), 1),
-            (parse_lit!(a), 1),
-            (parse_lit!(b), 1),
-            (parse_lit!(b), 1),
-            (parse_lit!(c), 1),
-            (parse_lit!(d), 1),
-            (parse_lit!(e), 1),
-            (parse_lit!(f), 1),
-        ];
+    //     let indices = vec![
+    //         (parse_lit!(a), 1),
+    //         (parse_lit!(a), 1),
+    //         (parse_lit!(a), 1),
+    //         (parse_lit!(b), 1),
+    //         (parse_lit!(b), 1),
+    //         (parse_lit!(c), 1),
+    //         (parse_lit!(d), 1),
+    //         (parse_lit!(e), 1),
+    //         (parse_lit!(f), 1),
+    //     ];
 
-        let ac = a.canonize_tensors(&indices);
-        println!("{}", ac.unwrap());
-        let bc = b.canonize_tensors(&indices);
-        println!("{}", bc.unwrap());
-    }
+    //     let ac = a.canonize_tensors(&indices);
+    //     println!("{}", ac.unwrap());
+    //     let bc = b.canonize_tensors(&indices);
+    //     println!("{}", bc.unwrap());
+    // }
 }

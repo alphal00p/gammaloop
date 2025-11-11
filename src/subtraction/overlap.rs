@@ -1,9 +1,10 @@
-use crate::cff::esurface::get_representative;
+use crate::GammaLoopContext;
 use crate::cff::esurface::EsurfaceCollection;
 use crate::cff::esurface::EsurfaceID;
 use crate::cff::esurface::ExistingEsurfaceId;
 use crate::cff::esurface::ExistingEsurfaces;
 use crate::cff::esurface::GroupEsurfaceId;
+use crate::cff::esurface::get_representative;
 use crate::gammaloop_integrand::GenericEvaluator;
 use crate::graph::GraphGroupPosition;
 use crate::graph::LoopMomentumBasis;
@@ -12,10 +13,9 @@ use crate::momentum_sample::ExternalFourMomenta;
 use crate::momentum_sample::LoopMomenta;
 use crate::settings::RuntimeSettings;
 use crate::signature::LoopExtSignature;
-use crate::utils::compute_shift_part;
 use crate::utils::F;
 use crate::utils::GS;
-use crate::GammaLoopContext;
+use crate::utils::compute_shift_part;
 use ahash::HashMap;
 use ahash::HashMapExt;
 use ahash::HashSet;
@@ -23,7 +23,7 @@ use bincode_trait_derive::Decode;
 use bincode_trait_derive::Encode;
 use clarabel::algebra::*;
 use clarabel::solver::*;
-use eyre::{eyre, Result};
+use eyre::{Result, eyre};
 use itertools::Itertools;
 use linnet::half_edge::involution::EdgeVec;
 use serde::Serialize;
@@ -418,11 +418,7 @@ pub(crate) fn find_center(
                 < F::from_f64(0.0)
         });
 
-        if is_valid {
-            Some(center)
-        } else {
-            None
-        }
+        if is_valid { Some(center) } else { None }
     } else {
         if verbose {
             println!("{:?}", solver.solution.x);
@@ -825,7 +821,10 @@ impl EsurfacePairs {
 mod tests {
     use super::*;
     use itertools::Itertools;
-    use linnet::half_edge::involution::EdgeIndex;
+    use linnet::half_edge::{
+        involution::EdgeIndex,
+        subgraph::{SuBitGraph, SubSetLike},
+    };
     use typed_index_collections::ti_vec;
 
     use crate::{
@@ -881,7 +880,7 @@ mod tests {
                 .unwrap();
 
             let box_lmb = LoopMomentumBasis {
-                tree: None,
+                tree: SuBitGraph::empty(0),
                 ext_edges: vec![].into(),
                 loop_edges: box_basis,
                 edge_signatures: box_signatures,
@@ -983,7 +982,7 @@ mod tests {
                 .unwrap();
 
             let banana_lmb = LoopMomentumBasis {
-                tree: None,
+                tree: SuBitGraph::empty(0),
                 loop_edges: banana_basis,
                 ext_edges: vec![].into(),
                 edge_signatures: banana_edge_sigs,

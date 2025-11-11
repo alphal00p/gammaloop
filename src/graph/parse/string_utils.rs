@@ -1,5 +1,6 @@
 use symbolica::{
     atom::{Atom, AtomCore},
+    printer::CanonicalOrderingSettings,
     try_parse,
 };
 
@@ -23,7 +24,7 @@ where
     fn to_quoted(&self) -> String {
         // let mut opts = PrintOptions::file();
         // opts.hide_namespace = Some("gammalooprs");
-        format!("\"{}\"", self.to_canonical_string()).replace("gammalooprs::", "")
+        format!("\"{}\"", self.to_canonical_string())
         //.printer(opts))
     }
 }

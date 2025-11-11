@@ -165,7 +165,8 @@
           vim
           helix
           jujutsu
-
+          just
+          dot-language-server
           # pkgs.ripgrep
           cargo-insta
           cargo-udeps

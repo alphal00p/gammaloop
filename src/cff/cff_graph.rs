@@ -1101,7 +1101,7 @@ mod test {
         builder::HedgeGraphBuilder,
         involution::{EdgeIndex, Flow, Orientation},
         nodestore::NodeStorageVec,
-        subgraph::SubGraphOps,
+        subgraph::{SuBitGraph, SubGraphOps, SubSetOps},
     };
 
     #[test]

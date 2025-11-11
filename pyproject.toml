@@ -76,5 +76,5 @@ module = "pydot.*"
 ignore_missing_imports = true
 
 [tool.pyright]
-reportPrivateImportUsage = "none"
-include = ["python/gammaloop"]
+# reportPrivateImportUsage = "none"
+# include = ["gamm/gammaloop"]

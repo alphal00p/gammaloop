@@ -6,18 +6,18 @@ use color_eyre::Result;
 use gammaloop_api::commands::{inspect::Inspect, integrate::Integrate};
 
 use gammalooprs::{
+    GammaLoopContextContainer,
     model::UFOSymbol,
     numerator::aind::Aind,
     status_info,
-    utils::{F, GS, TENSORLIB, W_},
-    GammaLoopContextContainer,
+    utils::{F, FUN_LIB, GS, TENSORLIB, W_},
 };
 use insta::assert_snapshot;
 use momtrop::assert_approx_eq;
 use spenso::{
     algebra::complex::Complex,
-    network::{store::NetworkStore, Network, Sequential, SmallestDegree},
-    structure::{representation::LibraryRep, IndexlessNamedStructure, NamedStructure},
+    network::{Network, Sequential, SmallestDegree, store::NetworkStore},
+    structure::{IndexlessNamedStructure, NamedStructure, representation::LibraryRep},
     tensors::{complex::RealOrComplexTensor, parametric::ParamOrConcrete},
 };
 use std::{env, ops::Deref};
@@ -380,6 +380,7 @@ fn test_broken_network() -> Result<()> {
             Atom,
         >,
         IndexlessNamedStructure<Symbol, Vec<Atom>, LibraryRep, Aind>,
+        Symbol,
         Aind,
     > = bincode::decode_from_std_read_with_context(
         &mut file,
@@ -390,7 +391,10 @@ fn test_broken_network() -> Result<()> {
     println!("{}", network.dot_pretty());
 
     network
-        .execute::<Sequential, SmallestDegree, _, _>(TENSORLIB.read().unwrap().deref())
+        .execute::<Sequential, SmallestDegree, _, _, _>(
+            TENSORLIB.read().unwrap().deref(),
+            FUN_LIB.deref(),
+        )
         .unwrap();
 
     let scalar: Atom = network.result_scalar().unwrap().into();

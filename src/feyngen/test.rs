@@ -3,6 +3,7 @@ use std::sync::Arc;
 use ahash::HashMap;
 use ahash::HashMapExt;
 use ahash::HashSet;
+use idenso::IndexTooling;
 use idenso::gamma::AGS;
 use idenso::metric::PermuteWithMetric;
 use insta::assert_snapshot;
@@ -10,18 +11,18 @@ use itertools::Itertools;
 use linnet::half_edge::involution::EdgeData;
 use linnet::half_edge::involution::Flow;
 use linnet::half_edge::involution::Orientation;
+use spenso::network::library::LibraryTensor;
 use spenso::network::library::symbolic::ExplicitKey;
 use spenso::network::library::symbolic::TensorLibrary;
-use spenso::network::library::LibraryTensor;
+use spenso::structure::PermutedStructure;
 use spenso::structure::representation::Minkowski;
 use spenso::structure::representation::RepName;
-use spenso::structure::PermutedStructure;
 use spenso::tensors::data::DataTensor;
 use spenso::tensors::parametric::MixedTensor;
 use spenso::tensors::parametric::ParamOrConcrete;
 use spenso::tensors::parametric::ParamTensor;
-use spenso_hep_lib::gamma5_weyl_data;
 use spenso_hep_lib::gamma_data_weyl;
+use spenso_hep_lib::gamma5_weyl_data;
 use spenso_hep_lib::proj_m_data_weyl;
 use spenso_hep_lib::proj_p_data_weyl;
 use symbolica::atom::Atom;
@@ -43,16 +44,16 @@ use crate::utils::F;
 use crate::utils::GS;
 use crate::uv::UltravioletGraph;
 // use crate::graph::BareGraph;
-use super::diagram_generator::NodeColorWithVertexRule;
-use super::diagram_generator::ProcessedNumeratorForComparison;
 use super::GenerationType;
 use super::GraphGroupingOptions;
 use super::NumeratorAwareGraphGroupingOption;
 use super::SewedFilterOptions;
 use super::SnailFilterOptions;
 use super::TadpolesFilterOptions;
+use super::diagram_generator::NodeColorWithVertexRule;
+use super::diagram_generator::ProcessedNumeratorForComparison;
 use super::{FeynGenFilter, FeynGenFilters};
-use crate::graph::{parse::IntoGraph, Graph};
+use crate::graph::{Graph, parse::IntoGraph};
 use crate::model::ArcVertexRule;
 use crate::model::ColorStructure;
 use crate::model::Model;
@@ -323,15 +324,15 @@ fn gl_11_vs_gl_12() {
     println!("color_simplified_11 {}", numerator_color_simplified_11);
     println!(
         "color_simplified_12_can {}",
-        numerator_color_simplified_12.canonize_spenso()
+        numerator_color_simplified_12.canonize(Aind::Dummy)
     );
     println!(
         "color_simplified_11_can {}",
-        numerator_color_simplified_11.canonize_spenso()
+        numerator_color_simplified_11.canonize(Aind::Dummy)
     );
 
-    let r = (numerator_color_simplified_11.canonize_spenso()
-        / &numerator_color_simplified_12.canonize_spenso())
+    let r = (numerator_color_simplified_11.canonize(Aind::Dummy)
+        / &numerator_color_simplified_12.canonize(Aind::Dummy))
         .expand();
 
     println!("ratio:{r}");
