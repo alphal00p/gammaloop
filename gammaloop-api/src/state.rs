@@ -53,6 +53,7 @@ pub trait SyncSettings {
 
 impl SyncSettings for CLISettings {
     fn sync_settings(&self) -> Result<()> {
+        println!("Syncing settings {}", self.global.logfile_directive);
         set_file_log_filter(&self.global.logfile_directive)?;
         set_stderr_log_filter(&self.global.display_directive)?;
         initialise_with_settings(Some(&self.global))?;

@@ -33,6 +33,7 @@ use linnet::half_edge::{
     },
 };
 
+use tracing::info;
 use typed_index_collections::TiVec;
 use vakint::{Vakint, VakintExpression, vakint_symbol};
 // use vakint::{EvaluationOrder, LoopNormalizationFactor, Vakint, VakintSettings};
@@ -469,13 +470,14 @@ impl Approximation {
         let Some((inner_t, sign)) = dependent.integrated_4d.expr() else {
             return ApproxOp::NotComputed;
         };
-        let t_arg = uv_graph
+        let mut t_arg = uv_graph
             .numerator(&reduced)
             .to_d_dim(GS.dim)
             .get_single_atom()
-            .unwrap()
-            .simplify_gamma()
-            / uv_graph.denominator(&reduced, |_| 1);
+            .unwrap();
+
+        info!(t_arg = %t_arg,"T arg for integrated 4d CT");
+        t_arg = t_arg.simplify_gamma() / uv_graph.denominator(&reduced, |_| 1);
 
         let ep = vakint_symbol!("ε");
 

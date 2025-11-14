@@ -410,14 +410,20 @@ impl ReversibleEdge for EdgeData<ArcParticle> {
 mod test {
 
     // use env_logger::WriteStyle;
-    use idenso::color::ColorSimplifier;
+    use idenso::{color::ColorSimplifier, gamma::GammaSimplifier};
 
-    use symbolica::atom::{Atom, AtomCore};
+    use spenso::network::parsing::{ParseSettings, SymbolicParse};
+    use symbolica::{
+        atom::{Atom, AtomCore},
+        parse_lit,
+    };
 
     use crate::{
         dot,
         gammaloop_integrand::param_builder::ParamBuilderGraph,
         graph::{Graph, parse::IntoGraph},
+        initialisation::test_initialise,
+        numerator::aind::Aind,
         processes::{Amplitude, AmplitudeGraph},
         settings::{
             GlobalSettings, RuntimeSettings, global::GenerationSettings,
@@ -901,5 +907,78 @@ mod test {
         }
 )
         .unwrap();
+    }
+
+    #[test]
+    fn simplify() {
+        test_initialise().unwrap();
+        let expr = parse_lit!(
+            -GC_1 * GC_11
+                ^ 2 * Q(4, mink(dim, gammalooprs::edge(4, 1)))
+                    * Q(5, mink(dim, gammalooprs::edge(5, 1)))
+                    * g(
+                        mink(dim, gammalooprs::hedge(16)),
+                        mink(dim, gammalooprs::hedge(17))
+                    )
+                    * g(
+                        coad(8, gammalooprs::hedge(16)),
+                        coad(8, gammalooprs::hedge(17))
+                    )
+                    * g(
+                        dind(cof(3, gammalooprs::hedge(4))),
+                        cof(3, gammalooprs::hedge(6))
+                    )
+                    * g(
+                        dind(cof(3, gammalooprs::hedge(5))),
+                        cof(3, gammalooprs::hedge(4))
+                    )
+                    * g(
+                        dind(cof(3, gammalooprs::hedge(6))),
+                        cof(3, gammalooprs::hedge(7))
+                    )
+                    * gamma(
+                        bis(4, gammalooprs::hedge(4)),
+                        bis(4, gammalooprs::hedge(6)),
+                        mink(dim, gammalooprs::hedge(8))
+                    )
+                    * gamma(
+                        bis(4, gammalooprs::hedge(7)),
+                        bis(4, gammalooprs::hedge(13)),
+                        mink(dim, gammalooprs::hedge(17))
+                    )
+                    * gamma(
+                        bis(4, gammalooprs::hedge(11)),
+                        bis(4, gammalooprs::hedge(5)),
+                        mink(dim, gammalooprs::hedge(16))
+                    )
+                    * gamma(
+                        bis(4, gammalooprs::hedge(5)),
+                        bis(4, gammalooprs::hedge(4)),
+                        mink(dim, gammalooprs::edge(4, 1))
+                    )
+                    * gamma(
+                        bis(4, gammalooprs::hedge(6)),
+                        bis(4, gammalooprs::hedge(7)),
+                        mink(dim, gammalooprs::edge(5, 1))
+                    )
+                    * t(
+                        coad(8, gammalooprs::hedge(16)),
+                        cof(3, gammalooprs::hedge(5)),
+                        dind(cof(3, gammalooprs::hedge(11)))
+                    )
+                    * t(
+                        coad(8, gammalooprs::hedge(17)),
+                        cof(3, gammalooprs::hedge(13)),
+                        dind(cof(3, gammalooprs::hedge(7)))
+                    ),
+            default_namespace = "spenso"
+        );
+
+        let net = expr
+            .parse_to_symbolic_net::<Aind>(&ParseSettings::default())
+            .unwrap();
+        println!("{}", net.dot_pretty());
+
+        expr.simplify_gamma();
     }
 }

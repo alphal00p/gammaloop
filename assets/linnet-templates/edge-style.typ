@@ -13,6 +13,7 @@
   "e+":(source: sink_stroke()+arrow,sink: source_stroke()),
   "e-":(source: source_stroke()+arrow,sink: sink_stroke()),
   "a":(source: source_stroke()+wave,sink:sink_stroke()+wave),
+  "g":(source: source_stroke()+coil,sink:sink_stroke()+coil),
   "d":(source: sink_stroke()+arrow,sink: source_stroke()),
   "d~":(source: source_stroke()+arrow,sink: sink_stroke())
 )

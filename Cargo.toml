@@ -204,10 +204,10 @@ higher_loops = []
 
 
 [patch.crates-io]
-idenso = { git = "https://github.com/alphal00p/spenso", rev = "5f163d973e6ffb4ff03c476b21f7b27c9f24003e" }
-spenso = { git = "https://github.com/alphal00p/spenso", rev = "5f163d973e6ffb4ff03c476b21f7b27c9f24003e" }
-spenso-hep-lib = { git = "https://github.com/alphal00p/spenso", rev = "5f163d973e6ffb4ff03c476b21f7b27c9f24003e" }
-spenso-macros = { git = "https://github.com/alphal00p/spenso", rev = "5f163d973e6ffb4ff03c476b21f7b27c9f24003e" }
+idenso = { git = "https://github.com/alphal00p/spenso", rev = "c5173a9d9fede5f7753f6a5cd209029fc70ccc8b" }
+spenso = { git = "https://github.com/alphal00p/spenso", rev = "c5173a9d9fede5f7753f6a5cd209029fc70ccc8b" }
+spenso-hep-lib = { git = "https://github.com/alphal00p/spenso", rev = "c5173a9d9fede5f7753f6a5cd209029fc70ccc8b" }
+spenso-macros = { git = "https://github.com/alphal00p/spenso", rev = "c5173a9d9fede5f7753f6a5cd209029fc70ccc8b" }
 # symbolica = { git = "https://github.com/benruijl/symbolica", branch = "chi_sq_fix" }
 # spenso-macros = { path = "../spenso/spenso-macros" }
 # symbolica = { git = "https://github.com/benruijl/symbolica", branch = "optim" }
@@ -222,7 +222,7 @@ spenso-macros = { git = "https://github.com/alphal00p/spenso", rev = "5f163d973e
 # spenso = { git = "https://github.com/alphal00p/spenso", rev = "5e1c358e11b131ecd0d83da4453ad4cc28983165" }
 # {path="../spenso/spenso"}
 # idenso = { git = "https://github.com/alphal00p/spenso", rev = "5e1c358e11b131ecd0d83da4453ad4cc28983165" }
-# {path="../spenso/idenso"}
+# idenso={path="../spenso/idenso"}
 # spenso-hep-lib = {git = "https://github.com/alphal00p/spenso",rev="5e1c358e11b131ecd0d83da4453ad4cc28983165"}
 # {path="../spenso/spenso-hep-lib"}
 # symbolica-community={path="../symbolica-community"}

@@ -4,11 +4,11 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    GammaLoopContext,
     // cli::tracing::LogLevel,
     integrands::IntegrandSettings,
     observables::{ObservableSettings, PhaseSpaceSelectorSettings},
     utils::serde_utils::IsDefault,
-    GammaLoopContext,
 };
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
@@ -55,8 +55,8 @@ pub struct RuntimeSettings {
 
 pub mod global;
 pub use runtime::{
-    kinematic::KinematicsSettings, GeneralSettings, IntegratorSettings, SamplingSettings,
-    StabilitySettings, SubtractionSettings,
+    GeneralSettings, IntegratorSettings, SamplingSettings, StabilitySettings, SubtractionSettings,
+    kinematic::KinematicsSettings,
 };
 pub mod runtime;
 
@@ -68,14 +68,14 @@ mod tests {
         improve_ps::PhaseSpaceImprovementSettings,
         momentum::{Dep, ExternalMomenta, SignOrZero},
         settings::{
+            GlobalSettings, RuntimeSettings, SamplingSettings,
             global::GenerationSettings,
             runtime::{
-                kinematic::Externals, DiscreteGraphSamplingSettings, DiscreteGraphSamplingType,
-                GammaloopTropicalSamplingSettings,
+                DiscreteGraphSamplingSettings, DiscreteGraphSamplingType,
+                GammaloopTropicalSamplingSettings, kinematic::Externals,
             },
-            GlobalSettings, RuntimeSettings, SamplingSettings,
         },
-        utils::{serde_utils::SHOWDEFAULTS, F},
+        utils::{F, serde_utils::SHOWDEFAULTS},
     };
     use std::fmt::Debug;
 

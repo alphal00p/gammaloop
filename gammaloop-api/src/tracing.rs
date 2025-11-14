@@ -7,7 +7,7 @@ use chrono::{Datelike, Local, SecondsFormat, Timelike};
 use colored::{ColoredString, Colorize};
 use eyre::Context;
 use gammalooprs::utils::tracing::{LogFormat, LOG_GUARD};
-use tracing::{level_filters::LevelFilter, Event, Subscriber};
+use tracing::{info, level_filters::LevelFilter, Event, Subscriber};
 use tracing_appender::{
     non_blocking::NonBlockingBuilder,
     rolling::{RollingFileAppender, Rotation},
@@ -82,6 +82,7 @@ const ENV_ALL_LOG_FILTER: &'static str = "GL_ALL_LOG_FILTER";
 // Statics to hold the current log specifications
 static FILE_LOG_SPEC: LazyLock<Mutex<String>> = LazyLock::new(|| {
     if let Ok(all) = std::env::var(ENV_ALL_LOG_FILTER) {
+        println!("All:{all}");
         return Mutex::new(all);
     }
     let directive = std::env::var(ENV_FILE_LOG_FILTER)
@@ -140,7 +141,10 @@ pub fn set_file_log_filter(user_spec: impl AsRef<str>) -> Result<()> {
     *FILE_LOG_SPEC.lock().unwrap() = user_spec.to_string();
 
     let full_spec = file_filter_from(&user_spec)?;
-    // println!("Modifying env filter to: {}", full_spec);
+    println!(
+        "Modifying file filter to: {} with userspec {}",
+        full_spec, user_spec
+    );
     handles.file_handle.modify(|f| *f = full_spec)?;
     Ok(())
 }
@@ -163,7 +167,7 @@ pub fn set_stderr_log_filter(user_spec: impl AsRef<str>) -> Result<()> {
     };
     let full_spec = display_filter_from(&user_spec)?;
     *STDERR_LOG_SPEC.lock().unwrap() = user_spec;
-    // println!("Modifying env filter to: {}", full_spec);
+    println!("Modifying display filter to: {}", full_spec);
     handles.stderr_handle.modify(|f| *f = full_spec)?;
     Ok(())
 }
@@ -182,9 +186,15 @@ pub(crate) fn init_tracing(
     dir: impl AsRef<Path>,
     log_file_name: Option<String>,
 ) -> reload::Handle<EnvFilter, Registry> {
+    println!("Init tracing");
     let handles = FILTER_HANDLES.get_or_init(|| {
         let file_filter = EnvFilter::new(FILE_LOG_SPEC.lock().unwrap().as_str());
+        println!(
+            "File filter: {file_filter},:{}",
+            FILE_LOG_SPEC.lock().unwrap().as_str()
+        );
         let stderr_filter = EnvFilter::new(STDERR_LOG_SPEC.lock().unwrap().as_str());
+        println!("Stderr filter: {stderr_filter}");
 
         let (file_filter_layer, file_handle) = reload::Layer::new(file_filter.clone());
         let (stderr_filter_layer, stderr_handle) = reload::Layer::new(stderr_filter.clone());
@@ -216,7 +226,6 @@ pub(crate) fn init_tracing(
             .json()
             .flatten_event(true)
             .with_current_span(true)
-            // .with_span_list(true)
             .with_writer(nb);
 
         // Pretty status layer for stderr - only show status events
@@ -244,6 +253,8 @@ pub(crate) fn init_tracing(
             //         .with_filter(IndicatifFilter::new(false)),
             // )
             .init();
+
+        info!("HEYYY");
 
         FilterHandles {
             file_handle,

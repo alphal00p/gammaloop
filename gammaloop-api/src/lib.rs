@@ -235,7 +235,14 @@ impl OneShot {
                     &self.state_folder.join("cli_settings.toml"),
                 ) {
                     Ok(a) => a,
-                    Err(SerdeFileError::FileError(_)) => CLISettings::default(),
+                    Err(SerdeFileError::FileError(_)) => {
+                        println!(
+                            "File error for {} loading default ",
+                            &self.state_folder.join("cli_settings.toml").display()
+                        );
+                        CLISettings::default()
+                    }
+
                     Err(e) => return Err(e.into()),
                 };
 
@@ -298,6 +305,8 @@ impl OneShot {
 
         let (mut state, mut run_history, mut cli_settings, mut default_runtime_settings) =
             self.load()?;
+
+        println!(":{}", cli_settings.global.display_directive);
 
         if let Some(run) = self.run_history.as_ref() {
             let mut run = RunHistory::load(run)?;

@@ -4,7 +4,7 @@
 import "layout.typ": layout
 import "edge-style.typ": *
 show raw: it => if it.at("lang") == "dot"{
-  layout(it.at("text"),columns: 1,scope:(map:map),additional_data:(node:(eval:
+  layout(it.at("text"),columns: 3,scope:(map:map),additional_data:(node:(eval:
           "(stroke:blue,fill :black,
           radius:4pt,
           outset: -2pt)"),edge:(

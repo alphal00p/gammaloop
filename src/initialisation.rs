@@ -1,4 +1,6 @@
-use color_eyre::{config::HookBuilder, Result};
+use color_eyre::{Result, config::HookBuilder};
+use spenso::network::library::function_lib::INBUILTS;
+use spenso::network::parsing::SPENSO_TAG;
 use symbolica::activate_oem_license;
 use vakint::{
     EvaluationMethod, EvaluationOrder, FMFTOptions, LoopNormalizationFactor, MATADOptions,
@@ -23,6 +25,8 @@ pub fn initialise() -> Result<()> {
         eyre.install().unwrap();
 
         let _ = GS.delta_vec;
+        let _ = INBUILTS.conj;
+        let _ = SPENSO_TAG.tag;
         let _ = UFO.complexconjugate;
         let _ = UFOSymbol::zero();
 
@@ -76,7 +80,7 @@ pub fn initialise_vakint(global_settings: &GlobalSettings) -> Result<()> {
                 return Err(color_eyre::eyre::eyre!(
                     "Unknown Vakint evaluation method: {}",
                     other
-                ))
+                ));
             }
         }
     }
