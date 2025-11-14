@@ -838,35 +838,6 @@ impl LoopMomentumBasis {
     //         })
     //         .collect()
     // }
-
-    pub(crate) fn pattern(&self, edge_id: EdgeIndex) -> Pattern {
-        let signature = self.edge_signatures[edge_id].clone();
-
-        let mut atom = Atom::num(0);
-
-        for (i, sign) in signature.internal.into_iter().enumerate() {
-            let k = sign
-                * Atom::parse(with_default_namespace!(
-                    &format!("K({},x_)", i),
-                    GAMMALOOP_NAMESPACE
-                ))
-                .unwrap();
-
-            atom = &atom + &k;
-        }
-
-        for (i, sign) in signature.external.into_iter().enumerate() {
-            let p = sign
-                * Atom::parse(with_default_namespace!(
-                    &format!("P({},x_)", i),
-                    GAMMALOOP_NAMESPACE
-                ))
-                .unwrap();
-            atom = &atom + &p;
-        }
-
-        atom.to_pattern()
-    }
 }
 
 #[derive(
@@ -889,7 +860,7 @@ pub struct LmbIndex(usize);
 
 #[cfg(test)]
 pub mod test {
-    use bitvec::vec::BitVec;
+
     use insta::assert_snapshot;
     use linnet::{
         half_edge::subgraph::{SuBitGraph, SubGraphOps, SubSetOps},
@@ -899,10 +870,12 @@ pub mod test {
     use crate::{
         dot,
         graph::{Graph, LMBext, parse::IntoGraph},
+        initialisation::test_initialise,
     };
 
     #[test]
     fn lmb_for_dummy() {
+        test_initialise().unwrap();
         let gs: Vec<Graph> = dot!(
             digraph dxda{
                 ext [style=invis]

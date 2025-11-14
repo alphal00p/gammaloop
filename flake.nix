@@ -179,6 +179,7 @@
           gnum4
           nickel
           nls
+          typst
           # gcc_debug.out
           # stdenv.cc.cc.lib
           pkg-config
@@ -195,6 +196,15 @@
           rust-analyzer
           maturin
           virtualenv
+          (pkgs.rustPlatform.buildRustPackage rec {
+            pname = "clinnet";
+            version = "0.1.1";
+            src = pkgs.fetchCrate {
+              inherit pname version;
+              sha256 = "sha256-pRjtMFyJZgvtrFxBWYuKRzXHbVuomM7sCver4iuAZQI=";
+            };
+            cargoHash = "sha256-25vTr+uHcy9kQID8/FJTO7xA8DzQ/jUgOlrdtEm2vyI=";
+          })
         ];
       };
     });

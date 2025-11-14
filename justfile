@@ -12,9 +12,6 @@ build-cli-release:
 build-api:
 	maturin develop -m gammaloop-api/Cargo.toml --features=ufo_support,python_api --profile=dev-optim
 
-# Build gammaloop Python API in release mode
-build-api-release:
-	maturin develop -m gammaloop-api/Cargo.toml --features=ufo_support,python_api --release
 
 # Build all workspace packages
 build-all:

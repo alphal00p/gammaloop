@@ -1477,7 +1477,7 @@ dependencies = [
  "serde_yaml",
  "shlex",
  "spenso",
- "symbolica 0.19.2",
+ "symbolica",
  "thiserror 2.0.17",
  "toml 0.9.8",
  "tracing",
@@ -1559,8 +1559,9 @@ dependencies = [
  "smartstring",
  "spenso",
  "spenso-hep-lib",
+ "spenso-macros",
  "statrs",
- "symbolica 0.19.2",
+ "symbolica",
  "tabled",
  "thiserror 1.0.69",
  "toml 0.9.8",
@@ -1746,7 +1747,7 @@ dependencies = [
 [[package]]
 name = "idenso"
 version = "0.2.3"
-source = "git+https://github.com/alphal00p/spenso?rev=d7e3cd01dc419185e00d958301afe1bd6cf8c4e3#d7e3cd01dc419185e00d958301afe1bd6cf8c4e3"
+source = "git+https://github.com/alphal00p/spenso?rev=5f163d973e6ffb4ff03c476b21f7b27c9f24003e#5f163d973e6ffb4ff03c476b21f7b27c9f24003e"
 dependencies = [
  "anyhow",
  "bincode",
@@ -1755,7 +1756,7 @@ dependencies = [
  "linnet",
  "spenso",
  "spenso-macros",
- "symbolica 0.19.2",
+ "symbolica",
  "thiserror 2.0.17",
 ]
 
@@ -2089,9 +2090,9 @@ dependencies = [
 
 [[package]]
 name = "linnet"
-version = "0.13.1"
+version = "0.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dd23ecfbc139f3f6dfc79b69bc8a2480a5fd6c9c449f2ce9219ef1afae54cafa"
+checksum = "02da105b20e02472f029169276caf3771744e384abf7a0220be6204084edd740"
 dependencies = [
  "ahash",
  "bincode",
@@ -2102,6 +2103,7 @@ dependencies = [
  "derive_more",
  "dot-parser",
  "duplicate 2.0.1",
+ "figment",
  "frostfire",
  "getrandom 0.2.16",
  "indenter",
@@ -2114,7 +2116,7 @@ dependencies = [
  "rand_xoshiro 0.7.0",
  "ref-ops",
  "serde",
- "symbolica 0.19.2",
+ "symbolica",
  "thiserror 2.0.17",
 ]
 
@@ -3779,7 +3781,7 @@ dependencies = [
 [[package]]
 name = "spenso"
 version = "0.5.4"
-source = "git+https://github.com/alphal00p/spenso?rev=d7e3cd01dc419185e00d958301afe1bd6cf8c4e3#d7e3cd01dc419185e00d958301afe1bd6cf8c4e3"
+source = "git+https://github.com/alphal00p/spenso?rev=5f163d973e6ffb4ff03c476b21f7b27c9f24003e#5f163d973e6ffb4ff03c476b21f7b27c9f24003e"
 dependencies = [
  "ahash",
  "anyhow",
@@ -3812,7 +3814,7 @@ dependencies = [
  "serde_json",
  "slotmap",
  "spenso-macros",
- "symbolica 0.19.2",
+ "symbolica",
  "tabled",
  "thiserror 1.0.69",
 ]
@@ -3820,26 +3822,25 @@ dependencies = [
 [[package]]
 name = "spenso-hep-lib"
 version = "0.1.4"
-source = "git+https://github.com/alphal00p/spenso?rev=d7e3cd01dc419185e00d958301afe1bd6cf8c4e3#d7e3cd01dc419185e00d958301afe1bd6cf8c4e3"
+source = "git+https://github.com/alphal00p/spenso?rev=5f163d973e6ffb4ff03c476b21f7b27c9f24003e#5f163d973e6ffb4ff03c476b21f7b27c9f24003e"
 dependencies = [
  "ahash",
  "idenso",
  "spenso",
  "spenso-macros",
- "symbolica 0.19.2",
+ "symbolica",
  "xpct",
 ]
 
 [[package]]
 name = "spenso-macros"
 version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7d7d63dea4f3d09ba2d03e67bb186f9cd8904e881ccc67bdd204b6d888c7a2d6"
+source = "git+https://github.com/alphal00p/spenso?rev=5f163d973e6ffb4ff03c476b21f7b27c9f24003e#5f163d973e6ffb4ff03c476b21f7b27c9f24003e"
 dependencies = [
  "proc-macro2",
  "quote",
  "serde",
- "symbolica 0.18.0",
+ "symbolica",
  "syn 2.0.109",
 ]
 
@@ -3980,35 +3981,9 @@ dependencies = [
 
 [[package]]
 name = "symbolica"
-version = "0.18.0"
+version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "69a17722769f6efc9e24d6b881a4e87ac03d8a42b844990fb9e43bf0d84d8e05"
-dependencies = [
- "ahash",
- "append-only-vec",
- "brotli 8.0.2",
- "byteorder",
- "bytes",
- "colored 3.0.0",
- "dyn-clone",
- "libloading",
- "once_cell",
- "rand 0.9.2",
- "rand_xoshiro 0.7.0",
- "rayon",
- "rug",
- "self_cell",
- "smallvec",
- "smartstring",
- "tinyjson",
- "tracing",
- "wide 0.7.33",
-]
-
-[[package]]
-name = "symbolica"
-version = "0.19.2"
-source = "git+https://github.com/benruijl/symbolica?rev=93680d5098e1bdc8a69dc2f59c548f653a46f9e7#93680d5098e1bdc8a69dc2f59c548f653a46f9e7"
+checksum = "ac102a364b3dd7384ef5e6912182189255dca5630581a4c8d826fe3f03099163"
 dependencies = [
  "ahash",
  "append-only-vec",
@@ -4614,7 +4589,7 @@ dependencies = [
 [[package]]
 name = "vakint"
 version = "1.0.0"
-source = "git+https://github.com/alphal00p/vakint?rev=d3d6cf4ee7e36cf5602d277b6a11e88afb95c935#d3d6cf4ee7e36cf5602d277b6a11e88afb95c935"
+source = "git+https://github.com/alphal00p/vakint?rev=86092e16d5db64aef9d4a7aade69ccd945703dc7#86092e16d5db64aef9d4a7aade69ccd945703dc7"
 dependencies = [
  "ahash",
  "anyhow",
@@ -4625,7 +4600,7 @@ dependencies = [
  "regex",
  "rug",
  "string-template-plus",
- "symbolica 0.19.2",
+ "symbolica",
  "thiserror 1.0.69",
  "version-compare",
 ]

@@ -50,8 +50,6 @@ pub trait FeynmanGraph {
     fn num_virtual_edges(&self, subgraph: SuBitGraph) -> usize;
     fn is_incoming_to(&self, edge: EdgeIndex, vertex: NodeIndex) -> bool;
     // fn denominator(&self, edge: EdgeIndex) -> (Atom, Atom);
-    fn substitute_lmb(&self, edge: EdgeIndex, atom: Atom, lmb: &LoopMomentumBasis) -> Atom;
-
     // fn get_local_edge_position(
     //     &self,
     //     node_id: NodeIndex,
@@ -446,13 +444,6 @@ impl FeynmanGraph for Graph {
 
     //     (mom, mass)
     // }
-
-    fn substitute_lmb(&self, edge: EdgeIndex, atom: Atom, lmb: &LoopMomentumBasis) -> Atom {
-        let num = Into::<usize>::into(edge);
-        let mom = parse!(&format!("Q({num},x_)")).to_pattern();
-        let mom_rep = lmb.pattern(edge);
-        atom.replace(mom).with(mom_rep)
-    }
 
     // fn get_local_edge_position(
     //     &self,

@@ -54,7 +54,7 @@ tracing-subscriber = { version = "0.3.19", features = [
 ] }
 tracing = "0.1.41"
 #symbolica = { version = "0.18.0", default-features = false }
-symbolica = { version="0.19.2", default-features = false, features = [
+symbolica = { version="0.20", default-features = false, features = [
     "serde",
     "bincode",
 
