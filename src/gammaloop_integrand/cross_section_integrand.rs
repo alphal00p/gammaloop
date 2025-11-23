@@ -16,7 +16,7 @@ use crate::{
     integrands::HasIntegrand,
     model::Model,
     momentum::{Rotation, RotationMethod, ThreeMomentum},
-    momentum_sample::{LoopMomenta, MomentumSample},
+    momentum_sample::{self, ExternalIndex, LoopMomenta, MomentumSample},
     processes::{CrossSectionCut, CrossSectionGraph, CutId},
     settings::{GlobalSettings, RuntimeSettings, runtime::HFunctionSettings},
     utils::{
@@ -46,6 +46,7 @@ use std::{
     path::Path,
 };
 use symbolica::{
+    domains::float::Real,
     evaluate::OptimizationSettings,
     numerical_integration::{Grid, Sample},
 };
@@ -594,7 +595,40 @@ impl GraphTerm for CrossSectionGraphTerm {
             all_cut_result += result;
         }
 
-        all_cut_result
+        let flux_factor = match momentum_sample.external_moms().len() {
+            1 => {
+                momentum_sample.one()
+                    / (F::from_f64(2.0)
+                        * &momentum_sample
+                            .external_moms()
+                            .first()
+                            .as_ref()
+                            .unwrap()
+                            .temporal
+                            .value)
+            }
+            2 => {
+                let mom_1 = &momentum_sample.external_moms()[ExternalIndex::from(0)];
+                let mom_2 = &momentum_sample.external_moms()[ExternalIndex::from(1)];
+                let mass_factor = self
+                    .graph
+                    .initial_state_cut
+                    .iter_edges(&self.graph)
+                    .map(|(_, e)| e.data.mass.value(model, &self.param_builder).unwrap())
+                    .fold(Complex::new_re(momentum_sample.one()), |acc, mass| {
+                        acc * &mass * &mass
+                    })
+                    .re;
+
+                let f = F::from_f64(4.0) * (mom_1.dot(mom_2).square() - mass_factor).sqrt();
+                momentum_sample.one() / f
+            }
+            _ => unimplemented!(
+                "Flux factor for more than 3 or more incoming particles not implemented yet"
+            ),
+        };
+
+        all_cut_result * flux_factor
     }
     fn name(&self) -> String {
         self.graph.name.clone()

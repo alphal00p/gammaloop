@@ -902,7 +902,8 @@ impl CrossSectionGraph {
 
         let loop_3 = loop_number as i64 * 3;
         let grad_eta = Atom::var(GS.deta_lu_cut);
-        let factors_of_pi = (Atom::num(2) * Atom::var(GS.pi)).npow(loop_3);
+        let factors_of_pi = (Atom::num(2) * Atom::var(GS.pi)).npow(loop_3 - 1); // multiply with 2pi from energy conservation delta
+
         let tstar = Atom::var(GS.rescale_star);
         let tsrat_pow = tstar.npow(loop_3);
         let hfunction = Atom::var(GS.hfunction_lu_cut);

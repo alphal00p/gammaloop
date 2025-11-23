@@ -17,13 +17,13 @@ use spenso::{
     algebra::{algebraic_traits::RefZero, complex::Complex, upgrading_arithmetic::FallibleAdd},
     contraction::Contract,
     iterators::IteratableTensor,
-    shadowing::{symbolica_utils::NoArgs, Shadowable},
+    shadowing::{Shadowable, symbolica_utils::NoArgs},
     structure::{
+        CastStructure, IndexLess, NamedStructure, OrderedStructure, PermutedStructure,
+        TensorStructure, ToSymbolic,
         abstract_index::AbstractIndex,
         representation::{BaseRepName, Euclidean, LibraryRep, Minkowski, RepName},
         slot::{DualSlotTo, Slot},
-        CastStructure, IndexLess, NamedStructure, OrderedStructure, PermutedStructure,
-        TensorStructure, ToSymbolic,
     },
     tensors::{
         complex::RealOrComplexTensor,
@@ -32,7 +32,7 @@ use spenso::{
             StorageTensor,
         },
         parametric::{
-            atomcore::TensorAtomOps, EvalTensor, FlatCoefficent, MixedTensor, ParamOrConcrete,
+            EvalTensor, FlatCoefficent, MixedTensor, ParamOrConcrete, atomcore::TensorAtomOps,
         },
     },
 };
@@ -45,16 +45,16 @@ use symbolica::{
         rational::{Rational, RationalField},
     },
     evaluate::{ExpressionEvaluator, FunctionMap},
-    poly::{polynomial::MultivariatePolynomial, Exponent},
+    poly::{Exponent, polynomial::MultivariatePolynomial},
 };
 
 use idenso::representations::Bispinor;
 use symbolica::{parse, symbol};
 
 use crate::{
-    settings::runtime::RotationSetting,
-    utils::{ApproxEq, FloatLike, RefDefault, F},
     GammaLoopContext,
+    settings::runtime::RotationSetting,
+    utils::{ApproxEq, F, FloatLike, RefDefault},
 };
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize, Encode, Decode)]
@@ -1752,6 +1752,12 @@ impl<T> FourMomentum<T, T> {
 }
 
 impl<T: FloatLike> FourMomentum<F<T>, F<T>> {
+    pub(crate) fn dot(&self, p2: &FourMomentum<F<T>>) -> F<T> {
+        &self.temporal.value * &p2.temporal.value
+            - (&self.spatial.px * &p2.spatial.px
+                + &self.spatial.py * &p2.spatial.py
+                + &self.spatial.pz * &p2.spatial.pz)
+    }
     /// Compute the phi-angle separation with p2.
     pub(crate) fn getdelphi(&self, p2: &FourMomentum<F<T>>) -> F<T>
     where
