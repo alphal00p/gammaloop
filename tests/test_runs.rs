@@ -43,6 +43,35 @@ fn oak() -> Result<()> {
 }
 
 #[test]
+fn test_z_decay() -> Result<()> {
+    let mut state = get_test_cli(
+        Some("z_decay_test.toml".into()),
+        get_tests_workspace_path().join("z_decay_test"),
+        None,
+        false,
+    )?;
+
+    let result = Integrate {
+        process_id: Some(0),
+        integrand_name: Some("default".to_string()),
+        result_path: Some(
+            get_tests_workspace_path()
+                .join("z_decay_test/integration_workspace/integration_results.yaml"),
+        ),
+        workspace_path: Some(
+            get_tests_workspace_path().join("z_decay_test/integration_workspace/"),
+        ),
+        target: None,
+        n_cores: Some(1),
+        restart: true,
+    }
+    .run(&mut state.state, &state.cli_settings)?;
+
+    assert_approx_eq(&result.result.re, &F(-0.372), &F(1e-2));
+    Ok(())
+}
+
+#[test]
 fn qqx_aaa_subtracted_nlo_amplitude_test() -> Result<()> {
     let mut state = get_test_cli(
         Some("qqx_aaa_subtracted_nlo_amplitude.toml".into()),
