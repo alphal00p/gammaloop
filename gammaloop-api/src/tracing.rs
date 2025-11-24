@@ -194,7 +194,10 @@ pub(crate) fn init_tracing(
             FILE_LOG_SPEC.lock().unwrap().as_str()
         );
         let stderr_filter = EnvFilter::new(STDERR_LOG_SPEC.lock().unwrap().as_str());
-        println!("Stderr filter: {stderr_filter}");
+        println!(
+            "Stderr filter: {stderr_filter},:{}",
+            STDERR_LOG_SPEC.lock().unwrap().as_str()
+        );
 
         let (file_filter_layer, file_handle) = reload::Layer::new(file_filter.clone());
         let (stderr_filter_layer, stderr_handle) = reload::Layer::new(stderr_filter.clone());

@@ -12,13 +12,15 @@ use crate::{
 };
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
-#[derive(Debug, Clone, Default, Deserialize, Serialize, Encode, Decode, JsonSchema, PartialEq)]
+#[derive(Debug, Clone, Deserialize, Serialize, Encode, Decode, JsonSchema, PartialEq)]
 #[trait_decode(trait= GammaLoopContext)]
 #[serde(default, deny_unknown_fields)]
 pub struct GlobalSettings {
-    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "is_default_logfile_directive")]
+    #[serde(default = "default_logfile_directive")]
     pub logfile_directive: String,
-    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    #[serde(skip_serializing_if = "is_default_display_directive")]
+    #[serde(default = "default_display_directive")]
     pub display_directive: String,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub generation: GenerationSettings,
@@ -51,6 +53,33 @@ pub struct RuntimeSettings {
     pub sampling: SamplingSettings,
     #[serde(rename = "subtraction", skip_serializing_if = "IsDefault::is_default")]
     pub subtraction: SubtractionSettings,
+}
+
+fn default_logfile_directive() -> String {
+    "debug".to_string()
+}
+
+fn default_display_directive() -> String {
+    "info".to_string()
+}
+
+fn is_default_logfile_directive(val: &String) -> bool {
+    val == &default_logfile_directive()
+}
+
+fn is_default_display_directive(val: &String) -> bool {
+    val == &default_display_directive()
+}
+
+impl Default for GlobalSettings {
+    fn default() -> Self {
+        Self {
+            logfile_directive: default_logfile_directive(),
+            display_directive: default_display_directive(),
+            generation: GenerationSettings::default(),
+            n_cores: Parallelisation::default(),
+        }
+    }
 }
 
 pub mod global;

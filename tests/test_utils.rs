@@ -4,9 +4,9 @@
 use color_eyre::Result;
 
 use gammaloop_api::{
-    commands::{save::SaveState, Commands},
-    state::{RunHistory, State},
     CLISettings,
+    commands::{Commands, save::SaveState},
+    state::{RunHistory, State, SyncSettings},
 };
 
 use gammalooprs::{initialisation::initialise, utils::test_utils::load_generic_model};
@@ -92,6 +92,7 @@ pub(crate) fn get_test_cli(
     };
     let mut global_settings = cmds.cli_settings.clone();
     global_settings.state_folder = state_path.as_ref().to_path_buf();
+    global_settings.sync_settings()?;
     let default_runtime_settings = cmds.default_runtime_settings.clone();
     SaveState {
         override_state: Some(true),
@@ -140,7 +141,10 @@ pub(crate) fn clean_test(save_path: impl AsRef<Path>) {
             ),
         }
     } else {
-        warn!("Environment variable 'GAMMALOOP_TESTS_NO_CLEAN_STATE' is set so that the gammaloop state test folder '{}' is not cleaned.",save_path.as_ref().display());
+        warn!(
+            "Environment variable 'GAMMALOOP_TESTS_NO_CLEAN_STATE' is set so that the gammaloop state test folder '{}' is not cleaned.",
+            save_path.as_ref().display()
+        );
     }
 }
 

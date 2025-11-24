@@ -1,4 +1,4 @@
-# Gammaloop build commands
+# Gammaloop build and development commands
 
 # Build gammaloop Python CLI with UFO support and dev-optim profile
 build-cli:
@@ -12,24 +12,13 @@ build-cli-release:
 build-api:
 	maturin develop -m gammaloop-api/Cargo.toml --features=ufo_support,python_api --profile=dev-optim
 
-
 # Build all workspace packages
 build-all:
     cargo build --workspace
 
-
-
 # Clean build artifacts
 clean:
     cargo clean
-
-# Run tests
-test:
-    cargo test
-
-# Run tests for gammaloop-api specifically
-test-api:
-    cargo test -p gammaloop-api
 
 # Check code without building
 check:
@@ -42,6 +31,20 @@ fmt:
 # Run clippy linter
 clippy:
     cargo clippy
+
+
+# List all tests including unit tests (verbose output)
+list-all-tests:
+    cargo nextest list
+
+# Run integration test by name (searches across all test files)
+# Example: just test-integration evaluate_1l_scalar_vacuum
+test TEST_NAME:
+    cargo nextest run {{TEST_NAME}}
+
+# Run integration tests with nocapture (shows output during test execution)
+test-verbose TEST_NAME:
+    cargo nextest run {{TEST_NAME}} --nocapture
 
 # Run gammaloop
 run *ARGS:

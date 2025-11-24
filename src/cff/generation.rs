@@ -819,7 +819,7 @@ mod tests_cff {
         builder::HedgeGraphBuilder, involution::Flow, nodestore::NodeStorageVec,
     };
     use symbolica::{
-        domains::float::{NumericalFloatLike, Real},
+        domains::float::{FloatLike as SymFloatLike, Real},
         evaluate::{ExpressionEvaluator, FunctionMap},
         parse, symbol,
     };

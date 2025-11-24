@@ -153,6 +153,7 @@
         # Additional dev-shell environment variables can be set directly
         # MY_CUSTOM_DEVELOPMENT_VAR = "something else";
         RUST_SRC_PATH = "${pkgs.rustPlatform.rustLibSrc}";
+        GLIBC_TUNABLES = "glibc.rtld.optional_static_tls=10000";
 
         # LD_LIBRARY_PATH = "${pkgs.stdenv.cc.cc.lib}/lib";
 
@@ -199,12 +200,12 @@
           virtualenv
           (pkgs.rustPlatform.buildRustPackage rec {
             pname = "clinnet";
-            version = "0.1.1";
+            version = "0.1.4";
             src = pkgs.fetchCrate {
               inherit pname version;
-              sha256 = "sha256-pRjtMFyJZgvtrFxBWYuKRzXHbVuomM7sCver4iuAZQI=";
+              sha256 = "sha256-yXB/dAbDzZeYYhvucfFpurz499bDoaSqv1AO52iPYFM=";
             };
-            cargoHash = "sha256-25vTr+uHcy9kQID8/FJTO7xA8DzQ/jUgOlrdtEm2vyI=";
+            cargoHash = "sha256-UDlGzALmcLuurPov9kYQVdzT7/ge5CEI7uL81k/lUKc=";
           })
         ];
       };

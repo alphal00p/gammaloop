@@ -683,7 +683,7 @@ impl HasIntegrand for CrossSectionIntegrand {
         max_eval: Complex<F<f64>>,
     ) -> EvaluationResult {
         let result = evaluate_sample(self, model, sample, wgt, _iter, use_f128, max_eval);
-        info!("result: {:?}", result.integrand_result);
+        debug!("result: {:?}", result.integrand_result);
 
         result
     }

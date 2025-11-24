@@ -95,7 +95,8 @@ typed-index-collections = { version = "3.3.0", features = [
     "bincode",
 ] }
 bitvec = { version = "1.0.1", features = ["serde"] }
-
+walkdir = "2.5"
+rust-embed = { version = "8.4", features = ["interpolate-folder-path"] }
 # PyO3: optional for embedding. Auto-init at runtime.
 [dependencies.pyo3]
 version = "0.25"
@@ -105,7 +106,7 @@ optional = true
 features = ["auto-initialize", "abi3", "abi3-py37", "eyre"]
 
 [build-dependencies]
+walkdir = "2.5"
 pyo3-build-config = "0.25"
-walkdir = "2"
 vergen = { version = "9", default-features = false }
 vergen-gitcl = "1"

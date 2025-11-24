@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     state::{set_serialize_commands_as_strings, RunHistory, State},
+    templates::Templates,
     write_schemas, CLISettings,
 };
 
@@ -36,7 +37,16 @@ impl Save {
     ) -> Result<()> {
         match self {
             Save::Dot { path } => {
-                state.export_dots(path.unwrap_or(global_settings.state_folder.clone()))
+                // Use original default location (state folder) or custom path if provided
+                let target_dir = path.unwrap_or(global_settings.state_folder.clone());
+
+                // Extract embedded templates to build/templates relative to target directory
+                if let Err(e) = Templates::extract_to_build_dir(&target_dir) {
+                    println!("Warning: Could not extract templates to build/templates: {}", e);
+                }
+
+                // Export dot files to original location
+                state.export_dots(target_dir)
             }
             Save::State(s) => s.save(
                 state,

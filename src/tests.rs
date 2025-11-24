@@ -233,7 +233,7 @@ fn get_unit_volume_integrand() -> UnitVolumeSettings {
 
 #[cfg(test)]
 mod tests_integral {
-    use symbolica::domains::float::ConstructibleFloat;
+    use symbolica::domains::float::Constructible;
 
     use crate::{
         model::Model,

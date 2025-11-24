@@ -37,7 +37,7 @@ use gammalooprs::{
 use schemars::{schema_for, JsonSchema};
 use serde::{Deserialize, Serialize};
 
-use state::{RunHistory, State};
+use state::{RunHistory, State, SyncSettings};
 use std::{ffi::OsString, path::PathBuf};
 use std::{fs::File, ops::ControlFlow};
 use symbolica::activate_oem_license;
@@ -48,6 +48,7 @@ pub mod python;
 pub mod repl;
 
 pub mod state;
+pub mod templates;
 pub mod tracing;
 
 #[derive(Parser, Debug)]
@@ -292,7 +293,7 @@ impl OneShot {
             }
         };
 
-        initialise_with_settings(Some(&cli_settings.global))?;
+        cli_settings.sync_settings()?;
 
         Ok((state, run_history, cli_settings, default_runtime_settings))
     }

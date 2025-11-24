@@ -123,6 +123,7 @@ pub fn test_initialise() -> Result<()> {
 
     init_test_tracing();
     initialise()?;
+    initialise_with_settings(None)?;
 
     Ok(())
 }
@@ -132,6 +133,8 @@ pub fn bench_initialise() -> Result<()> {
 
     init_bench_tracing();
     initialise()?;
+
+    initialise_with_settings(None)?;
 
     Ok(())
 }

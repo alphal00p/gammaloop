@@ -24,7 +24,14 @@ where
     fn to_quoted(&self) -> String {
         // let mut opts = PrintOptions::file();
         // opts.hide_namespace = Some("gammalooprs");
-        format!("\"{}\"", self.to_canonical_string())
+        format!(
+            "\"{}\"",
+            self.to_canonically_ordered_string(CanonicalOrderingSettings {
+                include_namespace: true,
+                include_attributes: false,
+                hide_namespace: Some("gammalooprs")
+            })
+        )
         //.printer(opts))
     }
 }

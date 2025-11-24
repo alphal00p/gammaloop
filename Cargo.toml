@@ -63,7 +63,7 @@ idenso = { version = "0.2.3", features = ["bincode"] }
 spenso-macros = { version = "0.3" }
 spenso-hep-lib = { version = "0.1.4" }
 spenso = { version = "0.5.4", features = ["shadowing"] }
-linnet = { version = "0.13.2", features = [
+linnet = { version = "0.13.3", features = [
     "drawing",
     "serde",
     "bincode",
@@ -204,10 +204,10 @@ higher_loops = []
 
 
 [patch.crates-io]
-idenso = { git = "https://github.com/alphal00p/spenso", rev = "46d03a08aac6f249919d43cd2717220289baf8df" }
-spenso = { git = "https://github.com/alphal00p/spenso", rev = "46d03a08aac6f249919d43cd2717220289baf8df" }
-spenso-hep-lib = { git = "https://github.com/alphal00p/spenso", rev = "46d03a08aac6f249919d43cd2717220289baf8df" }
-spenso-macros = { git = "https://github.com/alphal00p/spenso", rev = "46d03a08aac6f249919d43cd2717220289baf8df" }
+idenso = { git = "https://github.com/alphal00p/spenso", rev = "906b4653e4c35d6083ddf0bd1c9585bdfdd7b681" }
+spenso = { git = "https://github.com/alphal00p/spenso", rev = "906b4653e4c35d6083ddf0bd1c9585bdfdd7b681" }
+spenso-hep-lib = { git = "https://github.com/alphal00p/spenso", rev = "906b4653e4c35d6083ddf0bd1c9585bdfdd7b681" }
+spenso-macros = { git = "https://github.com/alphal00p/spenso", rev = "906b4653e4c35d6083ddf0bd1c9585bdfdd7b681" }
 # symbolica = { git = "https://github.com/benruijl/symbolica", branch = "chi_sq_fix" }
 # spenso-macros = { path = "../spenso/spenso-macros" }
 # symbolica = { git = "https://github.com/benruijl/symbolica", branch = "optim" }

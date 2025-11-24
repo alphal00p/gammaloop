@@ -1,0 +1,128 @@
+#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/refs/heads/HEAD/assets/schemas/runhistory.json
+
+# Advanced GammaLoop integration and evaluation example
+# This file demonstrates Monte Carlo integration, phase-space evaluation,
+# and performance benchmarking capabilities
+
+commands = [
+    # Load the Standard Model with specific parameters
+    "import model sm-default",
+
+    # Import pre-computed graphs for a complex process
+    "generate xs e+ e- > d d~ g QED^2==4 [{{2}} QCD] --numerator-grouping only_detect_zeroes",
+
+    # Display the generated processes for verification
+    "display processes",
+
+    # Set up integration parameters
+    "set integrator.n_max 10000000",
+    "set integrator.discrete_dim_learning_rate 1.5",
+    "set integrator.continuous_dim_learning_rate 1.5",
+    "set integrator.max_prob_ratio 0.01",
+
+    # Configure kinematics for realistic scattering
+    "set kinematics.e_cm 500.0",  # 500 GeV center-of-mass energy
+
+    # Enable stability checks
+    "set stability.check_on_norm true",
+
+    # Run Monte Carlo integration with multiple cores
+    "integrate --process-id 0 --n-cores 8 --workspace-path ./integration_workspace --result-path ./results.txt",
+
+    # Inspect specific phase-space points
+    "inspect --process-id 0 --discrete-dim 0 -p 0.1 0.2 0.3 0.4 0.5 --momentum-space",
+
+    # Benchmark performance
+    "bench --samples 100000 --process-id 0 --name generated_process --n-cores 4",
+
+    # Evaluate at multiple points for validation
+    "evaluate --process-id 0 --n-points 1000 --output evaluation_results.json"
+]
+
+# CLI settings for advanced workflows
+[cli_settings]
+state_folder = "./advanced_integration_state"
+override_state = false
+try_strings = true
+
+[cli_settings.global]
+logfile_directive = "debug,symbolica=off"
+display_directive = "info"
+
+# Enable advanced generation features
+[cli_settings.global.generation]
+enable_thresholds = true
+
+[cli_settings.global.generation.evaluator]
+iterative_orientation_optimization = true
+compile = true
+
+[cli_settings.global.generation.compile]
+inline_asm = true
+optimization_level = "O3"
+fast_math = true
+unsafe_math = true
+
+# UV regularization settings
+[cli_settings.global.generation.uv]
+generate_integrated = true
+
+[cli_settings.global.generation.uv.vakint]
+form_exe_path = "form"
+python_exe_path = "python3"
+evaluation_methods = ["alphaloop", "matad", "fmft"]
+run_time_decimal_precision = 100
+clean_tmp_dir = true
+normalization = "MSbar"
+
+# Default runtime settings for high-precision integration
+[default_runtime_settings.general]
+m_uv = 1.0
+mu_r_sq = 25000.0  # 500^2 / 10 for renormalization scale
+
+[default_runtime_settings.kinematics]
+e_cm = 500.0
+threshold_ct_settings.enabled = false
+
+[default_runtime_settings.kinematics.externals]
+type = "constant"
+
+# Sample external momenta for e+ e- > d d~ g at 500 GeV
+[default_runtime_settings.kinematics.externals.data]
+momenta = [
+    "dependent",
+    [250.0, 0.0, 0.0, 250.0],    # e+ (incoming)
+    [250.0, 0.0, 0.0, -250.0],   # e- (incoming)
+    [166.67, 50.0, 75.0, 140.0], # d (outgoing)
+    [166.67, -30.0, -45.0, -150.0], # d~ (outgoing)
+    [166.66, -20.0, -30.0, 10.0]    # g (outgoing)
+]
+helicities = [1, -1, 1, -1, 1]
+
+# High-precision integrator settings
+[default_runtime_settings.integrator]
+n_increase = 5
+n_max = 50000000
+discrete_dim_learning_rate = 1.5
+continuous_dim_learning_rate = 1.5
+max_prob_ratio = 0.005
+target_relative_accuracy = 1e-6
+
+# Stability and validation settings
+[default_runtime_settings.stability]
+check_on_norm = true
+relative_precision_threshold = 1e-10
+absolute_precision_threshold = 1e-15
+
+# Advanced subtraction settings
+[default_runtime_settings.subtraction]
+disable_threshold_subtraction = false
+epsilon_expansion_order = 2
+local_ct_settings.enabled = true
+
+# Parallelization settings
+[cli_settings.global.n_cores]
+feyngen = 4
+generate = 4
+compile = 4
+integrate = 8

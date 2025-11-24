@@ -5,7 +5,10 @@ mod test_utils;
 use gammaloop_api::state::SyncSettings;
 use gammalooprs::feyngen::diagram_generator::evaluate_overall_factor;
 use gammalooprs::processes::ProcessCollection;
-use symbolica::atom::{Atom, AtomCore};
+use symbolica::{
+    atom::{Atom, AtomCore},
+    printer::CanonicalOrderingSettings,
+};
 use test_utils::{clean_test, get_test_cli, get_tests_workspace_path};
 use tracing::debug;
 
@@ -34,7 +37,7 @@ fn count_graphs_in_processes(cli: &CLIState) -> (usize, Atom) {
     for g in graphs {
         overall_factor_sum += &g.overall_factor;
     }
-    overall_factor_sum = evaluate_overall_factor(overall_factor_sum.as_view());
+    // overall_factor_sum = evaluate_overall_factor(overall_factor_sum.as_view());
     (n_graphs, overall_factor_sum)
 }
 
@@ -66,9 +69,20 @@ fn generate_graphs_and_count(
 fn feyngen_str(cli: &mut CLIState, generation_type: &str, process: &str) -> Result<String> {
     let (n_graphs, overall_factor_sum) = generate_graphs_and_count(cli, generation_type, process)?;
     Ok(format!(
-        "{} | {}",
+        "{} | {} = {}",
         n_graphs,
-        overall_factor_sum.to_canonical_string()
+        overall_factor_sum.to_canonically_ordered_string(CanonicalOrderingSettings {
+            include_namespace: false,
+            include_attributes: false,
+            ..Default::default()
+        }),
+        evaluate_overall_factor(overall_factor_sum.as_view()).to_canonically_ordered_string(
+            CanonicalOrderingSettings {
+                include_namespace: false,
+                include_attributes: false,
+                ..Default::default()
+            }
+        )
     ))
 }
 
@@ -114,8 +128,8 @@ fn example_graph_count() -> Result<()> {
     cli.run_command("import model sm.json")?;
 
     // A first process
-    assert_snapshot!(feyngen_str(&mut cli, "xs", "e+ e- > d d~ / z QED^2==4 [{{1}} QCD] --numerator-grouping no_grouping")?,@"1 | -1");
-    assert_snapshot!(feyngen_str(&mut cli, "xs", "e+ e- > d d~ | e- a d g QED^2==4 [{{2}} QCD] --numerator-grouping only_detect_zeroes")?,@"3 | -3");
+    assert_snapshot!(feyngen_str(&mut cli, "xs", "e+ e- > d d~ / z QED^2==4 [{{1}} QCD] --numerator-grouping no_grouping")?,@"1 | (AutG(1))^(-1)*AntiFermionSpinSumSign(-1)*ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1) = 1");
+    assert_snapshot!(feyngen_str(&mut cli, "xs", "e+ e- > d d~ | e- a d g QED^2==4 [{{2}} QCD] --numerator-grouping only_detect_zeroes")?,@"3 | (AutG(1))^(-1)*3*AntiFermionSpinSumSign(-1)*ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1) = 3");
     assert_snapshot!(feyngen_str(&mut cli, "xs", "e+ e- > d d~ | e- a d g QED^2==4 [{{2}} QCD] --numerator-grouping group_identical_graphs_up_to_sign")?,@"2 | -3");
     assert_snapshot!(feyngen_str(&mut cli, "amp", "e+ e- > d d~ / z QED==2 [{1}] --filter-selfenergies true")?,@"1 | 1");
     assert_snapshot!(feyngen_str(&mut cli, "amp", "e+ e- > d d~ / z QED==2 [{1}] --filter-selfenergies false")?,@"3 | 3");

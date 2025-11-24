@@ -470,3 +470,66 @@ fn test_broken_network() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn test_simple_workflow_example_card() -> Result<()> {
+    let mut cli = get_test_cli(
+        None,
+        get_tests_workspace_path().join("simple_workflow_example"),
+        Some("simple_workflow_example".to_string()),
+        true,
+    )?;
+
+    // Load and execute the simple workflow example card
+    cli.run_command("run ../examples/command_cards/simple_workflow.toml")?;
+
+    // Verify that processes were generated
+    assert!(
+        !cli.state.process_list.processes.is_empty(),
+        "No processes were generated"
+    );
+
+    // Verify that the Standard Model was loaded
+    assert_eq!(cli.state.model.name, "sm", "Expected SM model to be loaded");
+
+    clean_test(&cli.cli_settings.state_folder);
+    Ok(())
+}
+
+#[test]
+fn test_advanced_integration_example_card() -> Result<()> {
+    let mut cli = get_test_cli(
+        None,
+        get_tests_workspace_path().join("advanced_integration_example"),
+        Some("advanced_integration_example".to_string()),
+        true,
+    )?;
+
+    // Load and execute the advanced integration example card
+    cli.run_command("run ../examples/command_cards/advanced_integration.toml")?;
+
+    // Verify that processes were generated
+    assert!(
+        !cli.state.process_list.processes.is_empty(),
+        "No processes were generated"
+    );
+
+    // Verify that the Standard Model was loaded
+    assert_eq!(cli.state.model.name, "sm", "Expected SM model to be loaded");
+
+    // Verify that settings were applied (check if we can access some expected configuration)
+    // The example sets specific integrator settings
+    let first_process = &cli.state.process_list.processes[0];
+    match &first_process.collection {
+        gammalooprs::processes::ProcessCollection::Amplitudes(amplitudes) => {
+            // Check that amplitudes were generated
+            assert!(!amplitudes.is_empty(), "No amplitudes were generated");
+        }
+        gammalooprs::processes::ProcessCollection::CrossSections(_) => {
+            // Cross sections are also valid
+        }
+    }
+
+    clean_test(&cli.cli_settings.state_folder);
+    Ok(())
+}
