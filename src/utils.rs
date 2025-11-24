@@ -44,7 +44,7 @@ use spenso::tensors::parametric::to_param::ToAtom;
 use spenso_hep_lib::hep_lib;
 use symbolica::coefficient::Coefficient;
 use symbolica::domains::float::{
-    ConstructibleFloat, NumericalFloatLike, RealNumberLike, SingleFloat,
+    Constructible, FloatLike as SymFloatLike, RealLike, SingleFloat,
 };
 use symbolica::domains::integer::Integer;
 use symbolica::{function, parse};
@@ -435,7 +435,7 @@ impl<const N: u32> RefOne for VarFloat<N> {
     }
 }
 
-impl<const N: u32> NumericalFloatLike for VarFloat<N> {
+impl<const N: u32> SymFloatLike for VarFloat<N> {
     fn mul_add(&self, a: &Self, b: &Self) -> Self {
         (&self.float * &a.float + &b.float).complete(N).into()
     }
@@ -521,7 +521,7 @@ impl<const N: u32> SingleFloat for VarFloat<N> {
         rat.into()
     }
 }
-impl<const N: u32> RealNumberLike for VarFloat<N> {
+impl<const N: u32> RealLike for VarFloat<N> {
     fn to_f64(&self) -> f64 {
         self.float.to_f64()
     }
@@ -770,7 +770,7 @@ pub trait FloatLike:
     +R
     + Clone
     + PartialOrd
-    + RealNumberLike
+    + RealLike
     + for<'a> RefAdd<&'a Self, Output = Self>
     // + for<'a> RefMutAdd<&'a Self, Output = Self>
     + RefAdd<Self, Output = Self>
@@ -993,7 +993,7 @@ impl<T: FloatLike> RefZero<F<T>> for &F<T> {
     }
 }
 
-impl<T: FloatLike> RealNumberLike for F<T> {
+impl<T: FloatLike> RealLike for F<T> {
     delegate! {
         to self.0{
             fn to_usize_clamped(&self)->usize;
@@ -1099,7 +1099,7 @@ impl<T: FloatLike> std::fmt::LowerExp for F<T> {
     }
 }
 
-impl<T: FloatLike> NumericalFloatLike for F<T> {
+impl<T: FloatLike> SymFloatLike for F<T> {
     fn mul_add(&self, a: &Self, b: &Self) -> Self {
         F(self.0.mul_add(&a.0, &b.0))
     }
@@ -1148,7 +1148,7 @@ impl<T: FloatLike> NumericalFloatLike for F<T> {
     }
 }
 
-impl<T: FloatLike + ConstructibleFloat> ConstructibleFloat for F<T> {
+impl<T: FloatLike + Constructible> Constructible for F<T> {
     fn new_from_i64(a: i64) -> Self {
         F(T::new_from_i64(a))
     }
@@ -1660,7 +1660,7 @@ impl From<F<f64>> for f64 {
 
 impl From<F<f64>> for Rational {
     fn from(value: F<f64>) -> Self {
-        value.0.into()
+        value.0.try_into().unwrap()
     }
 }
 
@@ -3370,7 +3370,7 @@ impl<T: FloatLike> momtrop::float::MomTropFloat for F<T> {
 
     #[inline]
     fn one(&self) -> Self {
-        <F<T> as NumericalFloatLike>::one(self)
+        <F<T> as SymFloatLike>::one(self)
     }
 
     #[inline]
@@ -3385,7 +3385,7 @@ impl<T: FloatLike> momtrop::float::MomTropFloat for F<T> {
 
     #[inline]
     fn inv(&self) -> Self {
-        <F<T> as NumericalFloatLike>::inv(self)
+        <F<T> as SymFloatLike>::inv(self)
     }
 
     #[inline]
@@ -3410,7 +3410,7 @@ impl<T: FloatLike> momtrop::float::MomTropFloat for F<T> {
 
     #[inline]
     fn zero(&self) -> Self {
-        <F<T> as NumericalFloatLike>::zero(self)
+        <F<T> as SymFloatLike>::zero(self)
     }
 
     #[inline]

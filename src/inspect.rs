@@ -3,7 +3,7 @@ use colored::Colorize;
 use log::{debug, error, info, trace, warn};
 use momtrop::float::MomTropFloat;
 use spenso::algebra::complex::Complex;
-use symbolica::domains::float::NumericalFloatLike;
+use symbolica::domains::float::FloatLike;
 use symbolica::numerical_integration::Sample;
 
 use crate::integrands::HasIntegrand;
@@ -45,10 +45,10 @@ pub fn inspect<I: HasIntegrand>(
 
         status_info!(
             "f128 sampling jacobian for this point = {:+.32e}",
-            NumericalFloatLike::inv(&inv_jac)
+            FloatLike::inv(&inv_jac)
         );
 
-        (Some(NumericalFloatLike::inv(&inv_jac).to_f64()), xs)
+        (Some(FloatLike::inv(&inv_jac).to_f64()), xs)
     } else {
         (
             None,

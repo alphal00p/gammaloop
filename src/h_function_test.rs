@@ -18,7 +18,7 @@ use log::info;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
-use symbolica::domains::float::NumericalFloatLike;
+use symbolica::domains::float::FloatLike as SymFloatLike;
 use symbolica::numerical_integration::{ContinuousGrid, Grid, Sample};
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass)]

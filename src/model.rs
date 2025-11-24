@@ -1583,8 +1583,8 @@ impl Model {
                             .value
                             .ok_or(eyre!("internal param {} has no expression or value", key))?;
                         let value_rat = (
-                            Fraction::<IntegerRing>::from(value.re.0),
-                            Fraction::<IntegerRing>::from(value.im.0),
+                            Fraction::<IntegerRing>::try_from(value.re.0).unwrap(),
+                            Fraction::<IntegerRing>::try_from(value.im.0).unwrap(),
                         )
                             .into();
                         fn_map.add_constant(key, value_rat);
@@ -1604,7 +1604,7 @@ impl Model {
 
         fn_map.add_constant(
             Atom::var(Symbol::PI),
-            (Rational::from(0.0.pi()), Rational::zero()).into(),
+            (Rational::try_from(0.0.pi()).unwrap(), Rational::zero()).into(),
         );
 
         let evaluator = AtomView::to_eval_tree_multiple(&expr, &fn_map, &params)

@@ -14,7 +14,7 @@ use ref_ops::RefNeg;
 use serde::{Deserialize, Serialize};
 use spenso::network::graph;
 use symbolica::atom::{Atom, AtomCore};
-use symbolica::domains::float::{NumericalFloatLike, Real};
+use symbolica::domains::float::{FloatLike as SymFloatLike, Real};
 use symbolica::id::Replacement;
 use symbolica::{function, parse};
 use typed_index_collections::TiVec;

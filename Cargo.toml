@@ -54,13 +54,13 @@ insta.opt-level = 3
 # # ] }
 
 [dependencies]
-symbolica = { version="0.20", default-features = false, features = [
+symbolica = { version="1", default-features = false, features = [
     "serde",
     "bincode",
 ] }
 
 idenso = { version = "0.2.3", features = ["bincode"] }
-spenso-macros = { version = "0.2.2" }
+spenso-macros = { version = "0.3" }
 spenso-hep-lib = { version = "0.1.4" }
 spenso = { version = "0.5.4", features = ["shadowing"] }
 linnet = { version = "0.13.2", features = [
@@ -70,7 +70,7 @@ linnet = { version = "0.13.2", features = [
     "symbolica",
 ] }
 
-vakint = { git = "https://github.com/alphal00p/vakint", rev = "86092e16d5db64aef9d4a7aade69ccd945703dc7" } # "e44c210ded3936048615d39872022a0b6ef18454"
+vakint = { git = "https://github.com/alphal00p/vakint", rev = "a32723f7c56ce73dd6a35713880e3a924e72c51b" } # "e44c210ded3936048615d39872022a0b6ef18454"
 momtrop = { version = "0.3.0" }
 serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "*"
@@ -204,10 +204,10 @@ higher_loops = []
 
 
 [patch.crates-io]
-idenso = { git = "https://github.com/alphal00p/spenso", rev = "c5173a9d9fede5f7753f6a5cd209029fc70ccc8b" }
-spenso = { git = "https://github.com/alphal00p/spenso", rev = "c5173a9d9fede5f7753f6a5cd209029fc70ccc8b" }
-spenso-hep-lib = { git = "https://github.com/alphal00p/spenso", rev = "c5173a9d9fede5f7753f6a5cd209029fc70ccc8b" }
-spenso-macros = { git = "https://github.com/alphal00p/spenso", rev = "c5173a9d9fede5f7753f6a5cd209029fc70ccc8b" }
+idenso = { git = "https://github.com/alphal00p/spenso", rev = "46d03a08aac6f249919d43cd2717220289baf8df" }
+spenso = { git = "https://github.com/alphal00p/spenso", rev = "46d03a08aac6f249919d43cd2717220289baf8df" }
+spenso-hep-lib = { git = "https://github.com/alphal00p/spenso", rev = "46d03a08aac6f249919d43cd2717220289baf8df" }
+spenso-macros = { git = "https://github.com/alphal00p/spenso", rev = "46d03a08aac6f249919d43cd2717220289baf8df" }
 # symbolica = { git = "https://github.com/benruijl/symbolica", branch = "chi_sq_fix" }
 # spenso-macros = { path = "../spenso/spenso-macros" }
 # symbolica = { git = "https://github.com/benruijl/symbolica", branch = "optim" }

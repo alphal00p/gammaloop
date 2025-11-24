@@ -186,6 +186,7 @@
           cargo-deny
           cargo-edit
           cargo-watch
+          bacon
           # python311
           texlive.combined.scheme-medium
           uv

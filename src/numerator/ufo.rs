@@ -13,7 +13,7 @@ use spenso::structure::slot::{IsAbstractSlot, Slot};
 use spenso::structure::{OrderedStructure, TensorStructure};
 use symbolica::atom::FunctionBuilder;
 use symbolica::atom::{AtomCore, AtomView};
-use symbolica::domains::float::NumericalFloatLike;
+use symbolica::domains::float::FloatLike;
 use symbolica::domains::rational::Rational;
 use symbolica::symbol;
 use symbolica::{

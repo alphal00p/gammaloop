@@ -821,7 +821,7 @@ impl<T: FloatLike> ParamBuilder<T> {
             ..Default::default()
         };
 
-        let pi_rational = Rational::from(std::f64::consts::PI);
+        let pi_rational =  Rational::try_from(std::f64::consts::PI).unwrap();
 
         for e in graph.iter_edge_ids() {
             new.add_tagged_function(

@@ -68,7 +68,7 @@ use spenso::{
 };
 
 use symbolica::domains::rational::Rational;
-use symbolica::poly::Variable;
+use symbolica::poly::PolyVariable;
 use symbolica::printer::PrintOptions;
 use symbolica::state::Workspace;
 
@@ -224,17 +224,17 @@ impl<S: NumeratorState> Numerator<S> {
     fn add_consts_to_fn_map(fn_map: &mut FunctionMap) {
         fn_map.add_constant(
             parse!("Nc"),
-            symbolica::domains::float::Complex::from(Rational::from_unchecked(3, 1)),
+            symbolica::domains::float::Complex::from(Rational::from(3)),
         );
 
         fn_map.add_constant(
             parse!("TR"),
-            symbolica::domains::float::Complex::from(Rational::from_unchecked(1, 2)),
+            symbolica::domains::float::Complex::from(Rational::from((1, 2))),
         );
 
         fn_map.add_constant(
             parse!("pi"),
-            symbolica::domains::float::Complex::from(Rational::from(std::f64::consts::PI)),
+            symbolica::domains::float::Complex::from(Rational::try_from(std::f64::consts::PI).unwrap()),
         );
     }
 }
@@ -957,7 +957,7 @@ pub type Gloopoly =
 // #[trait_decode(trait = symbolica::state::HasStateMap)]
 pub struct PolySplit {
     pub colorless: DataTensor<Gloopoly, ShadowedStructure<Aind>>,
-    pub var_map: Arc<Vec<Variable>>,
+    pub var_map: Arc<Vec<PolyVariable>>,
     pub energies: Vec<usize>,
     pub color: ParamTensor<ShadowedStructure<Aind>>,
     pub colorsimplified: Color,
@@ -1025,13 +1025,13 @@ impl PolySplit {
             for (var_id, &pow) in poly.variables.iter().zip(monomial.exponents) {
                 if pow > 0 {
                     match var_id {
-                        Variable::Symbol(v) => {
+                        PolyVariable::Symbol(v) => {
                             var_h.to_var(*v);
                         }
-                        Variable::Temporary(_) => {
+                        PolyVariable::Temporary(_) => {
                             unreachable!("Temporary variable in expression")
                         }
-                        Variable::Function(_, a) | Variable::Power(a) => {
+                        PolyVariable::Function(_, a) | PolyVariable::Power(a) => {
                             var_h.set_from_view(&a.as_view());
                         }
                     }

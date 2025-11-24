@@ -17,7 +17,7 @@ use linnet::half_edge::subgraph::subset::SubSet;
 use linnet::half_edge::subgraph::{InternalSubGraph, SuBitGraph, SubSetOps};
 use serde::{Deserialize, Serialize};
 use std::ops::{Add, Index, IndexMut, Sub};
-use symbolica::domains::float::NumericalFloatLike;
+use symbolica::domains::float::FloatLike as SymFloatLike;
 use tabled::settings::Style;
 
 use typed_index_collections::TiVec;

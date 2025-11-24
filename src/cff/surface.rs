@@ -2,13 +2,13 @@ use super::{
     esurface::{Esurface, EsurfaceID},
     hsurface::{Hsurface, HsurfaceID},
 };
-use crate::utils::{FloatLike, F};
+use crate::utils::{FloatLike as GSFloatLike, F};
 use bincode_trait_derive::{Decode, Encode};
 use derive_more::From;
 use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeIndex, EdgeVec};
 use serde::{Deserialize, Serialize};
-use symbolica::{atom::Atom, domains::float::NumericalFloatLike};
+use symbolica::{atom::Atom, domains::float::FloatLike};
 use typed_index_collections::TiVec;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

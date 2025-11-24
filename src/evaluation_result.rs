@@ -4,7 +4,7 @@ use bincode::{Decode, Encode};
 use colored::Colorize;
 use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
-use symbolica::domains::float::ConstructibleFloat;
+use symbolica::domains::float::Constructible;
 
 use crate::observables::Event;
 use crate::status_info;

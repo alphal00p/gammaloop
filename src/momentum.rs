@@ -40,7 +40,7 @@ use symbolica::{
     atom::{Atom, AtomCore, Symbol},
     coefficient::Coefficient,
     domains::{
-        float::{Complex as SymComplex, NumericalFloatLike, Real, RealNumberLike, SingleFloat},
+        float::{Complex as SymComplex, FloatLike as SymFloatLike, Real, RealLike, SingleFloat},
         integer::IntegerRing,
         rational::{Rational, RationalField},
     },

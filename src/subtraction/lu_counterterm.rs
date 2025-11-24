@@ -4,7 +4,7 @@ use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeVec, Orientation};
 use spenso::algebra::complex::{sub, Complex};
 use symbolica::{
-    domains::float::{NumericalFloatLike, Real, RealNumberLike},
+    domains::float::{FloatLike as SymFloatLike, Real, RealLike},
     evaluate::OptimizationSettings,
 };
 use typed_index_collections::TiVec;

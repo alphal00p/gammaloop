@@ -9,7 +9,7 @@ use linnet::half_edge::involution::{EdgeIndex, Orientation};
 use linreg::linear_regression_of;
 use rand::Rng;
 use symbolica::{
-    domains::float::NumericalFloatLike, domains::float::Real, numerical_integration::MonteCarloRng,
+    domains::float::FloatLike as SymFloatLike, domains::float::Real, numerical_integration::MonteCarloRng,
 };
 
 use crate::{

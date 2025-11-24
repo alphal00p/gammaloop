@@ -16,7 +16,7 @@ use rayon::ThreadPoolBuilder;
 use serde::Deserialize;
 use serde::Serialize;
 use spenso::algebra::algebraic_traits::IsZero;
-use symbolica::domains::float::ConstructibleFloat;
+use symbolica::domains::float::Constructible;
 use symbolica::numerical_integration::ContinuousGrid;
 use symbolica::numerical_integration::{Grid, MonteCarloRng, Sample, StatisticsAccumulator};
 

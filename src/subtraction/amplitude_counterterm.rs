@@ -5,7 +5,7 @@ use linnet::half_edge::involution::{EdgeVec, Orientation};
 use spenso::algebra::{algebraic_traits::IsZero, complex::Complex};
 use symbolica::{
     atom::Atom,
-    domains::float::{NumericalFloatLike, Real},
+    domains::float::{FloatLike as SymFloatLike, Real},
     evaluate::OptimizationSettings,
 };
 use tracing::debug;

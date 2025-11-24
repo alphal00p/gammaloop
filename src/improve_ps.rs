@@ -17,7 +17,7 @@ use rand::Rng;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use symbolica::{
-    domains::float::{NumericalFloatLike, Real},
+    domains::float::{FloatLike as SymFloatLike, Real},
     numerical_integration::MonteCarloRng,
 };
 use tracing::{debug, warn};
