@@ -724,6 +724,7 @@ impl CrossSectionGraph {
         let mut cuts: TiVec<CutId, CrossSectionCut> = all_st_cuts
             .into_iter()
             .map(|(left, cut, right)| CrossSectionCut { cut, left, right })
+            .filter(|cut| cut.cut.nedges(&self.graph) > 1)
             .filter_map(
                 |cut| match cut.is_valid_for_process(self, process_definition, model) {
                     Ok(true) => Some(Ok(cut)),
