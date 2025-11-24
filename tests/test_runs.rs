@@ -3,6 +3,7 @@
 
 use color_eyre::Result;
 
+use eyre::Ok;
 use gammaloop_api::commands::{inspect::Inspect, integrate::Integrate};
 
 use gammalooprs::{
@@ -68,6 +69,19 @@ fn test_z_decay() -> Result<()> {
     .run(&mut state.state, &state.cli_settings)?;
 
     assert_approx_eq(&result.result.re, &F(-0.372), &F(1e-2));
+    Ok(())
+}
+
+#[test]
+fn test_epem_dd_dt() -> Result<()> {
+    let mut state = get_test_cli(
+        Some("test_epem_dd_dt.toml".into()),
+        get_tests_workspace_path().join("test_epem_dd_dt"),
+        None,
+        false,
+    )?;
+
+    // todo add integration
     Ok(())
 }
 

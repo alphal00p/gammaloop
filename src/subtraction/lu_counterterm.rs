@@ -2,7 +2,7 @@ use core::f64;
 
 use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeVec, Orientation};
-use spenso::algebra::complex::{sub, Complex};
+use spenso::algebra::complex::{Complex, sub};
 use symbolica::{
     domains::float::{FloatLike as SymFloatLike, Real, RealLike},
     evaluate::OptimizationSettings,
@@ -29,8 +29,8 @@ use crate::{
         overlap_subspace::{self, OverlapGroup, OverlapInput, OverlapStructure},
     },
     utils::{
-        newton_solver::{newton_iteration_and_derivative, NewtonIterationResult},
-        FloatLike, F,
+        F, FloatLike,
+        newton_solver::{NewtonIterationResult, newton_iteration_and_derivative},
     },
 };
 
@@ -293,6 +293,16 @@ impl LUCounterTerm {
             all_lmbs,
             left_subspace,
         );
+
+        for overlap_group in left_overlap.overlap_groups.iter() {
+            let overlap_builder = left_counterterm_builder.new_overlap_builder(overlap_group);
+
+            for esurface in overlap_group.existing_esurfaces.iter() {
+                let esurface_ct_builder = overlap_builder.new_esurface_builder(*esurface);
+                let rstar_solution = esurface_ct_builder.solve_rstar();
+                let rstar_sample = rstar_solution.rstar_sample();
+            }
+        }
 
         let right_counterterm_builder = CounterTermBuilder::new(
             graph,
