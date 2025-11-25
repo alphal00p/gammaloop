@@ -4,7 +4,7 @@ use gammalooprs::{
         diagram_generator::evaluate_overall_factor, NumeratorAwareGraphGroupingOption,
         SewedFilterOptions,
     },
-    graph::{self, Graph},
+    graph::{self, FeynmanGraph, Graph, LMBext},
     initialisation::initialise,
     integrate::MasterNode,
     model::{InputParamCard, Model},
@@ -552,6 +552,45 @@ impl GammaLoopAPI {
             overwrite,
             append,
         )
+    }
+
+    #[pyo3(name="get_lmbs", signature = (graphs, format="dot".into()))]
+    pub(crate) fn get_lmbs(&mut self, graphs: String, format: String) -> Result<String> {
+        let graphs = match format.as_str() {
+            "dot" => {
+                if !graphs.ends_with(".dot") {
+                    return Err(eyre!(
+                        "When using 'dot' format, the graphs argument must be a path to a DOT file"
+                    ));
+                }
+                let dot_path = PathBuf::from(&graphs);
+
+                let graphs =
+                    Graph::from_file(&dot_path, &self.gammaloop_state.model).map_err(|e| {
+                        eyre!("Could not parse graphs from DOT file: {}", e.to_string())
+                    })?;
+                graphs
+            }
+            "string" => {
+                let graphs = Graph::from_string(&graphs, &self.gammaloop_state.model)
+                    .map_err(|e| eyre!("Could not parse graphs from string: {}", e.to_string()))?;
+                graphs
+            }
+            other => {
+                return Err(eyre!(
+                    "Unknown graph import format: {}. Supported formats are sting and dot",
+                    other
+                ))
+            }
+        };
+
+        let lmbs = graphs
+            .into_iter()
+            .map(|g| g.generate_loop_momentum_bases(&g.no_dummy()))
+            .collect_vec();
+
+        let lmbs_serialized = serde_json::to_string(&lmbs)?;
+        Ok(lmbs_serialized)
     }
 
     #[pyo3(name="evaluate", signature = (process_id=None, graphs_group_name=None, result_path=None, numerical=true, number_of_terms_in_epsilon_expansion=None))]
