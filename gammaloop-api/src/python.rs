@@ -555,7 +555,7 @@ impl GammaLoopAPI {
     }
 
     #[pyo3(name="get_lmbs", signature = (graphs, format="dot".into()))]
-    pub(crate) fn get_lmbs(&mut self, graphs: String, format: String) -> Result<String> {
+    pub(crate) fn get_lmbs(&self, graphs: String, format: String) -> Result<String> {
         let graphs = match format.as_str() {
             "dot" => {
                 if !graphs.ends_with(".dot") {
@@ -591,6 +591,81 @@ impl GammaLoopAPI {
 
         let lmbs_serialized = serde_json::to_string(&lmbs)?;
         Ok(lmbs_serialized)
+    }
+
+    #[pyo3(name="get_orientations", signature = (graph_name, process_id=None, integrand_name=None))]
+    pub(crate) fn get_orientations(
+        &self,
+        graph_name: String,
+        process_id: Option<usize>,
+        integrand_name: Option<String>,
+    ) -> Result<String> {
+        let (pid, name) = self
+            .gammaloop_state
+            .process_list
+            .find_integrand(process_id, integrand_name.as_ref())
+            .map_err(|e| {
+                exceptions::PyException::new_err(format!(
+                    "Could not find integrand: {}",
+                    e.to_string()
+                ))
+            })?;
+
+        let orientations = match &self.gammaloop_state.process_list.processes[pid].collection {
+            ProcessCollection::Amplitudes(amplitudes) => {
+                let cff = amplitudes
+                    .get(&name)
+                    .unwrap()
+                    .graphs
+                    .iter()
+                    .find(|g| g.graph.name == graph_name)
+                    .as_ref()
+                    .unwrap()
+                    .derived_data
+                    .cff_expression
+                    .as_ref()
+                    .unwrap();
+
+                cff.orientations
+                    .iter()
+                    .map(|or_data| or_data.data.orientation.clone())
+                    .collect_vec()
+            }
+
+            ProcessCollection::CrossSections(cross_sections) => {
+                let cff = cross_sections
+                    .get(&name)
+                    .unwrap()
+                    .supergraphs
+                    .iter()
+                    .find(|g| g.graph.name == graph_name)
+                    .as_ref()
+                    .unwrap()
+                    .derived_data
+                    .cff_expression
+                    .as_ref()
+                    .unwrap();
+
+                cff.orientation_data
+                    .iter()
+                    .map(|or_data| or_data.orientation.clone())
+                    .collect_vec()
+            }
+        };
+
+        let orientations = serde_json::to_string(&orientations)?;
+        Ok(orientations)
+    }
+
+    #[pyo3(name = "get_model")]
+    pub(crate) fn get_model(&self) -> PyResult<String> {
+        let serializable_model = self.gammaloop_state.model.to_serializable();
+        serde_json::to_string(&serializable_model).map_err(|e| {
+            exceptions::PyException::new_err(format!(
+                "Could not serialize model: {}",
+                e.to_string()
+            ))
+        })
     }
 
     #[pyo3(name="evaluate", signature = (process_id=None, graphs_group_name=None, result_path=None, numerical=true, number_of_terms_in_epsilon_expansion=None))]
