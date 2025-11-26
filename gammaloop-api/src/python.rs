@@ -15,7 +15,7 @@ use gammalooprs::{
 };
 use linnet::half_edge::{
     builder::HedgeNodeBuilder,
-    involution::EdgeIndex,
+    involution::{EdgeIndex, Orientation},
     subgraph::{HedgeNode, ModifySubSet, SuBitGraph},
 };
 use numpy::{
@@ -34,7 +34,7 @@ use crate::{
     state::{RunHistory, State},
     CLISettings, OneShot,
 };
-use ahash::HashMap;
+use ahash::{HashMap, HashMapExt};
 
 use color_eyre::Result;
 use eyre::eyre;
@@ -599,7 +599,7 @@ impl GammaLoopAPI {
         graph_name: String,
         process_id: Option<usize>,
         integrand_name: Option<String>,
-    ) -> Result<String> {
+    ) -> Result<Vec<HashMap<usize, i8>>> {
         let (pid, name) = self
             .gammaloop_state
             .process_list
@@ -653,8 +653,21 @@ impl GammaLoopAPI {
             }
         };
 
-        let orientations = serde_json::to_string(&orientations)?;
-        Ok(orientations)
+        Ok(orientations
+            .into_iter()
+            .map(|orientation| {
+                let mut result = HashMap::new();
+                for (edge_id, direction) in orientation.into_iter() {
+                    let direction = match direction {
+                        Orientation::Default => 1,
+                        Orientation::Reversed => -1,
+                        Orientation::Undirected => 0,
+                    };
+                    result.insert(edge_id.0, direction);
+                }
+                result
+            })
+            .collect())
     }
 
     #[pyo3(name = "get_model")]
