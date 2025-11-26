@@ -715,9 +715,11 @@ impl CrossSectionGraph {
     ) -> Result<()> {
         info!("generatig cuts for graph: {}", self.graph.name);
 
-        let all_st_cuts = self
-            .graph
-            .all_st_cuts_for_cs(self.source_nodes.clone(), self.target_nodes.clone());
+        let all_st_cuts = self.graph.all_st_cuts_for_cs(
+            self.source_nodes.clone(),
+            self.target_nodes.clone(),
+            &self.graph.get_initial_state_tree().0,
+        );
 
         info!("num s_t cuts: {}", all_st_cuts.len());
 
@@ -781,6 +783,8 @@ impl CrossSectionGraph {
         settings: &GenerationSettings,
     ) -> Result<TiVec<CutId, Atom>> {
         let global_num = self.graph.global_network();
+
+        let (externals, props) = self.graph.get_initial_state_tree();
 
         let canonize_esurface = self
             .graph
@@ -1002,9 +1006,11 @@ impl CrossSectionGraph {
     fn build_threshold_counteterm(&mut self, settings: &GenerationSettings) -> Result<()> {
         // thershold enumeration as st cuts
         let all_possible_thresholds: TiVec<GlobalThresholdId, _> = {
-            let mut unsorted = self
-                .graph
-                .all_st_cuts_for_cs(self.source_nodes.clone(), self.target_nodes.clone());
+            let mut unsorted = self.graph.all_st_cuts_for_cs(
+                self.source_nodes.clone(),
+                self.target_nodes.clone(),
+                &self.graph.get_initial_state_tree().0,
+            );
 
             unsorted.sort_by(|a, b| a.1.cmp(&b.1));
             unsorted.into()

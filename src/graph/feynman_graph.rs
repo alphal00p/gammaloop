@@ -85,6 +85,7 @@ pub trait FeynmanGraph {
         &self,
         source_nodes: HedgeNode,
         target_nodes: HedgeNode,
+        initial_state_tree: &SuBitGraph,
     ) -> Vec<(SuBitGraph, OrientedCut, SuBitGraph)>;
 }
 
@@ -735,16 +736,19 @@ impl FeynmanGraph for Graph {
         &self,
         source_nodes: HedgeNode,
         target_nodes: HedgeNode,
+        initial_state_tree: &SuBitGraph,
     ) -> Vec<(SuBitGraph, OrientedCut, SuBitGraph)> {
         self.underlying
             .all_cuts(source_nodes, target_nodes)
             .into_iter()
-            .map(|(l, mut c, r)| {
+            .map(|(mut l, mut c, mut r)| {
                 // remove initial state cut edges from cut
                 c.left.subtract_with(&self.initial_state_cut.left);
                 c.right.subtract_with(&self.initial_state_cut.left);
                 c.left.subtract_with(&self.initial_state_cut.right);
                 c.right.subtract_with(&self.initial_state_cut.right);
+                l.subtract_with(initial_state_tree);
+                r.subtract_with(initial_state_tree);
 
                 (l, c, r)
             })

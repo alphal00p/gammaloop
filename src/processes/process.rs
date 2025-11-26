@@ -20,17 +20,17 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
-use crate::graph::edge::PossibleParticle;
 use crate::graph::FeynmanGraph;
+use crate::graph::edge::PossibleParticle;
 use crate::{
+    GammaLoopContext, GammaLoopContextContainer,
     feyngen::NumeratorAwareGraphGroupingOption,
     gammaloop_integrand::GLIntegrand,
     model,
     numerator::GlobalPrefactor,
-    settings::{runtime::LockedRuntimeSettings, GlobalSettings},
-    GammaLoopContext, GammaLoopContextContainer,
+    settings::{GlobalSettings, runtime::LockedRuntimeSettings},
 };
-use eyre::{eyre, Context};
+use eyre::{Context, eyre};
 
 use crate::{
     feyngen::{FeynGenFilters, GenerationType},
@@ -75,39 +75,77 @@ impl fmt::Display for ProcessDefinition {
             self.process_id,
             self.folder_name,
             self.generation_type,
-            if self.symmetrize_left_right_states { " (left-right symmetrized)" } else { "" },
+            if self.symmetrize_left_right_states {
+                " (left-right symmetrized)"
+            } else {
+                ""
+            },
             if self.allow_symmetrization_of_external_fermions_in_amplitudes
                 && self.generation_type == GenerationType::Amplitude
-                && (self.symmetrize_initial_states  || self.symmetrize_final_states || self.symmetrize_left_right_states)
-                { " (allowing fermion symmetrization)" } else { "" },
-            self.initial_pdgs,
-            if self.symmetrize_initial_states { " (symmetrized)" } else { "" },
-            if self.final_pdgs_lists.len() == 1 {
-                format!("{:?}",self.final_pdgs_lists[0])
+                && (self.symmetrize_initial_states
+                    || self.symmetrize_final_states
+                    || self.symmetrize_left_right_states)
+            {
+                " (allowing fermion symmetrization)"
             } else {
-                format!("[ {} ]", self.final_pdgs_lists.iter().map(|pdgs| format!("{:?}", pdgs)).join(" | "))
+                ""
             },
-            if self.symmetrize_final_states { " (symmetrized)" } else { "" },
+            self.initial_pdgs,
+            if self.symmetrize_initial_states {
+                " (symmetrized)"
+            } else {
+                ""
+            },
+            if self.final_pdgs_lists.len() == 1 {
+                format!("{:?}", self.final_pdgs_lists[0])
+            } else {
+                format!(
+                    "[ {} ]",
+                    self.final_pdgs_lists
+                        .iter()
+                        .map(|pdgs| format!("{:?}", pdgs))
+                        .join(" | ")
+                )
+            },
+            if self.symmetrize_final_states {
+                " (symmetrized)"
+            } else {
+                ""
+            },
             if self.loop_count_range.0 == self.loop_count_range.1 {
                 format!("{}", self.loop_count_range.0)
             } else {
                 format!("{:?}", self.loop_count_range)
             },
-            if self.amplitude_filters.0.is_empty() { " None" } else {"\n"},
-            if self.amplitude_filters.0.is_empty() { "".into() } else { self.amplitude_filters
-                .0
-                .iter()
-                .map(|f| format!(" > {}", f))
-                .collect::<Vec<String>>()
-                .join("\n")
+            if self.amplitude_filters.0.is_empty() {
+                " None"
+            } else {
+                "\n"
             },
-            if self.cross_section_filters.0.is_empty() { " None" } else {"\n"},
-            if self.cross_section_filters.0.is_empty() { "".into() } else { self.cross_section_filters
-                .0
-                .iter()
-                .map(|f| format!(" > {}", f))
-                .collect::<Vec<String>>()
-                .join("\n")
+            if self.amplitude_filters.0.is_empty() {
+                "".into()
+            } else {
+                self.amplitude_filters
+                    .0
+                    .iter()
+                    .map(|f| format!(" > {}", f))
+                    .collect::<Vec<String>>()
+                    .join("\n")
+            },
+            if self.cross_section_filters.0.is_empty() {
+                " None"
+            } else {
+                "\n"
+            },
+            if self.cross_section_filters.0.is_empty() {
+                "".into()
+            } else {
+                self.cross_section_filters
+                    .0
+                    .iter()
+                    .map(|f| format!(" > {}", f))
+                    .collect::<Vec<String>>()
+                    .join("\n")
             }
         )
     }
@@ -219,7 +257,11 @@ impl ProcessDefinition {
             GenerationType::CrossSection => {
                 for g in graphs {
                     let (source_nodes, target_nodes) = g.get_source_and_target();
-                    let st_cuts = g.all_st_cuts_for_cs(source_nodes, target_nodes);
+                    let st_cuts = g.all_st_cuts_for_cs(
+                        source_nodes,
+                        target_nodes,
+                        &g.get_initial_state_tree().0,
+                    );
                     for (_, cut, _) in st_cuts {
                         let mut final_pdgs_of_cut = vec![];
                         for (orientaion, edge) in cut.iter_edges(&g.underlying) {
@@ -858,7 +900,7 @@ impl ProcessCollection {
 
 #[cfg(test)]
 mod tests {
-    use crate::{utils::test_utils::load_generic_model, GammaLoopContextContainer};
+    use crate::{GammaLoopContextContainer, utils::test_utils::load_generic_model};
 
     #[test]
     fn test_proc_definition_encode() {
