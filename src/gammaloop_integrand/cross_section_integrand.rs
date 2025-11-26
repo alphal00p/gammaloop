@@ -60,6 +60,7 @@ use super::{
 const TOLERANCE: F<f64> = F(2.0);
 const HARD_CODED_M_UV: F<f64> = F(1000.0);
 const HARD_CODED_M_R_SQ: F<f64> = F(1000.0);
+const PICOBARN_CONVERSION: F<f64> = F(389_379_338.0); // thanks chatgpt
 
 #[derive(Clone, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]
@@ -528,6 +529,8 @@ impl GraphTerm for CrossSectionGraphTerm {
             };
 
             debug!("rescaled loop moms: {}", rescaled_momenta.loop_moms());
+            debug!("tstar: {}", lu_params.tstar);
+            debug!("num iterations: {}", solution.num_iterations_used);
 
             let prefactor = if let Some((channel_index, alpha)) = &channel_id {
                 self.multi_channeling_setup.compute_prefactor_impl(
@@ -621,7 +624,15 @@ impl GraphTerm for CrossSectionGraphTerm {
                     .re;
 
                 let f = F::from_f64(4.0) * (mom_1.dot(mom_2).square() - mass_factor).sqrt();
-                momentum_sample.one() / f
+
+                let res = momentum_sample.one() / f
+                    * if settings.general.use_picobarns {
+                        F::from_ff64(PICOBARN_CONVERSION)
+                    } else {
+                        F::from_f64(1.0)
+                    };
+
+                res
             }
             _ => unimplemented!(
                 "Flux factor for more than 3 or more incoming particles not implemented yet"

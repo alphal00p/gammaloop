@@ -8,22 +8,22 @@ use spenso::algebra::complex::Complex;
 use typed_index_collections::TiVec;
 
 use crate::{
+    GammaLoopContext,
     improve_ps::generate_default_momenta,
     momentum::RotationMethod,
     momentum_sample::ExternalIndex,
     settings::runtime::kinematic::Externals,
     signature::SignatureLike,
     utils::{
-        serde_utils::{
-            is_false, is_float, is_true, is_u64, is_usize, IsDefault, _default_rotation_axis,
-            _default_stability_levels, is_default_rotation_axis, is_default_stability_levels,
-        },
         F,
+        serde_utils::{
+            _default_rotation_axis, _default_stability_levels, IsDefault, is_default_rotation_axis,
+            is_default_stability_levels, is_false, is_float, is_true, is_u64, is_usize,
+        },
     },
-    GammaLoopContext,
 };
 
-use super::{global::OrientationPattern, RuntimeSettings};
+use super::{RuntimeSettings, global::OrientationPattern};
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, Encode, Decode, JsonSchema)]
@@ -105,6 +105,8 @@ pub struct GeneralSettings {
     pub m_uv: f64,
     #[serde(skip_serializing_if = "is_float::<1000_000>")]
     pub mu_r_sq: f64,
+    #[serde(skip_serializing_if = "is_false")]
+    pub use_picobarns: bool,
 }
 
 impl Default for GeneralSettings {
@@ -116,6 +118,7 @@ impl Default for GeneralSettings {
             orientation_pat: OrientationPattern::default(),
             m_uv: 1000.0,
             mu_r_sq: 1000000.0,
+            use_picobarns: false,
         }
     }
 }
