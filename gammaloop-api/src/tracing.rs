@@ -82,7 +82,7 @@ const ENV_ALL_LOG_FILTER: &'static str = "GL_ALL_LOG_FILTER";
 // Statics to hold the current log specifications
 static FILE_LOG_SPEC: LazyLock<Mutex<String>> = LazyLock::new(|| {
     if let Ok(all) = std::env::var(ENV_ALL_LOG_FILTER) {
-        println!("All:{all}");
+        // println!("All:{all}");
         return Mutex::new(all);
     }
     let directive = std::env::var(ENV_FILE_LOG_FILTER)
@@ -141,10 +141,10 @@ pub fn set_file_log_filter(user_spec: impl AsRef<str>) -> Result<()> {
     *FILE_LOG_SPEC.lock().unwrap() = user_spec.to_string();
 
     let full_spec = file_filter_from(&user_spec)?;
-    println!(
-        "Modifying file filter to: {} with userspec {}",
-        full_spec, user_spec
-    );
+    // println!(
+    //     "Modifying file filter to: {} with userspec {}",
+    //     full_spec, user_spec
+    // );
     handles.file_handle.modify(|f| *f = full_spec)?;
     Ok(())
 }
@@ -167,7 +167,7 @@ pub fn set_stderr_log_filter(user_spec: impl AsRef<str>) -> Result<()> {
     };
     let full_spec = display_filter_from(&user_spec)?;
     *STDERR_LOG_SPEC.lock().unwrap() = user_spec;
-    println!("Modifying display filter to: {}", full_spec);
+    // println!("Modifying display filter to: {}", full_spec);
     handles.stderr_handle.modify(|f| *f = full_spec)?;
     Ok(())
 }
@@ -186,18 +186,18 @@ pub(crate) fn init_tracing(
     dir: impl AsRef<Path>,
     log_file_name: Option<String>,
 ) -> reload::Handle<EnvFilter, Registry> {
-    println!("Init tracing");
+    // println!("Init tracing");
     let handles = FILTER_HANDLES.get_or_init(|| {
         let file_filter = EnvFilter::new(FILE_LOG_SPEC.lock().unwrap().as_str());
-        println!(
-            "File filter: {file_filter},:{}",
-            FILE_LOG_SPEC.lock().unwrap().as_str()
-        );
+        // println!(
+        //     "File filter: {file_filter},:{}",
+        //     FILE_LOG_SPEC.lock().unwrap().as_str()
+        // );
         let stderr_filter = EnvFilter::new(STDERR_LOG_SPEC.lock().unwrap().as_str());
-        println!(
-            "Stderr filter: {stderr_filter},:{}",
-            STDERR_LOG_SPEC.lock().unwrap().as_str()
-        );
+        // println!(
+        //     "Stderr filter: {stderr_filter},:{}",
+        //     STDERR_LOG_SPEC.lock().unwrap().as_str()
+        // );
 
         let (file_filter_layer, file_handle) = reload::Layer::new(file_filter.clone());
         let (stderr_filter_layer, stderr_handle) = reload::Layer::new(stderr_filter.clone());
