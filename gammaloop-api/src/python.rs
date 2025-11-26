@@ -555,7 +555,19 @@ impl GammaLoopAPI {
     }
 
     #[pyo3(name="get_lmbs", signature = (graphs, format="dot".into()))]
-    pub(crate) fn get_lmbs(&self, graphs: String, format: String) -> Result<String> {
+    pub(crate) fn get_lmbs(
+        &self,
+        graphs: String,
+        format: String,
+    ) -> Result<
+        Vec<
+            Vec<(
+                Vec<usize>, // loop edges
+                Vec<usize>, // external edges
+                HashMap<usize, (Vec<i8>, Vec<i8>)>,
+            )>,
+        >,
+    > {
         let graphs = match format.as_str() {
             "dot" => {
                 if !graphs.ends_with(".dot") {
@@ -589,8 +601,36 @@ impl GammaLoopAPI {
             .map(|g| g.generate_loop_momentum_bases(&g.no_dummy()))
             .collect_vec();
 
-        let lmbs_serialized = serde_json::to_string(&lmbs)?;
-        Ok(lmbs_serialized)
+        Ok(lmbs
+            .into_iter()
+            .map(|lmb_list| {
+                lmb_list
+                    .into_iter()
+                    .map(|lmb| {
+                        let loop_edges = lmb.loop_edges.into_iter().map(|e| e.0).collect_vec();
+                        let external_edges = lmb.ext_edges.into_iter().map(|e| e.0).collect_vec();
+                        let mut edge_signatures = HashMap::new();
+
+                        for (edge_id, signature) in lmb.edge_signatures.into_iter() {
+                            let loop_part = signature
+                                .internal
+                                .into_iter()
+                                .map(|e| e as i8)
+                                .collect_vec();
+
+                            let ext_part = signature
+                                .external
+                                .into_iter()
+                                .map(|e| e as i8)
+                                .collect_vec();
+
+                            edge_signatures.insert(edge_id.0, (loop_part, ext_part));
+                        }
+                        (loop_edges, external_edges, edge_signatures)
+                    })
+                    .collect()
+            })
+            .collect())
     }
 
     #[pyo3(name="get_orientations", signature = (graph_name, process_id=None, integrand_name=None))]
