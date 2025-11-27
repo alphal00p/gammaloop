@@ -145,45 +145,6 @@ impl NumeratorAwareGraphGroupingOption {
             self.get_options().map_or("".into(), |o| format!("({})", o))
         )
     }
-
-    pub fn new_with_attributes(
-        strategy: &str,
-        seed: Option<u16>,
-        num_samples: Option<usize>,
-        differentiate_particle_masses_only: Option<bool>,
-        fully_numerical_substitution_when_comparing_numerators: Option<bool>,
-        test_canonized_numerator: Option<bool>,
-        symmetric_polarizations: Option<bool>,
-    ) -> Result<Self, FeynGenError> {
-        let mut opt = NumeratorAwareGraphGroupingOption::from_str(strategy)?;
-        let grouping_options = opt.set_options();
-        if let Some(grouping_options) = grouping_options {
-            if let Some(seed) = seed {
-                grouping_options.numerical_sample_seed = seed;
-            }
-            if let Some(num_samples) = num_samples {
-                grouping_options.number_of_numerical_samples = num_samples;
-            }
-            if let Some(differentiate_particle_masses_only) = differentiate_particle_masses_only {
-                grouping_options.differentiate_particle_masses_only =
-                    differentiate_particle_masses_only;
-            }
-            if let Some(test_canonized_numerator) = test_canonized_numerator {
-                grouping_options.test_canonized_numerator = test_canonized_numerator;
-            }
-            if let Some(fully_numerical_substitution_when_comparing_numerators) =
-                fully_numerical_substitution_when_comparing_numerators
-            {
-                grouping_options.fully_numerical_substitution_when_comparing_numerators =
-                    fully_numerical_substitution_when_comparing_numerators;
-            }
-            if let Some(symmetric_polarizations) = symmetric_polarizations {
-                grouping_options.symmetric_polarizations = symmetric_polarizations;
-            }
-        }
-
-        Ok(opt)
-    }
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, JsonSchema, Encode, Decode, Copy)]

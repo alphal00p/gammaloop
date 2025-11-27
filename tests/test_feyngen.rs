@@ -121,11 +121,11 @@ fn graph_count_from_amplitude_load() -> Result<()> {
 #[test]
 #[rustfmt::skip]
 fn example_graph_count() -> Result<()> {
-    let mut cli = get_test_cli(None,get_tests_workspace_path().join("feyn_gen_generation_test"),Some("feyngen".to_string()),true)?;
+    let mut cli = get_test_cli( Some("sm_load.toml".into()),get_tests_workspace_path().join("feyn_gen_generation_test"),Some("feyngen".to_string()),true)?;
 
 
     // Choose the model to consider
-    cli.run_command("import model sm.json")?;
+    // cli.run_command("import model sm.json")?;
 
     // A first process
     assert_snapshot!(feyngen_str(&mut cli, "xs", "e+ e- > d d~ / z QED^2==4 [{{1}} QCD] --numerator-grouping no_grouping")?,@"1 | (AutG(1))^(-1)*AntiFermionSpinSumSign(-1)*ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1) = 1");

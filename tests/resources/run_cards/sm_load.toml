@@ -1,1 +1,6 @@
-commands = ["import model sm-default.json"]
+commands = ["import model sm-default"]
+
+
+[cli_settings.global]
+logfile_directive = "debug,symbolica=off"
+display_directive = "gammalooprs=debug"

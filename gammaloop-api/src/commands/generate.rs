@@ -18,8 +18,9 @@ use thiserror::Error;
 
 use eyre::eyre;
 use gammalooprs::feyngen::{
-    FeynGenFilter, FeynGenFilters, GenerationType, NumeratorAwareGraphGroupingOption,
-    SelfEnergyFilterOptions, SewedFilterOptions, SnailFilterOptions, TadpolesFilterOptions,
+    FeynGenFilter, FeynGenFilters, GenerationType, GraphGroupingOptions,
+    NumeratorAwareGraphGroupingOption, SelfEnergyFilterOptions, SewedFilterOptions,
+    SnailFilterOptions, TadpolesFilterOptions,
 };
 use gammalooprs::model::Model;
 use gammalooprs::numerator::GlobalPrefactor;
@@ -65,14 +66,51 @@ pub enum GroupingChoice {
 }
 
 impl GroupingChoice {
-    fn as_strategy_str(self) -> &'static str {
+    fn to_strategy(
+        self,
+        seed: Option<u16>,
+        num_samples: Option<usize>,
+        differentiate_particle_masses_only: Option<bool>,
+        fully_numerical_substitution_when_comparing_numerators: Option<bool>,
+        test_canonized_numerator: Option<bool>,
+        symmetric_polarizations: Option<bool>,
+    ) -> NumeratorAwareGraphGroupingOption {
+        let mut graph_grouping_options = GraphGroupingOptions::default();
+        if let Some(seed) = seed {
+            graph_grouping_options.numerical_sample_seed = seed;
+        }
+        if let Some(num_samples) = num_samples {
+            graph_grouping_options.number_of_numerical_samples = num_samples;
+        }
+        if let Some(differentiate_particle_masses_only) = differentiate_particle_masses_only {
+            graph_grouping_options.differentiate_particle_masses_only =
+                differentiate_particle_masses_only;
+        }
+        if let Some(test_canonized_numerator) = test_canonized_numerator {
+            graph_grouping_options.test_canonized_numerator = test_canonized_numerator;
+        }
+        if let Some(fully_numerical_substitution_when_comparing_numerators) =
+            fully_numerical_substitution_when_comparing_numerators
+        {
+            graph_grouping_options.fully_numerical_substitution_when_comparing_numerators =
+                fully_numerical_substitution_when_comparing_numerators;
+        }
+        if let Some(symmetric_polarizations) = symmetric_polarizations {
+            graph_grouping_options.symmetric_polarizations = symmetric_polarizations;
+        }
         match self {
-            GroupingChoice::NoGrouping => "no_grouping",
-            GroupingChoice::OnlyDetectZeroes => "only_detect_zeroes",
-            GroupingChoice::GroupIdenticalGraphsUpToSign => "group_identical_graphs_up_to_sign",
             GroupingChoice::GroupIdenticalGraphsUpToScalarRescaling => {
-                "group_identical_graphs_up_to_scalar_rescaling"
+                NumeratorAwareGraphGroupingOption::GroupIdenticalGraphUpToScalarRescaling(
+                    graph_grouping_options,
+                )
             }
+            GroupingChoice::GroupIdenticalGraphsUpToSign => {
+                NumeratorAwareGraphGroupingOption::GroupIdenticalGraphUpToSign(
+                    graph_grouping_options,
+                )
+            }
+            GroupingChoice::NoGrouping => NumeratorAwareGraphGroupingOption::NoGrouping,
+            GroupingChoice::OnlyDetectZeroes => NumeratorAwareGraphGroupingOption::OnlyDetectZeroes,
         }
     }
 }
@@ -511,7 +549,7 @@ pub struct ProcessSpec {
     pub process_definition: ProcessDefinition,
 
     /// Parsed numerator-aware grouping mode (not part of FeynGenOptions)
-    pub numerator_grouping: Option<NumeratorAwareGraphGroupingOption>,
+    pub numerator_grouping: NumeratorAwareGraphGroupingOption,
 }
 
 impl ProcessSpec {
@@ -871,19 +909,7 @@ pub fn parse_spec_with_model(
     } else {
         spec.process_definition.folder_name = spec.process_shell_name(true);
     }
-    spec.process_definition.numerator_grouping =
-        spec.numerator_grouping.clone().unwrap_or_else(|| {
-            NumeratorAwareGraphGroupingOption::new_with_attributes(
-                "group_identical_graphs_up_to_scalar_rescaling",
-                args.numerical_samples_seed,
-                args.number_of_samples_for_numerator_comparisons,
-                args.consider_internal_masses_only_in_numerator_isomorphisms,
-                args.fully_numerical_substitution_when_comparing_numerators,
-                args.compare_canonized_numerator,
-                args.symmetric_left_right_polarizations,
-            )
-            .unwrap_or(NumeratorAwareGraphGroupingOption::NoGrouping)
-        });
+    spec.process_definition.numerator_grouping = spec.numerator_grouping.clone();
     spec.process_definition.filter_self_loop = args.filter_self_loop.unwrap_or(false);
     spec.process_definition.filter_zero_flow_edges = args.filter_zero_flow_edges.unwrap_or(true);
 
@@ -1533,24 +1559,17 @@ fn coupling_orders_from_order_ranges_xs(
     coupling_orders_from_order_ranges_amp(&merged)
 }
 
-fn build_grouping_option(a: &SpecArgs) -> Option<NumeratorAwareGraphGroupingOption> {
-    let strategy = a
-        .numerator_aware_isomorphism_grouping
-        .map(|c| c.as_strategy_str().to_string())
-        .unwrap_or_else(|| "group_identical_graphs_up_to_scalar_rescaling".to_string());
-    let opt = NumeratorAwareGraphGroupingOption::new_with_attributes(
-        &strategy,
-        a.numerical_samples_seed,
-        a.number_of_samples_for_numerator_comparisons,
-        a.consider_internal_masses_only_in_numerator_isomorphisms,
-        a.fully_numerical_substitution_when_comparing_numerators,
-        a.compare_canonized_numerator,
-        a.symmetric_left_right_polarizations,
-    );
-    match opt {
-        Ok(v) => Some(v),
-        Err(_e) => Some(NumeratorAwareGraphGroupingOption::NoGrouping),
-    }
+fn build_grouping_option(a: &SpecArgs) -> NumeratorAwareGraphGroupingOption {
+    a.numerator_aware_isomorphism_grouping
+        .unwrap_or(GroupingChoice::GroupIdenticalGraphsUpToScalarRescaling)
+        .to_strategy(
+            a.numerical_samples_seed,
+            a.number_of_samples_for_numerator_comparisons,
+            a.consider_internal_masses_only_in_numerator_isomorphisms,
+            a.fully_numerical_substitution_when_comparing_numerators,
+            a.compare_canonized_numerator,
+            a.symmetric_left_right_polarizations,
+        )
 }
 
 // ---- Model-backed validation and resolution ----

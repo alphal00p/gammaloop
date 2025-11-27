@@ -1,5 +1,9 @@
 use linnet::{
-    half_edge::{HedgeGraph, involution::Flow, subgraph::SubSetLike},
+    half_edge::{
+        HedgeGraph,
+        involution::{Flow, HedgePair},
+        subgraph::SubSetLike,
+    },
     parser::{DotEdgeData, DotGraph, DotHedgeData, DotVertexData},
 };
 
@@ -18,7 +22,24 @@ impl From<&Graph> for DotGraph {
             if value.initial_state_cut.is_empty() {
                 value.underlying.map_data_ref(
                     |_, _, v| v.into(),
-                    |_, _, _, e| e.map(|e| e.into()),
+                    |_, _, p, e| {
+                        if let HedgePair::Unpaired { flow, .. } = p {
+                            e.map(|e| {
+                                let mut dot: DotEdgeData = e.into();
+                                match flow {
+                                    Flow::Sink => {
+                                        dot.add_statement("pin", format!("\"x:@right\""));
+                                    }
+                                    Flow::Source => {
+                                        dot.add_statement("pin", format!("\"x:@left\""));
+                                    }
+                                }
+                                dot
+                            })
+                        } else {
+                            e.map(|e| e.into())
+                        }
+                    },
                     |_, d| d.into(),
                 )
             } else {
