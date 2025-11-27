@@ -39,7 +39,7 @@ use crate::{
     numerator::{self, symbolica_ext::AtomCoreExt},
     settings::{GlobalSettings, global::GenerationSettings, runtime::LockedRuntimeSettings},
     utils::{FUN_LIB, GS, TENSORLIB, W_},
-    uv::UltravioletGraph,
+    uv::{UltravioletGraph, uv_graph::UVE},
 };
 use eyre::{Context, eyre};
 use itertools::Itertools;
@@ -54,6 +54,7 @@ use serde::{Deserialize, Serialize};
 use symbolica::{
     atom::{Atom, AtomCore},
     function,
+    id::Replacement,
 };
 use typed_index_collections::TiVec;
 
@@ -786,6 +787,52 @@ impl CrossSectionGraph {
 
         let (tree_structure, props) = self.graph.get_initial_state_tree();
 
+        println!("props: {:?}", props);
+
+        let external_energy_atoms = self
+            .graph
+            .loop_momentum_basis
+            .ext_edges
+            .iter()
+            .map(|e_id| GS.emr_mom(*e_id, Atom::from(ExpandedIndex::from_iter([0]))))
+            .collect_vec();
+
+        let mut prop_atoms = Atom::num(1);
+        let mut replacements = vec![];
+        for edge_id in props.iter() {
+            let emr = (0..4)
+                .map(|mu| GS.emr_mom(*edge_id, Atom::from(ExpandedIndex::from_iter([mu]))))
+                .collect_vec();
+
+            let mass = self.graph[*edge_id].mass_atom();
+            let prop_atom = Atom::num(1)
+                / (&emr[0] * &emr[0]
+                    - &emr[1] * &emr[1]
+                    - &emr[2] * &emr[2]
+                    - &emr[3] * &emr[3]
+                    - &mass * &mass);
+
+            let replaced_mom = self.graph.loop_momentum_basis.edge_signatures[*edge_id]
+                .external
+                .apply(&external_energy_atoms);
+
+            println!("edge {}: replaced_mom: {}", edge_id, replaced_mom);
+
+            let replacement = Replacement::new(
+                GS.emr_mom(*edge_id, Atom::from(ExpandedIndex::from_iter([0])))
+                    .to_pattern(),
+                replaced_mom,
+            );
+
+            replacements.push(replacement);
+            prop_atoms *= prop_atom;
+        }
+
+        println!("prop atoms: {}", prop_atoms);
+        let replaced = prop_atoms.replace_multiple(&replacements);
+        println!("replaced: {}", replaced);
+        println!("q5 num: {}", self.graph[EdgeIndex::from(5)].num);
+
         let canonize_esurface = self
             .graph
             .get_esurface_canonization(&self.graph.loop_momentum_basis);
@@ -860,7 +907,7 @@ impl CrossSectionGraph {
                     .push((left_expr.clone(), right_expr.clone()));
             }
 
-            let initial_state_tree_numerator = numerator::symbolica_ext::AtomCoreExt::wrap_color(
+            let initial_state_tree_expr = numerator::symbolica_ext::AtomCoreExt::wrap_color(
                 &(self
                     .graph
                     .iter_edges_of(&tree_structure)
@@ -868,14 +915,14 @@ impl CrossSectionGraph {
                     * self
                         .graph
                         .iter_nodes_of(&tree_structure)
-                        .fold(Atom::num(1), |acc, (_, _, vertex)| acc * vertex.get_num())),
+                        .fold(Atom::num(1), |acc, (_, _, vertex)| acc * vertex.get_num())
+                    * &prop_atoms),
                 GS.color_wrap,
             )
             .parse_into_net()
             .unwrap();
 
-            let mut product =
-                left_expr * right_expr * global_num.clone() * initial_state_tree_numerator;
+            let mut product = left_expr * right_expr * global_num.clone() * initial_state_tree_expr;
 
             product
                 .execute::<Sequential, SmallestDegree, _, _, _>(
@@ -907,6 +954,7 @@ impl CrossSectionGraph {
                     .with(GS.emr_mom(edge_index, Atom::from(ExpandedIndex::from_iter([0]))));
             }
 
+            integrand = integrand.replace_multiple(&replacements);
             let prefactor = self.lu_prefactor_helper();
             let integrand_with_prefactor = prefactor * integrand;
             debug!("integrand for cut {}: {}", cut_id, integrand_with_prefactor);
