@@ -787,8 +787,6 @@ impl CrossSectionGraph {
 
         let (tree_structure, props) = self.graph.get_initial_state_tree();
 
-        println!("props: {:?}", props);
-
         let external_energy_atoms = self
             .graph
             .loop_momentum_basis
@@ -816,8 +814,6 @@ impl CrossSectionGraph {
                 .external
                 .apply(&external_energy_atoms);
 
-            println!("edge {}: replaced_mom: {}", edge_id, replaced_mom);
-
             let replacement = Replacement::new(
                 GS.emr_mom(*edge_id, Atom::from(ExpandedIndex::from_iter([0])))
                     .to_pattern(),
@@ -827,11 +823,6 @@ impl CrossSectionGraph {
             replacements.push(replacement);
             prop_atoms *= prop_atom;
         }
-
-        println!("prop atoms: {}", prop_atoms);
-        let replaced = prop_atoms.replace_multiple(&replacements);
-        println!("replaced: {}", replaced);
-        println!("q5 num: {}", self.graph[EdgeIndex::from(5)].num);
 
         let canonize_esurface = self
             .graph
