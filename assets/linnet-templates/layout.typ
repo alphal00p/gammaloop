@@ -125,15 +125,20 @@
 
   }
 
-let AutG(a)=$ op("Aut")_G (#a) $
-let AntiFermionSpinSumSign(a)=$ op("AntiFermionSpinSum")(#a) $
-let ExternalFermionOrderingSign(a)=$ op("ExternalFermionOrdering")(#a)$
-let InternalFermionLoopSign(a)=$ op("InternalFermionLoopSign")(#a) $
+// let AutG(a)=$ op("Aut")_G (#a) $
+// let AntiFermionSpinSumSign(a)=$ op("AntiFermionSpinSum")(#a) $
+// let ExternalFermionOrderingSign(a)=$ op("ExternalFermionOrdering")(#a)$
+// let InternalFermionLoopSign(a)=$ op("InternalFermionLoopSign")(#a) $
+let AutG(a)=$#a $
+let AntiFermionSpinSumSign(a)=$#a $
+let ExternalFermionOrderingSign(a)=$ #a$
+let InternalFermionLoopSign(a)=$ #a $
+//
 let AutG(a)=$ op("Aut")_G(#a) $
  diags.push(grid(
    gutter:2em,
-   g.name,
-   eval("$"+g.global_statements.overall_factor+"$",scope: (AutG:AutG,AntiFermionSpinSumSign:AntiFermionSpinSumSign,ExternalFermionOrderingSign:ExternalFermionOrderingSign,InternalFermionLoopSign:InternalFermionLoopSign)),
+   [#g.name | #g.global_statements.overall_factor_evaluated],
+   // eval("$"+g.global_statements.overall_factor_evaluated+"$",scope: (AutG:AutG,AntiFermionSpinSumSign:AntiFermionSpinSumSign,ExternalFermionOrderingSign:ExternalFermionOrderingSign,InternalFermionLoopSign:InternalFermionLoopSign)),
    diagram(
  node-shape:circle,
 	node-fill: black,

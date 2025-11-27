@@ -103,6 +103,33 @@ impl Deref for ParseGraph {
 }
 
 impl ParseGraph {
+    pub fn n_fermion_loops(&self) -> usize {
+        let fermions: SuBitGraph = self.graph.from_filter(|a| a.particle.is_fermion());
+
+        self.graph.cyclotomatic_number(&fermions)
+    }
+    pub fn n_external_fermion_loops(&mut self) -> Result<usize> {
+        let internal = self.n_fermion_loops();
+        self.graph
+            .sew(
+                |_, ae, _, be| {
+                    if let (Some(a), Some(b)) = (ae.data.is_cut, be.data.is_cut) {
+                        a == b
+                    } else {
+                        false
+                    }
+                },
+                |af, ae, bf, be| match (af, bf) {
+                    (Flow::Sink, Flow::Source) => (Flow::Sink, ae),
+                    (Flow::Source, Flow::Sink) => (Flow::Source, be),
+                    _ => panic!("Cannot sew hedges with flow {:?} and {:?}", af, bf),
+                },
+            )
+            .map_err(|e| eyre::eyre!("Graph sewing failed: {:?}", e))?;
+
+        Ok(self.n_fermion_loops() - internal)
+    }
+
     pub fn debug_dot(&self) -> String {
         DotGraph::from(self).debug_dot()
     }

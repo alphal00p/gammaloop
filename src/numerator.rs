@@ -234,7 +234,9 @@ impl<S: NumeratorState> Numerator<S> {
 
         fn_map.add_constant(
             parse!("pi"),
-            symbolica::domains::float::Complex::from(Rational::try_from(std::f64::consts::PI).unwrap()),
+            symbolica::domains::float::Complex::from(
+                Rational::try_from(std::f64::consts::PI).unwrap(),
+            ),
         );
     }
 }
@@ -1248,6 +1250,20 @@ impl Numerator<GammaSimplified> {
 
 pub type ParsingNet = spenso::network::Network<
     NetworkStore<MixedTensor<F<f64>, ShadowedStructure<Aind>>, Atom>,
+    ExplicitKey<Aind>,
+    Symbol,
+    Aind,
+>;
+
+pub type ParamParsingNet = spenso::network::Network<
+    NetworkStore<ParamTensor<ShadowedStructure<Aind>>, Atom>,
+    ExplicitKey<Aind>,
+    Symbol,
+    Aind,
+>;
+
+pub type IntParsingNet = spenso::network::Network<
+    NetworkStore<MixedTensor<i64, ShadowedStructure<Aind>>, Atom>,
     ExplicitKey<Aind>,
     Symbol,
     Aind,

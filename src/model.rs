@@ -2,11 +2,11 @@ use crate::momentum::Helicity;
 use crate::numerator::aind::Aind;
 use crate::utils::serde_utils::SmartSerde;
 use crate::utils::{self, F};
-use crate::{status_info, HasModel};
+use crate::{HasModel, status_info};
 use ahash::{AHashMap, HashSet, RandomState};
 use bincode::{Decode, Encode};
-use color_eyre::owo_colors::OwoColorize;
 use color_eyre::Report;
+use color_eyre::owo_colors::OwoColorize;
 use eyre::eyre;
 use itertools::Itertools;
 // use linnet::half_edge::drawing::Decoration;
@@ -23,9 +23,9 @@ use serde::{Deserialize, Serialize};
 use smartstring::{LazyCompact, SmartString};
 use spenso::algebra::complex::Complex;
 use spenso::network::library::symbolic::ETS;
+use spenso::structure::OrderedStructure;
 use spenso::structure::representation::Euclidean;
 use spenso::structure::representation::{LibraryRep, Minkowski};
-use spenso::structure::OrderedStructure;
 use spenso::structure::{
     representation::BaseRepName, representation::Lorentz, representation::RepName,
     slot::IsAbstractSlot, slot::Slot,
@@ -40,6 +40,7 @@ use symbolica::domains::integer::IntegerRing;
 use symbolica::domains::rational::{Fraction, Rational};
 use symbolica::evaluate::FunctionMap;
 use symbolica::id::Replacement;
+use tracing::info;
 
 use color_eyre::Result;
 use std::collections::HashMap;
@@ -832,6 +833,10 @@ impl Particle {
         self.spin == 3
     }
 
+    pub fn is_tensor(&self) -> bool {
+        self.spin == 5
+    }
+
     pub fn is_scalar(&self) -> bool {
         self.spin == 1
     }
@@ -1030,6 +1035,79 @@ impl Particle {
 
     pub(crate) fn is_massive(&self) -> bool {
         !self.mass.is_zero()
+    }
+
+    /// Generate edge styles for visualization based on particle properties
+    pub fn generate_edge_style(&self) -> (String, String) {
+        // Determine line thickness based on mass
+        let thickness = if self.is_massive() { "0.7mm" } else { "0.5mm" };
+
+        // Determine color based on charge
+        let color = if self.charge.abs() > 0.0 {
+            "blue"
+        } else {
+            "black"
+        };
+
+        // Generate base styles
+        let base_source = format!("source_stroke(c: {}, thickness: {})", color, thickness);
+        let base_sink = format!("sink_stroke(c: {}, thickness: {})", color, thickness);
+
+        if self.is_ghost() {
+            if self.is_antiparticle() {
+                (
+                    format!("{} + (stroke: (dash: (1pt, 1pt)))", base_sink),
+                    format!("{} + (stroke: (dash: (1pt, 1pt)))", base_source),
+                )
+            } else {
+                (
+                    format!("{} + (stroke: (dash: (1pt, 1pt)))", base_source),
+                    format!("{} + (stroke: (dash: (1pt, 1pt)))", base_sink),
+                )
+            }
+        } else if self.is_fermion() {
+            if self.is_antiparticle() {
+                (format!("{} + arrow", base_sink), base_source)
+            } else {
+                (format!("{} + arrow", base_source), base_sink)
+            }
+        } else if self.is_vector() {
+            // Vector bosons: differentiate based on charge and color properties
+            let (a, b) = if self.charge == 0.0 && self.color == 1 {
+                // Neutral color singlet (photon): wavy line
+                if self.is_antiparticle() {}
+                (
+                    format!("{} + wave", base_source),
+                    format!("{} + wave", base_sink),
+                )
+            } else if self.charge == 0.0 && self.color == 8 {
+                // Neutral color octet (gluon): coiled line
+                (
+                    format!("{} + coil", base_source),
+                    format!("{} + coil", base_sink),
+                )
+            } else {
+                // Charged vector bosons (W+/W-/Z with mass): zigzag line
+                (
+                    format!("{} + zigzag", base_source),
+                    format!("{} + zigzag", base_sink),
+                )
+            };
+            if self.is_antiparticle() {
+                (b, a)
+            } else {
+                (a, b)
+            }
+        } else if self.is_scalar() {
+            // Scalar particles: dashed lines
+            (
+                format!("{} + dashed", base_source),
+                format!("{} + dashed", base_sink),
+            )
+        } else {
+            // Default: solid line
+            (base_source, base_sink)
+        }
     }
 
     pub(crate) fn color_reps(&self, flow: Flow) -> IndexLess {
@@ -1345,6 +1423,56 @@ impl Model {
         Ok(())
     }
 
+    /// Generate edge-style.typ template file with styles for all particles in the model
+    pub fn generate_edge_style_template(
+        &self,
+        template_path: impl AsRef<std::path::Path>,
+    ) -> Result<(), std::io::Error> {
+        use std::fs;
+
+        // Create the directory if it doesn't exist
+        if let Some(parent) = template_path.as_ref().parent() {
+            fs::create_dir_all(parent)?;
+        }
+
+        let mut edge_style_content = String::new();
+        edge_style_content.push_str(r#"#import "@preview/fletcher:0.5.8" as fletcher: diagram, node, cetz,edge,hide
+
+#let source_stroke(c:black, thickness:0.5mm) = (stroke:(paint:c,thickness:thickness))
+#let sink_stroke(c:black, thickness:0.5mm) = (stroke:source_stroke(c:c.lighten(30%), thickness:thickness).stroke)
+#let wave = (decorations:cetz.decorations.wave.with(amplitude: 4pt,segment-length:0.2))
+#let double = (extrude:(-0.5mm, 0.5mm))
+#let arrow = (marks:((inherit:"solid",rev:false,pos:1.1,scale:50%),))
+#let coil = (decorations:cetz.decorations.coil.with(amplitude: 4pt,segment-length:0.2))
+#let zigzag = (decorations:cetz.decorations.zigzag.with(amplitude: 4pt,segment-length:0.2))
+#let dashed = (stroke:(dash: (2pt, 2pt)))
+
+// Auto-generated particle styles from model (computed in Rust)
+#let map = (
+"#);
+
+        // Generate styles for all particles in the model
+        for particle in self.particles.iter() {
+            let (source_style, sink_style) = particle.generate_edge_style();
+
+            edge_style_content.push_str(&format!(
+                r#"  "{}": (source: {}, sink: {}),
+"#,
+                particle.name, source_style, sink_style
+            ));
+        }
+
+        edge_style_content.push_str(")\n");
+
+        fs::write(&template_path, edge_style_content)?;
+        info!(
+            "Generated dynamic edge styles for {} particles",
+            self.particles.len()
+        );
+
+        Ok(())
+    }
+
     pub fn simplify(
         &mut self,
         model_parameters: &mut InputParamCard<F<f64>>,
@@ -1517,13 +1645,13 @@ impl Model {
         for (n, _) in &self.couplings {
             reps.push(Replacement::new(
                 Atom::from(n.0).to_pattern(),
-                function!(n.0 .0),
+                function!(n.0.0),
             ))
         }
         for (n, _) in &self.parameters {
             reps.push(Replacement::new(
                 Atom::from(n.0).to_pattern(),
-                function!(n.0 .0),
+                function!(n.0.0),
             ))
         }
 
@@ -1538,7 +1666,7 @@ impl Model {
         let mut new_values_len = 0;
 
         for (n, c) in &self.couplings {
-            let key = n.0 .0;
+            let key = n.0.0;
             expr.push(function!(key));
 
             fn_map
@@ -1556,7 +1684,7 @@ impl Model {
         let mut param_values = vec![];
 
         for (n, p) in &self.parameters {
-            let key = function!(n.0 .0);
+            let key = function!(n.0.0);
             match p.nature {
                 ParameterNature::External => {
                     params.push(key);
@@ -1572,7 +1700,7 @@ impl Model {
                     if let Some(body) = p.expression.clone() {
                         fn_map
                             .add_function(
-                                n.0 .0,
+                                n.0.0,
                                 p.name.namespaceless_string().into(),
                                 vec![],
                                 body.replace_multiple(&reps),
@@ -2136,7 +2264,7 @@ mod tests {
     use crate::{
         model::{ArcPropagator, ArcVertexRule},
         momentum::{Helicity, ThreeMomentum},
-        utils::{test_utils::load_generic_model, F},
+        utils::{F, test_utils::load_generic_model},
     };
 
     use super::ArcParticle;

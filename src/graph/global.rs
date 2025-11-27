@@ -3,11 +3,11 @@ use linnet::parser::GlobalData;
 use spenso::network::library::TensorLibraryData;
 use symbolica::atom::Atom;
 
-use crate::graph::GroupId;
+use crate::{feyngen::diagram_generator::evaluate_overall_factor, graph::GroupId};
 
 use super::{
-    parse::{ParseGraph, StripParse, ToQuoted},
     Graph,
+    parse::{ParseGraph, StripParse, ToQuoted},
 };
 
 #[derive(Clone, Debug)]
@@ -113,6 +113,7 @@ impl Graph {
 
         g.statements
             .insert("num".to_string(), self.global_prefactor.num.to_quoted());
+
         g.statements.insert(
             "projector".to_string(),
             self.global_prefactor.projector.to_quoted(),
@@ -124,6 +125,11 @@ impl Graph {
         g.statements.insert(
             "overall_factor".to_string(),
             self.overall_factor.to_quoted(),
+        );
+
+        g.statements.insert(
+            "overall_factor_evaluated".to_string(),
+            evaluate_overall_factor(self.overall_factor.as_view()).to_quoted(),
         );
 
         g

@@ -249,6 +249,7 @@ impl ImportModel {
                     load_ufo_model(&ufo_path, restriction_name, self.simplify_model)?;
             }
         }
+
         Ok(())
     }
 }

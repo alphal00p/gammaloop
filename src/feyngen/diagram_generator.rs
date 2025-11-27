@@ -19,7 +19,7 @@ use spenso::network::{Sequential, SmallestDegree};
 use spenso::structure::representation::{LibraryRep, Minkowski, RepName};
 use spenso::structure::{PermutedStructure, TensorStructure};
 use spenso::tensors::data::DataTensor;
-use spenso::tensors::parametric::{MixedTensor, ParamOrConcrete, ParamTensor};
+use spenso::tensors::parametric::ParamTensor;
 use spenso_hep_lib::{gamma_data_weyl, gamma5_weyl_data, proj_m_data_weyl, proj_p_data_weyl};
 use std::collections::HashSet;
 use std::collections::hash_map::Entry;
@@ -53,27 +53,29 @@ use super::NumeratorAwareGraphGroupingOption;
 use super::SelfEnergyFilterOptions;
 use super::SnailFilterOptions;
 use super::TadpolesFilterOptions;
-use crate::feyngen::half_edge_filters::FeynGenHedgeGraph;
 use crate::graph::ext::HedgeGraphExt;
+use crate::graph::parse::ParseGraph;
 use crate::graph::{FeynmanGraph, Graph, LMBext};
 use crate::model::ArcVertexRule;
 use crate::model::VertexRule;
 use crate::model::{ArcParticle, ColorStructure};
 use crate::momentum::{Pow, Sign, SignOrZero};
-use crate::numerator::ParsingNet;
+use crate::numerator::ParamParsingNet;
 use crate::numerator::aind::Aind;
 use crate::numerator::graph::ReversibleEdge;
 use crate::numerator::symbolica_ext::AtomCoreExt;
 use crate::processes::ProcessDefinition;
 use crate::utils::symbolica_ext::{COMPLEXRATPOLYFIELD, LOGPRINTOPTS, PrimeGenerate, Q_I};
-use crate::utils::{self, F, FUN_LIB, GS, W_};
+use crate::utils::{self, GS, PARAM_FUN_LIB, W_};
 use crate::uv::UltravioletGraph;
 use crate::{INTERRUPTED, is_interrupted, set_interrupted};
 use crate::{
     feyngen::{FeynGenFilter, GenerationType},
     model::Model,
 };
+
 use crate::{status_debug, status_error, status_info};
+use color_eyre::Result;
 use itertools::Itertools;
 use linnet::half_edge::HedgeGraph;
 use linnet::half_edge::NodeIndex;
@@ -202,7 +204,7 @@ pub(crate) struct CanonizedGraphInfo {
     pub canonized_graph: SymbolicaGraph<NodeColorWithoutVertexRule, String>,
     pub graph: SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>,
     pub graph_with_canonized_flow: SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>,
-    pub symmetry_factor: Atom,
+    pub gammaloop_graph: ParseGraph,
 }
 
 pub trait NodeColorFunctions: Sized + std::fmt::Display {
@@ -1111,42 +1113,34 @@ impl ProcessDefinition {
         model: &Model,
     ) -> (
         Vec<Replacement>,
-        TensorLibrary<MixedTensor<F<f64>, ExplicitKey<Aind>>, Aind>,
+        TensorLibrary<ParamTensor<ExplicitKey<Aind>>, Aind>,
     ) {
         let mut weyl = TensorLibrary::new();
         weyl.update_ids();
 
-        let gamma_key = PermutedStructure::identity(ParamOrConcrete::Param(
-            ParamTensor::composite(DataTensor::Sparse(
-                gamma_data_weyl(AGS.gamma_strct::<Aind>(4), Atom::num(1), Atom::num(0))
-                    .map_data(|a| a.re + Atom::i() * a.im),
-            )),
-        ));
+        let gamma_key = PermutedStructure::identity(ParamTensor::composite(DataTensor::Sparse(
+            gamma_data_weyl(AGS.gamma_strct::<Aind>(4), Atom::num(1), Atom::num(0))
+                .map_data(|a| a.re + Atom::i() * a.im),
+        )));
         // println!("permutation{}", gamma_key.rep_permutation);
         weyl.insert_explicit(gamma_key);
 
-        let gamma5_key = PermutedStructure::identity(ParamOrConcrete::Param(
-            ParamTensor::composite(DataTensor::Sparse(
-                gamma5_weyl_data(AGS.gamma5_strct::<Aind>(4), Atom::num(1), Atom::num(0))
-                    .map_data(|a| a.re + Atom::i() * a.im),
-            )),
-        ));
+        let gamma5_key = PermutedStructure::identity(ParamTensor::composite(DataTensor::Sparse(
+            gamma5_weyl_data(AGS.gamma5_strct::<Aind>(4), Atom::num(1), Atom::num(0))
+                .map_data(|a| a.re + Atom::i() * a.im),
+        )));
         weyl.insert_explicit(gamma5_key);
 
-        let projm_key = PermutedStructure::identity(ParamOrConcrete::Param(
-            ParamTensor::composite(DataTensor::Sparse(
-                proj_m_data_weyl(AGS.projm_strct::<Aind>(4), Atom::num(1), Atom::num(0))
-                    .map_data(|a| a.re + Atom::i() * a.im),
-            )),
-        ));
+        let projm_key = PermutedStructure::identity(ParamTensor::composite(DataTensor::Sparse(
+            proj_m_data_weyl(AGS.projm_strct::<Aind>(4), Atom::num(1), Atom::num(0))
+                .map_data(|a| a.re + Atom::i() * a.im),
+        )));
         weyl.insert_explicit(projm_key);
 
-        let projp_key = PermutedStructure::identity(ParamOrConcrete::Param(
-            ParamTensor::composite(DataTensor::Sparse(
-                proj_p_data_weyl(AGS.projp_strct::<Aind>(4), Atom::num(1), Atom::num(0))
-                    .map_data(|a| a.re + Atom::i() * a.im),
-            )),
-        ));
+        let projp_key = PermutedStructure::identity(ParamTensor::composite(DataTensor::Sparse(
+            proj_p_data_weyl(AGS.projp_strct::<Aind>(4), Atom::num(1), Atom::num(0))
+                .map_data(|a| a.re + Atom::i() * a.im),
+        )));
         weyl.insert_explicit(projp_key);
         let mut lib = weyl;
 
@@ -1158,16 +1152,14 @@ impl ProcessDefinition {
             );
 
             //debug!("lib_loop:{}", key.clone().permute_with_metric());
-            let key = ParamOrConcrete::Param(
-                ParamTensor::from_dense(
-                    key.structure,
-                    (0..4)
-                        .into_iter()
-                        .map(|_| Atom::prime_generate_rat(sample_iterator))
-                        .collect(),
-                )
-                .unwrap(),
-            );
+            let key = ParamTensor::from_dense(
+                key.structure,
+                (0..4)
+                    .into_iter()
+                    .map(|_| Atom::prime_generate_rat(sample_iterator))
+                    .collect(),
+            )
+            .unwrap();
 
             lib.insert_explicit(PermutedStructure::identity(key));
         }
@@ -1183,16 +1175,14 @@ impl ProcessDefinition {
 
             //debug!("lib_ext:{}", key.clone().permute_with_metric());
 
-            let key = ParamOrConcrete::Param(
-                ParamTensor::from_dense(
-                    key.structure,
-                    (0..4)
-                        .into_iter()
-                        .map(|_| Atom::prime_generate_rat(sample_iterator))
-                        .collect(),
-                )
-                .unwrap(),
-            );
+            let key = ParamTensor::from_dense(
+                key.structure,
+                (0..4)
+                    .into_iter()
+                    .map(|_| Atom::prime_generate_rat(sample_iterator))
+                    .collect(),
+            )
+            .unwrap();
 
             lib.insert_explicit(PermutedStructure::identity(key));
 
@@ -1217,9 +1207,8 @@ impl ProcessDefinition {
             );
 
             //debug!("lib_pol:{}", key.clone().permute_with_metric());
-            let key = ParamOrConcrete::Param(
-                ParamTensor::from_dense(key.structure, pol_vals.last().unwrap().clone()).unwrap(),
-            );
+            let key =
+                ParamTensor::from_dense(key.structure, pol_vals.last().unwrap().clone()).unwrap();
 
             lib.insert_explicit(PermutedStructure::identity(key));
         }
@@ -1234,16 +1223,14 @@ impl ProcessDefinition {
                         additional_args.clone(),
                     );
 
-                    let key = ParamOrConcrete::Param(
-                        ParamTensor::from_dense(
-                            key.structure,
-                            (0..4)
-                                .into_iter()
-                                .map(|_| Atom::prime_generate_rat(sample_iterator))
-                                .collect(),
-                        )
-                        .unwrap(),
-                    );
+                    let key = ParamTensor::from_dense(
+                        key.structure,
+                        (0..4)
+                            .into_iter()
+                            .map(|_| Atom::prime_generate_rat(sample_iterator))
+                            .collect(),
+                    )
+                    .unwrap();
 
                     lib.insert_explicit(PermutedStructure::identity(key));
 
@@ -1260,16 +1247,14 @@ impl ProcessDefinition {
                         additional_args,
                     };
 
-                    let key = ParamOrConcrete::Param(
-                        ParamTensor::from_dense(
-                            key,
-                            (0..len)
-                                .into_iter()
-                                .map(|_| Atom::prime_generate_rat_complex(sample_iterator))
-                                .collect(),
-                        )
-                        .unwrap(),
-                    );
+                    let key = ParamTensor::from_dense(
+                        key,
+                        (0..len)
+                            .into_iter()
+                            .map(|_| Atom::prime_generate_rat_complex(sample_iterator))
+                            .collect(),
+                    )
+                    .unwrap();
 
                     lib.insert_explicit(PermutedStructure::identity(key));
                 }
@@ -1293,22 +1278,20 @@ impl ProcessDefinition {
                     });
 
                     //debug!("lib_pol:{}", key.clone().permute_with_metric());
-                    let key = ParamOrConcrete::Param(
-                        ParamTensor::from_dense(
-                            key.structure,
-                            pol_vals[i]
-                                .iter()
-                                .map(|a| {
-                                    if symmetric_polarizations {
-                                        a.clone()
-                                    } else {
-                                        Atom::prime_generate_rat_complex(sample_iterator)
-                                    }
-                                })
-                                .collect(),
-                        )
-                        .unwrap(),
-                    );
+                    let key = ParamTensor::from_dense(
+                        key.structure,
+                        pol_vals[i]
+                            .iter()
+                            .map(|a| {
+                                if symmetric_polarizations {
+                                    a.clone()
+                                } else {
+                                    Atom::prime_generate_rat_complex(sample_iterator)
+                                }
+                            })
+                            .collect(),
+                    )
+                    .unwrap();
 
                     lib.insert_explicit(PermutedStructure::identity(key));
                 }
@@ -3727,6 +3710,14 @@ impl ProcessDefinition {
                         .normalize_flows(&sorted_g, model)
                         .expect("Failed to normalize fermion flow");
 
+                    let mut bare_graph = ParseGraph::from_symbolica_graph(
+                        model,
+                        "",
+                        &sorted_g,
+                        symmetry_factor.clone(),
+                        &external_connections,
+                    )?;
+
                     let fermion_sign = if self.generation_type == GenerationType::Amplitude {
                         if (!self.allow_symmetrization_of_external_fermions_in_amplitudes)
                             || (!self.symmetrize_initial_states && !self.symmetrize_final_states)
@@ -3743,21 +3734,21 @@ impl ProcessDefinition {
                             Atom::num(1)
                         }
                     } else {
-                        self.cross_section_external_fermion_ordering_sign(
-                            &g_with_canonical_flows,
-                            model,
-                            self.initial_pdgs.len(),
-                        )
+                        self.cross_section_external_fermion_ordering_sign(&mut bare_graph, model)?
                     };
-                    CanonizedGraphInfo {
+
+                    bare_graph.global_data.overall_factor =
+                        &bare_graph.global_data.overall_factor * fermion_sign;
+
+                    Ok(CanonizedGraphInfo {
                         canonized_graph: canonical_repr,
                         graph: sorted_g,
                         graph_with_canonized_flow: g_with_canonical_flows,
-                        symmetry_factor: symmetry_factor * fermion_sign,
-                    }
+                        gammaloop_graph: bare_graph,
+                    })
                 })
-                .collect::<Vec<_>>()
-        });
+                .collect::<Result<Vec<_>>>()
+        })?;
         bar.finish_and_clear();
 
         // Combine duplicates
@@ -3773,24 +3764,34 @@ impl ProcessDefinition {
                 .entry(g_with_canonical_flows_clone)
                 .and_modify(|entry: &mut CanonizedGraphInfo| {
                     // NumeratorIndependentSymmetryGrouping
-                    let ratio =
-                        (evaluate_overall_factor(canonized_graph.symmetry_factor.as_view())
-                            / evaluate_overall_factor(
-                                entry
-                                    .symmetry_factor
-                                    .replace(&numerator_independent_symmetry_pattern)
-                                    .with(Atom::num(1).to_pattern())
-                                    .as_view(),
-                            ))
-                        .expand();
+                    let ratio = (evaluate_overall_factor(
+                        canonized_graph
+                            .gammaloop_graph
+                            .global_data
+                            .overall_factor
+                            .as_view(),
+                    ) / evaluate_overall_factor(
+                        entry
+                            .gammaloop_graph
+                            .global_data
+                            .overall_factor
+                            .replace(&numerator_independent_symmetry_pattern)
+                            .with(Atom::num(1).to_pattern())
+                            .as_view(),
+                    ))
+                    .expand();
                     if entry
-                        .symmetry_factor
+                        .gammaloop_graph
+                        .global_data
+                        .overall_factor
                         .pattern_match(&numerator_independent_symmetry_pattern, None, None)
                         .next()
                         .is_some()
                     {
-                        entry.symmetry_factor = entry
-                            .symmetry_factor
+                        entry.gammaloop_graph.global_data.overall_factor = entry
+                            .gammaloop_graph
+                            .global_data
+                            .overall_factor
                             .replace(&numerator_independent_symmetry_pattern)
                             .with(
                                 function!(
@@ -3800,11 +3801,12 @@ impl ProcessDefinition {
                                 .to_pattern(),
                             );
                     } else {
-                        entry.symmetry_factor = &entry.symmetry_factor
-                            * function!(
-                                symbol!("NumeratorIndependentSymmetryGrouping"),
-                                (Atom::num(1) + ratio).expand()
-                            );
+                        entry.gammaloop_graph.global_data.overall_factor =
+                            &entry.gammaloop_graph.global_data.overall_factor
+                                * function!(
+                                    symbol!("NumeratorIndependentSymmetryGrouping"),
+                                    (Atom::num(1) + ratio).expand()
+                                );
                     }
                 })
                 .or_insert(canonized_graph);
@@ -3911,7 +3913,7 @@ impl ProcessDefinition {
         let was_interrupted = Arc::new(AtomicBool::new(false));
         pool.install(|| {
             canonized_processed_graphs
-                .par_iter()
+                .into_par_iter()
                 .progress_with(bar.clone())
                 .enumerate()
                 .map({
@@ -3928,13 +3930,8 @@ impl ProcessDefinition {
                                 return Ok(())
                             }
                         }
-                        let bare_graph = Graph::from_symbolica_graph(
-                            model,
-                            graph_name.clone(),
-                            &canonical_graph.graph,
-                            canonical_graph.symmetry_factor.clone(),
-                            &external_connections,
-                        )?;
+                        let mut bare_graph = Graph::from_parsed(canonical_graph.gammaloop_graph,model)?;
+                        bare_graph.name = graph_name.clone();
 
                         // The step below is optional, but it is nice to have all internal fermion edges canonized as particles.
                         // Notice that we cannot do this on the bare graph used for numerator local comparisons and diagram grouping because
@@ -3946,7 +3943,7 @@ impl ProcessDefinition {
                                 model,
                                 graph_name,
                                 &canonical_graph.graph_with_canonized_flow,
-                                canonical_graph.symmetry_factor.clone(),
+                                bare_graph.overall_factor.clone(),
                                 &external_connections,
                             )?
                         } else {
@@ -4343,21 +4340,17 @@ impl ProcessDefinition {
 
     fn cross_section_external_fermion_ordering_sign(
         &self,
-        graph: &SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>,
+        graph: &mut ParseGraph,
         model: &Model,
-        n_initials: usize,
-    ) -> Atom {
-        let mut he_graph =
-            FeynGenHedgeGraph::from_feyn_gen_symbolica(graph.clone(), model, n_initials);
-
-        // info!("Number of external fermion loops: {}", he_graph);
-        let n_external_fermion_loops = he_graph.number_of_external_fermion_loops();
+    ) -> Result<Atom> {
+        let n_external_fermion_loops = graph.n_external_fermion_loops()?;
 
         let number_of_initial_antifermions = self
             .initial_pdgs
             .iter()
             .filter(|&pdg| {
                 let p = model.get_particle_from_pdg(*pdg as isize);
+
                 p.0.is_antiparticle() && p.0.is_fermion()
             })
             .count();
@@ -4365,7 +4358,7 @@ impl ProcessDefinition {
         let sign = Sign::Negative.pow(n_external_fermion_loops);
         let antifermion_spinsum_sign = Sign::Negative.pow(number_of_initial_antifermions);
 
-        function!(
+        Ok(function!(
             symbol!("ExternalFermionOrderingSign"),
             Atom::num(match sign {
                 Sign::Positive => 1,
@@ -4377,7 +4370,7 @@ impl ProcessDefinition {
                 Sign::Positive => 1,
                 Sign::Negative => -1,
             })
-        )
+        ))
     }
 }
 
@@ -4438,6 +4431,7 @@ impl ProcessedNumeratorForComparison {
             if (a + b).expand().is_zero() {
                 return Some(Atom::num(-1));
             }
+            debug!(a = %a,b=%b,"compared but no luck, \na={a},\nb={b}");
             None
         }
 
@@ -4781,7 +4775,7 @@ impl ProcessedNumeratorForComparison {
         mut numerator: Atom,
         samples: &[(
             Vec<Replacement>,
-            TensorLibrary<MixedTensor<F<f64>, ExplicitKey<Aind>>, Aind>,
+            TensorLibrary<ParamTensor<ExplicitKey<Aind>>, Aind>,
         )],
         numerator_aware_isomorphism_grouping: &NumeratorAwareGraphGroupingOption,
     ) -> Result<Self, FeynGenError> {
@@ -4837,14 +4831,14 @@ impl ProcessedNumeratorForComparison {
                             .iter()
                             .map(|(c, l)| {
                                 debug!("Sample evaluation inputs c:{c},l:{l}");
-                                let mut net = ParsingNet::try_from_view(l.as_view(), lib,&ParseSettings::default()).unwrap();
+                                let mut net = ParamParsingNet::try_from_view(l.as_view(), lib,&ParseSettings::default()).unwrap();
                                 net.store
                                     .scalar
                                     .iter_mut()
                                     .for_each(|a| *a = a.replace_multiple(reps));
 
                                 // debug!(net=?net.dot_pretty());
-                                net.execute::<Sequential, SmallestDegree, _, _,_>(lib,FUN_LIB.deref())
+                                net.execute::<Sequential, SmallestDegree, _, _,_>(lib,PARAM_FUN_LIB.deref())
                                     .expect(&format!("failed to execute net:{}", net.dot_pretty()));
 
                                 // let c = ProcessDefinition::substitute_color_factors(c.as_view())

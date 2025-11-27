@@ -703,7 +703,7 @@ impl AmplitudeGraph {
 
         let vakint_integrand = to_vakint_integrand(
             &four_dimensional_integrand,
-            &self.graph.loop_momentum_basis,
+            &self.graph.lmb(component),
             &self.graph,
             &self.graph.full_filter(),
             &self.graph.empty_subgraph::<SuBitGraph>(),

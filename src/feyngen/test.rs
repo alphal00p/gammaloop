@@ -67,40 +67,32 @@ fn manual_lib<C: Into<Coefficient>>(
     pol_v: Vec<(isize, Vec<C>, Vec<C>)>,
     pol_out: Vec<(isize, Vec<C>)>,
     model: &Model,
-) -> TensorLibrary<MixedTensor<F<f64>, ExplicitKey<Aind>>, Aind> {
+) -> TensorLibrary<ParamTensor<ExplicitKey<Aind>>, Aind> {
     let mut weyl = TensorLibrary::new();
     weyl.update_ids();
 
-    let gamma_key = PermutedStructure::identity(ParamOrConcrete::Param(ParamTensor::composite(
-        DataTensor::Sparse(
-            gamma_data_weyl(AGS.gamma_strct::<Aind>(4), Atom::num(1), Atom::num(0))
-                .map_data(|a| a.re + Atom::i() * a.im),
-        ),
+    let gamma_key = PermutedStructure::identity(ParamTensor::composite(DataTensor::Sparse(
+        gamma_data_weyl(AGS.gamma_strct::<Aind>(4), Atom::num(1), Atom::num(0))
+            .map_data(|a| a.re + Atom::i() * a.im),
     )));
     // println!("permutation{}", gamma_key.rep_permutation);
     weyl.insert_explicit(gamma_key);
 
-    let gamma5_key = PermutedStructure::identity(ParamOrConcrete::Param(ParamTensor::composite(
-        DataTensor::Sparse(
-            gamma5_weyl_data(AGS.gamma5_strct::<Aind>(4), Atom::num(1), Atom::num(0))
-                .map_data(|a| a.re + Atom::i() * a.im),
-        ),
+    let gamma5_key = PermutedStructure::identity(ParamTensor::composite(DataTensor::Sparse(
+        gamma5_weyl_data(AGS.gamma5_strct::<Aind>(4), Atom::num(1), Atom::num(0))
+            .map_data(|a| a.re + Atom::i() * a.im),
     )));
     weyl.insert_explicit(gamma5_key);
 
-    let projm_key = PermutedStructure::identity(ParamOrConcrete::Param(ParamTensor::composite(
-        DataTensor::Sparse(
-            proj_m_data_weyl(AGS.projm_strct::<Aind>(4), Atom::num(1), Atom::num(0))
-                .map_data(|a| a.re + Atom::i() * a.im),
-        ),
+    let projm_key = PermutedStructure::identity(ParamTensor::composite(DataTensor::Sparse(
+        proj_m_data_weyl(AGS.projm_strct::<Aind>(4), Atom::num(1), Atom::num(0))
+            .map_data(|a| a.re + Atom::i() * a.im),
     )));
     weyl.insert_explicit(projm_key);
 
-    let projp_key = PermutedStructure::identity(ParamOrConcrete::Param(ParamTensor::composite(
-        DataTensor::Sparse(
-            proj_p_data_weyl(AGS.projp_strct::<Aind>(4), Atom::num(1), Atom::num(0))
-                .map_data(|a| a.re + Atom::i() * a.im),
-        ),
+    let projp_key = PermutedStructure::identity(ParamTensor::composite(DataTensor::Sparse(
+        proj_p_data_weyl(AGS.projp_strct::<Aind>(4), Atom::num(1), Atom::num(0))
+            .map_data(|a| a.re + Atom::i() * a.im),
     )));
     weyl.insert_explicit(projp_key);
 
@@ -113,10 +105,9 @@ fn manual_lib<C: Into<Coefficient>>(
         );
 
         debug!("lib_loop:{}", key.clone().permute_with_metric());
-        let key = ParamOrConcrete::Param(
+        let key =
             ParamTensor::from_dense(key.structure, v.into_iter().map(|n| Atom::num(n)).collect())
-                .unwrap(),
-        );
+                .unwrap();
 
         lib.insert_explicit(PermutedStructure::identity(key));
     }
@@ -131,10 +122,9 @@ fn manual_lib<C: Into<Coefficient>>(
 
         debug!("lib_ext:{}", key.clone().permute_with_metric());
 
-        let key = ParamOrConcrete::Param(
+        let key =
             ParamTensor::from_dense(key.structure, ext_mom.into_iter().map(Atom::num).collect())
-                .unwrap(),
-        );
+                .unwrap();
 
         lib.insert_explicit(PermutedStructure::identity(key));
 
@@ -149,10 +139,8 @@ fn manual_lib<C: Into<Coefficient>>(
         });
 
         debug!("lib_pol:{}", key.clone().permute_with_metric());
-        let key = ParamOrConcrete::Param(
-            ParamTensor::from_dense(key.structure, pol.into_iter().map(Atom::num).collect())
-                .unwrap(),
-        );
+        let key = ParamTensor::from_dense(key.structure, pol.into_iter().map(Atom::num).collect())
+            .unwrap();
 
         lib.insert_explicit(PermutedStructure::identity(key));
     }
@@ -171,10 +159,8 @@ fn manual_lib<C: Into<Coefficient>>(
             additional_args,
         });
         debug!("lib_pol:{}", key.clone().permute_with_metric());
-        let key = ParamOrConcrete::Param(
-            ParamTensor::from_dense(key.structure, pol.into_iter().map(Atom::num).collect())
-                .unwrap(),
-        );
+        let key = ParamTensor::from_dense(key.structure, pol.into_iter().map(Atom::num).collect())
+            .unwrap();
 
         lib.insert_explicit(PermutedStructure::identity(key));
     }

@@ -9,6 +9,7 @@ use gammalooprs::{
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use tracing::warn;
 
 use crate::{
     state::{set_serialize_commands_as_strings, RunHistory, State},
@@ -42,11 +43,34 @@ impl Save {
 
                 // Extract embedded templates to build/templates relative to target directory
                 if let Err(e) = Templates::extract_to_build_dir(&target_dir) {
-                    println!("Warning: Could not extract templates to build/templates: {}", e);
+                    println!(
+                        "Warning: Could not extract templates to build/templates: {}",
+                        e
+                    );
+                }
+
+                // Generate dynamic edge styles based on the model
+                let template_path = target_dir.join("build/templates/edge-style.typ");
+                if let Err(e) = state.model.generate_edge_style_template(&template_path) {
+                    warn!("Warning: Could not generate dynamic edge styles: {}", e);
                 }
 
                 // Export dot files to original location
-                state.export_dots(target_dir)
+                state.export_dots(&target_dir)?;
+
+                // Create Justfile with draw recipe
+                let justfile_path = target_dir.join("justfile");
+                let justfile_content =
+                    "# Generate drawings from dot files\ndraw:\n    linnet . -o drawings.pdf\n";
+                if let Err(e) = fs::write(&justfile_path, justfile_content) {
+                    warn!(
+                        "Warning: Could not create justfile at {}: {}",
+                        justfile_path.display(),
+                        e
+                    );
+                }
+
+                Ok(())
             }
             Save::State(s) => s.save(
                 state,

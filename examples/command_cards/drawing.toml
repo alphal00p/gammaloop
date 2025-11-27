@@ -3,7 +3,7 @@ commands = [
     "import model sm-default",
     "generate xs e+ e- > d d~ | e- a d g QED^2==4 [{{2}} QCD] --numerator-grouping only_detect_zeroes --clear-existing-processes --only-diagrams ",
     "save dot test",
-    "! linnet --build-dir test/build test ",
+    "! just -f test/justfile ",
     "quit -o"
 ]
 

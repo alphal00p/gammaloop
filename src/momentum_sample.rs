@@ -8,7 +8,6 @@ use crate::signature::LoopSignature;
 use crate::utils::{F, FloatLike, Length};
 use crate::{DependentMomentaConstructor, define_index, settings::runtime::kinematic::Externals};
 use bincode_trait_derive::{Decode, Encode};
-use bitvec::vec::BitVec;
 use color_eyre::Result;
 use derive_more::{From, Into};
 use eyre::eyre;

@@ -33,19 +33,17 @@ use spenso::algebra::complex::SymbolicaComplex;
 use spenso::algebra::complex::symbolica_traits::ToFloat;
 use spenso::algebra::upgrading_arithmetic::TrySmallestUpgrade;
 use spenso::network::library::TensorLibraryData;
-use spenso::network::library::function_lib::{INBUILTS, PanicMissingConcrete, SymbolLib};
+use spenso::network::library::function_lib::{INBUILTS, Panic, PanicMissingConcrete, SymbolLib};
 use spenso::network::library::symbolic::{ExplicitKey, TensorLibrary};
 use spenso::network::parsing::ShadowedStructure;
 use spenso::structure::concrete_index::ExpandedIndex;
 use spenso::tensors::complex::RealOrComplexTensor;
 use spenso::tensors::data::StorageTensor;
-use spenso::tensors::parametric::MixedTensor;
 use spenso::tensors::parametric::to_param::ToAtom;
+use spenso::tensors::parametric::{MixedTensor, ParamTensor};
 use spenso_hep_lib::hep_lib;
 use symbolica::coefficient::Coefficient;
-use symbolica::domains::float::{
-    Constructible, FloatLike as SymFloatLike, RealLike, SingleFloat,
-};
+use symbolica::domains::float::{Constructible, FloatLike as SymFloatLike, RealLike, SingleFloat};
 use symbolica::domains::integer::Integer;
 use symbolica::{function, parse};
 
@@ -68,7 +66,7 @@ use vakint::Vakint;
 use crate::{MAX_LOOP, status_debug};
 #[allow(unused_imports)]
 use log::{debug, info};
-use symbolica::atom::Atom;
+use symbolica::atom::{Atom, AtomCore};
 use symbolica::numerical_integration::Sample;
 use typed_index_collections::{TiSlice, TiVec};
 
@@ -3336,6 +3334,26 @@ pub static TENSORLIB: LazyLock<
 
 pub static FUN_LIB: LazyLock<
     SymbolLib<RealOrComplexTensor<F<f64>, ShadowedStructure<Aind>>, PanicMissingConcrete>,
+> = LazyLock::new(|| {
+    let mut lib = PanicMissingConcrete::new_lib();
+    lib.insert(INBUILTS.conj, |a| match a {
+        RealOrComplexTensor::Complex(c) => RealOrComplexTensor::Complex(c.map_data(|x| x.conj())),
+        RealOrComplexTensor::Real(r) => RealOrComplexTensor::Real(r),
+    });
+    lib
+});
+
+pub static PARAM_FUN_LIB: LazyLock<SymbolLib<ParamTensor<ShadowedStructure<Aind>>, Panic>> =
+    LazyLock::new(|| {
+        let mut lib = Panic::new_lib();
+        lib.insert(INBUILTS.conj, |a: ParamTensor<ShadowedStructure<Aind>>| {
+            a.map_data_self(|x| x.conj())
+        });
+        lib
+    });
+
+pub static INT_FUN_LIB: LazyLock<
+    SymbolLib<RealOrComplexTensor<i64, ShadowedStructure<Aind>>, PanicMissingConcrete>,
 > = LazyLock::new(|| {
     let mut lib = PanicMissingConcrete::new_lib();
     lib.insert(INBUILTS.conj, |a| match a {

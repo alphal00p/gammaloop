@@ -28,10 +28,10 @@ impl From<&Graph> for DotGraph {
                                 let mut dot: DotEdgeData = e.into();
                                 match flow {
                                     Flow::Sink => {
-                                        dot.add_statement("pin", format!("\"x:@right\""));
+                                        dot.add_statement("pin", format!("\"x:@+right\""));
                                     }
                                     Flow::Source => {
-                                        dot.add_statement("pin", format!("\"x:@left\""));
+                                        dot.add_statement("pin", format!("\"x:@-left\""));
                                     }
                                 }
                                 dot
@@ -56,13 +56,13 @@ impl From<&Graph> for DotGraph {
                                     Some(Flow::Sink) => {
                                         dot.add_statement(
                                             "pin",
-                                            format!("\"x:@right,y:@edge{}\"", e.index),
+                                            format!("\"x:@+right,y:@edge{}\"", e.index),
                                         );
                                     }
                                     Some(Flow::Source) => {
                                         dot.add_statement(
                                             "pin",
-                                            format!("\"x:@left,y:@edge{}\"", e.index),
+                                            format!("\"x:@-left,y:@edge{}\"", e.index),
                                         );
                                     }
                                     None => {}

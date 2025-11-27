@@ -288,6 +288,7 @@ pub(crate) fn to_vakint_integrand<E: UVE, V, H, S: SubSetLike, SS: SubSetLike>(
     debug!("Integrand pre vakint: {:}", integrand_vakint);
     // panic!("FUFU");
     for (i, l) in lmb.loop_edges.iter().enumerate() {
+        println!("{l:?}");
         integrand_vakint = integrand_vakint
             .replace(function!(GS.emr_mom, usize::from(*l) as i64))
             .with(function!(vk_mom, i as i64 + 1))

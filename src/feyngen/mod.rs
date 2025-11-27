@@ -97,37 +97,7 @@ impl fmt::Display for NumeratorAwareGraphGroupingOption {
     }
 }
 
-impl FromStr for NumeratorAwareGraphGroupingOption {
-    type Err = FeynGenError;
-
-    fn from_str(s: &str) -> Result<Self, FeynGenError> {
-        match s {
-            "no_grouping" => Ok(Self::NoGrouping),
-            "only_detect_zeroes" => Ok(Self::OnlyDetectZeroes),
-            "group_identical_graphs_up_to_sign" => Ok(Self::GroupIdenticalGraphUpToSign(
-                GraphGroupingOptions::default(),
-            )),
-            "group_identical_graphs_up_to_scalar_rescaling" => Ok(
-                Self::GroupIdenticalGraphUpToScalarRescaling(GraphGroupingOptions::default()),
-            ),
-            _ => Err(FeynGenError::GenericError(format!(
-                "Invalid grouping option: {}",
-                s
-            ))),
-        }
-    }
-}
-
 impl NumeratorAwareGraphGroupingOption {
-    pub(crate) fn set_options(&mut self) -> Option<&mut GraphGroupingOptions> {
-        match self {
-            Self::NoGrouping => None,
-            Self::OnlyDetectZeroes => None,
-            Self::GroupIdenticalGraphUpToSign(opts) => Some(opts),
-            Self::GroupIdenticalGraphUpToScalarRescaling(opts) => Some(opts),
-        }
-    }
-
     pub(crate) fn get_options(&self) -> Option<&GraphGroupingOptions> {
         match self {
             Self::NoGrouping => None,
@@ -557,6 +527,5 @@ impl fmt::Display for FeynGenFilter {
     }
 }
 
-pub mod half_edge_filters;
 #[cfg(test)]
 pub mod test;
