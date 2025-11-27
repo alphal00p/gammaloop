@@ -36,7 +36,7 @@ use crate::{
         GraphGroup, GroupId, LMBext, LmbIndex, LoopMomentumBasis, parse::complete_group_parsing,
     },
     model::ArcParticle,
-    numerator::symbolica_ext::AtomCoreExt,
+    numerator::{self, symbolica_ext::AtomCoreExt},
     settings::{GlobalSettings, global::GenerationSettings, runtime::LockedRuntimeSettings},
     utils::{FUN_LIB, GS, TENSORLIB, W_},
     uv::UltravioletGraph,
@@ -784,7 +784,7 @@ impl CrossSectionGraph {
     ) -> Result<TiVec<CutId, Atom>> {
         let global_num = self.graph.global_network();
 
-        let (externals, props) = self.graph.get_initial_state_tree();
+        let (tree_structure, props) = self.graph.get_initial_state_tree();
 
         let canonize_esurface = self
             .graph
@@ -860,7 +860,22 @@ impl CrossSectionGraph {
                     .push((left_expr.clone(), right_expr.clone()));
             }
 
-            let mut product = left_expr * right_expr * global_num.clone();
+            let initial_state_tree_numerator = numerator::symbolica_ext::AtomCoreExt::wrap_color(
+                &(self
+                    .graph
+                    .iter_edges_of(&tree_structure)
+                    .fold(Atom::num(1), |acc, (_, _, edge)| acc * &edge.data.num)
+                    * self
+                        .graph
+                        .iter_nodes_of(&tree_structure)
+                        .fold(Atom::num(1), |acc, (_, _, vertex)| acc * vertex.get_num())),
+                GS.color_wrap,
+            )
+            .parse_into_net()
+            .unwrap();
+
+            let mut product =
+                left_expr * right_expr * global_num.clone() * initial_state_tree_numerator;
 
             product
                 .execute::<Sequential, SmallestDegree, _, _, _>(
