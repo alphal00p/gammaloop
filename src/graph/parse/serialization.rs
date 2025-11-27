@@ -1,5 +1,5 @@
 use linnet::{
-    half_edge::{HedgeGraph, subgraph::SubSetLike},
+    half_edge::{HedgeGraph, involution::Flow, subgraph::SubSetLike},
     parser::{DotEdgeData, DotGraph, DotHedgeData, DotVertexData},
 };
 
@@ -13,12 +13,45 @@ use super::{ParseGraph, string_utils::ToQuoted};
 impl From<&Graph> for DotGraph {
     fn from(value: &Graph) -> Self {
         let global_data = value.global_data();
+
         let mut graph: HedgeGraph<DotEdgeData, DotVertexData, DotHedgeData> =
-            value.underlying.map_data_ref(
-                |_, _, v| v.into(),
-                |_, _, _, e| e.map(|e| e.into()),
-                |_, d| d.into(),
-            );
+            if value.initial_state_cut.is_empty() {
+                value.underlying.map_data_ref(
+                    |_, _, v| v.into(),
+                    |_, _, _, e| e.map(|e| e.into()),
+                    |_, d| d.into(),
+                )
+            } else {
+                value
+                    .initial_state_cut
+                    .clone()
+                    .to_owned_graph_ref(&value.underlying)
+                    .map(
+                        |_, _, v| v.into(),
+                        |_, _, _, _, e| {
+                            e.map(|e| {
+                                let mut dot: DotEdgeData = (*e.edge_data()).into();
+                                match e.flow() {
+                                    Some(Flow::Sink) => {
+                                        dot.add_statement(
+                                            "pin",
+                                            format!("\"x:@right,y:@edge{}\"", e.index),
+                                        );
+                                    }
+                                    Some(Flow::Source) => {
+                                        dot.add_statement(
+                                            "pin",
+                                            format!("\"x:@left,y:@edge{}\"", e.index),
+                                        );
+                                    }
+                                    None => {}
+                                }
+                                dot
+                            })
+                        },
+                        |_, d| d.into(),
+                    )
+            };
 
         // value.normal_emr_replacement(subgraph, lmb, rep_args, filter_pair)
         for (_, i, _) in value.iter_edges() {

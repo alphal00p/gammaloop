@@ -11,7 +11,7 @@
 //     gamma_ev=0.01
 //     length_scale = 0.2
 #let layout(input,scope:(:),columns:(1fr),unit:1,additional_data:(:))={
-  let a= p.layout_graph(bytes(input),cbor.encode((steps:200,step:1.2,step_shrink:0.21,temp:0.1,beta:9.1,k_spring:20.,g_center:0,gamma_dangling:50,gamma_ee:0.4,gamma_ev:0.1,length_scale:0.2,)+additional_data));
+  let a= p.layout_graph(bytes(input),cbor.encode((steps:1500,step:1.2,step_shrink:0.21,temp:0.1,beta:9.1,k_spring:20.,g_center:0,gamma_dangling:30,gamma_ee:0.4,gamma_ev:0.1,length_scale:0.2,)+additional_data));
 
 
   let graphs= cbor(a);
@@ -131,6 +131,7 @@ let ExternalFermionOrderingSign(a)=$ op("ExternalFermionOrdering")(#a)$
 let InternalFermionLoopSign(a)=$ op("InternalFermionLoopSign")(#a) $
 let AutG(a)=$ op("Aut")_G(#a) $
  diags.push(grid(
+   gutter:2em,
    g.name,
    eval("$"+g.global_statements.overall_factor+"$",scope: (AutG:AutG,AntiFermionSpinSumSign:AntiFermionSpinSumSign,ExternalFermionOrderingSign:ExternalFermionOrderingSign,InternalFermionLoopSign:InternalFermionLoopSign)),
    diagram(
@@ -143,10 +144,10 @@ let AutG(a)=$ op("Aut")_G(#a) $
 
 // diags.push([#parse ])
   }
-  set align(center)
+  // set align(center)
 
   grid(
-    align:center+horizon,gutter:4em,
+    align:center+top,gutter:4em,
     columns: columns,
     ..diags
   )

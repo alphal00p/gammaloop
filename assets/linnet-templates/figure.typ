@@ -6,13 +6,13 @@ import "edge-style.typ": *
 show raw: it => if it.at("lang") == "dot"{
   layout(it.at("text"),columns: 3,scope:(map:map),additional_data:(node:(eval:
           "(stroke:blue,fill :black,
-          radius:4pt,
-          outset: -2pt)"),edge:(
+          radius:2pt,
+          outset: -1pt)"),edge:(
             eval_source:"(label:[{particle}],..(map.at(\"{particle}\").source))",
             eval_sink:"map.at(\"{particle}\").sink"
           // eval_source:"..(map.at(\"{particle}\").source)", //",label:[{particle}],label-pos:100%,label-side:left)"
           // eval_sink:"..(map.at(\"{particle}\").sink)"
-        ),length_scale:1.5))
+        ),length_scale:0.2))
   }else{
     it
   }
