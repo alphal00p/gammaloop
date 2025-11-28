@@ -568,26 +568,54 @@ impl Process {
         match &self.collection {
             ProcessCollection::Amplitudes(a) => {
                 for (_, amp) in a {
-                    let mut dot = File::create_new(path.join(&format!("{}.dot", amp.name)))
-                        .with_context(|| {
-                            format!(
-                                "Trying to create file to export amplitude dot {}",
-                                p.join(&format!("{}.dot", amp.name)).display()
-                            )
-                        })?;
-                    amp.write_dot(&mut dot)?;
+                    // Create a folder for each amplitude
+                    let amp_path = path.join(&amp.name);
+                    fs::create_dir_all(&amp_path).with_context(|| {
+                        format!(
+                            "Trying to create directory for amplitude {}",
+                            amp_path.display()
+                        )
+                    })?;
+
+                    // Save each graph in its own file
+                    for (graph_idx, graph) in amp.graphs.iter().enumerate() {
+                        let mut dot =
+                            File::create_new(amp_path.join(&format!("graph_{}.dot", graph_idx)))
+                                .with_context(|| {
+                                    format!(
+                                        "Trying to create file to export amplitude graph {}",
+                                        amp_path
+                                            .join(&format!("graph_{}.dot", graph_idx))
+                                            .display()
+                                    )
+                                })?;
+                        graph.write_dot(&mut dot)?;
+                    }
                 }
             }
             ProcessCollection::CrossSections(cs) => {
                 for (_, cs) in cs {
-                    let mut dot = File::create_new(path.join(&format!("{}.dot", cs.name)))
-                        .with_context(|| {
-                            format!(
-                                "Trying to create file to export cross section dot {}",
-                                p.join(&format!("{}.dot", cs.name)).display()
-                            )
-                        })?;
-                    cs.write_dot(&mut dot)?;
+                    // Create a folder for each cross section
+                    let cs_path = path.join(&cs.name);
+                    fs::create_dir_all(&cs_path).with_context(|| {
+                        format!(
+                            "Trying to create directory for cross section {}",
+                            cs_path.display()
+                        )
+                    })?;
+
+                    // Save each supergraph in its own file
+                    for (graph_idx, graph) in cs.supergraphs.iter().enumerate() {
+                        let mut dot =
+                            File::create_new(cs_path.join(&format!("graph_{}.dot", graph_idx)))
+                                .with_context(|| {
+                                    format!(
+                                        "Trying to create file to export cross section graph {}",
+                                        cs_path.join(&format!("graph_{}.dot", graph_idx)).display()
+                                    )
+                                })?;
+                        graph.write_dot(&mut dot)?;
+                    }
                 }
             }
         }

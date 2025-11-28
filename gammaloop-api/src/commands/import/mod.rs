@@ -46,7 +46,7 @@ impl Import {
             } => {
                 let process_name = path.file_stem().unwrap().to_string_lossy().into_owned();
 
-                let graphs = Graph::from_file(&path, &state.model)?;
+                let graphs = Graph::from_path(&path, &state.model)?;
                 state.import_graphs(
                     graphs,
                     Some(process_name),

@@ -10,7 +10,7 @@ pub struct Templates;
 impl Templates {
     /// Extract all embedded templates to build/templates relative to target_dir
     pub fn extract_to_build_dir<P: AsRef<Path>>(target_dir: P) -> Result<()> {
-        let target = target_dir.as_ref().join("build/templates");
+        let target = target_dir.as_ref().join("drawings/templates");
 
         // Create the target directory if it doesn't exist
         fs::create_dir_all(&target)?;

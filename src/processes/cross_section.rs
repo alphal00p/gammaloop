@@ -275,7 +275,7 @@ impl CrossSection {
     pub fn from_graph_list(name: String, mut graphs: Vec<Graph>, model: &Model) -> Result<Self> {
         let mut cross_section = CrossSection::new(name);
         cross_section.graph_group_structure = complete_group_parsing(&mut graphs)?;
-        println!("group structure: {:?}", cross_section.graph_group_structure);
+        // println!("group structure: {:?}", cross_section.graph_group_structure);
 
         for mut cross_section_graph in graphs {
             cross_section_graph.param_builder = ParamBuilder::new(&cross_section_graph, model);

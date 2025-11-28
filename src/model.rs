@@ -1040,7 +1040,11 @@ impl Particle {
     /// Generate edge styles for visualization based on particle properties
     pub fn generate_edge_style(&self) -> (String, String) {
         // Determine line thickness based on mass
-        let thickness = if self.is_massive() { "0.7mm" } else { "0.5mm" };
+        let thickness = if self.is_massive() {
+            "massive"
+        } else {
+            "massless"
+        };
 
         // Determine color based on charge
         let color = if self.charge.abs() > 0.0 {
@@ -1438,8 +1442,10 @@ impl Model {
         let mut edge_style_content = String::new();
         edge_style_content.push_str(r#"#import "@preview/fletcher:0.5.8" as fletcher: diagram, node, cetz,edge,hide
 
+#let massive = 1mm
+#let massless = 0.5mm
 #let source_stroke(c:black, thickness:0.5mm) = (stroke:(paint:c,thickness:thickness))
-#let sink_stroke(c:black, thickness:0.5mm) = (stroke:source_stroke(c:c.lighten(30%), thickness:thickness).stroke)
+#let sink_stroke(c:black, thickness:0.5mm) = (stroke:source_stroke(c:c.lighten(50%), thickness:thickness).stroke)
 #let wave = (decorations:cetz.decorations.wave.with(amplitude: 4pt,segment-length:0.2))
 #let double = (extrude:(-0.5mm, 0.5mm))
 #let arrow = (marks:((inherit:"solid",rev:false,pos:1.1,scale:50%),))

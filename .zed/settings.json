@@ -17,6 +17,9 @@
     },
     "YAML": {
       "language_servers": ["yaml-language-server"]
+    },
+    "Typst": {
+      "language_servers": ["tinymist"]
     }
   },
   "lsp": {

@@ -43,8 +43,8 @@ use signature::ExternalSignature;
 use std::sync::atomic::AtomicBool;
 use symbolica::state::HasStateMap;
 use symbolica::state::StateMap;
-use utils::FloatLike;
 use utils::F;
+use utils::FloatLike;
 
 use crate::graph::Graph;
 

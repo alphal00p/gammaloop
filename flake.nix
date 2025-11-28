@@ -194,6 +194,8 @@
           ghostscript
           graphviz
           mupdf
+          tinymist
+          typstyle
           poppler-utils
           rust-analyzer
           maturin

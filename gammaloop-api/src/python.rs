@@ -510,19 +510,16 @@ impl GammaLoopAPI {
         }
         let (graphs, process_name) = match format.as_str() {
             "dot" => {
-                if !graphs.ends_with(".dot") {
-                    return Err(eyre!(
-                        "When using 'dot' format, the graphs argument must be a path to a DOT file"
-                    ));
-                }
                 let dot_path = PathBuf::from(&graphs);
+                if !dot_path.exists() {
+                    return Err(eyre!("Path does not exist: {}", dot_path.display()));
+                }
+
                 let process_name = process_name
                     .unwrap_or(dot_path.file_stem().unwrap().to_string_lossy().into_owned());
 
-                let graphs =
-                    Graph::from_file(&dot_path, &self.gammaloop_state.model).map_err(|e| {
-                        eyre!("Could not parse graphs from DOT file: {}", e.to_string())
-                    })?;
+                let graphs = Graph::from_path(&dot_path, &self.gammaloop_state.model)
+                    .map_err(|e| eyre!("Could not parse graphs from path: {}", e.to_string()))?;
                 (graphs, Some(process_name))
             }
             "string" => {
@@ -570,17 +567,13 @@ impl GammaLoopAPI {
     > {
         let graphs = match format.as_str() {
             "dot" => {
-                if !graphs.ends_with(".dot") {
-                    return Err(eyre!(
-                        "When using 'dot' format, the graphs argument must be a path to a DOT file"
-                    ));
-                }
                 let dot_path = PathBuf::from(&graphs);
+                if !dot_path.exists() {
+                    return Err(eyre!("Path does not exist: {}", dot_path.display()));
+                }
 
-                let graphs =
-                    Graph::from_file(&dot_path, &self.gammaloop_state.model).map_err(|e| {
-                        eyre!("Could not parse graphs from DOT file: {}", e.to_string())
-                    })?;
+                let graphs = Graph::from_path(&dot_path, &self.gammaloop_state.model)
+                    .map_err(|e| eyre!("Could not parse graphs from path: {}", e.to_string()))?;
                 graphs
             }
             "string" => {

@@ -21,7 +21,7 @@ use ahash::{AHashMap, AHashSet};
 
 use color_eyre::{Result, Section};
 
-use eyre::{Ok, eyre};
+use eyre::{Context, Ok, eyre};
 use itertools::Itertools;
 // use symbolica::{atom::Atom, graph::Graph as SymbolicaGraph};
 
@@ -1185,6 +1185,56 @@ impl Graph {
         Self::from_parsed(ParseGraph::from_parsed(graph, model)?, model)
     }
     pub fn from_file<P>(p: P, model: &Model) -> Result<Vec<Self>>
+    where
+        P: AsRef<Path>,
+    {
+        Self::from_path(p, model)
+    }
+
+    pub fn from_path<P>(p: P, model: &Model) -> Result<Vec<Self>>
+    where
+        P: AsRef<Path>,
+    {
+        let path = p.as_ref();
+
+        if path.is_dir() {
+            // Load all .dot files from directory
+            let mut all_graphs = Vec::new();
+            let entries = std::fs::read_dir(path)
+                .with_context(|| format!("Failed to read directory: {}", path.display()))?;
+
+            let mut dot_files = Vec::new();
+            for entry in entries {
+                let entry = entry?;
+                let file_path = entry.path();
+                if file_path.is_file() && file_path.extension().map_or(false, |ext| ext == "dot") {
+                    dot_files.push(file_path);
+                }
+            }
+
+            // Sort files for consistent ordering
+            dot_files.sort();
+
+            for dot_file in dot_files {
+                let graphs = Self::from_single_file(&dot_file, model)?;
+                all_graphs.extend(graphs);
+            }
+
+            if all_graphs.is_empty() {
+                return Err(eyre!(
+                    "No .dot files found in directory: {}",
+                    path.display()
+                ));
+            }
+
+            Ok(all_graphs)
+        } else {
+            // Load single file
+            Self::from_single_file(path, model)
+        }
+    }
+
+    fn from_single_file<P>(p: P, model: &Model) -> Result<Vec<Self>>
     where
         P: AsRef<Path>,
     {

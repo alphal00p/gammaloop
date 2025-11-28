@@ -44,13 +44,13 @@ impl Save {
                 // Extract embedded templates to build/templates relative to target directory
                 if let Err(e) = Templates::extract_to_build_dir(&target_dir) {
                     println!(
-                        "Warning: Could not extract templates to build/templates: {}",
+                        "Warning: Could not extract templates to drawings/templates: {}",
                         e
                     );
                 }
 
                 // Generate dynamic edge styles based on the model
-                let template_path = target_dir.join("build/templates/edge-style.typ");
+                let template_path = target_dir.join("drawings/templates/edge-style.typ");
                 if let Err(e) = state.model.generate_edge_style_template(&template_path) {
                     warn!("Warning: Could not generate dynamic edge styles: {}", e);
                 }
@@ -61,7 +61,7 @@ impl Save {
                 // Create Justfile with draw recipe
                 let justfile_path = target_dir.join("justfile");
                 let justfile_content =
-                    "# Generate drawings from dot files\ndraw:\n    linnet . -o drawings.pdf\n";
+                    "# Generate drawings from dot files\ndraw:\n    linnet --build-dir drawings . -o drawings.pdf\n";
                 if let Err(e) = fs::write(&justfile_path, justfile_content) {
                     warn!(
                         "Warning: Could not create justfile at {}: {}",
