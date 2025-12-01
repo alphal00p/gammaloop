@@ -295,15 +295,28 @@ impl LUCounterTerm {
             left_subspace,
         );
 
-        for overlap_group in left_overlap.overlap_groups.iter() {
-            let overlap_builder = left_counterterm_builder.new_overlap_builder(overlap_group);
+        let left_overlap_builders = left_overlap
+            .overlap_groups
+            .iter()
+            .map(|overlap_group| left_counterterm_builder.new_overlap_builder(overlap_group))
+            .collect_vec();
 
-            for esurface in overlap_group.existing_esurfaces.iter() {
-                let esurface_ct_builder = overlap_builder.new_esurface_builder(*esurface);
-                let rstar_solution = esurface_ct_builder.solve_rstar();
-                let rstar_sample = rstar_solution.rstar_sample();
-            }
-        }
+        let left_overlap_samples = left_overlap_builders
+            .iter()
+            .map(|overlap_builder| {
+                overlap_builder
+                    .overlap_group
+                    .existing_esurfaces
+                    .iter()
+                    .map(|esurface| {
+                        overlap_builder
+                            .new_esurface_builder(*esurface)
+                            .solve_rstar()
+                            .rstar_sample()
+                    })
+                    .collect_vec()
+            })
+            .collect_vec();
 
         let right_counterterm_builder = CounterTermBuilder::new(
             graph,
@@ -317,15 +330,28 @@ impl LUCounterTerm {
             right_subspace,
         );
 
-        for overlap_group in right_overlap.overlap_groups.iter() {
-            let overlap_builder = right_counterterm_builder.new_overlap_builder(overlap_group);
+        let right_overlap_builders = right_overlap
+            .overlap_groups
+            .iter()
+            .map(|overlap_group| right_counterterm_builder.new_overlap_builder(overlap_group))
+            .collect_vec();
 
-            for esurface in overlap_group.existing_esurfaces.iter() {
-                let esurface_ct_builder = overlap_builder.new_esurface_builder(*esurface);
-                let rstar_solution = esurface_ct_builder.solve_rstar();
-                let rstar_sample = rstar_solution.rstar_sample();
-            }
-        }
+        let right_overlap_samples = right_overlap_builders
+            .iter()
+            .map(|overlap_builder| {
+                overlap_builder
+                    .overlap_group
+                    .existing_esurfaces
+                    .iter()
+                    .map(|esurface| {
+                        overlap_builder
+                            .new_esurface_builder(*esurface)
+                            .solve_rstar()
+                            .rstar_sample()
+                    })
+                    .collect_vec()
+            })
+            .collect_vec();
 
         todo!()
     }
