@@ -578,17 +578,17 @@ impl Process {
                     })?;
 
                     // Save each graph in its own file
-                    for (graph_idx, graph) in amp.graphs.iter().enumerate() {
+                    for graph in amp.graphs.iter() {
                         let mut dot =
-                            File::create_new(amp_path.join(&format!("graph_{}.dot", graph_idx)))
+                            File::create_new(amp_path.join(&format!("{}.dot", graph.graph.name)))
                                 .with_context(|| {
-                                    format!(
-                                        "Trying to create file to export amplitude graph {}",
-                                        amp_path
-                                            .join(&format!("graph_{}.dot", graph_idx))
-                                            .display()
-                                    )
-                                })?;
+                                format!(
+                                    "Trying to create file to export amplitude graph {}",
+                                    amp_path
+                                        .join(&format!("{}.dot", graph.graph.name))
+                                        .display()
+                                )
+                            })?;
                         graph.write_dot(&mut dot)?;
                     }
                 }
@@ -605,13 +605,15 @@ impl Process {
                     })?;
 
                     // Save each supergraph in its own file
-                    for (graph_idx, graph) in cs.supergraphs.iter().enumerate() {
+                    for graph in cs.supergraphs.iter() {
                         let mut dot =
-                            File::create_new(cs_path.join(&format!("graph_{}.dot", graph_idx)))
+                            File::create_new(cs_path.join(&format!("{}.dot", graph.graph.name)))
                                 .with_context(|| {
                                     format!(
                                         "Trying to create file to export cross section graph {}",
-                                        cs_path.join(&format!("graph_{}.dot", graph_idx)).display()
+                                        cs_path
+                                            .join(&format!("{}.dot", graph.graph.name))
+                                            .display()
                                     )
                                 })?;
                         graph.write_dot(&mut dot)?;

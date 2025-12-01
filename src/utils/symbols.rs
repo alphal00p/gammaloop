@@ -7,6 +7,7 @@ use linnet::half_edge::involution::{EdgeIndex, Orientation};
 use spenso::structure::{
     abstract_index::AIND_SYMBOLS,
     representation::{Minkowski, RepName},
+    slot::{DummyAind, IsAbstractSlot, Slot},
 };
 use symbolica::{
     atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol},
@@ -15,7 +16,7 @@ use symbolica::{
     symbol,
 };
 
-use crate::cff::expression::GraphOrientation;
+use crate::{cff::expression::GraphOrientation, numerator::aind::Aind};
 
 use super::symbolica_ext::CallSymbol;
 
@@ -402,6 +403,10 @@ impl GammaloopSymbols {
         function!(GS.emr_vec, usize::from(e) as i64)
     }
 
+    pub(crate) fn emr_vec_spenso(&self, e: EdgeIndex) -> Atom {
+        function!(GS.emr_vec, usize::from(e) as i64)
+    }
+
     pub(crate) fn emr_vec_index<'a>(&self, e: EdgeIndex, index: impl Into<AtomOrView<'a>>) -> Atom {
         function!(GS.emr_vec, usize::from(e) as i64, index.into().as_view())
     }
@@ -421,12 +426,14 @@ impl GammaloopSymbols {
     pub(crate) fn ose_full(&self, e: EdgeIndex, e_mass: Atom, index: Option<Atom>) -> Atom {
         let eidc = usize::from(e) as i64;
         let m2 = &e_mass * &e_mass;
+
+        let mink: Slot<Minkowski, Aind> = Minkowski {}.new_rep(4).slot(Aind::new_dummy());
         let ose = function!(
             self.ose,
             eidc,
             GS.emr_vec(e),
             m2,
-            (-function!(MS.dot, GS.emr_vec(e), GS.emr_vec(e)) + m2)
+            (self.emr_vec_index(e, mink.to_atom()) * self.emr_vec_index(e, mink.to_atom()) + m2)
         )
         .npow((1, 2));
 

@@ -3910,7 +3910,14 @@ impl ProcessDefinition {
         } else {
             vec![]
         };
+
         let was_interrupted = Arc::new(AtomicBool::new(false));
+        let graph_count = canonized_processed_graphs.len();
+        let padding_width = if graph_count <= 1 {
+            1
+        } else {
+            (graph_count - 1).to_string().len()
+        };
         pool.install(|| {
             canonized_processed_graphs
                 .into_par_iter()
@@ -3919,7 +3926,7 @@ impl ProcessDefinition {
                 .map({
                     |(i_g, canonical_graph)| {
                         let was_interrupted = Arc::clone(&was_interrupted);
-                        let graph_name: String = format!("{}{}", self.graph_prefix, i_g);
+                        let graph_name: String = format!("{}{:0width$}", self.graph_prefix, i_g, width = padding_width);
                         if let Some(selected_graphs) = &self.selected_graphs {
                             if !selected_graphs.contains(&graph_name) {
                                 return Ok(())
