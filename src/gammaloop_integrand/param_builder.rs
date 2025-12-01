@@ -23,6 +23,7 @@ use symbolica::{
     domains::rational::Rational,
     evaluate::FunctionMap,
     id::Replacement,
+    parse_lit, symbol,
 };
 use tabled::{Table, settings::Style};
 
@@ -821,7 +822,7 @@ impl<T: FloatLike> ParamBuilder<T> {
             ..Default::default()
         };
 
-        let pi_rational =  Rational::try_from(std::f64::consts::PI).unwrap();
+        let pi_rational = Rational::try_from(std::f64::consts::PI).unwrap();
 
         for e in graph.iter_edge_ids() {
             new.add_tagged_function(
@@ -833,6 +834,15 @@ impl<T: FloatLike> ParamBuilder<T> {
             )
             .unwrap();
         }
+
+        new.add_function(
+            GS.broadcasting_sqrt,
+            format!("sqrt"),
+            vec![symbol!("x")],
+            parse_lit!(sqrt(x)),
+        )
+        .unwrap();
+
         new.add_constant(GS.pi.into(), pi_rational.into());
 
         new.values = vec![Complex::new_re(F(T::from_f64(0.))); len];

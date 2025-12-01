@@ -120,17 +120,54 @@ impl AtomCoreExt for AtomView<'_> {
 #[cfg(test)]
 mod tests {
     use idenso::IndexTooling;
-    use symbolica::{atom::AtomCore, parse_lit};
+    use linnet::half_edge::involution::EdgeIndex;
+    use spenso::{
+        network::parsing::SPENSO_TAG,
+        structure::{
+            representation::{Minkowski, RepName},
+            slot::{DummyAind, IsAbstractSlot, Slot},
+        },
+    };
+    use symbolica::{
+        atom::{Atom, AtomCore},
+        function, parse_lit, symbol,
+    };
 
     use crate::{
         dot,
         graph::{FeynmanGraph, Graph, parse::IntoGraph},
         initialisation::test_initialise,
         numerator::aind::Aind,
+        utils::GS,
         uv::UltravioletGraph,
     };
 
     use super::AtomCoreExt;
+
+    #[test]
+    fn dummy_parsing() {
+        test_initialise().unwrap();
+
+        let e_mass = parse_lit!(M_e);
+
+        let m2 = &e_mass * &e_mass;
+
+        let mink: Slot<Minkowski, Aind> = Minkowski {}.new_rep(4).slot(Aind::new_dummy());
+
+        let e = EdgeIndex(0);
+
+        let sqrt = symbol!("sqrt_scalar", tag = SPENSO_TAG.tag);
+
+        let a = function!(
+            sqrt,
+            (GS.emr_vec_index(e, mink.to_atom()) * GS.emr_vec_index(e, mink.to_atom()) + m2)
+                .pow(Atom::num(2))
+        );
+
+        let net = a.parse_into_net().unwrap();
+
+        println!("{}", net.dot_pretty())
+    }
 
     #[test]
     fn canonize_color() {

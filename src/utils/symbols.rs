@@ -4,13 +4,17 @@ use idenso::metric::MS;
 use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeIndex, Orientation};
 
-use spenso::structure::{
-    abstract_index::AIND_SYMBOLS,
-    representation::{Minkowski, RepName},
-    slot::{DummyAind, IsAbstractSlot, Slot},
+use spenso::{
+    network::parsing::SPENSO_TAG,
+    structure::{
+        abstract_index::AIND_SYMBOLS,
+        representation::{Minkowski, RepName},
+        slot::{DummyAind, IsAbstractSlot, Slot},
+    },
 };
 use symbolica::{
     atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol},
+    domains::{integer::Integer, rational::Rational},
     function,
     id::Replacement,
     symbol,
@@ -139,6 +143,7 @@ pub struct GammaloopSymbols {
     pub mu_r_sq: Symbol,
     pub sign: Symbol,
     pub theta: Symbol,
+    pub broadcasting_sqrt: Symbol,
     ///for selecting orientations at generation
     pub selected: Symbol,
 
@@ -303,6 +308,13 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
             }
         }
     ),
+    broadcasting_sqrt: symbol!(
+        "broadcasting_sqrt",
+        tag = SPENSO_TAG.tag,
+        der = |a, _, out| {
+            **out = Atom::num(1) / (Atom::num(2) * a);
+        }
+    ),
     rescale_star: symbol!("t⃰"),
     hfunction_lu_cut: symbol!("h_lu_cut"),
     hfunction_left_th: symbol!("h_left_th"),
@@ -394,16 +406,31 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
 });
 
 impl GammaloopSymbols {
+    pub fn to_broadcasting_sqrt<'a>(&self, arg: impl Into<AtomOrView<'a>>) -> Atom {
+        let a = arg.into();
+        a.replace_map(|a, ctx, out| {
+            if let AtomView::Pow(p) = a {
+                let (a, b) = p.get_base_exp();
+                let Ok(exp) = Rational::try_from(b) else {
+                    return;
+                };
+
+                if exp.denominator() == Integer::from(2) {
+                    **out = self
+                        .broadcasting_sqrt
+                        .f(&[a])
+                        .pow(Atom::num(exp.numerator()));
+                }
+            }
+        })
+    }
+
     pub(crate) fn emr_mom<'a>(&self, e: EdgeIndex, arg: impl Into<AtomOrView<'a>>) -> Atom {
         let a = arg.into();
         function!(self.emr_mom, usize::from(e) as i64, a.as_view())
     }
 
     pub(crate) fn emr_vec(&self, e: EdgeIndex) -> Atom {
-        function!(GS.emr_vec, usize::from(e) as i64)
-    }
-
-    pub(crate) fn emr_vec_spenso(&self, e: EdgeIndex) -> Atom {
         function!(GS.emr_vec, usize::from(e) as i64)
     }
 

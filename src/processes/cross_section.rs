@@ -915,6 +915,7 @@ impl CrossSectionGraph {
 
             let mut product = left_expr * right_expr * global_num.clone() * initial_state_tree_expr;
 
+            debug!("Product:{}", product.dot_pretty());
             product
                 .execute::<Sequential, SmallestDegree, _, _, _>(
                     TENSORLIB.read().unwrap().deref(),

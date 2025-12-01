@@ -1,7 +1,9 @@
 use color_eyre::{Result, config::HookBuilder};
 use spenso::network::library::function_lib::INBUILTS;
 use spenso::network::parsing::SPENSO_TAG;
+use spenso::structure::named::IdentityName;
 use symbolica::activate_oem_license;
+use symbolica::atom::Symbol;
 use vakint::{
     EvaluationMethod, EvaluationOrder, FMFTOptions, LoopNormalizationFactor, MATADOptions,
     PySecDecOptions, Vakint, VakintSettings,
@@ -28,6 +30,7 @@ pub fn initialise() -> Result<()> {
         let _ = INBUILTS.conj;
         let _ = SPENSO_TAG.tag;
         let _ = UFO.complexconjugate;
+        // let _ = Symbol::id();
         let _ = UFOSymbol::zero();
 
         crate::set_interrupt_handler();

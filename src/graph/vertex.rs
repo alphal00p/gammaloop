@@ -1,24 +1,24 @@
 use itertools::Itertools;
 use linnet::{
-    half_edge::{nodestore::BitVecNeighborIter, HedgeGraph, NodeIndex},
+    half_edge::{HedgeGraph, NodeIndex, nodestore::BitVecNeighborIter},
     parser::DotVertexData,
 };
 
 use symbolica::atom::Atom;
 
 use crate::{
+    GammaLoopContext,
     feyngen::diagram_generator::NodeColorWithVertexRule,
     model::{ArcParticle, ArcVertexRule, Model},
-    GammaLoopContext,
 };
 use color_eyre::Result;
-use eyre::{eyre, Context};
+use eyre::{Context, eyre};
 
 use super::{
     edge::ParseEdge,
     global::ParseData,
     hedge_data::ParseHedge,
-    parse::{extract_oriented_particles_from_vertex_hedges, StripParse, ToQuoted},
+    parse::{StripParse, ToQuoted, extract_oriented_particles_from_vertex_hedges},
 };
 
 #[derive(Debug, Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
@@ -181,7 +181,8 @@ impl ParseVertex {
                     let particles = particles.iter().map(|p| p.name.as_str()).collect_vec();
                     Err(eyre!(
                         "Failed to find vertex rule for particles: {:?} for node {node_id} in graph {}",
-                        particles,parse_data.name,
+                        particles,
+                        parse_data.name,
                     ))
                 }
             }

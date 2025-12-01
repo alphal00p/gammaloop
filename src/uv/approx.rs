@@ -9,7 +9,7 @@ use crate::{
     },
     graph::{Edge, Graph, LMBext, LoopMomentumBasis, Vertex},
     momentum::Sign,
-    numerator::{ParsingNet, symbolica_ext::AtomCoreExt},
+    numerator::{ParsingNet, aind::Aind, symbolica_ext::AtomCoreExt},
     utils::{
         GS, W_,
         symbolica_ext::{CallSymbol, LOGPRINTOPTS},
@@ -22,6 +22,15 @@ use itertools::Itertools;
 use log::debug;
 
 use spenso::structure::concrete_index::ExpandedIndex;
+
+use spenso::{
+    network::library::symbolic::ETS,
+    structure::{
+        named::IdentityName,
+        representation::{Minkowski, RepName},
+        slot::{DummyAind, IsAbstractSlot, Slot},
+    },
+};
 use symbolica::{
     atom::{Atom, AtomCore, FunctionBuilder, Symbol},
     function, parse, symbol,
@@ -290,7 +299,6 @@ pub(crate) fn to_vakint_integrand<E: UVE, V, H, S: SubSetLike, SS: SubSetLike>(
     debug!("Integrand pre vakint: {:}", integrand_vakint);
     // panic!("FUFU");
     for (i, l) in lmb.loop_edges.iter().enumerate() {
-        println!("{l:?}");
         integrand_vakint = integrand_vakint
             .replace(function!(GS.emr_mom, usize::from(*l) as i64))
             .with(function!(vk_mom, i as i64 + 1))
@@ -505,23 +513,23 @@ impl Approximation {
         // only apply replacements for edges in the reduced graph
         let mom_reps = graph.uv_wrapped_replacement(&reduced, &self.lmb, &[W_.x___]);
 
-        println!("Reps:");
-        for r in &mom_reps {
-            println!("{r}");
-        }
+        // println!("Reps:");
+        // for r in &mom_reps {
+        //     println!("{r}");
+        // }
 
-        println!(
-            "Expand-prerep {} with dod={} in {:?}",
-            atomarg, self.dod, self.lmb.ext_edges
-        );
+        // println!(
+        //     "Expand-prerep {} with dod={} in {:?}",
+        //     atomarg, self.dod, self.lmb.ext_edges
+        // );
 
         // rewrite the inner_t as well
         atomarg = atomarg.replace_multiple(&mom_reps);
 
-        println!(
-            "Expand {} with dod={} in {:?}",
-            atomarg, self.dod, self.lmb.ext_edges
-        );
+        // println!(
+        //     "Expand {} with dod={} in {:?}",
+        //     atomarg, self.dod, self.lmb.ext_edges
+        // );
         for e in &self.lmb.ext_edges {
             atomarg = atomarg
                 .replace(function!(GS.emr_mom, usize::from(*e) as i64, W_.x___))
@@ -600,8 +608,8 @@ impl Approximation {
         let integrand_vakint =
             to_vakint_integrand(&a, &self.lmb, &graph, &reduced, &dependent.subgraph, true);
 
-        let vakint_expr = VakintExpression::try_from(integrand_vakint.clone()).unwrap();
-        println!("\nVakint expression:\n{:#}", vakint_expr);
+        // let vakint_expr = VakintExpression::try_from(integrand_vakint.clone()).unwrap();
+        // println!("\nVakint expression:\n{:#}", vakint_expr);
 
         let mut res = vakint.evaluate(integrand_vakint.as_view()).unwrap();
 
@@ -629,16 +637,16 @@ impl Approximation {
                 .map(|mu| GS.emr_mom(*l, Atom::from(ExpandedIndex::from_iter([mu]))))
                 .collect_vec();
 
+            let mink: Slot<Minkowski, Aind> = Minkowski {}.new_rep(4).slot(Aind::new_dummy());
+
             // multiply CFF triangle
             res *= Atom::num((3, 16))
-                / (&emr[0] * &emr[0]
-                    + &emr[1] * &emr[1]
-                    + &emr[2] * &emr[2]
+                / (GS.emr_vec_index(*l, mink.to_atom()) * GS.emr_vec_index(*l, mink.to_atom())
                     + GS.m_uv_int * GS.m_uv_int)
                     .npow((5, 2));
         }
 
-        println!("\nIntegrated CT:\n{}\n", res);
+        // println!("\nIntegrated CT:\n{}\n", res);
 
         ApproxOp::Dependent {
             t_arg: IntegrandExpr { integrand: res },
@@ -951,7 +959,9 @@ impl Approximation {
             .coefficient((0, 1).into())
             .replace(GS.m_uv_int)
             .with(GS.m_uv)
-            .map_mink_dim(4);
+            .map_mink_dim(4)
+            .replace(function!(symbol!("vakint::g"), W_.a__))
+            .with(function!(symbol!("spenso::g"), W_.a__));
 
         debug!(
             "Integrated 4d finite part: {:#}",
@@ -983,11 +993,11 @@ impl Approximation {
 
         resnum = resnum.replace_multiple(&reps);
         resnum *= cff;
-        resnum = resnum.wrap_color(GS.color_wrap);
+        resnum = GS.to_broadcasting_sqrt(resnum.wrap_color(GS.color_wrap));
 
         debug!("Integrand before parsing:{}", resnum.printer(LOGPRINTOPTS));
         let mut res = resnum.parse_into_net().unwrap();
-        // println!("Final Integrand Net:{}", res.net.dot_pretty());
+        debug!("Final Integrand Net:{}", res.dot_pretty());
         res = res.replace_multiple(&reps);
 
         // .contract(())

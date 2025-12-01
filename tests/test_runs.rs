@@ -44,6 +44,17 @@ fn oak() -> Result<()> {
 }
 
 #[test]
+fn addbar() -> Result<()> {
+    let mut state = get_test_cli(
+        Some("addbar_generate.toml".into()),
+        get_tests_workspace_path().join("addbar_generate"),
+        None,
+        false,
+    )?;
+    Ok(())
+}
+
+#[test]
 fn test_z_decay() -> Result<()> {
     let mut state = get_test_cli(
         Some("z_decay_test.toml".into()),
