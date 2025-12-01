@@ -2,6 +2,7 @@ use core::f64;
 
 use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeVec, Orientation};
+use nalgebra::iter;
 use spenso::{
     algebra::complex::{Complex, sub},
     tensors::parametric,
@@ -502,7 +503,84 @@ impl LUCounterTerm {
             }
         }
 
-        todo!()
+        let flattened_left_iter = left_overlap_samples.iter().flatten();
+        let flattened_right_iter = right_overlap_samples.iter().flatten();
+        let cartesian_product_iter = flattened_left_iter.cartesian_product(flattened_right_iter);
+
+        let mut cartesian_product_result = Complex::new_re(momentum_sample.zero());
+
+        for (sample_left, sample_right) in cartesian_product_iter {
+            let left_threshold_params = sample_left.extract_threshold_parameters();
+            let right_threshold_params = sample_right.extract_threshold_parameters();
+            let multi_channeling_factor = &sample_left.value_of_multi_channeling_factor
+                * &sample_right.value_of_multi_channeling_factor;
+            let iterated_index = (
+                LeftThresholdId::from(sample_left.get_esurface_id().0),
+                RightThresholdId::from(sample_right.get_esurface_id().0),
+            );
+            let inverse_transformed_momentum_sample =
+                merge_and_inverse_transform(sample_left, sample_right);
+
+            let iterative_evaluator = self
+                .evaluators
+                .iterative_iterated_evaluator
+                .as_mut()
+                .map(|evaluators| &mut evaluators[iterated_index]);
+
+            let parametric_evaluator =
+                &mut self.evaluators.parametric_iterated_evaluator[iterated_index];
+
+            if let Some(mut iterative_evaluator) = iterative_evaluator {
+                let params = T::get_parameters(
+                    param_builder,
+                    false,
+                    graph,
+                    &inverse_transformed_momentum_sample,
+                    settings.kinematics.externals.get_helicities(),
+                    Some(&left_threshold_params),
+                    Some(&right_threshold_params),
+                    Some(&lu_cut_params),
+                );
+
+                let iterative_result =
+                    <T as GenericEvaluatorFloat>::get_evaluator(&mut iterative_evaluator)(&params);
+
+                let mut result_of_this_ct = Complex::new_re(momentum_sample.zero());
+
+                for (i, _e) in orientations.iter() {
+                    result_of_this_ct += &iterative_result[i.0];
+                }
+                result_of_this_ct *= multi_channeling_factor;
+                cartesian_product_result += result_of_this_ct;
+            } else {
+                let mut result_of_this_ct = Complex::new_re(momentum_sample.zero());
+
+                for (_i, orientation) in orientations.iter() {
+                    param_builder.orientation_value(orientation);
+
+                    let params = T::get_parameters(
+                        param_builder,
+                        false,
+                        graph,
+                        &inverse_transformed_momentum_sample,
+                        settings.kinematics.externals.get_helicities(),
+                        Some(&left_threshold_params),
+                        Some(&right_threshold_params),
+                        Some(&lu_cut_params),
+                    );
+
+                    let result =
+                        <T as GenericEvaluatorFloat>::get_evaluator(parametric_evaluator)(&params);
+
+                    result_of_this_ct += &result[0];
+                }
+
+                result_of_this_ct *= multi_channeling_factor;
+                cartesian_product_result += result_of_this_ct;
+            }
+        }
+
+        left_evaluations + right_evaluations + cartesian_product_result
     }
 }
 
@@ -887,21 +965,51 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
     }
 }
 
-fn merge_samples<T: FloatLike>(
-    left_sample: MomentumSample<T>,
-    right_sample: MomentumSample<T>,
-    left_subspace: &SubspaceData,
-    right_subspace: &SubspaceData,
+fn merge_and_inverse_transform<T: FloatLike>(
+    left_sample: &RstarSample<'_, T>,
+    right_sample: &RstarSample<'_, T>,
 ) -> MomentumSample<T> {
+    let left_subspace = left_sample
+        .rstar_solution
+        .esurface_ct_builder
+        .overlap_builder
+        .counterterm_builder
+        .subspace;
+
+    let right_subspace = right_sample
+        .rstar_solution
+        .esurface_ct_builder
+        .overlap_builder
+        .counterterm_builder
+        .subspace;
+
     assert!(
         left_subspace.is_mergable_with(right_subspace),
         "incompatible subspaces for merging samples"
     );
-    let mut merged_sample = left_sample;
+
+    let mut merged_sample = left_sample.rstar_sample.clone();
     for lmb_index in right_subspace.iter_lmb_indices() {
-        let right_momentum = right_sample.loop_moms()[lmb_index].clone();
+        let right_momentum = right_sample.rstar_sample.loop_moms()[lmb_index].clone();
         merged_sample.sample.loop_moms[lmb_index] = right_momentum;
     }
 
-    merged_sample
+    let current_lmb = left_subspace.get_lmb(
+        left_sample
+            .rstar_solution
+            .esurface_ct_builder
+            .overlap_builder
+            .counterterm_builder
+            .all_lmbs,
+    );
+
+    let target_lmb = &left_sample
+        .rstar_solution
+        .esurface_ct_builder
+        .overlap_builder
+        .counterterm_builder
+        .graph
+        .loop_momentum_basis;
+
+    merged_sample.lmb_transform(current_lmb, target_lmb)
 }

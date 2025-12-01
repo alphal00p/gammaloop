@@ -13,31 +13,33 @@ use tracing_subscriber::field::debug;
 use typed_index_collections::TiVec;
 
 use crate::{
+    GammaLoopContext,
     cff::{
         esurface::{Esurface, EsurfaceCollection, EsurfaceID, ExistingEsurfaceId, GroupEsurfaceId},
         expression::{AmplitudeOrientationID, GraphOrientation},
     },
     gammaloop_integrand::{
-        evaluators::SingleOrAllOrientations, GenericEvaluator, GenericEvaluatorFloat, ParamBuilder,
-        ThresholdParams,
+        GenericEvaluator, GenericEvaluatorFloat, ParamBuilder, ThresholdParams,
+        evaluators::SingleOrAllOrientations,
     },
     graph::{FeynmanGraph, Graph, GraphGroupPosition},
     model::Model,
     momentum::Rotation,
     momentum_sample::{LoopMomenta, MomentumSample},
     settings::{
+        GlobalSettings, RuntimeSettings,
         runtime::{
             IntegratedCounterTermRange, IntegratedCounterTermSettings, UVLocalisationSettings,
         },
-        GlobalSettings, RuntimeSettings,
     },
-    subtraction::overlap::{OverlapGroup, OverlapStructure},
+    subtraction::{
+        evaluate_integrated_ct_normalisation, evaluate_uv_damper,
+        overlap::{OverlapGroup, OverlapStructure},
+    },
     utils::{
-        self,
-        newton_solver::{newton_iteration_and_derivative, NewtonIterationResult},
-        FloatLike, F,
+        self, F, FloatLike,
+        newton_solver::{NewtonIterationResult, newton_iteration_and_derivative},
     },
-    GammaLoopContext,
 };
 
 const MAX_ITERATIONS: usize = 40;
@@ -579,48 +581,5 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
             .unwrap();
 
         T::get_evaluator_single(&mut evaluator.borrow_mut())(&params)
-    }
-}
-
-fn evaluate_uv_damper<T: FloatLike>(
-    radius: &F<T>,
-    radius_star: &F<T>,
-    e_cm: &F<T>,
-    settings: &UVLocalisationSettings,
-) -> F<T> {
-    let normalizing_scale = match settings.dynamic_width {
-        true => radius_star,
-        false => e_cm,
-    };
-
-    let delta_r = radius - radius_star;
-
-    if delta_r.abs() > F::from_f64(settings.sliver_width) * normalizing_scale {
-        return radius.zero();
-    }
-
-    let delta_r_sq = &delta_r * &delta_r;
-    let width = F::from_f64(settings.gaussian_width) * normalizing_scale;
-    let width_sq = &width * &width;
-
-    (-delta_r_sq / width_sq).exp()
-}
-
-fn evaluate_integrated_ct_normalisation<T: FloatLike>(
-    radius: &F<T>,
-    radius_star: &F<T>,
-    _e_cm: &F<T>,
-    settings: &IntegratedCounterTermSettings,
-) -> F<T> {
-    match &settings.range {
-        IntegratedCounterTermRange::Infinite {
-            h_function_settings,
-        } => {
-            let h = utils::h(&(radius_star / radius), None, None, h_function_settings);
-            h * (radius_star).inv()
-        }
-        IntegratedCounterTermRange::Compact {} => {
-            todo!();
-        }
     }
 }
