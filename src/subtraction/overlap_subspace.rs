@@ -1,9 +1,10 @@
-use crate::cff::esurface::get_representative;
+use crate::GammaLoopContext;
 use crate::cff::esurface::EsurfaceCollection;
 use crate::cff::esurface::EsurfaceID;
 use crate::cff::esurface::ExistingEsurfaceId;
 use crate::cff::esurface::ExistingThresholds;
 use crate::cff::esurface::GroupEsurfaceId;
+use crate::cff::esurface::get_representative;
 use crate::gammaloop_integrand::GenericEvaluator;
 use crate::graph::FeynmanGraph;
 use crate::graph::Graph;
@@ -17,11 +18,10 @@ use crate::momentum_sample::LoopMomenta;
 use crate::momentum_sample::SubspaceData;
 use crate::settings::RuntimeSettings;
 use crate::signature::LoopExtSignature;
-use crate::utils::compute_shift_part;
-use crate::utils::compute_shift_part_subspace;
 use crate::utils::F;
 use crate::utils::GS;
-use crate::GammaLoopContext;
+use crate::utils::compute_shift_part;
+use crate::utils::compute_shift_part_subspace;
 use ahash::HashMap;
 use ahash::HashMapExt;
 use ahash::HashSet;
@@ -29,18 +29,13 @@ use bincode_trait_derive::Decode;
 use bincode_trait_derive::Encode;
 use clarabel::algebra::*;
 use clarabel::solver::*;
-use eyre::{eyre, Result};
+use eyre::{Result, eyre};
 use itertools::Itertools;
 use linnet::half_edge::involution::EdgeVec;
 use serde::Serialize;
 use serde_with::serde_as;
 use spenso::algebra::algebraic_traits::IsZero;
-use std::cell::RefCell;
 use std::fmt::Display;
-use symbolica::atom::Atom;
-use symbolica::evaluate::FunctionMap;
-use symbolica::evaluate::OptimizationSettings;
-use symbolica::function;
 use typed_index_collections::TiVec;
 
 #[derive(Debug, Clone, Encode, Decode)]
@@ -388,11 +383,7 @@ pub(crate) fn find_center(
                 < F::from_f64(0.0)
         });
 
-        if is_valid {
-            Some(center)
-        } else {
-            None
-        }
+        if is_valid { Some(center) } else { None }
     } else {
         if verbose {
             println!("{:?}", solver.solution.x);

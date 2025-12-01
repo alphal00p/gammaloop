@@ -8,6 +8,7 @@ use symbolica::{
     evaluate::OptimizationSettings,
 };
 use typed_index_collections::TiVec;
+use vakint::Momentum;
 
 use crate::{
     cff::{
@@ -316,6 +317,16 @@ impl LUCounterTerm {
             right_subspace,
         );
 
+        for overlap_group in right_overlap.overlap_groups.iter() {
+            let overlap_builder = right_counterterm_builder.new_overlap_builder(overlap_group);
+
+            for esurface in overlap_group.existing_esurfaces.iter() {
+                let esurface_ct_builder = overlap_builder.new_esurface_builder(*esurface);
+                let rstar_solution = esurface_ct_builder.solve_rstar();
+                let rstar_sample = rstar_solution.rstar_sample();
+            }
+        }
+
         todo!()
     }
 }
@@ -513,9 +524,98 @@ impl<'a, T: FloatLike> RstarSolution<'a, T> {
 
         rstar_sample.sample.loop_moms = rstar_loop_momenta;
 
+        let multi_channeling_denominator = self
+            .esurface_ct_builder
+            .overlap_builder
+            .counterterm_builder
+            .overlap_structure
+            .overlap_groups
+            .iter()
+            .map(|group| {
+                group
+                    .complement
+                    .iter()
+                    .map(|existing_esurface_id| {
+                        let esurface_id = self
+                            .esurface_ct_builder
+                            .overlap_builder
+                            .counterterm_builder
+                            .overlap_structure
+                            .existing_esurfaces[*existing_esurface_id];
+
+                        let esurface = &self
+                            .esurface_ct_builder
+                            .overlap_builder
+                            .counterterm_builder
+                            .esurface_collection[esurface_id];
+
+                        let esurface_value = esurface.compute_from_momenta(
+                            subspace.get_lmb(
+                                self.esurface_ct_builder
+                                    .overlap_builder
+                                    .counterterm_builder
+                                    .all_lmbs,
+                            ),
+                            self.esurface_ct_builder
+                                .overlap_builder
+                                .counterterm_builder
+                                .real_mass_vector,
+                            rstar_sample.loop_moms(),
+                            rstar_sample.external_moms(),
+                        );
+
+                        &esurface_value * &esurface_value
+                    })
+                    .fold(rstar_sample.one(), |acc, val| acc * val)
+            })
+            .fold(rstar_sample.zero(), |acc, val| acc + val);
+
+        let multichanneling_numerator = self
+            .esurface_ct_builder
+            .overlap_builder
+            .overlap_group
+            .complement
+            .iter()
+            .map(|existing_esurface_id| {
+                let esurface_id = self
+                    .esurface_ct_builder
+                    .overlap_builder
+                    .counterterm_builder
+                    .overlap_structure
+                    .existing_esurfaces[*existing_esurface_id];
+
+                let esurface = &self
+                    .esurface_ct_builder
+                    .overlap_builder
+                    .counterterm_builder
+                    .esurface_collection[esurface_id];
+
+                let esurface_value = esurface.compute_from_momenta(
+                    subspace.get_lmb(
+                        self.esurface_ct_builder
+                            .overlap_builder
+                            .counterterm_builder
+                            .all_lmbs,
+                    ),
+                    self.esurface_ct_builder
+                        .overlap_builder
+                        .counterterm_builder
+                        .real_mass_vector,
+                    rstar_sample.loop_moms(),
+                    rstar_sample.external_moms(),
+                );
+
+                &esurface_value * &esurface_value
+            })
+            .fold(rstar_sample.one(), |acc, val| acc * val);
+
+        let value_of_multi_channeling_factor =
+            Complex::new_re(multichanneling_numerator / multi_channeling_denominator);
+
         RstarSample {
             rstar_solution: self,
             rstar_sample,
+            value_of_multi_channeling_factor,
         }
     }
 }
@@ -523,4 +623,20 @@ impl<'a, T: FloatLike> RstarSolution<'a, T> {
 struct RstarSample<'a, T: FloatLike> {
     rstar_solution: RstarSolution<'a, T>,
     rstar_sample: MomentumSample<T>,
+    // this can already be computed here because of non-crossing cuts
+    value_of_multi_channeling_factor: Complex<F<T>>,
+}
+
+fn merge_samples_unchecked<T: FloatLike>(
+    left_sample: MomentumSample<T>,
+    right_sample: MomentumSample<T>,
+    right_subspace: &SubspaceData,
+) -> MomentumSample<T> {
+    let mut merged_sample = left_sample;
+    for lmb_index in right_subspace.iter_lmb_indices() {
+        let right_momentum = right_sample.loop_moms()[lmb_index].clone();
+        merged_sample.sample.loop_moms[lmb_index] = right_momentum;
+    }
+
+    merged_sample
 }
