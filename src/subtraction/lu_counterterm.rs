@@ -2,7 +2,10 @@ use core::f64;
 
 use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeVec, Orientation};
-use spenso::algebra::complex::{Complex, sub};
+use spenso::{
+    algebra::complex::{Complex, sub},
+    tensors::parametric,
+};
 use symbolica::{
     domains::float::{FloatLike as SymFloatLike, Real, RealLike},
     evaluate::OptimizationSettings,
@@ -17,7 +20,9 @@ use crate::{
         expression::GraphOrientation,
     },
     gammaloop_integrand::{
-        GenericEvaluator, ParamBuilder, ThresholdParams, param_builder::LUParams,
+        GenericEvaluator, GenericEvaluatorFloat, ParamBuilder, ThresholdParams,
+        evaluators::SingleOrAllOrientations,
+        param_builder::{self, LUParams},
     },
     graph::{Graph, LmbIndex, LoopMomentumBasis},
     model::Model,
@@ -177,7 +182,7 @@ pub(crate) struct LUCounterTerm {
 
 impl LUCounterTerm {
     fn evaluate<T: FloatLike>(
-        &self,
+        &mut self,
         momentum_sample: &MomentumSample<T>,
         lu_cut_params: &LUParams<T>,
         cut_id: CutId,
@@ -186,6 +191,8 @@ impl LUCounterTerm {
         masses: &EdgeVec<F<T>>,
         rotation: &Rotation,
         settings: &RuntimeSettings,
+        param_builder: &mut ParamBuilder<f64>,
+        orientations: SingleOrAllOrientations<'_, SuperGraphOrientationID>,
     ) -> Complex<F<T>> {
         let (left_subspace, right_subspace) = &self.subspaces[cut_id];
         let (left_thresholds_typed, right_thresholds_typed) = &self.thresholds[cut_id];
@@ -357,11 +364,141 @@ impl LUCounterTerm {
             })
             .collect_vec();
 
-        let mut left_evaluations = momentum_sample.zero();
+        let mut left_evaluations = Complex::new_re(momentum_sample.zero());
 
-        for samples_group in left_overlap_samples {
+        for samples_group in left_overlap_samples.iter() {
             for sample in samples_group {
-                todo!()
+                let left_threshold_params = sample.extract_threshold_parameters();
+                let inverse_transformed_sample = sample.get_inverse_transformed_sample();
+                let left_threshold_id = LeftThresholdId::from(sample.get_esurface_id().0);
+
+                let iterative_evaluator = self
+                    .evaluators
+                    .iterative_left_thresholds_evaluator
+                    .as_mut()
+                    .map(|evaluators| &mut evaluators[left_threshold_id]);
+
+                let parametric_evaluator =
+                    &mut self.evaluators.parametric_left_thresholds_evaluator[left_threshold_id];
+
+                if let Some(mut iterative_evaluator) = iterative_evaluator {
+                    let params = T::get_parameters(
+                        param_builder,
+                        false,
+                        graph,
+                        &inverse_transformed_sample,
+                        settings.kinematics.externals.get_helicities(),
+                        Some(&left_threshold_params),
+                        None,
+                        Some(&lu_cut_params),
+                    );
+
+                    let iterative_result = <T as GenericEvaluatorFloat>::get_evaluator(
+                        &mut iterative_evaluator,
+                    )(&params);
+
+                    let mut result_of_this_ct = Complex::new_re(momentum_sample.zero());
+                    for (i, _e) in orientations.iter() {
+                        result_of_this_ct += &iterative_result[i.0];
+                    }
+                    result_of_this_ct *= &sample.value_of_multi_channeling_factor;
+                    left_evaluations += result_of_this_ct;
+                } else {
+                    let mut result_of_this_ct = Complex::new_re(momentum_sample.zero());
+
+                    for (_i, orientation) in orientations.iter() {
+                        param_builder.orientation_value(orientation);
+
+                        let params = T::get_parameters(
+                            param_builder,
+                            false,
+                            graph,
+                            &inverse_transformed_sample,
+                            settings.kinematics.externals.get_helicities(),
+                            Some(&left_threshold_params),
+                            None,
+                            Some(&lu_cut_params),
+                        );
+
+                        let result = <T as GenericEvaluatorFloat>::get_evaluator(
+                            parametric_evaluator,
+                        )(&params);
+
+                        result_of_this_ct += &result[0];
+                    }
+
+                    result_of_this_ct *= &sample.value_of_multi_channeling_factor;
+                    left_evaluations += result_of_this_ct;
+                }
+            }
+        }
+
+        let mut right_evaluations = Complex::new_re(momentum_sample.zero());
+
+        for samples_group in right_overlap_samples.iter() {
+            for sample in samples_group {
+                let right_threshold_params = sample.extract_threshold_parameters();
+                let inverse_transformed_sample = sample.get_inverse_transformed_sample();
+                let right_threshold_id = RightThresholdId::from(sample.get_esurface_id().0);
+
+                let iterative_evaluator = self
+                    .evaluators
+                    .iterative_right_threshold_evaluator
+                    .as_mut()
+                    .map(|evaluators| &mut evaluators[right_threshold_id]);
+
+                let parametric_evaluator =
+                    &mut self.evaluators.parametric_right_threshold_evaluator[right_threshold_id];
+
+                if let Some(mut iterative_evaluator) = iterative_evaluator {
+                    let params = T::get_parameters(
+                        param_builder,
+                        false,
+                        graph,
+                        &inverse_transformed_sample,
+                        settings.kinematics.externals.get_helicities(),
+                        None,
+                        Some(&right_threshold_params),
+                        Some(&lu_cut_params),
+                    );
+
+                    let iterative_result = <T as GenericEvaluatorFloat>::get_evaluator(
+                        &mut iterative_evaluator,
+                    )(&params);
+
+                    let mut result_of_this_ct = Complex::new_re(momentum_sample.zero());
+                    for (i, _e) in orientations.iter() {
+                        result_of_this_ct += &iterative_result[i.0];
+                    }
+                    result_of_this_ct *= &sample.value_of_multi_channeling_factor;
+                    left_evaluations += result_of_this_ct;
+                } else {
+                    let mut result_of_this_ct = Complex::new_re(momentum_sample.zero());
+
+                    for (_i, orientation) in orientations.iter() {
+                        param_builder.orientation_value(orientation);
+
+                        let params = T::get_parameters(
+                            param_builder,
+                            false,
+                            graph,
+                            &inverse_transformed_sample,
+                            settings.kinematics.externals.get_helicities(),
+                            None,
+                            Some(&right_threshold_params),
+                            Some(&lu_cut_params),
+                        );
+
+                        let result = <T as GenericEvaluatorFloat>::get_evaluator(
+                            parametric_evaluator,
+                        )(&params);
+
+                        result_of_this_ct += &result[0];
+                    }
+
+                    result_of_this_ct *= &sample.value_of_multi_channeling_factor;
+                    right_evaluations += result_of_this_ct;
+                }
             }
         }
 
@@ -718,6 +855,35 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
             uv_damp_minus,
             h_function,
         }
+    }
+
+    fn get_inverse_transformed_sample(&self) -> MomentumSample<T> {
+        let subspace = self
+            .rstar_solution
+            .esurface_ct_builder
+            .overlap_builder
+            .counterterm_builder
+            .subspace;
+        let current_lmb = subspace.get_lmb(
+            self.rstar_solution
+                .esurface_ct_builder
+                .overlap_builder
+                .counterterm_builder
+                .all_lmbs,
+        );
+        let target_lmb = &self
+            .rstar_solution
+            .esurface_ct_builder
+            .overlap_builder
+            .counterterm_builder
+            .graph
+            .loop_momentum_basis;
+
+        self.rstar_sample.lmb_transform(current_lmb, target_lmb)
+    }
+
+    fn get_esurface_id(&self) -> EsurfaceID {
+        self.rstar_solution.esurface_ct_builder.esurface_id
     }
 }
 
