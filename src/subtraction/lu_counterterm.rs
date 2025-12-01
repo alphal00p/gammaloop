@@ -16,7 +16,9 @@ use crate::{
         esurface::{Esurface, EsurfaceCollection, EsurfaceID, ExistingEsurfaceId},
         expression::GraphOrientation,
     },
-    gammaloop_integrand::{GenericEvaluator, ParamBuilder, param_builder::LUParams},
+    gammaloop_integrand::{
+        GenericEvaluator, ParamBuilder, ThresholdParams, param_builder::LUParams,
+    },
     graph::{Graph, LmbIndex, LoopMomentumBasis},
     model::Model,
     momentum::Rotation,
@@ -26,6 +28,7 @@ use crate::{
     },
     settings::{GlobalSettings, RuntimeSettings},
     subtraction::{
+        evaluate_integrated_ct_normalisation, evaluate_uv_damper,
         overlap::find_maximal_overlap,
         overlap_subspace::{self, OverlapGroup, OverlapInput, OverlapStructure},
     },
@@ -660,6 +663,62 @@ struct RstarSample<'a, T: FloatLike> {
     rstar_sample: MomentumSample<T>,
     // this can already be computed here because of non-crossing cuts
     value_of_multi_channeling_factor: Complex<F<T>>,
+}
+
+impl<'a, T: FloatLike> RstarSample<'a, T> {
+    fn extract_threshold_parameters(&self) -> ThresholdParams<T> {
+        let radius = &self
+            .rstar_solution
+            .esurface_ct_builder
+            .overlap_builder
+            .radius;
+
+        let e_cm = &self
+            .rstar_solution
+            .esurface_ct_builder
+            .overlap_builder
+            .counterterm_builder
+            .e_cm;
+
+        let uv_localisation_settings = &self
+            .rstar_solution
+            .esurface_ct_builder
+            .overlap_builder
+            .counterterm_builder
+            .settings
+            .subtraction
+            .local_ct_settings
+            .uv_localisation;
+
+        let radius_star = &self.rstar_solution.solution.solution;
+        let esurface_derivative = &self.rstar_solution.solution.derivative_at_solution;
+        let uv_damp_plus = evaluate_uv_damper(radius, radius_star, e_cm, &uv_localisation_settings);
+        let uv_damp_minus =
+            evaluate_uv_damper(&-radius, radius_star, e_cm, &uv_localisation_settings);
+
+        let h_function = evaluate_integrated_ct_normalisation(
+            radius,
+            radius_star,
+            e_cm,
+            &self
+                .rstar_solution
+                .esurface_ct_builder
+                .overlap_builder
+                .counterterm_builder
+                .settings
+                .subtraction
+                .integrated_ct_settings,
+        );
+
+        ThresholdParams {
+            radius: radius.clone(),
+            radius_star: radius_star.clone(),
+            esurface_derivative: esurface_derivative.clone(),
+            uv_damp_plus,
+            uv_damp_minus,
+            h_function,
+        }
+    }
 }
 
 fn merge_samples<T: FloatLike>(
