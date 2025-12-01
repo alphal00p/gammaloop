@@ -16,7 +16,7 @@ use crate::{
         esurface::{Esurface, EsurfaceCollection, EsurfaceID, ExistingEsurfaceId},
         expression::GraphOrientation,
     },
-    gammaloop_integrand::{GenericEvaluator, ParamBuilder},
+    gammaloop_integrand::{GenericEvaluator, ParamBuilder, param_builder::LUParams},
     graph::{Graph, LmbIndex, LoopMomentumBasis},
     model::Model,
     momentum::Rotation,
@@ -160,7 +160,7 @@ impl LUCounterTermEvaluators {
     }
 }
 
-pub struct LUCounterTerm {
+pub(crate) struct LUCounterTerm {
     pub evaluators: LUCounterTermEvaluators,
     pub thresholds: TiVec<
         CutId,
@@ -176,6 +176,7 @@ impl LUCounterTerm {
     fn evaluate<T: FloatLike>(
         &self,
         momentum_sample: &MomentumSample<T>,
+        lu_cut_params: &LUParams<T>,
         cut_id: CutId,
         all_lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
         graph: &Graph,
@@ -352,6 +353,14 @@ impl LUCounterTerm {
                     .collect_vec()
             })
             .collect_vec();
+
+        let mut left_evaluations = momentum_sample.zero();
+
+        for samples_group in left_overlap_samples {
+            for sample in samples_group {
+                todo!()
+            }
+        }
 
         todo!()
     }
@@ -653,11 +662,16 @@ struct RstarSample<'a, T: FloatLike> {
     value_of_multi_channeling_factor: Complex<F<T>>,
 }
 
-fn merge_samples_unchecked<T: FloatLike>(
+fn merge_samples<T: FloatLike>(
     left_sample: MomentumSample<T>,
     right_sample: MomentumSample<T>,
+    left_subspace: &SubspaceData,
     right_subspace: &SubspaceData,
 ) -> MomentumSample<T> {
+    assert!(
+        left_subspace.is_mergable_with(right_subspace),
+        "incompatible subspaces for merging samples"
+    );
     let mut merged_sample = left_sample;
     for lmb_index in right_subspace.iter_lmb_indices() {
         let right_momentum = right_sample.loop_moms()[lmb_index].clone();

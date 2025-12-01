@@ -18,8 +18,10 @@ use crate::{
 use ahash::AHashSet;
 use bitvec::vec::BitVec;
 use idenso::{gamma::GammaSimplifier, metric::MS};
+use itertools::Itertools;
 use log::debug;
 
+use spenso::structure::concrete_index::ExpandedIndex;
 use symbolica::{
     atom::{Atom, AtomCore, FunctionBuilder, Symbol},
     function, parse, symbol,
@@ -623,14 +625,17 @@ impl Approximation {
 
             res /= parse!("(-1i / (4 𝜋)^2 * 1/2 * 1/mUVI^2)");
 
+            let emr = (1..4)
+                .map(|mu| GS.emr_mom(*l, Atom::from(ExpandedIndex::from_iter([mu]))))
+                .collect_vec();
+
             // multiply CFF triangle
             res *= Atom::num((3, 16))
-                / ((-function!(
-                    MS.dot,
-                    function!(GS.emr_vec, usize::from(*l) as i64),
-                    function!(GS.emr_vec, usize::from(*l) as i64)
-                ) + GS.m_uv_int * GS.m_uv_int)
-                    .npow((5, 2)));
+                / (&emr[0] * &emr[0]
+                    + &emr[1] * &emr[1]
+                    + &emr[2] * &emr[2]
+                    + GS.m_uv_int * GS.m_uv_int)
+                    .npow((5, 2));
         }
 
         println!("\nIntegrated CT:\n{}\n", res);

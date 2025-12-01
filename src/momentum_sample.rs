@@ -1,7 +1,7 @@
 use std::fmt::Display;
 
 use crate::gammaloop_integrand::evaluators::SingleOrAllOrientations;
-use crate::graph::{Graph, LmbIndex, LoopMomentumBasis};
+use crate::graph::{Graph, LmbIndex, LoopMomentumBasis, lmb};
 use crate::momentum::{FourMomentum, Polarization, Rotatable, Rotation, SignOrZero, ThreeMomentum};
 
 use crate::signature::LoopSignature;
@@ -120,6 +120,18 @@ pub(crate) struct SubspaceData {
 }
 
 impl SubspaceData {
+    pub(crate) fn is_mergable_with(&self, other: &Self) -> bool {
+        self.lmb == other.lmb
+            && self
+                .lmb_indices
+                .iter()
+                .all(|idx| !other.lmb_indices.contains(idx))
+            && other
+                .lmb_indices
+                .iter()
+                .all(|idx| !self.lmb_indices.contains(idx))
+    }
+
     pub(crate) fn new_with_user_selected_lmb(
         subgraph: SuBitGraph,
         lmb: LmbIndex,
