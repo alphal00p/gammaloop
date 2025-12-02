@@ -111,7 +111,7 @@ impl<T> Length for LoopMomenta<T> {
 pub type Subspace<'a> = Option<&'a [LoopIndex]>; // None means full space
 
 #[derive(Clone, Debug, bincode::Encode, bincode::Decode)]
-pub(crate) struct SubspaceData {
+pub struct SubspaceData {
     subgraph: InternalSubGraph,
     #[bincode(with_serde)]
     complement_subgraph: SuBitGraph,

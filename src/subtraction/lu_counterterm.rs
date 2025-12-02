@@ -1,5 +1,6 @@
 use core::f64;
 
+use bincode_trait_derive::{Decode, Encode};
 use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeVec, Orientation};
 use nalgebra::iter;
@@ -15,6 +16,7 @@ use typed_index_collections::TiVec;
 use vakint::Momentum;
 
 use crate::{
+    GammaLoopContext,
     cff::{
         cut_expression::SuperGraphOrientationID,
         esurface::{Esurface, EsurfaceCollection, EsurfaceID, ExistingEsurfaceId},
@@ -44,6 +46,8 @@ use crate::{
     },
 };
 
+#[derive(Clone, Encode, Decode)]
+#[trait_decode(trait = GammaLoopContext)]
 pub struct LUCounterTermEvaluators {
     pub parametric_left_thresholds_evaluator: TiVec<LeftThresholdId, GenericEvaluator>,
     pub parametric_right_threshold_evaluator: TiVec<RightThresholdId, GenericEvaluator>,
@@ -169,8 +173,10 @@ impl LUCounterTermEvaluators {
     }
 }
 
+#[derive(Clone, Encode, Decode)]
+#[trait_decode(trait = GammaLoopContext)]
 pub(crate) struct LUCounterTerm {
-    pub evaluators: LUCounterTermEvaluators,
+    pub evaluators: TiVec<CutId, LUCounterTermEvaluators>,
     pub thresholds: TiVec<
         CutId,
         (
@@ -373,16 +379,11 @@ impl LUCounterTerm {
                 let inverse_transformed_sample = sample.get_inverse_transformed_sample();
                 let left_threshold_id = LeftThresholdId::from(sample.get_esurface_id().0);
 
-                let iterative_evaluator = self
-                    .evaluators
+                if let Some(mut iterative_evaluator) = self.evaluators[cut_id]
                     .iterative_left_thresholds_evaluator
                     .as_mut()
-                    .map(|evaluators| &mut evaluators[left_threshold_id]);
-
-                let parametric_evaluator =
-                    &mut self.evaluators.parametric_left_thresholds_evaluator[left_threshold_id];
-
-                if let Some(mut iterative_evaluator) = iterative_evaluator {
+                    .map(|evaluators| &mut evaluators[left_threshold_id])
+                {
                     let params = T::get_parameters(
                         param_builder,
                         false,
@@ -406,6 +407,9 @@ impl LUCounterTerm {
                     left_evaluations += result_of_this_ct;
                 } else {
                     let mut result_of_this_ct = Complex::new_re(momentum_sample.zero());
+
+                    let parametric_evaluator = &mut self.evaluators[cut_id]
+                        .parametric_left_thresholds_evaluator[left_threshold_id];
 
                     for (_i, orientation) in orientations.iter() {
                         param_builder.orientation_value(orientation);
@@ -442,16 +446,11 @@ impl LUCounterTerm {
                 let inverse_transformed_sample = sample.get_inverse_transformed_sample();
                 let right_threshold_id = RightThresholdId::from(sample.get_esurface_id().0);
 
-                let iterative_evaluator = self
-                    .evaluators
+                if let Some(mut iterative_evaluator) = self.evaluators[cut_id]
                     .iterative_right_threshold_evaluator
                     .as_mut()
-                    .map(|evaluators| &mut evaluators[right_threshold_id]);
-
-                let parametric_evaluator =
-                    &mut self.evaluators.parametric_right_threshold_evaluator[right_threshold_id];
-
-                if let Some(mut iterative_evaluator) = iterative_evaluator {
+                    .map(|evaluators| &mut evaluators[right_threshold_id])
+                {
                     let params = T::get_parameters(
                         param_builder,
                         false,
@@ -475,6 +474,9 @@ impl LUCounterTerm {
                     left_evaluations += result_of_this_ct;
                 } else {
                     let mut result_of_this_ct = Complex::new_re(momentum_sample.zero());
+
+                    let parametric_evaluator = &mut self.evaluators[cut_id]
+                        .parametric_right_threshold_evaluator[right_threshold_id];
 
                     for (_i, orientation) in orientations.iter() {
                         param_builder.orientation_value(orientation);
@@ -521,16 +523,11 @@ impl LUCounterTerm {
             let inverse_transformed_momentum_sample =
                 merge_and_inverse_transform(sample_left, sample_right);
 
-            let iterative_evaluator = self
-                .evaluators
+            if let Some(mut iterative_evaluator) = self.evaluators[cut_id]
                 .iterative_iterated_evaluator
                 .as_mut()
-                .map(|evaluators| &mut evaluators[iterated_index]);
-
-            let parametric_evaluator =
-                &mut self.evaluators.parametric_iterated_evaluator[iterated_index];
-
-            if let Some(mut iterative_evaluator) = iterative_evaluator {
+                .map(|evaluators| &mut evaluators[iterated_index])
+            {
                 let params = T::get_parameters(
                     param_builder,
                     false,
@@ -554,6 +551,9 @@ impl LUCounterTerm {
                 cartesian_product_result += result_of_this_ct;
             } else {
                 let mut result_of_this_ct = Complex::new_re(momentum_sample.zero());
+
+                let parametric_evaluator =
+                    &mut self.evaluators[cut_id].parametric_iterated_evaluator[iterated_index];
 
                 for (_i, orientation) in orientations.iter() {
                     param_builder.orientation_value(orientation);

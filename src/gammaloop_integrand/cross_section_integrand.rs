@@ -19,6 +19,7 @@ use crate::{
     momentum_sample::{self, ExternalIndex, LoopMomenta, MomentumSample},
     processes::{CrossSectionCut, CrossSectionGraph, CutId},
     settings::{GlobalSettings, RuntimeSettings, runtime::HFunctionSettings},
+    subtraction::lu_counterterm::{LUCounterTerm, LUCounterTermEvaluators},
     utils::{
         F, FloatLike, Length, h, newton_solver::newton_iteration_and_derivative,
         serde_utils::SmartSerde,
@@ -251,6 +252,7 @@ pub struct CrossSectionGraphTerm {
     pub param_builder: ParamBuilder<f64>,
     pub orientations: TiVec<SuperGraphOrientationID, EdgeVec<Orientation>>,
     pub orientation_filter: SubSet<SuperGraphOrientationID>,
+    pub counterterm: LUCounterTerm,
 }
 
 impl CrossSectionGraphTerm {
@@ -306,6 +308,38 @@ impl CrossSectionGraphTerm {
             None
         };
 
+        let ct_evaluators = graph
+            .derived_data
+            .threshold_counterterms
+            .iter()
+            .map(|ct_data| {
+                LUCounterTermEvaluators::from_atoms(
+                    ct_data,
+                    &graph.graph.param_builder,
+                    settings,
+                    &orientations,
+                )
+            })
+            .collect();
+
+        let thresholds = graph
+            .derived_data
+            .threshold_counterterms
+            .iter()
+            .map(|ct_data| {
+                (
+                    ct_data.left_thresholds.clone(),
+                    ct_data.right_thresholds.clone(),
+                )
+            })
+            .collect();
+
+        let counterterm = LUCounterTerm {
+            evaluators: ct_evaluators,
+            thresholds,
+            subspaces: todo!(),
+        };
+
         Ok(Self {
             iterative_integrand,
             parametric_integrand,
@@ -322,6 +356,7 @@ impl CrossSectionGraphTerm {
             param_builder: graph.graph.param_builder.clone(),
             orientation_filter: SubSet::full(orientations.len()),
             orientations,
+            counterterm,
         })
     }
 

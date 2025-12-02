@@ -36,13 +36,14 @@ use crate::{
         GraphGroup, GroupId, LMBext, LmbIndex, LoopMomentumBasis, parse::complete_group_parsing,
     },
     model::ArcParticle,
+    momentum_sample::SubspaceData,
     numerator::{self, symbolica_ext::AtomCoreExt},
     settings::{GlobalSettings, global::GenerationSettings, runtime::LockedRuntimeSettings},
     utils::{FUN_LIB, GS, TENSORLIB, W_},
     uv::{UltravioletGraph, uv_graph::UVE},
 };
 use eyre::{Context, eyre};
-use itertools::Itertools;
+use itertools::{Either::Left, Itertools};
 use linnet::half_edge::{
     involution::{EdgeIndex, Orientation},
     subgraph::{
@@ -1148,7 +1149,7 @@ impl CrossSectionGraph {
                             right: right_threshold_diagram.clone(),
                         };
 
-                        let mut threshold_esurface = Esurface::new_from_cut_left(
+                        let threshold_esurface = Esurface::new_from_cut_left(
                             &self.graph.underlying,
                             &cross_section_cut_for_threshold,
                             Some(&self.graph.initial_state_cut),
@@ -1187,7 +1188,7 @@ impl CrossSectionGraph {
                             right: right_threshold_diagram.clone(),
                         };
 
-                        let mut threshold_esurface = Esurface::new_from_cut_left(
+                        let threshold_esurface = Esurface::new_from_cut_left(
                             &self.graph.underlying,
                             &cross_section_cut_for_threshold,
                             Some(&self.graph.initial_state_cut),
@@ -1392,6 +1393,48 @@ impl CrossSectionGraph {
         Ok(())
     }
 
+    fn build_subspace_data(&mut self) -> Result<()> {
+        let all_lmbs = self.derived_data.lmbs.as_ref().unwrap();
+
+        let subspace_data = self
+            .cuts
+            .iter()
+            .map(|cut| {
+                let (subspace_lmb_index, _) = all_lmbs
+                    .iter_enumerated()
+                    .find(|(_index, lmb)| {
+                        let mut edges_in_cut = self
+                            .graph
+                            .underlying
+                            .iter_edges_of(&cut.cut)
+                            .map(|(_, e, _)| e)
+                            .collect_vec();
+
+                        edges_in_cut.retain(|e| !lmb.loop_edges.contains(e));
+                        edges_in_cut.len() == 1
+                    })
+                    .unwrap();
+
+                let left_subspace = SubspaceData::new_with_user_selected_lmb(
+                    cut.left.clone(),
+                    subspace_lmb_index,
+                    &self.graph,
+                    all_lmbs,
+                )?;
+                let right_subspace = SubspaceData::new_with_user_selected_lmb(
+                    cut.right.clone(),
+                    subspace_lmb_index,
+                    &self.graph,
+                    all_lmbs,
+                )?;
+
+                Ok((left_subspace, right_subspace))
+            })
+            .collect::<Result<_>>()?;
+
+        Ok(self.derived_data.subspace_data = subspace_data)
+    }
+
     fn generate_term_for_graph(
         &self,
         _model: &Model,
@@ -1411,6 +1454,7 @@ pub struct CrossSectionDerivedData {
     pub multi_channeling_setup: Option<LmbMultiChannelingSetup>,
     pub tensor_network_cache: TiVec<CutId, (ParsingNet, ParsingNet)>,
     pub threshold_counterterms: TiVec<CutId, LUCounterTermData>,
+    pub subspace_data: TiVec<CutId, (SubspaceData, SubspaceData)>,
 }
 
 impl CrossSectionDerivedData {
@@ -1423,6 +1467,7 @@ impl CrossSectionDerivedData {
             multi_channeling_setup: None,
             tensor_network_cache: TiVec::new(),
             threshold_counterterms: TiVec::new(),
+            subspace_data: TiVec::new(),
         }
     }
 }
