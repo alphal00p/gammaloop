@@ -2767,14 +2767,14 @@ impl ProcessDefinition {
                     oriented_particles.push((None, p.0.name.clone()));
                 } else if p.0.is_antiparticle() {
                     oriented_particles.push((
-                        Some(SB_INCOMING),
-                        // Some(SB_OUTGOING),
+                        // Some(SB_INCOMING),
+                        Some(SB_OUTGOING),
                         p.0.get_anti_particle(model).0.name.clone(),
                     ));
                 } else {
                     oriented_particles.push((
-                        Some(SB_OUTGOING),
-                        // Some(SB_INCOMING),
+                        // Some(SB_OUTGOING),
+                        Some(SB_INCOMING),
                         p.0.name.clone(),
                     ));
                 }
@@ -2792,6 +2792,11 @@ impl ProcessDefinition {
                 .or_default()
                 .push(vertex_rule.0.name.clone());
         }
+
+        // In Symbolica generation *all* particles have to be *particle* and never *anti-particles*.
+        // The differentiation in symbolica graphs happens through the edge directions.
+        // For that reason we must correctly set the directions of the external edges according to the nature of
+        // the particle specified in the process definition.
 
         let mut external_edges = self
             .initial_pdgs
@@ -2851,14 +2856,14 @@ impl ProcessDefinition {
                                     }
                                 } else if p.0.is_antiparticle() {
                                     HalfEdge {
-                                        direction: Some(SB_OUTGOING),
+                                        direction: Some(SB_INCOMING),
                                         data: EdgeColor::from_particle(
                                             p.0.get_anti_particle(model),
                                         ),
                                     }
                                 } else {
                                     HalfEdge {
-                                        direction: Some(SB_INCOMING),
+                                        direction: Some(SB_OUTGOING),
                                         data: EdgeColor::from_particle(p),
                                     }
                                 },
@@ -2884,12 +2889,12 @@ impl ProcessDefinition {
                             }
                         } else if p.0.is_antiparticle() {
                             HalfEdge {
-                                direction: Some(SB_OUTGOING),
+                                direction: Some(SB_INCOMING),
                                 data: EdgeColor::from_particle(p.0.get_anti_particle(model)),
                             }
                         } else {
                             HalfEdge {
-                                direction: Some(SB_INCOMING),
+                                direction: Some(SB_OUTGOING),
                                 data: EdgeColor::from_particle(p),
                             }
                         },
@@ -3717,12 +3722,14 @@ impl ProcessDefinition {
                             )
                             .unwrap();
                     }
+                    // println!("NON CANONIZED FLOW: {}", sorted_g.to_dot());
                     // NOTE: The normalization of the fermion flow cannot be performed at this stage yet because
                     // it involves flipping edge orientation which modifies the sign of the momenta for the local
                     // numerator comparison during the grouping of graphs. This is done later in the process then.
                     let (g_with_canonical_flows, is_external_fermion_flow_sign_negative) = self
                         .normalize_flows(&sorted_g, model)
                         .expect("Failed to normalize fermion flow");
+                    // println!("CANONIZED FLOW: {}", g_with_canonical_flows.to_dot());
 
                     let mut bare_graph = ParseGraph::from_symbolica_graph(
                         model,
