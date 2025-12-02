@@ -4,7 +4,7 @@ use crate::momentum::{FourMomentum, SignOrZero, ThreeMomentum};
 use crate::momentum_sample::{
     ExternalFourMomenta, ExternalIndex, ExternalThreeMomenta, LoopIndex, LoopMomenta,
 };
-use crate::utils::{FloatLike, Length, F};
+use crate::utils::{F, FloatLike, Length};
 use bincode::{BorrowDecode, Decode, Encode};
 use serde::{Deserialize, Serialize};
 use spenso::algebra::algebraic_traits::RefZero;
@@ -421,6 +421,10 @@ where
         } else {
             self.clone()
         }
+    }
+
+    pub(crate) fn pop(&mut self) -> Option<SignOrZero> {
+        self.0.pop()
     }
 }
 

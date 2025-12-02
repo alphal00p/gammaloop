@@ -33,10 +33,11 @@ use crate::{
         LmbMultiChannelingSetup, ParamBuilder, cross_section_integrand::CrossSectionIntegrandData,
     },
     graph::{
-        GraphGroup, GroupId, LMBext, LmbIndex, LoopMomentumBasis, parse::complete_group_parsing,
+        self, GraphGroup, GroupId, LMBext, LmbIndex, LoopMomentumBasis,
+        parse::complete_group_parsing,
     },
     model::ArcParticle,
-    momentum_sample::SubspaceData,
+    momentum_sample::{ExternalIndex, SubspaceData},
     numerator::{self, symbolica_ext::AtomCoreExt},
     settings::{GlobalSettings, global::GenerationSettings, runtime::LockedRuntimeSettings},
     utils::{FUN_LIB, GS, TENSORLIB, W_},
@@ -45,7 +46,7 @@ use crate::{
 use eyre::{Context, eyre};
 use itertools::{Either::Left, Itertools};
 use linnet::half_edge::{
-    involution::{EdgeIndex, Orientation},
+    involution::{EdgeIndex, Orientation, SignOrZero},
     subgraph::{
         HedgeNode, Inclusion, InternalSubGraph, OrientedCut, SuBitGraph, SubGraphLike, SubSetOps,
     },
@@ -657,6 +658,7 @@ impl CrossSectionGraph {
         if settings.enable_thresholds {
             debug!("building threshold counterterm");
             self.build_threshold_counteterm(settings)?;
+            self.build_subspace_data()?;
         }
 
         Ok(())
@@ -1060,7 +1062,7 @@ impl CrossSectionGraph {
     }
 
     fn build_lmbs(&mut self) {
-        let lmbs = self.graph.generate_loop_momentum_bases(
+        let mut lmbs = self.graph.generate_loop_momentum_bases(
             &self
                 .graph
                 .underlying
@@ -1068,6 +1070,26 @@ impl CrossSectionGraph {
                 .subtract(&self.graph.initial_state_cut.left)
                 .subtract(&self.graph.initial_state_cut.right),
         );
+
+        let ext_zero = ExternalIndex::from(0);
+        let ext_one = ExternalIndex::from(1);
+
+        if lmbs[LmbIndex::from(0)].ext_edges.len() == 2
+            && lmbs[LmbIndex::from(0)].ext_edges[ExternalIndex::from(0)]
+                == lmbs[LmbIndex::from(0)].ext_edges[ExternalIndex::from(1)]
+        {
+            warn!("dirty hack to fix lmbs, remove when this is properly fixed");
+
+            for lmb in lmbs.iter_mut() {
+                for (_, signature) in lmb.edge_signatures.iter_mut() {
+                    let popped = signature.external.pop().unwrap();
+                    if popped != crate::momentum::SignOrZero::Zero {
+                        signature.external[ext_zero] = popped;
+                    }
+                }
+                lmb.ext_edges.pop();
+            }
+        }
 
         self.derived_data.lmbs = Some(lmbs)
     }
@@ -1390,7 +1412,7 @@ impl CrossSectionGraph {
                         true,
                     );
 
-                    Ok(iterated_scalar * lu_prefactor * left_prefactor * right_prefactor)
+                    Ok(iterated_integrand * lu_prefactor * left_prefactor * right_prefactor)
                 })
                 .collect::<Result<Vec<_>>>()?;
 
@@ -1421,7 +1443,7 @@ impl CrossSectionGraph {
             .cuts
             .iter()
             .map(|cut| {
-                let (subspace_lmb_index, _) = all_lmbs
+                let (subspace_lmb_index, lmb) = all_lmbs
                     .iter_enumerated()
                     .find(|(_index, lmb)| {
                         let mut edges_in_cut = self
@@ -1435,6 +1457,8 @@ impl CrossSectionGraph {
                         edges_in_cut.len() == 1
                     })
                     .unwrap();
+
+                println!("externals: {:?}", lmb.ext_edges);
 
                 let left_subspace = SubspaceData::new_with_user_selected_lmb(
                     cut.left.clone(),

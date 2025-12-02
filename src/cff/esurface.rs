@@ -282,6 +282,7 @@ impl Esurface {
             .into_iter()
             .map(|index| {
                 let signature = &lmb.edge_signatures[index];
+                //panic!("signature: {:?}", signature);
                 let momentum = signature.compute_momentum(loop_moms, &spatial_externals);
                 let mass = &masses[index];
                 (momentum.norm_squared() + mass * mass).sqrt()

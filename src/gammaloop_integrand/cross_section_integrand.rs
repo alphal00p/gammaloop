@@ -624,6 +624,20 @@ impl GraphTerm for CrossSectionGraphTerm {
                 }
             }
 
+            let ct_result = self.counterterm.evaluate(
+                &rescaled_momenta,
+                &lu_params,
+                cut,
+                &self.lmbs,
+                &self.graph,
+                &masses,
+                rotation,
+                settings,
+                &mut self.param_builder,
+                orientations,
+            );
+
+            result += ct_result;
             //debug!("param builder for cut {}: \n{}", cut, self.param_builder);
 
             cut_results.push(result * prefactor);

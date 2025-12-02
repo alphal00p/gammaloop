@@ -11,9 +11,13 @@ use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
 use derive_more::{From, Into};
 use eyre::eyre;
+use linnet::half_edge::HedgeGraph;
 use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation};
+use linnet::half_edge::nodestore::NodeStorageOps;
 use linnet::half_edge::subgraph::subset::SubSet;
-use linnet::half_edge::subgraph::{InternalSubGraph, SuBitGraph, SubSetOps};
+use linnet::half_edge::subgraph::{
+    Inclusion, InternalSubGraph, ModifySubSet, SuBitGraph, SubSetLike, SubSetOps,
+};
 use serde::{Deserialize, Serialize};
 use std::ops::{Add, Index, IndexMut, Sub};
 use symbolica::domains::float::FloatLike as SymFloatLike;
@@ -132,13 +136,32 @@ impl SubspaceData {
                 .all(|idx| !self.lmb_indices.contains(idx))
     }
 
+    fn cleaned_filter_pessimist<E, V, H, N: NodeStorageOps<NodeData = V>>(
+        mut filter: SuBitGraph,
+        graph: &HedgeGraph<E, V, H, N>,
+    ) -> InternalSubGraph {
+        let mut to_remove = SuBitGraph::empty(filter.size());
+
+        for i in filter.included_iter() {
+            if !filter.includes(&graph.inv(i)) {
+                to_remove.add(i);
+            }
+        }
+        filter.subtract_with(&to_remove);
+
+        InternalSubGraph {
+            filter,
+            loopcount: None,
+        }
+    }
+
     pub(crate) fn new_with_user_selected_lmb(
         subgraph: SuBitGraph,
         lmb: LmbIndex,
         graph: &Graph,
         all_lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
     ) -> Result<Self> {
-        let mut subgraph = InternalSubGraph::cleaned_filter_pessimist(subgraph, graph);
+        let mut subgraph = Self::cleaned_filter_pessimist(subgraph, graph);
         subgraph.set_loopcount(graph);
         let edges_in_subgraph = graph
             .iter_edges_of(&subgraph.filter)
@@ -155,7 +178,11 @@ impl SubspaceData {
 
         if lmb_indices.len() != subgraph.loopcount.unwrap() {
             return Err(color_eyre::eyre::eyre!(
-                "Provided loop momentum basis does not align with subgraph"
+                "Provided loop momentum basis does not align with subgraph, lmb_indices: {:?}, lmb_edges: {:?}, subgraph loopcount: {}, edges_in_subgraph: {:?}",
+                lmb_indices,
+                all_lmbs[lmb].loop_edges,
+                subgraph.loopcount.unwrap(),
+                edges_in_subgraph,
             ));
         }
 

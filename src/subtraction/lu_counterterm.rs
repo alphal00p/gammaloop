@@ -188,7 +188,7 @@ pub(crate) struct LUCounterTerm {
 }
 
 impl LUCounterTerm {
-    fn evaluate<T: FloatLike>(
+    pub(crate) fn evaluate<T: FloatLike>(
         &mut self,
         momentum_sample: &MomentumSample<T>,
         lu_cut_params: &LUParams<T>,
