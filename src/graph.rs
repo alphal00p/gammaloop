@@ -285,6 +285,10 @@ impl Graph {
         let source_node_vec = source_nodes.into_iter().collect_vec();
         let target_node_vec = target_nodes.into_iter().collect_vec();
 
+        //println!("source nodes: {:?}", source_node_vec);
+        //println!("target nodes: {:?}", target_node_vec);
+        //panic!("stop");
+
         let source_node = self
             .underlying
             .combine_to_single_hedgenode(&source_node_vec);

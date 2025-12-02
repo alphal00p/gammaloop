@@ -637,7 +637,7 @@ impl CrossSectionGraph {
         settings: &GenerationSettings,
     ) -> Result<()> {
         debug!("generating cuts");
-        self.generate_cuts(model, process_definition)?;
+        self.generate_cuts(model, process_definition, settings)?;
         debug!("generating esurfaces corresponding to cuts");
         self.generate_esurface_cuts();
         debug!("generating cff");
@@ -714,6 +714,7 @@ impl CrossSectionGraph {
         &mut self,
         model: &Model,
         process_definition: &ProcessDefinition,
+        settings: &GenerationSettings,
     ) -> Result<()> {
         info!("generatig cuts for graph: {}", self.graph.name);
 
@@ -739,6 +740,26 @@ impl CrossSectionGraph {
             .collect::<Result<_>>()?;
 
         cuts.sort_by(|a, b| a.cut.cmp(&b.cut));
+
+        if !settings.force_cuts.is_empty() {
+            let force_cuts_sorted = settings
+                .force_cuts
+                .clone()
+                .into_iter()
+                .map(|cut_edges| cut_edges.into_iter().sorted().collect_vec())
+                .collect_vec();
+
+            cuts.retain(|cut| {
+                let edges_in_cut = self
+                    .graph
+                    .iter_edges_of(&cut.cut)
+                    .map(|(_, _, e)| e.data.name.clone())
+                    .sorted()
+                    .collect_vec();
+
+                force_cuts_sorted.contains(&edges_in_cut)
+            });
+        }
 
         self.cuts = cuts;
 

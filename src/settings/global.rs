@@ -10,16 +10,16 @@ use symbolica::{
 use tracing::debug;
 
 use crate::{
+    GammaLoopContext,
     cff::expression::GraphOrientation,
     graph::Graph,
     processes::EvaluatorSettings,
     utils::{
-        serde_utils::{is_false, is_float, is_true, is_usize, IsDefault},
-        symbolica_ext::StringSerializedAtom,
         GS, W_,
+        serde_utils::{IsDefault, is_false, is_float, is_true, is_usize},
+        symbolica_ext::StringSerializedAtom,
     },
     uv::UVgenerationSettings,
-    GammaLoopContext,
 };
 
 #[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
@@ -40,6 +40,8 @@ pub struct GenerationSettings {
     pub enable_thresholds: bool,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub uv: UVgenerationSettings,
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    pub force_cuts: Vec<Vec<String>>,
 }
 
 impl Default for GenerationSettings {
@@ -50,6 +52,7 @@ impl Default for GenerationSettings {
             compile: GammaloopCompileOptions::default(),
             tropical_subgraph_table: TropicalSubgraphTableSettings::default(),
             enable_thresholds: true,
+            force_cuts: vec![],
             uv: UVgenerationSettings::default(),
         }
     }

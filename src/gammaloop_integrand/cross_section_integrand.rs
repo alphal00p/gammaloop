@@ -337,7 +337,7 @@ impl CrossSectionGraphTerm {
         let counterterm = LUCounterTerm {
             evaluators: ct_evaluators,
             thresholds,
-            subspaces: todo!(),
+            subspaces: graph.derived_data.subspace_data.clone(),
         };
 
         Ok(Self {
@@ -563,8 +563,16 @@ impl GraphTerm for CrossSectionGraphTerm {
                     .rescaled_loop_momenta(&solution.solution, None),
             };
 
+            debug!(
+                "edges in cut: {:?}",
+                self.cuts[cut]
+                    .cut
+                    .iter_edges(&self.graph)
+                    .map(|(_, e)| e.data.name.clone())
+                    .collect_vec()
+            );
             debug!("rescaled loop moms: {}", rescaled_momenta.loop_moms());
-            debug!("tstar: {}", lu_params.tstar);
+            debug!("tstar: {:+16e}", lu_params.tstar);
             debug!("num iterations: {}", solution.num_iterations_used);
 
             let prefactor = if let Some((channel_index, alpha)) = &channel_id {
@@ -589,12 +597,6 @@ impl GraphTerm for CrossSectionGraphTerm {
                 None,
                 Some(&lu_params),
             );
-
-            if cut == CutId::from(2) {
-                for expr in &self.iterative_integrand.as_ref().unwrap()[cut].exprs {
-                    debug!("expr: {}", expr);
-                }
-            }
 
             let iterative = self
                 .iterative_integrand
@@ -622,14 +624,14 @@ impl GraphTerm for CrossSectionGraphTerm {
                 }
             }
 
-            debug!("param builder for cut {}: \n{}", cut, self.param_builder);
+            //debug!("param builder for cut {}: \n{}", cut, self.param_builder);
 
             cut_results.push(result * prefactor);
         }
 
         let mut all_cut_result = Complex::new_re(momentum_sample.zero());
         for (cut_id, result) in cut_results.iter_enumerated() {
-            debug!("Result for cut {}: {}", cut_id, result);
+            debug!("Result for cut {}: {:+16e}", cut_id, result);
             all_cut_result += result;
         }
 
