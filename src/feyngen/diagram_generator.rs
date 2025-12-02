@@ -798,7 +798,7 @@ pub(crate) fn veto_special_topologies_with_spanning_tree_root(
         }
     }
     for route in external_momenta_routing.iter_mut() {
-        if route.len() == max_external - 1 {
+        if max_external > 0 && route.len() == max_external - 1 {
             *route = vec![spanning_tree_node_external_tag];
         }
     }
@@ -816,6 +816,7 @@ pub(crate) fn veto_special_topologies_with_spanning_tree_root(
     let mut self_loops: HashSet<(usize, usize, usize)> = HashSet::default();
     let mut n_factorizable_loops = 0;
 
+    let mut visited_nodes = vec![false; spanning_tree.nodes.len()];
     for &i_n in &spanning_tree.order {
         let node = &spanning_tree.nodes[i_n];
         for (i_back_edge, &back_edge) in node.back_edges.iter().enumerate() {
@@ -831,9 +832,10 @@ pub(crate) fn veto_special_topologies_with_spanning_tree_root(
             let mut is_valid_chain = true;
             'follow_chain: loop {
                 if curr_chain_node == i_n {
-                    if i_back_edge > 0 {
-                        n_factorizable_loops += 1;
-                    }
+                    // This conditional is wrong!
+                    // if i_back_edge > 0 {
+                    n_factorizable_loops += 1;
+                    // }
                     break 'follow_chain;
                 }
                 let moms = &external_momenta_routing[curr_chain_node];
@@ -857,17 +859,29 @@ pub(crate) fn veto_special_topologies_with_spanning_tree_root(
                     is_valid_chain = false;
                     break 'follow_chain;
                 }
-                if let Some(chain_id) = spanning_tree.nodes[curr_chain_node].chain_id {
-                    if chain_id != i_chain {
-                        is_valid_chain = false;
-                        break 'follow_chain;
-                    }
-                } else {
+                // if let Some(chain_id) = spanning_tree.nodes[curr_chain_node].chain_id {
+                //     if chain_id != i_chain {
+                //         is_valid_chain = false;
+                //         break 'follow_chain;
+                //     }
+                // } else {
+                //     is_valid_chain = false;
+                //     break 'follow_chain;
+                // }
+                if spanning_tree.nodes[curr_chain_node].chain_id.is_none() {
                     is_valid_chain = false;
                     break 'follow_chain;
                 }
-                curr_chain_node = spanning_tree.nodes[curr_chain_node].parent;
+
+                if visited_nodes[curr_chain_node] {
+                    is_valid_chain = false;
+                    break 'follow_chain;
+                } else {
+                    visited_nodes[curr_chain_node] = true;
+                    curr_chain_node = spanning_tree.nodes[curr_chain_node].parent;
+                }
             }
+
             if is_valid_chain {
                 if let Some(leg_id) = self_energy_external_leg_id {
                     // Make sure the attachment point of the self-energy does not receive any other external momenta

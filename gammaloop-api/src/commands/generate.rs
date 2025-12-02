@@ -200,12 +200,13 @@ pub struct SpecArgs {
     #[arg(
         long = "number-of-factorized-loop-subtopologies",
         short = 'f',
-        alias = "nfactl"
+        alias = "nfactl",
+        num_args = 2
     )]
-    pub number_of_factorized_loop_subtopologies: Option<i32>,
+    pub number_of_factorized_loop_subtopologies: Option<Vec<i32>>,
     /// Number of closed fermion loops; negative disables
-    #[arg(long = "number-of-fermion-loops", short = 'L')]
-    pub number_of_fermion_loops: Option<i32>,
+    #[arg(long = "number-of-fermion-loops", short = 'L', num_args = 2)]
+    pub number_of_fermion_loops: Option<Vec<i32>>,
 
     /// Cut options (cross-section)
     /// Range of cut blobs on either side of the cut
@@ -1285,17 +1286,23 @@ fn feyngen_from_spec_args(
     // Normalize numeric toggles with the vacuum defaults
     let number_of_factorized_loop_subtopologies = a
         .number_of_factorized_loop_subtopologies
-        .or(if is_vacuum { Some(1) } else { None })
-        .and_then(|n| if n < 0 { None } else { Some(n as usize) });
+        .clone()
+        .or(if is_vacuum {
+            Some(vec![1 as i32, 1 as i32])
+        } else {
+            None
+        })
+        .and_then(|v| Some((v[0].max(0) as usize, v[1].max(0) as usize)));
 
     let max_n_bridges = a
         .max_n_bridges
         .or(if is_vacuum { Some(0) } else { None })
         .and_then(|n| if n < 0 { None } else { Some(n as usize) });
 
-    let number_of_fermion_loops =
-        a.number_of_fermion_loops
-            .and_then(|n| if n < 0 { None } else { Some(n as usize) });
+    let number_of_fermion_loops = a
+        .number_of_fermion_loops
+        .as_ref()
+        .and_then(|v| Some((v[0].max(0) as usize, v[1].max(0) as usize)));
 
     // Cut ranges (XS)
     let blob_range: RangeInclusive<usize> = {
@@ -1405,8 +1412,8 @@ fn feyngen_from_spec_args(
     }
 
     // Factorized loop topologies → FactorizedLoopTopologiesCountRange((n,n))
-    if let Some(n) = number_of_factorized_loop_subtopologies {
-        let filt = FeynGenFilter::FactorizedLoopTopologiesCountRange((n, n));
+    if let Some((n_min, n_max)) = number_of_factorized_loop_subtopologies {
+        let filt = FeynGenFilter::FactorizedLoopTopologiesCountRange((n_min, n_max));
         if fg.generation_type == GenerationType::Amplitude {
             amp_filters.push(filt);
         } else {
@@ -1415,8 +1422,8 @@ fn feyngen_from_spec_args(
     }
 
     // Fermion loop count → FermionLoopCountRange((n,n))
-    if let Some(n) = number_of_fermion_loops {
-        let filt = FeynGenFilter::FermionLoopCountRange((n, n));
+    if let Some((n_min, n_max)) = number_of_fermion_loops {
+        let filt = FeynGenFilter::FermionLoopCountRange((n_min, n_max));
         if fg.generation_type == GenerationType::Amplitude {
             amp_filters.push(filt);
         } else {
