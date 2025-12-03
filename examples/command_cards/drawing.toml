@@ -1,7 +1,7 @@
 #:schema https://raw.githubusercontent.com/alphal00p/gammaloop/refs/heads/HEAD/assets/schemas/runhistory.json
 commands = [
     "import model sm-default",
-    "generate xs e+ e- > d d~ | e- a d g QED^2==4 [{{2}} QCD] --numerator-grouping only_detect_zeroes --clear-existing-processes --only-diagrams ",
+    "generate xs e+ e- > d d~ | e- a d g QED^2==4 [{{3}} QCD] --numerator-grouping only_detect_zeroes --clear-existing-processes --only-diagrams ",
     "save dot test",
     "! just -f test/justfile ",
     "quit -o"

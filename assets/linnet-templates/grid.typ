@@ -33,7 +33,7 @@
 }
 
 
-#if tree.folders.processes.folders.amplitudes != none {
+#if tree.folders.processes.folders.at("amplitudes", default: none) != none {
   [= Amplitudes]
   for f in tree.folders.processes.folders.amplitudes.order {
     [#f]
@@ -41,12 +41,12 @@
   }
 }
 
-#if tree.folders.processes.folders.at("cross-section", default: none) != none {
+#if tree.folders.processes.folders.at("cross_sections", default: none) != none {
   [= Cross-Section]
-  for f in tree.folders.processes.folders.cross-section.order {
+  for f in tree.folders.processes.folders.cross_sections.order {
     [#f]
     render-node(
-      tree.folders.processes.folders.cross-section.folders.at(f),
+      tree.folders.processes.folders.cross_sections.folders.at(f),
       (),
       0,
     )

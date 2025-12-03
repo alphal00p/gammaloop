@@ -16,6 +16,7 @@ use rayon::{
     iter::{IntoParallelRefMutIterator, ParallelIterator},
 };
 use spenso::{
+    algebra::algebraic_traits::IsZero,
     network::{Sequential, SmallestDegree},
     structure::concrete_index::ExpandedIndex,
 };
@@ -1062,33 +1063,40 @@ impl CrossSectionGraph {
     }
 
     fn build_lmbs(&mut self) {
-        let mut lmbs = self.graph.generate_loop_momentum_bases(
-            &self
-                .graph
-                .underlying
-                .full_filter()
-                .subtract(&self.graph.initial_state_cut.left)
-                .subtract(&self.graph.initial_state_cut.right),
-        );
+        let mut lmbs: TiVec<LmbIndex, LoopMomentumBasis> = vec![].into();
 
-        let ext_zero = ExternalIndex::from(0);
-        let ext_one = ExternalIndex::from(1);
+        let externals: SuBitGraph = self.graph.empty_subgraph();
+        let full_filter = self.graph.full_filter();
+        let cut_graph = full_filter.subtract(&self.graph.initial_state_cut.right);
 
-        if lmbs[LmbIndex::from(0)].ext_edges.len() == 2
-            && lmbs[LmbIndex::from(0)].ext_edges[ExternalIndex::from(0)]
-                == lmbs[LmbIndex::from(0)].ext_edges[ExternalIndex::from(1)]
-        {
-            warn!("dirty hack to fix lmbs, remove when this is properly fixed");
+        for s in self.graph.all_spanning_trees(&cut_graph) {
+            let mut lmb = self.graph.lmb_impl(&full_filter, &s, externals.clone());
+            let mut exts = vec![];
 
-            for lmb in lmbs.iter_mut() {
-                for (_, signature) in lmb.edge_signatures.iter_mut() {
-                    let popped = signature.external.pop().unwrap();
-                    if popped != crate::momentum::SignOrZero::Zero {
-                        signature.external[ext_zero] = popped;
+            for i in lmb.loop_edges.iter() {
+                let (_, p) = &self.graph[i];
+
+                if self.graph.initial_state_cut.intersects(p) {
+                    exts.push(i.clone());
+                }
+            }
+
+            exts.sort();
+
+            for e in exts {
+                let mut loopid = None;
+                for (l, s) in lmb.edge_signatures[e].internal.iter_enumerated() {
+                    if s.is_non_zero() {
+                        if loopid.is_none() {
+                            loopid = Some(l);
+                        } else {
+                            panic!("external edge has multiple loop momenta")
+                        }
                     }
                 }
-                lmb.ext_edges.pop();
+                lmb.put_loop_to_ext(loopid.unwrap());
             }
+            lmbs.push(self.graph.lmb_impl(&full_filter, &s, externals.clone()));
         }
 
         self.derived_data.lmbs = Some(lmbs)

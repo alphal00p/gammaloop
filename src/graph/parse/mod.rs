@@ -38,7 +38,6 @@ use linnet::{
     parser::{DotEdgeData, DotGraph, DotHedgeData, DotVertexData, GraphSet, HedgeParseError},
     permutation::Permutation,
 };
-use log::debug;
 use spenso::{
     contraction::Contract,
     network::library::TensorLibraryData,
@@ -46,6 +45,8 @@ use spenso::{
     tensors::{data::StorageTensor, parametric::ParamTensor},
 };
 use symbolica::{atom::Atom, graph::Graph as SymbolicaGraph};
+use tracing::debug;
+use tracing::instrument;
 use typed_index_collections::TiVec;
 
 use super::{
@@ -228,6 +229,7 @@ impl ParseGraph {
         }
     }
 
+    #[instrument(skip_all, fields(graph= %graph.to_dot(),name = %graph_name.as_ref(),external_connections = ?external_connections))]
     pub(crate) fn from_symbolica_graph(
         model: &Model,
         graph_name: impl AsRef<str>,
@@ -238,8 +240,18 @@ impl ParseGraph {
         debug!("Input:{}", graph.to_dot());
 
         let mut builder = HedgeGraphBuilder::new();
-        let vertex_map = Self::build_vertex_map(graph, &mut builder);
-        let external_tags = Self::extract_external_tags(graph);
+
+        let mut external_tags = vec![];
+        let mut vertex_map = AHashMap::new();
+        for (i, n) in graph.nodes().iter().enumerate() {
+            if n.edges.len() == 1 {
+                external_tags.push((n.data.external_tag, n.edges[0]));
+            } else {
+                vertex_map.insert(i, builder.add_node(ParseVertex::from(&n.data)));
+            }
+        }
+
+        external_tags.sort_by_key(|&(i, _)| i);
 
         let seen_edges = ParseGraph::process_external_connections(
             external_connections,
@@ -250,7 +262,18 @@ impl ParseGraph {
             &mut builder,
         )?;
 
-        ParseGraph::add_internal_edges(graph, &seen_edges, &vertex_map, model, &mut builder);
+        // Add internal edges
+        for (i, edge) in graph.edges().iter().enumerate() {
+            if seen_edges.contains(&i) {
+                continue;
+            }
+            let (source_v, sink_v) = edge.vertices;
+            let source = vertex_map[&source_v];
+            let sink = vertex_map[&sink_v];
+            let data = ParseEdge::from_symbolica_edge(model, &edge.data, None);
+            let orientation = data.particle.orientation();
+            builder.add_edge(source, sink, data, orientation);
+        }
 
         let mut parsed = ParseGraph {
             global_data: ParseData {
@@ -347,65 +370,15 @@ impl ParseGraph {
         }
         Ok(())
     }
-
-    fn build_vertex_map(
-        graph: &SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>,
-        builder: &mut HedgeGraphBuilder<ParseEdge, ParseVertex, ParseHedge>,
-    ) -> AHashMap<usize, NodeIndex> {
-        graph
-            .nodes()
-            .iter()
-            .enumerate()
-            .filter(|(_, node)| node.edges.len() > 1)
-            .map(|(i, node)| (i, builder.add_node(ParseVertex::from(&node.data))))
-            .collect()
-    }
-
-    fn extract_external_tags(
-        graph: &SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>,
-    ) -> Vec<(usize, usize)> {
-        let mut external_tags: Vec<_> = graph
-            .nodes()
-            .iter()
-            .enumerate()
-            .filter_map(|(i, node)| {
-                if node.edges.len() == 1 {
-                    Some((i, node.edges[0]))
-                } else {
-                    None
-                }
-            })
-            .collect();
-
-        external_tags.sort_by_key(|&(i, _)| i);
-        external_tags
-    }
-
-    fn add_internal_edges(
-        graph: &SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>,
-        seen_edges: &AHashSet<usize>,
-        vertex_map: &AHashMap<usize, NodeIndex>,
-        model: &Model,
-        builder: &mut HedgeGraphBuilder<ParseEdge, ParseVertex, ParseHedge>,
-    ) {
-        for (i, edge) in graph.edges().iter().enumerate() {
-            if seen_edges.contains(&i) {
-                continue;
-            }
-            let (source_v, sink_v) = edge.vertices;
-            let source = vertex_map[&source_v];
-            let sink = vertex_map[&sink_v];
-            let data = ParseEdge::from_symbolica_edge(model, &edge.data, None);
-            let orientation = data.particle.orientation();
-            builder.add_edge(source, sink, data, orientation);
-        }
-    }
 }
 
 impl ParseGraph {
+    /// Add dangling hedges based on external connections
+    /// external connections is provided in  the process definition order
+    /// it maps the external_tag s of the external degree 1 nodes together
     fn process_external_connections(
         external_connections: &[(Option<usize>, Option<usize>)],
-        external_tags: &[(usize, usize)],
+        external_tags: &[(i32, usize)],
         vertex_map: &AHashMap<usize, NodeIndex>,
         graph: &SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>,
         model: &Model,
@@ -446,12 +419,10 @@ impl ParseGraph {
 
                     ParseGraph::validate_edge_compatibility(out_edge, in_edge, in_id, out_id)?;
 
-                    // Reuse process_single_connection for both directions
                     ParseGraph::process_single_connection_internal(
-                        out_id,
+                        out_edge_idx,
                         Flow::Source,
                         Some(Hedge(i)),
-                        external_tags,
                         vertex_map,
                         &mut seen_edges,
                         graph,
@@ -460,10 +431,9 @@ impl ParseGraph {
                     )?;
 
                     ParseGraph::process_single_connection_internal(
-                        in_id,
+                        in_edge_idx,
                         Flow::Sink,
                         Some(Hedge(i)),
-                        external_tags,
                         vertex_map,
                         &mut seen_edges,
                         graph,
@@ -483,11 +453,12 @@ impl ParseGraph {
                         generation_type = Some(GenerationType::Amplitude);
                     }
 
+                    let in_edge_idx = ParseGraph::get_edge_index(external_tags, in_id)?;
+
                     ParseGraph::process_single_connection_internal(
-                        in_id,
+                        in_edge_idx,
                         Flow::Sink,
                         None,
-                        external_tags,
                         vertex_map,
                         &mut seen_edges,
                         graph,
@@ -506,12 +477,12 @@ impl ParseGraph {
                     } else {
                         generation_type = Some(GenerationType::Amplitude);
                     }
+                    let out_edge_idx = ParseGraph::get_edge_index(external_tags, out_id)?;
 
                     ParseGraph::process_single_connection_internal(
-                        out_id,
+                        out_edge_idx,
                         Flow::Source,
                         None,
-                        external_tags,
                         vertex_map,
                         &mut seen_edges,
                         graph,
@@ -531,36 +502,62 @@ impl ParseGraph {
     }
 
     fn process_single_connection_internal(
-        edge_id: usize,
+        edge_idx: usize,
         flow: Flow,
         hedge: Option<Hedge>,
-        external_tags: &[(usize, usize)],
         vertex_map: &AHashMap<usize, NodeIndex>,
         seen_edges: &mut AHashSet<usize>,
         graph: &SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>,
         model: &Model,
         builder: &mut HedgeGraphBuilder<ParseEdge, ParseVertex, ParseHedge>,
     ) -> Result<()> {
-        let edge_idx = ParseGraph::get_edge_index(external_tags, edge_id)?;
-
         // Only mark as seen if not already processed (for bidirectional case)
         if !seen_edges.contains(&edge_idx) {
             ParseGraph::mark_edge_as_seen(seen_edges, edge_idx)?;
         }
 
         let edge = &graph.edges()[edge_idx];
-        let data = ParseEdge::from_symbolica_edge(model, &edge.data, hedge);
-        ParseGraph::add_external_edge_with_flow(
-            edge.vertices,
-            data,
-            flow,
-            vertex_map,
-            model,
-            builder,
-        )
+        let mut data = ParseEdge::from_symbolica_edge(model, &edge.data, hedge);
+
+        let (out_vertex, in_vertex) = edge.vertices;
+        let mut orientation = data.particle.orientation();
+
+        // Determine which vertex to connect to and adjust particle/orientation if needed
+        let (node_idx, final_orientation, final_flow) = match flow {
+            Flow::Source => {
+                if let Some(&sink_node) = vertex_map.get(&in_vertex) {
+                    data.particle = data.particle.reverse(model);
+                    orientation = orientation.reverse();
+                    (sink_node, orientation, flow)
+                } else if let Some(&source_node) = vertex_map.get(&out_vertex) {
+                    (source_node, orientation, flow)
+                } else {
+                    return Err(eyre!(
+                        "Outgoing external edges must be attached to an external node (degree 1)"
+                    ));
+                }
+            }
+            Flow::Sink => {
+                if let Some(&sink_node) = vertex_map.get(&in_vertex) {
+                    (sink_node, orientation, flow)
+                } else if let Some(&source_node) = vertex_map.get(&out_vertex) {
+                    data.particle = data.particle.reverse(model);
+                    orientation = orientation.reverse();
+                    (source_node, orientation, flow)
+                } else {
+                    return Err(eyre!(
+                        "Incoming external edges must be attached to an external node (degree 1)"
+                    ));
+                }
+            }
+        };
+
+        debug!(node =  %node_idx, edge_data = ?data ,"adding_external_edge");
+        builder.add_external_edge(node_idx, data, final_orientation, final_flow);
+        Ok(())
     }
 
-    fn get_edge_index(external_tags: &[(usize, usize)], connection_id: usize) -> Result<usize> {
+    fn get_edge_index(external_tags: &[(i32, usize)], connection_id: usize) -> Result<usize> {
         external_tags
             .get(connection_id.saturating_sub(1))
             .map(|(_, edge_idx)| *edge_idx)
@@ -603,51 +600,6 @@ impl ParseGraph {
             ));
         }
 
-        Ok(())
-    }
-
-    fn add_external_edge_with_flow(
-        vertices: (usize, usize),
-        mut edge_data: ParseEdge,
-        flow: Flow,
-        vertex_map: &AHashMap<usize, NodeIndex>,
-        model: &Model,
-        builder: &mut HedgeGraphBuilder<ParseEdge, ParseVertex, ParseHedge>,
-    ) -> Result<()> {
-        let (out_vertex, in_vertex) = vertices;
-        let mut orientation = edge_data.particle.orientation();
-
-        // Determine which vertex to connect to and adjust particle/orientation if needed
-        let (node_idx, final_orientation, final_flow) = match flow {
-            Flow::Source => {
-                if let Some(&sink_node) = vertex_map.get(&in_vertex) {
-                    edge_data.particle = edge_data.particle.reverse(model);
-                    orientation = orientation.reverse();
-                    (sink_node, orientation, flow)
-                } else if let Some(&source_node) = vertex_map.get(&out_vertex) {
-                    (source_node, orientation, flow)
-                } else {
-                    return Err(eyre!(
-                        "Outgoing external edges must be attached to an external node (degree 1)"
-                    ));
-                }
-            }
-            Flow::Sink => {
-                if let Some(&sink_node) = vertex_map.get(&in_vertex) {
-                    (sink_node, orientation, flow)
-                } else if let Some(&source_node) = vertex_map.get(&out_vertex) {
-                    edge_data.particle = edge_data.particle.reverse(model);
-                    orientation = orientation.reverse();
-                    (source_node, orientation, flow)
-                } else {
-                    return Err(eyre!(
-                        "Incoming external edges must be attached to an external node (degree 1)"
-                    ));
-                }
-            }
-        };
-
-        builder.add_external_edge(node_idx, edge_data, final_orientation, final_flow);
         Ok(())
     }
 }
@@ -744,6 +696,14 @@ impl Graph {
         g.write_io(writer)
     }
 
+    pub(crate) fn dot_split_serialize_io(
+        &self,
+        writer: &mut impl std::io::Write,
+    ) -> Result<(), std::io::Error> {
+        let g = self.to_spit_dotgraph();
+        g.write_io(writer)
+    }
+
     pub fn dot_serialize_fmt(
         &self,
         writer: &mut impl std::fmt::Write,
@@ -759,14 +719,32 @@ impl Graph {
         symmetry_factor: Atom,
         external_connections: &[(Option<usize>, Option<usize>)],
     ) -> Result<Self> {
-        ParseGraph::from_symbolica_graph(
+        let mut parse_graph = ParseGraph::from_symbolica_graph(
             model,
             graph_name,
             graph,
             symmetry_factor,
             external_connections,
-        )
-        .and_then(|pg| Graph::from_parsed(pg, model))
+        )?;
+
+        parse_graph
+            .graph
+            .sew(
+                |_, ae, _, be| {
+                    if let (Some(a), Some(b)) = (ae.data.is_cut, be.data.is_cut) {
+                        a == b
+                    } else {
+                        false
+                    }
+                },
+                |af, ae, bf, be| match (af, bf) {
+                    (Flow::Sink, Flow::Source) => (Flow::Sink, ae),
+                    (Flow::Source, Flow::Sink) => (Flow::Source, be),
+                    _ => panic!("Cannot sew hedges with flow {:?} and {:?}", af, bf),
+                },
+            )
+            .map_err(|e| eyre::eyre!("Graph sewing failed: {:?}", e))?;
+        Graph::from_parsed(parse_graph, model)
     }
 
     pub(crate) fn from_parsed(graph: ParseGraph, model: &Model) -> Result<Self> {

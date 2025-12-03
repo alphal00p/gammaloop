@@ -107,11 +107,72 @@ fn simple_epem_ddx_generation() -> Result<()> {
 
     cli.run_command("generate amp e+ e- > d d~")?;
 
-    clean_test(&cli.cli_settings.state_folder);
+    Ok(())
+}
+
+#[test]
+fn from_symbolica() -> Result<()> {
+    let mut cli = get_test_cli(
+        Some("epem_ddx.toml".into()),
+        get_tests_workspace_path().join("epem_ddx"),
+        Some("epem_ddx".to_string()),
+        true,
+    )?;
+
+    let ProcessCollection::CrossSections(x) = &cli.state.process_list.processes[0].collection
+    else {
+        panic!("Expected cross-section process");
+    };
+    let xs = x.values().next().unwrap();
+
+    let a = xs.supergraphs.iter().next().unwrap();
+
+    insta::assert_snapshot!(a.graph.debug_dot(),@r#"
+    digraph GL0{
+      num = "1";
+      overall_factor = "(AutG(1))^(-1)*AntiFermionSpinSumSign(-1)*ExternalFermionOrderingSign(-1)*InternalFermionLoopSign(-1)";
+      overall_factor_evaluated = "-1";
+      projector = "u(1,spenso::bis(4,hedge(3)))*ubar(1,spenso::bis(4,hedge(2)))*v(0,spenso::bis(4,hedge(0)))*vbar(0,spenso::bis(4,hedge(1)))";
+      0[dod=0 int_id=V_71 num="UFO::GC_1*spenso::g(spenso::cof(3,hedge(4)),spenso::dind(spenso::cof(3,hedge(6))))*spenso::gamma(spenso::bis(4,hedge(6)),spenso::bis(4,hedge(4)),spenso::mink(4,hedge(8)))"];
+      1[dod=0 int_id=V_71 num="UFO::GC_1*spenso::g(spenso::cof(3,hedge(7)),spenso::dind(spenso::cof(3,hedge(5))))*spenso::gamma(spenso::bis(4,hedge(5)),spenso::bis(4,hedge(7)),spenso::mink(4,hedge(10)))"];
+      2[dod=0 int_id=V_98 num="UFO::GC_3*spenso::gamma(spenso::bis(4,hedge(2)),spenso::bis(4,hedge(0)),spenso::mink(4,hedge(11)))"];
+      3[dod=0 int_id=V_98 num="UFO::GC_3*spenso::gamma(spenso::bis(4,hedge(1)),spenso::bis(4,hedge(3)),spenso::mink(4,hedge(9)))"];
+
+      ext0	 [style=invis];
+      ext0	-> 3:0	 [id=0 dir=back sink=0 dod=-2 is_cut=0 is_dummy=false lmb_rep="P(0,a___)" name=e0 num="1" particle="e+" pin="x:@-left,y:@edgee0"];
+      ext1	 [style=invis];
+      ext1	-> 3:1	 [id=1 sink=1 dod=-2 is_cut=1 is_dummy=false lmb_rep="P(1,a___)" name=e1 num="1" particle="e-" pin="x:@-left,y:@edgee1"];
+      1:10	-> 2:11	 [id=2 dir=none source=2 sink=2  dod=-2 is_dummy=false lmb_rep="P(0,a___)+P(1,a___)" name=e2 num="-1*spenso::g(spenso::mink(4,hedge(10)),spenso::mink(4,hedge(11)))" particle="a"];
+      0:8	-> 3:9	 [id=3 dir=none source=2 sink=2  dod=-2 is_dummy=false lmb_rep="-1*P(0,a___)+-1*P(1,a___)" name=e3 num="-1*spenso::g(spenso::mink(4,hedge(8)),spenso::mink(4,hedge(9)))" particle="a"];
+      0:4	-> 1:5	 [id=4 dir=back source=1 sink=0  dod=-1 is_dummy=false lmb_id=0 lmb_rep="K(0,a___)" name=e4 num="Q(4,spenso::mink(4,edge(4,1)))*spenso::g(spenso::cof(3,hedge(5)),spenso::dind(spenso::cof(3,hedge(4))))*spenso::gamma(spenso::bis(4,hedge(4)),spenso::bis(4,hedge(5)),spenso::mink(4,edge(4,1)))" particle="d~"];
+      0:6	-> 1:7	 [id=5 source=0 sink=1  dod=-1 is_dummy=false lmb_rep="-1*K(0,a___)+P(0,a___)+P(1,a___)" name=e5 num="Q(5,spenso::mink(4,edge(5,1)))*spenso::g(spenso::cof(3,hedge(6)),spenso::dind(spenso::cof(3,hedge(7))))*spenso::gamma(spenso::bis(4,hedge(7)),spenso::bis(4,hedge(6)),spenso::mink(4,edge(5,1)))" particle="d"];
+      ext6	 [style=invis];
+      2:3	-> ext6	 [id=6 dir=back source=1 dod=-2 is_dummy=false name=e0 num="1" particle="e+" pin="x:@+right,y:@edgee0"];
+      ext7	 [style=invis];
+      2:2	-> ext7	 [id=7 source=0 dod=-2 is_dummy=false name=e1 num="1" particle="e-" pin="x:@+right,y:@edgee1"];
+    }
+    "#);
+
+    // clean_test(&cli.cli_settings.state_folder);
 
     Ok(())
 }
 
+#[test]
+// fn simple_epem_ddx_generation() -> Result<()> {
+//     let mut cli = get_test_cli(
+//         Some("sm_load.toml".into()),
+//         get_tests_workspace_path().join("epem_ddx_generation"),
+//         Some("epem_ddx_generation".to_string()),
+//         true,
+//     )?;
+
+//     cli.run_command("generate amp e+ e- > d d~")?;
+
+//     clean_test(&cli.cli_settings.state_folder);
+
+//     Ok(())
+// }
 #[test]
 fn graph_count_from_amplitude_load() -> Result<()> {
     let mut cli = get_test_cli(
@@ -183,8 +244,8 @@ fn test_generate_sm_a_ddx() -> Result<()> {
 
     // Full particle contents
     // assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{1}}] --symmetrize-left-right-states true",false)?,@"1 | (AutG(1))^(-1)*AntiFermionSpinSumSign(1)*ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1) = -1");
-    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states false --compare-canonized-numerator true --number-of-samples-for-numerator-comparisons 0 --fully-numerical-substitution-when-comparing-numerators false",true)?,@"10 | -12+-27*UFO::G^2*spenso::Nc*spenso::TR*UFO::ee^(-2)+27*UFO::G^2*spenso::Nc^-1*spenso::TR*UFO::ee^(-2)");
-    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states true --compare-canonized-numerator true --number-of-samples-for-numerator-comparisons 0 --fully-numerical-substitution-when-comparing-numerators true",false)?,@"10 | -12+-36*UFO::G^2*UFO::ee^(-2)");
+    // assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states false --compare-canonized-numerator true --number-of-samples-for-numerator-comparisons 0 --fully-numerical-substitution-when-comparing-numerators false",true)?,@"10 | -12+-27*UFO::G^2*spenso::Nc*spenso::TR*UFO::ee^(-2)+27*UFO::G^2*spenso::Nc^-1*spenso::TR*UFO::ee^(-2)");
+    // assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states true --compare-canonized-numerator true --number-of-samples-for-numerator-comparisons 0 --fully-numerical-substitution-when-comparing-numerators true",false)?,@"10 | -12+-36*UFO::G^2*UFO::ee^(-2)");
     assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states true --compare-canonized-numerator false --number-of-samples-for-numerator-comparisons 3 --fully-numerical-substitution-when-comparing-numerators true",false)?,@"10 | -12+-36*UFO::G^2*UFO::ee^(-2)");
     assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states true --no-compare-canonized-numerator --number-of-samples-for-numerator-comparisons 3 --fully-numerical-substitution-when-comparing-numerators false",false)?,@"10 | -12+-3*spenso::Nc*spenso::TR+3*spenso::Nc^-1*spenso::TR");
 

@@ -561,12 +561,11 @@ impl Process {
     }
 
     pub(crate) fn export_dot(&self, path: impl AsRef<Path>) -> Result<()> {
-        let p = path.as_ref().join("amplitudes");
-        let path = p.join(PathBuf::from(self.definition.folder_name.clone()));
-        fs::create_dir_all(&path)?;
-
         match &self.collection {
             ProcessCollection::Amplitudes(a) => {
+                let p = path.as_ref().join("amplitudes");
+                let path = p.join(PathBuf::from(self.definition.folder_name.clone()));
+                fs::create_dir_all(&path)?;
                 for (_, amp) in a {
                     // Create a folder for each amplitude
                     let amp_path = path.join(&amp.name);
@@ -589,11 +588,14 @@ impl Process {
                                         .display()
                                 )
                             })?;
-                        graph.write_dot(&mut dot)?;
+                        graph.graph.dot_split_serialize_io(&mut dot)?;
                     }
                 }
             }
             ProcessCollection::CrossSections(cs) => {
+                let p = path.as_ref().join("cross_sections");
+                let path = p.join(PathBuf::from(self.definition.folder_name.clone()));
+                fs::create_dir_all(&path)?;
                 for (_, cs) in cs {
                     // Create a folder for each cross section
                     let cs_path = path.join(&cs.name);
@@ -616,7 +618,7 @@ impl Process {
                                             .display()
                                     )
                                 })?;
-                        graph.write_dot(&mut dot)?;
+                        graph.graph.dot_split_serialize_io(&mut dot)?;
                     }
                 }
             }
