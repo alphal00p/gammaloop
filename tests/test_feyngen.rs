@@ -403,6 +403,18 @@ fn test_generate_aa_ttx_cross_section_slow_filter() -> Result<()> {
 
 #[test]
 #[rustfmt::skip]
+fn test_vacuum_amplitude_generation_kaapo() -> Result<()> {
+    let mut cli = get_test_cli(None, get_tests_workspace_path().join("feyn_gen_generation_test"), Some("feyngen".to_string()),true)?;
+    cli.run_command(&format!("import model sm-default.json"))?;
+
+    // 4-loop vaccuum contribution to the neutron start equation of state
+    assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} | g d d~ ghG ghG~ [{4}] --numerator-grouping only_detect_zeroes --number-of-factorized-loop-subtopologies 1 1000 --number-of-fermion-loops 1 1000 --filter-snails false --filter-selfenergies false --filter-tadpoles false --max-n-bridges 0",false)?,@"53 | (AutG(1))^(-1)*2*ExternalFermionOrderingSign(1)+(AutG(1))^(-1)*7*ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)+(AutG(12))^(-1)*ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)+(AutG(2))^(-1)*15*ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)+(AutG(2))^(-1)*2*ExternalFermionOrderingSign(1)+(AutG(3))^(-1)*4*ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)+(AutG(4))^(-1)*3*ExternalFermionOrderingSign(1)+(AutG(4))^(-1)*9*ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)+(AutG(6))^(-1)*2*ExternalFermionOrderingSign(1)+(AutG(6))^(-1)*2*ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)+(AutG(8))^(-1)*5*ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)+(AutG(8))^(-1)*ExternalFermionOrderingSign(1) = -179/12");
+
+    Ok(())
+}
+
+#[test]
+#[rustfmt::skip]
 fn test_vacuum_amplitude_generation() -> Result<()> {
     let mut cli = get_test_cli(None, get_tests_workspace_path().join("feyn_gen_generation_test"), Some("feyngen".to_string()),true)?;
     cli.run_command(&format!("import model sm.json"))?;
