@@ -202,12 +202,12 @@
           virtualenv
           (pkgs.rustPlatform.buildRustPackage rec {
             pname = "clinnet";
-            version = "0.1.5";
+            version = "0.1.6";
             src = pkgs.fetchCrate {
               inherit pname version;
-              sha256 = "sha256-g8ND45q4j2no0CK6BUpnherEpZXnwNeJos7xrBCo4SM=";
+              sha256 = "sha256-8XABubt8JHeGWCxtFNeLjvNxWNYp2/Gu1WLqtwEBSWc=";
             };
-            cargoHash = "sha256-+X41ZUwQW4+cHRXMJCfM8tEICA7zqp4jhq2BZ3DA5Gw=";
+            cargoHash = "sha256-/ZLM/KkDaJgY2egeSdqQkWL/TOicuTzradsN5MLEVms=";
           })
         ];
       };

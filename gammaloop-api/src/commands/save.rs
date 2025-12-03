@@ -61,7 +61,7 @@ impl Save {
                 // Create Justfile with draw recipe
                 let justfile_path = target_dir.join("justfile");
                 let justfile_content =
-                    "# Generate drawings from dot files\ndraw:\n    linnet --build-dir drawings . -o drawings.pdf\n";
+                    "# Generate drawings from dot files\ndraw *INPUTS:\n    linnet --build-dir drawings --input {{INPUTS}} . -o drawings.pdf\n";
                 if let Err(e) = fs::write(&justfile_path, justfile_content) {
                     warn!(
                         "Warning: Could not create justfile at {}: {}",

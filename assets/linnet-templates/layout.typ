@@ -22,7 +22,7 @@
 ) = {
   let a = p.layout_graph(bytes(input), cbor.encode(
     (
-      steps: 1500,
+      steps: sys.inputs.at("steps", default: 1500),
       step: 1.2,
       step_shrink: 0.21,
       temp: 0.1,
