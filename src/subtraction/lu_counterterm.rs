@@ -243,7 +243,7 @@ impl LUCounterTerm {
                     return None;
                 }
             })
-            .collect();
+            .collect::<TiVec<ExistingEsurfaceId, _>>();
 
         let right_existing_esurfaces = self.thresholds[cut_id]
             .1
@@ -263,7 +263,16 @@ impl LUCounterTerm {
                     None
                 }
             })
-            .collect();
+            .collect::<TiVec<ExistingEsurfaceId, _>>();
+
+        debug!(
+            "number of thresholds on the left: {}",
+            left_existing_esurfaces.len()
+        );
+        debug!(
+            "number of thresholds on the right: {}",
+            right_existing_esurfaces.len()
+        );
 
         let left_overlap_input = OverlapInput {
             graph,
@@ -304,15 +313,6 @@ impl LUCounterTerm {
         } else {
             return Complex::new_re(F::from_f64(f64::NAN));
         };
-
-        debug!(
-            "number of thresholds on the left: {}",
-            left_existing_esurfaces.len()
-        );
-        debug!(
-            "number of thresholds on the right: {}",
-            right_existing_esurfaces.len()
-        );
 
         debug!(
             "left overlap structure: {:?}",

@@ -275,24 +275,16 @@ impl Esurface {
     ) -> F<T> {
         let lmb = subspace.get_lmb(all_lmbs);
 
-        debug!("received lmb: {}", lmb);
-
-        debug!("energies: {:?}", self.energies);
-        debug!("shift parts: {:?}", self.external_shift);
-
         let full_external_shift = self
             .external_shift
             .iter()
             .map(|(index, sign)| {
                 let external_signature = &lmb.edge_signatures[*index].external;
-                debug!("external signature: {:?}", external_signature);
                 F::from_f64(*sign as f64)
                     * compute_t_part_of_shift_part(external_signature, external_moms)
             })
             .reduce(|acc, x| acc + x)
             .unwrap_or_else(|| external_moms[ExternalIndex(0)].temporal.value.zero());
-
-        debug!("full external shift: {}", full_external_shift);
 
         let spatial_externals = external_moms
             .iter()
@@ -311,8 +303,6 @@ impl Esurface {
             })
             .reduce(|acc, x| acc + x)
             .unwrap_or_else(|| full_external_shift.zero());
-
-        debug!("remaining shift: {}", remaining_shift);
 
         full_external_shift + remaining_shift
     }
@@ -351,11 +341,14 @@ impl Esurface {
             .map(|mom| mom.spatial.clone())
             .collect();
 
-        let loops: LoopMomenta<F<T>> = subspace
-            .iter_lmb_indices()
-            .map(|loop_index| {
-                &shifted_unit_loops_in_subspace[loop_index] * radius
-                    + &center_in_subspace[loop_index]
+        let loops: LoopMomenta<F<T>> = shifted_unit_loops_in_subspace
+            .iter_enumerated()
+            .map(|(loop_index, shifted_unit_momenta)| {
+                if subspace.contains_loop_index(loop_index) {
+                    shifted_unit_momenta * radius + &center_in_subspace[loop_index]
+                } else {
+                    shifted_unit_momenta.clone()
+                }
             })
             .collect();
 
@@ -491,6 +484,7 @@ impl Esurface {
 
         let lmb = subspace.get_lmb(all_lmbs);
 
+        debug!("unit loops in subspace: {:?}", loops_unit_in_subspace);
         let external_3_momenta = external_moms.iter().map(|x| x.spatial.clone()).collect();
 
         //println!("got to energy loop");

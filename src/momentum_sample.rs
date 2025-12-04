@@ -271,6 +271,21 @@ impl SubspaceData {
         })
     }
 
+    pub(crate) fn project_loop_signature_filtered<'a>(
+        &'a self,
+        signature: &'a LoopSignature,
+    ) -> impl Iterator<Item = SignOrZero> + 'a {
+        signature
+            .iter_enumerated()
+            .filter_map(move |(loop_index, sign)| {
+                if self.lmb_indices.contains(&loop_index) {
+                    Some(*sign)
+                } else {
+                    None
+                }
+            })
+    }
+
     pub(crate) fn project_complement_loop_signature<'a>(
         &'a self,
         signature: &'a LoopSignature,
@@ -307,6 +322,10 @@ impl<T> LoopMomenta<T> {
 
     pub(crate) fn first(&self) -> Option<&ThreeMomentum<T>> {
         self.0.first()
+    }
+
+    pub(crate) fn iter_enumerated(&self) -> impl Iterator<Item = (LoopIndex, &ThreeMomentum<T>)> {
+        self.0.iter().enumerate().map(|(i, m)| (LoopIndex(i), m))
     }
 }
 
@@ -354,7 +373,13 @@ impl<T: FloatLike> LoopMomenta<F<T>> {
         match subspace {
             None => LoopMomenta::from_iter(self.iter().map(|k| k * factor)),
             // this branch is wrong
-            Some(subspace) => LoopMomenta::from_iter(subspace.iter().map(|&i| &self[i] * factor)),
+            Some(subspace) => LoopMomenta::from_iter(self.iter_enumerated().map(|(i, k)| {
+                if subspace.contains(&i) {
+                    k * factor
+                } else {
+                    k.clone()
+                }
+            })),
         }
     }
 

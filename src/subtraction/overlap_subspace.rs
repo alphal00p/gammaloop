@@ -293,17 +293,17 @@ fn construct_solver(
         b_vector[vertical_offset + 1] = spatial_shift.py.0;
         b_vector[vertical_offset + 2] = spatial_shift.pz.0;
 
-        for (loop_index, individual_loop_signature) in overlap_input
+        for (subspace_loop_index, individual_loop_signature) in overlap_input
             .subspace
-            .project_loop_signature(&propagator_constraint.signature.internal)
+            .project_loop_signature_filtered(&propagator_constraint.signature.internal)
             .enumerate()
         {
             if individual_loop_signature.is_sign() {
-                a_matrix[vertical_offset][loop_momentum_offset + 3 * loop_index] =
+                a_matrix[vertical_offset][loop_momentum_offset + 3 * subspace_loop_index] =
                     -(individual_loop_signature as i8) as f64;
-                a_matrix[vertical_offset + 1][loop_momentum_offset + 3 * loop_index + 1] =
+                a_matrix[vertical_offset + 1][loop_momentum_offset + 3 * subspace_loop_index + 1] =
                     -(individual_loop_signature as i8) as f64;
-                a_matrix[vertical_offset + 2][loop_momentum_offset + 3 * loop_index + 2] =
+                a_matrix[vertical_offset + 2][loop_momentum_offset + 3 * subspace_loop_index + 2] =
                     -(individual_loop_signature as i8) as f64;
             }
         }
