@@ -668,7 +668,7 @@ pub struct OverlapSettings {
     pub force_global_center: Option<Vec<[f64; 3]>>,
     #[serde(skip_serializing_if = "is_true")]
     pub check_global_center: bool,
-    #[serde(skip_serializing_if = "is_false")]
+    #[serde(skip_serializing_if = "is_true")]
     pub try_origin: bool,
     #[serde(skip_serializing_if = "is_false")]
     pub try_origin_all_lmbs: bool,
@@ -679,7 +679,7 @@ impl Default for OverlapSettings {
         Self {
             force_global_center: None,
             check_global_center: true,
-            try_origin: false,
+            try_origin: true,
             try_origin_all_lmbs: false,
         }
     }
