@@ -1032,7 +1032,7 @@ impl CrossSectionGraph {
             Atom::var(GS.hfunction_left_th)
         };
 
-        let i = Atom::i();
+        let i = if is_on_right { -Atom::i() } else { Atom::i() };
         let pi = Atom::var(GS.pi);
 
         let jacobian_ratio = (&radius_star / &radius).npow(subspace_loop_count as i64 * 3 - 1);
@@ -1043,6 +1043,11 @@ impl CrossSectionGraph {
             * &jacobian_ratio;
 
         let integrated_prefactor = &h_function * &i * &pi * &jacobian_ratio / &grad_eta;
+
+        debug!(
+            "th prefactor local: {}, integrated: {}",
+            local_prefactor, integrated_prefactor
+        );
 
         local_prefactor + integrated_prefactor
     }
@@ -1409,15 +1414,11 @@ impl CrossSectionGraph {
 
                     let lu_prefactor = self.lu_prefactor_helper();
                     let left_prefactor = self.th_prefactor_helper(
-                        self.graph
-                            .underlying
-                            .cyclotomatic_number(&left_ct_diagram.left_subgraph),
+                        self.graph.underlying.cyclotomatic_number(&cut.left),
                         false,
                     );
                     let right_prefactor = self.th_prefactor_helper(
-                        self.graph
-                            .underlying
-                            .cyclotomatic_number(&right_ct_diagram.right_subgraph),
+                        self.graph.underlying.cyclotomatic_number(&cut.right),
                         true,
                     );
 

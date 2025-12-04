@@ -13,6 +13,7 @@ use symbolica::{
     evaluate::OptimizationSettings,
 };
 use tracing::debug;
+use tracing_subscriber::field::debug;
 use typed_index_collections::TiVec;
 use vakint::Momentum;
 
@@ -406,7 +407,8 @@ impl LUCounterTerm {
 
         for samples_group in left_overlap_samples.iter() {
             for sample in samples_group {
-                let left_threshold_params = sample.extract_threshold_parameters();
+                debug!("left threshold parameters");
+                let left_threshold_params = sample.extract_threshold_parameters(true);
                 let inverse_transformed_sample = sample.get_inverse_transformed_sample();
                 let left_threshold_id = LeftThresholdId::from(sample.get_esurface_id().0);
 
@@ -473,7 +475,8 @@ impl LUCounterTerm {
 
         for samples_group in right_overlap_samples.iter() {
             for sample in samples_group {
-                let right_threshold_params = sample.extract_threshold_parameters();
+                debug!("right threshold parameters");
+                let right_threshold_params = sample.extract_threshold_parameters(true);
                 let inverse_transformed_sample = sample.get_inverse_transformed_sample();
                 let right_threshold_id = RightThresholdId::from(sample.get_esurface_id().0);
 
@@ -502,7 +505,7 @@ impl LUCounterTerm {
                         result_of_this_ct += &iterative_result[i.0];
                     }
                     result_of_this_ct *= &sample.value_of_multi_channeling_factor;
-                    left_evaluations += result_of_this_ct;
+                    right_evaluations += result_of_this_ct;
                 } else {
                     let mut result_of_this_ct = Complex::new_re(momentum_sample.zero());
 
@@ -543,8 +546,8 @@ impl LUCounterTerm {
         let mut cartesian_product_result = Complex::new_re(momentum_sample.zero());
 
         for (sample_left, sample_right) in cartesian_product_iter {
-            let left_threshold_params = sample_left.extract_threshold_parameters();
-            let right_threshold_params = sample_right.extract_threshold_parameters();
+            let left_threshold_params = sample_left.extract_threshold_parameters(false);
+            let right_threshold_params = sample_right.extract_threshold_parameters(false);
             let multi_channeling_factor = &sample_left.value_of_multi_channeling_factor
                 * &sample_right.value_of_multi_channeling_factor;
             let iterated_index = (
@@ -903,6 +906,11 @@ impl<'a, T: FloatLike> RstarSolution<'a, T> {
         let value_of_multi_channeling_factor =
             Complex::new_re(multichanneling_numerator / multi_channeling_denominator);
 
+        debug!(
+            "value of multi-channeling factor: {}",
+            value_of_multi_channeling_factor
+        );
+
         RstarSample {
             rstar_solution: self,
             rstar_sample,
@@ -919,7 +927,7 @@ struct RstarSample<'a, T: FloatLike> {
 }
 
 impl<'a, T: FloatLike> RstarSample<'a, T> {
-    fn extract_threshold_parameters(&self) -> ThresholdParams<T> {
+    fn extract_threshold_parameters(&self, is_first_call: bool) -> ThresholdParams<T> {
         let radius = &self
             .rstar_solution
             .esurface_ct_builder
@@ -962,6 +970,16 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
                 .subtraction
                 .integrated_ct_settings,
         );
+
+        if is_first_call {
+            debug!("esurface_id: {}", self.get_esurface_id().0);
+            debug!("radius: {}", radius);
+            debug!("radius_star: {}", radius_star);
+            debug!("esurface_derivative: {}", esurface_derivative);
+            debug!("uv_damp_plus: {}", uv_damp_plus);
+            debug!("uv_damp_minus: {}", uv_damp_minus);
+            debug!("h_function: {}", h_function);
+        }
 
         ThresholdParams {
             radius: radius.clone(),
