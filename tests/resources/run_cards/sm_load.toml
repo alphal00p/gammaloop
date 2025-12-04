@@ -3,4 +3,4 @@ commands = ["import model sm-default"]
 
 [cli_settings.global]
 logfile_directive = "off,gammalooprs[compare_with_scalar_rescaling]=debug"
-display_directive = "off"
+display_directive = "info"

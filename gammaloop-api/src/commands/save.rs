@@ -13,7 +13,7 @@ use tracing::warn;
 
 use crate::{
     state::{set_serialize_commands_as_strings, RunHistory, State},
-    templates::Templates,
+    templates::Assets,
     write_schemas, CLISettings,
 };
 
@@ -40,10 +40,11 @@ impl Save {
             Save::Dot { path } => {
                 // Use original default location (state folder) or custom path if provided
                 let target_dir = path.unwrap_or(global_settings.state_folder.clone());
+                status_info!("Saving dot files to {}", target_dir.display());
 
-                // Extract embedded templates to build/templates relative to target directory
-                if let Err(e) = Templates::extract_to_build_dir(&target_dir) {
-                    println!(
+                // Extract embedded templates to drawings/templates relative to target directory
+                if let Err(e) = Assets::extract_templates(&target_dir) {
+                    warn!(
                         "Warning: Could not extract templates to drawings/templates: {}",
                         e
                     );
@@ -58,14 +59,11 @@ impl Save {
                 // Export dot files to original location
                 state.export_dots(&target_dir)?;
 
-                // Create Justfile with draw recipe
-                let justfile_path = target_dir.join("justfile");
-                let justfile_content =
-                    "# Generate drawings from dot files\ndraw *INPUTS:\n    linnet --build-dir drawings --input {{INPUTS}} . -o drawings.pdf\n";
-                if let Err(e) = fs::write(&justfile_path, justfile_content) {
+                // Create Justfile with draw recipe from embedded template
+                if let Err(e) = Assets::extract_justfile(&target_dir) {
                     warn!(
                         "Warning: Could not create justfile at {}: {}",
-                        justfile_path.display(),
+                        target_dir.join("justfile").display(),
                         e
                     );
                 }

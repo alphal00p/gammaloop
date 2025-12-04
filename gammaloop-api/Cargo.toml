@@ -105,6 +105,9 @@ optional = true
 # If you only embed, you may drop "abi3" and "abi3-py37".
 features = ["auto-initialize", "abi3", "abi3-py37", "eyre"]
 
+[dev-dependencies]
+tempfile = "3.8"
+
 [build-dependencies]
 walkdir = "2.5"
 pyo3-build-config = "0.25"

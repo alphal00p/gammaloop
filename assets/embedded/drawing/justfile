@@ -1,0 +1,16 @@
+
+# Number of steps for the simulated annealing
+steps := "1200"
+
+# Number of columns per amplitude or xs
+columns := "4"
+
+
+# Generate drawings from dot files taking into account steps and columns
+draw:
+    linnet --build-dir drawings --input steps={{steps}} --input columns={{columns}} . -o drawings.pdf
+
+
+# Generate a single figure from dot files
+draw-single FIGURE:
+    linnet --build-dir drawings --rebuild-figure {{FIGURE}} --input steps={{steps}} --input columns={{columns}} . -o drawings.pdf

@@ -3,8 +3,9 @@ use color_eyre::Result;
 
 mod test_utils;
 use gammaloop_api::{commands::save, state::SyncSettings};
-use gammalooprs::feyngen::diagram_generator::evaluate_overall_factor;
 use gammalooprs::processes::ProcessCollection;
+use gammalooprs::{feyngen::diagram_generator::evaluate_overall_factor, status_info};
+use log::info;
 use symbolica::{
     atom::{Atom, AtomCore},
     printer::CanonicalOrderingSettings,
@@ -246,7 +247,7 @@ fn test_generate_sm_a_ddx() -> Result<()> {
     // assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{1}}] --symmetrize-left-right-states true",false)?,@"1 | (AutG(1))^(-1)*AntiFermionSpinSumSign(1)*ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1) = -1");
     // assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states false --compare-canonized-numerator true --number-of-samples-for-numerator-comparisons 0 --fully-numerical-substitution-when-comparing-numerators false",true)?,@"10 | -12+-27*UFO::G^2*spenso::Nc*spenso::TR*UFO::ee^(-2)+27*UFO::G^2*spenso::Nc^-1*spenso::TR*UFO::ee^(-2)");
     // assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states true --compare-canonized-numerator true --number-of-samples-for-numerator-comparisons 0 --fully-numerical-substitution-when-comparing-numerators true",false)?,@"10 | -12+-36*UFO::G^2*UFO::ee^(-2)");
-    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states true --compare-canonized-numerator false --number-of-samples-for-numerator-comparisons 3 --fully-numerical-substitution-when-comparing-numerators true",false)?,@"10 | -12+-36*UFO::G^2*UFO::ee^(-2)");
+    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states true --compare-canonized-numerator false --number-of-samples-for-numerator-comparisons 3 --fully-numerical-substitution-when-comparing-numerators true",true)?,@"10 | -12+-36*UFO::G^2*UFO::ee^(-2)");
     assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states true --no-compare-canonized-numerator --number-of-samples-for-numerator-comparisons 3 --fully-numerical-substitution-when-comparing-numerators false",false)?,@"10 | -12+-3*spenso::Nc*spenso::TR+3*spenso::Nc^-1*spenso::TR");
 
     // Only 1-flavour pure QCD corrections
