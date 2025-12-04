@@ -618,7 +618,7 @@ impl LUCounterTerm {
             cartesian_product_result
         );
 
-        -(left_evaluations + right_evaluations + cartesian_product_result)
+        -(left_evaluations + right_evaluations - cartesian_product_result)
     }
 }
 
