@@ -8,6 +8,10 @@
 #let grid_rows      = int(sys.inputs.at("rows", default: 5))
 #let grid_row_h     = eval(sys.inputs.at("row_height", default: "1fr"))
 #let grid_align     = eval(sys.inputs.at("align", default: "center+horizon"))
+#let top_margin     = eval(sys.inputs.at("top_margin", default: "12mm"))
+#let bottom_margin  = eval(sys.inputs.at("bottom_margin", default: "30mm"))
+#let left_margin    = eval(sys.inputs.at("left_margin", default: "10mm"))
+#let right_margin   = eval(sys.inputs.at("right_margin", default: "10mm"))
 #let cells_per_page = grid_cols * grid_rows
 
 // Page-number option: "on" (default) or "off"/"none"/"false"
@@ -32,7 +36,12 @@
 
 #set page(
   paper: "a4",
-  margin: 12mm,
+  margin: (
+    top: top_margin,
+    bottom: bottom_margin,
+    left: left_margin,
+    right: right_margin,
+  ),
   flipped: page_format == "landscape",
   // "1 / 1" pattern = current page / total pages
   numbering: if show_page_numbers { "1 / 1" } else { none },
@@ -141,7 +150,7 @@
 }
 
 #if tree.folders.processes.folders.at("cross_sections", default: none) != none {
-  [= Cross-Section]
+  [= Cross-section]
   for f in tree.folders.processes.folders.cross_sections.order {
     [#f]
     render-node(
@@ -151,3 +160,4 @@
     )
   }
 }
+

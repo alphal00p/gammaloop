@@ -7,9 +7,21 @@ rows := "5"
 
 # Generate drawings from dot files taking into account steps and columns
 draw *EXTRA_INPUTS:
-	linnet --build-dir drawings draw . {{EXTRA_INPUTS}} --input steps={{steps}} --input columns={{columns}} --input rows={{rows}} -o drawings.pdf
+	linnet \
+	  --build-dir drawings draw . {{EXTRA_INPUTS}} \
+	  --input steps={{steps}} \
+	  --input columns={{columns}} \
+	  --input rows={{rows}} \
+	  -o drawings.pdf
 
 # Generate a single figure from dot files
 draw-single FIGURE *EXTRA_INPUTS:
-	linnet --build-dir drawings redraw-figure {{FIGURE}} {{EXTRA_INPUTS}} --input steps={{steps}}
-	linnet --build-dir drawings redraw-grid --input columns={{columns}} --input rows={{rows}} -o drawings.pdf
+	linnet \
+	  --build-dir drawings redraw-figure {{FIGURE}} {{EXTRA_INPUTS}} \
+	  --input steps={{steps}}
+	linnet \
+	  --build-dir drawings redraw-grid {{EXTRA_INPUTS}} \
+	  --input columns={{columns}} \
+	  --input rows={{rows}} \
+	  -o drawings.pdf
+
