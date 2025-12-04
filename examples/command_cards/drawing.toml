@@ -2,8 +2,9 @@
 commands = [
     "import model sm-default",
     "generate xs e+ e- > d d~ | e- a d g QED^2==4 [{{3}} QCD] --numerator-grouping only_detect_zeroes --clear-existing-processes --only-diagrams ",
+    "! rm -rf ./test ",
     "save dot test",
-    "! just -f test/justfile steps=100 ",
+    "! just -f test/justfile draw steps=5000 ",
     "quit -o"
 ]
 
