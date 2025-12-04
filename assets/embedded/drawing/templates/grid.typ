@@ -1,5 +1,5 @@
 // Default grid template that mirrors the folder hierarchy of generated figures.
-#import "fig-index.typ": cols, tree
+#import "fig-index.typ": tree
 
 // --- Global layout configuration from inputs ---------------------------------
 
@@ -151,4 +151,3 @@
     )
   }
 }
-
