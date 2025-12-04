@@ -1096,7 +1096,8 @@ impl CrossSectionGraph {
                 }
                 lmb.put_loop_to_ext(loopid.unwrap());
             }
-            lmbs.push(self.graph.lmb_impl(&full_filter, &s, externals.clone()));
+            //lmbs.push(self.graph.lmb_impl(&full_filter, &s, externals.clone()));
+            lmbs.push(lmb);
         }
 
         self.derived_data.lmbs = Some(lmbs)

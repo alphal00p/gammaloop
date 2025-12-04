@@ -12,6 +12,7 @@ use symbolica::{
     domains::float::{FloatLike as SymFloatLike, Real, RealLike},
     evaluate::OptimizationSettings,
 };
+use tracing::debug;
 use typed_index_collections::TiVec;
 use vakint::Momentum;
 
@@ -207,6 +208,9 @@ impl LUCounterTerm {
         let left_thresholds = TiVec::from_ref(&left_thresholds_typed.raw);
         let right_thresholds = TiVec::from_ref(&right_thresholds_typed.raw);
 
+        debug!("possible left thresholds: {}", left_thresholds.len());
+        debug!("possible right thresholds: {}", right_thresholds.len());
+
         let masses_f64: EdgeVec<F<f64>> = masses.iter().map(|(_, m)| F(m.to_f64())).collect();
         let loop_moms_f64 = momentum_sample
             .loop_moms()
@@ -300,6 +304,33 @@ impl LUCounterTerm {
         } else {
             return Complex::new_re(F::from_f64(f64::NAN));
         };
+
+        debug!(
+            "number of thresholds on the left: {}",
+            left_existing_esurfaces.len()
+        );
+        debug!(
+            "number of thresholds on the right: {}",
+            right_existing_esurfaces.len()
+        );
+
+        debug!(
+            "left overlap structure: {:?}",
+            left_overlap
+                .overlap_groups
+                .iter()
+                .map(|group| group.existing_esurfaces.len())
+                .collect_vec()
+        );
+
+        debug!(
+            "right overlap structure: {:?}",
+            right_overlap
+                .overlap_groups
+                .iter()
+                .map(|group| group.existing_esurfaces.len())
+                .collect_vec()
+        );
 
         let left_counterterm_builder = CounterTermBuilder::new(
             graph,
@@ -580,7 +611,14 @@ impl LUCounterTerm {
             }
         }
 
-        left_evaluations + right_evaluations + cartesian_product_result
+        debug!("left ct evaluation: {:+16e}", left_evaluations);
+        debug!("right ct evaluation: {:+16e}", right_evaluations);
+        debug!(
+            "cartesian product ct evaluation: {:+16e}",
+            cartesian_product_result
+        );
+
+        -(left_evaluations + right_evaluations + cartesian_product_result)
     }
 }
 

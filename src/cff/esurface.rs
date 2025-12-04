@@ -17,6 +17,8 @@ use symbolica::atom::{Atom, AtomCore};
 use symbolica::domains::float::{FloatLike as SymFloatLike, Real};
 use symbolica::id::Replacement;
 use symbolica::{function, parse};
+use tracing::debug;
+use tracing_subscriber::field::debug;
 use typed_index_collections::TiVec;
 
 use crate::cff::cff_graph::VertexSet;
@@ -144,6 +146,7 @@ impl Esurface {
     ) -> bool {
         //todo!("refactor for subspaces");
         if self.external_shift.is_empty() {
+            debug!("esurface has no external shift, cannot exist");
             return false;
         }
 
@@ -159,10 +162,9 @@ impl Esurface {
         if shift_part < -F::from_ff64(SHIFT_THRESHOLD) * e_cm {
             let lmb = subspace.get_lmb(all_lmbs);
 
-            let mass_sum: F<T> = self
-                .energies
-                .iter()
-                .map(|index| &real_mass_vector[*index])
+            let mass_sum: F<T> = subspace
+                .contains(&self.energies, graph)
+                .map(|index| &real_mass_vector[index])
                 .fold(F::from_f64(0.0), |acc, x| acc + x);
 
             let zero_vector = ThreeMomentum::new(e_cm.zero(), e_cm.zero(), e_cm.zero());
@@ -197,9 +199,21 @@ impl Esurface {
 
             let shift_vector_sq = (&graph_vector + &other_part).norm_squared();
 
-            &shift_part * &shift_part - shift_vector_sq - &mass_sum * &mass_sum
+            if &shift_part * &shift_part - &shift_vector_sq - &mass_sum * &mass_sum
                 > F::from_ff64(EXISTENCE_THRESHOLD) * e_cm * e_cm
+            {
+                true
+            } else {
+                debug!(
+                    "spatial part too large: shift_part^2: {}, shift_vector_sq: {}, mass_sum^2: {}",
+                    &shift_part * &shift_part,
+                    shift_vector_sq,
+                    &mass_sum * &mass_sum
+                );
+                false
+            }
         } else {
+            debug!("shift part not negative enough: {}", shift_part);
             false
         }
     }
@@ -261,16 +275,24 @@ impl Esurface {
     ) -> F<T> {
         let lmb = subspace.get_lmb(all_lmbs);
 
+        debug!("received lmb: {}", lmb);
+
+        debug!("energies: {:?}", self.energies);
+        debug!("shift parts: {:?}", self.external_shift);
+
         let full_external_shift = self
             .external_shift
             .iter()
             .map(|(index, sign)| {
                 let external_signature = &lmb.edge_signatures[*index].external;
+                debug!("external signature: {:?}", external_signature);
                 F::from_f64(*sign as f64)
                     * compute_t_part_of_shift_part(external_signature, external_moms)
             })
             .reduce(|acc, x| acc + x)
             .unwrap_or_else(|| external_moms[ExternalIndex(0)].temporal.value.zero());
+
+        debug!("full external shift: {}", full_external_shift);
 
         let spatial_externals = external_moms
             .iter()
@@ -289,6 +311,8 @@ impl Esurface {
             })
             .reduce(|acc, x| acc + x)
             .unwrap_or_else(|| full_external_shift.zero());
+
+        debug!("remaining shift: {}", remaining_shift);
 
         full_external_shift + remaining_shift
     }

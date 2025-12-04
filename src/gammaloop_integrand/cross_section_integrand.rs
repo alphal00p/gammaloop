@@ -503,6 +503,7 @@ impl GraphTerm for CrossSectionGraphTerm {
         let masses = self.graph.get_real_mass_vector(&model);
         let hel = settings.kinematics.externals.get_helicities();
         let mut cut_results = TiVec::<CutId, Complex<F<T>>>::new();
+        let mut cut_threshold_counterterms = TiVec::<CutId, Complex<F<T>>>::new();
 
         let momentum_sample = if let Some((channel_id, _alpha)) = &channel_id {
             MomentumSample {
@@ -519,6 +520,7 @@ impl GraphTerm for CrossSectionGraphTerm {
         debug!("loop moms: {}", momentum_sample.loop_moms());
 
         for (cut, esurface) in self.cut_esurface.iter_enumerated() {
+            debug!("\n =====START EVALUTAION FOR CUT {}=====", cut);
             let function = |t: &F<T>| {
                 esurface.compute_self_and_r_derivative(
                     t,
@@ -571,9 +573,12 @@ impl GraphTerm for CrossSectionGraphTerm {
                     .map(|(_, e)| e.data.name.clone())
                     .collect_vec()
             );
-            debug!("rescaled loop moms: {}", rescaled_momenta.loop_moms());
             debug!("tstar: {:+16e}", lu_params.tstar);
-            debug!("num iterations: {}", solution.num_iterations_used);
+            debug!(
+                "num iterations to find tstar: {}",
+                solution.num_iterations_used
+            );
+            debug!("rescaled loop moms:\n {}", rescaled_momenta.loop_moms());
 
             let prefactor = if let Some((channel_index, alpha)) = &channel_id {
                 self.multi_channeling_setup.compute_prefactor_impl(
@@ -641,16 +646,21 @@ impl GraphTerm for CrossSectionGraphTerm {
                 )
             };
 
-            result += ct_result;
+            cut_threshold_counterterms.push(ct_result);
+
             //debug!("param builder for cut {}: \n{}", cut, self.param_builder);
 
             cut_results.push(result * prefactor);
         }
 
         let mut all_cut_result = Complex::new_re(momentum_sample.zero());
-        for (cut_id, result) in cut_results.iter_enumerated() {
-            debug!("Result for cut {}: {:+16e}", cut_id, result);
-            all_cut_result += result;
+        for ((cut_id, result), ct_result) in cut_results
+            .iter_enumerated()
+            .zip(cut_threshold_counterterms.iter())
+        {
+            debug!("bare result: {:+16e}", result);
+            debug!("threshold counterterm: {:+16e}", ct_result);
+            all_cut_result += result + ct_result;
         }
 
         let flux_factor = match momentum_sample.external_moms().len() {
