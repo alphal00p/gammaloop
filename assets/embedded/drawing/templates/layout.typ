@@ -64,31 +64,48 @@
       let end = e.data.remove("to")
       let data = e.remove("data")
 
-      let ev_sink = eval-dict(data, "eval_sink",scope)
-      let ev_source = eval-dict(data, "eval_source",scope)
+      let o = e.remove("orientation")
+      let ev_sink = eval-dict(data, "eval_sink",scope+(orientation:o))
+      let ev_source = eval-dict(data, "eval_source",scope+(orientation:o))
 
       let bend-angle = data.remove("bend")
       let bend = bend-angle.remove("Ok", default: 0.)
-      let o = e.remove("orientation")
 
+      let enmlab = label("em" + str(i))
+      let (end-node, end-node-pos) = if end != none {
+        let nodelab = label(str(end))
+
+          noed.push(edge(
+            vertices: ((data.pos.x * unit, data.pos.y * unit), nodelab),
+            bend: bend * 0.5rad,
+            ..ev_sink,
+          ))
+
+
+        (nodelab, n.at(str(end)).pos)
+      } else {
+        let lab = label("exte" + str(i))
+        noed.push(node(
+          (data.pos.x * unit, data.pos.y * unit),
+          name: lab,
+          outset: -5mm,
+          radius: 5mm,
+          fill: none,
+        ))
+        (lab, data.pos)
+      }
 
       let snmlab = label("sm" + str(i))
       let (start-node, start-node-pos) = if start != none {
         let nodelab = label(str(start))
 
-        if o == "Reversed" {
-          noed.push(edge(
-            vertices: ((data.pos.x * unit, data.pos.y * unit), nodelab),
-            bend: bend * -0.5rad,
-            ..ev_sink,
-          ))
-        } else {
+
           noed.push(edge(
             vertices: (nodelab, (data.pos.x * unit, data.pos.y * unit)),
             bend: bend * 0.5rad,
             ..ev_source,
           ))
-        }
+
 
         (nodelab, n.at(str(start)).pos)
       } else {
@@ -103,42 +120,7 @@
         (lab, data.pos)
       }
 
-      let enmlab = label("em" + str(i))
-      let (end-node, end-node-pos) = if end != none {
-        let nodelab = label(str(end))
-        if o == "Reversed" {
-          let side = if bend < 0 {
-            "ri"
-          } else {
-            "right"
-          }
 
-          noed.push(edge(
-            vertices: (nodelab, (data.pos.x * unit, data.pos.y * unit)),
-            bend: bend * -0.5rad,
-            ..ev_source,
-            label-side: left,
-          ))
-        } else {
-          noed.push(edge(
-            vertices: ((data.pos.x * unit, data.pos.y * unit), nodelab),
-            bend: bend * 0.5rad,
-            ..ev_sink,
-          ))
-        }
-
-        (nodelab, n.at(str(end)).pos)
-      } else {
-        let lab = label("exte" + str(i))
-        noed.push(node(
-          (data.pos.x * unit, data.pos.y * unit),
-          name: lab,
-          outset: -5mm,
-          radius: 5mm,
-          fill: none,
-        ))
-        (lab, data.pos)
-      }
 
 
       let percentb = 1 + calc.abs(bend / calc.pi)

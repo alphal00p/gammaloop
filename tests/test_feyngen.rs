@@ -229,6 +229,17 @@ fn cp_fix_from_symbolica()->Result<()>{
 }
 
 #[test]
+fn single_test() -> Result<()> {
+    let mut cli = get_test_cli(
+        Some("sm_load.toml".into()),
+        get_tests_workspace_path().join("feyn_gen_generation_test"),
+        Some("feyngen".to_string()),
+        true,
+    )?;
+    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --numerator-grouping no_grouping --select-graphs GL03 GL04",true)?,@"2 | (AutG(1))^(-1)*2*AntiFermionSpinSumSign(1)*ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1) = -2");
+    Ok(())
+}
+#[test]
 #[rustfmt::skip]
 fn test_generate_sm_a_ddx() -> Result<()> {
     let mut cli = get_test_cli(Some("sm_load.toml".into()), get_tests_workspace_path().join("feyn_gen_generation_test"), Some("feyngen".to_string()),true)?;

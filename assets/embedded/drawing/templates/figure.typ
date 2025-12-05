@@ -8,20 +8,18 @@
       it.at("text"),
       unit: 10mm,
       columns: 1,
-      scope: (map: map),
+      scope: (map: map,arrowmap:arrowmap),
       additional_data: (
-        node: (
-          eval: "(stroke:blue,fill :black,
-          radius:2pt,
-          outset: -1pt)",
-        ),
-        edge: (
-          eval_source: "(label:[{particle}],..(map.at(\"{particle}\").source))",
-          // eval_source:"map.at(\"{particle}\").source",
-          eval_sink: "map.at(\"{particle}\").sink",
-          // eval_source:"..(map.at(\"{particle}\").source)", //",label:[{particle}],label-pos:100%,label-side:left)"
-          // eval_sink:"..(map.at(\"{particle}\").sink)"
-        ),
+                node: (
+                  eval: "(stroke:blue,fill :white,
+                  radius:6pt,
+                  outset: -1pt,label:[#set text(size:3pt);{int_id}])",
+                ),
+                edge: (
+                  eval_source: "map.at(\"{particle}\").source+arrowmap(orientation)+(label:map.at(\"{particle}\").at(\"label\",default:[a]))",
+                  eval_sink: "map.at(\"{particle}\").sink",
+                ),
+
         length_scale: 0.2,
       ),
     )

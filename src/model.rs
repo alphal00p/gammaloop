@@ -1038,7 +1038,8 @@ impl Particle {
     }
 
     /// Generate edge styles for visualization based on particle properties
-    pub fn generate_edge_style(&self) -> (String, String) {
+    pub fn generate_edge_typst_dict(&self) -> String {
+        let label = format!("mi(\"{}\")", self.texname);
         // Determine line thickness based on mass
         let thickness = if self.is_massive() {
             "massive"
@@ -1057,29 +1058,19 @@ impl Particle {
         let base_source = format!("source_stroke(c: {}, thickness: {})", color, thickness);
         let base_sink = format!("sink_stroke(c: {}, thickness: {})", color, thickness);
 
-        if self.is_ghost() {
-            if self.is_antiparticle() {
-                (
-                    format!("{} + (stroke: (dash: (1pt, 1pt)))", base_sink),
-                    format!("{} + (stroke: (dash: (1pt, 1pt)))", base_source),
-                )
-            } else {
-                (
-                    format!("{} + (stroke: (dash: (1pt, 1pt)))", base_source),
-                    format!("{} + (stroke: (dash: (1pt, 1pt)))", base_sink),
-                )
-            }
+        let (source, sink) = if self.is_ghost() {
+            (
+                format!(
+                    "source_stroke(c: {color}, thickness: {thickness},dash: (dash:(1pt, 1pt)))",
+                ),
+                format!("sink_stroke(c: {color}, thickness: {thickness},dash: (dash:(1pt, 1pt)))"),
+            )
         } else if self.is_fermion() {
-            if self.is_antiparticle() {
-                (format!("{} + arrow", base_sink), base_source)
-            } else {
-                (format!("{} + arrow", base_source), base_sink)
-            }
+            (base_source, base_sink)
         } else if self.is_vector() {
             // Vector bosons: differentiate based on charge and color properties
-            let (a, b) = if self.charge == 0.0 && self.color == 1 {
+            if self.charge == 0.0 && self.color == 1 {
                 // Neutral color singlet (photon): wavy line
-                if self.is_antiparticle() {}
                 (
                     format!("{} + wave", base_source),
                     format!("{} + wave", base_sink),
@@ -1096,22 +1087,19 @@ impl Particle {
                     format!("{} + zigzag", base_source),
                     format!("{} + zigzag", base_sink),
                 )
-            };
-            if self.is_antiparticle() {
-                (b, a)
-            } else {
-                (a, b)
             }
         } else if self.is_scalar() {
             // Scalar particles: dashed lines
             (
-                format!("{} + dashed", base_source),
-                format!("{} + dashed", base_sink),
+                format!("source_stroke(c: {color}, thickness: {thickness},dash: dashed)",),
+                format!("sink_stroke(c: {color}, thickness: {thickness},dash: dashed)"),
             )
         } else {
             // Default: solid line
             (base_source, base_sink)
-        }
+        };
+
+        format!("(source:{}, sink:{}, label:{})", source, sink, label)
     }
 
     pub(crate) fn color_reps(&self, flow: Flow) -> IndexLess {
@@ -1441,14 +1429,23 @@ impl Model {
 
         let mut edge_style_content = String::new();
         edge_style_content.push_str(r#"#import "@preview/fletcher:0.5.8" as fletcher: diagram, node, cetz,edge,hide
+#import "@preview/mitex:0.2.6": *
 
 #let massive = 1mm
 #let massless = 0.5mm
-#let source_stroke(c:black, thickness:0.5mm) = (stroke:(paint:c,thickness:thickness))
-#let sink_stroke(c:black, thickness:0.5mm) = (stroke:source_stroke(c:c.lighten(50%), thickness:thickness).stroke)
+#let source_stroke(c:black, thickness:0.5mm,dash:none) = (stroke:(paint:c,thickness:thickness)+dash)
+#let sink_stroke(c:black, thickness:0.5mm,dash:none) = (stroke:source_stroke(c:c.lighten(50%), thickness:thickness,dash:dash).stroke)
 #let wave = (decorations:cetz.decorations.wave.with(amplitude: 4pt,segment-length:0.2))
 #let double = (extrude:(-0.5mm, 0.5mm))
 #let arrow = (marks:((inherit:"solid",rev:false,pos:1.1,scale:50%),))
+#let antiarrow = (marks:((inherit:"solid",rev:true,pos:1.1,scale:50%),))
+#let arrowmap = orientation => if orientation == "Default"{
+  arrow
+} else if orientation == "Reversed"{
+  antiarrow
+} else{
+  (:)
+}
 #let coil = (decorations:cetz.decorations.coil.with(amplitude: 4pt,segment-length:0.2))
 #let zigzag = (decorations:cetz.decorations.zigzag.with(amplitude: 4pt,segment-length:0.2))
 #let dashed = (stroke:(dash: (2pt, 2pt)))
@@ -1459,12 +1456,11 @@ impl Model {
 
         // Generate styles for all particles in the model
         for particle in self.particles.iter() {
-            let (source_style, sink_style) = particle.generate_edge_style();
-
             edge_style_content.push_str(&format!(
-                r#"  "{}": (source: {}, sink: {}),
+                r#"  "{}": {},
 "#,
-                particle.name, source_style, sink_style
+                particle.name,
+                particle.generate_edge_typst_dict()
             ));
         }
 
