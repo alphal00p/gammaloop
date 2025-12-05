@@ -155,6 +155,8 @@ pub struct GammaloopSymbols {
     pub external_mom: Symbol,
     pub dim: Symbol,
     pub coeff: Symbol,
+
+    pub nc2_1: Symbol,
     pub top: Symbol,
     pub num: Symbol,
     pub den: Symbol,
@@ -290,6 +292,7 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
             **out = Atom::Zero;
         }
     ),
+    nc2_1: symbol!("NC2_1"),
     rescale: symbol!("t"),
     _linear: symbol!("_linear";Linear),
     linearize: symbol!(

@@ -1755,7 +1755,7 @@ dependencies = [
 [[package]]
 name = "idenso"
 version = "0.2.3"
-source = "git+https://github.com/alphal00p/spenso?rev=a34c6f734d31c476d8e7329a874368105b31facf#a34c6f734d31c476d8e7329a874368105b31facf"
+source = "git+https://github.com/alphal00p/spenso?rev=5b7123124df40848fbd0153dff415e7f8428800a#5b7123124df40848fbd0153dff415e7f8428800a"
 dependencies = [
  "anyhow",
  "bincode",
@@ -3874,7 +3874,7 @@ dependencies = [
 [[package]]
 name = "spenso"
 version = "0.5.4"
-source = "git+https://github.com/alphal00p/spenso?rev=a34c6f734d31c476d8e7329a874368105b31facf#a34c6f734d31c476d8e7329a874368105b31facf"
+source = "git+https://github.com/alphal00p/spenso?rev=5b7123124df40848fbd0153dff415e7f8428800a#5b7123124df40848fbd0153dff415e7f8428800a"
 dependencies = [
  "ahash",
  "anyhow",
@@ -3916,7 +3916,7 @@ dependencies = [
 [[package]]
 name = "spenso-hep-lib"
 version = "0.1.4"
-source = "git+https://github.com/alphal00p/spenso?rev=a34c6f734d31c476d8e7329a874368105b31facf#a34c6f734d31c476d8e7329a874368105b31facf"
+source = "git+https://github.com/alphal00p/spenso?rev=5b7123124df40848fbd0153dff415e7f8428800a#5b7123124df40848fbd0153dff415e7f8428800a"
 dependencies = [
  "ahash",
  "idenso",
@@ -3929,7 +3929,7 @@ dependencies = [
 [[package]]
 name = "spenso-macros"
 version = "0.3.0"
-source = "git+https://github.com/alphal00p/spenso?rev=a34c6f734d31c476d8e7329a874368105b31facf#a34c6f734d31c476d8e7329a874368105b31facf"
+source = "git+https://github.com/alphal00p/spenso?rev=5b7123124df40848fbd0153dff415e7f8428800a#5b7123124df40848fbd0153dff415e7f8428800a"
 dependencies = [
  "proc-macro2",
  "quote",

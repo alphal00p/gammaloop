@@ -17,6 +17,22 @@ pub trait ToQuoted {
 //     }
 // }
 
+pub trait ToOrderedSimple {
+    fn to_ordered_simple(&self) -> String;
+}
+
+impl<A> ToOrderedSimple for A
+where
+    A: AtomCore,
+{
+    fn to_ordered_simple(&self) -> String {
+        self.to_canonically_ordered_string(CanonicalOrderingSettings {
+            include_namespace: false,
+            include_attributes: false,
+            hide_namespace: None,
+        })
+    }
+}
 impl<A> ToQuoted for A
 where
     A: AtomCore,

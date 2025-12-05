@@ -1039,7 +1039,7 @@ impl Particle {
 
     /// Generate edge styles for visualization based on particle properties
     pub fn generate_edge_typst_dict(&self) -> String {
-        let label = format!("mi(\"{}\")", self.texname);
+        let label = format!("mi(`{}`)", self.texname);
         // Determine line thickness based on mass
         let thickness = if self.is_massive() {
             "massive"
@@ -1060,10 +1060,8 @@ impl Particle {
 
         let (source, sink) = if self.is_ghost() {
             (
-                format!(
-                    "source_stroke(c: {color}, thickness: {thickness},dash: (dash:(1pt, 1pt)))",
-                ),
-                format!("sink_stroke(c: {color}, thickness: {thickness},dash: (dash:(1pt, 1pt)))"),
+                format!("source_stroke(c: {color}, thickness: {thickness},dash: dotted)",),
+                format!("sink_stroke(c: {color}, thickness: {thickness},dash: dotted)"),
             )
         } else if self.is_fermion() {
             (base_source, base_sink)
@@ -1448,8 +1446,8 @@ impl Model {
 }
 #let coil = (decorations:cetz.decorations.coil.with(amplitude: 4pt,segment-length:0.2))
 #let zigzag = (decorations:cetz.decorations.zigzag.with(amplitude: 4pt,segment-length:0.2))
-#let dashed = (stroke:(dash: (2pt, 2pt)))
-
+#let dashed = (dash: (0.1em, 0.5em))
+#let dotted = (dash: (0.01em, 0.3em))
 // Auto-generated particle styles from model (computed in Rust)
 #let map = (
 "#);

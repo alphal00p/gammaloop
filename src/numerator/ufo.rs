@@ -661,18 +661,6 @@ impl UFOSymbols {
             ),
             (
                 self.t.f(&[
-                    adj.to_symbolic([W_.a_]),
-                    fund.to_symbolic([W_.i_]),
-                    antifund.to_symbolic([W_.j_]),
-                ]),
-                CS.t.f(&[
-                    adj.to_symbolic([CS.nc * CS.nc - 1, Atom::var(W_.a_)]),
-                    fund.to_symbolic([CS.nc, W_.i_]),
-                    antifund.to_symbolic([CS.nc, W_.j_]),
-                ]),
-            ),
-            (
-                self.t.f(&[
                     adj.to_symbolic([W_.a__]),
                     fund.to_symbolic([W_.i__]),
                     antifund.to_symbolic([W_.j__]),
@@ -685,24 +673,27 @@ impl UFOSymbols {
             ),
             (
                 self.f.f(&[
-                    adj.to_symbolic([W_.a_]),
-                    adj.to_symbolic([W_.b_]),
-                    adj.to_symbolic([W_.c_]),
+                    adj.to_symbolic([W_.a__]),
+                    adj.to_symbolic([W_.b__]),
+                    adj.to_symbolic([W_.c__]),
                 ]),
                 CS.f.f(&[
-                    adj.to_symbolic([CS.nc * CS.nc - 1, Atom::var(W_.a_)]),
-                    adj.to_symbolic([CS.nc * CS.nc - 1, Atom::var(W_.b_)]),
-                    adj.to_symbolic([CS.nc * CS.nc - 1, Atom::var(W_.c_)]),
+                    adj.to_symbolic([W_.a__]),
+                    adj.to_symbolic([W_.b__]),
+                    adj.to_symbolic([W_.c__]),
                 ]),
             ),
         ]
         .into_iter()
-        .map(|(pat, rep)| Replacement::new(pat.to_pattern(), rep))
+        .map(|(pat, rep)| {
+            let a = Replacement::new(pat.to_pattern(), rep);
+            a
+        })
         .collect();
 
         atom = atom.replace_multiple(&reps);
 
-        // debug!("Out:{}", atom);
+        // println!("Out:{:#}", atom);
         atom
     }
 }

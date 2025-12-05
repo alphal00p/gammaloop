@@ -23,20 +23,22 @@
   let a = p.layout_graph(bytes(input), cbor.encode(
     (
       steps: sys.inputs.at("steps", default: 1500),
-      step: 1.2,
-      step_shrink: 0.21,
-      temp: 0.1,
-      beta: 9.1,
-      k_spring: 20.,
-      g_center: 0,
-      gamma_dangling: 30,
-      gamma_ee: 0.4,
-      gamma_ev: 0.1,
-      length_scale: 0.2,
+      seed: sys.inputs.at("seed", default: 42),
+      step: "1.2",
+      step_shrink: "0.21",
+      temp: "0.1",
+      beta: "9.1",
+      k_spring: "20.",
+      g_center: "0",
+      gamma_dangling: "30",
+      gamma_ee: "0.4",
+      gamma_ev: "0.1",
+      length_scale: "0.2",
     )
       + additional_data,
   ))
-  let graphs = cbor(a)
+  let out = cbor(a)
+  let graphs = out.graphs
   let diags = ()
   for (g, parse) in graphs {
     let noed = ()

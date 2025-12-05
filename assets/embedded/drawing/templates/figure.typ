@@ -20,7 +20,7 @@
                   eval_sink: "map.at(\"{particle}\").sink",
                 ),
 
-        length_scale: 0.2,
+        length_scale: "0.2",
       ),
     )
   } else {

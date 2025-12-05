@@ -1,5 +1,5 @@
 use idenso::IndexTooling;
-use idenso::color::{CS, SelectiveExpand};
+use idenso::color::{CS, ColorSimplifier, SelectiveExpand};
 use idenso::gamma::AGS;
 use indicatif::ProgressBar;
 use indicatif::{ParallelProgressIterator, ProgressStyle};
@@ -16,6 +16,7 @@ use spenso::network::{Sequential, SmallestDegree};
 
 // use spenso::network::Network;
 
+// use spenso::shadowing::symbolica_utils::AtomCoreExt;
 use spenso::structure::representation::{LibraryRep, Minkowski, RepName};
 use spenso::structure::{PermutedStructure, TensorStructure};
 use spenso::tensors::data::DataTensor;
@@ -54,7 +55,8 @@ use super::SelfEnergyFilterOptions;
 use super::SnailFilterOptions;
 use super::TadpolesFilterOptions;
 use crate::graph::ext::HedgeGraphExt;
-use crate::graph::parse::ParseGraph;
+use crate::graph::parse::string_utils::ToOrderedSimple;
+use crate::graph::parse::{ParseGraph, ToQuoted};
 use crate::graph::{FeynmanGraph, Graph, LMBext};
 use crate::model::ArcVertexRule;
 use crate::model::VertexRule;
@@ -2767,14 +2769,14 @@ impl ProcessDefinition {
                     oriented_particles.push((None, p.0.name.clone()));
                 } else if p.0.is_antiparticle() {
                     oriented_particles.push((
-                        // Some(SB_INCOMING),
-                        Some(SB_OUTGOING),
+                        Some(SB_INCOMING),
+                        // Some(SB_OUTGOING),
                         p.0.get_anti_particle(model).0.name.clone(),
                     ));
                 } else {
                     oriented_particles.push((
-                        // Some(SB_OUTGOING),
-                        Some(SB_INCOMING),
+                        Some(SB_OUTGOING),
+                        // Some(SB_INCOMING),
                         p.0.name.clone(),
                     ));
                 }
@@ -4019,8 +4021,9 @@ impl ProcessDefinition {
                             numerator.state.expr *=&bare_graph.global_prefactor.num * &bare_graph.global_prefactor.projector;// * &bare_graph.overall_factor;
                             numerator.state.expr = numerator.state.expr.replace_multiple(&cpl_reps);
 
+                            // println!("HEEEEy");
                             let numerator_color_simplified =
-                                numerator.clone().color_simplify().get_single_atom().unwrap();
+                                numerator.clone().get_single_atom().unwrap().to_param_color().simplify_color();
 
                             if numerator_color_simplified
                                 .is_zero()
@@ -4734,12 +4737,11 @@ impl ProcessedNumeratorForComparison {
                             );
                             polyrat_to_atom(&element)
                         } else {
-                            // Make sure that collect_factor() has been called already when creating the samples
-                            a.collect_factors() / b.collect_factors()
+                            (a / b).cancel()
                         };
                         debug!(
                             sample_idx = %idx,
-                            computed_ratio = %ratio.to_canonical_string(),
+                            computed_ratio = %ratio.to_ordered_simple(),
                             "Computed ratio for sample"
                         );
                         Some(ratio)
@@ -4756,9 +4758,9 @@ impl ProcessedNumeratorForComparison {
                     debug!(
                         self_diagram_id = %self.diagram_id,
                         other_diagram_id = %other.diagram_id,
-                        ratio_value = ?rat.as_ref().map(|ra| ra.floatify(13).to_canonical_string()).unwrap_or("None".into()),
-                        numerator_value = %a.floatify(13).to_canonical_string(),
-                        denominator_value = %b.floatify(13).to_canonical_string(),
+                        ratio_value = ?rat.as_ref().map(|ra| ra.floatify(13).to_ordered_simple()).unwrap_or("None".into()),
+                        numerator_value = %a.floatify(13).to_ordered_simple(),
+                        denominator_value = %b.floatify(13).to_ordered_simple(),
                         "Detailed sample evaluation ratio information"
                     );
                 }
@@ -4886,9 +4888,14 @@ impl ProcessedNumeratorForComparison {
                                         ,graph.debug_dot()
                                     ))
                                     .into();
+
+                                // println!("Trying to canonize:{c}");
+                                let canonized_color = c.canonize::<Aind>(Aind::Dummy);
+                                debug!("canonizing \n{c}\n gives\n{canonized_color}");
                                 let a = ProcessDefinition::substitute_color_factors(
-                                    (c * scalar).as_view(),
+                                    (canonized_color * scalar).as_view(),
                                 );
+
                                 debug!(evaluated=%a.printer(LOGPRINTOPTS),"evaluated{}",a.floatify(13).printer(LOGPRINTOPTS));
                                 a
                             })

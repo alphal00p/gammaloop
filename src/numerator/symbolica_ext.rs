@@ -1,6 +1,9 @@
 use std::ops::Deref;
 
-use idenso::color::SelectiveExpand;
+use idenso::{
+    color::{CS, SelectiveExpand},
+    representations::{ColorAdjoint, ColorFundamental},
+};
 use spenso::{
     network::parsing::ParseSettings,
     structure::representation::{Minkowski, RepName},
@@ -28,6 +31,7 @@ pub type ParsingNetError = spenso::network::TensorNetworkError<
 >;
 
 pub trait AtomCoreExt {
+    fn to_param_color(&self) -> Atom;
     fn wrap_color(&self, symbol: Symbol) -> Atom;
 
     fn floatify(&self, prec: u32) -> Atom;
@@ -40,6 +44,10 @@ pub trait AtomCoreExt {
 }
 
 impl AtomCoreExt for Atom {
+    fn to_param_color(&self) -> Atom {
+        self.as_view().to_param_color()
+    }
+
     fn map_mink_dim<'a>(&self, dim: impl Into<AtomOrView<'a>>) -> Atom {
         self.as_view().map_mink_dim(dim)
     }
@@ -61,6 +69,14 @@ impl AtomCoreExt for Atom {
 }
 
 impl AtomCoreExt for AtomView<'_> {
+    fn to_param_color(&self) -> Atom {
+        let adj = ColorAdjoint {};
+        let fund = ColorFundamental {};
+        self.replace(adj.to_symbolic([W_.d_, W_.a_]))
+            .with(adj.to_symbolic([CS.nc * CS.nc - 1, Atom::var(W_.a_)]))
+            .replace(fund.to_symbolic([W_.d_, W_.a_]))
+            .with(fund.to_symbolic([CS.nc, W_.a_]))
+    }
     fn floatify(&self, prec: u32) -> Atom {
         self.map_coefficient(|c| match c {
             CoefficientView::Natural(r, d, ri, di) => {

@@ -31,6 +31,7 @@ use thiserror::Error;
 use tracing::{debug, instrument};
 // use crate::feyngen::dis::{DisEdge, DisVertex};
 
+use crate::graph::parse::string_utils::ToOrderedSimple;
 use crate::momentum::{PolDef, PolType};
 use crate::utils::{FUN_LIB, GS, TENSORLIB, W_};
 use crate::{
@@ -920,15 +921,19 @@ impl Numerator<AppliedFeynmanRule> {
         self
     }
 
+    #[instrument(skip(self), fields(expr=%self.state.expr.to_ordered_simple()))]
     pub(crate) fn color_simplify(self) -> Numerator<ColorSimplified> {
-        debug!("Color simplifying global numerator");
+        // debug!("Color simplifying global numerator");
         // let mut fully_simplified = true;
 
         let state = ColorSimplified {
             expr: self.state.expr.simplify_color(),
             state: Color::Fully,
         };
-        debug!("Color simplified numerator:{}", state.expr);
+        debug!(
+            "Color simplified numerator:{}",
+            state.expr.to_ordered_simple()
+        );
         Numerator { state }
     }
 }

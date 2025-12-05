@@ -1652,7 +1652,7 @@
     },
     {
       "antiname": "ve~",
-      "antitexname": "{\\overline{\\nu}e}",
+      "antitexname": "{\\overline{\\nu}_e}",
       "charge": 0.0,
       "color": 1,
       "ghost_number": 0,
@@ -1661,13 +1661,13 @@
       "name": "ve",
       "pdg_code": 12,
       "spin": 2,
-      "texname": "{\\nue}",
+      "texname": "{\\nu_e}",
       "width": "ZERO",
       "y_charge": 0
     },
     {
       "antiname": "ve",
-      "antitexname": "{\\nue}",
+      "antitexname": "{\\nu_e}",
       "charge": -0.0,
       "color": 1,
       "ghost_number": 0,
@@ -1676,13 +1676,13 @@
       "name": "ve~",
       "pdg_code": -12,
       "spin": 2,
-      "texname": "{\\overline{\\nu}e}",
+      "texname": "{\\overline{\\nu}_e}",
       "width": "ZERO",
       "y_charge": 0
     },
     {
       "antiname": "vm~",
-      "antitexname": "{\\overline{\\nu}\\mu}",
+      "antitexname": "{\\overline{\\nu}_\\mu}",
       "charge": 0.0,
       "color": 1,
       "ghost_number": 0,
@@ -1691,13 +1691,13 @@
       "name": "vm",
       "pdg_code": 14,
       "spin": 2,
-      "texname": "{\\nu\\mu}",
+      "texname": "{\\nu_\\mu}",
       "width": "ZERO",
       "y_charge": 0
     },
     {
       "antiname": "vm",
-      "antitexname": "{\\nu\\mu}",
+      "antitexname": "{\\nu_\\mu}",
       "charge": -0.0,
       "color": 1,
       "ghost_number": 0,
@@ -1706,13 +1706,13 @@
       "name": "vm~",
       "pdg_code": -14,
       "spin": 2,
-      "texname": "{\\overline{\\nu}\\mu}",
+      "texname": "{\\overline{\\nu}_\\mu}",
       "width": "ZERO",
       "y_charge": 0
     },
     {
       "antiname": "vt~",
-      "antitexname": "{\\overline{\\nu}\\tau}",
+      "antitexname": "{\\overline{\\nu}_\\tau}",
       "charge": 0.0,
       "color": 1,
       "ghost_number": 0,
@@ -1721,13 +1721,13 @@
       "name": "vt",
       "pdg_code": 16,
       "spin": 2,
-      "texname": "{\\nu\\tau}",
+      "texname": "{\\nu_\\tau}",
       "width": "ZERO",
       "y_charge": 0
     },
     {
       "antiname": "vt",
-      "antitexname": "{\\nu\\tau}",
+      "antitexname": "{\\nu_\\tau}",
       "charge": -0.0,
       "color": 1,
       "ghost_number": 0,
@@ -1736,7 +1736,7 @@
       "name": "vt~",
       "pdg_code": -16,
       "spin": 2,
-      "texname": "{\\overline{\\nu}\\tau}",
+      "texname": "{\\overline{\\nu}_\\tau}",
       "width": "ZERO",
       "y_charge": 0
     },

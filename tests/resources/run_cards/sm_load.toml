@@ -2,5 +2,5 @@ commands = ["import model sm-default"]
 
 
 [cli_settings.global]
-logfile_directive = "off,gammalooprs[compare_with_scalar_rescaling]=debug,gammalooprs[compare_with_sign_only]=debug"
+logfile_directive = "off,gammalooprs[compare_with_scalar_rescaling]=debug,gammalooprs::numerator[color_simplify]=debug,gammalooprs[from_numerator_symbolic_expression]=debug"
 display_directive = "info"
