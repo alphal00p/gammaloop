@@ -153,13 +153,13 @@ fn polyrat_to_atom(
             1 => {
                 if a_poly.exponents[0] == 1 {
                     Coefficient::Complex(SymbolicaComplex::new(
-                        a_poly.coefficients[0].clone(),
                         0.into(),
+                        a_poly.coefficients[0].clone(),
                     ))
                 } else {
                     Coefficient::Complex(SymbolicaComplex::new(
-                        0.into(),
                         a_poly.coefficients[0].clone(),
+                        0.into(),
                     ))
                 }
             }
@@ -179,13 +179,13 @@ fn polyrat_to_atom(
             1 => {
                 if a_poly.exponents[0] == 1 {
                     Coefficient::Complex(SymbolicaComplex::new(
-                        a_poly.coefficients[0].clone(),
                         0.into(),
+                        a_poly.coefficients[0].clone(),
                     ))
                 } else {
                     Coefficient::Complex(SymbolicaComplex::new(
-                        0.into(),
                         a_poly.coefficients[0].clone(),
+                        0.into(),
                     ))
                 }
             }
@@ -4459,7 +4459,7 @@ impl ProcessedNumeratorForComparison {
             if (a + b).expand().is_zero() {
                 return Some(Atom::num(-1));
             }
-            debug!(a = %a,b=%b,"compared but no luck, \na={a},\nb={b}");
+            debug!(a = %a.floatify(13).to_canonical_string(),b=%b.floatify(13).to_canonical_string(),"compared but no luck");
             None
         }
 
