@@ -237,30 +237,196 @@ impl ParseGraph {
         symmetry_factor: Atom,
         external_connections: &[(Option<usize>, Option<usize>)],
     ) -> Result<Self> {
+        fn mark_edge_as_seen(seen_edges: &mut AHashSet<usize>, edge_idx: usize) -> Result<()> {
+            if !seen_edges.insert(edge_idx) {
+                return Err(eyre!(
+                    "External connections must be unique: edge {} already used",
+                    edge_idx
+                ));
+            }
+            Ok(())
+        }
+
+        fn validate_edge_compatibility(
+            out_edge: &symbolica::graph::Edge<EdgeColor>,
+            in_edge: &symbolica::graph::Edge<EdgeColor>,
+            in_id: usize,
+            out_id: usize,
+        ) -> Result<()> {
+            if out_edge.directed != in_edge.directed {
+                return Err(eyre!(
+                    "External edges must have the same directedness, for edge ids {} and {} found {:?} and {:?}",
+                    in_id,
+                    out_id,
+                    in_edge,
+                    out_edge
+                ));
+            }
+
+            if in_edge.data.pdg.abs() != out_edge.data.pdg.abs() {
+                return Err(eyre!(
+                    "External edges must have the same pdg in abs, for edge ids {} and {} found {:?} and {:?}",
+                    in_id,
+                    out_id,
+                    in_edge,
+                    out_edge
+                ));
+            }
+
+            Ok(())
+        }
+
+        /// Add dangling hedges based on external connections
+        /// external connections is provided in  the process definition order
+        /// it maps the external_tag s of the external degree 1 nodes together
+        fn process_single_connection_internal(
+            edge_idx: usize,
+            flow: Flow,
+            hedge: Option<Hedge>,
+            vertex_map: &AHashMap<usize, NodeIndex>,
+            seen_edges: &mut AHashSet<usize>,
+            graph: &SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>,
+            model: &Model,
+            builder: &mut HedgeGraphBuilder<ParseEdge, ParseVertex, ParseHedge>,
+        ) -> Result<()> {
+            // Only mark as seen if not already processed (for bidirectional case)
+            if !seen_edges.contains(&edge_idx) {
+                mark_edge_as_seen(seen_edges, edge_idx)?;
+            }
+
+            let edge = &graph.edges()[edge_idx];
+            let mut data = ParseEdge::from_symbolica_edge(model, &edge.data, hedge);
+
+            let (out_vertex, in_vertex) = edge.vertices;
+            let mut orientation = data.particle.orientation();
+
+            // Determine which vertex to connect to and adjust particle/orientation if needed
+            let (node_idx, final_orientation, final_flow) = match flow {
+                Flow::Source => {
+                    if let Some(&sink_node) = vertex_map.get(&in_vertex) {
+                        data.particle = data.particle.reverse(model);
+                        orientation = orientation.reverse();
+                        (sink_node, orientation, flow)
+                    } else if let Some(&source_node) = vertex_map.get(&out_vertex) {
+                        (source_node, orientation, flow)
+                    } else {
+                        return Err(eyre!(
+                            "Outgoing external edges must be attached to an external node (degree 1)"
+                        ));
+                    }
+                }
+                Flow::Sink => {
+                    if let Some(&sink_node) = vertex_map.get(&in_vertex) {
+                        (sink_node, orientation, flow)
+                    } else if let Some(&source_node) = vertex_map.get(&out_vertex) {
+                        data.particle = data.particle.reverse(model);
+                        orientation = orientation.reverse();
+                        (source_node, orientation, flow)
+                    } else {
+                        return Err(eyre!(
+                            "Incoming external edges must be attached to an external node (degree 1)"
+                        ));
+                    }
+                }
+            };
+
+            debug!(node =  %node_idx, edge_data = ?data ,"adding_external_edge");
+            builder.add_external_edge(node_idx, data, final_orientation, final_flow);
+            Ok(())
+        }
+
         debug!("Input:{}", graph.to_dot());
 
         let mut builder = HedgeGraphBuilder::new();
 
-        let mut external_tags = vec![];
+        let mut tags_to_edge_id = BTreeMap::new();
         let mut vertex_map = AHashMap::new();
         for (i, n) in graph.nodes().iter().enumerate() {
             if n.edges.len() == 1 {
-                external_tags.push((n.data.external_tag, n.edges[0]));
+                tags_to_edge_id.insert(n.data.external_tag, n.edges[0]);
             } else {
                 vertex_map.insert(i, builder.add_node(ParseVertex::from(&n.data)));
             }
         }
 
-        external_tags.sort_by_key(|&(i, _)| i);
+        for v in vertex_map.iter() {
+            debug!("Vertices: {}->{}", v.0, v.1);
+        }
 
-        let seen_edges = ParseGraph::process_external_connections(
-            external_connections,
-            &external_tags,
-            &vertex_map,
-            graph,
-            model,
-            &mut builder,
-        )?;
+        let mut seen_edges = AHashSet::new();
+        let mut generation_type: Option<GenerationType> = None;
+
+        // first add incoming edges
+        for (i, &(in_tag, out_tag)) in external_connections.iter().enumerate() {
+            if let Some(in_tag) = in_tag {
+                let in_edge_idx = tags_to_edge_id[&(in_tag as i32)];
+                mark_edge_as_seen(&mut seen_edges, in_edge_idx)?;
+                let in_edge = &graph.edges()[in_edge_idx];
+
+                let is_cut_hedge = if let Some(out_id) = out_tag {
+                    let out_edge_idx = tags_to_edge_id[&(out_id as i32)];
+                    mark_edge_as_seen(&mut seen_edges, out_edge_idx)?;
+
+                    let out_edge = &graph.edges()[out_edge_idx];
+
+                    validate_edge_compatibility(out_edge, in_edge, in_tag, out_id)?;
+                    if let Some(existing_type) = &generation_type {
+                        if *existing_type != GenerationType::CrossSection {
+                            return Err(eyre!(
+                                "Cannot have both incoming and outgoing external connections for amplitudes"
+                            ));
+                        }
+                    } else {
+                        generation_type = Some(GenerationType::CrossSection);
+                    }
+                    Some(Hedge(i))
+                } else {
+                    None
+                };
+
+                process_single_connection_internal(
+                    in_edge_idx,
+                    Flow::Sink,
+                    is_cut_hedge,
+                    &vertex_map,
+                    &mut seen_edges,
+                    graph,
+                    model,
+                    &mut builder,
+                )?;
+            } else if out_tag.is_some() {
+                if let Some(existing_type) = &generation_type {
+                    if *existing_type != GenerationType::Amplitude {
+                        return Err(eyre!(
+                            "Cannot mix single directional connections with bidirectional ones for cross sections"
+                        ));
+                    }
+                } else {
+                    generation_type = Some(GenerationType::Amplitude);
+                }
+            }
+        }
+
+        // then add outgoing amplitude edges
+        for (in_id, out_id) in external_connections.iter() {
+            if let Some(out_id) = out_id
+                && in_id.is_none()
+            {
+                let out_edge_idx = tags_to_edge_id[&(*out_id as i32)];
+                mark_edge_as_seen(&mut seen_edges, out_edge_idx)?;
+
+                process_single_connection_internal(
+                    out_edge_idx,
+                    Flow::Source,
+                    None,
+                    &vertex_map,
+                    &mut seen_edges,
+                    graph,
+                    model,
+                    &mut builder,
+                )?;
+            }
+        }
 
         // Add internal edges
         for (i, edge) in graph.edges().iter().enumerate() {
@@ -268,11 +434,32 @@ impl ParseGraph {
                 continue;
             }
             let (source_v, sink_v) = edge.vertices;
+
             let source = vertex_map[&source_v];
             let sink = vertex_map[&sink_v];
             let data = ParseEdge::from_symbolica_edge(model, &edge.data, None);
             let orientation = data.particle.orientation();
             builder.add_edge(source, sink, data, orientation);
+        }
+
+        // then add outgoing cross_section edges
+        for (i, &(in_id, out_id)) in external_connections.iter().enumerate() {
+            if let Some(out_id) = out_id
+                && in_id.is_some()
+            {
+                let out_edge_idx = tags_to_edge_id[&(out_id as i32)];
+
+                process_single_connection_internal(
+                    out_edge_idx,
+                    Flow::Source,
+                    Some(Hedge(i)),
+                    &vertex_map,
+                    &mut seen_edges,
+                    graph,
+                    model,
+                    &mut builder,
+                )?;
+            }
         }
 
         let mut parsed = ParseGraph {
@@ -368,238 +555,6 @@ impl ParseGraph {
             debug!("New vr for {node_id}:{}", vr.name);
             self.graph[node_id].vertex_rule = Some(vr);
         }
-        Ok(())
-    }
-}
-
-impl ParseGraph {
-    /// Add dangling hedges based on external connections
-    /// external connections is provided in  the process definition order
-    /// it maps the external_tag s of the external degree 1 nodes together
-    fn process_external_connections(
-        external_connections: &[(Option<usize>, Option<usize>)],
-        external_tags: &[(i32, usize)],
-        vertex_map: &AHashMap<usize, NodeIndex>,
-        graph: &SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>,
-        model: &Model,
-        builder: &mut HedgeGraphBuilder<ParseEdge, ParseVertex, ParseHedge>,
-    ) -> Result<AHashSet<usize>> {
-        let mut seen_edges = AHashSet::new();
-        let mut generation_type: Option<GenerationType> = None;
-
-        for (i, &(in_id, out_id)) in external_connections.iter().enumerate() {
-            debug!(
-                "External connection {}: in_id={:?}, out_id={:?}",
-                i + 1,
-                in_id,
-                out_id
-            );
-
-            match (in_id, out_id) {
-                (Some(in_id), Some(out_id)) => {
-                    // Bidirectional connection
-                    if let Some(existing_type) = &generation_type {
-                        if *existing_type != GenerationType::CrossSection {
-                            return Err(eyre!(
-                                "Cannot have both incoming and outgoing external connections for amplitudes"
-                            ));
-                        }
-                    } else {
-                        generation_type = Some(GenerationType::CrossSection);
-                    }
-
-                    let out_edge_idx = ParseGraph::get_edge_index(external_tags, out_id)?;
-                    let in_edge_idx = ParseGraph::get_edge_index(external_tags, in_id)?;
-
-                    ParseGraph::mark_edge_as_seen(&mut seen_edges, out_edge_idx)?;
-                    ParseGraph::mark_edge_as_seen(&mut seen_edges, in_edge_idx)?;
-
-                    let out_edge = &graph.edges()[out_edge_idx];
-                    let in_edge = &graph.edges()[in_edge_idx];
-
-                    ParseGraph::validate_edge_compatibility(out_edge, in_edge, in_id, out_id)?;
-
-                    ParseGraph::process_single_connection_internal(
-                        out_edge_idx,
-                        Flow::Source,
-                        Some(Hedge(i)),
-                        vertex_map,
-                        &mut seen_edges,
-                        graph,
-                        model,
-                        builder,
-                    )?;
-
-                    ParseGraph::process_single_connection_internal(
-                        in_edge_idx,
-                        Flow::Sink,
-                        Some(Hedge(i)),
-                        vertex_map,
-                        &mut seen_edges,
-                        graph,
-                        model,
-                        builder,
-                    )?;
-                }
-                (Some(in_id), None) => {
-                    // Incoming only
-                    if let Some(existing_type) = &generation_type {
-                        if *existing_type != GenerationType::Amplitude {
-                            return Err(eyre!(
-                                "Cannot mix single directional connections with bidirectional ones for cross sections"
-                            ));
-                        }
-                    } else {
-                        generation_type = Some(GenerationType::Amplitude);
-                    }
-
-                    let in_edge_idx = ParseGraph::get_edge_index(external_tags, in_id)?;
-
-                    ParseGraph::process_single_connection_internal(
-                        in_edge_idx,
-                        Flow::Sink,
-                        None,
-                        vertex_map,
-                        &mut seen_edges,
-                        graph,
-                        model,
-                        builder,
-                    )?;
-                }
-                (None, Some(out_id)) => {
-                    // Outgoing only
-                    if let Some(existing_type) = &generation_type {
-                        if *existing_type != GenerationType::Amplitude {
-                            return Err(eyre!(
-                                "Cannot mix single directional connections with bidirectional ones for cross sections"
-                            ));
-                        }
-                    } else {
-                        generation_type = Some(GenerationType::Amplitude);
-                    }
-                    let out_edge_idx = ParseGraph::get_edge_index(external_tags, out_id)?;
-
-                    ParseGraph::process_single_connection_internal(
-                        out_edge_idx,
-                        Flow::Source,
-                        None,
-                        vertex_map,
-                        &mut seen_edges,
-                        graph,
-                        model,
-                        builder,
-                    )?;
-                }
-                (None, None) => {
-                    return Err(eyre!(
-                        "External connections must have at least one of incoming or outgoing defined"
-                    ));
-                }
-            }
-        }
-
-        Ok(seen_edges)
-    }
-
-    fn process_single_connection_internal(
-        edge_idx: usize,
-        flow: Flow,
-        hedge: Option<Hedge>,
-        vertex_map: &AHashMap<usize, NodeIndex>,
-        seen_edges: &mut AHashSet<usize>,
-        graph: &SymbolicaGraph<NodeColorWithVertexRule, EdgeColor>,
-        model: &Model,
-        builder: &mut HedgeGraphBuilder<ParseEdge, ParseVertex, ParseHedge>,
-    ) -> Result<()> {
-        // Only mark as seen if not already processed (for bidirectional case)
-        if !seen_edges.contains(&edge_idx) {
-            ParseGraph::mark_edge_as_seen(seen_edges, edge_idx)?;
-        }
-
-        let edge = &graph.edges()[edge_idx];
-        let mut data = ParseEdge::from_symbolica_edge(model, &edge.data, hedge);
-
-        let (out_vertex, in_vertex) = edge.vertices;
-        let mut orientation = data.particle.orientation();
-
-        // Determine which vertex to connect to and adjust particle/orientation if needed
-        let (node_idx, final_orientation, final_flow) = match flow {
-            Flow::Source => {
-                if let Some(&sink_node) = vertex_map.get(&in_vertex) {
-                    data.particle = data.particle.reverse(model);
-                    orientation = orientation.reverse();
-                    (sink_node, orientation, flow)
-                } else if let Some(&source_node) = vertex_map.get(&out_vertex) {
-                    (source_node, orientation, flow)
-                } else {
-                    return Err(eyre!(
-                        "Outgoing external edges must be attached to an external node (degree 1)"
-                    ));
-                }
-            }
-            Flow::Sink => {
-                if let Some(&sink_node) = vertex_map.get(&in_vertex) {
-                    (sink_node, orientation, flow)
-                } else if let Some(&source_node) = vertex_map.get(&out_vertex) {
-                    data.particle = data.particle.reverse(model);
-                    orientation = orientation.reverse();
-                    (source_node, orientation, flow)
-                } else {
-                    return Err(eyre!(
-                        "Incoming external edges must be attached to an external node (degree 1)"
-                    ));
-                }
-            }
-        };
-
-        debug!(node =  %node_idx, edge_data = ?data ,"adding_external_edge");
-        builder.add_external_edge(node_idx, data, final_orientation, final_flow);
-        Ok(())
-    }
-
-    fn get_edge_index(external_tags: &[(i32, usize)], connection_id: usize) -> Result<usize> {
-        external_tags
-            .get(connection_id.saturating_sub(1))
-            .map(|(_, edge_idx)| *edge_idx)
-            .ok_or_else(|| eyre!("Invalid external connection ID: {}", connection_id))
-    }
-
-    fn mark_edge_as_seen(seen_edges: &mut AHashSet<usize>, edge_idx: usize) -> Result<()> {
-        if !seen_edges.insert(edge_idx) {
-            return Err(eyre!(
-                "External connections must be unique: edge {} already used",
-                edge_idx
-            ));
-        }
-        Ok(())
-    }
-
-    fn validate_edge_compatibility(
-        out_edge: &symbolica::graph::Edge<EdgeColor>,
-        in_edge: &symbolica::graph::Edge<EdgeColor>,
-        in_id: usize,
-        out_id: usize,
-    ) -> Result<()> {
-        if out_edge.directed != in_edge.directed {
-            return Err(eyre!(
-                "External edges must have the same directedness, for edge ids {} and {} found {:?} and {:?}",
-                in_id,
-                out_id,
-                in_edge,
-                out_edge
-            ));
-        }
-
-        if in_edge.data.pdg.abs() != out_edge.data.pdg.abs() {
-            return Err(eyre!(
-                "External edges must have the same pdg in abs, for edge ids {} and {} found {:?} and {:?}",
-                in_id,
-                out_id,
-                in_edge,
-                out_edge
-            ));
-        }
-
         Ok(())
     }
 }

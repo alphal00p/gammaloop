@@ -1,6 +1,13 @@
-commands = ["import model sm-default"]
+commands = [
+"import model sm-default",
+"set global kv global.n_cores.feyngen=1",
+]
 
 
 [cli_settings.global]
-logfile_directive = "off,gammalooprs[compare_with_scalar_rescaling]=debug,gammalooprs::numerator[color_simplify]=debug,gammalooprs[from_numerator_symbolic_expression]=debug"
-display_directive = "info"
+logfile_directive = "off,gammalooprs[compare_with_scalar_rescaling]=debug,gammalooprs::numerator[color_simplify]=debug,gammalooprs=debug"
+display_directive = "info,status=debug"
+
+
+[cli_settings.global.n_cores]
+feyngen=1

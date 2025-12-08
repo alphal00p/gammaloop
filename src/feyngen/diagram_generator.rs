@@ -4021,6 +4021,7 @@ impl ProcessDefinition {
                             numerator.state.expr *=&bare_graph.global_prefactor.num * &bare_graph.global_prefactor.projector;// * &bare_graph.overall_factor;
                             numerator.state.expr = numerator.state.expr.replace_multiple(&cpl_reps);
 
+                            debug!(num = %numerator.state.expr.to_ordered_simple(),"INitial numerator",);
                             // println!("HEEEEy");
                             let numerator_color_simplified =
                                 numerator.clone().get_single_atom().unwrap().to_param_color().simplify_color();
@@ -4214,6 +4215,7 @@ impl ProcessDefinition {
                     .expand()
                     .is_zero()
                 {
+                    println!("{combined_overall_factor}");
                     n_cancellations += 1;
                 } else {
                     bare_graph_representative.overall_factor = combined_overall_factor;
@@ -4798,7 +4800,7 @@ impl ProcessedNumeratorForComparison {
         );
         None
     }
-    #[instrument(skip_all)]
+    #[instrument(skip_all,fields(graph_name = %graph.name))]
     pub fn from_numerator_symbolic_expression(
         diagram_id: usize,
         graph: &Graph,
@@ -4825,7 +4827,7 @@ impl ProcessedNumeratorForComparison {
                 );
 
                 numerator = numerator.replace_multiple(&lmb_reps);
-                debug!(numerator=%numerator.to_canonical_string(),diagram_id=%diagram_id,debug_dot=%graph.debug_dot(),"Initial Numerator");
+                debug!(numerator=%numerator.to_ordered_simple(),diagram_id=%diagram_id,debug_dot=%graph.debug_dot(),"Initial Numerator");
 
                 let canonized_numerator = if group_options.test_canonized_numerator {
                     let mut canonized_numerator_to_consider = numerator.canonize(Aind::Dummy);

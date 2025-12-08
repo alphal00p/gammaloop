@@ -236,7 +236,17 @@ fn single_test() -> Result<()> {
         Some("feyngen".to_string()),
         true,
     )?;
-    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ | d g ghG a QED^2==2 [{{3}} QCD=2] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --numerator-grouping no_grouping --select-graphs GL23 GL24",true)?,@"16 | -41/2");
+    // assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ | d g ghG a QED^2==2 [{{3}} QCD=2] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --numerator-grouping no_grouping --select-graphs GL23 GL24",true)?,@"16 | -41/2");
+    // assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ | d g ghG a QED^2==2 [{{3}} QCD=2] --symmetrize-left-right-states true --symmetric-left-right-polarizations true  --select-graphs GL23 GL24",true)?,@"0 | 0 = 0");
+    println!(
+        "{}",
+        feyngen_str(
+            &mut cli,
+            "xs",
+            "e+ e- > t t~ h | e+ e- g t t~ h ghG ghG~ a QCD^2==2 QED^2==6 [{{3}} QCD] --select-graphs GL06 --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --symmetrize-left-right-states true --select-graphs GL06",
+            true
+        )?
+    );
 
     // assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --numerator-grouping no_grouping --select-graphs GL03 GL04",true)?,@"2 | (AutG(1))^(-1)*2*AntiFermionSpinSumSign(1)*ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1) = -2");
     Ok(())

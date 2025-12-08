@@ -329,8 +329,10 @@ impl From<&ParseEdge> for DotEdgeData {
             e.add_statement("vakint_edge_power", vak);
         }
 
+        if !value.is_dummy {
+            e.add_statement("is_dummy", value.is_dummy);
+        }
         // e.add_statement("color_num", value.color_num.to_quoted());
-        e.add_statement("is_dummy", value.is_dummy);
         e
     }
 }
@@ -354,7 +356,10 @@ impl From<&Edge> for DotEdgeData {
         e.add_statement("dod", value.dod);
         e.add_statement("num", value.num.to_quoted());
         // e.add_statement("color_num", value.color_num.to_quoted());
-        e.add_statement("is_dummy", value.is_dummy);
+        //
+        if !value.is_dummy {
+            e.add_statement("is_dummy", value.is_dummy);
+        }
 
         value
             .extra_data
