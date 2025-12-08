@@ -1,5 +1,5 @@
 use bincode_trait_derive::{Decode, Encode};
-use linnet::half_edge::{involution::EdgeIndex, subgraph::SubGraphLike};
+use linnet::half_edge::involution::EdgeIndex;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use symbolica::{
@@ -12,7 +12,6 @@ use tracing::debug;
 use crate::{
     GammaLoopContext,
     cff::expression::GraphOrientation,
-    graph::Graph,
     processes::EvaluatorSettings,
     utils::{
         GS, W_,
@@ -30,6 +29,9 @@ pub struct GenerationSettings {
     // Generation Time settings
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub evaluator: EvaluatorSettings,
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    pub feyngen: FeyGenSettings,
+
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub orientation_pattern: OrientationPattern,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
@@ -49,6 +51,7 @@ pub struct GenerationSettings {
 impl Default for GenerationSettings {
     fn default() -> Self {
         Self {
+            feyngen: FeyGenSettings::default(),
             evaluator: EvaluatorSettings::default(),
             orientation_pattern: OrientationPattern::default(),
             compile: GammaloopCompileOptions::default(),
@@ -160,6 +163,22 @@ impl GammaloopCompileOptions {
             compiler: self.compiler.clone(),
             // custom: self.custom.clone(),
             ..CompileOptions::default()
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
+#[serde(default, deny_unknown_fields)]
+pub struct FeyGenSettings {
+    #[serde(skip_serializing_if = "is_false")]
+    pub gamma_simplification_closure_check: bool,
+}
+
+impl Default for FeyGenSettings {
+    fn default() -> Self {
+        FeyGenSettings {
+            gamma_simplification_closure_check: false,
         }
     }
 }

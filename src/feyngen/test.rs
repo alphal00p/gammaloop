@@ -40,6 +40,8 @@ use crate::initialisation::test_initialise;
 use crate::numerator::aind::Aind;
 use crate::numerator::graph::ReversibleEdge;
 use crate::numerator::symbolica_ext::AtomCoreExt;
+use crate::settings::GlobalSettings;
+use crate::settings::global::Parallelisation;
 use crate::utils::F;
 use crate::utils::GS;
 use crate::uv::UltravioletGraph;
@@ -337,6 +339,13 @@ fn gl_11_vs_gl_12() {
         &gl_12,
         numerator_color_simplified_12,
         &samples,
+        &GlobalSettings {
+            n_cores: Parallelisation {
+                feyngen: 10,
+                ..Default::default()
+            },
+            ..Default::default()
+        },
         &options,
     )
     .unwrap();
@@ -346,6 +355,13 @@ fn gl_11_vs_gl_12() {
         &gl_11,
         numerator_color_simplified_11,
         &samples,
+        &GlobalSettings {
+            n_cores: Parallelisation {
+                feyngen: 10,
+                ..Default::default()
+            },
+            ..Default::default()
+        },
         &options,
     )
     .unwrap();
@@ -824,7 +840,19 @@ pub(crate) fn dis_cart_prod(
 pub(crate) fn chain_dis_generate(options: &[ProcessDefinition], model: &Model) -> Vec<Graph> {
     options
         .iter()
-        .flat_map(|a| a.generate(model, Some(10)).unwrap())
+        .flat_map(|a| {
+            a.generate(
+                model,
+                &GlobalSettings {
+                    n_cores: Parallelisation {
+                        feyngen: 10,
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                },
+            )
+            .unwrap()
+        })
         .collect()
 }
 

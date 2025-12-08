@@ -2243,7 +2243,7 @@
     {
       "denominator": "(UFO::P(1))^2",
       "name": "d~_propFeynman",
-      "numerator": "UFO::PSlash(1,2)",
+      "numerator": "-UFO::PSlash(1,2)",
       "particle": "d~"
     },
     {

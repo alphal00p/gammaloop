@@ -330,13 +330,12 @@ impl ParseGraph {
                 }
             };
 
-            debug!(node =  %node_idx, edge_data = ?data ,"adding_external_edge");
+            // debug!(node =  %node_idx, edge_data = ?data ,"adding_external_edge");
             builder.add_external_edge(node_idx, data, final_orientation, final_flow);
             Ok(())
         }
 
-        debug!("Input:{}", graph.to_dot());
-
+        // debug!("Input:{}", graph.to_dot());
         let mut builder = HedgeGraphBuilder::new();
 
         let mut tags_to_edge_id = BTreeMap::new();
@@ -347,10 +346,6 @@ impl ParseGraph {
             } else {
                 vertex_map.insert(i, builder.add_node(ParseVertex::from(&n.data)));
             }
-        }
-
-        for v in vertex_map.iter() {
-            debug!("Vertices: {}->{}", v.0, v.1);
         }
 
         let mut seen_edges = AHashSet::new();
@@ -702,6 +697,7 @@ impl Graph {
         Graph::from_parsed(parse_graph, model)
     }
 
+    #[instrument(skip_all, fields(graph= %graph.debug_dot(),name = %graph.global_data.name.as_str()))]
     pub(crate) fn from_parsed(graph: ParseGraph, model: &Model) -> Result<Self> {
         let (initial_data, mut graph) = Self::extract_initial_data(&graph, model)?;
 
@@ -755,7 +751,7 @@ impl Graph {
             &cut_result.xs_ext_id,
         )?;
 
-        Ok(Graph {
+        let g = Graph {
             overall_factor: initial_data.overall_factor,
             polarizations: global_prefactor.polarizations(),
             global_prefactor,
@@ -766,7 +762,11 @@ impl Graph {
             group_id: initial_data.group_id,
             is_group_master: initial_data.is_group_master,
             param_builder,
-        })
+        };
+
+        debug!("{}", g.debug_dot());
+
+        Ok(g)
     }
 
     fn extract_initial_data(

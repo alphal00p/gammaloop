@@ -1,6 +1,6 @@
 use idenso::IndexTooling;
 use idenso::color::{CS, ColorSimplifier, SelectiveExpand};
-use idenso::gamma::AGS;
+use idenso::gamma::{AGS, GammaSimplifier};
 use indicatif::ProgressBar;
 use indicatif::{ParallelProgressIterator, ProgressStyle};
 
@@ -22,8 +22,8 @@ use spenso::structure::{PermutedStructure, TensorStructure};
 use spenso::tensors::data::DataTensor;
 use spenso::tensors::parametric::ParamTensor;
 use spenso_hep_lib::{gamma_data_weyl, gamma5_weyl_data, proj_m_data_weyl, proj_p_data_weyl};
-use std::collections::HashSet;
 use std::collections::hash_map::Entry;
+use std::collections::{HashSet, VecDeque};
 
 use std::ops::{Deref, RangeInclusive};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -67,6 +67,7 @@ use crate::numerator::aind::Aind;
 use crate::numerator::graph::ReversibleEdge;
 use crate::numerator::symbolica_ext::AtomCoreExt;
 use crate::processes::ProcessDefinition;
+use crate::settings::GlobalSettings;
 use crate::utils::symbolica_ext::{COMPLEXRATPOLYFIELD, LOGPRINTOPTS, PrimeGenerate, Q_I};
 use crate::utils::{self, GS, PARAM_FUN_LIB, W_};
 use crate::uv::UltravioletGraph;
@@ -75,6 +76,7 @@ use crate::{
     feyngen::{FeynGenFilter, GenerationType},
     model::Model,
 };
+use eyre::eyre;
 
 use crate::{status_debug, status_error, status_info};
 use color_eyre::Result;
@@ -2692,8 +2694,9 @@ impl ProcessDefinition {
     pub fn generate(
         &self,
         model: &Model,
-        num_threads: Option<usize>,
+        settings: &GlobalSettings,
     ) -> Result<Vec<Graph>, FeynGenError> {
+        let num_threads = Some(settings.n_cores.feyngen);
         let progress_bar_style = ProgressStyle::with_template(
             "[{elapsed_precise} | ETA: {eta_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} ({percent}%) {msg}",
         )
@@ -3680,7 +3683,7 @@ impl ProcessDefinition {
 
         let bar = ProgressBar::new(graphs.len() as u64);
         bar.set_style(progress_bar_style.clone());
-        bar.set_message("Canonalizing edge and nodes ordering of selected graphs, including leg symmetrization...");
+        bar.set_message("Canonizing edge and nodes ordering of selected graphs, including leg symmetrization...");
         // println!(
         //     "Before edge and vertex canonization, first graph:\n{}",
         //     processed_graphs.first().unwrap().0.to_dot()
@@ -3990,7 +3993,7 @@ impl ProcessDefinition {
                             graph_id: i_g,
                             numerator_data: None,
                             ratio: Atom::num(1),
-                            bare_graph:bare_graph.clone(),
+                            bare_graph:canonized_fermion_flow_bare_graph.clone(),
                         };
                         if was_interrupted.load(Ordering::Relaxed) && is_interrupted(){
                             was_interrupted.store(true, Ordering::Relaxed);
@@ -4021,7 +4024,8 @@ impl ProcessDefinition {
                             numerator.state.expr *=&bare_graph.global_prefactor.num * &bare_graph.global_prefactor.projector;// * &bare_graph.overall_factor;
                             numerator.state.expr = numerator.state.expr.replace_multiple(&cpl_reps);
 
-                            debug!(num = %numerator.state.expr.to_ordered_simple(),"INitial numerator",);
+                            debug!(num = %numerator.state.expr.to_ordered_simple(),"Initial numerator",);
+
                             // println!("HEEEEy");
                             let numerator_color_simplified =
                                 numerator.clone().get_single_atom().unwrap().to_param_color().simplify_color();
@@ -4083,6 +4087,7 @@ impl ProcessDefinition {
                                         &bare_graph,
                                        numerator_color_simplified,
                                         &samples,
+                                        settings,
                                         &self.numerator_grouping,
                                     )?,
                                 );
@@ -4809,6 +4814,7 @@ impl ProcessedNumeratorForComparison {
             Vec<Replacement>,
             TensorLibrary<ParamTensor<ExplicitKey<Aind>>, Aind>,
         )],
+        settings: &GlobalSettings,
         numerator_aware_isomorphism_grouping: &NumeratorAwareGraphGroupingOption,
     ) -> Result<Self, FeynGenError> {
         let default_processed_data = ProcessedNumeratorForComparison {
@@ -4827,6 +4833,7 @@ impl ProcessedNumeratorForComparison {
                 );
 
                 numerator = numerator.replace_multiple(&lmb_reps);
+
                 debug!(numerator=%numerator.to_ordered_simple(),diagram_id=%diagram_id,debug_dot=%graph.debug_dot(),"Initial Numerator");
 
                 let canonized_numerator = if group_options.test_canonized_numerator {
@@ -4853,10 +4860,24 @@ impl ProcessedNumeratorForComparison {
                 } else {
                     None
                 };
+                let mut numerators = vec![numerator];
 
-                let expanded = numerator.expand_color();
+                if settings
+                    .generation
+                    .feyngen
+                    .gamma_simplification_closure_check
+                {
+                    debug!(numerator = %numerators[0].to_ordered_simple(),"Gamma Simplifying");
+                    numerators.push(numerators[0].simplify_gamma());
+                    debug!("Done Simplifying");
+                }
 
-                let sample_evaluations = samples
+                let mut sample_evals = VecDeque::new();
+
+                for numerator in numerators {
+                    let expanded = numerator.expand_color();
+
+                    let sample_evaluations = samples
                     .iter()
                     .map(|(reps, lib)| {
                         let sample_evaluation = expanded
@@ -4913,10 +4934,39 @@ impl ProcessedNumeratorForComparison {
                     })
                     .collect();
 
+                    sample_evals.push_back(sample_evaluations);
+                }
+
+                let sample_evaluations = sample_evals.pop_front().unwrap();
+                let sample_gamma_simplified_evaluations =
+                    sample_evals.pop_front().unwrap_or(vec![]);
+
+                if settings
+                    .generation
+                    .feyngen
+                    .gamma_simplification_closure_check
+                {
+                    for (i, (a, b)) in sample_evaluations
+                        .iter()
+                        .zip(sample_gamma_simplified_evaluations.iter())
+                        .enumerate()
+                    {
+                        if !(a - b).expand().is_zero() {
+                            return Err(FeynGenError::Eyre(eyre!(
+                                "Gamma simplification closure check failed for diagram ID {} on sample evaluation #{}. Numerator evaluation before gamma simplification: {}. After gamma simplification: {}.",
+                                diagram_id,
+                                i,
+                                a.to_ordered_simple(),
+                                b.to_ordered_simple()
+                            )));
+                        }
+                    }
+                }
+
                 ProcessedNumeratorForComparison {
                     diagram_id,
                     canonized_numerator,
-                    sample_evaluations: sample_evaluations,
+                    sample_evaluations,
                 }
             } else {
                 default_processed_data

@@ -287,7 +287,7 @@ impl Generate {
         state: &mut State,
         compile_folder: impl AsRef<Path>,
         override_existing_compiled: bool,
-        generation_settings: &GlobalSettings,
+        global_settings: &GlobalSettings,
         runtime_settings: &RuntimeSettings,
     ) -> Result<()> {
         let generation_mode = match &self.mode {
@@ -343,9 +343,7 @@ impl Generate {
                 let (spec, existing_process) = generation_info.unwrap();
                 let this_process_id = spec.process_definition.process_id;
                 // TODO handle existing process and continue
-                let graphs = spec
-                    .process_definition
-                    .generate(model, Some(generation_settings.n_cores.feyngen))?;
+                let graphs = spec.process_definition.generate(model, &global_settings)?;
                 status_info!(
                     "Generated {} {} graphs.",
                     if matches!(self.mode, Some(GenerateCmd::Amp(_))) {
@@ -408,7 +406,7 @@ impl Generate {
                 };
                 if !args.only_diagrams {
                     return state.generate_integrand(
-                        generation_settings,
+                        global_settings,
                         runtime_settings.into(),
                         this_process_id,
                         Some(generated_integrand_name),
@@ -444,16 +442,16 @@ impl Generate {
                     }
                 }
                 state.generate_integrand(
-                    generation_settings,
+                    global_settings,
                     runtime_settings.into(),
                     process_args.process_id,
                     process_args.integrand_name.clone(),
                 )?;
-                if generation_settings.generation.evaluator.compile {
+                if global_settings.generation.evaluator.compile {
                     state.compile_integrands(
                         compile_folder,
                         override_existing_compiled,
-                        generation_settings,
+                        global_settings,
                         Some(process_args.process_id),
                         process_args.integrand_name.clone(),
                     )?;
@@ -461,12 +459,12 @@ impl Generate {
                 Ok(())
             }
             None => {
-                state.generate_integrands(generation_settings, runtime_settings.into())?;
-                if generation_settings.generation.evaluator.compile {
+                state.generate_integrands(global_settings, runtime_settings.into())?;
+                if global_settings.generation.evaluator.compile {
                     state.compile_integrands(
                         compile_folder,
                         override_existing_compiled,
-                        generation_settings,
+                        global_settings,
                         None,
                         None,
                     )?
