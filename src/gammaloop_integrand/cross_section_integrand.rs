@@ -648,7 +648,7 @@ impl GraphTerm for CrossSectionGraphTerm {
 
             cut_threshold_counterterms.push(ct_result);
 
-            //debug!("param builder for cut {}: \n{}", cut, self.param_builder);
+            debug!("param builder for cut {}: \n{}", cut, self.param_builder);
 
             cut_results.push(result * prefactor);
         }

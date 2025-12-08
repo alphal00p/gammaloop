@@ -849,6 +849,8 @@ impl CrossSectionGraph {
             prop_atoms *= prop_atom;
         }
 
+        prop_atoms = prop_atoms.replace_multiple(&replacements);
+
         let canonize_esurface = self
             .graph
             .get_esurface_canonization(&self.graph.loop_momentum_basis);
@@ -971,10 +973,16 @@ impl CrossSectionGraph {
                     .with(GS.emr_mom(edge_index, Atom::from(ExpandedIndex::from_iter([0]))));
             }
 
+            for edge_index in props.iter() {
+                integrand = integrand
+                    .replace(GS.ose(*edge_index))
+                    .with(GS.emr_mom(*edge_index, Atom::from(ExpandedIndex::from_iter([0]))));
+            }
+
             integrand = integrand.replace_multiple(&replacements);
             let prefactor = self.lu_prefactor_helper();
             let integrand_with_prefactor = prefactor * integrand;
-            debug!("integrand for cut {}: {}", cut_id, integrand_with_prefactor);
+            // panic!("integrand for cut {}: {}", cut_id, integrand_with_prefactor);
             integrands.push(integrand_with_prefactor);
         }
 
