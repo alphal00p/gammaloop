@@ -230,6 +230,29 @@ fn photons_1l_inspect() -> Result<()> {
 }
 
 #[test]
+fn photons_phys_1l_inspect() -> Result<()> {
+    let mut cli = get_test_cli(
+        Some("generate_threshold_1L_6photons.toml".into()),
+        "./tests/photons_phys_1l_inspect",
+        None,
+        true,
+    )?;
+    let (_, inspect) = Inspect {
+        process_id: Some(0),
+        integrand_name: Some("default".to_string()),
+        point: vec![0.1, 0.2, 0.3],
+        momentum_space: false,
+        ..Default::default()
+    }
+    .run(&mut cli)?;
+
+    let target = Complex::new(-2.827365545920272e-10, -5.127347264133554e-10);
+    assert_eq!(inspect, target);
+
+    Ok(())
+}
+
+#[test]
 fn photons_2l_inspect() -> Result<()> {
     let mut cli = get_test_cli(
         Some("photons_eu_2l.toml".into()),
