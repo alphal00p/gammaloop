@@ -200,10 +200,11 @@ impl ProcessList {
         &mut self,
         model: &Model,
         settings: &GlobalSettings,
+        locked_runtime_settings: &LockedRuntimeSettings,
         thread_pool: &ThreadPool,
     ) -> Result<()> {
         for process in self.processes.iter_mut() {
-            process.preprocess(model, settings, thread_pool)?;
+            process.preprocess(model, settings, locked_runtime_settings, thread_pool)?;
         }
         Ok(())
     }
@@ -281,9 +282,12 @@ mod tests {
     use crate::{
         GammaLoopContextContainer, dot,
         graph::{Graph, LoopMomentumBasis, parse::IntoGraph},
-        settings::global::{
-            CompilationOptimizationLevel, GammaloopCompileOptions, GenerationSettings,
-            TropicalSubgraphTableSettings,
+        settings::{
+            RuntimeSettings,
+            global::{
+                CompilationOptimizationLevel, GammaloopCompileOptions, GenerationSettings,
+                TropicalSubgraphTableSettings,
+            },
         },
         signature::LoopExtSignature,
         utils::test_utils::load_generic_model,
@@ -347,6 +351,7 @@ mod tests {
                     },
                     ..Default::default()
                 },
+                &LockedRuntimeSettings::from(RuntimeSettings::default()),
             )
             .unwrap();
 

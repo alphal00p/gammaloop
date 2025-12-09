@@ -22,6 +22,8 @@ use std::fmt;
 
 use crate::graph::FeynmanGraph;
 use crate::graph::edge::PossibleParticle;
+use crate::settings::RuntimeSettings;
+use crate::settings::runtime;
 use crate::{
     GammaLoopContext, GammaLoopContextContainer,
     feyngen::NumeratorAwareGraphGroupingOption,
@@ -326,10 +328,16 @@ impl Process {
         &mut self,
         model: &Model,
         settings: &GlobalSettings,
+        locked_runtime_settings: &LockedRuntimeSettings,
         thread_pool: &ThreadPool,
     ) -> Result<()> {
-        self.collection
-            .preprocess(model, &self.definition, &settings.generation, thread_pool)?;
+        self.collection.preprocess(
+            model,
+            &self.definition,
+            &settings.generation,
+            locked_runtime_settings,
+            thread_pool,
+        )?;
         self.settings_history = Some(settings.clone());
         Ok(())
     }
@@ -862,12 +870,13 @@ impl ProcessCollection {
         model: &Model,
         process_definition: &ProcessDefinition,
         settings: &GenerationSettings,
+        locked_runtime_settings: &LockedRuntimeSettings,
         thread_pool: &ThreadPool,
     ) -> Result<()> {
         match self {
             Self::Amplitudes(amplitudes) => {
                 for (_, amplitude) in amplitudes {
-                    amplitude.preprocess(model, settings, thread_pool)?;
+                    amplitude.preprocess(model, settings, locked_runtime_settings, thread_pool)?;
                 }
             }
             Self::CrossSections(cross_sections) => {

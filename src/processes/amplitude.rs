@@ -29,7 +29,7 @@ use tracing_indicatif::{span_ext::IndicatifSpanExt, style::ProgressStyle};
 use vakint::{EvaluationMethod, NumericalEvaluationResult, Vakint, vakint_symbol};
 
 use crate::{
-    GammaLoopContext, GammaLoopContextContainer,
+    DependentMomentaConstructor, GammaLoopContext, GammaLoopContextContainer,
     cff::{
         esurface::GroupEsurfaceId,
         expression::{
@@ -212,6 +212,7 @@ impl Amplitude {
         &mut self,
         model: &Model,
         settings: &GenerationSettings,
+        locked_runtime_settings: &LockedRuntimeSettings,
         thread_pool: &ThreadPool,
     ) -> Result<()> {
         // preprocess each graph individually
@@ -228,7 +229,7 @@ impl Amplitude {
 
         thread_pool.install(|| {
             self.graphs.par_iter_mut().try_for_each(|amplitude_graph| {
-                let ok = amplitude_graph.preprocess(model, settings);
+                let ok = amplitude_graph.preprocess(model, settings, locked_runtime_settings);
                 preprocess_span.pb_inc(1);
 
                 ok
@@ -448,8 +449,9 @@ impl AmplitudeGraph {
     //Stage 1
     pub(crate) fn preprocess(
         &mut self,
-        _model: &Model,
+        model: &Model,
         settings: &GenerationSettings,
+        locked_runtime_settings: &LockedRuntimeSettings,
     ) -> Result<()> {
         status_debug!("Generating Cff");
         self.generate_cff()?;
@@ -471,8 +473,12 @@ impl AmplitudeGraph {
 
         if settings.enable_thresholds {
             status_debug!("Building Threshold Counterterms");
-            self.derived_data.threshold_counterterms =
-                self.build_threshold_counterterm_parametric_integrand(settings)?;
+            self.derived_data.threshold_counterterms = self
+                .build_threshold_counterterm_parametric_integrand(
+                    settings,
+                    locked_runtime_settings,
+                    model,
+                )?;
         }
 
         Ok(())
@@ -757,6 +763,8 @@ impl AmplitudeGraph {
     fn build_threshold_counterterm_parametric_integrand(
         &self,
         settings: &GenerationSettings,
+        locked_runtime_settings: &LockedRuntimeSettings,
+        model: &Model,
     ) -> Result<TiVec<EsurfaceID, AmplitudeCountertermAtom>> {
         let global_num = self.graph.global_network();
 
@@ -782,6 +790,26 @@ impl AmplitudeGraph {
                     parametric_integrated: Atom::new(),
                 });
                 continue;
+            }
+
+            if settings.check_esurface_at_generation {
+                let masses = self.graph.get_real_mass_vector(model);
+                let external_signature = self.graph.get_external_signature();
+
+                let exists = locked_runtime_settings.existence_check(
+                    esurface,
+                    &masses,
+                    &external_signature,
+                    &self.graph.loop_momentum_basis,
+                );
+
+                if !exists {
+                    counterterms.push(AmplitudeCountertermAtom {
+                        parametric_local: Atom::new(),
+                        parametric_integrated: Atom::new(),
+                    });
+                    continue;
+                }
             }
 
             let (circled, complement) = esurface.get_subgraph_components(&self.graph.underlying);

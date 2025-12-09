@@ -327,8 +327,12 @@ impl State {
             .num_threads(global_settings.n_cores.generate)
             .build()?;
 
-        self.process_list
-            .preprocess(&self.model, global_settings, &generation_pool)?;
+        self.process_list.preprocess(
+            &self.model,
+            global_settings,
+            &runtime_default,
+            &generation_pool,
+        )?;
         self.process_list.generate_integrands(
             &self.model,
             global_settings,
@@ -354,7 +358,12 @@ impl State {
             match &mut p.collection {
                 ProcessCollection::Amplitudes(a) => {
                     if let Some(a) = a.get_mut(name) {
-                        a.preprocess(&self.model, &global_settings.generation, &generation_pool)?;
+                        a.preprocess(
+                            &self.model,
+                            &global_settings.generation,
+                            &runtime_default,
+                            &generation_pool,
+                        )?;
                         a.build_integrand(
                             &self.model,
                             global_settings,
@@ -393,7 +402,12 @@ impl State {
                 }
             }
         } else {
-            p.preprocess(&self.model, global_settings, &generation_pool)?;
+            p.preprocess(
+                &self.model,
+                global_settings,
+                &runtime_default,
+                &generation_pool,
+            )?;
             p.generate_integrands(
                 &self.model,
                 global_settings,

@@ -38,6 +38,8 @@ pub struct GenerationSettings {
     pub tropical_subgraph_table: TropicalSubgraphTableSettings,
     #[serde(skip_serializing_if = "is_true")]
     pub enable_thresholds: bool,
+    #[serde(skip_serializing_if = "is_false")]
+    pub check_esurface_at_generation: bool,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub uv: UVgenerationSettings,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
@@ -54,6 +56,7 @@ impl Default for GenerationSettings {
             enable_thresholds: true,
             force_cuts: vec![],
             uv: UVgenerationSettings::default(),
+            check_esurface_at_generation: false,
         }
     }
 }

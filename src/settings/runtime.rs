@@ -2,13 +2,16 @@ use std::fmt::Display;
 
 use bincode_trait_derive::{Decode, Encode};
 use eyre::Result;
+use linnet::half_edge::involution::EdgeVec;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
 use typed_index_collections::TiVec;
 
 use crate::{
-    GammaLoopContext,
+    DependentMomentaConstructor, GammaLoopContext,
+    cff::esurface::Esurface,
+    graph::LoopMomentumBasis,
     improve_ps::generate_default_momenta,
     momentum::RotationMethod,
     momentum_sample::ExternalIndex,
@@ -85,6 +88,31 @@ impl<'a> LockedRuntimeSettings<'a> {
                 }
             }
         }
+    }
+
+    pub(crate) fn existence_check(
+        &self,
+        esurface: &Esurface,
+        masses: &EdgeVec<F<f64>>,
+        external_signature: &SignatureLike<ExternalIndex>,
+        lmb: &LoopMomentumBasis,
+    ) -> bool {
+        let dependent_momenta_constructor =
+            DependentMomentaConstructor::Amplitude(external_signature);
+
+        let exists = esurface.exists(
+            &self
+                .0
+                .kinematics
+                .externals
+                .get_dependent_externals(dependent_momenta_constructor)
+                .unwrap(),
+            lmb,
+            &masses,
+            &F(self.0.kinematics.e_cm),
+        );
+
+        exists
     }
 }
 

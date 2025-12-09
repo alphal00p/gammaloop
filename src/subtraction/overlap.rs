@@ -440,6 +440,28 @@ pub struct OverlapInput<'a> {
     pub group_esurface_map: TiVec<GroupEsurfaceId, TiVec<GraphGroupPosition, Option<EsurfaceID>>>,
 }
 
+pub(crate) fn check_global_center(
+    overlap_input: &OverlapInput,
+    existing_esurfaces: &ExistingEsurfaces,
+    center: &LoopMomenta<F<f64>>,
+    external_momenta: &ExternalFourMomenta<F<f64>>,
+) -> bool {
+    existing_esurfaces.iter().all(|existing_esurface_id| {
+        let (graph_group_postition, esurface_id) =
+            get_representative(&overlap_input.group_esurface_map[*existing_esurface_id])
+                .expect("overlap corrupted");
+        let esurface = &overlap_input.graph_data[graph_group_postition].esurfaces[esurface_id];
+
+        let lmb = overlap_input.graph_data[graph_group_postition].lmb;
+        let edge_masses = &overlap_input.graph_data[graph_group_postition].edge_masses;
+
+        let esurface_val =
+            esurface.compute_from_momenta(lmb, &edge_masses, &center, external_momenta);
+
+        esurface_val < F(0.0)
+    })
+}
+
 /// TODO: When this function will be called at runtime, panics should be removed and this function should return result.
 /// When the overlap finding fails, treat the point as unstable
 pub(crate) fn find_maximal_overlap(
@@ -470,25 +492,12 @@ pub(crate) fn find_maximal_overlap(
             .collect();
 
         if settings.subtraction.overlap_settings.check_global_center {
-            let is_valid = existing_esurfaces.iter().all(|existing_esurface_id| {
-                let (graph_group_postition, esurface_id) =
-                    get_representative(&overlap_input.group_esurface_map[*existing_esurface_id])
-                        .expect("overlap corrupted");
-                let esurface =
-                    &overlap_input.graph_data[graph_group_postition].esurfaces[esurface_id];
-
-                let lmb = overlap_input.graph_data[graph_group_postition].lmb;
-                let edge_masses = &overlap_input.graph_data[graph_group_postition].edge_masses;
-
-                let esurface_val = esurface.compute_from_momenta(
-                    lmb,
-                    &edge_masses,
-                    &global_center_f,
-                    external_momenta,
-                );
-
-                esurface_val < F(0.0)
-            });
+            let is_valid = check_global_center(
+                overlap_input,
+                existing_esurfaces,
+                &global_center_f,
+                external_momenta,
+            );
 
             if !is_valid {
                 return Err(eyre!(
@@ -509,9 +518,35 @@ pub(crate) fn find_maximal_overlap(
         return Ok(res);
     }
 
-    if settings.subtraction.overlap_settings.try_origin
-        || settings.subtraction.overlap_settings.try_origin_all_lmbs
-    {
+    if settings.subtraction.overlap_settings.try_origin {
+        let global_loop_count = overlap_input
+            .graph_data
+            .first()
+            .unwrap()
+            .lmb
+            .loop_edges
+            .len();
+        let origin = LoopMomenta::from_iter(
+            (0..global_loop_count).map(|_| ThreeMomentum::new(F(0.0), F(0.0), F(0.0))),
+        );
+
+        let is_valid =
+            check_global_center(overlap_input, existing_esurfaces, &origin, external_momenta);
+
+        if is_valid {
+            let single_group = OverlapGroup {
+                existing_esurfaces: all_existing_esurfaces,
+                center: origin,
+                complement: vec![],
+                prefactor_evaluator: None,
+            };
+            res.overlap_groups.push(single_group);
+            res.fill_in_complements();
+            return Ok(res);
+        }
+    }
+
+    if settings.subtraction.overlap_settings.try_origin_all_lmbs {
         todo!("Not all heuristics implemented")
     }
 
