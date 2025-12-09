@@ -978,7 +978,7 @@ impl AmplitudeGraph {
                 * (uv_damp_plus / delta_r_plus + uv_damp_minus / delta_r_minus);
 
             let integrated_prefactor =
-                i * Atom::var(GS.pi) * &jacobian_ratio * hfunction / factors_of_pi / grad_eta;
+                -i * Atom::var(GS.pi) * &jacobian_ratio * hfunction / factors_of_pi / grad_eta;
 
             let local_counterterm = local_prefactor * &counterterm;
             let integrated_counterterm = integrated_prefactor * &counterterm;
