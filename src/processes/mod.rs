@@ -288,6 +288,7 @@ mod tests {
                 CompilationOptimizationLevel, GammaloopCompileOptions, GenerationSettings,
                 TropicalSubgraphTableSettings,
             },
+            runtime::LockedRuntimeSettings,
         },
         signature::LoopExtSignature,
         utils::test_utils::load_generic_model,
@@ -351,7 +352,7 @@ mod tests {
                     },
                     ..Default::default()
                 },
-                &LockedRuntimeSettings::from(RuntimeSettings::default()),
+                &LockedRuntimeSettings::from(&RuntimeSettings::default()),
             )
             .unwrap();
 

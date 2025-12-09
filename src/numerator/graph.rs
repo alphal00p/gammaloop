@@ -409,6 +409,7 @@ impl ReversibleEdge for EdgeData<ArcParticle> {
 #[cfg(test)]
 mod test {
 
+    use clarabel::solver::default;
     // use env_logger::WriteStyle;
     use idenso::{color::ColorSimplifier, gamma::GammaSimplifier};
 
@@ -426,8 +427,9 @@ mod test {
         numerator::aind::Aind,
         processes::{Amplitude, AmplitudeGraph},
         settings::{
-            GlobalSettings, RuntimeSettings, global::GenerationSettings,
-            runtime::kinematic::KinematicsSettings,
+            GlobalSettings, RuntimeSettings,
+            global::GenerationSettings,
+            runtime::{LockedRuntimeSettings, kinematic::KinematicsSettings},
         },
         uv::UltravioletGraph,
     };
@@ -466,6 +468,8 @@ mod test {
         let mut settings = RuntimeSettings::default();
 
         settings.kinematics = KinematicsSettings::random(&graph, 42);
+        let default_runtime_settings = RuntimeSettings::default();
+        let locked_runtime_settings = LockedRuntimeSettings::from(&default_runtime_settings);
         amp.add_graph(graph).unwrap();
         // Amplitude::new(name)
 
@@ -476,7 +480,8 @@ mod test {
             .build()
             .unwrap();
 
-        amp.preprocess(&model, &proc_set, &thread_pool).unwrap();
+        amp.preprocess(&model, &proc_set, &locked_runtime_settings, &thread_pool)
+            .unwrap();
         amp.build_integrand(
             &model,
             &GlobalSettings::default(),
@@ -561,7 +566,11 @@ mod test {
             .build()
             .unwrap();
 
-        amp.preprocess(&model, &proc_set, &thread_pool).unwrap();
+        let default_runtime_settings = RuntimeSettings::default();
+        let locked_runtime_settings = LockedRuntimeSettings::from(&default_runtime_settings);
+
+        amp.preprocess(&model, &proc_set, &locked_runtime_settings, &thread_pool)
+            .unwrap();
         amp.build_integrand(
             &model,
             &GlobalSettings::default(),
@@ -621,7 +630,10 @@ mod test {
             .build()
             .unwrap();
 
-        amp.preprocess(&model, &proc_set, &thread_pool).unwrap();
+        let default_runtime_settings = RuntimeSettings::default();
+        let locked_runtime_settings = LockedRuntimeSettings::from(&default_runtime_settings);
+        amp.preprocess(&model, &proc_set, &locked_runtime_settings, &thread_pool)
+            .unwrap();
 
         amp.build_integrand(
             &model,
@@ -877,8 +889,15 @@ mod test {
             .build()
             .unwrap();
 
-        a.preprocess(&model, &GenerationSettings::default(), &generation_pool)
-            .unwrap();
+        let default_runtime_settings = RuntimeSettings::default();
+        let locked_runtime_settings = LockedRuntimeSettings::from(&default_runtime_settings);
+        a.preprocess(
+            &model,
+            &GenerationSettings::default(),
+            &locked_runtime_settings,
+            &generation_pool,
+        )
+        .unwrap();
     }
 
     #[test]
