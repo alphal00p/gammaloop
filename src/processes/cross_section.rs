@@ -656,7 +656,7 @@ impl CrossSectionGraph {
         debug!("building parametric integrand");
         self.build_parametric_integrand(&settings)?;
 
-        if settings.enable_thresholds {
+        if settings.threshold_subtraction.enable_thresholds {
             debug!("building threshold counterterm");
             self.build_threshold_counteterm(settings)?;
             self.build_subspace_data()?;
@@ -943,7 +943,7 @@ impl CrossSectionGraph {
 
             let right_expr = right_forest.orientation_parametric_expr(None, &self.graph);
 
-            if settings.enable_thresholds {
+            if settings.threshold_subtraction.enable_thresholds {
                 // we can recycle these tensor networks for the single threshold counterterms
                 self.derived_data
                     .tensor_network_cache
@@ -1136,10 +1136,12 @@ impl CrossSectionGraph {
                 self.target_nodes.clone(),
                 &self.graph.get_initial_state_tree().0,
             );
-
+            unsorted.retain(|(_left, cut, _right)| cut.nedges(&self.graph) > 1);
             unsorted.sort_by(|a, b| a.1.cmp(&b.1));
             unsorted.into()
         };
+
+        let (initial_state_tree, replacements) = self.get_initial_state_tree_data();
 
         let vakint = self.new_vakint();
         let global_num = self.graph.global_network();
@@ -1288,7 +1290,8 @@ impl CrossSectionGraph {
 
                     let mut product = left_ct
                         * self.derived_data.tensor_network_cache[cut_id].1.clone()
-                        * global_num.clone();
+                        * global_num.clone()
+                        * initial_state_tree.clone();
 
                     product
                         .execute::<Sequential, SmallestDegree, _, _, _>(
@@ -1325,6 +1328,7 @@ impl CrossSectionGraph {
                     let left_loop_count = self.graph.underlying.cyclotomatic_number(&cut.left);
 
                     let th_prefactor = self.th_prefactor_helper(left_loop_count, false);
+                    left_integrand = left_integrand.replace_multiple(&replacements);
 
                     Ok(left_integrand * lu_prefactor * th_prefactor)
                 })
@@ -1344,7 +1348,8 @@ impl CrossSectionGraph {
 
                     let mut product = self.derived_data.tensor_network_cache[cut_id].0.clone()
                         * right_ct
-                        * global_num.clone();
+                        * global_num.clone()
+                        * initial_state_tree.clone();
 
                     product
                         .execute::<Sequential, SmallestDegree, _, _, _>(
@@ -1382,6 +1387,8 @@ impl CrossSectionGraph {
 
                     let th_prefactor = self.th_prefactor_helper(right_loop_count, true);
 
+                    right_integrand = right_integrand.replace_multiple(&replacements);
+
                     Ok(right_integrand * lu_prefactor * th_prefactor)
                 })
                 .collect::<Result<TiVec<RightThresholdId, Atom>>>()?;
@@ -1392,7 +1399,8 @@ impl CrossSectionGraph {
                 .map(|(left_ct_diagram, right_ct_diagram)| {
                     let mut product = left_ct_diagram.network.clone().unwrap()
                         * right_ct_diagram.network.clone().unwrap()
-                        * global_num.clone();
+                        * global_num.clone()
+                        * initial_state_tree.clone();
 
                     product
                         .execute::<Sequential, SmallestDegree, _, _, _>(
@@ -1433,6 +1441,8 @@ impl CrossSectionGraph {
                         self.graph.underlying.cyclotomatic_number(&cut.right),
                         true,
                     );
+
+                    iterated_integrand = iterated_integrand.replace_multiple(&replacements);
 
                     Ok(iterated_integrand * lu_prefactor * left_prefactor * right_prefactor)
                 })

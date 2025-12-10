@@ -471,7 +471,7 @@ impl AmplitudeGraph {
             self.build_multi_channeling_channels();
         }
 
-        if settings.enable_thresholds {
+        if settings.threshold_subtraction.enable_thresholds {
             status_debug!("Building Threshold Counterterms");
             self.derived_data.threshold_counterterms = self
                 .build_threshold_counterterm_parametric_integrand(
@@ -792,7 +792,7 @@ impl AmplitudeGraph {
                 continue;
             }
 
-            if settings.check_esurface_at_generation {
+            if settings.threshold_subtraction.check_esurface_at_generation {
                 let masses = self.graph.get_real_mass_vector(model);
                 let external_signature = self.graph.get_external_signature();
 

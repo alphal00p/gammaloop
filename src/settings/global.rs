@@ -38,14 +38,38 @@ pub struct GenerationSettings {
     pub compile: GammaloopCompileOptions,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub tropical_subgraph_table: TropicalSubgraphTableSettings,
-    #[serde(skip_serializing_if = "is_true")]
-    pub enable_thresholds: bool,
-    #[serde(skip_serializing_if = "is_false")]
-    pub check_esurface_at_generation: bool,
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    pub threshold_subtraction: ThresholdSubtractionSettings,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub uv: UVgenerationSettings,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub force_cuts: Vec<Vec<String>>,
+}
+
+#[cfg_attr(feature = "python_api", pyo3::pyclass(get_all, set_all))]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
+#[trait_decode(trait = GammaLoopContext)]
+#[serde(default, deny_unknown_fields)]
+pub struct ThresholdSubtractionSettings {
+    #[serde(skip_serializing_if = "is_true")]
+    pub enable_thresholds: bool,
+    #[serde(skip_serializing_if = "is_false")]
+    pub check_esurface_at_generation: bool,
+    #[serde(skip_serializing_if = "is_true")]
+    pub skip_thresholds_that_are_cuts: bool,
+    #[serde(skip_serializing_if = "is_false")]
+    pub disable_integrated_ct: bool,
+}
+
+impl Default for ThresholdSubtractionSettings {
+    fn default() -> Self {
+        Self {
+            enable_thresholds: true,
+            check_esurface_at_generation: false,
+            skip_thresholds_that_are_cuts: true,
+            disable_integrated_ct: false,
+        }
+    }
 }
 
 impl Default for GenerationSettings {
@@ -56,10 +80,9 @@ impl Default for GenerationSettings {
             orientation_pattern: OrientationPattern::default(),
             compile: GammaloopCompileOptions::default(),
             tropical_subgraph_table: TropicalSubgraphTableSettings::default(),
-            enable_thresholds: true,
+            threshold_subtraction: ThresholdSubtractionSettings::default(),
             force_cuts: vec![],
             uv: UVgenerationSettings::default(),
-            check_esurface_at_generation: false,
         }
     }
 }
