@@ -196,6 +196,13 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph {
         Self: AsRef<HedgeGraph<E, V, H>>,
     {
         let ref_graph = self.as_ref();
+
+        if subgraph.is_empty() {
+            let mut spinneys = AHashSet::new();
+            spinneys.insert(ref_graph.empty_subgraph());
+            return spinneys;
+        }
+
         let init_node = ref_graph.iter_nodes_of(subgraph).next().unwrap().0;
         let all_subcycles: Vec<_> = Cycle::all_sum_powerset_filter_map(
             &ref_graph

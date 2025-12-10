@@ -20,6 +20,10 @@ compile = false
 [cli_settings.global.generation]
 enable_thresholds = false
 
+
+[default_runtime_settings.subtraction]
+disable_threshold_subtraction = true
+
 [default_runtime_settings.sampling]
 type = "discrete_graph_sampling"
 
