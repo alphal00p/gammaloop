@@ -1,5 +1,8 @@
 use insta::assert_snapshot;
-use linnet::half_edge::involution::{EdgeIndex, HedgePair};
+use linnet::half_edge::{
+    NodeIndex,
+    involution::{EdgeIndex, HedgePair},
+};
 use log::info;
 use spenso::{
     network::{
@@ -12,17 +15,15 @@ use spenso::{
     tensors::symbolic::SymbolicTensor,
 };
 use symbolica::atom::{Atom, FunctionBuilder, Symbol};
-use tracing::debug;
 use typed_index_collections::ti_vec;
 
 use super::Graph;
 use crate::{
     dot,
     feyngen::diagram_generator::{EdgeColor, NodeColorWithVertexRule},
-    gammaloop_integrand::param_builder::SplitPolarizations,
     graph::{
         GraphGroup, LMBext,
-        parse::{IntoGraph, complete_group_parsing},
+        parse::{IntoGraph, complete_group_parsing, string_utils::ToOrderedSimple},
     },
     initialisation::test_initialise,
     momentum_sample::LoopIndex,
@@ -495,6 +496,69 @@ fn polarizations() {
     insta::assert_snapshot!(gs[3].global_prefactor.projector,@"v(0,bis(4,hedge(0)))");
     insta::assert_snapshot!(gs[4].global_prefactor.projector,@"vbar(0,bis(4,hedge(0)))");
     insta::assert_snapshot!(gs[5].global_prefactor.projector,@"v(0,bis(4,hedge(0)))");
+}
+
+#[test]
+fn vertex_rules() {
+    test_initialise().unwrap();
+    let gs: Vec<Graph> = dot!(
+        digraph g1{
+           ext [style=invis];
+            ext -> n [particle="g"];
+            ext -> n [particle="g"];
+            ext -> n [particle="g"];
+        }
+
+        digraph g2{
+           ext [style=invis];
+            ext -> n [particle="d"];
+            ext -> n [particle="d~"];
+            ext -> n [particle="g"];
+        }
+
+    )
+    .unwrap();
+
+    insta::assert_snapshot!(gs[0].underlying[NodeIndex(0)].num.to_ordered_simple(),@"(-1*Q(0,mink(4,hedge(1)))*g(mink(4,hedge(0)),mink(4,hedge(2)))+-1*Q(1,mink(4,hedge(2)))*g(mink(4,hedge(0)),mink(4,hedge(1)))+-1*Q(2,mink(4,hedge(0)))*g(mink(4,hedge(1)),mink(4,hedge(2)))+Q(0,mink(4,hedge(2)))*g(mink(4,hedge(0)),mink(4,hedge(1)))+Q(1,mink(4,hedge(0)))*g(mink(4,hedge(1)),mink(4,hedge(2)))+Q(2,mink(4,hedge(1)))*g(mink(4,hedge(0)),mink(4,hedge(2))))*GC_10*f(coad(8,hedge(0)),coad(8,hedge(1)),coad(8,hedge(2)))");
+    insta::assert_snapshot!(gs[1].underlying[NodeIndex(0)].num.to_ordered_simple(),@"GC_11*gamma(bis(4,hedge(1)),bis(4,hedge(0)),mink(4,hedge(2)))*t(coad(8,hedge(2)),cof(3,hedge(0)),dind(cof(3,hedge(1))))");
+
+    let gs: Vec<Graph> = dot!(
+        digraph g1{
+           ext [style=invis];
+            ext -> n [particle="scalar_0"];
+            ext -> n [particle="scalar_0"];
+            ext -> n [particle="graviton"];
+        },"scalar_gravity"
+    )
+    .unwrap();
+    insta::assert_snapshot!(gs[0].underlying[NodeIndex(0)].num.to_ordered_simple(),@"(-1*Q(0,mink(4,vertex(0,1)))*Q(1,mink(4,vertex(0,1)))*g(mink(4,hedge(2)),mink(4,hedge(2,1)))+Q(0,mink(4,hedge(2)))*Q(1,mink(4,hedge(2,1)))+Q(0,mink(4,hedge(2,1)))*Q(1,mink(4,hedge(2))))*SST+-1*SSTmpart0*g(mink(4,hedge(2)),mink(4,hedge(2,1)))");
+}
+
+#[test]
+fn propagators() {
+    test_initialise().unwrap();
+    let gs: Vec<Graph> = dot!(
+        digraph g1{
+            node [num=1]
+            a -> b[particle="g"];
+        }
+
+        digraph g2{
+            node [num=1]
+            a -> b [particle="d"];
+        }
+
+        digraph g3{
+            node [num=1]
+            a -> b [particle="Z"];
+        }
+
+    )
+    .unwrap();
+
+    insta::assert_snapshot!(gs[0].underlying[EdgeIndex(0)].num.to_ordered_simple(),@"-1*g(coad(8,hedge(0)),coad(8,hedge(1)))*g(mink(4,hedge(0)),mink(4,hedge(1)))");
+    insta::assert_snapshot!(gs[1].underlying[EdgeIndex(0)].num.to_ordered_simple(),@"Q(0,mink(4,edge(0,1)))*g(cof(3,hedge(0)),dind(cof(3,hedge(1))))*gamma(bis(4,hedge(1)),bis(4,hedge(0)),mink(4,edge(0,1)))");
+    insta::assert_snapshot!(gs[2].underlying[EdgeIndex(0)].num.to_ordered_simple(),@"-1*g(mink(4,hedge(0)),mink(4,hedge(1)))+MZ^(-2)*Q(0,mink(4,hedge(0)))*Q(0,mink(4,hedge(1)))");
 }
 
 #[test]

@@ -1,5 +1,6 @@
 use std::sync::LazyLock;
 
+use crate::graph::parse::string_utils::ToOrderedSimple;
 use crate::utils::{GS, W_, symbolica_ext::CallSymbol};
 use idenso::color::CS;
 use idenso::gamma::AGS;
@@ -21,6 +22,7 @@ use symbolica::{
     function,
     id::Replacement,
 };
+use tracing::debug;
 
 use super::aind::Aind;
 
@@ -43,6 +45,8 @@ pub struct UFOSymbols {
     pub antilevicivita: Symbol,
     pub t6: Symbol,
     pub k6: Symbol,
+    pub idx: Symbol,
+    pub dummy: Symbol,
     pub k6bar: Symbol,
     pub complexconjugate: Symbol,
     pub pslash: Symbol,
@@ -63,6 +67,8 @@ pub static UFO: LazyLock<UFOSymbols> = LazyLock::new(|| UFOSymbols {
             }
         }
     ),
+    idx: symbol!("UFO::idx"),
+    dummy: symbol!("UFO::dummy"),
     gamma5: symbol!("UFO::Gamma5"),
     projm: symbol!("UFO::ProjM"),
     projp: symbol!("UFO::ProjP"),
@@ -117,6 +123,9 @@ pub static UFO: LazyLock<UFOSymbols> = LazyLock::new(|| UFOSymbols {
 });
 
 impl UFOSymbols {
+    pub fn idx(&self, id: usize, shift: usize) -> Atom {
+        function!(self.idx, shift, id)
+    }
     pub(crate) fn reindex_spin(
         &self,
         slots: &[&OrderedStructure<LibraryRep, Aind>],
@@ -130,253 +139,162 @@ impl UFOSymbols {
         // for s in slots {
         //     println!("{}", s);
         // }
-        // debug!(in = atom.printer(LOGPRINTOPTS).to_string());
+        // println!("In{}", atom.to_ordered_simple());
+
+        //`P(i,j)` = $$p_j^{\mu_i}$$
+        // and P(i)= $$p^{\mu_i}$$
+        atom = atom
+            .replace(self.momentum.f(&[W_.a_, W_.b___]))
+            .with(self.momentum.f((&[W_.b___], &[mink.to_symbolic([W_.a_])])))
+            .replace(self.momentum.f((&[self.idx.f((&[1], &[W_.a_]))], &[W_.b_])))
+            .with(self.momentum.f(&[W_.a_, W_.b_]));
+
+        // Fill in representations
+        let reps: Vec<_> = [
+            (
+                self.gamma.f(&[W_.a_, W_.i_, W_.j_]),
+                self.gamma.f(&[
+                    mink.to_symbolic([W_.a_]),
+                    bis.to_symbolic([W_.i_]),
+                    bis.to_symbolic([W_.j_]),
+                ]),
+            ),
+            (
+                self.identityl.f(&[W_.a_, W_.b_]),
+                self.identityl
+                    .f(&[mink.to_symbolic([W_.a_]), mink.to_symbolic([W_.b_])]),
+            ),
+            (
+                self.metric.f(&[W_.a_, W_.b_]),
+                self.metric
+                    .f(&[mink.to_symbolic([W_.a_]), mink.to_symbolic([W_.b_])]),
+            ),
+            (
+                self.sigma.f(&[W_.a_, W_.b_, W_.i_, W_.j_]),
+                self.sigma.f(&[
+                    mink.to_symbolic([W_.a_]),
+                    mink.to_symbolic([W_.b_]),
+                    bis.to_symbolic([W_.i_]),
+                    bis.to_symbolic([W_.j_]),
+                ]),
+            ),
+            (
+                self.pslash.f(&[W_.i_, W_.j_, W_.a___]),
+                self.pslash.f((
+                    &[bis.to_symbolic([W_.i_]), bis.to_symbolic([W_.j_])],
+                    &[W_.a___],
+                )),
+            ),
+            (
+                self.identity.f(&[W_.i_, W_.j_]),
+                self.identity
+                    .f(&[bis.to_symbolic([W_.i_]), bis.to_symbolic([W_.j_])]),
+            ),
+            (
+                self.gamma5.f(&[W_.i_, W_.j_]),
+                self.gamma5
+                    .f(&[bis.to_symbolic([W_.i_]), bis.to_symbolic([W_.j_])]),
+            ),
+            (
+                self.projm.f(&[W_.i_, W_.j_]),
+                self.projm
+                    .f(&[bis.to_symbolic([W_.i_]), bis.to_symbolic([W_.j_])]),
+            ),
+            (
+                self.projp.f(&[W_.i_, W_.j_]),
+                self.projp
+                    .f(&[bis.to_symbolic([W_.i_]), bis.to_symbolic([W_.j_])]),
+            ),
+            (
+                self.charge_conj.f(&[W_.i_, W_.j_]),
+                self.charge_conj
+                    .f(&[bis.to_symbolic([W_.i_]), bis.to_symbolic([W_.j_])]),
+            ),
+        ]
+        .into_iter()
+        .map(|(pat, rep)| Replacement::new(pat.to_pattern(), rep))
+        .collect();
+
+        atom = atom
+            .replace_multiple(&reps)
+            .replace(self.levicivita.f((&[W_.a___], &[W_.i_], &[W_.b___])))
+            .repeat()
+            .with(
+                self.levicivita
+                    .f((&[W_.a___], &[mink.to_symbolic([W_.i_])], &[W_.b___])),
+            );
 
         for (i, s) in slots.iter().enumerate() {
-            let i = (i + 1) as i64;
-            for r in s.external_structure_iter() {
+            let i = i + 1;
+            for (shift, r) in s.external_structure_iter().enumerate() {
                 let rep = r.rep_name();
-                match rep {
-                    _ if rep == mink => {
-                        atom = atom
-                            // Fill in gamma
-                            .replace(self.gamma.f((&[i], &[W_.x_, W_.y_])))
-                            .with(self.gamma.f((&[r.to_atom()], &[W_.x_, W_.y_])))
-                            // Fill in kroneker
-                            .replace(self.identityl.f((&[i], &[W_.a_])))
-                            .with(self.identityl.f((&[r.to_atom()], &[W_.a_])))
-                            .replace(self.identityl.f((&[W_.a_], &[i])))
-                            .with(self.identityl.f((&[W_.a_], &[r.to_atom()])))
-                            // Fill in metric
-                            .replace(self.metric.f((&[i], &[W_.a_])))
-                            .with(self.metric.f((&[r.to_atom()], &[W_.a_])))
-                            .replace(self.metric.f((&[W_.a_], &[i])))
-                            .with(self.metric.f((&[W_.a_], &[r.to_atom()])))
-                            // Fill in momentum
-                            .replace(self.momentum.f((&[i], &[W_.i___])))
-                            .with(self.momentum.f((&[r.to_atom()], &[W_.i___])))
-                            // Fill in sigma
-                            .replace(self.sigma.f((&[i], &[W_.j_, W_.a_, W_.b_])))
-                            .with(self.sigma.f((&[r.to_atom()], &[W_.j_, W_.a_, W_.b_])))
-                            .replace(self.sigma.f((&[W_.j_], &[i], &[W_.a_, W_.b_])))
-                            .with(self.sigma.f((&[W_.j_], &[r.to_atom()], &[W_.a_, W_.b_])))
-                            // Fill in levi-civita
-                            .replace(self.levicivita.f((&[W_.a___], &[i], &[W_.b___])))
-                            .with(self.levicivita.f((&[W_.a___], &[r.to_atom()], &[W_.b___])))
-                    }
-                    _ if rep == bis => {
-                        let reps: Vec<_> = [
-                            // Fill in pslash
-                            (
-                                self.pslash.f((&[i], &[W_.i_, W_.a___])),
-                                self.pslash.f((&[r.to_atom()], &[W_.i_, W_.a___])),
-                            ),
-                            (
-                                self.pslash.f((&[W_.i_], &[i], &[W_.a___])),
-                                self.pslash.f((&[W_.i_], &[r.to_atom()], &[W_.i_, W_.a___])),
-                            ),
-                            (
-                                self.identity.f((&[i], &[W_.a_])),
-                                self.identity.f((&[r.to_atom()], &[W_.a_])),
-                            ),
-                            (
-                                self.identity.f((&[W_.a_], &[i])),
-                                self.identity.f((&[W_.a_], &[r.to_atom()])),
-                            ),
-                            (
-                                self.gamma.f((&[W_.i_], &[i], &[W_.a_])),
-                                self.gamma.f((&[W_.i_], &[r.to_atom()], &[W_.a_])),
-                            ),
-                            (
-                                self.gamma.f((&[W_.i_, W_.a_], &[i])),
-                                self.gamma.f((&[W_.i_, W_.a_], &[r.to_atom()])),
-                            ),
-                            (
-                                self.gamma5.f((&[i], &[W_.a_])),
-                                self.gamma5.f((&[r.to_atom()], &[W_.a_])),
-                            ),
-                            (
-                                self.gamma5.f((&[W_.a_], &[i])),
-                                self.gamma5.f((&[W_.a_], &[r.to_atom()])),
-                            ),
-                            (
-                                self.projm.f((&[i], &[W_.a_])),
-                                self.projm.f((&[r.to_atom()], &[W_.a_])),
-                            ),
-                            (
-                                self.projm.f((&[W_.a_], &[i])),
-                                self.projm.f((&[W_.a_], &[r.to_atom()])),
-                            ),
-                            (
-                                self.projp.f((&[i], &[W_.a_])),
-                                self.projp.f((&[r.to_atom()], &[W_.a_])),
-                            ),
-                            (
-                                self.projp.f((&[W_.a_], &[i])),
-                                self.projp.f((&[W_.a_], &[r.to_atom()])),
-                            ),
-                            (
-                                self.charge_conj.f((&[i], &[W_.a_])),
-                                self.charge_conj.f((&[r.to_atom()], &[W_.a_])),
-                            ),
-                            (
-                                self.charge_conj.f((&[W_.a_], &[i])),
-                                self.charge_conj.f((&[W_.a_], &[r.to_atom()])),
-                            ),
-                            (
-                                self.sigma.f((&[W_.i_, W_.j_], &[i], &[W_.a_])),
-                                self.sigma.f((&[W_.i_, W_.j_], &[r.to_atom()], &[W_.a_])),
-                            ),
-                            (
-                                self.sigma.f((&[W_.i_, W_.j_, W_.a_], &[i])),
-                                self.sigma.f((&[W_.i_, W_.j_, W_.a_], &[r.to_atom()])),
-                            ),
-                        ]
-                        .into_iter()
-                        .map(|(pat, rep)| Replacement::new(pat.to_pattern(), rep))
-                        .collect();
+                let wrappedi = self.idx(i, shift + 1);
+                let wrappedi = wrappedi.as_view();
 
-                        // for r in &reps {
-                        //     println!("{:#}", r);
-                        // }
-
-                        atom = atom.replace_multiple(&reps);
-                    }
-                    _ => {}
-                }
+                // println!("{}", rep.to_symbolic([i]));
+                atom = atom
+                    .replace(rep.to_symbolic([wrappedi]))
+                    .level_range((1, Some(1)))
+                    .with(r.to_atom())
+                    .replace(rep.to_symbolic([i]))
+                    .level_range((1, Some(1)))
+                    .with(r.to_atom())
             }
         }
+        // debug!(in = atom.printer(LOGPRINTOPTS).to_string());
 
         // Handle dummies:
 
-        let mink = Minkowski {}.new_rep(4);
-        let bis = Bispinor {}.new_rep(4);
-
         let mut max_dummy = 0;
 
-        // debug!(before_dummies = atom.printer(LOGPRINTOPTS).to_string());
+        // debug!("Before dummies : {}", atom.to_ordered_simple());
 
-        atom = atom.replace_map(|term, _, out| {
-            if let AtomView::Fun(f) = term {
+        for rep in [LibraryRep::from(mink), bis.into()] {
+            let mut max_dummy = 0;
+
+            atom = atom.replace_map(|term, _, out| {
+                let AtomView::Fun(f) = term else {
+                    return;
+                };
+
                 let name = f.get_symbol();
-                if name == self.gamma {
-                    let mut fbuilder = FunctionBuilder::new(self.gamma);
-                    let mut first = true;
-                    for a in f.iter() {
-                        if let Ok(a) = i64::try_from(a) {
-                            if a < 0 {
-                                let a = (-a) as usize;
+                if name != rep.symbol() {
+                    return;
+                }
 
-                                if first {
-                                    if a > max_dummy {
-                                        max_dummy = a;
-                                    }
-                                    fbuilder =
-                                        fbuilder.add_arg(mink.slot::<Aind, _>(dummy(a)).to_atom());
-                                } else {
-                                    // debug!(
-                                    //     bisslot = bis
-                                    //         .slot::<Aind, _>(dummy(a))
-                                    //         .to_atom()
-                                    //         .printer(LOGPRINTOPTS)
-                                    //         .to_string()
-                                    // );
-                                    fbuilder =
-                                        fbuilder.add_arg(bis.slot::<Aind, _>(dummy(a)).to_atom());
-                                }
-                            } else {
-                                fbuilder = fbuilder.add_arg(a);
-                            }
+                let mut fbuilder = FunctionBuilder::new(name);
+
+                if f.get_nargs() == 1 {
+                    fbuilder = fbuilder.add_arg(4);
+                    let arg = f.iter().next().unwrap();
+                    let a = if let Ok(a) = i64::try_from(arg) {
+                        if a < 0 {
+                            let a = (-a) as usize;
+
+                            a
                         } else {
-                            fbuilder = fbuilder.add_arg(a);
+                            return;
                         }
-                        if first {
-                            first = false;
-                        }
+                    } else if let AtomView::Fun(f) = arg
+                        && f.get_symbol() == self.dummy
+                        && f.get_nargs() == 1
+                        && let Ok(a) = usize::try_from(f.iter().next().unwrap())
+                    {
+                        a
+                    } else {
+                        return;
+                    };
+                    if a > max_dummy {
+                        max_dummy = a;
                     }
-
-                    **out = fbuilder.finish();
-                } else if name == self.charge_conj
-                    || name == self.gamma5
-                    || name == self.identity
-                    || name == self.pslash
-                    || name == self.projm
-                    || name == self.projp
-                {
-                    let mut fbuilder = FunctionBuilder::new(name);
-                    let mut count = 0;
-                    for a in f.iter() {
-                        count += 1;
-                        if count <= 2 {
-                            if let Ok(a) = i64::try_from(a) {
-                                if a < 0 {
-                                    let a = (-a) as usize;
-                                    fbuilder =
-                                        fbuilder.add_arg(bis.slot::<Aind, _>(dummy(a)).to_atom());
-                                } else {
-                                    fbuilder = fbuilder.add_arg(a);
-                                }
-                            } else {
-                                fbuilder = fbuilder.add_arg(a);
-                            }
-                        }
-                    }
-                    **out = fbuilder.finish();
-                } else if name == self.identityl
-                    || name == self.levicivita
-                    || name == self.momentum
-                    || name == self.metric
-                {
-                    let mut fbuilder = FunctionBuilder::new(name);
-                    for a in f.iter() {
-                        if let Ok(a) = i64::try_from(a) {
-                            if a < 0 {
-                                let a = (-a) as usize;
-                                if a > max_dummy {
-                                    max_dummy = a;
-                                }
-                                fbuilder =
-                                    fbuilder.add_arg(mink.slot::<Aind, _>(dummy(a)).to_atom());
-                            } else {
-                                fbuilder = fbuilder.add_arg(a);
-                            }
-                        } else {
-                            fbuilder = fbuilder.add_arg(a);
-                        }
-                    }
-                    **out = fbuilder.finish();
-                } else if name == self.sigma {
-                    let mut fbuilder = FunctionBuilder::new(self.gamma);
-                    let mut count = 0;
-                    for a in f.iter() {
-                        if let Ok(a) = i64::try_from(a) {
-                            if a < 0 {
-                                let a = (-a) as usize;
-
-                                if count < 2 {
-                                    if a > max_dummy {
-                                        max_dummy = a;
-                                    }
-                                    fbuilder =
-                                        fbuilder.add_arg(mink.slot::<Aind, _>(dummy(a)).to_atom());
-                                } else {
-                                    fbuilder =
-                                        fbuilder.add_arg(bis.slot::<Aind, _>(dummy(a)).to_atom());
-                                }
-                            } else {
-                                fbuilder = fbuilder.add_arg(a);
-                            }
-                        } else {
-                            fbuilder = fbuilder.add_arg(a);
-                        }
-                        count += 1;
-                    }
-
+                    fbuilder = fbuilder.add_arg(Atom::from(dummy(a)));
                     **out = fbuilder.finish();
                 }
-            }
-        });
+            });
+        }
 
+        let mink = Minkowski {}.new_rep(4);
+        let bis = Bispinor {}.new_rep(4);
         // debug!(after_dummies = atom.printer(LOGPRINTOPTS).to_string());
         // debug!("After dummies{}", atom);
 
@@ -475,7 +393,7 @@ impl UFOSymbols {
 
         for (i, (f, e)) in momenta.iter().enumerate() {
             atom = atom
-                .replace(function!(UFO.momentum, W_.a_, (i + 1) as i64))
+                .replace(function!(UFO.momentum, (i + 1) as i64, W_.a_))
                 .with(match f {
                     Flow::Sink => GS.emr_mom(*e, W_.a_),
                     Flow::Source => -GS.emr_mom(*e, W_.a_),
@@ -599,12 +517,21 @@ impl UFOSymbols {
         // println!("postid:{atom}");
 
         for (i, s) in slots.iter().enumerate() {
-            let i = (i + 1) as i64;
-            for r in s.external_structure_iter() {
+            let i = i + 1;
+            for (shift, r) in s.external_structure_iter().enumerate() {
                 let rep = r.rep_name();
+                let wrappedi = self.idx(i, shift + 1);
+                let wrappedi = wrappedi.as_view();
 
                 // println!("{}", rep.to_symbolic([i]));
                 atom = atom
+                    .replace(rep.to_symbolic([wrappedi]))
+                    .level_range((1, Some(1)))
+                    .with(r.to_atom())
+                    .replace(self.identity.f((&[wrappedi], &[W_.i_])))
+                    .with(self.identity.f((&[r.to_atom()], &[W_.i_])))
+                    .replace(self.identity.f((&[W_.i_], &[wrappedi])))
+                    .with(self.identity.f((&[W_.i_], &[r.to_atom()])))
                     .replace(rep.to_symbolic([i]))
                     .level_range((1, Some(1)))
                     .with(r.to_atom())
@@ -617,41 +544,55 @@ impl UFOSymbols {
 
         // println!("slot:{atom}");
         // Handle dummies:
-
+        //
         for rep in [
-            LibraryRep::from(adj),
-            fund.into(),
-            antifund.into(),
-            sext.into(),
-            antisext.into(),
+            LibraryRep::from(adj).new_rep(8),
+            fund.new_rep(3).to_lib(),
+            antifund.new_rep(3).to_lib(),
+            sext.new_rep(6).to_lib(),
+            antisext.new_rep(6).to_lib(),
         ] {
             let mut max_dummy = 0;
 
-            if let AtomView::Fun(r) = rep.to_symbolic::<Atom>([]).as_view() {
-                atom = atom.replace_map(|term, _, out| {
-                    if let AtomView::Fun(f) = term {
-                        let name = f.get_symbol();
-                        if name == r.get_symbol() {
-                            let mut fbuilder = FunctionBuilder::new(name);
-                            if f.get_nargs() == 1 {
-                                let arg = f.iter().next().unwrap();
-                                if let Ok(a) = i64::try_from(arg) {
-                                    if a < 0 {
-                                        let a = (-a) as usize;
+            atom = atom.replace_map(|term, _, out| {
+                let AtomView::Fun(f) = term else {
+                    return;
+                };
 
-                                        if a > max_dummy {
-                                            max_dummy = a;
-                                        }
-                                        fbuilder = fbuilder
-                                            .add_arg(rep.to_symbolic([Atom::from(dummy(a))]));
-                                        **out = fbuilder.finish();
-                                    }
-                                }
-                            }
+                let name = f.get_symbol();
+                if name != rep.rep.symbol() {
+                    return;
+                }
+
+                let mut fbuilder = FunctionBuilder::new(name);
+
+                if f.get_nargs() == 1 {
+                    fbuilder = fbuilder.add_arg(rep.dim.to_symbolic());
+                    let arg = f.iter().next().unwrap();
+                    let a = if let Ok(a) = i64::try_from(arg) {
+                        if a < 0 {
+                            let a = (-a) as usize;
+
+                            a
+                        } else {
+                            return;
                         }
+                    } else if let AtomView::Fun(f) = arg
+                        && f.get_symbol() == self.dummy
+                        && f.get_nargs() == 1
+                        && let Ok(a) = usize::try_from(f.iter().next().unwrap())
+                    {
+                        a
+                    } else {
+                        return;
+                    };
+                    if a > max_dummy {
+                        max_dummy = a;
                     }
-                });
-            }
+                    fbuilder = fbuilder.add_arg(Atom::from(dummy(a)));
+                    **out = fbuilder.finish();
+                }
+            });
         }
 
         let reps: Vec<_> = [

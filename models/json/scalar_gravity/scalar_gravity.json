@@ -1,6 +1,48 @@
 {
   "couplings": [
     {
+      "expression": "UFO::{}::ZERO",
+      "name": "SSTmpart0",
+      "orders": [
+        [
+          "GRAV",
+          1
+        ]
+      ],
+      "value": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "expression": "UFO::{}::ZERO",
+      "name": "SSTTTmpart0",
+      "orders": [
+        [
+          "GRAV",
+          3
+        ]
+      ],
+      "value": [
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "expression": "UFO::{}::ZERO",
+      "name": "SSTTmpart0",
+      "orders": [
+        [
+          "GRAV",
+          2
+        ]
+      ],
+      "value": [
+        0.0,
+        0.0
+      ]
+    },
+    {
       "expression": "1𝑖/2*UFO::{}::kappa*UFO::{}::mass_scalar_1^2",
       "name": "SSTmpart1",
       "orders": [
@@ -298,13 +340,13 @@
       ]
     },
     {
-      "expression": "UFO::{}::ZERO",
+      "expression": null,
       "lhablock": "SCALARS",
       "lhacode": [
         3002
       ],
       "name": "width_scalar_1",
-      "nature": "internal",
+      "nature": "external",
       "parameter_type": "real",
       "value": [
         0.0,
@@ -326,13 +368,13 @@
       ]
     },
     {
-      "expression": "UFO::{}::ZERO",
+      "expression": null,
       "lhablock": "SCALARS",
       "lhacode": [
         3003
       ],
       "name": "width_scalar_2",
-      "nature": "internal",
+      "nature": "external",
       "parameter_type": "real",
       "value": [
         0.0,
@@ -433,7 +475,7 @@
   "particles": [
     {
       "antiname": "scalar_0",
-      "antitexname": "\\phi0",
+      "antitexname": "\\phi_0",
       "charge": 0.0,
       "color": 1,
       "ghost_number": 0,
@@ -442,13 +484,13 @@
       "name": "scalar_0",
       "pdg_code": 2000,
       "spin": 1,
-      "texname": "\\phi0",
+      "texname": "\\phi_0",
       "width": "ZERO",
       "y_charge": 0
     },
     {
       "antiname": "scalar_1",
-      "antitexname": "\\phi1",
+      "antitexname": "\\phi_1",
       "charge": 0.0,
       "color": 1,
       "ghost_number": 0,
@@ -457,13 +499,13 @@
       "name": "scalar_1",
       "pdg_code": 2001,
       "spin": 1,
-      "texname": "\\phi1",
+      "texname": "\\phi_1",
       "width": "width_scalar_1",
       "y_charge": 0
     },
     {
       "antiname": "scalar_2",
-      "antitexname": "\\phi2",
+      "antitexname": "\\phi_2",
       "charge": 0.0,
       "color": 1,
       "ghost_number": 0,
@@ -472,7 +514,7 @@
       "name": "scalar_2",
       "pdg_code": 2002,
       "spin": 1,
-      "texname": "\\phi2",
+      "texname": "\\phi_2",
       "width": "width_scalar_2",
       "y_charge": 0
     },
@@ -526,7 +568,7 @@
       ],
       "couplings": [
         [
-          null,
+          "SSTmpart0",
           "SST"
         ]
       ],
@@ -547,7 +589,7 @@
       ],
       "couplings": [
         [
-          null,
+          "SSTTmpart0",
           "SSTT"
         ]
       ],
@@ -569,7 +611,7 @@
       ],
       "couplings": [
         [
-          null,
+          "SSTTTmpart0",
           "SSTTT"
         ]
       ],

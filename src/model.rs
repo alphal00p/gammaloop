@@ -40,6 +40,7 @@ use symbolica::domains::integer::IntegerRing;
 use symbolica::domains::rational::{Fraction, Rational};
 use symbolica::evaluate::FunctionMap;
 use symbolica::id::Replacement;
+use tabled::settings::measurement::Min;
 use tracing::info;
 
 use color_eyre::Result;
@@ -1026,9 +1027,18 @@ impl Particle {
 
     pub(crate) fn spin_reps(&self) -> IndexLess<LibraryRep, Aind> {
         PermutedStructure::<IndexLess<LibraryRep, Aind>>::from_iter(match self.spin {
-            3 => vec![Minkowski {}.new_rep(4).cast()],
-            2 => vec![Bispinor {}.new_rep(4).cast()],
-            _ => vec![],
+            1 | 0 | -1 => vec![],
+            a => {
+                if a > 0 {
+                    if a % 2 == 0 {
+                        vec![Bispinor {}.new_rep(4).cast(); a.div_euclid(2) as usize]
+                    } else {
+                        vec![Minkowski {}.new_rep(4).cast(); a.div_euclid(2) as usize]
+                    }
+                } else {
+                    vec![]
+                }
+            }
         })
         .structure
     }

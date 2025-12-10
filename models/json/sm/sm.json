@@ -1,652 +1,652 @@
 {
   "couplings": [
     {
-      "expression": "-1𝑖/3*UFO::ee",
+      "expression": "-1𝑖/3*UFO::{}::ee",
       "name": "GC_1",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [0.0, -0.10265125574812292]
     },
     {
-      "expression": "2𝑖/3*UFO::ee",
+      "expression": "2𝑖/3*UFO::{}::ee",
       "name": "GC_2",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [0.0, 0.20530251149624584]
     },
     {
-      "expression": "-1𝑖*UFO::ee",
+      "expression": "-1𝑖*UFO::{}::ee",
       "name": "GC_3",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [0.0, -0.3079537672443688]
     },
     {
-      "expression": "1𝑖*UFO::ee",
+      "expression": "1𝑖*UFO::{}::ee",
       "name": "GC_4",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [0.0, 0.3079537672443688]
     },
     {
-      "expression": "1𝑖*UFO::ee^2",
+      "expression": "1𝑖*UFO::{}::ee^2",
       "name": "GC_5",
       "orders": [["QED", 2]],
-      "value": null
+      "value": [0.0, 0.09483552275999887]
     },
     {
-      "expression": "2𝑖*UFO::ee^2",
+      "expression": "2𝑖*UFO::{}::ee^2",
       "name": "GC_6",
       "orders": [["QED", 2]],
-      "value": null
+      "value": [0.0, 0.18967104551999775]
     },
     {
-      "expression": "-1/2*UFO::cw^(-1)*UFO::ee^2",
+      "expression": "-1/2*UFO::{}::cw^(-1)*UFO::{}::ee^2",
       "name": "GC_7",
       "orders": [["QED", 2]],
-      "value": null
+      "value": [-0.05376752624649809, 0.0]
     },
     {
-      "expression": "1𝑖/2*UFO::cw^(-1)*UFO::ee^2",
+      "expression": "1𝑖/2*UFO::{}::cw^(-1)*UFO::{}::ee^2",
       "name": "GC_8",
       "orders": [["QED", 2]],
-      "value": null
+      "value": [0.0, 0.05376752624649809]
     },
     {
-      "expression": "1/2*UFO::cw^(-1)*UFO::ee^2",
+      "expression": "1/2*UFO::{}::cw^(-1)*UFO::{}::ee^2",
       "name": "GC_9",
       "orders": [["QED", 2]],
-      "value": null
+      "value": [0.05376752624649809, 0.0]
     },
     {
-      "expression": "-1*UFO::G",
+      "expression": "-1*UFO::{}::G",
       "name": "GC_10",
       "orders": [["QCD", 1]],
-      "value": null
+      "value": [-1.2177157847767195, 0.0]
     },
     {
-      "expression": "1𝑖*UFO::G",
+      "expression": "1𝑖*UFO::{}::G",
       "name": "GC_11",
       "orders": [["QCD", 1]],
-      "value": null
+      "value": [0.0, 1.2177157847767195]
     },
     {
-      "expression": "1𝑖*UFO::G^2",
+      "expression": "1𝑖*UFO::{}::G^2",
       "name": "GC_12",
       "orders": [["QCD", 2]],
-      "value": null
+      "value": [0.0, 1.4828317324943818]
     },
     {
-      "expression": "UFO::I1x31",
+      "expression": "UFO::{}::I1x31",
       "name": "GC_13",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [0.0, 0.0]
     },
     {
-      "expression": "UFO::I1x32",
+      "expression": "UFO::{}::I1x32",
       "name": "GC_14",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [0.0, 0.0]
     },
     {
-      "expression": "UFO::I1x33",
+      "expression": "UFO::{}::I1x33",
       "name": "GC_15",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [0.026995554250465494, 0.0]
     },
     {
-      "expression": "-1*UFO::I2x12",
+      "expression": "-1*UFO::{}::I2x12",
       "name": "GC_16",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [0.0, 0.0]
     },
     {
-      "expression": "-1*UFO::I2x13",
+      "expression": "-1*UFO::{}::I2x13",
       "name": "GC_17",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [0.0, 0.0]
     },
     {
-      "expression": "-1*UFO::I2x22",
+      "expression": "-1*UFO::{}::I2x22",
       "name": "GC_18",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [0.0, 0.0]
     },
     {
-      "expression": "-1*UFO::I2x23",
+      "expression": "-1*UFO::{}::I2x23",
       "name": "GC_19",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [0.0, 0.0]
     },
     {
-      "expression": "-1*UFO::I2x32",
+      "expression": "-1*UFO::{}::I2x32",
       "name": "GC_20",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [0.0, 0.0]
     },
     {
-      "expression": "-1*UFO::I2x33",
+      "expression": "-1*UFO::{}::I2x33",
       "name": "GC_21",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [-0.9936661458150063, 0.0]
     },
     {
-      "expression": "UFO::I3x21",
+      "expression": "UFO::{}::I3x21",
       "name": "GC_22",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [0.0, 0.0]
     },
     {
-      "expression": "UFO::I3x22",
+      "expression": "UFO::{}::I3x22",
       "name": "GC_23",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [0.0, 0.0]
     },
     {
-      "expression": "UFO::I3x23",
+      "expression": "UFO::{}::I3x23",
       "name": "GC_24",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [0.0, 0.0]
     },
     {
-      "expression": "UFO::I3x31",
+      "expression": "UFO::{}::I3x31",
       "name": "GC_25",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [0.0, 0.0]
     },
     {
-      "expression": "UFO::I3x32",
+      "expression": "UFO::{}::I3x32",
       "name": "GC_26",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [0.0, 0.0]
     },
     {
-      "expression": "UFO::I3x33",
+      "expression": "UFO::{}::I3x33",
       "name": "GC_27",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [0.9936661458150063, 0.0]
     },
     {
-      "expression": "-1*UFO::I4x13",
+      "expression": "-1*UFO::{}::I4x13",
       "name": "GC_28",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [0.0, 0.0]
     },
     {
-      "expression": "-1*UFO::I4x23",
+      "expression": "-1*UFO::{}::I4x23",
       "name": "GC_29",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [0.0, 0.0]
     },
     {
-      "expression": "-1*UFO::I4x33",
+      "expression": "-1*UFO::{}::I4x33",
       "name": "GC_30",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [-0.026995554250465494, 0.0]
     },
     {
-      "expression": "-2𝑖*UFO::lam",
+      "expression": "-2𝑖*UFO::{}::lam",
       "name": "GC_31",
       "orders": [["QED", 2]],
-      "value": null
+      "value": [0.0, -0.2577382120338054]
     },
     {
-      "expression": "-4𝑖*UFO::lam",
+      "expression": "-4𝑖*UFO::{}::lam",
       "name": "GC_32",
       "orders": [["QED", 2]],
-      "value": null
+      "value": [0.0, -0.5154764240676108]
     },
     {
-      "expression": "-6𝑖*UFO::lam",
+      "expression": "-6𝑖*UFO::{}::lam",
       "name": "GC_33",
       "orders": [["QED", 2]],
-      "value": null
+      "value": [0.0, -0.7732146361014163]
     },
     {
-      "expression": "1𝑖/2*UFO::ee^2*UFO::sw^(-2)",
+      "expression": "1𝑖/2*UFO::{}::ee^2*UFO::{}::sw^(-2)",
       "name": "GC_34",
       "orders": [["QED", 2]],
-      "value": null
+      "value": [0.0, 0.2133566306452431]
     },
     {
-      "expression": "-1𝑖*UFO::ee^2*UFO::sw^(-2)",
+      "expression": "-1𝑖*UFO::{}::ee^2*UFO::{}::sw^(-2)",
       "name": "GC_35",
       "orders": [["QED", 2]],
-      "value": null
+      "value": [0.0, -0.4267132612904862]
     },
     {
-      "expression": "1𝑖*UFO::cw^2*UFO::ee^2*UFO::sw^(-2)",
+      "expression": "1𝑖*UFO::{}::cw^2*UFO::{}::ee^2*UFO::{}::sw^(-2)",
       "name": "GC_36",
       "orders": [["QED", 2]],
-      "value": null
+      "value": [0.0, 0.33187773853048735]
     },
     {
-      "expression": "-1/2*UFO::ee*UFO::sw^(-1)",
+      "expression": "-1/2*UFO::{}::ee*UFO::{}::sw^(-1)",
       "name": "GC_37",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [-0.3266164651737899, 0.0]
     },
     {
-      "expression": "-1𝑖/2*UFO::ee*UFO::sw^(-1)",
+      "expression": "-1𝑖/2*UFO::{}::ee*UFO::{}::sw^(-1)",
       "name": "GC_38",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [0.0, -0.3266164651737899]
     },
     {
-      "expression": "1𝑖/2*UFO::ee*UFO::sw^(-1)",
+      "expression": "1𝑖/2*UFO::{}::ee*UFO::{}::sw^(-1)",
       "name": "GC_39",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [0.0, 0.3266164651737899]
     },
     {
-      "expression": "(1/2)^(1/2)*1𝑖*UFO::ee*UFO::sw^(-1)",
+      "expression": "(1/2)^(1/2)*1𝑖*UFO::{}::ee*UFO::{}::sw^(-1)",
       "name": "GC_40",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [0.0, 0.4619054347431334]
     },
     {
-      "expression": "(1/2)^(1/2)*1𝑖*UFO::CKM1x1*UFO::ee*UFO::sw^(-1)",
+      "expression": "(1/2)^(1/2)*1𝑖*UFO::{}::CKM1x1*UFO::{}::ee*UFO::{}::sw^(-1)",
       "name": "GC_41",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [0.0, 0.4619054347431334]
     },
     {
-      "expression": "(1/2)^(1/2)*1𝑖*UFO::CKM1x2*UFO::ee*UFO::sw^(-1)",
+      "expression": "(1/2)^(1/2)*1𝑖*UFO::{}::CKM1x2*UFO::{}::ee*UFO::{}::sw^(-1)",
       "name": "GC_42",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [0.0, 0.0]
     },
     {
-      "expression": "(1/2)^(1/2)*1𝑖*UFO::CKM1x3*UFO::ee*UFO::sw^(-1)",
+      "expression": "(1/2)^(1/2)*1𝑖*UFO::{}::CKM1x3*UFO::{}::ee*UFO::{}::sw^(-1)",
       "name": "GC_43",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [0.0, 0.0]
     },
     {
-      "expression": "(1/2)^(1/2)*1𝑖*UFO::CKM2x1*UFO::ee*UFO::sw^(-1)",
+      "expression": "(1/2)^(1/2)*1𝑖*UFO::{}::CKM2x1*UFO::{}::ee*UFO::{}::sw^(-1)",
       "name": "GC_44",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [0.0, 0.0]
     },
     {
-      "expression": "(1/2)^(1/2)*1𝑖*UFO::CKM2x2*UFO::ee*UFO::sw^(-1)",
+      "expression": "(1/2)^(1/2)*1𝑖*UFO::{}::CKM2x2*UFO::{}::ee*UFO::{}::sw^(-1)",
       "name": "GC_45",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [0.0, 0.4619054347431334]
     },
     {
-      "expression": "(1/2)^(1/2)*1𝑖*UFO::CKM2x3*UFO::ee*UFO::sw^(-1)",
+      "expression": "(1/2)^(1/2)*1𝑖*UFO::{}::CKM2x3*UFO::{}::ee*UFO::{}::sw^(-1)",
       "name": "GC_46",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [0.0, 0.0]
     },
     {
-      "expression": "(1/2)^(1/2)*1𝑖*UFO::CKM3x1*UFO::ee*UFO::sw^(-1)",
+      "expression": "(1/2)^(1/2)*1𝑖*UFO::{}::CKM3x1*UFO::{}::ee*UFO::{}::sw^(-1)",
       "name": "GC_47",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [0.0, 0.0]
     },
     {
-      "expression": "(1/2)^(1/2)*1𝑖*UFO::CKM3x2*UFO::ee*UFO::sw^(-1)",
+      "expression": "(1/2)^(1/2)*1𝑖*UFO::{}::CKM3x2*UFO::{}::ee*UFO::{}::sw^(-1)",
       "name": "GC_48",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [0.0, 0.0]
     },
     {
-      "expression": "(1/2)^(1/2)*1𝑖*UFO::CKM3x3*UFO::ee*UFO::sw^(-1)",
+      "expression": "(1/2)^(1/2)*1𝑖*UFO::{}::CKM3x3*UFO::{}::ee*UFO::{}::sw^(-1)",
       "name": "GC_49",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [0.0, 0.4619054347431334]
     },
     {
-      "expression": "-1𝑖/2*UFO::cw*UFO::ee*UFO::sw^(-1)",
+      "expression": "-1𝑖/2*UFO::{}::cw*UFO::{}::ee*UFO::{}::sw^(-1)",
       "name": "GC_50",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [0.0, -0.28804415396362726]
     },
     {
-      "expression": "1𝑖/2*UFO::cw*UFO::ee*UFO::sw^(-1)",
+      "expression": "1𝑖/2*UFO::{}::cw*UFO::{}::ee*UFO::{}::sw^(-1)",
       "name": "GC_51",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [0.0, 0.28804415396362726]
     },
     {
-      "expression": "-1𝑖*UFO::cw*UFO::ee*UFO::sw^(-1)",
+      "expression": "-1𝑖*UFO::{}::cw*UFO::{}::ee*UFO::{}::sw^(-1)",
       "name": "GC_52",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [0.0, -0.5760883079272545]
     },
     {
-      "expression": "1𝑖*UFO::cw*UFO::ee*UFO::sw^(-1)",
+      "expression": "1𝑖*UFO::{}::cw*UFO::{}::ee*UFO::{}::sw^(-1)",
       "name": "GC_53",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [0.0, 0.5760883079272545]
     },
     {
-      "expression": "-1/2*UFO::ee^2*UFO::sw^(-1)",
+      "expression": "-1/2*UFO::{}::ee^2*UFO::{}::sw^(-1)",
       "name": "GC_54",
       "orders": [["QED", 2]],
-      "value": null
+      "value": [-0.1005827708943078, 0.0]
     },
     {
-      "expression": "-1𝑖/2*UFO::ee^2*UFO::sw^(-1)",
+      "expression": "-1𝑖/2*UFO::{}::ee^2*UFO::{}::sw^(-1)",
       "name": "GC_55",
       "orders": [["QED", 2]],
-      "value": null
+      "value": [0.0, -0.1005827708943078]
     },
     {
-      "expression": "1/2*UFO::ee^2*UFO::sw^(-1)",
+      "expression": "1/2*UFO::{}::ee^2*UFO::{}::sw^(-1)",
       "name": "GC_56",
       "orders": [["QED", 2]],
-      "value": null
+      "value": [0.1005827708943078, 0.0]
     },
     {
-      "expression": "-2𝑖*UFO::cw*UFO::ee^2*UFO::sw^(-1)",
+      "expression": "-2𝑖*UFO::{}::cw*UFO::{}::ee^2*UFO::{}::sw^(-1)",
       "name": "GC_57",
       "orders": [["QED", 2]],
-      "value": null
+      "value": [0.0, -0.354817129383264]
     },
     {
-      "expression": "-1𝑖/6*UFO::cw^(-1)*UFO::ee*UFO::sw",
+      "expression": "-1𝑖/6*UFO::{}::cw^(-1)*UFO::{}::ee*UFO::{}::sw",
       "name": "GC_58",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [0.0, -0.02743662775741614]
     },
     {
-      "expression": "1𝑖/2*UFO::cw^(-1)*UFO::ee*UFO::sw",
+      "expression": "1𝑖/2*UFO::{}::cw^(-1)*UFO::{}::ee*UFO::{}::sw",
       "name": "GC_59",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [0.0, 0.08230988327224842]
     },
     {
-      "expression": "-1/2*UFO::cw*UFO::ee*UFO::sw^(-1)+-1/2*UFO::cw^(-1)*UFO::ee*UFO::sw",
+      "expression": "-1/2*UFO::{}::cw*UFO::{}::ee*UFO::{}::sw^(-1)+-1/2*UFO::{}::cw^(-1)*UFO::{}::ee*UFO::{}::sw",
       "name": "GC_60",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [-0.3703540372358757, 0.0]
     },
     {
-      "expression": "-1𝑖/2*UFO::cw*UFO::ee*UFO::sw^(-1)+1𝑖/2*UFO::cw^(-1)*UFO::ee*UFO::sw",
+      "expression": "-1𝑖/2*UFO::{}::cw*UFO::{}::ee*UFO::{}::sw^(-1)+1𝑖/2*UFO::{}::cw^(-1)*UFO::{}::ee*UFO::{}::sw",
       "name": "GC_61",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [0.0, -0.20573427069137884]
     },
     {
-      "expression": "1𝑖/2*UFO::cw*UFO::ee*UFO::sw^(-1)+1𝑖/2*UFO::cw^(-1)*UFO::ee*UFO::sw",
+      "expression": "1𝑖/2*UFO::{}::cw*UFO::{}::ee*UFO::{}::sw^(-1)+1𝑖/2*UFO::{}::cw^(-1)*UFO::{}::ee*UFO::{}::sw",
       "name": "GC_62",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [0.0, 0.3703540372358757]
     },
     {
-      "expression": "-1𝑖*UFO::cw^(-1)*UFO::ee^2*UFO::sw+1𝑖*UFO::cw*UFO::ee^2*UFO::sw^(-1)",
+      "expression": "-1𝑖*UFO::{}::cw^(-1)*UFO::{}::ee^2*UFO::{}::sw+1𝑖*UFO::{}::cw*UFO::{}::ee^2*UFO::{}::sw^(-1)",
       "name": "GC_63",
       "orders": [["QED", 2]],
-      "value": null
+      "value": [0.0, 0.12671328742136567]
     },
     {
-      "expression": "-1𝑖*UFO::ee^2+1𝑖/2*UFO::cw^(-2)*UFO::ee^2*UFO::sw^2+1𝑖/2*UFO::cw^2*UFO::ee^2*UFO::sw^(-2)",
+      "expression": "-1𝑖*UFO::{}::ee^2+1𝑖/2*UFO::{}::cw^(-2)*UFO::{}::ee^2*UFO::{}::sw^2+1𝑖/2*UFO::{}::cw^2*UFO::{}::ee^2*UFO::{}::sw^(-2)",
       "name": "GC_64",
       "orders": [["QED", 2]],
-      "value": null
+      "value": [0.0, 0.08465318027382712]
     },
     {
-      "expression": "1𝑖*UFO::ee^2+1𝑖/2*UFO::cw^(-2)*UFO::ee^2*UFO::sw^2+1𝑖/2*UFO::cw^2*UFO::ee^2*UFO::sw^(-2)",
+      "expression": "1𝑖*UFO::{}::ee^2+1𝑖/2*UFO::{}::cw^(-2)*UFO::{}::ee^2*UFO::{}::sw^2+1𝑖/2*UFO::{}::cw^2*UFO::{}::ee^2*UFO::{}::sw^(-2)",
       "name": "GC_65",
       "orders": [["QED", 2]],
-      "value": null
+      "value": [0.0, 0.27432422579382487]
     },
     {
-      "expression": "-1/2*UFO::cw^(-1)*UFO::ee^2*UFO::vev",
+      "expression": "-1/2*UFO::{}::cw^(-1)*UFO::{}::ee^2*UFO::{}::vev",
       "name": "GC_66",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [-13.238557408361698, 0.0]
     },
     {
-      "expression": "1/2*UFO::cw^(-1)*UFO::ee^2*UFO::vev",
+      "expression": "1/2*UFO::{}::cw^(-1)*UFO::{}::ee^2*UFO::{}::vev",
       "name": "GC_67",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [13.238557408361698, 0.0]
     },
     {
-      "expression": "-2𝑖*UFO::lam*UFO::vev",
+      "expression": "-2𝑖*UFO::{}::lam*UFO::{}::vev",
       "name": "GC_68",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [0.0, -63.45990516088257]
     },
     {
-      "expression": "-6𝑖*UFO::lam*UFO::vev",
+      "expression": "-6𝑖*UFO::{}::lam*UFO::{}::vev",
       "name": "GC_69",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [0.0, -190.37971548264773]
     },
     {
-      "expression": "-1/4*UFO::ee^2*UFO::sw^(-2)*UFO::vev",
+      "expression": "-1/4*UFO::{}::ee^2*UFO::{}::sw^(-2)*UFO::{}::vev",
       "name": "GC_70",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [-26.266170311635243, 0.0]
     },
     {
-      "expression": "-1𝑖/4*UFO::ee^2*UFO::sw^(-2)*UFO::vev",
+      "expression": "-1𝑖/4*UFO::{}::ee^2*UFO::{}::sw^(-2)*UFO::{}::vev",
       "name": "GC_71",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [0.0, -26.266170311635243]
     },
     {
-      "expression": "1𝑖/2*UFO::ee^2*UFO::sw^(-2)*UFO::vev",
+      "expression": "1𝑖/2*UFO::{}::ee^2*UFO::{}::sw^(-2)*UFO::{}::vev",
       "name": "GC_72",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [0.0, 52.532340623270485]
     },
     {
-      "expression": "1/4*UFO::ee^2*UFO::sw^(-2)*UFO::vev",
+      "expression": "1/4*UFO::{}::ee^2*UFO::{}::sw^(-2)*UFO::{}::vev",
       "name": "GC_73",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [26.266170311635243, 0.0]
     },
     {
-      "expression": "-1/2*UFO::ee^2*UFO::sw^(-1)*UFO::vev",
+      "expression": "-1/2*UFO::{}::ee^2*UFO::{}::sw^(-1)*UFO::{}::vev",
       "name": "GC_74",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [-24.765334761204713, 0.0]
     },
     {
-      "expression": "1/2*UFO::ee^2*UFO::sw^(-1)*UFO::vev",
+      "expression": "1/2*UFO::{}::ee^2*UFO::{}::sw^(-1)*UFO::{}::vev",
       "name": "GC_75",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [24.765334761204713, 0.0]
     },
     {
-      "expression": "-1/4*UFO::cw*UFO::ee^2*UFO::sw^(-2)*UFO::vev+-1/4*UFO::cw^(-1)*UFO::ee^2*UFO::vev",
+      "expression": "-1/4*UFO::{}::cw*UFO::{}::ee^2*UFO::{}::sw^(-2)*UFO::{}::vev+-1/4*UFO::{}::cw^(-1)*UFO::{}::ee^2*UFO::{}::vev",
       "name": "GC_76",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [-29.783502226267554, 0.0]
     },
     {
-      "expression": "-1/4*UFO::cw*UFO::ee^2*UFO::sw^(-2)*UFO::vev+1/4*UFO::cw^(-1)*UFO::ee^2*UFO::vev",
+      "expression": "-1/4*UFO::{}::cw*UFO::{}::ee^2*UFO::{}::sw^(-2)*UFO::{}::vev+1/4*UFO::{}::cw^(-1)*UFO::{}::ee^2*UFO::{}::vev",
       "name": "GC_77",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [-16.544944817905854, 0.0]
     },
     {
-      "expression": "-1/4*UFO::cw^(-1)*UFO::ee^2*UFO::vev+1/4*UFO::cw*UFO::ee^2*UFO::sw^(-2)*UFO::vev",
+      "expression": "-1/4*UFO::{}::cw^(-1)*UFO::{}::ee^2*UFO::{}::vev+1/4*UFO::{}::cw*UFO::{}::ee^2*UFO::{}::sw^(-2)*UFO::{}::vev",
       "name": "GC_78",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [16.544944817905854, 0.0]
     },
     {
-      "expression": "1/4*UFO::cw*UFO::ee^2*UFO::sw^(-2)*UFO::vev+1/4*UFO::cw^(-1)*UFO::ee^2*UFO::vev",
+      "expression": "1/4*UFO::{}::cw*UFO::{}::ee^2*UFO::{}::sw^(-2)*UFO::{}::vev+1/4*UFO::{}::cw^(-1)*UFO::{}::ee^2*UFO::{}::vev",
       "name": "GC_79",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [29.783502226267554, 0.0]
     },
     {
-      "expression": "-1𝑖/2*UFO::ee^2*UFO::vev+-1𝑖/4*UFO::cw^(-2)*UFO::ee^2*UFO::sw^2*UFO::vev+-1𝑖/4*UFO::cw^2*UFO::ee^2*UFO::sw^(-2)*UFO::vev",
+      "expression": "-1𝑖/2*UFO::{}::ee^2*UFO::{}::vev+-1𝑖/4*UFO::{}::cw^(-2)*UFO::{}::ee^2*UFO::{}::sw^2*UFO::{}::vev+-1𝑖/4*UFO::{}::cw^2*UFO::{}::ee^2*UFO::{}::sw^(-2)*UFO::{}::vev",
       "name": "GC_80",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [0.0, -33.77184394746503]
     },
     {
-      "expression": "1𝑖*UFO::ee^2*UFO::vev+1𝑖/2*UFO::cw^(-2)*UFO::ee^2*UFO::sw^2*UFO::vev+1𝑖/2*UFO::cw^2*UFO::ee^2*UFO::sw^(-2)*UFO::vev",
+      "expression": "1𝑖*UFO::{}::ee^2*UFO::{}::vev+1𝑖/2*UFO::{}::cw^(-2)*UFO::{}::ee^2*UFO::{}::sw^2*UFO::{}::vev+1𝑖/2*UFO::{}::cw^2*UFO::{}::ee^2*UFO::{}::sw^(-2)*UFO::{}::vev",
       "name": "GC_81",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [0.0, 67.54368789493006]
     },
     {
-      "expression": "(1/2)^(1/2)*-1*UFO::yb",
+      "expression": "(1/2)^(1/2)*-1*UFO::{}::yb",
       "name": "GC_82",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [-0.01908873947239348, 0.0]
     },
     {
-      "expression": "(1/2)^(1/2)*-1𝑖*UFO::yb",
+      "expression": "(1/2)^(1/2)*-1𝑖*UFO::{}::yb",
       "name": "GC_83",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [0.0, -0.01908873947239348]
     },
     {
-      "expression": "(1/2)^(1/2)*-1𝑖*UFO::yc",
+      "expression": "(1/2)^(1/2)*-1𝑖*UFO::{}::yc",
       "name": "GC_84",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [0.0, 0.0]
     },
     {
-      "expression": "(1/2)^(1/2)*UFO::yc",
+      "expression": "(1/2)^(1/2)*UFO::{}::yc",
       "name": "GC_85",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [0.0, 0.0]
     },
     {
-      "expression": "-1*UFO::ye",
+      "expression": "-1*UFO::{}::ye",
       "name": "GC_86",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [0.0, 0.0]
     },
     {
-      "expression": "UFO::ye",
+      "expression": "UFO::{}::ye",
       "name": "GC_87",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [0.0, 0.0]
     },
     {
-      "expression": "(1/2)^(1/2)*-1*UFO::ye",
+      "expression": "(1/2)^(1/2)*-1*UFO::{}::ye",
       "name": "GC_88",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [0.0, 0.0]
     },
     {
-      "expression": "(1/2)^(1/2)*-1𝑖*UFO::ye",
+      "expression": "(1/2)^(1/2)*-1𝑖*UFO::{}::ye",
       "name": "GC_89",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [0.0, 0.0]
     },
     {
-      "expression": "-1*UFO::ym",
+      "expression": "-1*UFO::{}::ym",
       "name": "GC_90",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [0.0, 0.0]
     },
     {
-      "expression": "UFO::ym",
+      "expression": "UFO::{}::ym",
       "name": "GC_91",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [0.0, 0.0]
     },
     {
-      "expression": "(1/2)^(1/2)*-1*UFO::ym",
+      "expression": "(1/2)^(1/2)*-1*UFO::{}::ym",
       "name": "GC_92",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [0.0, 0.0]
     },
     {
-      "expression": "(1/2)^(1/2)*-1𝑖*UFO::ym",
+      "expression": "(1/2)^(1/2)*-1𝑖*UFO::{}::ym",
       "name": "GC_93",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [0.0, 0.0]
     },
     {
-      "expression": "(1/2)^(1/2)*-1𝑖*UFO::yt",
+      "expression": "(1/2)^(1/2)*-1𝑖*UFO::{}::yt",
       "name": "GC_94",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [0.0, -0.7026280699412918]
     },
     {
-      "expression": "(1/2)^(1/2)*UFO::yt",
+      "expression": "(1/2)^(1/2)*UFO::{}::yt",
       "name": "GC_95",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [0.7026280699412918, 0.0]
     },
     {
-      "expression": "-1*UFO::ytau",
+      "expression": "-1*UFO::{}::ytau",
       "name": "GC_96",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [-0.010206617000654719, 0.0]
     },
     {
-      "expression": "UFO::ytau",
+      "expression": "UFO::{}::ytau",
       "name": "GC_97",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [0.010206617000654719, 0.0]
     },
     {
-      "expression": "(1/2)^(1/2)*-1*UFO::ytau",
+      "expression": "(1/2)^(1/2)*-1*UFO::{}::ytau",
       "name": "GC_98",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [-0.007217168094136852, 0.0]
     },
     {
-      "expression": "(1/2)^(1/2)*-1𝑖*UFO::ytau",
+      "expression": "(1/2)^(1/2)*-1𝑖*UFO::{}::ytau",
       "name": "GC_99",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [0.0, -0.007217168094136852]
     },
     {
-      "expression": "(1/2)^(1/2)*1𝑖*UFO::complexconjugate(UFO::CKM1x1)*UFO::ee*UFO::sw^(-1)",
+      "expression": "(1/2)^(1/2)*1𝑖*UFO::{}::complexconjugate(UFO::{}::CKM1x1)*UFO::{}::ee*UFO::{}::sw^(-1)",
       "name": "GC_100",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [0.0, 0.4619054347431334]
     },
     {
-      "expression": "(1/2)^(1/2)*1𝑖*UFO::complexconjugate(UFO::CKM1x2)*UFO::ee*UFO::sw^(-1)",
+      "expression": "(1/2)^(1/2)*1𝑖*UFO::{}::complexconjugate(UFO::{}::CKM1x2)*UFO::{}::ee*UFO::{}::sw^(-1)",
       "name": "GC_101",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [0.0, 0.0]
     },
     {
-      "expression": "(1/2)^(1/2)*1𝑖*UFO::complexconjugate(UFO::CKM1x3)*UFO::ee*UFO::sw^(-1)",
+      "expression": "(1/2)^(1/2)*1𝑖*UFO::{}::complexconjugate(UFO::{}::CKM1x3)*UFO::{}::ee*UFO::{}::sw^(-1)",
       "name": "GC_102",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [0.0, 0.0]
     },
     {
-      "expression": "(1/2)^(1/2)*1𝑖*UFO::complexconjugate(UFO::CKM2x1)*UFO::ee*UFO::sw^(-1)",
+      "expression": "(1/2)^(1/2)*1𝑖*UFO::{}::complexconjugate(UFO::{}::CKM2x1)*UFO::{}::ee*UFO::{}::sw^(-1)",
       "name": "GC_103",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [0.0, 0.0]
     },
     {
-      "expression": "(1/2)^(1/2)*1𝑖*UFO::complexconjugate(UFO::CKM2x2)*UFO::ee*UFO::sw^(-1)",
+      "expression": "(1/2)^(1/2)*1𝑖*UFO::{}::complexconjugate(UFO::{}::CKM2x2)*UFO::{}::ee*UFO::{}::sw^(-1)",
       "name": "GC_104",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [0.0, 0.4619054347431334]
     },
     {
-      "expression": "(1/2)^(1/2)*1𝑖*UFO::complexconjugate(UFO::CKM2x3)*UFO::ee*UFO::sw^(-1)",
+      "expression": "(1/2)^(1/2)*1𝑖*UFO::{}::complexconjugate(UFO::{}::CKM2x3)*UFO::{}::ee*UFO::{}::sw^(-1)",
       "name": "GC_105",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [0.0, 0.0]
     },
     {
-      "expression": "(1/2)^(1/2)*1𝑖*UFO::complexconjugate(UFO::CKM3x1)*UFO::ee*UFO::sw^(-1)",
+      "expression": "(1/2)^(1/2)*1𝑖*UFO::{}::complexconjugate(UFO::{}::CKM3x1)*UFO::{}::ee*UFO::{}::sw^(-1)",
       "name": "GC_106",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [0.0, 0.0]
     },
     {
-      "expression": "(1/2)^(1/2)*1𝑖*UFO::complexconjugate(UFO::CKM3x2)*UFO::ee*UFO::sw^(-1)",
+      "expression": "(1/2)^(1/2)*1𝑖*UFO::{}::complexconjugate(UFO::{}::CKM3x2)*UFO::{}::ee*UFO::{}::sw^(-1)",
       "name": "GC_107",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [0.0, 0.0]
     },
     {
-      "expression": "(1/2)^(1/2)*1𝑖*UFO::complexconjugate(UFO::CKM3x3)*UFO::ee*UFO::sw^(-1)",
+      "expression": "(1/2)^(1/2)*1𝑖*UFO::{}::complexconjugate(UFO::{}::CKM3x3)*UFO::{}::ee*UFO::{}::sw^(-1)",
       "name": "GC_108",
       "orders": [["QED", 1]],
-      "value": null
+      "value": [0.0, 0.4619054347431334]
     }
   ],
   "lorentz_structures": [
@@ -658,7 +658,7 @@
     {
       "name": "UUV1",
       "spins": [-1, -1, 3],
-      "structure": "UFO::P(3,2)+UFO::P(3,3)"
+      "structure": "UFO::{}::P(UFO::{}::idx(1,3),UFO::{}::idx(1,2))+UFO::{}::P(UFO::{}::idx(1,3),UFO::{}::idx(1,3))"
     },
     {
       "name": "SSS1",
@@ -668,62 +668,62 @@
     {
       "name": "FFS1",
       "spins": [2, 2, 1],
-      "structure": "UFO::ProjM(1,2)"
+      "structure": "UFO::{}::ProjM(UFO::{}::idx(1,1),UFO::{}::idx(1,2))"
     },
     {
       "name": "FFS2",
       "spins": [2, 2, 1],
-      "structure": "-1*UFO::ProjP(1,2)+UFO::ProjM(1,2)"
+      "structure": "-1*UFO::{}::ProjP(UFO::{}::idx(1,1),UFO::{}::idx(1,2))+UFO::{}::ProjM(UFO::{}::idx(1,1),UFO::{}::idx(1,2))"
     },
     {
       "name": "FFS3",
       "spins": [2, 2, 1],
-      "structure": "UFO::ProjP(1,2)"
+      "structure": "UFO::{}::ProjP(UFO::{}::idx(1,1),UFO::{}::idx(1,2))"
     },
     {
       "name": "FFS4",
       "spins": [2, 2, 1],
-      "structure": "UFO::ProjM(1,2)+UFO::ProjP(1,2)"
+      "structure": "UFO::{}::ProjM(UFO::{}::idx(1,1),UFO::{}::idx(1,2))+UFO::{}::ProjP(UFO::{}::idx(1,1),UFO::{}::idx(1,2))"
     },
     {
       "name": "FFV1",
       "spins": [2, 2, 3],
-      "structure": "UFO::Gamma(3,1,2)"
+      "structure": "UFO::{}::Gamma(UFO::{}::idx(1,3),UFO::{}::idx(1,1),UFO::{}::idx(1,2))"
     },
     {
       "name": "FFV2",
       "spins": [2, 2, 3],
-      "structure": "UFO::Gamma(3,1,-1)*UFO::ProjM(-1,2)"
+      "structure": "UFO::{}::Gamma(UFO::{}::idx(1,3),UFO::{}::idx(1,1),UFO::{}::dummy(1))*UFO::{}::ProjM(UFO::{}::dummy(1),UFO::{}::idx(1,2))"
     },
     {
       "name": "FFV3",
       "spins": [2, 2, 3],
-      "structure": "-2*UFO::Gamma(3,1,-1)*UFO::ProjP(-1,2)+UFO::Gamma(3,1,-1)*UFO::ProjM(-1,2)"
+      "structure": "-2*UFO::{}::Gamma(UFO::{}::idx(1,3),UFO::{}::idx(1,1),UFO::{}::dummy(1))*UFO::{}::ProjP(UFO::{}::dummy(1),UFO::{}::idx(1,2))+UFO::{}::Gamma(UFO::{}::idx(1,3),UFO::{}::idx(1,1),UFO::{}::dummy(1))*UFO::{}::ProjM(UFO::{}::dummy(1),UFO::{}::idx(1,2))"
     },
     {
       "name": "FFV4",
       "spins": [2, 2, 3],
-      "structure": "2*UFO::Gamma(3,1,-1)*UFO::ProjP(-1,2)+UFO::Gamma(3,1,-1)*UFO::ProjM(-1,2)"
+      "structure": "2*UFO::{}::Gamma(UFO::{}::idx(1,3),UFO::{}::idx(1,1),UFO::{}::dummy(1))*UFO::{}::ProjP(UFO::{}::dummy(1),UFO::{}::idx(1,2))+UFO::{}::Gamma(UFO::{}::idx(1,3),UFO::{}::idx(1,1),UFO::{}::dummy(1))*UFO::{}::ProjM(UFO::{}::dummy(1),UFO::{}::idx(1,2))"
     },
     {
       "name": "FFV5",
       "spins": [2, 2, 3],
-      "structure": "4*UFO::Gamma(3,1,-1)*UFO::ProjP(-1,2)+UFO::Gamma(3,1,-1)*UFO::ProjM(-1,2)"
+      "structure": "4*UFO::{}::Gamma(UFO::{}::idx(1,3),UFO::{}::idx(1,1),UFO::{}::dummy(1))*UFO::{}::ProjP(UFO::{}::dummy(1),UFO::{}::idx(1,2))+UFO::{}::Gamma(UFO::{}::idx(1,3),UFO::{}::idx(1,1),UFO::{}::dummy(1))*UFO::{}::ProjM(UFO::{}::dummy(1),UFO::{}::idx(1,2))"
     },
     {
       "name": "VSS1",
       "spins": [3, 1, 1],
-      "structure": "-1*UFO::P(1,3)+UFO::P(1,2)"
+      "structure": "-1*UFO::{}::P(UFO::{}::idx(1,1),UFO::{}::idx(1,3))+UFO::{}::P(UFO::{}::idx(1,1),UFO::{}::idx(1,2))"
     },
     {
       "name": "VVS1",
       "spins": [3, 3, 1],
-      "structure": "UFO::Metric(1,2)"
+      "structure": "UFO::{}::Metric(UFO::{}::idx(1,1),UFO::{}::idx(1,2))"
     },
     {
       "name": "VVV1",
       "spins": [3, 3, 3],
-      "structure": "-1*UFO::Metric(1,2)*UFO::P(3,2)+-1*UFO::Metric(1,3)*UFO::P(2,1)+-1*UFO::Metric(2,3)*UFO::P(1,3)+UFO::Metric(1,2)*UFO::P(3,1)+UFO::Metric(1,3)*UFO::P(2,3)+UFO::Metric(2,3)*UFO::P(1,2)"
+      "structure": "-1*UFO::{}::Metric(UFO::{}::idx(1,1),UFO::{}::idx(1,2))*UFO::{}::P(UFO::{}::idx(1,3),UFO::{}::idx(1,2))+-1*UFO::{}::Metric(UFO::{}::idx(1,1),UFO::{}::idx(1,3))*UFO::{}::P(UFO::{}::idx(1,2),UFO::{}::idx(1,1))+-1*UFO::{}::Metric(UFO::{}::idx(1,2),UFO::{}::idx(1,3))*UFO::{}::P(UFO::{}::idx(1,1),UFO::{}::idx(1,3))+UFO::{}::Metric(UFO::{}::idx(1,1),UFO::{}::idx(1,2))*UFO::{}::P(UFO::{}::idx(1,3),UFO::{}::idx(1,1))+UFO::{}::Metric(UFO::{}::idx(1,1),UFO::{}::idx(1,3))*UFO::{}::P(UFO::{}::idx(1,2),UFO::{}::idx(1,3))+UFO::{}::Metric(UFO::{}::idx(1,2),UFO::{}::idx(1,3))*UFO::{}::P(UFO::{}::idx(1,1),UFO::{}::idx(1,2))"
     },
     {
       "name": "SSSS1",
@@ -733,32 +733,32 @@
     {
       "name": "VVSS1",
       "spins": [3, 3, 1, 1],
-      "structure": "UFO::Metric(1,2)"
+      "structure": "UFO::{}::Metric(UFO::{}::idx(1,1),UFO::{}::idx(1,2))"
     },
     {
       "name": "VVVV1",
       "spins": [3, 3, 3, 3],
-      "structure": "-1*UFO::Metric(1,3)*UFO::Metric(2,4)+UFO::Metric(1,4)*UFO::Metric(2,3)"
+      "structure": "-1*UFO::{}::Metric(UFO::{}::idx(1,1),UFO::{}::idx(1,3))*UFO::{}::Metric(UFO::{}::idx(1,2),UFO::{}::idx(1,4))+UFO::{}::Metric(UFO::{}::idx(1,1),UFO::{}::idx(1,4))*UFO::{}::Metric(UFO::{}::idx(1,2),UFO::{}::idx(1,3))"
     },
     {
       "name": "VVVV2",
       "spins": [3, 3, 3, 3],
-      "structure": "-2*UFO::Metric(1,2)*UFO::Metric(3,4)+UFO::Metric(1,3)*UFO::Metric(2,4)+UFO::Metric(1,4)*UFO::Metric(2,3)"
+      "structure": "-2*UFO::{}::Metric(UFO::{}::idx(1,1),UFO::{}::idx(1,2))*UFO::{}::Metric(UFO::{}::idx(1,3),UFO::{}::idx(1,4))+UFO::{}::Metric(UFO::{}::idx(1,1),UFO::{}::idx(1,3))*UFO::{}::Metric(UFO::{}::idx(1,2),UFO::{}::idx(1,4))+UFO::{}::Metric(UFO::{}::idx(1,1),UFO::{}::idx(1,4))*UFO::{}::Metric(UFO::{}::idx(1,2),UFO::{}::idx(1,3))"
     },
     {
       "name": "VVVV3",
       "spins": [3, 3, 3, 3],
-      "structure": "-1*UFO::Metric(1,2)*UFO::Metric(3,4)+UFO::Metric(1,4)*UFO::Metric(2,3)"
+      "structure": "-1*UFO::{}::Metric(UFO::{}::idx(1,1),UFO::{}::idx(1,2))*UFO::{}::Metric(UFO::{}::idx(1,3),UFO::{}::idx(1,4))+UFO::{}::Metric(UFO::{}::idx(1,1),UFO::{}::idx(1,4))*UFO::{}::Metric(UFO::{}::idx(1,2),UFO::{}::idx(1,3))"
     },
     {
       "name": "VVVV4",
       "spins": [3, 3, 3, 3],
-      "structure": "-1*UFO::Metric(1,2)*UFO::Metric(3,4)+UFO::Metric(1,3)*UFO::Metric(2,4)"
+      "structure": "-1*UFO::{}::Metric(UFO::{}::idx(1,1),UFO::{}::idx(1,2))*UFO::{}::Metric(UFO::{}::idx(1,3),UFO::{}::idx(1,4))+UFO::{}::Metric(UFO::{}::idx(1,1),UFO::{}::idx(1,3))*UFO::{}::Metric(UFO::{}::idx(1,2),UFO::{}::idx(1,4))"
     },
     {
       "name": "VVVV5",
       "spins": [3, 3, 3, 3],
-      "structure": "-1/2*UFO::Metric(1,2)*UFO::Metric(3,4)+-1/2*UFO::Metric(1,3)*UFO::Metric(2,4)+UFO::Metric(1,4)*UFO::Metric(2,3)"
+      "structure": "-1/2*UFO::{}::Metric(UFO::{}::idx(1,1),UFO::{}::idx(1,2))*UFO::{}::Metric(UFO::{}::idx(1,3),UFO::{}::idx(1,4))+-1/2*UFO::{}::Metric(UFO::{}::idx(1,1),UFO::{}::idx(1,3))*UFO::{}::Metric(UFO::{}::idx(1,2),UFO::{}::idx(1,4))+UFO::{}::Metric(UFO::{}::idx(1,1),UFO::{}::idx(1,4))*UFO::{}::Metric(UFO::{}::idx(1,2),UFO::{}::idx(1,3))"
     }
   ],
   "name": "sm",
@@ -782,7 +782,7 @@
       "name": "aEWM1",
       "nature": "external",
       "parameter_type": "real",
-      "value": [132.50698, 0.0]
+      "value": [132.507, 0.0]
     },
     {
       "expression": null,
@@ -809,7 +809,7 @@
       "name": "lamWS",
       "nature": "external",
       "parameter_type": "real",
-      "value": [0.2253, 0.0]
+      "value": [0.0, 0.0]
     },
     {
       "expression": null,
@@ -818,7 +818,7 @@
       "name": "AWS",
       "nature": "external",
       "parameter_type": "real",
-      "value": [0.808, 0.0]
+      "value": [0.0, 0.0]
     },
     {
       "expression": null,
@@ -827,7 +827,7 @@
       "name": "rhoWS",
       "nature": "external",
       "parameter_type": "real",
-      "value": [0.132, 0.0]
+      "value": [0.0, 0.0]
     },
     {
       "expression": null,
@@ -836,7 +836,7 @@
       "name": "etaWS",
       "nature": "external",
       "parameter_type": "real",
-      "value": [0.341, 0.0]
+      "value": [0.0, 0.0]
     },
     {
       "expression": null,
@@ -845,7 +845,7 @@
       "name": "ymc",
       "nature": "external",
       "parameter_type": "real",
-      "value": [1.27, 0.0]
+      "value": [0.0, 0.0]
     },
     {
       "expression": null,
@@ -854,7 +854,7 @@
       "name": "ymb",
       "nature": "external",
       "parameter_type": "real",
-      "value": [4.2, 0.0]
+      "value": [4.7, 0.0]
     },
     {
       "expression": null,
@@ -863,7 +863,7 @@
       "name": "ymt",
       "nature": "external",
       "parameter_type": "real",
-      "value": [164.5, 0.0]
+      "value": [173.0, 0.0]
     },
     {
       "expression": null,
@@ -872,7 +872,7 @@
       "name": "yme",
       "nature": "external",
       "parameter_type": "real",
-      "value": [0.000511, 0.0]
+      "value": [0.0, 0.0]
     },
     {
       "expression": null,
@@ -881,7 +881,7 @@
       "name": "ymm",
       "nature": "external",
       "parameter_type": "real",
-      "value": [0.10566, 0.0]
+      "value": [0.0, 0.0]
     },
     {
       "expression": null,
@@ -908,7 +908,7 @@
       "name": "MC",
       "nature": "external",
       "parameter_type": "real",
-      "value": [1.27, 0.0]
+      "value": [0.0, 0.0]
     },
     {
       "expression": null,
@@ -926,7 +926,7 @@
       "name": "MB",
       "nature": "external",
       "parameter_type": "real",
-      "value": [4.7, 0.0]
+      "value": [4.9, 0.0]
     },
     {
       "expression": null,
@@ -944,7 +944,7 @@
       "name": "Me",
       "nature": "external",
       "parameter_type": "real",
-      "value": [0.000511, 0.0]
+      "value": [0.0, 0.0]
     },
     {
       "expression": null,
@@ -953,7 +953,7 @@
       "name": "MM",
       "nature": "external",
       "parameter_type": "real",
-      "value": [0.10566, 0.0]
+      "value": [0.0, 0.0]
     },
     {
       "expression": null,
@@ -971,7 +971,7 @@
       "name": "WZ",
       "nature": "external",
       "parameter_type": "real",
-      "value": [2.44140351, 0.0]
+      "value": [2.441404, 0.0]
     },
     {
       "expression": null,
@@ -980,7 +980,7 @@
       "name": "WW",
       "nature": "external",
       "parameter_type": "real",
-      "value": [2.04759951, 0.0]
+      "value": [2.0476, 0.0]
     },
     {
       "expression": null,
@@ -989,7 +989,7 @@
       "name": "WT",
       "nature": "external",
       "parameter_type": "real",
-      "value": [1.50833649, 0.0]
+      "value": [1.4915, 0.0]
     },
     {
       "expression": null,
@@ -1007,7 +1007,7 @@
       "name": "WTau",
       "nature": "external",
       "parameter_type": "real",
-      "value": [2.27e-12, 0.0]
+      "value": [0.0, 0.0]
     },
     {
       "expression": null,
@@ -1028,400 +1028,400 @@
       "value": [1.0, 0.0]
     },
     {
-      "expression": "-1/2*UFO::lamWS^2+1",
+      "expression": "-1/2*UFO::{}::lamWS^2+1",
       "lhablock": null,
       "lhacode": null,
       "name": "CKM1x1",
       "nature": "internal",
       "parameter_type": "complex",
-      "value": null
+      "value": [1.0, 0.0]
     },
     {
-      "expression": "UFO::lamWS",
+      "expression": "UFO::{}::lamWS",
       "lhablock": null,
       "lhacode": null,
       "name": "CKM1x2",
       "nature": "internal",
       "parameter_type": "complex",
-      "value": null
+      "value": [0.0, 0.0]
     },
     {
-      "expression": "(-1𝑖*UFO::etaWS+UFO::rhoWS)*UFO::AWS*UFO::lamWS^3",
+      "expression": "(-1𝑖*UFO::{}::etaWS+UFO::{}::rhoWS)*UFO::{}::AWS*UFO::{}::lamWS^3",
       "lhablock": null,
       "lhacode": null,
       "name": "CKM1x3",
       "nature": "internal",
       "parameter_type": "complex",
-      "value": null
+      "value": [0.0, 0.0]
     },
     {
-      "expression": "-1*UFO::lamWS",
+      "expression": "-1*UFO::{}::lamWS",
       "lhablock": null,
       "lhacode": null,
       "name": "CKM2x1",
       "nature": "internal",
       "parameter_type": "complex",
-      "value": null
+      "value": [0.0, 0.0]
     },
     {
-      "expression": "-1/2*UFO::lamWS^2+1",
+      "expression": "-1/2*UFO::{}::lamWS^2+1",
       "lhablock": null,
       "lhacode": null,
       "name": "CKM2x2",
       "nature": "internal",
       "parameter_type": "complex",
-      "value": null
+      "value": [1.0, 0.0]
     },
     {
-      "expression": "UFO::AWS*UFO::lamWS^2",
+      "expression": "UFO::{}::AWS*UFO::{}::lamWS^2",
       "lhablock": null,
       "lhacode": null,
       "name": "CKM2x3",
       "nature": "internal",
       "parameter_type": "complex",
-      "value": null
+      "value": [0.0, 0.0]
     },
     {
-      "expression": "(-1*UFO::rhoWS+-1𝑖*UFO::etaWS+1)*UFO::AWS*UFO::lamWS^3",
+      "expression": "(-1*UFO::{}::rhoWS+-1𝑖*UFO::{}::etaWS+1)*UFO::{}::AWS*UFO::{}::lamWS^3",
       "lhablock": null,
       "lhacode": null,
       "name": "CKM3x1",
       "nature": "internal",
       "parameter_type": "complex",
-      "value": null
+      "value": [0.0, 0.0]
     },
     {
-      "expression": "-1*UFO::AWS*UFO::lamWS^2",
+      "expression": "-1*UFO::{}::AWS*UFO::{}::lamWS^2",
       "lhablock": null,
       "lhacode": null,
       "name": "CKM3x2",
       "nature": "internal",
       "parameter_type": "complex",
-      "value": null
+      "value": [0.0, 0.0]
     },
     {
-      "expression": "UFO::aEWM1^(-1)",
+      "expression": "UFO::{}::aEWM1^(-1)",
       "lhablock": null,
       "lhacode": null,
       "name": "aEW",
       "nature": "internal",
       "parameter_type": "real",
-      "value": null
+      "value": [0.0075467711139788835, 0.0]
     },
     {
-      "expression": "2*UFO::aS^(1/2)*𝜋^(1/2)",
+      "expression": "2*UFO::{}::aS^(1/2)*𝜋^(1/2)",
       "lhablock": null,
       "lhacode": null,
       "name": "G",
       "nature": "internal",
       "parameter_type": "real",
-      "value": null
+      "value": [1.2177157847767195, 0.0]
     },
     {
-      "expression": "(((1/2)^(1/2)*-1*UFO::Gf^(-1)*UFO::MZ^2*UFO::aEW*𝜋+1/4*UFO::MZ^4)^(1/2)+1/2*UFO::MZ^2)^(1/2)",
+      "expression": "(((1/2)^(1/2)*-1*UFO::{}::Gf^(-1)*UFO::{}::MZ^2*UFO::{}::aEW*𝜋+1/4*UFO::{}::MZ^4)^(1/2)+1/2*UFO::{}::MZ^2)^(1/2)",
       "lhablock": null,
       "lhacode": null,
       "name": "MW",
       "nature": "internal",
       "parameter_type": "real",
-      "value": null
+      "value": [80.41900244575616, 0.0]
     },
     {
-      "expression": "2*UFO::aEW^(1/2)*𝜋^(1/2)",
+      "expression": "2*UFO::{}::aEW^(1/2)*𝜋^(1/2)",
       "lhablock": null,
       "lhacode": null,
       "name": "ee",
       "nature": "internal",
       "parameter_type": "real",
-      "value": null
+      "value": [0.3079537672443688, 0.0]
     },
     {
-      "expression": "-1*UFO::MW^2*UFO::MZ^(-2)+1",
+      "expression": "-1*UFO::{}::MW^2*UFO::{}::MZ^(-2)+1",
       "lhablock": null,
       "lhacode": null,
       "name": "sw2",
       "nature": "internal",
       "parameter_type": "real",
-      "value": null
+      "value": [0.22224648578577766, 0.0]
     },
     {
-      "expression": "(-1*UFO::sw2+1)^(1/2)",
+      "expression": "(-1*UFO::{}::sw2+1)^(1/2)",
       "lhablock": null,
       "lhacode": null,
       "name": "cw",
       "nature": "internal",
       "parameter_type": "real",
-      "value": null
+      "value": [0.8819033474333922, 0.0]
     },
     {
-      "expression": "UFO::sw2^(1/2)",
+      "expression": "UFO::{}::sw2^(1/2)",
       "lhablock": null,
       "lhacode": null,
       "name": "sw",
       "nature": "internal",
       "parameter_type": "real",
-      "value": null
+      "value": [0.4714302554840723, 0.0]
     },
     {
-      "expression": "UFO::cw^(-1)*UFO::ee",
+      "expression": "UFO::{}::cw^(-1)*UFO::{}::ee",
       "lhablock": null,
       "lhacode": null,
       "name": "g1",
       "nature": "internal",
       "parameter_type": "real",
-      "value": null
+      "value": [0.349192196787333, 0.0]
     },
     {
-      "expression": "UFO::ee*UFO::sw^(-1)",
+      "expression": "UFO::{}::ee*UFO::{}::sw^(-1)",
       "lhablock": null,
       "lhacode": null,
       "name": "gw",
       "nature": "internal",
       "parameter_type": "real",
-      "value": null
+      "value": [0.6532329303475798, 0.0]
     },
     {
-      "expression": "2*UFO::MW*UFO::ee^(-1)*UFO::sw",
+      "expression": "2*UFO::{}::MW*UFO::{}::ee^(-1)*UFO::{}::sw",
       "lhablock": null,
       "lhacode": null,
       "name": "vev",
       "nature": "internal",
       "parameter_type": "real",
-      "value": null
+      "value": [246.2184581018163, 0.0]
     },
     {
-      "expression": "1/2*UFO::MH^2*UFO::vev^(-2)",
+      "expression": "1/2*UFO::{}::MH^2*UFO::{}::vev^(-2)",
       "lhablock": null,
       "lhacode": null,
       "name": "lam",
       "nature": "internal",
       "parameter_type": "real",
-      "value": null
+      "value": [0.1288691060169027, 0.0]
     },
     {
-      "expression": "2^(1/2)*UFO::vev^(-1)*UFO::ymb",
+      "expression": "2^(1/2)*UFO::{}::vev^(-1)*UFO::{}::ymb",
       "lhablock": null,
       "lhacode": null,
       "name": "yb",
       "nature": "internal",
       "parameter_type": "real",
-      "value": null
+      "value": [0.026995554250465494, 0.0]
     },
     {
-      "expression": "2^(1/2)*UFO::vev^(-1)*UFO::ymc",
+      "expression": "2^(1/2)*UFO::{}::vev^(-1)*UFO::{}::ymc",
       "lhablock": null,
       "lhacode": null,
       "name": "yc",
       "nature": "internal",
       "parameter_type": "real",
-      "value": null
+      "value": [0.0, 0.0]
     },
     {
-      "expression": "2^(1/2)*UFO::vev^(-1)*UFO::yme",
+      "expression": "2^(1/2)*UFO::{}::vev^(-1)*UFO::{}::yme",
       "lhablock": null,
       "lhacode": null,
       "name": "ye",
       "nature": "internal",
       "parameter_type": "real",
-      "value": null
+      "value": [0.0, 0.0]
     },
     {
-      "expression": "2^(1/2)*UFO::vev^(-1)*UFO::ymm",
+      "expression": "2^(1/2)*UFO::{}::vev^(-1)*UFO::{}::ymm",
       "lhablock": null,
       "lhacode": null,
       "name": "ym",
       "nature": "internal",
       "parameter_type": "real",
-      "value": null
+      "value": [0.0, 0.0]
     },
     {
-      "expression": "2^(1/2)*UFO::vev^(-1)*UFO::ymt",
+      "expression": "2^(1/2)*UFO::{}::vev^(-1)*UFO::{}::ymt",
       "lhablock": null,
       "lhacode": null,
       "name": "yt",
       "nature": "internal",
       "parameter_type": "real",
-      "value": null
+      "value": [0.9936661458150063, 0.0]
     },
     {
-      "expression": "2^(1/2)*UFO::vev^(-1)*UFO::ymtau",
+      "expression": "2^(1/2)*UFO::{}::vev^(-1)*UFO::{}::ymtau",
       "lhablock": null,
       "lhacode": null,
       "name": "ytau",
       "nature": "internal",
       "parameter_type": "real",
-      "value": null
+      "value": [0.010206617000654719, 0.0]
     },
     {
-      "expression": "(UFO::lam*UFO::vev^2)^(1/2)",
+      "expression": "(UFO::{}::lam*UFO::{}::vev^2)^(1/2)",
       "lhablock": null,
       "lhacode": null,
       "name": "muH",
       "nature": "internal",
       "parameter_type": "real",
-      "value": null
+      "value": [88.38834764831844, 0.0]
     },
     {
-      "expression": "UFO::complexconjugate(UFO::CKM1x3)*UFO::yb",
+      "expression": "UFO::{}::complexconjugate(UFO::{}::CKM1x3)*UFO::{}::yb",
       "lhablock": null,
       "lhacode": null,
       "name": "I1x31",
       "nature": "internal",
       "parameter_type": "complex",
-      "value": null
+      "value": [0.0, 0.0]
     },
     {
-      "expression": "UFO::complexconjugate(UFO::CKM2x3)*UFO::yb",
+      "expression": "UFO::{}::complexconjugate(UFO::{}::CKM2x3)*UFO::{}::yb",
       "lhablock": null,
       "lhacode": null,
       "name": "I1x32",
       "nature": "internal",
       "parameter_type": "complex",
-      "value": null
+      "value": [0.0, 0.0]
     },
     {
-      "expression": "UFO::complexconjugate(UFO::CKM3x3)*UFO::yb",
+      "expression": "UFO::{}::complexconjugate(UFO::{}::CKM3x3)*UFO::{}::yb",
       "lhablock": null,
       "lhacode": null,
       "name": "I1x33",
       "nature": "internal",
       "parameter_type": "complex",
-      "value": null
+      "value": [0.026995554250465494, 0.0]
     },
     {
-      "expression": "UFO::complexconjugate(UFO::CKM2x1)*UFO::yc",
+      "expression": "UFO::{}::complexconjugate(UFO::{}::CKM2x1)*UFO::{}::yc",
       "lhablock": null,
       "lhacode": null,
       "name": "I2x12",
       "nature": "internal",
       "parameter_type": "complex",
-      "value": null
+      "value": [0.0, 0.0]
     },
     {
-      "expression": "UFO::complexconjugate(UFO::CKM3x1)*UFO::yt",
+      "expression": "UFO::{}::complexconjugate(UFO::{}::CKM3x1)*UFO::{}::yt",
       "lhablock": null,
       "lhacode": null,
       "name": "I2x13",
       "nature": "internal",
       "parameter_type": "complex",
-      "value": null
+      "value": [0.0, 0.0]
     },
     {
-      "expression": "UFO::complexconjugate(UFO::CKM2x2)*UFO::yc",
+      "expression": "UFO::{}::complexconjugate(UFO::{}::CKM2x2)*UFO::{}::yc",
       "lhablock": null,
       "lhacode": null,
       "name": "I2x22",
       "nature": "internal",
       "parameter_type": "complex",
-      "value": null
+      "value": [0.0, 0.0]
     },
     {
-      "expression": "UFO::complexconjugate(UFO::CKM3x2)*UFO::yt",
+      "expression": "UFO::{}::complexconjugate(UFO::{}::CKM3x2)*UFO::{}::yt",
       "lhablock": null,
       "lhacode": null,
       "name": "I2x23",
       "nature": "internal",
       "parameter_type": "complex",
-      "value": null
+      "value": [0.0, 0.0]
     },
     {
-      "expression": "UFO::complexconjugate(UFO::CKM2x3)*UFO::yc",
+      "expression": "UFO::{}::complexconjugate(UFO::{}::CKM2x3)*UFO::{}::yc",
       "lhablock": null,
       "lhacode": null,
       "name": "I2x32",
       "nature": "internal",
       "parameter_type": "complex",
-      "value": null
+      "value": [0.0, 0.0]
     },
     {
-      "expression": "UFO::complexconjugate(UFO::CKM3x3)*UFO::yt",
+      "expression": "UFO::{}::complexconjugate(UFO::{}::CKM3x3)*UFO::{}::yt",
       "lhablock": null,
       "lhacode": null,
       "name": "I2x33",
       "nature": "internal",
       "parameter_type": "complex",
-      "value": null
+      "value": [0.9936661458150063, 0.0]
     },
     {
-      "expression": "UFO::CKM2x1*UFO::yc",
+      "expression": "UFO::{}::CKM2x1*UFO::{}::yc",
       "lhablock": null,
       "lhacode": null,
       "name": "I3x21",
       "nature": "internal",
       "parameter_type": "complex",
-      "value": null
+      "value": [0.0, 0.0]
     },
     {
-      "expression": "UFO::CKM2x2*UFO::yc",
+      "expression": "UFO::{}::CKM2x2*UFO::{}::yc",
       "lhablock": null,
       "lhacode": null,
       "name": "I3x22",
       "nature": "internal",
       "parameter_type": "complex",
-      "value": null
+      "value": [0.0, 0.0]
     },
     {
-      "expression": "UFO::CKM2x3*UFO::yc",
+      "expression": "UFO::{}::CKM2x3*UFO::{}::yc",
       "lhablock": null,
       "lhacode": null,
       "name": "I3x23",
       "nature": "internal",
       "parameter_type": "complex",
-      "value": null
+      "value": [0.0, 0.0]
     },
     {
-      "expression": "UFO::CKM3x1*UFO::yt",
+      "expression": "UFO::{}::CKM3x1*UFO::{}::yt",
       "lhablock": null,
       "lhacode": null,
       "name": "I3x31",
       "nature": "internal",
       "parameter_type": "complex",
-      "value": null
+      "value": [0.0, 0.0]
     },
     {
-      "expression": "UFO::CKM3x2*UFO::yt",
+      "expression": "UFO::{}::CKM3x2*UFO::{}::yt",
       "lhablock": null,
       "lhacode": null,
       "name": "I3x32",
       "nature": "internal",
       "parameter_type": "complex",
-      "value": null
+      "value": [0.0, 0.0]
     },
     {
-      "expression": "UFO::CKM3x3*UFO::yt",
+      "expression": "UFO::{}::CKM3x3*UFO::{}::yt",
       "lhablock": null,
       "lhacode": null,
       "name": "I3x33",
       "nature": "internal",
       "parameter_type": "complex",
-      "value": null
+      "value": [0.9936661458150063, 0.0]
     },
     {
-      "expression": "UFO::CKM1x3*UFO::yb",
+      "expression": "UFO::{}::CKM1x3*UFO::{}::yb",
       "lhablock": null,
       "lhacode": null,
       "name": "I4x13",
       "nature": "internal",
       "parameter_type": "complex",
-      "value": null
+      "value": [0.0, 0.0]
     },
     {
-      "expression": "UFO::CKM2x3*UFO::yb",
+      "expression": "UFO::{}::CKM2x3*UFO::{}::yb",
       "lhablock": null,
       "lhacode": null,
       "name": "I4x23",
       "nature": "internal",
       "parameter_type": "complex",
-      "value": null
+      "value": [0.0, 0.0]
     },
     {
-      "expression": "UFO::CKM3x3*UFO::yb",
+      "expression": "UFO::{}::CKM3x3*UFO::{}::yb",
       "lhablock": null,
       "lhacode": null,
       "name": "I4x33",
       "nature": "internal",
       "parameter_type": "complex",
-      "value": null
+      "value": [0.026995554250465494, 0.0]
     }
   ],
   "particles": [
@@ -1937,7 +1937,7 @@
     },
     {
       "antiname": "G0",
-      "antitexname": "{G0}",
+      "antitexname": "{G_0}",
       "charge": 0.0,
       "color": 1,
       "ghost_number": 0,
@@ -1946,7 +1946,7 @@
       "name": "G0",
       "pdg_code": 250,
       "spin": 1,
-      "texname": "{G0}",
+      "texname": "{G_0}",
       "width": "WZ",
       "y_charge": 0
     },
@@ -2073,261 +2073,261 @@
   ],
   "propagators": [
     {
-      "denominator": "(UFO::P(1))^2",
+      "denominator": "(UFO::{}::P(1))^2",
       "name": "a_propFeynman",
-      "numerator": "-1*UFO::Metric(1,2)",
+      "numerator": "-1*UFO::{}::Metric(1,2)",
       "particle": "a"
     },
     {
-      "denominator": "(UFO::P(1))^2+-1*UFO::MZ^2",
+      "denominator": "(UFO::{}::P(1))^2+-1*UFO::{}::MZ^2",
       "name": "Z_propFeynman",
-      "numerator": "-1*UFO::Metric(1,2)+UFO::MZ^(-2)*UFO::P(1)*UFO::P(2)",
+      "numerator": "-1*UFO::{}::Metric(1,2)+UFO::{}::MZ^(-2)*UFO::{}::P(1)*UFO::{}::P(2)",
       "particle": "Z"
     },
     {
-      "denominator": "(UFO::P(1))^2+-1*UFO::MW^2",
+      "denominator": "(UFO::{}::P(1))^2+-1*UFO::{}::MW^2",
       "name": "W+_propFeynman",
-      "numerator": "-1*UFO::Metric(1,2)+UFO::MW^(-2)*UFO::P(1)*UFO::P(2)",
+      "numerator": "-1*UFO::{}::Metric(1,2)+UFO::{}::MW^(-2)*UFO::{}::P(1)*UFO::{}::P(2)",
       "particle": "W+"
     },
     {
-      "denominator": "(UFO::P(1))^2+-1*UFO::MW^2",
+      "denominator": "(UFO::{}::P(1))^2+-1*UFO::{}::MW^2",
       "name": "W-_propFeynman",
-      "numerator": "-1*UFO::Metric(1,2)+UFO::MW^(-2)*UFO::P(1)*UFO::P(2)",
+      "numerator": "-1*UFO::{}::Metric(1,2)+UFO::{}::MW^(-2)*UFO::{}::P(1)*UFO::{}::P(2)",
       "particle": "W-"
     },
     {
-      "denominator": "(UFO::P(1))^2",
+      "denominator": "(UFO::{}::P(1))^2",
       "name": "g_propFeynman",
-      "numerator": "-1*UFO::Metric(1,2)",
+      "numerator": "-1*UFO::{}::Metric(1,2)",
       "particle": "g"
     },
     {
-      "denominator": "(UFO::P(1))^2",
+      "denominator": "(UFO::{}::P(1))^2",
       "name": "ghA_propFeynman",
       "numerator": "1",
       "particle": "ghA"
     },
     {
-      "denominator": "(UFO::P(1))^2",
+      "denominator": "(UFO::{}::P(1))^2",
       "name": "ghA~_propFeynman",
       "numerator": "1",
       "particle": "ghA~"
     },
     {
-      "denominator": "(UFO::P(1))^2+-1*UFO::MZ^2",
+      "denominator": "(UFO::{}::P(1))^2+-1*UFO::{}::MZ^2",
       "name": "ghZ_propFeynman",
       "numerator": "1",
       "particle": "ghZ"
     },
     {
-      "denominator": "(UFO::P(1))^2+-1*UFO::MZ^2",
+      "denominator": "(UFO::{}::P(1))^2+-1*UFO::{}::MZ^2",
       "name": "ghZ~_propFeynman",
       "numerator": "1",
       "particle": "ghZ~"
     },
     {
-      "denominator": "(UFO::P(1))^2+-1*UFO::MW^2",
+      "denominator": "(UFO::{}::P(1))^2+-1*UFO::{}::MW^2",
       "name": "ghWp_propFeynman",
       "numerator": "1",
       "particle": "ghWp"
     },
     {
-      "denominator": "(UFO::P(1))^2+-1*UFO::MW^2",
+      "denominator": "(UFO::{}::P(1))^2+-1*UFO::{}::MW^2",
       "name": "ghWp~_propFeynman",
       "numerator": "1",
       "particle": "ghWp~"
     },
     {
-      "denominator": "(UFO::P(1))^2+-1*UFO::MW^2",
+      "denominator": "(UFO::{}::P(1))^2+-1*UFO::{}::MW^2",
       "name": "ghWm_propFeynman",
       "numerator": "1",
       "particle": "ghWm"
     },
     {
-      "denominator": "(UFO::P(1))^2+-1*UFO::MW^2",
+      "denominator": "(UFO::{}::P(1))^2+-1*UFO::{}::MW^2",
       "name": "ghWm~_propFeynman",
       "numerator": "1",
       "particle": "ghWm~"
     },
     {
-      "denominator": "(UFO::P(1))^2",
+      "denominator": "(UFO::{}::P(1))^2",
       "name": "ghG_propFeynman",
       "numerator": "1",
       "particle": "ghG"
     },
     {
-      "denominator": "(UFO::P(1))^2",
+      "denominator": "(UFO::{}::P(1))^2",
       "name": "ghG~_propFeynman",
       "numerator": "1",
       "particle": "ghG~"
     },
     {
-      "denominator": "(UFO::P(1))^2",
+      "denominator": "(UFO::{}::P(1))^2",
       "name": "ve_propFeynman",
-      "numerator": "UFO::PSlash(2,1)",
+      "numerator": "UFO::{}::PSlash(2,1)",
       "particle": "ve"
     },
     {
-      "denominator": "(UFO::P(1))^2",
+      "denominator": "(UFO::{}::P(1))^2",
       "name": "ve~_propFeynman",
-      "numerator": "UFO::PSlash(1,2)",
+      "numerator": "-1*UFO::{}::PSlash(1,2)",
       "particle": "ve~"
     },
     {
-      "denominator": "(UFO::P(1))^2",
+      "denominator": "(UFO::{}::P(1))^2",
       "name": "vm_propFeynman",
-      "numerator": "UFO::PSlash(2,1)",
+      "numerator": "UFO::{}::PSlash(2,1)",
       "particle": "vm"
     },
     {
-      "denominator": "(UFO::P(1))^2",
+      "denominator": "(UFO::{}::P(1))^2",
       "name": "vm~_propFeynman",
-      "numerator": "UFO::PSlash(1,2)",
+      "numerator": "-1*UFO::{}::PSlash(1,2)",
       "particle": "vm~"
     },
     {
-      "denominator": "(UFO::P(1))^2",
+      "denominator": "(UFO::{}::P(1))^2",
       "name": "vt_propFeynman",
-      "numerator": "UFO::PSlash(2,1)",
+      "numerator": "UFO::{}::PSlash(2,1)",
       "particle": "vt"
     },
     {
-      "denominator": "(UFO::P(1))^2",
+      "denominator": "(UFO::{}::P(1))^2",
       "name": "vt~_propFeynman",
-      "numerator": "UFO::PSlash(1,2)",
+      "numerator": "-1*UFO::{}::PSlash(1,2)",
       "particle": "vt~"
     },
     {
-      "denominator": "(UFO::P(1))^2",
+      "denominator": "(UFO::{}::P(1))^2",
       "name": "u_propFeynman",
-      "numerator": "UFO::PSlash(2,1)",
+      "numerator": "UFO::{}::PSlash(2,1)",
       "particle": "u"
     },
     {
-      "denominator": "(UFO::P(1))^2",
+      "denominator": "(UFO::{}::P(1))^2",
       "name": "u~_propFeynman",
-      "numerator": "UFO::PSlash(1,2)",
+      "numerator": "-1*UFO::{}::PSlash(1,2)",
       "particle": "u~"
     },
     {
-      "denominator": "(UFO::P(1))^2+-1*UFO::MC^2",
+      "denominator": "(UFO::{}::P(1))^2+-1*UFO::{}::MC^2",
       "name": "c_propFeynman",
-      "numerator": "-1*UFO::Identity(2,1)*UFO::MC+UFO::PSlash(2,1)",
+      "numerator": "UFO::{}::Identity(2,1)*UFO::{}::MC+UFO::{}::PSlash(2,1)",
       "particle": "c"
     },
     {
-      "denominator": "(UFO::P(1))^2+-1*UFO::MC^2",
+      "denominator": "(UFO::{}::P(1))^2+-1*UFO::{}::MC^2",
       "name": "c~_propFeynman",
-      "numerator": "UFO::Identity(1,2)*UFO::MC+UFO::PSlash(1,2)",
+      "numerator": "-1*UFO::{}::PSlash(1,2)+UFO::{}::Identity(1,2)*UFO::{}::MC",
       "particle": "c~"
     },
     {
-      "denominator": "(UFO::P(1))^2+-1*UFO::MT^2",
+      "denominator": "(UFO::{}::P(1))^2+-1*UFO::{}::MT^2",
       "name": "t_propFeynman",
-      "numerator": "-1*UFO::Identity(2,1)*UFO::MT+UFO::PSlash(2,1)",
+      "numerator": "UFO::{}::Identity(2,1)*UFO::{}::MT+UFO::{}::PSlash(2,1)",
       "particle": "t"
     },
     {
-      "denominator": "(UFO::P(1))^2+-1*UFO::MT^2",
+      "denominator": "(UFO::{}::P(1))^2+-1*UFO::{}::MT^2",
       "name": "t~_propFeynman",
-      "numerator": "UFO::Identity(1,2)*UFO::MT+UFO::PSlash(1,2)",
+      "numerator": "-1*UFO::{}::PSlash(1,2)+UFO::{}::Identity(1,2)*UFO::{}::MT",
       "particle": "t~"
     },
     {
-      "denominator": "(UFO::P(1))^2",
+      "denominator": "(UFO::{}::P(1))^2",
       "name": "d_propFeynman",
-      "numerator": "UFO::PSlash(2,1)",
+      "numerator": "UFO::{}::PSlash(2,1)",
       "particle": "d"
     },
     {
-      "denominator": "(UFO::P(1))^2",
+      "denominator": "(UFO::{}::P(1))^2",
       "name": "d~_propFeynman",
-      "numerator": "-UFO::PSlash(1,2)",
+      "numerator": "-1*UFO::{}::PSlash(1,2)",
       "particle": "d~"
     },
     {
-      "denominator": "(UFO::P(1))^2",
+      "denominator": "(UFO::{}::P(1))^2",
       "name": "s_propFeynman",
-      "numerator": "UFO::PSlash(2,1)",
+      "numerator": "UFO::{}::PSlash(2,1)",
       "particle": "s"
     },
     {
-      "denominator": "(UFO::P(1))^2",
+      "denominator": "(UFO::{}::P(1))^2",
       "name": "s~_propFeynman",
-      "numerator": "UFO::PSlash(1,2)",
+      "numerator": "-1*UFO::{}::PSlash(1,2)",
       "particle": "s~"
     },
     {
-      "denominator": "(UFO::P(1))^2+-1*UFO::MB^2",
+      "denominator": "(UFO::{}::P(1))^2+-1*UFO::{}::MB^2",
       "name": "b_propFeynman",
-      "numerator": "-1*UFO::Identity(2,1)*UFO::MB+UFO::PSlash(2,1)",
+      "numerator": "UFO::{}::Identity(2,1)*UFO::{}::MB+UFO::{}::PSlash(2,1)",
       "particle": "b"
     },
     {
-      "denominator": "(UFO::P(1))^2+-1*UFO::MB^2",
+      "denominator": "(UFO::{}::P(1))^2+-1*UFO::{}::MB^2",
       "name": "b~_propFeynman",
-      "numerator": "UFO::Identity(1,2)*UFO::MB+UFO::PSlash(1,2)",
+      "numerator": "-1*UFO::{}::PSlash(1,2)+UFO::{}::Identity(1,2)*UFO::{}::MB",
       "particle": "b~"
     },
     {
-      "denominator": "(UFO::P(1))^2+-1*UFO::MH^2",
+      "denominator": "(UFO::{}::P(1))^2+-1*UFO::{}::MH^2",
       "name": "H_propFeynman",
       "numerator": "1",
       "particle": "H"
     },
     {
-      "denominator": "(UFO::P(1))^2+-1*UFO::MZ^2",
+      "denominator": "(UFO::{}::P(1))^2+-1*UFO::{}::MZ^2",
       "name": "G0_propFeynman",
       "numerator": "1",
       "particle": "G0"
     },
     {
-      "denominator": "(UFO::P(1))^2+-1*UFO::MW^2",
+      "denominator": "(UFO::{}::P(1))^2+-1*UFO::{}::MW^2",
       "name": "G+_propFeynman",
       "numerator": "1",
       "particle": "G+"
     },
     {
-      "denominator": "(UFO::P(1))^2+-1*UFO::MW^2",
+      "denominator": "(UFO::{}::P(1))^2+-1*UFO::{}::MW^2",
       "name": "G-_propFeynman",
       "numerator": "1",
       "particle": "G-"
     },
     {
-      "denominator": "(UFO::P(1))^2+-1*UFO::Me^2",
+      "denominator": "(UFO::{}::P(1))^2+-1*UFO::{}::Me^2",
       "name": "e-_propFeynman",
-      "numerator": "-1*UFO::Identity(2,1)*UFO::Me+UFO::PSlash(2,1)",
+      "numerator": "UFO::{}::Identity(2,1)*UFO::{}::Me+UFO::{}::PSlash(2,1)",
       "particle": "e-"
     },
     {
-      "denominator": "(UFO::P(1))^2+-1*UFO::Me^2",
+      "denominator": "(UFO::{}::P(1))^2+-1*UFO::{}::Me^2",
       "name": "e+_propFeynman",
-      "numerator": "UFO::Identity(1,2)*UFO::Me+UFO::PSlash(1,2)",
+      "numerator": "-1*UFO::{}::PSlash(1,2)+UFO::{}::Identity(1,2)*UFO::{}::Me",
       "particle": "e+"
     },
     {
-      "denominator": "(UFO::P(1))^2+-1*UFO::MM^2",
+      "denominator": "(UFO::{}::P(1))^2+-1*UFO::{}::MM^2",
       "name": "mu-_propFeynman",
-      "numerator": "-1*UFO::Identity(2,1)*UFO::MM+UFO::PSlash(2,1)",
+      "numerator": "UFO::{}::Identity(2,1)*UFO::{}::MM+UFO::{}::PSlash(2,1)",
       "particle": "mu-"
     },
     {
-      "denominator": "(UFO::P(1))^2+-1*UFO::MM^2",
+      "denominator": "(UFO::{}::P(1))^2+-1*UFO::{}::MM^2",
       "name": "mu+_propFeynman",
-      "numerator": "UFO::Identity(1,2)*UFO::MM+UFO::PSlash(1,2)",
+      "numerator": "-1*UFO::{}::PSlash(1,2)+UFO::{}::Identity(1,2)*UFO::{}::MM",
       "particle": "mu+"
     },
     {
-      "denominator": "(UFO::P(1))^2+-1*UFO::MTA^2",
+      "denominator": "(UFO::{}::P(1))^2+-1*UFO::{}::MTA^2",
       "name": "ta-_propFeynman",
-      "numerator": "-1*UFO::Identity(2,1)*UFO::MTA+UFO::PSlash(2,1)",
+      "numerator": "UFO::{}::Identity(2,1)*UFO::{}::MTA+UFO::{}::PSlash(2,1)",
       "particle": "ta-"
     },
     {
-      "denominator": "(UFO::P(1))^2+-1*UFO::MTA^2",
+      "denominator": "(UFO::{}::P(1))^2+-1*UFO::{}::MTA^2",
       "name": "ta+_propFeynman",
-      "numerator": "UFO::Identity(1,2)*UFO::MTA+UFO::PSlash(1,2)",
+      "numerator": "-1*UFO::{}::PSlash(1,2)+UFO::{}::Identity(1,2)*UFO::{}::MTA",
       "particle": "ta+"
     }
   ],
@@ -2572,14 +2572,14 @@
       "particles": ["ghZ", "ghZ~", "H"]
     },
     {
-      "color_structures": ["UFO::f(1,2,3)"],
+      "color_structures": ["UFO::{}::f(1,2,3)"],
       "couplings": [["GC_10"]],
       "lorentz_structures": ["UUV1"],
       "name": "V_35",
       "particles": ["ghG", "ghG~", "g"]
     },
     {
-      "color_structures": ["UFO::f(1,2,3)"],
+      "color_structures": ["UFO::{}::f(1,2,3)"],
       "couplings": [["GC_10"]],
       "lorentz_structures": ["VVV1"],
       "name": "V_36",
@@ -2587,9 +2587,9 @@
     },
     {
       "color_structures": [
-        "UFO::f(-1,1,2)*UFO::f(3,4,-1)",
-        "UFO::f(-1,1,3)*UFO::f(2,4,-1)",
-        "UFO::f(-1,1,4)*UFO::f(2,3,-1)"
+        "UFO::{}::f(-1,1,2)*UFO::{}::f(3,4,-1)",
+        "UFO::{}::f(-1,1,3)*UFO::{}::f(2,4,-1)",
+        "UFO::{}::f(-1,1,4)*UFO::{}::f(2,3,-1)"
       ],
       "couplings": [
         ["GC_12", null, null],
@@ -2832,189 +2832,189 @@
       "particles": ["W-", "W+", "Z", "Z"]
     },
     {
-      "color_structures": ["UFO::Identity(1,2)"],
+      "color_structures": ["UFO::{}::Identity(1,2)"],
       "couplings": [["GC_1"]],
       "lorentz_structures": ["FFV1"],
       "name": "V_71",
       "particles": ["d~", "d", "a"]
     },
     {
-      "color_structures": ["UFO::Identity(1,2)"],
+      "color_structures": ["UFO::{}::Identity(1,2)"],
       "couplings": [["GC_1"]],
       "lorentz_structures": ["FFV1"],
       "name": "V_72",
       "particles": ["s~", "s", "a"]
     },
     {
-      "color_structures": ["UFO::Identity(1,2)"],
+      "color_structures": ["UFO::{}::Identity(1,2)"],
       "couplings": [["GC_1"]],
       "lorentz_structures": ["FFV1"],
       "name": "V_73",
       "particles": ["b~", "b", "a"]
     },
     {
-      "color_structures": ["UFO::T(3,2,1)"],
+      "color_structures": ["UFO::{}::T(3,2,1)"],
       "couplings": [["GC_11"]],
       "lorentz_structures": ["FFV1"],
       "name": "V_74",
       "particles": ["d~", "d", "g"]
     },
     {
-      "color_structures": ["UFO::T(3,2,1)"],
+      "color_structures": ["UFO::{}::T(3,2,1)"],
       "couplings": [["GC_11"]],
       "lorentz_structures": ["FFV1"],
       "name": "V_75",
       "particles": ["s~", "s", "g"]
     },
     {
-      "color_structures": ["UFO::T(3,2,1)"],
+      "color_structures": ["UFO::{}::T(3,2,1)"],
       "couplings": [["GC_11"]],
       "lorentz_structures": ["FFV1"],
       "name": "V_76",
       "particles": ["b~", "b", "g"]
     },
     {
-      "color_structures": ["UFO::Identity(1,2)"],
+      "color_structures": ["UFO::{}::Identity(1,2)"],
       "couplings": [["GC_82"]],
       "lorentz_structures": ["FFS2"],
       "name": "V_77",
       "particles": ["b~", "b", "G0"]
     },
     {
-      "color_structures": ["UFO::Identity(1,2)"],
+      "color_structures": ["UFO::{}::Identity(1,2)"],
       "couplings": [["GC_83"]],
       "lorentz_structures": ["FFS4"],
       "name": "V_78",
       "particles": ["b~", "b", "H"]
     },
     {
-      "color_structures": ["UFO::Identity(1,2)"],
+      "color_structures": ["UFO::{}::Identity(1,2)"],
       "couplings": [["GC_50", "GC_58"]],
       "lorentz_structures": ["FFV2", "FFV3"],
       "name": "V_79",
       "particles": ["d~", "d", "Z"]
     },
     {
-      "color_structures": ["UFO::Identity(1,2)"],
+      "color_structures": ["UFO::{}::Identity(1,2)"],
       "couplings": [["GC_50", "GC_58"]],
       "lorentz_structures": ["FFV2", "FFV3"],
       "name": "V_80",
       "particles": ["s~", "s", "Z"]
     },
     {
-      "color_structures": ["UFO::Identity(1,2)"],
+      "color_structures": ["UFO::{}::Identity(1,2)"],
       "couplings": [["GC_50", "GC_58"]],
       "lorentz_structures": ["FFV2", "FFV3"],
       "name": "V_81",
       "particles": ["b~", "b", "Z"]
     },
     {
-      "color_structures": ["UFO::Identity(1,2)"],
+      "color_structures": ["UFO::{}::Identity(1,2)"],
       "couplings": [["GC_16"]],
       "lorentz_structures": ["FFS3"],
       "name": "V_82",
       "particles": ["c~", "d", "G+"]
     },
     {
-      "color_structures": ["UFO::Identity(1,2)"],
+      "color_structures": ["UFO::{}::Identity(1,2)"],
       "couplings": [["GC_17"]],
       "lorentz_structures": ["FFS3"],
       "name": "V_83",
       "particles": ["t~", "d", "G+"]
     },
     {
-      "color_structures": ["UFO::Identity(1,2)"],
+      "color_structures": ["UFO::{}::Identity(1,2)"],
       "couplings": [["GC_18"]],
       "lorentz_structures": ["FFS3"],
       "name": "V_84",
       "particles": ["c~", "s", "G+"]
     },
     {
-      "color_structures": ["UFO::Identity(1,2)"],
+      "color_structures": ["UFO::{}::Identity(1,2)"],
       "couplings": [["GC_19"]],
       "lorentz_structures": ["FFS3"],
       "name": "V_85",
       "particles": ["t~", "s", "G+"]
     },
     {
-      "color_structures": ["UFO::Identity(1,2)"],
+      "color_structures": ["UFO::{}::Identity(1,2)"],
       "couplings": [["GC_13"]],
       "lorentz_structures": ["FFS1"],
       "name": "V_86",
       "particles": ["u~", "b", "G+"]
     },
     {
-      "color_structures": ["UFO::Identity(1,2)"],
+      "color_structures": ["UFO::{}::Identity(1,2)"],
       "couplings": [["GC_14", "GC_20"]],
       "lorentz_structures": ["FFS1", "FFS3"],
       "name": "V_87",
       "particles": ["c~", "b", "G+"]
     },
     {
-      "color_structures": ["UFO::Identity(1,2)"],
+      "color_structures": ["UFO::{}::Identity(1,2)"],
       "couplings": [["GC_15", "GC_21"]],
       "lorentz_structures": ["FFS1", "FFS3"],
       "name": "V_88",
       "particles": ["t~", "b", "G+"]
     },
     {
-      "color_structures": ["UFO::Identity(1,2)"],
+      "color_structures": ["UFO::{}::Identity(1,2)"],
       "couplings": [["GC_100"]],
       "lorentz_structures": ["FFV2"],
       "name": "V_89",
       "particles": ["u~", "d", "W+"]
     },
     {
-      "color_structures": ["UFO::Identity(1,2)"],
+      "color_structures": ["UFO::{}::Identity(1,2)"],
       "couplings": [["GC_103"]],
       "lorentz_structures": ["FFV2"],
       "name": "V_90",
       "particles": ["c~", "d", "W+"]
     },
     {
-      "color_structures": ["UFO::Identity(1,2)"],
+      "color_structures": ["UFO::{}::Identity(1,2)"],
       "couplings": [["GC_106"]],
       "lorentz_structures": ["FFV2"],
       "name": "V_91",
       "particles": ["t~", "d", "W+"]
     },
     {
-      "color_structures": ["UFO::Identity(1,2)"],
+      "color_structures": ["UFO::{}::Identity(1,2)"],
       "couplings": [["GC_101"]],
       "lorentz_structures": ["FFV2"],
       "name": "V_92",
       "particles": ["u~", "s", "W+"]
     },
     {
-      "color_structures": ["UFO::Identity(1,2)"],
+      "color_structures": ["UFO::{}::Identity(1,2)"],
       "couplings": [["GC_104"]],
       "lorentz_structures": ["FFV2"],
       "name": "V_93",
       "particles": ["c~", "s", "W+"]
     },
     {
-      "color_structures": ["UFO::Identity(1,2)"],
+      "color_structures": ["UFO::{}::Identity(1,2)"],
       "couplings": [["GC_107"]],
       "lorentz_structures": ["FFV2"],
       "name": "V_94",
       "particles": ["t~", "s", "W+"]
     },
     {
-      "color_structures": ["UFO::Identity(1,2)"],
+      "color_structures": ["UFO::{}::Identity(1,2)"],
       "couplings": [["GC_102"]],
       "lorentz_structures": ["FFV2"],
       "name": "V_95",
       "particles": ["u~", "b", "W+"]
     },
     {
-      "color_structures": ["UFO::Identity(1,2)"],
+      "color_structures": ["UFO::{}::Identity(1,2)"],
       "couplings": [["GC_105"]],
       "lorentz_structures": ["FFV2"],
       "name": "V_96",
       "particles": ["c~", "b", "W+"]
     },
     {
-      "color_structures": ["UFO::Identity(1,2)"],
+      "color_structures": ["UFO::{}::Identity(1,2)"],
       "couplings": [["GC_108"]],
       "lorentz_structures": ["FFV2"],
       "name": "V_97",
@@ -3147,203 +3147,203 @@
       "particles": ["vt~", "ta-", "W+"]
     },
     {
-      "color_structures": ["UFO::Identity(1,2)"],
+      "color_structures": ["UFO::{}::Identity(1,2)"],
       "couplings": [["GC_28"]],
       "lorentz_structures": ["FFS3"],
       "name": "V_116",
       "particles": ["b~", "u", "G-"]
     },
     {
-      "color_structures": ["UFO::Identity(1,2)"],
+      "color_structures": ["UFO::{}::Identity(1,2)"],
       "couplings": [["GC_22"]],
       "lorentz_structures": ["FFS1"],
       "name": "V_117",
       "particles": ["d~", "c", "G-"]
     },
     {
-      "color_structures": ["UFO::Identity(1,2)"],
+      "color_structures": ["UFO::{}::Identity(1,2)"],
       "couplings": [["GC_23"]],
       "lorentz_structures": ["FFS1"],
       "name": "V_118",
       "particles": ["s~", "c", "G-"]
     },
     {
-      "color_structures": ["UFO::Identity(1,2)"],
+      "color_structures": ["UFO::{}::Identity(1,2)"],
       "couplings": [["GC_24", "GC_29"]],
       "lorentz_structures": ["FFS1", "FFS3"],
       "name": "V_119",
       "particles": ["b~", "c", "G-"]
     },
     {
-      "color_structures": ["UFO::Identity(1,2)"],
+      "color_structures": ["UFO::{}::Identity(1,2)"],
       "couplings": [["GC_25"]],
       "lorentz_structures": ["FFS1"],
       "name": "V_120",
       "particles": ["d~", "t", "G-"]
     },
     {
-      "color_structures": ["UFO::Identity(1,2)"],
+      "color_structures": ["UFO::{}::Identity(1,2)"],
       "couplings": [["GC_26"]],
       "lorentz_structures": ["FFS1"],
       "name": "V_121",
       "particles": ["s~", "t", "G-"]
     },
     {
-      "color_structures": ["UFO::Identity(1,2)"],
+      "color_structures": ["UFO::{}::Identity(1,2)"],
       "couplings": [["GC_27", "GC_30"]],
       "lorentz_structures": ["FFS1", "FFS3"],
       "name": "V_122",
       "particles": ["b~", "t", "G-"]
     },
     {
-      "color_structures": ["UFO::Identity(1,2)"],
+      "color_structures": ["UFO::{}::Identity(1,2)"],
       "couplings": [["GC_41"]],
       "lorentz_structures": ["FFV2"],
       "name": "V_123",
       "particles": ["d~", "u", "W-"]
     },
     {
-      "color_structures": ["UFO::Identity(1,2)"],
+      "color_structures": ["UFO::{}::Identity(1,2)"],
       "couplings": [["GC_42"]],
       "lorentz_structures": ["FFV2"],
       "name": "V_124",
       "particles": ["s~", "u", "W-"]
     },
     {
-      "color_structures": ["UFO::Identity(1,2)"],
+      "color_structures": ["UFO::{}::Identity(1,2)"],
       "couplings": [["GC_43"]],
       "lorentz_structures": ["FFV2"],
       "name": "V_125",
       "particles": ["b~", "u", "W-"]
     },
     {
-      "color_structures": ["UFO::Identity(1,2)"],
+      "color_structures": ["UFO::{}::Identity(1,2)"],
       "couplings": [["GC_44"]],
       "lorentz_structures": ["FFV2"],
       "name": "V_126",
       "particles": ["d~", "c", "W-"]
     },
     {
-      "color_structures": ["UFO::Identity(1,2)"],
+      "color_structures": ["UFO::{}::Identity(1,2)"],
       "couplings": [["GC_45"]],
       "lorentz_structures": ["FFV2"],
       "name": "V_127",
       "particles": ["s~", "c", "W-"]
     },
     {
-      "color_structures": ["UFO::Identity(1,2)"],
+      "color_structures": ["UFO::{}::Identity(1,2)"],
       "couplings": [["GC_46"]],
       "lorentz_structures": ["FFV2"],
       "name": "V_128",
       "particles": ["b~", "c", "W-"]
     },
     {
-      "color_structures": ["UFO::Identity(1,2)"],
+      "color_structures": ["UFO::{}::Identity(1,2)"],
       "couplings": [["GC_47"]],
       "lorentz_structures": ["FFV2"],
       "name": "V_129",
       "particles": ["d~", "t", "W-"]
     },
     {
-      "color_structures": ["UFO::Identity(1,2)"],
+      "color_structures": ["UFO::{}::Identity(1,2)"],
       "couplings": [["GC_48"]],
       "lorentz_structures": ["FFV2"],
       "name": "V_130",
       "particles": ["s~", "t", "W-"]
     },
     {
-      "color_structures": ["UFO::Identity(1,2)"],
+      "color_structures": ["UFO::{}::Identity(1,2)"],
       "couplings": [["GC_49"]],
       "lorentz_structures": ["FFV2"],
       "name": "V_131",
       "particles": ["b~", "t", "W-"]
     },
     {
-      "color_structures": ["UFO::Identity(1,2)"],
+      "color_structures": ["UFO::{}::Identity(1,2)"],
       "couplings": [["GC_2"]],
       "lorentz_structures": ["FFV1"],
       "name": "V_132",
       "particles": ["u~", "u", "a"]
     },
     {
-      "color_structures": ["UFO::Identity(1,2)"],
+      "color_structures": ["UFO::{}::Identity(1,2)"],
       "couplings": [["GC_2"]],
       "lorentz_structures": ["FFV1"],
       "name": "V_133",
       "particles": ["c~", "c", "a"]
     },
     {
-      "color_structures": ["UFO::Identity(1,2)"],
+      "color_structures": ["UFO::{}::Identity(1,2)"],
       "couplings": [["GC_2"]],
       "lorentz_structures": ["FFV1"],
       "name": "V_134",
       "particles": ["t~", "t", "a"]
     },
     {
-      "color_structures": ["UFO::T(3,2,1)"],
+      "color_structures": ["UFO::{}::T(3,2,1)"],
       "couplings": [["GC_11"]],
       "lorentz_structures": ["FFV1"],
       "name": "V_135",
       "particles": ["u~", "u", "g"]
     },
     {
-      "color_structures": ["UFO::T(3,2,1)"],
+      "color_structures": ["UFO::{}::T(3,2,1)"],
       "couplings": [["GC_11"]],
       "lorentz_structures": ["FFV1"],
       "name": "V_136",
       "particles": ["c~", "c", "g"]
     },
     {
-      "color_structures": ["UFO::T(3,2,1)"],
+      "color_structures": ["UFO::{}::T(3,2,1)"],
       "couplings": [["GC_11"]],
       "lorentz_structures": ["FFV1"],
       "name": "V_137",
       "particles": ["t~", "t", "g"]
     },
     {
-      "color_structures": ["UFO::Identity(1,2)"],
+      "color_structures": ["UFO::{}::Identity(1,2)"],
       "couplings": [["GC_85"]],
       "lorentz_structures": ["FFS2"],
       "name": "V_138",
       "particles": ["c~", "c", "G0"]
     },
     {
-      "color_structures": ["UFO::Identity(1,2)"],
+      "color_structures": ["UFO::{}::Identity(1,2)"],
       "couplings": [["GC_95"]],
       "lorentz_structures": ["FFS2"],
       "name": "V_139",
       "particles": ["t~", "t", "G0"]
     },
     {
-      "color_structures": ["UFO::Identity(1,2)"],
+      "color_structures": ["UFO::{}::Identity(1,2)"],
       "couplings": [["GC_84"]],
       "lorentz_structures": ["FFS4"],
       "name": "V_140",
       "particles": ["c~", "c", "H"]
     },
     {
-      "color_structures": ["UFO::Identity(1,2)"],
+      "color_structures": ["UFO::{}::Identity(1,2)"],
       "couplings": [["GC_94"]],
       "lorentz_structures": ["FFS4"],
       "name": "V_141",
       "particles": ["t~", "t", "H"]
     },
     {
-      "color_structures": ["UFO::Identity(1,2)"],
+      "color_structures": ["UFO::{}::Identity(1,2)"],
       "couplings": [["GC_51", "GC_58"]],
       "lorentz_structures": ["FFV2", "FFV5"],
       "name": "V_142",
       "particles": ["u~", "u", "Z"]
     },
     {
-      "color_structures": ["UFO::Identity(1,2)"],
+      "color_structures": ["UFO::{}::Identity(1,2)"],
       "couplings": [["GC_51", "GC_58"]],
       "lorentz_structures": ["FFV2", "FFV5"],
       "name": "V_143",
       "particles": ["c~", "c", "Z"]
     },
     {
-      "color_structures": ["UFO::Identity(1,2)"],
+      "color_structures": ["UFO::{}::Identity(1,2)"],
       "couplings": [["GC_51", "GC_58"]],
       "lorentz_structures": ["FFV2", "FFV5"],
       "name": "V_144",
