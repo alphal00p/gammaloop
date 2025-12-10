@@ -46,9 +46,27 @@ pub struct ProcessList {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct ExportSettings {
-    pub root_folder: PathBuf,
+
+pub struct DotExportSettings {
+    // pub root_folder: PathBuf,
     pub combine_diagrams: bool,
+    pub output_full_numerator: bool,
+    pub split_xs_by_initial_states: bool,
+    pub do_gamma_algebra: bool,
+    pub do_color_algebra: bool,
+}
+
+impl Default for DotExportSettings {
+    fn default() -> Self {
+        Self {
+            // root_folder: PathBuf::from("."),
+            split_xs_by_initial_states: false,
+            output_full_numerator: false,
+            do_gamma_algebra: false,
+            do_color_algebra: true,
+            combine_diagrams: false,
+        }
+    }
 }
 
 impl Default for ProcessList {
@@ -183,9 +201,10 @@ impl ProcessList {
         process.get_integrand_mut(integrand_name)
     }
 
-    pub fn export_dot(&self, settings: &ExportSettings) -> Result<()> {
-        let path = settings.root_folder.join("processes");
+    pub fn export_dot(&self, path: impl AsRef<Path>, settings: &DotExportSettings) -> Result<()> {
+        let path = path.as_ref().join("processes");
         fs::create_dir_all(&path)?;
+
         for p in self.processes.iter() {
             p.export_dot(&path, settings)?;
         }

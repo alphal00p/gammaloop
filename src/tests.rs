@@ -4,17 +4,17 @@ use crate::model::Model;
 use crate::utils::{self, ApproxEq, F};
 use crate::{
     h_function_test::HFunctionTestSettings, integrand_factory, integrands::UnitVolumeSettings,
-    settings::runtime::IntegratedPhase, settings::RuntimeSettings,
+    settings::RuntimeSettings, settings::runtime::IntegratedPhase,
 };
 use crate::{observables::JetSliceSettings, observables::PhaseSpaceSelectorSettings};
 use colored::Colorize;
-use hyperdual::Zero;
+// use hyperdual::Zero;
 use spenso::algebra::algebraic_traits::IsZero;
 use spenso::algebra::complex::Complex;
 use symbolica::domains::float::Complex as SymComplex;
 
 use crate::inspect::inspect;
-use crate::integrate::{havana_integrate, UserData};
+use crate::integrate::{UserData, havana_integrate};
 
 const CENTRAL_VALUE_TOLERANCE: F<f64> = F(2.0e-2);
 const INSPECT_TOLERANCE: F<f64> = F(1.0e-15);

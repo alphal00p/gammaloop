@@ -88,7 +88,8 @@
           "command": "check"
         },
         "runnables": {
-          "extraArgs": ["--profile dev-optim"]
+          "extraArgs": ["--profile", "dev-optim"],
+          "cargoExtraArgs": ["--profile", "dev-optim"]
         }
       }
     }

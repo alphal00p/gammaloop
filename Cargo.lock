@@ -1516,7 +1516,6 @@ dependencies = [
  "gammaloop-api",
  "gat-lending-iterator",
  "git-version",
- "hyperdual",
  "idenso",
  "include_dir",
  "indexmap 2.12.1",
@@ -1529,7 +1528,6 @@ dependencies = [
  "linnet",
  "linreg",
  "log",
- "lorentz_vector",
  "momtrop",
  "nalgebra 0.32.6",
  "paste",
@@ -1720,15 +1718,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "hyperdual"
-version = "0.5.0"
-source = "git+https://gitlab.com/benruijl/hyperdual.git#57ec74523111f89c0ec799375c406a444ced0112"
-dependencies = [
- "nalgebra 0.29.0",
- "num-traits",
-]
-
-[[package]]
 name = "iana-time-zone"
 version = "0.1.64"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1755,7 +1744,7 @@ dependencies = [
 [[package]]
 name = "idenso"
 version = "0.2.3"
-source = "git+https://github.com/alphal00p/spenso?rev=5b7123124df40848fbd0153dff415e7f8428800a#5b7123124df40848fbd0153dff415e7f8428800a"
+source = "git+https://github.com/alphal00p/spenso?rev=c83e98d133ee2c97b4b85f9fd95cd50c4a7c4ec0#c83e98d133ee2c97b4b85f9fd95cd50c4a7c4ec0"
 dependencies = [
  "anyhow",
  "bincode",
@@ -2108,8 +2097,9 @@ dependencies = [
 
 [[package]]
 name = "linnet"
-version = "0.14.1"
-source = "git+https://github.com/alphal00p/linnet?rev=aa7da353060b53f0af5a79810ed5383026871394#aa7da353060b53f0af5a79810ed5383026871394"
+version = "0.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "04bf74b7db2dd07875234c0688d8933061f881a22d4a8b0c11ce68ac249fc720"
 dependencies = [
  "ahash",
  "bincode",
@@ -2173,16 +2163,6 @@ name = "log"
 version = "0.4.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "34080505efa8e45a4b816c349525ebe327ceaa8559756f0356cba97ef3bf7432"
-
-[[package]]
-name = "lorentz_vector"
-version = "0.1.4"
-source = "git+https://github.com/benruijl/lorentz_vector?branch=hyperdual#c2d8d6f527455ec1c380ae39d69f395d710dd1d4"
-dependencies = [
- "hyperdual",
- "num 0.3.1",
- "serde",
-]
 
 [[package]]
 name = "louds-rs"
@@ -2312,8 +2292,8 @@ dependencies = [
  "approx 0.5.1",
  "matrixmultiply",
  "nalgebra-macros 0.1.0",
- "num-complex 0.4.6",
- "num-rational 0.4.2",
+ "num-complex",
+ "num-rational",
  "num-traits",
  "rand 0.8.5",
  "rand_distr",
@@ -2330,8 +2310,8 @@ dependencies = [
  "approx 0.5.1",
  "matrixmultiply",
  "nalgebra-macros 0.2.2",
- "num-complex 0.4.6",
- "num-rational 0.4.2",
+ "num-complex",
+ "num-rational",
  "num-traits",
  "simba 0.8.1",
  "typenum",
@@ -2366,7 +2346,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "882ed72dce9365842bf196bdeedf5055305f11fc8c03dee7bb0194a6cad34841"
 dependencies = [
  "matrixmultiply",
- "num-complex 0.4.6",
+ "num-complex",
  "num-integer",
  "num-traits",
  "portable-atomic",
@@ -2427,40 +2407,15 @@ dependencies = [
 
 [[package]]
 name = "num"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8b7a8e9be5e039e2ff869df49155f1c06bd01ade2117ec783e56ab0932b67a8f"
-dependencies = [
- "num-bigint 0.3.3",
- "num-complex 0.3.1",
- "num-integer",
- "num-iter",
- "num-rational 0.3.2",
- "num-traits",
-]
-
-[[package]]
-name = "num"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "35bd024e8b2ff75562e5f34e7f4905839deb4b22955ef5e73d2fea1b9813cb23"
 dependencies = [
- "num-bigint 0.4.6",
- "num-complex 0.4.6",
+ "num-bigint",
+ "num-complex",
  "num-integer",
  "num-iter",
- "num-rational 0.4.2",
- "num-traits",
-]
-
-[[package]]
-name = "num-bigint"
-version = "0.3.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5f6f7833f2cbf2360a6cfd58cd41a53aa7a90bd4c202f5b1c7dd2ed73c57b2c3"
-dependencies = [
- "autocfg",
- "num-integer",
+ "num-rational",
  "num-traits",
 ]
 
@@ -2473,15 +2428,6 @@ dependencies = [
  "num-integer",
  "num-traits",
  "serde",
-]
-
-[[package]]
-name = "num-complex"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "747d632c0c558b87dbabbe6a82f3b4ae03720d0646ac5b7b4dae89394be5f2c5"
-dependencies = [
- "num-traits",
 ]
 
 [[package]]
@@ -2532,23 +2478,11 @@ dependencies = [
 
 [[package]]
 name = "num-rational"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "12ac428b1cb17fce6f731001d307d351ec70a6d202fc2e60f7d4c5e42d8f4f07"
-dependencies = [
- "autocfg",
- "num-bigint 0.3.3",
- "num-integer",
- "num-traits",
-]
-
-[[package]]
-name = "num-rational"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f83d14da390562dca69fc84082e73e548e1ad308d24accdedd2720017cb37824"
 dependencies = [
- "num-bigint 0.4.6",
+ "num-bigint",
  "num-integer",
  "num-traits",
  "serde",
@@ -2606,7 +2540,7 @@ checksum = "29f1dee9aa8d3f6f8e8b9af3803006101bb3653866ef056d530d53ae68587191"
 dependencies = [
  "libc",
  "ndarray",
- "num-complex 0.4.6",
+ "num-complex",
  "num-integer",
  "num-traits",
  "pyo3",
@@ -3059,7 +2993,7 @@ dependencies = [
  "itertools 0.13.0",
  "log",
  "maplit",
- "num-complex 0.4.6",
+ "num-complex",
  "pyo3",
  "pyo3-stub-gen-derive",
  "serde",
@@ -3802,7 +3736,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f0b7840f121a46d63066ee7a99fc81dcabbc6105e437cae43528cea199b5a05f"
 dependencies = [
  "approx 0.5.1",
- "num-complex 0.4.6",
+ "num-complex",
  "num-traits",
  "paste",
  "wide 0.7.33",
@@ -3815,7 +3749,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "061507c94fc6ab4ba1c9a0305018408e312e17c041eb63bef8aa726fa33aceae"
 dependencies = [
  "approx 0.5.1",
- "num-complex 0.4.6",
+ "num-complex",
  "num-traits",
  "paste",
  "wide 0.7.33",
@@ -3873,7 +3807,7 @@ dependencies = [
 [[package]]
 name = "spenso"
 version = "0.5.4"
-source = "git+https://github.com/alphal00p/spenso?rev=5b7123124df40848fbd0153dff415e7f8428800a#5b7123124df40848fbd0153dff415e7f8428800a"
+source = "git+https://github.com/alphal00p/spenso?rev=c83e98d133ee2c97b4b85f9fd95cd50c4a7c4ec0#c83e98d133ee2c97b4b85f9fd95cd50c4a7c4ec0"
 dependencies = [
  "ahash",
  "anyhow",
@@ -3897,7 +3831,7 @@ dependencies = [
  "itertools 0.14.0",
  "linnet",
  "log",
- "num 0.4.3",
+ "num",
  "once_cell",
  "rand 0.9.2",
  "rand_xoshiro 0.6.0",
@@ -3915,7 +3849,7 @@ dependencies = [
 [[package]]
 name = "spenso-hep-lib"
 version = "0.1.4"
-source = "git+https://github.com/alphal00p/spenso?rev=5b7123124df40848fbd0153dff415e7f8428800a#5b7123124df40848fbd0153dff415e7f8428800a"
+source = "git+https://github.com/alphal00p/spenso?rev=c83e98d133ee2c97b4b85f9fd95cd50c4a7c4ec0#c83e98d133ee2c97b4b85f9fd95cd50c4a7c4ec0"
 dependencies = [
  "ahash",
  "idenso",
@@ -3928,7 +3862,7 @@ dependencies = [
 [[package]]
 name = "spenso-macros"
 version = "0.3.0"
-source = "git+https://github.com/alphal00p/spenso?rev=5b7123124df40848fbd0153dff415e7f8428800a#5b7123124df40848fbd0153dff415e7f8428800a"
+source = "git+https://github.com/alphal00p/spenso?rev=c83e98d133ee2c97b4b85f9fd95cd50c4a7c4ec0#c83e98d133ee2c97b4b85f9fd95cd50c4a7c4ec0"
 dependencies = [
  "proc-macro2",
  "quote",

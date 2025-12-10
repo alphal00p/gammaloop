@@ -11,7 +11,6 @@ use std::{
 use ahash::AHashSet;
 // use bincode::{Decode, Encode};
 use bincode_trait_derive::{Decode, Encode};
-use bitvec::vec::BitVec;
 use color_eyre::{Result, Section};
 use momtrop::SampleGenerator;
 
@@ -29,7 +28,7 @@ use tracing_indicatif::{span_ext::IndicatifSpanExt, style::ProgressStyle};
 use vakint::{EvaluationMethod, NumericalEvaluationResult, Vakint, vakint_symbol};
 
 use crate::{
-    DependentMomentaConstructor, GammaLoopContext, GammaLoopContextContainer,
+    GammaLoopContext, GammaLoopContextContainer,
     cff::{
         esurface::GroupEsurfaceId,
         expression::{
@@ -45,6 +44,7 @@ use crate::{
     model::ArcParticle,
     momentum_sample::ExternalIndex,
     numerator::symbolica_ext::AtomCoreExt,
+    processes::DotExportSettings,
     settings::{GlobalSettings, RuntimeSettings, runtime::LockedRuntimeSettings},
     signature::SignatureLike,
     status_debug,
@@ -57,7 +57,7 @@ use itertools::Itertools;
 use linnet::{
     half_edge::{
         involution::{HedgePair, Orientation},
-        subgraph::{SuBitGraph, SubGraphLike, SubSetLike},
+        subgraph::{SuBitGraph, SubGraphLike},
     },
     parser::DotGraph,
 };
@@ -173,7 +173,7 @@ impl Amplitude {
           )
     )]
     pub fn save(&mut self, path: impl AsRef<Path>, override_existing: bool) -> Result<()> {
-        let p = path.as_ref().join(format!("amp_{}", self.name));
+        let p = path.as_ref().join(&self.name);
 
         let r = fs::create_dir_all(&p).with_context(|| {
             format!(
@@ -321,9 +321,10 @@ impl Amplitude {
     pub(crate) fn write_dot<W: std::io::Write>(
         &self,
         writer: &mut W,
+        settings: &DotExportSettings,
     ) -> Result<(), std::io::Error> {
         for graph in &self.graphs {
-            graph.write_dot(writer)?;
+            graph.write_dot(writer, settings)?;
             writeln!(writer)?;
         }
         Ok(())
@@ -420,8 +421,9 @@ impl AmplitudeGraph {
     pub(crate) fn write_dot<W: std::io::Write>(
         &self,
         writer: &mut W,
+        settings: &DotExportSettings,
     ) -> Result<(), std::io::Error> {
-        self.graph.dot_serialize_io(writer)
+        self.graph.dot_serialize_io(writer, settings)
     }
 
     pub(crate) fn write_dot_fmt<W: fmt::Write>(

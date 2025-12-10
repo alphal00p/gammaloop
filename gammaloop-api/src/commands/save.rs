@@ -3,6 +3,7 @@ use std::{fs, path::PathBuf};
 use clap::{arg, Args, Subcommand};
 use color_eyre::{eyre::eyre, owo_colors::OwoColorize, Result};
 use gammalooprs::{
+    processes::DotExportSettings,
     settings::RuntimeSettings,
     status_info,
     utils::serde_utils::{SmartSerde, SHOWDEFAULTS},
@@ -22,8 +23,17 @@ pub enum Save {
     Dot {
         #[arg(value_hint = clap::ValueHint::FilePath)]
         path: Option<PathBuf>,
-        #[arg(long = "combine-diagrams", short = 'c', default_value_t = false)]
+        #[arg(short = 'c', default_value_t = false)]
         combine_diagrams: bool,
+        #[arg(short = 'n', long,num_args(0..=1), default_missing_value = "true",
+               value_parser = clap::builder::BoolishValueParser::new(),)]
+        output_full_numerator: Option<bool>,
+        #[arg(short = 'g', long,num_args(0..=1), default_missing_value = "true",
+               value_parser = clap::builder::BoolishValueParser::new(),)]
+        do_gamma_algebra: Option<bool>,
+        #[arg(long,num_args(0..=1), default_missing_value = "true",
+               value_parser = clap::builder::BoolishValueParser::new(),)]
+        do_color_algebra: Option<bool>,
     },
     State(SaveState),
     /// regenerate the schema files
@@ -42,6 +52,9 @@ impl Save {
             Save::Dot {
                 path,
                 combine_diagrams,
+                output_full_numerator,
+                do_color_algebra,
+                do_gamma_algebra,
             } => {
                 // Use original default location (state folder) or custom path if provided
                 let target_dir = path.unwrap_or(global_settings.state_folder.clone());
@@ -61,8 +74,16 @@ impl Save {
                     warn!("Warning: Could not generate dynamic edge styles: {}", e);
                 }
 
+                let settings = DotExportSettings {
+                    do_color_algebra: do_color_algebra.unwrap_or(false),
+                    do_gamma_algebra: do_gamma_algebra.unwrap_or(false),
+                    output_full_numerator: output_full_numerator.unwrap_or(false),
+                    split_xs_by_initial_states: true,
+                    combine_diagrams,
+                };
+
                 // Export dot files to original location
-                state.export_dots(&target_dir, combine_diagrams)?;
+                state.export_dots(&target_dir, &settings)?;
 
                 // Create Justfile with draw recipe from embedded template
                 if let Err(e) = Assets::extract_justfile(&target_dir) {

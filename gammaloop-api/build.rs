@@ -12,9 +12,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("cargo:rerun-if-changed=.git/HEAD");
     println!("cargo:rerun-if-changed=.git/refs/heads");
 
-    if cfg!(feature = "python_api") {
-        pyo3_build_config::add_extension_module_link_args();
-    }
+    #[cfg(feature = "python_api")]
+    pyo3_build_config::add_extension_module_link_args();
+
     // if cfg!(feature = "fjcore") {
     //     println!("cargo:rustc-link-search=./python/gammaloop/dependencies/fjcore");
     //     println!("cargo:rustc-link-lib=stdc++");

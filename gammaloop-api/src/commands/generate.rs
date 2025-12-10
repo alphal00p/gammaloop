@@ -5,6 +5,7 @@ use ahash::HashMap;
 use color_eyre::owo_colors::OwoColorize;
 use gammalooprs::status_info;
 use std::collections::{BTreeMap, BTreeSet};
+use std::num::ParseIntError;
 use std::ops::RangeInclusive;
 use std::path::Path;
 use std::str::FromStr;
@@ -206,7 +207,12 @@ pub struct SpecArgs {
     )]
     pub number_of_factorized_loop_subtopologies: Option<Vec<i32>>,
     /// Number of closed fermion loops; negative disables
-    #[arg(long = "number-of-fermion-loops", short = 'L', num_args = 2)]
+    #[arg(
+        long = "number-of-fermion-loops",
+        short = 'L',
+        num_args = 2,
+        allow_negative_numbers = true
+    )]
     pub number_of_fermion_loops: Option<Vec<i32>>,
 
     /// Cut options (cross-section)
@@ -518,7 +524,7 @@ pub struct Perturbative {
     pub loops_sum_amp_or_sum: Option<u32>,
     /// {{n}}
     pub loops_forward_graph: Option<u32>,
-    /// QCD=2, QED=1; shorthand “QCD”≡1
+    /// QCD=2, QED=1; shorthand "QCD"≡1
     pub orders: BTreeMap<String, u32>,
 }
 
@@ -815,6 +821,8 @@ pub enum ParseError {
     UnknownParticle { name: String, choices: String },
     #[error("unknown coupling '{name}'. Valid choices: {choices}")]
     UnknownCoupling { name: String, choices: String },
+    #[error("invalid lmb specification: {0}")]
+    InvalidLmbSpec(ParseIntError),
 }
 
 pub fn parse_spec_with_model(
@@ -922,11 +930,22 @@ pub fn parse_spec_with_model(
     // spec.process_definition.vetoed_graphs = args.veto_graphs.as_ref().map(|s| parse_csv_list(s));
     spec.process_definition.selected_graphs = args.select_graphs.clone();
     spec.process_definition.vetoed_graphs = args.veto_graphs.clone();
-    spec.process_definition.loop_momentum_bases = args.loop_momentum_bases.as_deref().map(|kvs| {
-        kvs.iter()
-            .map(|kv| (kv.key.clone(), parse_csv_list(&kv.value)))
-            .collect::<HashMap<_, _>>()
-    });
+    spec.process_definition.loop_momentum_bases = args
+        .loop_momentum_bases
+        .as_deref()
+        .map(|kvs| {
+            kvs.iter()
+                .map(|kv| {
+                    parse_csv_list(&kv.value)
+                        .into_iter()
+                        .map(|s| s.parse::<usize>())
+                        .collect::<core::result::Result<Vec<_>, _>>()
+                        .map(|lst| (kv.key.clone(), lst))
+                })
+                .collect::<core::result::Result<HashMap<_, _>, _>>()
+        })
+        .transpose()
+        .map_err(ParseError::InvalidLmbSpec)?;
     spec.process_definition.prefactor = GlobalPrefactor::default();
 
     Ok(spec)

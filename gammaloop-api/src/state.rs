@@ -30,7 +30,7 @@ use gammalooprs::{
     initialisation::{initialise, initialise_with_settings},
     integrands::HasIntegrand,
     model::{InputParamCard, Model},
-    processes::{ExportSettings, Process, ProcessCollection, ProcessDefinition, ProcessList},
+    processes::{DotExportSettings, Process, ProcessCollection, ProcessDefinition, ProcessList},
     settings::{runtime::LockedRuntimeSettings, GlobalSettings, RuntimeSettings},
     status_debug, status_info,
     utils::{
@@ -448,12 +448,12 @@ impl State {
         Ok(())
     }
 
-    pub fn export_dots(&mut self, path: impl AsRef<Path>, combine_diagrams: bool) -> Result<()> {
-        let exp_set = ExportSettings {
-            root_folder: path.as_ref().to_path_buf(),
-            combine_diagrams,
-        };
-        self.process_list.export_dot(&exp_set)?;
+    pub fn export_dots(
+        &mut self,
+        path: impl AsRef<Path>,
+        settings: &DotExportSettings,
+    ) -> Result<()> {
+        self.process_list.export_dot(path, settings)?;
         Ok(())
     }
 

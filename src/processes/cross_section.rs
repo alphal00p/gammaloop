@@ -40,6 +40,7 @@ use crate::{
     model::ArcParticle,
     momentum_sample::{ExternalIndex, SubspaceData},
     numerator::{self, symbolica_ext::AtomCoreExt},
+    processes::DotExportSettings,
     settings::{GlobalSettings, global::GenerationSettings, runtime::LockedRuntimeSettings},
     utils::{FUN_LIB, GS, TENSORLIB, W_},
     uv::{UltravioletGraph, uv_graph::UVE},
@@ -247,9 +248,10 @@ impl CrossSection {
     pub(crate) fn write_dot<W: std::io::Write>(
         &self,
         writer: &mut W,
+        settings: &DotExportSettings,
     ) -> Result<(), std::io::Error> {
         for graph in &self.supergraphs {
-            graph.write_dot(writer)?;
+            graph.write_dot(writer, settings)?;
             writeln!(writer)?;
         }
         Ok(())
@@ -410,7 +412,7 @@ impl CrossSection {
     }
 
     pub fn save(&mut self, path: impl AsRef<Path>, override_existing: bool) -> Result<()> {
-        let p = path.as_ref().join(format!("cs_{}", self.name));
+        let p = path.as_ref().join(&self.name);
         let r = fs::create_dir_all(&p).with_context(|| {
             format!(
                 "Trying to create directory to save cross section {}",
@@ -668,8 +670,9 @@ impl CrossSectionGraph {
     pub(crate) fn write_dot<W: std::io::Write>(
         &self,
         writer: &mut W,
+        settings: &DotExportSettings,
     ) -> Result<(), std::io::Error> {
-        self.graph.dot_serialize_io(writer)
+        self.graph.dot_serialize_io(writer, settings)
     }
 
     pub(crate) fn write_dot_fmt<W: std::fmt::Write>(

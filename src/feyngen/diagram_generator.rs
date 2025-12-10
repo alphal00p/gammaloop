@@ -4,6 +4,7 @@ use idenso::gamma::{AGS, GammaSimplifier};
 use indicatif::ProgressBar;
 use indicatif::{ParallelProgressIterator, ProgressStyle};
 
+use linnet::half_edge::tree::SimpleTraversalTree;
 use linnet::permutation::Permutation;
 use rayon::ThreadPoolBuilder;
 use rayon::iter::ParallelIterator;
@@ -16,6 +17,7 @@ use spenso::network::{Sequential, SmallestDegree};
 
 // use spenso::network::Network;
 
+use spenso::structure::permuted::Perm;
 // use spenso::shadowing::symbolica_utils::AtomCoreExt;
 use spenso::structure::representation::{LibraryRep, Minkowski, RepName};
 use spenso::structure::{PermutedStructure, TensorStructure};
@@ -23,7 +25,8 @@ use spenso::tensors::data::DataTensor;
 use spenso::tensors::parametric::ParamTensor;
 use spenso_hep_lib::{gamma_data_weyl, gamma5_weyl_data, proj_m_data_weyl, proj_p_data_weyl};
 use std::collections::hash_map::Entry;
-use std::collections::{HashSet, VecDeque};
+use std::collections::{BTreeMap, HashSet, VecDeque};
+use symbolica::domains::Field;
 
 use std::ops::{Deref, RangeInclusive};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -32,11 +35,11 @@ use std::time::Instant;
 use symbolica::atom::AtomView;
 use symbolica::coefficient::Coefficient;
 use symbolica::domains::algebraic_number::AlgebraicExtension;
-use symbolica::domains::finite_field::PrimeIteratorU64;
+use symbolica::domains::finite_field::{FiniteField, FiniteFieldCore, PrimeIteratorU64, Zp64};
 use symbolica::domains::float::Complex as SymbolicaComplex;
-use symbolica::function;
 use symbolica::graph::{GenerationSettings, HalfEdge};
 use symbolica::id::Replacement;
+use symbolica::{function, parse_lit};
 use tracing::{event_enabled, instrument};
 
 use ahash::AHashMap;
@@ -62,6 +65,7 @@ use crate::model::ArcVertexRule;
 use crate::model::VertexRule;
 use crate::model::{ArcParticle, ColorStructure};
 use crate::momentum::{Pow, Sign, SignOrZero};
+use crate::momentum_sample::LoopIndex;
 use crate::numerator::ParamParsingNet;
 use crate::numerator::aind::Aind;
 use crate::numerator::graph::ReversibleEdge;
@@ -83,11 +87,13 @@ use color_eyre::Result;
 use itertools::Itertools;
 use linnet::half_edge::HedgeGraph;
 use linnet::half_edge::NodeIndex;
-use linnet::half_edge::involution::{EdgeData, Flow, Orientation};
-use linnet::half_edge::subgraph::{InternalSubGraph, OrientedCut, SuBitGraph, SubSetLike};
+use linnet::half_edge::involution::{EdgeData, EdgeIndex, Flow, Orientation};
+use linnet::half_edge::subgraph::{
+    InternalSubGraph, ModifySubSet, OrientedCut, SuBitGraph, SubSetLike, SubSetOps,
+};
 use symbolica::{atom::Atom, graph::Graph as SymbolicaGraph};
 
-const CANONIZE_GRAPH_FLOWS: bool = true;
+const CANONIZE_GRAPH_FLOWS: bool = false;
 const ANALYZE_RATIO_AS_RATIONAL_POLYNOMIAL: bool = true;
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct NodeColorWithVertexRule {
@@ -1122,6 +1128,36 @@ pub fn evaluate_overall_factor(factor: AtomView) -> Atom {
     res.expand()
 }
 
+pub fn evaluate_sign_origin(factor: AtomView) -> Atom {
+    let mut res = factor.to_owned();
+    for header in [
+        "AutG",
+        "CouplingsMultiplicity",
+        "InternalFermionLoopSign",
+        "ExternalFermionOrderingSign",
+        "AntiFermionSpinSumSign",
+        "NumeratorIndependentSymmetryGrouping",
+    ] {
+        res = res
+            .replace(function!(symbol!(header), Atom::var(symbol!("x_"))).to_pattern())
+            .with(Atom::var(symbol!("x_")).to_pattern());
+    }
+    res = res
+        .replace(function!(
+            symbol!("NumeratorDependentGrouping"),
+            Atom::var(symbol!("GraphId_")),
+            Atom::var(symbol!("ratio_")),
+            Atom::var(symbol!("GraphSymmetryFactor_"))
+        ))
+        .with(function!(
+            symbol!("Group"),
+            Atom::var(symbol!("GraphId_")),
+            Atom::var(symbol!("ratio_")),
+            Atom::var(symbol!("GraphSymmetryFactor_"))
+        ));
+    res.expand()
+}
+
 impl ProcessDefinition {
     pub fn sample_lib(
         &self,
@@ -1133,6 +1169,8 @@ impl ProcessDefinition {
         Vec<Replacement>,
         TensorLibrary<ParamTensor<ExplicitKey<Aind>>, Aind>,
     ) {
+        // let ff = Zp64::new(PrimeIteratorU64::new(100000000).next().unwrap());
+
         let mut weyl = TensorLibrary::new();
         weyl.update_ids();
 
@@ -2194,6 +2232,26 @@ impl ProcessDefinition {
                     model.get_particle_from_pdg(edge.data.pdg)
                 };
 
+                let keep_direction = is_edge_external;
+
+                // // We want to forget the orientation of fermions (except for externals) to capture furry, but we need the canonization to be sensitive to charged vector bosons when it is connected to fermion lines
+                // if !keep_direction && edge.directed && particle.is_vector() {
+                //     let src_ferm = input_graph.node(edge.vertices.0).edges.iter().any(|a| {
+                //         model
+                //             .get_particle_from_pdg(input_graph.edge(*a).data.pdg)
+                //             .is_fermion()
+                //     });
+                //     let sink_ferm = input_graph.node(edge.vertices.1).edges.iter().any(|a| {
+                //         model
+                //             .get_particle_from_pdg(input_graph.edge(*a).data.pdg)
+                //             .is_fermion()
+                //     });
+
+                //     if src_ferm || sink_ferm {
+                //         keep_direction = true;
+                //     }
+                // }
+
                 // WARNING: It is important to note that the colouring choice below dictates what representative diagram (i.e. "sorted_g") will be used
                 // for performing numerical comparisons for grouping isomorphic graphs. If we do not include the spin in the colouring, we may incorrectly
                 // sort two isomorphic graphs with and interchange of massless quarks and gluons which will prevent their grouping (final result still correct, but more diagrams).
@@ -2205,7 +2263,7 @@ impl ProcessDefinition {
                     .add_edge(
                         remapped_edge_vertices.0,
                         remapped_edge_vertices.1,
-                        is_edge_external, //edge.directed && is_edge_external,
+                        keep_direction,
                         if color_according_to_mass && !is_edge_external {
                             format!("{} | {}", particle.0.mass.0, particle.0.spin)
                         } else {
@@ -4263,19 +4321,69 @@ impl ProcessDefinition {
             if n_cancellations > 1 { "s" } else { "" },
         );
 
-        for (_graph_id, _graph) in bare_graphs.iter_mut() {
-            // let forced_lmb = if let Some(lmbs) = loop_momentum_bases.as_ref() {
-            //     let g_name = String::from(graph.name.clone());
-            //     // lmbs.get(&g_name).map(|lmb: &Vec<String>| {
-            //     //     lmb.iter().map(SmartString::<LazyCompact>::from).collect()
-            //     // })
-            //     None
-            // } else {
-            //     None
-            // };
-            // if forced_lmb.is_some() {
-            //     graph.set_loop_momentum_basis(&forced_lmb)?;
-            // }
+        if let Some(lmbs) = self.loop_momentum_bases.as_ref() {
+            for (_graph_id, graph) in bare_graphs.iter_mut() {
+                if let Some(lmb) = lmbs.get(&graph.name) {
+                    let full_filter = graph.full_filter();
+                    let mut cut_graph = full_filter.subtract(&graph.initial_state_cut.right);
+
+                    for e in lmb.iter() {
+                        cut_graph.sub(graph[&EdgeIndex(*e)].1);
+                    }
+
+                    let mut loop_momentum_basis = if let Some(i) = cut_graph.included_iter().next()
+                    {
+                        let tree = SimpleTraversalTree::depth_first_traverse(
+                            &graph,
+                            &cut_graph,
+                            &graph.node_id(i),
+                            None,
+                        )
+                        .unwrap();
+
+                        let external = graph.internal_crown(&full_filter);
+                        graph.lmb_impl(&full_filter, &tree.tree_subgraph, external)
+                    } else {
+                        return Err(FeynGenError::Eyre(eyre!(
+                            "No included edges found in full_cut for loop momentum basis setup"
+                        )));
+                    };
+
+                    for e in graph.initial_state_cut.left.included_iter() {
+                        let e = graph[&e];
+                        let (l, _) = loop_momentum_basis
+                            .loop_edges
+                            .iter()
+                            .find_position(|a| *a == &e)
+                            .unwrap();
+
+                        loop_momentum_basis.put_loop_to_ext(LoopIndex(l));
+                    }
+
+                    let lmb_init_loop_ids = lmb
+                        .iter()
+                        .map(|e| {
+                            LoopIndex(
+                                loop_momentum_basis
+                                    .loop_edges
+                                    .iter()
+                                    .find_position(|a| a.0 == *e)
+                                    .unwrap()
+                                    .0,
+                            )
+                        })
+                        .collect::<Vec<_>>();
+
+                    let p = Permutation::sort(&lmb_init_loop_ids)
+                        .inverse()
+                        .transpositions();
+
+                    for (a, b) in p {
+                        loop_momentum_basis.swap_loops(LoopIndex(a), LoopIndex(b));
+                    }
+                    graph.loop_momentum_basis = loop_momentum_basis;
+                }
+            }
         }
         debug!(
             "Graphs: [\n{}\n]",
@@ -4863,6 +4971,7 @@ impl ProcessedNumeratorForComparison {
                 } else {
                     None
                 };
+
                 let mut numerators = vec![numerator];
 
                 if settings

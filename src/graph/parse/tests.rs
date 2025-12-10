@@ -811,12 +811,12 @@ fn parse() {
     let expr = num.state.expr.as_view();
 
     let lib: DummyLibrary<SymbolicTensor<Aind>> = DummyLibrary::<_>::new();
-    let net = Network::<NetworkStore<SymbolicTensor<Aind>, Atom>, _, Symbol, Aind>::try_from_view(
-        expr,
-        &lib,
-        &ParseSettings::default(),
-    )
-    .unwrap();
+    let net =
+        Network::<NetworkStore<SymbolicTensor<Aind>, Atom>, _, Symbol, Aind>::try_from_view::<
+            SymbolicTensor<Aind>,
+            _,
+        >(expr, &lib, &ParseSettings::default())
+        .unwrap();
 
     println!("{}", expr);
     println!(
@@ -909,12 +909,12 @@ fn parse_local() {
     let expr = num.state.expr.as_view();
 
     let lib: DummyLibrary<SymbolicTensor<Aind>> = DummyLibrary::<_>::new();
-    let net = Network::<NetworkStore<SymbolicTensor<Aind>, Atom>, _, Symbol, Aind>::try_from_view(
-        expr,
-        &lib,
-        &ParseSettings::default(),
-    )
-    .unwrap();
+    let net =
+        Network::<NetworkStore<SymbolicTensor<Aind>, Atom>, _, Symbol, Aind>::try_from_view::<
+            SymbolicTensor<Aind>,
+            _,
+        >(expr, &lib, &ParseSettings::default())
+        .unwrap();
 
     println!("{}", expr);
     println!(
@@ -1014,6 +1014,42 @@ fn parse_lmbsetting_crossection() {
     }
     "#);
 }
+
+#[test]
+fn lmb() {
+    test_initialise().unwrap();
+
+    let g: Vec<Graph> = dot!(
+        digraph G{
+            edge [num="1"]
+            ext    [style=invis]
+            node [num="1"]
+            ext -> A
+            ext -> A
+            ext -> A
+            A -> B
+            B -> ext
+            B -> ext
+            B -> ext
+            B -> ext
+        }
+
+        digraph G{
+            edge [num="1"]
+            ext    [style=invis]
+            node [num="1"]
+            A ->C
+            C -> D
+            D -> A
+            A -> B
+
+            B->B1
+            B1->B2
+            B2->B
+        }
+    )
+    .unwrap();
+}
 #[test]
 fn parse_lmbsetting() {
     test_initialise().unwrap();
@@ -1086,12 +1122,12 @@ fn parse_lmbsetting() {
     let expr = num.state.expr.as_view();
 
     let lib: DummyLibrary<SymbolicTensor<Aind>> = DummyLibrary::<_>::new();
-    let net = Network::<NetworkStore<SymbolicTensor<Aind>, Atom>, _, Symbol, Aind>::try_from_view(
-        expr,
-        &lib,
-        &ParseSettings::default(),
-    )
-    .unwrap();
+    let net =
+        Network::<NetworkStore<SymbolicTensor<Aind>, Atom>, _, Symbol, Aind>::try_from_view::<
+            SymbolicTensor<Aind>,
+            _,
+        >(expr, &lib, &ParseSettings::default())
+        .unwrap();
 
     println!("{}", expr);
     println!(

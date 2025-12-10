@@ -1,3 +1,4 @@
+use idenso::{color::ColorSimplifier, gamma::GammaSimplifier};
 use linnet::{
     half_edge::{
         HedgeGraph,
@@ -9,13 +10,45 @@ use linnet::{
 
 use crate::{
     graph::Graph,
+    processes::DotExportSettings,
     utils::{GS, W_},
+    uv::UltravioletGraph,
 };
 
 use super::{ParseGraph, string_utils::ToQuoted};
 
 impl Graph {
-    pub fn to_spit_dotgraph(&self) -> DotGraph {
+    pub fn to_dot_graph_with_settings(&self, settings: &DotExportSettings) -> DotGraph {
+        let mut dotgraph = if settings.split_xs_by_initial_states {
+            self.to_split_dotgraph()
+        } else {
+            DotGraph::from(self)
+        };
+
+        if settings.output_full_numerator {
+            let mut num = self
+                .numerator(&self.full_filter())
+                .get_single_atom()
+                .unwrap();
+
+            if settings.do_color_algebra {
+                num = num.simplify_color();
+            }
+
+            if settings.do_gamma_algebra {
+                num = num.simplify_gamma();
+            }
+
+            dotgraph
+                .global_data
+                .statements
+                .insert("full_num".into(), num.to_quoted());
+        }
+
+        dotgraph
+    }
+
+    pub fn to_split_dotgraph(&self) -> DotGraph {
         let global_data = self.global_data();
 
         let mut graph: HedgeGraph<DotEdgeData, DotVertexData, DotHedgeData> = if self

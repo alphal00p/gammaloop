@@ -1,13 +1,13 @@
 use crate::momentum::FourMomentum;
 use crate::settings::RuntimeSettings;
-use crate::utils::{FloatLike, F};
+use crate::utils::{F, FloatLike};
 use bincode_trait_derive::{Decode, Encode};
 use itertools::Itertools;
 #[allow(unused_imports)]
 use libc::{c_double, c_int, c_void};
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
-use lorentz_vector::LorentzVector;
+// use lorentz_vector::LorentzVector;
 use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
 use spenso::algebra::complex::Complex;
@@ -656,8 +656,10 @@ impl JetClustering {
 
         self.ordered_pt.clear();
         for i in 0..actual_len as usize {
-            let jet = LorentzVector::from_slice(&self.fastjet_jets_out[i * 4..(i + 1) * 4]);
-            self.ordered_pt.push(jet.pt());
+            let p = &self.fastjet_jets_out[i * 4..(i + 1) * 4];
+            // let jet = FourMomentum::from_args(t, x, y, z);
+            self.ordered_pt
+                .push((p[1] * p[1] + p[2] * p[2]).abs().sqrt());
         }
 
         // Filter order_pt jets by removing those below the necessary min_jpt

@@ -10,7 +10,7 @@ use symbolica::{
     atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol},
     domains::{
         algebraic_number::AlgebraicExtension,
-        finite_field::PrimeIteratorU64,
+        finite_field::{FiniteFieldCore, PrimeIteratorU64, Zp64},
         float::Complex,
         integer::IntegerRing,
         rational::{FractionField, Q, Rational},
@@ -109,7 +109,11 @@ impl<'de> Deserialize<'de> for StringSerializedAtom {
 
 pub trait PrimeGenerate {
     fn prime_generate_int(sample_iterator: &mut PrimeIteratorU64) -> Atom;
-
+    fn prime_generate_ff_complex(
+        sample_iterator: &mut PrimeIteratorU64,
+        finite_field: &Zp64,
+    ) -> Atom;
+    fn prime_generate_ff(sample_iterator: &mut PrimeIteratorU64, finite_field: &Zp64) -> Atom;
     fn prime_generate_rat_complex(sample_iterator: &mut PrimeIteratorU64) -> Atom;
     fn prime_generate_rat(sample_iterator: &mut PrimeIteratorU64) -> Atom;
 }
@@ -125,6 +129,28 @@ impl PrimeGenerate for Atom {
             sample_iterator.next().unwrap(),
         ));
         Atom::num(a)
+    }
+
+    fn prime_generate_ff_complex(
+        sample_iterator: &mut PrimeIteratorU64,
+        finite_field: &Zp64,
+    ) -> Atom {
+        let a = finite_field.to_element(sample_iterator.next().unwrap());
+        let b = finite_field.to_element(sample_iterator.next().unwrap());
+        Atom::num(1)
+        // Atom::i() * Atom::num(b) + Atom::num(a)
+    }
+
+    fn prime_generate_ff(sample_iterator: &mut PrimeIteratorU64, finite_field: &Zp64) -> Atom {
+        let a = Rational::from((
+            sample_iterator.next().unwrap(),
+            sample_iterator.next().unwrap(),
+        ));
+        let b = Rational::from((
+            sample_iterator.next().unwrap(),
+            sample_iterator.next().unwrap(),
+        ));
+        Atom::num(Complex::new(a, b))
     }
 
     fn prime_generate_rat_complex(sample_iterator: &mut PrimeIteratorU64) -> Atom {

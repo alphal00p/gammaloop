@@ -181,6 +181,7 @@
           nickel
           nls
           typst
+          cargo-nextest
           # gcc_debug.out
           # stdenv.cc.cc.lib
           pkg-config

@@ -1,5 +1,6 @@
 use ahash::HashMap;
 use ahash::HashSet;
+use linnet::half_edge::involution::EdgeIndex;
 use linnet::half_edge::involution::Flow;
 use linnet::half_edge::involution::HedgePair;
 use linnet::half_edge::involution::Orientation;
@@ -22,7 +23,8 @@ use std::fmt;
 
 use crate::graph::FeynmanGraph;
 use crate::graph::edge::PossibleParticle;
-use crate::processes::ExportSettings;
+use crate::processes::DotExportSettings;
+
 use crate::settings::RuntimeSettings;
 use crate::settings::runtime;
 use crate::{
@@ -66,7 +68,7 @@ pub struct ProcessDefinition {
     pub graph_prefix: String,
     pub selected_graphs: Option<Vec<String>>,
     pub vetoed_graphs: Option<Vec<String>>,
-    pub loop_momentum_bases: Option<HashMap<String, Vec<String>>>,
+    pub loop_momentum_bases: Option<HashMap<String, Vec<usize>>>,
     pub prefactor: GlobalPrefactor,
 }
 
@@ -572,7 +574,7 @@ impl Process {
     pub(crate) fn export_dot(
         &self,
         path: impl AsRef<Path>,
-        settings: &ExportSettings,
+        settings: &DotExportSettings,
     ) -> Result<()> {
         match &self.collection {
             ProcessCollection::Amplitudes(a) => {
@@ -603,7 +605,7 @@ impl Process {
                             )
                         })?;
                         for graph in amp.graphs.iter() {
-                            graph.graph.dot_split_serialize_io(&mut dot)?;
+                            graph.graph.dot_serialize_io(&mut dot, settings)?;
                         }
                     } else {
                         // Save each graph in its own file
@@ -619,7 +621,7 @@ impl Process {
                                         .display()
                                 )
                             })?;
-                            graph.graph.dot_split_serialize_io(&mut dot)?;
+                            graph.graph.dot_serialize_io(&mut dot, settings)?;
                         }
                     }
                 }
@@ -637,6 +639,7 @@ impl Process {
                             cs_path.display()
                         )
                     })?;
+
                     if settings.combine_diagrams {
                         // Save all graphs combined in one file
                         let mut dot = File::create_new(
@@ -651,7 +654,7 @@ impl Process {
                             )
                         })?;
                         for graph in cs.supergraphs.iter() {
-                            graph.graph.dot_split_serialize_io(&mut dot)?;
+                            graph.graph.dot_serialize_io(&mut dot, settings)?;
                         }
                     } else {
                         // Save each supergraph in its own file
@@ -665,7 +668,7 @@ impl Process {
                                     cs_path.join(&format!("{}.dot", graph.graph.name)).display()
                                 )
                             })?;
-                            graph.graph.dot_split_serialize_io(&mut dot)?;
+                            graph.graph.dot_serialize_io(&mut dot, settings)?;
                         }
                     }
                 }

@@ -15,6 +15,7 @@ use crate::{
         graph::GeneratePolarizations,
         ufo::UFO,
     },
+    processes::DotExportSettings,
     utils::symbolica_ext::DOD,
 };
 use ahash::{AHashMap, AHashSet};
@@ -641,8 +642,9 @@ impl Graph {
     pub(crate) fn dot_serialize_io(
         &self,
         writer: &mut impl std::io::Write,
+        settings: &DotExportSettings,
     ) -> Result<(), std::io::Error> {
-        let g = DotGraph::from(self);
+        let g = self.to_dot_graph_with_settings(settings);
         g.write_io(writer)
     }
 
@@ -650,7 +652,7 @@ impl Graph {
         &self,
         writer: &mut impl std::io::Write,
     ) -> Result<(), std::io::Error> {
-        let g = self.to_spit_dotgraph();
+        let g = self.to_split_dotgraph();
         g.write_io(writer)
     }
 
