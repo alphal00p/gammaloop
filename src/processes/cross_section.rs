@@ -21,7 +21,7 @@ use spenso::{
     structure::concrete_index::ExpandedIndex,
 };
 use tracing::info;
-use vakint::{EvaluationOrder, LoopNormalizationFactor, Vakint, VakintSettings};
+use vakint::{EvaluationOrder, LoopNormalizationFactor, ReplacementRules, Vakint, VakintSettings};
 
 use crate::{
     GammaLoopContext, GammaLoopContextContainer,
@@ -804,13 +804,10 @@ impl CrossSectionGraph {
         Ok(())
     }
 
-    fn build_original_parametric_integrand(
-        &mut self,
-        settings: &GenerationSettings,
-    ) -> Result<TiVec<CutId, Atom>> {
-        let global_num = self.graph.global_network();
-
+    fn get_initial_state_tree_data(&self) -> (ParsingNet, Vec<Replacement>) {
         let (tree_structure, props) = self.graph.get_initial_state_tree();
+        let mut prop_atoms = Atom::num(1);
+        let mut replacements = vec![];
 
         let external_energy_atoms = self
             .graph
@@ -820,8 +817,6 @@ impl CrossSectionGraph {
             .map(|e_id| GS.emr_mom(*e_id, Atom::from(ExpandedIndex::from_iter([0]))))
             .collect_vec();
 
-        let mut prop_atoms = Atom::num(1);
-        let mut replacements = vec![];
         for edge_id in props.iter() {
             let emr = (0..4)
                 .map(|mu| GS.emr_mom(*edge_id, Atom::from(ExpandedIndex::from_iter([mu]))))
@@ -839,17 +834,47 @@ impl CrossSectionGraph {
                 .external
                 .apply(&external_energy_atoms);
 
-            let replacement = Replacement::new(
+            let replacement_1 = Replacement::new(
                 GS.emr_mom(*edge_id, Atom::from(ExpandedIndex::from_iter([0])))
                     .to_pattern(),
-                replaced_mom,
+                replaced_mom.clone(),
             );
 
-            replacements.push(replacement);
+            let replacement_2 =
+                Replacement::new(GS.ose(*edge_id).to_pattern(), replaced_mom.clone());
+
+            replacements.push(replacement_1);
+            replacements.push(replacement_2);
             prop_atoms *= prop_atom;
         }
 
         prop_atoms = prop_atoms.replace_multiple(&replacements);
+
+        let initial_state_tree_expr = numerator::symbolica_ext::AtomCoreExt::wrap_color(
+            &(self
+                .graph
+                .iter_edges_of(&tree_structure)
+                .fold(Atom::num(1), |acc, (_, _, edge)| acc * &edge.data.num)
+                * self
+                    .graph
+                    .iter_nodes_of(&tree_structure)
+                    .fold(Atom::num(1), |acc, (_, _, vertex)| acc * vertex.get_num())
+                * &prop_atoms),
+            GS.color_wrap,
+        )
+        .parse_into_net()
+        .unwrap();
+
+        (initial_state_tree_expr, replacements)
+    }
+
+    fn build_original_parametric_integrand(
+        &mut self,
+        settings: &GenerationSettings,
+    ) -> Result<TiVec<CutId, Atom>> {
+        let global_num = self.graph.global_network();
+
+        let (tree_structure, replacements) = self.get_initial_state_tree_data();
 
         let canonize_esurface = self
             .graph
@@ -925,22 +950,7 @@ impl CrossSectionGraph {
                     .push((left_expr.clone(), right_expr.clone()));
             }
 
-            let initial_state_tree_expr = numerator::symbolica_ext::AtomCoreExt::wrap_color(
-                &(self
-                    .graph
-                    .iter_edges_of(&tree_structure)
-                    .fold(Atom::num(1), |acc, (_, _, edge)| acc * &edge.data.num)
-                    * self
-                        .graph
-                        .iter_nodes_of(&tree_structure)
-                        .fold(Atom::num(1), |acc, (_, _, vertex)| acc * vertex.get_num())
-                    * &prop_atoms),
-                GS.color_wrap,
-            )
-            .parse_into_net()
-            .unwrap();
-
-            let mut product = left_expr * right_expr * global_num.clone() * initial_state_tree_expr;
+            let mut product = left_expr * right_expr * global_num.clone() * tree_structure.clone();
 
             debug!("Product:{}", product.dot_pretty());
             product
@@ -971,12 +981,6 @@ impl CrossSectionGraph {
                 integrand = integrand
                     .replace(GS.ose(edge_index))
                     .with(GS.emr_mom(edge_index, Atom::from(ExpandedIndex::from_iter([0]))));
-            }
-
-            for edge_index in props.iter() {
-                integrand = integrand
-                    .replace(GS.ose(*edge_index))
-                    .with(GS.emr_mom(*edge_index, Atom::from(ExpandedIndex::from_iter([0]))));
             }
 
             integrand = integrand.replace_multiple(&replacements);
