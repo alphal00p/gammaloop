@@ -2951,25 +2951,25 @@ impl ProcessDefinition {
             "Starting Feynman graph generation with Symbolica..."
         );
 
-        // pool.install(|| {
-        //     graphs = graphs
-        //         .par_iter()
-        //         .progress_with(bar.clone())
-        //         .filter(|(g, _symmetry_factor)| {
-        //             contains_particles(
-        //                 g,
-        //                 unoriented_final_state_particles_always_present_vec.as_slice(),
-        //             )
-        //         })
-        //         .map(|(g, sf)| (g.clone(), sf.clone()))
-        //         .collect::<HashMap<_, _>>()
-        // });
-        // bar.finish_and_clear();
+        let graph_gen_bar = Arc::new(ProgressBar::new(0 as u64));
+        graph_gen_bar.set_style(progress_bar_style.clone());
+        graph_gen_bar.set_message("Starting Feynamn graphs generation with Symbolica...");
+        graph_gen_bar.tick();
+        let graph_gen_bar_arc_clone = graph_gen_bar.clone();
         let symbolica_generation_settings = if let Some(max_bridges) = filters.get_max_bridge() {
             GenerationSettings::new().max_bridges(max_bridges)
         } else {
             GenerationSettings::new()
         }
+        .progress_fn(Box::new(move |_| {
+            graph_gen_bar_arc_clone.inc_length(1);
+            graph_gen_bar_arc_clone.inc(1);
+            if INTERRUPTED.swap(false, Ordering::SeqCst) {
+                false
+            } else {
+                true
+            }
+        }))
         .max_loops(self.loop_count_range.1)
         .allow_self_loops(!self.filter_self_loop)
         .allow_zero_flow_edges(!self.filter_zero_flow_edges)
@@ -3007,14 +3007,20 @@ impl ProcessDefinition {
         // );
 
         // println!(
-        //     "vertex_signatures_for_generation=\nvec![{:?}]",
+        //     "vertex_signatures_for_generation bis=\nvec![{:?}]",
         //     vertex_signatures_for_generation
         //         .iter()
         //         .map(|v| {
         //             format!(
         //                 "vec![{}]",
         //                 v.iter()
-        //                     .map(|e| format!("{:?}", e),)
+        //                     .map(|e| format!(
+        //                         "{:?}",
+        //                         HalfEdge {
+        //                             direction: e.direction,
+        //                             data: e.data.pdg
+        //                         }
+        //                     ),)
         //                     .collect::<Vec<_>>()
         //                     .join(", ")
         //             )
@@ -3029,30 +3035,26 @@ impl ProcessDefinition {
         //         .iter()
         //         .map(|v| {
         //             v.iter()
-        //                 .map(|(orientation, edge_color)| {
-        //                     // (
-        //                     //     *orientation,
-        //                     //     format!(
-        //                     //         "{}{}",
-        //                     //         edge_color.pdg,
-        //                     //         model
-        //                     //             .get_particle_from_pdg(edge_color.pdg)
-        //                     //             .0
-        //                     //             .name
-        //                     //             .to_string()
-        //                     //     ),
-        //                     // )
-        //                     model
-        //                         .get_particle_from_pdg(edge_color.pdg)
-        //                         .0
-        //                         .name
-        //                         .to_string()
+        //                 .map(|he| {
+        //                     (
+        //                         he.direction
+        //                             .map(|d| format!("{}", d))
+        //                             .unwrap_or("None".to_string()),
+        //                         format!(
+        //                             "{}|{}",
+        //                             he.data.pdg,
+        //                             model.get_particle_from_pdg(he.data.pdg).0.name.to_string()
+        //                         ),
+        //                     )
         //                 })
         //                 .collect::<Vec<_>>()
         //         })
         //         .collect::<Vec<_>>()
         // );
-
+        // println!(
+        //     "Symbolica generation settings:\n{:?}",
+        //     symbolica_generation_settings
+        // );
         let mut graphs = match SymbolicaGraph::generate(
             external_edges_for_generation.as_slice(),
             vertex_signatures_for_generation.as_slice(),
@@ -3086,6 +3088,7 @@ impl ProcessDefinition {
                 gs_thus_far
             }
         };
+        graph_gen_bar.finish_and_clear();
 
         // Immediately drop lower loop count contributions
         graphs.retain(|g, _| g.num_loops() >= self.loop_count_range.0);

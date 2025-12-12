@@ -251,7 +251,14 @@ impl RunHistory {
         default_runtime_settings: &mut RuntimeSettings,
     ) -> Result<ControlFlow<SaveState>> {
         for command_history in self.commands.clone() {
-            status_info!("Running command: {:?}", command_history.command);
+            info!(
+                "Running command: {}",
+                if let Some(rs) = command_history.raw_string {
+                    rs.green()
+                } else {
+                    format!("{:?}", command_history.command).normal()
+                }
+            );
             if let ControlFlow::Break(a) = command_history.command.run(
                 state,
                 self,
