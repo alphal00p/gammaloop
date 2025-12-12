@@ -687,7 +687,9 @@ impl GammaloopIntegrand for AmplitudeIntegrand {
             self.settings.subtraction.disable_threshold_subtraction = true;
         }
 
-        if !self.settings.subtraction.disable_threshold_subtraction {
+        let is_tree_level = self.data.graph_terms[0].graph.get_loop_number() == 0;
+
+        if !self.settings.subtraction.disable_threshold_subtraction && !is_tree_level {
             status_debug!("esurface existence check");
             let existing_esurfaces = self.get_existing_esurfaces(model);
             for (group_id, existing_esurfaces) in existing_esurfaces.iter_enumerated() {
