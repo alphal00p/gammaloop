@@ -139,6 +139,7 @@ pub(crate) fn load_ufo_model(
             None => kwargs.set_item("restriction_name", py.None())?,
         }
         kwargs.set_item("simplify_model", simplify_model)?;
+        kwargs.set_item("wrap_indices_in_lorentz_structures", true)?;
 
         // call loader.load(...)
         let out = load_model
