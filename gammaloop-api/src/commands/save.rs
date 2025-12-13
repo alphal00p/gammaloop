@@ -22,6 +22,8 @@ pub enum Save {
     Dot {
         #[arg(value_hint = clap::ValueHint::FilePath)]
         path: Option<PathBuf>,
+        #[arg(long = "combine-diagrams", short = 'c', default_value_t = false)]
+        combine_diagrams: bool,
     },
     State(SaveState),
     /// regenerate the schema files
@@ -37,7 +39,10 @@ impl Save {
         global_settings: &CLISettings,
     ) -> Result<()> {
         match self {
-            Save::Dot { path } => {
+            Save::Dot {
+                path,
+                combine_diagrams,
+            } => {
                 // Use original default location (state folder) or custom path if provided
                 let target_dir = path.unwrap_or(global_settings.state_folder.clone());
                 status_info!("Saving dot files to {}", target_dir.display());
@@ -57,7 +62,7 @@ impl Save {
                 }
 
                 // Export dot files to original location
-                state.export_dots(&target_dir)?;
+                state.export_dots(&target_dir, combine_diagrams)?;
 
                 // Create Justfile with draw recipe from embedded template
                 if let Err(e) = Assets::extract_justfile(&target_dir) {

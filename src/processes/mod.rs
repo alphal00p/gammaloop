@@ -48,6 +48,7 @@ pub struct ProcessList {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ExportSettings {
     pub root_folder: PathBuf,
+    pub combine_diagrams: bool,
 }
 
 impl Default for ProcessList {
@@ -186,7 +187,7 @@ impl ProcessList {
         let path = settings.root_folder.join("processes");
         fs::create_dir_all(&path)?;
         for p in self.processes.iter() {
-            p.export_dot(&path)?;
+            p.export_dot(&path, settings)?;
         }
         Ok(())
     }

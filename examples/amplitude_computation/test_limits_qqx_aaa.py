@@ -2,6 +2,8 @@
 
 import argparse
 import polars as pl
+from polars import Field
+
 import subprocess
 import os
 
@@ -110,27 +112,74 @@ graph_names = [
 
 
 def get_integrand_results(log_file_path):
-    df = pl.read_ndjson(log_file_path)
+    df = pl.read_ndjson(log_file_path, infer_schema_length=None)
+    schema = df.schema
 
-    has_span = "span" in df.columns
-    has_spans = "spans" in df.columns
+    span_dt = schema.get("span")
+    has_term_name = bool(
+        span_dt is not None
+        and span_dt.is_(pl.Struct)
+        and "term.name" in span_dt.to_schema()  # dict of field -> dtype
+    )
+
+    spans_dt = schema.get("spans")
+    has_term_name_from_spans = bool(
+        spans_dt is not None
+        and spans_dt.is_(pl.List)
+        and spans_dt.inner.is_(pl.Struct)
+        and "term.name" in spans_dt.inner.to_schema()
+    )
+
+    #target = {
+    #    "span":  pl.Struct([Field("term.name", pl.Utf8), Field("name", pl.Utf8)]),
+    #    "spans": pl.List(pl.Struct([Field("term.name", pl.Utf8), Field("name", pl.Utf8)])),
+    #}
+
+
+
+    norm = (
+        df.select("span", "spans")
+        .match_to_schema(
+            {
+                 "span":  pl.Struct([Field("term.name", pl.Utf8), Field("name", pl.Utf8)]),
+                  "spans": pl.List(pl.Struct([Field("term.name", pl.Utf8), Field("name", pl.Utf8)])),
+            },
+            missing_struct_fields="insert",
+            extra_struct_fields="ignore",
+              extra_columns="ignore",
+          )
+    )
+
+    # overwrite only these two columns, keep everything else (including "message")
+    df = df.with_columns(norm["span"], norm["spans"])
+
+
+
+    #df = df.match_to_schema(
+    #    {
+    #        "span":  pl.Struct([Field("term.name", pl.Utf8), Field("name", pl.Utf8)]),
+    #        "spans": pl.List(pl.Struct([Field("term.name", pl.Utf8), Field("name", pl.Utf8)])),
+    #    },
+    #    missing_struct_fields="insert",   # add missing struct fields as null
+    #    extra_struct_fields="ignore",     # don't complain about other fields inside the structs
+    #    extra_columns="ignore",           # don't complain about other top-level columns
+    #)
 
     all_evals = {}
     for g_name in graph_names:
         all_evals[g_name] = {'I': complex(
             0.0, 0.0), 'threshold_CT': complex(0.0, 0.0)}
-        pred_span = (
-            pl.col("span").struct.field("term.name") == g_name
-        ) if has_span else pl.lit(False)
+
+        pred_span = (pl.col("span").struct.field("term.name") == g_name) 
 
         pred_spans = (
             pl.col("spans")
             .list.eval(pl.element().struct.field("term.name") == g_name)
             .list.any()
-        ) if has_spans else pl.lit(False)
+            .fill_null(False)
+        ) 
 
         g_df = df.filter(pred_span | pred_spans)
-
         g_original_integrand = g_df.filter(
             pl.col("message") == "Original integrand value")
         if g_original_integrand.is_empty():
@@ -155,10 +204,10 @@ def get_integrand_results(log_file_path):
         all_evals[g_name]['threshold_CT'] = -extract_complex(eval_str)
 
     # inspect_df = df.filter(pl.col("target") == "gammalooprs::inspect")
-    inspect_df = df.filter(pl.col("target") == "status")
+    inspect_df = df.filter(pl.col("target") == "_gammaloop::commands::inspect")
 
     total_df = inspect_df.filter(
-        pl.col("message").str.contains("The evaluation of integrand"))
+        pl.col("message").str.contains("Result:"))
     if total_df.is_empty():
         raise ValueError("No entries found for total integrand")
     if total_df.height > 1:
@@ -168,10 +217,10 @@ def get_integrand_results(log_file_path):
     total = extract_complex(total_str)
 
     # inspect_df = df.filter(pl.col("target") == "gammalooprs::inspect")
-    inspect_df = df.filter(pl.col("target") == "status")
+    inspect_df = df.filter(pl.col("target") == "_gammaloop::commands::inspect")
 
     jac_df = inspect_df.filter(pl.col("message").str.contains(
-        "f128 sampling jacobian for this point"))
+        "Jacobian for this point:"))
     if jac_df.is_empty():
         raise ValueError("No entries found for Jacobian")
     if jac_df.height > 1:
@@ -193,7 +242,7 @@ def eval_integrand(k_input, debug=False, gammaloop_state='./GL_QQX_AAA_euclidean
     if debug:
         print(f"Running command:\n{cmd}")
     tmp_env = os.environ.copy()
-    tmp_env['GL_LOGFILE_FILTER'] = 'debug,status=on'
+    tmp_env['GL_LOGFILE_FILTER'] = 'debug'
     if debug:
         tmp_env['GL_DISPLAY_FILTER'] = 'debug'
     else:

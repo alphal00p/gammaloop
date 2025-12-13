@@ -2953,7 +2953,7 @@ impl ProcessDefinition {
 
         let graph_gen_bar = Arc::new(ProgressBar::new(0 as u64));
         graph_gen_bar.set_style(progress_bar_style.clone());
-        graph_gen_bar.set_message("Starting Feynamn graphs generation with Symbolica...");
+        graph_gen_bar.set_message("Starting Feynman graphs generation with Symbolica...");
         graph_gen_bar.tick();
         let graph_gen_bar_arc_clone = graph_gen_bar.clone();
         let symbolica_generation_settings = if let Some(max_bridges) = filters.get_max_bridge() {

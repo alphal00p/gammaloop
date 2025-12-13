@@ -22,6 +22,7 @@ use std::fmt;
 
 use crate::graph::FeynmanGraph;
 use crate::graph::edge::PossibleParticle;
+use crate::processes::ExportSettings;
 use crate::settings::RuntimeSettings;
 use crate::settings::runtime;
 use crate::{
@@ -568,13 +569,17 @@ impl Process {
         self.collection.get_integrand_mut(integrand_name)
     }
 
-    pub(crate) fn export_dot(&self, path: impl AsRef<Path>) -> Result<()> {
+    pub(crate) fn export_dot(
+        &self,
+        path: impl AsRef<Path>,
+        settings: &ExportSettings,
+    ) -> Result<()> {
         match &self.collection {
             ProcessCollection::Amplitudes(a) => {
                 let p = path.as_ref().join("amplitudes");
                 let path = p.join(PathBuf::from(self.definition.folder_name.clone()));
                 fs::create_dir_all(&path)?;
-                for (_, amp) in a {
+                for (amp_name, amp) in a {
                     // Create a folder for each amplitude
                     let amp_path = path.join(&amp.name);
                     fs::create_dir_all(&amp_path).with_context(|| {
@@ -584,11 +589,29 @@ impl Process {
                         )
                     })?;
 
-                    // Save each graph in its own file
-                    for graph in amp.graphs.iter() {
-                        let mut dot =
-                            File::create_new(amp_path.join(&format!("{}.dot", graph.graph.name)))
-                                .with_context(|| {
+                    if settings.combine_diagrams {
+                        // Save all graphs combined in one file
+                        let mut dot = File::create_new(
+                            amp_path.join(&format!("{}_graphs.dot", amp_name.clone())),
+                        )
+                        .with_context(|| {
+                            format!(
+                                "Trying to create file to export amplitude graph {}",
+                                amp_path
+                                    .join(&format!("{}_graphs.dot", amp_name.clone()))
+                                    .display()
+                            )
+                        })?;
+                        for graph in amp.graphs.iter() {
+                            graph.graph.dot_split_serialize_io(&mut dot)?;
+                        }
+                    } else {
+                        // Save each graph in its own file
+                        for graph in amp.graphs.iter() {
+                            let mut dot = File::create_new(
+                                amp_path.join(&format!("{}.dot", graph.graph.name)),
+                            )
+                            .with_context(|| {
                                 format!(
                                     "Trying to create file to export amplitude graph {}",
                                     amp_path
@@ -596,7 +619,8 @@ impl Process {
                                         .display()
                                 )
                             })?;
-                        graph.graph.dot_split_serialize_io(&mut dot)?;
+                            graph.graph.dot_split_serialize_io(&mut dot)?;
+                        }
                     }
                 }
             }
@@ -604,7 +628,7 @@ impl Process {
                 let p = path.as_ref().join("cross_sections");
                 let path = p.join(PathBuf::from(self.definition.folder_name.clone()));
                 fs::create_dir_all(&path)?;
-                for (_, cs) in cs {
+                for (xs_name, cs) in cs {
                     // Create a folder for each cross section
                     let cs_path = path.join(&cs.name);
                     fs::create_dir_all(&cs_path).with_context(|| {
@@ -613,20 +637,36 @@ impl Process {
                             cs_path.display()
                         )
                     })?;
-
-                    // Save each supergraph in its own file
-                    for graph in cs.supergraphs.iter() {
-                        let mut dot =
-                            File::create_new(cs_path.join(&format!("{}.dot", graph.graph.name)))
-                                .with_context(|| {
-                                    format!(
-                                        "Trying to create file to export cross section graph {}",
-                                        cs_path
-                                            .join(&format!("{}.dot", graph.graph.name))
-                                            .display()
-                                    )
-                                })?;
-                        graph.graph.dot_split_serialize_io(&mut dot)?;
+                    if settings.combine_diagrams {
+                        // Save all graphs combined in one file
+                        let mut dot = File::create_new(
+                            cs_path.join(&format!("{}_graphs.dot", xs_name.clone())),
+                        )
+                        .with_context(|| {
+                            format!(
+                                "Trying to create file to export amplitude graph {}",
+                                cs_path
+                                    .join(&format!("{}_graphs.dot", xs_name.clone()))
+                                    .display()
+                            )
+                        })?;
+                        for graph in cs.supergraphs.iter() {
+                            graph.graph.dot_split_serialize_io(&mut dot)?;
+                        }
+                    } else {
+                        // Save each supergraph in its own file
+                        for graph in cs.supergraphs.iter() {
+                            let mut dot = File::create_new(
+                                cs_path.join(&format!("{}.dot", graph.graph.name)),
+                            )
+                            .with_context(|| {
+                                format!(
+                                    "Trying to create file to export cross section graph {}",
+                                    cs_path.join(&format!("{}.dot", graph.graph.name)).display()
+                                )
+                            })?;
+                            graph.graph.dot_split_serialize_io(&mut dot)?;
+                        }
                     }
                 }
             }

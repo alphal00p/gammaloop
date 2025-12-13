@@ -448,9 +448,10 @@ impl State {
         Ok(())
     }
 
-    pub fn export_dots(&mut self, path: impl AsRef<Path>) -> Result<()> {
+    pub fn export_dots(&mut self, path: impl AsRef<Path>, combine_diagrams: bool) -> Result<()> {
         let exp_set = ExportSettings {
             root_folder: path.as_ref().to_path_buf(),
+            combine_diagrams,
         };
         self.process_list.export_dot(&exp_set)?;
         Ok(())
