@@ -195,13 +195,14 @@ pub struct SpecArgs {
     pub veto_only_scaleless_self_energy: Option<bool>,
 
     /// Extra filters / constraints
-    #[arg(long = "max-n-bridges", short = 'b')]
+    #[arg(long = "max-n-bridges", short = 'b', allow_negative_numbers = true)]
     pub max_n_bridges: Option<i32>,
     #[arg(
         long = "number-of-factorized-loop-subtopologies",
         short = 'f',
         alias = "nfactl",
-        num_args = 2
+        num_args = 2,
+        allow_negative_numbers = true
     )]
     pub number_of_factorized_loop_subtopologies: Option<Vec<i32>>,
     /// Number of closed fermion loops; negative disables
@@ -1290,7 +1291,13 @@ fn feyngen_from_spec_args(
         } else {
             None
         })
-        .and_then(|v| Some((v[0].max(0) as usize, v[1].max(0) as usize)));
+        .and_then(|v| {
+            if v[0] < 0 && v[1] < 0 {
+                None
+            } else {
+                Some((v[0].max(0) as usize, v[1].max(0) as usize))
+            }
+        });
 
     let max_n_bridges = a
         .max_n_bridges
