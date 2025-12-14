@@ -1,0 +1,145 @@
+digraph qqx_aaa_pentagon {
+            ext    [style=invis]
+            
+			// Externals
+            ext -> vl1:1 [particle="d" id=1];
+            ext -> vl2:2 [particle="d~" id=2];
+            v1:3 -> ext [particle="a" id=3];
+            v2:4 -> ext [particle="a" id=4];
+            v3:0 -> ext [particle="a" id=0];
+
+            v1 -> v2 [particle="d" id=5];
+            v2 -> v3 [particle="d" id=6];
+
+            vl1 -> v1 [particle="d" id=7];
+            v3 -> vl2 [particle="d" id=8];
+            vl1 -> vl2 [particle="g" id=9 lmb_id=0];
+}
+
+digraph qqx_aaa_box_A {
+            ext    [style=invis]
+            
+			// Externals
+            ext -> vl1:1 [particle="d" id=1];
+            ext -> v3:2 [particle="d~" id=2];
+            v1:3 -> ext [particle="a" id=3];
+            v2:4 -> ext [particle="a" id=4];
+            v3:0 -> ext [particle="a" id=0];
+
+            v1 -> v2 [particle="d" id=5];
+            v2 -> vl2 [particle="d" id=6];
+
+            vl1 -> v1 [particle="d" id=7];
+            vl2 -> v3 [particle="d" id=8];
+
+            vl1 -> vl2 [particle="g" id=9 lmb_id=0];
+}
+
+digraph qqx_aaa_box_B {
+            ext    [style=invis]
+            
+			// Externals
+            ext -> v1:1 [particle="d" id=1];
+            ext -> vl2:2 [particle="d~" id=2];
+            v1:3 -> ext [particle="a" id=3];
+            v2:4 -> ext [particle="a" id=4];
+            v3:0 -> ext [particle="a" id=0];
+
+            v1 -> vl1 [particle="d" id=5];
+            v2 -> v3 [particle="d" id=6];
+
+            vl1 -> v2 [particle="d" id=7];
+            v3  -> vl2 [particle="d" id=8];
+
+            vl1 -> vl2 [particle="g" id=9 lmb_id=0];
+}
+
+digraph qqx_aaa_tri_A {
+            ext    [style=invis]
+            
+			// Externals
+            ext -> vl1:1 [particle="d" id=1];
+            ext -> v3:2 [particle="d~" id=2];
+            v1:3 -> ext [particle="a" id=3];
+            v2:4 -> ext [particle="a" id=4];
+            v3:0 -> ext [particle="a" id=0];
+
+            vl1 -> v1 [particle="d" id=5];
+            v1 -> vl2 [particle="d" id=6];
+            vl2 -> v2 [particle="d" id=7];
+            v2 -> v3 [particle="d" id=8];
+
+            vl1 -> vl2 [particle="g" id=9 lmb_id=0];
+}
+
+digraph qqx_aaa_tri_B {
+            ext    [style=invis]
+            
+			// Externals
+            ext -> v1:1 [particle="d" id=1];
+            ext -> v3:2 [particle="d~" id=2];
+            v1:3 -> ext [particle="a" id=3];
+            v2:4 -> ext [particle="a" id=4];
+            v3:0 -> ext [particle="a" id=0];
+
+            v1 -> vl1 [particle="d" id=5];
+            vl1 -> v2 [particle="d" id=6];
+            v2 -> vl2 [particle="d" id=7];
+            vl2 -> v3 [particle="d" id=8];
+
+            vl1 -> vl2 [particle="g" id=9 lmb_id=0];
+}
+
+digraph qqx_aaa_tri_C {
+            ext    [style=invis]
+            
+			// Externals
+            ext -> v1:1 [particle="d" id=1];
+            ext -> vl2:2 [particle="d~" id=2];
+            v1:3 -> ext [particle="a" id=3];
+            v2:4 -> ext [particle="a" id=4];
+            v3:0 -> ext [particle="a" id=0];
+
+            v1 -> v2 [particle="d" id=5];
+            v2 -> vl1 [particle="d" id=6];
+            vl1 -> v3 [particle="d" id=7];
+            v3 -> vl2 [particle="d" id=8];
+
+            vl1 -> vl2 [particle="g" id=9 lmb_id=0];
+}
+
+digraph qqx_aaa_bub_A {
+            ext    [style=invis]
+            
+			// Externals
+            ext -> v1:1 [particle="d" id=1];
+            ext -> v3:2 [particle="d~" id=2];
+            v1:3 -> ext [particle="a" id=3];
+            v2:4 -> ext [particle="a" id=4];
+            v3:0 -> ext [particle="a" id=0];
+
+            v1 -> vl1 [particle="d" id=5];
+            vl1 -> vl2 [particle="d" id=6];
+            vl2 -> v2 [particle="d" id=7];
+            v2 -> v3 [particle="d" id=8];
+
+            vl1 -> vl2 [particle="g" id=9 lmb_id=0];
+}
+
+digraph qqx_aaa_bub_B {
+            ext    [style=invis]
+            
+			// Externals
+            ext -> v1:1 [particle="d" id=1];
+            ext -> v3:2 [particle="d~" id=2];
+            v1:3 -> ext [particle="a" id=3];
+            v2:4 -> ext [particle="a" id=4];
+            v3:0 -> ext [particle="a" id=0];
+
+            v1 -> v2 [particle="d" id=5];
+            v2 -> vl1 [particle="d" id=6];
+            vl1 -> vl2 [particle="d" id=7];
+            vl2 -> v3 [particle="d" id=8];
+
+            vl1 -> vl2 [particle="g" id=9 lmb_id=0];
+}

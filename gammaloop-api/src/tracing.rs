@@ -257,8 +257,6 @@ pub(crate) fn init_tracing(
             // )
             .init();
 
-        info!("HEYYY");
-
         FilterHandles {
             file_handle,
             stderr_handle,
