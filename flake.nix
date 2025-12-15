@@ -49,16 +49,25 @@
 
         buildInputs =
           [
-            # pkgs.mold
-            pkgs.gcc
-            pkgs.clang
-            pkgs.stdenv.cc.cc.lib
             # Add additional build inputs here
+            pkgs.openssl
+            pkgs.pkg-config
+            pkgs.gmp
+            pkgs.mpfr
           ]
           ++ lib.optionals pkgs.stdenv.isDarwin [
             # Additional darwin specific inputs can be set here
             pkgs.libiconv
-            # pkgs.gcc.cc.lib
+          ];
+
+        nativeBuildInputs =
+          [
+            pkgs.pkg-config
+            pkgs.clang
+            pkgs.gcc
+          ]
+          ++ lib.optionals pkgs.stdenv.isDarwin [
+            pkgs.apple-sdk
           ];
 
         # Additional environment variables can be set directly
@@ -79,14 +88,14 @@
 
       # Build the actual crate itself, reusing the dependency
       # artifacts from above.
-      my-crate = craneLib.buildPackage (commonArgs
+      gammaloop = craneLib.buildPackage (commonArgs
         // {
           inherit cargoArtifacts;
         });
     in {
       checks = {
         # Build the crate as part of `nix flake check` for convenience
-        inherit my-crate;
+        inherit gammaloop;
 
         # Run clippy (and deny all warnings) on the crate source,
         # again, reusing the dependency artifacts from above.
@@ -94,36 +103,36 @@
         # Note that this is done as a separate derivation so that
         # we can block the CI if there are issues here, but not
         # prevent downstream consumers from building our crate by itself.
-        my-crate-clippy = craneLib.cargoClippy (commonArgs
+        gammaloop-clippy = craneLib.cargoClippy (commonArgs
           // {
             inherit cargoArtifacts;
             cargoClippyExtraArgs = "--all-targets -- --deny warnings";
           });
 
-        my-crate-doc = craneLib.cargoDoc (commonArgs
+        gammaloop-doc = craneLib.cargoDoc (commonArgs
           // {
             inherit cargoArtifacts;
           });
 
         # Check formatting
-        my-crate-fmt = craneLib.cargoFmt {
+        gammaloop-fmt = craneLib.cargoFmt {
           inherit src;
         };
 
         # Audit dependencies
-        my-crate-audit = craneLib.cargoAudit {
+        gammaloop-audit = craneLib.cargoAudit {
           inherit src advisory-db;
         };
 
         # Audit licenses
-        my-crate-deny = craneLib.cargoDeny {
+        gammaloop-deny = craneLib.cargoDeny {
           inherit src;
         };
 
         # Run tests with cargo-nextest
-        # Consider setting `doCheck = false` on `my-crate` if you do not want
+        # Consider setting `doCheck = false` on `gammaloop` if you do not want
         # the tests to run twice
-        my-crate-nextest = craneLib.cargoNextest (commonArgs
+        gammaloop-nextest = craneLib.cargoNextest (commonArgs
           // {
             inherit cargoArtifacts;
             cargoNextestExtraArgs = "--test-threads 1 --no-fail-fast --final-status-level fail";
@@ -132,12 +141,12 @@
 
       packages =
         {
-          default = my-crate;
+          default = gammaloop;
           # Expose cargoArtifacts for CI caching
           inherit cargoArtifacts;
         }
         // lib.optionalAttrs (!pkgs.stdenv.isDarwin) {
-          my-crate-llvm-coverage = craneLibLLvmTools.cargoLlvmCov (commonArgs
+          gammaloop-llvm-coverage = craneLibLLvmTools.cargoLlvmCov (commonArgs
             // {
               inherit cargoArtifacts;
             });
@@ -145,7 +154,7 @@
 
       apps = {
         default = flake-utils.lib.mkApp {
-          drv = my-crate;
+          drv = gammaloop;
         };
 
         # Nextest commands for CI

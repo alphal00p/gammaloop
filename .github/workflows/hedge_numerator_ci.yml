@@ -212,11 +212,11 @@ jobs:
 
       - name: Run security audit
         run: |
-          nix build .#my-crate-audit --print-build-logs
+          nix build .#checks.x86_64-linux.gammaloop-audit --print-build-logs
 
       - name: Run license check
         run: |
-          nix build .#my-crate-deny --print-build-logs
+          nix build .#checks.x86_64-linux.gammaloop-deny --print-build-logs
 
   build:
     if: always()
@@ -246,7 +246,7 @@ jobs:
 
       - name: Build documentation
         run: |
-          nix build .#my-crate-doc --print-build-logs
+          nix build .#checks.x86_64-linux.gammaloop-doc --print-build-logs
 
   coverage:
     if: always()
@@ -272,7 +272,7 @@ jobs:
 
       - name: Generate coverage report
         run: |
-          nix build .#my-crate-llvm-coverage --print-build-logs
+          nix build .#packages.x86_64-linux.gammaloop-llvm-coverage --print-build-logs
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
