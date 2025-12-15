@@ -1,0 +1,103 @@
+# Nextest configuration for gammaloop
+# This file configures test execution, timeouts, and partitioning behavior
+
+[profile.default]
+# Default timeout for tests - can be overridden per test
+default-timeout = "60s"
+
+# Slow tests get extra time
+slow-timeout = { period = "120s", terminate-after = 2 }
+
+# Test threads - we'll override this in CI for better control
+test-threads = "logical"
+
+# Failure output configuration
+failure-output = "immediate"
+success-output = "never"
+
+# Retry configuration for flaky tests
+retries = 1
+
+# Status level configuration
+status-level = "fail"
+final-status-level = "fail"
+
+[profile.ci]
+# CI-specific profile with more conservative settings
+default-timeout = "60s"
+slow-timeout = { period = "120s", terminate-after = 2 }
+
+# Single-threaded execution for deterministic results
+test-threads = 1
+
+# More verbose output for debugging CI failures
+failure-output = "immediate-final"
+success-output = "never"
+
+# No retries in CI to avoid masking real issues
+retries = 0
+
+# Fail fast disabled to collect all failures
+fail-fast = false
+
+# Enhanced status reporting
+status-level = "fail"
+final-status-level = "fail"
+
+[profile.ci.junit]
+# JUnit output for CI systems
+path = "target/nextest/ci/junit.xml"
+
+[profile.partition]
+# Profile optimized for partitioned test execution
+default-timeout = "60s"
+slow-timeout = { period = "120s", terminate-after = 2 }
+
+test-threads = 1
+failure-output = "immediate"
+success-output = "never"
+retries = 0
+fail-fast = false
+
+[test-groups]
+# Group integration tests that might be slow
+integration = { max-threads = 1 }
+
+# Group tests that use a lot of memory
+memory-intensive = { max-threads = 1 }
+
+# Group tests that might be flaky
+flaky = { max-threads = 1, retries = 2 }
+
+[[profile.default.overrides]]
+# Mark integration tests as slow
+filter = 'test(integration)'
+slow = true
+test-group = "integration"
+
+[[profile.default.overrides]]
+# Mark tests with "heavy" in the name as memory-intensive
+filter = 'test(heavy) or test(memory) or test(large)'
+slow = true
+test-group = "memory-intensive"
+timeout = "120s"
+
+[[profile.default.overrides]]
+# Mark benchmark-style tests as very slow
+filter = 'test(bench) or test(benchmark)'
+slow = true
+timeout = "120s"
+
+[[profile.ci.overrides]]
+# In CI, be extra conservative with timeouts
+filter = 'test(integration) or test(heavy) or test(memory) or test(large)'
+timeout = "120s"
+
+[[profile.ci.overrides]]
+# Benchmark tests get even more time in CI
+filter = 'test(bench) or test(benchmark)'
+timeout = "120s"
+
+[profile.default.junit]
+# Default JUnit output location
+path = "target/nextest/default/junit.xml"

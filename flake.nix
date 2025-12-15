@@ -126,14 +126,15 @@
         my-crate-nextest = craneLib.cargoNextest (commonArgs
           // {
             inherit cargoArtifacts;
-            partitions = 1;
-            partitionType = "count";
+            cargoNextestExtraArgs = "--test-threads 1 --no-fail-fast --final-status-level fail";
           });
       };
 
       packages =
         {
           default = my-crate;
+          # Expose cargoArtifacts for CI caching
+          inherit cargoArtifacts;
         }
         // lib.optionalAttrs (!pkgs.stdenv.isDarwin) {
           my-crate-llvm-coverage = craneLibLLvmTools.cargoLlvmCov (commonArgs
@@ -142,8 +143,68 @@
             });
         };
 
-      apps.default = flake-utils.lib.mkApp {
-        drv = my-crate;
+      apps = {
+        default = flake-utils.lib.mkApp {
+          drv = my-crate;
+        };
+
+        # Nextest commands for CI
+        nextest = flake-utils.lib.mkApp {
+          drv = pkgs.writeShellScriptBin "nextest" ''
+            export PATH=${lib.makeBinPath (with pkgs; [cargo rustc cargo-nextest])}:$PATH
+            exec cargo nextest "$@"
+          '';
+        };
+
+        nextest-partition = flake-utils.lib.mkApp {
+          drv = pkgs.writeShellScriptBin "nextest-partition" ''
+            PARTITION="''${1:-1}"
+            TOTAL="''${2:-6}"
+            shift 2
+            export PATH=${lib.makeBinPath (with pkgs; [cargo rustc cargo-nextest])}:$PATH
+            export LD_LIBRARY_PATH=${lib.makeLibraryPath commonArgs.buildInputs}
+            exec cargo nextest run \
+              --partition hash:$PARTITION/$TOTAL \
+              --test-threads 1 \
+              --no-fail-fast \
+              --final-status-level fail \
+              --success-output never \
+              --failure-output immediate \
+              --verbose \
+              "$@"
+          '';
+        };
+
+        nextest-ci = flake-utils.lib.mkApp {
+          drv = pkgs.writeShellScriptBin "nextest-ci" ''
+            export PATH=${lib.makeBinPath (with pkgs; [cargo rustc cargo-nextest])}:$PATH
+            export LD_LIBRARY_PATH=${lib.makeLibraryPath commonArgs.buildInputs}
+            exec cargo nextest run \
+              --profile ci \
+              --test-threads 1 \
+              --no-fail-fast \
+              --final-status-level fail \
+              --success-output never \
+              --failure-output immediate \
+              --verbose \
+              "$@"
+          '';
+        };
+
+        clippy = flake-utils.lib.mkApp {
+          drv = pkgs.writeShellScriptBin "clippy" ''
+            export PATH=${lib.makeBinPath (with pkgs; [cargo rustc])}:$PATH
+            export LD_LIBRARY_PATH=${lib.makeLibraryPath commonArgs.buildInputs}
+            exec cargo clippy --all-targets -- --deny warnings
+          '';
+        };
+
+        fmt = flake-utils.lib.mkApp {
+          drv = pkgs.writeShellScriptBin "fmt" ''
+            export PATH=${lib.makeBinPath (with pkgs; [cargo rustc])}:$PATH
+            exec cargo fmt --check
+          '';
+        };
       };
 
       devShells.default = craneLib.devShell {
