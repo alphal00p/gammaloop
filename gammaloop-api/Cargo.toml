@@ -7,6 +7,7 @@ authors = [
     "Mathijs Fraaije <mathijsfraaije@gmail.com>",
     "Lucien Huber <mail@lcnbr.ch>",
 ]
+license = "MIT"
 categories = ["science"]
 description = "An implementation of the Local Unitarity method for computing differential collider cross-sections."
 keywords = ["loop", "cross-section", "perturbative", "physics"]

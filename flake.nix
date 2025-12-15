@@ -66,6 +66,10 @@
             pkgs.pkg-config
             pkgs.clang
             pkgs.gcc
+            pkgs.python313
+            pkgs.gnum4
+            pkgs.gmp
+            pkgs.mpfr
           ]
           ++ lib.optionals pkgs.stdenv.isDarwin [
             pkgs.apple-sdk
@@ -80,6 +84,9 @@
         commonArgs
         // {
           cargoExtraArgs = "";
+          # Set PyO3 environment variables to help it find Python
+          PYO3_PYTHON = "${pkgs.python313}/bin/python3";
+          PYTHONPATH = "${pkgs.python313}/lib/python3.13/site-packages";
         };
 
       craneLibLLvmTools =
@@ -210,8 +217,10 @@
 
         clippy = flake-utils.lib.mkApp {
           drv = pkgs.writeShellScriptBin "clippy" ''
-            export PATH=${lib.makeBinPath (with pkgs; [cargo rustc])}:$PATH
+            export PATH=${lib.makeBinPath (with pkgs; [cargo rustc python313])}:$PATH
             export LD_LIBRARY_PATH=${lib.makeLibraryPath commonArgs.buildInputs}
+            export PYO3_PYTHON="${pkgs.python313}/bin/python3"
+            export PYTHONPATH="${pkgs.python313}/lib/python3.13/site-packages"
             exec cargo clippy --all-targets -- --deny warnings
           '';
         };
