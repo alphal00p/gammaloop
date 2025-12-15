@@ -54,6 +54,7 @@
             pkgs.pkg-config
             pkgs.gmp
             pkgs.mpfr
+            pkgs.python313
           ]
           ++ lib.optionals pkgs.stdenv.isDarwin [
             # Additional darwin specific inputs can be set here
@@ -74,6 +75,13 @@
         # MY_CUSTOM_VAR = "some value";
       };
 
+      # CI-specific args that disable Python API to avoid pyo3 build issues
+      ciArgs =
+        commonArgs
+        // {
+          cargoExtraArgs = "--no-default-features --features cli";
+        };
+
       craneLibLLvmTools =
         craneLib.overrideToolchain
         (fenix.packages.${system}.stable.withComponents [
@@ -84,7 +92,7 @@
 
       # Build *just* the cargo dependencies, so we can reuse
       # all of that work (e.g. via cachix) when running in CI
-      cargoArtifacts = craneLib.buildDepsOnly commonArgs;
+      cargoArtifacts = craneLib.buildDepsOnly ciArgs;
 
       # Build the actual crate itself, reusing the dependency
       # artifacts from above.
@@ -103,13 +111,13 @@
         # Note that this is done as a separate derivation so that
         # we can block the CI if there are issues here, but not
         # prevent downstream consumers from building our crate by itself.
-        gammaloop-clippy = craneLib.cargoClippy (commonArgs
+        gammaloop-clippy = craneLib.cargoClippy (ciArgs
           // {
             inherit cargoArtifacts;
-            cargoClippyExtraArgs = "--all-targets -- --deny warnings";
+            cargoClippyExtraArgs = "--all-targets --no-default-features --features cli -- --deny warnings";
           });
 
-        gammaloop-doc = craneLib.cargoDoc (commonArgs
+        gammaloop-doc = craneLib.cargoDoc (ciArgs
           // {
             inherit cargoArtifacts;
           });
@@ -132,10 +140,10 @@
         # Run tests with cargo-nextest
         # Consider setting `doCheck = false` on `gammaloop` if you do not want
         # the tests to run twice
-        gammaloop-nextest = craneLib.cargoNextest (commonArgs
+        gammaloop-nextest = craneLib.cargoNextest (ciArgs
           // {
             inherit cargoArtifacts;
-            cargoNextestExtraArgs = "--test-threads 1 --no-fail-fast --final-status-level fail";
+            cargoNextestExtraArgs = "--test-threads 1 --no-fail-fast --final-status-level fail --no-default-features --features cli";
           });
       };
 
@@ -204,7 +212,7 @@
           drv = pkgs.writeShellScriptBin "clippy" ''
             export PATH=${lib.makeBinPath (with pkgs; [cargo rustc])}:$PATH
             export LD_LIBRARY_PATH=${lib.makeLibraryPath commonArgs.buildInputs}
-            exec cargo clippy --all-targets -- --deny warnings
+            exec cargo clippy --all-targets --no-default-features --features cli -- --deny warnings
           '';
         };
 
