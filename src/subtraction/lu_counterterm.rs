@@ -1,8 +1,9 @@
 use core::f64;
 
 use bincode_trait_derive::{Decode, Encode};
+use color_eyre::owo_colors::styles::ReversedDisplay;
 use itertools::Itertools;
-use linnet::half_edge::involution::{EdgeVec, Orientation};
+use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation};
 use nalgebra::iter;
 use spenso::{
     algebra::complex::{Complex, sub},
@@ -195,6 +196,7 @@ impl LUCounterTerm {
         momentum_sample: &MomentumSample<T>,
         lu_cut_params: &LUParams<T>,
         cut_id: CutId,
+        reversed_edges: &[EdgeIndex],
         all_lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
         graph: &Graph,
         masses: &EdgeVec<F<T>>,
@@ -204,6 +206,12 @@ impl LUCounterTerm {
         orientations: SingleOrAllOrientations<'_, SuperGraphOrientationID>,
     ) -> Complex<F<T>> {
         let (left_subspace, right_subspace) = &self.subspaces[cut_id];
+        let (sample_left_transformed, sample_right_transformed) = (
+            momentum_sample
+                .lmb_transform(&graph.loop_momentum_basis, left_subspace.get_lmb(all_lmbs)),
+            momentum_sample
+                .lmb_transform(&graph.loop_momentum_basis, right_subspace.get_lmb(all_lmbs)),
+        );
         let (left_thresholds_typed, right_thresholds_typed) = &self.thresholds[cut_id];
 
         let left_thresholds = TiVec::from_ref(&left_thresholds_typed.raw);
@@ -213,7 +221,12 @@ impl LUCounterTerm {
         debug!("possible right thresholds: {}", right_thresholds.len());
 
         let masses_f64: EdgeVec<F<f64>> = masses.iter().map(|(_, m)| F(m.to_f64())).collect();
-        let loop_moms_f64 = momentum_sample
+        let sample_left_transformed_f64 = sample_left_transformed
+            .loop_moms()
+            .iter()
+            .map(|lm| lm.to_f64())
+            .collect();
+        let sample_right_transformed_f64 = sample_right_transformed
             .loop_moms()
             .iter()
             .map(|lm| lm.to_f64())
@@ -231,12 +244,13 @@ impl LUCounterTerm {
             .iter_enumerated()
             .filter_map(|(left_id, esurface)| {
                 if esurface.exists_subspace(
-                    momentum_sample.loop_moms(),
+                    sample_left_transformed.loop_moms(),
                     momentum_sample.external_moms(),
                     left_subspace,
                     all_lmbs,
                     graph,
                     masses,
+                    reversed_edges,
                     &e_cm,
                 ) {
                     Some(EsurfaceID::from(left_id.0))
@@ -251,12 +265,13 @@ impl LUCounterTerm {
             .iter_enumerated()
             .filter_map(|(right_id, esurface)| {
                 if esurface.exists_subspace(
-                    momentum_sample.loop_moms(),
+                    sample_right_transformed.loop_moms(),
                     momentum_sample.external_moms(),
                     right_subspace,
                     all_lmbs,
                     graph,
                     masses,
+                    reversed_edges,
                     &e_cm,
                 ) {
                     Some(EsurfaceID::from(right_id.0))
@@ -296,7 +311,7 @@ impl LUCounterTerm {
         let left_overlap = if let Ok(left_overlap) = overlap_subspace::find_maximal_overlap(
             &left_overlap_input,
             &left_existing_esurfaces,
-            &loop_moms_f64,
+            &sample_left_transformed_f64,
             &external_moms_f64,
         ) {
             left_overlap
@@ -307,7 +322,7 @@ impl LUCounterTerm {
         let right_overlap = if let Ok(right_overlap) = overlap_subspace::find_maximal_overlap(
             &right_overlap_input,
             &right_existing_esurfaces,
-            &loop_moms_f64,
+            &sample_right_transformed_f64,
             &external_moms_f64,
         ) {
             right_overlap
@@ -505,6 +520,12 @@ impl LUCounterTerm {
                         result_of_this_ct += &iterative_result[i.0];
                     }
                     result_of_this_ct *= &sample.value_of_multi_channeling_factor;
+
+                    debug!(
+                        "evaluation of ct for esurface id {}: {:+16e}",
+                        sample.get_esurface_id().0,
+                        result_of_this_ct,
+                    );
                     right_evaluations += result_of_this_ct;
                 } else {
                     let mut result_of_this_ct = Complex::new_re(momentum_sample.zero());
@@ -534,6 +555,13 @@ impl LUCounterTerm {
                     }
 
                     result_of_this_ct *= &sample.value_of_multi_channeling_factor;
+
+                    debug!(
+                        "evaluation of ct for esurface id {}: {:+16e}",
+                        sample.get_esurface_id().0,
+                        result_of_this_ct,
+                    );
+
                     right_evaluations += result_of_this_ct;
                 }
             }
@@ -582,6 +610,12 @@ impl LUCounterTerm {
                     result_of_this_ct += &iterative_result[i.0];
                 }
                 result_of_this_ct *= multi_channeling_factor;
+                debug!(
+                    "evaluation of ct for esurfaces {}, {}: {:+16e}",
+                    sample_left.get_esurface_id().0,
+                    sample_right.get_esurface_id().0,
+                    result_of_this_ct,
+                );
                 cartesian_product_result += result_of_this_ct;
             } else {
                 let mut result_of_this_ct = Complex::new_re(momentum_sample.zero());
@@ -610,6 +644,12 @@ impl LUCounterTerm {
                 }
 
                 result_of_this_ct *= multi_channeling_factor;
+                debug!(
+                    "evaluation of ct for esurfaces {}, {}: {:+16e}",
+                    sample_left.get_esurface_id().0,
+                    sample_right.get_esurface_id().0,
+                    result_of_this_ct,
+                );
                 cartesian_product_result += result_of_this_ct;
             }
         }
@@ -972,7 +1012,26 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
         );
 
         if is_first_call {
+            let edges_in_esurface = self
+                .rstar_solution
+                .esurface_ct_builder
+                .esurface
+                .energies
+                .iter()
+                .map(|i| {
+                    self.rstar_solution
+                        .esurface_ct_builder
+                        .overlap_builder
+                        .counterterm_builder
+                        .graph[i]
+                        .0
+                        .name
+                        .clone()
+                })
+                .collect_vec();
+
             debug!("esurface_id: {}", self.get_esurface_id().0);
+            debug!("edges in esurface: {:?}", edges_in_esurface);
             debug!("radius: {}", radius);
             debug!("radius_star: {}", radius_star);
             debug!("esurface_derivative: {}", esurface_derivative);

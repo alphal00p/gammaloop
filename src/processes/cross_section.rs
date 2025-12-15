@@ -1010,7 +1010,12 @@ impl CrossSectionGraph {
         tsrat_pow * hfunction / factors_of_pi / grad_eta
     }
 
-    fn th_prefactor_helper(&self, subspace_loop_count: usize, is_on_right: bool) -> Atom {
+    fn th_prefactor_helper(
+        &self,
+        subspace_loop_count: usize,
+        is_on_right: bool,
+        include_integrated: bool,
+    ) -> Atom {
         let radius = if is_on_right {
             Atom::var(GS.radius_right)
         } else {
@@ -1057,7 +1062,11 @@ impl CrossSectionGraph {
             / &grad_eta
             * &jacobian_ratio;
 
-        let integrated_prefactor = &h_function * &i * &pi * &jacobian_ratio / &grad_eta;
+        let integrated_prefactor = if include_integrated {
+            &h_function * &i * &pi * &jacobian_ratio / &grad_eta
+        } else {
+            Atom::new()
+        };
 
         debug!(
             "th prefactor local: {}, integrated: {}",
@@ -1140,6 +1149,12 @@ impl CrossSectionGraph {
                 &self.graph.get_initial_state_tree().0,
             );
             unsorted.retain(|(_left, cut, _right)| cut.nedges(&self.graph) > 1);
+            if settings.threshold_subtraction.skip_thresholds_that_are_cuts {
+                unsorted.retain(|(_left, cut, _right)| {
+                    !self.cuts.iter().any(|cs_cut| &cs_cut.cut == cut)
+                });
+            }
+
             unsorted.sort_by(|a, b| a.1.cmp(&b.1));
             unsorted.into()
         };
@@ -1330,7 +1345,11 @@ impl CrossSectionGraph {
 
                     let left_loop_count = self.graph.underlying.cyclotomatic_number(&cut.left);
 
-                    let th_prefactor = self.th_prefactor_helper(left_loop_count, false);
+                    let th_prefactor = self.th_prefactor_helper(
+                        left_loop_count,
+                        false,
+                        !settings.threshold_subtraction.disable_integrated_ct,
+                    );
                     left_integrand = left_integrand.replace_multiple(&replacements);
 
                     Ok(left_integrand * lu_prefactor * th_prefactor)
@@ -1388,7 +1407,11 @@ impl CrossSectionGraph {
 
                     let right_loop_count = self.graph.underlying.cyclotomatic_number(&cut.right);
 
-                    let th_prefactor = self.th_prefactor_helper(right_loop_count, true);
+                    let th_prefactor = self.th_prefactor_helper(
+                        right_loop_count,
+                        true,
+                        !settings.threshold_subtraction.disable_integrated_ct,
+                    );
 
                     right_integrand = right_integrand.replace_multiple(&replacements);
 
@@ -1439,10 +1462,12 @@ impl CrossSectionGraph {
                     let left_prefactor = self.th_prefactor_helper(
                         self.graph.underlying.cyclotomatic_number(&cut.left),
                         false,
+                        !settings.threshold_subtraction.disable_integrated_ct,
                     );
                     let right_prefactor = self.th_prefactor_helper(
                         self.graph.underlying.cyclotomatic_number(&cut.right),
                         true,
+                        !settings.threshold_subtraction.disable_integrated_ct,
                     );
 
                     iterated_integrand = iterated_integrand.replace_multiple(&replacements);

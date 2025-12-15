@@ -132,6 +132,7 @@ impl Esurface {
     }
 
     #[inline]
+    #[allow(clippy::too_many_arguments)]
     /// TODO: upgrade to a status type
     pub(crate) fn exists_subspace<T: FloatLike>(
         &self,
@@ -141,6 +142,7 @@ impl Esurface {
         all_lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
         graph: &Graph,
         real_mass_vector: &EdgeVec<F<T>>,
+        reversed_edges: &[EdgeIndex],
         e_cm: &F<T>,
     ) -> bool {
         //todo!("refactor for subspaces");
@@ -181,20 +183,27 @@ impl Esurface {
 
             let other_part = subspace
                 .does_not_contain(&self.energies, graph)
-                .into_iter()
                 .map(|index| {
                     let signature = &lmb.edge_signatures[index];
+                    let sign = if reversed_edges.contains(&index) {
+                        -F::from_f64(1.0)
+                    } else {
+                        F::from_f64(1.0)
+                    };
                     let momentum = signature.compute_momentum(
                         loop_moms,
                         &external_moms
                             .iter()
                             .map(|mom| mom.spatial.clone())
                             .collect::<TiVec<ExternalIndex, _>>(),
-                    );
+                    ) * sign;
+
                     momentum
                 })
                 .reduce(|acc, x| acc + x)
                 .unwrap_or_else(|| zero_vector.clone());
+
+            let shift_vector = &graph_vector + &other_part;
 
             let shift_vector_sq = (&graph_vector + &other_part).norm_squared();
 
@@ -292,13 +301,14 @@ impl Esurface {
 
         let remaining_shift = subspace
             .does_not_contain(&self.energies, graph)
-            .into_iter()
             .map(|index| {
                 let signature = &lmb.edge_signatures[index];
                 //panic!("signature: {:?}", signature);
                 let momentum = signature.compute_momentum(loop_moms, &spatial_externals);
                 let mass = &masses[index];
-                (momentum.norm_squared() + mass * mass).sqrt()
+                let energy = (momentum.norm_squared() + mass * mass).sqrt();
+
+                energy
             })
             .reduce(|acc, x| acc + x)
             .unwrap_or_else(|| full_external_shift.zero());
@@ -324,6 +334,7 @@ impl Esurface {
     }
 
     #[inline]
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn compute_self_and_r_derivative_subspace<T: FloatLike>(
         &self,
         radius: &F<T>,

@@ -32,7 +32,7 @@ use color_eyre::Result;
 use eyre::Context;
 use itertools::Itertools;
 use linnet::half_edge::{
-    involution::{EdgeVec, Orientation},
+    involution::{EdgeIndex, EdgeVec, Orientation},
     subgraph::{ModifySubSet, SubSetLike, subset::SubSet},
 };
 use log::{debug, info};
@@ -246,6 +246,7 @@ pub struct CrossSectionGraphTerm {
     pub graph: Graph,
     pub cut_esurface: TiVec<CutId, Esurface>,
     pub cuts: TiVec<CutId, CrossSectionCut>,
+    pub reversed_edges: TiVec<CutId, Vec<EdgeIndex>>,
     pub multi_channeling_setup: LmbMultiChannelingSetup,
     pub lmbs: TiVec<LmbIndex, LoopMomentumBasis>,
     pub estimated_scale: Option<F<f64>>,
@@ -340,6 +341,28 @@ impl CrossSectionGraphTerm {
             subspaces: graph.derived_data.subspace_data.clone(),
         };
 
+        let reversed_edges = graph
+            .cuts
+            .iter()
+            .map(|cut| {
+                cut.cut
+                    .iter_edges(&graph.graph)
+                    .filter_map(|(orientation, edge_data)| {
+                        if orientation == Orientation::Reversed {
+                            Some(
+                                graph
+                                    .graph
+                                    .edge_name_to_index(&edge_data.data.name)
+                                    .unwrap(),
+                            )
+                        } else {
+                            None
+                        }
+                    })
+                    .collect_vec()
+            })
+            .collect();
+
         Ok(Self {
             iterative_integrand,
             parametric_integrand,
@@ -357,6 +380,7 @@ impl CrossSectionGraphTerm {
             orientation_filter: SubSet::full(orientations.len()),
             orientations,
             counterterm,
+            reversed_edges,
         })
     }
 
@@ -636,6 +660,7 @@ impl GraphTerm for CrossSectionGraphTerm {
                     &rescaled_momenta,
                     &lu_params,
                     cut,
+                    &self.reversed_edges[cut],
                     &self.lmbs,
                     &self.graph,
                     &masses,
@@ -647,8 +672,7 @@ impl GraphTerm for CrossSectionGraphTerm {
             };
 
             cut_threshold_counterterms.push(ct_result);
-
-            debug!("param builder for cut {}: \n{}", cut, self.param_builder);
+            //debug!("param builder for cut {}: \n{}", cut, self.param_builder);
 
             cut_results.push(result * prefactor);
         }
@@ -658,6 +682,7 @@ impl GraphTerm for CrossSectionGraphTerm {
             .iter_enumerated()
             .zip(cut_threshold_counterterms.iter())
         {
+            debug!("cut {} results:", cut_id);
             debug!("bare result: {:+16e}", result);
             debug!("threshold counterterm: {:+16e}", ct_result);
             all_cut_result += result + ct_result;
