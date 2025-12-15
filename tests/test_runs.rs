@@ -567,3 +567,28 @@ fn test_advanced_integration_example_card() -> Result<()> {
     clean_test(&cli.cli_settings.state_folder);
     Ok(())
 }
+
+#[test]
+fn test_epem_tth_inspect_nlo_gl18() -> Result<()> {
+    let mut cli = get_test_cli(
+        Some("test_epem_tth_inspect_nlo_gl18.toml".into()),
+        get_tests_workspace_path().join("test_epem_tth_inspect_nlo_gl18"),
+        None,
+        true,
+    )
+    .unwrap();
+
+    let (_, inspect) = Inspect {
+        process_id: None,
+        integrand_name: None,
+        point: vec![0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.823, 0.214],
+        momentum_space: false,
+        ..Default::default()
+    }
+    .run(&mut cli)
+    .unwrap();
+
+    let target = Complex::new(-9.487984855932107e-6, 3.610476200052732e-5);
+    assert_eq!(inspect, target);
+    Ok(())
+}
