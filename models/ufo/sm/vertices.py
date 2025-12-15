@@ -216,7 +216,7 @@ V_34 = Vertex(name = 'V_34',
 
 V_35 = Vertex(name = 'V_35',
               particles = [ P.ghG, P.ghG__tilde__, P.g ],
-              color = [ 'f(1,2,3)' ],
+              color = [ 'f(3,1,2)' ],
               lorentz = [ L.UUV1 ],
               couplings = {(0,0):C.GC_10})
 
