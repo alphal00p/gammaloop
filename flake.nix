@@ -66,6 +66,7 @@
             pkgs.pkg-config
             pkgs.clang
             pkgs.gcc
+            pkgs.git
             pkgs.python313
             pkgs.gnum4
             pkgs.gmp
