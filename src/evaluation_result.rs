@@ -10,7 +10,7 @@ use crate::observables::Event;
 use crate::status_info;
 use crate::{
     settings::runtime::Precision,
-    utils::{format_evaluation_time, F},
+    utils::{F, format_evaluation_time},
 };
 
 /// The result of an evaluation of the integrand

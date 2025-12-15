@@ -11,18 +11,18 @@ use crate::momentum::Rotation;
 use crate::momentum_sample::{BareMomentumSample, LoopMomenta, MomentumSample};
 use crate::settings::GlobalSettings;
 use crate::status_debug;
-use crate::utils::{format_for_compare_digits, get_n_dim_for_n_loop_momenta, FloatLike, F};
+use crate::utils::{F, FloatLike, format_for_compare_digits, get_n_dim_for_n_loop_momenta};
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::owo_colors::OwoColorize;
 use colored::Colorize;
 use derive_more::{From, Into};
 use enum_dispatch::enum_dispatch;
 use eyre::Context;
-use gammaloop_sample::{parameterize, DiscreteGraphSample, GammaLoopSample};
+use gammaloop_sample::{DiscreteGraphSample, GammaLoopSample, parameterize};
 use itertools::Itertools;
 use linnet::half_edge::involution::EdgeVec;
-use momtrop::float::MomTropFloat;
 use momtrop::SampleGenerator;
+use momtrop::float::MomTropFloat;
 use serde::{Deserialize, Serialize};
 use spenso::algebra::algebraic_traits::IsZero;
 use spenso::algebra::complex::Complex;
@@ -37,11 +37,11 @@ pub mod gammaloop_sample;
 use crate::observables::EventManager;
 use crate::utils::f128;
 use crate::{
+    DependentMomentaConstructor, GammaLoopContext, settings::RuntimeSettings,
     settings::runtime::DiscreteGraphSamplingSettings, settings::runtime::DiscreteGraphSamplingType,
     settings::runtime::IntegratorSettings, settings::runtime::Precision,
     settings::runtime::SamplingSettings, settings::runtime::StabilityLevelSetting,
-    settings::runtime::StabilitySettings, settings::RuntimeSettings, DependentMomentaConstructor,
-    GammaLoopContext,
+    settings::runtime::StabilitySettings,
 };
 use color_eyre::Result;
 

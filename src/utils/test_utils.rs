@@ -2,7 +2,7 @@ use std::{env, path::PathBuf};
 
 use crate::model::Model;
 
-use include_dir::{include_dir, Dir};
+use include_dir::{Dir, include_dir};
 
 static BUILTIN_MODELS: Dir = include_dir!("$CARGO_MANIFEST_DIR/models/json");
 
@@ -34,7 +34,7 @@ pub mod test {
     use crate::{
         momentum::ThreeMomentum,
         settings::runtime::ParameterizationSettings,
-        utils::{global_inv_parameterize, global_parameterize, symbolica_ext::CallSymbol, F, GS},
+        utils::{F, GS, global_inv_parameterize, global_parameterize, symbolica_ext::CallSymbol},
     };
 
     #[test]

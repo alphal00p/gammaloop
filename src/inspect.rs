@@ -12,8 +12,8 @@ use crate::momentum::ThreeMomentum;
 use crate::settings::RuntimeSettings;
 use crate::status_info;
 use crate::utils;
-use crate::utils::f128;
 use crate::utils::F;
+use crate::utils::f128;
 
 pub fn inspect<I: HasIntegrand>(
     settings: &RuntimeSettings,

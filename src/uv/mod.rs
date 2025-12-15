@@ -4,9 +4,9 @@ use crate::{numerator::aind::Aind, utils::GS};
 use spenso::{
     network::parsing::ShadowedStructure,
     structure::{
+        NamedStructure, ToSymbolic,
         dimension::Dimension,
         representation::{Minkowski, RepName},
-        NamedStructure, ToSymbolic,
     },
 };
 use symbolica::atom::Atom;

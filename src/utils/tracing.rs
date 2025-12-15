@@ -6,7 +6,7 @@ use std::sync::OnceLock;
 use tracing::level_filters::LevelFilter;
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::filter::filter_fn;
-use tracing_subscriber::{fmt, prelude::*, registry::Registry, reload, EnvFilter};
+use tracing_subscriber::{EnvFilter, fmt, prelude::*, registry::Registry, reload};
 
 #[repr(usize)]
 #[derive(
@@ -151,7 +151,7 @@ pub fn init_bench_tracing() -> reload::Handle<EnvFilter, Registry> {
         .clone()
 }
 
-use tracing::{event, Level};
+use tracing::{Level, event};
 
 pub enum Target {
     Lib,

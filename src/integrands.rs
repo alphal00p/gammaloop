@@ -5,11 +5,11 @@ use crate::h_function_test::{HFunctionTestIntegrand, HFunctionTestSettings};
 use crate::model::Model;
 use crate::momentum::FourMomentum;
 use crate::observables::EventManager;
-use crate::utils::{FloatLike, F};
+use crate::utils::{F, FloatLike};
 use crate::{
     settings::{
-        runtime::{IntegratorSettings, Precision},
         RuntimeSettings,
+        runtime::{IntegratorSettings, Precision},
     },
     utils,
 };

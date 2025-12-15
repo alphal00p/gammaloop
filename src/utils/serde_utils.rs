@@ -1,5 +1,5 @@
 use dirs::home_dir;
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{Serialize, de::DeserializeOwned};
 use std::{
     env,
     io::Write,
@@ -8,7 +8,7 @@ use std::{
 };
 
 use color_eyre::{Result, Section};
-use eyre::{eyre, Context};
+use eyre::{Context, eyre};
 use std::collections::BTreeMap;
 use thiserror::Error;
 
@@ -194,7 +194,10 @@ pub fn get_schema_folder(online: bool) -> Result<PathBuf> {
         Ok(path) => PathBuf::try_from(path)?,
         Err(_) => {
             if online {
-                PathBuf::try_from(format!("https://raw.githubusercontent.com/alphal00p/gammaloop/refs/heads/{}/assets/schemas",BRANCH))?
+                PathBuf::try_from(format!(
+                    "https://raw.githubusercontent.com/alphal00p/gammaloop/refs/heads/{}/assets/schemas",
+                    BRANCH
+                ))?
             } else {
                 match home_dir() {
                     Some(home) => home.join(".config").join("gammaloop").join("schemas"),

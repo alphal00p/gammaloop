@@ -1,10 +1,10 @@
 use ahash::AHashMap;
 use itertools::Itertools;
 use linnet::half_edge::{
+    HedgeGraph, HedgeGraphError, NoData, NodeIndex,
     builder::HedgeGraphBuilder,
     involution::{HedgePair, Orientation},
     nodestore::NodeStorageOps,
-    HedgeGraph, HedgeGraphError, NoData, NodeIndex,
 };
 use symbolica::graph::Graph as SymbolicaGraph;
 

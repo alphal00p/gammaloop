@@ -2,7 +2,7 @@ use super::{
     esurface::{Esurface, EsurfaceID},
     hsurface::{Hsurface, HsurfaceID},
 };
-use crate::utils::{FloatLike as GSFloatLike, F};
+use crate::utils::{F, FloatLike as GSFloatLike};
 use bincode_trait_derive::{Decode, Encode};
 use derive_more::From;
 use itertools::Itertools;

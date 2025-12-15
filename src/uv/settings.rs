@@ -1,7 +1,7 @@
 use crate::utils::serde_utils::{
-    is_default_form_path, is_default_pysecdec_relative_precision, is_default_python_path,
-    is_default_vakint_evaluation_methods, is_default_vakint_normalization, is_true, is_usize,
-    IsDefault,
+    IsDefault, is_default_form_path, is_default_pysecdec_relative_precision,
+    is_default_python_path, is_default_vakint_evaluation_methods, is_default_vakint_normalization,
+    is_true, is_usize,
 };
 use bincode_trait_derive::{Decode, Encode};
 use schemars::JsonSchema;

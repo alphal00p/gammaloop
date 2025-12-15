@@ -9,19 +9,18 @@ use tabled::{builder::Builder, settings::Style};
 use typed_index_collections::TiVec;
 
 use crate::{
+    DependentMomentaConstructor, GammaLoopContext,
     graph::Graph,
-    improve_ps::{improve_ps, PhaseSpaceImprovementSettings},
+    improve_ps::{PhaseSpaceImprovementSettings, improve_ps},
     momentum::{
         self, Dep, ExternalMomenta, FourMomentum, Helicity, Polarization, Rotatable, SignOrZero,
     },
     momentum_sample::{ExternalFourMomenta, ExternalIndex},
     signature::ExternalSignature,
     utils::{
-        f128,
-        serde_utils::{is_float, IsDefault},
-        FloatLike, F,
+        F, FloatLike, f128,
+        serde_utils::{IsDefault, is_float},
     },
-    DependentMomentaConstructor, GammaLoopContext,
 };
 use color_eyre::{Result, Section};
 

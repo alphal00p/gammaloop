@@ -6,10 +6,10 @@ use crate::{
     settings::runtime::kinematic::Externals,
     signature::SignatureLike,
     status_debug,
-    utils::{newton_solver::newton_iteration_and_derivative, FloatLike, F},
+    utils::{F, FloatLike, newton_solver::newton_iteration_and_derivative},
 };
 
-use crate::utils::serde_utils::{is_false, IsDefault};
+use crate::utils::serde_utils::{IsDefault, is_false};
 use bincode_trait_derive::{Decode, Encode};
 use eyre::Result;
 use itertools::Itertools;
@@ -667,15 +667,14 @@ mod tests {
     use typed_index_collections::TiVec;
 
     use crate::{
-        dot,
-        graph::{parse::IntoGraph, FeynmanGraph, Graph},
+        DependentMomentaConstructor, dot,
+        graph::{FeynmanGraph, Graph, parse::IntoGraph},
         initialisation::test_initialise,
         model::Model,
         momentum::{FourMomentum, SignOrZero},
         momentum_sample::ExternalIndex,
         signature::SignatureLike,
-        utils::{f128, test_utils::load_generic_model, FloatLike, F},
-        DependentMomentaConstructor,
+        utils::{F, FloatLike, f128, test_utils::load_generic_model},
     };
 
     fn test_default_momenta_graph(graph: &Graph, model: &Model, e_cm: &F<f64>) -> Result<()> {

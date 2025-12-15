@@ -9,19 +9,19 @@ use linnet::half_edge::involution::{EdgeIndex, Orientation};
 use linreg::linear_regression_of;
 use rand::Rng;
 use symbolica::{
-    domains::float::FloatLike as SymFloatLike, domains::float::Real, numerical_integration::MonteCarloRng,
+    domains::float::FloatLike as SymFloatLike, domains::float::Real,
+    numerical_integration::MonteCarloRng,
 };
 
 use crate::{
-    disable,
-    gammaloop_integrand::{cross_section_integrand::CrossSectionGraphTerm, GraphTerm},
+    DependentMomentaConstructor, disable,
+    gammaloop_integrand::{GraphTerm, cross_section_integrand::CrossSectionGraphTerm},
     graph::FeynmanGraph,
     model::Model,
     momentum::{Rotation, RotationMethod, ThreeMomentum},
     momentum_sample::{LoopIndex, LoopMomenta, MomentumSample},
     settings::RuntimeSettings,
-    utils::{box_muller, f128, FloatLike, F},
-    DependentMomentaConstructor,
+    utils::{F, FloatLike, box_muller, f128},
 };
 
 const SLOPE_STABILITY_POINTS: usize = 50;
@@ -501,7 +501,7 @@ impl IrLimit {
                         "Unexpected character '{}' at position {}",
                         char,
                         char_position
-                    ))
+                    ));
                 }
             }
         }

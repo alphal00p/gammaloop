@@ -9,10 +9,10 @@ use bincode::Decode;
 use bincode::Encode;
 use color_eyre::Report;
 use colored::Colorize;
-use itertools::izip;
 use itertools::Itertools;
-use rayon::iter::repeat_n;
+use itertools::izip;
 use rayon::ThreadPoolBuilder;
+use rayon::iter::repeat_n;
 use serde::Deserialize;
 use serde::Serialize;
 use spenso::algebra::algebraic_traits::IsZero;
@@ -20,21 +20,21 @@ use symbolica::domains::float::Constructible;
 use symbolica::numerical_integration::ContinuousGrid;
 use symbolica::numerical_integration::{Grid, MonteCarloRng, Sample, StatisticsAccumulator};
 
+use crate::INTERRUPTED;
+use crate::Integrand;
 use crate::disable;
 use crate::evaluation_result::EvaluationResult;
 use crate::evaluation_result::StatisticsCounter;
 use crate::integrands::HasIntegrand;
 use crate::model::Model;
 use crate::observables::Event;
-use crate::settings::runtime::{IntegratedPhase, IntegrationResult};
 use crate::settings::IntegratorSettings;
 use crate::settings::RuntimeSettings;
+use crate::settings::runtime::{IntegratedPhase, IntegrationResult};
 use crate::status_info;
 use crate::utils;
-use crate::utils::format_sample;
 use crate::utils::F;
-use crate::Integrand;
-use crate::INTERRUPTED;
+use crate::utils::format_sample;
 use crate::{is_interrupted, set_interrupted};
 #[allow(unused_imports)]
 use log::{debug, error, info, trace, warn};
@@ -1114,7 +1114,9 @@ pub(crate) fn show_integration_status(
         );
     }
     if show_max_wgt_info {
-        status_info!("|  -------------------------------------------------------------------------------------------");
+        status_info!(
+            "|  -------------------------------------------------------------------------------------------"
+        );
         status_info!(
             "|  {:<16} | {:<23} | {}",
             "Integrand",
@@ -1128,7 +1130,9 @@ pub(crate) fn show_integration_status(
             }
         }
 
-        status_info!("|  -------------------------------------------------------------------------------------------");
+        status_info!(
+            "|  -------------------------------------------------------------------------------------------"
+        );
     }
 
     integration_state.stats.display_status();

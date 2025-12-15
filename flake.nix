@@ -79,7 +79,7 @@
       ciArgs =
         commonArgs
         // {
-          cargoExtraArgs = "--no-default-features --features cli";
+          cargoExtraArgs = "";
         };
 
       craneLibLLvmTools =
@@ -114,7 +114,7 @@
         gammaloop-clippy = craneLib.cargoClippy (ciArgs
           // {
             inherit cargoArtifacts;
-            cargoClippyExtraArgs = "--all-targets --no-default-features --features cli -- --deny warnings";
+            cargoClippyExtraArgs = "--all-targets -- --deny warnings";
           });
 
         gammaloop-doc = craneLib.cargoDoc (ciArgs
@@ -143,7 +143,7 @@
         gammaloop-nextest = craneLib.cargoNextest (ciArgs
           // {
             inherit cargoArtifacts;
-            cargoNextestExtraArgs = "--test-threads 1 --no-fail-fast --final-status-level fail --no-default-features --features cli";
+            cargoNextestExtraArgs = "--test-threads 1 --no-fail-fast --final-status-level fail";
           });
       };
 
@@ -212,7 +212,7 @@
           drv = pkgs.writeShellScriptBin "clippy" ''
             export PATH=${lib.makeBinPath (with pkgs; [cargo rustc])}:$PATH
             export LD_LIBRARY_PATH=${lib.makeLibraryPath commonArgs.buildInputs}
-            exec cargo clippy --all-targets --no-default-features --features cli -- --deny warnings
+            exec cargo clippy --all-targets -- --deny warnings
           '';
         };
 

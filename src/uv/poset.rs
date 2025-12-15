@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use slotmap::{new_key_type, Key, SecondaryMap, SlotMap};
+use slotmap::{Key, SecondaryMap, SlotMap, new_key_type};
 use std::collections::HashSet;
 use std::{cmp::Ordering, collections::VecDeque, hash::Hash};
 

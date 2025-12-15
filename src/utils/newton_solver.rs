@@ -1,6 +1,6 @@
 use serde::Serialize;
 
-use crate::utils::{FloatLike, F};
+use crate::utils::{F, FloatLike};
 
 /// root finding, returns the derivative at the root, so that we don't have to recompute it.
 /// Also returns the value of the function whose root is being found and the number of iterations used for debug information

@@ -5,14 +5,14 @@ use slotmap::SecondaryMap;
 use std::collections::VecDeque;
 use std::fmt::Write;
 
-use linnet::half_edge::{subgraph::InternalSubGraph, HedgeGraph};
+use linnet::half_edge::{HedgeGraph, subgraph::InternalSubGraph};
 
 // use vakint::{EvaluationOrder, LoopNormalizationFactor, Vakint, VakintSettings};
 
 use super::{
-    approx::Approximation,
-    poset::{DagNode, PosetNode, DAG},
     Forest, Poset, UltravioletGraph,
+    approx::Approximation,
+    poset::{DAG, DagNode, PosetNode},
 };
 
 pub struct Wood {
