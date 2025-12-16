@@ -1,9 +1,9 @@
 commands = [
-    "set global kv display_directive=gammalooprs=info,info",
     "import model sm-default",
     "import graphs ./qqx_aaa_subtracted.dot",
     "generate",
     "inspect -m -p 0.1 0.2 0.3",
+	"quit -o"
 ]
 
 
@@ -65,7 +65,7 @@ disable_threshold_subtraction = false
 display_directive = "debug"
 logfile_directive = "debug"
 
-[cli_settings.global.generation]
+[cli_settings.global.generation.threshold_subtraction]
 enable_thresholds = true
 
 [cli_settings.global.generation.evaluator]

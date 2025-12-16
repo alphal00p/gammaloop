@@ -592,3 +592,104 @@ fn test_epem_tth_inspect_nlo_gl18() -> Result<()> {
     assert_eq!(inspect, target);
     Ok(())
 }
+
+#[test]
+fn test_qqx_aaa_ir_tree_unprocessed_inspect() -> Result<()> {
+    let mut cli = get_test_cli(
+        Some("generate_qqx_aaa_tree_unprocessed.toml".into()),
+        get_tests_workspace_path().join("qqx_aaa_tree_unprocessed"),
+        None,
+        true,
+    )
+    .unwrap();
+
+    let (_, inspect) = Inspect {
+        process_id: None,
+        integrand_name: None,
+        point: vec![],
+        momentum_space: false,
+        ..Default::default()
+    }
+    .run(&mut cli)
+    .unwrap();
+
+    let target = Complex::new(0.00014727604164105595, -0.001150313936913021);
+    assert_eq!(inspect, target);
+    Ok(())
+}
+
+#[test]
+fn test_qqx_aaa_ir_tree_user_numerator_unprocessed_with_momtrop_table_inspect() -> Result<()> {
+    let mut cli = get_test_cli(
+        Some("generate_qqx_aaa_tree_user_numerator_unprocessed_with_momtrop_table.toml".into()),
+        get_tests_workspace_path()
+            .join("qqx_aaa_tree_user_numerator_unprocessed_with_momtrop_table"),
+        None,
+        true,
+    )
+    .unwrap();
+
+    let (_, inspect) = Inspect {
+        process_id: None,
+        integrand_name: None,
+        point: vec![],
+        momentum_space: false,
+        ..Default::default()
+    }
+    .run(&mut cli)
+    .unwrap();
+
+    let target = Complex::new(1.47276041641056e-4, -1.1503139369130214e-3);
+    assert_eq!(inspect, target);
+    Ok(())
+}
+
+#[test]
+fn test_qqx_aaa_ir_tree_user_numerator_inspect() -> Result<()> {
+    let mut cli = get_test_cli(
+        Some("generate_qqx_aaa_tree_user_numerator.toml".into()),
+        get_tests_workspace_path().join("qqx_aaa_tree_user_numerator"),
+        None,
+        true,
+    )
+    .unwrap();
+
+    let (_, inspect) = Inspect {
+        process_id: None,
+        integrand_name: None,
+        point: vec![],
+        momentum_space: false,
+        ..Default::default()
+    }
+    .run(&mut cli)
+    .unwrap();
+
+    let target = Complex::new(1.47276041641056e-4, -1.1503139369130214e-3);
+    assert_eq!(inspect, target);
+    Ok(())
+}
+
+#[test]
+fn test_qqx_aaa_ir_subtracted_inspect() -> Result<()> {
+    let mut cli = get_test_cli(
+        Some("generate_qqx_aaa_ir_subtracted_physical.toml".into()),
+        get_tests_workspace_path().join("qqx_aaa_ir_subtracted_physical"),
+        None,
+        true,
+    )
+    .unwrap();
+
+    let (_, inspect) = Inspect {
+        process_id: None,
+        integrand_name: None,
+        point: vec![0.0, 0.10001, 0.10001],
+        momentum_space: true,
+        ..Default::default()
+    }
+    .run(&mut cli)
+    .unwrap();
+
+    let target = Complex::new(2.3159767780905335e-1, -1.8547720156633686e-4);
+    assert_eq!(inspect, target);
+    Ok(())
+}

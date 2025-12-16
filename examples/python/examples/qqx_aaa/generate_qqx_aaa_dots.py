@@ -4,10 +4,8 @@
 # %%
 # ENVIRONMENT SETUP
 
-# Tested with gammaloop with rev c556211efd2a6d93aec64cf0573ef5a0468a4431
-# Tested with git@github.com:alphal00p/symbolica-community.git rev 4e22a8fbaa43be42cf7d81cda66eff14a0a61ade
-# > *BUT* with spenso+subcrates patched to revision 5b7123124df40848fbd0153dff415e7f8428800a
-# > *AND* linnet patched to revision aa7da353060b53f0af5a79810ed5383026871394
+# Tested with gammaloop with rev c71701cefc11eb7184234d8d70a190222374c32b 
+# Tested with symbolica-community v 1.1.0 (rev b796597474e3eee41a463b3b816df169220cc343)
 
 import os
 ROOT_PATH = os.path.dirname(__file__) 
@@ -43,8 +41,8 @@ from symbolica.community.spenso import TensorName as \
     N,LibraryTensor,TensorNetwork,Representation,TensorStructure,TensorIndices,Tensor,Slot,TensorLibrary, ExecutionMode
 from symbolica.community.idenso import *
 from symbolica.community.spenso import Tensor
-from symbolica.community.spenso import initialize as spenso_initialize
-spenso_initialize()
+#from symbolica.community.spenso import initialize as spenso_initialize
+#spenso_initialize()
 
 #print(E("spenso::{spenso::upper}::bis(4,x)").to_canonical_string())
 #from symbolica_community import Expression, S,E, Replacement
@@ -1742,7 +1740,7 @@ print("Total ME squared: %.16e"%total_squared_me.evaluate_complex({},{}).real)
 run_gammaloop_commands([
     f'import model {SM_MODEL_PATH}',
     f"import graphs {os.path.join(ROOT_DIR, "dot_graphs", "loop_graphs", "qqx_aaa_loops_unprocessed.dot")}",
-    f"save dot {os.path.join(ROOT_DIR,'TMP')} --combine-diagrams",
+    f"save dot {os.path.join(ROOT_DIR,'TMP')} -c",
     f"!cp {os.path.join(ROOT_DIR,'TMP','processes','amplitudes','qqx_aaa_loops_unprocessed','default','default_graphs.dot')} {os.path.join(ROOT_DIR, "dot_graphs", "loop_graphs", "qqx_aaa_loops.dot")}",
     f"!rm -rf {os.path.join(ROOT_DIR,'TMP_state')}",
     f"!rm -rf {os.path.join(ROOT_DIR,'TMP')}"
@@ -1956,7 +1954,7 @@ with open(os.path.join(ROOT_DIR, "dot_graphs", "loop_graphs", "ir_ct_unprocessed
 run_gammaloop_commands([
     f'import model {SM_MODEL_PATH}',
     f"import graphs {os.path.join(ROOT_DIR,'dot_graphs','loop_graphs','ir_ct_unprocessed.dot')}",
-    f"save dot {os.path.join(ROOT_DIR,'TMP')} --combine-diagrams",
+    f"save dot {os.path.join(ROOT_DIR,'TMP')} -c",
     f"!cp {os.path.join(ROOT_DIR,'TMP','processes','amplitudes','ir_ct_unprocessed','default','default_graphs.dot')} {os.path.join(ROOT_DIR,'dot_graphs','loop_graphs','ir_ct.dot')}",
     f"!rm -rf {os.path.join(ROOT_DIR,'TMP_state')}",
     f"!rm -rf {os.path.join(ROOT_DIR,'TMP')}",
@@ -2318,7 +2316,7 @@ with open(os.path.join(ROOT_DIR, "dot_graphs", "loop_graphs", "uv_cts_unprocesse
 run_gammaloop_commands([
     f'import model {SM_MODEL_PATH}',
     f"import graphs {os.path.join(ROOT_DIR,'dot_graphs','loop_graphs','uv_cts_unprocessed.dot')}",
-    f"save dot {os.path.join(ROOT_DIR,'TMP')} --combine-diagrams",
+    f"save dot {os.path.join(ROOT_DIR,'TMP')} -c",
     f"!cp {os.path.join(ROOT_DIR,'TMP','processes','amplitudes','uv_cts_unprocessed','default','default_graphs.dot')} {os.path.join(ROOT_DIR,'dot_graphs','loop_graphs','uv_cts.dot')}",
     f"!rm -rf {os.path.join(ROOT_DIR,'TMP_state')}",
     f"!rm -rf {os.path.join(ROOT_DIR,'TMP')}",

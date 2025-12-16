@@ -93,7 +93,7 @@ use linnet::half_edge::subgraph::{
 };
 use symbolica::{atom::Atom, graph::Graph as SymbolicaGraph};
 
-const CANONIZE_GRAPH_FLOWS: bool = false;
+const CANONIZE_GRAPH_FLOWS: bool = true;
 const ANALYZE_RATIO_AS_RATIONAL_POLYNOMIAL: bool = true;
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct NodeColorWithVertexRule {
@@ -4077,7 +4077,7 @@ impl ProcessDefinition {
                             }
                         } else {
                             // println!("Processing graph #{}...", i_g);
-                            // println!("Bare graph: {}",bare_graph.dot());
+                            // println!("Bare graph: {}",bare_graph.dot_serialize());
                             let mut numerator = bare_graph.numerator(&bare_graph.no_dummy());
 
 
@@ -4090,6 +4090,8 @@ impl ProcessDefinition {
                             // println!("HEEEEy");
                             let numerator_color_simplified =
                                 numerator.clone().get_single_atom().unwrap().to_param_color().simplify_color();
+
+                            // println!("numerator_color_simplified=\n{}",numerator_color_simplified.to_plain_string());
 
                             // Color part need to be expanded to identify zeroes properly
                             if numerator_color_simplified.expand_color().iter().fold(Atom::Zero,|acc,(a, b)| a*b+acc).is_zero()

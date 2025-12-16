@@ -1,11 +1,11 @@
 commands = [
+    "set default-runtime kv subtraction.disable_threshold_subtraction=true",
+    "set global kv global.generation.threshold_subtraction.enable_thresholds=false",
     "import model sm-default",
-    "import graphs ./qqx_aaa_subtracted.dot",
+    "import graphs ./tests/resources/graphs/qqx_aaa_tree_user_numerator.dot",
     "generate",
-    "inspect -m -p 0.1 0.2 0.3",
-	"quit"
+    "quit -o",
 ]
-
 
 [default_runtime_settings.general]
 m_uv = 1.0
@@ -49,7 +49,7 @@ helicities = [1, 1, -1, -1, -1]
 
 [default_runtime_settings.integrator]
 n_increase = 0
-n_max = 20000000
+n_max = 1000000
 discrete_dim_learning_rate = 1.5
 continuous_dim_learning_rate = 1.5
 max_prob_ratio = 0.01
@@ -58,15 +58,9 @@ max_prob_ratio = 0.01
 check_on_norm = true
 rotation_axis = []
 
-[default_runtime_settings.subtraction]
-disable_threshold_subtraction = true
-
 [cli_settings.global]
-display_directive = "debug"
-logfile_directive = "debug"
-
-[cli_settings.global.generation]
-enable_thresholds = false
+display_directive = "gammalooprs=info"
+logfile_directive = "gammalooprs=info"
 
 [cli_settings.global.generation.evaluator]
 iterative_orientation_optimization = true
@@ -75,3 +69,6 @@ compile = true
 [cli_settings.global.generation.compile]
 inline_asm = true
 optimization_level = "O3"
+
+[cli_settings.global.generation.tropical_subgraph_table]
+disable_tropical_generation = true

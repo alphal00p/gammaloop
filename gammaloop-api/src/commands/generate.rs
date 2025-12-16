@@ -257,7 +257,7 @@ pub struct SpecArgs {
     /// Graph processing toggles
     ///
     /// Format:
-    ///   --loop-momentum-bases "GL_12=q7,q10 GL_77=q4,q2"
+    ///   --loop-momentum-bases "GL_12=7,10 GL_77=4,2"
     ///   --select-graphs "GL_12 GL_13"
     ///   --veto-graphs "GL_11 GL_15"
     #[arg(long = "loop-momentum-bases", value_name = "KEY=VALUE", num_args = 0.., value_parser = KvPair::from_str)]

@@ -311,9 +311,9 @@ def run_limit_test(elements_to_display=None, tests_to_run=None, gammaloop_state=
 
     x = 0.1
     for test_name, k_base, scaling, pref_power in [
-        ('IR', [0.0001, 0.0001, 1.0*x], 0.1, 0.0),
-        ('UV', [1.0e3, 1.0e3, 1.0e3], 10.0, 0.0),
-        ('THRES', on_threshold_point, 0.1, 0.0),
+        ('IR', [0.0001, 0.0001, 1.0*x], 0.1, 2.0),
+        ('UV', [1.0e4, 1.0e4, 1.0e4], 10.0, 3.0),
+        ('THRES', on_threshold_point, 0.1, 1.0),
     ]:
         if test_name not in tests_to_run:
             continue
