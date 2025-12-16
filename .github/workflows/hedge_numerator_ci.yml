@@ -95,7 +95,7 @@ jobs:
 
       - name: Run clippy
         run: |
-          nix run .#clippy
+          nix build .#checks.x86_64-linux.gammaloop-clippy --print-build-logs
 
   fmt:
     needs: build-deps
@@ -134,7 +134,7 @@ jobs:
 
       - name: Check formatting
         run: |
-          nix run .#fmt
+          nix build .#checks.x86_64-linux.gammaloop-fmt --print-build-logs
 
   test:
     if: always()
@@ -190,8 +190,7 @@ jobs:
 
       - name: Run nextest (partition ${{ matrix.partition }})
         run: |
-          # Use flake app for nextest partitioning
-          nix run .#nextest-partition -- ${{ matrix.partition }} ${{ env.PARTITION_COUNT }}
+          nix build .#checks.x86_64-linux.gammaloop-nextest-partition-${{ matrix.partition }} --print-build-logs
         timeout-minutes: 60
 
       - name: Run doctests
@@ -203,9 +202,11 @@ jobs:
       - name: Generate test report
         if: always()
         run: |
-          nix run .#nextest-partition -- ${{ matrix.partition }} ${{ env.PARTITION_COUNT }} \
+          nix develop --command cargo nextest run \
+            --partition hash:${{ matrix.partition }}/${{ env.PARTITION_COUNT }} \
             --reporter junit \
-            --output-file nextest-report-${{ matrix.partition }}.xml || true
+            --output-file nextest-report-${{ matrix.partition }}.xml \
+            --test-threads 1 || true
 
       - name: Upload test results
         if: always()

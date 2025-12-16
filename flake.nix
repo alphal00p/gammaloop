@@ -77,7 +77,7 @@
             pkgs.mpfr
           ]
           ++ lib.optionals pkgs.stdenv.isDarwin [
-            pkgs.apple-sdk
+            pkgs.darwin.cctools
           ];
 
         # Additional environment variables can be set directly
@@ -85,6 +85,34 @@
         CPPFLAGS = "-I${pkgs.gmp.dev}/include -I${pkgs.mpfr.dev}/include -I${pkgs.libmpc}/include";
         LDFLAGS = "-L${pkgs.gmp}/lib -L${pkgs.mpfr}/lib -L${pkgs.libmpc}/lib";
         PKG_CONFIG_PATH = "${pkgs.gmp.dev}/lib/pkgconfig:${pkgs.mpfr.dev}/lib/pkgconfig:${pkgs.libmpc}/lib/pkgconfig";
+
+        # Force gmp-mpfr-sys to use system libraries
+        MPFR_LIB_DIR = "${pkgs.mpfr}/lib";
+        MPFR_INCLUDE_DIR = "${pkgs.mpfr.dev}/include";
+        GMP_LIB_DIR = "${pkgs.gmp}/lib";
+        GMP_INCLUDE_DIR = "${pkgs.gmp.dev}/include";
+        MPC_LIB_DIR = "${pkgs.libmpc}/lib";
+        MPC_INCLUDE_DIR = "${pkgs.libmpc}/include";
+
+        # Additional variables to force system lib usage
+        GMP_MPFR_SYS_LIBRARY = "1";
+        LIBGMP_LIB_DIR = "${pkgs.gmp}/lib";
+        LIBGMP_INCLUDE_DIR = "${pkgs.gmp.dev}/include";
+        LIBMPFR_LIB_DIR = "${pkgs.mpfr}/lib";
+        LIBMPFR_INCLUDE_DIR = "${pkgs.mpfr.dev}/include";
+        LIBMPC_LIB_DIR = "${pkgs.libmpc}/lib";
+        LIBMPC_INCLUDE_DIR = "${pkgs.libmpc}/include";
+
+        # Disable source builds
+        GMP_NO_SYS = "0";
+        MPFR_NO_SYS = "0";
+        MPC_NO_SYS = "0";
+
+        # Rug-specific environment variables for system GMP
+        CARGO_FEATURE_USE_SYSTEM_LIBS = "1";
+        RUG_GMP_DIR = "${pkgs.gmp}";
+        RUG_MPFR_DIR = "${pkgs.mpfr}";
+        RUG_MPC_DIR = "${pkgs.libmpc}";
       };
 
       # CI-specific args that disable Python API to avoid pyo3 build issues
@@ -99,6 +127,34 @@
           CPPFLAGS = "-I${pkgs.gmp.dev}/include -I${pkgs.mpfr.dev}/include -I${pkgs.libmpc}/include";
           LDFLAGS = "-L${pkgs.gmp}/lib -L${pkgs.mpfr}/lib -L${pkgs.libmpc}/lib";
           PKG_CONFIG_PATH = "${pkgs.gmp.dev}/lib/pkgconfig:${pkgs.mpfr.dev}/lib/pkgconfig:${pkgs.libmpc}/lib/pkgconfig";
+
+          # Force gmp-mpfr-sys to use system libraries
+          MPFR_LIB_DIR = "${pkgs.mpfr}/lib";
+          MPFR_INCLUDE_DIR = "${pkgs.mpfr.dev}/include";
+          GMP_LIB_DIR = "${pkgs.gmp}/lib";
+          GMP_INCLUDE_DIR = "${pkgs.gmp.dev}/include";
+          MPC_LIB_DIR = "${pkgs.libmpc}/lib";
+          MPC_INCLUDE_DIR = "${pkgs.libmpc}/include";
+
+          # Additional variables to force system lib usage
+          GMP_MPFR_SYS_LIBRARY = "1";
+          LIBGMP_LIB_DIR = "${pkgs.gmp}/lib";
+          LIBGMP_INCLUDE_DIR = "${pkgs.gmp.dev}/include";
+          LIBMPFR_LIB_DIR = "${pkgs.mpfr}/lib";
+          LIBMPFR_INCLUDE_DIR = "${pkgs.mpfr.dev}/include";
+          LIBMPC_LIB_DIR = "${pkgs.libmpc}/lib";
+          LIBMPC_INCLUDE_DIR = "${pkgs.libmpc}/include";
+
+          # Disable source builds
+          GMP_NO_SYS = "0";
+          MPFR_NO_SYS = "0";
+          MPC_NO_SYS = "0";
+
+          # Rug-specific environment variables for system GMP
+          CARGO_FEATURE_USE_SYSTEM_LIBS = "1";
+          RUG_GMP_DIR = "${pkgs.gmp}";
+          RUG_MPFR_DIR = "${pkgs.mpfr}";
+          RUG_MPC_DIR = "${pkgs.libmpc}";
         };
 
       craneLibLLvmTools =
@@ -164,6 +220,43 @@
             inherit cargoArtifacts;
             cargoNextestExtraArgs = "--test-threads 1 --no-fail-fast --final-status-level fail";
           });
+
+        # Individual partitioned test checks for CI
+        gammaloop-nextest-partition-1 = craneLib.cargoNextest (ciArgs
+          // {
+            inherit cargoArtifacts;
+            cargoNextestExtraArgs = "--test-threads 1 --no-fail-fast --final-status-level fail --partition hash:1/6";
+          });
+
+        gammaloop-nextest-partition-2 = craneLib.cargoNextest (ciArgs
+          // {
+            inherit cargoArtifacts;
+            cargoNextestExtraArgs = "--test-threads 1 --no-fail-fast --final-status-level fail --partition hash:2/6";
+          });
+
+        gammaloop-nextest-partition-3 = craneLib.cargoNextest (ciArgs
+          // {
+            inherit cargoArtifacts;
+            cargoNextestExtraArgs = "--test-threads 1 --no-fail-fast --final-status-level fail --partition hash:3/6";
+          });
+
+        gammaloop-nextest-partition-4 = craneLib.cargoNextest (ciArgs
+          // {
+            inherit cargoArtifacts;
+            cargoNextestExtraArgs = "--test-threads 1 --no-fail-fast --final-status-level fail --partition hash:4/6";
+          });
+
+        gammaloop-nextest-partition-5 = craneLib.cargoNextest (ciArgs
+          // {
+            inherit cargoArtifacts;
+            cargoNextestExtraArgs = "--test-threads 1 --no-fail-fast --final-status-level fail --partition hash:5/6";
+          });
+
+        gammaloop-nextest-partition-6 = craneLib.cargoNextest (ciArgs
+          // {
+            inherit cargoArtifacts;
+            cargoNextestExtraArgs = "--test-threads 1 --no-fail-fast --final-status-level fail --partition hash:6/6";
+          });
       };
 
       packages =
@@ -182,66 +275,6 @@
       apps = {
         default = flake-utils.lib.mkApp {
           drv = gammaloop;
-        };
-
-        # Nextest commands for CI
-        nextest = flake-utils.lib.mkApp {
-          drv = pkgs.writeShellScriptBin "nextest" ''
-            export PATH=${lib.makeBinPath (with pkgs; [cargo rustc cargo-nextest])}:$PATH
-            exec cargo nextest "$@"
-          '';
-        };
-
-        nextest-partition = flake-utils.lib.mkApp {
-          drv = pkgs.writeShellScriptBin "nextest-partition" ''
-            PARTITION="''${1:-1}"
-            TOTAL="''${2:-6}"
-            shift 2
-            export PATH=${lib.makeBinPath (with pkgs; [cargo rustc cargo-nextest])}:$PATH
-            export LD_LIBRARY_PATH=${lib.makeLibraryPath commonArgs.buildInputs}
-            exec cargo nextest run \
-              --partition hash:$PARTITION/$TOTAL \
-              --test-threads 1 \
-              --no-fail-fast \
-              --final-status-level fail \
-              --success-output never \
-              --failure-output immediate \
-              --verbose \
-              "$@"
-          '';
-        };
-
-        nextest-ci = flake-utils.lib.mkApp {
-          drv = pkgs.writeShellScriptBin "nextest-ci" ''
-            export PATH=${lib.makeBinPath (with pkgs; [cargo rustc cargo-nextest])}:$PATH
-            export LD_LIBRARY_PATH=${lib.makeLibraryPath commonArgs.buildInputs}
-            exec cargo nextest run \
-              --profile ci \
-              --test-threads 1 \
-              --no-fail-fast \
-              --final-status-level fail \
-              --success-output never \
-              --failure-output immediate \
-              --verbose \
-              "$@"
-          '';
-        };
-
-        clippy = flake-utils.lib.mkApp {
-          drv = pkgs.writeShellScriptBin "clippy" ''
-            export PATH=${lib.makeBinPath (with pkgs; [cargo rustc python313])}:$PATH
-            export LD_LIBRARY_PATH=${lib.makeLibraryPath commonArgs.buildInputs}
-            export PYO3_PYTHON="${pkgs.python313}/bin/python3"
-            export PYTHONPATH="${pkgs.python313}/lib/python3.13/site-packages"
-            exec cargo clippy --all-targets -- --deny warnings
-          '';
-        };
-
-        fmt = flake-utils.lib.mkApp {
-          drv = pkgs.writeShellScriptBin "fmt" ''
-            export PATH=${lib.makeBinPath (with pkgs; [cargo rustc])}:$PATH
-            exec cargo fmt --check
-          '';
         };
       };
 
