@@ -9,7 +9,7 @@ default-timeout = "60s"
 slow-timeout = { period = "120s", terminate-after = 2 }
 
 # Test threads - we'll override this in CI for better control
-test-threads = "logical"
+test-threads = "num-cpus"
 
 # Failure output configuration
 failure-output = "immediate"
