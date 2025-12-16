@@ -1516,7 +1516,6 @@ dependencies = [
  "gammaloop-api",
  "gat-lending-iterator",
  "git-version",
- "gmp-mpfr-sys",
  "idenso",
  "include_dir",
  "indexmap 2.12.1",

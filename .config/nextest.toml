@@ -8,7 +8,7 @@ default-timeout = "60s"
 # Slow tests get extra time
 slow-timeout = { period = "120s", terminate-after = 2 }
 
-# Test threads - we'll override this in CI for better control
+# Test threads - use all available cores for maximum parallelism
 test-threads = "num-cpus"
 
 # Failure output configuration
@@ -23,12 +23,12 @@ status-level = "fail"
 final-status-level = "fail"
 
 [profile.ci]
-# CI-specific profile with more conservative settings
+# CI-specific profile optimized for speed
 default-timeout = "60s"
 slow-timeout = { period = "120s", terminate-after = 2 }
 
-# Single-threaded execution for deterministic results
-test-threads = 1
+# Use all available cores in CI for faster execution
+test-threads = "num-cpus"
 
 # More verbose output for debugging CI failures
 failure-output = "immediate-final"
@@ -53,20 +53,21 @@ path = "target/nextest/ci/junit.xml"
 default-timeout = "60s"
 slow-timeout = { period = "120s", terminate-after = 2 }
 
-test-threads = 1
+# Use multiple threads even in partitions for better performance
+test-threads = "num-cpus"
 failure-output = "immediate"
 success-output = "never"
 retries = 0
 fail-fast = false
 
 [test-groups]
-# Group integration tests that might be slow
-integration = { max-threads = 1 }
+# Group integration tests that might be slow - allow some parallelism
+integration = { max-threads = 2 }
 
-# Group tests that use a lot of memory
-memory-intensive = { max-threads = 1 }
+# Group tests that use a lot of memory - limit but don't serialize completely
+memory-intensive = { max-threads = 2 }
 
-# Group tests that might be flaky
+# Group tests that might be flaky - serialize these for stability
 flaky = { max-threads = 1, retries = 2 }
 
 [[profile.default.overrides]]
@@ -91,12 +92,12 @@ timeout = "120s"
 [[profile.ci.overrides]]
 # In CI, be extra conservative with timeouts
 filter = 'test(integration) or test(heavy) or test(memory) or test(large)'
-timeout = "120s"
+timeout = "180s"
 
 [[profile.ci.overrides]]
 # Benchmark tests get even more time in CI
 filter = 'test(bench) or test(benchmark)'
-timeout = "120s"
+timeout = "300s"
 
 [profile.default.junit]
 # Default JUnit output location

@@ -1,6 +1,7 @@
 #![allow(dead_code, unused_variables, non_snake_case)]
 
 use crate::cff::expression::{AmplitudeOrientationID, GraphOrientation};
+use crate::gammaloop_integrand::{GLIntegrand, GraphTerm};
 use crate::graph::edge::ParseEdge;
 use crate::graph::global::ParseData;
 use crate::graph::hedge_data::ParseHedge;
@@ -8,18 +9,23 @@ use crate::graph::parse::ParseGraph;
 use crate::graph::vertex::ParseVertex;
 use crate::graph::{LMBext, LoopMomentumBasis};
 use crate::initialisation::test_initialise;
+use crate::inspect::{self, inspect};
 use crate::momentum_sample::LoopIndex;
 use crate::processes::{Amplitude, AmplitudeGraph};
-use crate::settings::GlobalSettings;
 use crate::settings::global::OrientationPattern;
-use crate::utils::W_;
+use crate::settings::runtime::DiscreteGraphSamplingSettings;
+use crate::settings::{GlobalSettings, SamplingSettings};
+use crate::utils::{F, W_};
 use crate::uv::settings::VakintSettings;
 use linnet::half_edge::involution::EdgeIndex;
 
 use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike};
 use linnet::half_edge::{builder::HedgeGraphBuilder, involution::Flow};
+use rand::Rng;
 use rayon::ThreadPool;
 use symbolica::atom::Symbol;
+use symbolica::domains::float::Real;
+use symbolica::numerical_integration::MonteCarloRng;
 use symbolica::symbol;
 
 use crate::{
@@ -73,6 +79,18 @@ fn four_photon_one_loop_amp() {
     println!("{}", amp.derived_data.all_mighty_integrand);
 }
 
+fn logspace(start: f64, stop: f64, num: usize, base: f64) -> Vec<f64> {
+    let log_start = start;
+    let log_stop = stop;
+    let step = (log_stop - log_start) / (num - 1) as f64;
+
+    (0..num)
+        .map(|i| {
+            let exponent = log_start + step * i as f64;
+            base.powf(exponent)
+        })
+        .collect()
+}
 #[test]
 fn scalar_bubble() {
     test_initialise().unwrap();
@@ -123,24 +141,92 @@ fn scalar_bubble() {
     .unwrap();
 
     println!("{}", amp.graphs[0].derived_data.all_mighty_integrand);
-    for g in amp.graphs {
-        for o in g
-            .derived_data
-            .cff_expression
-            .as_ref()
-            .unwrap()
-            .orientations
-            .iter()
-        {
-            let oatom = o
-                .data
-                .orientation
-                .select(&g.derived_data.all_mighty_integrand);
-            for lmb in g.derived_data.lmbs.as_ref().unwrap() {
-                g.graph
-                    .all_limits(&g.graph.full_filter(), &oatom, symbol!("lambd"), &lmb);
+
+    // let (inspect_res_jac, inspect_res_eval) = gammalooprs::inspect::inspect(
+    //     &settings,
+    //     integrand,
+    //     &state.model,
+    //     pt,
+    //     &self.discrete_dim,
+    //     self.force_radius,
+    //     self.momentum_space,
+    //     self.use_f128,
+    // );
+
+    // if let Some(GLIntegrand::Amplitude(a)) = &mut amp.integrand {
+
+    //     inspect(settings, integrand, model, pt, discrete_dimensions, force_radius, is_momentum_space, use_f128)
+
+    //     let res = a.data.graph_terms[0].evaluate(sample, model, settings, rotation, channel_id;)
+    // } else {
+    //     panic!("No integrand built");
+    // }
+
+    let integrand = amp.integrand.as_mut().unwrap();
+    integrand.warm_up(&model);
+
+    let mut settings = integrand.get_settings().clone();
+
+    settings.sampling = SamplingSettings::DiscreteGraphs(DiscreteGraphSamplingSettings::default());
+    let mut rng = MonteCarloRng::new(1234567, 0);
+
+    let scales = logspace(2., 6., 10, 10.);
+
+    for (i, g) in amp.graphs.iter().enumerate() {
+        for lmb in g.derived_data.lmbs.as_ref().unwrap() {
+            println!("{}", lmb);
+            let mut pt = vec![];
+
+            let mut res = vec![];
+            for l in lmb.loop_edges.iter() {
+                pt.push(F(rng.random_range(-1.0..1.0)));
+                pt.push(F(rng.random_range(-1.0..1.0)));
+                pt.push(F(rng.random_range(-1.0..1.0)));
+            }
+
+            for s in &scales {
+                let mut ogpt = pt.clone();
+                for p in ogpt.iter_mut() {
+                    *p = *p * F(*s);
+                }
+
+                println!("Scale :{s}");
+
+                let (inspect_res_jac, inspect_res_eval) = inspect(
+                    &settings,
+                    integrand,
+                    &model,
+                    ogpt,
+                    &vec![i],
+                    false,
+                    true,
+                    false,
+                );
+
+                res.push(inspect_res_eval)
+            }
+
+            for r in res.iter() {
+                println!("res: {}", r.norm_squared().sqrt());
             }
         }
+
+        // for o in g
+        //     .derived_data
+        //     .cff_expression
+        //     .as_ref()
+        //     .unwrap()
+        //     .orientations
+        //     .iter()
+        // {
+        //     let oatom = o
+        //         .data
+        //         .orientation
+        //         .select(&g.derived_data.all_mighty_integrand);
+
+        //     g.graph
+        //         .all_limits(&g.graph.full_filter(), &oatom, symbol!("lambd"), &lmb);
+        // }
     }
 }
 

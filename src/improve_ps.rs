@@ -174,6 +174,19 @@ pub(crate) fn generate_default_momenta(
         },
     };
 
+    if num_initial == 1 && num_final == 1 {
+        return Ok(Externals::Constant {
+            momenta: vec![
+                ExternalMomenta::Independent([incoming_energy, F(0.0), F(0.0), incoming_energy]),
+                ExternalMomenta::Dependent(Dep::Dep),
+            ],
+            improvement_settings: PhaseSpaceImprovementSettings::default(),
+            helicities: vec![SignOrZero::Plus, SignOrZero::Plus],
+            f_64_cache: None,
+            f_128_cache: None,
+        });
+    }
+
     // start a rng with a fixed seed
     let mut rng = MonteCarloRng::new(1234567, 0);
 
@@ -223,7 +236,7 @@ pub(crate) fn generate_default_momenta(
             let ose = spatial.on_shell_energy(Some(external_masses[final_states[i]].clone()));
             FourMomentum {
                 temporal: ose,
-                spatial: spatial,
+                spatial,
             }
         })
         .collect_vec();
@@ -308,6 +321,10 @@ fn find_rescaling<T: FloatLike>(
                         .on_shell_energy(Some(mass.clone()))
                         .value;
                     let der = x * mom.spatial.norm_squared() / &ose;
+                    // println!(
+                    //     "Rescaling x: {:?}, mom: {:?}, ose: {:?}, der: {:?}",
+                    //     x, mom, ose, der
+                    // );
 
                     (ose, der)
                 } else {

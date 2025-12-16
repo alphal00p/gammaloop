@@ -148,7 +148,7 @@ impl Amplitude {
         thread_pool: &ThreadPool,
     ) -> Result<()> {
         info!("Compiling amplitude {}", self.name);
-        let p = path.as_ref().join(format!("amp_{}", self.name));
+        let p = path.as_ref().join(&self.name);
 
         let r = fs::create_dir_all(&p).with_context(|| {
             format!(

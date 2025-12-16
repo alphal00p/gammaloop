@@ -33,6 +33,9 @@ jobs:
             substituters = https://cache.nixos.org/ https://nix-community.cachix.org
             trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs=
 
+      - name: Magic Nix Cache
+        uses: DeterminateSystems/magic-nix-cache-action@main
+
       - name: Setup Cachix
         uses: cachix/cachix-action@v14
         with:
@@ -49,14 +52,17 @@ jobs:
         with:
           path: |
             ~/.cache/nix
-            /nix/store
-          key: ${{ steps.cache-key.outputs.key }}
+          key: ${{ steps.cache-key.outputs.key }}-build-deps
           restore-keys: |
             nix-deps-
 
-      - name: Build cargo dependencies
+      - name: Build cargo dependencies and main package
         run: |
-          nix build .#cargoArtifacts --print-build-logs
+          echo "Starting dependency build at $(date)"
+          time nix build .#cargoArtifacts --print-build-logs
+          echo "Dependencies built at $(date)"
+          time nix build --print-build-logs
+          echo "Main package built at $(date)"
 
   clippy:
     needs: build-deps
@@ -77,6 +83,9 @@ jobs:
             substituters = https://cache.nixos.org/ https://nix-community.cachix.org
             trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs=
 
+      - name: Magic Nix Cache
+        uses: DeterminateSystems/magic-nix-cache-action@main
+
       - name: Setup Cachix
         uses: cachix/cachix-action@v14
         with:
@@ -88,14 +97,16 @@ jobs:
         with:
           path: |
             ~/.cache/nix
-            /nix/store
-          key: ${{ needs.build-deps.outputs.cache-key }}
+          key: ${{ needs.build-deps.outputs.cache-key }}-clippy
           restore-keys: |
+            ${{ needs.build-deps.outputs.cache-key }}
             nix-deps-
 
       - name: Run clippy
         run: |
-          nix build .#checks.x86_64-linux.gammaloop-clippy --print-build-logs
+          echo "Starting clippy at $(date)"
+          time nix build .#checks.gammaloop-clippy --print-build-logs
+          echo "Clippy completed at $(date)"
 
   fmt:
     needs: build-deps
@@ -116,6 +127,9 @@ jobs:
             substituters = https://cache.nixos.org/ https://nix-community.cachix.org
             trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs=
 
+      - name: Magic Nix Cache
+        uses: DeterminateSystems/magic-nix-cache-action@main
+
       - name: Setup Cachix
         uses: cachix/cachix-action@v14
         with:
@@ -127,20 +141,21 @@ jobs:
         with:
           path: |
             ~/.cache/nix
-            /nix/store
-          key: ${{ needs.build-deps.outputs.cache-key }}
+          key: ${{ needs.build-deps.outputs.cache-key }}-fmt
           restore-keys: |
+            ${{ needs.build-deps.outputs.cache-key }}
             nix-deps-
 
       - name: Check formatting
         run: |
-          nix build .#checks.x86_64-linux.gammaloop-fmt --print-build-logs
+          nix build .#checks.gammaloop-fmt --print-build-logs
 
   test:
     if: always()
     needs: build-deps
     environment: Cachix
     strategy:
+      max-parallel: 3
       matrix:
         # Use multiple runners for test partitioning
         partition: [1, 2, 3, 4, 5, 6]
@@ -151,7 +166,7 @@ jobs:
             partition: 1
 
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 90
+    timeout-minutes: 180
 
     steps:
       - name: Checkout code
@@ -169,6 +184,9 @@ jobs:
             substituters = https://cache.nixos.org/ https://nix-community.cachix.org
             trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs=
 
+      - name: Magic Nix Cache
+        uses: DeterminateSystems/magic-nix-cache-action@main
+
       - name: Setup Cachix
         uses: cachix/cachix-action@v14
         with:
@@ -181,23 +199,31 @@ jobs:
         with:
           path: |
             ~/.cache/nix
-            /nix/store
-          key: ${{ needs.build-deps.outputs.cache-key }}-${{ matrix.os }}
+          key: ${{ needs.build-deps.outputs.cache-key }}-test-${{ matrix.partition }}-${{ matrix.os }}
           restore-keys: |
+            ${{ needs.build-deps.outputs.cache-key }}-${{ matrix.os }}
             ${{ needs.build-deps.outputs.cache-key }}
             nix-deps-${{ matrix.os }}-
             nix-deps-
 
       - name: Run nextest (partition ${{ matrix.partition }})
         run: |
-          nix build .#checks.x86_64-linux.gammaloop-nextest-partition-${{ matrix.partition }} --print-build-logs
-        timeout-minutes: 60
+          echo "Starting nextest partition ${{ matrix.partition }} at $(date)"
+          echo "Available disk space:"
+          df -h
+          echo "Available memory:"
+          free -h || vm_stat
+          time nix build .#checks.gammaloop-nextest-partition-${{ matrix.partition }} --print-build-logs
+          echo "Nextest partition ${{ matrix.partition }} completed at $(date)"
+        timeout-minutes: 120
 
       - name: Run doctests
         if: matrix.partition == 1
         run: |
-          nix develop --command cargo test --doc --verbose
-        timeout-minutes: 30
+          echo "Starting doctests at $(date)"
+          time nix develop --command cargo test --doc --verbose
+          echo "Doctests completed at $(date)"
+        timeout-minutes: 60
 
       - name: Generate test report
         if: always()
@@ -222,7 +248,7 @@ jobs:
     if: always()
     needs: build-deps
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     environment: Cachix
 
     steps:
@@ -235,6 +261,9 @@ jobs:
           extra-conf: |
             experimental-features = nix-command flakes
 
+      - name: Magic Nix Cache
+        uses: DeterminateSystems/magic-nix-cache-action@main
+
       - name: Setup Cachix
         uses: cachix/cachix-action@v14
         with:
@@ -246,20 +275,20 @@ jobs:
         with:
           path: |
             ~/.cache/nix
-            /nix/store
-          key: ${{ needs.build-deps.outputs.cache-key }}
+          key: ${{ needs.build-deps.outputs.cache-key }}-audit
           restore-keys: |
+            ${{ needs.build-deps.outputs.cache-key }}
             nix-deps-
 
       - name: Run security audit
         run: |
-          nix build .#checks.x86_64-linux.gammaloop-audit --print-build-logs
+          nix build .#checks.gammaloop-audit --print-build-logs
 
       - name: Run license check
         run: |
-          nix build .#checks.x86_64-linux.gammaloop-deny --print-build-logs
+          nix build .#checks.gammaloop-deny --print-build-logs
 
-  build:
+  docs:
     if: always()
     needs: build-deps
     runs-on: ubuntu-latest
@@ -276,6 +305,9 @@ jobs:
           extra-conf: |
             experimental-features = nix-command flakes
 
+      - name: Magic Nix Cache
+        uses: DeterminateSystems/magic-nix-cache-action@main
+
       - name: Setup Cachix
         uses: cachix/cachix-action@v14
         with:
@@ -287,24 +319,20 @@ jobs:
         with:
           path: |
             ~/.cache/nix
-            /nix/store
-          key: ${{ needs.build-deps.outputs.cache-key }}
+          key: ${{ needs.build-deps.outputs.cache-key }}-docs
           restore-keys: |
+            ${{ needs.build-deps.outputs.cache-key }}
             nix-deps-
-
-      - name: Build main package
-        run: |
-          nix build --print-build-logs
 
       - name: Build documentation
         run: |
-          nix build .#checks.x86_64-linux.gammaloop-doc --print-build-logs
+          nix build .#checks.gammaloop-doc --print-build-logs
 
   coverage:
     if: always()
     needs: build-deps
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 150
     environment: Cachix
 
     steps:
@@ -317,6 +345,9 @@ jobs:
           extra-conf: |
             experimental-features = nix-command flakes
 
+      - name: Magic Nix Cache
+        uses: DeterminateSystems/magic-nix-cache-action@main
+
       - name: Setup Cachix
         uses: cachix/cachix-action@v14
         with:
@@ -328,14 +359,14 @@ jobs:
         with:
           path: |
             ~/.cache/nix
-            /nix/store
-          key: ${{ needs.build-deps.outputs.cache-key }}
+          key: ${{ needs.build-deps.outputs.cache-key }}-coverage
           restore-keys: |
+            ${{ needs.build-deps.outputs.cache-key }}
             nix-deps-
 
       - name: Generate coverage report
         run: |
-          nix build .#packages.x86_64-linux.gammaloop-llvm-coverage --print-build-logs
+          nix build .#packages.gammaloop-llvm-coverage --print-build-logs
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4

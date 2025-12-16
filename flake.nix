@@ -119,7 +119,7 @@
       ciArgs =
         commonArgs
         // {
-          cargoExtraArgs = "";
+          buildType = "release";
           # Set PyO3 environment variables to help it find Python
           PYO3_PYTHON = "${pkgs.python313}/bin/python3";
           PYTHONPATH = "${pkgs.python313}/lib/python3.13/site-packages";
@@ -218,44 +218,44 @@
         gammaloop-nextest = craneLib.cargoNextest (ciArgs
           // {
             inherit cargoArtifacts;
-            cargoNextestExtraArgs = "--test-threads 1 --no-fail-fast --final-status-level fail";
+            cargoNextestExtraArgs = "--profile ci --test-threads 0 --no-fail-fast --final-status-level fail";
           });
 
         # Individual partitioned test checks for CI
         gammaloop-nextest-partition-1 = craneLib.cargoNextest (ciArgs
           // {
             inherit cargoArtifacts;
-            cargoNextestExtraArgs = "--test-threads 1 --no-fail-fast --final-status-level fail --partition hash:1/6";
+            cargoNextestExtraArgs = "--profile ci --test-threads 0 --no-fail-fast --final-status-level fail --partition hash:1/6";
           });
 
         gammaloop-nextest-partition-2 = craneLib.cargoNextest (ciArgs
           // {
             inherit cargoArtifacts;
-            cargoNextestExtraArgs = "--test-threads 1 --no-fail-fast --final-status-level fail --partition hash:2/6";
+            cargoNextestExtraArgs = "--profile ci --test-threads 0 --no-fail-fast --final-status-level fail --partition hash:2/6";
           });
 
         gammaloop-nextest-partition-3 = craneLib.cargoNextest (ciArgs
           // {
             inherit cargoArtifacts;
-            cargoNextestExtraArgs = "--test-threads 1 --no-fail-fast --final-status-level fail --partition hash:3/6";
+            cargoNextestExtraArgs = "--profile ci --test-threads 0 --no-fail-fast --final-status-level fail --partition hash:3/6";
           });
 
         gammaloop-nextest-partition-4 = craneLib.cargoNextest (ciArgs
           // {
             inherit cargoArtifacts;
-            cargoNextestExtraArgs = "--test-threads 1 --no-fail-fast --final-status-level fail --partition hash:4/6";
+            cargoNextestExtraArgs = "--profile ci --test-threads 0 --no-fail-fast --final-status-level fail --partition hash:4/6";
           });
 
         gammaloop-nextest-partition-5 = craneLib.cargoNextest (ciArgs
           // {
             inherit cargoArtifacts;
-            cargoNextestExtraArgs = "--test-threads 1 --no-fail-fast --final-status-level fail --partition hash:5/6";
+            cargoNextestExtraArgs = "--profile ci --test-threads 0 --no-fail-fast --final-status-level fail --partition hash:5/6";
           });
 
         gammaloop-nextest-partition-6 = craneLib.cargoNextest (ciArgs
           // {
             inherit cargoArtifacts;
-            cargoNextestExtraArgs = "--test-threads 1 --no-fail-fast --final-status-level fail --partition hash:6/6";
+            cargoNextestExtraArgs = "--profile ci --test-threads 0 --no-fail-fast --final-status-level fail --partition hash:6/6";
           });
       };
 

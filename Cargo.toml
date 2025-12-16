@@ -175,7 +175,7 @@ ringbuffer = "0.16.0"
 tracing-indicatif = "0.3.13"
 json5 = "0.4.1"
 
-gmp-mpfr-sys = { version = "1.6", features = ["use-system-libs"] }
+# gmp-mpfr-sys = { version = "1.6", features = ["use-system-libs"] }
 rug = { version = "1.27.0", features = ["serde"] }
 [dependencies.pyo3]
 features = ["abi3", "abi3-py37", "eyre", "auto-initialize"]
