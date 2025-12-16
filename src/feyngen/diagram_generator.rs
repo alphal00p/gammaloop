@@ -4090,7 +4090,6 @@ impl ProcessDefinition {
                             // println!("HEEEEy");
                             let numerator_color_simplified =
                                 numerator.clone().get_single_atom().unwrap().to_param_color().simplify_color();
-                            
 
                             // Color part need to be expanded to identify zeroes properly
                             if numerator_color_simplified.expand_color().iter().fold(Atom::Zero,|acc,(a, b)| a*b+acc).is_zero()

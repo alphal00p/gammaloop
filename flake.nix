@@ -54,6 +54,7 @@
             pkgs.pkg-config
             pkgs.gmp
             pkgs.mpfr
+            pkgs.libmpc
             pkgs.python313
           ]
           ++ lib.optionals pkgs.stdenv.isDarwin [
@@ -80,7 +81,10 @@
           ];
 
         # Additional environment variables can be set directly
-        # MY_CUSTOM_VAR = "some value";
+        # Help gmp-mpfr-sys find system libraries
+        CPPFLAGS = "-I${pkgs.gmp.dev}/include -I${pkgs.mpfr.dev}/include -I${pkgs.libmpc}/include";
+        LDFLAGS = "-L${pkgs.gmp}/lib -L${pkgs.mpfr}/lib -L${pkgs.libmpc}/lib";
+        PKG_CONFIG_PATH = "${pkgs.gmp.dev}/lib/pkgconfig:${pkgs.mpfr.dev}/lib/pkgconfig:${pkgs.libmpc}/lib/pkgconfig";
       };
 
       # CI-specific args that disable Python API to avoid pyo3 build issues
@@ -91,6 +95,10 @@
           # Set PyO3 environment variables to help it find Python
           PYO3_PYTHON = "${pkgs.python313}/bin/python3";
           PYTHONPATH = "${pkgs.python313}/lib/python3.13/site-packages";
+          # Help gmp-mpfr-sys find system libraries
+          CPPFLAGS = "-I${pkgs.gmp.dev}/include -I${pkgs.mpfr.dev}/include -I${pkgs.libmpc}/include";
+          LDFLAGS = "-L${pkgs.gmp}/lib -L${pkgs.mpfr}/lib -L${pkgs.libmpc}/lib";
+          PKG_CONFIG_PATH = "${pkgs.gmp.dev}/lib/pkgconfig:${pkgs.mpfr.dev}/lib/pkgconfig:${pkgs.libmpc}/lib/pkgconfig";
         };
 
       craneLibLLvmTools =
