@@ -179,7 +179,7 @@ impl ParseGraph {
                 let oriented_particle = particle_iter
                     .next()
                     .expect("Mismatch between hedges and oriented particles");
-
+                debug!("Oriented particle: {h} : {}", oriented_particle.name);
                 // Try to match with vertex rule particles
                 if let Some(name) = &vertex_name {
                     if let Some((pos, matched_particle)) = particles
@@ -936,6 +936,7 @@ impl Graph {
             let perm = Permutation::sort(&order);
             perm.apply_slice_in_place(&mut color_slots);
             perm.apply_slice_in_place(&mut spin_slots);
+            perm.apply_slice_in_place(&mut momenta);
 
             let Some(vertex_rule) = &v.vertex_rule else {
                 continue;

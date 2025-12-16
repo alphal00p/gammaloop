@@ -6,8 +6,8 @@ authors = ["Valentin Hirschi <valentin.hirschi@gmail.com>"]
 categories = ["science"]
 description = "An implementation of the Local Unitarity method for computing differential collider cross-sections."
 keywords = ["loop", "cross-section", "perturbative", "physics"]
-license = "MIT"
-license-file = "LICENSE.md"
+license =  "MIT OR Apache-2.0"
+# license-file = "LICENSE.md"
 readme = "README.md"
 repository = "https://github.com/alphal00p/gammaloop"
 build = "build.rs"
@@ -175,6 +175,7 @@ ringbuffer = "0.16.0"
 tracing-indicatif = "0.3.13"
 json5 = "0.4.1"
 
+gmp-mpfr-sys = { version = "*", features = ["use-system-libs"] }
 [dependencies.pyo3]
 features = ["abi3", "abi3-py37", "eyre", "auto-initialize"]
 optional = true
@@ -198,7 +199,7 @@ fjcore = []
 fail-on-warnings = []
 higher_loops = []
 
-
+# use-system-gmp = ["rug/gmp-mpfr-sys/use-system-libs"]
 
 [patch.crates-io]
 idenso = { git = "https://github.com/alphal00p/spenso", rev = "c83e98d133ee2c97b4b85f9fd95cd50c4a7c4ec0" }

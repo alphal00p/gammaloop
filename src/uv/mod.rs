@@ -55,5 +55,10 @@ pub use approx::ApproxOp;
 pub mod forest;
 pub use forest::Forest;
 
+pub mod profile;
+pub use profile::{
+    UVProfileConfig, UVProfileResult, display_results_summary, run_uv_profile, write_results,
+};
+
 #[cfg(test)]
 mod tests;

@@ -1283,7 +1283,7 @@ impl Amplitude {
         }
     }
 
-    pub(crate) fn add_graph(&mut self, graph: Graph) -> Result<()> {
+    fn add_graph(&mut self, graph: Graph) -> Result<()> {
         let new_external_particels = graph.get_external_partcles();
         let new_external_signature = graph.get_external_signature();
 

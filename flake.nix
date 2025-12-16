@@ -65,7 +65,10 @@
           [
             pkgs.pkg-config
             pkgs.clang
-            pkgs.gcc
+            pkgs.gmp.dev
+            pkgs.mpfr.dev
+            pkgs.libmpc
+            # pkgs.gcc
             pkgs.git
             pkgs.python313
             pkgs.gnum4

@@ -1,6 +1,6 @@
 #![allow(dead_code, unused_variables, non_snake_case)]
 
-use crate::cff::expression::AmplitudeOrientationID;
+use crate::cff::expression::{AmplitudeOrientationID, GraphOrientation};
 use crate::graph::edge::ParseEdge;
 use crate::graph::global::ParseData;
 use crate::graph::hedge_data::ParseHedge;
@@ -9,7 +9,8 @@ use crate::graph::vertex::ParseVertex;
 use crate::graph::{LMBext, LoopMomentumBasis};
 use crate::initialisation::test_initialise;
 use crate::momentum_sample::LoopIndex;
-use crate::processes::AmplitudeGraph;
+use crate::processes::{Amplitude, AmplitudeGraph};
+use crate::settings::GlobalSettings;
 use crate::settings::global::OrientationPattern;
 use crate::utils::W_;
 use crate::uv::settings::VakintSettings;
@@ -17,6 +18,7 @@ use linnet::half_edge::involution::EdgeIndex;
 
 use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike};
 use linnet::half_edge::{builder::HedgeGraphBuilder, involution::Flow};
+use rayon::ThreadPool;
 use symbolica::atom::Symbol;
 use symbolica::symbol;
 
@@ -72,14 +74,82 @@ fn four_photon_one_loop_amp() {
 }
 
 #[test]
+fn scalar_bubble() {
+    test_initialise().unwrap();
+
+    let mut g: Vec<Graph> = dot!(
+        digraph G{
+            e        [style=invis]
+            e -> A:0   [ id=0 particle=scalar_0]
+            B:1 -> e   [ id=1 particle=scalar_0]
+            A -> B    [ id=2 particle=scalar_0]
+            A -> B    [ id=3 particle=scalar_0]
+        },"scalars"
+    )
+    .unwrap();
+
+    let mut amp = Amplitude::from_graph_list("bub", g).unwrap();
+
+    let model = load_generic_model("scalars");
+
+    let theadpool = rayon::ThreadPoolBuilder::new()
+        .num_threads(1)
+        .build()
+        .unwrap();
+
+    let runtime = RuntimeSettings::default();
+    amp.preprocess(
+        &model,
+        &GenerationSettings {
+            uv: UVgenerationSettings {
+                generate_integrated: false,
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+        &(&runtime).into(),
+        &theadpool,
+    )
+    .unwrap();
+
+    amp.build_integrand(
+        &model,
+        &GlobalSettings {
+            ..Default::default()
+        },
+        (&runtime).into(),
+        &theadpool,
+    )
+    .unwrap();
+
+    println!("{}", amp.graphs[0].derived_data.all_mighty_integrand);
+    for g in amp.graphs {
+        for o in g
+            .derived_data
+            .cff_expression
+            .as_ref()
+            .unwrap()
+            .orientations
+            .iter()
+        {
+            let oatom = o
+                .data
+                .orientation
+                .select(&g.derived_data.all_mighty_integrand);
+            for lmb in g.derived_data.lmbs.as_ref().unwrap() {
+                g.graph
+                    .all_limits(&g.graph.full_filter(), &oatom, symbol!("lambd"), &lmb);
+            }
+        }
+    }
+}
+
+#[test]
 fn tta_uv() {
     test_initialise().unwrap();
-    let model = load_generic_model("sm");
 
-    let mut amp: AmplitudeGraph = dot!(
+    let mut g: Vec<Graph> = dot!(
         digraph G{
-            num="spenso::g(spenso::dind(spenso::cof(3,hedge(0))),spenso::cof(3,hedge(1)))"
-            // node [num=1]
             e        [style=invis]
             e -> A:0   [ id=0 particle=t]
             B:1 -> e   [ id=1 particle=t]
@@ -87,31 +157,52 @@ fn tta_uv() {
             A -> B    [ lmb_index=0 particle=g]
             C -> B  [particle=t]
             A -> C [particle=t]
-        },&model
+        }
     )
     .unwrap();
 
-    println!("{}", amp.graph.debug_dot());
+    let mut amp = Amplitude::from_graph_list("tta", g).unwrap();
 
-    amp.generate_cff().unwrap();
-    let a = amp
-        .build_parametric_integrand(&GenerationSettings {
-            // orientation_pattern: OrientationPattern::from_orientation(
-            //     &amp.derived_data
-            //         .cff_expression
-            //         .as_ref()
-            //         .unwrap()
-            //         .orientations[AmplitudeOrientationID(0)],
-            // ),
-            uv: UVgenerationSettings {
-                generate_integrated: false,
-                vakint: VakintSettings::default(),
-            },
-            ..Default::default()
-        })
+    let model = load_generic_model("sm");
+
+    let theadpool = rayon::ThreadPoolBuilder::new()
+        .num_threads(1)
+        .build()
         .unwrap();
 
-    println!("{}", amp.derived_data.all_mighty_integrand);
+    let runtime = RuntimeSettings::default();
+    amp.preprocess(
+        &model,
+        &GenerationSettings {
+            ..Default::default()
+        },
+        &(&runtime).into(),
+        &theadpool,
+    )
+    .unwrap();
+
+    amp.build_integrand(
+        &model,
+        &GlobalSettings {
+            ..Default::default()
+        },
+        (&runtime).into(),
+        &theadpool,
+    )
+    .unwrap();
+
+    println!("{}", amp.graphs[0].derived_data.all_mighty_integrand);
+
+    for g in amp.graphs {
+        // let all = g.graph.all_cycle_unions(&g.graph.full_filter());
+
+        g.graph.all_limits(
+            &g.graph.full_filter(),
+            &g.derived_data.all_mighty_integrand,
+            symbol!("lambd"),
+            &g.graph.loop_momentum_basis,
+        );
+    }
 }
 
 #[test]

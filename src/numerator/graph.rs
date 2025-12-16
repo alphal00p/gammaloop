@@ -463,14 +463,14 @@ mod test {
         }
         // return;
 
-        let mut amp: Amplitude = Amplitude::new("name");
+        let mut amp: Amplitude = Amplitude::from_graph_list("name", vec![graph.clone()]).unwrap();
 
         let mut settings = RuntimeSettings::default();
 
         settings.kinematics = KinematicsSettings::random(&graph, 42);
         let default_runtime_settings = RuntimeSettings::default();
         let locked_runtime_settings = LockedRuntimeSettings::from(&default_runtime_settings);
-        amp.add_graph(graph).unwrap();
+        // amp.add_graph(graph).unwrap();
         // Amplitude::new(name)
 
         let proc_set = GenerationSettings::default();
@@ -543,12 +543,12 @@ mod test {
         }
         // return;
 
-        let mut amp: Amplitude = Amplitude::new("name");
+        let mut amp: Amplitude = Amplitude::from_graph_list("name", vec![graph.clone()]).unwrap();
 
         let mut settings = RuntimeSettings::default();
 
         settings.kinematics = KinematicsSettings::random(&graph, 42);
-        amp.add_graph(graph).unwrap();
+        // amp.add_graph(graph).unwrap();
         // Amplitude::new(name)
 
         let proc_set = GenerationSettings::default();
@@ -614,13 +614,13 @@ mod test {
         })
         .unwrap();
 
-        let mut amp: Amplitude = Amplitude::new("name");
+        let mut amp: Amplitude = Amplitude::from_graph_list("name", graphs.clone()).unwrap();
         let mut settings = RuntimeSettings::default();
 
         for g in graphs {
             println!("{}", g.dot_serialize());
             settings.kinematics = KinematicsSettings::random(&g, 42);
-            amp.add_graph(g).unwrap();
+
             // Amplitude::new(name)
         }
 
@@ -877,11 +877,8 @@ mod test {
             println!("{}", out);
         }
 
-        let mut a = Amplitude::new("test");
+        let mut a = Amplitude::from_graph_list("test", graphs.clone()).unwrap();
 
-        for g in graphs {
-            a.add_graph(g).unwrap();
-        }
         let model = crate::utils::test_utils::load_generic_model("sm");
 
         let generation_pool = rayon::ThreadPoolBuilder::new()

@@ -10,26 +10,18 @@ use crate::{
     graph::{Edge, Graph, LMBext, LoopMomentumBasis, Vertex},
     momentum::Sign,
     numerator::{ParsingNet, aind::Aind, symbolica_ext::AtomCoreExt},
-    utils::{
-        GS, W_,
-        symbolica_ext::{CallSymbol, LOGPRINTOPTS},
-    },
+    utils::{GS, W_, symbolica_ext::LOGPRINTOPTS},
 };
 use ahash::AHashSet;
-use bitvec::vec::BitVec;
 use idenso::{gamma::GammaSimplifier, metric::MS};
 use itertools::Itertools;
 use log::debug;
 
 use spenso::structure::concrete_index::ExpandedIndex;
 
-use spenso::{
-    network::library::symbolic::ETS,
-    structure::{
-        named::IdentityName,
-        representation::{Minkowski, RepName},
-        slot::{DummyAind, IsAbstractSlot, Slot},
-    },
+use spenso::structure::{
+    representation::{Minkowski, RepName},
+    slot::{DummyAind, IsAbstractSlot, Slot},
 };
 use symbolica::{
     atom::{Atom, AtomCore, FunctionBuilder, Symbol},
@@ -39,14 +31,12 @@ use symbolica::{
 use linnet::half_edge::{
     HedgeGraph,
     involution::{EdgeIndex, HedgePair},
-    subgraph::{
-        Inclusion, InternalSubGraph, SuBitGraph, SubGraphLike, SubGraphOps, SubSetLike, SubSetOps,
-    },
+    subgraph::{Inclusion, InternalSubGraph, SuBitGraph, SubGraphLike, SubSetLike, SubSetOps},
 };
 
 use tracing::info;
 use typed_index_collections::TiVec;
-use vakint::{Vakint, VakintExpression, vakint_symbol};
+use vakint::{Vakint, vakint_symbol};
 // use vakint::{EvaluationOrder, LoopNormalizationFactor, Vakint, VakintSettings};
 
 use super::{IntegrandExpr, UltravioletGraph, uv_graph::UVE};

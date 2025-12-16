@@ -16,6 +16,7 @@ use symbolica::{
 };
 
 use crate::{
+    gammaloop_integrand::param_builder::ParamBuilderGraph,
     graph::{Edge, FeynmanGraph, Graph, LMBext, LoopMomentumBasis, NumHedgeData, Vertex},
     momentum_sample::LoopIndex,
     numerator::{AppliedFeynmanRule, Numerator},
@@ -24,7 +25,7 @@ use crate::{
 
 use super::{Wood, is_not_paired, spenso_lor_atom};
 
-pub trait UltravioletGraph: LMBext + FeynmanGraph {
+pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
     fn n_loops<S: SubGraphLike, E, V, H>(&self, subgraph: &S) -> usize
     where
         Self: AsRef<HedgeGraph<E, V, H>>,
@@ -79,58 +80,23 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph {
     where
         Self: AsRef<HedgeGraph<E, V, H>>,
     {
-        let mom_reps = self.uv_spatial_wrapped_replacement(subgraph, lmb, &[W_.x___]);
+        let mom_reps = self.normal_emr_replacement(subgraph, lmb, &[W_.x___], |s| true);
 
-        // for x in &mom_reps {
-        //     println!("LMB replacement: {x}");
-        // }
+        let ose_reps = self.get_ose_replacements();
+        for x in &mom_reps {
+            println!("LMB replacement: {x}");
+        }
 
-        let energy_reps = self.replacement_impl::<_, Atom>(
-            |e, a, b| {
-                Replacement::new(
-                    GS.energy.f([usize::from(e) as i32]).to_pattern(),
-                    (a + b).to_pattern(),
-                )
-            },
-            subgraph,
-            lmb,
-            GS.energy,
-            GS.energy,
-            &[],
-            &[],
-            is_not_paired,
-            true,
-        );
-
-        // for e in &energy_reps {
-        //     println!("Energy replacement: {e}");
-        // }
-
-        let q3_reps = self.replacement_impl::<_, Atom>(
-            |e, a, b| {
-                Replacement::new(
-                    GS.emr_vec.f([usize::from(e) as i32]).to_pattern(),
-                    (a + b).to_pattern(),
-                )
-            },
-            subgraph,
-            lmb,
-            GS.emr_vec,
-            GS.emr_vec,
-            &[],
-            &[],
-            is_not_paired,
-            true,
-        );
-
-        // for e in &q3_reps {
-        //     println!("Q3 replacement: {e}");
-        // }
+        for r in &ose_reps {
+            println!("ose{r}");
+        }
 
         let expr = expr
-            .replace_multiple(&mom_reps)
-            .replace_multiple(&energy_reps)
-            .replace_multiple(&q3_reps);
+            .replace(function!(GS.broadcasting_sqrt, W_.a_))
+            .with(Atom::var(W_.a_).sqrt())
+            .replace_multiple(&ose_reps)
+            .replace_multiple(&mom_reps);
+        // .replace_multiple(&q3_reps);
         let mut loops = PowersetIterator::new(lmb.loop_edges.len() as u8).into_iter();
 
         let mut limits = Vec::new();
@@ -142,18 +108,11 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph {
             for l in ls.included_iter() {
                 let e = usize::from(lmb.loop_edges[LoopIndex(l.0)]) as i64;
                 expr = expr
-                    .replace(function!(GS.emr_vec, e, W_.x___))
-                    .with(function!(GS.emr_vec, e, W_.x___) / expansion);
+                    .replace(function!(GS.emr_mom, e, W_.x___))
+                    .with(function!(GS.emr_mom, e, W_.x___) / expansion);
 
                 expr /= Atom::var(expansion).npow(3);
             }
-
-            expr = expr
-                .replace(function!(MS.dot, W_.x___))
-                .with(-function!(MS.dot, W_.x___)) // make dot products positive
-                .replace(function!(MS.dot, W_.x_ / expansion, W_.y_))
-                .repeat()
-                .with(function!(MS.dot, W_.x_, W_.y_) / expansion);
 
             let series = expr.series(expansion, Atom::Zero, 0.into(), true).unwrap();
 

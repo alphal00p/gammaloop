@@ -16,15 +16,14 @@ use serde::{Deserialize, Serialize};
 use symbolica::{
     atom::{Atom, AtomCore, AtomOrView, FunctionBuilder, Symbol},
     function,
-    id::{Pattern, Replacement},
+    id::Replacement,
     printer::PrintOptions,
-    with_default_namespace,
+    symbol,
 };
 use tabled::{builder::Builder, settings::Style};
 use typed_index_collections::TiVec;
 
 use crate::{
-    GAMMALOOP_NAMESPACE,
     momentum::SignOrZero,
     momentum_sample::{ExternalIndex, LoopIndex},
     signature::{LoopExtSignature, SignatureLike},
@@ -772,6 +771,27 @@ impl LMBext for Graph {
 }
 
 impl LoopMomentumBasis {
+    pub fn map_to(&self, other: &Self) -> Vec<Atom> {
+        let selfmom = symbol!("K");
+        let othermom = symbol!("L");
+        let mut sys = vec![];
+
+        for (l, e) in self.loop_edges.iter_enumerated() {
+            sys.push(
+                other.loop_atom::<Atom>(*e, othermom, &[], false)
+                    + other.ext_atom::<Atom>(*e, othermom, &[], false)
+                    - selfmom.f(&[l.0]),
+            )
+        }
+
+        let mut vars = vec![];
+
+        for (l, _) in other.loop_edges.iter_enumerated() {
+            vars.push(othermom.f(&[l.0]))
+        }
+
+        Atom::solve_linear_system::<u8, _, _>(&sys, &vars).unwrap()
+    }
     // pub(crate) fn spatial_emr<T: FloatLike>(
     //     &self,
     //     sample: &BareMomentumSample<T>,

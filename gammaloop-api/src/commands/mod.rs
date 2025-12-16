@@ -33,6 +33,8 @@ pub mod run;
 pub use run::Run;
 pub mod evaluate;
 pub use evaluate::Evaluate;
+pub mod profile;
+pub use profile::Profile;
 
 #[derive(Subcommand, Debug, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
 pub enum Commands {
@@ -78,6 +80,8 @@ pub enum Commands {
         #[arg(short = 'c', long)]
         n_cores: usize,
     },
+    #[clap(subcommand)]
+    Profile(Profile),
 
     /// HPC batch evaluation branch
     Batch {
@@ -116,6 +120,9 @@ impl Commands {
             println!("Dummy mode: Command '{:?}' not executed.", self);
         } else {
             match self {
+                Commands::Profile(p) => {
+                    p.run(state, global_cli_settings, default_runtime_settings)?;
+                }
                 Commands::Quit(s) => {
                     return Ok(ControlFlow::Break(s));
                 }
