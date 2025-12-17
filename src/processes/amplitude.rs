@@ -1098,6 +1098,12 @@ impl AmplitudeGraph {
             return Ok(());
         }
         let num_virtual_loop_edges = self.graph.iter_loop_edges().count();
+
+        if num_virtual_loop_edges == 0 {
+            debug!("Graph has no loop edges, skipping tropical sampler generation.");
+            return Ok(());
+        }
+
         let num_loops = self.graph.loop_momentum_basis.loop_edges.len();
         let target_omega = process_settings.tropical_subgraph_table.target_omega;
 
