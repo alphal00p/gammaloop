@@ -95,6 +95,7 @@ use symbolica::{atom::Atom, graph::Graph as SymbolicaGraph};
 
 const CANONIZE_GRAPH_FLOWS: bool = true;
 const ANALYZE_RATIO_AS_RATIONAL_POLYNOMIAL: bool = true;
+const EXPAND_NUMERICAL_SAMPLES_BEFORE_COMPARISON: bool = false;
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct NodeColorWithVertexRule {
     pub external_tag: i32,
@@ -4157,7 +4158,7 @@ impl ProcessDefinition {
 
                                 // Test if Lorentz evaluations are zero
                                 if !numerator_data.as_ref().unwrap().sample_evaluations.is_empty() {
-                                    if numerator_data.as_ref().unwrap().sample_evaluations.iter().all(|eval| eval.is_zero()) {
+                                    if numerator_data.as_ref().unwrap().sample_evaluations_are_zero.iter().all(|&b| b) {
                                         {
                                             let n_zeroes_color_value = n_zeroes_color.lock().unwrap();
                                             let mut n_zeroes_lorentz_value = n_zeroes_lorentz.lock().unwrap();
@@ -4564,6 +4565,16 @@ pub(crate) struct ProcessedNumeratorForComparison {
     /// - Evaluations include color expansion, tensor network execution, and color factor substitution
     /// - May have common factors collected depending on the grouping mode and ANALYZE_RATIO_AS_RATIONAL_POLYNOMIAL setting
     sample_evaluations: Vec<Atom>,
+    sample_evaluations_as_polynomial: Vec<
+        symbolica::poly::polynomial::MultivariatePolynomial<
+            AlgebraicExtension<
+                symbolica::domains::rational::FractionField<
+                    symbolica::domains::integer::IntegerRing,
+                >,
+            >,
+        >,
+    >,
+    sample_evaluations_are_zero: Vec<bool>,
 }
 
 impl ProcessedNumeratorForComparison {
@@ -4836,7 +4847,7 @@ impl ProcessedNumeratorForComparison {
                         numerator_diagram_id = %self.diagram_id,
                         denominator = %b.to_canonical_string(),
                         denominator_diagram_id = %other.diagram_id,
-                        "Sample evaluation"
+                        "Sample evaluation A"
                     );
                     if a == b {
                         Some(Atom::num(1))
@@ -4850,21 +4861,31 @@ impl ProcessedNumeratorForComparison {
                         None
                     } else {
                         let ratio = if ANALYZE_RATIO_AS_RATIONAL_POLYNOMIAL {
-                            let element = COMPLEXRATPOLYFIELD.to_element(
-                                a.to_polynomial(&Q_I, None),
-                                b.to_polynomial(&Q_I, None),
-                                true,
-                            );
-                            polyrat_to_atom(&element)
+                            // let a_poly = a.to_polynomial(&Q_I.clone(), None);
+                            // let b_poly = b.to_polynomial(&Q_I.clone(), None);
+                            let a_poly = &self.sample_evaluations_as_polynomial[idx];
+                            let b_poly = &other.sample_evaluations_as_polynomial[idx];
+                            if a_poly.is_zero() || b_poly.is_zero() {
+                                debug!(
+                                    sample_idx = %idx,
+                                    "Skipping sample due to zero value after expansion"
+                                );
+                                None
+                            } else {
+                                let element = COMPLEXRATPOLYFIELD.to_element(a_poly.clone(), b_poly.clone(), true);
+                                Some(polyrat_to_atom(&element))
+                            }
+                            // let element = COMPLEXRATPOLYFIELD.to_element(a.to_polynomial(&Q_I, None), b.to_polynomial(&Q_I, None), true);
+                            // Some(polyrat_to_atom(&element))
                         } else {
-                            (a / b).cancel()
+                            Some((a / b).cancel())
                         };
                         debug!(
                             sample_idx = %idx,
-                            computed_ratio = %ratio.to_ordered_simple(),
+                            computed_ratio = %ratio.clone().map(|r| format!("{}",r.to_ordered_simple())).unwrap_or("None".into()),
                             "Computed ratio for sample"
                         );
-                        Some(ratio)
+                        ratio
                     }
                 })
                 .collect::<HashSet<_>>();
@@ -4934,6 +4955,8 @@ impl ProcessedNumeratorForComparison {
             diagram_id,
             canonized_numerator: None,
             sample_evaluations: vec![],
+            sample_evaluations_as_polynomial: vec![],
+            sample_evaluations_are_zero: vec![],
         };
         let res = if let Some(group_options) = numerator_aware_isomorphism_grouping.get_options() {
             if group_options.test_canonized_numerator
@@ -4987,14 +5010,13 @@ impl ProcessedNumeratorForComparison {
                 }
 
                 let mut sample_evals = VecDeque::new();
-
                 for numerator in numerators {
                     let expanded = numerator.expand_color();
 
                     let sample_evaluations = samples
                     .iter()
                     .map(|(reps, lib)| {
-                        let sample_evaluation = expanded
+                        let mut sample_evaluation = expanded
                             .iter()
                             .map(|(c, l)| {
                                 debug!("Sample evaluation inputs c:{c},l:{l}");
@@ -5037,6 +5059,12 @@ impl ProcessedNumeratorForComparison {
                                 a
                             })
                             .fold(Atom::Zero, |acc, l| acc + l);
+
+                        if EXPAND_NUMERICAL_SAMPLES_BEFORE_COMPARISON {
+                            sample_evaluation = sample_evaluation.expand();
+                        }
+                        // TODO: optimize the above by instead directly storing "a.to_polynomial(&Q_I.clone(), None)" in the sample record, and not the expanded atom.
+                        // Only do that for the if-branch below though.
                         if ANALYZE_RATIO_AS_RATIONAL_POLYNOMIAL || !matches!(numerator_aware_isomorphism_grouping,NumeratorAwareGraphGroupingOption::GroupIdenticalGraphUpToScalarRescaling(_))
                         {
                             sample_evaluation
@@ -5076,11 +5104,45 @@ impl ProcessedNumeratorForComparison {
                         }
                     }
                 }
-
+                let samples_evals_as_polynomial: (
+                    Vec<
+                        symbolica::poly::polynomial::MultivariatePolynomial<
+                            AlgebraicExtension<
+                                symbolica::domains::rational::FractionField<
+                                    symbolica::domains::integer::IntegerRing,
+                                >,
+                            >,
+                        >,
+                    >,
+                    Vec<bool>,
+                ) = if ANALYZE_RATIO_AS_RATIONAL_POLYNOMIAL
+                    || !matches!(
+                        numerator_aware_isomorphism_grouping,
+                        NumeratorAwareGraphGroupingOption::GroupIdenticalGraphUpToScalarRescaling(
+                            _
+                        )
+                    ) {
+                    let se_as_poly = sample_evaluations
+                        .iter()
+                        .map(|a| a.to_polynomial(&Q_I.clone(), None))
+                        .collect::<Vec<_>>();
+                    let se_are_zero = se_as_poly.iter().map(|p| p.is_zero()).collect::<Vec<_>>();
+                    (se_as_poly, se_are_zero)
+                } else {
+                    (
+                        vec![],
+                        sample_evaluations
+                            .iter()
+                            .map(|a| a.expand().is_zero())
+                            .collect::<Vec<_>>(),
+                    )
+                };
                 ProcessedNumeratorForComparison {
                     diagram_id,
                     canonized_numerator,
                     sample_evaluations,
+                    sample_evaluations_as_polynomial: samples_evals_as_polynomial.0,
+                    sample_evaluations_are_zero: samples_evals_as_polynomial.1,
                 }
             } else {
                 default_processed_data
