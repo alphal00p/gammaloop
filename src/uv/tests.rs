@@ -150,6 +150,7 @@ fn scalar_bubble() {
             .typst_string()
     );
 
+    println!("{}", amp.graphs[0].derived_data.all_mighty_integrand);
     // let (inspect_res_jac, inspect_res_eval) = gammalooprs::inspect::inspect(
     //     &settings,
     //     integrand,

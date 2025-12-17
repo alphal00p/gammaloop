@@ -4,7 +4,7 @@ use schemars::{JsonSchema, json_schema};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, BTreeSet},
-    fmt::Display,
+    fmt::{Display, Write},
     ops::{Deref, DerefMut},
     sync::LazyLock,
 };
@@ -62,6 +62,7 @@ pub trait IsNeg {
 }
 
 impl<A: AtomCore> IsNeg for A {
+    // fn is_one(&self)
     fn is_negative(&self) -> bool {
         match self.as_atom_view() {
             AtomView::Num(a) => match a.get_coeff_view() {
@@ -94,15 +95,28 @@ impl<A: AtomCore> IsNeg for A {
                 CoefficientView::RationalPolynomial(_) => false,
             },
             AtomView::Mul(a) => {
-                if let Some(first) = a.iter().next() {
-                    first.is_negative()
-                } else {
-                    false
+                for term in a.iter() {
+                    if term.is_negative() {
+                        return true;
+                    }
                 }
+                false
+                // if let Some(first) = a.iter().next() {
+                //     first.is_negative()
+                // } else {
+                //     false
+                // }
             }
             _ => false,
         }
     }
+}
+
+#[test]
+fn isneg() {
+    let a = Atom::num(-3) * Atom::var(GS.emr_mom);
+
+    assert!(a.is_negative());
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -110,13 +124,14 @@ pub struct TypstState {
     pub inproduct: bool,
     pub without_minus: bool,
     pub in_power: bool,
+    pub in_function: bool,
 }
 pub trait TypstFormat {
     fn typst_string(&self) -> String {
         let mut s = String::new();
 
         let symbols = self.preable(&mut s).unwrap();
-        s.push_str("$");
+        s.push_str("$ ");
         self.fmt_output(
             &mut s,
             &symbols,
@@ -124,10 +139,11 @@ pub trait TypstFormat {
                 inproduct: false,
                 without_minus: false,
                 in_power: false,
+                in_function: false,
             },
         )
         .unwrap();
-        s.push_str("$");
+        s.push_str(" $");
         s
     }
 
@@ -159,6 +175,19 @@ impl<A: AtomCore> TypstFormat for A {
             }
         });
 
+        writeln!(
+            fmt,
+            r#"#let defaultfn(..args, name:"NA") = {{
+let a = args.pos().map(v => $#v$).join($, $);
+    if args.pos().len() != 0 {{
+        $op(name)(#a)$
+    }} else {{
+        $#name$
+    }}
+}}
+           "#
+        )?;
+
         for (s, isfun) in &symbols {
             if let Some(p) = s.get_print_function() {
                 if let Some(s) = p(
@@ -181,7 +210,7 @@ impl<A: AtomCore> TypstFormat for A {
             if *isfun {
                 writeln!(
                     fmt,
-                    "#let {}-{}(..args)= $op(\"{}\")$",
+                    "#let {}-{}(..args)= defaultfn(..args,name:\"{}\")",
                     s.get_namespace(),
                     s.get_stripped_name(),
                     s.get_stripped_name()
@@ -238,7 +267,17 @@ impl<A: AtomCore> TypstFormat for A {
                 CoefficientView::Natural(n_re, d_re, n_im, de_im) => {
                     if d_re == 1 && de_im == 1 {
                         if n_im == 0 {
-                            write!(fmt, "{}", n_re)?;
+                            if print_state.without_minus && n_re.is_negative() {
+                                write!(fmt, "{}", -n_re)?;
+                            } else {
+                                write!(fmt, "{}", n_re)?;
+                            }
+                        } else if n_re == 0 {
+                            if n_im == 1 {
+                                write!(fmt, "i")?;
+                            } else {
+                                write!(fmt, "{} i", n_im)?;
+                            }
                         } else {
                             if print_state.inproduct || print_state.in_power {
                                 write!(fmt, "(")?;
@@ -251,10 +290,19 @@ impl<A: AtomCore> TypstFormat for A {
                     } else {
                         if n_im == 0 {
                             if d_re == 1 {
-                                write!(fmt, "{}", n_re)?;
+                                if print_state.without_minus && n_re.is_negative() {
+                                    write!(fmt, "{}", -n_re)?;
+                                } else {
+                                    write!(fmt, "{}", n_re)?;
+                                }
                                 return Ok(true);
                             }
-                            write!(fmt, "({})/({})", n_re, d_re)?;
+                            if print_state.without_minus && n_re.is_negative() {
+                                write!(fmt, "({})/({})", -n_re, d_re)?;
+                            } else {
+                                write!(fmt, "({})/({})", n_re, d_re)?;
+                            }
+                            return Ok(true);
                         } else {
                             if de_im == 1 {
                                 if print_state.inproduct || print_state.in_power {
@@ -292,7 +340,11 @@ impl<A: AtomCore> TypstFormat for A {
                         }
                     } else if re.is_zero() {
                         if im.is_integer() {
-                            write!(fmt, "{} i", im.numerator())?;
+                            if im.is_one() {
+                                write!(fmt, "i")?;
+                            } else {
+                                write!(fmt, "{} i", im.numerator())?;
+                            }
                         } else {
                             write!(fmt, "({})/({}) i", im.numerator(), im.denominator())?;
                         }
@@ -341,23 +393,31 @@ impl<A: AtomCore> TypstFormat for A {
             },
 
             AtomView::Var(v) => {
+                if !print_state.in_function {
+                    write!(fmt, "#")?;
+                }
                 write!(
                     fmt,
-                    "#{}-{}",
+                    "{}-{}",
                     v.get_symbol().get_namespace(),
                     v.get_symbol().get_stripped_name()
                 )?;
                 Ok(true)
             }
             AtomView::Fun(f) => {
+                if !print_state.in_function {
+                    write!(fmt, "#")?;
+                }
                 write!(
                     fmt,
-                    "#{}-{}(",
+                    "{}-{}(",
                     f.get_symbol().get_namespace(),
                     f.get_symbol().get_stripped_name()
                 )?;
 
-                for i in f.iter() {
+                let nargs = f.get_nargs();
+
+                for (j, i) in f.iter().enumerate() {
                     i.fmt_output(
                         fmt,
                         symbols,
@@ -365,9 +425,12 @@ impl<A: AtomCore> TypstFormat for A {
                             inproduct: false,
                             without_minus: false,
                             in_power: false,
+                            in_function: true,
                         },
                     )?;
-                    write!(fmt, ", ")?;
+                    if j + 1 != nargs {
+                        write!(fmt, ", ")?;
+                    }
                 }
                 write!(fmt, ")")?;
 
@@ -385,8 +448,13 @@ impl<A: AtomCore> TypstFormat for A {
                             inproduct: false,
                             without_minus: false,
                             in_power: true,
+                            in_function: false,
                         },
                     )?;
+
+                    if (-exp).is_one() {
+                        return Ok(true);
+                    }
                     write!(fmt, "^(")?;
                     exp.fmt_output(
                         fmt,
@@ -395,6 +463,7 @@ impl<A: AtomCore> TypstFormat for A {
                             inproduct: false,
                             without_minus: true,
                             in_power: false,
+                            in_function: false,
                         },
                     )?;
                     write!(fmt, ")")?;
@@ -406,8 +475,12 @@ impl<A: AtomCore> TypstFormat for A {
                             inproduct: false,
                             without_minus: false,
                             in_power: true,
+                            in_function: false,
                         },
                     )?;
+                    if (exp).is_one() {
+                        return Ok(true);
+                    }
                     write!(fmt, "^(")?;
                     exp.fmt_output(
                         fmt,
@@ -416,6 +489,7 @@ impl<A: AtomCore> TypstFormat for A {
                             inproduct: false,
                             without_minus: false,
                             in_power: false,
+                            in_function: false,
                         },
                     )?;
 
@@ -426,15 +500,92 @@ impl<A: AtomCore> TypstFormat for A {
 
             AtomView::Mul(t) => {
                 print_state.inproduct = true;
+                let infun = print_state.in_function;
+                print_state.in_function = false;
+                if infun {
+                    write!(fmt, "$")?;
+                }
+                let mut numbuffer = String::new();
+                let mut denombuffer = String::new();
+
                 for term in t.iter() {
-                    term.fmt_output(fmt, symbols, print_state)?;
-                    write!(fmt, " ")?;
+                    if let AtomView::Pow(p) = term.as_atom_view() {
+                        let (base, exp) = p.get_base_exp();
+                        if exp.is_negative() {
+                            let mut state = TypstState {
+                                inproduct: false,
+                                without_minus: false,
+                                in_power: true,
+                                in_function: false,
+                            };
+                            // if (-exp).is_one() {
+                            //     state.in_function = true;
+                            // }
+                            base.fmt_output(&mut denombuffer, symbols, state)?;
+
+                            if (-exp).is_one() {
+                                continue;
+                            }
+                            write!(&mut denombuffer, "^(")?;
+                            exp.fmt_output(
+                                &mut denombuffer,
+                                symbols,
+                                TypstState {
+                                    inproduct: false,
+                                    without_minus: true,
+                                    in_power: false,
+                                    in_function: false,
+                                },
+                            )?;
+
+                            write!(&mut denombuffer, ")")?;
+                            write!(&mut denombuffer, " ")?;
+
+                            continue;
+                        } else {
+                            term.fmt_output(&mut numbuffer, symbols, print_state)?;
+                        }
+                    } else if let Ok(t) = i32::try_from(term)
+                        && t == -1
+                    {
+                        if !print_state.without_minus {
+                            write!(fmt, "-")?;
+                        } else {
+                            continue;
+                        }
+                    } else {
+                        term.fmt_output(&mut numbuffer, symbols, print_state)?;
+                    }
+                    write!(&mut numbuffer, " ")?;
+                }
+
+                if !denombuffer.is_empty() {
+                    write!(
+                        fmt,
+                        "({})/({})",
+                        numbuffer.trim_end(),
+                        denombuffer.trim_end()
+                    )?;
+                } else {
+                    write!(fmt, "{}", numbuffer.trim_end())?;
+                }
+
+                if infun {
+                    write!(fmt, "$")?;
                 }
 
                 Ok(true)
             }
 
             AtomView::Add(e) => {
+                let infun = print_state.in_function;
+                print_state.in_function = false;
+                if infun {
+                    write!(fmt, "$")?;
+                }
+                if print_state.inproduct || print_state.in_power {
+                    write!(fmt, "(")?;
+                }
                 let mut first = true;
                 for term in e.iter() {
                     if term.is_negative() {
@@ -445,6 +596,13 @@ impl<A: AtomCore> TypstFormat for A {
                     first = false;
                     print_state.without_minus = true;
                     term.fmt_output(fmt, symbols, print_state)?;
+                }
+
+                if print_state.inproduct || print_state.in_power {
+                    write!(fmt, ")")?;
+                }
+                if infun {
+                    write!(fmt, "$")?;
                 }
                 Ok(true)
             }

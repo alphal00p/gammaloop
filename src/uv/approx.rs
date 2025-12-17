@@ -726,7 +726,7 @@ impl Approximation {
         self.local_3d = CFFapprox::Dependent {
             sign: -sign,
             t_arg: IntegrandExpr {
-                integrand: -sum_3d * Atom::i(),
+                integrand: sum_3d, //* 2, //* Atom::i(),
             },
         };
 

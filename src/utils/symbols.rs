@@ -467,7 +467,7 @@ impl GammaloopSymbols {
             eidc,
             GS.emr_vec(e),
             m2,
-            (self.emr_vec_index(e, mink.to_atom()) * self.emr_vec_index(e, mink.to_atom()) + m2)
+            (m2 - self.emr_vec_index(e, mink.to_atom()) * self.emr_vec_index(e, mink.to_atom()))
         )
         .npow((1, 2));
 
