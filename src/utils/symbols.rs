@@ -110,6 +110,8 @@ pub struct WildCards {
 }
 
 pub struct GammaloopSymbols {
+    pub is_function: Symbol,
+    pub is_symbol: Symbol,
     pub ufozero: Symbol,
     pub _linear: Symbol,
     pub linearize: Symbol,
@@ -292,6 +294,8 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
             **out = Atom::Zero;
         }
     ),
+    is_function: symbol!("is_function"),
+    is_symbol: symbol!("is_symbol"),
     nc2_1: symbol!("NC2_1"),
     rescale: symbol!("t"),
     _linear: symbol!("_linear";Linear),

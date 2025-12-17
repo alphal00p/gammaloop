@@ -831,14 +831,14 @@ pub(crate) fn veto_special_topologies_with_spanning_tree_root(
         let node = &spanning_tree.nodes[i_n];
         for (i_back_edge, &back_edge) in node.back_edges.iter().enumerate() {
             let i_chain = i_n;
-            if back_edge == i_n {
+            if back_edge.target == i_n {
                 n_factorizable_loops += 1;
 
                 self_loops.insert((i_n, i_back_edge, i_chain));
                 continue;
             }
             let mut self_energy_external_leg_id: Option<usize> = None;
-            let mut curr_chain_node = back_edge;
+            let mut curr_chain_node = back_edge.target;
             let mut is_valid_chain = true;
             'follow_chain: loop {
                 if curr_chain_node == i_n {
@@ -946,7 +946,7 @@ pub(crate) fn veto_special_topologies_with_spanning_tree_root(
             && !spanning_tree.nodes[node.parent]
                 .back_edges
                 .iter()
-                .any(|&end| i_n == end)
+                .any(|&end| i_n == end.target)
         {
             tree_bridge_node_indices.insert(i_n);
         }

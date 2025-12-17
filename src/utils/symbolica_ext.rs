@@ -1,23 +1,26 @@
 use bincode_trait_derive::{Decode, Encode};
+use color_eyre::Result;
 use schemars::{JsonSchema, json_schema};
 use serde::{Deserialize, Serialize};
 use std::{
+    collections::{BTreeMap, BTreeSet},
     fmt::Display,
     ops::{Deref, DerefMut},
     sync::LazyLock,
 };
 use symbolica::{
     atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol},
+    coefficient::CoefficientView,
     domains::{
         algebraic_number::AlgebraicExtension,
         finite_field::{FiniteFieldCore, PrimeIteratorU64, Zp64},
-        float::Complex,
+        float::{Complex, FloatLike},
         integer::IntegerRing,
         rational::{FractionField, Q, Rational},
     },
     parse,
     poly::polynomial::PolynomialRing,
-    printer::{PrintMode, PrintOptions},
+    printer::{PrintMode, PrintOptions, PrintState},
 };
 
 use crate::GammaLoopContext;
@@ -53,6 +56,401 @@ pub static LOGPRINTOPTS: PrintOptions = PrintOptions {
     custom_print_mode: None,
     hide_namespace: Some("gammalooprs"),
 };
+
+pub trait IsNeg {
+    fn is_negative(&self) -> bool;
+}
+
+impl<A: AtomCore> IsNeg for A {
+    fn is_negative(&self) -> bool {
+        match self.as_atom_view() {
+            AtomView::Num(a) => match a.get_coeff_view() {
+                CoefficientView::FiniteField(_, _) => false,
+                CoefficientView::Float(re, im) => {
+                    if im.is_zero() {
+                        re.to_float().is_negative()
+                    } else {
+                        false
+                    }
+                }
+                CoefficientView::Indeterminate => false,
+                CoefficientView::Natural(n_re, d_re, n_im, de_im) => {
+                    if n_im == 0 {
+                        n_re.is_negative()
+                    } else {
+                        false
+                    }
+                }
+                CoefficientView::Infinity(_) => false,
+                CoefficientView::Large(re, im) => {
+                    let re = re.to_rat();
+                    let im = im.to_rat();
+                    if im.is_zero() {
+                        re.is_negative()
+                    } else {
+                        false
+                    }
+                }
+                CoefficientView::RationalPolynomial(_) => false,
+            },
+            AtomView::Mul(a) => {
+                if let Some(first) = a.iter().next() {
+                    first.is_negative()
+                } else {
+                    false
+                }
+            }
+            _ => false,
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct TypstState {
+    pub inproduct: bool,
+    pub without_minus: bool,
+    pub in_power: bool,
+}
+pub trait TypstFormat {
+    fn typst_string(&self) -> String {
+        let mut s = String::new();
+
+        let symbols = self.preable(&mut s).unwrap();
+        s.push_str("$");
+        self.fmt_output(
+            &mut s,
+            &symbols,
+            TypstState {
+                inproduct: false,
+                without_minus: false,
+                in_power: false,
+            },
+        )
+        .unwrap();
+        s.push_str("$");
+        s
+    }
+
+    fn fmt_output<W: std::fmt::Write>(
+        &self,
+        f: &mut W,
+        symbols: &BTreeMap<Symbol, bool>,
+        print_state: TypstState,
+    ) -> Result<bool>;
+
+    fn preable<W: std::fmt::Write>(&self, f: &mut W) -> Result<BTreeMap<Symbol, bool>>;
+}
+
+impl<A: AtomCore> TypstFormat for A {
+    fn preable<W: std::fmt::Write>(&self, fmt: &mut W) -> Result<BTreeMap<Symbol, bool>> {
+        let mut symbols = BTreeMap::new();
+        self.visitor(&mut |a| match a {
+            AtomView::Add(a) => true,
+            AtomView::Mul(m) => true,
+            AtomView::Fun(f) => {
+                *(symbols.entry(f.get_symbol()).or_insert_with(|| true)) = true;
+                true
+            }
+            AtomView::Num(a) => false,
+            AtomView::Pow(a) => true,
+            AtomView::Var(v) => {
+                symbols.entry(v.get_symbol()).or_insert_with(|| false);
+                false
+            }
+        });
+
+        for (s, isfun) in &symbols {
+            if let Some(p) = s.get_print_function() {
+                if let Some(s) = p(
+                    if *isfun {
+                        Atom::var(GS.is_function)
+                    } else {
+                        Atom::var(GS.is_symbol)
+                    }
+                    .as_view(),
+                    &PrintOptions {
+                        custom_print_mode: Some(("typst", 2)),
+                        ..Default::default()
+                    },
+                ) {
+                    writeln!(fmt, "{}", s).unwrap();
+                    continue;
+                }
+            }
+
+            if *isfun {
+                writeln!(
+                    fmt,
+                    "#let {}-{}(..args)= $op(\"{}\")$",
+                    s.get_namespace(),
+                    s.get_stripped_name(),
+                    s.get_stripped_name()
+                )
+                .unwrap();
+            } else {
+                writeln!(
+                    fmt,
+                    "#let {}-{}= $\"{}\"$",
+                    s.get_namespace(),
+                    s.get_stripped_name(),
+                    s.get_stripped_name()
+                )
+                .unwrap();
+            }
+        }
+
+        Ok(symbols)
+    }
+    fn fmt_output<W: std::fmt::Write>(
+        &self,
+        fmt: &mut W,
+        symbols: &BTreeMap<Symbol, bool>,
+        mut print_state: TypstState,
+    ) -> Result<bool> {
+        match self.as_atom_view() {
+            AtomView::Num(n) => match n.get_coeff_view() {
+                CoefficientView::FiniteField(e, i) => Ok(true),
+                CoefficientView::Float(re, im) => {
+                    let re = re.to_float();
+                    let im = im.to_float();
+
+                    if im.is_fully_zero() {
+                        if print_state.without_minus && re.is_negative() {
+                            write!(fmt, "{}", -re)?;
+                        } else {
+                            write!(fmt, "{}", re)?;
+                        }
+                    } else {
+                        if print_state.inproduct || print_state.in_power {
+                            write!(fmt, "(")?;
+                        }
+                        write!(fmt, "{} + {} i", re, im)?;
+                        if print_state.inproduct || print_state.in_power {
+                            write!(fmt, ")")?;
+                        }
+                    }
+                    Ok(true)
+                }
+                CoefficientView::Indeterminate => {
+                    write!(fmt, "NA")?;
+                    Ok(true)
+                }
+                CoefficientView::Natural(n_re, d_re, n_im, de_im) => {
+                    if d_re == 1 && de_im == 1 {
+                        if n_im == 0 {
+                            write!(fmt, "{}", n_re)?;
+                        } else {
+                            if print_state.inproduct || print_state.in_power {
+                                write!(fmt, "(")?;
+                            }
+                            write!(fmt, "{} + {} i", n_re, n_im)?;
+                            if print_state.inproduct || print_state.in_power {
+                                write!(fmt, ")")?;
+                            }
+                        }
+                    } else {
+                        if n_im == 0 {
+                            if d_re == 1 {
+                                write!(fmt, "{}", n_re)?;
+                                return Ok(true);
+                            }
+                            write!(fmt, "({})/({})", n_re, d_re)?;
+                        } else {
+                            if de_im == 1 {
+                                if print_state.inproduct || print_state.in_power {
+                                    write!(fmt, "(")?;
+                                }
+                                write!(fmt, "({})/({}) + {} i", n_re, d_re, n_im)?;
+                                if print_state.inproduct || print_state.in_power {
+                                    write!(fmt, ")")?;
+                                }
+                                return Ok(true);
+                            }
+                            if print_state.inproduct || print_state.in_power {
+                                write!(fmt, "(")?;
+                            }
+                            write!(fmt, "({})/({})+ ({})/({})i", n_re, d_re, n_im, de_im)?;
+                            if print_state.inproduct || print_state.in_power {
+                                write!(fmt, ")")?;
+                            }
+                        }
+                    }
+                    Ok(true)
+                }
+                CoefficientView::Infinity(a) => {
+                    write!(fmt, "oo")?;
+                    Ok(true)
+                }
+                CoefficientView::Large(re, im) => {
+                    let re = re.to_rat();
+                    let im = im.to_rat();
+                    if im.is_zero() {
+                        if re.is_integer() {
+                            write!(fmt, "{}", re.numerator())?;
+                        } else {
+                            write!(fmt, "({})/({})", re.numerator(), re.denominator())?;
+                        }
+                    } else if re.is_zero() {
+                        if im.is_integer() {
+                            write!(fmt, "{} i", im.numerator())?;
+                        } else {
+                            write!(fmt, "({})/({}) i", im.numerator(), im.denominator())?;
+                        }
+                    } else {
+                        if print_state.inproduct || print_state.in_power {
+                            write!(fmt, "(")?;
+                        }
+                        if re.is_integer() && im.is_integer() {
+                            write!(fmt, "{} + {} i", re.numerator(), im.numerator())?;
+                        } else if re.is_integer() {
+                            write!(
+                                fmt,
+                                "{} + ({})/({}) i",
+                                re.numerator(),
+                                im.numerator(),
+                                im.denominator()
+                            )?;
+                        } else if im.is_integer() {
+                            write!(
+                                fmt,
+                                "({})/({}) + {} i",
+                                re.numerator(),
+                                re.denominator(),
+                                im.numerator()
+                            )?;
+                        } else {
+                            write!(
+                                fmt,
+                                "({})/({}) + ({})/({}) i",
+                                re.numerator(),
+                                re.denominator(),
+                                im.numerator(),
+                                im.denominator()
+                            )?;
+                        }
+                        if print_state.inproduct || print_state.in_power {
+                            write!(fmt, ")")?;
+                        }
+                    }
+                    Ok(true)
+                }
+                CoefficientView::RationalPolynomial(a) => {
+                    write!(fmt, "{}", a.deserialize())?;
+                    Ok(true)
+                }
+            },
+
+            AtomView::Var(v) => {
+                write!(
+                    fmt,
+                    "#{}-{}",
+                    v.get_symbol().get_namespace(),
+                    v.get_symbol().get_stripped_name()
+                )?;
+                Ok(true)
+            }
+            AtomView::Fun(f) => {
+                write!(
+                    fmt,
+                    "#{}-{}(",
+                    f.get_symbol().get_namespace(),
+                    f.get_symbol().get_stripped_name()
+                )?;
+
+                for i in f.iter() {
+                    i.fmt_output(
+                        fmt,
+                        symbols,
+                        TypstState {
+                            inproduct: false,
+                            without_minus: false,
+                            in_power: false,
+                        },
+                    )?;
+                    write!(fmt, ", ")?;
+                }
+                write!(fmt, ")")?;
+
+                Ok(true)
+            }
+            AtomView::Pow(p) => {
+                let (base, exp) = p.get_base_exp();
+
+                if exp.is_negative() {
+                    write!(fmt, "1/")?;
+                    base.fmt_output(
+                        fmt,
+                        symbols,
+                        TypstState {
+                            inproduct: false,
+                            without_minus: false,
+                            in_power: true,
+                        },
+                    )?;
+                    write!(fmt, "^(")?;
+                    exp.fmt_output(
+                        fmt,
+                        symbols,
+                        TypstState {
+                            inproduct: false,
+                            without_minus: true,
+                            in_power: false,
+                        },
+                    )?;
+                    write!(fmt, ")")?;
+                } else {
+                    base.fmt_output(
+                        fmt,
+                        symbols,
+                        TypstState {
+                            inproduct: false,
+                            without_minus: false,
+                            in_power: true,
+                        },
+                    )?;
+                    write!(fmt, "^(")?;
+                    exp.fmt_output(
+                        fmt,
+                        symbols,
+                        TypstState {
+                            inproduct: false,
+                            without_minus: false,
+                            in_power: false,
+                        },
+                    )?;
+
+                    write!(fmt, ")")?;
+                }
+                Ok(true)
+            }
+
+            AtomView::Mul(t) => {
+                print_state.inproduct = true;
+                for term in t.iter() {
+                    term.fmt_output(fmt, symbols, print_state)?;
+                    write!(fmt, " ")?;
+                }
+
+                Ok(true)
+            }
+
+            AtomView::Add(e) => {
+                let mut first = true;
+                for term in e.iter() {
+                    if term.is_negative() {
+                        write!(fmt, " - ")?;
+                    } else if !first {
+                        write!(fmt, " + ")?;
+                    }
+                    first = false;
+                    print_state.without_minus = true;
+                    term.fmt_output(fmt, symbols, print_state)?;
+                }
+                Ok(true)
+            }
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Default, Encode, Decode)]
 #[trait_decode(trait = GammaLoopContext)]

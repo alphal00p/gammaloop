@@ -60,10 +60,10 @@ symbolica = { version = "1", default-features = false, features = [
     "bincode",
 ] }
 
-idenso = { version = "0.2.3", features = ["bincode"] }
+idenso = { version = "0.2", features = ["bincode"] }
 spenso-macros = { version = "0.3" }
-spenso-hep-lib = { version = "0.1.4" }
-spenso = { version = "0.5.4", features = ["shadowing"] }
+spenso-hep-lib = { version = "0.1" }
+spenso = { version = "0.5", features = ["shadowing"] }
 linnet = { version = "0.15", features = [
     "drawing",
     "serde",
@@ -203,10 +203,10 @@ higher_loops = []
 # use-system-gmp = ["rug/gmp-mpfr-sys/use-system-libs"]
 
 [patch.crates-io]
-idenso = { git = "https://github.com/alphal00p/spenso", rev = "c83e98d133ee2c97b4b85f9fd95cd50c4a7c4ec0" }
-spenso = { git = "https://github.com/alphal00p/spenso", rev = "c83e98d133ee2c97b4b85f9fd95cd50c4a7c4ec0" }
-spenso-hep-lib = { git = "https://github.com/alphal00p/spenso", rev = "c83e98d133ee2c97b4b85f9fd95cd50c4a7c4ec0" }
-spenso-macros = { git = "https://github.com/alphal00p/spenso", rev = "c83e98d133ee2c97b4b85f9fd95cd50c4a7c4ec0" }
+# idenso = { git = "https://github.com/alphal00p/spenso", rev = "c83e98d133ee2c97b4b85f9fd95cd50c4a7c4ec0" }
+# spenso = { git = "https://github.com/alphal00p/spenso", rev = "c83e98d133ee2c97b4b85f9fd95cd50c4a7c4ec0" }
+# spenso-hep-lib = { git = "https://github.com/alphal00p/spenso", rev = "c83e98d133ee2c97b4b85f9fd95cd50c4a7c4ec0" }
+# spenso-macros = { git = "https://github.com/alphal00p/spenso", rev = "c83e98d133ee2c97b4b85f9fd95cd50c4a7c4ec0" }
 # symbolica = { git = "https://github.com/benruijl/symbolica", branch = "chi_sq_fix" }
 # spenso-macros = { path = "../spenso/spenso-macros" }
 # symbolica = { git = "https://github.com/benruijl/symbolica", branch = "optim" }

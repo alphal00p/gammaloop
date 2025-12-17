@@ -15,6 +15,7 @@ use crate::processes::{Amplitude, AmplitudeGraph};
 use crate::settings::global::OrientationPattern;
 use crate::settings::runtime::DiscreteGraphSamplingSettings;
 use crate::settings::{GlobalSettings, SamplingSettings};
+use crate::utils::symbolica_ext::TypstFormat;
 use crate::utils::{F, W_};
 use crate::uv::settings::VakintSettings;
 use linnet::half_edge::involution::EdgeIndex;
@@ -23,6 +24,7 @@ use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike};
 use linnet::half_edge::{builder::HedgeGraphBuilder, involution::Flow};
 use rand::Rng;
 use rayon::ThreadPool;
+use spenso::shadowing::symbolica_utils::AtomCoreExt;
 use symbolica::atom::Symbol;
 use symbolica::domains::float::Real;
 use symbolica::numerical_integration::MonteCarloRng;
@@ -140,7 +142,13 @@ fn scalar_bubble() {
     )
     .unwrap();
 
-    println!("{}", amp.graphs[0].derived_data.all_mighty_integrand);
+    println!(
+        "{}",
+        amp.graphs[0]
+            .derived_data
+            .all_mighty_integrand
+            .typst_string()
+    );
 
     // let (inspect_res_jac, inspect_res_eval) = gammalooprs::inspect::inspect(
     //     &settings,
@@ -209,24 +217,24 @@ fn scalar_bubble() {
             for r in res.iter() {
                 println!("res: {}", r.norm_squared().sqrt());
             }
+
+            for o in g
+                .derived_data
+                .cff_expression
+                .as_ref()
+                .unwrap()
+                .orientations
+                .iter()
+            {
+                let oatom = o
+                    .data
+                    .orientation
+                    .select(&g.derived_data.all_mighty_integrand);
+
+                g.graph
+                    .all_limits(&g.graph.full_filter(), &oatom, symbol!("lambd"), &lmb);
+            }
         }
-
-        // for o in g
-        //     .derived_data
-        //     .cff_expression
-        //     .as_ref()
-        //     .unwrap()
-        //     .orientations
-        //     .iter()
-        // {
-        //     let oatom = o
-        //         .data
-        //         .orientation
-        //         .select(&g.derived_data.all_mighty_integrand);
-
-        //     g.graph
-        //         .all_limits(&g.graph.full_filter(), &oatom, symbol!("lambd"), &lmb);
-        // }
     }
 }
 

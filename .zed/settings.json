@@ -7,30 +7,30 @@
     "enabled": true,
     "show_type_hints": true,
     "show_parameter_hints": false,
-    "show_other_hints": true
+    "show_other_hints": true,
   },
   "load_direnv": "direct",
 
   "languages": {
     "Nickel": {
-      "language_servers": ["nls"]
+      "language_servers": ["nls"],
     },
     "YAML": {
-      "language_servers": ["yaml-language-server"]
+      "language_servers": ["yaml-language-server"],
     },
     "Typst": {
-      "language_servers": ["tinymist"]
-    }
+      "language_servers": ["tinymist"],
+    },
   },
   "lsp": {
     "yaml-language-server": {
       "settings": {
         "yaml": {
           "schemas": {
-            "./run_schema.json": "./examples/amplitude_computation/gammaloop_state/run.yaml"
-          }
-        }
-      }
+            "./run_schema.json": "./examples/amplitude_computation/gammaloop_state/run.yaml",
+          },
+        },
+      },
     },
     "json-language-server": {
       "settings": {
@@ -44,54 +44,62 @@
             //   "fileMatch": ["example-*-root.json"],
             //   "url": "./schema-at-root.json"
             // }
-          ]
-        }
-      }
+          ],
+        },
+      },
     },
 
     "nls": {
+      "binary": {
+        "ignore_system_version": false,
+      },
       "enable_lsp_tasks": true,
       "initialization_options": {
         "experimentalFeatures": true,
         "trace": {
-          "server": "verbose"
-        }
-      }
+          "server": "verbose",
+        },
+      },
     },
     "rust-analyzer": {
+      "binary": {
+        "ignore_system_version": false,
+        "path": "rust-analyzer",
+      },
+
       "initialization_options": {
         "inlayHints": {
           "typeHints": true,
           "maxLength": null,
           "lifetimeElisionHints": {
             "useParameterNames": true,
-            "enable": "never"
+            "enable": "never",
           },
           "closureReturnTypeHints": {
-            "enable": "always"
-          }
+            "enable": "always",
+          },
         },
         "cargo": {
           "features": ["python_api"],
-          "allTargets": true
+          "allTargets": true,
         },
         "diagnostics": {
           "experimental": {
-            "enable": true
-          }
+            "enable": true,
+          },
         },
         "checkOnSave": true,
 
         "check": {
           "onSave": true,
           "features": ["python_api"],
-          "command": "check"
+          "command": "check",
         },
         "runnables": {
           "extraArgs": ["--profile", "dev-optim"],
-          "cargoExtraArgs": ["--profile", "dev-optim"]
-        }
-      }
-    }
-  }
+          "cargoExtraArgs": ["--profile", "dev-optim"],
+        },
+      },
+    },
+  },
 }
