@@ -100,7 +100,7 @@ colored = "*"
 libc = "0.2.0"
 statrs = "0.16.0"
 smallvec = { version = "1.7", features = ["const_generics", "serde"] }
-itertools = "0.8"
+itertools = "0.14"
 smartstring = { version = "*", features = ["serde"] }
 log = { version = "*", features = ["release_max_level_debug"] }
 # env_logger = "*"

@@ -362,6 +362,28 @@ impl Graph {
 
         (result, tree_like_edges)
     }
+
+    pub(crate) fn get_raised_edge_groups(&self) -> Vec<Vec<EdgeIndex>> {
+        let mut result = Vec::<Vec<EdgeIndex>>::new();
+
+        for (_, edge_index, _) in self.iter_loop_edges() {
+            let group_position = result.iter().position(|group| {
+                group
+                    .iter()
+                    .all(|e| self.loop_momentum_basis.edges_are_raised(*e, edge_index))
+            });
+
+            if let Some(pos) = group_position {
+                result[pos].push(edge_index);
+            } else {
+                result.push(vec![edge_index]);
+            }
+        }
+
+        result.iter_mut().for_each(|group| group.sort());
+
+        result
+    }
 }
 
 pub mod edge;

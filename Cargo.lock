@@ -1452,7 +1452,7 @@ dependencies = [
  "git-version",
  "include_dir",
  "indicatif 0.17.11",
- "itertools 0.8.2",
+ "itertools 0.14.0",
  "json5",
  "linnet",
  "ndarray",
@@ -1522,7 +1522,7 @@ dependencies = [
  "indicatif 0.17.11",
  "insta",
  "is-terminal",
- "itertools 0.8.2",
+ "itertools 0.14.0",
  "json5",
  "libc",
  "linnet",
@@ -1925,15 +1925,6 @@ name = "is_terminal_polyfill"
 version = "1.70.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a6cb138bb79a146c1bd460005623e142ef0181e3d0219cb493e02f7d08a35695"
-
-[[package]]
-name = "itertools"
-version = "0.8.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f56a2d0bc861f9165be4eb3442afd3c236d8a98afd426f65d92324ae1091a484"
-dependencies = [
- "either",
-]
 
 [[package]]
 name = "itertools"

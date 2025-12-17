@@ -858,6 +858,12 @@ impl LoopMomentumBasis {
     //         })
     //         .collect()
     // }
+
+    pub(crate) fn edges_are_raised(&self, edge_1: EdgeIndex, edge_2: EdgeIndex) -> bool {
+        let sig_1 = &self.edge_signatures[edge_1];
+        let sig_2 = &self.edge_signatures[edge_2];
+        sig_1.equality_up_to_sign(sig_2)
+    }
 }
 
 #[derive(

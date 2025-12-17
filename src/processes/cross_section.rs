@@ -9,8 +9,8 @@ use std::{
 // use bincode::{Decode, Encode};
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
-
 use idenso::color::ColorSimplifier;
+use itertools::Itertools;
 use rayon::{
     ThreadPool,
     iter::{IntoParallelRefMutIterator, ParallelIterator},
@@ -40,13 +40,13 @@ use crate::{
     model::ArcParticle,
     momentum_sample::{ExternalIndex, SubspaceData},
     numerator::{self, symbolica_ext::AtomCoreExt},
+    observables::CrossSectionObservable,
     processes::DotExportSettings,
     settings::{GlobalSettings, global::GenerationSettings, runtime::LockedRuntimeSettings},
     utils::{FUN_LIB, GS, TENSORLIB, W_},
     uv::{UltravioletGraph, uv_graph::UVE},
 };
 use eyre::{Context, eyre};
-use itertools::{Either::Left, Itertools};
 use linnet::half_edge::{
     involution::{EdgeIndex, Orientation, SignOrZero},
     subgraph::{
@@ -230,6 +230,7 @@ impl CsAmplitudeCTDiagram {
 define_index! {pub struct GlobalThresholdId;}
 define_index! {pub struct RightThresholdId;}
 define_index! {pub struct LeftThresholdId;}
+define_index! {pub struct RaisedCutId;}
 
 use derive_more::{From, Into};
 #[derive(Clone, Encode, Decode)]
@@ -663,6 +664,98 @@ impl CrossSectionGraph {
             self.build_threshold_counteterm(settings)?;
             self.build_subspace_data()?;
         }
+
+        Ok(())
+    }
+
+    pub(crate) fn determine_raisings(&mut self) -> Result<()> {
+        let raised_edges = self.graph.get_raised_edge_groups();
+
+        let normalized_cut_esurfaces = self
+            .cut_esurface
+            .iter()
+            .map(|esurface| {
+                let mut new_esurface = esurface.clone();
+                for energy in new_esurface.energies.iter_mut() {
+                    let group_index_of_energy = raised_edges
+                        .iter()
+                        .position(|group| group.contains(&energy));
+
+                    if let Some(found_group_index) = group_index_of_energy {
+                        *energy = *raised_edges[found_group_index].first().unwrap();
+                    }
+                }
+                new_esurface.energies.sort();
+                new_esurface
+            })
+            .collect::<TiVec<CutId, _>>();
+
+        let mut raised_groups = TiVec::<RaisedCutId, Vec<CutId>>::new();
+
+        for (cut_id, normalized_cut_esurface) in normalized_cut_esurfaces.iter_enumerated() {
+            let raised_cut_id =
+                raised_groups
+                    .iter_enumerated()
+                    .find_map(|(raised_cut_id, cuts)| {
+                        if cuts.iter().all(|cut_in_raised_group_id| {
+                            normalized_cut_esurfaces[*cut_in_raised_group_id].energies
+                                == normalized_cut_esurface.energies
+                        }) {
+                            Some(raised_cut_id)
+                        } else {
+                            None
+                        }
+                    });
+
+            if let Some(found_raised_cut_id) = raised_cut_id {
+                raised_groups[found_raised_cut_id].push(cut_id);
+            } else {
+                raised_groups.push(vec![cut_id]);
+            }
+        }
+
+        let mut crossed_pairs = Vec::<(CutId, CutId)>::new();
+        for cut_pair in self.cuts.iter_enumerated().combinations(2) {
+            if cut_pair[0].1.left.includes(&cut_pair[1].1.left)
+                || cut_pair[1].1.left.includes(&cut_pair[0].1.left)
+                || cut_pair[0].1.right.includes(&cut_pair[1].1.right)
+                || cut_pair[1].1.right.includes(&cut_pair[0].1.right)
+            {
+                continue;
+            } else {
+                if cut_pair[0].0.0 < cut_pair[1].0.0 {
+                    crossed_pairs.push((cut_pair[0].0, cut_pair[1].0));
+                } else {
+                    crossed_pairs.push((cut_pair[1].0, cut_pair[0].0));
+                }
+            }
+        }
+
+        let cross_free_powersets = raised_groups
+            .iter()
+            .map(|group| {
+                group
+                    .into_iter()
+                    .powerset()
+                    .filter_map(|subset| {
+                        if subset.is_empty() {
+                            None
+                        } else {
+                            let has_crossing = group.iter().combinations(2).any(|combination| {
+                                let combination_tuple = if combination[0].0 < combination[1].0 {
+                                    (*combination[0], *combination[1])
+                                } else {
+                                    (*combination[1], *combination[0])
+                                };
+                                crossed_pairs.contains(&combination_tuple)
+                            });
+
+                            if has_crossing { None } else { Some(subset) }
+                        }
+                    })
+                    .collect_vec()
+            })
+            .collect::<TiVec<RaisedCutId, _>>();
 
         Ok(())
     }

@@ -93,6 +93,11 @@ impl LoopExtSignature {
     {
         self.external.atom(mom_symbol, additional_args, id_map)
     }
+
+    pub(crate) fn equality_up_to_sign(&self, other: &Self) -> bool {
+        self.internal.first_abs() == other.internal.first_abs()
+            && self.external.first_abs() == other.external.first_abs()
+    }
 }
 
 impl From<(Vec<isize>, Vec<isize>)> for LoopExtSignature {
