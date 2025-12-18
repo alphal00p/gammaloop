@@ -5,9 +5,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     GammaLoopContext,
-    // cli::tracing::LogLevel,
     integrands::IntegrandSettings,
     observables::{ObservableSettings, PhaseSpaceSelectorSettings},
+    settings::runtime::HFunctionSettings,
     utils::serde_utils::IsDefault,
 };
 
@@ -53,6 +53,8 @@ pub struct RuntimeSettings {
     pub sampling: SamplingSettings,
     #[serde(rename = "subtraction", skip_serializing_if = "IsDefault::is_default")]
     pub subtraction: SubtractionSettings,
+    #[serde(rename = "h_function", skip_serializing_if = "IsDefault::is_default")]
+    pub lu_h_function: HFunctionSettings,
 }
 
 fn default_logfile_directive() -> String {

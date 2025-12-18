@@ -570,12 +570,7 @@ impl GraphTerm for CrossSectionGraphTerm {
                 &F::from_f64(settings.kinematics.e_cm),
             );
 
-            let h_function = h(
-                &solution.solution,
-                None,
-                None,
-                &HFunctionSettings::default(),
-            );
+            let h_function = h(&solution.solution, None, None, &settings.lu_h_function);
 
             let lu_params = LUParams {
                 h_function,
