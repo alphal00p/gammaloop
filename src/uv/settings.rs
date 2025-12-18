@@ -131,6 +131,8 @@ impl Default for VakintSettings {
 #[serde(default, deny_unknown_fields)]
 pub struct UVgenerationSettings {
     #[serde(skip_serializing_if = "is_true")]
+    pub softct: bool,
+    #[serde(skip_serializing_if = "is_true")]
     pub generate_integrated: bool,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub vakint: VakintSettings,
@@ -139,6 +141,7 @@ pub struct UVgenerationSettings {
 impl Default for UVgenerationSettings {
     fn default() -> Self {
         UVgenerationSettings {
+            softct: true,
             generate_integrated: true,
             vakint: VakintSettings::default(),
         }

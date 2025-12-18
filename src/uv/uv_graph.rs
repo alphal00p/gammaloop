@@ -1,6 +1,4 @@
 use ahash::AHashSet;
-use bitvec::vec::BitVec;
-use idenso::metric::MS;
 use linnet::half_edge::{
     HedgeGraph, PowersetIterator,
     involution::{Hedge, HedgePair},
@@ -12,7 +10,6 @@ use linnet::half_edge::{
 use symbolica::{
     atom::{Atom, AtomCore, Symbol},
     function,
-    id::Replacement,
 };
 
 use crate::{
@@ -20,10 +17,10 @@ use crate::{
     graph::{Edge, FeynmanGraph, Graph, LMBext, LoopMomentumBasis, NumHedgeData, Vertex},
     momentum_sample::LoopIndex,
     numerator::{AppliedFeynmanRule, Numerator},
-    utils::{GS, W_, symbolica_ext::CallSymbol},
+    utils::{GS, W_},
 };
 
-use super::{Wood, is_not_paired, spenso_lor_atom};
+use super::{Wood, spenso_lor_atom};
 
 pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
     fn n_loops<S: SubGraphLike, E, V, H>(&self, subgraph: &S) -> usize

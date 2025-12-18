@@ -6,6 +6,10 @@ commands = [
     # "inspect --process-id 0 --name box -m -p 0.1 0.2 0.3",
 ]
 
+[cli_settings.global]
+logfile_directive = "off"#,gammalooprs[build_original_parametric_integrand]=debug"
+
+
 
 [default_runtime_settings.kinematics.externals]
 type = "constant"
@@ -44,13 +48,14 @@ mapping = "linear"
 
 [cli_settings.global.generation.uv]
 generate_integrated = false
+softct = false
 [cli_settings.global.generation.threshold_subtraction]
 enable_thresholds = true
 
 
 [cli_settings.global.generation.evaluator]
-iterative_orientation_optimization = true
-compile = false
+iterative_orientation_optimization = false
+compile = true
 
 [default_runtime_settings.integrator]
 seed = 42

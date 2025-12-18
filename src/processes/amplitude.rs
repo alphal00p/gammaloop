@@ -61,11 +61,11 @@ use linnet::{
     },
     parser::DotGraph,
 };
-use log::{debug, info};
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, Symbol, Var},
     function,
 };
+use tracing::{debug, info};
 use typed_index_collections::{TiVec, ti_vec};
 
 use crate::{
@@ -762,6 +762,12 @@ impl AmplitudeGraph {
         Ok(())
     }
 
+    #[instrument(
+        skip_all,
+          fields(
+              graph.name = %self.graph.name,
+          )
+      )]
     fn build_threshold_counterterm_parametric_integrand(
         &self,
         settings: &GenerationSettings,
@@ -939,7 +945,7 @@ impl AmplitudeGraph {
             // println!("{}", complement_expr.dot_pretty());
 
             let mut product = circled_expr * complement_expr * global_num.clone();
-
+            debug!(dot = %product.dot_pretty(),"Product before execution");
             product
                 .execute::<Sequential, SmallestDegree, _, _, _>(
                     TENSORLIB.read().unwrap().deref(),
@@ -998,6 +1004,12 @@ impl AmplitudeGraph {
         Ok(counterterms)
     }
 
+    #[instrument(
+        skip_all,
+          fields(
+              amplitude_graph.name = %self.graph.name,
+          )
+      )]
     fn build_original_parametric_integrand(&self, settings: &GenerationSettings) -> Result<Atom> {
         let wood = self.graph.wood(&self.graph.no_dummy());
         debug!(
@@ -1042,6 +1054,8 @@ impl AmplitudeGraph {
         let mut full = forest.orientation_parametric_expr(None, &self.graph);
 
         full *= global_num;
+
+        debug!(dot = %full.dot_pretty(),"Full before execution");
 
         full.execute::<Sequential, SmallestDegree, _, _, _>(
             TENSORLIB.read().unwrap().deref(),

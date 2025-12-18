@@ -1530,7 +1530,6 @@ dependencies = [
  "log",
  "momtrop",
  "nalgebra 0.32.6",
- "oneloop_bridge",
  "paste",
  "pathfinding",
  "pprof",
@@ -2576,15 +2575,6 @@ name = "once_cell_polyfill"
 version = "1.70.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
-
-[[package]]
-name = "oneloop_bridge"
-version = "0.2.0"
-source = "git+https://github.com/SecretGmG/OneLOopBridge#ab5d3454377df1d1c23c6ad2bedd5272210476b3"
-dependencies = [
- "num-complex",
- "num-traits",
-]
 
 [[package]]
 name = "oorandom"

@@ -1,6 +1,5 @@
 use std::sync::LazyLock;
 
-use idenso::metric::MS;
 use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeIndex, Orientation};
 
@@ -8,6 +7,7 @@ use spenso::{
     network::parsing::SPENSO_TAG,
     structure::{
         abstract_index::AIND_SYMBOLS,
+        concrete_index::ExpandedIndex,
         representation::{Minkowski, RepName},
         slot::{DummyAind, IsAbstractSlot, Slot},
     },
@@ -19,6 +19,7 @@ use symbolica::{
     id::Replacement,
     symbol,
 };
+use tabled::settings::measurement::Min;
 
 use crate::{cff::expression::GraphOrientation, numerator::aind::Aind};
 
@@ -413,6 +414,85 @@ pub static GS: LazyLock<GammaloopSymbols> = LazyLock::new(|| GammaloopSymbols {
 });
 
 impl GammaloopSymbols {
+    pub fn do_dot_product_in_sqrt<'a>(&self, arg: impl Into<AtomOrView<'a>>) -> Atom {
+        let a = arg.into();
+
+        let mink = Minkowski {}.new_rep(4).to_symbolic([Atom::var(W_.i_)]);
+
+        let pat = function!(self.emr_vec, W_.a_, mink) * function!(self.emr_vec, W_.b_, mink);
+        let rhs = function!(
+            self.emr_mom,
+            W_.a_,
+            Atom::from(ExpandedIndex::from_iter([1]))
+        ) * function!(
+            self.emr_mom,
+            W_.b_,
+            Atom::from(ExpandedIndex::from_iter([1]))
+        ) + function!(
+            self.emr_mom,
+            W_.a_,
+            Atom::from(ExpandedIndex::from_iter([2]))
+        ) * function!(
+            self.emr_mom,
+            W_.b_,
+            Atom::from(ExpandedIndex::from_iter([2]))
+        ) + function!(
+            self.emr_mom,
+            W_.a_,
+            Atom::from(ExpandedIndex::from_iter([3]))
+        ) * function!(
+            self.emr_mom,
+            W_.b_,
+            Atom::from(ExpandedIndex::from_iter([3]))
+        );
+
+        let a = a.replace(pat).with(rhs);
+
+        let pat = function!(self.emr_vec, W_.a_, mink).npow(2);
+        let rhs = function!(
+            self.emr_mom,
+            W_.a_,
+            Atom::from(ExpandedIndex::from_iter([1]))
+        )
+        .npow(2)
+            + function!(
+                self.emr_mom,
+                W_.a_,
+                Atom::from(ExpandedIndex::from_iter([2]))
+            )
+            .npow(2)
+            + function!(
+                self.emr_mom,
+                W_.a_,
+                Atom::from(ExpandedIndex::from_iter([3]))
+            )
+            .npow(2);
+        // * GS.emr_mom(edge, Atom::from(ExpandedIndex::from_iter([1])))
+        // + GS.emr_mom(edge, Atom::from(ExpandedIndex::from_iter([2])))
+        //     * GS.emr_mom(edge, Atom::from(ExpandedIndex::from_iter([2])))
+        // + GS.emr_mom(edge, Atom::from(ExpandedIndex::from_iter([3])))
+        //     * GS.emr_mom(edge, Atom::from(ExpandedIndex::from_iter([3])));
+
+        // let dot = self.emr_vec_index(e, mink.to_atom()) * self.emr_vec_index(e, mink.to_atom())
+        a.replace(pat).with(rhs)
+
+        // a.replace_map(|a, ctx, out| {
+        //     if let AtomView::Pow(p) = a {
+        //         let (a, b) = p.get_base_exp();
+        //         let Ok(exp) = Rational::try_from(b) else {
+        //             return;
+        //         };
+
+        //         if exp.denominator() == Integer::from(2) {
+        //             **out = self
+        //                 .broadcasting_sqrt
+        //                 .f(&[a])
+        //                 .pow(Atom::num(exp.numerator()));
+        //         }
+        //     }
+        // });
+    }
+
     pub fn to_broadcasting_sqrt<'a>(&self, arg: impl Into<AtomOrView<'a>>) -> Atom {
         let a = arg.into();
         a.replace_map(|a, ctx, out| {

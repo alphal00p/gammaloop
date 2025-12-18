@@ -323,6 +323,7 @@
           bacon
           # python311
           gfortran
+          gcc
           uv
           ghostscript
           graphviz

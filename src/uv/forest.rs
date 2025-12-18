@@ -93,6 +93,7 @@ impl Forest {
                             vakint,
                             amplitude_subgraph,
                             &parent.data,
+                            settings,
                         );
                     }
                     current.data.compute(
@@ -102,6 +103,7 @@ impl Forest {
                         orientations,
                         cut_edges,
                         &parent.data,
+                        settings,
                     );
                 }
                 _ => {

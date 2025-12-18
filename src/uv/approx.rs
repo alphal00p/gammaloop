@@ -10,7 +10,9 @@ use crate::{
     graph::{Edge, Graph, LMBext, LoopMomentumBasis, Vertex},
     momentum::Sign,
     numerator::{ParsingNet, aind::Aind, symbolica_ext::AtomCoreExt},
+    status_info,
     utils::{GS, W_, symbolica_ext::LOGPRINTOPTS},
+    uv::UVgenerationSettings,
 };
 use ahash::AHashSet;
 use idenso::{gamma::GammaSimplifier, metric::MS};
@@ -464,6 +466,7 @@ impl Approximation {
         vakint: &Vakint,
         uv_graph: &G,
         amplitude_subgraph: &S,
+        settings: &UVgenerationSettings,
     ) -> ApproxOp {
         let graph = uv_graph.as_ref();
         let reduced = self.subgraph.subtract(&dependent.subgraph);
@@ -526,7 +529,8 @@ impl Approximation {
                 .with(function!(GS.emr_mom, usize::from(*e) as i64, W_.x___) * GS.rescale);
         }
         // TODO: only enable soft CT if doing OS renormalization
-        let soft_ct = graph.full_crown(&self.subgraph).n_included() == 2 && self.dod > 0;
+        let soft_ct =
+            graph.full_crown(&self.subgraph).n_included() == 2 && self.dod > 0 && settings.softct;
 
         let mut masses = AHashSet::new();
         masses.insert(Atom::var(GS.m_uv));
@@ -657,8 +661,10 @@ impl Approximation {
         vakint: &Vakint,
         amplitude_subgraph: &S,
         dependent: &Self,
+        settings: &UVgenerationSettings,
     ) {
-        self.integrated_4d = self.integrated_4d(dependent, vakint, graph, amplitude_subgraph);
+        self.integrated_4d =
+            self.integrated_4d(dependent, vakint, graph, amplitude_subgraph, settings);
     }
 
     /// Computes the 3d approximation of the UV
@@ -676,6 +682,7 @@ impl Approximation {
         orientations: &TiVec<OID, O>,
         cut_edges: &[EdgeIndex],
         dependent: &Self,
+        settings: &UVgenerationSettings,
     ) {
         let Some((cff, sign)) = dependent.local_3d.expr() else {
             panic!("Should have computed the dependent cff");
@@ -703,7 +710,7 @@ impl Approximation {
 
         let mut sum_3d = Atom::Zero;
 
-        sum_3d += self.local_3d(dependent, graph, cff);
+        sum_3d += self.local_3d(dependent, graph, cff, settings);
 
         let finite = t4
             .series(vakint_symbol!("ε"), Atom::Zero, 0.into(), true)
@@ -721,7 +728,7 @@ impl Approximation {
         // TODO: multiply by the number of orientations or only apply the counterterm to
         // one orientation
         // subtract integrated CT
-        sum_3d -= self.local_3d(dependent, graph, finite * t_arg.integrand);
+        sum_3d -= self.local_3d(dependent, graph, finite * t_arg.integrand, settings);
 
         self.local_3d = CFFapprox::Dependent {
             sign: -sign,
@@ -739,6 +746,7 @@ impl Approximation {
         dependent: &Self,
         uv_graph: &G,
         mut cff: Atom,
+        settings: &UVgenerationSettings,
     ) -> Atom {
         let graph = uv_graph.as_ref();
         let reduced = self.subgraph.subtract(&dependent.subgraph);
@@ -803,12 +811,14 @@ impl Approximation {
         //     atomarg, self.dod, self.lmb.ext_edges
         // );
 
-        let soft_ct = graph.full_crown(&self.subgraph).n_included() == 2 && self.dod > 0;
+        let soft_ct =
+            graph.full_crown(&self.subgraph).n_included() == 2 && self.dod > 0 && settings.softct;
 
         // (re-)expand OSEs from the subgraph only
         for (_, eid, _) in graph.iter_edges_of(&self.subgraph) {
             let eid = usize::from(eid) as i64;
             if soft_ct {
+                status_info!("DOing soft ct{}", graph.dot(&self.subgraph));
                 // TODO: rescale the masses in OSEs
                 // TODO: also scale masses in the numerator _only_ for the subgraph
                 // expand the OSEs around an OSE with a UV mass

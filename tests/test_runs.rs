@@ -423,15 +423,15 @@ fn scalar_sunrise() -> Result<()> {
     // from Kaapo: m=1 muv=5 4.37688e-03 m=2 muv=5 	2.48100e-03	 m=3 muv=5 1.07231e-03
     cli.run_command("set model mass_scalar_1={re:1.0,im:0.0}")?;
     let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
-    assert_snapshot!(format!("{:.8e}",integral_no_cache.result),@"(2.0361143153099125e-2+0e0i)");
+    assert_snapshot!(format!("{:.8e}",integral_no_cache.result),@"(-3.0440676491099083e-3+0e0i)");
 
     cli.run_command("set model mass_scalar_1={re:2.0,im:0.0}")?;
     let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
-    assert_snapshot!(format!("{:.8e}",integral_no_cache.result),@"(1.1584675622329286e-2+0e0i)");
+    assert_snapshot!(format!("{:.8e}",integral_no_cache.result),@"(-1.4523538186894842e-3+0e0i)");
 
     cli.run_command("set model mass_scalar_1={re:3.0,im:0.0}")?;
     let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
-    assert_snapshot!(format!("{:.8e}",integral_no_cache.result),@"(6.460057304375133e-3+0e0i)");
+    assert_snapshot!(format!("{:.8e}",integral_no_cache.result),@"(-4.5184321377520566e-4+0e0i)");
 
     clean_test(&cli.cli_settings.state_folder);
 
