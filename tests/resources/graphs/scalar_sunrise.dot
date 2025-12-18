@@ -1,8 +1,9 @@
 digraph bubble{
     node [num = "1" ]
     e        [style=invis]
-    e -> A:0   [ id=2 particle=scalar_1]
-    B:1 -> e   [ id=3 particle=scalar_1]
+    e -> A:0   [ id=3 particle=scalar_1]
+    B:1 -> e   [ id=4 particle=scalar_1]
     A -> B    [ id=0 particle=scalar_1]
     A -> B    [ id=1 particle=scalar_1]
+    A -> B    [ id=2 particle=scalar_1]
 }

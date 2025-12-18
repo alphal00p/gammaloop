@@ -362,39 +362,76 @@ fn scalar_bubble() -> Result<()> {
         false,
     )?;
 
-    cli.run_command("set process -p 0 -i default kv general.enable_cache=false")?;
-    let integral_no_cache = Integrate {
+    let integrate_command = Integrate {
         process_id: Some(0),
         integrand_name: Some("default".to_string()),
         result_path: Some(
             get_tests_workspace_path()
-                .join("scalar_box/integration_workspace/integration_results.toml"),
+                .join("scalar_bubble/integration_workspace/integration_results.toml"),
         ),
-        workspace_path: Some(get_tests_workspace_path().join("scalar_box/integration_workspace")),
+        workspace_path: Some(
+            get_tests_workspace_path().join("scalar_bubble/integration_workspace"),
+        ),
         n_cores: Some(1),
         target: None,
         restart: true,
-    }
-    .run(&mut cli.state, &cli.cli_settings)?;
+    };
 
-    // cli.run_command("set process -p 0 -i default kv general.enable_cache=true")?;
-    // let integral_with_cache = Integrate {
-    //     process_id: Some(0),
-    //     integrand_name: Some("default".to_string()),
-    //     result_path: Some(
-    //         get_tests_workspace_path()
-    //             .join("scalar_box/integration_workspace/integration_results.toml"),
-    //     ),
-    //     workspace_path: Some(get_tests_workspace_path().join("scalar_box/integration_workspace")),
-    //     target: None,
-    //     n_cores: Some(1),
-    //     restart: true,
-    // }
-    // .run(&mut cli.state, &cli.cli_settings)?;
+    // from Kaapo: m=1 muv=5 2.03838e-02 m=2 muv=5 	1.16050e-02	 m=3 muv=5 6.46968e-03
 
-    status_info!("Integral result without caching: {:#?}", integral_no_cache);
+    cli.run_command("set model mass_scalar_1={re:1.0,im:0.0}")?;
+    let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
+    assert_snapshot!(format!("{:.8e}",integral_no_cache.result),@"(2.0361143153099125e-2+0e0i)");
 
-    assert_snapshot!(format!("{:.8e}",integral_no_cache.result),@"(2.036114315309913e-2+0e0i)");
+    cli.run_command("set model mass_scalar_1={re:2.0,im:0.0}")?;
+    let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
+    assert_snapshot!(format!("{:.8e}",integral_no_cache.result),@"(1.1584675622329286e-2+0e0i)");
+
+    cli.run_command("set model mass_scalar_1={re:3.0,im:0.0}")?;
+    let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
+    assert_snapshot!(format!("{:.8e}",integral_no_cache.result),@"(6.460057304375133e-3+0e0i)");
+
+    clean_test(&cli.cli_settings.state_folder);
+
+    Ok(())
+}
+
+#[test]
+fn scalar_sunrise() -> Result<()> {
+    let mut cli = get_test_cli(
+        Some("scalar_sunrise.toml".into()),
+        get_tests_workspace_path().join("scalar_sunrise"),
+        Some("scalar_sunrise".to_string()),
+        false,
+    )?;
+
+    let integrate_command = Integrate {
+        process_id: Some(0),
+        integrand_name: Some("default".to_string()),
+        result_path: Some(
+            get_tests_workspace_path()
+                .join("scalar_sunrise/integration_workspace/integration_results.toml"),
+        ),
+        workspace_path: Some(
+            get_tests_workspace_path().join("scalar_sunrise/integration_workspace"),
+        ),
+        n_cores: Some(1),
+        target: None,
+        restart: true,
+    };
+
+    // from Kaapo: m=1 muv=5 4.37688e-03 m=2 muv=5 	2.48100e-03	 m=3 muv=5 1.07231e-03
+    cli.run_command("set model mass_scalar_1={re:1.0,im:0.0}")?;
+    let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
+    assert_snapshot!(format!("{:.8e}",integral_no_cache.result),@"(2.0361143153099125e-2+0e0i)");
+
+    cli.run_command("set model mass_scalar_1={re:2.0,im:0.0}")?;
+    let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
+    assert_snapshot!(format!("{:.8e}",integral_no_cache.result),@"(1.1584675622329286e-2+0e0i)");
+
+    cli.run_command("set model mass_scalar_1={re:3.0,im:0.0}")?;
+    let integral_no_cache = integrate_command.run(&mut cli.state, &cli.cli_settings)?;
+    assert_snapshot!(format!("{:.8e}",integral_no_cache.result),@"(6.460057304375133e-3+0e0i)");
 
     clean_test(&cli.cli_settings.state_folder);
 
