@@ -871,7 +871,7 @@ impl GammaLoopAPI {
         subgraph_nodes: Vec<String>,
         reverse_dangling: Vec<usize>,
         orientation_pattern: Option<String>,
-    ) -> PyResult<String> {
+    ) -> PyResult<Vec<(HashMap<usize, i32>, String)>> {
         let graph = Graph::from_string(dot_string, &self.gammaloop_state.model)
             .unwrap()
             .pop()
@@ -920,12 +920,29 @@ impl GammaLoopAPI {
             None => OrientationPattern { pat: None },
         };
 
-        let atom = cff.to_atom(or_pattern);
+        let atoms = cff.get_orientation_atoms_with_data(or_pattern);
         let inverse_energies = graph::get_cff_inverse_energy_product_impl(&graph, &subgraph, &[]);
 
-        let energy_sub = cff.surfaces.substitute_energies(&atom, &[]) * inverse_energies;
+        let result = atoms
+            .into_iter()
+            .map(|(atom, orientation_data)| {
+                let energy_sub = cff.surfaces.substitute_energies(&atom, &[]) * &inverse_energies;
+                let string_atom = energy_sub.to_string();
 
-        Ok(energy_sub.to_string())
+                let mut orientation_as_hashmap = HashMap::new();
+                for (edge_id, direction) in orientation_data.orientation.into_iter() {
+                    let direction = match direction {
+                        Orientation::Default => 1,
+                        Orientation::Reversed => -1,
+                        Orientation::Undirected => 0,
+                    };
+                    orientation_as_hashmap.insert(edge_id.0, direction);
+                }
+                (orientation_as_hashmap, string_atom)
+            })
+            .collect_vec();
+
+        Ok(result)
     }
     /*
 

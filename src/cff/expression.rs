@@ -288,20 +288,34 @@ where
             .unwrap_or_default()
     }
 
-    pub(crate) fn get_orientation_atoms(&self) -> TiVec<AmplitudeOrientationID, Atom> {
+    pub(crate) fn get_orientation_atoms(
+        &self,
+        pattern: OrientationPattern,
+    ) -> TiVec<AmplitudeOrientationID, Atom> {
         self.orientations
             .iter()
-            .map(|orientation| orientation.expression.to_atom_inv())
+            .map(|orientation| {
+                if pattern.alt_filter(orientation.orientation()) {
+                    orientation.expression.to_atom_inv()
+                } else {
+                    Atom::new()
+                }
+            })
             .collect()
     }
 
-    pub(crate) fn get_orientation_atoms_with_data(
+    pub fn get_orientation_atoms_with_data(
         &self,
+        pattern: OrientationPattern,
     ) -> TiVec<AmplitudeOrientationID, (Atom, OrientationData)> {
         self.orientations
             .iter()
             .map(|orientation| {
-                let atom = orientation.expression.to_atom_inv();
+                let atom = if pattern.alt_filter(orientation.orientation()) {
+                    orientation.expression.to_atom_inv()
+                } else {
+                    Atom::new()
+                };
                 let data = orientation.data.clone();
                 (atom, data)
             })
