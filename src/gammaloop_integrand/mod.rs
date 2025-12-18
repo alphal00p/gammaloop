@@ -1,5 +1,4 @@
 use std::fs;
-use std::ops::Range;
 use std::path::Path;
 
 use crate::evaluation_result::{EvaluationMetaData, EvaluationResult};
@@ -10,7 +9,6 @@ use crate::model::Model;
 use crate::momentum::Rotation;
 use crate::momentum_sample::{BareMomentumSample, LoopMomenta, MomentumSample};
 use crate::settings::GlobalSettings;
-use crate::status_debug;
 use crate::utils::{F, FloatLike, format_for_compare_digits, get_n_dim_for_n_loop_momenta};
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::owo_colors::OwoColorize;

@@ -58,7 +58,7 @@ pub struct RuntimeSettings {
 }
 
 fn default_logfile_directive() -> String {
-    "debug".to_string()
+    "off".to_string()
 }
 
 fn default_display_directive() -> String {

@@ -122,7 +122,7 @@ fn scalar_bubble() {
         &model,
         &GenerationSettings {
             uv: UVgenerationSettings {
-                generate_integrated: false,
+                generate_integrated: true,
                 ..Default::default()
             },
             ..Default::default()
@@ -179,7 +179,7 @@ fn scalar_bubble() {
     settings.sampling = SamplingSettings::DiscreteGraphs(DiscreteGraphSamplingSettings::default());
     let mut rng = MonteCarloRng::new(1234567, 0);
 
-    let scales = logspace(2., 6., 10, 10.);
+    let scales = logspace(2., 10., 10, 10.);
 
     for (i, g) in amp.graphs.iter().enumerate() {
         for lmb in g.derived_data.lmbs.as_ref().unwrap() {
@@ -212,7 +212,9 @@ fn scalar_bubble() {
                     false,
                 );
 
-                res.push(inspect_res_eval)
+                println!("Jac{:?}", inspect_res_jac);
+
+                res.push(inspect_res_eval * F(inspect_res_jac.unwrap()))
             }
 
             for r in res.iter() {

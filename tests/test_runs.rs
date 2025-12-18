@@ -354,6 +354,54 @@ fn test_grouped_subtraction() -> Result<()> {
 }
 
 #[test]
+fn scalar_bubble() -> Result<()> {
+    let mut cli = get_test_cli(
+        Some("scalar_bubble.toml".into()),
+        get_tests_workspace_path().join("scalar_bubble"),
+        Some("scalar_bubble".to_string()),
+        false,
+    )?;
+
+    cli.run_command("set process -p 0 -i default kv general.enable_cache=false")?;
+    let integral_no_cache = Integrate {
+        process_id: Some(0),
+        integrand_name: Some("default".to_string()),
+        result_path: Some(
+            get_tests_workspace_path()
+                .join("scalar_box/integration_workspace/integration_results.toml"),
+        ),
+        workspace_path: Some(get_tests_workspace_path().join("scalar_box/integration_workspace")),
+        n_cores: Some(1),
+        target: None,
+        restart: true,
+    }
+    .run(&mut cli.state, &cli.cli_settings)?;
+
+    // cli.run_command("set process -p 0 -i default kv general.enable_cache=true")?;
+    // let integral_with_cache = Integrate {
+    //     process_id: Some(0),
+    //     integrand_name: Some("default".to_string()),
+    //     result_path: Some(
+    //         get_tests_workspace_path()
+    //             .join("scalar_box/integration_workspace/integration_results.toml"),
+    //     ),
+    //     workspace_path: Some(get_tests_workspace_path().join("scalar_box/integration_workspace")),
+    //     target: None,
+    //     n_cores: Some(1),
+    //     restart: true,
+    // }
+    // .run(&mut cli.state, &cli.cli_settings)?;
+
+    status_info!("Integral result without caching: {:#?}", integral_no_cache);
+
+    assert_snapshot!(format!("{:.8e}",integral_no_cache.result),@"(2.036114315309913e-2+0e0i)");
+
+    clean_test(&cli.cli_settings.state_folder);
+
+    Ok(())
+}
+
+#[test]
 fn scalar_box() -> Result<()> {
     let mut cli = get_test_cli(
         Some("scalar_box.toml".into()),

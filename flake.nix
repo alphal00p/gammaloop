@@ -322,7 +322,7 @@
           cargo-watch
           bacon
           # python311
-          texlive.combined.scheme-medium
+          gfortran
           uv
           ghostscript
           graphviz
