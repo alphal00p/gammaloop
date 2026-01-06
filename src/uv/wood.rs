@@ -5,7 +5,10 @@ use slotmap::SecondaryMap;
 use std::collections::VecDeque;
 use std::fmt::Write;
 
-use linnet::half_edge::{HedgeGraph, subgraph::InternalSubGraph};
+use linnet::half_edge::{
+    HedgeGraph,
+    subgraph::{InternalSubGraph, SubSetLike},
+};
 
 // use vakint::{EvaluationOrder, LoopNormalizationFactor, Vakint, VakintSettings};
 
@@ -158,7 +161,7 @@ impl Wood {
         self.poset.to_dot_impl(&|n| {
             format!(
                 "label={}, dod={},topo_order = {}",
-                n.dot_id(shift),
+                n.data.string_label(),
                 graph.dod(&n.data),
                 // graph.as_ref().count_internal_edges(&n.data),
                 n.order.unwrap()

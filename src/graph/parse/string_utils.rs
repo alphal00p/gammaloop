@@ -41,7 +41,7 @@ where
         // let mut opts = PrintOptions::file();
         // opts.hide_namespace = Some("gammalooprs");
         format!(
-            "\"{}\"",
+            "{}",
             self.to_canonically_ordered_string(CanonicalOrderingSettings {
                 include_namespace: true,
                 include_attributes: false,

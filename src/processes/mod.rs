@@ -50,6 +50,7 @@ pub struct ProcessList {
 pub struct DotExportSettings {
     // pub root_folder: PathBuf,
     pub combine_diagrams: bool,
+    pub with_uv: bool,
     pub output_full_numerator: bool,
     pub split_xs_by_initial_states: bool,
     pub do_gamma_algebra: bool,
@@ -65,6 +66,7 @@ impl Default for DotExportSettings {
             do_gamma_algebra: false,
             do_color_algebra: true,
             combine_diagrams: false,
+            with_uv: false,
         }
     }
 }

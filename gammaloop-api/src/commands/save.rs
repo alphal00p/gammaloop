@@ -27,6 +27,9 @@ pub enum Save {
         combine_diagrams: bool,
         #[arg(short = 'n', long,num_args(0..=1), default_missing_value = "true",
                value_parser = clap::builder::BoolishValueParser::new(),)]
+        with_uv: Option<bool>,
+        #[arg(short = 'n', long,num_args(0..=1), default_missing_value = "true",
+               value_parser = clap::builder::BoolishValueParser::new(),)]
         output_full_numerator: Option<bool>,
         #[arg(short = 'g', long,num_args(0..=1), default_missing_value = "true",
                value_parser = clap::builder::BoolishValueParser::new(),)]
@@ -55,6 +58,7 @@ impl Save {
                 output_full_numerator,
                 do_color_algebra,
                 do_gamma_algebra,
+                with_uv,
             } => {
                 // Use original default location (state folder) or custom path if provided
                 let target_dir = path.unwrap_or(global_settings.state_folder.clone());
@@ -79,6 +83,7 @@ impl Save {
                     do_gamma_algebra: do_gamma_algebra.unwrap_or(false),
                     output_full_numerator: output_full_numerator.unwrap_or(false),
                     split_xs_by_initial_states: true,
+                    with_uv: with_uv.unwrap_or(false),
                     combine_diagrams,
                 };
 

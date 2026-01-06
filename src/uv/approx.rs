@@ -7,7 +7,7 @@ use crate::{
         expression::{GraphOrientation, OrientationID},
         generation::{ShiftRewrite, generate_uv_cff},
     },
-    graph::{Edge, Graph, LMBext, LoopMomentumBasis, Vertex},
+    graph::{Edge, Graph, LMBext, LoopMomentumBasis, NumHedgeData, Vertex},
     momentum::Sign,
     numerator::{ParsingNet, aind::Aind, symbolica_ext::AtomCoreExt},
     status_info,
@@ -324,6 +324,7 @@ pub struct Approximation {
     pub local_3d: CFFapprox, //3d denoms
     pub final_integrand: Option<ParsingNet>,
     pub integrated_4d: ApproxOp, //4d
+    pub integrated_pole_part: ApproxOp,
     pub simple_approx: Option<SimpleApprox>,
 }
 
@@ -451,6 +452,7 @@ impl Approximation {
             simple_approx: None,
             local_3d: CFFapprox::NotComputed,
             integrated_4d: ApproxOp::NotComputed,
+            integrated_pole_part: ApproxOp::NotComputed,
         }
     }
 
@@ -467,13 +469,28 @@ impl Approximation {
         uv_graph: &G,
         amplitude_subgraph: &S,
         settings: &UVgenerationSettings,
+        pole_part: bool,
     ) -> ApproxOp {
         let graph = uv_graph.as_ref();
         let reduced = self.subgraph.subtract(&dependent.subgraph);
 
-        let Some((inner_t, sign)) = dependent.integrated_4d.expr() else {
+        let dep = if pole_part {
+            dependent.integrated_pole_part.expr()
+        } else {
+            dependent.integrated_4d.expr()
+        };
+        let Some((inner_t, sign)) = dep else {
             return ApproxOp::NotComputed;
         };
+
+        //(int + inner)*red
+        // K = T - Tb
+        // K(A*K(B))= T(A*T(B)) + Tb(A*Tb(B))
+        // Tb(A*Tb(B))
+        //
+        // T(A*T4d(B))
+        //Tb(A*(T(B)+Tb(B))=Tb(A*Tb(B))
+        // (1 + G_inner)*G_red
         let mut t_arg = uv_graph
             .numerator(&reduced)
             .to_d_dim(GS.dim)
@@ -484,21 +501,26 @@ impl Approximation {
         t_arg = t_arg.simplify_gamma() / uv_graph.denominator(&reduced, |_| 1);
 
         let ep = vakint_symbol!("ε");
+        let n_loops = uv_graph.n_loops(amplitude_subgraph);
 
         // strip the pole part of inner_t as this is removed by MS bar
         let mut pole_stripped = inner_t
-            .series(
-                ep,
-                Atom::Zero,
-                (uv_graph.n_loops(amplitude_subgraph) as i64 + 1).into(),
-                true,
-            )
+            .series(ep, Atom::Zero, (n_loops as i64 + 1).into(), true)
             .unwrap()
             .to_atom();
-        for i in -(uv_graph.n_loops(&dependent.subgraph) as i64)..0 {
-            pole_stripped = pole_stripped
-                .replace(Atom::var(ep).npow(i))
-                .with(Atom::Zero);
+
+        if pole_part {
+            for i in 0..(n_loops as i64 + 1) {
+                pole_stripped = pole_stripped
+                    .replace(Atom::var(ep).npow(i))
+                    .with(Atom::Zero);
+            }
+        } else {
+            for i in -(uv_graph.n_loops(&dependent.subgraph) as i64)..0 {
+                pole_stripped = pole_stripped
+                    .replace(Atom::var(ep).npow(i))
+                    .with(Atom::Zero);
+            }
         }
 
         let mut atomarg = t_arg * pole_stripped;
@@ -663,8 +685,16 @@ impl Approximation {
         dependent: &Self,
         settings: &UVgenerationSettings,
     ) {
-        self.integrated_4d =
-            self.integrated_4d(dependent, vakint, graph, amplitude_subgraph, settings);
+        self.integrated_4d = self.integrated_4d(
+            dependent,
+            vakint,
+            graph,
+            amplitude_subgraph,
+            settings,
+            false,
+        );
+        self.integrated_pole_part =
+            self.integrated_4d(dependent, vakint, graph, amplitude_subgraph, settings, true);
     }
 
     /// Computes the 3d approximation of the UV
@@ -970,6 +1000,14 @@ impl Approximation {
             finite.printer(LOGPRINTOPTS)
         );
         let reduced = amplitude.included().subtract(&self.subgraph.included());
+
+        // let concrete_red = graph.as_ref().concretize(&reduced).map(
+        //     |_, _, v| v.clone(),
+        //     |_, _, _, e, d| d.map(Clone::clone),
+        //     |h, s| NumHedgeData::de,
+        // );
+
+        // graph.as_ref()..contract_subgraph(&reduced, node_data_merge);
 
         let mut cff = s * t - s * finite * t_arg.integrand;
 

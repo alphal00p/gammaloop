@@ -72,7 +72,7 @@ linnet = { version = "0.15", features = [
     "symbolica",
 ] }
 
-vakint = { git = "https://github.com/alphal00p/vakint", rev = "a32723f7c56ce73dd6a35713880e3a924e72c51b" } # "e44c210ded3936048615d39872022a0b6ef18454"
+# vakint = { git = "https://github.com/alphal00p/vakint", rev = "a32723f7c56ce73dd6a35713880e3a924e72c51b" } # "e44c210ded3936048615d39872022a0b6ef18454"
 momtrop = { version = "0.3.0" }
 serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "*"
@@ -178,6 +178,7 @@ json5 = "0.4.1"
 
 # gmp-mpfr-sys = { version = "1.6", features = ["use-system-libs"] }
 rug = { version = "1.27.0", features = ["serde"] }
+vakint = "0.1.2"
 [dependencies.pyo3]
 features = ["abi3", "abi3-py37", "eyre", "auto-initialize"]
 optional = true
@@ -217,7 +218,7 @@ higher_loops = []
 # symbolica = { git = "https://github.com/alphal00p/symbolica", rev = "a23ebaa71b1bc715a129ac765764ece7273625dc" }
 # symbolica = { path = "../symbolica" }
 # linnet = "0.10.0"
-# linnet = { path = "../linnet" }
+linnet = { path = "../linnet" }
 # linnet = { git = "https://github.com/alphal00p/linnet", rev = "aa7da353060b53f0af5a79810ed5383026871394" }
 # spenso = { git = "https://github.com/alphal00p/spenso", rev = "5e1c358e11b131ecd0d83da4453ad4cc28983165" }
 # spenso={path="../spenso/spenso"}

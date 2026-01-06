@@ -1,5 +1,8 @@
 use itertools::Itertools;
-use linnet::{half_edge::involution::Hedge, parser::DotHedgeData};
+use linnet::{
+    half_edge::involution::{Flow, Hedge},
+    parser::DotHedgeData,
+};
 use spenso::structure::{
     OrderedStructure, PermutedStructure, TensorStructure,
     representation::{LibraryRep, LibrarySlot},
@@ -7,7 +10,7 @@ use spenso::structure::{
 };
 use symbolica::atom::{Atom, FunctionBuilder};
 
-use crate::numerator::aind::Aind;
+use crate::{graph::edge::PossibleParticle, numerator::aind::Aind};
 
 use super::parse::ParseGraph;
 
@@ -37,63 +40,60 @@ pub struct NumIndices {
 }
 
 impl NumIndices {
+    fn from_particle(particle: &PossibleParticle, flow: Flow, h: Hedge) -> Self {
+        let creps = particle.color_reps(flow);
+        let sreps = particle.spin_reps();
+
+        let mut init = 0;
+        let mut last = None;
+        let color_structure: PermutedStructure<_> = creps
+            .external_reps_iter()
+            .map(|r| {
+                if let Some(l) = last {
+                    if l != r {
+                        last = Some(r);
+                        init = 0;
+                    } else {
+                        init += 1;
+                    }
+                } else {
+                    last = Some(r);
+                    init = 0;
+                }
+                r.slot(Aind::Hedge(h.0 as u16, init))
+            })
+            .collect();
+
+        let spin_structure: PermutedStructure<_> = sreps
+            .external_reps_iter()
+            .map(|r| {
+                if let Some(l) = last {
+                    if l != r {
+                        last = Some(r);
+                        init = 0;
+                    } else {
+                        init += 1;
+                    }
+                } else {
+                    last = Some(r);
+                    init = 0;
+                }
+                r.slot(Aind::Hedge(h.0 as u16, init))
+            })
+            .collect();
+
+        NumIndices {
+            color_indices: HedgeIndices::new(color_structure.structure),
+            spin_indices: HedgeIndices::new(spin_structure.structure),
+        }
+    }
+
     pub(crate) fn parse<'a>(graph: &'a ParseGraph) -> impl FnMut(Hedge, &'a ParseHedge) -> Self {
         |h, _| {
             let eid = graph[&h];
             let flow = graph.flow(h);
-            // let orientation = graph.orientation(h);
 
-            // let flow = match orientation {
-            //     Orientation::Default => flow,
-            //     Orientation::Reversed => -flow,
-            //     Orientation::Undirected => flow,
-            // };
-
-            let creps = graph[eid].particle.color_reps(flow);
-            let sreps = graph[eid].particle.spin_reps();
-
-            let mut init = 0;
-            let mut last = None;
-            let color_structure: PermutedStructure<_> = creps
-                .external_reps_iter()
-                .map(|r| {
-                    if let Some(l) = last {
-                        if l != r {
-                            last = Some(r);
-                            init = 0;
-                        } else {
-                            init += 1;
-                        }
-                    } else {
-                        last = Some(r);
-                        init = 0;
-                    }
-                    r.slot(Aind::Hedge(h.0 as u16, init))
-                })
-                .collect();
-
-            let spin_structure: PermutedStructure<_> = sreps
-                .external_reps_iter()
-                .map(|r| {
-                    if let Some(l) = last {
-                        if l != r {
-                            last = Some(r);
-                            init = 0;
-                        } else {
-                            init += 1;
-                        }
-                    } else {
-                        last = Some(r);
-                        init = 0;
-                    }
-                    r.slot(Aind::Hedge(h.0 as u16, init))
-                })
-                .collect();
-
-            NumIndices {
-                color_indices: HedgeIndices::new(color_structure.structure),
-                spin_indices: HedgeIndices::new(spin_structure.structure),
-            }
+            Self::from_particle(&graph[eid].particle, flow, h)
         }
     }
 }

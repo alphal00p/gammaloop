@@ -1236,7 +1236,6 @@ impl AmplitudeGraph {
 pub struct AmplitudeDerivedData {
     pub all_mighty_integrand: Atom,
     pub threshold_counterterms: TiVec<EsurfaceID, AmplitudeCountertermAtom>,
-
     pub multi_channeling_setup: Option<LmbMultiChannelingSetup>,
     pub lmbs: Option<TiVec<LmbIndex, LoopMomentumBasis>>,
     pub tropical_sampler: Option<SampleGenerator<3>>,

@@ -74,6 +74,7 @@ fn four_photon_one_loop_amp() {
             generate_integrated: true,
             softct: todo!(),
             vakint: VakintSettings::default(),
+            ..Default::default()
         },
         ..Default::default()
     })

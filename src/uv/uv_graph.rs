@@ -30,6 +30,8 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
         self.as_ref().cyclotomatic_number(subgraph)
     }
 
+    // fn concretize_spinney<S: SubGraphLike<Base = SuBitGraph>>(&self, subgraph: &S) -> Graph;
+
     fn dummy_less_full_crown<S: SubGraphLike>(&self, subgraph: &S) -> S::Base
     where
         S::Base: ModifySubSet<Hedge> + SubGraphOps;
@@ -170,14 +172,19 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
         .map(|a| a.into_iter().map(|c| c.internal_graph(ref_graph)).collect())
         .unwrap();
 
-        // println!("{}", self.base_dot());
+        for s in &all_subcycles {
+            println!("Subcycle: {}", self.as_ref().dot(s));
+        }
+
         let mut spinneys: AHashSet<_> = InternalSubGraph::all_ops_iterative_filter_map(
             &all_subcycles,
             &|a, b| a.union(b),
             &|union| {
+                println!("{}", self.as_ref().dot(&union));
                 if self.dod(&union) >= 0 {
                     Some(union)
                 } else {
+                    println!("Negative dod:{}", self.dod(&union));
                     None
                 }
             },
@@ -211,6 +218,23 @@ impl UltravioletGraph for Graph {
 
         ac
     }
+
+    // fn concretize_spinney<S: SubGraphLike<Base = SuBitGraph>>(&self, s: &S) -> Graph {
+    //     let mut underlying = self.underlying.clone();
+    //     let dod = self.dod(s);
+    //     let cc = underlying.connected_components(s);
+
+    //     for c in cc{
+
+    //     let v = Vertex {
+
+    //     }
+    //     underlying.identify_nodes_without_self_edges(s, node_data_merge);
+    //     };
+    //     }
+
+    //     self.clone()
+    // }
 
     fn denominator<S: SubGraphLike, T: Fn(&Edge) -> isize>(
         &self,
