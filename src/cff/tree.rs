@@ -1,4 +1,5 @@
 use bincode_trait_derive::{Decode, Encode};
+use color_eyre::owo_colors::OwoColorize;
 use derive_more::{From, Into};
 use serde::{Deserialize, Serialize};
 use symbolica::atom::Atom;
@@ -6,7 +7,21 @@ use typed_index_collections::TiVec;
 
 /// data structure for a tree
 
-#[derive(Debug, From, Into, Copy, Clone, Serialize, Deserialize, Encode, Decode)]
+#[derive(
+    Debug,
+    From,
+    Into,
+    Copy,
+    Clone,
+    Serialize,
+    Deserialize,
+    Encode,
+    Decode,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+)]
 pub struct NodeId(usize);
 
 impl NodeId {
@@ -15,7 +30,7 @@ impl NodeId {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, Eq, PartialEq)]
 pub struct TreeNode<T> {
     pub data: T,
     pub node_id: NodeId,
@@ -23,7 +38,36 @@ pub struct TreeNode<T> {
     pub parent: Option<NodeId>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
+fn determine_shifted_id(removed_ids_sorted: &[NodeId], original_id: NodeId) -> NodeId {
+    let shift = removed_ids_sorted
+        .iter()
+        .filter(|&&removed_id| removed_id < original_id)
+        .count();
+    NodeId(original_id.0 - shift)
+}
+
+impl<T> TreeNode<T> {
+    fn update_node_ids(&mut self, removed_ids: &[NodeId]) {
+        self.node_id = determine_shifted_id(&removed_ids, self.node_id);
+
+        self.children
+            .retain(|child_id| !removed_ids.contains(child_id));
+        self.children.iter_mut().for_each(|child_id| {
+            *child_id = determine_shifted_id(&removed_ids, *child_id);
+        });
+
+        if let Some(parent_id) = self.parent {
+            if removed_ids.contains(&parent_id) {
+                self.parent = None;
+            } else {
+                let shifted_parent_id = determine_shifted_id(&removed_ids, parent_id);
+                self.parent = Some(shifted_parent_id);
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, Eq, PartialEq)]
 pub struct Tree<T> {
     nodes: TiVec<NodeId, TreeNode<T>>,
 }
@@ -96,6 +140,34 @@ impl<T> Tree<T> {
     pub(crate) fn iter_nodes(&self) -> impl Iterator<Item = &TreeNode<T>> {
         self.nodes.iter()
     }
+
+    fn obtain_subtree_node_ids_impl(&self, node_id: NodeId, collected_ids: &mut Vec<NodeId>) {
+        for &child_id in &self.nodes[node_id].children {
+            collected_ids.push(child_id);
+            self.obtain_subtree_node_ids_impl(child_id, collected_ids);
+        }
+    }
+
+    fn obtain_subtree_node_ids(&self, node_id: NodeId) -> Vec<NodeId> {
+        let mut collected_ids = vec![node_id];
+        self.obtain_subtree_node_ids_impl(node_id, &mut collected_ids);
+        collected_ids
+    }
+
+    pub(crate) fn remove_node(&mut self, node_id: NodeId) {
+        let mut subtree = self.obtain_subtree_node_ids(node_id);
+        subtree.sort();
+
+        // from largest to smallest, this way the shifting of indices does not affect the removal
+        for id in subtree.iter().rev() {
+            self.nodes.remove(*id);
+        }
+
+        for node in &mut self.nodes {
+            // shift all the node ids accordingly
+            node.update_node_ids(&subtree);
+        }
+    }
 }
 
 impl<T> Tree<T>
@@ -119,5 +191,55 @@ where
 
     pub(crate) fn to_atom_inv(&self) -> Atom {
         self.to_atom_inv_impl(NodeId::root())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use dot_parser::canonical::Node;
+
+    use crate::cff::tree::{NodeId, Tree};
+
+    #[test]
+    fn test_remove_node() {
+        let mut tree = Tree::from_root(0);
+        tree.insert_node(NodeId(0), 1);
+        tree.insert_node(NodeId(0), 2);
+        tree.insert_node(NodeId(2), 3);
+        tree.insert_node(NodeId(2), 4);
+        tree.insert_node(NodeId(4), 5);
+        tree.insert_node(NodeId(4), 6);
+        tree.insert_node(NodeId(4), 7);
+        tree.insert_node(NodeId(7), 8);
+        tree.insert_node(NodeId(7), 9);
+
+        tree.remove_node(NodeId(4));
+
+        let mut expected_tree = Tree::from_root(0);
+        expected_tree.insert_node(NodeId(0), 1);
+        expected_tree.insert_node(NodeId(0), 2);
+        expected_tree.insert_node(NodeId(2), 3);
+
+        assert_eq!(tree, expected_tree);
+
+        let mut tree = Tree::from_root(0);
+        tree.insert_node(NodeId(0), 1);
+        tree.insert_node(NodeId(1), 2);
+        tree.insert_node(NodeId(1), 3);
+        tree.insert_node(NodeId(1), 4);
+        tree.insert_node(NodeId(4), 5);
+        tree.insert_node(NodeId(4), 6);
+        tree.insert_node(NodeId(0), 7);
+        tree.insert_node(NodeId(7), 8);
+        tree.insert_node(NodeId(7), 9);
+
+        tree.remove_node(NodeId(1));
+
+        let mut expected_tree = Tree::from_root(0);
+        expected_tree.insert_node(NodeId(0), 7);
+        expected_tree.insert_node(NodeId(1), 8);
+        expected_tree.insert_node(NodeId(1), 9);
+
+        assert_eq!(tree, expected_tree);
     }
 }

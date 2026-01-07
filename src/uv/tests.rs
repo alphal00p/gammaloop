@@ -72,6 +72,7 @@ fn four_photon_one_loop_amp() {
         ),
         uv: UVgenerationSettings {
             generate_integrated: true,
+            softct: todo!(),
             vakint: VakintSettings::default(),
         },
         ..Default::default()
