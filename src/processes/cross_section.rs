@@ -663,7 +663,7 @@ impl CrossSectionGraph {
 
         if settings.threshold_subtraction.enable_thresholds {
             debug!("building threshold counterterm");
-            self.build_threshold_counteterm(settings)?;
+            self.build_threshold_counterterm(settings)?;
             self.build_subspace_data()?;
         }
 
@@ -1242,7 +1242,7 @@ impl CrossSectionGraph {
         self.derived_data.multi_channeling_setup = Some(channels)
     }
 
-    fn build_threshold_counteterm(&mut self, settings: &GenerationSettings) -> Result<()> {
+    fn build_threshold_counterterm(&mut self, settings: &GenerationSettings) -> Result<()> {
         // thershold enumeration as st cuts
         let all_possible_thresholds: TiVec<GlobalThresholdId, _> = {
             let mut unsorted = self.graph.all_st_cuts_for_cs(
