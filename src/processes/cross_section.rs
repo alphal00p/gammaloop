@@ -653,7 +653,7 @@ impl CrossSectionGraph {
         self.build_lmbs();
         debug!("building multi channeling channels");
 
-        // self.determine_raisings()?;
+        self.determine_raisings()?;
 
         if self.graph.is_group_master {
             self.build_multi_channeling_channels();
@@ -756,13 +756,38 @@ impl CrossSectionGraph {
                                 crossed_pairs.contains(&combination_tuple)
                             });
 
-                            if has_crossing { None } else { Some(subset) }
+                            if has_crossing {
+                                None
+                            } else {
+                                // sort by number of vertices on left side, for non crossing cuts, this will sort them from left to right.
+                                let sorted_subset = subset
+                                    .iter()
+                                    .sorted_by(|cut_id_a, cut_id_b| {
+                                        let left_of_cut_a = &self.cuts[***cut_id_a].left;
+                                        let left_of_cut_b = &self.cuts[***cut_id_b].left;
+                                        let n_vertices_a = self
+                                            .graph
+                                            .underlying
+                                            .iter_nodes_of(left_of_cut_a)
+                                            .count();
+                                        let n_vertices_b = self
+                                            .graph
+                                            .underlying
+                                            .iter_nodes_of(left_of_cut_b)
+                                            .count();
+                                        n_vertices_a.cmp(&n_vertices_b)
+                                    })
+                                    .copied()
+                                    .collect_vec();
+                                Some(sorted_subset)
+                            }
                         }
                     })
                     .collect_vec()
             })
             .collect::<TiVec<RaisedCutId, _>>();
 
+        // now check all sandwiches and check for connectedness
         println!("cross free powersets: {:?}", cross_free_powersets);
 
         todo!("store this data");
