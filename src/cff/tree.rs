@@ -1,6 +1,9 @@
+use std::collections::HashSet;
+
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::owo_colors::OwoColorize;
 use derive_more::{From, Into};
+use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use symbolica::atom::Atom;
 use typed_index_collections::TiVec;
@@ -21,6 +24,7 @@ use typed_index_collections::TiVec;
     Eq,
     PartialOrd,
     Ord,
+    Hash,
 )]
 pub struct NodeId(usize);
 
@@ -166,6 +170,27 @@ impl<T> Tree<T> {
         for node in &mut self.nodes {
             // shift all the node ids accordingly
             node.update_node_ids(&subtree);
+        }
+    }
+
+    pub(crate) fn filter_mut(&mut self, predicate: impl Fn(&T) -> bool) {
+        let mut nodes_to_remove = HashSet::new();
+
+        for node in &self.nodes {
+            if !predicate(&node.data) {
+                nodes_to_remove.extend(self.obtain_subtree_node_ids(node.node_id));
+            }
+        }
+
+        let nodes_to_remove: Vec<NodeId> = nodes_to_remove.into_iter().sorted().collect();
+
+        for id in nodes_to_remove.iter().rev() {
+            self.nodes.remove(*id);
+        }
+
+        for node in &mut self.nodes {
+            // shift all the node ids accordingly
+            node.update_node_ids(&nodes_to_remove);
         }
     }
 }
