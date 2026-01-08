@@ -653,6 +653,8 @@ impl CrossSectionGraph {
         self.build_lmbs();
         debug!("building multi channeling channels");
 
+        // self.determine_raisings()?;
+
         if self.graph.is_group_master {
             self.build_multi_channeling_channels();
         }
@@ -670,6 +672,8 @@ impl CrossSectionGraph {
 
     pub(crate) fn determine_raisings(&mut self) -> Result<()> {
         let raised_edges = self.graph.get_raised_edge_groups();
+
+        println!("raised edges: {:?}", raised_edges);
 
         let normalized_cut_esurfaces = self
             .cut_esurface
@@ -714,6 +718,8 @@ impl CrossSectionGraph {
             }
         }
 
+        println!("raised groups: {:?}", raised_groups);
+
         let mut crossed_pairs = Vec::<(CutId, CutId)>::new();
         for cut_pair in self.cuts.iter_enumerated().combinations(2) {
             if cut_pair[0].1.left.includes(&cut_pair[1].1.left)
@@ -741,11 +747,11 @@ impl CrossSectionGraph {
                         if subset.is_empty() {
                             None
                         } else {
-                            let has_crossing = group.iter().combinations(2).any(|combination| {
+                            let has_crossing = subset.iter().combinations(2).any(|combination| {
                                 let combination_tuple = if combination[0].0 < combination[1].0 {
-                                    (*combination[0], *combination[1])
+                                    (**combination[0], **combination[1])
                                 } else {
-                                    (*combination[1], *combination[0])
+                                    (**combination[1], **combination[0])
                                 };
                                 crossed_pairs.contains(&combination_tuple)
                             });
@@ -757,6 +763,9 @@ impl CrossSectionGraph {
             })
             .collect::<TiVec<RaisedCutId, _>>();
 
+        println!("cross free powersets: {:?}", cross_free_powersets);
+
+        todo!("store this data");
         Ok(())
     }
 
