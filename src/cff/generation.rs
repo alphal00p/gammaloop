@@ -603,8 +603,8 @@ impl SurfaceCache {
     }
 
     pub(crate) fn iter_all_surfaces(
-        &self,
-    ) -> impl Iterator<Item = (HybridSurfaceID, HybridSurfaceRef)> + '_ {
+        &'_ self,
+    ) -> impl Iterator<Item = (HybridSurfaceID, HybridSurfaceRef<'_>)> + '_ {
         let esurface_id_iter = self.esurface_cache.iter_enumerated().map(|(id, esurface)| {
             (
                 HybridSurfaceID::Esurface(id),

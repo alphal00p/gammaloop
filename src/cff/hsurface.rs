@@ -12,6 +12,7 @@ use linnet::half_edge::subgraph::InternalSubGraph;
 use serde::{Deserialize, Serialize};
 use symbolica::atom::Atom;
 use symbolica::parse;
+use tracing::warn;
 use typed_index_collections::TiVec;
 
 use super::esurface::ExternalShift;
@@ -74,6 +75,44 @@ impl Hsurface {
 
         symbolic_sum_positive_energies - &symbolic_sum_negative_energies + &symbolic_shift
     }
+
+    pub(crate) fn equality_under_energy_conservation(
+        &self,
+        other: &Esurface,
+        constraints: &[&Esurface],
+    ) -> Option<bool> {
+        if !self.external_shift.is_empty() {
+            warn!("this is not handled yet");
+            return None;
+        }
+        constraints
+            .iter()
+            .find(|esurface| {
+                let res = self
+                    .negative_energies
+                    .iter()
+                    .all(|index| esurface.energies.contains(index));
+                res
+            })
+            .map(|constraint| {
+                let energies_to_be_added = constraint
+                    .energies
+                    .iter()
+                    .filter(|index| !self.negative_energies.contains(index));
+
+                let mut new_positive_energies = self.positive_energies.clone();
+                new_positive_energies.extend(energies_to_be_added);
+                new_positive_energies.sort();
+
+                let new_esurface = Esurface {
+                    energies: new_positive_energies,
+                    external_shift: constraint.external_shift.clone(),
+                    vertex_set: VertexSet::dummy(),
+                };
+
+                other == &new_esurface
+            })
+    }
 }
 
 impl From<HsurfaceID> for Atom {
@@ -94,6 +133,7 @@ mod tests {
     use symbolica::atom::{Atom, AtomCore};
 
     use symbolica::parse;
+    use tabled::assert;
 
     use crate::{
         cff::{cff_graph::VertexSet, esurface::Esurface},
@@ -129,5 +169,32 @@ mod tests {
         let diff = h_surface_atom - &expected_atom;
         let diff = diff.expand();
         assert_eq!(diff, Atom::new());
+    }
+
+    #[test]
+    fn test_equality_under_energy_conservation() {
+        let constraint = Esurface {
+            energies: vec![EdgeIndex::from(1), EdgeIndex::from(2)],
+            external_shift: vec![(EdgeIndex::from(0), -1)],
+            vertex_set: VertexSet::dummy(),
+        };
+
+        let hsurface = Hsurface {
+            positive_energies: vec![EdgeIndex::from(3), EdgeIndex::from(5)],
+            negative_energies: vec![EdgeIndex::from(2)],
+            external_shift: vec![],
+        };
+
+        let other = Esurface {
+            energies: vec![EdgeIndex::from(1), EdgeIndex::from(3), EdgeIndex::from(5)],
+            external_shift: vec![(EdgeIndex::from(0), -1)],
+            vertex_set: VertexSet::dummy(),
+        };
+
+        assert!(
+            hsurface
+                .equality_under_energy_conservation(&other, &[&constraint])
+                .unwrap()
+        );
     }
 }
