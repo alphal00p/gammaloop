@@ -653,7 +653,7 @@ impl CrossSectionGraph {
         self.build_lmbs();
         debug!("building multi channeling channels");
 
-        //self.determine_raisings()?;
+        self.determine_raisings()?;
 
         if self.graph.is_group_master {
             self.build_multi_channeling_channels();
@@ -775,14 +775,14 @@ impl CrossSectionGraph {
                                         n_vertices_a.cmp(&n_vertices_b)
                                     })
                                     .copied()
+                                    .copied()
                                     .collect_vec();
 
                                 let all_sandwiches_connected =
                                     sorted_subset.windows(2).all(|sequential_cuts| {
-                                        let left_of_first_cut =
-                                            &self.cuts[*sequential_cuts[0]].left;
+                                        let left_of_first_cut = &self.cuts[sequential_cuts[0]].left;
                                         let right_of_second_cut =
-                                            &self.cuts[*sequential_cuts[1]].right;
+                                            &self.cuts[sequential_cuts[1]].right;
 
                                         let sandwich = self
                                             .graph
@@ -808,7 +808,13 @@ impl CrossSectionGraph {
         // now check all sandwiches and check for connectedness
         println!("cross free powersets: {:?}", cross_free_powersets);
 
-        todo!("store this data");
+        let result = RaisedData {
+            raised_cut_groups: raised_groups,
+            cross_free_powersets,
+        };
+
+        self.derived_data.raised_data = result;
+
         Ok(())
     }
 
@@ -1083,7 +1089,6 @@ impl CrossSectionGraph {
                 &settings.uv,
                 true,
             );
-
             let left_expr = left_forest.orientation_parametric_expr(
                 Some(&esurface.bitvec(&self.graph.underlying)),
                 &self.graph,
@@ -1229,7 +1234,7 @@ impl CrossSectionGraph {
             run_time_decimal_precision: 32,
             number_of_terms_in_epsilon_expansion: self.graph.n_loops(&self.graph.no_dummy()) as i64
                 + 1,
-            // temporary_directory: Some("./form".into()),
+            // temporary_directory: Some("./form".into())R,
             mu_r_sq_symbol: GS.mu_r_sq.get_name().to_string(),
             ..VakintSettings::default()
         }))
@@ -1705,6 +1710,22 @@ pub struct CrossSectionDerivedData {
     pub tensor_network_cache: TiVec<CutId, (ParsingNet, ParsingNet)>,
     pub threshold_counterterms: TiVec<CutId, LUCounterTermData>,
     pub subspace_data: TiVec<CutId, (SubspaceData, SubspaceData)>,
+    pub raised_data: RaisedData,
+}
+
+#[derive(Clone, Encode, Decode)]
+pub struct RaisedData {
+    pub raised_cut_groups: TiVec<RaisedCutId, Vec<CutId>>,
+    pub cross_free_powersets: TiVec<RaisedCutId, Vec<Vec<CutId>>>,
+}
+
+impl RaisedData {
+    pub fn new() -> Self {
+        RaisedData {
+            raised_cut_groups: TiVec::new(),
+            cross_free_powersets: TiVec::new(),
+        }
+    }
 }
 
 impl CrossSectionDerivedData {
@@ -1718,6 +1739,7 @@ impl CrossSectionDerivedData {
             tensor_network_cache: TiVec::new(),
             threshold_counterterms: TiVec::new(),
             subspace_data: TiVec::new(),
+            raised_data: RaisedData::new(),
         }
     }
 }
