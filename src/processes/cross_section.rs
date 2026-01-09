@@ -653,13 +653,13 @@ impl CrossSectionGraph {
         self.build_lmbs();
         debug!("building multi channeling channels");
 
-        self.determine_raisings()?;
+        //self.determine_raisings()?;
 
         if self.graph.is_group_master {
             self.build_multi_channeling_channels();
         }
         debug!("building parametric integrand");
-        self.build_parametric_integrand(&settings)?;
+        self.build_parametric_integrand(settings)?;
 
         if settings.threshold_subtraction.enable_thresholds {
             debug!("building threshold counterterm");
@@ -681,9 +681,8 @@ impl CrossSectionGraph {
             .map(|esurface| {
                 let mut new_esurface = esurface.clone();
                 for energy in new_esurface.energies.iter_mut() {
-                    let group_index_of_energy = raised_edges
-                        .iter()
-                        .position(|group| group.contains(&energy));
+                    let group_index_of_energy =
+                        raised_edges.iter().position(|group| group.contains(energy));
 
                     if let Some(found_group_index) = group_index_of_energy {
                         *energy = *raised_edges[found_group_index].first().unwrap();
@@ -728,12 +727,10 @@ impl CrossSectionGraph {
                 || cut_pair[1].1.right.includes(&cut_pair[0].1.right)
             {
                 continue;
+            } else if cut_pair[0].0.0 < cut_pair[1].0.0 {
+                crossed_pairs.push((cut_pair[0].0, cut_pair[1].0));
             } else {
-                if cut_pair[0].0.0 < cut_pair[1].0.0 {
-                    crossed_pairs.push((cut_pair[0].0, cut_pair[1].0));
-                } else {
-                    crossed_pairs.push((cut_pair[1].0, cut_pair[0].0));
-                }
+                crossed_pairs.push((cut_pair[1].0, cut_pair[0].0));
             }
         }
 
@@ -741,7 +738,7 @@ impl CrossSectionGraph {
             .iter()
             .map(|group| {
                 group
-                    .into_iter()
+                    .iter()
                     .powerset()
                     .filter_map(|subset| {
                         if subset.is_empty() {
@@ -779,7 +776,28 @@ impl CrossSectionGraph {
                                     })
                                     .copied()
                                     .collect_vec();
-                                Some(sorted_subset)
+
+                                let all_sandwiches_connected =
+                                    sorted_subset.windows(2).all(|sequential_cuts| {
+                                        let left_of_first_cut =
+                                            &self.cuts[*sequential_cuts[0]].left;
+                                        let right_of_second_cut =
+                                            &self.cuts[*sequential_cuts[1]].right;
+
+                                        let sandwich = self
+                                            .graph
+                                            .full_filter()
+                                            .subtract(left_of_first_cut)
+                                            .subtract(right_of_second_cut);
+
+                                        self.graph.is_connected(&sandwich)
+                                    });
+
+                                if all_sandwiches_connected {
+                                    Some(sorted_subset)
+                                } else {
+                                    None
+                                }
                             }
                         }
                     })
