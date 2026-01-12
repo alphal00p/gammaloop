@@ -298,14 +298,14 @@ impl From<&ParseEdge> for DotEdgeData {
         }
         match &value.particle {
             PossibleParticle::Particle(p) => {
-                e.add_statement("particle", format!("\"{}\"", p.name));
+                e.add_statement("particle", format!("{}", p.name));
             }
             PossibleParticle::JustMass { expr, .. } => {
                 e.add_statement("mass", expr.to_quoted());
             }
             PossibleParticle::MassOverriddenParticle { mass, particle, .. } => {
                 e.add_statement("mass", mass.to_quoted());
-                e.add_statement("particle", format!("\"{}\"", particle.name));
+                e.add_statement("particle", format!("{}", particle.name));
             }
         }
         if let Some(lmb_id) = &value.lmb_id {
@@ -343,14 +343,14 @@ impl From<&Edge> for DotEdgeData {
         e.add_statement("name", value.name.clone());
         match &value.particle {
             PossibleParticle::Particle(p) => {
-                e.add_statement("particle", format!("\"{}\"", p.name));
+                e.add_statement("particle", format!("{}", p.name));
             }
             PossibleParticle::JustMass { expr, .. } => {
                 e.add_statement("mass", expr.to_quoted());
             }
             PossibleParticle::MassOverriddenParticle { mass, particle, .. } => {
                 e.add_statement("mass", mass.to_quoted());
-                e.add_statement("particle", format!("\"{}\"", particle.name));
+                e.add_statement("particle", format!("{}", particle.name));
             }
         }
         e.add_statement("dod", value.dod);

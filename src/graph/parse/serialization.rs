@@ -63,10 +63,10 @@ impl Graph {
                             let mut dot: DotEdgeData = e.into();
                             match flow {
                                 Flow::Sink => {
-                                    dot.add_statement("pin", format!("\"x:@+right\""));
+                                    dot.add_statement("pin", format!("x:@+right"));
                                 }
                                 Flow::Source => {
-                                    dot.add_statement("pin", format!("\"x:@-left\""));
+                                    dot.add_statement("pin", format!("x:@-left"));
                                 }
                             }
                             dot
