@@ -238,7 +238,7 @@ fn stability_check(
 
 #[inline]
 fn stability_check_on_norm(
-    settings: &RuntimeSettings,
+    _settings: &RuntimeSettings,
     results: &[Complex<F<f64>>],
     stability_settings: &StabilityLevelSetting,
     max_eval: Complex<F<f64>>,
@@ -394,8 +394,6 @@ impl LmbMultiChannelingSetup {
         model: &Model,
         alpha: &F<T>,
     ) -> (MomentumSample<T>, F<T>) {
-        let base_lmb = &self.graph.loop_momentum_basis;
-
         let sample = MomentumSample {
             sample: self.reinterpret_loop_momenta_impl(
                 channel_index,
@@ -833,7 +831,7 @@ fn evaluate_single<T: FloatLike, I: GammaloopIntegrand>(
 ) -> Complex<F<f64>> {
     let settings = integrand.get_settings().clone();
     let zero = Complex::new_re(gammaloop_sample.get_default_sample().zero());
-    let mut loop_cache_shift = 0;
+    let loop_cache_shift = 0;
     let cache = integrand.get_settings().general.enable_cache;
 
     let result = match &gammaloop_sample {

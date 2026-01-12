@@ -17,12 +17,10 @@ use serde::Deserialize;
 use serde::Serialize;
 use spenso::algebra::algebraic_traits::IsZero;
 use symbolica::domains::float::Constructible;
-use symbolica::numerical_integration::ContinuousGrid;
 use symbolica::numerical_integration::{Grid, MonteCarloRng, Sample, StatisticsAccumulator};
 
 use crate::INTERRUPTED;
 use crate::Integrand;
-use crate::disable;
 use crate::evaluation_result::EvaluationResult;
 use crate::evaluation_result::StatisticsCounter;
 use crate::integrands::HasIntegrand;
@@ -1225,6 +1223,8 @@ pub fn print_integral_result(
 
 #[test]
 fn test_threading() {
+    use symbolica::numerical_integration::ContinuousGrid;
+
     fn test_fn(x: f64) -> f64 {
         x * x * (x * 6.).sin()
     }

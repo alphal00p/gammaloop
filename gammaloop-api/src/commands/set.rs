@@ -1,6 +1,6 @@
 use std::{path::PathBuf, str::FromStr};
 
-use clap::{command, Subcommand};
+use clap::Subcommand;
 use color_eyre::Result;
 use eyre::{eyre, Context, Report};
 use figment::{
@@ -243,7 +243,7 @@ use serde_yaml::Value as Y;
 
 fn infer_cli_value(raw: &str) -> Result<J> {
     // 1) Try strict JSON (numbers/bools work; strings need quotes)
-    if let Ok(v) = serde_json::from_str::<J>(raw) {
+    if let Ok(v) = json5::from_str::<J>(raw) {
         return Ok(v);
     }
     // 2) YAML scalars: true/false, 42, 3.14, and bare words -> string

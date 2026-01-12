@@ -602,7 +602,7 @@ impl JetClustering {
     pub(crate) fn cluster_fastjet(&mut self, event: &Event) {
         self.fastjet_jets_in.clear();
 
-        #[allow(unused_variables)]
+        #[cfg(feature = "fjcore")]
         let mut len: c_int = 0;
         for (e, id) in event
             .kinematic_configuration
@@ -619,7 +619,10 @@ impl JetClustering {
                 || id.abs() == 0
             {
                 self.fastjet_jets_in.extend(e.into_iter().map(|x| x.0));
-                len += 1;
+                #[cfg(feature = "fjcore")]
+                {
+                    len += 1;
+                }
             }
         }
 

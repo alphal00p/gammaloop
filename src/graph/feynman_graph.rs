@@ -19,7 +19,6 @@ use spenso::{
 use symbolica::{
     atom::{Atom, AtomCore},
     id::Replacement,
-    parse,
 };
 use typed_index_collections::TiVec;
 

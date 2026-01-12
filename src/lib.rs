@@ -35,7 +35,6 @@ pub mod tests;
 pub mod improve_ps;
 pub mod utils;
 pub mod uv;
-use graph::ExternalConnection;
 use idenso::representations::initialize;
 use integrands::*;
 use model::Model;
@@ -46,7 +45,6 @@ use symbolica::state::StateMap;
 use utils::F;
 use utils::FloatLike;
 
-use crate::graph::Graph;
 
 pub static INTERRUPTED: AtomicBool = AtomicBool::new(false);
 

@@ -157,7 +157,6 @@ impl Wood {
     }
 
     pub(crate) fn dot(&self, graph: &impl UltravioletGraph) -> String {
-        let shift = self.poset.shift();
         self.poset.to_dot_impl(&|n| {
             format!(
                 "label={}, dod={},topo_order = {}",

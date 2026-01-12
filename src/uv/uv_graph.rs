@@ -38,7 +38,6 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
 
     ///Get the numerator of the graph.
     /// If multiply_prefactor is true, the numerator is multiplied by the global  prefactor. (just num not projector)
-
     fn numerator<S: SubGraphLike>(&self, subgraph: &S) -> Numerator<AppliedFeynmanRule>;
     fn denominator<S: SubGraphLike, T: Fn(&Edge) -> isize>(
         &self,
@@ -79,7 +78,7 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
     where
         Self: AsRef<HedgeGraph<E, V, H>>,
     {
-        let mom_reps = self.normal_emr_replacement(subgraph, lmb, &[W_.x___], |s| true);
+        let mom_reps = self.normal_emr_replacement(subgraph, lmb, &[W_.x___], |_s| true);
 
         let ose_reps = self.get_ose_replacements();
         for x in &mom_reps {

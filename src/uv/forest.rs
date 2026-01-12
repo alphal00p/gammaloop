@@ -7,12 +7,8 @@ use crate::{
     momentum::SignOrZero,
     numerator::{ParsingNet, symbolica_ext::AtomCoreExt},
     utils::{GS, ose_atom_from_index, symbolica_ext::CallSymbol},
-    uv::{
-        ApproxOp,
-        approx::{CFFapprox, SimpleApprox},
-    },
+    uv::approx::CFFapprox,
 };
-use bitvec::vec::BitVec;
 use spenso::{
     network::store::TensorScalarStoreMapping,
     structure::abstract_index::AIND_SYMBOLS,
@@ -64,7 +60,7 @@ impl Forest {
         canonize_esurface: &Option<ShiftRewrite>,
         cut_edges: &[EdgeIndex],
         settings: &UVgenerationSettings,
-        conjugate: bool,
+        _conjugate: bool,
     ) {
         let order = self.dag.compute_topological_order();
 

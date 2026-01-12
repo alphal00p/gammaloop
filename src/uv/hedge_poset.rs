@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use ahash::AHashSet;
+use ahash::{AHashMap, AHashSet};
 use linnet::half_edge::{
     HedgeGraph, NoData, NodeIndex,
     algorithms::trace_unfold::{HiddenData, Independence, TraceKey, TraceUnfold},
@@ -8,12 +8,43 @@ use linnet::half_edge::{
     nodestore::{NodeStorageOps, NodeStorageVec},
     subgraph::{Inclusion, ModifySubSet, SuBitGraph, SubSetLike, SubSetOps},
 };
+use spenso::network::library::TensorLibraryData;
+use symbolica::{
+    atom::{Atom, FunctionBuilder},
+    symbol,
+};
+
+use crate::{
+    numerator::ParsingNet,
+    uv::UltravioletGraph,
+};
 
 #[derive(Clone, Debug, Hash, Eq)]
 pub struct Spinney {
     pub subgraph: SuBitGraph,
-    // pub dod: i32,
+    components: Vec<SuBitGraph>,
+    pub dod: i32,
     // pub lmb: LoopMomentumBasis,
+}
+
+impl Spinney {
+    pub fn empty<E, V, H>(g: impl AsRef<HedgeGraph<E, V, H>>) -> Self {
+        Spinney {
+            components: vec![],
+            dod: 0,
+            subgraph: g.as_ref().empty_subgraph(),
+        }
+    }
+    pub fn new<E, V, H, G: UltravioletGraph + AsRef<HedgeGraph<E, V, H>>>(
+        subgraph: SuBitGraph,
+        g: &G,
+    ) -> Self {
+        Spinney {
+            components: g.as_ref().connected_components(&subgraph),
+            dod: g.dod(&subgraph),
+            subgraph,
+        }
+    }
 }
 
 impl PartialEq for Spinney {
@@ -72,9 +103,7 @@ impl SpinneyWood {
         graph: impl AsRef<HedgeGraph<E, V, H>>,
     ) -> Self {
         let mut spinneyset: AHashSet<_> = s.into_iter().collect();
-        spinneyset.insert(Spinney {
-            subgraph: graph.as_ref().empty_subgraph(),
-        });
+        spinneyset.insert(Spinney::empty(&graph));
 
         let mut unions = AHashSet::new();
         let g: HedgeGraph<_, _> = HedgeGraph::poset(spinneyset);
@@ -152,7 +181,7 @@ impl SpinneyWood {
             }
         }
 
-        println!("Removing: {}", poset.dot(&to_remove));
+        // println!("Removing: {}", poset.dot(&to_remove));
 
         poset.delete_hedges(&to_remove);
         let root = poset
@@ -168,8 +197,13 @@ impl SpinneyWood {
 
     pub fn unfold(&self) -> SpinneyForest {
         SpinneyForest {
-            graph: self.trace_unfold::<NodeStorageVec<_>>(self.root),
+            graph: self.trace_unfold::<NodeStorageVec<_>>(self.root).map(
+                |_, _, key| OperationNode { key },
+                |_, _, _, _, e| e,
+                |_, h| h,
+            ),
             root: self.root.clone(),
+            compute_store: AHashMap::new(),
         }
     }
 }
@@ -195,8 +229,79 @@ impl Display for SpinneyWood {
 // }
 
 pub struct SpinneyForest {
-    pub graph: HedgeGraph<NoData, TraceKey<SuBitGraph, EdgeIndex>>,
+    pub graph: HedgeGraph<NoData, OperationNode>,
     pub root: NodeIndex,
+    pub compute_store: AHashMap<OperationNode, ComputeNode>,
+}
+
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+pub struct OperationNode {
+    pub key: TraceKey<SuBitGraph, EdgeIndex>,
+}
+
+impl Display for OperationNode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.key.levels.is_empty() {
+            write!(f, "∅")
+        } else {
+            let mut acc: Option<SuBitGraph> = None;
+
+            self.key.write_foata_like(f, |op| {
+                if let Some(a) = &mut acc {
+                    a.union_with(&op);
+                } else {
+                    acc = Some(op.clone());
+                }
+                op.string_label()
+            })?;
+            if let Some(a) = acc {
+                write!(f, " => ")?;
+                write!(f, "{} = {}", &a.string_label(), self.to_atom())?;
+            }
+            Ok(())
+        }
+    }
+}
+
+impl OperationNode {
+    pub fn to_atom(&self) -> Atom {
+        let mut acc = Atom::one();
+
+        let approx = FunctionBuilder::new(symbol!("T"));
+        if self.key.levels.is_empty() {
+            return acc;
+        }
+
+        let mut last = SuBitGraph::empty(self.key.levels[0][0].order.size());
+        for l in &self.key.levels {
+            let last_sym = if last.is_empty() {
+                Atom::Zero
+            } else {
+                Atom::var(symbol!(format!("S_{}", last.string_label())))
+            };
+
+            let mut mul = Atom::one();
+
+            for op in l {
+                let new = Atom::var(symbol!(format!("S_{}", op.order.string_label())));
+                mul *= approx.clone().add_arg((new - &last_sym) * &acc).finish();
+                last.union_with(&op.order);
+            }
+
+            acc = mul
+        }
+
+        acc
+    }
+
+    // fn simple_op()
+}
+
+pub struct ComputeNode {
+    pub local_3d: Atom, //3d denoms
+    pub final_integrand: Option<ParsingNet>,
+    pub integrated_4d: Atom, //4d
+    pub integrated_pole_part: Atom,
 }
 
 impl SpinneyForest {
@@ -207,42 +312,8 @@ impl SpinneyForest {
             .iter()
             .for_each(|nidx| {
                 let trace_key = &self.graph[*nidx];
-                println!("Node {}: {}", nidx, trace_key_label(trace_key));
+                println!("Node {}: {}", nidx, trace_key);
             });
-    }
-}
-
-pub fn trace_key_label(v: &TraceKey<SuBitGraph, EdgeIndex>) -> String {
-    if v.levels.is_empty() {
-        "∅".to_string()
-    } else {
-        let mut s = String::new();
-        let mut acc: Option<SuBitGraph> = None;
-
-        for (i, level) in v.levels.iter().enumerate() {
-            if i > 0 {
-                s.push_str(" · ");
-            }
-            s.push_str("{");
-            for (j, op) in level.iter().enumerate() {
-                if j > 0 {
-                    s.push_str(",");
-                }
-                if let Some(a) = &mut acc {
-                    a.union_with(&op.order);
-                } else {
-                    acc = Some(op.order.clone());
-                }
-                s.push_str(&op.order.string_label());
-            }
-            s.push_str("}");
-        }
-        if let Some(a) = acc {
-            s.push_str(" => ");
-            s.push_str(&a.string_label());
-        }
-
-        s
     }
 }
 
@@ -254,7 +325,7 @@ impl Display for SpinneyForest {
             "start=2;\n",
             &|_| None,
             &|_| None,
-            &|v| Some(format!("label=\"{}\"", trace_key_label(v))),
+            &|v| Some(format!("label=\"{}\"", v)),
         )
     }
 }
@@ -288,7 +359,7 @@ mod tests {
             dumbell
                 .spinneys(&dumbell.full_filter())
                 .into_iter()
-                .map(|a| Spinney { subgraph: a.filter }),
+                .map(|a| Spinney::new(a.filter, &dumbell)),
             &dumbell,
         );
 
@@ -312,6 +383,7 @@ mod tests {
         println!("{}", ff.dot(&dumbell));
 
         let f = f.unfold();
+        println!("{}", f);
         insta::assert_snapshot!(
             f.graph.n_nodes(),
             @"4");
@@ -342,7 +414,7 @@ mod tests {
                 let f = SpinneyWood::from_spinneys(
                     g.spinneys(&g.full_filter())
                         .into_iter()
-                        .map(|a| Spinney { subgraph: a.filter }),
+                        .map(|a| Spinney::new(a.filter, &g)),
                     &g,
                 );
 
@@ -412,7 +484,7 @@ mod tests {
             mercedes
                 .spinneys(&mercedes.full_filter())
                 .into_iter()
-                .map(|a| Spinney { subgraph: a.filter }),
+                .map(|a| Spinney::new(a.filter, &mercedes)),
             &mercedes,
         );
         println!("{}", f);
@@ -453,7 +525,7 @@ mod tests {
             spectacles
                 .spinneys(&spectacles.full_filter())
                 .into_iter()
-                .map(|a| Spinney { subgraph: a.filter }),
+                .map(|a| Spinney::new(a.filter, &spectacles)),
             &spectacles,
         );
         println!("{}", f);
@@ -489,7 +561,7 @@ mod tests {
             basketball
                 .spinneys(&basketball.full_filter())
                 .into_iter()
-                .map(|a| Spinney { subgraph: a.filter }),
+                .map(|a| Spinney::new(a.filter, &basketball)),
             &basketball,
         );
         println!("{}", f);
@@ -529,7 +601,7 @@ mod tests {
             fourloop_b
                 .spinneys(&fourloop_b.full_filter())
                 .into_iter()
-                .map(|a| Spinney { subgraph: a.filter }),
+                .map(|a| Spinney::new(a.filter, &fourloop_b)),
             &fourloop_b,
         );
         println!("{}", f);
@@ -568,7 +640,7 @@ mod tests {
             four_loop_a
                 .spinneys(&four_loop_a.full_filter())
                 .into_iter()
-                .map(|a| Spinney { subgraph: a.filter }),
+                .map(|a| Spinney::new(a.filter, &four_loop_a)),
             &four_loop_a,
         );
         println!("{}", f);

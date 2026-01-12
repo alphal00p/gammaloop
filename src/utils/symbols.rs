@@ -19,7 +19,6 @@ use symbolica::{
     id::Replacement,
     symbol,
 };
-use tabled::settings::measurement::Min;
 
 use crate::{cff::expression::GraphOrientation, numerator::aind::Aind};
 
@@ -495,7 +494,7 @@ impl GammaloopSymbols {
 
     pub fn to_broadcasting_sqrt<'a>(&self, arg: impl Into<AtomOrView<'a>>) -> Atom {
         let a = arg.into();
-        a.replace_map(|a, ctx, out| {
+        a.replace_map(|a, _ctx, out| {
             if let AtomView::Pow(p) = a {
                 let (a, b) = p.get_base_exp();
                 let Ok(exp) = Rational::try_from(b) else {

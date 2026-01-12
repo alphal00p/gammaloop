@@ -7,11 +7,9 @@ use std::{
 use bincode::{Decode, Encode};
 use idenso::color::CS;
 
-use linnet::half_edge::involution::{EdgeIndex, HedgePair, Orientation};
+use linnet::half_edge::involution::{EdgeIndex, Orientation};
 use log::debug;
-use nalgebra::LU;
 use ringbuffer::{ConstGenericRingBuffer, RingBuffer};
-use serde::Serialize;
 use spenso::{
     algebra::{algebraic_traits::RefOne, complex::Complex},
     iterators::IteratableTensor,

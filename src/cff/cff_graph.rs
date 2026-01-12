@@ -2,15 +2,14 @@
 
 use crate::cff::hsurface::Hsurface;
 use ahash::{HashMap, HashSet, HashSetExt};
-use bincode::Encode;
-use bincode_trait_derive::Decode;
+
 use color_eyre::Result;
 use eyre::eyre;
 use itertools::Itertools;
 use linnet::half_edge::{
     HedgeGraph, NodeIndex,
     involution::{EdgeIndex, EdgeVec, Flow, HedgePair, Orientation},
-    subgraph::{InternalSubGraph, ModifySubSet, SuBitGraph, SubGraphLike, SubSetLike},
+    subgraph::{ModifySubSet, SuBitGraph, SubGraphLike},
 };
 use serde::{Deserialize, Serialize};
 use std::hash::Hash;

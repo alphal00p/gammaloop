@@ -7,7 +7,7 @@ use crate::{
         expression::{GraphOrientation, OrientationID},
         generation::{ShiftRewrite, generate_uv_cff},
     },
-    graph::{Edge, Graph, LMBext, LoopMomentumBasis, NumHedgeData, Vertex},
+    graph::{Edge, Graph, LMBext, LoopMomentumBasis, Vertex},
     momentum::Sign,
     numerator::{ParsingNet, aind::Aind, symbolica_ext::AtomCoreExt},
     status_info,
@@ -16,10 +16,8 @@ use crate::{
 };
 use ahash::AHashSet;
 use idenso::{gamma::GammaSimplifier, metric::MS};
-use itertools::Itertools;
 use log::debug;
 
-use spenso::structure::concrete_index::ExpandedIndex;
 
 use spenso::structure::{
     representation::{Minkowski, RepName},
@@ -648,10 +646,6 @@ impl Approximation {
             //TODO: Add orientation localisation prefactor (Sum of valid orientation thetas)/(number of valid orientations)
 
             res /= parse!("(-1i / (4 𝜋)^2 * 1/2 * 1/mUVI^2)");
-
-            let emr = (1..4)
-                .map(|mu| GS.emr_mom(*l, Atom::from(ExpandedIndex::from_iter([mu]))))
-                .collect_vec();
 
             let mink: Slot<Minkowski, Aind> = Minkowski {}.new_rep(4).slot(Aind::new_dummy());
 

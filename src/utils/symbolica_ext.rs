@@ -3,7 +3,7 @@ use color_eyre::Result;
 use schemars::{JsonSchema, json_schema};
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::BTreeMap,
     fmt::{Display, Write},
     ops::{Deref, DerefMut},
     sync::LazyLock,
@@ -20,7 +20,7 @@ use symbolica::{
     },
     parse,
     poly::polynomial::PolynomialRing,
-    printer::{PrintMode, PrintOptions, PrintState},
+    printer::{PrintMode, PrintOptions},
 };
 
 use crate::GammaLoopContext;
@@ -75,7 +75,7 @@ impl<A: AtomCore> IsNeg for A {
                     }
                 }
                 CoefficientView::Indeterminate => false,
-                CoefficientView::Natural(n_re, d_re, n_im, de_im) => {
+                CoefficientView::Natural(n_re, _d_re, n_im, _de_im) => {
                     if n_im == 0 {
                         n_re.is_negative()
                     } else {
@@ -161,14 +161,14 @@ impl<A: AtomCore> TypstFormat for A {
     fn preable<W: std::fmt::Write>(&self, fmt: &mut W) -> Result<BTreeMap<Symbol, bool>> {
         let mut symbols = BTreeMap::new();
         self.visitor(&mut |a| match a {
-            AtomView::Add(a) => true,
-            AtomView::Mul(m) => true,
+            AtomView::Add(_) => true,
+            AtomView::Mul(_) => true,
             AtomView::Fun(f) => {
                 *(symbols.entry(f.get_symbol()).or_insert_with(|| true)) = true;
                 true
             }
-            AtomView::Num(a) => false,
-            AtomView::Pow(a) => true,
+            AtomView::Num(_) => false,
+            AtomView::Pow(_) => true,
             AtomView::Var(v) => {
                 symbols.entry(v.get_symbol()).or_insert_with(|| false);
                 false
@@ -238,7 +238,7 @@ let a = args.pos().map(v => $#v$).join($, $);
     ) -> Result<bool> {
         match self.as_atom_view() {
             AtomView::Num(n) => match n.get_coeff_view() {
-                CoefficientView::FiniteField(e, i) => Ok(true),
+                CoefficientView::FiniteField(_, _) => Ok(true),
                 CoefficientView::Float(re, im) => {
                     let re = re.to_float();
                     let im = im.to_float();
@@ -325,7 +325,7 @@ let a = args.pos().map(v => $#v$).join($, $);
                     }
                     Ok(true)
                 }
-                CoefficientView::Infinity(a) => {
+                CoefficientView::Infinity(_) => {
                     write!(fmt, "oo")?;
                     Ok(true)
                 }
@@ -512,7 +512,7 @@ let a = args.pos().map(v => $#v$).join($, $);
                     if let AtomView::Pow(p) = term.as_atom_view() {
                         let (base, exp) = p.get_base_exp();
                         if exp.is_negative() {
-                            let mut state = TypstState {
+                            let state = TypstState {
                                 inproduct: false,
                                 without_minus: false,
                                 in_power: true,
@@ -691,13 +691,13 @@ impl PrimeGenerate for Atom {
         sample_iterator: &mut PrimeIteratorU64,
         finite_field: &Zp64,
     ) -> Atom {
-        let a = finite_field.to_element(sample_iterator.next().unwrap());
-        let b = finite_field.to_element(sample_iterator.next().unwrap());
+        let _a = finite_field.to_element(sample_iterator.next().unwrap());
+        let _b = finite_field.to_element(sample_iterator.next().unwrap());
         Atom::num(1)
         // Atom::i() * Atom::num(b) + Atom::num(a)
     }
 
-    fn prime_generate_ff(sample_iterator: &mut PrimeIteratorU64, finite_field: &Zp64) -> Atom {
+    fn prime_generate_ff(sample_iterator: &mut PrimeIteratorU64, _finite_field: &Zp64) -> Atom {
         let a = Rational::from((
             sample_iterator.next().unwrap(),
             sample_iterator.next().unwrap(),

@@ -1,7 +1,7 @@
 use crate::{
     cff::{
         cut_expression::CFFCutsExpression,
-        esurface::{self, add_external_shifts},
+        esurface::{ add_external_shifts},
         expression::OrientationData,
         hsurface::HsurfaceID,
         surface::{HybridSurface, HybridSurfaceID},
@@ -17,7 +17,7 @@ use itertools::Itertools;
 use linnet::half_edge::{
     HedgeGraph,
     involution::{EdgeVec, HedgePair},
-    subgraph::{OrientedCut, SubGraphLike, SubSetLike},
+    subgraph::{OrientedCut, SubGraphLike},
 };
 use linnet::half_edge::{
     involution::{EdgeIndex, Orientation},
@@ -27,7 +27,7 @@ use symbolica::{
     atom::{Atom, AtomCore},
     id::{Pattern, Replacement},
 };
-use typed_index_collections::{TiVec, ti_vec};
+use typed_index_collections::TiVec;
 
 use serde::{Deserialize, Serialize};
 
@@ -647,8 +647,8 @@ impl SurfaceCache {
         }
     }
 
-    pub(crate) fn set_subspaces(&mut self, subspace_graph: &InternalSubGraph) {
-        for esurface in self.esurface_cache.iter_mut() {
+    pub(crate) fn set_subspaces(&mut self, _subspace_graph: &InternalSubGraph) {
+        for _esurface in self.esurface_cache.iter_mut() {
             //esurface.subspace_graph = subspace_graph.clone();
         }
     }

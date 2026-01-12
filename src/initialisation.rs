@@ -1,9 +1,6 @@
 use color_eyre::{Result, config::HookBuilder};
 use spenso::network::library::function_lib::INBUILTS;
 use spenso::network::parsing::SPENSO_TAG;
-use spenso::structure::named::IdentityName;
-use symbolica::activate_oem_license;
-use symbolica::atom::Symbol;
 use vakint::{
     EvaluationMethod, EvaluationOrder, FMFTOptions, LoopNormalizationFactor, MATADOptions,
     PySecDecOptions, Vakint, VakintSettings,

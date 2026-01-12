@@ -23,7 +23,6 @@ use super::aind::Aind;
 pub trait GeneratePolarizations {
     /// Returns the polarizations of the given subgraph. One polarization per half-edge.
     /// If you only want those that are dangling first get the crown of the subgraph.
-
     fn generate_polarizations_of<S: SubSetLike>(&self, subgraph: &S) -> Atom;
     fn generate_polarization_parameters_of<S: SubSetLike>(&self, subgraph: &S) -> Vec<Atom>;
     // fn generate_polarizations(&self) -> Atom;

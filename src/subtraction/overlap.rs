@@ -615,7 +615,7 @@ pub(crate) fn find_maximal_overlap(
 
             res.overlap_groups.push(OverlapGroup {
                 existing_esurfaces: vec![existing_esurface_id],
-                center: center,
+                center,
                 complement: vec![],
                 prefactor_evaluator: None,
             });

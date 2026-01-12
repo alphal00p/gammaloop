@@ -6,30 +6,25 @@ use eyre::eyre;
 use itertools::Itertools;
 use linnet::half_edge::HedgeGraph;
 use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Flow, HedgePair};
-use linnet::half_edge::subgraph::{
-    InternalSubGraph, ModifySubSet, OrientedCut, SuBitGraph, SubGraphOps,
-};
+use linnet::half_edge::subgraph::{ModifySubSet, OrientedCut, SuBitGraph, SubGraphOps};
 use ref_ops::RefNeg;
 use serde::{Deserialize, Serialize};
-use spenso::network::graph;
+
 use symbolica::atom::{Atom, AtomCore};
 use symbolica::domains::float::{FloatLike as SymFloatLike, Real};
 use symbolica::id::Replacement;
 use symbolica::{function, parse};
 use tracing::debug;
-use tracing_subscriber::field::debug;
 use typed_index_collections::TiVec;
 
 use crate::cff::cff_graph::VertexSet;
 
 use crate::define_index;
-use crate::gammaloop_integrand::GammaloopIntegrand;
 use crate::graph::{Graph, GraphGroupPosition, LmbIndex, LoopMomentumBasis};
 
 use crate::momentum::ThreeMomentum;
 use crate::momentum_sample::{
-    ExternalFourMomenta, ExternalIndex, ExternalThreeMomenta, LoopIndex, LoopMomenta, Subspace,
-    SubspaceData,
+    ExternalFourMomenta, ExternalIndex, ExternalThreeMomenta, LoopIndex, LoopMomenta, SubspaceData,
 };
 use crate::processes::CrossSectionCut;
 use crate::utils::{
@@ -202,8 +197,6 @@ impl Esurface {
                 })
                 .reduce(|acc, x| acc + x)
                 .unwrap_or_else(|| zero_vector.clone());
-
-            let shift_vector = &graph_vector + &other_part;
 
             let shift_vector_sq = (&graph_vector + &other_part).norm_squared();
 
@@ -768,7 +761,6 @@ mod tests {
     use linnet::half_edge::builder::HedgeGraphBuilder;
     use linnet::half_edge::involution::{EdgeIndex, Flow, Orientation};
     use linnet::half_edge::nodestore::NodeStorageVec;
-    use linnet::half_edge::subgraph::InternalSubGraph;
     use symbolica::atom::{Atom, AtomCore};
     use symbolica::parse;
 

@@ -1,17 +1,14 @@
 use std::ops::Index;
 
-use ahash::{AHashMap, AHashSet, HashSet};
+use ahash::AHashSet;
 use bincode_trait_derive::{Decode, Encode};
-use color_eyre::Result;
-use global::ParseData;
 use itertools::Itertools;
 use linnet::{
     half_edge::{
         HedgeGraph,
-        builder::HedgeGraphBuilder,
-        involution::{EdgeData, EdgeIndex, Flow, Hedge, HedgePair, Orientation},
+        involution::{EdgeData, EdgeIndex, Hedge, HedgePair},
         subgraph::{
-            HedgeNode, Inclusion, ModifySubSet, OrientedCut, SuBitGraph, SubGraphLike, SubSetLike,
+            HedgeNode, Inclusion, ModifySubSet, OrientedCut, SuBitGraph, SubSetLike,
             SubSetOps, subset::SubSet,
         },
     },
@@ -19,23 +16,19 @@ use linnet::{
 };
 use log::debug;
 
-use parse::ParseGraph;
 use rand::{Rng, SeedableRng, rngs::SmallRng};
 // use petgraph::Direction::Outgoing;
-use symbolica::{atom::Atom, graph::Graph as SymbolicaGraph};
+use symbolica::atom::Atom;
 use tracing::warn;
 use typed_index_collections::TiVec;
 
 use crate::{
     define_index,
     feyngen::{
-        GenerationType,
-        diagram_generator::{EdgeColor, NodeColorWithVertexRule, evaluate_overall_factor},
+        diagram_generator::evaluate_overall_factor,
     },
     gammaloop_integrand::{LmbMultiChannelingSetup, ParamBuilder},
-    graph::{edge::ParseEdge, vertex::ParseVertex},
     improve_ps::PhaseSpaceImprovementSettings,
-    model::Model,
     momentum::{Dep, ExternalMomenta, PolDef},
     momentum_sample::ExternalIndex,
     numerator::{GlobalPrefactor, ParsingNet, symbolica_ext::AtomCoreExt},

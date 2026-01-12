@@ -40,7 +40,6 @@ use symbolica::domains::integer::IntegerRing;
 use symbolica::domains::rational::{Fraction, Rational};
 use symbolica::evaluate::FunctionMap;
 use symbolica::id::Replacement;
-use tabled::settings::measurement::Min;
 use tracing::info;
 
 use color_eyre::Result;

@@ -76,7 +76,7 @@ macro_rules! dot {
 
     (@internal [$($code:tt)*], $model:literal) => {
 
-        stringify!($($code)*).into_graph(&crate::utils::test_utils::load_generic_model($model))
+        stringify!($($code)*).into_graph(&$crate::utils::test_utils::load_generic_model($model))
     };
 
     // Internal rule: End of parsing, with an optional argument.
@@ -88,7 +88,7 @@ macro_rules! dot {
     // Internal rule: End of parsing, no optional argument.
     // This is matched when the accumulator has run out of tokens to process.
     (@internal [$($code:tt)*]) => {
-        stringify!($($code)*).into_graph( &crate::utils::test_utils::load_generic_model("sm"))
+        stringify!($($code)*).into_graph(&$crate::utils::test_utils::load_generic_model("sm"))
     };
 
     // Internal rule: The "accumulator".

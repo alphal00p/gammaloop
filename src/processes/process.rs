@@ -1,6 +1,5 @@
 use ahash::HashMap;
 use ahash::HashSet;
-use linnet::half_edge::involution::EdgeIndex;
 use linnet::half_edge::involution::Flow;
 use linnet::half_edge::involution::HedgePair;
 use linnet::half_edge::involution::Orientation;
@@ -25,13 +24,10 @@ use crate::graph::FeynmanGraph;
 use crate::graph::edge::PossibleParticle;
 use crate::processes::DotExportSettings;
 
-use crate::settings::RuntimeSettings;
-use crate::settings::runtime;
 use crate::{
     GammaLoopContext, GammaLoopContextContainer,
     feyngen::NumeratorAwareGraphGroupingOption,
     gammaloop_integrand::GLIntegrand,
-    model,
     numerator::GlobalPrefactor,
     settings::{GlobalSettings, runtime::LockedRuntimeSettings},
 };

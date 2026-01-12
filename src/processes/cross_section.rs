@@ -4,12 +4,10 @@ use std::{
     io::Write,
     ops::{Deref, Index, IndexMut},
     path::Path,
-    sync::Arc,
 };
 
 // use bincode::{Decode, Encode};
 use bincode_trait_derive::{Decode, Encode};
-use chrono::format::parse;
 use color_eyre::Result;
 use idenso::color::ColorSimplifier;
 use itertools::Itertools;
@@ -23,7 +21,7 @@ use spenso::{
     structure::concrete_index::ExpandedIndex,
 };
 use tracing::info;
-use vakint::{EvaluationOrder, LoopNormalizationFactor, ReplacementRules, Vakint, VakintSettings};
+use vakint::{EvaluationOrder, LoopNormalizationFactor, Vakint, VakintSettings};
 
 use crate::{
     GammaLoopContext, GammaLoopContextContainer,
@@ -35,14 +33,10 @@ use crate::{
     gammaloop_integrand::{
         LmbMultiChannelingSetup, ParamBuilder, cross_section_integrand::CrossSectionIntegrandData,
     },
-    graph::{
-        self, GraphGroup, GroupId, LMBext, LmbIndex, LoopMomentumBasis,
-        parse::complete_group_parsing,
-    },
+    graph::{GraphGroup, GroupId, LMBext, LmbIndex, LoopMomentumBasis, parse::complete_group_parsing},
     model::ArcParticle,
-    momentum_sample::{ExternalIndex, SubspaceData},
+    momentum_sample::SubspaceData,
     numerator::{self, symbolica_ext::AtomCoreExt},
-    observables::CrossSectionObservable,
     processes::DotExportSettings,
     settings::{GlobalSettings, global::GenerationSettings, runtime::LockedRuntimeSettings},
     utils::{FUN_LIB, GS, TENSORLIB, W_},
@@ -50,7 +44,7 @@ use crate::{
 };
 use eyre::{Context, eyre};
 use linnet::half_edge::{
-    involution::{EdgeIndex, Orientation, SignOrZero},
+    involution::{EdgeIndex, Orientation},
     subgraph::{
         HedgeNode, Inclusion, InternalSubGraph, OrientedCut, SuBitGraph, SubGraphLike, SubSetOps,
     },
@@ -59,7 +53,6 @@ use log::{debug, warn};
 use serde::{Deserialize, Serialize};
 use symbolica::{
     atom::{Atom, AtomCore},
-    domains::atom::AtomField,
     function,
     id::Replacement,
     parse, symbol,
@@ -857,7 +850,7 @@ impl CrossSectionGraph {
         }
     }
 
-    fn generate_cff(&mut self, settings: &GenerationSettings) -> Result<()> {
+    fn generate_cff(&mut self, _settings: &GenerationSettings) -> Result<()> {
         // hardcorde 1 to n for now
         debug!("generating cff");
 
@@ -1028,13 +1021,13 @@ impl CrossSectionGraph {
 
     fn build_parametric_integrand_raised_cuts(
         &mut self,
-        settings: &GenerationSettings,
+        _settings: &GenerationSettings,
     ) -> Result<()> {
-        let global_num = self.graph.global_network();
+        let _global_num = self.graph.global_network();
 
-        let (tree_structure, replacements) = self.get_initial_state_tree_data();
+        let (_tree_structure, _replacements) = self.get_initial_state_tree_data();
 
-        let canonize_esurface = self
+        let _canonize_esurface = self
             .graph
             .get_esurface_canonization(&self.graph.loop_momentum_basis);
 
@@ -1047,11 +1040,11 @@ impl CrossSectionGraph {
             .max()
             .unwrap();
 
-        let derivative_structure_cache = (1..=max_order)
+        let _derivative_structure_cache = (1..=max_order)
             .map(|order| build_derivative_structure(order as u8))
             .collect_vec();
 
-        for raised_cut_id in self
+        for _raised_cut_id in self
             .derived_data
             .raised_data
             .raised_cut_groups

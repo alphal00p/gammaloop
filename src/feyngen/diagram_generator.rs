@@ -17,7 +17,6 @@ use spenso::network::{Sequential, SmallestDegree};
 
 // use spenso::network::Network;
 
-use spenso::structure::permuted::Perm;
 // use spenso::shadowing::symbolica_utils::AtomCoreExt;
 use spenso::structure::representation::{LibraryRep, Minkowski, RepName};
 use spenso::structure::{PermutedStructure, TensorStructure};
@@ -25,8 +24,7 @@ use spenso::tensors::data::DataTensor;
 use spenso::tensors::parametric::ParamTensor;
 use spenso_hep_lib::{gamma_data_weyl, gamma5_weyl_data, proj_m_data_weyl, proj_p_data_weyl};
 use std::collections::hash_map::Entry;
-use std::collections::{BTreeMap, HashSet, VecDeque};
-use symbolica::domains::Field;
+use std::collections::{HashSet, VecDeque};
 
 use std::ops::{Deref, RangeInclusive};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -35,11 +33,11 @@ use std::time::Instant;
 use symbolica::atom::AtomView;
 use symbolica::coefficient::Coefficient;
 use symbolica::domains::algebraic_number::AlgebraicExtension;
-use symbolica::domains::finite_field::{FiniteField, FiniteFieldCore, PrimeIteratorU64, Zp64};
+use symbolica::domains::finite_field::PrimeIteratorU64;
 use symbolica::domains::float::Complex as SymbolicaComplex;
 use symbolica::graph::{GenerationSettings, HalfEdge};
 use symbolica::id::Replacement;
-use symbolica::{function, parse_lit};
+use symbolica::function;
 use tracing::{event_enabled, instrument};
 
 use ahash::AHashMap;
@@ -59,7 +57,7 @@ use super::SnailFilterOptions;
 use super::TadpolesFilterOptions;
 use crate::graph::ext::HedgeGraphExt;
 use crate::graph::parse::string_utils::ToOrderedSimple;
-use crate::graph::parse::{ParseGraph, ToQuoted};
+use crate::graph::parse::ParseGraph;
 use crate::graph::{FeynmanGraph, Graph, LMBext};
 use crate::model::ArcVertexRule;
 use crate::model::VertexRule;

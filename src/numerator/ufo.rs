@@ -1,6 +1,5 @@
 use std::sync::LazyLock;
 
-use crate::graph::parse::string_utils::ToOrderedSimple;
 use crate::utils::{GS, W_, symbolica_ext::CallSymbol};
 use idenso::color::CS;
 use idenso::gamma::AGS;
@@ -22,7 +21,6 @@ use symbolica::{
     function,
     id::Replacement,
 };
-use tracing::debug;
 
 use super::aind::Aind;
 

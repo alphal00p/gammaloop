@@ -9,7 +9,6 @@ use symbolica::{
     evaluate::OptimizationSettings,
 };
 use tracing::debug;
-use tracing_subscriber::field::debug;
 use typed_index_collections::TiVec;
 
 use crate::{
@@ -26,20 +25,12 @@ use crate::{
     model::Model,
     momentum::Rotation,
     momentum_sample::{LoopMomenta, MomentumSample},
-    settings::{
-        GlobalSettings, RuntimeSettings,
-        runtime::{
-            IntegratedCounterTermRange, IntegratedCounterTermSettings, UVLocalisationSettings,
-        },
-    },
+    settings::{GlobalSettings, RuntimeSettings},
     subtraction::{
         evaluate_integrated_ct_normalisation, evaluate_uv_damper,
         overlap::{OverlapGroup, OverlapStructure},
     },
-    utils::{
-        self, F, FloatLike,
-        newton_solver::{NewtonIterationResult, newton_iteration_and_derivative},
-    },
+    utils::{F, FloatLike, newton_solver::{NewtonIterationResult, newton_iteration_and_derivative}},
 };
 
 const MAX_ITERATIONS: usize = 40;

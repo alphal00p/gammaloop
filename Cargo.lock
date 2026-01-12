@@ -2092,8 +2092,6 @@ dependencies = [
 [[package]]
 name = "linnet"
 version = "0.16.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "05cee7a5103719b61119a6fdbc0fca62102fec4db52fc66ab03163af39ccd413"
 dependencies = [
  "ahash",
  "bincode",

@@ -1,7 +1,6 @@
 use std::collections::HashSet;
 
 use bincode_trait_derive::{Decode, Encode};
-use color_eyre::owo_colors::OwoColorize;
 use derive_more::{From, Into};
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};

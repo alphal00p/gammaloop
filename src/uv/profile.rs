@@ -3,19 +3,15 @@
 //! This module provides functionality for analyzing ultraviolet behavior of loop integrands
 //! by evaluating them at different momentum scalings and computing degrees of divergence.
 
-use crate::evaluation_result::EvaluationResult;
-use crate::gammaloop_integrand::GLIntegrand;
-use crate::integrands::{HasIntegrand, Integrand};
+use crate::integrands::HasIntegrand;
 use crate::model::Model;
 use crate::momentum::FourMomentum;
 use crate::settings::RuntimeSettings;
-use crate::utils::{F, FloatLike};
-use color_eyre::{Report, Result, eyre::Context};
+use crate::utils::F;
+use color_eyre::{Result, eyre::Context};
 use log::{debug, info, warn};
-use nalgebra::{Matrix4, Vector4};
 use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
-use std::collections::HashMap;
 use symbolica::numerical_integration::Sample;
 
 /// Configuration for UV profile analysis
@@ -77,7 +73,7 @@ pub fn run_uv_profile<I: HasIntegrand>(
     config: UVProfileConfig,
     integrand: &mut I,
     model: &Model,
-    runtime_settings: &RuntimeSettings,
+    _runtime_settings: &RuntimeSettings,
 ) -> Result<UVProfileResult> {
     let start_time = std::time::Instant::now();
 
@@ -206,7 +202,7 @@ fn evaluate_at_scaling<I: HasIntegrand>(
     scaling: f64,
     integrand: &mut I,
     model: &Model,
-    config: &UVProfileConfig,
+    _config: &UVProfileConfig,
     use_f128: bool,
 ) -> Result<Complex<F<f64>>> {
     // Generate a random sample point in [0,1]^n_dim
@@ -241,7 +237,7 @@ fn evaluate_at_scaling<I: HasIntegrand>(
 fn apply_momentum_scaling(
     scaling: f64,
     base_momenta: &[F<f64>],
-    config: &UVProfileConfig,
+    _config: &UVProfileConfig,
 ) -> Vec<F<f64>> {
     // For UV profiling, we typically scale all momenta by the same factor
     // This probes the UV behavior as energy scales increase
@@ -447,7 +443,7 @@ pub fn display_results_summary(result: &UVProfileResult) {
             "  {:>12} {:>15} {:>15} {:>10}",
             "Scaling", "Real", "Imag", "Stable"
         );
-        for (i, point) in result.scaling_points.iter().enumerate().take(10) {
+        for (_i, point) in result.scaling_points.iter().enumerate().take(10) {
             println!(
                 "  {:>12.3e} {:>15.6e} {:>15.6e} {:>10}",
                 point.scaling,

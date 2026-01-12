@@ -1,4 +1,4 @@
-#![allow(dead_code, unused_variables, unreachable_code)]
+#![allow(dead_code, unused_imports, unused_variables, unreachable_code)]
 
 use std::fmt::Display;
 

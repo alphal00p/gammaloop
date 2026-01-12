@@ -151,7 +151,7 @@ pub fn init_bench_tracing() -> reload::Handle<EnvFilter, Registry> {
         .clone()
 }
 
-use tracing::{Level, event};
+use tracing::Level;
 
 pub enum Target {
     Lib,

@@ -1,6 +1,5 @@
 use bincode_trait_derive::{Decode, Encode};
 use eyre::eyre;
-use itertools::Itertools;
 use log::debug;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};

@@ -16,9 +16,9 @@ use crate::{
     integrands::HasIntegrand,
     model::Model,
     momentum::{Rotation, RotationMethod, ThreeMomentum},
-    momentum_sample::{self, ExternalIndex, LoopMomenta, MomentumSample},
+    momentum_sample::{ExternalIndex, LoopMomenta, MomentumSample},
     processes::{CrossSectionCut, CrossSectionGraph, CutId},
-    settings::{GlobalSettings, RuntimeSettings, runtime::HFunctionSettings},
+    settings::{GlobalSettings, RuntimeSettings},
     subtraction::lu_counterterm::{LUCounterTerm, LUCounterTermEvaluators},
     utils::{
         F, FloatLike, Length, h, newton_solver::newton_iteration_and_derivative,
@@ -27,7 +27,6 @@ use crate::{
 };
 use bincode::Encode;
 use bincode_trait_derive::Decode;
-use bitvec::vec::BitVec;
 use color_eyre::Result;
 use eyre::Context;
 use itertools::Itertools;
@@ -35,7 +34,7 @@ use linnet::half_edge::{
     involution::{EdgeIndex, EdgeVec, Orientation},
     subgraph::{ModifySubSet, SubSetLike, subset::SubSet},
 };
-use log::{debug, info};
+use log::debug;
 use rayon::{
     ThreadPool,
     iter::{IntoParallelRefMutIterator, ParallelIterator},
@@ -43,7 +42,6 @@ use rayon::{
 use spenso::algebra::complex::Complex;
 use std::{
     fs::{self},
-    io::Read,
     path::Path,
 };
 use symbolica::{

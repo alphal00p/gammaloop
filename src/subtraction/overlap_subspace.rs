@@ -1,14 +1,9 @@
 use crate::GammaLoopContext;
 use crate::cff::esurface::EsurfaceCollection;
-use crate::cff::esurface::EsurfaceID;
 use crate::cff::esurface::ExistingEsurfaceId;
 use crate::cff::esurface::ExistingThresholds;
-use crate::cff::esurface::GroupEsurfaceId;
-use crate::cff::esurface::get_representative;
-use crate::gammaloop_integrand::GenericEvaluator;
 use crate::graph::FeynmanGraph;
 use crate::graph::Graph;
-use crate::graph::GraphGroupPosition;
 use crate::graph::LmbIndex;
 use crate::graph::LoopMomentumBasis;
 use crate::momentum::ThreeMomentum;
@@ -19,8 +14,6 @@ use crate::momentum_sample::SubspaceData;
 use crate::settings::RuntimeSettings;
 use crate::signature::LoopExtSignature;
 use crate::utils::F;
-use crate::utils::GS;
-use crate::utils::compute_shift_part;
 use crate::utils::compute_shift_part_subspace;
 use ahash::HashMap;
 use ahash::HashMapExt;
@@ -258,7 +251,6 @@ fn construct_solver(
         }
 
         let esurface_id = existing_esurfaces[*existing_esurface_id];
-        let lmb = overlap_input.subspace.get_lmb(overlap_input.lmbs);
         let esurface = &overlap_input.thresholds[esurface_id];
 
         let shift_part = esurface.compute_shift_part_from_momenta_in_subspace(
@@ -569,7 +561,7 @@ pub(crate) fn find_maximal_overlap(
 
             res.overlap_groups.push(OverlapGroup {
                 existing_esurfaces: vec![existing_esurface_id],
-                center: center,
+                center,
                 complement: vec![],
             });
             num_disconnected_surfaces += 1;

@@ -1,14 +1,10 @@
 use crate::cff::cff_graph::VertexSet;
-use crate::cff::esurface::add_external_shifts;
-use crate::utils::{
-    F, FloatLike, cut_energy, external_energy_atom_from_index, ose_atom_from_index,
-};
+use crate::utils::{cut_energy, external_energy_atom_from_index, ose_atom_from_index};
 use bincode_trait_derive::{Decode, Encode};
 
 use derive_more::{From, Into};
 use itertools::Itertools;
-use linnet::half_edge::involution::{EdgeIndex, EdgeVec};
-use linnet::half_edge::subgraph::InternalSubGraph;
+use linnet::half_edge::involution::EdgeIndex;
 use serde::{Deserialize, Serialize};
 use symbolica::atom::Atom;
 use symbolica::parse;
@@ -16,7 +12,7 @@ use tracing::warn;
 use typed_index_collections::TiVec;
 
 use super::esurface::ExternalShift;
-use super::{esurface::Esurface, surface};
+use super::esurface::Esurface;
 
 #[derive(From, Into, Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Encode, Decode)]
 pub struct HsurfaceID(usize);

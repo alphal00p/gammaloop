@@ -1,4 +1,4 @@
-use clap::{arg, Args};
+use clap::Args;
 use color_eyre::Result;
 
 use schemars::JsonSchema;

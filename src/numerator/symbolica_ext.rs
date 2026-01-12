@@ -9,7 +9,6 @@ use spenso::{
     structure::representation::{Minkowski, RepName},
 };
 
-use crate::numerator::Aind;
 use symbolica::{
     atom::{Atom, AtomCore, AtomOrView, AtomView, Symbol},
     coefficient::{Coefficient, CoefficientView},

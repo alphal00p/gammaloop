@@ -1,22 +1,17 @@
 use core::f64;
 
 use bincode_trait_derive::{Decode, Encode};
-use color_eyre::owo_colors::styles::ReversedDisplay;
 use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation};
-use nalgebra::iter;
 use spenso::{
-    algebra::complex::{Complex, sub},
-    tensors::parametric,
+    algebra::complex::Complex,
 };
 use symbolica::{
     domains::float::{FloatLike as SymFloatLike, Real, RealLike},
     evaluate::OptimizationSettings,
 };
 use tracing::debug;
-use tracing_subscriber::field::debug;
 use typed_index_collections::TiVec;
-use vakint::Momentum;
 
 use crate::{
     GammaLoopContext,
@@ -28,10 +23,9 @@ use crate::{
     gammaloop_integrand::{
         GenericEvaluator, GenericEvaluatorFloat, ParamBuilder, ThresholdParams,
         evaluators::SingleOrAllOrientations,
-        param_builder::{self, LUParams},
+        param_builder::LUParams,
     },
     graph::{Graph, LmbIndex, LoopMomentumBasis},
-    model::Model,
     momentum::Rotation,
     momentum_sample::{LoopMomenta, MomentumSample, SubspaceData},
     processes::{
@@ -40,9 +34,9 @@ use crate::{
     settings::{GlobalSettings, RuntimeSettings},
     subtraction::{
         evaluate_integrated_ct_normalisation, evaluate_uv_damper,
-        overlap::find_maximal_overlap,
-        overlap_subspace::{self, OverlapGroup, OverlapInput, OverlapStructure},
+        overlap_subspace::{OverlapGroup, OverlapInput, OverlapStructure},
     },
+    subtraction::overlap_subspace,
     utils::{
         F, FloatLike,
         newton_solver::{NewtonIterationResult, newton_iteration_and_derivative},
@@ -423,7 +417,8 @@ impl LUCounterTerm {
         for samples_group in left_overlap_samples.iter() {
             for sample in samples_group {
                 debug!("left threshold parameters");
-                let left_threshold_params = sample.extract_threshold_parameters(true);
+                let left_threshold_params: ThresholdParams<T> =
+                    sample.extract_threshold_parameters(true);
                 let inverse_transformed_sample = sample.get_inverse_transformed_sample();
                 let left_threshold_id = LeftThresholdId::from(sample.get_esurface_id().0);
 
@@ -491,7 +486,8 @@ impl LUCounterTerm {
         for samples_group in right_overlap_samples.iter() {
             for sample in samples_group {
                 debug!("right threshold parameters");
-                let right_threshold_params = sample.extract_threshold_parameters(true);
+                let right_threshold_params: ThresholdParams<T> =
+                    sample.extract_threshold_parameters(true);
                 let inverse_transformed_sample = sample.get_inverse_transformed_sample();
                 let right_threshold_id = RightThresholdId::from(sample.get_esurface_id().0);
 
@@ -574,8 +570,10 @@ impl LUCounterTerm {
         let mut cartesian_product_result = Complex::new_re(momentum_sample.zero());
 
         for (sample_left, sample_right) in cartesian_product_iter {
-            let left_threshold_params = sample_left.extract_threshold_parameters(false);
-            let right_threshold_params = sample_right.extract_threshold_parameters(false);
+            let left_threshold_params: ThresholdParams<T> =
+                sample_left.extract_threshold_parameters(false);
+            let right_threshold_params: ThresholdParams<T> =
+                sample_right.extract_threshold_parameters(false);
             let multi_channeling_factor = &sample_left.value_of_multi_channeling_factor
                 * &sample_right.value_of_multi_channeling_factor;
             let iterated_index = (

@@ -11,7 +11,7 @@ use eyre::Context;
 use itertools::Itertools;
 use linnet::half_edge::{
     involution::{EdgeVec, Orientation},
-    subgraph::{ModifySubSet, SuBitGraph, SubSetLike, subset::SubSet},
+    subgraph::{ModifySubSet, SubSetLike, subset::SubSet},
 };
 use momtrop::SampleGenerator;
 use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
@@ -40,8 +40,8 @@ use crate::{
     },
     integrands::HasIntegrand,
     model::Model,
-    momentum::{Rotation, RotationMethod, ThreeMomentum},
-    momentum_sample::{ExternalIndex, LoopMomenta, MomentumSample, SubspaceData},
+    momentum::{Rotation, RotationMethod},
+    momentum_sample::{ExternalIndex, MomentumSample},
     processes::{AmplitudeGraph, GroupDerivedData},
     settings::{GlobalSettings, RuntimeSettings},
     signature::SignatureLike,
@@ -77,7 +77,6 @@ pub struct AmplitudeGraphTerm {
 }
 
 /// Num(sigma_1,sigma_2,...)*(CFF_1 delta(edge(1),1) delta_(1,1,1,-1,1)+CFF_3 delta_(1,1,1,-1,1)+CFF_2 delta_(1,1,1,-1,1))
-
 impl AmplitudeGraphTerm {
     pub fn from_amplitude_graph(
         graph: &AmplitudeGraph,
@@ -545,33 +544,6 @@ impl AmplitudeIntegrand {
                                         .graph_group_structure[group_id][graph_group_pos]];
 
                                     let esurface = &graph.esurfaces[esurface_id];
-                                    let loop_moms = LoopMomenta::from_iter(
-                                        std::iter::repeat(ThreeMomentum::new(
-                                            F(0.0),
-                                            F(0.0),
-                                            F(0.0),
-                                        ))
-                                        .take(graph.graph.get_loop_number()),
-                                    );
-
-                                    let (lmb_index, _) = graph
-                                        .lmbs
-                                        .iter_enumerated()
-                                        .find(|lmb| {
-                                            graph.graph.loop_momentum_basis.loop_edges
-                                                == lmb.1.loop_edges
-                                        })
-                                        .unwrap();
-
-                                    let subspace: SubspaceData =
-                                        SubspaceData::new_with_user_selected_lmb(
-                                            graph.graph.full_filter(),
-                                            lmb_index,
-                                            &graph.graph,
-                                            &graph.lmbs,
-                                        )
-                                        .unwrap();
-
                                     esurface.exists(
                                         &external_moms,
                                         &graph.graph.loop_momentum_basis,

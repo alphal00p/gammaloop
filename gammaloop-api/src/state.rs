@@ -21,7 +21,7 @@ use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
 use symbolica::numerical_integration::Sample;
 use tracing::debug;
-use tracing::{info, warn};
+use tracing::info;
 use tracing_subscriber::{reload, EnvFilter, Registry};
 
 use gammalooprs::{
@@ -32,7 +32,7 @@ use gammalooprs::{
     model::{InputParamCard, Model},
     processes::{DotExportSettings, Process, ProcessCollection, ProcessDefinition, ProcessList},
     settings::{runtime::LockedRuntimeSettings, GlobalSettings, RuntimeSettings},
-    status_debug, status_info,
+    status_debug,
     utils::{
         serde_utils::{get_schema_folder, SmartSerde},
         tracing::{init_bench_tracing, init_test_tracing},

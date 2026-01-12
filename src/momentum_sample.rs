@@ -1,7 +1,7 @@
 use std::fmt::Display;
 
 use crate::gammaloop_integrand::evaluators::SingleOrAllOrientations;
-use crate::graph::{Graph, LmbIndex, LoopMomentumBasis, lmb};
+use crate::graph::{Graph, LmbIndex, LoopMomentumBasis};
 use crate::momentum::{FourMomentum, Polarization, Rotatable, Rotation, SignOrZero, ThreeMomentum};
 
 use crate::signature::LoopSignature;
@@ -596,7 +596,6 @@ impl<T: FloatLike> BareMomentumSample<T> {
     }
 
     #[inline]
-
     pub(crate) fn rotate(
         &self,
         rotation: &Rotation,
