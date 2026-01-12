@@ -944,6 +944,66 @@ impl GammaLoopAPI {
 
         Ok(result)
     }
+
+    #[pyo3(name = "generate_cff_as_json_string", signature = (dot_string, subgraph_nodes, reverse_dangling,orientation_pattern=None))]
+    pub(crate) fn generate_cff_as_json_string(
+        &self,
+        dot_string: String,
+        subgraph_nodes: Vec<String>,
+        reverse_dangling: Vec<usize>,
+        orientation_pattern: Option<String>,
+    ) -> PyResult<String> {
+        let graph = Graph::from_string(dot_string, &self.gammaloop_state.model)
+            .unwrap()
+            .pop()
+            .unwrap();
+
+        let reverse_dangling = reverse_dangling
+            .into_iter()
+            .map(EdgeIndex::from)
+            .collect_vec();
+
+        let subgraph: SuBitGraph = if subgraph_nodes.is_empty() {
+            graph.full_filter()
+        } else {
+            let mut result: SuBitGraph = graph.empty_subgraph();
+            for (_node_id, neighbors, vertex) in graph.iter_nodes() {
+                if subgraph_nodes.contains(&vertex.name.to_string()) {
+                    neighbors.for_each(|hedge| result.add(hedge));
+                }
+            }
+            result
+        };
+
+        let mut surface_cache = SurfaceCache {
+            esurface_cache: TiVec::new(),
+            hsurface_cache: TiVec::new(),
+        };
+
+        let cff = generate_cff_expression_from_subgraph(
+            &graph.underlying,
+            &subgraph,
+            &None,
+            &reverse_dangling,
+            &mut surface_cache,
+        )
+        .map_err(|e| {
+            exceptions::PyException::new_err(format!(
+                "Could not generate CFF expression: {}",
+                e.to_string()
+            ))
+        })?;
+
+        let json_string = serde_json::to_string(&cff).map_err(|e| {
+            exceptions::PyException::new_err(format!(
+                "Could not serialize cff to json: {}",
+                e.to_string()
+            ))
+        })?;
+
+        Ok(json_string)
+    }
+
     /*
 
     #[allow(clippy::too_many_arguments)]
