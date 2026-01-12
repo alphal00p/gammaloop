@@ -1454,7 +1454,7 @@ dependencies = [
  "indicatif 0.17.11",
  "itertools 0.14.0",
  "json5",
- "linnet 0.15.1",
+ "linnet",
  "ndarray",
  "nu-ansi-term",
  "numpy",
@@ -1525,7 +1525,7 @@ dependencies = [
  "itertools 0.14.0",
  "json5",
  "libc",
- "linnet 0.15.1",
+ "linnet",
  "linreg",
  "log",
  "momtrop",
@@ -1751,7 +1751,7 @@ dependencies = [
  "bincode",
  "bincode-trait-derive",
  "itertools 0.14.0",
- "linnet 0.16.0",
+ "linnet",
  "spenso",
  "spenso-macros",
  "symbolica",
@@ -2091,9 +2091,9 @@ dependencies = [
 
 [[package]]
 name = "linnet"
-version = "0.15.1"
+version = "0.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3a3afada703c8edc22c46a16fd1ae305d95148dba2a4651723a19dc6b887c7d0"
+checksum = "05cee7a5103719b61119a6fdbc0fca62102fec4db52fc66ab03163af39ccd413"
 dependencies = [
  "ahash",
  "bincode",
@@ -2118,33 +2118,6 @@ dependencies = [
  "ref-ops",
  "serde",
  "symbolica",
- "thiserror 2.0.17",
-]
-
-[[package]]
-name = "linnet"
-version = "0.16.0"
-dependencies = [
- "ahash",
- "bincode",
- "bincode-trait-derive",
- "bitvec",
- "by_address",
- "derive_more",
- "dot-parser",
- "duplicate 2.0.1",
- "figment",
- "getrandom 0.2.16",
- "indenter",
- "indexmap 2.13.0",
- "itertools 0.14.0",
- "kurbo",
- "paste",
- "piet",
- "rand 0.8.5",
- "rand_xoshiro 0.7.0",
- "ref-ops",
- "serde",
  "thiserror 2.0.17",
 ]
 
@@ -3852,7 +3825,7 @@ dependencies = [
  "gat-lending-iterator",
  "indexmap 2.13.0",
  "itertools 0.14.0",
- "linnet 0.16.0",
+ "linnet",
  "log",
  "num",
  "once_cell",
