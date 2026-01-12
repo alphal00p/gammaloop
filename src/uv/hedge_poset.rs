@@ -199,6 +199,53 @@ pub struct SpinneyForest {
     pub root: NodeIndex,
 }
 
+impl SpinneyForest {
+    pub fn walk(&self) {
+        self.graph
+            .topo_sort_kahn()
+            .unwrap()
+            .iter()
+            .for_each(|nidx| {
+                let trace_key = &self.graph[*nidx];
+                println!("Node {}: {}", nidx, trace_key_label(trace_key));
+            });
+    }
+}
+
+pub fn trace_key_label(v: &TraceKey<SuBitGraph, EdgeIndex>) -> String {
+    if v.levels.is_empty() {
+        "∅".to_string()
+    } else {
+        let mut s = String::new();
+        let mut acc: Option<SuBitGraph> = None;
+
+        for (i, level) in v.levels.iter().enumerate() {
+            if i > 0 {
+                s.push_str(" · ");
+            }
+            s.push_str("{");
+            for (j, op) in level.iter().enumerate() {
+                if j > 0 {
+                    s.push_str(",");
+                }
+                if let Some(a) = &mut acc {
+                    a.union_with(&op.order);
+                } else {
+                    acc = Some(op.order.clone());
+                }
+                s.push_str(&op.order.string_label());
+            }
+            s.push_str("}");
+        }
+        if let Some(a) = acc {
+            s.push_str(" => ");
+            s.push_str(&a.string_label());
+        }
+
+        s
+    }
+}
+
 impl Display for SpinneyForest {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.graph.dot_impl_fmt(
@@ -207,41 +254,7 @@ impl Display for SpinneyForest {
             "start=2;\n",
             &|_| None,
             &|_| None,
-            &|v| {
-                Some(format!("label=\"{}\"", {
-                    if v.levels.is_empty() {
-                        "∅".to_string()
-                    } else {
-                        let mut s = String::new();
-                        let mut acc: Option<SuBitGraph> = None;
-
-                        for (i, level) in v.levels.iter().enumerate() {
-                            if i > 0 {
-                                s.push_str(" · ");
-                            }
-                            s.push_str("{");
-                            for (j, op) in level.iter().enumerate() {
-                                if j > 0 {
-                                    s.push_str(",");
-                                }
-                                if let Some(a) = &mut acc {
-                                    a.union_with(&op.order);
-                                } else {
-                                    acc = Some(op.order.clone());
-                                }
-                                s.push_str(&op.order.string_label());
-                            }
-                            s.push_str("}");
-                        }
-                        if let Some(a) = acc {
-                            s.push_str(" => ");
-                            s.push_str(&a.string_label());
-                        }
-
-                        s
-                    }
-                }))
-            },
+            &|v| Some(format!("label=\"{}\"", trace_key_label(v))),
         )
     }
 }
@@ -354,6 +367,7 @@ mod tests {
                 println!("{}", ff.dot(&g));
 
                 let f = f.unfold();
+                f.walk();
                 assert_eq!(
                     152,
                     f.graph.n_nodes(),

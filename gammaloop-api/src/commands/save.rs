@@ -28,7 +28,7 @@ pub enum Save {
         #[arg(short = 'n', long,num_args(0..=1), default_missing_value = "true",
                value_parser = clap::builder::BoolishValueParser::new(),)]
         with_uv: Option<bool>,
-        #[arg(short = 'n', long,num_args(0..=1), default_missing_value = "true",
+        #[arg(short = 'u', long,num_args(0..=1), default_missing_value = "true",
                value_parser = clap::builder::BoolishValueParser::new(),)]
         output_full_numerator: Option<bool>,
         #[arg(short = 'g', long,num_args(0..=1), default_missing_value = "true",
