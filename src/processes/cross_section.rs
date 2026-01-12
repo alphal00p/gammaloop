@@ -1038,6 +1038,19 @@ impl CrossSectionGraph {
             .graph
             .get_esurface_canonization(&self.graph.loop_momentum_basis);
 
+        let max_order = self
+            .derived_data
+            .raised_data
+            .cross_free_powersets
+            .iter()
+            .map(|sets| sets.iter().map(|set| set.len()).max().unwrap())
+            .max()
+            .unwrap();
+
+        let derivative_structure_cache = (1..=max_order)
+            .map(|order| build_derivative_structure(order as u8))
+            .collect_vec();
+
         for raised_cut_id in self
             .derived_data
             .raised_data
