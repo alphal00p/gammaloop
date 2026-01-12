@@ -4,10 +4,12 @@ use std::{
     io::Write,
     ops::{Deref, Index, IndexMut},
     path::Path,
+    sync::Arc,
 };
 
 // use bincode::{Decode, Encode};
 use bincode_trait_derive::{Decode, Encode};
+use chrono::format::parse;
 use color_eyre::Result;
 use idenso::color::ColorSimplifier;
 use itertools::Itertools;
@@ -57,8 +59,10 @@ use log::{debug, warn};
 use serde::{Deserialize, Serialize};
 use symbolica::{
     atom::{Atom, AtomCore},
+    domains::atom::AtomField,
     function,
     id::Replacement,
+    parse, symbol,
 };
 use typed_index_collections::TiVec;
 
@@ -1022,6 +1026,28 @@ impl CrossSectionGraph {
         (initial_state_tree_expr, replacements)
     }
 
+    fn build_parametric_integrand_raised_cuts(
+        &mut self,
+        settings: &GenerationSettings,
+    ) -> Result<()> {
+        let global_num = self.graph.global_network();
+
+        let (tree_structure, replacements) = self.get_initial_state_tree_data();
+
+        let canonize_esurface = self
+            .graph
+            .get_esurface_canonization(&self.graph.loop_momentum_basis);
+
+        for raised_cut_id in self
+            .derived_data
+            .raised_data
+            .raised_cut_groups
+            .iter_enumerated()
+        {}
+
+        Ok(())
+    }
+
     fn build_original_parametric_integrand(
         &mut self,
         settings: &GenerationSettings,
@@ -1742,4 +1768,62 @@ impl CrossSectionDerivedData {
             raised_data: RaisedData::new(),
         }
     }
+}
+
+#[test]
+fn test_template() {
+    println!("result: {}", build_derivative_structure(1));
+    println!("result: {}", build_derivative_structure(2));
+    println!("result: {}", build_derivative_structure(3));
+}
+
+fn build_derivative_structure(order: u8) -> Atom {
+    let order = order as i32;
+    // let mut expansion = Atom::new();
+    let f = symbol!("f");
+
+    //for k in 1..=order {
+    //    let k_factorial = (2..=k).product::<i32>();
+    //    expansion += function!(a, Atom::num(k)) * (GS.rescale - GS.rescale_star).npow(k)
+    //        / Atom::num(k_factorial);
+    //}
+
+    let expansion = parse!("η(t)")
+        .series(
+            GS.rescale,
+            Atom::var(GS.rescale_star),
+            (order, 1).into(),
+            true,
+        )
+        .unwrap()
+        .to_atom()
+        .replace(function!(symbol!("η"), GS.rescale_star).to_pattern())
+        .level_range((0, Some(0)))
+        .with(0);
+
+    let mut expression_to_derive = function!(f, GS.rescale)
+        * expansion.npow(-order)
+        * (GS.rescale - GS.rescale_star).npow(order);
+
+    for _ in 1..order {
+        expression_to_derive = expression_to_derive.derivative(GS.rescale);
+    }
+
+    expression_to_derive = expression_to_derive
+        .replace(GS.rescale - GS.rescale_star)
+        .with(parse!("delta_t"));
+
+    let polynomial_in_delta_t = expression_to_derive
+        .series(symbol!("delta_t"), Atom::num(0), (0, 1).into(), true)
+        .unwrap();
+
+    let factorial_prefactor = (2..order).product::<i32>();
+
+    let mut expression_to_derive = polynomial_in_delta_t.to_atom() / Atom::num(factorial_prefactor);
+
+    expression_to_derive = expression_to_derive
+        .replace(GS.rescale)
+        .with(GS.rescale_star);
+
+    expression_to_derive
 }
